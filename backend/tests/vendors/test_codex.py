@@ -46,7 +46,9 @@ def _token_count_event(input_t: int, cached_in: int, output_t: int, reasoning_ou
                     "cached_input_tokens": cached_in,
                     "output_tokens": output_t,
                     "reasoning_output_tokens": reasoning_out,
-                    "total_tokens": input_t + cached_in + output_t + reasoning_out,
+                    # Codex's input_tokens already holds the cached share and
+                    # output_tokens the reasoning share.
+                    "total_tokens": input_t + output_t,
                 },
                 "model_context_window": 258400,
             },
@@ -63,10 +65,10 @@ def test_first_event_emits_full_total(fake_codex_session: Path) -> None:
     events = reader.parse_session_file(fake_codex_session, set())
     assert len(events) == 1
     ev = events[0]
-    # input = 100 (input_tokens) + 20 (cached_input_tokens) = 120
-    assert ev.input_tokens == 120
-    # output = 50 (output_tokens) + 10 (reasoning_output_tokens) = 60
-    assert ev.output_tokens == 60
+    # input = input_tokens (100, the 20 cached already in it)
+    assert ev.input_tokens == 100
+    # output = output_tokens (50, the 10 reasoning already in it)
+    assert ev.output_tokens == 50
     assert ev.cwd == "/Users/me/proj"
     assert ev.vendor == "codex"
 

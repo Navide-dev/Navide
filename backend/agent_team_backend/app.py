@@ -1364,6 +1364,12 @@ _pane_activity: dict[str, dict[str, Any]] = {}
 # Observers of the table above (chat channels): called as (pane_id, entry) on
 # every record and (pane_id, None) when a closed pane is forgotten. Must not raise.
 pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
+# Observers of the text a Claude Stop hook carries itself (chat channels): called
+# as (pane_id, text, log_ended) — ``last_assistant_message``, the turn's final
+# assistant message, which is the same message the log reader's turn_complete
+# carries; ``log_ended`` when the log already reported this turn's end, so its
+# text was posted from there. Must not raise.
+hook_reply_listeners: list[Callable[[str, str, bool], None]] = []
 # Observers of the user's own prompts (chat channels): (pane_id, text) for every
 # user-record event: the reader's longer copy when it has one (up to 16K chars),
 # else the naming snippet. Must not raise.
@@ -1534,6 +1540,47 @@ def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:
     return (match["text"] if match else ""), {
         "prev_hook_turn_end": previous, "log_ended": match is not None,
     }
+
+
+def _note_hook_reply(pane_id: str, payload: dict[str, Any]) -> None:
+    """Hand a Claude Stop hook's own copy of the turn's final text to the reply
+    listeners (chat channels), so a chat's reply does not wait for the log
+    reader's walk — minutes behind on a loaded machine (2026-11-04: p50 119 s,
+    p90 767 s), and never when a blocked Stop hook had that turn's log end
+    downgraded. ``last_assistant_message`` is the final assistant message of
+    the turn, the same message the reader's turn_complete carries (checked
+    against Claude Code 2.1.318: a text, tool, text turn gives the last text
+    only, as the end_turn line does). A hook without it (older builds) changes
+    nothing. Blocked or not, the text is the pane's answer to what it was
+    working on; it is not posted again when the log already ended the turn.
+    """
+    text = payload.get("last_assistant_message")
+    if not isinstance(text, str) or not text.strip():
+        return
+    text = _cap_activity_text(text)
+    log_ended = _log_ended_with(pane_id, text)
+    for listener in hook_reply_listeners:
+        try:
+            listener(_current_pane_id(pane_id), text, log_ended)
+        except Exception as err:  # noqa: BLE001
+            log.warning("hook reply listener failed: %s", err)
+
+
+def _log_ended_with(pane_id: str, text: str) -> bool:
+    """Whether the log already reported the end of the turn whose final text
+    the Stop hook carries as ``text``: its latest record is a log turn end
+    with that same text, or the turn end `_hook_turn_end` pairs with this hook
+    and it carries no text of its own (the text half still to come, or the
+    reader lagging a whole turn — then the hook's text would be another
+    turn's, and the log is left to answer, as before)."""
+    key = _current_pane_id(pane_id)
+    entry = _pane_activity.get(key)
+    if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
+        return False
+    if entry["text"].strip() == text.strip():
+        return True
+    match = log_turn_end_after(pane_id, _last_hook_turn_end.get(key))
+    return match is not None and not match["text"].strip()
 
 
 def forget_pane_activity(pane_id: str) -> None:
@@ -3260,6 +3307,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
             # call the pane idle and start injecting the NEXT queued message
             # over stdin, into a pane that is already working.
             event_type = "agent_active"
+        if pane_id:
+            # Before the turn end is recorded below: a chat run this answers is
+            # closed by it, so the hook's own turn end does not wait on the log.
+            _note_hook_reply(pane_id, payload)
     # The turn's reply text is only in the transcript. Read it next rather than
     # behind every other file the log watcher has queued.
     transcript = payload.get("transcript_path")
@@ -3779,9 +3830,12 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
     installed (cursor ships `agent`; older installs only have `cursor-agent`).
     Spawning the pinned name then dies with exit 127 while detection reports
     the CLI as present — so resolve the alias here instead.
+
+    The same goes for a name that resolves to another product's stand-in
+    (Dep.shim_dirs: VS Code's copilot-shim) ahead of the real CLI on PATH.
     """
     dep = onboarding_deps.DEPS_BY_ID.get(agent_key)
-    if dep is None or not dep.alt_commands:
+    if dep is None or not (dep.alt_commands or dep.shim_dirs):
         return command
     text = _command_text(command)
     try:
@@ -3790,7 +3844,8 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
         return command
     if not parts or not _names_a_known_command(parts[0], (dep.check_cmd[0], *dep.alt_commands)):
         return command
-    if osplat.paths.resolve_program(parts[0]):
+    requested = osplat.paths.resolve_program(parts[0])
+    if requested and not onboarding_deps.is_shim(dep, requested):
         return command  # the requested name resolves — nothing to fix
     installed = onboarding_deps.resolve_executable(dep)
     if not installed:
@@ -4027,6 +4082,8 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
     known_names = (dep.check_cmd[0], *dep.alt_commands)
     if requested_executable and _names_a_known_command(requested_executable, known_names):
         executable = osplat.paths.resolve_program(requested_executable)
+        if executable and onboarding_deps.is_shim(dep, executable):
+            executable = None  # VS Code's stand-in, not the CLI (Dep.shim_dirs)
     executable = executable or onboarding_deps.resolve_executable(dep)
     if not executable:
         if _spawn_execs_the_cli_directly(requested_command, known_names):

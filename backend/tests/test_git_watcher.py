@@ -572,3 +572,217 @@ async def test_a_restarted_watcher_drains_again() -> None:
         assert "/stale" not in fired
     finally:
         w.stop()
+
+
+# ── Home-directory workspace: one observer schedule per tree, not per repo ──
+#
+# A workspace at the home directory was watched recursively, and then every
+# repo under it was scheduled again by its badge's git.status — two kernel
+# watches and two handler passes for every write in a repo. A path already
+# covered by a watched ancestor now rides on that ancestor's schedule, and
+# still gets its own git.changed (Git panes match workspace_path exactly).
+
+
+class _FakeObserver:
+    def __init__(self) -> None:
+        self.scheduled: list[tuple[object, str]] = []
+        self.unscheduled: list[object] = []
+
+    def schedule(self, handler, path: str, recursive: bool = False):
+        watch = object()
+        self.scheduled.append((watch, path))
+        return watch
+
+    def unschedule(self, watch) -> None:
+        self.unscheduled.append(watch)
+
+
+def _fake_watcher() -> tuple[GitWatcher, _FakeObserver, list[tuple[str, list]]]:
+    marks: list[tuple[str, list]] = []
+    w = GitWatcher(lambda ws, paths: asyncio.sleep(0))
+    obs = _FakeObserver()
+    w._started = True
+    w._observer = obs  # type: ignore[assignment]
+    w._mark_dirty_threadsafe = lambda ws, paths: marks.append((ws, paths))  # type: ignore[method-assign]
+    return w, obs, marks
+
+
+def _top_handler(obs: _FakeObserver, w: GitWatcher) -> _RepoHandler:
+    live = [watch for watch, _ in obs.scheduled if watch not in obs.unscheduled]
+    assert len(live) == 1
+    return w._handlers[next(ws for ws, watch in w._watches.items() if watch is live[0])]
+
+
+def test_a_repo_under_a_watched_workspace_adds_no_observer(tmp_path: Path) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    w, obs, marks = _fake_watcher()
+    w.watch(str(tmp_path))
+    w.watch(str(repo))
+    w.watch(str(repo))  # badge refreshes call it again
+    assert [path for _, path in obs.scheduled] == [str(tmp_path.resolve())]
+    # The repo still gets its own, repo-relative, change.
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(repo / "a.py")))
+    assert sorted(marks) == sorted([
+        (str(tmp_path), [("proj/a.py", "modified")]),
+        (str(repo), [("a.py", "modified")]),
+    ])
+
+
+def test_watching_an_ancestor_replaces_its_watched_descendants(tmp_path: Path) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    w, obs, marks = _fake_watcher()
+    w.watch(str(repo))
+    w.watch(str(tmp_path))
+    assert [path for _, path in obs.scheduled] == [str(repo.resolve()), str(tmp_path.resolve())]
+    assert obs.unscheduled == [obs.scheduled[0][0]]
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(repo / ".git" / "HEAD")))
+    assert sorted(marks) == sorted([
+        (str(tmp_path), [("proj/.git/HEAD", "modified")]),
+        (str(repo), [(".git/HEAD", "modified")]),
+    ])
+    # A sibling outside the repo reaches only the workspace.
+    marks.clear()
+    _top_handler(obs, w).on_any_event(FileModifiedEvent(str(tmp_path / "notes.txt")))
+    assert marks == [(str(tmp_path), [("notes.txt", "modified")])]
+
+
+def test_an_unrelated_workspace_is_still_scheduled(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    w, obs, _ = _fake_watcher()
+    w.watch(str(a))
+    w.watch(str(b))
+    assert [path for _, path in obs.scheduled] == [str(a.resolve()), str(b.resolve())]
+    assert obs.unscheduled == []
+
+
+# ── Home-directory noise: AppData, Library and dot-dirs outside a repo ──────
+
+
+def test_home_noise_dirs_outside_a_repo_are_ignored(tmp_path: Path) -> None:
+    h = _handler(tmp_path)
+    for noise in ("AppData/Local/Temp/x.tmp", "Library/Caches/y.db",
+                  ".cache/pip/z", ".config/Code/state.json", ".npm/_logs/a.log",
+                  "Documents/.obsidian/workspace.json",
+                  ".cache/pre-commit/repo1/.git/HEAD"):
+        assert h._is_relevant(str(tmp_path / noise)) is False, noise
+    assert h._is_relevant(str(tmp_path / ".cache"), is_dir=True) is False
+    # Dot-files outside a repo too: shell history, Finder state.
+    for noise in (".zsh_history", ".DS_Store", ".CFUserTextEncoding",
+                  "Documents/.DS_Store"):
+        assert h._is_relevant(str(tmp_path / noise)) is False, noise
+
+
+def test_dot_dirs_inside_a_repo_still_report(tmp_path: Path) -> None:
+    # A repo's own .github/, .vscode/ or Library/ is tracked content.
+    (tmp_path / "proj" / ".git").mkdir(parents=True)
+    home = _handler(tmp_path)
+    for tracked in ("proj/.github/workflows/ci.yml", "proj/Library/Src/a.cs",
+                    "proj/.git/HEAD", "proj/.git/refs/heads/main", "proj/.git/index"):
+        assert home._is_relevant(str(tmp_path / tracked)) is True, tracked
+    repo = _handler(tmp_path / "proj")
+    assert repo._is_relevant(str(tmp_path / "proj" / ".github" / "x.yml")) is True
+    for tracked in (".gitignore", ".env", "src/.eslintrc"):
+        assert home._is_relevant(str(tmp_path / "proj" / tracked)) is True, tracked
+        assert repo._is_relevant(str(tmp_path / "proj" / tracked)) is True, tracked
+    assert repo._is_relevant(str(tmp_path / "proj" / "AppData" / "x")) is True
+
+
+@pytest.mark.asyncio
+async def test_home_dot_file_writes_fire_nothing_but_a_repo_gitignore_does(
+    tmp_path: Path, arming_delay: float
+) -> None:
+    repo = tmp_path / "proj"
+    (repo / ".git").mkdir(parents=True)
+    fired: list[tuple[str, set[str]]] = []
+
+    async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
+        fired.append((ws, {rel for rel, _ in paths}))
+
+    watcher = GitWatcher(sink, debounce_s=0.1)
+    watcher.start()
+    try:
+        watcher.watch(str(tmp_path))
+        await arm(tmp_path, fired, per_probe_s=2.0)
+        fired.clear()
+        (tmp_path / ".zsh_history").write_text("ls\n")
+        (repo / ".gitignore").write_text("dist/\n")
+        assert await wait_until(
+            lambda: any("proj/.gitignore" in paths for _, paths in fired)
+        )
+        assert not any(".zsh_history" in paths for _, paths in fired)
+    finally:
+        watcher.stop()
+
+
+# ── Windows home-folder poll storm (0.2.38) ─────────────────────────────────
+#
+# Windows asks ReadDirectoryChangesW for last-access and attribute changes too
+# (watchdog's flags), and reports them as `modified`: git reading a repo's
+# .git files to answer a status came back as a change to that repo, which made
+# every Git pane read status again — ~1078 git processes a minute under a
+# home-folder workspace on a Windows VM, none on Linux.
+
+
+def test_windows_modified_events_that_change_nothing_do_not_fire(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_team_backend.git_watcher as gw
+
+    monkeypatch.setattr(gw, "_SKIP_UNCHANGED_MODIFIED", True)
+    (tmp_path / ".git").mkdir()
+    index = tmp_path / ".git" / "index"
+    index.write_bytes(b"one")
+    h, dirty, _ = _counting_handler(tmp_path, "")
+    for _ in range(5):  # git status read the index five times
+        h.on_any_event(FileModifiedEvent(str(index)))
+    assert len(dirty) == 1
+    index.write_bytes(b"two!")  # a real write still reports
+    h.on_any_event(FileModifiedEvent(str(index)))
+    assert len(dirty) == 2
+
+
+def test_modified_events_still_fire_every_time_off_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import agent_team_backend.git_watcher as gw
+
+    monkeypatch.setattr(gw, "_SKIP_UNCHANGED_MODIFIED", False)
+    f = tmp_path / "a.txt"
+    f.write_text("x", encoding="utf-8")
+    h, dirty, _ = _counting_handler(tmp_path, "")
+    for _ in range(3):
+        h.on_any_event(FileModifiedEvent(str(f)))
+    assert len(dirty) == 3
+
+
+def test_concurrent_watch_calls_schedule_one_observer(tmp_path: Path) -> None:
+    # git.status registers the workspace from a worker thread
+    # (asyncio.to_thread), and a window's panes ask for status together: the
+    # Windows log showed "GitWatcher watching C:\Users\navide" four times in
+    # one millisecond — four recursive kernel watches over the home folder.
+    w, obs, _ = _fake_watcher()
+    orig = obs.schedule
+    barrier = threading.Barrier(8)
+
+    def slow_schedule(handler, path: str, recursive: bool = False):
+        import time
+
+        time.sleep(0.02)
+        return orig(handler, path, recursive)
+
+    obs.schedule = slow_schedule  # type: ignore[method-assign]
+
+    def call() -> None:
+        barrier.wait()
+        w.watch(str(tmp_path))
+
+    threads = [threading.Thread(target=call) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(obs.scheduled) == 1

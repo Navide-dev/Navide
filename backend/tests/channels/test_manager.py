@@ -2492,3 +2492,146 @@ async def test_telegram_shared_sender_ids_are_refused_at_the_gate(env: Env, send
     # An approved person in the same topic still gets through.
     await env.inbound("hello", sender="7")
     assert env.fake.delivered[-1][:2] == ("pane-1", "hello")
+
+
+# --- a Stop hook's own text (app.hook_reply_listeners) ---------------------------------
+# 2026-11-04, v0.2.37: four Telegram messages went into a busy commander pane and the
+# chat heard nothing for 13 minutes. The pane's MSG reply sat in the transcript while the
+# log reader ran 119 s (p50) to 1778 s behind the Stop hook, and every Stop hook of that
+# pane was blocked to hand it the next inbox message, so the log's end of the turn was
+# downgraded (hook_drain.turn_end_is_superseded) and the held reply was never settled.
+# Claude Code's Stop payload carries the turn's final text itself (last_assistant_message).
+
+
+def _hook_reply(env: Env, text: str, *, log_ended: bool = False, pane_id: str = "pane-1") -> None:
+    env.m.on_hook_reply(pane_id, text, log_ended)
+
+
+async def test_a_stop_hooks_own_text_answers_the_chat_before_the_log(env: Env) -> None:
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_reply(env, "the reply, from the hook")
+    _hook_end(env)
+    await _until(lambda: _said(env, "the reply, from the hook"))
+    assert not env.m._await_text.get("pane-1")  # nothing waits on the log
+    assert env.m._pending.get("pane-1") is None
+    _log_end(env, "the reply, from the hook")  # the reader gets to the same line later
+    await asyncio.sleep(0.3)  # past the grace
+    assert sum("the reply, from the hook" in t for t in env.tg.texts()) == 1
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY) and not _waiting_notice(env) and not _lost(env)
+
+
+async def test_a_blocked_stop_hooks_text_answers_the_chat(env: Env) -> None:
+    """A pane handed its next message by its Stop hook reports no turn end at all, and the
+    log's end of that turn is downgraded: the MSG block it wrote for the chat used to wait
+    for RUN_WATCH_MAX_S or be given up as lost."""
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_reply(env, "---MSG-START--- to: telegram:alice re: k1\nanswered, then on to the next\n---MSG-END---")
+    await _until(lambda: _said(env, "answered, then on to the next"))
+    assert env.m._pending.get("pane-1") is None and not env.m._await_text.get("pane-1")
+    reply = next(t for t in env.tg.texts() if "answered, then on to the next" in t)
+    assert "MSG-START" not in reply
+    _log_end(env, "---MSG-START--- to: telegram:alice re: k1\nanswered, then on to the next\n---MSG-END---")
+    await asyncio.sleep(0.3)
+    assert sum("answered, then on to the next" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_hook_reply_the_log_already_posted_is_not_posted_again(env: Env) -> None:
+    """The reader got there first: its turn end answered the run, and the hook's copy of
+    the same text (marked log_ended by app._log_ended_with) adds nothing."""
+    await env.inbound("go")
+    await _delivered(env)
+    _log_end(env, "fast reader")
+    await _until(lambda: _said(env, "fast reader"))
+    _hook_reply(env, "fast reader", log_ended=True)
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "fast reader", "source": "hook",
+                                      "log_ended": True, "ts_monotonic": env.clock() + 1e-6})
+    await asyncio.sleep(0.3)
+    assert sum("fast reader" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_hook_reply_no_chat_message_asked_for_is_left_to_the_log(env: Env) -> None:
+    _hook_reply(env, "typed at the keyboard")
+    await asyncio.sleep(0.1)
+    assert not _said(env, "typed at the keyboard")
+    _log_end(env, "typed at the keyboard")  # mirrored at "full" verbosity, as before
+    await _until(lambda: _said(env, "typed at the keyboard"))
+    assert sum("typed at the keyboard" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_late_log_end_of_a_hook_answered_turn_does_not_close_the_next_run(env: Env) -> None:
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_reply(env, "reply to first")
+    _hook_end(env)
+    await _until(lambda: _said(env, "reply to first"))
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    _log_end(env, "reply to first")  # the reader reaches the first turn only now
+    await asyncio.sleep(0.1)
+    assert env.m._pending["pane-1"].armed_at is not None
+    _hook_reply(env, "reply to second")
+    _hook_end(env)
+    await _until(lambda: _said(env, "reply to second"))
+    assert sum("reply to first" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_hook_without_its_own_text_is_answered_from_the_log_as_before(env: Env) -> None:
+    """Older Claude Code builds, and every other vendor: no hook_reply call at all."""
+    await env.inbound("go")
+    await _delivered(env)
+    _hook_end(env)
+    await asyncio.sleep(0.05)
+    assert env.m._await_text.get("pane-1")
+    _log_end(env, "from the log")
+    await _until(lambda: _said(env, "from the log"))
+    assert sum("from the log" in t for t in env.tg.texts()) == 1
+
+
+async def test_two_turns_with_the_same_text_are_two_replies_when_the_log_beats_the_second_hook(env: Env) -> None:
+    """Review of a9567fc28: a remembered text must be used up by the log turn end it
+    matches. Kept, the second turn's log end (same words, "好。" twice) was skipped as
+    the first's copy, so when the reader beat that turn's hook nothing closed the second
+    run: the hook then saw a log end with its text and stood aside, and the reply went
+    the slow RUN_WATCH_MAX_S way."""
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_reply(env, "好。")
+    _hook_end(env)
+    await _until(lambda: _said(env, "好。"))
+    _log_end(env, "好。")  # the log's end of the first turn: recognised, and used up
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    _log_end(env, "好。")  # this time the reader is ahead of the hook
+    await _until(lambda: sum("好。" in t for t in env.tg.texts()) == 2)
+    assert env.m._pending.get("pane-1") is None
+    _hook_reply(env, "好。", log_ended=True)  # app._log_ended_with: the log has this text
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "好。", "source": "hook",
+                                      "log_ended": True, "ts_monotonic": env.clock() + 1e-6})
+    await asyncio.sleep(0.3)
+    assert sum("好。" in t for t in env.tg.texts()) == 2
+    assert not env.m._await_text.get("pane-1") and env.m._pending.get("pane-1") is None
+
+
+async def test_a_log_end_stamped_after_the_hook_is_not_its_copy(env: Env) -> None:
+    """The same words again, but the hooked turn's log end never came (an interrupted
+    turn): the next turn's end is stamped after that hook fired, so it is not taken for
+    the copy and answers its own run."""
+    await env.inbound("first")
+    await _delivered(env)
+    _hook_reply(env, "好。")
+    _hook_end(env)
+    await _until(lambda: _said(env, "好。"))
+    await env.inbound("second")
+    env.fake.verdicts["k2"] = {"status": "delivered"}
+    await _until(lambda: env.m._pending.get("pane-1") is not None
+                 and env.m._pending["pane-1"].armed_at is not None)
+    env.m.on_pane_activity("pane-1", {"event_type": "turn_complete", "text": "好。", "source": "log",
+                                      "event_wall": time.time() + 5.0, "ts_monotonic": env.clock() + 1e-6})
+    await _until(lambda: sum("好。" in t for t in env.tg.texts()) == 2)
+    assert env.m._pending.get("pane-1") is None

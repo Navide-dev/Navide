@@ -47,6 +47,9 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
   const responses = new Map<string, WsResponse>()
   const rejections = new Map<string, Error>()
   const sent: SentRecord[] = []
+  // Runs inside send(type) before it answers: lets a test model a backend
+  // event that reaches the window ahead of that request's response.
+  const beforeResponse = new Map<string, () => void>()
 
   function on(type: string, cb: (p: unknown) => void): () => void {
     let set = listeners.get(type)
@@ -71,6 +74,7 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     sent.push({ type, payload, timeoutMs })
     const rejection = rejections.get(type)
     if (rejection) throw rejection
+    beforeResponse.get(type)?.()
     const preset = responses.get(type)
     if (preset) return preset as WsResponse<T>
     return { id: 't', type, ok: true, payload: null, error: null, timestamp: '' } as WsResponse<T>
@@ -208,6 +212,7 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     setResponse,
     setRejection,
     clearRejection,
+    beforeResponse,
     sent,
   }
 }

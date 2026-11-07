@@ -361,7 +361,7 @@ Turn に対する判定ではない唯一のものです。待機が判定に至
 | Tool | パラメータ | 動作 |
 |---|---|---|
 | `ui_list_actions` | `workspace_path` | `workspace_path` を所有する Navide ウィンドウに登録されたすべての Command ID を一覧 |
-| `ui_invoke` | `workspace_path`, `action`, `args?` | 登録済みの Action を一つ呼び出し、`args` をそのまま渡す。拒否は `ok: false` と `error` の文で返り、Action が理由を示す場合は `error_code` と `params` も付きます。分岐は文言ではなくコードで行ってください |
+| `ui_invoke` | `workspace_path`, `action`, `args?`, `snapshot=false` | 登録済みの Action を一つ呼び出し、`args` をそのまま渡す。拒否は `ok: false` と `error` の文で返り、Action が理由を示す場合は `error_code` と `params` も付きます。分岐は文言ではなくコードで行ってください。`snapshot` が true なら、`ok: true` の応答のあとに、その時点で `ui_snapshot` が返す内容を `snapshot` として加えます。スナップショットが失敗した場合は `snapshot_error` `{error, error_code}` として返り、Action 自体の応答は変わりません |
 | `ui_snapshot` | `workspace_path` | そのウィンドウの UI State の構造化 Snapshot |
 | `ui_diagnostics` | `workspace_path`, `since_seq=0`, `pane_id`, `limit=50` | そのウィンドウが自分の UI アクションについて記録した Renderer 側の診断 — 例えば `injectText` が Echo チェックの Timeout で内容を再送した、あるいは完全に諦めた、といったもの。`ui_invoke` の呼び出し元が `ok: true` だけからは知りようがなく、以前はそのウィンドウの DevTools コンソールにしか出ませんでした。Tool が成功を報告したのにウィンドウ内の挙動がおかしい（入力の重複、送信の停止）場合の診断に使います。`since_seq` はその Sequence 番号より後のエントリだけを返すので、前回の `nextSeq` を渡せば増分 polling ができます。応答には `frame_drops` も含まれます: Backend 起動以降に、どのウィンドウも PTY を所有していなかったため捨てられたターミナルフレームの数（`ownerless`）と、Backend が知らないターミナル id を指定したターミナル要求の数（`unknown_terminal`）です。ウィンドウ自身の `inject.failed` エントリには Pane のターミナルサイズが含まれます |
 

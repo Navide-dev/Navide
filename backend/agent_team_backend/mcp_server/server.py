@@ -6745,12 +6745,16 @@ async def ui_list_actions(workspace_path: str, ctx: Context) -> dict[str, Any]:
 
 @server.tool()
 async def ui_invoke(
-    workspace_path: str, action: str, ctx: Context, args: dict[str, Any] | None = None
+    workspace_path: str, action: str, ctx: Context, args: dict[str, Any] | None = None, snapshot: bool = False
 ) -> dict[str, Any]:
     """Invoke a registered UI action in the Navide window for workspace_path.
 
     `action` must be one returned by ui_list_actions; `args` is passed through
-    to it verbatim. `action` "ui.workspace.open" is routed differently: it has
+    to it verbatim. `snapshot` true also returns, after an action that answered
+    ok true, what ui_snapshot would answer then, as `snapshot` — one call
+    instead of two. The action's own answer is unchanged either way: a
+    snapshot that fails comes back as `snapshot_error` {error, error_code}
+    beside it, and does not make the action count as failed. `action` "ui.workspace.open" is routed differently: it has
     no fixed owner (the workspace may not have a window yet), so it is sent to
     any one live Navide window instead of broadcast to all. Errors if no
     window owns workspace_path (or, for ui.workspace.open, no window is open
@@ -6858,7 +6862,8 @@ async def ui_invoke(
             rest = [i for i in ids if _named_pane_id(i) != scope.pane_id]
             own = _self_reclaim_entry(scope.pane_id)
             if not rest:
-                return {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+                reply = {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+                return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
             reply = await _ui_request(
                 workspace_path,
                 "invoke",
@@ -6871,8 +6876,8 @@ async def ui_invoke(
             # own id was taken out of the batch.
             base = result if reply.get("ok") and isinstance(result, dict) else {"reclaimed": []}
             reply["result"] = {**base, "refused": [*(base.get("refused") or []), own]}
-            return reply
-    return await _ui_request(
+            return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
+    reply = await _ui_request(
         workspace_path,
         "invoke",
         caller=caller,
@@ -6880,6 +6885,30 @@ async def ui_invoke(
         args=args,
         is_global=action == "ui.workspace.open",
     )
+    return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
+
+
+async def _with_ui_snapshot(
+    reply: dict[str, Any], wanted: bool, workspace_path: str, caller: "_Caller"
+) -> dict[str, Any]:
+    """ui_invoke's `snapshot`: the action's answer, with ui_snapshot's beside it.
+
+    The action has already run; nothing about the snapshot may turn its answer
+    into a failure, so every way the snapshot can go wrong lands in
+    `snapshot_error` and the action's own keys stay exactly as they were.
+    """
+    if not wanted or not reply.get("ok"):
+        return reply
+    try:
+        taken = await _ui_request(workspace_path, "snapshot", caller=caller)
+    except Exception as err:  # noqa: BLE001 — reported beside the action's answer
+        return {**reply, "snapshot_error": {"error": str(err) or type(err).__name__, "error_code": "ui_snapshot_failed"}}
+    if taken.get("ok"):
+        return {**reply, "snapshot": taken.get("result")}
+    return {
+        **reply,
+        "snapshot_error": {"error": taken.get("error"), "error_code": taken.get("error_code") or "ui_snapshot_failed"},
+    }
 
 
 @server.tool()

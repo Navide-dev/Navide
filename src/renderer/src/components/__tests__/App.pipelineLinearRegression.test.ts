@@ -137,6 +137,8 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     pipelineDag: dag,
     // No pane in these traces was held by an earlier run (#448).
     heldKickoffCopy: () => undefined,
+    // ...and no retry finds a copy in the box.
+    kickoffCopyInBox: () => ({ holds: () => false, submit: async () => false }),
     heldKickoffPanes: new Set<string>(),
     failRunOnKickoff: async () => {},
     runEndingSlots: new Set<string>(),

@@ -955,6 +955,37 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  STOP wants that agent to stay stopped until they type. */
   const stoppedBy = ref<'agent' | 'user' | null>(null)
   watch(isStopped, (stopped) => { if (!stopped) stoppedBy.value = null }, { flush: 'sync' })
+  /** A STOP that was not an agent's whose badge the agent's own next turn has
+   *  since cleared (markAgentTurnStart). The badge is gone, but the messaging
+   *  gate keeps holding queued messages until a person types: see stoppedBy. */
+  const stopHeldForUser = ref(false)
+  // When this composable last issued an interrupt; 0 for a STOP restored from
+  // disk or another window, which has no interrupted turn left to settle.
+  let stoppedAt = 0
+  // Activity stamped this soon after an interrupt still belongs to the turn it
+  // cut off (its last log records, Claude's "[Request interrupted by user]").
+  const STOP_SETTLE_MS = 3_000
+
+  /** The agent began a turn of its own after a STOP: Stop hook feedback, a
+   *  schedule, a delivered message. The badge records the interrupt and must
+   *  not outlive the next turn — left on, it kept Interrupt / Reapply Role /
+   *  Reclaim disabled on a pane that was visibly working (0.2.38). Only the
+   *  badge clears: a STOP that was not an agent's keeps holding the messaging
+   *  gate through stopHeldForUser until a person types. `at` is when the
+   *  activity was recorded. */
+  function markAgentTurnStart(at: number): void {
+    if (!isStopped.value || at - stoppedAt < STOP_SETTLE_MS) return
+    if (stoppedBy.value !== 'agent') stopHeldForUser.value = true
+    isStopped.value = false
+  }
+
+  /** A person typed into the pane: the STOP is over, badge and gate hold both. */
+  function resumeFromStop(): void {
+    if (!isStopped.value && !stopHeldForUser.value) return
+    isStopped.value = false
+    stopHeldForUser.value = false
+    opts?.onUserResume?.()
+  }
 
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
@@ -2420,7 +2451,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
 
   /** Input bookkeeping shared by term.onData and the manual-paste path. */
   function noteUserInput(text: string): void {
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     // A clipboard paste is the user putting something in the composer they have
     // not sent yet, so it counts as input for the draft gate exactly like typing.
     lastUserKeyAt.value = Date.now()
@@ -2459,7 +2490,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (!inputTransportReady()) return
       noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
           inputBuffer = ''
           syncDraft()
@@ -2483,10 +2514,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         // the failure this whole gate exists to prevent.
         inputBuffer = inputBuffer.replace(/\s*\S+\s*$/, '')
       } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         inputBuffer += data
       } else if (data.length > 1) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         // Terminal reports ride this same channel and are not typed text.
         // Dropping escape sequences is not enough for the mouse ones: X10
         // encodes the button and coordinates as three PRINTABLE bytes after
@@ -2736,6 +2767,34 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // pendingSpawn — which does not exist until this line.
   watch(displayStatus, onLeftUserPrompt)
   let activeCreateGeneration: string | null = null
+  // Output frames that arrived while terminal.create was in flight, keyed by
+  // their PTY id: the backend streams a PTY's output the moment it spawns, but
+  // this pane only learns the id from the create response. A CLI that prints
+  // its whole banner before that response and then sits at its prompt was
+  // otherwise dropped entirely — the pane showed nothing, cleanBytesSeen stayed
+  // 0, and every injection into it read "printed nothing" (Windows VM 0.2.38,
+  // cli_open_agent into a new workspace). Frames for other panes' PTYs land
+  // here too and are discarded once the response names ours; the cap bounds
+  // what a busy window can pile up while one create is slow.
+  const EARLY_OUTPUT_CAP_BYTES = 512 * 1024
+  let earlyOutput = new Map<string, (string | Uint8Array)[]>()
+  let earlyOutputBytes = 0
+  function holdEarlyOutput(id: string, data: string | Uint8Array): void {
+    if (!id || earlyOutputBytes + data.length > EARLY_OUTPUT_CAP_BYTES) return
+    earlyOutputBytes += data.length
+    const held = earlyOutput.get(id)
+    if (held) held.push(data)
+    else earlyOutput.set(id, [data])
+  }
+  /** Hand the held frames of `id` to the normal output path, drop the rest. */
+  function replayEarlyOutput(id: string): void {
+    const held = earlyOutput.get(id)
+    earlyOutput = new Map()
+    earlyOutputBytes = 0
+    if (!held?.length) return
+    _pendingOutput.push(...held)
+    if (!_outputTimer) _outputTimer = setTimeout(() => _flushPendingOutput(true), _coalesceMs())
+  }
   let pendingCreateCancel: Promise<boolean> | null = null
   const createCancelRequests = new Map<string, Promise<boolean>>()
 
@@ -2895,6 +2954,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (activeCreateGeneration !== createGeneration || isDisposed) return
       stallReason.value = null  // past every silent exit — the create is going out
       createInFlight = true
+      // This pane's output handler is bound only once the response below names
+      // its PTY; hold whatever arrives meanwhile (see replayEarlyOutput).
+      earlyOutput = new Map()
+      earlyOutputBytes = 0
+      const earlyUnsub = terminalPort.onOutput((p) => holdEarlyOutput(p.terminal_session_id, p.data))
       const resp = await terminalPort.create({
         paneId,
         createGeneration,
@@ -2915,7 +2979,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,
-      }, TERMINAL_CREATE_TIMEOUT_MS)
+      }, TERMINAL_CREATE_TIMEOUT_MS).finally(earlyUnsub)
       // A cancellation or replacement can land while the RPC is in flight.
       // The backend cancellation owns rollback; a late result must never bind
       // its PTY or overwrite the newer pane state.
@@ -2938,6 +3002,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       activeCreateGeneration = null
       startingStartedAt.value = null
       sessionId.value = resp.payload.terminal_session_id
+      replayEarlyOutput(sessionId.value)
       rememberSessionId(sessionId.value)  // enable reattach after a reload
       resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
       status.value = 'running'
@@ -3091,6 +3156,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       throw new Error('terminal already running')
     }
     isStopped.value = false
+    stopHeldForUser.value = false
     runningLatched.value = false
     turnCompleteAt.value = 0
     // A rebuild/respawn out of AWAITING must not carry the old session's
@@ -3346,7 +3412,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function submitAsTyped(): boolean {
     if (_stdinGated || isDisposed) return false
     if (!pasteText('\r', HUMAN_KEY)) return false
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     inputBuffer = ''
     syncDraft()
     return true
@@ -3369,6 +3435,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // interrupt that never left.
     if (!inputTransportReady()) return false
     stoppedBy.value = by
+    stoppedAt = Date.now()
+    stopHeldForUser.value = false
     isStopped.value = true
     const reply = await terminalPort.interrupt(sessionId.value)
     // wsClient resolves an `ok: false` rather than rejecting it, so a refusal
@@ -3566,6 +3634,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     displayStatus,
     liveStatus,
     stoppedBy,
+    stopHeldForUser,
+    markAgentTurnStart,
     awaitingKind,
     startingStartedAt,
     startingAgeMs,

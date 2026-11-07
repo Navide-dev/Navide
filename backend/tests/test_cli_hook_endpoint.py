@@ -940,3 +940,105 @@ def test_a_coarse_clock_never_lets_the_previous_turns_text_through(
         app_module._pane_tracked_since.pop("pw-tick", None)
         app_module._last_hook_turn_end.pop("pw-tick", None)
         app_module._last_log_turn_start.pop("pw-tick", None)
+
+
+# --- the Stop hook's own text (last_assistant_message) -----------------------------
+
+
+def _reply_listener(monkeypatch) -> list[tuple]:
+    seen: list[tuple] = []
+    monkeypatch.setattr(app_module, "hook_reply_listeners", [lambda p, t, e: seen.append((p, t, e))])
+    return seen
+
+
+def test_stop_hook_hands_its_last_assistant_message_to_the_reply_listeners(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """Claude Code's Stop payload carries the turn's final assistant message, the
+    same message the log reader's turn_complete carries. The chat reply used to
+    wait for the reader to reach that line (2026-11-04: p50 119 s, p90 767 s)."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", ""))
+    seen = _reply_listener(monkeypatch)
+    try:
+        _post(client, "stop", last_assistant_message="what the agent said")
+        assert seen == [("pw", "what the agent said", False)]
+        # The activity table is as before: the hook's turn end, with no text of a
+        # log turn end that has not come.
+        assert app_module._pane_activity["pw"]["event_type"] == "turn_complete"
+        assert app_module._pane_activity["pw"]["text"] == ""
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_a_blocked_stop_hook_still_hands_over_its_text(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """The text is the pane's answer to what it was working on, whether or not the
+    hook then hands it the next message; the pane's state stays "working"."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", ""))
+
+    async def drain(pane_id: str, *, stop_hook_active: bool) -> str:
+        return "[Navide MSG] the next one"
+
+    monkeypatch.setattr(app_module.hook_drain, "drain_for_stop_hook", drain)
+    seen = _reply_listener(monkeypatch)
+    try:
+        resp = client.post(
+            "/hooks/claude", headers={"X-Agent-Team-Event": "stop"},
+            json={"session_id": "s-1", "cwd": "/tmp/ws", "last_assistant_message": "done with that one"},
+        )
+        assert resp.json() == {"decision": "block", "reason": "[Navide MSG] the next one"}
+        assert seen == [("pw", "done with that one", False)]
+        assert app_module._pane_activity["pw"]["event_type"] == "agent_active"
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_a_stop_hook_without_the_field_hands_nothing_over(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", ""))
+    seen = _reply_listener(monkeypatch)
+    try:
+        _post(client, "stop")
+        _post(client, "stop", last_assistant_message="   ")
+        _post(client, "stop", last_assistant_message=None)
+        assert seen == []
+        assert app_module._pane_activity["pw"]["event_type"] == "turn_complete"
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_the_text_the_log_already_posted_is_marked_so(stepped_wall,
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", ""))
+    seen = _reply_listener(monkeypatch)
+    app_module._record_pane_activity("pw", "agent_active", "a prompt", source="log", turn_start=True, event_wall=app_module.time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "what the agent said", source="log", event_wall=app_module.time.time())
+    try:
+        _post(client, "stop", last_assistant_message="what the agent said")
+        assert seen == [("pw", "what the agent said", True)]
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_a_log_end_of_an_earlier_turn_does_not_mark_the_hooks_text_posted(stepped_wall,
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """The reader lags a whole turn: its latest end is the previous turn's, with
+    that turn's text. The hook's text is this turn's and goes out."""
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", ""))
+    seen = _reply_listener(monkeypatch)
+    app_module._record_pane_activity("pw", "agent_active", "prompt one", source="log", turn_start=True, event_wall=app_module.time.time())
+    app_module._record_pane_activity("pw", "turn_complete", "reply one", source="log", event_wall=app_module.time.time())
+    try:
+        _post(client, "stop", last_assistant_message="reply two")
+        assert seen == [("pw", "reply two", False)]
+    finally:
+        app_module._pane_activity.clear()

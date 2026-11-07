@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { transformWithEsbuild } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
 import { createParkedDelivery, waitUntilTurnEnds } from '../../lib/pipelineDelivery'
+import { noteScreenRoute, takeScreenRoute } from '../../lib/routedBlockCredits'
 
 // 0.2.37 VM round, the run-time half of the resume bug: the stage router types
 // ASK / REPORT / DISPATCH / handoff / reminder text into panes, and text typed
@@ -41,8 +42,8 @@ async function loadRouter(parked: { value: boolean }) {
     'AppRouter.ts',
     { loader: 'ts' },
   )
-  const api = new Function('injectPane', 'routerInject', 'pipelineLog', 'i18n', 'paneTurnStartedAt', code)(
-    injectPane, routerInject, () => {}, { global: { t: () => '' } }, new Map(),
+  const api = new Function('injectPane', 'routerInject', 'pipelineLog', 'i18n', 'paneTurnStartedAt', 'noteScreenRoute', 'takeScreenRoute', code)(
+    injectPane, routerInject, () => {}, { global: { t: () => '' } }, new Map(), noteScreenRoute, takeScreenRoute,
   ) as {
     queueOrRouteWorkerMsg: (router: unknown, stageId: string, msg: unknown) => void
     markManagerReady: (router: unknown, stageId: string, how: string) => Promise<void>

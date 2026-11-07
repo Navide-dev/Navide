@@ -401,8 +401,11 @@ async def server():
                 return res.status
         except urllib.error.HTTPError as err:
             return err.code
-        except urllib.error.URLError:
-            # Refused mid-upload: the connection closed before the client read the 413.
+        except (urllib.error.URLError, ConnectionError):
+            # Refused mid-upload: the connection closed before the client read the
+            # 413. urllib wraps a reset while sending in URLError; one while reading
+            # the response surfaces bare, as ConnectionResetError (Windows 10054)
+            # or ConnectionAbortedError (Windows 10053).
             return RESET
 
     yield SimpleNamespace(host=host, listener=listener, trigger=trigger, guard=guard, post=lambda *a, **k: asyncio.to_thread(post, *a, **k))

@@ -94,6 +94,7 @@ EMPTY_TURN_GRACE_S = 120.0
 # follow, and it does, until RUN_WATCH_MAX_S.
 LATE_TEXT_STATUS_AFTER_S = 10.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
+HOOK_REPLIED_REMEMBERED = 16  # per pane: turn texts a Stop hook answered, for the log's late copy
 VERDICT_POLL_S = 5.0
 # Right after a restart a platform hands over what queued while Navide was down, before the
 # windows have registered their panes again: a pane that does not resolve yet is waited for
@@ -273,6 +274,9 @@ class Seams:
     wake_target: Callable[[str], dict[str, str]] = lambda _pane_id: {}
     # () -> whether any Navide window is connected
     windows_open: Callable[[], bool] = lambda: True
+    # pane_id -> whether it runs in a connected window: False for a restore placeholder
+    # not yet opened, or a pane whose window closed (still registered, waiting out its grace)
+    pane_live: Callable[[str], bool] = lambda _pane_id: True
     # (pane_id, workspace_path, session_id) -> {ok, pane_id} with the pane back on that same
     # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
     # `started` is False when it was refused before anything was opened
@@ -448,6 +452,10 @@ class ChannelManager:
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         # pane_id -> runs a hook's turn end closed, oldest first, waiting for the log's text
         self._await_text: dict[str, list[_AwaitText]] = {}
+        # pane_id -> (when, text) of the last turns a Stop hook's own text answered, so
+        # the log's end of each of those turns (arriving later) is not posted a second
+        # time; an entry is used up by the log turn end it matches
+        self._hook_replied: dict[str, deque[tuple[float, str]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
@@ -1354,6 +1362,55 @@ class ChannelManager:
         else:
             loop.call_soon_threadsafe(self._handle_activity, pane_id, entry)
 
+    def on_hook_reply(self, pane_id: str, text: str, log_ended: bool) -> None:
+        """Sync listener registered in app.hook_reply_listeners. Never raises."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            self._handle_hook_reply(pane_id, text, log_ended)
+        else:
+            loop.call_soon_threadsafe(self._handle_hook_reply, pane_id, text, log_ended)
+
+    def _handle_hook_reply(self, pane_id: str, text: str, log_ended: bool) -> None:
+        """A Claude Stop hook brought the turn's final text itself: the same message the
+        log's turn end carries, so the chat run waiting on this turn is answered now, not
+        when the log reader gets to the line (minutes behind on a loaded machine, and never
+        when a blocked Stop hook had the log's end of the turn downgraded). The log's own
+        end of the turn, when it comes, is recognised by its text and not posted again.
+        A turn the log already ended was answered from there; a turn no chat message asked
+        for is left to the log, which mirrors it at the binding's verbosity, as before."""
+        if log_ended or not text.strip():
+            return
+        pending = self._pending.get(pane_id)
+        if pending is None or pending.armed_at is None:
+            return
+        self._close_run(pane_id, pending)
+        replied = self._hook_replied.setdefault(pane_id, deque(maxlen=HOOK_REPLIED_REMEMBERED))
+        replied.append((time.time(), text.strip()))
+        self._spawn(self._send_reply(pending, text))
+
+    def _take_hook_replied(self, pane_id: str, text: str, wall: Any) -> bool:
+        """Whether a log turn end with ``text``, stamped ``wall`` (None when unstamped), is
+        the log's copy of a turn a Stop hook already answered — and use that entry up, so
+        a later turn that happens to end with the same words goes its own way (the
+        transcript is in order: the answered turn's log end comes first). A copy written
+        before the hook fired is stamped no later than the hook's arrival."""
+        replied = self._hook_replied.get(pane_id)
+        if not replied:
+            return False
+        wanted = text.strip()
+        for item in replied:
+            when, said = item
+            if said == wanted and (wall is None or float(wall) <= when):
+                replied.remove(item)
+                return True
+        return False
+
     def _handle_activity(self, pane_id: str, entry: dict[str, Any] | None) -> None:
         if entry is None:
             # Unregistered is not closed: a rebuild, detach or workspace switch
@@ -1363,6 +1420,7 @@ class ChannelManager:
             self._retire_relay(pane_id, MSG_RELAY_PANE_GONE)
             self._known_panes.discard(pane_id)
             self._turn_source.pop(pane_id, None)
+            self._hook_replied.pop(pane_id, None)
             return
         if pane_id not in self._known_panes:
             # First activity from this id (e.g. after a restart): rebind by alias.
@@ -1401,6 +1459,12 @@ class ChannelManager:
                 # A prompt written after the hook fired, and no end line for the hooked
                 # turn before it (an interrupted turn): its text is not coming.
                 self._lose_held(pane_id, head, "the log has no end for the turn")
+        if is_turn_end and source == "log" \
+                and self._take_hook_replied(pane_id, text, entry.get("event_wall")):
+            # The log's end of a turn whose Stop hook already answered the chat with this
+            # same text (_handle_hook_reply): posted once. Arriving late, it is neither the
+            # reply to a run armed since nor a turn to mirror.
+            return
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
             # The text half of a turn end that came in two lines: the reply after all.
@@ -1419,13 +1483,7 @@ class ChannelManager:
             if source != "hook":
                 self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
-        self._pending.pop(pane_id, None)
-        if pending.task:
-            pending.task.cancel()
-        self._retire_relay(pane_id, MSG_RELAY_TURN_ENDED)
-        self._awaiting_posted.discard(pane_id)
-        self._awaiting_failures.pop(pane_id, None)
-        self._awaiting_shown.pop(pane_id, None)
+        self._close_run(pane_id, pending)
         if source == "hook":
             # The turn ended; its text is still on its way from the conversation log.
             wall = entry.get("event_wall")
@@ -1443,6 +1501,16 @@ class ChannelManager:
             self._textless[pane_id] = (pending, self._spawn(self._reply_textless(pane_id, pending)))
             return
         self._spawn(self._send_reply(pending, text))
+
+    def _close_run(self, pane_id: str, pending: _Pending) -> None:
+        """The turn ``pending`` waited on has ended: the run is over, whatever answers it."""
+        self._pending.pop(pane_id, None)
+        if pending.task:
+            pending.task.cancel()
+        self._retire_relay(pane_id, MSG_RELAY_TURN_ENDED)
+        self._awaiting_posted.discard(pane_id)
+        self._awaiting_failures.pop(pane_id, None)
+        self._awaiting_shown.pop(pane_id, None)
 
     async def _reply_textless(self, pane_id: str, pending: _Pending) -> None:
         """No text came after a textless turn end within the grace: the turn said nothing."""
@@ -1879,7 +1947,15 @@ class ChannelManager:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
+        # A typed /wake (offered where there are no buttons) is answered like the button, never
+        # sent to the CLI as a prompt.
+        wake_asked = wake_pressed or _command_word(
+            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
         pane_id = await self._resolve_after_startup(binding.pane_id)
+        if pane_id and wake_asked and not self._seams.pane_live(pane_id):
+            # Registered but not running (a restore placeholder, or its window just closed):
+            # a wake opens it rather than answering that it is online.
+            pane_id = ""
         if not pane_id:
             await self._offline(msg, binding)  # binding kept: it may come back
             return
@@ -1887,10 +1963,6 @@ class ChannelManager:
             self.store.rename_pane(binding.pane_id, pane_id)
         self._spawn(self._remember_wake_target(binding, pane_id))
         key = binding.location().key()
-        # A typed /wake (offered where there are no buttons) is answered like the button, never
-        # sent to the CLI as a prompt.
-        wake_asked = wake_pressed or _command_word(
-            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
         if wake_asked or key in self._wake_kept:
             # The pane is back (on its own, or a wake asked for before it came back): what
             # was kept for it goes in first, in order.
@@ -1980,7 +2052,8 @@ class ChannelManager:
                 log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
                 result = {"ok": False, "code": "error", "started": True}
         finally:
-            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)),
+                                  succeeded=bool(result.get("ok")))
         if not result.get("ok"):
             await self._reply(msg, wake.outcome_text(lang, result))
             return

@@ -378,6 +378,8 @@ defineExpose({
   displayStatus,
   liveStatus: terminal.liveStatus,
   stoppedBy: terminal.stoppedBy,
+  stopHeldForUser: terminal.stopHeldForUser,
+  markAgentTurnStart: terminal.markAgentTurnStart,
   awaitingKind: terminal.awaitingKind,
   startingStartedAt: terminal.startingStartedAt,
   startingAgeMs: terminal.startingAgeMs,
@@ -434,7 +436,11 @@ defineExpose({
   redraw: terminal.redraw,
   // STOP badge: App.vue owns persistence; it reflects stored/broadcast truth
   // into this pane's composable ref via setStopped (no persist side-effect).
-  setStopped: (v: boolean) => { terminal.isStopped.value = v }
+  // Cleared elsewhere means a person resumed it there: drop the gate hold too.
+  setStopped: (v: boolean) => {
+    terminal.isStopped.value = v
+    if (!v) terminal.stopHeldForUser.value = false
+  }
 })
 
 /** True when the drag carries a CLI pane's identity (pane→pane context share)

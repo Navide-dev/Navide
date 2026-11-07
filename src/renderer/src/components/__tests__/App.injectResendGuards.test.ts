@@ -27,12 +27,14 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   )
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
-    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'paneParkedOnPrompt',
+    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'kickoffCopyInBox', 'paneParkedOnPrompt',
     'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', 'runPaneSentAt', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
-    'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined, () => false,
+    'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined,
+    // An empty box: retries type again, as before.
+    () => ({ holds: () => false, submit: async () => false }), () => false,
     // The run is running: both sites check it before each attempt.
     () => true, { state: 'running' }, false, 0, () => {}, () => {}, new Map(),
   ) as () => ReturnType<typeof runPipelineKickoff>

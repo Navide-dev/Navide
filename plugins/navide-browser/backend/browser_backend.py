@@ -10,6 +10,7 @@ stdout is reserved for compact protocol frames; diagnostics belong on stderr.
 
 from __future__ import annotations
 
+import difflib
 import json
 import math
 import os
@@ -34,6 +35,11 @@ SNAPSHOT_MAX_CHARS = 400_000
 # A screenshot's base64 is bounded the same way; quality steps down until it fits.
 SCREENSHOT_MAX_BASE64 = 700_000
 SCREENSHOT_QUALITIES = (70, 50, 35, 20)
+# A view on no window may paint no frame (Linux/Windows without a compositor,
+# software rendering). The Host gives up after ~4s with NO_FRAME_PREFIX; this
+# is the backstop so the tool never runs into the 30s plugin timeout.
+SCREENSHOT_WAIT_S = 5.0
+NO_FRAME_PREFIX = "no-frame"
 WAIT_FOR_CONTROL_MAX_MS = 50_000
 WAIT_FOR_CONTROL_POLL_S = 1.0
 # browser_wait polls the page for a URL, selector or text up to this long.
@@ -79,6 +85,17 @@ ACT_ACTIONS = ("click", "fill", "press", "select", "hover", "scroll", "goto", "b
 REF_RE = re.compile(r"^@([1-9][0-9]{0,15})$")
 # AX roles that only wrap content; a nameless one is flattened into its parent.
 _STRUCTURAL_ROLES = frozenset({"generic", "none", "presentation", "InlineTextBox", "LineBreak"})
+# filter "interactive": landmarks and containers worth expanding (their lines
+# say how much they hide), then the controls and headings an agent acts on.
+_LANDMARK_ROLES = frozenset({
+    "banner", "navigation", "main", "complementary", "contentinfo", "region", "form", "search", "dialog",
+    "alertdialog", "listbox", "menu", "menubar", "tablist", "tree",
+})
+_INTERACTIVE_ROLES = _LANDMARK_ROLES | frozenset({
+    "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio", "switch", "slider", "spinbutton",
+    "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "option", "treeitem", "heading",
+})
+SNAPSHOT_FILTERS = ("all", "interactive")
 
 _MISSING = object()
 _write_lock = threading.Lock()
@@ -91,6 +108,14 @@ _bridge_origin_ids: dict[str, set[str]] = {}
 # browser_tabs new/select. Lost on restart: a Space then acts on its first
 # agent tab again, as it did before Spaces had tabs.
 _active_tabs: dict[str, str] = {}
+# The last viewport snapshot each pane saw of each view ((pane, viewId) ->
+# (document URL, text, None when it was cut)), the base browser_act diff compares against. Keyed by
+# pane so two panes sharing a Space never diff against each other's reads.
+_snapshot_bases: dict[tuple[str | None, str], tuple[str, str | None]] = {}
+# The pane whose browser_handoff a view is waiting on (viewId -> pane). On a
+# Space any pane may use, another pane's take_over or finish leaves that
+# handoff's need-action state and note in place while the user holds control.
+_handoffs: dict[str, str | None] = {}
 
 
 class DuplicateKeyError(ValueError):
@@ -462,6 +487,7 @@ def _cancel(request_id: Any) -> None:
 _USER_IN_CONTROL_MESSAGES = {
     "user-owned": "This Space belongs to the user. Ask the user to choose \"Let the agent use this Space\" first.",
     "manual_takeover": "The user took over this Space. Call browser_wait_for_control and continue once it returns control.",
+    "agent_handoff": "An agent handed this Space to the user with browser_handoff. Call browser_wait_for_control and continue once the user returns control.",
     "permission": "The page asked for a permission only the user can grant. Call browser_wait_for_control.",
 }
 
@@ -607,8 +633,8 @@ def _ax_text(field: Any) -> str:
     return ""
 
 
-def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
-    """backendNodeIds whose layout box intersects the visible viewport."""
+def _viewport_nodes(bridge: Bridge, view_id: str) -> tuple[set[int], str]:
+    """backendNodeIds whose layout box intersects the visible viewport, and the document URL."""
     metrics = _evaluate(
         bridge,
         view_id,
@@ -617,12 +643,17 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
     try:
         left, top, width, height = (float(item) for item in json.loads(metrics))
     except (TypeError, ValueError):
-        return set()
+        return set(), ""
+    if width <= 0 or height <= 0:
+        raise _not_rendered()
     captured = _cdp(bridge, view_id, "DOMSnapshot.captureSnapshot", {"computedStyles": []})
     documents = captured.get("documents")
     if not isinstance(documents, list) or not documents or not _is_record(documents[0]):
-        return set()
+        return set(), ""
     document = documents[0]
+    strings = captured.get("strings")
+    url_index = document.get("documentURL")
+    url = strings[url_index] if isinstance(strings, list) and isinstance(url_index, int) and 0 <= url_index < len(strings) else ""
     backend_ids = (document.get("nodes") or {}).get("backendNodeId") or []
     layout = document.get("layout") or {}
     visible: set[int] = set()
@@ -634,41 +665,94 @@ def _viewport_nodes(bridge: Bridge, view_id: str) -> set[int]:
             continue
         if x < left + width and x + w > left and y < top + height and y + h > top and 0 <= index < len(backend_ids):
             visible.add(backend_ids[index])
-    return visible
+    return visible, url if isinstance(url, str) else ""
 
 
-def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str, Any]:
+def _not_rendered() -> ToolError:
+    return ToolError(
+        "VIEW_NOT_RENDERED",
+        "The page has no viewport (0x0): it is not laid out, so it cannot be read or captured.",
+    )
+
+
+def snapshot(
+    bridge: Bridge, view_id: str, scope: str = "viewport", filter: str = "all", root: Any = None
+) -> dict[str, Any]:
     """A compact role/name tree; every element carries a ref ``@<backendDOMNodeId>``.
 
     Refs are valid only until the page changes; take a new snapshot after any action.
+    `filter` "interactive" keeps controls, headings and landmarks only; `root`
+    (a ref) renders that element's subtree only. Neither changes a ref.
     """
+    return _snapshot(bridge, view_id, scope, filter, root)[0]
+
+
+def _snapshot(bridge: Bridge, view_id: str, scope: str, filter: str, root: Any) -> tuple[dict[str, Any], str]:
+    """snapshot() and, for scope viewport, the document URL it was taken of."""
     if scope not in ("viewport", "full"):
         raise ToolError("INVALID_ARGUMENT", "scope must be viewport or full.")
+    if filter not in SNAPSHOT_FILTERS:
+        raise ToolError("INVALID_ARGUMENT", "filter must be all or interactive.")
+    root_id = _backend_node(root) if root is not None else None
     tree = _cdp(bridge, view_id, "Accessibility.getFullAXTree")
     nodes = [node for node in tree.get("nodes") or [] if _is_record(node)]
     by_id = {node.get("nodeId"): node for node in nodes}
     child_ids = {child for node in nodes for child in node.get("childIds") or []}
-    roots = [node for node in nodes if node.get("nodeId") not in child_ids]
-    visible = _viewport_nodes(bridge, view_id) if scope == "viewport" else None
+    if root_id is None:
+        roots = [node for node in nodes if node.get("nodeId") not in child_ids]
+    else:
+        roots = [node for node in nodes if node.get("backendDOMNodeId") == root_id][:1]
+        if not roots:
+            raise ToolError("STALE_REF", "The element is gone; take a new browser_snapshot.")
+    visible, url = _viewport_nodes(bridge, view_id) if scope == "viewport" else (None, "")
+    interactive = filter == "interactive"
 
     lines: list[str] = []
     truncated = False
     size = 0
+    omitted = 0
+
+    def listed(node: dict[str, Any]) -> bool:
+        """The node has a line of its own under filter all."""
+        role = _ax_text(node.get("role"))
+        name = _ax_text(node.get("name")).strip()
+        own = not node.get("ignored") and role not in ("", "RootWebArea") and not (
+            role in _STRUCTURAL_ROLES and not name
+        )
+        return own and not (role == "StaticText" and not name)
+
+    def in_viewport(node: dict[str, Any]) -> bool:
+        backend_id = node.get("backendDOMNodeId")
+        return visible is None or (isinstance(backend_id, int) and backend_id in visible)
+
+    def hidden_below(node: dict[str, Any]) -> int:
+        """Lines filter interactive drops under `node`, down to the next kept node."""
+        count = 0
+        for child_id in node.get("childIds") or []:
+            child = by_id.get(child_id)
+            if child is None:
+                continue
+            if listed(child) and _ax_text(child.get("role")) in _INTERACTIVE_ROLES:
+                continue
+            if listed(child) and in_viewport(child):
+                count += 1
+            count += hidden_below(child)
+        return count
 
     def render(node: dict[str, Any], depth: int) -> bool:
         """Append the node's subtree; True when anything in it was emitted."""
-        nonlocal truncated, size
+        nonlocal truncated, size, omitted
         if truncated:
             return False
         role = _ax_text(node.get("role"))
         name = _ax_text(node.get("name")).strip()
         backend_id = node.get("backendDOMNodeId")
-        own = not node.get("ignored") and role not in ("", "RootWebArea") and not (
-            role in _STRUCTURAL_ROLES and not name
-        )
-        if role == "StaticText" and not name:
+        own = listed(node)
+        in_view = in_viewport(node)
+        if interactive and own and role not in _INTERACTIVE_ROLES:
             own = False
-        in_view = visible is None or (isinstance(backend_id, int) and backend_id in visible)
+            if in_view:
+                omitted += 1
         line_index = len(lines)
         if own and in_view:
             parts = [f"{'  ' * depth}- {role}"]
@@ -685,6 +769,10 @@ def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str,
                         parts.append(f"[{prop['name']}]" if flag == "true" else f"[{prop['name']}={flag}]")
             if isinstance(backend_id, int) and role != "StaticText":
                 parts.append(f"@{backend_id}")
+            if interactive and role in _LANDMARK_ROLES:
+                hidden = hidden_below(node)
+                if hidden:
+                    parts.append(f"(+{hidden} hidden)")
             line = " ".join(parts)
             if size + len(line) + 1 > SNAPSHOT_MAX_CHARS:
                 truncated = True
@@ -703,9 +791,14 @@ def snapshot(bridge: Bridge, view_id: str, scope: str = "viewport") -> dict[str,
             size += len(container) + 1
         return (own and in_view) or emitted_child
 
-    for root in roots:
-        render(root, 0)
-    return {"scope": scope, "snapshot": "\n".join(lines), "truncated": truncated}
+    for node in roots:
+        render(node, 0)
+    result: dict[str, Any] = {"scope": scope, "snapshot": "\n".join(lines), "truncated": truncated}
+    if interactive:
+        result.update(filter=filter, omitted=omitted)
+    if root_id is not None:
+        result["root"] = f"@{root_id}"
+    return result, url
 
 
 def _backend_node(ref: Any) -> int:
@@ -840,10 +933,20 @@ def _http_url(value: Any) -> str:
     return value
 
 
-def act(bridge: Bridge, view_id: str, arguments: dict[str, Any], *, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+def act(
+    bridge: Bridge,
+    view_id: str,
+    arguments: dict[str, Any],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    pane: str | None = None,
+) -> dict[str, Any]:
     action = arguments.get("action")
     if action not in ACT_ACTIONS:
         raise ToolError("INVALID_ARGUMENT", f"action must be one of {', '.join(ACT_ACTIONS)}.")
+    diff = arguments.get("diff", False)
+    if not isinstance(diff, bool):
+        raise ToolError("INVALID_ARGUMENT", "diff must be a boolean.")
     result: dict[str, Any] = {"action": action}
     navigates = False
     if action in ("click", "hover"):
@@ -918,14 +1021,110 @@ def act(bridge: Bridge, view_id: str, arguments: dict[str, Any], *, sleep: Calla
         # A click or Enter may or may not navigate; give it a moment to start.
         sleep(0.3)
         result["loaded"] = wait_for_load(bridge, view_id, sleep=sleep)
-    if arguments.get("snapshot") is True:
-        result.update(snapshot(bridge, view_id, "viewport"))
+    if diff:
+        result.update(_diff_snapshot(bridge, view_id, pane))
+    elif arguments.get("snapshot") is True:
+        taken, url = _snapshot(bridge, view_id, "viewport", "all", None)
+        remember_snapshot(pane, view_id, url, taken)
+        result.update(taken)
     return result
 
 
+def remember_snapshot(pane: str | None, view_id: str, url: str, taken: dict[str, Any]) -> None:
+    """Keep a full viewport snapshot as the base of this pane's next diff."""
+    with _state_lock:
+        _snapshot_bases[(pane, view_id)] = (url, None if taken["truncated"] else taken["snapshot"])
+
+
+def _forget_snapshots(view_id: str) -> None:
+    with _state_lock:
+        for key in [key for key in _snapshot_bases if key[1] == view_id]:
+            del _snapshot_bases[key]
+
+
+def _refs(text: str) -> set[str]:
+    return set(re.findall(r" (@[0-9]+)(?= |$)", text, re.MULTILINE))
+
+
+def _diff_snapshot(bridge: Bridge, view_id: str, pane: str | None) -> dict[str, Any]:
+    """The viewport after an action as the lines that changed since this pane's last
+    snapshot of the view, or the whole of it when a diff would not be the cheaper or
+    the truthful answer; `mode` says which one came back."""
+    taken, url = _snapshot(bridge, view_id, "viewport", "all", None)
+    with _state_lock:
+        base = _snapshot_bases.get((pane, view_id))
+    remember_snapshot(pane, view_id, url, taken)
+    text = taken["snapshot"]
+    reason = None
+    if base is None:
+        reason = "no-base"
+    elif taken["truncated"] or base[1] is None:
+        reason = "truncated"
+    elif base[0] != url:
+        reason = "navigated"
+    elif _refs(base[1]) and not _refs(base[1]) & _refs(text):
+        reason = "stale"
+    if reason is None:
+        changed = [
+            f"{line[0]} {line[1:]}"
+            for line in difflib.unified_diff(base[1].splitlines(), text.splitlines(), n=0, lineterm="")
+            if line[:1] in "+-" and not line.startswith(("+++", "---"))
+        ]
+        patch = "\n".join(changed)
+        if len(patch) < len(text):
+            return {
+                "scope": "viewport",
+                "snapshot": patch,
+                "truncated": False,
+                "mode": "diff",
+                "added": sum(1 for line in changed if line[0] == "+"),
+                "removed": sum(1 for line in changed if line[0] == "-"),
+            }
+        reason = "larger"
+    return {**taken, "mode": "full", "fullReason": reason}
+
+
+def _no_frame(detail: str) -> ToolError:
+    return ToolError(
+        "VIEW_NOT_RENDERED",
+        f"The page painted no frame to capture ({detail}). A Space that is not shown in the Browser "
+        "window may not paint on this system; open it in the Browser window, or use browser_snapshot.",
+        reason="no-frame",
+    )
+
+
+def _capture_screenshot(bridge: Bridge, view_id: str, quality: int) -> dict[str, Any]:
+    answer: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
+
+    def run() -> None:
+        try:
+            answer.put((True, _cdp(bridge, view_id, "Page.captureScreenshot", {"format": "jpeg", "quality": quality})))
+        except BaseException as error:  # noqa: BLE001 - handed to the caller's thread
+            answer.put((False, error))
+
+    threading.Thread(target=run, name="navide-browser-screenshot", daemon=True).start()
+    try:
+        ok, value = answer.get(timeout=SCREENSHOT_WAIT_S)
+    except queue.Empty:
+        raise _no_frame(f"no answer in {SCREENSHOT_WAIT_S:g}s") from None
+    if ok:
+        return value
+    if isinstance(value, BridgeFailure) and value.code == "CDP_ERROR" and (value.message or "").startswith(NO_FRAME_PREFIX):
+        raise _no_frame("the Host found no frame") from None
+    raise value
+
+
 def screenshot(bridge: Bridge, view_id: str) -> dict[str, Any]:
+    # A 0x0 page never paints, and Page.captureScreenshot then never answers.
+    try:
+        metrics = _evaluate(bridge, view_id, "JSON.stringify([scrollX, scrollY, innerWidth, innerHeight])")
+        _, _, width, height = (float(item) for item in json.loads(metrics))
+    except (TypeError, ValueError):
+        width = height = 1.0
+    if width <= 0 or height <= 0:
+        raise _not_rendered()
     for quality in SCREENSHOT_QUALITIES:
-        shot = _cdp(bridge, view_id, "Page.captureScreenshot", {"format": "jpeg", "quality": quality})
+        shot = _capture_screenshot(bridge, view_id, quality)
         data = shot.get("data")
         if not isinstance(data, str):
             raise ToolError("SCREENSHOT_FAILED", "The page returned no image.")
@@ -1082,6 +1281,9 @@ def tabs(bridge: Bridge, arguments: dict[str, Any], pane: str | None, *, sleep: 
             _active_tabs[name] = tab
         return {"viewId": tab, **_tabs_value(name, views)}
     _call(bridge, "close", {"viewId": tab})
+    _forget_snapshots(tab)
+    with _state_lock:
+        _handoffs.pop(tab, None)
     with _state_lock:
         if _active_tabs.get(name) == tab:
             del _active_tabs[name]
@@ -1096,6 +1298,9 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
     if not whole:
         view_id = _resolve_tab(bridge, arguments, pane)
         _call(bridge, "close", {"viewId": view_id})
+        _forget_snapshots(view_id)
+        with _state_lock:
+            _handoffs.pop(view_id, None)
         with _state_lock:
             for name, active in list(_active_tabs.items()):
                 if active == view_id:
@@ -1112,6 +1317,9 @@ def close(bridge: Bridge, arguments: dict[str, Any], pane: str | None) -> dict[s
             skipped.append(view["viewId"])
             continue
         _call(bridge, "close", {"viewId": view["viewId"]})
+        _forget_snapshots(view["viewId"])
+        with _state_lock:
+            _handoffs.pop(view["viewId"], None)
         closed.append(view["viewId"])
     with _state_lock:
         _active_tabs.pop(name, None)
@@ -1276,6 +1484,19 @@ def upload(bridge: Bridge, view_id: str, arguments: dict[str, Any], workspace: s
     return value
 
 
+def _others_handoff_pending(view: dict[str, Any] | None, pane: str | None) -> bool:
+    """The user still holds a view this backend saw another pane hand off.
+
+    A need-action of unknown origin (one set before a restart, or not through
+    browser_handoff) is not protected: take_over and finish act on it as they
+    always did.
+    """
+    if view is None or view.get("control") != "user" or view.get("state") != "need-action":
+        return False
+    with _state_lock:
+        return view.get("viewId") in _handoffs and _handoffs[view["viewId"]] != pane
+
+
 def take_over(
     bridge: Bridge,
     view_id: str,
@@ -1283,6 +1504,7 @@ def take_over(
     *,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    pane: str | None = None,
 ) -> dict[str, Any]:
     """Ask the user for control back, then wait. Never takes control itself."""
     view = _find_view(bridge, view_id)
@@ -1298,7 +1520,9 @@ def take_over(
     timeout = _bounded_timeout(arguments, WAIT_FOR_CONTROL_MAX_MS, WAIT_FOR_CONTROL_MAX_MS)
     # running, not need-action: entering need-action reloads a page the agent
     # ran script in, which would throw away what the user is doing there.
-    _set_state(bridge, view_id, "running", f"{TAKE_OVER_NOTE}: {note}" if note else TAKE_OVER_NOTE)
+    # Another pane's handoff the user has not finished keeps its own request.
+    if not _others_handoff_pending(view, pane):
+        _set_state(bridge, view_id, "running", f"{TAKE_OVER_NOTE}: {note}" if note else TAKE_OVER_NOTE)
     return {"asked": True, **wait_for_control(bridge, view_id, timeout, sleep=sleep, clock=clock)}
 
 
@@ -1342,16 +1566,23 @@ def run_tool(
             value = open_space(bridge, arguments, pane)
         elif name == "browser.snapshot":
             view_id = _resolve_view(bridge, arguments, pane)
-            value = {"viewId": view_id, **snapshot(bridge, view_id, arguments.get("scope", "viewport"))}
+            scope = arguments.get("scope", "viewport")
+            filter_ = arguments.get("filter", "all")
+            taken, url = _snapshot(bridge, view_id, scope, filter_, arguments.get("root"))
+            if scope == "viewport" and filter_ == "all" and arguments.get("root") is None:
+                remember_snapshot(pane, view_id, url, taken)
+            value = {"viewId": view_id, **taken}
         elif name == "browser.act":
             view_id = _resolve_view(bridge, arguments, pane)
-            value = {"viewId": view_id, **act(bridge, view_id, arguments)}
+            value = {"viewId": view_id, **act(bridge, view_id, arguments, pane=pane)}
         elif name == "browser.screenshot":
             view_id = _resolve_view(bridge, arguments, pane)
             value = {"viewId": view_id, **screenshot(bridge, view_id)}
         elif name == "browser.handoff":
             view_id = _resolve_view(bridge, arguments, pane)
             _set_state(bridge, view_id, "need-action", arguments.get("note"))
+            with _state_lock:
+                _handoffs[view_id] = pane
             value = {"viewId": view_id, "state": "need-action", "control": "user"}
         elif name == "browser.control.wait":
             view_id = _resolve_view(bridge, arguments, pane)
@@ -1361,8 +1592,11 @@ def run_tool(
             value = {"viewId": view_id, **wait_for_control(bridge, view_id, min(timeout, WAIT_FOR_CONTROL_MAX_MS))}
         elif name == "browser.finish":
             view_id = _resolve_view(bridge, arguments, pane)
-            _set_state(bridge, view_id, "done", arguments.get("note"))
-            value = {"viewId": view_id, "state": "done"}
+            if _others_handoff_pending(_find_view(bridge, view_id), pane):
+                value = {"viewId": view_id, "state": "need-action", "handoffPending": True}
+            else:
+                _set_state(bridge, view_id, "done", arguments.get("note"))
+                value = {"viewId": view_id, "state": "done"}
         elif name == "browser.close":
             value = close(bridge, arguments, pane)
         elif name == "browser.tabs":
@@ -1381,7 +1615,7 @@ def run_tool(
             value = {"viewId": view_id, **upload(bridge, view_id, arguments, workspace)}
         elif name == "browser.takeover":
             view_id = _resolve_tab(bridge, arguments, pane)
-            value = {"viewId": view_id, **take_over(bridge, view_id, arguments)}
+            value = {"viewId": view_id, **take_over(bridge, view_id, arguments, pane=pane)}
         elif name == "browser.cdp":
             view_id = _resolve_tab(bridge, arguments, pane)
             value = {"viewId": view_id, **raw_cdp(bridge, view_id, arguments)}

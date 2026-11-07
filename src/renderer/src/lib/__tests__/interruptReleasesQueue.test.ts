@@ -40,6 +40,13 @@ describe('messagingGateStatus', () => {
     }
   })
 
+  it('keeps holding a user STOP whose badge the agent\'s next turn cleared', () => {
+    // 0.2.38: the badge follows the agent; the hold still waits for the person.
+    expect(messagingGateStatus('idle', 'idle', null, true)).toBe('stopped')
+    expect(messagingGateStatus('running', 'running', null, true)).toBe('stopped')
+    expect(messagingGateStatus('idle', 'idle', null, false)).toBe('idle')
+  })
+
   it('stays not-ready when there is no live status to read', () => {
     // An older TerminalPane (or an ACP pane) exposes no liveStatus.
     expect(messagingGateStatus('stopped', undefined, 'agent')).toBe('stopped')
@@ -82,9 +89,24 @@ describe('App.vue wiring', () => {
     expect(appSource.match(/by: 'agent'/g)).toHaveLength(1)
   })
 
+  it('messagingHoldKey passes the STOP hold left after the badge cleared', () => {
+    expect(body).toContain('stopHeldForUser')
+  })
+
+  it('an agent turn clears the STOP badge, user records included', () => {
+    // 0.2.38 Linux VM: a delivered message's turn is only its user record until
+    // the model answers; filtering user records left the badge on all turn.
+    const at = appSource.indexOf("ev.event_type === 'agent_active'")
+    const branch = appSource.slice(at, at + 4000)
+    expect(branch).toContain('markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))')
+    expect(branch).not.toContain("ev.detail !== 'user'")
+  })
+
   it('TerminalPane exposes liveStatus', () => {
     const pane = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/TerminalPane.vue'), 'utf8')
     expect(pane).toContain('liveStatus: terminal.liveStatus')
     expect(pane).toContain('stoppedBy: terminal.stoppedBy')
+    expect(pane).toContain('stopHeldForUser: terminal.stopHeldForUser')
+    expect(pane).toContain('markAgentTurnStart: terminal.markAgentTurnStart')
   })
 })

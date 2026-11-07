@@ -128,6 +128,12 @@ class Dep:
     # unlike identity_regex it does not decide which binary is used.
     # '' = no such check.
     official_regex: str = ""
+    # Directory names another product keeps a same-named stand-in in. VS Code
+    # ships `<VS Code>\bin\copilot-shim\copilot.exe`, which is not the
+    # Copilot CLI: taken for it, its health check read "Startup probe failed".
+    # A binary whose own directory has one of these names is never this dep.
+    # () = no such stand-in (every other dep).
+    shim_dirs: tuple[str, ...] = ()
     min_version: str = ""            # '' = any version is fine
     install_cmd: str = ""            # shell command (whitelist); '' = no auto-install
     needs_terminal: bool = False     # interactive (sudo / OAuth) → external Terminal

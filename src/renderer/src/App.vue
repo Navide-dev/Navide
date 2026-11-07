@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -157,6 +157,7 @@ import { deriveAutoName, stripCliSessionContext } from './lib/autoName'
 import { bootWorkspaceToRecord } from './lib/bootWorkspace'
 import { diagLog } from '@navide/terminal'
 import { reclaimBlockedBy, focusedReclaimBlockedBy, namedReclaimBlockedBy, focusedForReclaim, idleReclaimDisabled, idleReclaimThresholdMs, RECLAIM_NOW_THRESHOLD_MS, type ReclaimCandidate } from './lib/idleReclaim'
+import { isSpawnReportSend } from './lib/spawnReportSend'
 import { useResourceLimits } from './composables/useResourceLimits'
 import { reclaimRefusalReason, reclaimRequestPaneIds, type ReclaimRefusal } from './lib/paneReclaimRequest'
 import { findConsecutiveQuestionBlocks, findScreenSentinel, findSentinel } from '@navide/terminal'
@@ -182,6 +183,7 @@ import {
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -198,6 +200,7 @@ import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanD
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
   composerHoldsPayload, echoEvidenceSince, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
+  screenShowsNewTail,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
@@ -217,7 +220,7 @@ import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSin
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
-import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
+import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
@@ -2574,6 +2577,10 @@ const paneTurnStartedAt = new Map<string, number>()
  *  before their badge could show it (stopFailedRunPanes). Emptied when a run
  *  starts; a send stopped before its Enter is taken out again. */
 const runPaneSentAt = new Map<string, number>()
+/** The last text injectPane typed into each pane. A failed run reads it for
+ *  a pane in runPaneSentAt: interrupting a turn the model has not answered
+ *  yet puts that role or kickoff back in the input box. */
+const paneLastInjectedText = new Map<string, string>()
 
 // Per-pane count of background subagents the CLI is still waiting on, as last
 // reported by a hook event, with the wall-clock time of that report. The
@@ -2977,6 +2984,7 @@ function messagingHoldKey(
     paneRefs[paneId]?.displayStatus as string | undefined,
     paneRefs[paneId]?.liveStatus as string | undefined,
     paneRefs[paneId]?.stoppedBy as string | null | undefined,
+    !!paneRefs[paneId]?.stopHeldForUser,
   )
   // A question passes deliberately. Those panes were already reaching this gate
   // as 'idle' (a turn ending on a question, or an AskUserQuestion box the badge
@@ -3179,6 +3187,22 @@ function settleSpawnReport(
   const report = renderFallbackReport(text)
   if (!report) return
   messaging.sendMessage(senderName, parentName, report, { kind: 'fallback' })
+}
+
+/** cli_send messages that are a spawned pane's report to its parent, by
+ *  msg_key → child pane id, until their delivery verdict arrives. */
+const spawnReportSends = new Map<string, string>()
+
+/** A child's cli_send report to its parent was delivered: that is the report
+ *  cli_open_agent asked for, so the debt is settled (see isSpawnReportSend). */
+function settleSpawnReportSend(msgKey: string, ok: boolean): void {
+  const childId = spawnReportSends.get(msgKey)
+  if (!childId) return
+  spawnReportSends.delete(msgKey)
+  const pane = panes.value.find((p) => p.id === childId)
+  if (!ok || !pane?.spawnReportPending) return
+  pane.spawnReportPending = false
+  persistPaneReportDebt(pane)
 }
 
 function onTurnCompleteForMessaging(paneId: string, text: string, timestamp: string): void {
@@ -3476,8 +3500,21 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
     dismissStartupDialog: (id) => dismissStartupDialog(id, DISMISS_TIMEOUT_MS),
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
+    waitForPromptReady: async (id, timeoutMs) => {
+      // The gate reads the pane's own terminal ref, and returns false at once
+      // without one. Wait for the ref to be mounted with its session first,
+      // within the same ceiling, so a pane still mounting is not judged as a
+      // CLI that printed nothing.
+      const deadline = Date.now() + timeoutMs
+      while (!paneRefs[id]?.sessionId && paneAlive(id) && Date.now() < deadline) await sleep(250)
+      return waitForPromptReady(id, Math.max(0, deadline - Date.now()))
+    },
+    paneStarting: (id) => paneStillStarting({
+      status: paneRefs[id]?.displayStatus as string | undefined,
+      cleanBytes: paneCleanBytes(id),
+    }),
     paneAlive: (id) => paneAlive(id),
-    injectPane: (id, text, label, preserveNewlines) => injectPane(id, text, label, preserveNewlines),
+    injectPane: (id, text, label, preserveNewlines, evidence) => injectPane(id, text, label, preserveNewlines, undefined, evidence),
     onKill: (id) => onKill(id),
   }
 }
@@ -3485,10 +3522,13 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
 /** Standalone counterpart to createRequestedPane for an external MCP spawn
  *  request addressed by target_workspace instead of a requesting pane (no
  *  report-back parent). Mirrors ui.pane.create's independent-pane path: the
- *  pane is created roleless, then the task is injected directly via
+ *  pane is created roleless, and its caller then injects the task directly via
  *  injectStandaloneTask — scheduleInjection early-returns for a roleless
  *  pane before its kickoff step, so a kickoffPrompt handed to spawnPane here
- *  would never actually be injected. */
+ *  would never actually be injected. Returns null only when the pane was not
+ *  created (no id, or its PTY failed to start). The task is not typed here:
+ *  that can take as long as the prompt-ready gate, and cli_open_agent waits
+ *  only 40s for this answer — so the caller reports the pane first. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
   req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
@@ -3561,10 +3601,6 @@ async function createStandaloneRequestedPane(
   })
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || pane.preparationStatus === 'failed') return null
-  const injected = await injectStandaloneTask(paneId, req.task, 'mcp-task', standaloneTaskDeps(), {
-    resume: !!mcpResumeId,
-  })
-  if (!injected) return null
   return paneId
 }
 
@@ -3742,6 +3778,14 @@ async function kickoffRequestedPane(
       const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
       return read ? read(SUBMIT_SCREEN_LINES) : ''
     }
+    const visibleScreen = (): string => {
+      const read = paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined
+      return read ? read() : screenTail()
+    }
+    // Per attempt, for takenLate: when it began to be typed, and the busy
+    // lines already on screen then (an earlier turn's "Worked for" is not ours).
+    let attemptStartedAt = 0
+    let busyBeforeAttempt: string[] = []
     // The loop, the per-attempt decision and the one-shot report all live in
     // lib/spawnKickoff.ts, where they can be driven under test — this function
     // cannot be, so everything that only it can do (write to the PTY, read the
@@ -3752,6 +3796,8 @@ async function kickoffRequestedPane(
       promptReady,
       paneStarting,
       inject: async () => {
+        attemptStartedAt = Date.now()
+        busyBeforeAttempt = busyLines(visibleScreen())
         const seen: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null } = {}
         const kicked = await injectPane(paneId, text, 'agent-spawn', true, undefined, seen)
         return { injected: kicked, echo: seen.echo ?? null, submit: seen.submit ?? null }
@@ -3779,6 +3825,23 @@ async function kickoffRequestedPane(
         now: Date.now,
         confirmMs: SUBMIT_CONFIRM_MS,
       }),
+      // The grace a pipeline kickoff gets (lib/submitStall.ts). A paste starts
+      // no turn and fires no hook, so activity since the attempt began is the
+      // CLI taking it; the box letting go counts only for a copy seen landing.
+      takenLate: async (echo) => {
+        const late = await awaitLateSubmit({
+          turnSeen: () => Math.max(
+            paneTurnStartedAt.get(paneId) ?? 0, paneLastActiveAt.get(paneId) ?? 0,
+          ) > attemptStartedAt,
+          busySeen: () => newBusyLine(busyBeforeAttempt, visibleScreen()),
+          screenSubmitted: () => (echo === 'tail' || echo === 'placeholder')
+            && framedComposerHolds(visibleScreen(), tail) === false,
+          aborted: () => !paneAlive(paneId),
+          sleep,
+          now: Date.now,
+        })
+        return late !== null && late !== 'aborted'
+      },
       onRetry: ({ attempt, echo, submit }) => recordDiagnostic({
         level: 'warn',
         code: 'spawn.kickoff-retry',
@@ -3803,6 +3866,16 @@ async function kickoffRequestedPane(
         message:
           `kickoff held unsent in the composer on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} ` +
           'submit evidence — pressed Enter and it left the box',
+        paneId,
+      })
+    }
+    if (loop.takenLate) {
+      recordDiagnostic({
+        level: 'info',
+        code: 'spawn.kickoff-taken-late',
+        message:
+          `kickoff checks gave up on ${loop.echo ?? 'no'} echo / ${loop.submit ?? 'no'} submit ` +
+          'evidence, then the CLI showed it took the task — not typing it again',
         paneId,
       })
     }
@@ -4058,28 +4131,33 @@ async function handleMcpSpawnRequest(ev: {
     })
   }
   if (!parent && !cross) {
-    // Standalone spawn: createStandaloneRequestedPane already settled the CLI
-    // and injected the task (or left the pane empty if there was none) before
-    // returning paneId above. There is no parent pane to report back to, so
-    // no kickoffRequestedPane / report-back marker either.
+    // Standalone spawn: the pane exists, so say so now — its CLI may take up
+    // to the prompt-ready gate to come up, longer than cli_open_agent waits
+    // for this answer. There is no parent pane to report back to, so no
+    // kickoffRequestedPane / report-back marker either. The task is typed
+    // next and judged as the kickoff verdict; a pane whose task did not land
+    // stays open (Windows VM 0.2.38: killing it reported a launched pane as
+    // 建立失敗).
     report({ ok: true, paneId, name: childName, advisories: gate.advisories })
-    // cli_open_agent now blocks on a kickoff verdict after the spawn verdict;
-    // injectStandaloneTask already typed the task (a failure returned null
-    // above), so answer at once rather than letting the call wait out 45s.
-    //
-    // 'unverified', not 'sent': all injectStandaloneTask hands back is
-    // injectPane's boolean, and that says true on buffer growth alone — the
-    // same growth-only evidence the pane path refuses to call sent. Claiming
-    // 'sent' here made one word mean two different things depending on which
-    // path answered it, and the weaker one was the silent kind: the caller
-    // stopped looking. 'unverified' routes through the server's "read
-    // cli_get_status first" hint instead.
+    const standaloneEvidence: StandaloneKickoffEvidence = {}
+    try {
+      await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
+        resume: !!(ev.session_id ?? '').trim(),
+        evidence: standaloneEvidence,
+      })
+    } catch { /* judged below on whatever evidence was recorded */ }
+    // Judged on the echo/submit evidence injectPane recorded, not on its
+    // boolean: that says true on buffer growth alone, which the pane path
+    // refuses to call sent. Growth-only stays 'unverified' and routes through
+    // the server's "read cli_get_status first" hint; payload-level evidence is
+    // 'sent'. Hard-coding 'unverified' here reported every external spawn as
+    // failed, the task already running (Linux VM 0.2.38).
+    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task })
     backend.send('agent_spawn.kickoff', {
       request_id: ev.request_id,
       pane_id: paneId,
-      kickoff: 'unverified',
-      reason: 'standalone injection reports success without payload-level evidence — '
-        + 'the task may be in the pane, read its prompt before resending',
+      kickoff: verdict.kickoff,
+      ...(verdict.reason ? { reason: verdict.reason } : {}),
     }).catch(() => { /* the tool call times out and says so */ })
     return
   }
@@ -4242,6 +4320,7 @@ onMounted(() => {
     pushDeliver: pushDeliverAgentMessage,
     routeRemote: routeRemoteMessage,
     reportDelivery: (msgKey, ok, reason) => {
+      settleSpawnReportSend(msgKey, ok)
       backend
         .send('agent_msg.delivered', {
           msg_key: msgKey,
@@ -4491,14 +4570,6 @@ function flattenForInjection(text: string): string {
  *  terminal.input_blocked / input_unblocked events. */
 const inputBlocks = createInputBlockTracker()
 
-/** Kill-line for a composer holding text we gave up on. Ctrl-U is what ⌘⌫
- *  sends from the terminal (useTerminal) and the canonical-mode kill character,
- *  so it clears whichever side of the PTY ends up holding the payload — a
- *  blocked PTY queues it behind the text, and it takes effect when the CLI
- *  reads. Nothing before the injection clears the composer (the typing hold
- *  keeps a draft out of the way instead), so this is the only clear. */
-const CLEAR_LINE = '\x15'
-
 async function injectText(
   sessionId: string,
   text: string,
@@ -4568,6 +4639,14 @@ async function injectText(
   // zero — or negative — while output is streaming, which made the echo look
   // absent and resent the whole prompt.
   const cleanBytes = (): number => (paneId ? paneCleanBytes(paneId) : -1)
+  const renderedScreen = (): string => {
+    const read = paneId ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined) : undefined
+    try {
+      return read ? read() : ''
+    } catch {
+      return ''
+    }
+  }
 
   // Send in modest chunks to avoid hitting any tty input-buffer limits and to
   // give the CLI's render loop a chance to keep up.
@@ -4645,11 +4724,20 @@ async function injectText(
   }
   // Every failure exit after bytes went out must not leave them in the
   // composer: the next thing the user or an agent submits would carry them.
-  // Best effort — a socket that just failed the send fails this too.
+  // Best effort — a socket that just failed the send fails this too. The whole
+  // box, as stopBeforeEnter clears it: one Ctrl-U clears only a row, and a
+  // multi-row task's tail stayed behind for the next Enter (0.2.37 Windows VM).
   const giveUp = async (): Promise<false> => {
     if (wroteBytes) {
-      await backend.send('terminal.input', { terminal_session_id: sessionId, data: CLEAR_LINE })
-        .catch(() => { /* nothing left to clear into */ })
+      const cols = paneId !== undefined ? paneRefs[paneId]?.terminalSize?.()?.cols : undefined
+      for (const keys of composerClearKeys(body, cols ?? 80)) {
+        try {
+          await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+        } catch {
+          break // nothing left to clear into
+        }
+        await sleep(100)
+      }
     }
     return false
   }
@@ -4708,9 +4796,15 @@ async function injectText(
   const MAX_CONTENT_SENDS = 1
   const readyTimeout = echoTimeoutFor(text.length)
   let ready = false
+  // For inject.failed: what this pane's own terminal saw after we typed.
+  let bytesBeforeSend = -1
+  let sentAt = 0
   for (let send = 1; send <= MAX_CONTENT_SENDS && !ready; send++) {
     if (aborted()) return giveUp()
     const preBytes = cleanBytes()
+    bytesBeforeSend = preBytes
+    sentAt = Date.now()
+    const screenBefore = renderedScreen()
     const ackPending = await sendChunks()
     if (ackPending === null) return giveUp()
     if (paneId === undefined || preBytes < 0) {
@@ -4719,8 +4813,10 @@ async function injectText(
       ready = true
       break
     }
+    // The rendered screen backs the stream up: see screenShowsNewTail.
     const echoed = (): EchoEvidence | null =>
       echoEvidenceSince(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
+        ?? (screenShowsNewTail(screenBefore, renderedScreen(), tail) ? 'tail' : null)
     if (needsInputWait(ackPending, inputBlocks.get(sessionId) !== null)) {
       const waited = await awaitInputUnblocked({
         ackPending,
@@ -4796,7 +4892,11 @@ async function injectText(
     recordDiagnostic({
       level: 'error',
       code: 'inject.failed',
-      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null),
+      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null)
+        + (paneId && bytesBeforeSend >= 0
+          ? ` — since typing: ${cleanBytes() - bytesBeforeSend} clean chars, raw output `
+            + `${Number(paneRefs[paneId]?.lastRawActivityAt ?? 0) >= sentAt ? 'yes' : 'no'}`
+          : ''),
       paneId
     })
     return giveUp()
@@ -5050,6 +5150,7 @@ async function injectPane(
   // Anything reaching the prompt ends the parked-after-resume state the continue
   // button exists for — including this button's own injection.
   pane.resumeContinueAvailable = false
+  paneLastInjectedText.set(paneId, text)
   return injectText(
     ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
   )
@@ -7576,6 +7677,7 @@ function scheduleInjection(pane: ActivePane): void {
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
         onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
@@ -8751,6 +8853,8 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   // keep the seat, and workspace close / teardown restore the pane later.
   if (markRemoved && !keepInList) useChannels(backend).paneClosed(paneId)
   turnTextGate.delete(paneId)
+  workerTurnTextGate.delete(paneId)
+  workerTurnTextAt.delete(paneId)
   // The auto-name guard is per pane id and pane ids are never reused, so a
   // stale entry cannot misfire — it just never leaves. Dropped here with the
   // rest of the per-pane state.
@@ -11268,7 +11372,11 @@ registerCommand('ui.pane.create', async (args) => {
   // kickoff step, so the task must be injected here rather than via
   // spawnPane's kickoffPrompt (see createStandaloneRequestedPane above).
   const injected = await injectStandaloneTask(paneId, a.task ?? '', 'mcp-task', standaloneTaskDeps())
-  if (!injected) throw new Error(`ui.pane.create failed to inject task into pane "${paneId}"`)
+  if (!injected) {
+    // injectStandaloneTask no longer rolls back a live pane; this path still does.
+    if (paneAlive(paneId)) await onKill(paneId)
+    throw new Error(`ui.pane.create failed to inject task into pane "${paneId}"`)
+  }
   return paneId
 })
 // These actions key on the pane id and reject a pane name, which is the only
@@ -15419,7 +15527,8 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       },
       onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
       // A resume after a held kickoff: submit the copy still in the box.
-      heldCopy: heldKickoffCopy(pane.id, kickoff),
+      heldCopy: heldKickoffCopy(pane.id, kickoff, slotStillWanted),
+      copyInBox: kickoffCopyInBox(pane.id, kickoff, slotStillWanted),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
     })
@@ -16015,20 +16124,55 @@ const heldKickoffPanes = new Set<string>()
 /** For a pane in heldKickoffPanes (the flag is consumed): read whether the
  *  box still holds this kickoff, and submit it with Enter — the same framed-box
  *  check the spawn kickoff trusts. undefined for every other pane. */
-function heldKickoffCopy(paneId: string, text: string): { holds: () => boolean; submit: () => Promise<boolean> } | undefined {
+function heldKickoffCopy(paneId: string, text: string, stillWanted?: () => boolean): { holds: () => boolean; submit: () => Promise<boolean>; cleared: () => boolean } | undefined {
   if (!heldKickoffPanes.delete(paneId)) return undefined
   const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
   const screenTail = (): string => {
     const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
     return read ? read(SUBMIT_SCREEN_LINES) : ''
   }
+  const copy = kickoffCopyInBox(paneId, text, stillWanted)
   return {
     holds: () => composerHoldsPayload(screenTail(), tail),
+    submit: copy.submit,
+    cleared: copy.cleared,
+  }
+}
+
+/** runPipelineKickoff's copyInBox: whether the framed input box holds this
+ *  kickoff right now — the box only, so a summary drawn above it by an
+ *  earlier submit is not taken for a held copy — and Enter on that copy.
+ *  stillWanted is asked right before every Enter: one the run no longer
+ *  wants is not pressed, and the copy is cleared out of the box instead. */
+function kickoffCopyInBox(paneId: string, text: string, stillWanted?: () => boolean): { holds: () => boolean; submit: () => Promise<boolean>; cleared: () => boolean } {
+  let cleared = false
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  const screenTail = (): string => {
+    const read = paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined
+    return read ? read(SUBMIT_SCREEN_LINES) : ''
+  }
+  return {
+    holds: () => framedComposerHolds(screenTail(), tail) === true,
+    cleared: () => cleared,
     submit: () => submitHeldCopy({
       held: () => framedComposerHolds(screenTail(), tail),
       pressEnter: async () => {
         const sid = paneRefs[paneId]?.sessionId
         if (!sid || !paneAlive(paneId)) return false
+        if (stillWanted && !stillWanted()) {
+          // runPipelineKickoff reports it stopped, and its caller logs that.
+          cleared = true
+          const cols = paneRefs[paneId]?.terminalSize?.()?.cols as number | undefined
+          for (const keys of composerClearKeys(text, cols ?? 80)) {
+            try {
+              await backend.send('terminal.input', { terminal_session_id: sid, data: keys })
+            } catch {
+              break // nothing left to clear into
+            }
+            await sleep(100)
+          }
+          return false
+        }
         try {
           await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
           return true
@@ -16144,13 +16288,14 @@ async function failRunOnKickoff(stageIndex: number, slotLabel: string, reason: s
 async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<void> {
   const slots = runSlots.current()
   const failedAt = Date.now()
+  const sentUnfinished = (paneId: string): boolean => {
+    const sentAt = runPaneSentAt.get(paneId)
+    return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
+  }
   await stopFailedRunPanesFor({
     paneIds: [...new Set(slots.values())].filter((id) => id !== failedPaneId),
     status: (paneId) => (panes.value.find((p) => p.id === paneId)?.realized ? paneRefs[paneId]?.displayStatus as string | undefined : undefined),
-    sentUnfinished: (paneId) => {
-      const sentAt = runPaneSentAt.get(paneId)
-      return sentAt !== undefined && (paneTurnCompleteAt.get(paneId) ?? 0) < sentAt && !!panes.value.find((p) => p.id === paneId)?.realized
-    },
+    sentUnfinished,
     userTouched: (paneId) => ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt,
     // A resume, a restart or a new run: that run's panes are its own.
     runGoesOn: () => pipeline.state === 'running' || runSlots.current() !== slots,
@@ -16169,10 +16314,56 @@ async function stopFailedRunPanes(failedPaneId: string | undefined): Promise<voi
         }
       }
       if (sent) pipelineLog(`⏹ interrupted ${pane?.slotLabel ?? paneId} — the run failed`)
+      // Not awaited: the other panes' stop keys do not wait on this one's box.
+      if (sent && how === 'interrupt' && sentUnfinished(paneId)) void clearInterruptedCopy(paneId, failedAt)
     },
     sleep,
     now: Date.now,
   })
+}
+
+/** How long after a failed run's interrupt key the input box is watched for
+ *  the role or kickoff Claude Code puts back. */
+const INTERRUPTED_COPY_WAIT_MS = 3_000
+
+/** A turn interrupted before the model answered gives its message back:
+ *  Claude Code 2.1.286 put a failed run's whole kickoff back in the input box,
+ *  where the next Enter would send it (0.2.38 Linux VM, 2/15). Once the box
+ *  shows that text it is cleared the way stopBeforeEnter clears it, with no
+ *  Enter. Nothing is pressed when the box never shows it, when the person
+ *  typed into the pane since the failure, or once a run goes on. */
+async function clearInterruptedCopy(paneId: string, failedAt: number): Promise<void> {
+  const text = paneLastInjectedText.get(paneId)
+  const ref = paneRefs[paneId]
+  const sessionId = ref?.sessionId
+  if (text === undefined || !sessionId) return
+  const tail = normalizeForMatch(text).slice(-TAIL_MATCH_LEN)
+  // The framed box only, read off the whole screen: the kickoff Claude Code
+  // drew above the box when it was submitted must not pass for the copy put
+  // back, and a copy put back whole can be taller than the bottom rows.
+  const screen = (): string => (ref.readVisibleScreen as (() => string) | undefined)?.()
+    ?? (ref.readScreenTail as ((n: number) => string) | undefined)?.(SUBMIT_SCREEN_LINES) ?? ''
+  const until = Date.now() + INTERRUPTED_COPY_WAIT_MS
+  const leftAlone = (): boolean => pipeline.state === 'running'
+    || paneRefs[paneId]?.sessionId !== sessionId
+    || ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0) > failedAt
+  while (framedComposerHolds(screen(), tail) !== true) {
+    if (Date.now() >= until) return
+    await sleep(200)
+    if (leftAlone()) return
+  }
+  if (leftAlone()) return
+  const cols = ref.terminalSize?.()?.cols as number | undefined
+  for (const keys of composerClearKeys(text, cols ?? 80)) {
+    try {
+      await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys })
+    } catch {
+      return // nothing left to clear into
+    }
+    await sleep(100)
+  }
+  const label = panes.value.find((p) => p.id === paneId)?.slotLabel ?? paneId
+  pipelineLog(`⏹ cleared ${label}'s input box — the interrupt put the run's message back in it`)
 }
 
 /** Approve the gate the run is paused on and carry on with the hand-off. */
@@ -16876,6 +17067,7 @@ backend.on('agent.activity', (raw) => {
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    if (!markerReply) void routeWorkerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
@@ -16923,6 +17115,9 @@ backend.on('agent.activity', (raw) => {
         paneTurnStartedAt.set(ev.pane_id, Date.now())
       }
       paneLastActiveAt.set(ev.pane_id, Date.now())
+      // A turn the agent started on its own ends a STOP badge, user records
+      // included: see agentTurnActivityAt.
+      paneRefs[ev.pane_id]?.markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))
       // The loop reads a stricter clock; see activityMeansWorking for why.
       if (activityMeansWorking(ev.detail ?? '')) paneLastWorkingAt.set(ev.pane_id, Date.now())
     }
@@ -17218,6 +17413,21 @@ backend.on('agent_msg.deliver', (raw) => {
     origin?: string
   }
   if (!ev?.msg_key || !ev.target_pane_id || !ev.content) return
+  if (ev.from_pane_id) {
+    const child = panes.value.find((p) => p.id === ev.from_pane_id)
+    const reportSend = isSpawnReportSend(
+      child,
+      {
+        fromPaneId: ev.from_pane_id,
+        targetPaneId: ev.target_pane_id,
+        targetName: ev.target_name,
+        targetWorkspacePath: ev.target_workspace_path,
+        kind: ev.kind,
+      },
+      (name) => panes.value.find((p) => p.messagingName === name)?.id,
+    )
+    if (child && reportSend) spawnReportSends.set(ev.msg_key, child.id)
+  }
   // The broadcast reaches the sending window too. When the sender is one of our
   // panes, log the outbound side here — a message sent through the MCP cli_send
   // tool never passed through sendMessage(), so nothing else would record it.
@@ -17408,6 +17618,7 @@ backend.on('agent_msg.cancel', (raw) => {
 backend.on('agent_msg.delivery_result', (raw) => {
   const ev = raw as { msg_key?: string; ok?: boolean; reason?: string }
   if (!ev?.msg_key) return
+  settleSpawnReportSend(ev.msg_key, !!ev.ok)
   messaging.resolveRemoteDelivery(ev.msg_key, !!ev.ok, ev.reason || '')
 })
 
@@ -18200,6 +18411,10 @@ interface StageRouter {
    *  content, whitespace dropped). A TUI repaint re-emits rows already on
    *  screen, so the scan meets the same block again further down the buffer. */
   routedWorkerMessages: Set<string>
+  /** Receipt times of the screen's sends, by the same key, not yet matched to
+   *  the turn text that printed them (see lib/routedBlockCredits). Created on
+   *  first use. */
+  screenRoutes?: Map<string, number[]>
   /** Manager replies that ended before the router poll started, which waits
    *  for every slot's kickoff, with when each turn ended. startRouterPoll
    *  routes them (#539). */
@@ -18984,15 +19199,25 @@ function finishManagerStage(router: StageRouter, stageId: string, stageIndex: nu
   void onPipelineNext()
 }
 
-function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage): void {
-  // Keyed on the text alone: a block from an earlier turn stays on screen and
-  // is scanned again in the next one, so a per-turn key re-sent it (0.2.37 VM,
-  // ASK reached the Manager twice). The same text sent again on purpose is a
-  // known gap for 0.2.38.
+/** `turnTextSince` set: the block came from the worker's turn text, and is the
+ *  time its previous turn text arrived (see routeWorkerTurnText). */
+function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: PendingMessage, turnTextSince?: number): void {
+  // The screen is keyed on the text alone: a block from an earlier turn stays
+  // on screen and is scanned again in the next one, so a per-turn key re-sent
+  // it (0.2.37 VM, ASK reached the Manager twice). The same text printed again
+  // in a later turn is known from that turn's own text instead.
   const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
-  if (router.routedWorkerMessages.has(key)) {
-    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
-    return
+  const credits = (router.screenRoutes ??= new Map())
+  if (turnTextSince === undefined) {
+    if (router.routedWorkerMessages.has(key)) {
+      pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
+      return
+    }
+    noteScreenRoute(credits, key, Date.now())
+  } else if (takeScreenRoute(credits, key, turnTextSince)) {
+    return // the screen already sent this turn's copy
+  } else if (router.routedWorkerMessages.has(key)) {
+    pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} printed again in a new turn — routing it again`)
   }
   router.routedWorkerMessages.add(key)
   if (!router.managerReady) {
@@ -19120,6 +19345,68 @@ async function routeManagerTurnText(paneId: string, text: string, timestamp: str
   }
 }
 
+/** When each pane's last turn text reached routeWorkerTurnText (receipt clock):
+ *  a screen send before it belonged to an earlier turn. */
+const workerTurnTextAt = new Map<string, number>()
+/** Hook and transcript can report one turn twice; the second must not count as
+ *  a new turn that printed the same blocks again. A turn from before this
+ *  window booted (a backend restart re-emitting history) is not taken at all. */
+const workerTurnTextGate = createMessagingTurnGate(Date.now())
+
+/** A worker's reply, as its reader reported it at turn end, for both routers.
+ *  The screen cannot tell a block this turn printed from one an earlier turn
+ *  left on screen, so it sends a text only once; the turn text holds only what
+ *  this turn printed, so an ASK or REPORT in it that the screen did not send
+ *  for this turn is a new message, even with words already sent (0.2.37 VM
+ *  dup1–dup3: the run waited on a REPORT skipped as "already routed"). */
+async function routeWorkerTurnText(paneId: string, text: string, timestamp: string): Promise<void> {
+  if (!text || pipeline.state !== 'running' || isInjectedMessageText(text)) return
+  if (!workerTurnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)) return
+  const since = workerTurnTextAt.get(paneId) ?? 0
+  workerTurnTextAt.set(paneId, Date.now())
+  // A block printed twice in one turn is one message, as on screen.
+  const blocks = (re: RegExp): string[] => {
+    const seen = new Set<string>()
+    return parseContentBlocks(text, 0, re).items.filter((c) => {
+      const k = c.replace(/\s+/g, '')
+      return !seen.has(k) && !!seen.add(k)
+    })
+  }
+  const asks = blocks(ASK_RE)
+  const reports = blocks(REPORT_RE)
+  if (!asks.length && !reports.length) return
+  const eventMs = timestamp ? Date.parse(timestamp) : NaN
+  const router = stageRouters.get(pipeline.stageIndex)
+  const stage = stagesApi.stages.value[pipeline.stageIndex]
+  const label = router ? [...router.workerPaneIds].find(([, id]) => id === paneId)?.[0] : undefined
+  // A replayed historical turn (backend restart) is older than the arm, as in
+  // routeManagerTurnText.
+  if (router && stage && label !== undefined && router.armedAt && !router.finished &&
+      !(!Number.isNaN(eventMs) && eventMs < router.armedAt - TURN_TEXT_REPLAY_TOLERANCE_MS)) {
+    for (const content of asks) queueOrRouteWorkerMsg(router, stage.id, { fromLabel: label, kind: 'ASK', content }, since)
+    for (const content of reports) queueOrRouteWorkerMsg(router, stage.id, { fromLabel: label, kind: 'REPORT', content }, since)
+  }
+  // The global router, for the same panes its screen scan reads.
+  if (globalRouterHandle === null || !pipeline.globalManager) return
+  const managerPaneId = globalManagerPaneId()
+  const gm = pipeline.globalManager
+  const wp = panes.value.find((p) => p.id === paneId)
+  if (!managerPaneId || !wp || !wp.realized || wp.origin !== 'pipeline' || wp.id === managerPaneId || isPriorRunPane(wp.id) ||
+      (wp.stageId === gm.stageId && wp.slotLabel === gm.slotLabel)) return
+  if (router?.managerPaneId === managerPaneId && label !== undefined) return // the stage router's, as in the scan
+  const fromLabel = wp.slotLabel || wp.stageId
+  for (const [kind, items] of [['ASK', asks], ['REPORT', reports]] as const) {
+    for (const content of items) {
+      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
+      if (takeScreenRoute(globalScreenRoutes, key, since)) continue
+      if (globalRoutedMessages.has(key)) pipelineLog(`🎯 Global: ${kind} from ${fromLabel} printed again in a new turn — routing it again`)
+      globalRoutedMessages.add(key)
+      pipelineLog(`🎯 Global → Manager: [${kind} from ${fromLabel}]`)
+      await routerInject(managerPaneId, `[→ ${kind} FROM ${fromLabel} (Stage ${wp.stageId})]\n${content}`, `${kind.toLowerCase()}:${fromLabel}`)
+    }
+  }
+}
+
 /** The deadlock fallback (#539): a Manager that ended its turn without READY,
  *  was reminded, and has sat idle MANAGER_READY_FALLBACK_MS since, while worker
  *  messages are held for it, gets them anyway. Every pane would otherwise wait
@@ -19160,6 +19447,8 @@ const globalRouterAnchors = new Map<string, BufferObservation>()
 /** StageRouter.routedWorkerMessages for the global Manager (pane + stage + kind +
  *  content, whitespace dropped): a repaint re-emits a block already routed. */
 const globalRoutedMessages = new Set<string>()
+/** StageRouter.screenRoutes for the global Manager, by globalRoutedMessages' key. */
+const globalScreenRoutes = new Map<string, number[]>()
 let _globalScanRunning = false
 
 function startGlobalManagerRouter(): void {
@@ -19182,6 +19471,7 @@ function stopGlobalManagerRouter(): void {
     globalRouterCursors.clear()
     globalRouterAnchors.clear()
     globalRoutedMessages.clear()
+    globalScreenRoutes.clear()
     pipelineLog('🎯 Global Manager router stopped')
   }
 }
@@ -19206,6 +19496,12 @@ function handStageToGlobalRouter(r: StageRouter): void {
     const paneId = r.workerPaneIds.get(label)
     const stageId = panes.value.find((p) => p.id === paneId)?.stageId
     if (paneId && stageId) globalRoutedMessages.add(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`)
+  }
+  for (const [key, times] of r.screenRoutes ?? []) {
+    const [kind, label, content] = key.split('\u0000')
+    const paneId = r.workerPaneIds.get(label)
+    const stageId = panes.value.find((p) => p.id === paneId)?.stageId
+    if (paneId && stageId) globalScreenRoutes.set(`${paneId}\u0000${stageId}\u0000${kind}\u0000${content}`, [...times])
   }
 }
 
@@ -19262,6 +19558,7 @@ async function globalManagerRouterScan(): Promise<void> {
         return false
       }
       globalRoutedMessages.add(key)
+      noteScreenRoute(globalScreenRoutes, key, Date.now())
       return true
     }
     askRes.items = askRes.items.filter((c) => firstSeen('ASK', c))

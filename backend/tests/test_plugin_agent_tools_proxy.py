@@ -153,7 +153,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for the absent windows (previous pin 65ad36fe…): cli_usage says what
 #: `absentWindows` means, so an agent can tell no limit from no data. No other
 #: tool changed.
-MAIN_TOOLS_LIST_SHA256 = "94228b18a612e6bee9a7839c4a7d96a4fba2392dcef6f8b32d57b814cb5f1637"
+#: Re-pinned for ui_invoke's new `snapshot` parameter (plan agent-desktop_f10dcb,
+#: previous pin 94228b18…): with main's ui_invoke entry the list still hashes to
+#: the previous pin, so no other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "8a95e7e9e69fd5b2785c31e6257b1a4aa5ec33a617e78932ff8bca969ca250c7"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",

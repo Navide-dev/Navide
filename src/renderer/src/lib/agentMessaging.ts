@@ -732,14 +732,35 @@ export function isTurnInFlight(
  * of unknown origin) stays 'stopped' and holds the queue until they type: they
  * stopped that agent on purpose, and a queued message would wake it. Without a
  * live status there is nothing to read through, so 'stopped' stays too.
+ * `heldForUser` is such a STOP whose badge the agent's own next turn already
+ * cleared (0.2.38): the badge follows the agent, the hold still waits for them.
  */
 export function messagingGateStatus(
   displayStatus: string | undefined,
   liveStatus: string | undefined,
   stoppedBy: string | null | undefined,
+  heldForUser = false,
 ): string | undefined {
+  if (heldForUser) return 'stopped'
   if (displayStatus !== 'stopped' || stoppedBy !== 'agent' || liveStatus === undefined) return displayStatus
   return liveStatus
+}
+
+/**
+ * When an agent_active record (one that already passed the idle_prompt and
+ * tool-result guards) was written, for useTerminal.markAgentTurnStart: its own
+ * timestamp, or `now` for a hook event, which carries none.
+ *
+ * Every such record counts, user records included. A turn a delivered message starts is, until the model
+ * answers, nothing but the user record of its envelope; dropping user records
+ * left the badge on for that whole turn (0.2.38 Linux VM, Claude Code
+ * 2.1.286). The interrupt's own "[Request interrupted by user]" record is
+ * still not a new turn: markAgentTurnStart ignores records in its settle
+ * window, and a person typing has already cleared the STOP before theirs.
+ */
+export function agentTurnActivityAt(timestamp: string | undefined, now: number): number {
+  const at = timestamp ? Date.parse(timestamp) : NaN
+  return Number.isNaN(at) ? now : at
 }
 
 /**

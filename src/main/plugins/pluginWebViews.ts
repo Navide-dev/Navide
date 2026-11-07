@@ -105,10 +105,34 @@ export interface PluginWebViewDeps {
   session(partition: string): WebGuestSession
   /** Called (coalesced per microtask) whenever a plugin's view list changes. */
   onChanged(pluginId: string, views: WebViewInfo[]): void
+  /** Diagnostic lines for the main log. */
+  log?(line: string): void
 }
 
 export const DEFAULT_CAPTURE_WIDTH = 480
+/** Bounds of a view on no window. A WebContentsView never given bounds is
+ *  0x0: its page has no viewport (innerWidth 0) and never paints, so a
+ *  viewport snapshot comes back empty and Page.captureScreenshot never
+ *  answers. Hidden views still lay out and paint at this size. */
+export const UNATTACHED_VIEW_BOUNDS: WebViewRect = { x: 0, y: 0, width: 1280, height: 800 }
 const CDP_PROTOCOL_VERSION = '1.3'
+/** How long Page.captureScreenshot may wait for a frame. A view on no window
+ *  may never get one: on Linux and Windows its layer has no compositor, and
+ *  under software rendering a hidden view does not paint at all. */
+export const SCREENSHOT_FRAME_WAIT_MS = 2500
+/** How long the capturePage fallback may take after that. */
+export const SCREENSHOT_CAPTURE_WAIT_MS = 1500
+/** CDP_ERROR message prefix the browser backend reads as VIEW_NOT_RENDERED. */
+export const NO_FRAME_MESSAGE = 'no-frame: the page produced no frame to capture (it is on no window and does not paint here)'
+const TIMED_OUT: unique symbol = Symbol('timed-out')
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<typeof TIMED_OUT>(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), ms) }),
+  ]).finally(() => clearTimeout(timer))
+}
 const MAX_CDP_ERROR_MESSAGE = 500
 const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 /** Live views per plugin; `create` and popups past it are LIMIT_REACHED. */
@@ -265,6 +289,7 @@ export class PluginWebViewRegistry {
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
     view.setVisible(false)
+    view.setBounds(UNATTACHED_VIEW_BOUNDS)
     void view.webContents.loadURL(request.url ?? 'about:blank').catch(() => undefined)
     this.changed(pluginId)
     return { viewId: entry.viewId }
@@ -361,7 +386,8 @@ export class PluginWebViewRegistry {
     entry.state = state
     entry.note = note
     if (state === 'need-action') {
-      this.takeOver(entry, 'manual_takeover')
+      // The agent handed the view over; nothing the user did took it.
+      this.takeOver(entry, 'agent_handoff')
       // The agent asked the user in: there is no user input to lose, so the
       // page its script ran in is reloaded before the user types anything.
       const contents = entry.view.webContents
@@ -418,6 +444,7 @@ export class PluginWebViewRegistry {
     const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
+      if (method === 'Page.captureScreenshot') return await this.captureScreenshot(entry, params)
       const result = await contents.debugger.sendCommand(method, params)
       if (uploaded === null) return result
       // Disclose, don't restrict: the view info and the agent's own result
@@ -434,6 +461,7 @@ export class PluginWebViewRegistry {
         }),
       }
     } catch (error) {
+      if (error instanceof WebViewError) throw error
       throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
     } finally {
       if (input) entry.agentInput -= 1
@@ -441,6 +469,33 @@ export class PluginWebViewRegistry {
       if (script) entry.agentScriptSinceLoad = true
       // The user may have taken over while the command ran; the next one is refused.
     }
+  }
+
+  /** Page.captureScreenshot that cannot hang: when no frame comes in time,
+   *  fall back to capturePage (JPEG requests only, the format it can match),
+   *  and failing that answer NO_FRAME_MESSAGE. */
+  private async captureScreenshot(entry: WebViewEntry, params?: Record<string, unknown>): Promise<unknown> {
+    const contents = entry.view.webContents
+    const frame = contents.debugger.sendCommand('Page.captureScreenshot', params)
+    // A frame that arrives after the fallback answered has nobody to go to.
+    frame.catch(() => undefined)
+    const shot = await withTimeout(frame, SCREENSHOT_FRAME_WAIT_MS)
+    if (shot !== TIMED_OUT) return shot
+    const where = `view ${entry.viewId} (${entry.host === null ? 'on no window' : 'attached'})`
+    this.deps.log?.(`[PluginWebViewRegistry] Page.captureScreenshot: no frame in ${SCREENSHOT_FRAME_WAIT_MS}ms for ${where}; trying capturePage`)
+    if (params?.format !== 'jpeg') {
+      this.deps.log?.(`[PluginWebViewRegistry] no capturePage fallback for format ${String(params?.format ?? 'png')} on ${where}`)
+      throw new WebViewError('CDP_ERROR', { message: NO_FRAME_MESSAGE })
+    }
+    const image = await withTimeout(contents.capturePage(), SCREENSHOT_CAPTURE_WAIT_MS)
+      .catch((): typeof TIMED_OUT => TIMED_OUT)
+    if (image !== TIMED_OUT && !image.isEmpty()) {
+      const quality = typeof params.quality === 'number' ? params.quality : 80
+      this.deps.log?.(`[PluginWebViewRegistry] capturePage fallback gave an image for ${where}`)
+      return { data: image.toJPEG(quality).toString('base64') }
+    }
+    this.deps.log?.(`[PluginWebViewRegistry] capturePage fallback ${image === TIMED_OUT ? 'timed out' : 'was empty'} for ${where}`)
+    throw new WebViewError('CDP_ERROR', { message: NO_FRAME_MESSAGE })
   }
 
   /** `web.capture`: a JPEG data URL for the Spaces overview card. */
@@ -613,6 +668,7 @@ export class PluginWebViewRegistry {
     entry.host = null
     entry.rect = null
     entry.view.setVisible(false)
+    entry.view.setBounds(UNATTACHED_VIEW_BOUNDS)
     if (host) {
       try {
         host.removeChildView(entry.view)
