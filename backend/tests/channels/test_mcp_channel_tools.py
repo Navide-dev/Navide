@@ -169,9 +169,10 @@ def acting(live: Env, tmp_path, monkeypatch):
     monkeypatch.setattr(app, "has_main_window", lambda: True)
     agent_window_actions._reset_for_test(tmp_path / "actions.jsonl")
     agent_requests.registry._reset_for_test()
-    # The group the suite binds is one the default bot has seen; alice (7) is let in.
-    live.store.remember_chat("telegram", _bot_key(live.m._adapters[("telegram", "default")]), "-100", "api",
-                             "supergroup", True, 1)
+    # The default bot has seen the group -100 and alice's DM (7); alice is let in.
+    seen = _bot_key(live.m._adapters[("telegram", "default")])
+    live.store.remember_chat("telegram", seen, "-100", "api", "supergroup", True, 1)
+    live.store.remember_chat("telegram", seen, "7", "alice", "private", False, 1)
     yield live, events, caller
     agent_messaging._reset_for_test()
     agent_window_actions._reset_for_test(None)
@@ -187,7 +188,7 @@ def _recorded() -> list[dict]:
 async def test_bind_binds_a_pane_of_the_callers_own_workspace_and_says_so(acting) -> None:
     env, events, _ = acting
     await env.m.unbind("pane-1")
-    out = await channel_tools.channels_bind("telegram", "-100", None, pane="dev", thread_id="50")
+    out = await channel_tools.channels_bind("telegram", "7", None, pane="dev")
     assert out["ok"] is True and out["binding"]["pane_id"] == "p-42"
     assert [b.pane_id for b in env.store.bindings()] == ["p-42"]
     record = _recorded()[-1]
@@ -195,13 +196,13 @@ async def test_bind_binds_a_pane_of_the_callers_own_workspace_and_says_so(acting
     assert record["caller"]["pane_id"] == "p-41" and record["target"]["pane"] == "dev"
     assert events[-1]["type"] == "channels.agent_action"
     assert events[-1]["payload"]["tool"] == "channels_bind"
-    assert events[-1]["payload"]["target"]["chat_id"] == "-100"
+    assert events[-1]["payload"]["target"]["chat_id"] == "7"
 
 
 async def test_bind_without_a_pane_binds_the_caller(acting) -> None:
     env, _, _ = acting
     await env.m.unbind("pane-1")
-    out = await channel_tools.channels_bind("telegram", "-100", None, thread_id="50")
+    out = await channel_tools.channels_bind("telegram", "7", None)
     assert out["ok"] is True and out["binding"]["pane_id"] == "p-41"
 
 
@@ -223,7 +224,7 @@ async def test_a_caller_with_no_pane_cannot_bind(acting) -> None:
 async def test_unbind_and_verbosity_change_the_pane_and_are_recorded(acting) -> None:
     env, events, _ = acting
     await env.m.unbind("pane-1")
-    assert (await channel_tools.channels_bind("telegram", "-100", None, pane="dev"))["ok"]
+    assert (await channel_tools.channels_bind("telegram", "7", None, pane="dev"))["ok"]
     out = await channel_tools.channels_set_verbosity("full", None, pane="dev")
     assert out["ok"] is True and out["binding"]["verbosity"] == "full"
     assert (await channel_tools.channels_unbind(None, pane="dev")) == {"ok": True, "removed": True}
@@ -300,12 +301,22 @@ async def test_binding_a_chat_the_bot_does_not_know_goes_to_the_user(acting, cha
     assert env.store.bindings() == []
 
 
-async def test_binding_a_chat_nobody_was_let_in_from_goes_to_the_user(acting) -> None:
+async def test_binding_a_dm_whose_sender_was_not_let_in_goes_to_the_user(acting) -> None:
     env, _, _ = acting
     await env.m.unbind("pane-1")
     env.store.remove_allow("telegram", "7", "default")
-    out = await channel_tools.channels_bind("telegram", "-100", None, pane="dev")
+    out = await channel_tools.channels_bind("telegram", "7", None, pane="dev")
     assert out["status"] == "pending" and out["why"] == "Nobody in this chat has been let in yet."
+
+
+async def test_binding_a_group_goes_to_the_user_at_the_default_verbosity(acting) -> None:
+    env, _, _ = acting
+    await env.m.unbind("pane-1")
+    out = await channel_tools.channels_bind("telegram", "-100", None, pane="dev", thread_id="50", verbosity="full")
+    assert out["status"] == "pending" and out["why"] == "Anyone in a group chat would read the pane."
+    assert env.store.bindings() == []
+    await agent_requests.decide(env.m, out["id"], True)
+    assert [(b.pane_id, b.verbosity) for b in env.store.bindings()] == [("p-42", "replies")]
 
 
 async def test_approving_a_pairing_can_bind_the_senders_chat(acting) -> None:

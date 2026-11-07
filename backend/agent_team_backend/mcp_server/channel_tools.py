@@ -28,6 +28,7 @@ from typing import Any
 from mcp.server.fastmcp import Context
 
 from ..channels import agent_requests, redact
+from ..channels.manager import TELEGRAM_DIRECT_KINDS
 from ..channels.pairing import normalize_code
 from ..channels.registry import PLATFORMS
 from ..channels.store import DEFAULT_ACCOUNT
@@ -235,10 +236,12 @@ async def channels_bind(
 
     Only a CLI pane may call this. `pane` (a name, addressed as in cli_send)
     or `pane_id` picks the pane; with neither it is you. A pane in your own
-    workspace, on a chat the bot knows and someone was let in from, is bound
-    at once. Otherwise — another workspace's pane, a chat the bot has not
-    seen, or one nobody there was let in from yet — the bind goes to the
-    user: Navide shows it in the main window with `reason`, and the answer is
+    workspace, on the Telegram DM of someone already let in, is bound at
+    once. Otherwise — another workspace's pane, a group chat or another
+    platform's chat (anyone there would read the pane), a chat the bot has
+    not seen, or one whose sender was not let in yet — the bind goes to the
+    user, at the default verbosity whatever you asked (raise it afterwards
+    with channels_set_verbosity): Navide shows it in the main window with `reason`, and the answer is
     {ok, id, status: "pending", why, expires_at, note}; follow it with
     channels_request_status. `chat_id` comes from
     channels_chats; `account` is the bot ("default" when omitted). `mode`
@@ -541,7 +544,11 @@ def _bind_needs_user(manager: Any, platform: str, account: str, chat_id: str, cr
     chat = next((c for c in chats if str(c.get("chat_id")) == str(chat_id)), None)
     if chat is None:
         return "The bot has not seen this chat."
-    if not manager._chat_usable(platform, account, str(chat_id), str(chat.get("kind") or "")):  # noqa: SLF001
+    # Only a Telegram DM names one sender whose approval can be checked; anyone in a
+    # group or on another platform may read what the pane says, so the user decides.
+    if platform != "telegram" or str(chat.get("kind") or "") not in TELEGRAM_DIRECT_KINDS:
+        return "Anyone in a group chat would read the pane."
+    if not manager.gate.is_allowed(platform, str(chat_id), account):
         return "Nobody in this chat has been let in yet."
     return ""
 

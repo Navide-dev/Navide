@@ -196,9 +196,10 @@ async def _apply(manager: Any, record: dict[str, Any]) -> dict[str, Any]:
     if kind == "bot-remove":
         return await manager.remove(t["platform"], t["account"])
     if kind == "bind":
+        # The card does not show a verbosity, so the agent's choice is not taken:
+        # a new binding gets the default, a re-bind keeps the pane's level.
         return await manager.bind(t["pane_id"], t["pane"], t["platform"], t["mode"], t["chat_id"],
-                                  t["thread_id"], t["title"], verbosity=t["verbosity"],
-                                  account=t["account"] or DEFAULT_ACCOUNT)
+                                  t["thread_id"], t["title"], account=t["account"] or DEFAULT_ACCOUNT)
     # pairing-approve: approve, then bind the sender's chat when a pane was named.
     approved = await manager.pairing_approve(t["platform"], t["code"])
     if not approved.get("ok") or not t.get("bind_pane_id"):
