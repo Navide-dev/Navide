@@ -552,6 +552,9 @@
     "agent-channels-disabled": "“{caller}”断开了 bot {bot}",
     "agent-channels-link": "“{caller}”为 bot {bot} 生成了链接码",
     "agent-channels-reject": "“{caller}”拒绝了 {bot} 的配对请求 {code}",
+    "agent-channels-managed": "“{caller}”请 Telegram bot {bot} 创建新的 bot",
+    "agent-channels-request": "“{caller}”有一个聊天频道请求等你决定",
+    "agent-channels-request-open": "打开",
     "undo": "撤销",
     "cross-workspace-toast": "来自其他工作区的指令：“{from}”→“{target}”",
     "cross-workspace-badge": "跨工作区",
@@ -10965,6 +10968,19 @@
     "token-linked": "已用令牌链接"
   },
   "channels": {
+    "agent": {
+      "title": "agent 的请求",
+      "from": "由 {requester} 提出",
+      "kind-bot-add": "添加一个 {platform} bot",
+      "kind-bot-remove": "移除 bot {bot}",
+      "kind-bind": "把 {bot} 的聊天 {chat} 绑定到分格“{pane}”",
+      "kind-pairing": "让 {sender} 和 {bot} 对话",
+      "kind-pairing-bind": "让 {sender} 和 {bot} 对话，并把其聊天绑定到分格“{pane}”",
+      "approve": "批准",
+      "decline": "拒绝",
+      "fill": "打开表单",
+      "add-note": "这个 bot 是 {requester} 请求添加的，名称由 agent 填写。凭证请你自己粘贴在这里，它不会传给 agent。"
+    },
     "shareOpenNotify": {
       "title": "分享链接打开通知",
       "desc": "新的设备打开这台电脑创建的分享链接时，通知已绑定的聊天室（不含链接网址）。需要 Navide Cloud。"

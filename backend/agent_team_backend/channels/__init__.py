@@ -248,7 +248,10 @@ def default_seams() -> Seams:
 
     async def broadcast(event_type: str, payload: dict[str, Any]) -> None:
         from .. import app
+        from . import agent_requests
 
+        # An agent waiting on a Telegram creation or a link code hears the outcome here.
+        agent_requests.on_event(event_type, payload)
         await app.broadcast(make_event(event_type, payload))
 
     # The vault shells out to the Keychain (blocking, up to 10s): keep it off the loop.

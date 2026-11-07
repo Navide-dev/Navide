@@ -43,7 +43,7 @@ import { countUntouchedElsewhere, parseSidebarMode, SIDEBAR_MODE_KEY, type Sideb
 import { formatBytes } from './lib/formatBytes'
 import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/resourceSampling'
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
-import { channelsKey, useChannels } from './composables/useChannels'
+import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
 import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
@@ -17624,6 +17624,7 @@ const AGENT_CHANNEL_TOASTS: Record<string, string> = {
   channels_bot_rename: 'msg.agent-channels-rename',
   channels_link_code: 'msg.agent-channels-link',
   channels_pairing_reject: 'msg.agent-channels-reject',
+  channels_managed_bot_create: 'msg.agent-channels-managed',
 }
 backend.on('channels.agent_action', (raw) => {
   const ev = (raw ?? {}) as { tool?: string; caller?: string; target?: Record<string, unknown> }
@@ -17641,6 +17642,37 @@ backend.on('channels.agent_action', (raw) => {
     }),
     { type: 'info', duration: 8000 },
   )
+})
+// channels_bot_add_open: show the add-a-bot form for that platform, empty.
+backend.on('channels.agent_form.open', (raw) => {
+  const ev = (raw ?? {}) as { platform?: string; requester?: { address?: string; pane_id?: string } }
+  if (!ev.platform) return
+  requestChannelsBot({
+    platform: ev.platform, account: '',
+    add: { name: '', requestId: '', requester: ev.requester?.address || ev.requester?.pane_id || '' },
+  })
+  openSettingsAt('channels')
+})
+// A new request from a channels_* tool: a bot to add opens its form at once (the
+// agent asked for a form, like the Marketplace *_fill tools); anything the user
+// decides shows on the Channels page, and a toast says so with a way there.
+backend.on('channels.agent_request.changed', (raw) => {
+  const req = (raw ?? {}) as Partial<ChannelAgentRequest>
+  if (req.status !== 'pending' || !req.id || !req.target) return
+  const requester = req.requester?.address || req.requester?.pane_id || ''
+  if (req.kind === 'bot-add') {
+    requestChannelsBot({
+      platform: req.target.platform ?? '', account: '',
+      add: { name: req.draft?.name ?? '', requestId: req.id, requester },
+    })
+    openSettingsAt('channels')
+    return
+  }
+  notifyRestore.toast(i18n.global.t('msg.agent-channels-request', { caller: requester || 'an agent' }), {
+    type: 'info',
+    duration: 15000,
+    action: { label: i18n.global.t('msg.agent-channels-request-open'), run: () => openSettingsAt('channels') },
+  })
 })
 backend.on('agent_spawn.request', (raw) => {
   const ev = raw as {

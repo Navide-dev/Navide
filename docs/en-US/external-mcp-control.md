@@ -557,12 +557,14 @@ servers are configured, and which prompts the user has saved.
 ### Chat channels
 
 The `channels_*` tools work Navide's chat-channel bots (Settings → Channels):
-read which bots, chats, bindings and pairing requests exist, and make the
-changes that stay within the caller's reach. What stays the user's, in the
-main window: approving a person, adding or removing a bot, binding another
-workspace's pane, and the switch for every bot at once. For those, open the
-page with `ui_invoke` `ui.settings.open` `{tab: "channels", platform,
-account}` — it opens with that bot selected.
+read which bots, chats, bindings and pairing requests exist, make the
+changes that stay within the caller's reach, and ask the user for the rest.
+What only the user can grant — letting a person in, adding or removing a bot,
+a bind outside the caller's reach — an agent files as a request: the main
+window shows it with who asked and why, and only a press there grants it.
+The switch for every bot at once is not on any tool. To show the user the
+page, `ui_invoke` `ui.settings.open` `{tab: "channels", platform, account}`
+opens it with that bot selected.
 
 | Tool | Parameters | What it does |
 |---|---|---|
@@ -570,19 +572,30 @@ account}` — it opens with that bot selected.
 | `channels_bindings` | — | Every binding: `{ok, bindings: [{pane_id, platform, account, chat_id, thread_id, title, verbosity, parent_pane_id, auto}], note}`. A chat drives one pane at a time; `auto` marks a child pane's topic made for it |
 | `channels_chats` | `platform=""`, `account=""` | The chats a running bot knows, for `channels_bind`: `{ok, bots: [{platform, account, chats: [{chat_id, title, kind, supports_topics, …}]}]}`. With no platform, every running bot's |
 | `channels_pairing_requests` | `platform=""` | People waiting to be let in: `{ok, requests: [{platform, account, code, sender_id, sender_name, created_at, source}]}`, `source` `invite` (a redeemed link code) or `pairing` |
-| `channels_link_code` | `platform`, `account=""`, `target="direct"` | A one-time code (10 minutes, at most 5 per bot) whose sender becomes a pairing request: `{ok, platform, code, target, expires_at, url}`. The code alone lets nobody in |
-| `channels_bind` | `platform`, `chat_id`, `pane=""`, `pane_id=""`, `account=""`, `mode="existing"`, `thread_id=""`, `title=""`, `verbosity=""` | Bind a chat to a pane in the caller's own workspace (the caller itself when no pane is named): `{ok, binding, needs_approval?}`. `mode` `new` makes a topic where the platform can. The chat is told which pane it drives; a chat bound elsewhere is refused |
+| `channels_link_code` | `platform`, `account=""`, `target="direct"` | A one-time code (10 minutes, at most 5 per bot) whose sender becomes a pairing request: `{ok, platform, code, target, expires_at, url, id}`. The code alone lets nobody in; `id` follows it in `channels_request_status` |
+| `channels_bind` | `platform`, `chat_id`, `pane=""`, `pane_id=""`, `account=""`, `mode="existing"`, `thread_id=""`, `title=""`, `verbosity=""`, `reason=""` | Bind a chat to a pane (the caller itself when no pane is named). A pane in the caller's own workspace, on a chat the bot knows and someone was let in from, is bound at once: `{ok, binding}`. Anything else — another workspace's pane, a chat the bot has not seen, one nobody there was let in from — becomes a request: `{ok, id, status: "pending", why, expires_at, note}`. `mode` `new` makes a topic where the platform can. The chat is told which pane it drives; a chat bound elsewhere is refused |
 | `channels_unbind` | `pane=""`, `pane_id=""` | Unbind a pane in the caller's own workspace: `{ok, removed}`. The chat is told |
 | `channels_set_verbosity` | `verbosity`, `pane=""`, `pane_id=""` | How much of the pane its chat receives: `replies`, `minimal`, `standard` or `full`; child topics follow |
 | `channels_bot_rename` | `platform`, `account`, `name` | The bot's label in Navide only |
 | `channels_bot_set_enabled` | `platform`, `account`, `enabled` | Connect or disconnect one bot; nothing is deleted |
 | `channels_pairing_reject` | `platform`, `code` | Turn down a pairing request |
+| `channels_bot_add_open` | `platform` | Open the add-a-bot form in Navide, empty, for the user to fill: `{ok, opened, platform, note}` |
+| `channels_bot_add_fill` | `platform`, `name=""`, `reason=""` | A request to add a bot: the form opens with `name` written in and marked as the agent's; the user types the credential and presses Add. `result` `{platform, account}` |
+| `channels_managed_bot_create` | `manager_account=""`, `username=""`, `name=""` | A Telegram bot in Bot Management Mode, with someone linked to it, makes a new bot: `{ok, id, url, expires_at, note}`. When that person presses Create at `url`, Navide fetches the new bot's credential from Telegram and adds it; nobody handles the credential. `result` `{account, name, link}` |
+| `channels_pairing_approve_request` | `platform`, `code`, `bind_pane=""`, `bind_pane_id=""`, `reason=""` | A request to let a person in, and with a pane named, to bind their chat to it in the same press. `result` `{sender_id, binding?, bind_error?}` |
+| `channels_bot_remove_request` | `platform`, `account`, `reason=""` | A request to remove a bot (its stored credential, the people let in and its bindings go with it) |
+| `channels_request_status` | `id`, `wait_s=0` | Where a request stands: `{ok, id, kind, status, result, error, reason, target, created_at, expires_at}`, status `pending`, `applying`, `completed`, `failed`, `rejected` (the user said no) or `expired`; a link code still waiting on the user adds `pairing_code`. `wait_s` (at most 60) waits for it to settle. Only the pane that made a request can read it, and a backend restart forgets every request (`unknown-request`) |
 
-`channels_bind`, `channels_unbind` and `channels_set_verbosity` need a CLI
-pane caller (`pane-caller-required`) and a pane in its own workspace
-(`cross-workspace`). Every change is recorded with the caller in the agent
-action log (`agent-window-actions.jsonl`) and every main window shows a toast
-naming the pane that made it. A refusal from the channel gateway is
+Every tool that changes something or files a request needs a CLI pane caller
+(`pane-caller-required`), so the record can name the pane; `channels_unbind`
+and `channels_set_verbosity` also need a pane in the caller's own workspace
+(`cross-workspace`), and a request needs an open main window
+(`no-main-window`). Every change and request is recorded with the caller in
+the agent action log (`agent-window-actions.jsonl`); every main window shows a
+toast naming the pane behind a change, and the Channels page lists open
+requests under "Requests from agents" with Approve and Decline (a bot to add
+opens its form instead). A decision is accepted only from a main window's own
+connection, which an agent does not have. A refusal from the channel gateway is
 `{ok: false, error, error_code: "channels-refused"}`; a malformed platform or
 bot id is `bad-request`.
 

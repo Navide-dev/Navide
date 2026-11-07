@@ -552,6 +552,9 @@
     "agent-channels-disabled": "“{caller}” đã ngắt kết nối bot {bot}",
     "agent-channels-link": "“{caller}” đã tạo mã liên kết cho bot {bot}",
     "agent-channels-reject": "“{caller}” đã từ chối yêu cầu ghép đôi {code} của {bot}",
+    "agent-channels-managed": "“{caller}” đã yêu cầu bot Telegram {bot} tạo một bot mới",
+    "agent-channels-request": "“{caller}” cần bạn quyết định một yêu cầu kênh trò chuyện",
+    "agent-channels-request-open": "Mở",
     "undo": "Hoàn tác",
     "cross-workspace-toast": "Chỉ thị từ workspace khác: “{from}” → “{target}”",
     "cross-workspace-badge": "giữa các workspace",
@@ -10965,6 +10968,19 @@
     "token-linked": "Đã liên kết bằng token"
   },
   "channels": {
+    "agent": {
+      "title": "Yêu cầu từ agent",
+      "from": "Do {requester} yêu cầu",
+      "kind-bot-add": "Thêm một bot {platform}",
+      "kind-bot-remove": "Gỡ bot {bot}",
+      "kind-bind": "Gắn cuộc trò chuyện {chat} của {bot} vào pane “{pane}”",
+      "kind-pairing": "Cho phép {sender} trò chuyện với {bot}",
+      "kind-pairing-bind": "Cho phép {sender} trò chuyện với {bot} và gắn cuộc trò chuyện vào pane “{pane}”",
+      "approve": "Phê duyệt",
+      "decline": "Từ chối",
+      "fill": "Mở biểu mẫu",
+      "add-note": "{requester} đã yêu cầu bot này; tên do agent điền. Hãy tự dán thông tin xác thực vào đây — agent không bao giờ nhận được nó."
+    },
     "shareOpenNotify": {
       "title": "Thông báo liên kết chia sẻ được mở",
       "desc": "Khi một thiết bị mới mở liên kết chia sẻ tạo trên máy tính này, báo cho các cuộc trò chuyện đã gắn (URL của liên kết không bao giờ được gửi). Cần Navide Cloud."

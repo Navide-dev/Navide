@@ -552,6 +552,9 @@
     "agent-channels-disabled": "«{caller}» отключил бота {bot}",
     "agent-channels-link": "«{caller}» создал код привязки для бота {bot}",
     "agent-channels-reject": "«{caller}» отклонил запрос на сопряжение {code} для {bot}",
+    "agent-channels-managed": "«{caller}» попросил Telegram-бота {bot} создать нового бота",
+    "agent-channels-request": "«{caller}» просит вас решить запрос по чат-каналу",
+    "agent-channels-request-open": "Открыть",
     "undo": "Отменить",
     "cross-workspace-toast": "Инструкция из другой рабочей области: «{from}» → «{target}»",
     "cross-workspace-badge": "между рабочими областями",
@@ -10965,6 +10968,19 @@
     "token-linked": "Привязано с помощью токена"
   },
   "channels": {
+    "agent": {
+      "title": "Запросы агентов",
+      "from": "Запросил {requester}",
+      "kind-bot-add": "Добавить бота {platform}",
+      "kind-bot-remove": "Удалить бота {bot}",
+      "kind-bind": "Привязать чат {chat} бота {bot} к панели «{pane}»",
+      "kind-pairing": "Разрешить {sender} писать боту {bot}",
+      "kind-pairing-bind": "Разрешить {sender} писать боту {bot} и привязать его чат к панели «{pane}»",
+      "approve": "Одобрить",
+      "decline": "Отклонить",
+      "fill": "Открыть форму",
+      "add-note": "Этого бота запросил {requester}; имя вписал агент. Вставьте учётные данные сами — агент их не получит."
+    },
     "shareOpenNotify": {
       "title": "Уведомления об открытии ссылок",
       "desc": "Когда новое устройство открывает ссылку, созданную на этом компьютере, сообщать об этом в привязанные чаты (URL ссылки никогда не отправляется). Требуется Navide Cloud."

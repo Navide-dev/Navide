@@ -552,6 +552,9 @@
     "agent-channels-disabled": "„{caller}“ hat Bot {bot} getrennt",
     "agent-channels-link": "„{caller}“ hat einen Verknüpfungscode für Bot {bot} erstellt",
     "agent-channels-reject": "„{caller}“ hat die Kopplungsanfrage {code} für {bot} abgelehnt",
+    "agent-channels-managed": "„{caller}“ hat Telegram-Bot {bot} gebeten, einen neuen Bot zu erstellen",
+    "agent-channels-request": "„{caller}“ bittet dich, über eine Chat-Kanal-Anfrage zu entscheiden",
+    "agent-channels-request-open": "Öffnen",
     "undo": "Rückgängig",
     "cross-workspace-toast": "Anweisung aus einem anderen Arbeitsbereich: „{from}“ → „{target}“",
     "cross-workspace-badge": "arbeitsbereichsübergreifend",
@@ -10965,6 +10968,19 @@
     "token-linked": "Mit einem Token verknüpft"
   },
   "channels": {
+    "agent": {
+      "title": "Anfragen von Agents",
+      "from": "Angefragt von {requester}",
+      "kind-bot-add": "Einen {platform}-Bot hinzufügen",
+      "kind-bot-remove": "Bot {bot} entfernen",
+      "kind-bind": "Chat {chat} von {bot} an den Bereich „{pane}“ binden",
+      "kind-pairing": "{sender} mit {bot} sprechen lassen",
+      "kind-pairing-bind": "{sender} mit {bot} sprechen lassen und den Chat an den Bereich „{pane}“ binden",
+      "approve": "Genehmigen",
+      "decline": "Ablehnen",
+      "fill": "Formular öffnen",
+      "add-note": "{requester} hat diesen Bot angefragt; den Namen hat ein Agent eingetragen. Füge die Zugangsdaten selbst hier ein – sie erreichen den Agent nie."
+    },
     "shareOpenNotify": {
       "title": "Hinweise beim Öffnen von Freigabelinks",
       "desc": "Wenn ein neues Gerät einen auf diesem Computer erstellten Freigabelink öffnet, die verbundenen Chats informieren (die URL des Links wird nie gesendet). Erfordert Navide Cloud."

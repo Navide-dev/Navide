@@ -552,6 +552,9 @@
     "agent-channels-disabled": "“{caller}” disconnected bot {bot}",
     "agent-channels-link": "“{caller}” made a link code for bot {bot}",
     "agent-channels-reject": "“{caller}” turned down pairing request {code} on {bot}",
+    "agent-channels-managed": "“{caller}” asked Telegram bot {bot} to make a new bot",
+    "agent-channels-request": "“{caller}” asks you to decide a chat-channel request",
+    "agent-channels-request-open": "Open",
     "undo": "Undo",
     "cross-workspace-toast": "Instruction from another workspace: “{from}” → “{target}”",
     "cross-workspace-badge": "cross-workspace",
@@ -10965,6 +10968,19 @@
     "token-linked": "Linked with a token"
   },
   "channels": {
+    "agent": {
+      "title": "Requests from agents",
+      "from": "Asked by {requester}",
+      "kind-bot-add": "Add a {platform} bot",
+      "kind-bot-remove": "Remove bot {bot}",
+      "kind-bind": "Bind chat {chat} on {bot} to pane “{pane}”",
+      "kind-pairing": "Let {sender} talk to {bot}",
+      "kind-pairing-bind": "Let {sender} talk to {bot} and bind their chat to pane “{pane}”",
+      "approve": "Approve",
+      "decline": "Decline",
+      "fill": "Open the form",
+      "add-note": "{requester} asked for this bot; the name was written by an agent. Paste the credential here yourself — it never reaches the agent."
+    },
     "shareOpenNotify": {
       "title": "Share link opened notices",
       "desc": "When a new device opens a share link made on this computer, tell the bound chats (the link's URL is never sent). Requires Navide Cloud."

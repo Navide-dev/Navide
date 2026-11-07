@@ -119,6 +119,20 @@ export interface ChannelPairingRequest {
   source?: 'pairing' | 'invite'
 }
 
+/** A request an agent filed through the channels_* MCP tools; the user decides it here.
+ *  Holds no credential (backend channels/agent_requests.py). */
+export interface ChannelAgentRequest {
+  id: string
+  kind: 'bot-add' | 'pairing-approve' | 'bot-remove' | 'bind'
+  requester: { pane_id?: string; address?: string; kind?: string }
+  reason: string
+  target: Record<string, string>
+  draft: { name?: string }
+  status: 'pending' | 'applying' | 'completed' | 'failed' | 'rejected' | 'expired'
+  error: string | null
+  expires_at: number
+}
+
 export interface ChannelAllowEntry {
   platform: ChannelPlatform
   /** The bot this sender may talk to; absent from older backends (= default). */
@@ -319,6 +333,8 @@ function createChannelsStore(backend: Backend) {
   const lastLinked = ref<ChannelLinkedEvent | null>(null)
   const lastLinkFailed = ref<ChannelLinkFailedEvent | null>(null)
   const lastManagedCreated = ref<ChannelManagedCreatedEvent | null>(null)
+  // Open agent requests (pending or being applied), newest last.
+  const agentRequests = ref<ChannelAgentRequest[]>([])
   // Settings → Channels: fetched once the page asks for it, then on every refresh.
   const overview = ref<ChannelOverviewBot[]>([])
   const overviewLoaded = ref(false)
@@ -439,6 +455,16 @@ function createChannelsStore(backend: Backend) {
     const msg = raw as ChannelManagedCreatedEvent | null
     if (msg?.request_id) lastManagedCreated.value = msg
   })
+  async function fetchAgentRequests(): Promise<void> {
+    const res = await call<{ requests: ChannelAgentRequest[] }>('channels.agent_request.list')
+    if (res.ok && res.data) agentRequests.value = res.data.requests ?? []
+  }
+  backend.on('channels.agent_request.changed', (raw) => {
+    const req = raw as ChannelAgentRequest | null
+    if (!req?.id) return
+    const rest = agentRequests.value.filter((r) => r.id !== req.id)
+    agentRequests.value = req.status === 'pending' || req.status === 'applying' ? [...rest, req] : rest
+  })
   backend.on('channels.status', (raw) => {
     const msg = raw as { platform?: string; account?: string; status?: Partial<ChannelStatus> } | null
     if (!msg?.platform) return
@@ -457,8 +483,10 @@ function createChannelsStore(backend: Backend) {
   watch(
     () => backend.status.value,
     (s, prev) => {
-      if (s === 'connected') void refresh()
-      else if (prev === 'connected') linkEpoch.value += 1
+      if (s === 'connected') {
+        void refresh()
+        void fetchAgentRequests()
+      } else if (prev === 'connected') linkEpoch.value += 1
     },
     { immediate: true }
   )
@@ -479,6 +507,12 @@ function createChannelsStore(backend: Backend) {
     lastLinkFailed,
     lastManagedCreated,
     linkEpoch,
+    agentRequests,
+    /** Approve or decline an agent's request; approving runs what it asked for. */
+    decideAgentRequest: (id: string, approve: boolean) => call('channels.agent_request.decide', { id, approve }),
+    /** The add-a-bot form an agent asked for: the user added the bot (or gave up). */
+    finishAgentRequest: (id: string, ok: boolean, account = '', error = '') =>
+      call('channels.agent_request.finish', { id, ok, account, error }),
     configuredPlatforms,
     refresh,
     overview,
