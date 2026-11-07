@@ -723,7 +723,7 @@ class LiveBridge:
             return {"status": "error", "reason": SKIP_NO_WINDOW, "detail": _no_window_detail(workspace)}
         answer = await mcp._start_pipeline_run(
             mcp._Caller(kind="host"), workspace, action["task"], pipeline_id,
-            taint_detail=action.get(TAINT_KEY) or "",
+            taint_detail=action.get(TAINT_KEY) or "", origin="schedule",
         )
         if answer.get("ok"):
             return {"status": "ok", "detail": f'started pipeline "{pipeline_id}"'}

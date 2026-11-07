@@ -12178,6 +12178,16 @@
       "crossWorkspace": "ワークスペースをまたぐ呼び出し：{from} → {to}",
       "totalSize": "引数の合計 {args}、結果の合計 {result}。サイズ不明の {unknown} 件は含めていません"
     },
+    "pipelineNodes": {
+      "heading": "このノードを実行した Pipeline",
+      "row": "{date} {origin}が開始した Pipeline → ノード {node}（{workspace}）：{outcome}、{duration} ms",
+      "origin": {
+        "user": "あなた",
+        "agent": "エージェント",
+        "schedule": "スケジュール",
+        "webhook": "Webhook"
+      }
+    },
     "caller": {
       "pane": "pane「{name}」",
       "external": "外部クライアント",

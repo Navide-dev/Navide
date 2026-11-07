@@ -11789,7 +11789,11 @@ registerCommand('ui.window.openPipeline', (args) => {
 // nothing, so these two actions drive the very functions the ControlPane
 // buttons emit into (@pipeline-start / @pipeline-abort) rather than a copy.
 registerCommand('ui.pipeline.start', async (args) => {
-  const a = (args as { pipelineId?: string; task?: string } | undefined) ?? {}
+  const a = (args as { pipelineId?: string; task?: string; origin?: string } | undefined) ?? {}
+  // The editor's Run button says 'user'; over the action bus the bus sets it
+  // (useUiActionBus remoteArgs): an agent, a schedule or a webhook.
+  const origin: PipelineRunOrigin =
+    a.origin === 'user' || a.origin === 'schedule' || a.origin === 'webhook' ? a.origin : 'agent'
   if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.start requires an open workspace'), { code: 'no-workspace' })
   // A second run would overwrite pipeline.task/stageIndex/state under the
   // panes the first one is still driving, so refuse rather than restart.
@@ -11805,7 +11809,7 @@ registerCommand('ui.pipeline.start', async (args) => {
     throw Object.assign(new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline'), { code: 'no-pipeline' })
   }
   const refused: { last?: StartRefusal } = {}
-  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId }, (r) => { refused.last = r })
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId, origin }, (r) => { refused.last = r })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -15793,10 +15797,17 @@ async function spawnPipelineStage(index: number): Promise<void> {
   }
 }
 
+/** Who started the current pipeline run: a person (the Run button), an agent
+ *  (ui.pipeline.start / pipeline_start), a schedule or a webhook. A child run
+ *  keeps its parent's. Recorded with every plugin node the run reaches. */
+type PipelineRunOrigin = 'user' | 'agent' | 'schedule' | 'webhook'
+let pipelineRunOrigin: PipelineRunOrigin = 'user'
+
 /** Returns why the run was refused, or '' when it was not (ui.pipeline.start
  *  reports the reason). `report` also gets the refusal's code, for a caller
  *  that says it in the UI language (pipelineErrors.startRefusalText). */
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }, report?: (refusal: StartRefusal) => void): Promise<string> {
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string; origin?: PipelineRunOrigin }, report?: (refusal: StartRefusal) => void): Promise<string> {
+  if (!payload.childOf) pipelineRunOrigin = payload.origin ?? 'user'
   const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
   // pipelineLog alone left a refusal nowhere durable: it persists only once
   // pipeline.workspacePath is set, which happens below, so after a reset or a
@@ -16510,7 +16521,7 @@ async function runPluginNode(
   pipelineLog(`◇ Plugin node "${call.label}" → ${call.pluginId} ${call.node}`)
   const run = window.agentTeam?.plugins?.runPipelineNode
   const answer = run
-    ? await run({ workspacePath: pipeline.workspacePath, pluginId: call.pluginId, node: call.node, input: call.input })
+    ? await run({ workspacePath: pipeline.workspacePath, pluginId: call.pluginId, node: call.node, input: call.input, origin: pipelineRunOrigin })
         .catch(() => ({ ok: false as const, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }))
     : { ok: false as const, code: 'BACKEND_UNAVAILABLE', message: 'plugin nodes are unavailable in this window' }
   if (pipeline.state !== 'running') return

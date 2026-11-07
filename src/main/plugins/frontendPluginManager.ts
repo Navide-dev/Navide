@@ -832,6 +832,9 @@ const IPC_EVENT = 'plugin:cap:event'
 const IPC_READY = 'plugin:ready'
 const IPC_HIDE_SELF = 'plugin:hideSelf'
 const IPC_OPEN_TARGET = 'plugin:openTarget'
+/** Who started a pipeline run that reaches a plugin node (Activity only). */
+const PIPELINE_RUN_ORIGINS = ['user', 'agent', 'schedule', 'webhook'] as const
+type PipelineRunOrigin = (typeof PIPELINE_RUN_ORIGINS)[number]
 const IPC_BACKEND_CALL = 'plugin:backend:call'
 const IPC_BACKEND_CANCEL = 'plugin:backend:cancel'
 const IPC_BACKEND_SUBSCRIBE = 'plugin:backend:subscribe'
@@ -7850,15 +7853,17 @@ export class FrontendPluginManager {
     const record = typeof request === 'object' && request !== null && !Array.isArray(request)
       ? request as Record<string, unknown>
       : {}
-    const { workspacePath, pluginId, node, input } = record
+    const { workspacePath, pluginId, node, input, origin } = record
     if (
-      Object.keys(record).some((key) => !['workspacePath', 'pluginId', 'node', 'input'].includes(key)) ||
+      Object.keys(record).some((key) => !['workspacePath', 'pluginId', 'node', 'input', 'origin'].includes(key)) ||
       !nonEmptyString(workspacePath) || !nonEmptyString(pluginId) || !nonEmptyString(node) ||
-      typeof input !== 'string'
+      typeof input !== 'string' || !PIPELINE_RUN_ORIGINS.includes(origin as PipelineRunOrigin)
     ) {
       return { ok: false, code: 'INVALID_ARGUMENT', message: 'malformed pipeline node request' }
     }
-    let contributed: { method: string; timeoutMs: number } | undefined
+    const started = Date.now()
+    let contributed: { method: string; timeoutMs?: number } | undefined
+    let answer: { ok: true; output: JsonValue } | { ok: false; code: string; message: string }
     try {
       const output = await this.callContributedMethod(
         null,
@@ -7870,14 +7875,48 @@ export class FrontendPluginManager {
         () => contributed?.method ?? '',
         workspacePath,
         { input },
+        // Whoever started the run, the node runs as the Host user; the run's
+        // origin is disclosed in Activity instead (decision on plan 53b862 n7).
         HOST_USER_INITIATOR,
         () => contributed?.timeoutMs,
       )
-      return { ok: true, output }
+      answer = { ok: true, output }
     } catch (error) {
-      if (error instanceof InterPluginCallError) return { ok: false, code: error.code, message: error.message }
-      return { ok: false, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }
+      answer = error instanceof InterPluginCallError
+        ? { ok: false, code: error.code, message: error.message }
+        : { ok: false, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }
     }
+    this.recordPipelineNodeRun(pluginId, node, workspacePath, origin as PipelineRunOrigin, answer, started)
+    return answer
+  }
+
+  /** One pipeline plugin node run into the plugin's Activity: who started the
+   *  run, the node, how it ended and how long it took. Never throws. */
+  private recordPipelineNodeRun(
+    pluginId: string,
+    node: string,
+    workspacePath: string,
+    origin: PipelineRunOrigin,
+    answer: { ok: true } | { ok: false; code: string },
+    started: number,
+  ): void {
+    const client = this.wsClient
+    const version = this.descriptors.get(pluginId)?.packageVersion
+    if (!client || !this.hostSessionRegistered || !nonEmptyString(version)) return
+    const at = Date.now()
+    void client.send('plugin.pipelineNode.record', {
+      plugin_id: pluginId,
+      plugin_version: version,
+      workspace: resolve(workspacePath),
+      node_id: node,
+      run_origin: origin,
+      outcome: answer.ok ? 'ok' : 'error',
+      error_code: answer.ok ? '' : answer.code,
+      duration_ms: at - started,
+      at,
+    }, 10_000).catch(() => {
+      // A row the backend did not take is dropped, like any activity row.
+    })
   }
 
   /** Call a method another installed plugin offers (its contributes.api, or a

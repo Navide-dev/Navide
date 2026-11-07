@@ -242,6 +242,19 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         {{ $t('pluginActivity.tools.totalSize', { args: formatBytes(sizes.args.bytes), result: formatBytes(sizes.result.bytes), unknown: sizes.args.unknown + sizes.result.unknown }) }}
       </p>
 
+      <template v-if="report.pipelineNodeRuns.length">
+        <h5>{{ $t('pluginActivity.pipelineNodes.heading') }}</h5>
+        <ul class="nv-activity-tools">
+          <li v-for="run in report.pipelineNodeRuns" :key="`node-${run.id}`">
+            {{ $t('pluginActivity.pipelineNodes.row', {
+              date: date(run.at), origin: $t(`pluginActivity.pipelineNodes.origin.${run.runOrigin}`), node: reveal(run.nodeId),
+              workspace: reveal(run.workspace), duration: run.durationMs,
+              outcome: run.outcome === 'ok' ? $t('pluginActivity.tools.ok') : $t('pluginActivity.tools.failed', { code: reveal(run.errorCode) }),
+            }) }}
+          </li>
+        </ul>
+      </template>
+
       <h5>{{ $t('pluginActivity.files.heading') }}</h5>
       <ul v-if="report.files.length" class="nv-activity-files">
         <li

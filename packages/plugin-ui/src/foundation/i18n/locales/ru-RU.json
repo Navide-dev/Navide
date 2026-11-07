@@ -12178,6 +12178,16 @@
       "crossWorkspace": "Между рабочими областями: {from} → {to}",
       "totalSize": "Всего аргументов {args} и результатов {result}; неизвестных размеров (не учтены): {unknown}"
     },
+    "pipelineNodes": {
+      "heading": "Запуски pipeline, дошедшие до его узлов",
+      "row": "{date} запуск, начатый ({origin}) → узел {node} ({workspace}): {outcome}, {duration} мс",
+      "origin": {
+        "user": "вами",
+        "agent": "агентом",
+        "schedule": "расписанием",
+        "webhook": "вебхуком"
+      }
+    },
     "caller": {
       "pane": "панель «{name}»",
       "external": "внешний клиент",

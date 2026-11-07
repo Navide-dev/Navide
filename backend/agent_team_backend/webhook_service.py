@@ -227,7 +227,7 @@ class LiveWindow:
         from .mcp_server import server as mcp
 
         return await mcp._start_pipeline_run(
-            mcp._Caller(kind="host"), workspace, task, pipeline_id, taint_detail=taint_detail,
+            mcp._Caller(kind="host"), workspace, task, pipeline_id, taint_detail=taint_detail, origin="webhook",
         )
 
 

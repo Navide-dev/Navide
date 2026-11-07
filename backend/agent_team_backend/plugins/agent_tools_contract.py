@@ -870,7 +870,27 @@ PLUGIN_AUDIT_DDL = (
     " UNIQUE (plugin_id, minute, plugin_version, workspace, source, address, outcome, denied_reason, fs_path,"
     " shell_command))",
     "CREATE INDEX IF NOT EXISTS plugin_activity_counts_minute ON plugin_activity_counts (minute)",
+    # One row per pipeline plugin node run (E2): who started the run, which
+    # node of which plugin, how it ended and how long it took. Kept like
+    # plugin_tool_calls (PLUGIN_TOOL_CALLS_RETENTION_DAYS).
+    "CREATE TABLE IF NOT EXISTS plugin_pipeline_node_runs ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " node_id TEXT NOT NULL,"
+    " run_origin TEXT NOT NULL,"
+    " outcome TEXT NOT NULL,"
+    " error_code TEXT NOT NULL DEFAULT '',"
+    " duration_ms INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS plugin_pipeline_node_runs_plugin_at ON plugin_pipeline_node_runs (plugin_id, at)",
 )
+
+#: Who started a pipeline run that ran a plugin node (plugin.pipelineNode.record).
+PIPELINE_NODE_RUN_ORIGINS = ("user", "agent", "schedule", "webhook")
+#: The message the Host sends one plugin node run in.
+PIPELINE_NODE_RECORD_MESSAGE = "plugin.pipelineNode.record"
 
 # ── navide.db: agent plugin actions (B2-c) ──────────────────────────────────
 # Who asked for, decided or carried out a change to a Navide plugin. Its own

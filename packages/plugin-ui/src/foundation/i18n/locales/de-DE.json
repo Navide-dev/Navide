@@ -12178,6 +12178,16 @@
       "crossWorkspace": "Arbeitsbereichsübergreifend: {from} → {to}",
       "totalSize": "Argumente {args} und Ergebnisse {result} insgesamt; {unknown} Größen sind unbekannt und nicht mitgezählt"
     },
+    "pipelineNodes": {
+      "heading": "Pipeline-Läufe, die seine Knoten erreicht haben",
+      "row": "{date} Lauf gestartet von {origin} → Knoten {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "Ihnen",
+        "agent": "einem Agenten",
+        "schedule": "einem Zeitplan",
+        "webhook": "einem Webhook"
+      }
+    },
     "caller": {
       "pane": "Bereich „{name}“",
       "external": "ein externer Client",

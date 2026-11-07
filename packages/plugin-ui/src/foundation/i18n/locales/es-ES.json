@@ -12178,6 +12178,16 @@
       "crossWorkspace": "Entre áreas de trabajo: {from} → {to}",
       "totalSize": "Argumentos {args} y resultados {result} en total; {unknown} tamaños son desconocidos y no se cuentan"
     },
+    "pipelineNodes": {
+      "heading": "Ejecuciones de pipeline que llegaron a sus nodos",
+      "row": "{date} ejecución iniciada por {origin} → nodo {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "ti",
+        "agent": "un agente",
+        "schedule": "una programación",
+        "webhook": "un webhook"
+      }
+    },
     "caller": {
       "pane": "pane «{name}»",
       "external": "un cliente externo",

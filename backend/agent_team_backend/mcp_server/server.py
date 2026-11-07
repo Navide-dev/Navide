@@ -8874,7 +8874,8 @@ async def pipeline_start(
 
 
 async def _start_pipeline_run(
-    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = ""
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = "",
+    origin: str = "agent",
 ) -> dict[str, Any]:
     """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
     ui.pipeline.start in the window holding the workspace, with the caller's
@@ -8886,7 +8887,9 @@ async def _start_pipeline_run(
     if await asyncio.to_thread(_run_is_active, workspace_path):
         refused = PipelineAlreadyRunning("start a pipeline run")
         return {"ok": False, "error": str(refused), "error_code": refused.error_code}
-    args: dict[str, Any] = {"task": str(task or "")}
+    # Who started the run (agent, schedule or webhook): the window records it
+    # with every plugin node the run reaches (plugin Activity).
+    args: dict[str, Any] = {"task": str(task or ""), "origin": origin}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
         args["pipelineId"] = pipeline_id

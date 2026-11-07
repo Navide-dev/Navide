@@ -100,6 +100,17 @@ export interface UseUiActionBusOptions {
   }
 }
 
+/** A request's args as the window acts on them. A pipeline run started over
+ *  the bus never counts as started by the person at the window: from a pane
+ *  it is an agent's, and from the backend itself a schedule's or a webhook's
+ *  when it says so, an agent's otherwise (recorded with its plugin nodes). */
+function remoteArgs(req: UiInvokeRequest): Record<string, unknown> | undefined {
+  if (req.action !== 'ui.pipeline.start') return req.args ?? undefined
+  const said = req.args?.origin
+  const origin = !req.caller_pane_id && (said === 'schedule' || said === 'webhook') ? said : 'agent'
+  return { ...(req.args ?? {}), origin }
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -335,7 +346,7 @@ export async function handleUiInvokeRequest(
           result = { ...base, refused: [...(base.refused ?? []), own] }
         }
       } else {
-        const outcome = await invokeCommand(req.action, req.args ?? undefined)
+        const outcome = await invokeCommand(req.action, remoteArgs(req))
         ok = outcome.ok
         result = outcome.result
         error = outcome.error

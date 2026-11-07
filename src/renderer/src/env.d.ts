@@ -586,7 +586,7 @@ declare global {
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
         /** Run a pipeline's plugin node on the contributing plugin's backend. */
-        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string }) => Promise<
+        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }) => Promise<
           { ok: true; output: unknown } | { ok: false; code: string; message: string }
         >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>

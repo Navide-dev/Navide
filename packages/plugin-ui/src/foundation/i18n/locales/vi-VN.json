@@ -12178,6 +12178,16 @@
       "crossWorkspace": "Giữa các workspace: {from} → {to}",
       "totalSize": "Tổng tham số {args} và kết quả {result}; {unknown} kích thước không rõ và không được tính"
     },
+    "pipelineNodes": {
+      "heading": "Các lần chạy pipeline đã tới nút của nó",
+      "row": "{date} lần chạy do {origin} bắt đầu → nút {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "bạn",
+        "agent": "một agent",
+        "schedule": "lịch hẹn",
+        "webhook": "webhook"
+      }
+    },
     "caller": {
       "pane": "pane “{name}”",
       "external": "một client bên ngoài",

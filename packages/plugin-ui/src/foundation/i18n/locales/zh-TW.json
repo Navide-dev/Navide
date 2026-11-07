@@ -12178,6 +12178,16 @@
       "crossWorkspace": "跨工作區：{from} → {to}",
       "totalSize": "參數共 {args}、結果共 {result}；另有 {unknown} 筆大小未知，沒有算進去"
     },
+    "pipelineNodes": {
+      "heading": "執行到它節點的 pipeline",
+      "row": "{date} 啟動者：{origin} → pipeline 節點 {node}（{workspace}）：{outcome}，{duration} 毫秒",
+      "origin": {
+        "user": "你",
+        "agent": "agent",
+        "schedule": "排程",
+        "webhook": "webhook"
+      }
+    },
     "caller": {
       "pane": "分格「{name}」",
       "external": "外部用戶端",

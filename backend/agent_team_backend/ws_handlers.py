@@ -527,6 +527,33 @@ def _backend_call_row(app: Any, row: dict) -> str | None:
     return None if recorded else "refused"
 
 
+@handler("plugin.pipelineNode.record")
+async def plugin_pipeline_node_record(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store one pipeline plugin node run the Host ran (E2): who started the
+    run, which node of which plugin, how it ended and how long it took. A row
+    the audit refuses is dropped; nothing here fails the run it records."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    keys = {"plugin_id", "plugin_version", "workspace", "node_id", "run_origin", "outcome", "error_code",
+            "duration_ms", "at"}
+    if not isinstance(payload, dict) or set(payload) != keys or not isinstance(payload.get("at"), int) \
+            or isinstance(payload.get("at"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.pipelineNode.record is malformed")
+        )
+        return
+    fields = {key: payload[key] for key in keys - {"at"}}
+    recorded = app.plugin_audit_log.record_pipeline_node_run(**fields, at_ms=payload["at"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "recorded": recorded}))
+
+
 @handler("plugin.activity.record")
 async def plugin_activity_record(
     session: "Session", msg_id: str, msg_type: str, payload: dict

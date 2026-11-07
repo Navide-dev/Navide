@@ -129,6 +129,11 @@ ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 ERROR_CODES = frozenset((
     *contract.AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout", "result_helper_failed", "cancelled",
 ))
+#: What a pipeline plugin node run can end with (FrontendPluginManager.runPipelineNode).
+PIPELINE_NODE_ERROR_CODES = frozenset((
+    "INVALID_ARGUMENT", "METHOD_NOT_FOUND", "BACKEND_UNAVAILABLE", "TIMEOUT", "USER_CANCELLED",
+    "PLUGIN_STOPPING", "RESOURCE_LIMIT", "INTERNAL_ERROR",
+))
 #: Contract reasons a call or broker request is refused for.
 DENIED_REASONS = frozenset(contract.PLUGIN_ACTIVITY_DENIED_REASONS)
 
@@ -446,6 +451,7 @@ class PluginAuditLog:
         self._activity_counts: dict[tuple[Any, ...], list[int]] = {}
         self._decisions: list[tuple[Any, ...]] = []
         self._actions: list[tuple[Any, ...]] = []
+        self._node_runs: list[tuple[Any, ...]] = []
         # Backend calls, added up per (plugin, version, workspace, address,
         # outcome, minute) until the next flush.
         self._backend_calls: dict[tuple[str, str, str, str, str, int], int] = {}
@@ -501,7 +507,7 @@ class PluginAuditLog:
         with self._lock:
             pending = (
                 len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
-                + len(self._backend_calls) + len(self._activity_counts)
+                + len(self._backend_calls) + len(self._activity_counts) + len(self._node_runs)
             )
         return {
             "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
@@ -586,6 +592,44 @@ class PluginAuditLog:
             log.warning("plugin audit: tool call not recorded: %s", err)
             return None
         return call_id
+
+    def record_pipeline_node_run(
+        self,
+        *,
+        plugin_id: str,
+        plugin_version: str,
+        workspace: str,
+        node_id: str,
+        run_origin: str,
+        outcome: str,
+        duration_ms: int,
+        error_code: str = "",
+        at_ms: int | None = None,
+    ) -> bool:
+        """Queue one pipeline plugin node run (E2); False when it is not recorded.
+
+        ``at_ms`` is when the run of the node ended. ``run_origin`` says who
+        started the pipeline run: a person, an agent, a schedule or a webhook.
+        """
+        if not self.enabled:
+            return False
+        try:
+            if run_origin not in contract.PIPELINE_NODE_RUN_ORIGINS:
+                raise ValueError(f"unknown run origin {run_origin!r}")
+            if outcome not in TOOL_CALL_OUTCOMES:
+                raise ValueError(f"unknown outcome {outcome!r}")
+            for value in (plugin_id, plugin_version, workspace, node_id):
+                if not isinstance(value, str) or not value or len(value) > 4096:
+                    raise ValueError("plugin, version, workspace and node must be non-empty strings")
+            code = "" if outcome == "ok" else (_code(error_code, PIPELINE_NODE_ERROR_CODES) or OTHER)
+            row = (self._at(at_ms), plugin_id, plugin_version, workspace, node_id, run_origin, outcome, code,
+                   _non_negative_int(duration_ms))
+            with self._lock:
+                self._node_runs.append(row)
+        except Exception as err:  # noqa: BLE001 - the audit never fails the run it records
+            log.warning("plugin audit: pipeline node run not recorded: %s", err)
+            return False
+        return True
 
     def record_activity(
         self,
@@ -800,6 +844,17 @@ class PluginAuditLog:
             backend_calls, self._backend_calls = self._backend_calls, {}
             decisions, self._decisions = self._decisions, []
             activity_counts, self._activity_counts = self._activity_counts, {}
+            node_runs, self._node_runs = self._node_runs, []
+        if node_runs:
+            try:
+                with self.db.transaction() as cur:
+                    cur.executemany(
+                        "INSERT INTO plugin_pipeline_node_runs (at, plugin_id, plugin_version, workspace, node_id,"
+                        " run_origin, outcome, error_code, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        node_runs,
+                    )
+            except Exception as err:  # noqa: BLE001 - dropped, never raised into a run
+                log.warning("plugin audit: %d pipeline node rows not written: %s", len(node_runs), err)
         if backend_calls:
             try:
                 with self.db.transaction() as cur:
@@ -1020,6 +1075,12 @@ class PluginAuditLog:
             (calls_cutoff, batch),
         ):
             pass
+        while self._batch(
+            "DELETE FROM plugin_pipeline_node_runs WHERE id IN"
+            " (SELECT id FROM plugin_pipeline_node_runs WHERE at < ? LIMIT ?)",
+            (calls_cutoff, batch),
+        ):
+            pass
         with self.db.transaction() as cur:
             row = cur.execute(
                 "SELECT id FROM plugin_tool_calls ORDER BY id DESC LIMIT 1 OFFSET ?",
@@ -1237,7 +1298,7 @@ class PluginAuditLog:
         report: dict[str, Any] = {
             "schemaVersion": ACTIVITY_REPORT_SCHEMA_VERSION, "pluginId": plugin_id, "generatedAt": now,
             "window": {"from": window_from, "to": now}, "totals": {"calls": 0, "denied": 0, "errors": 0},
-            "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "files": [], "commands": [],
+            "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "pipelineNodeRuns": [], "files": [], "commands": [],
             "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
             "backendCalls": {"methods": [], "daily": []},
         }
@@ -1265,6 +1326,10 @@ class PluginAuditLog:
             ).fetchone()
             tool_calls = cur.execute(
                 "SELECT * FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ? ORDER BY at DESC, id DESC",
+                (plugin_id, window_from),
+            ).fetchall()
+            node_runs = cur.execute(
+                "SELECT * FROM plugin_pipeline_node_runs WHERE plugin_id = ? AND at >= ? ORDER BY at DESC, id DESC",
                 (plugin_id, window_from),
             ).fetchall()
             files = cur.execute(
@@ -1381,6 +1446,14 @@ class PluginAuditLog:
                 "argsBytes": row["args_bytes"], "resultBytes": row["result_bytes"],
             }
             for row in tool_calls
+        ]
+        report["pipelineNodeRuns"] = [
+            {
+                "id": row["id"], "at": row["at"], "pluginVersion": row["plugin_version"],
+                "workspace": row["workspace"], "nodeId": row["node_id"], "runOrigin": row["run_origin"],
+                "outcome": row["outcome"], "errorCode": row["error_code"], "durationMs": row["duration_ms"],
+            }
+            for row in node_runs
         ]
         report["files"] = [
             {"path": path, "address": address, "workspace": ws, "outcome": outcome, "count": int(n), "lastAt": last}
