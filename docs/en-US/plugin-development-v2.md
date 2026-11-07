@@ -1714,9 +1714,17 @@ of this change.
 
 The table shows representative entries; `capabilities-v1.json` lists all of
 them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and
-`shell.*` methods). Entries marked with an `eligibility` requirement there,
-such as the Git account and share methods, are limited to first-party
-packages.
+`shell.*` methods). Entries marked with an `eligibility` requirement there
+are limited, each for a reason written here (reviewed in 0.2.39 under
+"disclose, don't restrict": whatever a disclosure can carry is open):
+
+| Address | Eligibility | Why |
+|---|---|---|
+| `ui.openPlansWindow` | public (was first-party) | Opens the Plans window on a plan of the workspace; `ui.openPluginWindow` already lets any package open an installed window contribution, so nothing new is reached |
+| `ui.openPath`, `ui.openTempFile` | `declaredShell` (was first-party): any package whose manifest declares `permissions.shell` | Hands a file to the OS default application, which runs a `.command` or `.bat`: that is "runs programs on your machine", exactly what the shell permission discloses. Without `permissions.shell` the call is refused as undeclared and shown in Activity; `ui.revealPath` and `ui.openInEditor` stay public for the common cases |
+| `ui.writeKeybindings` | first-party | `keybindings.json` is the Host's own configuration: a package could rebind any shortcut to any Host command, and no permission discloses that. `ui.readKeybindings` is public |
+| `ui.listGitAccounts`, `ui.getGitAccountBinding`, `ui.addGitAccount`, `ui.bindGitAccount`, `ui.unbindGitAccount` | first-party | The Host's credential store: adding a token the user never typed, or re-binding which account pushes go through, is account takeover; even the read side names the user's accounts. A `gitAccounts` permission with its own disclosure clause is the way to open the read side |
+| `ui.shareCaps`, `ui.shareCreate`, `ui.shareChatTargets` | first-party | `shareCreate` publishes workspace content through the user's Navide Cloud account and `shareChatTargets` lists their chat channels; no permission discloses either. A `share` permission with its own clause would open them |
 
 `workspace` is a resource boundary, not raw workspace filesystem access. The
 Host derives `workspaceId` from authenticated runtime binding. There is no

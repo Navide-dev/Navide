@@ -865,6 +865,11 @@ export function planPublicCapabilityCall(
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'publisher is not eligible for this capability')
   }
+  // The method starts a program with a file: a package reaches it by
+  // declaring the shell permission, which discloses exactly that.
+  if (entry.eligibility === 'declaredShell' && !policy.shell) {
+    return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell`)
+  }
 
   if (entry.storage === true) {
     return planStoragePartition(call, context)
@@ -1107,6 +1112,7 @@ export function isPublicCapabilityEventAllowed(
   if (!entry || entry.kind !== 'event') return false
   if (entry.namespace === 'shell' ? !policy.shell : !policy.system.includes(entry.namespace as PluginSystemNamespace)) return false
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) return false
+  if (entry.eligibility === 'declaredShell' && !policy.shell) return false
   const binding = context.runtimeBinding
   if (!binding || !requiresWorkspace(binding)) return false
   const grant = context.userGrant

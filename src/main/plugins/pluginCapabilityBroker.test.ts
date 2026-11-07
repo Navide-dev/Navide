@@ -341,26 +341,49 @@ describe('Issue 03/04 public Host planner', () => {
     })
   })
 
-  it('requires first-party eligibility for Plans window navigation', () => {
-    const plansBinding = { ...binding, pluginId: 'navide.plans' }
+  it('opens Plans window navigation to any package with a ui grant (batch 4)', () => {
+    const plansBinding = { ...binding, pluginId: 'acme.ui' }
     const plansPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })
     const plansCall = call({
-      pluginId: 'navide.plans',
+      pluginId: 'acme.ui',
       ns: 'ui',
       method: 'openPlansWindow',
       args: { path: '.agent-team/plans/example.html' },
     })
 
-    expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
+    for (const publisherEligible of [true, false]) {
+      expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
+        runtimeBinding: plansBinding,
+        userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+        publisherEligible,
+      }))).toMatchObject({ kind: 'allow', plan: { address: 'ui.openPlansWindow' } })
+    }
+    expect(planPublicCapabilityCall(plansCall, manifestV2CapabilityPolicy({ system: ['fs'] }), context({
       runtimeBinding: plansBinding,
-      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
-      publisherEligible: true,
-    }))).toMatchObject({ kind: 'allow', plan: { address: 'ui.openPlansWindow' } })
-    expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
-      runtimeBinding: plansBinding,
-      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+      userGrant: { packageVersion: '1.0.0', system: ['fs'] },
       publisherEligible: false,
     }))).toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+  })
+
+  it.each([
+    ['openPath', { path: 'run.command' }],
+    ['openTempFile', { name: 'x.bat', content: 'calc' }],
+  ])('lets any package that declares permissions.shell reach ui.%s, and no other (batch 4)', (method, args) => {
+    const uiBinding = { ...binding, pluginId: 'acme.ui' }
+    const uiCall = call({ pluginId: 'acme.ui', ns: 'ui', method, args })
+    const uiContext = (publisherEligible: boolean, shell?: 'allowlist' | 'full') => context({
+      runtimeBinding: uiBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'], ...(shell ? { shell } : {}) },
+      publisherEligible,
+    })
+    const withShell = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'allowlist' })
+    expect(planPublicCapabilityCall(uiCall, withShell, uiContext(false, 'allowlist')))
+      .toMatchObject({ kind: 'allow', plan: { address: `ui.${method}` } })
+    const withoutShell = manifestV2CapabilityPolicy({ system: ['ui'] })
+    for (const publisherEligible of [true, false]) {
+      expect(planPublicCapabilityCall(uiCall, withoutShell, uiContext(publisherEligible)))
+        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell') } } })
+    }
   })
 
   it.each([
@@ -385,15 +408,13 @@ describe('Issue 03/04 public Host planner', () => {
   })
 
   it.each([
-    ['openPath', { path: 'run.command' }],
-    ['openTempFile', { name: 'x.bat', content: 'calc' }],
     ['writeKeybindings', { content: '[]' }],
     ['listGitAccounts', {}],
     ['getGitAccountBinding', {}],
     ['addGitAccount', { label: 'l', host: 'github.com', username: 'u', token: 't' }],
     ['bindGitAccount', { accountId: 'a' }],
     ['unbindGitAccount', {}],
-  ])('keeps ui.%s (launches files or reaches credentials) to first-party publishers', (method, args) => {
+  ])('keeps ui.%s (the Host configuration or its credential store) to first-party publishers', (method, args) => {
     const uiBinding = { ...binding, pluginId: 'acme.ui' }
     const uiPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })
     const uiCall = call({ pluginId: 'acme.ui', ns: 'ui', method, args })
