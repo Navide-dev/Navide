@@ -4,15 +4,6 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
-<<<<<<< HEAD
-=======
-### Fixed
-
-- Tokens (0.2.39): two workspaces whose folder names Claude Code files under the same project folder (two Chinese names of the same length, such as AI建模 and AI電商) no longer count each other's Claude usage, even when only one of them is open in Navide. Each Claude session now goes to the workspace its transcript says it ran in. A session that ran in a folder never opened in Navide, or that names no folder while several workspaces share the project folder, counts in the global and account totals and in no workspace. Numbers recorded before the update are not recalculated. The folder Navide reports for a Claude session also comes from its transcript, instead of being guessed from the project folder name.
-
-## [0.2.38] — 2026-11-07
-
->>>>>>> origin/fix/project-dir-collision-0239
 ### Added
 
 - Navide (0.2.39): a per-call usage ledger in `navide.db` keeps each model call's session, working directory, model and uncached input, cache read, cache write and output tokens (one running total per session for Codex), so AI cost can be computed and re-priced from the ledger after the CLI's own session logs are gone.
@@ -25,6 +16,10 @@ All notable released changes to Navide will be documented in this file. The form
 - Guard (0.2.39): a command that only reads a public key in `~/.ssh` (a file ending in `.pub`, such as `ssh-copy-id -i ~/.ssh/id_ed25519.pub user@host`) no longer counts as touching a credential store. Private keys, writes, moves and deletes in `~/.ssh`, uploading a key with `curl -d @…`, and piping a key into a network tool are still refused.
 - Terminal panes (0.2.39): a refused terminal command now says what to do next: send it again with `submit: false` so you can check it and press Enter, add an allow prefix in Settings → Security, or run it yourself.
 - Interface wording (0.2.39): the Chinese interface (zh-TW and zh-CN) now calls a pane 分格 everywhere, instead of the English "pane" or the 面板 / CLI 視窗 / 子視窗 it was also written as. 視窗 (zh-CN 窗口) now means only a real window, 面板 only a panel, 對話框 (zh-CN 对话框) a dialog, and the English "workspace" and "tab" left in Chinese text read 工作區 and 分頁 (zh-CN 工作区 and 标签页). The help pages, the setup wizard and the zh-TW user guide explain the word where it first appears: "分格＝視窗裡的一格，通常跑一個 agent". The same applies to What's New, the Navide Browser and Plans plugin texts and the zh-TW docs; docs/en-US/glossary.md records the vocabulary. Navide Git 1.0.3, Navide Mini-IDE 1.0.3, Navide Plans 1.1.3.
+
+### Fixed
+
+- Tokens (0.2.39): two workspaces whose folder names Claude Code files under the same project folder (two Chinese names of the same length, such as AI建模 and AI電商) no longer count each other's Claude usage, even when only one of them is open in Navide. Each Claude session now goes to the workspace its transcript says it ran in. A session that ran in a folder never opened in Navide, or that names no folder while several workspaces share the project folder, counts in the global and account totals and in no workspace. Numbers recorded before the update are not recalculated. The folder Navide reports for a Claude session also comes from its transcript, instead of being guessed from the project folder name.
 
 ## [0.2.38] — 2026-11-07
 
