@@ -49,6 +49,7 @@ import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
 import { DeveloperVault } from './plugins/developerVault'
+import { PluginSecretStore } from './plugins/pluginSecrets'
 import { createDeveloperQueryHandler, registerDeveloperIpc } from './plugins/developerIpc'
 import { prepareLocalInstall } from './plugins/pluginInstaller'
 import { contributionIcon } from './plugins/pluginContributionIcon'
@@ -1321,6 +1322,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
+  secretsPort: () => frontendPluginManager.createThirdPartySecretsPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
@@ -2412,6 +2414,20 @@ void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
   const staged = pluginTrustRefresh.stagedUpdates()
   if (staged.length > 0) pluginStagedCandidateRelay.notifyStagedUpdates(staged)
 })
+
+// A plugin's own secrets (`secrets`): safeStorage ciphertext in
+// <userData>/plugin-secrets, keyed by plugin id, never synced, exported or
+// logged. Without real encryption every set/get answers SECRETS_UNAVAILABLE;
+// nothing is ever written in plain text. Not the CLI account credentials.
+const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), {
+  get available(): boolean {
+    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  },
+  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+})
+frontendPluginManager.setPluginSecretStore(pluginSecretStore)
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their

@@ -472,6 +472,36 @@ export interface UninstallAnswer {
   /** Set only when the plugin's native backend left private data on this
    *  device and the dialog asked about it. */
   nativeBackendData?: 'keep' | 'delete'
+  /** Set only when the plugin keeps secrets (`secrets`) on this device and
+   *  the user was asked; keeping them is the default. */
+  secrets?: 'keep' | 'delete'
+}
+
+/** After the remove confirmation: when the plugin keeps secrets on this
+ *  device, ask whether they go too. Cancel (or no answer) keeps them. */
+async function askSecrets(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  notify: ReturnType<typeof useNotify>,
+  id: string,
+  answer: UninstallAnswer
+): Promise<UninstallAnswer> {
+  let count = 0
+  try {
+    count = (await window.agentTeam?.plugins?.secretCount?.(id))?.count ?? 0
+  } catch (err) {
+    console.warn('[plugins] plugin secret count lookup failed', err)
+  }
+  if (count <= 0) return answer
+  const deleteSecrets = await notify.confirm(
+    t('settings.extensions.marketplace.uninstallSecretsBody', { name: id, count }),
+    {
+      title: t('settings.extensions.marketplace.uninstallSecretsTitle'),
+      confirmText: t('settings.extensions.marketplace.uninstallSecretsDelete'),
+      cancelText: t('settings.extensions.marketplace.uninstallSecretsKeep'),
+      danger: true,
+    }
+  )
+  return { ...answer, secrets: deleteSecrets ? 'delete' : 'keep' }
 }
 
 /** The in-app remove confirmation. When the plugin's native backend left
@@ -491,7 +521,7 @@ export async function askUninstall(
     // it, exactly as before the choice existed.
     console.warn('[plugins] native backend data lookup failed', err)
   }
-  if (!data?.exists) return (await confirmUninstall(t, notify, id)) ? {} : null
+  if (!data?.exists) return (await confirmUninstall(t, notify, id)) ? askSecrets(t, notify, id, {}) : null
   const confirmed = await notify.confirm(
     withWebDataNote(t, id, t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) })),
     {
@@ -504,15 +534,16 @@ export async function askUninstall(
     }
   )
   if (!confirmed) return null
-  return { nativeBackendData: notify.dialogCheckbox.value ? 'keep' : 'delete' }
+  return askSecrets(t, notify, id, { nativeBackendData: notify.dialogCheckbox.value ? 'keep' : 'delete' })
 }
 
 /** Remove with the dialog's answer; no data choice keeps the old call shape. */
 export function removeWithAnswer(
-  plugins: { remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<unknown> },
+  plugins: { remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete') => Promise<unknown> },
   id: string,
   answer: UninstallAnswer
 ): Promise<unknown> {
+  if (answer.secrets) return plugins.remove(id, answer.nativeBackendData, answer.secrets)
   return answer.nativeBackendData ? plugins.remove(id, answer.nativeBackendData) : plugins.remove(id)
 }
 

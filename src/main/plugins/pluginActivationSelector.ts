@@ -141,7 +141,7 @@ function validateGrant(value: unknown, selection: PluginPackageSelection | undef
     value.packageVersion !== selection.packageVersion ||
     !Array.isArray(value.system) ||
     value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli' && item !== 'web' &&
-      item !== 'agents' && item !== 'agentMessages') ||
+      item !== 'agents' && item !== 'agentMessages' && item !== 'secrets') ||
     new Set(value.system).size !== value.system.length ||
     (value.shell !== undefined && value.shell !== 'allowlist' && value.shell !== 'full') ||
     (value.shellExecutables !== undefined && (

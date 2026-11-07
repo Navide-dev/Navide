@@ -806,6 +806,16 @@ For callers of the `plugins:remove` IPC, the data choice is the optional
 before this choice existed; `plugins:nativeBackendData` reports
 `{ exists, bytes, path }` for the dialog.
 
+The plugin's own secrets (`secrets`, see [Plugin secrets](#plugin-secrets-secrets))
+are kept by default, so a reinstall finds them again. When the plugin keeps any,
+the remove dialog then asks "Also delete this plugin's saved secrets?";
+"Delete secrets" deletes `<userData>/plugin-secrets/<pluginId>.json`, and
+"Keep secrets" (or closing the dialog) keeps it. For `plugins:remove` callers
+the choice is the optional `secrets: 'keep' | 'delete'` argument (omitted keeps
+them); `plugins:secretCount` reports `{ count }` for the dialog, never names or
+values. Removing an Extension Pack member and an agent's approved removal
+request keep them.
+
 What removal keeps:
 
 - Publisher trust: removing a plugin keeps publisher trust. A reinstall of the
@@ -1154,7 +1164,7 @@ matches.
 | `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
 | `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
-| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages` | 1–6 unique entries; `agentMessages` requires `agents` |
+| `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, `secrets` | 1–7 unique entries; `agentMessages` requires `agents` |
 | `permissions.shell` | no | allowlist, full, or an object with mode allowlist and an executables list | Omission denies `shell.run`; the object form declares executables beyond git, gh and glab, see [Declared executables](#declared-executables-permissionsshellexecutables) |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `permissions.network` | no | Object with a required hosts array | Hosts the package's views may connect to; enforced on views, see [Network hosts](#network-hosts-permissionsnetwork) |
@@ -1498,7 +1508,7 @@ Manifest permissions, the capability catalog, the explicit package-version
 Grant, publisher eligibility, request schemas, workspace binding, and runtime
 state remain mandatory for both initiators. `full` mode bypasses only the
 agent-specific namespace and executable filters. `allowlist` and `denylist`
-operate on first-level `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages` namespaces and on every resolved
+operate on first-level `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, and `secrets` namespaces and on every resolved
 top-level executable in a shell pipeline or command chain. Policy v1 does not
 express subcommands, arguments, path patterns, or wrappers. The v1 shell parser
 fails closed on unquoted grouping or negation syntax (`(`, `)`, `{`, `}`, `!`)
@@ -1507,8 +1517,8 @@ user and agent shell execution, so quote these characters or assignment-shaped
 arguments when they are intended as command data. For the private Backend
 Bridge, the `filesystem` port maps to the `fs` Execution Policy namespace, the
 `shell` port is judged on its command, the `web` port maps to `web`, the
-`agents` port to `agents` and the `agent-message-bodies` port to
-`agentMessages`. `web`, `agents` and `agentMessages` are never admitted by omission: a
+`agents` port to `agents`, the `agent-message-bodies` port to
+`agentMessages` and the `secrets` port to `secrets`. `web`, `agents`, `agentMessages` and `secrets` are never admitted by omission: a
 `denylist` does not admit them, only `full` or an `allowlist` that names them. All other current Bridge ports fail closed for agent Initiators until
 an explicit namespace mapping is assigned; user Initiators continue through
 their existing checks.
@@ -1690,7 +1700,7 @@ Manifest v2 uses one coarse system namespace array and one shell mode:
 }
 ```
 
-`system` accepts only `fs`, `ui`, `aiCli`, `web`, `agents`, and `agentMessages`. It is not a map of methods or
+`system` accepts only `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, and `secrets`. It is not a map of methods or
 read/write accesses: declaring `fs` allows catalog validation to consider the
 filesystem methods, but does not bypass method schemas, scope checks, or Host
 policy. `shell` accepts only `allowlist` or `full`; omission denies
@@ -1706,6 +1716,7 @@ are not Manifest v2 permissions.
 | `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
 | `system:agents` | `agents.listPanes`, `lineage`, `listMessages`, `listSessions` | `workspace` (see [Agent data and privacy](#agent-data-and-privacy-agents-agentmessages)) |
 | `system:agentMessages` | `agentMessages.read` | `workspace` |
+| `system:secrets` | `secrets.set`, `get`, `delete`, `list` | `plugin` (see [Plugin secrets](#plugin-secrets-secrets)) |
 | `shell` | `shell.run` | `workspace` |
 
 **`shell.run` output size.** The Host shell broker returns at most 8000
@@ -2095,6 +2106,86 @@ the Host delivers each event only to live instances bound to that workspace
 whose manifest declares it and whose grant holds `agents`. Nothing is
 rate-limited or filtered beyond that: what is declared is disclosed, and what is
 disclosed is delivered.
+
+### Plugin secrets (`secrets`)
+
+Declaring `secrets` lets a package keep its own API keys and tokens on this
+device: the user pastes a key into the package's view once, and the package
+(view or native backend) reads it back whenever it calls its service. This is
+the only place a package should keep a key: never in its code, manifest,
+tests, README, settings (`contributes.settings` and `storage.*` are plain
+JSON) or a commit.
+
+| Method | Params | Result |
+|---|---|---|
+| `secrets.set` | `{ name, value }` | `{ ok: true }` or `{ ok: false, code: "SECRETS_UNAVAILABLE" }` |
+| `secrets.get` | `{ name }` | `{ present: true, value }`, `{ present: false }` or `{ ok: false, code: "SECRETS_UNAVAILABLE" }` |
+| `secrets.delete` | `{ name }` | `{ ok: true }` |
+| `secrets.list` | `{}` | `{ names }` (names only, sorted; never values) |
+
+`name` is 1–128 characters of letters, digits, `_`, `-` and `.`; `value` is a
+string of at most 16 KiB (UTF-8); a package keeps at most 64 secrets. A longer
+value or a 65th name is refused with `RESOURCE_LIMIT`; any other key in the
+request (a `pluginId`, a path) is `INVALID_ARGUMENT`. The SDK wraps the four
+methods as `createPluginSecretStore(context)` (`set`, `get`, `delete`, `list`);
+the types are `SecretsParams` / `SecretsResults` in `@navide/plugin-contracts`
+(`secrets.ts`). Since plugin API 1.3.0.
+
+**Storage.** Each value is encrypted with Electron `safeStorage` (its key lives
+in the OS keychain: Keychain on macOS, DPAPI on Windows, the Secret Service or
+KWallet on Linux) and only the ciphertext is written, to
+`<userData>/plugin-secrets/<pluginId>.json` (mode 0600, directory 0700). Names
+are stored as written. Without secure storage (a Linux desktop without a
+keyring, where Electron falls back to `basic_text`) `set` and `get` answer
+`SECRETS_UNAVAILABLE` and nothing is written: there is no plain-text
+fallback. A value that no longer decrypts (the keychain key changed) also
+answers `SECRETS_UNAVAILABLE`.
+
+**Namespace and lifetime.** The file is keyed by the plugin id, not by the
+package version. Unlike Host-managed storage, which is partitioned per version
+snapshot, secrets survive an update, a rollback, a disable, a re-enable and a
+restart. They are deleted only on the user's explicit choice: removing the
+plugin with "Delete secrets" (see [Removing a plugin](#removing-a-plugin)) or
+`plugins_disable` with `clear_secrets: true`. Every package sees only its own
+names: the Host takes the plugin id from the authenticated runtime binding,
+never from the request.
+
+**Where secrets never go.** Navide does not upload, display or copy them:
+
+- **Navide Cloud sync** carries the `prompts`, `mcp`, `skills` and `memory`
+  scopes only; **the settings export** carries roles, pipelines, MCP servers
+  and analyzer/AI chat settings with their keys redacted; **a share bundle**
+  carries prompts, MCP servers, skills and memory. None of the three includes
+  `secrets` or a plugin's Host-managed storage (`storage.*`), which both live
+  in the Electron main process's data directory (see the trust boundary
+  "Secrets never leave the machine" in [Architecture](architecture.md#trust-boundaries)).
+- **Activity** records a `secrets.*` call by its address and outcome only:
+  neither the name nor the value.
+- **Logs**: the Host never logs a name or a value.
+- **Agents**: no MCP tool returns a value, and every agent tool answer (its
+  result, a chunked result and its error text) is redacted against the
+  package's own stored values before it reaches the agent
+  (`[secret redacted]`). A view or backend serving an agent tool can still use
+  its key to call its service; only the answer is cleaned.
+
+**Disclosure.** `secrets` is **high** risk (`system.secrets`) and sensitive, so
+installing asks for the second confirmation. The summary clause reads
+"Keeps its own API keys and tokens encrypted on this computer; Navide never
+uploads or shows them". A version that adds `secrets` asks again.
+
+**Agent Execution Policy.** Like `web`, `secrets` is never admitted by
+omission: an agent-initiated call (a view capability or the `secrets` Bridge
+port) is admitted only in `full` mode or by an `allowlist` naming it. The Host
+default allowlist names it, so an agent tool can use the package's key.
+
+#### Backend Bridge port `secrets`
+
+A third-party native backend whose package declares `secrets` reaches the same
+store through the Bridge port `secrets`, operations `set`, `get`, `delete` and
+`list`, with the arguments and results of the methods above. The plugin id is
+the binding's. The port maps to the `secrets` Execution Policy namespace; an
+agent reaches it only inside an admitted agent-tool call of the same package.
+`navide-plugin dev-backend` keeps no secrets and answers `BACKEND_UNAVAILABLE`.
 
 ### Calling another plugin (`plugins.call`)
 

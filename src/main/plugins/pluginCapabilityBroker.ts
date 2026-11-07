@@ -818,6 +818,10 @@ export function executionPolicyAllows(
   if (namespace === 'agents' || namespace === 'agentMessages') {
     return policy.mode === 'allowlist' && policy.system.includes(namespace)
   }
+  // A plugin's own secrets: like `web`, never allowed by omission. The Host
+  // default allowlist names it, so an agent tool can use the plugin's API key;
+  // the value is redacted from every agent tool result.
+  if (namespace === 'secrets') return policy.mode === 'allowlist' && policy.system.includes('secrets')
   // The target backend may write; an Execution Policy cannot name plugins, so
   // like `web` it is never allowed by omission: only full mode reaches it.
   if (namespace === 'plugins') return false

@@ -1966,7 +1966,8 @@
         "aiCli": "AI CLI 会话",
         "web": "浏览网页",
         "agents": "agent 分格",
-        "agentMessages": "agent 消息"
+        "agentMessages": "agent 消息",
+        "secrets": "Navide 插件密钥"
       },
       "shellLabel": "Shell 可可执行文件",
       "shellHint": "只允许最上层可可执行文件名称，不接受路径或 shell 表达式。",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "将从这台设备移除 {name}。之后仍可从 Navide 市场重新安装。",
         "uninstallConfirmBodyWithData": "将从这台设备移除 {name}。{name} 的原生后端还在这台设备上存了 {size} 的私有数据，位置如下。除非你选择保留，Navide 会一并删除这些数据。",
         "uninstallKeepNativeData": "保留这些数据，重新安装时可以继续使用",
+        "uninstallSecretsTitle": "也要删除这个 Navide 插件保存的密钥吗？",
+        "uninstallSecretsBody": "{name} 在这台设备上加密保存了 API 密钥或 token（共 {count} 个）。保留下来，重新安装时可以继续使用；也可以现在删除。",
+        "uninstallSecretsDelete": "删除密钥",
+        "uninstallSecretsKeep": "保留密钥",
         "uninstallClearsWebData": "移除 {name} 也会删除它在这台电脑上的网站登录、Cookie 与缓存。",
         "updatesCount": "可用更新：{count} 个",
         "retry": "重试",
@@ -2418,6 +2423,7 @@
           "web": "可打开并浏览任何网站；网站登录数据会保存在本机；agent 会使用你在此 Navide 插件中的登录身分（可代你在网页上发送请求），并可读取它打开的所有网页内容与登录状态；你接手后，页面内已经在跑的 agent 脚本要重新加载才会停止；交给 agent 操作的网页，此 Navide 插件本身也能在其中执行脚本并读取内容与登录状态；可同时打开多个网页，每个网页都会占用内存。",
           "agents": "查看你的 agent 分格、哪个分格打开了哪个，以及它们何时互发消息——但看不到消息内容。",
           "agentMessages": "读取 agent 之间消息的完整正文；正文可能包含代码、文件内容或机密信息。",
+          "secrets": "Navide 插件会在本机加密保存它自己的密钥与 token；Navide 不会上传、不会显示。",
           "shell": "在你的电脑上运行指令。",
           "terminal": "打开并操作 Navide 终端。"
         }
@@ -12448,6 +12454,7 @@
       "web": "可打开并浏览任何网站；网站登录数据会保存在本机；agent 会使用你在此 Navide 插件中的登录身分（可代你在网页上发送请求），并可读取它打开的所有网页内容与登录状态；你接手后，页面内已经在跑的 agent 脚本要重新加载才会停止；交给 agent 操作的网页，此 Navide 插件本身也能在其中执行脚本并读取内容与登录状态；可同时打开多个网页，每个网页都会占用内存。",
       "agents": "可查看此项目中的 agent 分格、哪个分格打开了哪个、消息的送达记录（不含内容）和 session 列表（不含对话内容）",
       "agentMessages": "可读取此项目中 agent 之间消息的完整正文，正文可能包含代码、文件内容或机密信息",
+      "secrets": "Navide 插件会在本机加密保存它自己的密钥，Navide 不会上传、不会显示",
       "ui": "显示自己的画面",
       "agentTools": "提供 agent 可调用的工具（唯读 {read} 个、写入 {write} 个）",
       "network": "它的画面（view）可以连到：{hosts}",

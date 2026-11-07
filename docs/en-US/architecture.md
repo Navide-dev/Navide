@@ -272,6 +272,26 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   session, which an agent does not have. No tool takes or returns a bot
   credential. Because pane identity is not a process boundary (below), "its
   own workspace" is the workspace of the pane the caller presents itself as.
+- **Secrets never leave the machine.** No API key, token, password or signing
+  key — the user's or a third-party service's — is synced to Navide Cloud or
+  Navide Server, uploaded to S3 or any backup, attached to a plan, report or
+  chat message, or written into a commit, branch, PR, issue, CHANGELOG, test
+  fixture, log or screenshot. Secrets stay on this device: encrypted with
+  Electron `safeStorage`, in the OS keychain, or in a 0600 file. Tests build
+  fake values at run time. A Navide plugin keeps its own keys through the
+  `secrets` namespace: safeStorage ciphertext in
+  `<userData>/plugin-secrets/<pluginId>.json` (0600), keyed by plugin id,
+  never in plain text (without secure storage the call answers
+  `SECRETS_UNAVAILABLE`). Checked against the code: the Navide Cloud sync
+  scopes are `prompts`, `mcp`, `skills` and `memory` (`credentials` is
+  local-only, `sync_engine.LOCAL_ONLY_SCOPES`); the settings export
+  (`app._settings_bundle`) holds roles, pipelines, MCP servers with their
+  secrets redacted, analyzer and AI chat settings with keys redacted; a share
+  bundle (`settings_bundle.py`) holds prompts, MCP servers, skills and memory.
+  None of the three reads `plugin-secrets/` or a plugin's Host-managed storage,
+  both of which live in the Electron main process's data directory. Activity
+  records a `secrets.*` call by its address only, and every agent tool answer
+  is redacted against the package's own values.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

@@ -808,6 +808,8 @@ function executionPolicyNamespaceForBridgePort(
       return 'agents'
     case 'agent-message-bodies':
       return 'agentMessages'
+    case 'secrets':
+      return 'secrets'
     case 'shell':
       // The agent shell policy is judged on the command itself, like shell.run.
       return 'shell'

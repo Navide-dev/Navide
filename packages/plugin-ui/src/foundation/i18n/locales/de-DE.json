@@ -1966,7 +1966,8 @@
         "aiCli": "AI-CLI-Sitzungen",
         "web": "Surfen im Web",
         "agents": "Agent-Bereiche",
-        "agentMessages": "Agent-Nachrichten"
+        "agentMessages": "Agent-Nachrichten",
+        "secrets": "Geheimnisse des Navide-Plug-ins"
       },
       "shellLabel": "Ausführbare Shell-Dateien",
       "shellHint": "Nur Namen ausführbarer Dateien der obersten Ebene erlauben. Pfade und Shell-Ausdrücke werden nicht akzeptiert.",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "{name} wird von diesem Gerät entfernt. Sie können es aus dem Navide Marketplace erneut installieren.",
         "uninstallConfirmBodyWithData": "{name} wird von diesem Gerät entfernt. Sein natives Backend hat außerdem {size} private Daten auf diesem Gerät am unten genannten Ort gespeichert. Navide löscht auch diese Daten, sofern Sie sie nicht behalten möchten.",
         "uninstallKeepNativeData": "Diese Daten behalten, damit eine Neuinstallation sie wieder verwenden kann",
+        "uninstallSecretsTitle": "Auch die gespeicherten Geheimnisse dieses Navide-Plug-ins löschen?",
+        "uninstallSecretsBody": "{name} speichert API-Schlüssel oder Tokens verschlüsselt auf diesem Gerät (insgesamt {count}). Behalte sie, damit eine Neuinstallation sie wieder nutzen kann, oder lösche sie jetzt.",
+        "uninstallSecretsDelete": "Geheimnisse löschen",
+        "uninstallSecretsKeep": "Geheimnisse behalten",
         "uninstallClearsWebData": "Beim Entfernen von {name} werden auch seine Website-Anmeldungen, Cookies und sein Cache auf diesem Computer gelöscht.",
         "updatesCount": "Verfügbare Updates: {count}",
         "retry": "Erneut versuchen",
@@ -2418,6 +2423,7 @@
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-Bereiche, welcher Bereich welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
+          "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an.",
           "shell": "Befehle auf Ihrem Computer ausführen.",
           "terminal": "Navide-Terminals öffnen und steuern."
         }
@@ -12448,6 +12454,7 @@
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-Bereiche in diesem Projekt, welcher Bereich welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
+      "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
       "network": "Seine Ansichten können sich verbinden mit: {hosts}",

@@ -901,7 +901,7 @@ export interface PluginAgentActionRequest {
 }
 
 export type PluginAgentActionAnswer =
-  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean }
+  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean; secretsCleared?: true }
   | { ok: false; error: string; error_code: Exclude<PluginAgentActionErrorCode, 'APPROVAL_REQUIRED'> }
   /** enable of a package the user disabled (or with no recorded source): the backend files a plugin-enable request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }

@@ -1966,7 +1966,8 @@
         "aiCli": "Phiên AI CLI",
         "web": "Duyệt web",
         "agents": "Pane của agent",
-        "agentMessages": "Tin nhắn giữa các agent"
+        "agentMessages": "Tin nhắn giữa các agent",
+        "secrets": "Bí mật của plugin Navide"
       },
       "shellLabel": "Tệp thực thi shell",
       "shellHint": "Chỉ cho phép tên tệp thực thi cấp cao nhất. Không chấp nhận đường dẫn và biểu thức shell.",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "{name} sẽ bị gỡ khỏi thiết bị này. Bạn có thể cài lại từ Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} sẽ bị gỡ khỏi thiết bị này. Backend gốc của nó cũng đã lưu {size} dữ liệu riêng trên thiết bị này, tại vị trí bên dưới. Navide cũng xóa dữ liệu này trừ khi bạn chọn giữ lại.",
         "uninstallKeepNativeData": "Giữ dữ liệu này để lần cài lại có thể dùng tiếp",
+        "uninstallSecretsTitle": "Xóa luôn các bí mật plugin Navide này đã lưu?",
+        "uninstallSecretsBody": "{name} đang lưu khóa API hoặc token ở dạng mã hóa trên thiết bị này (tổng cộng {count}). Giữ lại để lần cài lại có thể dùng tiếp, hoặc xóa ngay bây giờ.",
+        "uninstallSecretsDelete": "Xóa bí mật",
+        "uninstallSecretsKeep": "Giữ bí mật",
         "uninstallClearsWebData": "Gỡ {name} cũng xóa thông tin đăng nhập trang web, cookie và bộ đệm của nó trên máy tính này.",
         "updatesCount": "Có bản cập nhật: {count}",
         "retry": "Thử lại",
@@ -2418,6 +2423,7 @@
           "web": "Có thể mở và duyệt bất kỳ trang web nào; thông tin đăng nhập trang web được giữ trên máy tính này; agent dùng thông tin đăng nhập của bạn trong plugin Navide này (chúng có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn tiếp quản, các script agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc và mỗi trang đều dùng bộ nhớ.",
           "agents": "Xem các pane agent của bạn, pane nào đã mở pane nào và khi nào chúng nhắn tin cho nhau, nhưng không xem được nội dung tin nhắn.",
           "agentMessages": "Đọc toàn văn tin nhắn giữa các agent của bạn; nội dung có thể chứa mã, nội dung tệp hoặc bí mật.",
+          "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng.",
           "shell": "Chạy lệnh trên máy tính của bạn.",
           "terminal": "Mở và điều khiển terminal của Navide."
         }
@@ -12448,6 +12454,7 @@
       "web": "Có thể mở và duyệt bất kỳ trang web nào; đăng nhập trang web được lưu trên máy tính này; agent dùng các lần đăng nhập của bạn trong plugin Navide này (agent có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc, và mỗi trang đều tốn bộ nhớ.",
       "agents": "Xem các pane agent trong dự án này, pane nào đã mở pane nào, nhật ký gửi tin nhắn (không có nội dung) và danh sách phiên (không có nội dung hội thoại)",
       "agentMessages": "Đọc toàn văn tin nhắn giữa các agent trong dự án này; nội dung có thể chứa mã, nội dung tệp hoặc bí mật",
+      "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng",
       "ui": "Hiển thị chế độ xem riêng",
       "agentTools": "Cung cấp công cụ cho agent gọi ({read} chỉ đọc, {write} có ghi)",
       "network": "Các chế độ xem của nó có thể kết nối tới: {hosts}",

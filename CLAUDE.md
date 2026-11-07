@@ -65,6 +65,7 @@ in-repo docs above.
    push the branch and report it for review, and the reviewer merges it into
    the integration branch. Then one PR, one CI, main, the release dry run, and
    the user's go. Bug fixes go in the current version, never the next one.
+7. **Secrets never leave the machine**: no cloud sync, no git history, no fixtures, no logs; tests build fakes at runtime.
 
 ## Workflow (Plan Documents)
 

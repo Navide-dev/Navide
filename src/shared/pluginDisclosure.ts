@@ -38,6 +38,7 @@ export type DisclosureRiskReasonKey =
   | 'system.web'
   | 'system.agents'
   | 'system.agentMessages'
+  | 'system.secrets'
   | 'shell.allowlist'
   | 'shell.executables'
   | 'nativeBackend'
@@ -54,6 +55,7 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.web', 'high'],
   ['system.agents', 'medium'],
   ['system.agentMessages', 'high'],
+  ['system.secrets', 'high'],
   ['shell.allowlist', 'high'],
   ['shell.executables', 'high'],
   ['nativeBackend', 'high'],
@@ -71,6 +73,7 @@ export type DisclosureSummaryClause =
   | { key: 'web'; params: Record<string, never> }
   | { key: 'agents'; params: Record<string, never> }
   | { key: 'agentMessages'; params: Record<string, never> }
+  | { key: 'secrets'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
   | { key: 'network'; params: { hosts: string[] } }
@@ -87,7 +90,7 @@ export interface DisclosureSummary {
 }
 
 export interface DisclosurePermissions {
-  system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages'>
+  system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages' | 'secrets'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
   /** `permissions.network.hosts` sorted; present only when the manifest declares hosts. */
@@ -344,6 +347,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('web')) present.add('system.web')
   if (system.includes('agents')) present.add('system.agents')
   if (system.includes('agentMessages')) present.add('system.agentMessages')
+  if (system.includes('secrets')) present.add('system.secrets')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
   if (declaredExecutables.length > 0) {
     present.add('shell.executables')
@@ -368,6 +372,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('web')) clauses.push({ key: 'web', params: {} })
   if (system.includes('agents')) clauses.push({ key: 'agents', params: {} })
   if (system.includes('agentMessages')) clauses.push({ key: 'agentMessages', params: {} })
+  if (system.includes('secrets')) clauses.push({ key: 'secrets', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
   if (agentEvents.length > 0) clauses.push({ key: 'agentEvents', params: { events: agentEvents } })

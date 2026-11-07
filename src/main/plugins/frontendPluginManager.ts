@@ -73,6 +73,7 @@ import {
   interPluginTargetError,
   PLUGINS_CALL_ADDRESS,
 } from './pluginInterCall'
+import { PluginSecretsLimitError, redactSecretValues, secretsOperation, type PluginSecretStore } from './pluginSecrets'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -155,6 +156,7 @@ import {
   NativeBackendRefusal,
   type NativeBackendStatus,
   type PackageAgentsPort,
+  type PackageSecretsPort,
   type PackageShellPort,
 } from './pluginThirdPartyBackends'
 import {
@@ -1765,6 +1767,8 @@ export class FrontendPluginManager {
   private wsStatus: WsClientStatus = 'disconnected'
   /** Plugin browser views (`web`); created on first use. */
   private webViewRegistry: PluginWebViewRegistry | null = null
+  /** The plugins' own encrypted secrets (`secrets`); absent, every call fails. */
+  private pluginSecretStore: PluginSecretStore | null = null
   /** Host-owned executor seam for cataloged v2 plans. */
   private publicCapabilityHandler:
     | ((plan: PublicCapabilityExecutionPlan) => unknown | Promise<unknown>)
@@ -2624,6 +2628,51 @@ export class FrontendPluginManager {
     this.networkStrictResolver = resolver
   }
 
+  setPluginSecretStore(store: PluginSecretStore | null): void {
+    this.pluginSecretStore = store
+  }
+
+  /** How many secrets a package keeps (0 when the store is unavailable). */
+  pluginSecretCount(pluginId: string): number {
+    try {
+      return this.pluginSecretStore?.count(pluginId) ?? 0
+    } catch {
+      return 0
+    }
+  }
+
+  /** Delete every secret of a package: only on the user's explicit choice
+   *  (remove with its data, or plugins_disable with clear_secrets). */
+  clearPluginSecrets(pluginId: string): void {
+    this.pluginSecretStore?.clear(pluginId)
+  }
+
+  /** An agent tool answer with the package's own secret values redacted.
+   *  A chunked result is joined and parsed first; the core splits it again. */
+  private redactAgentToolSecrets(pluginId: string, response: HostAgentToolResponse): HostAgentToolResponse {
+    let values: string[]
+    try {
+      values = this.pluginSecretStore?.values(pluginId) ?? []
+    } catch {
+      values = []
+    }
+    if (values.length === 0) return response
+    if (response.ok && 'resultText' in response) {
+      const { resultText, ...rest } = response
+      let text = ''
+      for (let seq = 0; seq < resultText.chunks; seq++) text += resultText.piece(seq)
+      let result: unknown
+      try {
+        result = JSON.parse(text)
+      } catch {
+        return { ...agentToolError('PLUGIN_TOOL_CHUNKS_INVALID', 'The Navide plugin result did not arrive whole.'), reason: 'json', meta: rest.meta }
+      }
+      const redacted = redactSecretValues(result, values)
+      return redacted === result ? response : { ...rest, result: redacted }
+    }
+    return redactSecretValues(response, values)
+  }
+
   setCapabilityGrantResolver(
     resolver: ((pluginId: string, packageVersion: string) => HostCapabilityGrant | null) | null
   ): void {
@@ -3067,6 +3116,30 @@ export class FrontendPluginManager {
     }
   }
 
+  /** The package's own secrets for a third-party backend that declares
+   *  `secrets`, under the same checks as the agents ports: the registered
+   *  version declares it, its Grant holds it, and the call comes from a live
+   *  view or an admitted agent-tool call of the package. The plugin id is the
+   *  runtime binding's. */
+  createThirdPartySecretsPort(): PackageSecretsPort {
+    return {
+      run: (operation, args, context) => {
+        if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+        if (!this.thirdPartyAgentsGrantAllows('secrets', context)) {
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Secrets capability is denied.')
+        }
+        const store = this.pluginSecretStore
+        if (!store) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Plugin secrets are unavailable.')
+        try {
+          return store.run(context.runtime.pluginId, operation, args) as JsonValue
+        } catch (error) {
+          if (error instanceof PluginSecretsLimitError) throw new PlansBridgeError('RESOURCE_LIMIT', error.message)
+          throw new PlansBridgeError('INTERNAL_ERROR', 'Plugin secrets request failed.')
+        }
+      },
+    }
+  }
+
   /** The Host's read-only agent data for third-party backends that declare
    *  `agents` (and `agentMessages` for message text): the same `agents.public`
    *  backend query a view's agents.* uses, at the bound workspace only. */
@@ -3080,7 +3153,7 @@ export class FrontendPluginManager {
    *  the namespace and its user Grant holds it, at the canonical bound root;
    *  and the call comes from a live view of the package there, or from an
    *  agent-tool call the Host bound headless at that root and still serves. */
-  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages', context: PlansBridgeContext): boolean {
+  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages' | 'secrets', context: PlansBridgeContext): boolean {
     const runtime = context.runtime
     if (
       context.signal.aborted ||
@@ -5728,6 +5801,7 @@ export class FrontendPluginManager {
         } catch (error) {
           if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
           if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
+          if (error instanceof PluginSecretsLimitError) return buildError(call.reqId, 'RESOURCE_LIMIT', error.message)
           // The Plugin keeps the fixed opaque message (it must not learn Host
           // paths or internals); the Host console keeps the cause.
           console.error(`[plugins] public capability '${plan.address}' failed:`, error)
@@ -6774,6 +6848,16 @@ export class FrontendPluginManager {
       return await this.runInterPluginCall(plan, plugin, workspacePath)
     }
 
+    const secretsOp = secretsOperation(plan.address)
+    if (secretsOp) {
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      if (!this.pluginSecretStore) throw new Error('plugin secrets are unavailable')
+      // The plugin id is the Host binding's, never the request's.
+      return this.pluginSecretStore.run(plan.runtime.pluginId, secretsOp, plan.args)
+    }
+
     const agentsOp = agentsOperation(plan.address)
     if (agentsOp) {
       if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
@@ -7421,6 +7505,7 @@ export class FrontendPluginManager {
       } catch (error) {
         if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
         if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
+        if (error instanceof PluginSecretsLimitError) return buildError(call.reqId, 'RESOURCE_LIMIT', error.message)
         return buildError(call.reqId, 'INTERNAL_ERROR', 'public capability failed')
       }
     }
@@ -8432,7 +8517,7 @@ export class FrontendPluginManager {
     const namespace = plan.address.split('.', 1)[0]
     if (
       namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' &&
-      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'shell'
+      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'secrets' && namespace !== 'shell'
     ) {
       return true
     }
@@ -10015,10 +10100,11 @@ export class FrontendPluginManager {
             .catch(() => undefined)
         }
         try {
-          toolResponse = await this.executeAgentToolCall(
-            joined ? { ...record, payload: { arguments: joined.arguments } } : record,
-            progress,
-          )
+          const toolRequest = joined ? { ...record, payload: { arguments: joined.arguments } } : record
+          toolResponse = await this.executeAgentToolCall(toolRequest, progress)
+          // A tool answer never carries the package's own secrets.
+          const toolPluginId = parseAgentToolCallRequest(toolRequest)?.pluginId
+          if (toolPluginId) toolResponse = this.redactAgentToolSecrets(toolPluginId, toolResponse)
         } catch (error) {
           // Never forward an internal message (it can carry local paths).
           console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)

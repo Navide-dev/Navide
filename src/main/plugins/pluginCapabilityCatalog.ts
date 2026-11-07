@@ -12,6 +12,7 @@ import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from
 import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
 import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
 import { validateInterPluginCallRequest } from './pluginInterCall'
+import { SECRETS_METHODS, validateSecretsRequest } from './pluginSecrets'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -66,7 +67,7 @@ export interface PublicStorageCapabilityCatalogEntry extends PublicCapabilityCat
 }
 
 export interface PublicSystemCapabilityCatalogEntry extends PublicCapabilityCatalogBase {
-  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'shell' | 'plugins'
+  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'secrets' | 'shell' | 'plugins'
   /** Host-pinned scope for declared namespaces (`ui.openExternal` and every
    *  `web.*` address are `plugin`; storage has its own discriminated entry). */
   scope: PublicCapabilityScope
@@ -490,6 +491,11 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   // and schedules: metadata only, each declared under permissions.agents.events.
   ...Object.fromEntries(AGENTS_EVENTS.map(address => [address, {
     address, kind: 'event', namespace: 'agents', scope: 'workspace', eligibility: 'public',
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // The plugin's own encrypted secrets, keyed by plugin id (pluginSecrets.ts).
+  ...Object.fromEntries(SECRETS_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: 'secrets', scope: 'plugin', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateSecretsRequest(address, value),
   } satisfies PublicSystemCapabilityCatalogEntry])),
   // Another installed plugin's contributes.api method; the target must be in
   // the caller's permissions.plugins (not a system namespace). A literal, not

@@ -417,6 +417,7 @@ in this order, each only when it applies:
 | `web` | `system` contains `web` | `{}` |
 | `agents` | `system` contains `agents` | `{}` |
 | `agentMessages` | `system` contains `agentMessages` | `{}` |
+| `secrets` | `system` contains `secrets` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
 | `network` | `permissions.network.hosts` declared | `{hosts}` sorted, after `networkViaShell` |
@@ -435,6 +436,7 @@ none apply. Reasons are listed in this fixed order:
 | `system.web` | `system` contains `web` (plugin browser views and their saved sign-ins) | high |
 | `system.agents` | `system` contains `agents` (agent panes, lineage, message delivery records, session list; no message text) | medium |
 | `system.agentMessages` | `system` contains `agentMessages` (the text of messages between agents) | high |
+| `system.secrets` | `system` contains `secrets` (the package's own API keys and tokens, encrypted on this device) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
 | `shell.executables` | the package declares executables beyond the Host's three (C2) | high |
 | `nativeBackend` | the manifest has `backend` | high |
@@ -903,6 +905,16 @@ result)` path:
 { "ok": false, "error": "devmap is disabled", "error_code": "PLUGIN_TOOL_UNAVAILABLE", "reason": "plugin-disabled" }
 ```
 
+**A tool answer never carries a secret.** A package must not put an API key,
+token or password (its own or the user's) into a tool result or an error
+message, and the Host enforces it for the package's own secrets (`secrets`):
+before the answer goes back to the core, every string in it (keys and values of
+`result`, a chunked result joined first, `error`, `plugin_error`) is redacted
+against the values the package keeps, each occurrence replaced with
+`[secret redacted]`. A chunked result that held one goes back inline (the core
+chunks it again). The tool can still use its key to call its service; only the
+answer is cleaned. No MCP tool returns a `secrets.*` value.
+
 Host checks run on every call, in this order, regardless of what the CLI has
 cached: the package's switch (DB8 for third-party, the first-party switch for first-party) → caller kind → package installed, enabled, not
 quarantined, not revoked, not stopping → tool in the consented list →
@@ -1029,6 +1041,11 @@ For `plugins_disable` / `plugins_enable`. The backend unicasts
 { "request_id": "pa:5d1e...", "action": "disable", "plugin_id": "nerdtechnic.devmap",
   "requester": { "paneId": "p-41", "paneName": "dev", "workspace": "/Users/me/project", "callerKind": "pane" } }
 ```
+
+A `disable` may carry `"clear_secrets": true` (from `plugins_disable` with
+`clear_secrets=true`; never `false`, never on another action): the Host then
+also deletes the package's own secrets (`secrets`), which otherwise survive a
+disable, and adds `secretsCleared: true` to its answer.
 
 The Host answers with the WebSocket message `plugins.agent_action.result`:
 `{request_id, ok: true, pluginId, pluginVersion, disabled, changed}` or `{request_id,

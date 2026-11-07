@@ -10883,8 +10883,8 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "secrets", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "system.secrets", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
@@ -11615,7 +11615,9 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     return answer
 
 
-async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: Any) -> dict[str, Any]:
+async def _plugin_agent_action(
+    ctx: Context, action: str, namespace: Any, name: Any, *, clear_secrets: bool = False,
+) -> dict[str, Any]:
     """Ask the Host to disable or enable one installed Marketplace package."""
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -11649,6 +11651,7 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     try:
         sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
             "request_id": request_id, "action": action, "plugin_id": plugin_id, "requester": requester,
+            **({"clear_secrets": True} if clear_secrets else {}),
         }))
         if not sent:
             return finish(_marketplace_error("HOST_UNAVAILABLE", "Navide Host is not connected"))
@@ -11659,8 +11662,11 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
         return finish(_marketplace_error("HOST_UNAVAILABLE", f"Navide Host did not answer the {action} request"))
     if result.get("ok") is True and isinstance(result.get("pluginVersion"), str):
         version = result["pluginVersion"]
-        return finish({"ok": True, "pluginId": plugin_id, "pluginVersion": version,
-                       "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
+        answer = {"ok": True, "pluginId": plugin_id, "pluginVersion": version,
+                  "disabled": action == "disable", "changed": result.get("changed") is True}
+        if result.get("secretsCleared") is True:
+            answer["secretsCleared"] = True
+        return finish(answer, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
     if code == "APPROVAL_REQUIRED" and action == "enable" and isinstance(result.get("pluginVersion"), str):
@@ -11727,7 +11733,7 @@ async def _file_enable_request(
 
 
 @server.tool()
-async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
+async def plugins_disable(ctx: Context, namespace: str, name: str, clear_secrets: bool = False) -> dict[str, Any]:
     """Disable an installed Navide plugin from the Navide Marketplace.
 
     Takes effect at once: the plugin stops and its views, backend and agent
@@ -11735,12 +11741,17 @@ async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, 
     agent did it, with a one-click undo, and the change is recorded. The
     bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
 
-    Returns {ok, pluginId, pluginVersion, disabled: true, changed} or {ok:
-    false, error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
-    ACTION_FAILED, HOST_UNAVAILABLE). `changed` is false when it was already
-    disabled: nothing happens then and the user is not notified.
+    The plugin's own encrypted secrets (`secrets`: its API keys and tokens)
+    stay by default, so enabling it again finds them. `clear_secrets=true`
+    deletes them too; that cannot be undone. No secret value is ever returned.
+
+    Returns {ok, pluginId, pluginVersion, disabled: true, changed} (plus
+    `secretsCleared: true` when they were deleted) or {ok: false, error,
+    error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST, ACTION_FAILED,
+    HOST_UNAVAILABLE). `changed` is false when it was already disabled:
+    nothing happens then and the user is not notified.
     """
-    return await _plugin_agent_action(ctx, "disable", namespace, name)
+    return await _plugin_agent_action(ctx, "disable", namespace, name, clear_secrets=clear_secrets is True)
 
 
 @server.tool()

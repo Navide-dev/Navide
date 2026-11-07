@@ -1966,7 +1966,8 @@
         "aiCli": "Sesiones de AI CLI",
         "web": "Navegación web",
         "agents": "Panes de agentes",
-        "agentMessages": "Mensajes entre agentes"
+        "agentMessages": "Mensajes entre agentes",
+        "secrets": "Secretos del complemento de Navide"
       },
       "shellLabel": "Ejecutables de shell",
       "shellHint": "Permite solo nombres de ejecutables de nivel superior. No se aceptan rutas ni expresiones de shell.",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "{name} se quitará de este dispositivo. Puedes volver a instalarlo desde Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} se quitará de este dispositivo. Su backend nativo también guardó {size} de datos privados en este dispositivo, en la ubicación de abajo. Navide elimina también estos datos, salvo que elijas conservarlos.",
         "uninstallKeepNativeData": "Conservar estos datos para que una reinstalación pueda volver a usarlos",
+        "uninstallSecretsTitle": "¿Eliminar también los secretos guardados de este complemento de Navide?",
+        "uninstallSecretsBody": "{name} guarda claves de API o tokens cifrados en este dispositivo ({count} en total). Consérvalos para que una reinstalación pueda volver a usarlos, o elimínalos ahora.",
+        "uninstallSecretsDelete": "Eliminar secretos",
+        "uninstallSecretsKeep": "Conservar secretos",
         "uninstallClearsWebData": "Al quitar {name} también se eliminan sus inicios de sesión en sitios web, cookies y caché en este equipo.",
         "updatesCount": "Actualizaciones disponibles: {count}",
         "retry": "Reintentar",
@@ -2418,6 +2423,7 @@
           "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este equipo; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar solicitudes a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; cuando tomas el control, los scripts de agent que ya se ejecutan en una página solo se detienen al recargarla; mientras dejas que los agents controlen una página, este complemento de Navide también puede ejecutar scripts en ella y leerla junto con su estado de inicio de sesión; puede abrir muchas páginas web a la vez y cada una consume memoria.",
           "agents": "Ve tus panes de agent, qué pane abrió cada uno y cuándo se enviaron mensajes, pero no lo que dijeron.",
           "agentMessages": "Lee el texto completo de los mensajes entre tus agents; puede contener código, contenido de archivos o secretos.",
+          "secrets": "Guarda sus propias claves de API y tokens cifrados en este equipo; Navide nunca los sube ni los muestra.",
           "shell": "Ejecutar comandos en tu equipo.",
           "terminal": "Abrir y controlar terminales de Navide."
         }
@@ -12448,6 +12454,7 @@
       "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este ordenador; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar peticiones a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; después de tomar el control, los scripts del agent que ya se estén ejecutando en una página solo se detienen cuando la recargas; mientras dejas que los agents controlen una página, este complemento de Navide también puede ejecutar scripts en ella y leerla junto con su estado de inicio de sesión; puede abrir muchas páginas web a la vez, y cada una usa memoria.",
       "agents": "Ve los panes de agent de este proyecto, qué pane abrió cada uno, los registros de entrega de mensajes (sin su contenido) y la lista de sesiones (sin el contenido de las conversaciones)",
       "agentMessages": "Lee el texto completo de los mensajes entre tus agents en este proyecto, que puede contener código, contenido de archivos o secretos",
+      "secrets": "Guarda sus propias claves de API y tokens cifrados en este equipo; Navide nunca los sube ni los muestra",
       "ui": "Muestra sus propias vistas",
       "agentTools": "Ofrece herramientas que los agents pueden llamar ({read} de solo lectura, {write} de escritura)",
       "network": "Sus vistas pueden conectarse a: {hosts}",

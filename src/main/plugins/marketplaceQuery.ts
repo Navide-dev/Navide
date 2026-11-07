@@ -149,7 +149,7 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'networkViaShell': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'secrets': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
     case 'network': {
       const hosts = isRecord(params) ? hostList(params.hosts) : null
@@ -212,7 +212,7 @@ function permissionsBlock(value: unknown): DisclosurePermissions | null {
   if (!isRecord(value)) return null
   const system = strings(value.system)
   if (!system || !system.every((name) => name === 'aiCli' || name === 'fs' || name === 'ui' || name === 'web' ||
-    name === 'agents' || name === 'agentMessages')) return null
+    name === 'agents' || name === 'agentMessages' || name === 'secrets')) return null
   const shell = value.shell === null ? null : shellParams(value.shell)
   if (shell === undefined) return null
   let scopes: DisclosurePermissions['scopes'] = null

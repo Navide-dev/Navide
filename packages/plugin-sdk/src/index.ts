@@ -1075,6 +1075,30 @@ export function createPluginSettingsStore(
   })
 }
 
+/** The plugin's own secrets (declare `secrets` in `permissions.system`).
+ *  Values are encrypted on this device under the plugin id and survive
+ *  updates and disabling; they never reach Navide Cloud, an export, Activity,
+ *  a log or an agent tool result. Never put a key in code, the manifest,
+ *  tests, a README or a commit: keep it here. `set` and `get` answer
+ *  `{ ok: false, code: 'SECRETS_UNAVAILABLE' }` when the system has no secure
+ *  storage; nothing is then written. */
+export interface PluginSecretStore {
+  set(name: string, value: string): Promise<Result<'secrets.set'>>
+  get(name: string): Promise<Result<'secrets.get'>>
+  delete(name: string): Promise<Result<'secrets.delete'>>
+  /** Names only, never values. */
+  list(): Promise<Result<'secrets.list'>>
+}
+
+export function createPluginSecretStore(context: Pick<PluginContext, 'capabilities'>): PluginSecretStore {
+  return Object.freeze({
+    set: (name: string, value: string) => context.capabilities.invoke('secrets.set', { name, value }),
+    get: (name: string) => context.capabilities.invoke('secrets.get', { name }),
+    delete: (name: string) => context.capabilities.invoke('secrets.delete', { name }),
+    list: () => context.capabilities.invoke('secrets.list', {}),
+  })
+}
+
 export interface PluginViewState<T extends JsonValue> {
   /** The last saved value, or the fallback when there is none or it cannot be read. Never rejects. */
   restore(): Promise<T>

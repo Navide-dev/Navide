@@ -1966,7 +1966,8 @@
         "aiCli": "AI CLI sessions",
         "web": "Web browsing",
         "agents": "Agent panes",
-        "agentMessages": "Agent messages"
+        "agentMessages": "Agent messages",
+        "secrets": "Navide plugin secrets"
       },
       "shellLabel": "Shell executables",
       "shellHint": "Allow only top-level executable names. Paths and shell expressions are not accepted.",
@@ -2212,6 +2213,10 @@
         "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} will be removed from this device. Its native backend also stored {size} of private data on this device, at the location below. Navide deletes this data too unless you choose to keep it.",
         "uninstallKeepNativeData": "Keep this data so a reinstall can use it again",
+        "uninstallSecretsTitle": "Also delete the secrets this Navide plugin saved?",
+        "uninstallSecretsBody": "{name} keeps API keys or tokens encrypted on this device ({count} in total). Keep them so a reinstall can use them again, or delete them now.",
+        "uninstallSecretsDelete": "Delete secrets",
+        "uninstallSecretsKeep": "Keep secrets",
         "uninstallClearsWebData": "Removing {name} also deletes its site sign-ins, cookies and cache on this computer.",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
@@ -2418,6 +2423,7 @@
           "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
           "agents": "See your agent panes, which pane opened which, and when they messaged each other — not what they said.",
           "agentMessages": "Read the full text of messages between your agents; it can contain code, file contents or secrets.",
+          "secrets": "Keep its own API keys and tokens encrypted on this computer; Navide never uploads or shows them.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
         }
@@ -12448,6 +12454,7 @@
       "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
       "agents": "Sees your agent panes in this project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content)",
       "agentMessages": "Reads the full text of messages between your agents in this project, which can contain code, file contents or secrets",
+      "secrets": "Keeps its own API keys and tokens encrypted on this computer; Navide never uploads or shows them",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
       "network": "Its views can connect to: {hosts}",
