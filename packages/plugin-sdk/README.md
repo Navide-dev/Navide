@@ -56,6 +56,7 @@ delivers Host events to the plugin's subscribers (an `agents.*` event only when
 it is declared), and `calls` and `effects` record what the plugin did. It runs
 no Host code and grants nothing real.
 
+<!-- docs-typecheck: skip (test snippet; `plugin` and `expect` come from the reader's own test file) -->
 ```ts
 import { createTestHost } from '@navide/plugin-sdk/testing'
 

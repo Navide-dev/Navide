@@ -69,6 +69,19 @@
       "resultBytes": -1
     }
   ],
+  "pipelineNodeRuns": [
+    {
+      "id": 1,
+      "at": 1792022400000,
+      "pluginVersion": "0.2.0",
+      "workspace": "/Users/me/project",
+      "nodeId": "import",
+      "runOrigin": "schedule",
+      "outcome": "ok",
+      "errorCode": "",
+      "durationMs": 120
+    }
+  ],
   "files": [
     {
       "path": "docs/devmap.md",
