@@ -228,6 +228,14 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+/** Whether a declared executable is one that runs any program handed to it,
+ *  read with its version suffix stripped (`python3.12`, `node22`, `php8.3` are
+ *  `python`, `node`, `php`), so a versioned spelling is disclosed like the
+ *  plain one. Twin: runs_any_program. */
+export function runsAnyProgram(name: string): boolean {
+  return SHELL_ANY_PROGRAM_EXECUTABLES.has(name) || SHELL_ANY_PROGRAM_EXECUTABLES.has(name.replace(/[-.]?\d[\d.]*$/, ''))
+}
+
 /** The highest level among the reasons; low when there are none. */
 export function riskLevelForReasons(reasons: ReadonlyArray<{ key: string; level: DisclosureRiskLevel }>): DisclosureRiskLevel {
   let level: DisclosureRiskLevel = 'low'
@@ -280,7 +288,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
   if (declaredExecutables.length > 0) {
     present.add('shell.executables')
-    if (declaredExecutables.some((name) => SHELL_ANY_PROGRAM_EXECUTABLES.has(name))) present.add('shell.interpreter')
+    if (declaredExecutables.some(runsAnyProgram)) present.add('shell.interpreter')
   }
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')

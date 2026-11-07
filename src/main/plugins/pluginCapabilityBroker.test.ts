@@ -1394,7 +1394,7 @@ describe('C2: declared shell executables', () => {
     expect(planPublicCapabilityCall(run('npm test'), declaredPolicy, context(grant({ shellExecutables: ['npm'] }))))
       .toMatchObject({ kind: 'deny', response: { error: { message: expect.stringContaining('shell executables are not user-approved') } } })
     const withoutNames = grant()
-    delete (withoutNames as { shellExecutables?: string[] }).shellExecutables
+    delete (withoutNames as unknown as { shellExecutables?: string[] }).shellExecutables
     expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(withoutNames))).toMatchObject({ kind: 'deny' })
     expect(sameExecutables(undefined, [])).toBe(true)
     expect(sameExecutables(['a', 'b'], ['b', 'a'])).toBe(true)

@@ -13,6 +13,7 @@ src/shared/pluginDisclosure.ts.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal, NotRequired, TypedDict
 
 from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, MAX_SAFE_INTEGER
@@ -110,6 +111,17 @@ class CanonicalJsonError(TypeError):
     """A value with no canonical contract spelling (a non-integer or unsafe number, or a non-JSON type)."""
 
 
+_VERSION_SUFFIX = re.compile(r"[-.]?\d[\d.]*$")
+
+
+def runs_any_program(name: str) -> bool:
+    """Whether a declared executable is one that runs any program handed to
+    it, read with its version suffix stripped (``python3.12``, ``node22``,
+    ``php8.3`` are ``python``, ``node``, ``php``), so a versioned spelling is
+    disclosed like the plain one. Twin: runsAnyProgram."""
+    return name in SHELL_ANY_PROGRAM_EXECUTABLES or _VERSION_SUFFIX.sub("", name) in SHELL_ANY_PROGRAM_EXECUTABLES
+
+
 def risk_level_for_reasons(reasons: list[dict[str, Any]]) -> str:
     """The highest level among the reasons; low when there are none."""
     level = "low"
@@ -193,7 +205,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("shell.allowlist")
     if declared_executables:
         present.add("shell.executables")
-        if any(name in SHELL_ANY_PROGRAM_EXECUTABLES for name in declared_executables):
+        if any(runs_any_program(name) for name in declared_executables):
             present.add("shell.interpreter")
     if native is not None:
         present.add("nativeBackend")

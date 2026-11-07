@@ -2951,6 +2951,132 @@
           "projectWrites": "undeclared"
         }
       }
+    },
+    {
+      "name": "shell-executables-versioned-interpreter",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.pyrunner",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "python3.12"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.pyrunner",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "python3.12"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            },
+            {
+              "key": "shell.interpreter",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "python3.12"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
     }
   ]
 }

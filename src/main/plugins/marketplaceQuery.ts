@@ -23,6 +23,7 @@ import type {
   MarketplaceQueryResponse,
 } from '../../shared/pluginAgentTools'
 import { AGENT_TOOL_NAME_PATTERN } from '../../shared/pluginAgentTools'
+import { V2_NETWORK_HOST, V2_SHELL_EXECUTABLE } from '../../../packages/plugin-contracts/src/index'
 import {
   DISCLOSURE_RISK_RULES,
   DISCLOSURE_SUMMARY_TEMPLATE,
@@ -125,12 +126,20 @@ const nullableString = (value: unknown): string | null | undefined =>
 const isEmptyParams = (value: unknown): boolean => isRecord(value) && Object.keys(value).length === 0
 const REASON_LEVELS = new Map<string, DisclosureRiskLevel>(DISCLOSURE_RISK_RULES.map(([key, level]) => [key, level]))
 const SHELL_EXECUTABLES = new Set<string>(HOST_SHELL_ALLOWLIST)
+/** C2: an allowlist's executables are the Host's three plus names the package
+ *  declared, each a bare lowercase name (the manifest's own spelling rule). */
+const isShellExecutable = (name: string): boolean => SHELL_EXECUTABLES.has(name) || V2_SHELL_EXECUTABLE.test(name)
+/** C1: declared view hosts, each spelled as the manifest rule allows. */
+const hostList = (value: unknown): string[] | null => {
+  const hosts = strings(value)
+  return hosts && hosts.length > 0 && hosts.every((host) => host.length <= 253 && V2_NETWORK_HOST.test(host)) ? hosts : null
+}
 
 function shellParams(value: unknown): DisclosurePermissions['shell'] | undefined {
   if (!isRecord(value)) return undefined
   if (value.mode === 'full' && value.executables === null) return { mode: 'full', executables: null }
   const executables = strings(value.executables)
-  if (value.mode === 'allowlist' && executables && executables.every((name) => SHELL_EXECUTABLES.has(name))) {
+  if (value.mode === 'allowlist' && executables && executables.every(isShellExecutable)) {
     return { mode: 'allowlist', executables }
   }
   return undefined
@@ -140,8 +149,12 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'network': case 'networkViaShell': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
+    case 'network': {
+      const hosts = isRecord(params) ? hostList(params.hosts) : null
+      return hosts ? { key: 'network', params: { hosts } } : null
+    }
     case 'files':
       return isRecord(params) && (params.access === 'read' || params.access === 'readWrite')
         ? { key: 'files', params: { access: params.access } }
@@ -196,7 +209,14 @@ function permissionsBlock(value: unknown): DisclosurePermissions | null {
     if (!isRecord(fs) || (fs.root !== 'workspace' && fs.root !== 'repository') || !read || !write) return null
     scopes = { fs: { root: fs.root, read, write } }
   }
-  return { system: system as DisclosurePermissions['system'], shell, scopes }
+  // C1: present only when the manifest declares hosts (never null).
+  let network: DisclosurePermissions['network'] | undefined
+  if (value.network !== undefined) {
+    const hosts = isRecord(value.network) ? hostList(value.network.hosts) : null
+    if (!hosts) return null
+    network = { hosts }
+  }
+  return { system: system as DisclosurePermissions['system'], shell, scopes, ...(network ? { network } : {}) }
 }
 
 function agentToolEntry(value: unknown): DisclosureAgentTool | null {
@@ -249,10 +269,14 @@ function manifestDisclosure(value: unknown): ManifestDisclosure | null {
   const tools = Array.isArray(value.agentTools) ? value.agentTools.map(agentToolEntry) : null
   const locations = value.dataLocations
   const writes = isRecord(locations) ? projectWrites(locations.projectWrites) : null
+  // C1: `networkHosts` is present only when hosts are declared, and then
+  // equals the permissions' list (the contract computes both from one field).
+  const networkHosts = value.networkHosts === undefined ? undefined : hostList(value.networkHosts)
   if (
     !summary || !risk || !permissions || !tools || tools.some((tool) => tool === null) ||
     !isRecord(locations) || locations.hostStorage !== true || typeof locations.backendDataDirectory !== 'boolean' ||
-    writes === null
+    writes === null || networkHosts === null ||
+    JSON.stringify(networkHosts ?? null) !== JSON.stringify(permissions.network?.hosts ?? null)
   ) return null
   return {
     schemaVersion: 1,
@@ -262,6 +286,7 @@ function manifestDisclosure(value: unknown): ManifestDisclosure | null {
     permissions,
     nativeBackend,
     network: value.network,
+    ...(networkHosts ? { networkHosts } : {}),
     agentTools: tools as DisclosureAgentTool[],
     dataLocations: { hostStorage: true, backendDataDirectory: locations.backendDataDirectory, projectWrites: writes },
   }
