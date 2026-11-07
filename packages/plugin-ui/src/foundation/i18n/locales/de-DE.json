@@ -11000,7 +11000,7 @@
     "enable-platform": "{platform} aktivieren",
     "bot": {
       "sort-recent": "Zuletzt aktiv",
-      "sort-name": "Name",
+      "sort-name": "Alphabetisch",
       "group-workspace": "Nach Arbeitsbereich",
       "search-placeholder": "Name, {'@'}Handle, ID, Bereich oder Arbeitsbereich suchen",
       "search-empty": "Kein Bot gefunden",
