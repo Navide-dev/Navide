@@ -2019,7 +2019,7 @@
           "firstParty": "Let agents call tools from first-party Navide plugins",
           "firstPartyDescription": "On by default. Lets agents in your panes call the tools of first-party Navide plugins, the ones Navide makes such as Navide Browser, without asking for each version. Their results are still marked as external content, and a tool that changes something still asks once per workspace.",
           "enable": "Let agents call tools from third-party Navide plugins",
-          "description": "Lets agents in your panes call tools declared by Navide plugins you allowed; a tool that changes files asks once per workspace. It turns on by itself when you allow a Navide plugin whose consent card lists tools; turn it off here to stop every third-party tool at once.",
+          "description": "Lets agents in your panes call tools declared by Navide plugins you allowed; a tool that changes files asks once per workspace. While you have never set it here, it turns on by itself when you allow a Navide plugin whose consent card lists tools; a choice you make here stays. Turn it off here to stop every third-party tool at once.",
           "externalCallers": "Let external MCP clients call them too",
           "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
         },

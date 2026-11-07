@@ -537,7 +537,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• and ${count} more${writes ? ` (${writes} declared as changing data)` : ''}: ${names}`,
     agentToolsDetailIn: 'Each tool\'s full description and input schema are shown in Settings → Navide Plugins.',
-    agentToolsOn: 'Allowing it lets agents call these tools: if "Let agents call tools from third-party Navide plugins" is off in Settings → Navide Plugins, allowing turns it on. Turn it off there to stop every third-party tool at once.',
+    agentToolsOn: 'Allowing it lets agents call these tools: if "Let agents call tools from third-party Navide plugins" in Settings → Navide Plugins is still at its default (off, never set by you), allowing turns it on; a setting you made there stays as you left it. Turn it off there to stop every third-party tool at once.',
     agentToolsOutro: 'What these tools return is shown to the agent, which may pass it on elsewhere.',
     notNow: 'Don\'t allow',
     allow: 'Allow',
@@ -566,7 +566,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• 另外 ${count} 個${writes ? `（其中 ${writes} 個外掛宣告為寫入）` : ''}：${names}`,
     agentToolsDetailIn: '每個工具的完整說明和輸入結構描述，都在「設定 → Navide 外掛」。',
-    agentToolsOn: '允許後 agent 就能呼叫這些工具：若「設定 → Navide 外掛」裡的「允許 agent 呼叫第三方 Navide 外掛的工具」是關的，允許會把它打開。要一次停用所有第三方工具，請到那裡關掉。',
+    agentToolsOn: '允許後 agent 就能呼叫這些工具：若「設定 → Navide 外掛」裡的「允許 agent 呼叫第三方 Navide 外掛的工具」還是預設值（關、你沒動過），允許會把它打開；你自己設定過的就維持原狀。要一次停用所有第三方工具，請到那裡關掉。',
     agentToolsOutro: '這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。',
     notNow: '不允許',
     allow: '允許',
@@ -595,7 +595,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• ほか ${count} 個${writes ? `（うち ${writes} 個はプラグインの宣言：書き込み）` : ''}：${names}`,
     agentToolsDetailIn: '各ツールの説明と入力スキーマの全文は「設定 → Navide プラグイン」に表示されます。',
-    agentToolsOn: '許可すると agent がこれらのツールを呼び出せます。「設定 → Navide プラグイン」の「エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可」がオフなら、許可と同時にオンになります。サードパーティのツールをすべて止めるには、そこでオフにしてください。',
+    agentToolsOn: '許可すると agent がこれらのツールを呼び出せます。「設定 → Navide プラグイン」の「エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可」がまだ初期値（オフ、未設定）なら、許可と同時にオンになります。あなたが設定した値はそのままです。サードパーティのツールをすべて止めるには、そこでオフにしてください。',
     agentToolsOutro: 'これらのツールが返す内容は agent に渡され、agent がそれを別の場所に渡すことがあります。',
     notNow: '許可しない',
     allow: '許可',

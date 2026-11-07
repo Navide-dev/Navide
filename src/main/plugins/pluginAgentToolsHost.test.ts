@@ -629,6 +629,13 @@ describe('C3: the consent card is the switch', () => {
     expect(on.sent).toHaveLength(1)
   })
 
+  it('leaves a switch the user set in Settings alone, off or on', async () => {
+    const off = harness({}, { enabled: false, enabledSetByUser: true })
+    expect(await off.host.consented('nerdtechnic.devmap')).toBe(false)
+    expect(off.switches.enabled).toBe(false)
+    expect(off.sent).toEqual([])
+  })
+
   it('never turns external callers on with it', async () => {
     const h = harness()
     await h.host.consented('nerdtechnic.devmap')

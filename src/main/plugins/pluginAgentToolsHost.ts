@@ -137,14 +137,17 @@ export class PluginAgentToolsHost {
 
   /** C3 (DB8 folded into the consent card): the user allowed a third-party
    * package whose consent card listed its agent tools, so those tools go live.
-   * The master switch turns on when it was off; a package that declares no
-   * tools, a first-party one or an unknown id only refreshes the catalog. The
-   * switch stays in Settings as the one place that turns every third-party
-   * tool off again, and an "off" set there holds until the user allows the
-   * next package that offers tools. Returns whether the switch was turned on. */
+   * The master switch turns on when it is still at its default (off and never
+   * set by the user in Settings); a switch the user set themselves, on or off,
+   * is their choice and is left alone, so allowing one more package never
+   * re-enables the tools of others behind their back. A package that declares
+   * no tools, a first-party one or an unknown id only refreshes the catalog.
+   * Settings stays the one place that turns every third-party tool off again.
+   * Returns whether the switch was turned on. */
   async consented(pluginId: string): Promise<boolean> {
     const spec = this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
-    if (spec && declaredTools(spec).length > 0 && !this.options.switches().enabled) {
+    const switches = this.options.switches()
+    if (spec && declaredTools(spec).length > 0 && !switches.enabled && switches.enabledSetByUser !== true) {
       await this.setSwitches({ enabled: true })
       return true
     }

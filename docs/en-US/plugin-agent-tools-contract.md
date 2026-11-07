@@ -777,10 +777,10 @@ A Host event carrying the complete catalog; each one replaces the previous one.
   packages are in the snapshot: the DB8 master switch (off by default; since
   0.2.39 the consent card is the switch — allowing a third-party package whose
   card lists agent tools, at install or at the native-backend prompt, turns it
-  on, and the card says so; Settings → Navide Plugins → **Let agents call tools
-  from third-party Navide plugins** stays the one place that turns every
-  third-party tool off again, and an "off" set there holds until the next such
-  consent) covers
+  on while it is still at its default, and the card says so; a value the user
+  set in Settings → Navide Plugins → **Let agents call tools from third-party
+  Navide plugins** (`enabledSetByUser`) holds, on or off, and that switch stays
+  the one place that turns every third-party tool off again) covers
   third-party packages, and the first-party switch (on by default; Settings →
   Navide Plugins → **Let agents call tools from first-party Navide plugins**) covers
   first-party packages (`navide.browser`). A package whose switch is off is

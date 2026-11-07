@@ -2019,7 +2019,7 @@
           "firstParty": "允許 agent 呼叫官方 Navide 外掛的工具",
           "firstPartyDescription": "預設開啟。讓分格裡的 agent 呼叫官方 Navide 外掛（Navide 自己做的，例如 Navide Browser）的工具，不必每個版本都詢問。結果仍會標示為外部內容，會改動東西的工具在每個工作區仍會詢問一次。",
           "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
-          "description": "讓分格裡的 agent 呼叫你已允許的 Navide 外掛所宣告的工具；會改動檔案的工具在每個工作區詢問一次。當你允許一個同意卡上列有工具的 Navide 外掛時會自動開啟；要一次停用所有第三方工具，就在這裡關掉。",
+          "description": "讓分格裡的 agent 呼叫你已允許的 Navide 外掛所宣告的工具；會改動檔案的工具在每個工作區詢問一次。你沒動過這個開關時，允許一個同意卡上列有工具的 Navide 外掛會自動開啟；你在這裡設定過的就維持原狀。要一次停用所有第三方工具，就在這裡關掉。",
           "externalCallers": "外部 MCP 客戶端也能呼叫",
           "externalCallersDisclosure": "外部程式只共用一組 token，稽核紀錄分不出是哪個程式，只能記成「外部客戶端」。Host 憑證也比照處理。"
         },

@@ -2019,7 +2019,7 @@
           "firstParty": "Permitir que os agents chamem ferramentas de plug-ins do Navide oficiais",
           "firstPartyDescription": "Ativado por padrão. Permite que os agentes dos seus panes chamem as ferramentas dos plug-ins do Navide oficiais, os que o Navide faz como o Navide Browser, sem perguntar a cada versão. Os resultados continuam marcados como conteúdo externo, e uma ferramenta que altera algo continua perguntando uma vez por espaço de trabalho.",
           "enable": "Permitir que os agents chamem ferramentas de plug-ins do Navide de terceiros",
-          "description": "Permite que os agentes dos seus panes chamem ferramentas declaradas por plug-ins do Navide que você permitiu; uma ferramenta que altera arquivos pergunta uma vez por espaço de trabalho. Ele é ativado sozinho quando você permite um plug-in do Navide cujo cartão de consentimento lista ferramentas; desative-o aqui para parar de uma vez todas as ferramentas de terceiros.",
+          "description": "Permite que os agentes dos seus panes chamem ferramentas declaradas por plug-ins do Navide que você permitiu; uma ferramenta que altera arquivos pergunta uma vez por espaço de trabalho. Enquanto você nunca o tiver ajustado aqui, ele é ativado sozinho quando você permite um plug-in do Navide cujo cartão de consentimento lista ferramentas; uma escolha feita aqui é mantida. Desative-o aqui para parar de uma vez todas as ferramentas de terceiros.",
           "externalCallers": "Permitir que clientes MCP externos também as chamem",
           "externalCallersDisclosure": "Programas externos compartilham um único token, então o registro de uma chamada só pode dizer “um cliente externo”, não qual programa foi. A credencial do host é tratada da mesma forma."
         },

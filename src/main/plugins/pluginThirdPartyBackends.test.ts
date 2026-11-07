@@ -1564,6 +1564,7 @@ describe('native backend consent text', () => {
       agentTools: [{ name: 'files_search', method: 'files.search', risk: 'read' as const, title: 'Search', description: 'Search files', timeoutMs: 30000, inputSchema: {} }],
     }
     expect(nativeBackendConsentText(withTools).detail).toContain('allowing turns it on')
+    expect(nativeBackendConsentText(withTools).detail).toContain('a setting you made there stays as you left it')
     expect(nativeBackendConsentText(withTools, 'zh-TW').detail).toContain('允許會把它打開')
     expect(nativeBackendConsentText(withTools, 'ja-JP').detail).toContain('許可と同時にオンになります')
     expect(nativeBackendConsentText(prompt).detail).not.toContain('allowing turns it on')

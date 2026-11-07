@@ -556,11 +556,13 @@ the manifest side is:
 Allowing the package is what lets agents call these tools (C3, 0.2.39): the
 install consent card and the native-backend prompt list every declared tool
 with its read/write claim, and the user's "Allow" turns on Settings → Navide
-Plugins → "Let agents call tools from third-party Navide plugins" when it was
-off, as the dialog says. No separate switch has to be found afterwards; the
-switch stays in Settings as the way to stop every third-party tool at once,
-and turning it off there holds until the user allows the next package that
-offers tools. A tool that changes files still asks once per workspace.
+Plugins → "Let agents call tools from third-party Navide plugins" while that
+switch is still at its default (off and never set by the user), as the dialog
+says. No separate switch has to be found afterwards. A value the user set in
+Settings, on or off, holds: allowing one more package never re-enables the
+tools of others behind the user's back, and the switch stays the way to stop
+every third-party tool at once. A tool that changes files still asks once per
+workspace.
 
 | Tool field | Required | Rule |
 |---|---|---|
