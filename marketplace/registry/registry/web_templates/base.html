@@ -47,6 +47,7 @@
             <button type="submit" class="link-button">Sign out</button>
           </form>
         {% else %}
+          <a href="{{ dev }}/developer"{% if request.url.path.endswith('/developer') %} aria-current="page"{% endif %}>Build</a>
           <a href="{{ dev }}/publish"{% if request.url.path.endswith('/publish') %} aria-current="page"{% endif %}>Publish</a>
           {% if cloud_auth %}<a href="{{ base }}/login">Sign in</a>{% endif %}
         {% endif %}
@@ -63,6 +64,10 @@
       <span class="footer-mark">Navide Marketplace</span>
       <span>Packages are served by this registry, and the Navide app verifies each one before it installs anything.</span>
       <a href="{{ store }}/removed">Removed extensions</a>
+      <a href="{{ dev }}/developer">Developers</a>
+      <a href="{{ guide_url }}">Docs</a>
+      <a href="{{ discussions_url }}">Discussions</a>
+      <a href="{{ security_url }}">Security</a>
     </div>
   </footer>
 </body>

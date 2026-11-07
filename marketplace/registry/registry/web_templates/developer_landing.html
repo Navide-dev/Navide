@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_journey.html" import journey_bar %}
+{% block title %}Build for Navide — Navide Developers{% endblock %}
+{% block description %}Build a Navide plugin and list it on the Navide Marketplace: seven steps from template to listing, and what an application needs.{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Build for Navide — from template to listing, in seven steps</h1>
+  {{ journey_bar() }}
+
+  <div class="landing-grid">
+    <div class="landing-box">
+      <h2 class="section-title">What the application needs</h2>
+      <ul class="checklist">
+        <li>A Navide Cloud (forum) account</li>
+        <li>Your real name and an email we can reach</li>
+        <li>Organizations: name and registration number (individuals skip this)</li>
+        <li>A person reviews it, target: 3 business days</li>
+        <li>A rejection comes with a reason, and you can apply again</li>
+      </ul>
+    </div>
+    <div class="landing-box">
+      <h2 class="section-title">Do this before you sign in</h2>
+      <ul class="checklist">
+        <li><code>npx navide-plugin init acme-hello --id acme.hello --template vue</code> <span class="muted">(Navide 0.2.39 or later)</span></li>
+        <li>Load it with Settings → Navide Plugins → Developer Mode → Load from folder</li>
+        <li>See what a plugin can do: <a href="{{ guide_url }}#2-what-a-plugin-can-do">capability table ↗</a></li>
+        <li>Pick one: <a href="{{ ideas_url }}">plugin ideas ↗</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="button-row">
+    {% if viewer %}
+      <a class="install-button" href="{{ base }}/publish">See which step you are on →</a>
+    {% elif enabled %}
+      <a class="install-button" href="{{ base }}/login?next=/developer/apply">Sign in to apply →</a>
+    {% endif %}
+    <a class="secondary-button" href="{{ guide_url }}">Read the full guide ↗</a>
+  </div>
+  {% if not enabled %}<p class="muted">Navide Cloud sign-in is not enabled on this registry.</p>{% endif %}
+  <p class="muted">Review checks who is publishing and that you can be reached — never which
+    permissions your plugin asks for. Users see those when they install.</p>
+  <p class="muted">Already have a namespace? <a href="{{ base }}/publisher">Go to dashboard</a></p>
+</section>
+{% endblock %}

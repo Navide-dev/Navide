@@ -40,7 +40,7 @@ NOINDEX = b"noindex, nofollow"
 # /auth/*, health) is served unchanged.
 _STORE_PAGE = re.compile(r"^/(?:extensions/[^/]+/[^/]+(?:/report)?|removed)?$")
 _DEVELOPER_PAGE = re.compile(
-    r"^/(?:publish|publisher(?:/[^/]+)?|developer/apply"
+    r"^/(?:publish|publisher(?:/[^/]+)?|developer(?:/apply)?"
     r"|cli/authorize|admin/[a-z-]+)$"
 )
 # Non-page routes each host serves for its own pages' forms and images.

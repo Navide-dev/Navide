@@ -191,7 +191,7 @@ def create_app(
     # accepts both prefixed (ALB forwards the path unchanged) and prefix-stripped
     # request paths, and every URL the website emits carries the prefix.
     app = FastAPI(
-        title="Navide Marketplace Registry",
+        title="Navide Registry API",
         version="0.1.0",
         root_path=settings.root_path,
     )
