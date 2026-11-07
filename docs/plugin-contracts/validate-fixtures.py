@@ -202,6 +202,12 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
                 raise AssertionError(f"shell catalog entry is malformed: {item['address']}")
             shell_addresses.add(item["address"])
             shell_entries += 1
+        elif permission_id == "plugins":
+            # plugins.call carries one coarse permission object; the manifest's
+            # permissions.plugins list names which installed plugins may be
+            # called, so no per-address rule is defined here either.
+            if set(permission) != {"id", "scope"} or scope != "workspace":
+                raise AssertionError(f"plugins catalog entry is malformed: {item['address']}")
         else:
             raise AssertionError(f"catalog has unsupported permission id: {permission_id!r}")
     if "shell.run" not in shell_addresses:
