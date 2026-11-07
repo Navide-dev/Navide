@@ -192,7 +192,15 @@ navide-plugin dev-backend dist/package
   per-workspace write prompt a user answers in Navide); the `shell` port only
   when it declares `shell: "allowlist"`, running git, gh, glab and the declared
   executables through the same public command policy as the Host broker, in
-  that directory; `agents` ports answer `BACKEND_UNAVAILABLE` (there are no
+  that directory and the way the broker runs them (git, gh and glab in a
+  throw-away home with global and system Git config off, prompts, pagers and
+  editors disabled, git's program-selecting keys overridden, and a workspace
+  `.git/config` that selects a program refused; a declared executable as you
+  run it from a terminal); gh and glab see your own sign-in only with
+  `--provider-auth`, and its token values are redacted from what the backend
+  reads. A shell command never needs `--allow-writes`: in Navide the shell
+  grant is its own consent, separate from the per-workspace file-write
+  prompt. `agents` ports answer `BACKEND_UNAVAILABLE` (there are no
   agents in dev-backend); every other port, and anything the manifest does not
   declare, is `CAPABILITY_DENIED` with reason `undeclared`. A request the
   local bridge refuses is one Navide refuses too. Without `--workspace`
@@ -701,5 +709,5 @@ navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-brow
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
 navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
-navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes]
+navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]
 ```

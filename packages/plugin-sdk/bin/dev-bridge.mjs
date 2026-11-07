@@ -11,11 +11,13 @@
 // in the shape of Navide's `plugin_activity` rows.
 
 import {
-  appendFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync,
-  rmSync, statSync, writeFileSync, closeSync,
+  appendFileSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, readdirSync,
+  realpathSync, renameSync, rmSync, statSync, writeSync, closeSync,
 } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './dev-shell-policy.mjs'
 import { declaredExecutables, parseCommand, validatePublicArgv, ShellPolicyError } from './dev-shell-policy.mjs'
 
 export class DevBridgeError extends Error {
@@ -60,7 +62,94 @@ export function declaredPermissions(manifest) {
   return { system, shell }
 }
 
-export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = false, activityFile, dataDir, runShell, now = Date.now }) {
+/** The token values a provider CLI's config carries, for redaction (host_shell._project_provider_auth). */
+function providerSecrets(configDir) {
+  const secrets = new Set()
+  for (const name of ['hosts.yml', 'config.yml']) {
+    let text = ''
+    try { text = readFileSync(join(configDir, name), 'utf8') } catch { continue }
+    for (const match of text.matchAll(/^\s*(?:oauth_token|token|job_token|refresh_token|oauth2_refresh_token):\s*(\S+)\s*$/gm)) {
+      const value = match[1].replace(/^['"]|['"]$/g, '')
+      if (value.length >= 8) secrets.add(value)
+    }
+  }
+  return [...secrets]
+}
+
+const UNSAFE_CORE_KEYS = new Set([
+  'fsmonitor', 'hookspath', 'sshcommand', 'gitproxy', 'worktree', 'editor', 'pager', 'askpass', 'attributesfile',
+  'alternaterefscommand', 'excludesfile',
+])
+
+/** git_security.assert_public_git_config_safe: refuse a workspace Git config
+ *  that selects a program (global and system config are off for the run).
+ *  Unknown structure is refused rather than interpreted. */
+export function assertPublicGitConfigSafe(cwd, workspaceRoot) {
+  const refuse = () => new DevBridgeError('CAPABILITY_DENIED', 'policy', 'command is not permitted by the public shell policy')
+  const root = realpathSync(workspaceRoot)
+  const inside = (path) => {
+    const real = realpathOrResolve(path)
+    if (real !== root && !real.startsWith(`${root}/`)) throw refuse()
+    return real
+  }
+  let dir = realpathOrResolve(cwd)
+  let gitDir = null
+  while (dir === root || dir.startsWith(`${root}/`)) {
+    const candidate = join(dir, '.git')
+    if (existsSync(candidate)) {
+      const stat = statSync(candidate)
+      if (stat.isDirectory()) gitDir = inside(candidate)
+      else {
+        const text = readFileSync(candidate, 'utf8').trim()
+        if (!text.startsWith('gitdir:')) throw refuse()
+        gitDir = inside(resolve(dir, text.slice('gitdir:'.length).trim()))
+      }
+      break
+    }
+    if (dir === root) break
+    dir = dirname(dir)
+  }
+  if (!gitDir) return
+  const configs = [join(gitDir, 'config'), join(gitDir, 'config.worktree')]
+  const commondir = join(gitDir, 'commondir')
+  if (existsSync(commondir)) {
+    const value = readFileSync(commondir, 'utf8').trim()
+    if (!value) throw refuse()
+    configs.push(join(inside(resolve(gitDir, value)), 'config'))
+  }
+  for (const path of new Set(configs)) {
+    if (!existsSync(path)) continue
+    if (statSync(path).size > 1024 * 1024) throw refuse()
+    let section = ''
+    for (const rawLine of readFileSync(path, 'utf8').split(/\r?\n/)) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith('#') || line.startsWith(';')) continue
+      const header = /^\[([^\]]*)\]$/.exec(line)
+      if (header) {
+        section = header[1].trim().toLowerCase().split(/\s+/)[0]
+        if (section === 'include' || section.startsWith('includeif')) throw refuse()
+        continue
+      }
+      const eq = line.indexOf('=')
+      const key = (eq === -1 ? line : line.slice(0, eq)).trim().toLowerCase()
+      if (/\s/.test(key)) throw refuse()
+      if (section === 'core' && UNSAFE_CORE_KEYS.has(key)) throw refuse()
+      if (section === 'init' && key === 'templatedir') throw refuse()
+      if (section === 'gc' && key === 'recentobjectshook') throw refuse()
+      if (section === 'push' && key === 'gpgsign') throw refuse()
+      if (section === 'sequence' && key === 'editor') throw refuse()
+      if (['alias', 'credential', 'filter', 'diff', 'merge', 'mergetool', 'difftool', 'uploadpack', 'receive', 'remote', 'url', 'protocol', 'ssh'].includes(section) &&
+        /^(helper|external|textconv|command|cmd|driver|clean|smudge|process|uploadpack|receivepack|proxy|vcs|insteadof|pushinsteadof|allow|packobjectshook|.*hook)$/.test(key)) throw refuse()
+      if (section === 'alias') throw refuse()
+    }
+  }
+}
+
+function realpathOrResolve(path) {
+  try { return realpathSync(path) } catch { return resolve(path) }
+}
+
+export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = false, providerAuth = false, activityFile, dataDir, runShell, now = Date.now }) {
   const declared = declaredPermissions(manifest)
   const root = workspaceRoot === null ? null : realpathSync(workspaceRoot)
   if (root !== null && !statSync(root).isDirectory()) throw new Error(`--workspace is not a directory: ${workspaceRoot}`)
@@ -96,12 +185,26 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
     const target = resolve(root, value)
     const rel = relative(root, target)
     if (rel.startsWith('..') || isAbsolute(rel)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
-    // The nearest existing ancestor must still be inside the root (symlinks).
+    // The nearest existing ancestor must still be inside the root (symbolic
+    // links resolved), and the path itself must not be a dangling link, which
+    // a write would follow out of the workspace.
     let probe = target
-    while (!existsSync(probe)) probe = dirname(probe)
+    while (!existsSync(probe)) {
+      let link = null
+      try { link = lstatSync(probe) } catch { link = null }
+      if (link?.isSymbolicLink()) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
+      probe = dirname(probe)
+    }
     const real = realpathSync(probe)
     if (real !== root && !real.startsWith(`${root}/`)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
     return target
+  }
+
+  /** Write a whole file without following a link at the final component. */
+  function writeWhole(path, data) {
+    mkdirSync(dirname(path), { recursive: true })
+    const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o644)
+    try { writeSync(fd, data) } finally { closeSync(fd) }
   }
 
   function mtimeOf(path) { return Math.floor(statSync(path).mtimeMs) }
@@ -152,8 +255,7 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
         if (values.expected_mtime !== undefined && existsSync(path) && mtimeOf(path) !== values.expected_mtime) {
           return { ok: false, conflict: true, mtime: mtimeOf(path) }
         }
-        mkdirSync(dirname(path), { recursive: true })
-        writeFileSync(path, values.content)
+        writeWhole(path, values.content)
         return { ok: true, mtime: mtimeOf(path) }
       }
       case 'write_part': {
@@ -181,8 +283,7 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
           return { ok: false, conflict: true, mtime: mtimeOf(path) }
         }
         staging.delete(`${values.upload_id}\0${path}`)
-        mkdirSync(dirname(path), { recursive: true })
-        writeFileSync(path, Buffer.concat(part.chunks))
+        writeWhole(path, Buffer.concat(part.chunks))
         return { ok: true, mtime: mtimeOf(path) }
       }
       case 'write_abort': {
@@ -204,16 +305,77 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
     throw new DevBridgeError('METHOD_NOT_FOUND')
   }
 
+  /** host_shell.run_public_allowlisted_text's execution wrapper: git, gh and
+   *  glab run in a throw-away home with global and system Git config off,
+   *  prompts, pagers and editors disabled, and git's process-selecting keys
+   *  overridden; a declared executable runs as the user runs it from a
+   *  terminal. gh and glab see the user's own sign-in only with
+   *  --provider-auth (the Host projects it for an installed package), and
+   *  the token values are redacted from what the backend reads. */
   const defaultRunShell = (argv, cwd) => {
-    const result = spawnSync(argv[0], argv.slice(1), { cwd, encoding: 'utf8', timeout: SHELL_TIMEOUT_MS, shell: false, env: process.env })
-    if (result.error && result.error.code === 'ENOENT') throw new DevBridgeError('BACKEND_UNAVAILABLE', undefined, `${argv[0]} is not installed`)
-    const stdout = result.stdout ?? ''
-    const stderr = result.stderr ?? ''
-    return {
-      exitCode: result.status ?? 126,
-      stdout: stdout.slice(0, SHELL_OUTPUT_CHARS),
-      stderr: stderr.slice(0, SHELL_OUTPUT_CHARS),
-      ...(stdout.length > SHELL_OUTPUT_CHARS || stderr.length > SHELL_OUTPUT_CHARS ? { truncated: true } : {}),
+    const hostFamily = HOST_SHELL_EXECUTABLE_ALLOWLIST.has(argv[0])
+    let command = argv
+    let env = process.env
+    let isolated = null
+    let secrets = []
+    if (hostFamily) {
+      isolated = mkdtempSync(join(tmpdir(), 'navide-public-cli-'))
+      const configHome = join(isolated, 'config')
+      mkdirSync(join(configHome, 'gh'), { recursive: true, mode: 0o700 })
+      mkdirSync(join(configHome, 'glab'), { recursive: true, mode: 0o700 })
+      const hooks = join(isolated, 'hooks')
+      mkdirSync(hooks, { recursive: true, mode: 0o700 })
+      env = {
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        HOME: isolated,
+        TMPDIR: `${isolated}/`,
+        XDG_CONFIG_HOME: configHome,
+        GH_CONFIG_DIR: join(configHome, 'gh'),
+        GLAB_CONFIG_DIR: join(configHome, 'glab'),
+        LANG: process.env.LANG ?? 'C',
+        LC_ALL: process.env.LC_ALL ?? 'C',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_SYSTEM: '/dev/null',
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_PAGER: 'cat',
+        GIT_EDITOR: 'true',
+        GIT_SEQUENCE_EDITOR: 'true',
+        GH_PAGER: 'cat',
+        GH_EDITOR: 'true',
+        GLAB_PAGER: 'cat',
+        GLAB_CHECK_UPDATE: 'false',
+        GLAB_SEND_TELEMETRY: 'false',
+        GH_NO_UPDATE_NOTIFIER: '1',
+        EDITOR: 'true',
+        VISUAL: 'true',
+      }
+      if (argv[0] === 'git') {
+        command = [
+          'git', '-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${hooks}`, '-c', 'diff.external=', '-c', 'core.sshCommand=',
+          '-c', 'credential.helper=', '-c', 'protocol.ext.allow=never', '-c', 'core.gitProxy=', ...argv.slice(1),
+        ]
+      } else if (providerAuth) {
+        const userConfig = argv[0] === 'gh' ? (process.env.GH_CONFIG_DIR ?? join(xdgConfigHome(), 'gh')) : (process.env.GLAB_CONFIG_DIR ?? join(xdgConfigHome(), 'glab-cli'))
+        if (argv[0] === 'gh') env.GH_CONFIG_DIR = userConfig
+        else env.GLAB_CONFIG_DIR = userConfig
+        secrets = providerSecrets(userConfig)
+      }
+    }
+    try {
+      const result = spawnSync(command[0], command.slice(1), { cwd, encoding: 'utf8', timeout: SHELL_TIMEOUT_MS, shell: false, env })
+      if (result.error && result.error.code === 'ENOENT') throw new DevBridgeError('BACKEND_UNAVAILABLE', undefined, `${argv[0]} is not installed`)
+      const redact = (text) => secrets.reduce((acc, secret) => acc.split(secret).join('[redacted]'), text ?? '')
+      const stdout = redact(result.stdout)
+      const stderr = redact(result.stderr)
+      return {
+        exitCode: result.status ?? 126,
+        stdout: stdout.slice(0, SHELL_OUTPUT_CHARS),
+        stderr: stderr.slice(0, SHELL_OUTPUT_CHARS),
+        ...(stdout.length > SHELL_OUTPUT_CHARS || stderr.length > SHELL_OUTPUT_CHARS ? { truncated: true } : {}),
+      }
+    } finally {
+      if (isolated) rmSync(isolated, { recursive: true, force: true })
     }
   }
 
@@ -229,7 +391,14 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
       if (error instanceof ShellPolicyError) throw new DevBridgeError('CAPABILITY_DENIED', 'policy', error.message)
       throw error
     }
+    // Policy, not execution: a workspace Git config that selects a program
+    // is refused before anything runs, whichever runner is in use.
+    if (argv[0] === 'git') assertPublicGitConfigSafe(root, root)
     return (runShell ?? defaultRunShell)(argv, root)
+  }
+
+  function xdgConfigHome() {
+    return process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config')
   }
 
   /** One `navide/host/call` `params`; returns `{ value }` or `{ error: { code, reason?, message? } }`. */

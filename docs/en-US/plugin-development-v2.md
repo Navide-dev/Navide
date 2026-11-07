@@ -203,7 +203,7 @@ navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
-navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes]
+navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]
 ```
 
 Every staging directory includes an `artifact-files.json` control file with one

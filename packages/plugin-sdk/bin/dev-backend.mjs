@@ -192,7 +192,7 @@ function meta() {
  * Returns a session with `call`, `subscribe` and `close`; every frame the
  * backend sends is reported through `onOutput(kind, detail)`.
  */
-export async function startDevBackend({ directory, manifest, dataDir, onOutput, platform, probe, workspace = null, allowWrites = false, runShell }) {
+export async function startDevBackend({ directory, manifest, dataDir, onOutput, platform, probe, workspace = null, allowWrites = false, providerAuth = false, runShell }) {
   if (!manifest.backend) throw new Error(`${manifest.id} has no backend`)
   const packageDir = realpathSync(directory)
   const entryFile = realpathSync(join(packageDir, backendEntryForTarget(manifest.backend.entry)))
@@ -202,7 +202,7 @@ export async function startDevBackend({ directory, manifest, dataDir, onOutput, 
   const canonicalDataDir = realpathSync(dataDir)
   const paths = { packageDir, dataDir: canonicalDataDir, entryFile }
   const bridge = createDevBridge({
-    manifest, workspaceRoot: workspace, allowWrites, activityFile: join(canonicalDataDir, 'activity.jsonl'), dataDir: canonicalDataDir, runShell,
+    manifest, workspaceRoot: workspace, allowWrites, providerAuth, activityFile: join(canonicalDataDir, 'activity.jsonl'), dataDir: canonicalDataDir, runShell,
   })
   const sandbox = resolveDevSandbox(paths, platform, probe)
   if (sandbox instanceof Error) throw sandbox
@@ -410,10 +410,11 @@ export async function runDevBackend(directory, manifest, options) {
   const dataDir = options.dataDir ?? defaultDataDir(directory)
   const session = await startDevBackend({
     directory, manifest, dataDir, onOutput: print, workspace: options.workspace ?? null, allowWrites: options.allowWrites === true,
+    providerAuth: options.providerAuth === true,
   })
   console.log(`Backend ${manifest.id}@${manifest.version} is running in the ${session.sandbox} sandbox (data: ${dataDir}).`)
   console.log(options.workspace
-    ? `Host bridge: workspace ${resolve(options.workspace)}${options.allowWrites ? ' (writes allowed)' : ' (read-only; --allow-writes to change files)'}; every request is in ${join(dataDir, 'activity.jsonl')}.`
+    ? `Host bridge: workspace ${resolve(options.workspace)}; file writes ${options.allowWrites ? 'allowed' : 'refused (--allow-writes to grant them)'}; declared shell commands run${options.providerAuth ? ' with your gh/glab sign-in' : ' without your gh/glab sign-in (--provider-auth)'}; every request is in ${join(dataDir, 'activity.jsonl')}.`
     : `Host bridge: denied (no --workspace); requests are still listed in ${join(dataDir, 'activity.jsonl')}.`)
   for (const event of options.subscribe ?? []) {
     await session.subscribe(event)

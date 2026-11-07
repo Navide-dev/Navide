@@ -142,3 +142,64 @@ describe('the ported public shell policy', () => {
     expect(() => validatePublicArgv(['npm', 'run', 'x'])).toThrow('not allowlisted')
   })
 })
+
+describe('dev-bridge execution hardening (security review of eeb2b0896)', () => {
+  it('runs git, gh and glab in an isolated environment with the Host overrides, and declared executables as the user', async () => {
+    const root = workspace()
+    const bridge = createDevBridge({ manifest: manifest({ system: ['fs'], shell: { mode: 'allowlist', executables: ['npm'] } }), workspaceRoot: root })
+    const spawnPath = join(root, 'spy.sh')
+    // A spy that records argv and the environment, installed as `git`, `gh` and `npm` on a private PATH.
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const spyOut = join(root, 'spy.out')
+    writeFileSync(spawnPath, `#!/bin/sh\nprintf "%s\\n" "$0" "$@" > "${spyOut}"\nenv >> "${spyOut}.env"\n`, { mode: 0o755 })
+    for (const name of ['git', 'gh', 'npm']) symlinkSync(spawnPath, join(bin, name))
+    const previous = { PATH: process.env.PATH, NAVIDE_SPY_MARK: process.env.NAVIDE_SPY_MARK }
+    process.env.PATH = `${bin}:${process.env.PATH}`
+    process.env.NAVIDE_SPY_MARK = 'present'
+    try {
+      await expect(bridge.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
+      const argv = readFileSync(spyOut, 'utf8').trim().split('\n')
+      expect(argv.slice(1)).toEqual(['-c', 'core.fsmonitor=false', '-c', expect.stringMatching(/^core\.hooksPath=/), '-c', 'diff.external=', '-c', 'core.sshCommand=', '-c', 'credential.helper=', '-c', 'protocol.ext.allow=never', '-c', 'core.gitProxy=', 'status'])
+      const env = Object.fromEntries(readFileSync(`${spyOut}.env`, 'utf8').trim().split('\n').map((line) => line.split(/=(.*)/s).slice(0, 2) as [string, string]))
+      expect(env.GIT_CONFIG_GLOBAL).toBe('/dev/null')
+      expect(env.GIT_CONFIG_NOSYSTEM).toBe('1')
+      expect(env.GIT_TERMINAL_PROMPT).toBe('0')
+      expect(env.HOME).not.toBe(process.env.HOME)
+      expect(env.NAVIDE_SPY_MARK).toBeUndefined()
+      expect(existsSync(env.HOME)).toBe(false) // the throw-away home is removed after the run
+
+      rmSync(`${spyOut}.env`)
+      await expect(bridge.handle(request('shell', 'run', { command: 'gh pr list' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
+      const ghEnv = Object.fromEntries(readFileSync(`${spyOut}.env`, 'utf8').trim().split('\n').map((line) => line.split(/=(.*)/s).slice(0, 2) as [string, string]))
+      expect(ghEnv.GH_CONFIG_DIR).toMatch(/navide-public-cli-/) // not the user's sign-in without --provider-auth
+
+      rmSync(`${spyOut}.env`)
+      await expect(bridge.handle(request('shell', 'run', { command: 'npm test' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
+      const npmEnv = Object.fromEntries(readFileSync(`${spyOut}.env`, 'utf8').trim().split('\n').map((line) => line.split(/=(.*)/s).slice(0, 2) as [string, string]))
+      expect(npmEnv.NAVIDE_SPY_MARK).toBe('present') // a declared executable runs with the user's environment
+    } finally {
+      process.env.PATH = previous.PATH
+      if (previous.NAVIDE_SPY_MARK === undefined) delete process.env.NAVIDE_SPY_MARK
+      else process.env.NAVIDE_SPY_MARK = previous.NAVIDE_SPY_MARK
+    }
+  })
+
+  it('refuses git when the workspace .git/config selects a program, and a dangling link as a write target', async () => {
+    const root = workspace()
+    mkdirSync(join(root, '.git'))
+    writeFileSync(join(root, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n\thooksPath = /tmp/evil\n')
+    const bridge = createDevBridge({
+      manifest: manifest({ system: ['fs'], shell: 'allowlist' }), workspaceRoot: root, allowWrites: true,
+      runShell: () => { throw new Error('must not run') },
+    })
+    await expect(bridge.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'policy' } })
+    writeFileSync(join(root, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n')
+    const ran = createDevBridge({ manifest: manifest({ system: ['fs'], shell: 'allowlist' }), workspaceRoot: root, runShell: () => ({ exitCode: 0, stdout: '', stderr: '' }) })
+    await expect(ran.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
+
+    symlinkSync('/tmp/navide-dev-bridge-escape.txt', join(root, 'dangling.txt'))
+    await expect(bridge.handle(request('filesystem', 'write_file', { rel_path: 'dangling.txt', content: 'x' }))).resolves.toEqual({ error: { code: 'WORKSPACE_SCOPE_VIOLATION' } })
+    expect(existsSync('/tmp/navide-dev-bridge-escape.txt')).toBe(false)
+  })
+})
