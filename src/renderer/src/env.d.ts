@@ -585,6 +585,10 @@ declare global {
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
+        /** Run a pipeline's plugin node on the contributing plugin's backend. */
+        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string }) => Promise<
+          { ok: true; output: unknown } | { ok: false; code: string; message: string }
+        >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>

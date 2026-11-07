@@ -4918,6 +4918,12 @@ export function registerPluginIpc(
     return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
   })
 
+  // A pipeline run in a Navide window reached a plugin node (contributes.pipelineNodes).
+  ipcMain.handle('plugins:runPipelineNode', async (event, args: unknown) => {
+    assertAuthorized(event)
+    return manager.runPipelineNode(args)
+  })
+
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
   // the Marketplace switch below; the package stays loaded and the Host stops
   // offering, mounting and serving it (FrontendPluginManager.isBuiltinPluginDisabled).

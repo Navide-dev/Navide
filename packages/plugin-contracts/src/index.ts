@@ -94,6 +94,24 @@ export type PluginManifestV2ApiMethod = {
   description: string
 }
 
+/** A deterministic pipeline step this plugin contributes. The Host calls
+ *  `method` (also listed in `backend.methods`) with `{ input: string }`, the
+ *  node's expanded input, and the JSON it returns becomes the node's output,
+ *  treated as external content. No backend (Windows) means the node is
+ *  unavailable there and fails at once. */
+export type PluginManifestV2PipelineNode = {
+  /** Unique within the plugin; what a pipeline graph's plugin node names. */
+  id: string
+  title: string
+  description?: string
+  method: string
+  /** 1000..600000; the Host's backend call default when absent. */
+  timeoutMs?: number
+  /** n8n node types (e.g. `n8n-nodes-base.httpRequest`) this node can stand in
+   *  for when a workflow is imported. */
+  n8nTypes?: string[]
+}
+
 export type PluginManifestV2Receiver = {
   protocolVersion: 1
   locations: (typeof V2_RECEIVER_LOCATIONS)[number][]
@@ -141,7 +159,12 @@ export type PluginManifestV2 = {
     categories?: string[]
     icon?: string
   }
-  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[]; api?: PluginManifestV2ApiMethod[] }
+  contributes?: {
+    views: PluginManifestV2View[]
+    commands?: PluginManifestV2Command[]
+    api?: PluginManifestV2ApiMethod[]
+    pipelineNodes?: PluginManifestV2PipelineNode[]
+  }
   backend?: {
     entry: string
     protocolVersion: 1

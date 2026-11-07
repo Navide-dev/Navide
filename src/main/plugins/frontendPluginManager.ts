@@ -9,7 +9,7 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
-import type { PluginManifestV2Command } from '../../../packages/plugin-contracts/src/index'
+import type { PluginManifestV2Command, PluginManifestV2PipelineNode } from '../../../packages/plugin-contracts/src/index'
 import type { PluginCommandEntry, PluginCommandRunResult } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
@@ -283,6 +283,8 @@ export interface PluginLaunchDescriptor {
   displayName?: string
   /** `contributes.api` method names other plugins may call (`plugins.call`). */
   api?: string[]
+  /** `contributes.pipelineNodes`: deterministic steps a pipeline may run. */
+  pipelineNodes?: PluginManifestV2PipelineNode[]
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -7815,18 +7817,84 @@ export class FrontendPluginManager {
 
   /** `plugins.call`: forward to the target's backend for the caller's
    *  workspace. The broker already checked the caller (permissions.plugins and
-   *  the package-version grant); this checks the target is installed, enabled
-   *  and offers the method in contributes.api, and answers BACKEND_UNAVAILABLE
-   *  at once where the target has no backend (Windows) instead of waiting. The
-   *  call is recorded in the caller's Activity as plugins.call and in the
-   *  target's as a backend call. */
+   *  the package-version grant); {@link callContributedMethod} checks the
+   *  target. The call is recorded in the caller's Activity as plugins.call and
+   *  in the target's as a backend call. */
   private async runInterPluginCall(
     plan: PublicCapabilityExecutionPlan,
     caller: RunningPlugin,
     workspacePath: string,
   ): Promise<JsonValue> {
-    const targetId = String(plan.args.pluginId)
-    const method = String(plan.args.method)
+    const result = await this.callContributedMethod(
+      caller.id,
+      String(plan.args.pluginId),
+      (descriptor) => descriptor.api ?? [],
+      String(plan.args.method),
+      workspacePath,
+      plan.args.args as JsonValue,
+      // A person in the caller's view, or the agent driving it (which the
+      // broker allowed only under a full Execution Policy).
+      plan.initiator ?? HOST_USER_INITIATOR,
+    )
+    return { result }
+  }
+
+  /** A pipeline run reached a plugin node (contributes.pipelineNodes): run the
+   *  node's backend method for the run's workspace with the node's expanded
+   *  input. The output is external content; the renderer marks it so. A
+   *  target with no backend here (Windows) answers BACKEND_UNAVAILABLE at once,
+   *  so the run fails that node (or takes its error edge) instead of hanging. */
+  async runPipelineNode(request: unknown): Promise<
+    { ok: true; output: JsonValue } | { ok: false; code: string; message: string }
+  > {
+    const record = typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {}
+    const { workspacePath, pluginId, node, input } = record
+    if (
+      Object.keys(record).some((key) => !['workspacePath', 'pluginId', 'node', 'input'].includes(key)) ||
+      !nonEmptyString(workspacePath) || !nonEmptyString(pluginId) || !nonEmptyString(node) ||
+      typeof input !== 'string'
+    ) {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: 'malformed pipeline node request' }
+    }
+    let contributed: { method: string; timeoutMs: number } | undefined
+    try {
+      const output = await this.callContributedMethod(
+        null,
+        pluginId,
+        (descriptor) => {
+          contributed = descriptor.pipelineNodes?.find((entry) => entry.id === node)
+          return contributed ? [contributed.method] : []
+        },
+        () => contributed?.method ?? '',
+        workspacePath,
+        { input },
+        HOST_USER_INITIATOR,
+        () => contributed?.timeoutMs,
+      )
+      return { ok: true, output }
+    } catch (error) {
+      if (error instanceof InterPluginCallError) return { ok: false, code: error.code, message: error.message }
+      return { ok: false, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }
+    }
+  }
+
+  /** Call a method another installed plugin offers (its contributes.api, or a
+   *  pipeline node's method) on that plugin's backend for `workspacePath`. The
+   *  target must be installed, enabled, offer the method, have a backend on
+   *  this machine, and hold the user's Grant for this exact version (with fs
+   *  when it declares fs). Failures are InterPluginCallErrors. */
+  private async callContributedMethod(
+    callerId: string | null,
+    targetId: string,
+    offered: (descriptor: PluginLaunchDescriptor) => readonly string[],
+    method: string | (() => string),
+    workspacePath: string,
+    args: JsonValue,
+    initiator: AuthenticatedInitiator,
+    timeoutMs?: () => number | undefined,
+  ): Promise<JsonValue> {
     const descriptor = this.descriptors.get(targetId)
     const usable = descriptor && descriptor.capabilityPolicy?.kind === 'manifest-v2' &&
       !this.isPluginDisabled(targetId) && nonEmptyString(descriptor.packageVersion) &&
@@ -7834,12 +7902,14 @@ export class FrontendPluginManager {
     const activation = usable
       ? this.pluginBackendHost.activationFor(targetId, descriptor.packageVersion!, descriptor.packageDir!)
       : undefined
-    const refusal = interPluginTargetError(caller.id, usable ? {
+    const api = usable ? offered(descriptor) : []
+    const name = typeof method === 'function' ? method() : method
+    const refusal = interPluginTargetError(callerId ?? '', usable ? {
       pluginId: targetId,
-      api: descriptor.api ?? [],
-      backendMethods: activation?.approvedMethods ?? [...(descriptor.api ?? [])],
+      api,
+      backendMethods: activation?.approvedMethods ?? [...api],
       backendAvailable: activation !== undefined && !this.isPackageVersionStopping(targetId, descriptor.packageVersion!),
-    } : null, method)
+    } : null, name)
     if (refusal) throw refusal
     const root = resolve(workspacePath)
     const workspaceId = this.workspaceIdForPath(root)
@@ -7854,16 +7924,15 @@ export class FrontendPluginManager {
     ) {
       throw new InterPluginCallError('METHOD_NOT_FOUND', `'${targetId}' is not approved by the user`)
     }
+    const limit = timeoutMs?.()
     try {
       const instanceId = await this.bindHeadlessApiBackend(
         targetId, descriptor!.packageVersion!, descriptor!.packageDir!, root, workspaceId,
       )
-      // The caller's initiator: a person in the caller's view, or the agent
-      // driving it (which the broker allowed only under a full policy).
-      const result = await this.pluginBackendHost.call(instanceId, method, plan.args.args as JsonValue, {
-        initiator: plan.initiator ?? HOST_USER_INITIATOR,
+      return await this.pluginBackendHost.call(instanceId, name, args, {
+        initiator,
+        ...(limit === undefined ? {} : { timeoutMs: limit }),
       })
-      return { result }
     } catch (error) {
       throw interPluginBackendError(error instanceof BackendPluginError ? error.code : undefined)
     }

@@ -110,8 +110,10 @@ function planFor(graph: PipelineGraph, stages: readonly Stage[]): DagPlan | null
     if (labels.length !== want.length || labels.some((l, i) => l !== want[i])) return null
   }
   const gateIds = graph.nodes.filter((n) => n.kind === 'gate' && n.id in nodeLayer).map((n) => n.id)
+  // Plugin nodes are calls too: the run stops at each one, the Host runs it on
+  // the contributing plugin's backend, and the run goes on.
   const callIds = graph.nodes
-    .filter((n) => n.kind === 'subpipeline' && n.id in nodeLayer)
+    .filter((n) => (n.kind === 'subpipeline' || n.kind === 'plugin') && n.id in nodeLayer)
     .map((n) => n.id)
     .sort((a, b) => nodeLayer[a] - nodeLayer[b])
   const hasBranching = hasBranchingEdges(graph)
@@ -286,8 +288,8 @@ export function upstreamSlotNodes(plan: DagPlan, nodeId: string): string[] {
       if (!isForwardEdge(e) || e.to !== id || seen.has(e.from)) continue
       seen.add(e.from)
       const n = node(plan, e.from)
-      // A subpipeline node hands on its child run's output, as a slot does.
-      if (n?.kind === 'slot' || n?.kind === 'subpipeline') out.push(n.id)
+      // A subpipeline or plugin node hands on its output, as a slot does.
+      if (n?.kind === 'slot' || n?.kind === 'subpipeline' || n?.kind === 'plugin') out.push(n.id)
       else visit(e.from)
     }
   }

@@ -16492,7 +16492,43 @@ async function failRunOnCall(nodeId: string, label: string, reason: string): Pro
  *  (pipelineDag.nextCall): call it, or fail the run on it. */
 async function takeCall(call: NonNullable<ReturnType<typeof pipelineDag.nextCall>>, nextIndex: number): Promise<void> {
   if (call.kind === 'fail') await failRunOnCall(call.nodeId, call.label, call.reason)
+  else if (call.kind === 'plugin') await runPluginNode(call, nextIndex)
   else await startChildRun(call, nextIndex)
+}
+
+/** Run plugin node `call.nodeId` in place (no child run): the Host calls the
+ *  contributing plugin's backend with the node's expanded input. Its output is
+ *  external content, so it is recorded as the node's output and summary only,
+ *  never as an instruction. A failure is retried or routed like a sub-pipeline
+ *  failure; a plugin without a backend here (Windows) fails at once. Then the
+ *  hand-off to stage `nextIndex` goes on: the next call, or the stage. */
+async function runPluginNode(
+  call: { nodeId: string; label: string; pluginId: string; node: string; input: string; note: string },
+  nextIndex: number,
+): Promise<void> {
+  pipelineDag.callStarted(call.nodeId)
+  pipelineLog(`◇ Plugin node "${call.label}" → ${call.pluginId} ${call.node}`)
+  const run = window.agentTeam?.plugins?.runPipelineNode
+  const answer = run
+    ? await run({ workspacePath: pipeline.workspacePath, pluginId: call.pluginId, node: call.node, input: call.input })
+        .catch(() => ({ ok: false as const, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }))
+    : { ok: false as const, code: 'BACKEND_UNAVAILABLE', message: 'plugin nodes are unavailable in this window' }
+  if (pipeline.state !== 'running') return
+  if (answer.ok) {
+    const summary = typeof answer.output === 'string' ? answer.output : JSON.stringify(answer.output)
+    pipelineDag.callFinished(call.nodeId, { status: 'done', output: answer.output, summary: `[external content from ${call.pluginId}]\n${summary}` })
+    pipelineLog(`◇ Plugin node "${call.label}" ✓`)
+  } else {
+    pipelineDag.callFinished(call.nodeId, { status: 'failed', error: `${answer.code}: ${answer.message}` })
+    pipelineLog(`◇ Plugin node "${call.label}" ✕ ${answer.code}: ${answer.message}`)
+  }
+  const next = pipelineDag.nextCall(nextIndex)
+  if (next) {
+    await takeCall(next, nextIndex)
+    return
+  }
+  if (nextIndex === pipeline.stageIndex + 1) await onPipelineNext()
+  else await activateStage(nextIndex)
 }
 
 /** Suspend this run at subpipeline node `call.nodeId` and start its child

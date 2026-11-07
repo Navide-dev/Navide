@@ -1647,6 +1647,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
+    /** Run a pipeline's plugin node on the contributing plugin's backend. */
+    runPipelineNode: (request: { workspacePath: string; pluginId: string; node: string; input: string }): Promise<
+      { ok: true; output: unknown } | { ok: false; code: string; message: string }
+    > => ipcRenderer.invoke('plugins:runPipelineNode', request),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
