@@ -12,14 +12,22 @@ The full contract is `docs/en-US/plugin-development-v2.md` in the Navide
 repository (about 2,700 lines); this skill is the short path through it. When
 the two disagree, the spec wins.
 
+For a person, the one entry page is Build for Navide
+(https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md):
+the whole flow from `init` to a listed extension. Point the user there, and to
+https://developers.navide.dev/developer for the publishing steps (developer
+application, namespace, signing key, review), instead of explaining them from
+memory.
+
 ## 1. Start from the smallest thing that works
 
 ```text
-npx navide-plugin init acme-hello --id acme.hello
+npx navide-plugin init acme-hello --id acme.hello              # no build step
+npx navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
 ```
 
-That writes a frontend-only plugin that validates and packages as written
-(add `--template vue` for a buildable Vue view + Python backend + agent tool +
+The first writes a frontend-only plugin that validates and packages as written
+(the `--template vue` one is a buildable Vue view + Python backend + agent tool +
 tests; its README lists the npm scripts, and `docs/en-US/build-for-navide.md`
 is the one-page walkthrough):
 
@@ -114,7 +122,9 @@ needs is `docs/plugin-contracts/capabilities-v1.json`.
    `dist/package` with the shape above and its own `artifact-files.json`.
 2. Check it: call the `plugins_validate_package` tool with the folder's
    absolute path (or run `npx navide-plugin validate <folder>`). Fix every
-   error before going on; it is read-only.
+   error before going on; it is read-only. Then run
+   `npx navide-plugin scan <folder>`: it lists what the code does that the
+   manifest does not declare (shown in red to users); keep that list empty.
 3. Load it into Navide. Loading code from a folder needs **Developer Mode**,
    which only the user can turn on: call `plugins_developer_mode_open`, tell
    the user what you want to load and why, and stop. Once it is on, call
@@ -131,7 +141,8 @@ needs is `docs/plugin-contracts/capabilities-v1.json`.
 5. To hand it over as a file, call `plugins_package` (or
    `npx navide-plugin package <folder>`); install a `.vsix` the same way with
    `plugins_install_file_fill`. Signing and publishing to the Marketplace are
-   the user's decision; see `docs/en-US/marketplace-publishing.md`.
+   the user's decision; see section 4 of `docs/en-US/build-for-navide.md` and
+   https://developers.navide.dev/developer.
 
 ## 5. When something fails
 
@@ -141,7 +152,10 @@ needs is `docs/plugin-contracts/capabilities-v1.json`.
   lists every refused call.
 - A backend's stderr and restarts are in Navide's main log on lines starting
   with `[plugin-backend]`. `npx navide-plugin dev-backend <folder> --call
-  <method>` runs a built backend alone, with every Host request refused.
+  <method>` runs a built backend alone in Navide's sandbox, with every Host
+  request refused; add `--workspace <dir>` (and `--allow-writes`) to have its
+  Host requests answered under Navide's own rules. Every request is listed in
+  `<data>/activity.jsonl`.
 - A view's console is reachable through Chrome DevTools Protocol (Settings →
   MCP → External access); ask the user before turning it on, because while it
   is on anything on the machine can run code in Navide.

@@ -25,6 +25,18 @@ The root [README](../../README.md) introduces the product and current distributi
 | [Import from n8n](import-from-n8n.md) | Turn an exported n8n workflow into a pipeline: preview, credentials, external-content taint, n8n MCP |
 | [Troubleshooting](troubleshooting.md) | Resolve startup, permissions, agent-session, analyzer, and token-tracking problems |
 
+## Build for Navide
+
+Start with the first row: it is the one page for the whole flow, and the others are the reference it links to.
+
+| Document | Purpose |
+|---|---|
+| [Build for Navide](build-for-navide.md) | Start here as a plugin author: one page from `npx navide-plugin init` through self-checks, Developer Mode, and the Marketplace's application, Testplace, review, update and yank steps |
+| [Plugin ideas](plugin-ideas.md) | The plugins Navide's team would like to see, with the capabilities each needs and what blocks it |
+| [Plugin development v2](plugin-development-v2.md) | Use the public contracts, SDK, UI package, and external frontend package workflow |
+| [Publishing to the Navide Marketplace](marketplace-publishing.md) | Scaffold, package, sign, and publish a plugin with `navide-plugin`, then pass review |
+| [Plugin development (legacy)](plugin-development.md) | Manifest v1 notes, kept for existing plugins: build a frontend view plugin or a backend plugin, then package and sign it |
+
 ## Trust and safety
 
 | Document | Purpose |
@@ -46,11 +58,6 @@ The root [README](../../README.md) introduces the product and current distributi
 | [CLI integration records](cli-extension-guide.md) | Per-vendor integration records: install routes, resume syntax, session storage formats |
 | [CLI vendor matrix](cli-vendor-matrix.md) | See every shipped CLI, the command it runs, and the capabilities its spec declares |
 | [Glossary](glossary.md) | One term per concept: Navide plugins, Agent Assets, CLI extensions, and the words never to use bare |
-| [Build for Navide](build-for-navide.md) | Start here as a plugin author: one page from `npx navide-plugin init` through self-checks, Developer Mode, and the Marketplace's application, Testplace, review, update and yank steps |
-| [Plugin ideas](plugin-ideas.md) | The plugins Navide's team would like to see, with the capabilities each needs and what blocks it |
-| [Plugin development](plugin-development.md) | Build a frontend view plugin or a backend plugin, then package and sign it |
-| [Plugin development v2](plugin-development-v2.md) | Use the public contracts, SDK, UI package, and external frontend package workflow |
-| [Publishing to the Navide Marketplace](marketplace-publishing.md) | Scaffold, package, sign, and publish a plugin with `navide-plugin`, then pass review |
 | [Navide plugin agent tools and disclosure contract](plugin-agent-tools-contract.md) | Planned `backend.agentTools`, the disclosure data, Host messages and audit tables (contract only, not wired yet) |
 | [External MCP control](external-mcp-control.md) | Connect an external MCP client to control a running Navide window, and understand the security model |
 | [Release guide](releases.md) | Version, package, sign, notarize, publish, and recover a release |
