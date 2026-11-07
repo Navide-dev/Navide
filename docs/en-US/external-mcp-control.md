@@ -570,8 +570,9 @@ and let the user do it there.
 
 A bot credential never reaches the caller: each bot's settings (where its
 secret hint lives) are left out, any key named like a credential is dropped,
-and credential-shaped text — a Telegram bot token quoted in a `last_error`,
-say — reads `[redacted]`. Both answer `{ok: false, error_code:
+and text is masked — every secret a running bot registered (whatever the
+platform), a `/bot<token>/` URL segment, and anything shaped like a Telegram,
+Slack or Discord token reads `<redacted>` or `[redacted]`. Both answer `{ok: false, error_code:
 "channels-not-running"}` while the channel gateway is not running.
 
 ### Navide Marketplace (read-only)

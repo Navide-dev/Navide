@@ -7,8 +7,9 @@ Settings → Channels page reads over channels.list / channels.bindings.
 
 A bot credential never leaves the Host: each bot's ``config`` (where its
 secret hint lives) is left out, any key named like a credential is dropped,
-and credential-shaped text (a status ``last_error`` that quotes a request URL,
-say) is redacted before it is returned.
+and text is redacted before it is returned: every secret a running bot has
+registered with channels.redact (whatever its platform or shape), a bot-token
+URL segment, and anything shaped like a Telegram, Slack or Discord token.
 
 Registered on the core server by the import at the end of server.py.
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..channels import redact
 from . import server as core
 from .marketplace_forms import _without_secrets
 
@@ -41,7 +43,7 @@ def _redact(value: Any) -> Any:
     if isinstance(value, list):
         return [_redact(v) for v in value]
     if isinstance(value, str):
-        return _CHANNEL_SECRET_TEXT.sub("[redacted]", value)
+        return _CHANNEL_SECRET_TEXT.sub("[redacted]", redact.redact_text(value))
     return value
 
 
@@ -89,8 +91,8 @@ async def channels_status() -> dict[str, Any]:
     identity, ...}, bot_id (Telegram only), bindings: [{pane_id, pane_name,
     pane_exists, workspace_path, workspace_name, chat_title, created_at}],
     last_activity_at}. A platform with no bot set up lists none. No bot token
-    or other credential is ever part of the answer; credential-shaped text in
-    an error is shown as [redacted]. {ok: false, error_code:
+    or other credential is ever part of the answer; a secret quoted in an
+    error is shown as <redacted> or [redacted]. {ok: false, error_code:
     "channels-not-running"} when the channel gateway is not running.
     """
     manager = _manager()

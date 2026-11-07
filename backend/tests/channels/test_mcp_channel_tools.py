@@ -95,7 +95,7 @@ async def test_status_never_carries_a_token(live: Env) -> None:
     assert REAL_TOKEN not in text and "tok-A" not in text
     assert not any("token" in k.lower() or "secret" in k.lower() for k in _keys(out))
     bot_x = next(b for p in out["platforms"] for b in p["bots"] if b["account"] == "bot-x")
-    assert bot_x["status"]["last_error"] == "HTTP 409 from https://api.telegram.org/bot[redacted]/getUpdates"
+    assert bot_x["status"]["last_error"] == "HTTP 409 from https://api.telegram.org/bot<redacted>/getUpdates"
     assert "config" not in bot_x
 
 
@@ -123,5 +123,17 @@ async def test_without_the_gateway_each_tool_says_so(name: str, monkeypatch) -> 
     "xapp-1-A0123456789-abcdef",
     "MTA1234567890123456789012.GaBcDe.abcdefghijklmnopqrstuvwxyz0123",
 ])
-def test_scrub_redacts_each_platforms_credential_shape(text: str) -> None:
+def test_scrub_redacts_each_platforms_credential_shape(text: str, monkeypatch) -> None:
+    from agent_team_backend.channels import redact
+
+    # Unregistered: only the shape can catch it.
+    monkeypatch.setattr(redact, "_filter", redact.SecretRedactFilter())
     assert channel_tools._scrub({"e": f"failed: {text}"}) == {"e": "failed: [redacted]"}
+
+
+def test_scrub_masks_a_secret_a_bot_registered_whatever_its_shape(monkeypatch) -> None:
+    from agent_team_backend.channels import redact
+
+    monkeypatch.setattr(redact, "_filter", redact.SecretRedactFilter())
+    redact.add_secret("matrix-access-Qz9")
+    assert channel_tools._scrub({"e": "login failed for matrix-access-Qz9"}) == {"e": "login failed for <redacted>"}
