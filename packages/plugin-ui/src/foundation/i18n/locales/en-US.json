@@ -8741,6 +8741,7 @@
     "run-group-active": "Running — an agent in this group is active",
     "run-group-awaiting": "Needs you — an agent in this group is blocked on a permission or a question",
     "agent-not-installed": "{label} — not installed",
+    "cloud-agents-plugin-hint": "Cloud agents (Grok Bot, dots and others) come as Navide plugins: install them from the Navide Marketplace.",
     "select-role": "Select role…",
     "waiting-backend": "Waiting for backend…",
     "set-workspace-first": "Set workspace path first",

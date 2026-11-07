@@ -8741,6 +8741,7 @@
     "run-group-active": "Läuft – ein Agent in dieser Gruppe ist aktiv",
     "run-group-awaiting": "Benötigt Sie – ein Agent in dieser Gruppe wartet auf eine Berechtigung oder eine Antwort",
     "agent-not-installed": "{label} – nicht installiert",
+    "cloud-agents-plugin-hint": "Cloud-Agents (Grok Bot, dots und weitere) gibt es als Navide-Plug-in im Navide Marketplace.",
     "select-role": "Rolle auswählen …",
     "waiting-backend": "Warten auf Backend …",
     "set-workspace-first": "Zuerst Arbeitsbereichspfad festlegen",

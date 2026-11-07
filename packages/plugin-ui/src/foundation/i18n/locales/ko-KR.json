@@ -8741,6 +8741,7 @@
     "run-group-active": "실행 중 — 이 그룹의 agent가 작업하고 있어요",
     "run-group-awaiting": "확인 필요 — 이 그룹의 agent가 권한이나 질문 때문에 멈춰 있어요",
     "agent-not-installed": "{label} — 설치되지 않음",
+    "cloud-agents-plugin-hint": "클라우드 에이전트(Grok Bot, dots 등)는 Navide 마켓플레이스에서 해당 Navide 플러그인을 설치하세요.",
     "select-role": "역할 선택…",
     "waiting-backend": "백엔드를 기다리는 중…",
     "set-workspace-first": "먼저 작업 영역 경로를 설정하세요",

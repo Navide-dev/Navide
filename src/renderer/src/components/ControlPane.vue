@@ -2680,11 +2680,12 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
  *  456px) plus the fixed furniture around it — role picker, two dividers,
- *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
+ *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 546
+const ADD_MENU_MAX_H = 618
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
@@ -4409,6 +4410,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             </span>
           </button>
         </div>
+        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
+             ship as Navide plugins, so the menu points there. -->
+        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -6564,6 +6568,7 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
+.ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */

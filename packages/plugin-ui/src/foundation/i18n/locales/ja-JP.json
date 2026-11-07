@@ -8741,6 +8741,7 @@
     "run-group-active": "実行中 — このグループのエージェントが稼働しています",
     "run-group-awaiting": "対応が必要 — このグループのエージェントが許可または質問への回答を待っています",
     "agent-not-installed": "{label} — 未インストール",
+    "cloud-agents-plugin-hint": "クラウドエージェント（Grok Bot、dots など）は Navide マーケットプレイスで対応する Navide プラグインをインストールしてください。",
     "select-role": "ロールを選択…",
     "waiting-backend": "バックエンドを待機中…",
     "set-workspace-first": "まずワークスペースのパスを設定してください",

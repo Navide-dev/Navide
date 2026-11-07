@@ -8741,6 +8741,7 @@
     "run-group-active": "Đang chạy — một agent trong nhóm này đang hoạt động",
     "run-group-awaiting": "Cần bạn — một agent trong nhóm này đang chờ cấp quyền hoặc trả lời câu hỏi",
     "agent-not-installed": "{label} — chưa cài",
+    "cloud-agents-plugin-hint": "Tác tử đám mây (Grok Bot, dots và các tác tử khác) được cài dưới dạng plugin Navide từ Navide Marketplace.",
     "select-role": "Chọn vai trò…",
     "waiting-backend": "Đang chờ backend…",
     "set-workspace-first": "Hãy đặt đường dẫn workspace trước",

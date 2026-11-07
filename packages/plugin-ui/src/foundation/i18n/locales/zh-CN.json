@@ -8741,6 +8741,7 @@
     "run-group-active": "运行中 — 这个分组有 agent 正在跑",
     "run-group-awaiting": "等待回应 — 这个分组有 agent 卡在权限确认或问题上",
     "agent-not-installed": "{label}（未安装）",
+    "cloud-agents-plugin-hint": "云端代理（Grok Bot、dots 等）请到 Navide 市场安装对应的 Navide 插件。",
     "select-role": "选择角色…",
     "waiting-backend": "等待后端…",
     "set-workspace-first": "请先设置工作区路径",
