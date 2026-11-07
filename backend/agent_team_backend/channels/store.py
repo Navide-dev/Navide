@@ -186,8 +186,7 @@ class Binding:
     def public(self) -> dict[str, Any]:
         return {"pane_id": self.pane_id, "platform": self.platform, "account": self.account,
                 "chat_id": self.chat_id, "thread_id": self.thread_id, "title": self.title,
-                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto,
-                "workspace_path": self.workspace_path}
+                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto}
 
 
 class ChannelStore:
