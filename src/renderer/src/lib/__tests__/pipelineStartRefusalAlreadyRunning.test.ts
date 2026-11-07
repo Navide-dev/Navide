@@ -8,7 +8,7 @@ describe('startRefusalText – refusals the backend makes', () => {
   it('words already-running and not-recorded in the UI language', () => {
     const t = i18n.global.t as (k: string, p?: Record<string, unknown>) => string
     i18n.global.locale.value = 'zh-TW'
-    expect(startRefusalText(t, { code: 'already-running' })).toBe('這個 workspace 已有 pipeline 正在執行，請先中止它。')
+    expect(startRefusalText(t, { code: 'already-running' })).toBe('這個工作區已有 pipeline 正在執行，請先中止它。')
     i18n.global.locale.value = 'en-US'
     expect(startRefusalText(t, { code: 'not-recorded' })).toContain('was not recorded')
   })

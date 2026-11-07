@@ -133,7 +133,7 @@ describe('locales', () => {
       reload: '重新載入',
       keep: '保留頁面',
     })
-    expect(zhTW.browser.action['delegate-note']).toBe('任何 pane、任何工作區的 agent 都能使用')
+    expect(zhTW.browser.action['delegate-note']).toBe('任何分格、任何工作區的 agent 都能使用')
     // How many Spaces are open, each one a web page using memory (no cap).
     expect(enUS.browser.overview['open-count']).toBe('{count} open, each using memory')
     expect(zhTW.browser.overview['open-count']).toBe('{count} 個開著，每個都會占用記憶體')

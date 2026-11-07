@@ -7,8 +7,8 @@
 export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object.freeze({
   'navide.browser': '1.1.0',
   'navide.git': '1.0.3',
-  'navide.mini-ide': '1.0.2',
-  'navide.plans': '1.1.2',
+  'navide.mini-ide': '1.0.3',
+  'navide.plans': '1.1.3',
 })
 
 /** The bundled versions that may supersede an older installed copy this

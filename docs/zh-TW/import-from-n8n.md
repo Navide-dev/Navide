@@ -20,10 +20,10 @@ Agent 也能透過 MCP 工具 `pipeline_import_n8n` 做同樣的事，預設是 
 畫布依每個步驟的轉換方式上色：
 
 - **直接轉換**：Navide 照 workflow 原意執行。包括 Manual、Chat、Execute Workflow 觸發；AI Agent 叢集（模型、記憶、工具、輸出解析器併成一個步驟）；Wait 與 send-and-wait 核准（Gate）；IF 與 Switch（分支）；Append 或 Choose Branch 模式的 Merge；錯誤輸出與重試；以及呼叫 Navide 已有 workflow 的 Execute Workflow（子 Pipeline，見下文）。
-- **由 agent 執行**：HTTP Request、Code、Set、會合併資料的 Merge（依欄位、位置、所有組合或 SQL；Agent 照它的合併規則做）、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個 Pane。
+- **由 agent 執行**：HTTP Request、Code、Set、會合併資料的 Merge（依欄位、位置、所有組合或 SQL；Agent 照它的合併規則做）、應用程式節點（Google Sheets、Slack、Gmail……）、社群節點，以及不認得的節點類型或版本。由 CLI Agent 依節點原本的參數執行，expression 與 Code 原樣傳過去，結果可能和 n8n 不同。沒有分支的連續步驟會併成一個步驟，所以不會一個節點開一個分格。
 - **需要確認**：已匯入，但需要 Navide 目前還沒有的能力。包括 Webhook 與 Form 觸發（請到[設定 ▸ Webhook](../en-US/pipeline-webhooks.md)建立，匯入不會自動建立）、Schedule 與應用程式觸發（請手動啟動 Pipeline，或在**每輪消耗 ▸ 排程**排定）、Respond to Webhook、呼叫 Navide 還沒有的 workflow 的 Execute Workflow、Call n8n Workflow Tool（見下文），以及建議留在 n8n 的步驟（見下文，標成 **不支援**）。
 
-畫布下方的報告會逐一列出：每個 n8n 節點變成什麼、你要做什麼（需要確認的列排在最前面；合併了多個 n8n 節點的步驟會寫出合併了幾個）；每個步驟完整的 Kickoff 與每個 Gate 的提示（也就是每個 Pane 會收到的原文）；要補的憑證；秘密在哪裡被移除；有幾個步驟需要確認。這些都不會擋住 **匯入**，只是讓你在執行前先知道。
+畫布下方的報告會逐一列出：每個 n8n 節點變成什麼、你要做什麼（需要確認的列排在最前面；合併了多個 n8n 節點的步驟會寫出合併了幾個）；每個步驟完整的 Kickoff 與每個 Gate 的提示（也就是每個分格會收到的原文）；要補的憑證；秘密在哪裡被移除；有幾個步驟需要確認。這些都不會擋住 **匯入**，只是讓你在執行前先知道。
 
 ### 分支、錯誤、重試與步驟之間的資料
 
@@ -46,7 +46,7 @@ Navide 已有被呼叫的 workflow 時，**Execute Workflow** 節點會變成子
 
 ## 憑證與秘密
 
-憑證不會被匯入。報告會依類型與名稱列出 workflow 用到的每個憑證，以及用到它的節點；n8n 的 credential id 不保留。請改在這台機器上設定存取：在 **設定 → MCP** 加上該服務的 MCP server，或使用服務自己的 CLI 登入（例如 `gh`、`gcloud`）。不會把任何東西放進 Pane 的環境變數。
+憑證不會被匯入。報告會依類型與名稱列出 workflow 用到的每個憑證，以及用到它的節點；n8n 的 credential id 不保留。請改在這台機器上設定存取：在 **設定 → MCP** 加上該服務的 MCP server，或使用服務自己的 CLI 登入（例如 `gh`、`gcloud`）。不會把任何東西放進分格的環境變數。
 
 直接寫在 workflow 裡的秘密，例如 Authorization header、API key、bearer token 與其他常見的 token 形式（常是 cURL 匯入留下的），會在所有地方換成 `<removed: add credential for …>`，存下來的 workflow JSON 也一樣。報告只寫哪個節點的哪個欄位移除了一個秘密，原值不會保留。
 
@@ -54,7 +54,7 @@ Navide 已有被呼叫的 workflow 時，**Execute Workflow** 節點會變成子
 
 ## 匯入的內容是外部內容
 
-從 workflow 取來的一切，包括參數、備註、提示，都視為外部內容。匯入的 Pipeline 在流程管理與編輯器會顯示 **來自 n8n**，每個 Kickoff 開頭都有外部內容聲明；不論由誰啟動，每次執行都會把它的 Pane 標上 Navide Guard 的外部內容標記。這個標記無法關閉。執行不是你自己寫的 workflow 前，請先在預覽裡讀過 Kickoff。
+從 workflow 取來的一切，包括參數、備註、提示，都視為外部內容。匯入的 Pipeline 在流程管理與編輯器會顯示 **來自 n8n**，每個 Kickoff 開頭都有外部內容聲明；不論由誰啟動，每次執行都會把它的分格標上 Navide Guard 的外部內容標記。這個標記無法關閉。執行不是你自己寫的 workflow 前，請先在預覽裡讀過 Kickoff。
 
 ## 透過 n8n 的 MCP server 把步驟留在 n8n
 
@@ -72,5 +72,5 @@ Navide 已有被呼叫的 workflow 時，**Execute Workflow** 節點會變成子
 
 - 只有呼叫 Navide 已有 workflow 的 Execute Workflow 會變成子 Pipeline；遞迴呼叫與 Call n8n Workflow Tool 會維持需要確認。
 - `pinData` 會變成 Kickoff 裡的測試輸入，不會變成凍結輸出的步驟。
-- 超過約 8 個步驟只會警告；每個步驟都會開一個 CLI Pane。
+- 超過約 8 個步驟只會警告；每個步驟都會開一個 CLI 分格。
 - 節點對照表依 n8n 公開文件、按節點類型與版本整理；不認得的節點由 Agent 代行並標成需要確認。
