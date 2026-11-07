@@ -67,7 +67,7 @@ describe('web view capability requests', () => {
   it('lists the contract surface', () => {
     expect(WEB_METHODS).toEqual([
       'web.list', 'web.create', 'web.attach', 'web.detach', 'web.navigate',
-      'web.setOwner', 'web.takeControl', 'web.returnControl', 'web.close', 'web.capture', 'web.clearData',
+      'web.setOwner', 'web.takeControl', 'web.returnControl', 'web.close', 'web.capture', 'web.clearData', 'web.cdp',
     ])
     expect(WEB_EVENTS).toEqual(['web.changed'])
     expect([...WEB_GESTURE_METHODS].sort()).toEqual(['web.clearData', 'web.create', 'web.returnControl', 'web.setOwner', 'web.takeControl'])
@@ -91,6 +91,8 @@ describe('web view capability requests', () => {
     ['web.capture', { viewId: 'view-1' }],
     ['web.capture', { viewId: 'view-1', maxWidth: 64 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 2048 }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: 'Input.insertText', params: { text: 'hi' } }],
   ])('accepts %s %j', (address, value) => {
     expect(validateWebRequest(address, value)).toBe(true)
   })
@@ -130,6 +132,12 @@ describe('web view capability requests', () => {
     ['web.capture', { viewId: 'view-1', maxWidth: 63 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 2049 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 100.5 }],
+    ['web.cdp', { viewId: 'view-1' }],
+    ['web.cdp', { method: 'Runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: 'runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: `A.${'b'.repeat(127)}` }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate', params: [] }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate', sessionId: 'other' }],
   ])('rejects %s %j', (address, value) => {
     expect(validateWebRequest(address, value)).toBe(false)
   })
