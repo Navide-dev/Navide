@@ -1378,3 +1378,124 @@ async def test_a_tree_read_that_raises_still_kills_the_root_and_returns_the_enve
 
     assert (rc, killed) == (128, [4242]) and "timed out" in stderr
     assert any("could not read the process tree of pid 4242" in r.getMessage() for r in caplog.records)
+
+
+# ---- Windows: no suspend, no job for a short allowlisted run ---------------
+#
+# Every git.exe the backend started suspended and boxed in a kill-on-close
+# job left one kernel Token object behind on a user's Windows host (paged
+# pool +280MB/h); the processes git starts itself, with neither, did not.
+# These run the Windows process_tree with kernel32 and psutil stubbed.
+
+
+class _RecordingKernel32:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __getattr__(self, name):
+        def call(*_a):
+            self.calls.append(name)
+            return 1
+
+        return call
+
+
+def _windows_tree(monkeypatch) -> _RecordingKernel32:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _RecordingKernel32()
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    monkeypatch.setattr(host_shell, "process_tree", _windows.process_tree)
+
+    def no_resume(pid):
+        raise AssertionError(f"psutil.Process({pid}) touched: no resume is needed")
+
+    monkeypatch.setattr(_windows.psutil, "Process", no_resume)
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    return kernel32
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capped", [False, True])
+async def test_on_windows_a_run_starts_unsuspended_and_outside_any_job(monkeypatch, capped) -> None:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _windows_tree(monkeypatch)
+    spawn_kwargs: list[dict] = []
+
+    class DoneProc:
+        pid = 4_194_305  # only the stubbed process tree ever sees it
+        returncode = 0
+
+        async def communicate(self, *_a):
+            return b"main\n", b""
+
+    class DoneStream:
+        async def read(self, *_a):
+            return b""
+
+    async def fake_exec(*_a, **kwargs):
+        spawn_kwargs.append(kwargs)
+        proc = DoneProc()
+        proc.stdout = proc.stderr = DoneStream()
+
+        async def wait():
+            return 0
+
+        proc.wait = wait
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    if capped:
+        rc, *_ = await host_shell.run_allowlisted_capped(["git", "status"], max_stdout_bytes=10)
+    else:
+        rc, stdout, _ = await host_shell.run_allowlisted(["git", "rev-parse", "HEAD"])
+        assert stdout == b"main\n"
+
+    assert rc == 0
+    flags = spawn_kwargs[0].get("creationflags", 0)
+    assert not flags & _windows.CREATE_SUSPENDED
+    assert kernel32.calls == []  # no CreateJobObjectW, no assign, no SetInformationJobObject
+
+
+@pytest.mark.asyncio
+async def test_on_windows_a_timed_out_run_still_ends_its_tree(monkeypatch) -> None:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _windows_tree(monkeypatch)
+    killed: list[int] = []
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return None
+
+        def kill(self):
+            killed.append(self.pid)
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    tree = _windows.process_tree
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    # cmd\git.exe is a launcher: the real git.exe is its child.
+    monkeypatch.setattr(tree, "descendants", lambda pid: [pid + 1] if pid == 4242 else [])
+    monkeypatch.setattr(tree, "identity", lambda pid: f"id-{pid}")
+    monkeypatch.setattr(tree, "kill", lambda pid, *, force: killed.append(pid))
+    # The second read, just before the root dies: what started after the first.
+    reread: list[int] = []
+    monkeypatch.setattr(tree, "kill_tree", lambda pid, *, force: reread.append(pid))
+
+    rc, _, stderr = await host_shell.run_allowlisted(["git", "fetch"], timeout=0.05)
+
+    assert rc == 128 and b"timed out" in stderr
+    assert sorted(killed) == [4242, 4243]
+    assert reread == [4242]
+    assert kernel32.calls == []

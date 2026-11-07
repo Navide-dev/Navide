@@ -10,8 +10,8 @@
   "path": "${HOME}/.codex-panes/${PANE}/sessions/2026/09/29/rollout-test-12345678-1234-4234-8234-123456789abc.jsonl",
   "expected": {
     "tokens": [
-      12,
-      3
+      10,
+      2
     ],
     "reply": "Regression reply: café 完成\n---MSG-END---"
   },

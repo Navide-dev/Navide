@@ -46,7 +46,7 @@ describe('cli_open_agent(session_id) — the MCP resume path, station by station
     // the gate result rather than being threaded through it.
     expect(body).toContain("const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(),")
     expect(body).toContain('createRequestedPane(parent, spawnReq)')
-    expect(body).toContain('createStandaloneRequestedPane(ev.target_workspace as string, spawnReq, standaloneEvidence)')
+    expect(body).toContain('createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)')
   })
 
   it('both spawn paths turn it into a commandOverride instead of launching fresh', () => {
@@ -127,8 +127,10 @@ describe('cli_open_agent(session_id) — the MCP resume path, station by station
     expect(body).toContain('spawnedBy: resumeSpawnedBy || undefined')
     expect(body).toContain('spawned_by: resumeSpawnedBy')
     expect(body).toContain('resumableGroupId(req.resumeRunGroupId, workspacePath)')
-    // And it tells the injector this is a resume, so it waits for the reload.
-    expect(body).toContain('resume: !!mcpResumeId')
+    // And its caller tells the injector this is a resume, so it waits for the
+    // reload. The task is typed after the pane is reported (Windows VM 0.2.38).
+    expect(body).not.toContain('injectStandaloneTask(')
+    expect(fn('handleMcpSpawnRequest')).toContain("resume: !!(ev.session_id ?? '').trim(),\n        evidence: standaloneEvidence,")
   })
 
   it('records the restored lineage, so the next restore keeps the position', () => {

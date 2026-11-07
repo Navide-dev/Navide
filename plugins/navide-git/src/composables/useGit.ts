@@ -189,6 +189,18 @@ const emptyStatus = (): GitStatus => ({
   operation_in_progress: '',
 })
 
+/** A workspace path in one comparable form: forward slashes, no trailing
+ *  slash, and lower case for a Windows path (drive letter or UNC), whose file
+ *  system ignores case — `C:\Users\me` and `c:/users/me` are one folder. */
+export function normalizeWorkspacePath(path: string): string {
+  const p = path.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
+  return /^[a-zA-Z]:(\/|$)/.test(p) || p.startsWith('//') ? p.toLowerCase() : p
+}
+
+export function sameWorkspacePath(a: string, b: string): boolean {
+  return normalizeWorkspacePath(a) === normalizeWorkspacePath(b)
+}
+
 export function useGit(
   workspacePath: () => string,
   transport: GitTransport,
@@ -1738,21 +1750,54 @@ export function useGit(
   // Refresh on backend git.changed broadcast.
   // Debounce at 300 ms so rapid-fire events (e.g. GitWatcher fires once AND
   // app.py broadcasts once for the same operation) collapse into a single reload.
+  //
+  // A workspace that is not a repository (a home folder with repos below it)
+  // only re-reads status — the other six reads can only fail there — and,
+  // while reloads keep finding no repository or failing, each next one waits
+  // twice as long, up to 30 s. A folder the OS writes into constantly used to
+  // re-run all seven commands every few hundred ms. A real repository keeps
+  // the plain 300 ms debounce.
   let _gitChangedTimer: ReturnType<typeof setTimeout> | null = null
-  const _offGitChanged = on('git.changed', (payload: unknown) => {
-    const p = payload as { workspace_path?: string }
-    if (!p?.workspace_path || p.workspace_path === workspacePath()) {
-      if (_gitChangedTimer !== null) clearTimeout(_gitChangedTimer)
-      _gitChangedTimer = setTimeout(() => {
-        _gitChangedTimer = null
-        void loadStatus()
+  let _quietReloads = 0
+  watch(workspacePath, () => { _quietReloads = 0 })
+  async function reloadOnGitChanged(): Promise<void> {
+    const wasRepo = statusLoaded.value && gitStatus.value.is_git_repo && !statusError.value
+    if (wasRepo) {
+      void loadLog()
+      void loadBranches()
+      void loadStashes()
+      void loadRemotes()
+      void loadTags()
+      void loadWorktrees()
+    }
+    await loadStatus()
+    const isRepo = statusLoaded.value && gitStatus.value.is_git_repo && !statusError.value
+    if (isRepo) {
+      _quietReloads = 0
+      // The folder just became a repository (git init): load what was skipped.
+      if (!wasRepo) {
         void loadLog()
         void loadBranches()
         void loadStashes()
         void loadRemotes()
         void loadTags()
         void loadWorktrees()
-      }, 300)
+      }
+    } else {
+      _quietReloads += 1
+    }
+  }
+  const _offGitChanged = on('git.changed', (payload: unknown) => {
+    const p = payload as { workspace_path?: string }
+    if (!p?.workspace_path || sameWorkspacePath(p.workspace_path, workspacePath())) {
+      // Backing off: let the pending reload run instead of pushing it out.
+      if (_gitChangedTimer !== null && _quietReloads > 0) return
+      if (_gitChangedTimer !== null) clearTimeout(_gitChangedTimer)
+      const delay = Math.min(300 * 2 ** _quietReloads, 30_000)
+      _gitChangedTimer = setTimeout(() => {
+        _gitChangedTimer = null
+        void reloadOnGitChanged()
+      }, delay)
     }
   })
   onScopeDispose(() => {

@@ -909,6 +909,70 @@ def _discover_repository_paths(
     return True, truncated
 
 
+_DETACHED_HEAD_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+
+
+def _read_head_branch(repo: str) -> str | None:
+    """What ``git rev-parse --abbrev-ref HEAD`` prints for *repo*, read from its
+    HEAD file instead of a git process; None whenever the files leave any doubt,
+    and the caller then asks git.
+
+    A ``.git`` file (linked worktree, submodule) is followed to its gitdir, and
+    a worktree's refs are looked up in the common dir it names. A detached HEAD
+    prints ``HEAD``. A branch is only answered when its ref exists (an unborn
+    branch makes git fail, not print its name) and no tag, remote or other ref
+    shares the short name (git would print a longer, unambiguous form)."""
+    try:
+        dot = Path(repo) / ".git"
+        if dot.is_file():
+            line = dot.read_text(encoding="utf-8").strip()
+            if not line.startswith("gitdir:"):
+                return None
+            gitdir = Path(repo) / line[len("gitdir:"):].strip()
+        else:
+            gitdir = dot
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+        if _DETACHED_HEAD_RE.match(head):
+            return "HEAD"
+        prefix = "ref: refs/heads/"
+        if not head.startswith(prefix):
+            return None
+        name = head[len(prefix):]
+        commondir = gitdir / "commondir"
+        common = gitdir / commondir.read_text(encoding="utf-8").strip() if commondir.is_file() else gitdir
+        # A name git would reject (`..`, a leading '/') is git's to report,
+        # and must not steer these lookups outside the refs directory.
+        if (
+            not name
+            or name.startswith("/")
+            or _INVALID_REF_RE.search(name)
+            or (common / "reftable").exists()
+        ):
+            return None
+        packed_path = common / "packed-refs"
+        packed = set()
+        if packed_path.is_file():
+            for row in packed_path.read_text(encoding="utf-8").splitlines():
+                parts = row.split(" ", 1)
+                if len(parts) == 2 and not row.startswith(("#", "^")):
+                    packed.add(parts[1].strip())
+
+        def exists(ref: str) -> bool:
+            return ref in packed or (common / ref).is_file() or (gitdir / ref).is_file()
+
+        if not exists(f"refs/heads/{name}"):
+            return None
+        if any(
+            exists(ref)
+            for ref in (name, f"refs/{name}", f"refs/tags/{name}",
+                        f"refs/remotes/{name}", f"refs/remotes/{name}/HEAD")
+        ):
+            return None
+        return name
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+
+
 async def discover_repositories(
     workspace_path: str, max_depth: int = 3, limit: int = 20, force: bool = False
 ) -> dict[str, Any]:
@@ -926,7 +990,20 @@ async def discover_repositories(
 
     A workspace on a cloud-sync mount is not walked at all unless *force* — see
     ``_is_cloud_synced_path`` — and comes back as ``skipped: "cloud_storage"``.
+
+    Every window re-discovers on each git.changed; concurrent calls with the
+    same arguments share one scan, the way ``coalesced`` shares the Git pane's
+    reads.
     """
+    return await coalesced(
+        ("discover", workspace_path, max_depth, limit, force),
+        lambda: _discover_repositories(workspace_path, max_depth, limit, force),
+    )
+
+
+async def _discover_repositories(
+    workspace_path: str, max_depth: int, limit: int, force: bool
+) -> dict[str, Any]:
     repos: list[dict[str, str]] = []
     workspace_validation: queue.SimpleQueue[bool] = queue.SimpleQueue()
     stop_requested = threading.Event()
@@ -972,9 +1049,18 @@ async def discover_repositories(
         return {"ok": False, "error": "workspace not found", "repositories": []}
 
     # Annotate each repo with its current branch (best-effort; empty on failure).
-    for repo in repos:
+    # Read from the HEAD file: a git process per repo per discovery was the
+    # bulk of the git spawns a home-directory workspace made.
+    heads = (
+        [None] * len(repos)
+        if truncated
+        else await asyncio.to_thread(lambda: [_read_head_branch(r["abs_path"]) for r in repos])
+    )
+    for repo, branch in zip(repos, heads):
         if truncated:
             repo["branch"] = ""
+        elif branch is not None:
+            repo["branch"] = branch
         else:
             rc, out, _ = await _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo["abs_path"])
             repo["branch"] = out.strip() if rc == 0 else ""

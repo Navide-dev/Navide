@@ -200,6 +200,7 @@ import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanD
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
   composerHoldsPayload, echoEvidenceSince, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
+  screenShowsNewTail,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
@@ -2789,6 +2790,30 @@ function unregisterPaneMessaging(paneId: string, opts: { keepPersisted?: boolean
   if (!opts.keepPersisted) dropPersistedMessagingName(paneId)
 }
 
+/** deliver() dep for a plain terminal prefill (cli_send submit: false): type
+ *  the command onto the shell's command line and stop — no Enter, the user
+ *  runs it. Settles like deliverAgentMessage's terminal outcomes: refused for
+ *  good, back to the queue head while a program holds the tty, or typed. */
+async function deliverTerminalPrefill(
+  paneId: string,
+  text: string,
+  shouldAbort?: () => boolean,
+): Promise<boolean | null | { failed: MessageReason }> {
+  const outcome: { foregroundBusy?: boolean; commandRefused?: string } = {}
+  const ok = await injectPane(
+    paneId, text, 'agent-msg', true, shouldAbort, outcome,
+    (held) => messaging.setDeliveringHold(paneId, held ? { key: 'pty-blocked' } : undefined),
+    undefined, true,
+  )
+  if (ok) return true
+  if (outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }
+  if (outcome.foregroundBusy) {
+    terminalAtPrompt.set(paneId, false)
+    return null
+  }
+  return false
+}
+
 /** deliver() dep: inject the envelope via the same primitive as all other pane
  *  injections (bracketed paste + verified submit), then push the target's
  *  stage-watcher scan window past the injected text so sentinel/analyzer
@@ -3499,8 +3524,22 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
     dismissStartupDialog: (id) => dismissStartupDialog(id, DISMISS_TIMEOUT_MS),
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
+    waitForPromptReady: async (id, timeoutMs) => {
+      // The gate reads the pane's own terminal ref, and returns false at once
+      // without one. Wait for the ref to be mounted with its session first,
+      // within the same ceiling, so a pane still mounting is not judged as a
+      // CLI that printed nothing.
+      const deadline = Date.now() + timeoutMs
+      while (!paneRefs[id]?.sessionId && paneAlive(id) && Date.now() < deadline) await sleep(250)
+      return waitForPromptReady(id, Math.max(0, deadline - Date.now()))
+    },
+    paneStarting: (id) => paneStillStarting({
+      status: paneRefs[id]?.displayStatus as string | undefined,
+      cleanBytes: paneCleanBytes(id),
+    }),
     paneAlive: (id) => paneAlive(id),
-    injectPane: (id, text, label, preserveNewlines, evidence) => injectPane(id, text, label, preserveNewlines, undefined, evidence),
+    injectPane: (id, text, label, preserveNewlines, evidence, prefill) =>
+      injectPane(id, text, label, preserveNewlines, undefined, evidence, undefined, undefined, prefill === true),
     onKill: (id) => onKill(id),
   }
 }
@@ -3508,14 +3547,16 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
 /** Standalone counterpart to createRequestedPane for an external MCP spawn
  *  request addressed by target_workspace instead of a requesting pane (no
  *  report-back parent). Mirrors ui.pane.create's independent-pane path: the
- *  pane is created roleless, then the task is injected directly via
+ *  pane is created roleless, and its caller then injects the task directly via
  *  injectStandaloneTask — scheduleInjection early-returns for a roleless
  *  pane before its kickoff step, so a kickoffPrompt handed to spawnPane here
- *  would never actually be injected. */
+ *  would never actually be injected. Returns null only when the pane was not
+ *  created (no id, or its PTY failed to start). The task is not typed here:
+ *  that can take as long as the prompt-ready gate, and cli_open_agent waits
+ *  only 40s for this answer — so the caller reports the pane first. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
-  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
-  kickoffEvidence?: StandaloneKickoffEvidence,
+  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string; prefill?: boolean },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3585,11 +3626,6 @@ async function createStandaloneRequestedPane(
   })
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || pane.preparationStatus === 'failed') return null
-  const injected = await injectStandaloneTask(paneId, req.task, 'mcp-task', standaloneTaskDeps(), {
-    resume: !!mcpResumeId,
-    evidence: kickoffEvidence,
-  })
-  if (!injected) return null
   return paneId
 }
 
@@ -3672,7 +3708,7 @@ async function kickoffRequestedPane(
   parentName: string,
   task: string,
   requestId?: string,
-  opts: { resume?: boolean; crossParent?: boolean } = {},
+  opts: { resume?: boolean; crossParent?: boolean; prefill?: boolean } = {},
 ): Promise<boolean> {
   // Built before the pane lookup: that lookup has its own early return, and a
   // caller blocked on the verdict would otherwise wait out the whole deadline
@@ -3752,10 +3788,10 @@ async function kickoffRequestedPane(
       }
       const seen: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; commandRefused?: string } = {}
       const typed = promptReady || !paneStarting
-        ? await injectPane(paneId, task, 'agent-spawn', true, undefined, seen)
+        ? await injectPane(paneId, task, 'agent-spawn', true, undefined, seen, undefined, undefined, opts.prefill === true)
         : false
       const outcome = terminalKickoffOutcome({
-        typed, echo: seen.echo ?? null, submit: seen.submit ?? null, promptReady,
+        typed, echo: seen.echo ?? null, submit: seen.submit ?? null, promptReady, prefill: opts.prefill === true,
       })
       pane.kickoffStatus = outcome
       emitKickoffVerdict(outcome, outcome === 'sent' ? undefined : seen.commandRefused ?? TERMINAL_KICKOFF_REASON[outcome])
@@ -4014,6 +4050,9 @@ async function handleMcpSpawnRequest(ev: {
   /** cli_open_agent's `account`, resolved by the backend to an explicit pin.
    *  Absent when the pane runs on the live login. */
   profile_id?: string
+  /** false for a terminal prefill (cli_open_agent submit: false): the task is
+   *  typed onto the command line without Enter. Absent otherwise. */
+  submit?: boolean
 }): Promise<void> {
   const standalone = !!ev.target_workspace
   const cross = !!ev.cross_workspace
@@ -4081,12 +4120,10 @@ async function handleMcpSpawnRequest(ev: {
     })
   }
   let paneId: string | null = null
-  // Filled by the standalone path's injection, judged below for its verdict.
-  const standaloneEvidence: StandaloneKickoffEvidence = {}
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
-    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined }
+    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined, prefill: ev.submit === false }
     paneId = cross
       ? await createRequestedPane(
           { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
@@ -4094,7 +4131,7 @@ async function handleMcpSpawnRequest(ev: {
         )
       : parent
         ? await createRequestedPane(parent, spawnReq)
-        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq, standaloneEvidence)
+        : await createStandaloneRequestedPane(ev.target_workspace as string, spawnReq)
   } catch (err) {
     report({ ok: false, error: err instanceof Error ? err.message : String(err) })
     return
@@ -4122,22 +4159,29 @@ async function handleMcpSpawnRequest(ev: {
     })
   }
   if (!parent && !cross) {
-    // Standalone spawn: createStandaloneRequestedPane already settled the CLI
-    // and injected the task (or left the pane empty if there was none) before
-    // returning paneId above. There is no parent pane to report back to, so
-    // no kickoffRequestedPane / report-back marker either.
+    // Standalone spawn: the pane exists, so say so now — its CLI may take up
+    // to the prompt-ready gate to come up, longer than cli_open_agent waits
+    // for this answer. There is no parent pane to report back to, so no
+    // kickoffRequestedPane / report-back marker either. The task is typed
+    // next and judged as the kickoff verdict; a pane whose task did not land
+    // stays open (Windows VM 0.2.38: killing it reported a launched pane as
+    // 建立失敗).
     report({ ok: true, paneId, name: childName, advisories: gate.advisories })
-    // cli_open_agent now blocks on a kickoff verdict after the spawn verdict;
-    // injectStandaloneTask already typed the task (a failure returned null
-    // above), so answer at once rather than letting the call wait out 45s.
-    //
+    const standaloneEvidence: StandaloneKickoffEvidence = {}
+    try {
+      await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
+        resume: !!(ev.session_id ?? '').trim(),
+        evidence: standaloneEvidence,
+        ...(ev.submit === false ? { prefill: true } : {}),
+      })
+    } catch { /* judged below on whatever evidence was recorded */ }
     // Judged on the echo/submit evidence injectPane recorded, not on its
     // boolean: that says true on buffer growth alone, which the pane path
     // refuses to call sent. Growth-only stays 'unverified' and routes through
     // the server's "read cli_get_status first" hint; payload-level evidence is
     // 'sent'. Hard-coding 'unverified' here reported every external spawn as
     // failed, the task already running (Linux VM 0.2.38).
-    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task })
+    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task, prefill: ev.submit === false })
     backend.send('agent_spawn.kickoff', {
       request_id: ev.request_id,
       pane_id: paneId,
@@ -4156,6 +4200,7 @@ async function handleMcpSpawnRequest(ev: {
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
     crossParent: cross,
+    prefill: ev.submit === false,
   })
     .then((ok) => {
       if (!ok) {
@@ -4287,7 +4332,9 @@ const onStaleConfigFocus = (): void => { void refreshStaleConfigPanes() }
 onMounted(() => {
   messaging.configureMessaging({
     now: () => Date.now(),
-    deliver: deliverAgentMessage,
+    deliver: (paneId, text, shouldAbort, prefill) => prefill
+      ? deliverTerminalPrefill(paneId, text, shouldAbort)
+      : deliverAgentMessage(paneId, text, shouldAbort),
     isPaneIdle: (paneId: string) => deliveryHoldKey(paneId) === null,
     idleHoldKey: deliveryHoldKey,
     refuseDelivery: (paneId, envelope) => {
@@ -4600,7 +4647,12 @@ async function injectText(
   // pipeline slot whose sibling fails the run while its kickoff is being
   // typed. No means the box is cleared instead of submitted. An Enter already
   // sent is not chased.
-  stillWanted?: () => boolean
+  stillWanted?: () => boolean,
+  // Plain terminal only (cli_send / cli_open_agent submit: false): type the
+  // line and stop — no Enter. The user reads it and runs it. Every write is
+  // flagged so the backend accepts a refused command onto the command line
+  // and holds the terminal until the user types.
+  prefill = false,
 ): Promise<boolean> {
   // Log the full injection text to the session's output log file BEFORE
   // chunking so the log file shows one readable block per send.
@@ -4624,6 +4676,14 @@ async function injectText(
   // zero — or negative — while output is streaming, which made the echo look
   // absent and resent the whole prompt.
   const cleanBytes = (): number => (paneId ? paneCleanBytes(paneId) : -1)
+  const renderedScreen = (): string => {
+    const read = paneId ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined) : undefined
+    try {
+      return read ? read() : ''
+    } catch {
+      return ''
+    }
+  }
 
   // Send in modest chunks to avoid hitting any tty input-buffer limits and to
   // give the CLI's render loop a chance to keep up.
@@ -4659,8 +4719,9 @@ async function injectText(
     ? paneRefs[paneId as string]?.isBracketedPasteActive?.() === true
     : agentBracketed
   if (shellTarget && paneMultilineRefusal(paneId as string, body)) return false
+  if (prefill && !shellTarget) return false
   const chunks = injectionChunks(body, CHUNK, bracketed)
-  const shellGuard = shellTarget ? { require_shell_prompt: true } : {}
+  const shellGuard = shellTarget ? { require_shell_prompt: true, ...(prefill ? { prefill: true } : {}) } : {}
   // Why the backend refused a guarded write: a program in front of the shell
   // (try again later) or a command it will not type (never).
   const noteShellRefusal = (payload?: { error?: string; refusal?: { message?: string } } | null): void => {
@@ -4773,9 +4834,15 @@ async function injectText(
   const MAX_CONTENT_SENDS = 1
   const readyTimeout = echoTimeoutFor(text.length)
   let ready = false
+  // For inject.failed: what this pane's own terminal saw after we typed.
+  let bytesBeforeSend = -1
+  let sentAt = 0
   for (let send = 1; send <= MAX_CONTENT_SENDS && !ready; send++) {
     if (aborted()) return giveUp()
     const preBytes = cleanBytes()
+    bytesBeforeSend = preBytes
+    sentAt = Date.now()
+    const screenBefore = renderedScreen()
     const ackPending = await sendChunks()
     if (ackPending === null) return giveUp()
     if (paneId === undefined || preBytes < 0) {
@@ -4784,8 +4851,10 @@ async function injectText(
       ready = true
       break
     }
+    // The rendered screen backs the stream up: see screenShowsNewTail.
     const echoed = (): EchoEvidence | null =>
       echoEvidenceSince(cleanBuf(), tail, cleanBytes() - preBytes, normalizedLen)
+        ?? (screenShowsNewTail(screenBefore, renderedScreen(), tail) ? 'tail' : null)
     if (needsInputWait(ackPending, inputBlocks.get(sessionId) !== null)) {
       const waited = await awaitInputUnblocked({
         ackPending,
@@ -4861,11 +4930,17 @@ async function injectText(
     recordDiagnostic({
       level: 'error',
       code: 'inject.failed',
-      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null),
+      message: injectFailedMessage(paneId ? paneRefs[paneId]?.terminalSize?.() : null)
+        + (paneId && bytesBeforeSend >= 0
+          ? ` — since typing: ${cleanBytes() - bytesBeforeSend} clean chars, raw output `
+            + `${Number(paneRefs[paneId]?.lastRawActivityAt ?? 0) >= sentAt ? 'yes' : 'no'}`
+          : ''),
       paneId
     })
     return giveUp()
   }
+  // A prefill is done once it is on the command line: Enter is the user's.
+  if (prefill) return true
 
   // Past this point the payload is confirmed to be IN the input box, so every
   // remaining failure exit means "still sitting there, unsubmitted" rather
@@ -5106,7 +5181,8 @@ async function injectPane(
     enters?: number
   },
   onInputBlocked?: (held: boolean) => void,
-  stillWanted?: () => boolean
+  stillWanted?: () => boolean,
+  prefill = false,
 ): Promise<boolean> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return false
@@ -5117,7 +5193,7 @@ async function injectPane(
   pane.resumeContinueAvailable = false
   paneLastInjectedText.set(paneId, text)
   return injectText(
-    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
+    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted, prefill,
   )
 }
 
@@ -11337,7 +11413,11 @@ registerCommand('ui.pane.create', async (args) => {
   // kickoff step, so the task must be injected here rather than via
   // spawnPane's kickoffPrompt (see createStandaloneRequestedPane above).
   const injected = await injectStandaloneTask(paneId, a.task ?? '', 'mcp-task', standaloneTaskDeps())
-  if (!injected) throw new Error(`ui.pane.create failed to inject task into pane "${paneId}"`)
+  if (!injected) {
+    // injectStandaloneTask no longer rolls back a live pane; this path still does.
+    if (paneAlive(paneId)) await onKill(paneId)
+    throw new Error(`ui.pane.create failed to inject task into pane "${paneId}"`)
+  }
   return paneId
 })
 // These actions key on the pane id and reject a pane name, which is the only
@@ -17372,6 +17452,8 @@ backend.on('agent_msg.deliver', (raw) => {
     reply_to?: string
     kind?: string
     origin?: string
+    // false only for a terminal prefill (cli_send submit: false).
+    submit?: boolean
   }
   if (!ev?.msg_key || !ev.target_pane_id || !ev.content) return
   if (ev.from_pane_id) {
@@ -17423,6 +17505,7 @@ backend.on('agent_msg.deliver', (raw) => {
     external: isExternalDelivery(ev),
     // An MCP caller with no pane: a MSG reply to it would bounce (hasReplyRoute).
     noReplyRoute: !hasReplyRoute(ev),
+    ...(ev.submit === false ? { prefill: true } : {}),
   })
   if (!accepted) return
   // Say where the instruction came from — another machine, a chat channel or
@@ -17491,6 +17574,8 @@ backend.on('agent_spawn.request', (raw) => {
     // cli_open_agent's account pin; dropped here, the pane would open on the
     // live login while the tool reports the account it asked for.
     profile_id?: string
+    // false only for a terminal prefill (submit: false): typed without Enter.
+    submit?: boolean
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -17517,6 +17602,7 @@ backend.on('agent_spawn.request', (raw) => {
     cross_workspace: ev.cross_workspace === true,
     parent_address: ev.parent_address ?? '',
     profile_id: ev.profile_id ?? '',
+    ...(ev.submit === false ? { submit: false } : {}),
   })
 })
 

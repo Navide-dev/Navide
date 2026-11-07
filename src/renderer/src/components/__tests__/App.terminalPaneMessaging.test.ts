@@ -40,7 +40,9 @@ describe('plain terminal panes over MCP', () => {
     expect(branch).toBeGreaterThan(-1)
     expect(branch).toBeLessThan(rendered)
     const terminalBranch = fn.slice(branch, rendered)
-    expect(terminalBranch).toContain("injectPane(paneId, task, 'agent-spawn', true, undefined, seen)")
+    expect(terminalBranch).toContain(
+      "injectPane(paneId, task, 'agent-spawn', true, undefined, seen, undefined, undefined, opts.prefill === true)",
+    )
     expect(terminalBranch).not.toContain('runKickoffAttempts')
     expect(terminalBranch).not.toContain('spawnReportPending')
   })
@@ -71,11 +73,25 @@ describe('plain terminal panes over MCP', () => {
 
   it('asks the backend to refuse every write unless the shell is at its prompt, and requeues on refusal', () => {
     const fn = block('async function injectText(', '\n}\n')
-    expect(fn).toContain("const shellGuard = shellTarget ? { require_shell_prompt: true } : {}")
+    expect(fn).toContain(
+      'const shellGuard = shellTarget ? { require_shell_prompt: true, ...(prefill ? { prefill: true } : {}) } : {}',
+    )
     expect(fn.match(/\.\.\.shellGuard/g)?.length).toBe(2) // content chunks and the Enter
     const deliver = block('async function deliverAgentMessage(', '\n}\n')
     expect(deliver).toContain('if (!ok && outcome.foregroundBusy) {')
     expect(deliver).toContain('return null')
+  })
+
+  it('a prefill (submit: false) goes to a shell only, is flagged on every write and stops before Enter', () => {
+    const fn = block('async function injectText(', '\n}\n')
+    expect(fn).toContain('if (prefill && !shellTarget) return false')
+    const stop = fn.indexOf('if (prefill) return true')
+    expect(stop).toBeGreaterThan(-1)
+    expect(stop).toBeLessThan(fn.indexOf("data: '\\r'"))
+    const deliver = block('async function deliverTerminalPrefill(', '\n}\n')
+    expect(deliver).toContain('undefined, true,')
+    expect(deliver).toContain('if (outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }')
+    expect(appSource).toContain('? deliverTerminalPrefill(paneId, text, shouldAbort)')
   })
 
   it('presses Enter once for a shell and reports it typed, never resending Enter', () => {

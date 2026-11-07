@@ -1,4 +1,5 @@
 import { session, WebContentsView } from 'electron'
+import { infoMain } from '../main-log'
 import {
   PluginWebViewRegistry,
   type WebGuestSession,
@@ -37,6 +38,7 @@ export function pluginWebViewRegistry(): PluginWebViewRegistry {
     }) as unknown as WebGuestView,
     session: (partition) => session.fromPartition(partition) as unknown as WebGuestSession,
     onChanged: (pluginId, views) => changedHook?.(pluginId, views),
+    log: infoMain,
   })
   return registry
 }

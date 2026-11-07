@@ -187,7 +187,7 @@ describe('useEvolve', () => {
     ])
     expect(timeout.actions?.map((a) => a.kind)).toEqual(['evolve-open-pane', 'evolve-interrupt', 'evolve-reclaim'])
     expect(skipped.title).toBe('自我優化未執行 · beta')
-    expect(skipped.highlights).toEqual(['這個 workspace 已有一次在執行'])
+    expect(skipped.highlights).toEqual(['這個工作區已有一次在執行'])
     expect(skipped.actions).toEqual([{ kind: 'evolve-panel', workspace: B }])
   })
 
@@ -196,7 +196,7 @@ describe('useEvolve', () => {
     emit('evolve.notice', { workspace: A, kind: 'over_budget', run: run({ id: 'r7', status: 'error', reason: 'over_budget', detail: '312k / 200k' }) })
     const row = useAnnouncements().items.value.find((i) => i.kind === 'evolve')!
     expect(row.title).toBe('自我優化超出預算 · alpha')
-    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。'])
+    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的分格。'])
     expect(row.note).toBe('312k / 200k')
     expect(row.actions).toEqual([{ kind: 'evolve-open-pane', workspace: A, paneId: 'pane-1' }])
   })

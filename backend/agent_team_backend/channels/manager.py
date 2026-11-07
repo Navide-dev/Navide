@@ -274,6 +274,9 @@ class Seams:
     wake_target: Callable[[str], dict[str, str]] = lambda _pane_id: {}
     # () -> whether any Navide window is connected
     windows_open: Callable[[], bool] = lambda: True
+    # pane_id -> whether it runs in a connected window: False for a restore placeholder
+    # not yet opened, or a pane whose window closed (still registered, waiting out its grace)
+    pane_live: Callable[[str], bool] = lambda _pane_id: True
     # (pane_id, workspace_path, session_id) -> {ok, pane_id} with the pane back on that same
     # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
     # `started` is False when it was refused before anything was opened
@@ -1944,7 +1947,15 @@ class ChannelManager:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
+        # A typed /wake (offered where there are no buttons) is answered like the button, never
+        # sent to the CLI as a prompt.
+        wake_asked = wake_pressed or _command_word(
+            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
         pane_id = await self._resolve_after_startup(binding.pane_id)
+        if pane_id and wake_asked and not self._seams.pane_live(pane_id):
+            # Registered but not running (a restore placeholder, or its window just closed):
+            # a wake opens it rather than answering that it is online.
+            pane_id = ""
         if not pane_id:
             await self._offline(msg, binding)  # binding kept: it may come back
             return
@@ -1952,10 +1963,6 @@ class ChannelManager:
             self.store.rename_pane(binding.pane_id, pane_id)
         self._spawn(self._remember_wake_target(binding, pane_id))
         key = binding.location().key()
-        # A typed /wake (offered where there are no buttons) is answered like the button, never
-        # sent to the CLI as a prompt.
-        wake_asked = wake_pressed or _command_word(
-            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
         if wake_asked or key in self._wake_kept:
             # The pane is back (on its own, or a wake asked for before it came back): what
             # was kept for it goes in first, in order.
@@ -2045,7 +2052,8 @@ class ChannelManager:
                 log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
                 result = {"ok": False, "code": "error", "started": True}
         finally:
-            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)),
+                                  succeeded=bool(result.get("ok")))
         if not result.get("ok"):
             await self._reply(msg, wake.outcome_text(lang, result))
             return

@@ -25,6 +25,15 @@ describe('terminalKickoffOutcome', () => {
     expect(terminalKickoffOutcome({ typed: false, echo: null, submit: null, promptReady: true }))
       .toBe('failed')
   })
+
+  it('a prefill (submit: false) is sent once it echoed — there is no Enter to observe', () => {
+    expect(terminalKickoffOutcome({ typed: true, echo: 'tail', submit: null, promptReady: true, prefill: true }))
+      .toBe('sent')
+    expect(terminalKickoffOutcome({ typed: true, echo: null, submit: null, promptReady: true, prefill: true }))
+      .toBe('unverified')
+    expect(terminalKickoffOutcome({ typed: false, echo: null, submit: null, promptReady: true, prefill: true }))
+      .toBe('failed')
+  })
 })
 
 describe('kickoffAttemptOutcome', () => {

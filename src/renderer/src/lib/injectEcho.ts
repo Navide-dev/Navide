@@ -251,6 +251,16 @@ export function echoEvidence(
   return null
 }
 
+/** Is our `tail` drawn on the rendered screen now, having not been there
+ *  before we typed? The stream checks above read the cleaned bytes the PTY
+ *  sent; on Windows (ConPTY) every external cli_open_agent read "content never
+ *  appeared in the input box" while xterm drew the task in the box (VM 0.2.38),
+ *  so the rendered screen is asked as well. */
+export function screenShowsNewTail(screenBefore: string, screenNow: string, tail: string): boolean {
+  if (!tail) return false
+  return !normalizeForMatch(screenBefore).includes(tail) && normalizeForMatch(screenNow).includes(tail)
+}
+
 /** echoEvidence for one send: the tail counts only inside the `grownBy`
  *  characters that arrived since it, never in the scrollback before it. A
  *  kickoff typed a second time found the first attempt's copy, echoed after

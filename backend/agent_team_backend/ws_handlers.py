@@ -9578,13 +9578,29 @@ async def terminal_create_cancel(
 #: of the command.
 _GUARDED_LINES: dict[str, str] = {}
 _PASTE_GUARDS = ("\x1b[200~", "\x1b[201~")
+#: Terminal sessions whose command line holds a prefill (cli_send /
+#: cli_open_agent submit: false) the user has not run or cleared yet. Every
+#: guarded write is refused meanwhile: one with an Enter would run the prefill,
+#: which is the user's to run. The prefill is also the session's pending line in
+#: _GUARDED_LINES. Only the user's own keystroke that ends the line (a
+#: terminal.input flagged human carrying Enter, Ctrl-C or Ctrl-U) releases both:
+#: any other key, or a focus or mouse report, leaves the prefill on the line.
+_PREFILL_HELD: set[str] = set()
+#: Keys that run or discard the command line: Enter, Ctrl-C, Ctrl-U.
+_LINE_ENDING_KEYS = ("\r", "\x03", "\x15")
 
 
-def _guarded_terminal_write_refusal(session: "Session", session_id: str, data: str) -> Any:
+def _guarded_terminal_write_refusal(
+    session: "Session", session_id: str, data: str, *, prefill: bool = False
+) -> Any:
     """terminal_policy's refusal for a guarded write to a plain terminal, or
     None (also for a PTY that is not a terminal pane: only a shell runs what it
     is typed). Records the write into the session's pending line when it
-    passes; an Enter clears it."""
+    passes; an Enter clears it.
+
+    A ``prefill`` write is typed without Enter for the user: it is judged (and
+    audited) by the MCP tool that asked for it, so here it only has to be one
+    printable line. It then holds the session (see _PREFILL_HELD)."""
     term = session.terminals.get(session_id)
     if term is None or getattr(term, "agent_key", "") != "terminal":
         return None
@@ -9593,6 +9609,19 @@ def _guarded_terminal_write_refusal(session: "Session", session_id: str, data: s
     text = data
     for guard in _PASTE_GUARDS:
         text = text.replace(guard, "")
+    if prefill:
+        problem = terminal_policy.prefill_line_error(text)
+        if problem:
+            return terminal_policy.Refusal("prefill-not-single-line", text[:200], problem)
+        _GUARDED_LINES[session_id] = _GUARDED_LINES.get(session_id, "") + text
+        _PREFILL_HELD.add(session_id)
+        return None
+    if session_id in _PREFILL_HELD:
+        return terminal_policy.Refusal(
+            "prefill-pending", text[:200],
+            "a command prefilled for the user is still on this terminal's command line — "
+            "it is the user's to run or clear",
+        )
     submit = "\r" in text
     line = _GUARDED_LINES.get(session_id, "") + text.replace("\r", "")
     workspace = str(term.metadata.get("workspace_path") or term.cwd)
@@ -9627,7 +9656,9 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
         # Everything a guarded injection has typed since its last Enter is one
         # command line, checked as a whole before each write — a line split
         # across chunks is judged together, and the Enter re-checks it.
-        refusal = _guarded_terminal_write_refusal(session, session_id, payload["data"])
+        refusal = _guarded_terminal_write_refusal(
+            session, session_id, payload["data"], prefill=payload.get("prefill") is True
+        )
         if refusal is not None:
             await session.send_json(
                 make_response(
@@ -9638,7 +9669,11 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
     elif payload["data"]:
         # Anything else written (a person typing, a kill-line after a failed
         # injection) means the line is no longer only what was injected.
-        _GUARDED_LINES.pop(session_id, None)
+        if session_id not in _PREFILL_HELD:
+            _GUARDED_LINES.pop(session_id, None)
+        elif payload.get("human") is True and any(k in payload["data"] for k in _LINE_ENDING_KEYS):
+            _PREFILL_HELD.discard(session_id)
+            _GUARDED_LINES.pop(session_id, None)
     pending = session.terminals.write(session_id, payload["data"])
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending}))
     # A keyboard frame (the renderer flags only those: not mouse/focus reports,

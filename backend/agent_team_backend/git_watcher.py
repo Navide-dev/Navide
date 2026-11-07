@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -47,6 +48,7 @@ from watchdog.events import (
     FileSystemEventHandler,
 )
 
+from . import osplat
 from .fs_observer import Observer
 from .gitignore import GitIgnore
 
@@ -84,12 +86,32 @@ _IGNORE_GIT_FIRST_LEVEL = frozenset({"objects", "logs", "hooks", "lfs"})
 # still reports changes normally.
 _IGNORE_STORAGE_SUBDIRS = frozenset({"framework", "logs"})
 
+# Directories that are noise only outside a repository: a home-directory
+# workspace sees every write the OS, browsers and tools make under AppData,
+# Library and the dot-dirs (.cache, .config, .npm …), and in its dot-files
+# (.zsh_history, .DS_Store), and each became a git.changed. Discovery already skips them (git_service, `d.startswith(".")`).
+# Inside a repository they are content — a repo's own .github/ or a Unity
+# project's Library/ — so they are dropped only above the first repo root.
+_OUTSIDE_REPO_NOISE = frozenset({"AppData", "Library"})
+
 # The watchdog event types that mean something on disk changed. `closed`
 # (close after write) is left out: it always follows a `modified` for the same
 # write, and inotify queues a directory `modified` beside it.
 _CHANGE_EVENT_TYPES = frozenset({
     EVENT_TYPE_CREATED, EVENT_TYPE_DELETED, EVENT_TYPE_MODIFIED, EVENT_TYPE_MOVED,
 })
+
+# Windows reports a last-access or attribute change as `modified`: watchdog
+# asks ReadDirectoryChangesW for both. Git reading a repo's .git files to
+# answer a status therefore came back as a change to that repo, and every Git
+# pane read status again — ~1078 git processes a minute under a home-folder
+# workspace on Windows, none on Linux (inotify's reads are not `modified`).
+# There a `modified` whose size and mtime did not move is dropped. NTFS keeps
+# mtime to 100 ns, so a real write always moves it; other platforms keep every
+# event, since a coarse mtime (HFS+, FAT) could hide a second same-size write.
+_SKIP_UNCHANGED_MODIFIED = osplat.watch_reports_touch_as_modified
+# Bound on the per-handler (mtime, size) memo; cleared, not evicted, past it.
+_MAX_STAMPS = 8192
 
 # Directories monitored for plan and report documents.
 PLAN_DOC_DIRS = frozenset({
@@ -121,6 +143,13 @@ class _RepoHandler(FileSystemEventHandler):
         self._on_dirty = on_dirty
         self._on_plans_dirty = on_plans_dirty
         self._ignores = ignores
+        # ws_path -> (path below this root, handler) for workspaces nested in
+        # this one: they share this handler's observer schedule instead of
+        # adding a second recursive watch over the same tree.
+        self._nested: dict[str, tuple[tuple[str, ...], _RepoHandler]] = {}
+        # path -> (mtime_ns, size) at its last `modified`, for
+        # _SKIP_UNCHANGED_MODIFIED. Only the observer's dispatch thread uses it.
+        self._stamps: dict[str, tuple[int, int]] = {}
 
     def on_any_event(self, event: FileSystemEvent) -> None:
         # Only react to actual create/delete/modify/move. An allowlist, not a
@@ -132,6 +161,12 @@ class _RepoHandler(FileSystemEventHandler):
         if event.event_type not in _CHANGE_EVENT_TYPES:
             return
         src = str(event.src_path)
+        if (
+            _SKIP_UNCHANGED_MODIFIED
+            and event.event_type == EVENT_TYPE_MODIFIED
+            and not self._stamp_moved(src)
+        ):
+            return
         dest = str(event.dest_path) if getattr(event, "dest_path", "") else ""
         # Editing an ignore file changes the answer for every path beneath it,
         # so its cached rules go before this event is judged — otherwise the
@@ -143,6 +178,39 @@ class _RepoHandler(FileSystemEventHandler):
         # handler makes per event on watchdog's single dispatch thread.
         src_parts = self._parts(src)
         dest_parts = self._parts(dest) if dest else ()
+        self._judge(event, src_parts, dest_parts)
+        for prefix, nested in list(self._nested.values()):
+            n = len(prefix)
+            nested_src = src_parts[n:] if src_parts[:n] == prefix else ()
+            nested_dest = dest_parts[n:] if dest_parts[:n] == prefix else ()
+            if nested_src or nested_dest:
+                nested._judge(event, nested_src, nested_dest)
+
+    def _stamp_moved(self, src: str) -> bool:
+        """True unless `src` has the size and mtime it had at its last
+        `modified` — the first one seen, and a file that cannot be stat'ed,
+        count as moved."""
+        try:
+            st = os.stat(src)
+        except OSError:
+            self._stamps.pop(src, None)
+            return True
+        stamp = (st.st_mtime_ns, st.st_size)
+        if self._stamps.get(src) == stamp:
+            return False
+        if len(self._stamps) >= _MAX_STAMPS:
+            self._stamps.clear()
+        self._stamps[src] = stamp
+        return True
+
+    def _judge(
+        self,
+        event: FileSystemEvent,
+        src_parts: tuple[str, ...],
+        dest_parts: tuple[str, ...],
+    ) -> None:
+        """Judge one event whose paths are already relative to this root."""
+        dest = bool(dest_parts)
         self._refresh_ignore_rules(src_parts)
         if dest_parts:
             self._refresh_ignore_rules(dest_parts)
@@ -259,6 +327,8 @@ class _RepoHandler(FileSystemEventHandler):
         name = parts[-1]
         if name.endswith(".lock"):
             return False  # index.lock, ref locks — transient, ignore.
+        if self._is_outside_repo_noise(parts):
+            return False
         if ".git" in parts:
             gi = parts.index(".git")
             sub = parts[gi + 1:]
@@ -280,6 +350,20 @@ class _RepoHandler(FileSystemEventHandler):
         if self._ignores is not None and self._ignores.ignored(parts, is_dir):
             return False
         return True
+
+    def _is_outside_repo_noise(self, parts: tuple[str, ...]) -> bool:
+        """True when a segment of *parts* is AppData, Library or starts with a
+        dot (a dot-dir or dot-file, other than .git) and no repository root
+        lies at or above it.
+
+        Only paths that contain such a segment pay for the `.git` stats."""
+        stop = parts.index(".git") if ".git" in parts else len(parts)
+        for i, seg in enumerate(parts[:stop]):
+            if seg.startswith(".") or seg in _OUTSIDE_REPO_NOISE:
+                return not any(
+                    (self._root.joinpath(*parts[:j]) / ".git").exists() for j in range(i + 1)
+                )
+        return False
 
 
 class GitWatcher:
@@ -305,6 +389,11 @@ class GitWatcher:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._observer: Observer | None = None
         self._roots: dict[str, Path] = {}  # ws_path -> resolved root
+        # ws_path -> handler, for every watched workspace
+        self._handlers: dict[str, _RepoHandler] = {}
+        # ws_path -> observer watch, only for workspaces with their own
+        # schedule; the rest ride on a watched ancestor (see `watch`).
+        self._watches: dict[str, object] = {}
         self._pending: dict[str, asyncio.TimerHandle] = {}
         # ws_path -> the (rel_path, event_type) pairs seen in the open window
         self._dirty_paths: dict[str, set[tuple[str, str]]] = {}
@@ -321,6 +410,10 @@ class GitWatcher:
         self._inbox_lock = threading.Lock()
         self._drain_queued = False
         self._started = False
+        # git.status calls watch() from worker threads (asyncio.to_thread), and
+        # a window's panes ask together: unguarded, each passed the "already
+        # watched" check and scheduled its own recursive watch on the same root.
+        self._watch_lock = threading.Lock()
 
     def start(self) -> None:
         if self._started:
@@ -359,6 +452,10 @@ class GitWatcher:
     def watch(self, ws_path: str) -> None:
         """Register a workspace to watch. Idempotent; safe to call on every
         git.status. No-op until start() has run."""
+        with self._watch_lock:
+            self._watch_locked(ws_path)
+
+    def _watch_locked(self, ws_path: str) -> None:
         if not self._started or self._observer is None or not ws_path:
             return
         if ws_path in self._roots:
@@ -376,12 +473,43 @@ class GitWatcher:
             self._mark_plans_dirty_threadsafe if self._on_plans_change else None,
             GitIgnore(root),
         )
+        # A workspace inside an already-watched one (a repo under a home
+        # directory workspace, registered again by its badge's git.status)
+        # shares that schedule: one recursive watch per tree, not one per repo.
+        for top_ws, watch in self._watches.items():
+            top_root = self._roots[top_ws]
+            if root == top_root or top_root in root.parents:
+                prefix = root.relative_to(top_root).parts
+                self._handlers[top_ws]._nested[ws_path] = (prefix, handler)
+                self._roots[ws_path] = root
+                self._handlers[ws_path] = handler
+                log.info("GitWatcher watching %s (via %s)", root, top_root)
+                return
         try:
-            self._observer.schedule(handler, str(root), recursive=True)
+            watch = self._observer.schedule(handler, str(root), recursive=True)
         except Exception as err:  # noqa: BLE001
             log.warning("GitWatcher schedule on %s failed: %s", root, err)
             return
         self._roots[ws_path] = root
+        self._handlers[ws_path] = handler
+        self._watches[ws_path] = watch
+        # Watched descendants move under this schedule, so a write below them
+        # is not seen by two recursive watches. Their own nested workspaces
+        # move along, re-based on this root.
+        for low_ws in [ws for ws in self._watches if ws != ws_path]:
+            low_root = self._roots[low_ws]
+            if root not in low_root.parents:
+                continue
+            low = self._handlers[low_ws]
+            moved = {low_ws: ((), low), **low._nested}
+            low._nested = {}
+            base = low_root.relative_to(root).parts
+            for ws, (prefix, h) in moved.items():
+                handler._nested[ws] = (base + prefix, h)
+            try:
+                self._observer.unschedule(self._watches.pop(low_ws))
+            except Exception as err:  # noqa: BLE001
+                log.warning("GitWatcher unschedule on %s failed: %s", low_root, err)
         log.info("GitWatcher watching %s", root)
 
     # ───────────────────────── debounce (loop thread) ─────────────────────
