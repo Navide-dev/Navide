@@ -267,3 +267,15 @@ async def test_list_summarises_each_bots_bindings_with_one_directory_read(ov: En
 async def test_list_gives_an_unbound_bot_no_bindings(ov: Env) -> None:
     bot = ov.m.list()["platforms"][0]["accounts"][0]
     assert bot["bindings"] == [] and bot["last_activity_at"] is None
+
+
+async def test_one_locations_call_answers_every_running_bot(ov: Env) -> None:
+    ov.store.remember_chat("telegram", _bot_key(ov), "-100", "Dev group", "supergroup", True, 5)
+    res = await ws_api._dispatch(ov.m, "channels.locations", {"all": True})
+    assert res["ok"] is True
+    bot = next(b for b in res["bots"] if b["platform"] == "telegram" and b["account"] == "default")
+    assert bot["locations"] == ov.m.locations("telegram")["locations"]
+    assert any(loc["chat_id"] == "-100" for loc in bot["locations"])
+    # Without the flag it stays the per-bot call it always was.
+    one = await ws_api._dispatch(ov.m, "channels.locations", {"platform": "telegram"})
+    assert one == ov.m.locations("telegram")

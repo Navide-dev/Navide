@@ -15,6 +15,7 @@ import {
 import { guardKey, type GuardStore } from '../composables/useGuard'
 import { vendorRunsYolo } from '../lib/guardYolo'
 import { channelBotLabel, channelBotName, formatChannelIdentity } from '../lib/channelIdentity'
+import { channelBotSearchFields, filterChannelEntries } from '../lib/channelSearch'
 import { useAgentMessaging } from '../composables/useAgentMessaging'
 import ChannelLinkGuide from './ChannelLinkGuide.vue'
 
@@ -71,6 +72,19 @@ interface PlatformGroup {
   locations: ChannelLocation[]
 }
 const groups = ref<PlatformGroup[]>([])
+
+// Search, once there are enough bots to need it: a group stays when its bot or
+// one of its chats matches (lib/channelSearch, the same rules as Settings).
+const SEARCH_FROM = 6
+const query = ref('')
+const searchable = computed(() => groups.value.length >= SEARCH_FROM)
+const shownGroups = computed(() => {
+  if (!searchable.value || !query.value.trim()) return groups.value
+  return filterChannelEntries(groups.value, query.value, (g) => {
+    const state = store?.accountState(g.platform, g.account)
+    return [...(state ? channelBotSearchFields(state) : [g.account]), ...g.locations.flatMap((l) => [l.title, l.chat_id])]
+  }, (g) => store?.accountState(g.platform, g.account)?.bot_id ?? '')
+})
 // Bumped per open, so a slow `channels.locations` reply from an earlier open is dropped.
 let loadSeq = 0
 const btnRef = ref<HTMLElement | null>(null)
@@ -160,19 +174,16 @@ async function loadGroups(): Promise<void> {
       }
     })
   )
-  await Promise.all(
-    groups.value
-      .filter((g) => !g.unavailable)
-      .map(async (g) => {
-        const res = await store.locations(g.platform, g.account)
-        if (seq !== loadSeq) return
-        const group = groups.value.find((x) => x.platform === g.platform && x.account === g.account)
-        if (!group) return
-        group.loading = false
-        if (res.ok) group.locations = res.data?.locations ?? []
-        else group.error = res.error ?? t('channels.error.generic')
-      })
-  )
+  // Every bot's chats in one request, however many bots there are.
+  if (groups.value.some((g) => !g.unavailable)) {
+    const res = await store.allLocations()
+    if (seq !== loadSeq) return
+    for (const group of groups.value.filter((g) => !g.unavailable)) {
+      group.loading = false
+      if (!res.ok) group.error = res.error ?? t('channels.error.generic')
+      else group.locations = res.data?.bots.find((b) => b.platform === group.platform && b.account === group.account)?.locations ?? []
+    }
+  }
   if (seq !== loadSeq || !open.value) return
   await nextTick()
   position()
@@ -214,6 +225,7 @@ async function toggle(): Promise<void> {
 function close(): void {
   open.value = false
   pending.value = null
+  query.value = ''
   loadSeq++
   document.removeEventListener('pointerdown', onPointerDown, true)
   document.removeEventListener('keydown', onKeydown, true)
@@ -230,6 +242,7 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault()
   event.stopPropagation()
   if (pending.value) back()
+  else if (query.value) query.value = ''
   else close()
 }
 
@@ -517,7 +530,17 @@ function openSettings(): void {
         <template v-if="!pending">
           <div class="pch-pop-head">{{ t('channels.pane.where') }}</div>
           <p v-if="unguardedYolo" class="pch-warn" role="note" data-testid="channel-guard-warning">{{ t('guard.pane.no-hook-warning') }}</p>
-          <section v-for="g in groups" :key="`${g.platform}:${g.account}`" class="pch-group" :data-account="g.account" data-testid="channel-group">
+          <input
+            v-if="searchable"
+            v-model="query"
+            type="search"
+            class="pch-search"
+            :placeholder="t('channels.bot.search-placeholder')"
+            :aria-label="t('channels.bot.search-placeholder')"
+            data-testid="channel-search"
+          />
+          <p v-if="searchable && query.trim() && !shownGroups.length" class="pch-sub" data-testid="channel-search-empty">{{ t('channels.bot.search-empty') }}</p>
+          <section v-for="g in shownGroups" :key="`${g.platform}:${g.account}`" class="pch-group" :data-account="g.account" data-testid="channel-group">
             <div class="pch-group-head">
               <span class="pch-mark" aria-hidden="true">{{ platformName(g.platform).charAt(0) }}</span>
               <span class="pch-group-name">{{ platformName(g.platform) }}</span>
@@ -649,6 +672,19 @@ function openSettings(): void {
 .pch-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pch-link { font: inherit; text-align: left; color: var(--accent-fg); background: transparent; border: none; padding: 2px 0; cursor: pointer; }
 .pch-foot { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--border-muted); }
+.pch-search {
+  width: 100%;
+  height: var(--control-h-md);
+  margin: 2px 0 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-xs);
+}
+.pch-search:focus { outline: none; border-color: var(--accent-muted); }
 .pch-group { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
 .pch-group + .pch-group { border-top: 1px solid var(--border-muted); }
 .pch-group-head { display: flex; align-items: center; gap: 6px; min-width: 0; }

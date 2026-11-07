@@ -1233,6 +1233,12 @@ class ChannelManager:
                 merged[str(loc.get("chat_id"))] = {**merged.get(str(loc.get("chat_id")), {}), **loc}
         return {"ok": True, "locations": list(merged.values())}
 
+    def all_locations(self) -> dict[str, Any]:
+        """locations() of every running bot in one answer, for a picker listing them all."""
+        return {"ok": True, "bots": [{"platform": platform, "account": account,
+                                      "locations": self.locations(platform, account)["locations"]}
+                                     for platform, account in sorted(self._adapters)]}
+
     def _chat_usable(self, platform: str, account: str, chat_id: str, kind: str) -> bool:
         """Whether a message from this chat can pass the sender gate. A Telegram DM's chat
         id is its user's id, so that one sender is asked about. Any other chat (a group,
