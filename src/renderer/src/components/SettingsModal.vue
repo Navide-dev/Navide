@@ -49,6 +49,18 @@ import {
   clampResumeConcurrency,
 } from '@navide/terminal'
 import {
+  WEB_PANE_IDLE_SETTING_KEY,
+  WEB_PANE_IDLE_DEFAULT,
+  WEB_PANE_IDLE_MIN,
+  WEB_PANE_IDLE_MAX,
+  WEB_PANE_LIMIT_SETTING_KEY,
+  WEB_PANE_LIMIT_DEFAULT,
+  WEB_PANE_LIMIT_MIN,
+  WEB_PANE_LIMIT_MAX,
+  clampWebPaneIdleMinutes,
+  clampWebPaneLimit,
+} from '../lib/webPaneHost'
+import {
   DEFAULT_EDITOR_SETTING_KEY,
   DEFAULT_EDITOR_COMMAND_KEY,
   DEFAULT_EDITOR_ID,
@@ -1673,6 +1685,19 @@ const resumeConcurrencyModel = ref(
 function onResumeConcurrencyChange(value: string): void {
   resumeConcurrencyModel.value = clampResumeConcurrency(value)
   settingsSet(RESUME_CONCURRENCY_SETTING_KEY, resumeConcurrencyModel.value)
+}
+
+// Web panes: minutes unfocused before a pane's page is unloaded, and how many
+// keep a loaded page at once. Read live by App.vue (lib/webPaneHost.ts).
+const webPaneIdleModel = ref(clampWebPaneIdleMinutes(settingsGet(WEB_PANE_IDLE_SETTING_KEY, WEB_PANE_IDLE_DEFAULT)))
+function onWebPaneIdleChange(value: string): void {
+  webPaneIdleModel.value = clampWebPaneIdleMinutes(value)
+  settingsSet(WEB_PANE_IDLE_SETTING_KEY, webPaneIdleModel.value)
+}
+const webPaneLimitModel = ref(clampWebPaneLimit(settingsGet(WEB_PANE_LIMIT_SETTING_KEY, WEB_PANE_LIMIT_DEFAULT)))
+function onWebPaneLimitChange(value: string): void {
+  webPaneLimitModel.value = clampWebPaneLimit(value)
+  settingsSet(WEB_PANE_LIMIT_SETTING_KEY, webPaneLimitModel.value)
 }
 
 // ── Default editor ──────────────────────────────────────────────────────────
@@ -4033,6 +4058,38 @@ watch(activeTab, (tab) => {
                     :max="MAX_RESUME_CONCURRENCY"
                     :value="resumeConcurrencyModel"
                     @change="onResumeConcurrencyChange(($event.target as HTMLInputElement).value)"
+                  />
+                </template>
+              </SettingRow>
+
+              <SettingRow
+                data-settings-section="general-web-pane-idle"
+                :title="$t('settings.general.web-pane-idle')"
+                :description="$t('settings.general.web-pane-idle-hint')"
+              >
+                <template #control>
+                  <input
+                    type="number"
+                    :min="WEB_PANE_IDLE_MIN"
+                    :max="WEB_PANE_IDLE_MAX"
+                    :value="webPaneIdleModel"
+                    @change="onWebPaneIdleChange(($event.target as HTMLInputElement).value)"
+                  />
+                </template>
+              </SettingRow>
+
+              <SettingRow
+                data-settings-section="general-web-pane-limit"
+                :title="$t('settings.general.web-pane-limit')"
+                :description="$t('settings.general.web-pane-limit-hint')"
+              >
+                <template #control>
+                  <input
+                    type="number"
+                    :min="WEB_PANE_LIMIT_MIN"
+                    :max="WEB_PANE_LIMIT_MAX"
+                    :value="webPaneLimitModel"
+                    @change="onWebPaneLimitChange(($event.target as HTMLInputElement).value)"
                   />
                 </template>
               </SettingRow>

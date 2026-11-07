@@ -177,6 +177,7 @@ describe('explicit group validation after asynchronous spawn preparation', () =>
         return '/history'
       }),
       runGroupsOf: () => groups, resolveCommand,
+      webPaneSiteForAgentKey: () => undefined, // not a web pane
     }
     const javascript = ts.transpileModule(
       ['assertRequestedSpawnGroup', 'spawnPane'].map(appFunction).join('\n'),

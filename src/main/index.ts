@@ -218,6 +218,8 @@ import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
 import { isPluginWebGuest } from './plugins/pluginWebViews'
+import { adoptWebPaneGuest, approveWebPaneAttach, isWebPaneGuest, registerWebPaneIpc } from './webPaneGuests'
+import type { WebPaneSite } from '../shared/webPaneSites'
 import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   firstPartyAgentToolSpec,
@@ -728,12 +730,31 @@ async function createWindow(
   // a guest gets, and binds each guest to the identity reserved for it.
   {
     const guestHooks = createGuestAttachHooks(frontendPluginManager)
+    // A web pane (an agent website on its own persist:web-<site> partition)
+    // is approved before the plugin hook, which would refuse its src. The two
+    // events fire in order for one attach, so the site is paired across them.
+    let webPaneAttach: WebPaneSite | null = null
     win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
       // Electron types WebPreferences without an index signature; the hook needs
       // one to clear the keys the <webview> tag contributed.
-      guestHooks.onWillAttach(event, webPreferences as MutableWebPreferences, params)
+      const prefs = webPreferences as MutableWebPreferences
+      webPaneAttach = null
+      if (typeof prefs['partition'] === 'string' && prefs['partition'].startsWith('persist:web-')) {
+        // Approved, or refused: an unknown site or a src off the site never
+        // attaches (fail closed — the plugin hook would not sanitize it either).
+        webPaneAttach = approveWebPaneAttach(event, prefs, params)
+        if (!webPaneAttach) event.preventDefault()
+        return
+      }
+      guestHooks.onWillAttach(event, prefs, params)
     })
     win.webContents.on('did-attach-webview', (_event, guest) => {
+      const site = webPaneAttach
+      webPaneAttach = null
+      if (site) {
+        adoptWebPaneGuest(guest, site, (url) => void shell.openExternal(url))
+        return
+      }
       guestHooks.onDidAttach(guest)
     })
     // A reservation whose guest never rendered would otherwise hold this window
@@ -6024,11 +6045,12 @@ app.on('web-contents-created', (_e, contents) => {
     skip: () => contents.session === session.fromPartition(PDF_PARTITION),
   })
   contents.on('will-navigate', (e, url) => {
-    // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts).
-    if (isPluginWebGuest(contents)) return
+    // A plugin web view enforces its own http(s) allowlist (pluginWebViews.ts),
+    // a web pane its own (webPaneGuests.ts).
+    if (isPluginWebGuest(contents) || isWebPaneGuest(contents)) return
     if (!isAppNavigation(url)) e.preventDefault()
   })
-  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents))
+  guardPlanFrameNavigation(contents, () => isPluginWebGuest(contents) || isWebPaneGuest(contents))
   contents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
@@ -6052,6 +6074,7 @@ app.whenReady().then(async () => {
     [...mainWindows].some((w) => !w.isDestroyed() && w.webContents.id === wc.id)
   )
   app.on('will-quit', () => fnKey.dispose())
+  registerWebPaneIpc(ipcMain, (event) => isAppWindowSender(event))
   // Settings → Resource limits: Spotlight's privacy settings, opened on request.
   registerSpotlightSettingsIpc(ipcMain, {
     openExternal: (url) => shell.openExternal(url),

@@ -723,6 +723,22 @@
     }
   },
   "pane": {
+    "web": {
+      "signed-in": "已登录",
+      "signed-out": "未登录",
+      "unloaded": "已卸载",
+      "memory": "{mb} MB",
+      "reload": "重新加载",
+      "open-browser": "在系统浏览器中打开",
+      "clear": "退出并清除",
+      "clear-confirm": "再点一次即退出此网站，并清除所有网页分格中这个网站的数据",
+      "clear-confirm-short": "确认",
+      "unloaded-title": "已卸载以节省内存",
+      "unloaded-hint": "点一下重新加载，登录状态仍在。",
+      "google-hint": "Google 可能不允许在嵌入式浏览器内登录；如被拦截，请改用系统浏览器登录。",
+      "cloudflare-hint": "正在检查浏览器，请稍候；如出现“Verify you are human”勾选框，请自己勾选。",
+      "privacy": "请使用你自己的账号登录。登录状态只保存在这台电脑上，Navide 不会读取。"
+    },
     "acp": {
       "unconfirmed": "未确认",
       "unsent": "未发送",
@@ -2628,6 +2644,10 @@
       "download-retry": "重新下载"
     },
     "general": {
+      "web-pane-idle": "网页分格闲置卸载（分钟）",
+      "web-pane-idle-hint": "网页分格超过这段时间未被聚焦，就卸载页面以释放内存；点一下重新加载，登录状态仍在。",
+      "web-pane-limit": "网页分格同时活跃上限",
+      "web-pane-limit-hint": "同时保持页面加载的网页分格数量；再打开一个时，会卸载最久未使用的那一格。",
       "auto-resume-reconnect": "Navide 后台服务重启后自动接回工作阶段",
       "resume-interrupted-on-launch": "重开 Navide 后自动接回工作中的分格",
       "system-notify": "系统通知",

@@ -272,6 +272,14 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   session, which an agent does not have. No tool takes or returns a bot
   credential. Because pane identity is not a process boundary (below), "its
   own workspace" is the workspace of the pane the caller presents itself as.
+- A web pane shows an agent's website in a `<webview>` on that site's own
+  persistent partition (`persist:web-<site>`, `src/shared/webPaneSites.ts`).
+  The user signs in there; the cookies stay in that partition and Navide neither
+  reads nor syncs them. Main (`src/main/webPaneGuests.ts`) attaches a guest only
+  on a known site's partition with a src on that site, sandboxes it with no
+  preload, refuses every permission but clipboard write and fullscreen, refuses
+  downloads, and opens a `window.open` to another site in the system browser.
+  Nothing is typed into a web pane: `cli_send` only focuses it.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

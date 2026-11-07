@@ -974,6 +974,13 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('dialog:pickFiles', args),
   openExternal: (url: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:openExternal', url),
+  /** Web panes (src/shared/webPaneSites.ts): guest renderer memory in MB by
+   *  webContents id, and "sign out and clear" for one site's partition. */
+  webPane: {
+    memory: (webContentsIds: number[]): Promise<Record<string, number>> =>
+      ipcRenderer.invoke('webPane:memory', webContentsIds),
+    clearData: (siteId: string): Promise<boolean> => ipcRenderer.invoke('webPane:clearData', siteId),
+  },
   /** Move an instruction file the Memory page created to the Trash; main
    *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */
   trashCreatedMemoryFile: (
