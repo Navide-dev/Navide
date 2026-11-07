@@ -33,7 +33,9 @@ from ..channels.pairing import normalize_code
 from ..channels.registry import PLATFORMS
 from ..channels.store import DEFAULT_ACCOUNT
 from . import server as core
-from .marketplace_forms import _without_secrets
+# A module reference, not a name: marketplace_forms imports server, whose tail
+# imports this module, so it can still be half-loaded here.
+from . import marketplace_forms as _forms
 
 #: Platform credentials as they look in text: a Telegram bot token, Slack
 #: bot/app tokens, a Discord bot token.
@@ -61,7 +63,7 @@ def _redact(value: Any) -> Any:
 
 def _scrub(value: Any) -> Any:
     """``value`` with credential-named keys dropped and credential-shaped text redacted."""
-    return _redact(_without_secrets(value))
+    return _redact(_forms._without_secrets(value))
 
 
 def _manager() -> Any:

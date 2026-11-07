@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 // The three public npm packages ship together through
@@ -45,7 +45,8 @@ describe('public plugin packages', () => {
   })
 
   it('are published by an executable script that dry-runs by default and never takes a token', () => {
-    expect(statSync(script).mode & 0o111).not.toBe(0)
+    // The index records the executable bit on every platform; Windows' file mode does not.
+    expect(spawnSync('git', ['ls-files', '-s', script], { encoding: 'utf8' }).stdout).toMatch(/^100755 /)
     const source = readFileSync(script, 'utf8')
     expect(spawnSync('bash', ['-n', script]).status).toBe(0)
     expect(source).toContain('--dry-run')

@@ -247,6 +247,9 @@ def claude_projects_root() -> Path | None:
 #: A transcript's first lines carry its cwd; anything past these never will.
 SESSION_CWD_SCAN_LINES = 50
 _session_cwds: dict[tuple[str, int], str] = {}
+# Files whose first SESSION_CWD_SCAN_LINES lines name no cwd: they never will, and
+# re-scanning them on every parse would read those lines again on each append.
+_session_cwd_misses: set[tuple[str, int]] = set()
 
 
 class ClaudeLogReader(LogReader):
@@ -342,6 +345,8 @@ class ClaudeLogReader(LogReader):
             key = (str(path), path.stat().st_ino)
         except OSError:
             return ""
+        if key in _session_cwd_misses:
+            return ""
         cwd = _session_cwds.get(key) or self._read_session_cwd(path)
         if cwd:
             _session_cwds[key] = cwd
@@ -350,7 +355,9 @@ class ClaudeLogReader(LogReader):
     def _read_session_cwd(self, path: Path) -> str:
         try:
             with path.open(encoding="utf-8", errors="replace") as fh:
+                scanned = 0
                 for raw in islice(fh, SESSION_CWD_SCAN_LINES):
+                    scanned += 1
                     try:
                         rec = json.loads(raw)
                     except json.JSONDecodeError:
@@ -358,6 +365,8 @@ class ClaudeLogReader(LogReader):
                     cwd = rec.get("cwd") if isinstance(rec, dict) else None
                     if cwd and isinstance(cwd, str):
                         return cwd
+                if scanned >= SESSION_CWD_SCAN_LINES:
+                    _session_cwd_misses.add((str(path), os.fstat(fh.fileno()).st_ino))
         except OSError as err:
             log.debug("read cwd of %s failed: %s", path, err)
         return ""

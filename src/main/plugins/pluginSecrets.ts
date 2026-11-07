@@ -30,6 +30,7 @@ import {
   MAX_SECRET_VALUE_BYTES,
   SECRET_NAME_PATTERN,
 } from '../../../packages/plugin-contracts/src/secrets'
+import { isWindows } from '../../shared/osplat'
 
 export type { PluginSecretsNotice } from '../../shared/pluginSecretsNotice'
 
@@ -277,7 +278,7 @@ export class PluginSecretStore {
   private write(pluginId: string, file: SecretsFile): void {
     const path = this.path(pluginId)
     mkdirSync(this.root, { recursive: true, mode: 0o700 })
-    if (process.platform !== 'win32') chmodSync(this.root, 0o700)
+    if (!isWindows()) chmodSync(this.root, 0o700)
     if (Object.keys(file.secrets).length === 0) {
       rmSync(path, { force: true })
       return
@@ -289,7 +290,7 @@ export class PluginSecretStore {
     } finally {
       rmSync(temporary, { force: true })
     }
-    if (process.platform !== 'win32') chmodSync(path, 0o600)
+    if (!isWindows()) chmodSync(path, 0o600)
   }
 }
 
