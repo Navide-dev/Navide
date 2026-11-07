@@ -874,14 +874,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ...(args.base === undefined ? {} : { base: args.base }),
       ...(args.compare === undefined ? {} : { compare: args.compare }),
     }),
-  getZoomFactor: (): Promise<number> => ipcRenderer.invoke('window:getZoomFactor'),
   // Interface scale: main applies it to every window's WebContents at once.
   setUiScale: (scale: number): Promise<number> => ipcRenderer.invoke('window:setUiScale', scale),
-  onZoomChanged: (cb: () => void): (() => void) => {
-    const listener = (): void => cb()
-    ipcRenderer.on('window:zoom-changed', listener)
-    return () => ipcRenderer.removeListener('window:zoom-changed', listener)
-  },
   // Plan-window side receiver: main asks an already-open plan window to switch
   // to a newly clicked plan instead of reopening the window. Returns a disposer.
   onPlanOpenDoc: (handler: (relPath: string) => void): (() => void) => {

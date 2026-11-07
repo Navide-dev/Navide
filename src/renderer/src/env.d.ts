@@ -179,9 +179,7 @@ declare global {
         compare?: string
       }) => Promise<{ ok: boolean }>
       openBranchDiffWindow?: (args: { workspace_path: string; base: string }) => Promise<{ ok: boolean }>
-      getZoomFactor?: () => Promise<number>
       setUiScale?: (scale: number) => Promise<number>
-      onZoomChanged?: (cb: () => void) => () => void
       onPlanOpenDoc: (handler: (relPath: string) => void) => () => void
       openDiffWindow: (args: {
         workspace_path: string

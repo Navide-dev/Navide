@@ -36,23 +36,21 @@ describe('lockPageZoom', () => {
     expect(contents.setZoomFactor).toHaveBeenCalledWith(1)
   })
 
-  it('resets page zoom and notifies the renderer when zoom is requested', () => {
+  it('resets page zoom when zoom is requested', () => {
     const { contents, listeners } = webContentsStub()
-    const onZoomChanged = vi.fn()
-    lockPageZoom(contents as never, onZoomChanged)
+    lockPageZoom(contents as never)
     contents.setZoomFactor.mockClear()
 
     listeners.get('zoom-changed')?.()
 
     expect(contents.setZoomFactor).toHaveBeenCalledOnce()
     expect(contents.setZoomFactor).toHaveBeenCalledWith(1)
-    expect(onZoomChanged).toHaveBeenCalledOnce()
   })
 
   it('pins to the interface scale the app owns, not to 1', () => {
     const { contents } = webContentsStub()
 
-    lockPageZoom(contents as never, undefined, () => 1.25)
+    lockPageZoom(contents as never, () => 1.25)
 
     expect(contents.setZoomFactor).toHaveBeenCalledWith(1.25)
   })
@@ -60,7 +58,7 @@ describe('lockPageZoom', () => {
   it('re-reads the scale on each event so a later change reaches an old window', () => {
     const { contents, listeners } = webContentsStub()
     let scale = 1
-    lockPageZoom(contents as never, undefined, () => scale)
+    lockPageZoom(contents as never, () => scale)
     scale = 1.5
     contents.setZoomFactor.mockClear()
 
@@ -71,7 +69,7 @@ describe('lockPageZoom', () => {
 
   it('restores the interface scale after a pinch gesture rather than dropping to 1', () => {
     const { contents, listeners } = webContentsStub()
-    lockPageZoom(contents as never, undefined, () => 1.1)
+    lockPageZoom(contents as never, () => 1.1)
     contents.setZoomFactor.mockClear()
 
     listeners.get('zoom-changed')?.()
@@ -82,7 +80,7 @@ describe('lockPageZoom', () => {
   it('falls back to 1 when the provider yields an unusable factor', () => {
     const { contents } = webContentsStub()
 
-    lockPageZoom(contents as never, undefined, () => Number.NaN)
+    lockPageZoom(contents as never, () => Number.NaN)
 
     expect(contents.setZoomFactor).toHaveBeenCalledWith(1)
   })

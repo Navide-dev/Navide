@@ -4615,13 +4615,6 @@ ipcMain.handle('plugins:closeContribution', (event, args: Record<string, unknown
   return frontendPluginManager.closeContribution(hostWindow, contributionKey)
 })
 
-ipcMain.handle('window:getZoomFactor', (event) => {
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  if (!hostWindow) return 1
-  const factor = hostWindow.webContents.getZoomFactor()
-  return Number.isFinite(factor) && factor > 0 ? factor : 1
-})
-
 // Interface scale, applied to every window at once. Accepted only from a
 // top-level app frame: plugin content runs in a child frame or a
 // WebContentsView whose preload does not expose this bridge at all, so it can
@@ -6029,13 +6022,7 @@ app.on('web-contents-created', (_e, contents) => {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(
-    contents,
-    () => {
-      if (!contents.isDestroyed()) contents.send('window:zoom-changed')
-    },
-    () => (scalable ? zoom.get() : 1)
-  )
+  lockPageZoom(contents, () => (scalable ? zoom.get() : 1))
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
