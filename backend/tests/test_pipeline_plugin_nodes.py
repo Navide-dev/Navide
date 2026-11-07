@@ -106,3 +106,26 @@ def test_host_answer_is_read_by_type_and_first_plugin_wins() -> None:
         "x.y": {"pluginId": "acme.http", "node": "fetch", "title": "Fetch"},
     }
     assert mcp._pipeline_nodes_by_type({"ok": False}) == {}
+
+
+def test_a_plugin_node_run_lands_in_the_plugins_activity(tmp_path: Any) -> None:
+    from agent_team_backend.db import Database
+    from agent_team_backend.plugins.audit_log import PluginAuditLog
+
+    now = 1_762_000_000_000
+    audit = PluginAuditLog(Database(tmp_path / "navide.db"), clock=lambda: now / 1000)
+    common = {"plugin_id": "acme.http", "plugin_version": "1.0.0", "workspace": "/work/a", "node_id": "fetch"}
+    assert audit.record_pipeline_node_run(**common, run_origin="schedule", outcome="ok", duration_ms=40, at_ms=now - 2)
+    assert audit.record_pipeline_node_run(**common, run_origin="agent", outcome="error", duration_ms=5,
+                                          error_code="BACKEND_UNAVAILABLE", at_ms=now - 1)
+    assert audit.record_pipeline_node_run(**common, run_origin="user", outcome="error", duration_ms=1,
+                                          error_code="something else", at_ms=now)
+    assert not audit.record_pipeline_node_run(**common, run_origin="someone", outcome="ok", duration_ms=1)
+    audit.flush()
+    runs = audit.activity_report("acme.http", now_ms=now)["pipelineNodeRuns"]
+    assert [(r["runOrigin"], r["outcome"], r["errorCode"], r["durationMs"]) for r in runs] == [
+        ("user", "error", "other", 1),
+        ("agent", "error", "BACKEND_UNAVAILABLE", 5),
+        ("schedule", "ok", "", 40),
+    ]
+    assert runs[0]["nodeId"] == "fetch" and runs[0]["workspace"] == "/work/a"
