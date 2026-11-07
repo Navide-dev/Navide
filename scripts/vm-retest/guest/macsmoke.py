@@ -17,7 +17,14 @@ def view(c):
                            "b:[...document.querySelectorAll('button')].filter(e=>e.offsetParent).map(e=>e.innerText.trim()).filter(Boolean).slice(0,40),"
                            "t:document.body.innerText.slice(0,1500)})") or "{}")
 def wizard():
-    c = Cdp(main_wizard_page()); seen_claude = False
+    # The wizard renders only once the backend has answered onboarding.status (until then the shell shows the Welcome
+    # screen), so wait for it to appear before judging anything.
+    c = Cdp(main_wizard_page()); seen_claude = False; t0 = time.time()
+    while time.time() - t0 < 90 and "Skip for Now" not in view(c).get("b", []): time.sleep(2)
+    if "Skip for Now" not in view(c).get("b", []):
+        shot("wiz-missing"); st = B().call("onboarding.status").get("payload")
+        rec("wizard shown on first launch", False, f"no wizard after 90 s; onboarding.status={json.dumps(st)[:300]}"); return
+    rec("wizard shown on first launch", True, f"after {round(time.time() - t0)} s")
     for i in range(1, 11):
         time.sleep(3); v = view(c); shot(f"wiz-{i}")
         say(f"step {i} headings={v.get('h')} buttons={v.get('b')}")

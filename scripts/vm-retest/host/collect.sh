@@ -11,7 +11,7 @@ if [ "$p" = linux ]; then
     tar czf evidence.tgz fpre.out fpost.out results.jsonl totals.txt stub.log backend.log w*/.agent-team/runs sw/.agent-team/runs 2>/dev/null; ls -la evidence.tgz'
   "$HERE/gcp.sh" linux get evidence.tgz "$out"
 elif [ "$p" = macos ]; then  # the smoke round: macsmoke.out, its results and screenshots, the stub log, backend.log
-  "$HERE/gsh.sh" macos 'cp ~/Library/"Application Support"/Agent-Team/logs/backend.log backend.log 2>/dev/null
+  "$HERE/gsh.sh" macos 'cp ~/Library/"Application Support"/agent-team/logs/backend.log backend.log 2>/dev/null
     tar czf evidence.tgz macup.out macsmoke.out results.jsonl stub.log backend.log shots w*/.agent-team/runs 2>/dev/null; ls -la evidence.tgz'
   "$HERE/gcp.sh" macos get evidence.tgz "$out"
 else

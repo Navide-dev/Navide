@@ -10,7 +10,7 @@ mkdir -p "$out"; t0=$(date +%s); step() { echo "== $(date +%H:%M:%S) +$(( $(date
 step revert; "$HERE/vm.sh" macos state | grep -qx off || die "the macos VM is running"; "$HERE/vm.sh" macos revert || die "revert failed"
 step start;  "$HERE/vm.sh" macos start || die "start failed"
 step install; "$HERE/macos-up.sh" "$A" || die "macos-up failed"
-step smoke;  "$HERE/gsh.sh" macos 'export PATH=$HOME/.local/bin:/usr/local/bin:$PATH; python3 macsmoke.py ~/wh 2>&1 | tee macsmoke.out; exit ${PIPESTATUS[0]}'; rc=$?
+step smoke;  "$HERE/gsh.sh" macos 'export PATH=$HOME/.local/bin:/usr/local/bin:$PATH; python3 macsmoke.py ~/wh > macsmoke.out 2>&1; r=$?; cat macsmoke.out; exit $r'; rc=$?
 step collect; "$HERE/collect.sh" macos "$out"
 step stop;   "$HERE/vm.sh" macos stop
 step revert; "$HERE/vm.sh" macos revert

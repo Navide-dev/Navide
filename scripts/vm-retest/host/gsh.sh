@@ -8,9 +8,11 @@ set -u
 p="${1:-}"; need_any_platform "$p"; shift
 s="${1:-$(cat)}"
 dest="$(user_of "$p")@$(guest_of "$p")"
-if [ "$p" != windows ]; then
+if [ "$p" = linux ]; then
   exec ssh "${SSH_OPTS[@]}" "$dest" "cd ~/wh 2>/dev/null; $s"
 fi
+# macOS: the account's login shell is zsh, whose unmatched globs abort the command; run the text under bash like Linux
+[ "$p" = macos ] && exec ssh "${SSH_OPTS[@]}" "$dest" "bash -c $(printf '%q' "cd ~/wh 2>/dev/null; $s")"
 case "$s" in
   py:*) s="\$env:PYTHONUTF8='1'; \$env:PYTHONIOENCODING='utf-8'; [Console]::OutputEncoding=[Text.Encoding]::UTF8; cd \$env:USERPROFILE\\wh; cmd /c '${s#py:} 2>&1'" ;;
 esac
