@@ -278,6 +278,11 @@ received external content is marked tainted and its high-risk actions need
 local confirmation. A boundary line written inside the body is broken with a
 zero-width space, so the sender cannot close the block early.
 
+A pane's chat can be bound by the user in Settings → Channels or by an agent
+through `channels_bind` ([External MCP Control](external-mcp-control.md#chat-channels)).
+Either way the chat is told which pane it now drives, and a bind an agent made
+is recorded with that agent's pane and shown as a toast in every main window.
+
 ### Answering a chat sender
 
 A chat sender is not a pane, but the pane answers it the same way: an MSG

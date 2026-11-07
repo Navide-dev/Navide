@@ -222,7 +222,16 @@ server = NavideMCP(
         "last known activity, and cli_wait_idle blocks until it goes idle or a "
         "timeout passes — the reliable way to learn a pane is done, and the "
         "only way for an external caller, which gets no completion message at "
-        "all."
+        "all.\n"
+        "\n"
+        "Chat channels (Telegram, Discord, Slack, ...): the channels_* tools "
+        "read the bots, chats, bindings and pairing requests and make the "
+        "changes within your reach; what only the user can grant — letting a "
+        "person in, adding or removing a bot, a bind outside your reach — they "
+        "file as a request the user decides in the main window "
+        "(channels_request_status follows it). A bot's credential never goes "
+        "through a tool: if the user pastes one to you, ask them to paste it "
+        "into the form channels_bot_add_open or channels_bot_add_fill opens."
     ),
 )
 

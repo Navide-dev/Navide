@@ -398,7 +398,7 @@ Host Wiring — だけです。Navide の CLI Pane から、その Pane 自身�
 | Action | Args | 効果 |
 |---|---|---|
 | `ui.actions.describe` | `{prefix?}` | 登録済みの Action、または `prefix` で始まる id のみを説明します。各 Action について `{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}` を 1 行返します。`humanOnly` は `true` または適用条件で、`ui_human_only` で拒否されることを示します。`dedicatedTool` は `ui_invoke` が拒否する場合に使うツールを示します。`args` と `summary` を持つのは `ui.*` の行のみです |
-| `ui.settings.open` | `{tab?}`（`general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings` のいずれか） | Settings を開く。任意で特定のタブへ |
+| `ui.settings.open` | `{tab?, platform?, account?}`（`tab` は `general`、`mcp`、`analyzer`、`updates`、`appearance`、`accounts`、`keybindings`、`channels` のいずれか） | Settings を開く。任意で特定のタブへ。`tab: "channels"` のとき、`platform`（`telegram`、`discord` など）と `account`（`channels_status` の bot id。省略時は `default`）で Channels ページをその bot を選んだ状態で開く。ページにない bot なら、エラーにせずページだけ開く |
 | `ui.settings.close` | — | Settings を閉じる |
 | `ui.settings.yolo` | `{yolo?}` | CLI の権限バイパスのグローバルスイッチを読む。`yolo` を渡した場合は設定する。`{yolo, agents}` を返し、各 agent は `{agent, mode, skipFlag}`。Workspace スコープではありません: どのウィンドウでも答えられ、ベンダーごとの答えは `yolo` ではなく `skipFlag` です |
 | `ui.pane.create` | `{agent, name?, task?}` | ウィンドウが開いている Workspace に `agent` の Pane を Spawn。`task` を指定した場合は Kickoff Prompt として送られ、Role 注入はスキップされる |
@@ -536,6 +536,34 @@ CLI が既に何を渡されているのか、このプロジェクトが既に�
 | `workspace_switch` | `path` | 呼び出し元 Pane をホストしているウィンドウを、そのウィンドウがすでに保持している別の Workspace に切り替えます（1 ウィンドウ複数プロジェクト）。Pane は影響を受けません。ウィンドウが `path` を保持していない場合は、`workspace_open` を案内するエラーになります。そのウィンドウで Pipeline が実行中の間も拒否されます（先に `pipeline_abort` するか、サイドバーから切り替えてください）。Pane からの呼び出し専用です — host や外部の呼び出し元は自分のウィンドウを持たないため `ok: false` になります（代わりに `ui_invoke` に `workspace_path` と action `ui.workspace.switch` を渡してください）。今画面に表示されている Workspace を `{ok, path}` で返します |
 | `mcp_list` | — | ここで設定されている MCP サーバー — Navide 自身がクライアントとして接続するもの（ライブ状態付き）と、各 CLI が自分の設定（`~/.claude.json`、`~/.codex/config.toml` など）に持つものをファイルの記述どおりに反映したもの。`{servers, native, agents}` を返します。Navide 管理の各サーバーは `{name, enabled, transport, command, args, env}` または `{name, enabled, transport, url, headers}` に `status`（`disabled` / `connected` / `error` / `unknown`）と `tool_count` を加えたもので、ツール一覧そのものは含みません。各 native エントリは `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}` です。`agents` は各ベンダーと、Navide がその MCP に対してできること（`wired` / `planned` / `unsupported`）、および自身の設定が反映されているかどうかです。資格情報の形をした値 — env と header の値、`--api-key=` 形式の引数、URL の userinfo と秘密のクエリパラメータ — はすべて `***` にマスク済みで、名前とホストはエントリを識別できるよう残されます。Workspace ごとではなくグローバルな一覧です。読み取り専用 — サーバーの追加・有効化・編集は Settings でのユーザーの判断です |
 | `prompt_list` | `id=""` | ユーザーが Settings → Prompts に保持する Prompt スキル — アプリから CLI Pane に送る保存済みの指示。`id` なしで呼ぶとメタデータのみを一覧します: `{skills, default_id}` で、各スキルは `{id, name, icon, description, category, enabled, isDefault, maxTurns}`、`default_id` はデフォルトに指定されたスキルの id（無ければ `""`）です。ユーザーが一度も保存していない場合は `note` が付きます: アプリは初回使用時に組み込みスキルを植え付けますが、それはここからは見えません。`id` を付けるとそのスキルを丸ごと返します — `{skill}` で、`prompt` と `resumePrompt` も含みます。未知の id は `{ok: false, error}` を返します。読み取り専用: 作成や編集は Settings で行います |
+
+### チャットチャンネル
+
+`channels_*` tool は Navide のチャットチャンネル bot（設定 → Channels）を扱う。どの bot、チャット、紐付け、ペアリング要求があるかを読み、呼び出し元の範囲内の変更を行い、それ以外はユーザーに依頼する。ユーザーだけが与えられるもの——人を通すこと、bot の追加や削除、呼び出し元の範囲外の紐付け——は、エージェントは依頼として出すことしかできない。メインウィンドウが誰がなぜ依頼したかを表示し、そこで押されたときだけ実行される。全 bot を一度に止めるスイッチはどの tool にもない。ユーザーにページを見せるには、`ui_invoke` `ui.settings.open` `{tab: "channels", platform, account}` がその bot を選んだ状態でページを開く。
+
+| Tool | パラメータ | 内容 |
+|---|---|---|
+| `channels_status` | — | プラットフォームごとのすべての bot：`{ok, enabled, platforms: [{platform, configured, enabled, bots}], note}`。`enabled` はチャンネル全体のスイッチ。各 bot は `{platform, account, name, configured, enabled, status, bot_id, bindings, last_activity_at}`：`status` は接続状態（`lifecycle`、`connected`、`last_error`、`identity` など）、`bot_id` は Telegram の bot id、`bindings` はその bot が動かすペイン `{pane_id, pane_name, pane_exists, workspace_path, workspace_name, chat_title, created_at}` |
+| `channels_bindings` | — | すべての紐付け：`{ok, bindings: [{pane_id, platform, account, chat_id, thread_id, title, verbosity, parent_pane_id, auto}], note}`。1 つのチャットが同時に動かすペインは 1 つ。`auto` は子ペイン用に自動で作られたトピック |
+| `channels_chats` | `platform=""`、`account=""` | 動作中の bot が知っているチャット（`channels_bind` 用）：`{ok, bots: [{platform, account, chats: [{chat_id, title, kind, supports_topics, …}]}]}`。platform を省略すると動作中のすべての bot |
+| `channels_pairing_requests` | `platform=""` | 通されるのを待っている人：`{ok, requests: [{platform, account, code, sender_id, sender_name, created_at, source}]}`。`source` は `invite`（リンクコードを使った）か `pairing` |
+| `channels_link_code` | `platform`、`account=""`、`target="direct"` | 使い切りのリンクコード（10 分、bot ごとに最大 5 個）。送った人はペアリング要求になる：`{ok, platform, code, target, expires_at, url, id}`。コードだけでは誰も通らない。`id` は `channels_request_status` で追える |
+| `channels_bind` | `platform`、`chat_id`、`pane=""`、`pane_id=""`、`account=""`、`mode="existing"`、`thread_id=""`、`title=""`、`verbosity=""`、`reason=""` | チャットをペインに紐付ける（ペイン指定なしなら呼び出し元自身）。呼び出し元のワークスペースのペインで、bot が知っていて誰かが通されたチャットなら即座に紐付く：`{ok, binding}`。それ以外——別のワークスペースのペイン、bot が見たことのないチャット、まだ誰も通されていないチャット——は依頼になる：`{ok, id, status: "pending", why, expires_at, note}`。`mode` が `new` ならプラットフォームが対応していれば新しいトピックを作る。チャットにはどのペインを動かすかが通知される。別のペインに紐付いているチャットは拒否される |
+| `channels_unbind` | `pane=""`、`pane_id=""` | 呼び出し元のワークスペースのペインの紐付けを外す：`{ok, removed}`。チャットに通知される |
+| `channels_set_verbosity` | `verbosity`、`pane=""`、`pane_id=""` | ペインの活動をどこまでチャットに送るか：`replies`、`minimal`、`standard`、`full`。子トピックも従う |
+| `channels_bot_rename` | `platform`、`account`、`name` | Navide での bot の表示名だけを変える |
+| `channels_bot_set_enabled` | `platform`、`account`、`enabled` | 1 つの bot を接続または切断する。何も削除しない |
+| `channels_pairing_reject` | `platform`、`code` | ペアリング要求を拒否する |
+| `channels_bot_add_open` | `platform` | Navide で空の bot 追加フォームを開き、ユーザーに入力してもらう：`{ok, opened, platform, note}` |
+| `channels_bot_add_fill` | `platform`、`name=""`、`reason=""` | bot 追加の依頼：フォームは `name` が入力済みでエージェントが書いたと示された状態で開く。認証情報はユーザーが自分で入力して追加を押す。`result` は `{platform, account}` |
+| `channels_managed_bot_create` | `manager_account=""`、`username=""`、`name=""` | Bot Management Mode で誰かがリンク済みの Telegram bot から新しい bot を作る：`{ok, id, url, expires_at, note}`。その人が `url` で作成を押すと、Navide が Telegram から新しい bot の認証情報を自分で取得して追加する。誰も認証情報に触れない。`result` は `{account, name, link}` |
+| `channels_pairing_approve_request` | `platform`、`code`、`bind_pane=""`、`bind_pane_id=""`、`reason=""` | 人を通す依頼。ペインを指定すれば、同じ操作でその人のチャットをそのペインに紐付ける。`result` は `{sender_id, binding?, bind_error?}` |
+| `channels_bot_remove_request` | `platform`、`account`、`reason=""` | bot 削除の依頼（保存された認証情報、通された人、紐付けも一緒に消える） |
+| `channels_request_status` | `id`、`wait_s=0` | 依頼の状況：`{ok, id, kind, status, result, error, reason, target, created_at, expires_at}`。status は `pending`、`applying`、`completed`、`failed`、`rejected`（ユーザーが断った）、`expired`。ユーザー待ちのリンクコードには `pairing_code` が付く。`wait_s`（最大 60）で決着まで待つ。読めるのは依頼したペインだけで、バックエンドを再起動するとすべての依頼は消える（`unknown-request`） |
+
+変更や依頼を行う tool はすべて CLI ペインの呼び出し元が必要（`pane-caller-required`）。記録にどのペインかを残すため。`channels_unbind` と `channels_set_verbosity` は呼び出し元のワークスペースのペインであることも必要（`cross-workspace`）。依頼にはメインウィンドウが開いている必要がある（`no-main-window`）。すべての変更と依頼は呼び出し元とともにエージェント操作記録（`agent-window-actions.jsonl`）に残る。変更があるとすべてのメインウィンドウにどのペインが行ったかのトーストが出て、Channels ページの「エージェントからのリクエスト」に未決の依頼が承認・拒否ボタン付きで並ぶ（bot 追加はフォームを開く）。決定はメインウィンドウ自身の接続からしか受け付けず、エージェントはその接続を持たない。チャンネルゲートウェイが拒否したときは `{ok: false, error, error_code: "channels-refused"}`、プラットフォームや bot id の形式が不正なら `bad-request`。
+
+bot の認証情報が呼び出し元に渡ることはない。認証情報を受け取る tool はなく、各 bot の設定（secret hint がある場所）は返さず、認証情報らしい名前のキーは落とし、テキストも伏せる——動作中の bot が登録したすべての secret（プラットフォームを問わない）、`/bot<token>/` の URL 部分、Telegram・Slack・Discord のトークンらしい文字列は `<redacted>` か `[redacted]` になる。チャンネルゲートウェイが動いていないとき、どの tool も `{ok: false, error_code: "channels-not-running"}` を返す。
 
 ### Navide マーケットプレイス（読み取り専用）
 
