@@ -2119,7 +2119,6 @@
           "previousChanged": "Das Paket der vorherigen Version hat sich auf dem Datenträger geändert, daher wurde nicht darauf zurückgesetzt.",
           "grantUnavailable": "Die {id} gewährten Berechtigungen wurden nicht gefunden, daher wurde es nicht zurückgesetzt.",
           "factoryUnavailable": "Das Zurücksetzen auf die mitgelieferte Version ist nicht verfügbar.",
-          "gitLegacyRecovery": "Das mitgelieferte Git kann nicht wiederhergestellt werden, solange NAVIDE_GIT_RECOVERY=legacy die Legacy-Wiederherstellung erzwingt.",
           "factoryRestoreFailed": "Die mitgelieferte Version konnte nicht geladen werden."
         }
       },

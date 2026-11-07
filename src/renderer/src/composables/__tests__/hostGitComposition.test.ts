@@ -3,10 +3,7 @@ import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const rendererRoot = resolve(process.cwd(), 'src/renderer/src')
-// GitWindowApp is bundled as the navide.git plugin, so Issue 12 owns that
-// composition rather than the Host entry router.
-const issue12OwnedSources = new Set(['GitWindowApp.vue'])
-const v2GitHostCompositionSources = new Set(['components/GitPluginHostSlot.vue'])
+const v2GitHostCompositionSources = new Set(['components/ControlPane.vue', 'components/GitRecoveryPanel.vue'])
 // EditorWindowApp remains a separate legacy editor composition; Issue 19's
 // ownership boundary covers only the v2 Git left/window contribution path.
 
@@ -23,7 +20,6 @@ function collectProductionSources(directory: string): string[] {
 
 function collectHostOwnedSources(): string[] {
   return collectProductionSources(rendererRoot)
-    .filter((sourcePath) => !issue12OwnedSources.has(relative(rendererRoot, sourcePath)))
 }
 
 function gitPaneMounts(source: string): string[] {
@@ -35,13 +31,13 @@ describe('Host Git composition', () => {
     const controlPane = readFileSync(join(rendererRoot, 'components', 'ControlPane.vue'), 'utf8')
     expect(controlPane).toContain("import PluginRegionHost")
     expect(controlPane).toContain('<PluginRegionHost')
-    expect(controlPane).toContain("import GitPluginHostSlot from './GitPluginHostSlot.vue'")
-    expect(controlPane).toContain('v-if="legacyGitRecovery && backend && sidebarTab === \'git\'"')
+    expect(controlPane).toContain("import GitRecoveryPanel from './GitRecoveryPanel.vue'")
+    expect(controlPane).toContain('v-if="gitPluginFailed && sidebarTab === \'git\'"')
     expect(controlPane).not.toContain('MultiRepoGit')
     expect(controlPane).not.toContain('<GitPane')
   })
 
-  it('keeps the plugin-owned GitWindowApp outside the Host entry router', () => {
+  it('keeps the Git window out of the Host entry router', () => {
     const mainSource = readFileSync(join(rendererRoot, 'main.ts'), 'utf8')
     expect(mainSource).not.toMatch(/GitWindowApp/)
   })
@@ -69,14 +65,11 @@ describe('Host Git composition', () => {
 
   it('shows the recovery panel instead of any legacy Git implementation', () => {
     const directGitImplementationImport = /from ['"][^'"]*(?:GitPane|MultiRepoGit|GitHistoryModal|GitCredentialModal)\.vue['"]/
-    const slot = readFileSync(join(rendererRoot, 'components', 'GitPluginHostSlot.vue'), 'utf8')
     const directImporters = collectProductionSources(rendererRoot)
       .filter((sourcePath) => v2GitHostCompositionSources.has(relative(rendererRoot, sourcePath)))
       .filter((sourcePath) => directGitImplementationImport.test(readFileSync(sourcePath, 'utf8')))
       .map((sourcePath) => relative(rendererRoot, sourcePath))
 
     expect(directImporters).toEqual([])
-    expect(slot).toContain("import GitRecoveryPanel from './GitRecoveryPanel.vue'")
-    expect(slot).not.toContain('GitLegacyLeftFallback')
   })
 })

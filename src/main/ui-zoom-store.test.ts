@@ -103,7 +103,7 @@ describe('createUiZoomStore', () => {
   })
 
   it('tells each window the zoom changed so native views can re-place themselves', () => {
-    // GitPluginHostSlot divides CSS-pixel bounds by the zoom factor before
+    // A renderer that places a native view divides CSS-pixel bounds by the zoom factor before
     // handing them to main. Electron emits 'zoom-changed' only for user
     // gestures, so an app-driven change must be pushed or those WebContentsViews
     // stay at the old geometry.

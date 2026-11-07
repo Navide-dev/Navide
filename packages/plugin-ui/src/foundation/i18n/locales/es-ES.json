@@ -2119,7 +2119,6 @@
           "previousChanged": "El paquete de la versión anterior cambió en el disco, así que no se revirtió a ella.",
           "grantUnavailable": "No se encontraron los permisos concedidos a {id}, así que no se revirtió.",
           "factoryUnavailable": "No está disponible revertir a la versión integrada.",
-          "gitLegacyRecovery": "No se puede restaurar el Git integrado mientras NAVIDE_GIT_RECOVERY=legacy fuerce la recuperación heredada.",
           "factoryRestoreFailed": "No se pudo cargar la versión integrada."
         }
       },

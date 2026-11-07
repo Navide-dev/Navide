@@ -2119,7 +2119,6 @@
           "previousChanged": "디스크에 있는 이전 버전의 패키지가 바뀌어서 롤백하지 않았어요.",
           "grantUnavailable": "{id}에 부여한 권한을 찾지 못해서 롤백하지 않았어요.",
           "factoryUnavailable": "기본 포함 버전으로 롤백할 수 없어요.",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy로 레거시 복구를 강제하는 동안에는 기본 포함 Git을 복원할 수 없어요.",
           "factoryRestoreFailed": "기본 포함 버전을 불러오지 못했어요."
         }
       },

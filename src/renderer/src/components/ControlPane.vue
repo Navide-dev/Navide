@@ -41,7 +41,7 @@ import PaneChannelIcon from './PaneChannelIcon.vue'
 import PaneGuardIcon from './PaneGuardIcon.vue'
 import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
-import GitPluginHostSlot from './GitPluginHostSlot.vue'
+import GitRecoveryPanel from './GitRecoveryPanel.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
 import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
@@ -419,8 +419,8 @@ interface Props {
   issueHandoffs?: Record<string, { paneId: string; mode: string; state: string }>
   /** Manifest-driven contributions available to this Host window. */
   pluginContributions?: PluginRegionContribution[]
-  /** Main-process-only legacy Git recovery mode. */
-  legacyGitRecovery?: boolean
+  /** Why the Git plugin could not start; null/absent while it runs. */
+  gitActivationFailure?: string | null
   /** Main-process-only legacy Plans recovery mode. */
   legacyPlansRecovery?: boolean
   /** Host-side reason for that downgrade, '' when it is not known. */
@@ -1533,7 +1533,7 @@ const _TAB_KEY = 'agentTeam.sidebarTab'
 type SidebarTab = 'agents' | 'pipeline' | 'explorer' | 'git' | 'plans' | `plugin:${string}`
 const CORE_SIDEBAR_TABS = ['agents', 'pipeline', 'explorer'] as const
 type CoreSidebarTab = (typeof CORE_SIDEBAR_TABS)[number]
-const legacyGitRecovery = computed(() => props.legacyGitRecovery === true)
+const gitPluginFailed = computed(() => props.gitActivationFailure != null)
 const legacyPlansRecovery = computed(() => props.legacyPlansRecovery === true)
 /** The storage repair rebuilds an unreadable lifecycle record — it is the
  *  answer to exactly one downgrade. Offering it for a failed backend child
@@ -1601,7 +1601,7 @@ const sidebarTab = ref<SidebarTab>(
       // Backward-compat: unknown / legacy values fall back to the first tab.
       const isKnown = v !== null && (
         v === 'agents' || v === 'pipeline' || v === 'explorer' ||
-        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && legacyGitRecovery.value)
+        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && gitPluginFailed.value)
       )
       return isKnown ? v : 'agents'
     } catch { return 'agents' }
@@ -1609,9 +1609,9 @@ const sidebarTab = ref<SidebarTab>(
 )
 watch(sidebarTab, (v) => { try { sessionStorage.setItem(_TAB_KEY, v) } catch { /* ignore */ } })
 
-// Opening Git while the session sits in legacy recovery is the user's natural
-// retry: the downgrade is usually a transient activation failure, and the Host
-// answers with a bounded budget of v2 attempts.
+// Opening Git after the plugin failed to start is the user's natural retry:
+// the failure is usually transient, and the Host answers with a bounded budget
+// of v2 attempts.
 let awaitingGitV2Tab = false
 let gitV2RetryInFlight = false
 function requestGitV2Retry(): void {
@@ -1681,7 +1681,7 @@ async function requestPlansV2Retry(explicit = false): Promise<void> {
   }
 }
 
-watch(legacyGitRecovery, (enabled) => {
+watch(gitPluginFailed, (enabled) => {
   if (enabled || sidebarTab.value !== 'git') return
   const restored = gitPluginTab.value?.tabId
   if (restored) {
@@ -1751,7 +1751,7 @@ registerCommand('workbench.action.focusExplorer', () => selectSidebarTab('explor
 registerCommand('workbench.action.focusPipeline', () => selectSidebarTab('pipeline'))
 registerCommand('workbench.action.focusSourceControl', () => {
   if (disabledBuiltins.isDisabled('navide.git')) return false
-  if (legacyGitRecovery.value) {
+  if (gitPluginFailed.value) {
     selectSidebarTab('git')
     return
   }
@@ -1813,12 +1813,12 @@ function showSidebarTab(tab: SidebarTab): void {
 const gitChangesCount = computed(() => props.gitChangesCount ?? 0)
 
 function selectSidebarTab(tab: SidebarTab): void {
-  const target = tab === 'git' && !legacyGitRecovery.value
+  const target = tab === 'git' && !gitPluginFailed.value
     ? gitPluginTab.value?.tabId
     : tab
   if (!target) return
   showSidebarTab(target)
-  if (tab === 'git' && legacyGitRecovery.value) requestGitV2Retry()
+  if (tab === 'git' && gitPluginFailed.value) requestGitV2Retry()
   if (tab === 'plans' && legacyPlansRecovery.value) void requestPlansV2Retry()
   // Surfacing a tab while the slot is collapsed has to reopen it, or Cmd+1..5
   // and the programmatic entry points would only move a highlight on the rail.
@@ -3277,19 +3277,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :key="t.id"
         :class="[
           'tab-btn',
-          { 'plugin-tab-btn': t.id === 'git' && !legacyGitRecovery && gitPluginTab },
+          { 'plugin-tab-btn': t.id === 'git' && !gitPluginFailed && gitPluginTab },
           { active: sidebarTab === t.id || (t.id === 'git' && gitPluginTab?.tabId === sidebarTab) }
         ]"
         :data-tab="t.id"
-        :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
-        :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
+        :data-git-activation-failed="t.id === 'git' && gitPluginFailed ? '' : undefined"
+        :data-plugin-contribution="t.id === 'git' && !gitPluginFailed ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
           ? `${pluginTabLabel(gitPluginTab)} (${formatKeySpec(sidebarTabKeySpec(4))})`
           : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
         :aria-label="t.id === 'git' && gitPluginTab ? pluginTabLabel(gitPluginTab) : undefined"
         @click="selectSidebarTab(t.id)"
       >
-        <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
+        <template v-if="t.id === 'git' && !gitPluginFailed && gitPluginTab">
           <span
             v-if="isMonoPluginIcon(gitPluginTab)"
             class="plugin-tab-icon plugin-tab-icon--mono"
@@ -3375,7 +3375,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === pluginTab.tabId"
         />
         <PluginRegionHost
-          v-if="gitPluginTab && !legacyGitRecovery"
+          v-if="gitPluginTab && !gitPluginFailed"
           :key="gitPluginTab.contributionKey"
           :contribution="gitPluginTab"
           :workspace-path="workspace ?? ''"
@@ -3389,13 +3389,10 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === 'plans'"
           :before-prepare="projectPlansPreferencesBeforePrepare"
         />
-        <template v-if="legacyGitRecovery && backend && sidebarTab === 'git'">
-          <div class="legacy-recovery-label" data-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
-          <GitPluginHostSlot
-            :workspace-path="workspace ?? ''"
-            :visible="true"
-          />
-        </template>
+        <GitRecoveryPanel
+          v-if="gitPluginFailed && sidebarTab === 'git'"
+          :reason="gitActivationFailure ?? ''"
+        />
         <template v-if="legacyPlansRecovery && backend && sidebarTab === 'plans'">
           <div class="legacy-recovery-label" data-plans-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
           <div class="plans-repair-row">

@@ -1154,7 +1154,9 @@ const WS_PATH_KEY = 'agentTeam.currentWorkspace'
 // restore — see onWorkspaceCheck.
 const _bootWorkspace = new URLSearchParams(window.location.search).get('workspace_path') ?? ''
 const _bootIsDuplicate = new URLSearchParams(window.location.search).get('duplicate') === '1'
-const legacyGitRecovery = ref(new URLSearchParams(window.location.search).get('legacy_git_recovery') === '1')
+// Why the Git plugin could not start (null while it runs). The Git tab shows
+// it with a Reinstall action; the Host has no Git interface of its own.
+const gitActivationFailure = ref<string | null>(new URLSearchParams(window.location.search).get('git_activation_failure'))
 const legacyPlansRecovery = ref(new URLSearchParams(window.location.search).get('legacy_plans_recovery') === '1')
 // Why the Host downgraded. Only the Host knows it, and the recovery panel
 // has nothing honest to show without it.
@@ -6839,7 +6841,7 @@ function onGitContributionAction(envelope: {
 
 let stopGitContributionActions: (() => void) | null = null
 let stopPluginContributionChanges: (() => void) | null = null
-let stopGitRecoveryChanged: (() => void) | null = null
+let stopPluginActivationFailed: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
@@ -6848,11 +6850,10 @@ let stopPluginStagedUpdates: (() => void) | null = null
 let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
-  stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
-    // Both directions: the Host also reports recovery being *left* (Extensions
-    // restores the bundled v2 package). Latching on true left an open window
-    // showing the "Legacy recovery" panel for the rest of its life.
-    legacyGitRecovery.value = change.legacy
+  stopPluginActivationFailed = window.agentTeam?.onPluginActivationFailed?.((change) => {
+    // Both directions: the Host also reports Git running again (a retry or a
+    // reinstall), which must take the notice down in every open window.
+    if (change.pluginId === 'navide.git') gitActivationFailure.value = change.reason
   }) ?? null
   stopPlansRecoveryChanged = window.agentTeam?.onPlansRecoveryChanged?.((change) => {
     legacyPlansRecovery.value = change.legacy
@@ -6904,8 +6905,8 @@ onMounted(() => {
 onUnmounted(() => {
   stopGitContributionActions?.()
   stopGitContributionActions = null
-  stopGitRecoveryChanged?.()
-  stopGitRecoveryChanged = null
+  stopPluginActivationFailed?.()
+  stopPluginActivationFailed = null
   stopPlansRecoveryChanged?.()
   stopPlansRecoveryChanged = null
   stopPlansBackendStopped?.()
@@ -24759,7 +24760,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :run-pipeline-id="runPipelineId"
       :backend="backend"
       :plugin-contributions="pluginContributions"
-      :legacy-git-recovery="legacyGitRecovery"
+      :git-activation-failure="gitActivationFailure"
       :legacy-plans-recovery="legacyPlansRecovery"
       :legacy-plans-recovery-reason="legacyPlansRecoveryReason"
       :git-changes-count="gitChangesCount"

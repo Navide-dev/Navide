@@ -49,7 +49,9 @@ function emitManifest(): Plugin {
         engines: { navide: '^0.1.0' },
         entry: 'index.html',
         requires: PLANS_PLUGIN_REQUIRES,
-        // No activationEvents — see vite.git.config.ts.
+        // No activationEvents: a frontend view starts when the host opens it.
+        // The loader does not read the field, so declaring one would only
+        // promise a lifecycle nothing implements (see plugin-development.md).
       }
       writeFileSync(resolve(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
     },

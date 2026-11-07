@@ -2119,7 +2119,6 @@
           "previousChanged": "Le paquet de la version précédente a changé sur le disque ; le retour en arrière n’a donc pas eu lieu.",
           "grantUnavailable": "Les autorisations accordées à {id} sont introuvables ; le retour en arrière n’a donc pas eu lieu.",
           "factoryUnavailable": "Le retour à la version fournie n’est pas disponible.",
-          "gitLegacyRecovery": "Impossible de restaurer le Git fourni tant que NAVIDE_GIT_RECOVERY=legacy force la récupération héritée.",
           "factoryRestoreFailed": "Impossible de charger la version fournie."
         }
       },

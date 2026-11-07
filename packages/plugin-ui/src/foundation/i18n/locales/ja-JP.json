@@ -2119,7 +2119,6 @@
           "previousChanged": "以前のバージョンのパッケージがディスク上で変更されたため、戻しませんでした。",
           "grantUnavailable": "{id} に付与された権限が見つからないため、戻しませんでした。",
           "factoryUnavailable": "同梱版に戻す操作は現在利用できません。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy でレガシー復旧が強制されている間は、同梱の Git を復元できません。",
           "factoryRestoreFailed": "同梱版を読み込めませんでした。"
         }
       },

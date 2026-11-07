@@ -44,7 +44,7 @@ describe('OFFICIAL_PLUGIN_VERSIONS', () => {
 })
 
 describe('supersedingBundledVersions', () => {
-  const none = { optedOut: () => false, gitRecoveryForced: false, plansRecoveryForced: false }
+  const none = { optedOut: () => false, plansRecoveryForced: false }
 
   it('lets every bundled copy take part by default', () => {
     expect(supersedingBundledVersions(none)).toEqual(OFFICIAL_PLUGIN_VERSIONS)
@@ -53,12 +53,6 @@ describe('supersedingBundledVersions', () => {
   it('leaves an opted-out id to its installed copy', () => {
     expect(supersedingBundledVersions({ ...none, optedOut: (id) => id === 'navide.mini-ide' }))
       .not.toHaveProperty('navide.mini-ide')
-  })
-
-  it('leaves Git to its installed copy under forced legacy Git recovery', () => {
-    const versions = supersedingBundledVersions({ ...none, gitRecoveryForced: true })
-    expect(versions).not.toHaveProperty('navide.git')
-    expect(versions).toHaveProperty('navide.plans')
   })
 
   it('leaves Plans to its installed copy under forced legacy Plans recovery', () => {

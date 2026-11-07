@@ -10,34 +10,27 @@ interface SelectedGitDescriptor {
   capabilityPolicy?: { kind: string }
 }
 
-interface GitV2RecoveryDependencies {
+interface GitV2FailureDependencies {
   selectedDescriptor(): SelectedGitDescriptor | null
   hasExactGrant(pluginId: string, packageVersion: string): boolean
-  activateLegacy(): { registered: boolean; reason?: string }
-  onActivated(): void
 }
 
 /**
- * Switch the whole selected Git package to the retained v1 artifact only when
- * the exact, granted Manifest v2 package reached activation and then failed.
- * Absence, trust/grant denial, and stale-version failures stay fail closed.
+ * Whether an activation failure belongs to the exact, granted Manifest v2 Git
+ * package the Host selected — the only failure the main window reports with a
+ * Reinstall action. Absence, trust/grant denial, and stale-version failures are
+ * not that package failing and stay fail closed.
  */
-export function recoverFailedGitV2Activation(
+export function isSelectedGitV2ActivationFailure(
   failure: GitV2ActivationFailure,
-  dependencies: GitV2RecoveryDependencies,
+  dependencies: GitV2FailureDependencies,
 ): boolean {
   if (failure.pluginId !== 'navide.git') return false
   const selected = dependencies.selectedDescriptor()
-  if (
-    selected?.id !== failure.pluginId ||
-    selected.packageVersion !== failure.packageVersion ||
-    selected.capabilityPolicy?.kind !== 'manifest-v2' ||
-    !dependencies.hasExactGrant(failure.pluginId, failure.packageVersion)
-  ) {
-    return false
-  }
-  const recovery = dependencies.activateLegacy()
-  if (!recovery.registered) return false
-  dependencies.onActivated()
-  return true
+  return (
+    selected?.id === failure.pluginId &&
+    selected.packageVersion === failure.packageVersion &&
+    selected.capabilityPolicy?.kind === 'manifest-v2' &&
+    dependencies.hasExactGrant(failure.pluginId, failure.packageVersion)
+  )
 }

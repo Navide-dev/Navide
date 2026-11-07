@@ -2119,7 +2119,6 @@
           "previousChanged": "上一个版本的套件文件已被变更，因此没有回复。",
           "grantUnavailable": "找不到 {id} 已核准的权限，因此没有回复。",
           "factoryUnavailable": "目前无法回复为内置版本。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy 强制使用旧版恢复模式时，无法还原内置 Git。",
           "factoryRestoreFailed": "无法加载内置版本。"
         }
       },

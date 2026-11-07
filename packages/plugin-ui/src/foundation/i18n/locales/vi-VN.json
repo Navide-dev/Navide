@@ -2119,7 +2119,6 @@
           "previousChanged": "Gói của phiên bản trước đã thay đổi trên đĩa, nên không quay lui về nó.",
           "grantUnavailable": "Không tìm thấy các quyền đã cấp cho {id}, nên không quay lui.",
           "factoryUnavailable": "Không quay lui về phiên bản đi kèm được.",
-          "gitLegacyRecovery": "Không khôi phục được Git đi kèm khi NAVIDE_GIT_RECOVERY=legacy đang buộc khôi phục kiểu cũ.",
           "factoryRestoreFailed": "Không tải được phiên bản đi kèm."
         }
       },

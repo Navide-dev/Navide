@@ -260,7 +260,6 @@ const HOST_REFUSALS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^previous package artifact identity changed before rollback$/, 'previousChanged'],
   [/^active package grant is unavailable for (?<id>.+)$/, 'grantUnavailable'],
   [/^factory package rollback is unavailable$/, 'factoryUnavailable'],
-  [/^Bundled Git cannot be restored while NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery$/, 'gitLegacyRecovery'],
   [/^Factory package restoration failed: (?<detail>.+)$/s, 'factoryRestoreFailed'],
 ]
 

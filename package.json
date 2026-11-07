@@ -49,7 +49,7 @@
   },
   "scripts": {
     "dev": "pnpm run build:public-packages && vite build --config vite.plans.config.ts && pnpm run build:mini-ide:v2 && pnpm run build:plans:v2 && node scripts/build-plans-v2-backend.mjs --if-needed && pnpm run build:git:v2 && pnpm run build:browser:v2 && node scripts/build-browser-v2-backend.mjs --if-needed && node scripts/stage-official-plugin-artifacts.mjs && node scripts/build-fn-key-helper.mjs --if-needed && electron-vite dev",
-    "build": "pnpm run build:official-plugins && pnpm run build:git:legacy && pnpm run build:pane-helper && pnpm run build:fn-key && electron-vite build",
+    "build": "pnpm run build:official-plugins && pnpm run build:pane-helper && pnpm run build:fn-key && electron-vite build",
     "build:pane-helper": "node scripts/build-pane-helper.mjs",
     "build:fn-key": "node scripts/build-fn-key-helper.mjs",
     "build:stt": "node scripts/build-stt.mjs",
@@ -66,9 +66,8 @@
     "build:browser:backend": "node scripts/build-browser-v2-backend.mjs",
     "build:browser": "pnpm run build:browser:v2 && pnpm run build:browser:backend",
     "test:packaged-plans": "node scripts/run-artifact-tests.mjs --packaged-plans",
-    "build:git:legacy": "vite build --config vite.git.config.ts",
     "build:git:v2": "vite build --config plugins/navide-git/vite.config.ts",
-    "build:git": "pnpm run build:git:legacy && pnpm run build:git:v2",
+    "build:git": "pnpm run build:git:v2",
     "start": "electron-vite preview",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:integration": "tsc --noEmit -p tsconfig.integration.json",
@@ -128,10 +127,6 @@
       {
         "from": "dist-plugins/plans",
         "to": "plugins/plans"
-      },
-      {
-        "from": "dist-plugins/git",
-        "to": "plugins/git"
       }
     ],
     "publish": [
