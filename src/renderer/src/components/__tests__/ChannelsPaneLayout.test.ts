@@ -77,6 +77,124 @@ describe('ChannelsPane two columns', () => {
     expect(navItem(w, 'telegram:bot-b1').get('[data-testid="channel-nav-summary"]').text()).toContain('Off')
   })
 
+  it('names each bot by its live handle with its label, slot id, Telegram id and where it is bound', async () => {
+    const binding = { pane_id: 'p1', pane_name: 'HelperCTO', pane_exists: true, workspace_path: '/w/nt-notify-bridge',
+      workspace_name: 'nt-notify-bridge', chat_title: 'HelperCTO', created_at: 1 }
+    seed({ platforms: [platform('telegram', [account('bot-2e7877', '@NerdtechnicSalesBot', {
+      status: { ...ready, identity: '@nt_test_bot', display_name: 'test' }, bot_id: '7421', bindings: [binding],
+      last_activity_at: Math.floor(Date.now() / 1000) - 7200,
+    })])] })
+    const w = await render()
+    const row = navItem(w, 'telegram:bot-2e7877')
+    expect(row.text()).toContain('@nt_test_bot')
+    expect(row.text()).not.toContain('NerdtechnicSalesBot')
+    expect(row.get('[data-testid="channel-nav-tag"]').text()).toContain('test')
+    expect(row.get('[data-testid="channel-nav-ids"]').text()).toBe('bot-2e7877 · id 7421')
+    expect(row.get('[data-testid="channel-nav-binding"]').text()).toBe('nt-notify-bridge / HelperCTO · 2 hours ago')
+  })
+
+  it('flags a bot running, not linked, with its pane closed, or with a bad token', async () => {
+    const bound = (exists: boolean) => [{ pane_id: 'p', pane_name: 'api', pane_exists: exists, workspace_path: '/w/A',
+      workspace_name: 'A', chat_title: '', created_at: 1 }]
+    seed({ platforms: [platform('telegram', [
+      account('default', 'Run', { bindings: bound(true) }),
+      account('bot-b1', 'Free', { bindings: [] }),
+      account('bot-c2', 'Shut', { bindings: bound(false) }),
+      account('bot-d3', 'Bad', { status: { ...ready, lifecycle: 'blocked', last_error: 'HTTP 401 Unauthorized' }, bindings: [] }),
+      account('bot-e4', 'Down', { status: { ...ready, lifecycle: 'blocked', last_error: 'timed out' }, bindings: [] }),
+    ])] })
+    const w = await render()
+    const flag = (key: string) => navItem(w, key).get('[data-testid="channel-nav-flag"]').text()
+    expect(flag('telegram:default')).toBe('Running')
+    expect(flag('telegram:bot-b1')).toBe('Not linked')
+    expect(flag('telegram:bot-c2')).toBe('Pane closed')
+    expect(flag('telegram:bot-d3')).toBe('Token invalid')
+    expect(flag('telegram:bot-e4')).toBe('Connection failed')
+    expect(navItem(w, 'telegram:bot-b1').get('[data-testid="channel-nav-binding"]').text()).toBe('Not linked to any pane')
+  })
+
+  describe('search', () => {
+    afterEach(() => localStorage.clear())
+    const many = () => {
+      const target = account('bot-2e7877', '@NerdtechnicSalesBot', {
+        status: { ...ready, identity: '@nt_test_bot', display_name: 'test' }, bot_id: '7421000',
+        bindings: [{ pane_id: 'p1', pane_name: 'HelperCTO', pane_exists: true, workspace_path: '/w/nt-notify-bridge',
+          workspace_name: 'nt-notify-bridge', chat_title: 'HelperCTO', created_at: 1 }],
+      })
+      const others = Array.from({ length: 24 }, (_, i) => account(`bot-a${i}`, `Other ${i}`, {
+        status: { ...ready, identity: `@other_${i}_bot` }, bot_id: `6900${i}`, bindings: [],
+      }))
+      return [platform('telegram', [...others, target])]
+    }
+    const search = (w: VueWrapper) => w.get<HTMLInputElement>('[data-testid="channel-nav-search"]')
+    const keys = (w: VueWrapper) => navItems(w).map((i) => i.attributes('data-key'))
+
+    it.each(['test', '2e7877', 'HelperCTO', 'nt-notify-bridge', '7421', '@NT_TEST_BOT'])('finds the bot by %s', async (q) => {
+      seed({ platforms: many() })
+      const w = await render()
+      expect(navItems(w)).toHaveLength(25)
+      await search(w).setValue(q)
+      expect(keys(w)).toEqual(['telegram:bot-2e7877'])
+      expect(w.get('[data-testid="channel-nav-search-count"]').text()).toBe('1 / 25')
+    })
+
+    it('marks the hit and brings every row back when cleared', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('test')
+      expect(navItem(w, 'telegram:bot-2e7877').find('mark').text()).toBe('test')
+      await search(w).trigger('keydown', { key: 'Escape' })
+      expect(search(w).element.value).toBe('')
+      expect(navItems(w)).toHaveLength(25)
+    })
+
+    it('says when nothing matches, with a way to clear', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('zzz-nothing')
+      expect(navItems(w)).toHaveLength(0)
+      await w.get('[data-testid="channel-nav-search-clear"]').trigger('click')
+      expect(navItems(w)).toHaveLength(25)
+    })
+
+    it('moves through the kept rows with the arrow keys', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('other_1')
+      await search(w).trigger('keydown', { key: 'ArrowDown' })
+      expect(activeKey(w)).toBe(keys(w)[0])
+      await search(w).trigger('keydown', { key: 'ArrowDown' })
+      expect(activeKey(w)).toBe(keys(w)[1])
+    })
+
+    it('lists the most recently active first, or by name, and groups by workspace', async () => {
+      const bound = (ws: string) => [{ pane_id: ws, pane_name: 'p', pane_exists: true, workspace_path: `/w/${ws}`,
+        workspace_name: ws, chat_title: '', created_at: 1 }]
+      const bots = [
+        account('bot-a', 'A', { status: { ...ready, identity: '@zeta_bot' }, last_activity_at: 100, bindings: bound('nt-notify-bridge') }),
+        account('bot-b', 'B', { status: { ...ready, identity: '@alpha_bot' }, last_activity_at: 300, bindings: [] }),
+        account('bot-c', 'C', { status: { ...ready, identity: '@mid_bot' }, last_activity_at: 200, bindings: bound('Agent-Team') }),
+        ...Array.from({ length: 3 }, (_, i) => account(`bot-x${i}`, `X${i}`, { status: { ...ready, identity: `@x${i}_bot` }, bindings: [] })),
+      ]
+      seed({ platforms: [platform('telegram', bots)] })
+      const w = await render()
+      expect(keys(w).slice(0, 3)).toEqual(['telegram:bot-b', 'telegram:bot-c', 'telegram:bot-a'])
+      await w.get('[data-testid="channel-nav-sort-name"]').trigger('click')
+      expect(keys(w).slice(0, 3)).toEqual(['telegram:bot-b', 'telegram:bot-c', 'telegram:bot-x0'])
+      await w.get('[data-testid="channel-nav-group-workspace"]').trigger('click')
+      expect(w.findAll('[data-testid="channel-nav-group"]').map((g) => g.text())).toEqual(['Agent-Team', 'nt-notify-bridge', 'Not linked'])
+      expect(keys(w).slice(0, 2)).toEqual(['telegram:bot-c', 'telegram:bot-a'])
+      expect(localStorage.getItem('navide.channels.navSort')).toBe('name')
+      expect(localStorage.getItem('navide.channels.navGroup')).toBe('workspace')
+    })
+
+    it('stays out of the way of a short list', async () => {
+      seed()
+      const w = await render()
+      expect(w.find('[data-testid="channel-nav-search"]').exists()).toBe(false)
+    })
+  })
+
   it('opens on the first bot waiting for approval', async () => {
     seed({ requests: [{ platform: 'telegram', account: 'bot-c2', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1 }] })
     const w = await render()

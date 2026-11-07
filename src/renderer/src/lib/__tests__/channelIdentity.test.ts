@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChannelAccountState } from '../../composables/useChannels'
-import { channelBotLabel, channelBotName, formatChannelIdentity } from '../channelIdentity'
+import { channelBotLabel, channelBotName, channelBotTag, formatChannelIdentity } from '../channelIdentity'
 
 const t = (key: string): string =>
   ({ 'channels.platform.telegram': 'Telegram', 'channels.bot.default': 'Main bot' } as Record<string, string>)[key] ?? key
@@ -33,6 +33,10 @@ describe('channelBotName', () => {
 
   it('treats a name copied from the handle as unnamed', () => {
     expect(channelBotName(bot('@neil_m4_bot', '@neil_m4_bot', 'Neil M4'))).toBe('Neil M4')
+  })
+
+  it('lets an old handle left in the name give way after the token changed', () => {
+    expect(channelBotName(bot('@NerdtechnicSalesBot', '@nt_test_bot', 'test'))).toBe('test')
   })
 
   it('keeps a name copied from the handle when the platform reports no display name', () => {
@@ -73,5 +77,17 @@ describe('channelBotLabel', () => {
     expect(channelBotLabel(bot('', '@ops_bot'), 'default', t)).toBe('Main bot')
     expect(channelBotLabel(bot('', '@ops_bot'), 'b1', t)).toBe('b1')
     expect(channelBotLabel(null, 'b1', t)).toBe('b1')
+  })
+})
+
+describe('channelBotTag', () => {
+  it("is the user's label, else the display name, beside the live handle", () => {
+    expect(channelBotTag(bot('Sales', '@nt_test_bot', 'test'), '@nt_test_bot')).toBe('Sales')
+    expect(channelBotTag(bot('@NerdtechnicSalesBot', '@nt_test_bot', 'test'), '@nt_test_bot')).toBe('test')
+  })
+
+  it('is empty when it would repeat the name shown', () => {
+    expect(channelBotTag(bot('Ops', ''), 'Ops')).toBe('')
+    expect(channelBotTag(bot('@ops_bot', '@ops_bot'), '@ops_bot')).toBe('')
   })
 })

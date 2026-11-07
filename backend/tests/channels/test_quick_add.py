@@ -1,5 +1,6 @@
 """``channels.quick_add``: configure, wait for the platform to accept the credential,
-name the bot after its identity and hand back a link invite; any failure leaves no trace."""
+leave the bot's name to the user (its handle is read live) and hand back a link invite; any
+failure leaves no trace."""
 
 from __future__ import annotations
 
@@ -63,12 +64,12 @@ def _no_trace(env: Env, platform: str = "telegram", account: str = ACCOUNT) -> N
     assert all(holder != (platform, account) for holder in env.m._lease.values())
 
 
-async def test_success_names_the_bot_and_returns_a_link(env: Env) -> None:
+async def test_success_leaves_the_name_empty_and_returns_a_link(env: Env) -> None:
     _login_as(env, "ready")
     res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT, "direct")
     assert res["ok"], res
-    assert res["identity"] == "@quick_bot" and res["name"] == "@quick_bot"
-    assert env.store.accounts()[("telegram", ACCOUNT)]["config"]["name"] == "@quick_bot"
+    assert res["identity"] == "@quick_bot" and res["name"] == ""
+    assert env.store.accounts()[("telegram", ACCOUNT)]["config"].get("name", "") == ""
     assert env.fake.secrets["channel-telegram-bot-q1"] == '{"token":"tok-Q"}'
     link = res["link"]
     assert link["target"] == "direct" and link["code"] and link["expires_at"] > 0 and "ok" not in link
@@ -214,7 +215,7 @@ async def test_an_identity_that_proves_the_credential_counts_without_ready(env: 
     _login_as(env, "identified")
     res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
     assert res["ok"], res
-    assert res["identity"] == "@quick_bot" and res["name"] == "@quick_bot"
+    assert res["identity"] == "@quick_bot" and res["name"] == ""
 
 
 async def test_an_identity_alone_is_not_enough_for_other_adapters(env: Env) -> None:

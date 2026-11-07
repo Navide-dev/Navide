@@ -85,6 +85,8 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
     if msg_type == "channels.allow.remove":
         return await m.allow_remove(_s(p, "platform"), _s(p, "sender_id"), _account(p))
     if msg_type == "channels.locations":
+        if p.get("all") is True:
+            return m.all_locations()
         return m.locations(_s(p, "platform"), _account(p))
     if msg_type == "channels.bind":
         return await m.bind(_s(p, "pane_id"), _s(p, "pane_name"), _s(p, "platform"), _s(p, "mode"),

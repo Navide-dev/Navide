@@ -21,10 +21,12 @@ import {
   clipboardTokenField,
   type RegisteredChannelPlatform,
 } from '../../platform/channels'
-import { channelBotLabel } from '../../lib/channelIdentity'
+import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
+import { relativeTime } from '../../lib/relativeTime'
+import { channelBotSearchFields } from '../../lib/channelSearch'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
-import ChannelBotNav, { type ChannelNavGroup, type ChannelNavItem } from './ChannelBotNav.vue'
+import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -573,20 +575,106 @@ const orphanRequests = computed(() => store.pairing.value.filter((r) => !hasBot(
 const orphanEntries = computed(() => store.allow.value.filter((e) => !hasBot(e)))
 const hasOrphans = computed(() => orphanRequests.value.length + orphanEntries.value.length > 0)
 
+/** Where a bot is bound ("workspace / pane", or how many) and when it was last active. */
+function bindingText(bot: BotRow): string {
+  const bindings = bot.bindings
+  if (!bindings) return ''
+  let where: string
+  if (!bindings.length) where = t('channels.bot.bound-none')
+  else if (bindings.length === 1) where = [bindings[0].workspace_name, bindings[0].pane_name].filter(Boolean).join(' / ')
+  else {
+    const workspaces = [...new Set(bindings.map((b) => b.workspace_name).filter(Boolean))]
+    where = t('channels.bot.bound-many', { n: bindings.length, workspaces: workspaces.join(', ') })
+  }
+  if (!bot.last_activity_at) return where
+  const { unit, count } = relativeTime(bot.last_activity_at * 1000, Date.now())
+  return `${where} · ${t(`time.ago-${unit}`, { count })}`
+}
+
+const BAD_TOKEN = /\b401\b|unauthori[sz]ed/i
+
+/** Running / not linked / pane closed for a connected bot; token invalid / failed for a blocked one. */
+function botFlag(bot: BotRow): ChannelNavItem['flag'] {
+  if (!bot.configured || !bot.enabled) return undefined
+  const { lifecycle, last_error: error } = bot.status
+  if (lifecycle === 'blocked') {
+    return BAD_TOKEN.test(error) ? { kind: 'bad', text: t('channels.bot.flag-token') } : { kind: 'bad', text: t('channels.bot.flag-failed') }
+  }
+  if (lifecycle !== 'ready' || !bot.bindings) return undefined
+  if (!bot.bindings.length) return { kind: 'off', text: t('channels.bot.flag-unbound') }
+  return bot.bindings.some((b) => b.pane_exists)
+    ? { kind: 'ok', text: t('channels.bot.flag-running') }
+    : { kind: 'warn', text: t('channels.bot.flag-pane-closed') }
+}
+
 function navItem(spec: RegisteredChannelPlatform, bot: BotRow): ChannelNavItem {
   const tone = statusTone(bot)
   const counts = t('channels.bot.summary', { people: allowedOf(spec.id, bot).length, chats: chatsOf(spec.id, bot).length })
   const status = bot.configured ? statusText(bot) : t('channels.status.not-configured')
+  // The live handle names the bot; a stored name is only the user's label beside it.
+  const name = bot.configured ? bot.status.identity || botLabel(bot) : bot.isNew ? t('channels.bot.new') : platformName(spec.id)
   return {
     key: bot.key,
     badge: spec.badge,
-    name: bot.configured ? botLabel(bot) : bot.isNew ? t('channels.bot.new') : platformName(spec.id),
+    name,
     tone,
     status,
     // Connected is the usual case: only the other states take room on the line.
     summary: !bot.configured ? status : tone === 'ok' ? counts : `${status} · ${counts}`,
     pending: pendingOf(spec.id, bot).length,
+    ...(bot.configured ? {
+      tag: channelBotTag(bot, name),
+      ids: [bot.account, bot.bot_id ? `id ${bot.bot_id}` : ''].filter(Boolean).join(' · '),
+      binding: bindingText(bot),
+      flag: botFlag(bot),
+      search: channelBotSearchFields(bot),
+      botId: bot.bot_id ?? '',
+    } : {}),
   }
+}
+
+/** A handful of bots is read at a glance; from this many on, the list gets a search box. */
+const SEARCH_FROM = 6
+const searchable = computed(() => navGroups.value.reduce((n, g) => n + g.items.length, 0) >= SEARCH_FROM)
+const botNav = ref<InstanceType<typeof ChannelBotNav> | null>(null)
+
+// "/" jumps to the search box from anywhere on the page but a text field.
+function onPaneKey(e: KeyboardEvent): void {
+  if (e.key !== '/' || !searchable.value || e.metaKey || e.ctrlKey || e.altKey) return
+  const el = e.target as HTMLElement | null
+  if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return
+  e.preventDefault()
+  botNav.value?.focusSearch()
+}
+
+// How the list is ordered and grouped, remembered on this machine.
+const NAV_SORT_KEY = 'navide.channels.navSort'
+const NAV_GROUP_KEY = 'navide.channels.navGroup'
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+const navSort = ref<ChannelNavSort>(readPref(NAV_SORT_KEY, ['recent', 'name'] as const, 'recent'))
+const navGrouping = ref<ChannelNavGrouping>(readPref(NAV_GROUP_KEY, ['none', 'workspace'] as const, 'none'))
+watch(navSort, (v) => { try { localStorage.setItem(NAV_SORT_KEY, v) } catch { /* this session only */ } })
+watch(navGrouping, (v) => { try { localStorage.setItem(NAV_GROUP_KEY, v) } catch { /* this session only */ } })
+
+/** Most recently active first (never active last), or by name; a bot being added stays last. */
+function sortBots(bots: BotRow[], items: Map<string, ChannelNavItem>): BotRow[] {
+  const byRecent = (a: BotRow, b: BotRow) => (b.last_activity_at ?? 0) - (a.last_activity_at ?? 0)
+  const byName = (a: BotRow, b: BotRow) => (items.get(a.key)?.name ?? '').localeCompare(items.get(b.key)?.name ?? '')
+  const set = bots.filter((b) => !b.isNew)
+  return [...set.sort(navSort.value === 'name' ? byName : byRecent), ...bots.filter((b) => b.isNew)]
+}
+
+/** The workspace a bot is listed under: that of its newest binding; '' when unbound. */
+function botWorkspace(bot: BotRow): string {
+  const newest = [...(bot.bindings ?? [])].sort((a, b) => b.created_at - a.created_at)[0]
+  return newest ? newest.workspace_name || newest.workspace_path : ''
 }
 
 const navGroups = computed<ChannelNavGroup[]>(() => {
@@ -597,11 +685,24 @@ const navGroups = computed<ChannelNavGroup[]>(() => {
     }))
     .filter((g) => g.bots.length)
   const named = groups.length > 1
-  const list: ChannelNavGroup[] = groups.map(({ spec, bots }) => ({
-    id: spec.id,
-    label: named ? platformName(spec.id) : '',
-    items: bots.map((b) => navItem(spec, b)),
-  }))
+  const list: ChannelNavGroup[] = groups.flatMap(({ spec, bots }) => {
+    const items = new Map(bots.map((b) => [b.key, navItem(spec, b)]))
+    const sorted = sortBots(bots, items)
+    const platformLabel = named ? platformName(spec.id) : ''
+    if (navGrouping.value !== 'workspace') {
+      return [{ id: spec.id, label: platformLabel, items: sorted.map((b) => items.get(b.key)!) }]
+    }
+    // Platform outside, workspace inside; the unbound ones last.
+    const byWorkspace = new Map<string, BotRow[]>()
+    for (const b of sorted) byWorkspace.set(botWorkspace(b), [...(byWorkspace.get(botWorkspace(b)) ?? []), b])
+    const names = [...byWorkspace.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))
+    if (byWorkspace.has('')) names.push('')
+    return names.map((ws) => ({
+      id: `${spec.id}:${ws}`,
+      label: [platformLabel, ws || t('channels.bot.flag-unbound')].filter(Boolean).join(' · '),
+      items: byWorkspace.get(ws)!.map((b) => items.get(b.key)!),
+    }))
+  })
   if (hasOrphans.value) {
     list.push({
       id: ORPHAN_VIEW,
@@ -668,7 +769,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
 </script>
 
 <template>
-  <section class="channels-pane" data-settings-section="channels">
+  <section class="channels-pane" data-settings-section="channels" @keydown="onPaneKey">
     <SettingsCard>
       <SettingRow :title="t('channels.global.title')" :description="t('channels.global.desc')">
         <template #control>
@@ -702,8 +803,12 @@ function removeEntry(entry: ChannelAllowEntry): void {
     <div class="ch-layout" :class="{ 'ch-layout--solo': !navGroups.length }" :data-narrow-pane="narrowPane" data-testid="channel-layout">
       <ChannelBotNav
         v-if="navGroups.length"
+        ref="botNav"
         class="ch-layout-nav"
         :groups="navGroups"
+        v-model:sort="navSort"
+        v-model:grouping="navGrouping"
+        :searchable="searchable"
         :active="activeView"
         :add-active="activeView === ADD_VIEW"
         @select="show"

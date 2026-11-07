@@ -739,17 +739,40 @@ class ChannelManager:
             self._spawn(self._changed())
         return changed
 
-    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None) -> dict[str, Any]:
+    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None,
+                   bindings: list[Binding] | None = None,
+                   directory: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
         adapter = self._adapters.get((platform, account))
         config = acct["config"] if acct else {}
+        status = self._status_of(platform, account)
+        summary = [self._binding_summary(b, directory or {}) for b in bindings or []]
+        seen = self.store.chats_last_seen(platform, _bot_key(adapter)) if adapter is not None else None
+        activity = [t for t in (status.get("last_inbound_at"), seen, *(b["created_at"] for b in summary)) if t]
         return {
             "account": account,
             "name": str(config.get("name") or ""),
             "configured": acct is not None,
             "enabled": bool(acct and acct["enabled"]),
-            "status": self._status_of(platform, account),
+            "status": status,
             "config": {**config, "secret_hint": self._secret_hints.get((platform, account), "")},
             "capabilities": dataclasses.asdict(adapter.capabilities) if adapter is not None else None,
+            "bot_id": str(getattr(adapter, "bot_id", "") or "") if platform == "telegram" else "",
+            "bindings": summary,
+            "last_activity_at": max(activity) if activity else None,
+        }
+
+    def _binding_summary(self, binding: Binding, directory: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Where one binding of a bot points, for its row in the Settings list."""
+        pane = self._pane_info(binding, directory)
+        workspace = pane["workspace_path"] or binding.workspace_path
+        return {
+            "pane_id": self._seams.resolve_pane(binding.pane_id) or binding.pane_id,
+            "pane_name": pane["name"],
+            "pane_exists": pane["exists"],
+            "workspace_path": workspace,
+            "workspace_name": os.path.basename(workspace.rstrip("/\\")) if workspace else "",
+            "chat_title": binding.title,
+            "created_at": binding.created_at,
         }
 
     def list(self) -> dict[str, Any]:
@@ -757,9 +780,14 @@ class ChannelManager:
         bot's state flattened onto the platform as before several bots existed."""
         self._sync_bindings()
         accounts = self.store.accounts()
+        directory = {str(p.get("pane_id")): p for p in self._seams.pane_directory()}
+        by_bot: dict[BotKey, list[Binding]] = {}
+        for b in self.store.bindings():
+            by_bot.setdefault((b.platform, b.account), []).append(b)
         platforms = []
         for platform in PLATFORMS:
-            bots = [self._bot_state(platform, a, acct) for (p, a), acct in accounts.items() if p == platform]
+            bots = [self._bot_state(platform, a, acct, by_bot.get((p, a)), directory)
+                    for (p, a), acct in accounts.items() if p == platform]
             first = bots[0] if bots else self._bot_state(platform, DEFAULT_ACCOUNT, None)
             platforms.append({
                 "platform": platform,
@@ -854,11 +882,9 @@ class ChannelManager:
         finally:
             if bot not in self._quick_add_undos:
                 self._quick_adding.discard(bot)
+        # The name stays the user's own label: the handle is read live from the bot
+        # (status.identity), so a later token change cannot leave a stale one behind.
         identity = adapter.status.identity
-        async with self._lock:
-            acct = self.store.accounts().get(bot)
-            if acct is not None and not acct["config"].get("name") and identity:
-                self.store.upsert_account(platform, {**acct["config"], "name": identity}, account=account)
         await self._changed()
         name = str(((self.store.accounts().get(bot) or {}).get("config") or {}).get("name") or "")
         link = self.link_create(platform, link_target, account) if link_target else {}
@@ -1206,6 +1232,12 @@ class ChannelManager:
             for loc in known():
                 merged[str(loc.get("chat_id"))] = {**merged.get(str(loc.get("chat_id")), {}), **loc}
         return {"ok": True, "locations": list(merged.values())}
+
+    def all_locations(self) -> dict[str, Any]:
+        """locations() of every running bot in one answer, for a picker listing them all."""
+        return {"ok": True, "bots": [{"platform": platform, "account": account,
+                                      "locations": self.locations(platform, account)["locations"]}
+                                     for platform, account in sorted(self._adapters)]}
 
     def _chat_usable(self, platform: str, account: str, chat_id: str, kind: str) -> bool:
         """Whether a message from this chat can pass the sender gate. A Telegram DM's chat
@@ -2777,14 +2809,14 @@ class ChannelManager:
             if msg.is_direct or self._sole_bot(msg.platform):
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
+        pane_id = await self._resolve_after_startup(binding.pane_id)
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
         if scope == "all":
             adapter = self._adapters.get((msg.platform, msg.account))
             buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
             await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
-            return
-        pane_id = await self._resolve_after_startup(binding.pane_id)
-        if not pane_id:
-            await self._reply(msg, wake.text(lang, "offline"))
             return
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
@@ -2847,6 +2879,13 @@ class ChannelManager:
             return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
 
+    @staticmethod
+    def _bound_pane_closed(lang: str, binding: Binding) -> str:
+        """A bound chat whose pane is not open: which pane ("workspace / pane") and what to do."""
+        workspace = os.path.basename(binding.workspace_path.rstrip("/\\")) if binding.workspace_path else ""
+        pane = binding.title.removeprefix("↳ ") or binding.pane_id
+        return quick_menu.text(lang, "bound_pane_closed", where=f"{workspace} / {pane}" if workspace else pane)
+
     async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False,
                           scope: str | None = None) -> None:
         """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/prompts <n>``
@@ -2862,7 +2901,10 @@ class ChannelManager:
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
         pane_id = self._seams.resolve_pane(binding.pane_id)
-        if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
+        if menu is None or pane_id != self._seams.resolve_pane(menu.pane_id):
             await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
         press = self.quick.pick(msg.location_key(), number, mcp, scope)
