@@ -3,6 +3,17 @@
   "version": "1.0.0",
   "description": "Public manifest, capability, error, and schema contracts for Navide plugins.",
   "license": "MIT",
+  "keywords": ["navide", "plugin", "manifest", "contracts", "json-schema"],
+  "homepage": "https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Navide-dev/Navide.git",
+    "directory": "packages/plugin-contracts"
+  },
+  "bugs": "https://github.com/Navide-dev/Navide/issues",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },

@@ -108,13 +108,40 @@ safe AI CLI controller instead. The user reaffirmed this graph for miniIDE
 migration on 2026-09-11, superseding the earlier private-feature proposal.
 
 The package manifests declare public npm publication metadata and use normal
-SemVer 2.0.0 versions, but registry publication is future work outside Issue
-06. The package implementations live under
+SemVer 2.0.0 versions. The package implementations live under
 `packages/plugin-{contracts,sdk,ui}/` and have no dependency on Host
 renderer sources. Third-party projects must use registry versions in a
 published workflow, never `workspace:` dependencies. The Issue 06 release
 gate packs those public packages and installs the tarballs in a directory
-outside the Navide workspace; it does not publish to npm.
+outside the Navide workspace; publication to npm is a separate release step,
+`scripts/publish-public-packages.sh` (a dry run until `--publish`; see
+[Creating a release](releases.md#creating-a-release)), which the user runs
+with their own npm login.
+
+### Compatibility commitment (1.x)
+
+The three public packages share one version and follow SemVer 2.0.0. Within
+the 1.x line Navide commits to:
+
+- **Additions only.** An exported type, function, component, CLI command or
+  option, manifest field, capability address or error code that exists in a
+  1.x release keeps working in every later 1.x release.
+- **Twelve months' notice.** Something that has to go is marked deprecated in
+  the CHANGELOG, in its JSDoc and in the CLI's output, and keeps working for at
+  least twelve months after the release that deprecated it; it is removed only
+  in the next major.
+- **The Host keeps installing 1.x manifests.** A package whose `apiVersion`
+  is `^1.0.0` installs and runs on every Navide release for the same period
+  after a 2.0.0 of the packages ships. A Navide release that *needs* a newer
+  package feature says so in `engines.navide` of the plugins that use it, not
+  by refusing older packages.
+- **Fixes are patches.** A behavior change that corrects a documented
+  contract (the schema, the capability catalog, this document) ships as a
+  patch release and is listed in the CHANGELOG under the package name.
+
+The static scan, the Registry's manifest validation and the Host's disclosure
+contract are versioned with the packages, so a manifest that `navide-plugin
+validate` accepts at 1.x is accepted by the Registry of the same 1.x line.
 
 ## Recommended source project
 

@@ -26,20 +26,26 @@ manifest rules the Registry enforces, see
 
 ### Install the CLI
 
-`@navide/plugin-sdk` and `@navide/plugin-contracts` are not on the npm
-registry yet. Until they are, build them from a Navide checkout and install the
-tarballs into your plugin project:
+```bash
+npm install --save-dev @navide/plugin-sdk @navide/plugin-contracts
+npx navide-plugin
+```
+
+The packages are published to npm from the Navide repository with
+`scripts/publish-public-packages.sh` as a release step, under one shared 1.x
+version with a [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
+Before the first publication, or to try an unreleased build, pack them from a
+Navide checkout instead:
 
 ```bash
 # in the Navide checkout
 pnpm install
-pnpm run build:public-packages
-npm pack ./packages/plugin-contracts ./packages/plugin-sdk --pack-destination /tmp/navide-sdk
+scripts/publish-public-packages.sh        # dry run: builds and packs into dist/npm/
 
 # in your plugin project
 npm init -y
-npm install --save-dev /tmp/navide-sdk/navide-plugin-contracts-1.0.0.tgz \
-  /tmp/navide-sdk/navide-plugin-sdk-1.0.0.tgz
+npm install --save-dev <checkout>/dist/npm/navide-plugin-contracts-1.0.0.tgz \
+  <checkout>/dist/npm/navide-plugin-sdk-1.0.0.tgz
 npx navide-plugin
 ```
 
