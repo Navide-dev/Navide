@@ -785,7 +785,7 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
       }
       case 'set_retry': {
         const n = node(op.id)
-        if (!isWorkNode(n)) throw new Error(`only slot, subpipeline and plugin nodes can retry: ${op.id}`)
+        if (!isWorkNode(n)) throw new Error(`only slot and subpipeline nodes can retry: ${op.id}`)
         if (op.retry) n.retry = { ...op.retry }
         else delete n.retry
         break
