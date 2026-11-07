@@ -2267,7 +2267,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             workspace_path = usage.replay_workspace
         else:
             workspace_path = attributed.workspace_path
-        if workspace_path is None:
+        if workspace_path is None and not attributed.global_only:
             # External session — outside any registered workspace. Skip silently.
             return TokenSinkResult(False)
         # Namespace the dedup key by vendor + file_path so collisions across
@@ -2317,7 +2317,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
                 session_file=usage.file_path,
             )
         _schedule_tokens_broadcast(workspace_path)
-        return TokenSinkResult(handled, workspace_path)
+        return TokenSinkResult(handled, workspace_path or "")
     except Exception as err:  # noqa: BLE001
         log.warning("log token sink failed: %s", err)
         return TokenSinkResult(False)

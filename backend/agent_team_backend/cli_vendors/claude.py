@@ -363,11 +363,16 @@ class ClaudeLogReader(LogReader):
         return ""
 
     def cwd_from_file(self, path: Path) -> str:
-        """Reverse cwd-hash: project-dir-name `-foo-bar-baz` → `/foo/bar/baz`.
+        """The cwd the transcript records (read once per file, then cached).
 
-        Edge case: a literal `-` in the original path is ambiguous. Best-effort
-        only; attribution layer handles "unmatched cwd" gracefully.
+        Only a transcript that names none falls back to reversing the folder
+        name, `-foo-bar-baz` → `/foo/bar/baz`: that guess is lossy (a literal
+        `-`, or any non-ASCII name, comes back wrong), and folders that encode
+        alike would all get the same answer.
         """
+        cwd = self._session_cwd(path)
+        if cwd:
+            return unicodedata.normalize("NFC", cwd)
         try:
             project_dir_name = path.parent.name
         except Exception:
