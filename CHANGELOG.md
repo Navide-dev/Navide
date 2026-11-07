@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Git (0.2.39): branch comparisons in the Navide Git plugin (the Git window and the comparison opened from the Git tab) have the AI review panel again: review the working tree or the two branches, filter and dismiss findings, open a finding's file, and in the Git window send it to the AI CLI panel. It uses the provider and model set in Settings, as before; until now only the fallback Mini-IDE editor had it. Navide Git 1.0.4.
+
 ### Changed
 
 - Git (0.2.39): when the built-in Git plugin fails to start, the Git tab now says so, shows why, and offers Reinstall built-in Git (the same restore as the bundled row in Settings → Navide Plugins), instead of loading the old copy of the Git interface that was kept in the app for this case.
