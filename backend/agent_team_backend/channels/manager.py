@@ -2809,14 +2809,14 @@ class ChannelManager:
             if msg.is_direct or self._sole_bot(msg.platform):
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
+        pane_id = await self._resolve_after_startup(binding.pane_id)
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
         if scope == "all":
             adapter = self._adapters.get((msg.platform, msg.account))
             buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
             await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
-            return
-        pane_id = await self._resolve_after_startup(binding.pane_id)
-        if not pane_id:
-            await self._reply(msg, wake.text(lang, "offline"))
             return
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
@@ -2879,6 +2879,13 @@ class ChannelManager:
             return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
 
+    @staticmethod
+    def _bound_pane_closed(lang: str, binding: Binding) -> str:
+        """A bound chat whose pane is not open: which pane ("workspace / pane") and what to do."""
+        workspace = os.path.basename(binding.workspace_path.rstrip("/\\")) if binding.workspace_path else ""
+        pane = binding.title.removeprefix("↳ ") or binding.pane_id
+        return quick_menu.text(lang, "bound_pane_closed", where=f"{workspace} / {pane}" if workspace else pane)
+
     async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False,
                           scope: str | None = None) -> None:
         """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/prompts <n>``
@@ -2894,7 +2901,10 @@ class ChannelManager:
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
         pane_id = self._seams.resolve_pane(binding.pane_id)
-        if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
+        if menu is None or pane_id != self._seams.resolve_pane(menu.pane_id):
             await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
         press = self.quick.pick(msg.location_key(), number, mcp, scope)
