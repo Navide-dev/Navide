@@ -153,7 +153,7 @@ def test_event_list_matches_capability_catalog() -> None:
     catalog = json.loads(CONTRACTS.read_text())
     cataloged = [
         entry["address"] for entry in catalog["capabilities"]
-        if entry.get("kind") == "event" and entry["address"] in plugin_host_events.EVENTS
+        if "payload" in entry and entry["address"] in plugin_host_events.EVENTS
     ]
     assert cataloged == list(plugin_host_events.EVENTS)
 

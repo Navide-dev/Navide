@@ -10,6 +10,7 @@ import { EDITOR_PREFERENCE_METHODS, validateEditorPreferenceRequest } from './ed
 import { GIT_ACCOUNT_PUBLIC_METHODS, validateGitAccountRequest } from './gitAccountCapability'
 import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from './webCapability'
 import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
+import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -469,12 +470,18 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     scope: 'workspace', eligibility: 'public',
     validateRequest: (value: unknown): value is Record<string, unknown> => validateAgentsRequest(address, value),
   } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Host events about the bound workspace's panes, messages, plans, pipeline
+  // and schedules: metadata only, each declared under permissions.agents.events.
+  ...Object.fromEntries(AGENTS_EVENTS.map(address => [address, {
+    address, kind: 'event', namespace: 'agents', scope: 'workspace', eligibility: 'public',
+  } satisfies PublicSystemCapabilityCatalogEntry])),
 }
 
 export const PUBLIC_CAPABILITY_EVENT_ADDRESSES: readonly string[] = [
   'workspace.filesChanged',
   'aiCli.output',
   'aiCli.exited',
+  ...AGENTS_EVENTS,
 ]
 
 export function publicCapabilityEntry(address: string): PublicCapabilityCatalogEntry | null {

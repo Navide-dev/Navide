@@ -9,6 +9,7 @@ import { warnDeprecatedCapability } from './pluginCapabilityDeprecation'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
 import { validateWebChangedEvent } from './webCapability'
+import { isAgentsEvent } from './agentsEvents'
 import {
   HOST_SHELL_EXECUTABLE_ALLOWLIST,
   publicCapabilityEntry,
@@ -1147,6 +1148,11 @@ export function isPublicCapabilityEventAllowed(
   }
   if (event === 'web.changed') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateWebChangedEvent(payload))
+  }
+  if (isAgentsEvent(event)) {
+    // Each agents.* event is declared on its own (permissions.agents.events);
+    // the payload was validated field by field when the Host parsed the frame.
+    return Boolean(policy.agentEvents?.includes(event) && sourceBinding && sameBinding(sourceBinding, binding))
   }
   if ((EDITOR_AI_EVENTS as readonly string[]).includes(event)) {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) &&

@@ -57,6 +57,7 @@ import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebV
 import { dispatchWebBridge } from './webBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
+import { HOST_AGENT_EVENT_TYPE, parseHostAgentEvent } from './agentsEvents'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
@@ -9006,6 +9007,24 @@ export class FrontendPluginManager {
     }
   }
 
+  /** An `agents.*` Host event (backend plugin_host_events.py) to every live
+   *  instance bound to that event's workspace whose Manifest declares the event
+   *  and whose Grant holds `agents`. Each receiver's own binding is the source:
+   *  the backend frame is Host-produced, never package-supplied. */
+  private dispatchHostAgentEvent(frame: unknown): void {
+    const parsed = parseHostAgentEvent(frame)
+    if (!parsed) return
+    const workspaceId = this.workspaceIdForPath(parsed.workspacePath)
+    if (!workspaceId) return
+    for (const receiver of this.running.values()) {
+      const binding = receiver.capabilityContext?.runtimeBinding
+      if (!binding || binding.workspaceId !== workspaceId || this.isPluginStopping(receiver)) continue
+      if (this.isPublicEventAllowedForInstance(receiver, parsed.event, parsed.payload, binding)) {
+        this.emitToInstance(receiver.instanceId, parsed.event, parsed.payload)
+      }
+    }
+  }
+
   /** Host-only event ingress for cataloged public events. The target package id
    * is Host-selected and never comes from renderer payload. The source binding
    * must come from the Host producer, not the master package context: AI CLI
@@ -9263,6 +9282,9 @@ export class FrontendPluginManager {
           }
         })
       }
+      client.on(HOST_AGENT_EVENT_TYPE, (payload) => {
+        this.dispatchHostAgentEvent(payload)
+      })
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
       })

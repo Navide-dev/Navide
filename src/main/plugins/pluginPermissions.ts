@@ -3,6 +3,7 @@ import type {
   PluginShellMode,
   PluginSystemNamespace,
 } from './pluginManifestV2'
+import type { AgentsEventAddress } from '../../../packages/plugin-contracts/src/agents'
 
 export type PluginPermissionGrant =
   | { permission: 'system'; namespace: PluginSystemNamespace }
@@ -14,6 +15,8 @@ export type PluginCapabilityPolicy =
       kind: 'manifest-v2'
       system: readonly PluginSystemNamespace[]
       shell?: PluginShellMode
+      /** `permissions.agents.events`: the Host events this package receives. */
+      agentEvents?: readonly AgentsEventAddress[]
       // Reserved for B1 adapter composition; authorization currently reads
       // normalized system and shell fields directly.
       grants: readonly PluginPermissionGrant[]
@@ -40,6 +43,7 @@ export function manifestV2CapabilityPolicy(
     kind: 'manifest-v2',
     system: [...(permissions.system ?? [])],
     ...(permissions.shell ? { shell: permissions.shell } : {}),
+    ...(permissions.agents ? { agentEvents: [...permissions.agents.events] } : {}),
     grants,
   }
 }

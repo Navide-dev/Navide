@@ -9,7 +9,7 @@ import type { EditorNativeParams, EditorNativeResults, EditorNativeEvents } from
 import type { GitCapabilityParams, GitCapabilityResults } from './gitCapabilities.js'
 import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from './gitAccounts.js'
 import type { IssueParams, IssueResults } from './issues.js'
-import type { AgentsParams, AgentsResults } from './agents.js'
+import type { AgentsEventAddress, AgentsEventPayloads, AgentsParams, AgentsResults } from './agents.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -79,6 +79,8 @@ export type PluginManifestV2Permissions = {
   shell?: PluginShellMode
   /** Optional declared resource scopes; disclosure only, never a grant. */
   scopes?: PluginManifestV2Scopes
+  /** Host events declared one by one; needs `agents` in `system`. */
+  agents?: { events: AgentsEventAddress[] }
 }
 
 export type PluginManifestV2Receiver = {
@@ -1143,7 +1145,7 @@ export type PublicMethod = keyof PublicMethodParams
 export type Params<M extends PublicMethod> = PublicMethodParams[M]
 export type Result<M extends PublicMethod> = PublicMethodResults[M]
 
-export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents {
+export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads {
   /** UI notification for a write to this receiver's own selected snapshot. */
   'ui.pluginStorageChanged': { scope: StoragePartitionScope; key: string; value: JsonValue; deleted: boolean }
   'workspace.filesChanged': {
