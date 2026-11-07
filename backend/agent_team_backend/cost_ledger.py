@@ -354,14 +354,19 @@ _EFFECTIVE_PANE = (
 _GROUP_KEYS = {
     "cwd": "u.cwd",
     "pane": "epane",
-    "day": "date(u.ts, 'unixepoch')",
+    "day": "date(u.ts + :off, 'unixepoch')",
     "session": "u.session_id",
     "model": "u.model",
     "account": "u.profile_id",
     # model × account: key "<model>::<profile_id>", split again into the
     # bucket's model and account fields.
     "model_account": "u.model || '::' || u.profile_id",
+    # day × model: key "<day>::<model>", split into day and model.
+    "day_model": "date(u.ts + :off, 'unixepoch') || '::' || u.model",
 }
+
+# Groupings whose key joins two dimensions, and the bucket fields it splits into.
+_SPLIT_KEYS = {"model_account": ("model", "account"), "day_model": ("day", "model")}
 
 COST_REPORT_GROUPS = tuple(_GROUP_KEYS)
 
@@ -378,14 +383,17 @@ def cost_report(
     pane: str = "",
     since: str = "",
     until: str = "",
+    utc_offset_min: int = 0,
     pricing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Tokens and dollars from the ledger, grouped by cwd, pane, day, session,
     model, account (profile_id, '' = unknown) or model_account (key
-    "<model>::<profile_id>"; each group also carries ``model`` and ``account``).
+    "<model>::<profile_id>"; each group also carries ``model`` and ``account``)
+    or day_model (key "<day>::<model>", with ``day`` and ``model``).
 
     ``cwd`` keeps calls made in that folder or below it; ``since`` and ``until``
-    are inclusive UTC days (YYYY-MM-DD). A model the pricing table does not know
+    are inclusive days (YYYY-MM-DD), UTC unless ``utc_offset_min`` shifts
+    them (and the day groupings) to a local calendar. A model the pricing table does not know
     adds its calls to ``unpriced_calls`` and nothing to ``usd``. Grouped by pane,
     the answer also reconciles: per pane, the tokens of the calls that name it
     against the tokens of every call of the sessions mapped to it; ``differences``
@@ -394,24 +402,25 @@ def cost_report(
     if by not in _GROUP_KEYS:
         raise ValueError(f"by must be one of {', '.join(COST_REPORT_GROUPS)}")
     pricing = pricing if pricing is not None else load_pricing()
-    where, params = [], []
+    params: dict[str, Any] = {"off": int(utc_offset_min) * 60}
+    where = []
     if cwd:
         root = unicodedata.normalize("NFC", cwd.rstrip("/\\"))
-        where.append("(u.cwd = ? OR substr(u.cwd, 1, ?) IN (?, ?))")
-        params += [root, len(root) + 1, root + "/", root + "\\"]
+        where.append("(u.cwd = :root OR substr(u.cwd, 1, :rootlen) IN (:root_fwd, :root_back))")
+        params.update(root=root, rootlen=len(root) + 1, root_fwd=root + "/", root_back=root + "\\")
     if since:
-        where.append("date(u.ts, 'unixepoch') >= ?")
-        params.append(since)
+        where.append("date(u.ts + :off, 'unixepoch') >= :since")
+        params["since"] = since
     if until:
-        where.append("date(u.ts, 'unixepoch') <= ?")
-        params.append(until)
+        where.append("date(u.ts + :off, 'unixepoch') <= :until")
+        params["until"] = until
     inner = (
         f"SELECT u.*, {_EFFECTIVE_PANE} AS epane FROM usage_calls u"
         + (f" WHERE {' AND '.join(where)}" if where else "")
     )
-    outer_where = " WHERE epane = ?" if pane else ""
+    outer_where = " WHERE epane = :pane" if pane else ""
     if pane:
-        params.append(pane)
+        params["pane"] = pane
     sums = ", ".join(f"SUM({f})" for f in _TOKEN_FIELDS)
     key = _GROUP_KEYS[by].replace("u.", "")
     sql = (
@@ -436,8 +445,9 @@ def cost_report(
     groups = sorted(buckets.values(), key=lambda b: b["usd"], reverse=True)
     for bucket in groups:
         bucket["usd"] = round(bucket["usd"], 4)
-        if by == "model_account":
-            bucket["model"], _, bucket["account"] = bucket["key"].rpartition("::")
+        if by in _SPLIT_KEYS:
+            first, second = _SPLIT_KEYS[by]
+            bucket[first], _, bucket[second] = bucket["key"].partition("::")
     answer: dict[str, Any] = {
         "by": by,
         "groups": groups,

@@ -13100,5 +13100,25 @@
       "select": "リスト",
       "checkbox": "チェックボックス"
     }
+  },
+  "token-views": {
+    "by-model": "モデル別",
+    "by-account-quota": "アカウント別クォータ",
+    "range": "期間",
+    "range-day": "日",
+    "range-week": "週",
+    "cache": "キャッシュ",
+    "cache-read": "キャッシュ読み取り",
+    "cache-write": "キャッシュ書き込み",
+    "usd": "米ドル",
+    "other-models": "その他",
+    "no-ledger-data": "この期間の呼び出しはまだ記録されていません",
+    "no-quota-history": "クォータの記録はまだありません",
+    "window-session": "セッション",
+    "window-weekly": "週間",
+    "resets": "{time} にリセット",
+    "trend-7d": "直近 7 日の日別最大",
+    "week-tokens": "今週のトークン",
+    "day-tokens": "今日のトークン"
   }
 }

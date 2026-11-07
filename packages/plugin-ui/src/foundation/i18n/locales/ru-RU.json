@@ -13100,5 +13100,25 @@
       "select": "Список",
       "checkbox": "Флажок"
     }
+  },
+  "token-views": {
+    "by-model": "По модели",
+    "by-account-quota": "Квота по аккаунтам",
+    "range": "Период",
+    "range-day": "День",
+    "range-week": "Неделя",
+    "cache": "Кэш",
+    "cache-read": "Чтение кэша",
+    "cache-write": "Запись кэша",
+    "usd": "Доллары США",
+    "other-models": "Прочие",
+    "no-ledger-data": "За этот период вызовов пока нет",
+    "no-quota-history": "Данных о квоте пока нет",
+    "window-session": "Сессия",
+    "window-weekly": "Еженедельно",
+    "resets": "Сброс {time}",
+    "trend-7d": "Дневной максимум за 7 дней",
+    "week-tokens": "Токены за неделю",
+    "day-tokens": "Токены за сегодня"
   }
 }

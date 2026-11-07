@@ -13100,5 +13100,25 @@
       "select": "Liste",
       "checkbox": "Case à cocher"
     }
+  },
+  "token-views": {
+    "by-model": "Par modèle",
+    "by-account-quota": "Quota par compte",
+    "range": "Période",
+    "range-day": "Jour",
+    "range-week": "Semaine",
+    "cache": "Mémoire cache",
+    "cache-read": "Cache lu",
+    "cache-write": "Cache écrit",
+    "usd": "Dollars US",
+    "other-models": "Autres",
+    "no-ledger-data": "Aucun appel enregistré sur cette période",
+    "no-quota-history": "Aucun relevé de quota pour l’instant",
+    "window-session": "Séance",
+    "window-weekly": "Hebdomadaire",
+    "resets": "Réinitialisation {time}",
+    "trend-7d": "Pic quotidien, 7 derniers jours",
+    "week-tokens": "Tokens cette semaine",
+    "day-tokens": "Tokens aujourd’hui"
   }
 }

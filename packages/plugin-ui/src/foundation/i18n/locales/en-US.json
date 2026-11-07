@@ -13100,5 +13100,25 @@
       "select": "List",
       "checkbox": "Checkbox"
     }
+  },
+  "token-views": {
+    "by-model": "By model",
+    "by-account-quota": "By account quota",
+    "range": "Range",
+    "range-day": "Day",
+    "range-week": "Week",
+    "cache": "Cache",
+    "cache-read": "Cache read",
+    "cache-write": "Cache write",
+    "usd": "USD",
+    "other-models": "Other",
+    "no-ledger-data": "No calls recorded in this range yet",
+    "no-quota-history": "No quota readings recorded yet",
+    "window-session": "Session",
+    "window-weekly": "Weekly",
+    "resets": "Resets {time}",
+    "trend-7d": "Daily peak, last 7 days",
+    "week-tokens": "Tokens this week",
+    "day-tokens": "Tokens today"
   }
 }

@@ -7708,6 +7708,43 @@ async def tokens_monitor(session: "Session", msg_id: str, msg_type: str, payload
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("tokens.cost_report")
+async def tokens_cost_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    # The Token panel's by-model / by-account views: the per-call ledger
+    # grouped one way, optionally limited to a folder (cwd) and a local-day
+    # range. A bad grouping answers ok: false rather than raising.
+    try:
+        result = await asyncio.to_thread(
+            app.cost_ledger.report, str(payload.get("by") or ""),
+            cwd=str(payload.get("cwd") or ""),
+            since=str(payload.get("since") or ""),
+            until=str(payload.get("until") or ""),
+            utc_offset_min=int(payload.get("utc_offset_min") or 0),
+        )
+        result["ok"] = True
+    except ValueError as err:
+        result = {"ok": False, "error": str(err)}
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
+@handler("tokens.quota_history")
+async def tokens_quota_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+    from .quota_history_read import daily_peaks
+
+    # Read-only: each account window's highest used % per local day.
+    try:
+        result = await asyncio.to_thread(
+            daily_peaks, app.database, int(payload.get("days") or 7),
+            int(payload.get("utc_offset_min") or 0),
+        )
+    except ValueError as err:
+        result = {"ok": False, "error": str(err)}
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("devtime.snapshot")
 async def devtime_snapshot(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

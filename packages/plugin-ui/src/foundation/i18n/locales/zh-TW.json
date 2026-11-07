@@ -13100,5 +13100,25 @@
       "select": "下拉選單",
       "checkbox": "勾選"
     }
+  },
+  "token-views": {
+    "by-model": "依模型",
+    "by-account-quota": "依帳號額度",
+    "range": "範圍",
+    "range-day": "日",
+    "range-week": "週",
+    "cache": "快取",
+    "cache-read": "快取讀取",
+    "cache-write": "快取寫入",
+    "usd": "美元",
+    "other-models": "其他",
+    "no-ledger-data": "這段期間還沒有記錄到呼叫",
+    "no-quota-history": "還沒有額度讀數",
+    "window-session": "工作階段",
+    "window-weekly": "每週",
+    "resets": "{time} 重置",
+    "trend-7d": "近 7 天每日最高",
+    "week-tokens": "本週 Token",
+    "day-tokens": "今日 Token"
   }
 }

@@ -13100,5 +13100,25 @@
       "select": "Lista",
       "checkbox": "Casilla"
     }
+  },
+  "token-views": {
+    "by-model": "Por modelo",
+    "by-account-quota": "Cuota por cuenta",
+    "range": "Período",
+    "range-day": "Día",
+    "range-week": "Semana",
+    "cache": "Caché",
+    "cache-read": "Caché leída",
+    "cache-write": "Caché escrita",
+    "usd": "Dólares",
+    "other-models": "Otros",
+    "no-ledger-data": "Aún no hay llamadas registradas en este período",
+    "no-quota-history": "Aún no hay lecturas de cuota",
+    "window-session": "Sesión",
+    "window-weekly": "Semanal",
+    "resets": "Se restablece {time}",
+    "trend-7d": "Máximo diario, últimos 7 días",
+    "week-tokens": "Tokens esta semana",
+    "day-tokens": "Tokens hoy"
   }
 }

@@ -13100,5 +13100,25 @@
       "select": "下拉列表",
       "checkbox": "复选框"
     }
+  },
+  "token-views": {
+    "by-model": "按模型",
+    "by-account-quota": "按账号额度",
+    "range": "范围",
+    "range-day": "日",
+    "range-week": "周",
+    "cache": "缓存",
+    "cache-read": "缓存读取",
+    "cache-write": "缓存写入",
+    "usd": "美元",
+    "other-models": "其他",
+    "no-ledger-data": "此期间尚未记录到调用",
+    "no-quota-history": "尚无额度读数",
+    "window-session": "会话",
+    "window-weekly": "每周",
+    "resets": "{time} 重置",
+    "trend-7d": "近 7 天每日最高",
+    "week-tokens": "本周 Token",
+    "day-tokens": "今日 Token"
   }
 }
