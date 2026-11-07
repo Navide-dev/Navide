@@ -103,6 +103,7 @@ from .dev_time_store import DevTimeStore
 from .store_migrations import run_startup_migrations, version_change
 from .terminals import TerminalService, output_frame_session_id
 from .tokens_store import TokensStore
+from .cost_ledger import CostLedger
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
@@ -213,6 +214,7 @@ recent_workspaces_store = RecentWorkspacesStore(db=database)
 roles_store = RolesStore(db=database)
 stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
+cost_ledger = CostLedger(database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
 # Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
@@ -2303,6 +2305,11 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             cache_read_tokens=usage.cache_read_tokens,
             cache_creation_tokens=usage.cache_creation_tokens,
             timestamp=usage.timestamp,
+        )
+        # Never raises and does not feed `handled`: the ledger must not change
+        # what tokens_store records or how its checkpoint advances.
+        cost_ledger.record(
+            usage, workspace_path, attributed.slot_key or attributed.pane_id or ""
         )
         # The watcher just told us this session's log grew — the cheapest and
         # most timely rescan trigger there is, since it already carries the
