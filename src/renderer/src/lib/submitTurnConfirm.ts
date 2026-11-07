@@ -41,6 +41,8 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   goose: true,
   // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
   mcode: false,
+  // No log reader yet: Devin's session store is undocumented.
+  devin: false,
   // No log readers yet (standalone agents; their sessions live in their own
   // runtime).
   openclaw: false,

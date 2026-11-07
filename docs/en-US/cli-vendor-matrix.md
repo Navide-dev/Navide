@@ -12,7 +12,11 @@ rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
 Hermes Agent (`hermes`) were added on 2026-11-07 as **standalone agents**
 (`category="standalone"`: offered in the ＋ menu's "Standalone agents" block,
 not among the coding CLIs), making 18; they appear in the roster only — no
-reader, resume, model flag, usage or account switching to tabulate.
+reader, resume, model flag, usage or account switching to tabulate. Devin CLI
+(`devin`, Cognition) was added on 2026-11-07 as a **coding CLI** (the ＋ menu's
+CLI list), making 19; it too appears in the roster only, for the same reason —
+it was wired from the docs with no binary installed (see the
+[integration record](cli-extension-guide.md)).
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -104,6 +108,7 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `droid` | Droid CLI (Factory) | `droid` | `brew install --cask droid` |
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
 | `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
+| `devin` | Devin CLI (Cognition) | `devin` (`--permission-mode dangerous`) | install script (docs.devin.ai/cli) — user runs it |
 | `openclaw` | OpenClaw | `openclaw` | install script (docs.openclaw.ai) — user runs it |
 | `hermes` | Hermes Agent | `hermes` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
 

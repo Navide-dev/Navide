@@ -173,6 +173,18 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("cursor", USER_SCOPE, ("AGENTS.md",)),
     MemorySource("cursor", USER_SCOPE, ("CLAUDE.md",)),
     MemorySource("cursor", USER_SCOPE, ("CLAUDE.local.md",)),
+    # -- devin: every standard file is an always-on rule, user and project
+    # loaded together; ~/.config/devin/AGENTS.md is %APPDATA%\devin on Windows
+    # (docs.devin.ai/cli/extensibility/rules, read 2026-11-07 -- docs only).
+    MemorySource("devin", USER_SCOPE, (".config", "devin", "AGENTS.md"), canonical=True),
+    MemorySource("devin", USER_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", USER_SCOPE, (".devin", "rules"), glob="*.md"),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.local.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENT.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("CLAUDE.md",)),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "rules"), glob="*.md"),
     # -- droid: three personal dot dirs (the bare home is explicitly skipped),
     # and the same dirs per project level. The Claude.md/Agents.md/agents.md
     # spellings are the same files on a case-insensitive volume, so one row.

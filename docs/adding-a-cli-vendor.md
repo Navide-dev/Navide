@@ -1,7 +1,8 @@
 # Adding a CLI vendor
 
 Navide supports one CLI agent per vendor file. Adding a vendor is a
-self-contained PR: two new files plus one registration line on each side.
+self-contained PR: two new files plus one registration line on each side,
+and the test lists and docs under [Other hand-kept lists](#other-hand-kept-lists).
 You never need to read or modify the shared orchestration code.
 
 ## Backend
@@ -138,6 +139,36 @@ You never need to read or modify the shared orchestration code.
    filename, the file is registered, `resumeCommandPattern` matches the
    command Navide builds for you, no `/g` on a matcher). They need no edit
    when you add a vendor; they discover your file on their own.
+
+## Other hand-kept lists
+
+The steps above are not the whole set. These lists also name every vendor
+(or every vendor of a kind), and each one fails a test, not a build, when a
+new key is missing — so they are easy to find only after a red run:
+
+- `backend/tests/test_cli_launch_argv.py` — `EXPECTED_VENDORS`.
+- `backend/tests/cli_regression/support/isolation.py` — `CLI_NAMES` (the
+  binary name, so the regression suite never reaches a real install).
+- `backend/tests/test_spawn_probe_version_drift.py` — every vendor declares a
+  verified version (`cli_verified_version` or the account-switch evidence); a
+  vendor wired from docs with no install declares none and is listed as an
+  exception there instead of inventing one.
+- `backend/tests/test_cli_vendors_registry.py` — besides `EXPECTED_KEYS`, the
+  `test_vendors_without_session_ids` set when `supports_session_resume=False`.
+- `backend/tests/vendors/test_risk_declarations.py` — `DEFAULT_ROOTS` (and the
+  override-variable table) only when the spec declares `data_dirs`.
+- `src/renderer/src/lib/submitTurnConfirm.ts` — `TURN_START_SIGNAL` (`true`
+  only when the log reader reports a turn start; then also add the key to the
+  watched list in `lib/__tests__/submitTurnConfirm.test.ts`).
+- `src/renderer/src/components/ControlPane.vue` — the ＋ menu scroller cap
+  (`.ws-add-scroll` `max-height`, ~24px per CLI row) and `ADD_MENU_MAX_H`
+  above it; `ControlPane.addMenu.test.ts` fails when the CLI list outgrows
+  the cap.
+- `backend/agent_team_backend.spec` — only for a vendor with a log reader
+  (`test_pyinstaller_spec.py` holds that list to `_MIGRATED_READERS`).
+- The vendor count and list in `README.md`, `README.ja-JP.md` and
+  `README.zh-TW.md`, the roster in `docs/en-US/cli-vendor-matrix.md`, the key
+  list and an integration record in `docs/en-US/cli-extension-guide.md`.
 
 Write the spec as `export const SPEC = { … } as const satisfies AgentSpec`,
 never `SPEC: AgentSpec`. The annotation widens `agentKey` to `string`, and

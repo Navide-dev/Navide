@@ -16,6 +16,7 @@ DEFAULT_ROOTS = {
     "codex": ".codex",
     "copilot": ".copilot",
     "cursor": ".cursor/chats",
+    "devin": "AppData/Roaming/devin" if sys.platform == "win32" else ".config/devin",
     "droid": ".factory",
     "goose": "AppData/Roaming/Block/goose/data" if sys.platform == "win32" else ".local/share/goose",
     "grok": ".grok",

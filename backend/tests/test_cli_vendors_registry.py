@@ -31,7 +31,7 @@ CLI_AGENTS_HELP = (
 )
 
 EXPECTED_KEYS = {
-    "aider", "antigravity", "claude", "codex", "copilot", "cursor",
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin",
     "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
     "opencode", "openclaw", "pi", "qwen",
 }
@@ -675,7 +675,9 @@ def test_vendors_without_session_ids() -> None:
     }
     # openclaw and hermes: standalone agents whose sessions live in their own
     # runtime (OpenClaw's Gateway, Hermes's home), with no reader written yet.
-    assert others == {"aider", "mcode", "openclaw", "hermes"}, (
+    # devin: sessions exist (-c / -r <id>) but their store is undocumented
+    # and no reader is written yet.
+    assert others == {"aider", "mcode", "openclaw", "hermes", "devin"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

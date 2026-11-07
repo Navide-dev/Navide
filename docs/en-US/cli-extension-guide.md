@@ -10,8 +10,8 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, `goose`, and the standalone agents `openclaw` and
-`hermes`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, `devin`, and the standalone agents
+`openclaw` and `hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -81,6 +81,28 @@ exist as described, and the per-layer instructions are superseded by Part 1.
 What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
+
+### Devin CLI (`devin`, Cognition) — added 2026-11-07
+
+A coding CLI (no `category`, so the ＋ menu's CLI list). Read from the
+official docs on 2026-11-07 (docs.devin.ai/cli, /cli/reference/commands,
+/cli/essential-commands, /cli/handoff, /cli/extensibility/rules,
+/cli/reference/configuration/config-file, /cli/changelog/stable); no binary
+was installed, so nothing here is a live recording.
+
+| Question | Finding (docs, 2026-11-07) |
+|---|---|
+| Install | `curl -fsSL https://cli.devin.ai/install.sh \| bash` (macOS / Linux / WSL), `brew install --cask devin-cli`, or on Windows an x86_64/ARM64 installer or `irm https://static.devin.ai/cli/setup.ps1 \| iex` in PowerShell (not Git Bash or CMD). The install entry has no command, so the guided install shows the docs link. `devin update` / `devin doctor` are the update and diagnostic commands. |
+| Version | `devin --version` = `devin version`; the output line is undocumented. Releases are numbered `v3000.12.17`; the generic `(\d+\.\d+\.\d+)` reads `3000.12.17`. No verified version is declared (`test_spawn_probe_version_drift` exempts it). |
+| Launch | Bare `devin` opens the TUI. `devin -- <prompt>` preloads a prompt; Navide types the kickoff into the composer like every vendor. |
+| Permissions | `--permission-mode normal\|accept-edits\|smart\|dangerous\|autonomous` (`DEVIN_PERMISSION_MODE`); `dangerous` = `yolo` = `bypass`, admin deny/ask rules still apply; `autonomous` needs `--sandbox`. YOLO mode appends `--permission-mode dangerous`. |
+| Non-interactive | `-p/--print [PROMPT]`, `--prompt-file`; Navide never spawns it. |
+| Resume | `-c/--continue` (latest in cwd), `-r/--resume <id>`; `devin list` lists sessions. The session store's location is undocumented and no reader exists, so `supports_session_resume=False` and no `resumeArgs`. |
+| Cloud | `/handoff [task]` moves the session — repo, branch, conversation and **uncommitted changes** — to a cloud Devin VM; from a cloud session it pulls the PR branch back. Devin's own command and account; Navide adds nothing. |
+| Sign-in | `devin auth login` / `/login`; credential location undocumented. No `login_command_args`, no account switching, no usage. |
+| Instruction files | User: `~/.config/devin/AGENTS.md` (`%APPDATA%\devin\AGENTS.md` on Windows), `~/.devin/global_rules.md`, `~/.devin/rules/*.md`, `~/.claude/CLAUDE.md`. Project: `AGENTS.md`, `AGENTS.local.md`, `AGENT.md`, `CLAUDE.md`, `.windsurfrules`, `.devin/rules/*.md`, `.devin/global_rules.md`, plus `.windsurf/` and `.cursor/rules`. All always-on, loaded together. `native_memory` maps the Devin-specific ones and the standard files; the Windows user path is not covered (rows are home-relative). |
+| Config | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json`), project `.devin/config.json` / `config.local.json`. No relocation variable documented, so no `home_env_vars`; `data_dirs` declares that user config directory only (session and credential locations are undocumented). |
+| Not wired | Reader, resume, model flag (`--model` documented, not checked against an invalid value), MCP, skills, plugins/hooks inventory, usage, account switching. Busy/idle detection, paste protocol and the bare-line reply protocol are unverified. |
 
 ### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
 

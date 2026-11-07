@@ -150,6 +150,21 @@
         }
       }
     },
+    "devin": {
+      "capabilities": [
+        "launch",
+        "unsupported_session"
+      ],
+      "fixture": "devin.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[devin]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[devin]"
+        }
+      }
+    },
     "droid": {
       "capabilities": [
         "launch",

@@ -11,6 +11,7 @@ import { SPEC as claude } from './claude'
 import { SPEC as codex } from './codex'
 import { SPEC as copilot } from './copilot'
 import { SPEC as cursor } from './cursor'
+import { SPEC as devin } from './devin'
 import { SPEC as droid } from './droid'
 import { SPEC as goose } from './goose'
 import { SPEC as grok } from './grok'
@@ -45,6 +46,7 @@ const ORDERED = [
   droid,
   mcode,
   goose,
+  devin,
   openclaw,
   hermes,
   terminal
