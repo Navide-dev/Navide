@@ -27,14 +27,11 @@ function stub(name: string, props: string[] = []) {
 // stub; every other child pane is irrelevant here.
 vi.mock('../../components/ExplorerPane.vue', () => stub('ExplorerPane', ['workspacePath', 'workspaceDisplayName']))
 vi.mock('../../components/SearchPane.vue', () => stub('SearchPane'))
-vi.mock('../../components/GitPane.vue', () => stub('GitPane'))
 vi.mock('../../components/ProblemsPane.vue', () => stub('ProblemsPane'))
 vi.mock('../../components/NotificationHost.vue', () => stub('NotificationHost'))
 vi.mock('../EditorPane.vue', () => stub('EditorPane'))
 vi.mock('../PlanFileView.vue', () => stub('PlanFileView'))
 vi.mock('../DiffPane.vue', () => stub('DiffPane'))
-vi.mock('../ConflictPane.vue', () => stub('ConflictPane'))
-vi.mock('../BranchDiffPane.vue', () => stub('BranchDiffPane'))
 vi.mock('../FilePreviewPane.vue', () => stub('FilePreviewPane'))
 
 vi.mock('../../composables/useBackend', () => ({

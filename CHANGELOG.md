@@ -9,6 +9,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Git (0.2.39): when the built-in Git plugin fails to start, the Git tab now says so, shows why, and offers Reinstall built-in Git (the same restore as the bundled row in Settings → Navide Plugins), instead of loading the old copy of the Git interface that was kept in the app for this case.
 - Git (0.2.39): the file badges in the Explorer now read only Git status (one git process per refresh), instead of loading the whole Git panel's data (status, history, branches, stashes, remotes, tags, worktrees and config) for them. A folder that is not a repository backs off the same way the Git panel does.
 - Git (0.2.39): Navide no longer ships the old copy of the Git interface it kept for a Git plugin that fails to start, and `NAVIDE_GIT_RECOVERY=legacy` no longer does anything. When the built-in Git plugin fails to start, Navide closes its Git windows and the Git tab shows why with Reinstall built-in Git; opening the Git tab again retries it, as before. Navide Git 1.0.4.
+- Mini-IDE (0.2.39): the fallback editor Navide opens when the Mini-IDE plugin fails to start no longer has its own Git sidebar, conflict tabs or branch-comparison tabs; Git, its conflict resolution and branch diffs are in the Navide Git plugin, which those requests already opened. Files, search, problems and file diffs work as before.
 
 ## [0.2.38] — 2026-11-07
 
