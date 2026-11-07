@@ -52,7 +52,7 @@ describe('navide.git production package boundary', () => {
     const scanned = loadPluginDir(packageRoot)
     expect(scanned.error).toBeUndefined()
     expect(scanned.descriptor?.id).toBe('navide.git')
-    expect(scanned.descriptor?.packageVersion).toBe('1.0.3')
+    expect(scanned.descriptor?.packageVersion).toBe('1.0.4')
     expect(scanned.descriptor?.views?.map((view) => view.contributionKey)).toEqual([
       'navide.git.left',
       'navide.git.branch-detail',
@@ -65,12 +65,6 @@ describe('navide.git production package boundary', () => {
     expect(existsSync(join(packageRoot, 'src/GitWindowApp.vue'))).toBe(true)
     expect(existsSync(join(repositoryRoot, 'packages/features'))).toBe(false)
     expect(existsSync(join(repositoryRoot, 'packages/internal'))).toBe(false)
-  })
-
-  it('keeps the pure Git history presentation aligned with the recovery surface', () => {
-    expect(readFileSync(join(packageRoot, 'src/components/GitHistoryModal.vue'), 'utf8')).toBe(
-      readFileSync(join(repositoryRoot, 'src/renderer/src/components/GitHistoryModal.vue'), 'utf8')
-    )
   })
 
   it('does not concatenate numeric suffixes onto CSS custom-property values', () => {

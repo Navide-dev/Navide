@@ -302,15 +302,16 @@ fresh profile. A verified Marketplace version takes precedence. Removing the
 factory package records a durable opt-out; restart does not reinstall it, and
 the Navide Plugins view is the only place that restores it.
 
-Electron main tries the selected v2 descriptor first. A load, mount, or ready
-failure retires the whole v2 Git package and selects the retained legacy
-descriptor for the remainder of that process. Trust, signature, revocation,
-grant, and capability denials fail closed without fallback. An installed
-`navide.git` directory that fails validation also remains a visible hard
-failure instead of being hidden by the factory or legacy copy.
-`NAVIDE_GIT_RECOVERY=legacy` forces the recovery descriptor before activation.
-Neither recovery path mutates Plugin Storage snapshots or legacy seeds. This
-is a compatibility recovery path, not a generic version lifecycle.
+The Host has no Git interface of its own. When the selected v2 package fails to
+load, mount, or report ready, Electron main records the reason and sends
+`plugins:activationFailed`; the main window's Git tab then shows that reason
+with Reinstall built-in Git (the same factory restore as Settings → Navide
+Plugins), and opening the tab again retries the package a bounded number of
+times. Trust, signature, revocation, grant, and capability denials fail closed
+without that notice. An installed `navide.git` directory that fails validation
+also remains a visible hard failure instead of being hidden by the factory
+copy. The failure path does not mutate Plugin Storage snapshots or legacy
+seeds.
 
 ## Plugin backends and core sources
 

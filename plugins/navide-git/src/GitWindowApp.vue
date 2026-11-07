@@ -55,6 +55,7 @@ import SettingsReadinessNotice from './components/SettingsReadinessNotice.vue'
 import NotificationHost from './components/NotificationHost.vue'
 import DiffPane from './editor/DiffPane.vue'
 import BranchDiffPane from './editor/BranchDiffPane.vue'
+import ReviewPane from './components/ReviewPane.vue'
 // Hand-rolled three-way merge view (plain Vue, no Monaco — keeps it out of the
 // git plugin bundle); the same component the mini-IDE opens conflicts in.
 import ConflictPane from './editor/ConflictPane.vue'
@@ -1866,7 +1867,21 @@ registerCommand('git.focusAgent', () => {
               :branch-diff="branchDiff"
               :git-status="gitStatus"
               :git-branches="gitBranches"
-            />
+              @open-file="(p) => openInEditor(p.filepath)"
+              @ask-ai-fix="(text) => void aiCliPanelRef?.submitPrompt(text)"
+            >
+              <template #review="{ workspacePath: reviewWorkspacePath, gitStatus: reviewGitStatus, gitBranches: reviewGitBranches, close, openFile: reviewOpenFile, askAiFix }">
+                <ReviewPane
+                  :workspace-path="reviewWorkspacePath"
+                  :git-status="reviewGitStatus"
+                  :git-branches="reviewGitBranches"
+                  :hide-header="true"
+                  @close="close"
+                  @open-file="reviewOpenFile"
+                  @ask-ai-fix="askAiFix"
+                />
+              </template>
+            </BranchDiffPane>
             <div v-else class="empty-hint">{{ $t('hint.pick-two-branches') }}</div>
           </div>
         </div>

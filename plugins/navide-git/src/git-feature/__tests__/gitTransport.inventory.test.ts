@@ -7,7 +7,6 @@ import { GIT_EVENT_TYPES, GIT_REQUEST_TYPES } from '../gitTransport'
 const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
 const gitConsumerRoots = [
   join(repositoryRoot, 'src/renderer/src'),
-  join(repositoryRoot, 'src/renderer/plugins/git'),
   join(repositoryRoot, 'plugins/navide-git/src'),
 ]
 
@@ -43,11 +42,11 @@ const requestCallPattern = /\b(?:send|runWrite)\s*(?:<[\s\S]*?>\s*)?\(\s*['"](gi
 const eventSubscriptionPattern = /\bon\s*\(\s*['"](git\.[a-z_]+)['"]/g
 
 describe('Git transport inventory', () => {
-  it('matches every Git request issued by v2 and legacy consumers', () => {
+  it('matches every Git request issued by the plugin and the Host', () => {
     expect(collectGitTypes(requestCallPattern)).toEqual([...GIT_REQUEST_TYPES].sort())
   })
 
-  it('matches every Git event subscribed by v2 and legacy consumers', () => {
+  it('matches every Git event subscribed by the plugin and the Host', () => {
     expect(collectGitTypes(eventSubscriptionPattern)).toEqual([...GIT_EVENT_TYPES].sort())
   })
 })

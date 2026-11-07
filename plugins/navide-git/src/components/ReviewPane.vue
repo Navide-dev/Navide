@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useReview } from '../composables/useReview'
-import type { ReviewFinding } from '../composables/useReview'
-import type { useBackend } from '../composables/useBackend'
-import type { useGit } from '../composables/useGit'
-import { setDiagnostics, clearDiagnostics, diagnosticsKey } from '../editor/diagnostics'
-import type { Diagnostic } from '../editor/diagnostics'
+import { GIT_REVIEW_KEY, type GitReviewFinding as ReviewFinding, type GitReviewPort } from '../ports/gitSurface'
+import type { GitBranch, GitStatus } from '../composables/useGit'
 
+// AI review of the working tree or a branch comparison. The Host's analyzer
+// runs it (aiCli.review*); the provider credentials stay in Host Settings.
 const props = defineProps<{
   workspacePath: string
-  backend: ReturnType<typeof useBackend>
-  gitStatus: ReturnType<typeof useGit>['gitStatus']['value']
-  gitBranches: ReturnType<typeof useGit>['gitBranches']['value']
+  gitStatus: GitStatus
+  gitBranches: GitBranch[]
   hideHeader?: boolean
 }>()
 
@@ -22,22 +20,10 @@ const emit = defineEmits<{
   (e: 'ask-ai-fix', text: string): void
 }>()
 
-const { isReviewing, reviewResult, reviewError, reviewElapsed, startReview, stopReview } = useReview(props.backend)
-
-// Sync review findings → diagnosticsStore so Problems panel and gutter icons update.
-watch(reviewResult, (result) => {
-  if (!result) return
-  const byFile = new Map<string, Diagnostic[]>()
-  for (const f of result.findings) {
-    if (!f.file || f.line == null) continue
-    const sev: Diagnostic['severity'] =
-      f.severity === 'critical' ? 'error' : f.severity === 'warning' ? 'warning' : 'info'
-    const arr = byFile.get(f.file) ?? []
-    arr.push({ relPath: f.file, wsPath: props.workspacePath, line: f.line, col: 0, severity: sev, message: f.title, source: 'review' })
-    byFile.set(f.file, arr)
-  }
-  for (const [relPath, diags] of byFile) setDiagnostics(diagnosticsKey(props.workspacePath, relPath), diags)
-})
+const injectedReview = inject(GIT_REVIEW_KEY)
+if (!injectedReview) throw new Error('ReviewPane requires the Git review port')
+const review: GitReviewPort = injectedReview
+const { isReviewing, reviewResult, reviewError, reviewElapsed, startReview, stopReview } = useReview(review)
 
 const mode = ref<'working' | 'branch'>('working')
 const baseBranch = ref('main')
@@ -74,23 +60,20 @@ const ollamaModels = ref<string[]>([])
 const staticModels = computed(() => PROVIDER_MODELS[provider.value] ?? [])
 
 onMounted(async () => {
-  const r = await props.backend.send<Record<string, string>>('ai.chat.settings.get', {})
-  if (r.ok && r.payload) {
-    const p = r.payload.provider as ProviderKey
-    if (p) provider.value = p
-    if (r.payload.model) currentModel.value = r.payload.model
-  }
-  const mr = await props.backend.send<{ ok: boolean; models?: { name: string }[] }>('analyzer.models', {})
-  if (mr.ok && mr.payload?.models) {
-    ollamaModels.value = mr.payload.models.map((m: { name: string }) => m.name).filter(Boolean)
-  }
+  try {
+    const prefs = await review.getModelPreferences()
+    if (prefs.provider) provider.value = prefs.provider as ProviderKey
+    if (prefs.model) currentModel.value = prefs.model
+  } catch { /* keep the defaults; the review still runs with the Host's settings */ }
+  try {
+    ollamaModels.value = await review.listModels()
+  } catch { /* no local models listed */ }
 })
 
 async function saveModel() {
-  await props.backend.send('ai.chat.settings.set', {
-    provider: provider.value,
-    model: currentModel.value,
-  })
+  try {
+    await review.setModelPreferences(provider.value, currentModel.value)
+  } catch { /* the next review reads whatever the Host has */ }
 }
 
 const localBranches = computed(() =>
@@ -109,7 +92,6 @@ async function doReview() {
   showDismissed.value = false
   await saveModel()
   await startReview({
-    workspacePath: props.workspacePath,
     mode: mode.value,
     base: mode.value === 'branch' ? baseBranch.value : undefined,
     compare: mode.value === 'branch' ? (compareBranch.value || currentBranch.value) : undefined,

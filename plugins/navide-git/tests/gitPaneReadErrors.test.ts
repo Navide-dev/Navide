@@ -2,12 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// Both Git panels (the navide.git plugin and the renderer's recovery copy)
-// show why a history or commit read failed, the same way.
+// The Git panel shows why a history or commit read failed.
 const root = join(__dirname, '..', '..', '..')
 const copies = {
   plugin: readFileSync(join(root, 'plugins/navide-git/src/components/GitPane.vue'), 'utf8'),
-  renderer: readFileSync(join(root, 'src/renderer/src/components/GitPane.vue'), 'utf8'),
 }
 
 describe.each(Object.entries(copies))('GitPane (%s) — read errors', (_name, source) => {

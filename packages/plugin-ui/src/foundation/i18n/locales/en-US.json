@@ -617,6 +617,11 @@
       "open-accounts": "Open Git Accounts"
     },
     "left-view-unavailable": "The embedded Git view is temporarily unavailable.",
+    "recovery-title": "Built-in Git could not start",
+    "recovery-reason": "Reason: {reason}",
+    "recovery-reinstall": "Reinstall built-in Git",
+    "recovery-reinstalling": "Reinstalling…",
+    "recovery-reinstall-failed": "Reinstall failed: {reason}",
     "detail-open-failed": "Could not open the detail view. The Git pane keeps the current target.",
     "open-workspace": "Open a workspace to use Git.",
     "settings-unavailable": "Git preferences could not be loaded.",
@@ -2130,7 +2135,6 @@
           "previousChanged": "The previous version's package changed on disk, so it was not rolled back to.",
           "grantUnavailable": "The permissions granted to {id} could not be found, so it was not rolled back.",
           "factoryUnavailable": "Rolling back to the bundled version is not available.",
-          "gitLegacyRecovery": "Bundled Git cannot be restored while NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery.",
           "factoryRestoreFailed": "The bundled version could not be loaded."
         }
       },

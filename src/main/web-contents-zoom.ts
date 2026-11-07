@@ -5,8 +5,6 @@ type ZoomLockedWebContents = Pick<
   'on' | 'setVisualZoomLevelLimits' | 'setZoomFactor'
 >
 
-type ZoomChangedListener = () => void
-
 /**
  * Pin Electron's page zoom to the factor the app owns.
  *
@@ -23,7 +21,6 @@ type ZoomChangedListener = () => void
  */
 export function lockPageZoom(
   contents: ZoomLockedWebContents,
-  onZoomChanged?: ZoomChangedListener,
   getFactor: () => number = () => 1,
 ): void {
   const pinPageZoom = (): void => {
@@ -33,9 +30,6 @@ export function lockPageZoom(
 
   pinPageZoom()
   contents.on('did-finish-load', pinPageZoom)
-  contents.on('zoom-changed', () => {
-    pinPageZoom()
-    onZoomChanged?.()
-  })
+  contents.on('zoom-changed', pinPageZoom)
   void contents.setVisualZoomLevelLimits(1, 1)
 }

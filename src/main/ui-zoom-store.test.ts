@@ -14,7 +14,6 @@ function contentsStub(overrides: Partial<{ destroyed: boolean; throws: boolean }
       if (overrides.throws) throw new Error('Object has been destroyed')
     }),
     isDestroyed: vi.fn(() => overrides.destroyed ?? false),
-    send: vi.fn()
   }
 }
 
@@ -102,28 +101,14 @@ describe('createUiZoomStore', () => {
     expect(store.get()).toBe(1.25)
   })
 
-  it('tells each window the zoom changed so native views can re-place themselves', () => {
-    // GitPluginHostSlot divides CSS-pixel bounds by the zoom factor before
-    // handing them to main. Electron emits 'zoom-changed' only for user
-    // gestures, so an app-driven change must be pushed or those WebContentsViews
-    // stay at the old geometry.
-    const store = createUiZoomStore(1)
-    const contents = contentsStub()
-    store.track(contents)
-
-    store.set(1.25)
-
-    expect(contents.send).toHaveBeenCalledWith('window:zoom-changed')
-  })
-
-  it('does not notify a destroyed window', () => {
+  it('does not touch a destroyed window', () => {
     const store = createUiZoomStore(1)
     const dead = contentsStub({ destroyed: true })
     store.track(dead)
 
     store.set(1.25)
 
-    expect(dead.send).not.toHaveBeenCalled()
+    expect(dead.setZoomFactor).not.toHaveBeenCalled()
   })
 
   it('tracks a WebContents only once', () => {

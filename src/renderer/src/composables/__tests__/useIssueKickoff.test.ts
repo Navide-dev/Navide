@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildIssueKickoff } from '../useIssues'
-import type { Issue } from '../useIssues'
+import { buildIssueKickoff } from '../../lib/issueDispatch'
+import type { Issue } from '../../lib/issueDispatch'
 
 const baseIssue: Issue = {
   number: 7,

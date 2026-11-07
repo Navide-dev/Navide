@@ -54,8 +54,9 @@ interface GitCredential {
   expectedHost: string
 }
 
-interface GitRecoveryChanged {
-  legacy: boolean
+interface PluginActivationFailed {
+  pluginId: string
+  reason: string | null
 }
 
 interface PlansRecoveryChanged {
@@ -94,7 +95,7 @@ declare global {
       retryGitV2: () => Promise<{ ok: boolean; reason?: string }>
       retryPlansV2: () => Promise<{ ok: boolean; reason?: string }>
       repairPlansStorageRecord: () => Promise<{ ok: boolean; repaired: boolean; reason?: string }>
-      onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
+      onPluginActivationFailed: (cb: (change: PluginActivationFailed) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onPluginAgentAction?: (cb: (notice: {
@@ -178,18 +179,7 @@ declare global {
         compare?: string
       }) => Promise<{ ok: boolean }>
       openBranchDiffWindow?: (args: { workspace_path: string; base: string }) => Promise<{ ok: boolean }>
-      openGitLeftView: (args: {
-        workspace_path: string
-        bounds: { x: number; y: number; width: number; height: number }
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      updateGitLeftView: (args: {
-        bounds: { x: number; y: number; width: number; height: number }
-        visible: boolean
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      closeGitLeftView: () => Promise<{ ok: boolean }>
-      getZoomFactor?: () => Promise<number>
       setUiScale?: (scale: number) => Promise<number>
-      onZoomChanged?: (cb: () => void) => () => void
       onPlanOpenDoc: (handler: (relPath: string) => void) => () => void
       openDiffWindow: (args: {
         workspace_path: string

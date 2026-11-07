@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ref } from 'vue'
 import { useExplorer, type FsEntry } from '../useExplorer'
-import type { GitStatus } from '../useGit'
+import type { GitStatusSnapshot } from '../useGitStatusBadges'
 import { createMockBackend, withScope, flush } from './mockBackend'
 
 function entries(): FsEntry[] {
@@ -231,7 +231,7 @@ describe('useExplorer', () => {
       staged: [{ path: 'a.ts', status: 'M' }],
       unstaged: [{ path: 'a.ts', status: 'M' }, { path: 'b.ts', status: 'M' }],
       untracked: [{ path: 'c.ts', status: '?' }],
-    } as unknown as GitStatus
+    } as unknown as GitStatusSnapshot
     const map = result.buildStatusMap(status)
     expect(map.get('a.ts')).toEqual({ letter: 'M', staged: true })   // staged overrides unstaged
     expect(map.get('b.ts')).toEqual({ letter: 'M', staged: false })

@@ -147,7 +147,7 @@ describe('injectText asks right before every Enter', () => {
   it('injectPane passes the check through', () => {
     const pane = functionSource('injectPane')
     expect(pane).toMatch(/stillWanted\?: \(\) => boolean/)
-    expect(pane).toMatch(/onInputBlocked, stillWanted,?\s*\)/)
+    expect(pane).toMatch(/onInputBlocked, stillWanted, prefill,?\s*\)/)
   })
 })
 

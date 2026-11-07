@@ -2081,13 +2081,13 @@ the same Manifest, catalog, exact-version grant, instance, and capability
 runtime; factory provenance is not a permission bypass. Removing Bundled Git
 records a durable opt-out, and Extensions provides the explicit restore action.
 When the selected, trusted, approved `navide.git` version fails to
-load, mount, or report ready, the Host retires that package's v2 instances and
-uses the retained legacy renderer for the remainder of the process. Trust,
-signature, revocation, grant, and capability denials fail closed and never
-trigger the legacy path. An invalid installed package is also not hidden by the
-factory or legacy copy. `NAVIDE_GIT_RECOVERY=legacy` remains the explicit operator override.
-Issue 19 does not remove the legacy implementation or implement later Skills
-migration or marketplace lifecycle work.
+load, mount, or report ready, the Host closes its Git windows, records the
+reason and sends `plugins:activationFailed` (`{ pluginId, reason }`, with
+`reason: null` once it runs again); the main window shows the reason with a
+Reinstall action. The Host keeps no second Git implementation to fall back to.
+Trust, signature, revocation, grant, and capability denials fail closed and
+never raise that notice. An invalid installed package is also not hidden by the
+factory copy.
 
 The bundled first-party plugins (`navide.git`, `navide.mini-ide`,
 `navide.plans`) version independently of the App: each keeps the version in
@@ -2096,8 +2096,8 @@ App records the versions it bundles in `src/main/plugins/officialPluginVersions.
 to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
 verified Marketplace copy of the same id is also installed, the newer version
 by SemVer is loaded and the installed copy wins a tie; an opted-out bundled
-copy and a forced legacy recovery (`NAVIDE_GIT_RECOVERY=legacy`,
-`NAVIDE_PLANS_RECOVERY=legacy`) leave the installed copy in charge. An older installed copy
+copy and a forced legacy Plans recovery (`NAVIDE_PLANS_RECOVERY=legacy`)
+leave the installed copy in charge. An older installed copy
 is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.

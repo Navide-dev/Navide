@@ -617,6 +617,11 @@
       "open-accounts": "Abrir contas Git"
     },
     "left-view-unavailable": "A visualização Git incorporada está temporariamente indisponível.",
+    "recovery-title": "Não foi possível iniciar o Git integrado",
+    "recovery-reason": "Motivo: {reason}",
+    "recovery-reinstall": "Reinstalar o Git integrado",
+    "recovery-reinstalling": "Reinstalando…",
+    "recovery-reinstall-failed": "Falha ao reinstalar: {reason}",
     "detail-open-failed": "Não foi possível abrir a visualização de detalhes. O pane Git mantém o destino atual.",
     "open-workspace": "Abra um workspace para usar o Git.",
     "settings-unavailable": "Não foi possível carregar as preferências do Git.",
@@ -2130,7 +2135,6 @@
           "previousChanged": "O pacote da versão anterior mudou no disco, então a reversão para ela não foi feita.",
           "grantUnavailable": "As permissões concedidas a {id} não foram encontradas, então ele não foi revertido.",
           "factoryUnavailable": "A reversão para a versão integrada não está disponível.",
-          "gitLegacyRecovery": "Não é possível restaurar o Git integrado enquanto NAVIDE_GIT_RECOVERY=legacy estiver forçando a recuperação legada.",
           "factoryRestoreFailed": "Não foi possível carregar a versão integrada."
         }
       },

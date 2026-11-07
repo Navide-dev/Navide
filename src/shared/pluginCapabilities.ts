@@ -16,19 +16,6 @@
 // direction is a map reaching a namespace the manifest never granted, which
 // the broker would deny at runtime.
 
-/** navide.git — git/fs power the working tree, `ui` the theme sync and the
- *  open-in-editor host capability, `issues` the embedded cloud issues panel.
- *  `terminal` powers the embedded AiCliDock CLI agent panel (interactive PTY:
- *  create/input/reattach + the output/exit events). The old AIChatPane grants
- *  (`chat`, `search`) were dropped with the pane. */
-export const GIT_PLUGIN_REQUIRES: readonly string[] = [
-  'git',
-  'fs',
-  'ui',
-  'issues',
-  'terminal',
-]
-
 /** navide.mini-ide — the widest surface: editor, terminal, search and chat. */
 export const MINI_IDE_PLUGIN_REQUIRES: readonly string[] = [
   'fs',

@@ -1,6 +1,6 @@
 import { ref, watch, onScopeDispose, type Ref } from 'vue'
 import type { useBackend } from './useBackend'
-import type { GitStatus } from './useGit'
+import type { GitStatusSnapshot } from './useGitStatusBadges'
 
 export interface FsEntry {
   name: string
@@ -200,10 +200,10 @@ export function useExplorer(
 
   // ── Git status overlay ────────────────────────────────────────────────────
   /**
-   * Build a relPath → status-letter map from a GitStatus. staged paths win
+   * Build a relPath → status-letter map from a git status. staged paths win
    * (so the Explorer can pass the right `staged` flag when opening a diff).
    */
-  function buildStatusMap(status: GitStatus | null): Map<string, { letter: string; staged: boolean }> {
+  function buildStatusMap(status: GitStatusSnapshot | null): Map<string, { letter: string; staged: boolean }> {
     const map = new Map<string, { letter: string; staged: boolean }>()
     if (!status) return map
     for (const e of status.unstaged ?? []) map.set(e.path, { letter: e.status.trim() || 'M', staged: false })

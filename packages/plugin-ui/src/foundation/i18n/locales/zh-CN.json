@@ -617,6 +617,11 @@
       "open-accounts": "打开 Git 账号"
     },
     "left-view-unavailable": "嵌入式 Git View 暂时无法使用。",
+    "recovery-title": "内置 Git 无法启动",
+    "recovery-reason": "原因：{reason}",
+    "recovery-reinstall": "重新安装内置 Git",
+    "recovery-reinstalling": "正在重新安装…",
+    "recovery-reinstall-failed": "重新安装失败：{reason}",
     "detail-open-failed": "无法打开详细查看，Git 面板会保留目前的目标。",
     "open-workspace": "请先打开工作区以使用 Git。",
     "settings-unavailable": "Git 偏好设置加载失败。",
@@ -2130,7 +2135,6 @@
           "previousChanged": "上一个版本的套件文件已被变更，因此没有回复。",
           "grantUnavailable": "找不到 {id} 已核准的权限，因此没有回复。",
           "factoryUnavailable": "目前无法回复为内置版本。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy 强制使用旧版恢复模式时，无法还原内置 Git。",
           "factoryRestoreFailed": "无法加载内置版本。"
         }
       },

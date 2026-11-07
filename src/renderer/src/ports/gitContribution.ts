@@ -1,4 +1,4 @@
-import type { Issue, IssueDetail, IssueHandlerMode, IssueProvider } from '../composables/useIssues'
+import type { Issue, IssueDetail, IssueHandlerMode, IssueProvider } from '../lib/issueDispatch'
 
 export interface GitContributionState {
   workspacePath: string

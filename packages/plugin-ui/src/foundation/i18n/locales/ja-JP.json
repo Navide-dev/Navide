@@ -617,6 +617,11 @@
       "open-accounts": "Git アカウントを開く"
     },
     "left-view-unavailable": "埋め込み Git ビューは一時的に利用できません。",
+    "recovery-title": "内蔵 Git を起動できませんでした",
+    "recovery-reason": "原因: {reason}",
+    "recovery-reinstall": "内蔵 Git を再インストール",
+    "recovery-reinstalling": "再インストール中…",
+    "recovery-reinstall-failed": "再インストールに失敗しました: {reason}",
     "detail-open-failed": "詳細ビューを開けませんでした。Git パネルは現在のターゲットを保持します。",
     "open-workspace": "Git を使用するにはワークスペースを開いてください。",
     "settings-unavailable": "Git の設定を読み込めませんでした。",
@@ -2130,7 +2135,6 @@
           "previousChanged": "以前のバージョンのパッケージがディスク上で変更されたため、戻しませんでした。",
           "grantUnavailable": "{id} に付与された権限が見つからないため、戻しませんでした。",
           "factoryUnavailable": "同梱版に戻す操作は現在利用できません。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy でレガシー復旧が強制されている間は、同梱の Git を復元できません。",
           "factoryRestoreFailed": "同梱版を読み込めませんでした。"
         }
       },
