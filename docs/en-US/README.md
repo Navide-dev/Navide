@@ -31,6 +31,8 @@ The root [README](../../README.md) introduces the product and current distributi
 |---|---|
 | [Privacy and data flows](privacy.md) | Understand what stays local, what may reach third parties, and where credentials are stored |
 | [Security policy](../../SECURITY.md) | Understand supported security boundaries and report vulnerabilities privately |
+| [Security threat model](security-threat-model.md) | The attacker positions and STRIDE table every security review is checked against |
+| [Security assessments](security/README.md) | Threat assessments written before a trust boundary moves: backend network, declared executables, Windows backends, channel adapters |
 
 ## Development and maintenance
 
