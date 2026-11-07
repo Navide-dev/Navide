@@ -14,6 +14,7 @@ Thank you for your interest in contributing!
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [Code Style](#code-style)
 - [Commit Format](#commit-format)
+- [Documentation](#documentation) (including [Build for Navide](docs/en-US/build-for-navide.md) for plugin authors)
 
 ---
 
@@ -369,6 +370,8 @@ By participating you agree to abide by its terms.
 ## Documentation
 
 User-facing behavior changes must update the relevant canonical document under [`docs/en-US/`](docs/en-US/README.md), synchronize an existing localized counterpart in the same change, and add an entry under `CHANGELOG.md`'s Unreleased section. Avoid describing configurable registries with fixed counts, document any new external data flow in `docs/en-US/privacy.md`, and keep future vision distinct from shipped capability claims.
+
+Building a Navide plugin, as opposed to changing Navide, starts at [Build for Navide](docs/en-US/build-for-navide.md): one page from `npx navide-plugin init` through self-checks, Developer Mode and the Marketplace's application, Testplace, review, update and yank steps, with [the plugins we would like to see](docs/en-US/plugin-ideas.md). Open a Discussion in **Plugin ideas** before taking one up and in **Show and tell** when it ships.
 
 A PR that changes the plugin API (`packages/plugin-sdk`, `packages/plugin-contracts`), the manifest schema (`plugin-manifest-v2.schema.json`) or the capability catalog (`capabilities-v1.json`) must update `docs/en-US/plugin-development*.md` in the same PR. Two tests enforce part of this: `tests/infrastructure/pluginDocsExamples.test.ts` typechecks every TypeScript/JavaScript example in the plugin docs against the SDK source (mark a block that cannot compile with `<!-- docs-typecheck: skip (reason) -->` on the line before its fence) and rejects `definePlugin` as an activation path, and `tests/infrastructure/pluginDocsManifest.test.ts` compares the Spec v2 manifest field, view location, error code and capability tables with the schema and catalog. Prose they cannot parse is still yours to keep current.
 

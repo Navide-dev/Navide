@@ -40,6 +40,8 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | AI Coding CLI を追加する：2 つの Spec ファイル、登録、CI が強制するチェック |
 | [CLI Integration Records — English](../en-US/cli-extension-guide.md) | ベンダーごとの統合記録：インストール経路、Resume 構文、Session 保存形式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 対応済み CLI の一覧：実際に実行されるコマンドと、各 spec が宣言する機能 |
+| [Build for Navide — English](../en-US/build-for-navide.md) | プラグイン作者はここから：`npx navide-plugin init`、セルフチェック、Developer Mode、Marketplace の申請・Testplace・審査・更新・取り下げを 1 ページで |
+| [Plugin Ideas — English](../en-US/plugin-ideas.md) | Navide チームが欲しいプラグインの一覧と、それぞれに必要な機能・現在の阻害要因 |
 | [Plugin Development — English](../en-US/plugin-development.md) | フロントエンド View プラグインまたはバックエンドプラグインを開発し、パッケージ化して署名する |
 | [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 公開 Contracts、SDK、UI Package、外部 Frontend Package Workflow を使用する |
 | [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | `navide-plugin` でプラグインを作成・パッケージ化・署名し、Navide Marketplace に公開して審査を通す |

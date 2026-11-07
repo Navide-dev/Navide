@@ -18,13 +18,19 @@
 > the environment-variable Developer Mode of a development build
 > (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a Manifest v2 view or run a
 > backend, while a folder loaded with Settings → Navide Plugins → Developer
-> Mode can (see [Backend trust](#backend-trust)); there are no command, menu or keybinding
-> contribution points; `custom` is the only view kind; and a package can be
-> installed and removed but not disabled.
+> Mode can (see [Backend trust](#backend-trust)); `contributes.commands` is the
+> one contribution point besides views (no menu or keybinding contribution
+> points); `custom` is the only view kind; and a package can be installed,
+> disabled and enabled (Settings → Navide Plugins, or an agent's
+> `plugins_disable` / `plugins_enable` request the user approves) and removed.
 >
 > The SDK CLI (`navide-plugin`) covers the whole publishing workflow —
-> `init`, `validate`, `package` (per target), `keygen`, `sign`, `login`, and
-> `publish` — see [Publishing to the Navide Marketplace](marketplace-publishing.md).
+> `init`, `validate`, `scan`, `package` (per target), `keygen`, `sign`,
+> `verify`, `login`, `whoami`, `status`, `logout`, `publish`, `testplace` and
+> `dev-backend` — see [Publishing to the Navide Marketplace](marketplace-publishing.md)
+> for each one. There is no `navide-plugin dev` command: in development a
+> folder loaded with Settings → Navide Plugins → Developer Mode reloads by
+> itself when its files change (see "Local testing" below).
 > The first-party Plans build scripts package the app's production artifact
 > and are not the public author workflow.
 >
@@ -3038,8 +3044,10 @@ lives at `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`
 and summarises this document; change it in the same pull request as any change
 here that it describes.
 
-There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
-backend with `navide-plugin dev-backend`, whose Host bridge refuses every
+There is no `navide-plugin dev` command; the in-app loop is Developer Mode's
+folder load, which reloads by itself when the folder's files change (see
+"Local testing" in [Backend source, development, and publish contract](#backend-source-development-and-publish-contract)). Test a
+backend alone with `navide-plugin dev-backend`, whose Host bridge refuses every
 request, and test the complete package inside Navide by loading its folder
 with Settings → Navide Plugins → Developer Mode, installing it from a file, or
 installing it from a local Registry; only the environment-variable Developer
