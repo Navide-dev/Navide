@@ -918,22 +918,29 @@ export function registerPluginIpc(
     }
   }
   // The trust identity a package's own secrets (`secrets`) are bound to: its
-  // installed source, and for a local file the publisher key that signed it.
-  // A Registry install whose channel this release does not know still comes
-  // through the Registry. Null (refused) when nothing says where it came from.
+  // installed source; for a local file the publisher key that signed it, or
+  // its exact content when unsigned; for a developer folder, the folder
+  // (MED-4: neither id is vouched for). A Registry install whose channel this
+  // release does not know still comes through the Registry. Null (refused)
+  // when nothing says where it came from.
   manager.setPluginSecretIdentityResolver?.((pluginId) => {
     const summary = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
     if (!summary) return null
     const source = installedSource(summary, activeRegistryChannel(summary))
+    if (source === 'developer-unpacked') {
+      return secretsIdentity(source, { folderPath: developerMode.folder(pluginId)?.path })
+    }
     if (source === 'local-unsigned' || source === 'local-signed') {
       const path = summary.packageVersion ? localTrustRecordFor(pluginsRoot, pluginId, summary.packageVersion) : null
-      let signer: { publisherId: string; keyId: string } | null = null
+      if (!path) return null
       try {
-        signer = path ? readLocalTrustRecord(path).signer : null
+        const record = readLocalTrustRecord(path)
+        return record.signer
+          ? secretsIdentity('local-signed', { signer: record.signer })
+          : secretsIdentity('local-unsigned', { contentDigest: record.contentDigest })
       } catch {
         return null
       }
-      return signer ? secretsIdentity('local-signed', signer) : secretsIdentity('local-unsigned')
     }
     return secretsIdentity(source) ?? (summary.provenance === 'official-registry' ? secretsIdentity('marketplace') : null)
   })

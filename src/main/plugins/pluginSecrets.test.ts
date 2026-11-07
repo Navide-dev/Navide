@@ -290,11 +290,31 @@ describe('secrets bound to the package trust identity', () => {
     expect(secretsIdentity('prerelease')).toBe('registry')
     expect(secretsIdentity('testplace')).toBe('registry')
     expect(secretsIdentity('factory-bundled')).toBe('registry')
-    expect(secretsIdentity('developer-unpacked')).toBe('developer-unpacked')
-    expect(secretsIdentity('local-unsigned')).toBe('local-unsigned')
-    expect(secretsIdentity('local-signed', { publisherId: 'acme', keyId: 'k1' })).toBe('local-signed:acme:k1')
-    expect(secretsIdentity('local-signed', null)).toBeNull()
+    expect(secretsIdentity('local-signed', { signer: { publisherId: 'acme', keyId: 'k1' } })).toBe('local-signed:acme:k1')
+    expect(secretsIdentity('local-signed', { signer: null })).toBeNull()
     expect(secretsIdentity(undefined)).toBeNull()
+  })
+
+  it('never hands an unsigned local file or a developer folder another package\'s secrets (MED-4)', () => {
+    const digestA = 'a'.repeat(64)
+    const digestB = 'b'.repeat(64)
+    expect(secretsIdentity('local-unsigned', { contentDigest: digestA })).toBe(`local-unsigned:${digestA}`)
+    // Another unsigned file of the same id, an update of it included, is another identity.
+    expect(secretsIdentity('local-unsigned', { contentDigest: digestB })).not.toBe(secretsIdentity('local-unsigned', { contentDigest: digestA }))
+    expect(secretsIdentity('local-unsigned')).toBeNull()
+    const folder = secretsIdentity('developer-unpacked', { folderPath: '/dev/a' })
+    expect(folder).toMatch(/^developer-unpacked:[0-9a-f]{64}$/)
+    expect(folder).not.toContain('/dev/a')
+    expect(secretsIdentity('developer-unpacked', { folderPath: '/dev/b' })).not.toBe(folder)
+    expect(secretsIdentity('developer-unpacked', { folderPath: '/dev/a' })).toBe(folder)
+    expect(secretsIdentity('developer-unpacked')).toBeNull()
+
+    const { store: secrets } = store()
+    const value = fakeSecret('med4')
+    secrets.run('acme.tokens', `local-unsigned:${digestA}`, 'set', { name: 'API_KEY', value })
+    const other = secrets.run('acme.tokens', `local-unsigned:${digestB}`, 'get', { name: 'API_KEY' })
+    expect(other).toEqual(mismatch)
+    expect(JSON.stringify(other)).not.toContain(value)
   })
 
   it('binds on the first write and keeps serving the same identity (an upgrade or rollback)', () => {
@@ -306,7 +326,7 @@ describe('secrets bound to the package trust identity', () => {
   })
 
   it('refuses every operation for another identity, and neither reads, writes nor deletes', () => {
-    for (const other of ['developer-unpacked', 'local-unsigned', 'local-signed:acme:k2']) {
+    for (const other of ['developer-unpacked:x', 'local-unsigned:y', 'local-signed:acme:k2']) {
       const { store: secrets, root } = store()
       const value = fakeSecret(`id-${other}`)
       secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })

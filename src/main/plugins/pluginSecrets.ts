@@ -22,7 +22,7 @@
 // This is not the CLI account credential vault and shares no code with it.
 // Electron-free: the root and the crypto provider are injected, so it is
 // tested against a tmpdir with a fake crypto.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -69,13 +69,20 @@ const IDENTITY_MISMATCH = Object.freeze({ ok: false, code: 'SECRETS_IDENTITY_MIS
 
 /** The trust identity a secrets file is bound to, from the installed
  *  package's source: one value for every Registry-reviewed or bundled copy
- *  (the Registry binds the id's namespace to its publisher), the publisher
- *  and key for a locally installed signed file, and a class of its own for an
- *  unsigned local file and for a developer folder. Null when the Host cannot
- *  tell, which makes every operation refuse. */
+ *  (the Registry binds the id's namespace to its publisher) and the publisher
+ *  and key for a locally installed signed file. Nothing vouches for an
+ *  unsigned local file's or a developer folder's id (it is only what the
+ *  manifest claims), so, like their native backend data (MED-4), their
+ *  secrets are never handed to another package: an unsigned file is bound to
+ *  its exact content digest and a developer folder to its folder. Null when
+ *  the Host cannot tell, which makes every operation refuse. */
 export function secretsIdentity(
   source: string | undefined,
-  signer?: { publisherId: string; keyId: string } | null,
+  detail: {
+    signer?: { publisherId: string; keyId: string } | null
+    contentDigest?: string
+    folderPath?: string
+  } = {},
 ): string | null {
   switch (source) {
     case 'marketplace':
@@ -84,11 +91,13 @@ export function secretsIdentity(
     case 'factory-bundled':
       return 'registry'
     case 'local-signed':
-      return signer ? `local-signed:${signer.publisherId}:${signer.keyId}` : null
+      return detail.signer ? `local-signed:${detail.signer.publisherId}:${detail.signer.keyId}` : null
     case 'local-unsigned':
-      return 'local-unsigned'
+      return detail.contentDigest ? `local-unsigned:${detail.contentDigest}` : null
     case 'developer-unpacked':
-      return 'developer-unpacked'
+      return detail.folderPath
+        ? `developer-unpacked:${createHash('sha256').update(detail.folderPath, 'utf8').digest('hex')}`
+        : null
     default:
       return null
   }

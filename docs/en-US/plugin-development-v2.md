@@ -2154,9 +2154,14 @@ never from the request.
 the package that wrote it first, taken from the installed source: one identity
 for a Marketplace, pre-release, Testplace or bundled copy (the Registry binds
 the id's namespace to its publisher); `local-signed:<publisher>:<key id>` for a
-local file a vetted publisher signed; `local-unsigned` for an unsigned local
-file; `developer-unpacked` for a Developer Mode folder. An update or rollback
-from the same source and publisher keeps the same identity and keeps working.
+local file a vetted publisher signed. Nothing vouches for the id of an unsigned
+local file or a Developer Mode folder (it is only what the manifest claims), so,
+like their native backend data, their secrets are never handed to another
+package: an unsigned file is bound to its exact content digest (another
+unsigned file of the same id, an update of it included, starts with none) and a
+Developer Mode folder to that folder. An update or rollback from the Registry,
+or a signed file from the same publisher key, keeps the same identity and keeps
+working.
 When the same id is later installed from another source or signed with another
 key (including a Developer Mode folder of a Marketplace package), every
 `secrets.*` call and every Bridge `secrets` operation answers
