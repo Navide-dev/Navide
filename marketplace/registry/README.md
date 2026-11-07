@@ -387,10 +387,13 @@ scripts/publish-first-party-plugins.sh
 ```
 
 The script builds, packs, signs and publishes `navide.git` and
-`navide.mini-ide` as `universal` and `navide.plans` for the host target (for
-example `darwin-arm64`), reusing the `navide-plugin` CLI. `--skip-build` reuses
-`dist-plugins/`, `--only git|plans|mini-ide` publishes one. Plans carries a PyInstaller backend, so each other target must
-be built on a machine of that platform and architecture.
+`navide.mini-ide` as `universal`, and `navide.plans` and `navide.browser` for
+the host target (for example `darwin-arm64`), reusing the `navide-plugin` CLI.
+`--skip-build` reuses `dist-plugins/`, `--only git|plans|mini-ide|browser`
+publishes one. Plans and Browser carry a PyInstaller backend, so each other
+target must be built on a machine of that platform and architecture (or by
+`plugin-packages.yml` / `browser-plugin-package.yml` and published with
+`--from-run`).
 
 Running the script with the same version on each platform adds that
 platform's artifact to the version (see

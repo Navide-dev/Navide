@@ -597,6 +597,40 @@ dismiss a report or act on it: yank the version, or block the package or the
 publisher. Removals, and why, are listed publicly at
 <https://server.navide.dev/registry/removed>.
 
+## 10. Re-listing Navide's own plugins at a release
+
+The App bundles four first-party Navide plugins — `navide.git`,
+`navide.mini-ide`, `navide.plans` and `navide.browser` — and they version
+independently of the App (`src/main/plugins/officialPluginVersions.ts`). A user
+who installed one from the Marketplace keeps that copy until a newer version
+is listed there, so every App release that bumps one of them also lists the new
+version on the Marketplace. This is a release step, done after the App release
+is out, and each run needs the user's go: listing is public and cannot be
+undone, only yanked (see [8. Yank a version](#8-yank-a-version)).
+
+```bash
+NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
+NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
+scripts/publish-first-party-plugins.sh [--only git|mini-ide|plans|browser]
+```
+
+- `navide.git` and `navide.mini-ide` are frontend-only and are listed once, as
+  `universal`.
+- `navide.plans` and `navide.browser` carry a native backend and are listed
+  per target. The script lists the machine's own target; the other targets
+  the App ships come from `plugin-packages.yml` (Plans) and
+  `browser-plugin-package.yml` (Browser), listed with
+  `--from-run <run id> --id <plugin id> --version <version> --target "<targets>" --yes`.
+- Only list a plugin whose version changed in this release. A version that is
+  already listed answers `409`; skip it with `--only`.
+- `navide.browser` is listed for the first time with 0.2.39.
+
+The publisher key and token stay on the maintainer's machine; the CI
+workflows only build and pack. The registry side of this (registering the
+`navide` publisher, per-target artifacts) is in
+`marketplace/registry/README.md`, "Publishing first-party plugins".
+
 ## Troubleshooting
 
 | Message | Cause and fix |
