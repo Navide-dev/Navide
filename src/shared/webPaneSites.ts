@@ -21,6 +21,7 @@ export interface WebPaneSite {
 }
 
 export const WEB_PANE_SITES: readonly WebPaneSite[] = [
+  // Grok Bot's web entry is in the Cursor dashboard, hence cursor.com.
   { id: 'grok', name: 'Grok Bot', url: 'https://cursor.com/dashboard/bot', hosts: ['cursor.com'] },
   { id: 'dots', name: 'OpenAI dots', url: 'https://chatgpt.com', hosts: ['chatgpt.com', 'openai.com'], macAppBundleId: 'com.openai.chat' },
   { id: 'muse', name: 'Meta Muse', url: 'https://muse.ai', hosts: ['muse.ai'] },
