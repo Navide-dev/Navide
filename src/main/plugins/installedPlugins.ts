@@ -197,6 +197,9 @@ export function manifestToDescriptor(
         : {}),
       ...(manifest.contributes?.api ? { api: manifest.contributes.api.map(entry => entry.method) } : {}),
       ...(manifest.contributes?.pipelineNodes ? { pipelineNodes: manifest.contributes.pipelineNodes } : {}),
+      ...(manifest.contributes?.statusBar ? { statusBar: manifest.contributes.statusBar } : {}),
+      ...(manifest.contributes?.paneActions ? { paneActions: manifest.contributes.paneActions } : {}),
+      ...(manifest.contributes?.explorerMenu ? { explorerMenu: manifest.contributes.explorerMenu } : {}),
     }
   }
   return {

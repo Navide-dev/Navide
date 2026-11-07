@@ -455,7 +455,8 @@ declare global {
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
-        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
+        listSlots?: () => Promise<import('../../shared/pluginCommands').PluginSlotEntry[]>
+        runCommand: (args: { commandId: string; workspace_path: string; target?: import('../../shared/pluginCommands').PluginCommandTarget }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null

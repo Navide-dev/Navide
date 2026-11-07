@@ -94,6 +94,17 @@ export type PluginManifestV2ApiMethod = {
   description: string
 }
 
+/** A status bar item that runs `command` (one of this plugin's commands). */
+export type PluginManifestV2StatusBarItem = { command: string; text: string; tooltip?: string }
+/** An entry in a pane's context menu; the command gets `{ paneId }`. */
+export type PluginManifestV2PaneAction = { command: string; title: string }
+/** An entry in the Explorer's context menu; the command gets `{ path }`. */
+export type PluginManifestV2ExplorerMenuItem = {
+  command: string
+  title: string
+  when?: 'file' | 'directory' | 'any'
+}
+
 /** A deterministic pipeline step this plugin contributes. The Host calls
  *  `method` (also listed in `backend.methods`) with `{ input: string }`, the
  *  node's expanded input, and the JSON it returns becomes the node's output,
@@ -164,6 +175,10 @@ export type PluginManifestV2 = {
     commands?: PluginManifestV2Command[]
     api?: PluginManifestV2ApiMethod[]
     pipelineNodes?: PluginManifestV2PipelineNode[]
+    /** Batch 4 view slots: one of this plugin's own commands on a Host surface. */
+    statusBar?: PluginManifestV2StatusBarItem[]
+    paneActions?: PluginManifestV2PaneAction[]
+    explorerMenu?: PluginManifestV2ExplorerMenuItem[]
   }
   backend?: {
     entry: string

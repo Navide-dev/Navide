@@ -394,6 +394,7 @@ import {
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
 import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared/pluginAgentTools'
+import type { PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -1282,10 +1283,11 @@ function markPluginIconFailed(entry: Pick<PluginRegionContribution, 'contributio
   failedPluginIcons.value = failures
 }
 
-async function runPluginCommand(commandId: string): Promise<void> {
+async function runPluginCommand(commandId: string, target?: PluginCommandTarget): Promise<void> {
   const result = await window.agentTeam?.plugins?.runCommand?.({
     commandId,
     workspace_path: currentWorkspace.value.trim(),
+    ...(target ? { target } : {}),
   })
   if (!result) return
   if (result.ok) {
@@ -1295,9 +1297,20 @@ async function runPluginCommand(commandId: string): Promise<void> {
   notifyRestore.toast(i18n.global.t(`settings.keybindings.plugin.run.${result.reason}`), { type: 'error' })
 }
 
+/** Commands enabled plugins put on the status bar and the pane menu (view
+ *  slots). Their text is the plugin's own, so it is always shown with the
+ *  plugin's name and with invisible characters made visible. */
+const pluginSlots = ref<PluginSlotEntry[]>([])
+const pluginStatusItems = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'statusBar'))
+const pluginPaneActions = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'paneActions'))
+const pluginSlotLabel = (entry: PluginSlotEntry): string => revealInvisibleText(entry.title)
+const pluginSlotTitle = (entry: PluginSlotEntry): string =>
+  `${revealInvisibleText(entry.pluginName)} · ${revealInvisibleText(entry.tooltip ?? entry.title)}`
+
 async function refreshPluginCommands(): Promise<void> {
   const commands = await window.agentTeam?.plugins?.listCommands?.()
   syncPluginCommands(commands ?? [], (commandId) => { void runPluginCommand(commandId) })
+  pluginSlots.value = (await window.agentTeam?.plugins?.listSlots?.()) ?? []
 }
 
 async function openPluginContributionWindow(contribution: PluginRegionContribution): Promise<void> {
@@ -25856,6 +25869,17 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="$t('action.remove-children-title')"
           @click="killDescendants(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.remove-children', { count: ctxDescendantIds.length }) }}</div>
+        <template v-if="pluginPaneActions.length">
+          <div class="pane-ctx-sep"></div>
+          <div
+            v-for="item in pluginPaneActions"
+            :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+            class="pane-ctx-item"
+            :title="pluginSlotTitle(item)"
+            @click="runPluginCommand(item.commandId, { paneId: paneCtxMenu!.paneId }); closePaneCtxMenu()"
+          >{{ pluginSlotLabel(item) }} <span class="pane-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></div>
+          <div class="pane-ctx-sep"></div>
+        </template>
         <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ $t('action.remove') }}</div>
         <div
           v-if="ctxDescendantIds.length"
@@ -26042,6 +26066,16 @@ function paneIsCommander(p: ActivePane): boolean {
         </span>
       </div>
       <div class="statusbar-right">
+        <span
+          v-for="item in pluginStatusItems"
+          :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+          class="sb-item sb-clickable sb-plugin"
+          role="button"
+          tabindex="0"
+          :title="pluginSlotTitle(item)"
+          @click="runPluginCommand(item.commandId)"
+          @keydown.enter="runPluginCommand(item.commandId)"
+        >{{ pluginSlotLabel(item) }}</span>
         <span v-if="pipeline.state !== 'idle'" class="sb-item sb-pipeline" :class="'sb-' + pipeline.state">
           {{ pipeline.state === 'running'
             ? $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: stagesApi.stages.value.length || '?' })
@@ -26749,6 +26783,8 @@ function paneIsCommander(p: ActivePane): boolean {
 .sb-update-check-failed .sb-dot { background: var(--text-muted); }
 .sb-announce-unread { color: var(--accent-fg); }
 .sb-clickable { cursor: pointer; }
+.sb-plugin { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-ctx-plugin { opacity: 0.6; }
 
 /* ── Backend supervisor popover ──────────────────────────────────────────── */
 .bp-backdrop {

@@ -7,6 +7,8 @@ import { useGit } from '../composables/useGit'
 import { createHostGitTransport } from '../composables/hostGitTransport'
 import { createHostGitCredentialPort } from '../composables/hostSurfacePorts'
 import { revealPath } from '../composables/hostShell'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
+import type { PluginSlotEntry } from '../../../shared/pluginCommands'
 import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
@@ -304,6 +306,28 @@ function openCtx(e: MouseEvent, entry: FsEntry | null): void {
   e.preventDefault()
   ctx.value = { x: e.clientX, y: e.clientY, entry }
   if (entry?.is_dir) void loadEditorTargets()
+  if (entry && !props.embedded) void loadPluginMenuItems()
+}
+
+// Commands enabled plugins put on this menu (view slots), main window only.
+// Their text is the plugin's own: shown with the plugin's name, invisible
+// characters made visible.
+const pluginMenuItems = ref<PluginSlotEntry[]>([])
+async function loadPluginMenuItems(): Promise<void> {
+  const slots = (await window.agentTeam?.plugins?.listSlots?.()) ?? []
+  pluginMenuItems.value = slots.filter((entry) => entry.slot === 'explorerMenu')
+}
+function pluginItemsFor(entry: FsEntry): PluginSlotEntry[] {
+  return pluginMenuItems.value.filter((item) =>
+    item.when === 'any' || item.when === undefined || (item.when === 'directory') === entry.is_dir)
+}
+async function runPluginMenuItem(item: PluginSlotEntry, entry: FsEntry): Promise<void> {
+  const result = await window.agentTeam?.plugins?.runCommand?.({
+    commandId: item.commandId,
+    workspace_path: props.workspacePath,
+    target: { path: entry.rel_path },
+  })
+  if (result && !result.ok) toast(i18n.global.t(`settings.keybindings.plugin.run.${result.reason}`), { type: 'error' })
 }
 function closeCtx(): void {
   ctx.value = null
@@ -817,6 +841,16 @@ defineExpose({ revealFile, focusTree })
           <div class="exp-ctx-sep" />
           <button class="exp-ctx-item" @click="reveal(ctx.entry!); closeCtx()">{{ $t('action.reveal-in-finder') }}</button>
           <button class="exp-ctx-item" @click="copyPath(ctx.entry!); closeCtx()">{{ $t('action.copy-path') }}</button>
+          <template v-if="pluginItemsFor(ctx.entry).length">
+            <div class="exp-ctx-sep" />
+            <button
+              v-for="item in pluginItemsFor(ctx.entry)"
+              :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+              class="exp-ctx-item"
+              :title="`${revealInvisibleText(item.pluginName)} · ${revealInvisibleText(item.tooltip ?? item.title)}`"
+              @click="runPluginMenuItem(item, ctx.entry!); closeCtx()"
+            >{{ revealInvisibleText(item.title) }} <span class="exp-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></button>
+          </template>
         </template>
       </template>
     </div>
@@ -987,6 +1021,7 @@ defineExpose({ revealFile, focusTree })
 .exp-btn.ghost:hover { background: var(--bg-muted); color: var(--text-bright); }
 
 /* Context menu */
+.exp-ctx-plugin { opacity: 0.6; }
 .exp-ctx {
   position: fixed;
   z-index: 50;

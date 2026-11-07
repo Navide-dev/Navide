@@ -9,8 +9,14 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
-import type { PluginManifestV2Command, PluginManifestV2PipelineNode } from '../../../packages/plugin-contracts/src/index'
-import type { PluginCommandEntry, PluginCommandRunResult } from '../../shared/pluginCommands'
+import type {
+  PluginManifestV2Command,
+  PluginManifestV2ExplorerMenuItem,
+  PluginManifestV2PaneAction,
+  PluginManifestV2PipelineNode,
+  PluginManifestV2StatusBarItem,
+} from '../../../packages/plugin-contracts/src/index'
+import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
@@ -285,6 +291,10 @@ export interface PluginLaunchDescriptor {
   api?: string[]
   /** `contributes.pipelineNodes`: deterministic steps a pipeline may run. */
   pipelineNodes?: PluginManifestV2PipelineNode[]
+  /** Batch 4 view slots: this plugin's commands on Host surfaces. */
+  statusBar?: PluginManifestV2StatusBarItem[]
+  paneActions?: PluginManifestV2PaneAction[]
+  explorerMenu?: PluginManifestV2ExplorerMenuItem[]
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -12671,6 +12681,28 @@ export class FrontendPluginManager {
     )
   }
 
+  /** Commands enabled packages put on Host surfaces (view slots). An entry
+   *  whose command the same package does not declare is left out. */
+  listSlotCatalog(): PluginSlotEntry[] {
+    return this.enabledDescriptors().flatMap((descriptor) => {
+      const declared = new Set((descriptor.commands ?? []).map((command) => command.id))
+      const base = { pluginId: descriptor.id, pluginName: descriptor.displayName ?? descriptor.id }
+      const entries: PluginSlotEntry[] = [
+        ...(descriptor.statusBar ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'statusBar', commandId: item.command, title: item.text,
+          ...(item.tooltip ? { tooltip: item.tooltip } : {}),
+        })),
+        ...(descriptor.paneActions ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'paneActions', commandId: item.command, title: item.title,
+        })),
+        ...(descriptor.explorerMenu ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'explorerMenu', commandId: item.command, title: item.title, when: item.when ?? 'any',
+        })),
+      ]
+      return entries.filter((entry) => declared.has(entry.commandId))
+    })
+  }
+
   /** Decide what one command does in `hostWindow`, delivering its target when
    *  the view is already there. Opening a window view needs Electron main, so
    *  that comes back to the caller; a view nobody opened is reported, never
@@ -12679,9 +12711,10 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     commandId: string,
     workspacePath: string,
+    target?: PluginCommandTarget,
   ): PluginCommandRunResult
     | { ok: true; window: { contributionKey: string; params: Record<string, string> } }
-    | { ok: true; call: { plugin: RunningPlugin; method: string } } {
+    | { ok: true; call: { plugin: RunningPlugin; method: string; target?: PluginCommandTarget } } {
     const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.commands?.some((command) => command.id === commandId)
     )
@@ -12691,11 +12724,12 @@ export class FrontendPluginManager {
       const isHere = (candidate: RunningPlugin): boolean => candidate.hostWindow === hostWindow &&
         (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
       const plugin = this.instancesForPlugin(descriptor.id).find(isHere)
-      return plugin ? { ok: true, call: { plugin, method: run.method } } : { ok: false, reason: 'view-not-open' }
+      return plugin ? { ok: true, call: { plugin, method: run.method, target } } : { ok: false, reason: 'view-not-open' }
     }
     const view = descriptor.views?.find((candidate) => candidate.id === run.view)
     if (!view) return { ok: false, reason: 'not-installed' }
-    const params = run.target ?? {}
+    // A slot's target (the Explorer entry, the pane) joins the manifest's own.
+    const params = { ...(run.target ?? {}), ...(target ?? {}) }
     if (view.location === 'window') {
       return { ok: true, window: { contributionKey: view.contributionKey, params } }
     }
@@ -12721,11 +12755,13 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     commandId: string,
     workspacePath: string,
+    target?: PluginCommandTarget,
   ): Promise<PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } }> {
-    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath)
+    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath, target)
     if (!outcome.ok || !('call' in outcome)) return outcome
     const { plugin, method } = outcome.call
-    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args: {} })
+    const args = outcome.call.target ? { ...outcome.call.target } : {}
+    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args })
     return response?.ok ? { ok: true } : { ok: false, reason: 'method-failed' }
   }
 

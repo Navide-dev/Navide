@@ -22,7 +22,7 @@ import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
-import type { PluginCommandRunResult } from '../shared/pluginCommands'
+import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
@@ -4722,7 +4722,10 @@ ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>
     ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
     : null
   if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
-  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath)
+  // A view slot (Explorer entry, pane) hands its command what it was used on.
+  const target = args?.target === undefined ? undefined : parsePluginCommandTarget(args.target)
+  if (target === null) return { ok: false, reason: 'view-not-open' }
+  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath, target)
   if (!outcome.ok || !('window' in outcome)) return outcome
   const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
   return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }

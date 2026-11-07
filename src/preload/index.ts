@@ -20,7 +20,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
-import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
+import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -1458,7 +1458,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
     listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
-    runCommand: (args: { commandId: string; workspace_path: string }): Promise<PluginCommandRunResult> =>
+    /** Commands enabled packages put on the status bar, pane and Explorer menus. */
+    listSlots: (): Promise<PluginSlotEntry[]> => ipcRenderer.invoke('plugins:listSlots'),
+    runCommand: (args: { commandId: string; workspace_path: string; target?: PluginCommandTarget }): Promise<PluginCommandRunResult> =>
       ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string

@@ -1307,6 +1307,11 @@ export function registerPluginIpc(
     return manager.listCommandCatalog()
   })
 
+  ipcMain.handle('plugins:listSlots', (event) => {
+    assertAuthorized(event)
+    return manager.listSlotCatalog()
+  })
+
   ipcMain.handle('plugins:listContributions', (event) => {
     assertAuthorized(event)
     const installed = new Map(manager.listInstalledPackages().map((pkg) => [pkg.id, pkg] as const))
