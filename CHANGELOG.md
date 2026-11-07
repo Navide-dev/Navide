@@ -17,6 +17,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Git (0.2.39): closing a Git window now ends the AI CLI panels in it for that workspace, as closing a Plans window already did, instead of leaving them running; panels in other workspaces' Git windows are not touched, and quitting Navide still keeps them to restore next launch.
 - Git (0.2.39): finding repositories under a workspace no longer hangs or reads without limit when a `.git` file points its HEAD, commondir or packed-refs at something that is not a small regular file (such as a named pipe or a very large file). Navide now reads only regular files up to a size cap there and otherwise asks git for the branch, as it already did for any file it could not read.
 
 ## [0.2.38] — 2026-11-07

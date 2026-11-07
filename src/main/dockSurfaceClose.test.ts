@@ -37,6 +37,19 @@ describe('a window hosting AI panels ends them when it closes', () => {
     expect(handler).toContain("frontendPluginManager.endDockSurface('plans', workspacePath)")
   })
 
+  it('the Git window ends the git panels of its workspace and its AI review', () => {
+    const opener = indexSource.slice(indexSource.indexOf('async function openCatalogContributionWindow('))
+    const closed = opener.slice(opener.indexOf("ownedWindow.once('closed', () => {"))
+    const handler = closed.slice(0, closed.indexOf('\n    })'))
+    // Per workspace: each workspace has its own Git window and panels.
+    expect(handler).toContain(
+      "if (contributionKey === 'navide.git.window') frontendPluginManager.endDockSurface('git', workspacePath)",
+    )
+    // The review ends with the view instance the close releases.
+    expect(handler).toContain('frontendPluginManager.closeContribution(ownedWindow, contributionKey)')
+    expect(managerSource).toContain('this.editorAiCapability.close(instanceId)')
+  })
+
   it('the Mini-IDE window ends the editor panels', () => {
     expect(closedHandlerAfter(managerSource, 'function ensureMiniIdeWindow(')).toContain(
       "frontendPluginManager.endDockSurface('editor')",

@@ -4355,6 +4355,10 @@ async function openCatalogContributionWindow(
       } catch {
         // The host has already torn down its WebContentsView.
       }
+      // The Git window's embedded AI panels end with it (not on app quit), in
+      // its own workspace only: other workspaces' Git windows keep theirs. Its
+      // AI review closes with the view instance in closeContribution.
+      if (contributionKey === 'navide.git.window') frontendPluginManager.endDockSurface('git', workspacePath)
     })
   }
 
