@@ -17615,6 +17615,33 @@ backend.on('agent.window_action', (raw) => {
     },
   )
 })
+// An agent changed a chat channel through the channels_* MCP tools: every main
+// window says so, since the chat it touched may be watched from any of them.
+const AGENT_CHANNEL_TOASTS: Record<string, string> = {
+  channels_bind: 'msg.agent-channels-bind',
+  channels_unbind: 'msg.agent-channels-unbind',
+  channels_set_verbosity: 'msg.agent-channels-verbosity',
+  channels_bot_rename: 'msg.agent-channels-rename',
+  channels_link_code: 'msg.agent-channels-link',
+  channels_pairing_reject: 'msg.agent-channels-reject',
+}
+backend.on('channels.agent_action', (raw) => {
+  const ev = (raw ?? {}) as { tool?: string; caller?: string; target?: Record<string, unknown> }
+  const target = ev.target ?? {}
+  const text = (key: string) => String(target[key] ?? '')
+  const bot = text('account') && text('account') !== 'default' ? `${text('platform')}/${text('account')}` : text('platform')
+  const key = ev.tool === 'channels_bot_set_enabled'
+    ? (target.enabled ? 'msg.agent-channels-enabled' : 'msg.agent-channels-disabled')
+    : AGENT_CHANNEL_TOASTS[ev.tool ?? '']
+  if (!key) return
+  notifyRestore.toast(
+    i18n.global.t(key, {
+      caller: ev.caller || 'an agent', bot, chat: text('chat_id'), pane: text('pane'),
+      verbosity: text('verbosity'), name: text('name'), code: text('code'),
+    }),
+    { type: 'info', duration: 8000 },
+  )
+})
 backend.on('agent_spawn.request', (raw) => {
   const ev = raw as {
     request_id?: string

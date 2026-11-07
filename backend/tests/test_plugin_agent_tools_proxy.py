@@ -194,7 +194,11 @@ DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", 
 EVOLVE_RETRO_CORE_TOOLS = frozenset({"evolve_retro"})
 #: Plan mcp-bot_507912: the chat-channel tools (mcp_server/channel_tools.py); their own
 #: surface is pinned in tests/channels/test_mcp_channel_tools.py.
-CHANNEL_CORE_TOOLS = frozenset({"channels_status", "channels_bindings"})
+CHANNEL_CORE_TOOLS = frozenset({
+    "channels_status", "channels_bindings", "channels_chats", "channels_pairing_requests", "channels_link_code",
+    "channels_bind", "channels_unbind", "channels_set_verbosity", "channels_bot_rename", "channels_bot_set_enabled",
+    "channels_pairing_reject",
+})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when
 #: skills_set_delivery's description gained the approval for widening.

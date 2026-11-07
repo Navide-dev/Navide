@@ -25,7 +25,7 @@ REAL_TOKEN = "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ"
 TOKEN_SHAPE = re.compile(r"\d+:[A-Za-z0-9_-]{30,}")
 #: sha256 of the channels_* tools' names and parameter schemas. A tool added
 #: or changed on purpose updates it: print _surface()'s digest and paste it here.
-CHANNEL_SURFACE_SHA256 = "4a33b3da8c88d6f29a7f9f4736f52f48294ac7f3cc83eb9ead855f56b6fa999f"
+CHANNEL_SURFACE_SHA256 = "daf9a9c411f4d902dd73bf50ddf8aa2da79de65291db62992ba7df57b7bc40b8"
 
 
 def _tools() -> dict:
@@ -59,9 +59,9 @@ async def live(env: Env, monkeypatch):  # noqa: F811 — the env fixture importe
     return env
 
 
-def test_both_tools_are_registered_core_tools_with_a_pinned_surface() -> None:
+def test_every_channels_tool_is_a_core_tool_with_a_pinned_surface() -> None:
     tools = _tools()
-    for name in TOOLS:
+    for name in (n for n in tools if n.startswith("channels_")):
         assert name in tools and name in contract.CORE_TOOL_NAMES, name
     surface = _surface()
     for name, schema in json.loads(surface):
@@ -137,3 +137,124 @@ def test_scrub_masks_a_secret_a_bot_registered_whatever_its_shape(monkeypatch) -
     monkeypatch.setattr(redact, "_filter", redact.SecretRedactFilter())
     redact.add_secret("matrix-access-Qz9")
     assert channel_tools._scrub({"e": "login failed for matrix-access-Qz9"}) == {"e": "login failed for <redacted>"}
+
+
+# ── P1: the other read-only tools and the direct changes ────────────────────
+
+
+@pytest.fixture
+def acting(live: Env, tmp_path, monkeypatch):
+    """A CLI pane "lead" calling, with "dev" beside it and "far" in another workspace;
+    the main windows' events and the action record are captured."""
+    from agent_team_backend import agent_messaging, agent_window_actions, app
+
+    events: list[dict] = []
+
+    async def broadcast_main_windows(event: dict) -> None:
+        events.append(event)
+
+    agent_messaging._reset_for_test()
+    own, other = tmp_path / "own", tmp_path / "other"
+    own.mkdir()
+    other.mkdir()
+    agent_messaging.register("p-41", "lead", str(own), agent_key="claude")
+    agent_messaging.register("p-42", "dev", str(own), agent_key="claude")
+    agent_messaging.register("p-50", "far", str(other), agent_key="claude")
+    caller = {"value": mcp._Caller(kind="pane", pane_id="p-41")}
+    monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: caller["value"])
+    monkeypatch.setattr(app, "broadcast_main_windows", broadcast_main_windows)
+    agent_window_actions._reset_for_test(tmp_path / "actions.jsonl")
+    yield live, events, caller
+    agent_messaging._reset_for_test()
+    agent_window_actions._reset_for_test(None)
+
+
+def _recorded() -> list[dict]:
+    from agent_team_backend import agent_window_actions
+
+    return agent_window_actions.entries()
+
+
+async def test_bind_binds_a_pane_of_the_callers_own_workspace_and_says_so(acting) -> None:
+    env, events, _ = acting
+    await env.m.unbind("pane-1")
+    out = await channel_tools.channels_bind("telegram", "-100", None, pane="dev", thread_id="50")
+    assert out["ok"] is True and out["binding"]["pane_id"] == "p-42"
+    assert [b.pane_id for b in env.store.bindings()] == ["p-42"]
+    record = _recorded()[-1]
+    assert record["tool"] == "channels_bind" and record["ok"] is True
+    assert record["caller"]["pane_id"] == "p-41" and record["target"]["pane"] == "dev"
+    assert events[-1]["type"] == "channels.agent_action"
+    assert events[-1]["payload"]["tool"] == "channels_bind"
+    assert events[-1]["payload"]["target"]["chat_id"] == "-100"
+
+
+async def test_bind_without_a_pane_binds_the_caller(acting) -> None:
+    env, _, _ = acting
+    await env.m.unbind("pane-1")
+    out = await channel_tools.channels_bind("telegram", "-100", None, thread_id="50")
+    assert out["ok"] is True and out["binding"]["pane_id"] == "p-41"
+
+
+async def test_another_workspaces_pane_is_left_to_the_user(acting) -> None:
+    env, events, _ = acting
+    await env.m.unbind("pane-1")
+    out = await channel_tools.channels_bind("telegram", "-100", None, pane_id="p-50")
+    assert out["ok"] is False and out["error_code"] == "cross-workspace"
+    assert env.store.bindings() == [] and events == []
+    for call in (channel_tools.channels_unbind(None, pane_id="p-50"),
+                 channel_tools.channels_set_verbosity("full", None, pane_id="p-50")):
+        assert (await call)["error_code"] == "cross-workspace"
+
+
+async def test_a_caller_with_no_pane_cannot_bind(acting) -> None:
+    _, _, caller = acting
+    caller["value"] = mcp._Caller(kind="external")
+    out = await channel_tools.channels_bind("telegram", "-100", None, pane_id="p-42")
+    assert out["error_code"] == "pane-caller-required"
+
+
+async def test_unbind_and_verbosity_change_the_pane_and_are_recorded(acting) -> None:
+    env, events, _ = acting
+    await env.m.unbind("pane-1")
+    assert (await channel_tools.channels_bind("telegram", "-100", None, pane="dev"))["ok"]
+    out = await channel_tools.channels_set_verbosity("full", None, pane="dev")
+    assert out["ok"] is True and out["binding"]["verbosity"] == "full"
+    assert (await channel_tools.channels_unbind(None, pane="dev")) == {"ok": True, "removed": True}
+    assert env.store.bindings() == []
+    assert [e["payload"]["tool"] for e in events] == ["channels_bind", "channels_set_verbosity", "channels_unbind"]
+
+
+async def test_a_refused_change_is_recorded_but_not_announced(acting) -> None:
+    env, events, _ = acting
+    out = await channel_tools.channels_set_verbosity("everything", None, pane="dev")
+    assert out["ok"] is False and out["error_code"] == "channels-refused"
+    assert _recorded()[-1]["ok"] is False and events == []
+
+
+async def test_bot_rename_and_connection(acting) -> None:
+    env, events, _ = acting
+    assert await channel_tools.channels_bot_rename("telegram", "bot-x", "Night shift", None) == {"ok": True}
+    assert env.store.accounts()[("telegram", "bot-x")]["config"]["name"] == "Night shift"
+    assert (await channel_tools.channels_bot_set_enabled("telegram", "bot-x", False, None))["ok"] is True
+    assert env.store.accounts()[("telegram", "bot-x")]["enabled"] is False
+    assert events[-1]["payload"]["target"] == {"platform": "telegram", "account": "bot-x", "enabled": False}
+
+
+async def test_link_code_chats_pairing_and_reject(acting) -> None:
+    env, _, _ = acting
+    code = await channel_tools.channels_link_code("telegram", None)
+    assert code["ok"] is True and len(code["code"]) == 8 and code["target"] == "direct"
+    chats = await channel_tools.channels_chats("telegram")
+    assert chats["ok"] is True and chats["bots"][0]["account"] == "default"
+    every = await channel_tools.channels_chats()
+    assert {(b["platform"], b["account"]) for b in every["bots"]} == {("telegram", "default"), ("telegram", "bot-x")}
+    assert (await channel_tools.channels_pairing_requests())["requests"] == []
+    refused = await channel_tools.channels_pairing_reject("telegram", "NOPE0000", None)
+    assert refused["ok"] is False and refused["error_code"] == "channels-refused"
+
+
+async def test_an_unknown_platform_is_a_bad_request(acting) -> None:
+    out = await channel_tools.channels_bot_rename("carrier-pigeon", "default", "x", None)
+    assert out["ok"] is False and out["error_code"] == "bad-request"
+    assert (await channel_tools.channels_link_code("carrier-pigeon", None))["error_code"] == "bad-request"
