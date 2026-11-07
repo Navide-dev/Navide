@@ -1191,6 +1191,140 @@
           }
         ]
       }
+    },
+    {
+      "name": "declared-hosts-partly-seen",
+      "disclosureCase": "network-hosts-ui",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": [
+            {
+              "host": "api.github.com",
+              "source": "frontend",
+              "count": 2
+            },
+            {
+              "host": "sub.example.com",
+              "source": "frontend",
+              "count": 1
+            },
+            {
+              "host": "tracker.evil.net",
+              "source": "frontend",
+              "count": 1
+            }
+          ]
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "ui.openExternal",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": {
+            "eval": 0,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "network.hosts",
+            "params": {
+              "hosts": [
+                "api.github.com",
+                "sub.example.com",
+                "tracker.evil.net"
+              ]
+            }
+          },
+          {
+            "key": "notFound.shell",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [],
+        "cardRiskLevel": "highest",
+        "declaredVsScanned": {
+          "undeclared": [
+            {
+              "kind": "networkHost",
+              "key": "tracker.evil.net"
+            }
+          ],
+          "declaredNotSeen": []
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "ui.openExternal"
+          },
+          {
+            "kind": "scanHost",
+            "key": "api.github.com"
+          },
+          {
+            "kind": "scanHost",
+            "key": "sub.example.com"
+          },
+          {
+            "kind": "scanHost",
+            "key": "tracker.evil.net"
+          }
+        ]
+      }
     }
   ],
   "classify": [

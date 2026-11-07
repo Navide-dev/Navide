@@ -79,7 +79,8 @@ function foundNothing(call: CapabilityCall, response: CapabilityResponse): boole
   return fields.exists === false || fields.ok === false
 }
 
-export type PluginActivitySource = 'broker' | 'shell' | 'backend'
+/** `network`: a plugin frame's request to a host (C1), recorded by pluginFrameNetworkActivity. */
+export type PluginActivitySource = 'broker' | 'shell' | 'backend' | 'network'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
 /** A backend call can also be cancelled by its caller (not a refusal). */
 export type BackendCallActivityOutcome = PluginActivityOutcome | 'cancelled'

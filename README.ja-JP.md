@@ -193,6 +193,7 @@ Onboarding Wizard は Runtime を確認し、Agent CLI を検出し、関連す�
 - **Navide を使う：** [はじめに](docs/ja-JP/getting-started.md)、[ユーザーガイド](docs/ja-JP/user-guide.md)、[トラブルシューティング](docs/ja-JP/troubleshooting.md)
 - **プロダクトを理解する：** [マニフェスト](docs/ja-JP/manifesto.md)、[ビジョン](docs/ja-JP/vision.md)、[ポジショニング](docs/ja-JP/product-positioning.md)、[ロードマップ](docs/ja-JP/roadmap.md)
 - **境界を確認する：** [プライバシーとデータフロー](docs/ja-JP/privacy.md)と[セキュリティポリシー（英語）](SECURITY.md)
+- **Navide 向けに開発する：** [Build for Navide（英語）](docs/en-US/build-for-navide.md)は `npx navide-plugin init` から Marketplace 審査・公開までを 1 ページで説明し、[欲しいプラグインの一覧](docs/en-US/plugin-ideas.md)もあります
 - **すべてを見る：** [日本語ドキュメント索引](docs/ja-JP/README.md)または[言語入口](docs/README.md)
 
 ## ライセンス

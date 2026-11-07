@@ -113,6 +113,22 @@
         "lastAt": 1792799920000
       }
     ],
+    "network": [
+      {
+        "host": "api.github.com",
+        "workspace": "/Users/me/project",
+        "outcome": "allowed",
+        "count": 12,
+        "lastAt": 1792799940000
+      },
+      {
+        "host": "tracker.example.net",
+        "workspace": "/Users/me/project",
+        "outcome": "denied",
+        "count": 3,
+        "lastAt": 1792799935000
+      }
+    ],
     "daily": [
       {
         "day": "2026-10-10",
@@ -268,6 +284,24 @@
         "outcome"
       ],
       "value": "maybe"
+    },
+    {
+      "name": "network-unknown-outcome",
+      "path": [
+        "network",
+        1,
+        "outcome"
+      ],
+      "value": "blocked"
+    },
+    {
+      "name": "network-host-not-text",
+      "path": [
+        "network",
+        0,
+        "host"
+      ],
+      "value": 12
     },
     {
       "name": "undeclared-without-reasons",

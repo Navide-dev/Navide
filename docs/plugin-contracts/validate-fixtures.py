@@ -287,7 +287,11 @@ def main() -> None:
     catalog_system_namespaces, shell_entries = _catalog_permissions(catalog)
     permission_properties = schema["properties"]["permissions"]["properties"]
     schema_system_namespaces = set(permission_properties["system"]["items"]["enum"])
-    schema_shell_modes = set(permission_properties["shell"]["enum"])
+    shell_schema = permission_properties["shell"]
+    # C2: `shell` is an enum string or (oneOf) the object form with executables.
+    schema_shell_modes = set(
+        shell_schema["enum"] if "enum" in shell_schema else next(alt["enum"] for alt in shell_schema["oneOf"] if "enum" in alt)
+    )
     if schema_system_namespaces != catalog_system_namespaces:
         raise AssertionError(
             "manifest system namespaces and public capability catalog differ: "

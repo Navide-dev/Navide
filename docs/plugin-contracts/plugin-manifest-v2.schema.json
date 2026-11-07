@@ -37,7 +37,47 @@
           "if": { "contains": { "const": "agentMessages" } },
           "then": { "contains": { "const": "agents" } }
         },
-        "shell": { "enum": ["allowlist", "full"] },
+        "shell": {
+          "description": "The shell mode: allowlist (the Host's git, gh and glab, no shell syntax) or full. allowlist may be spelled as an object that also declares the executables the package needs beyond the Host's three; each declared name is enforced by the broker and disclosed, names that run any program as highest risk.",
+          "oneOf": [
+            { "enum": ["allowlist", "full"] },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "executables"],
+              "properties": {
+                "mode": { "const": "allowlist" },
+                "executables": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 32,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._+-]{0,63}$" }
+                }
+              }
+            }
+          ]
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hosts"],
+          "description": "Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource). The Host enforces the list through the plugin frame's connect-src and discloses it; the backend sandbox is unaffected.",
+          "properties": {
+            "hosts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "maxLength": 253,
+                "description": "Lowercase DNS labels, optionally one leading *. wildcard standing for one or more labels; no scheme, port, path or user info.",
+                "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+              }
+            }
+          }
+        },
         "scopes": {
           "type": "object",
           "additionalProperties": false,
@@ -79,6 +119,12 @@
           "maxItems": 32,
           "items": { "$ref": "#/$defs/command" },
           "description": "Commands the plugin offers. Each id is the plugin id, a dot and a name; the parser checks that prefix, duplicates, and that run names a declared view or a method in backend.methods."
+        },
+        "agentTools": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/viewAgentTool" },
+          "description": "Tools an agent may call that one of the declared views serves (0.2.39): the rules of backend.agentTools with `view` (a declared view id) in place of `method`, names unique across both lists; checked by validateAgentTools; see docs/en-US/plugin-agent-tools-contract.md section 2.9."
         }
       }
     },
@@ -242,6 +288,24 @@
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
         "method": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$" },
+        "risk": { "enum": ["read", "write"] },
+        "title": { "$ref": "#/$defs/agentToolText" },
+        "description": { "$ref": "#/$defs/agentToolText" },
+        "inputSchema": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } }
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 30000 }
+      }
+    },
+    "viewAgentTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "view", "risk", "title", "description", "inputSchema"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
+        "view": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "risk": { "enum": ["read", "write"] },
         "title": { "$ref": "#/$defs/agentToolText" },
         "description": { "$ref": "#/$defs/agentToolText" },

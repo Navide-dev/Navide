@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type { AgentToolPackage } from './pluginAgentToolsHost'
 import { createReadStream, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readdir, readlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -56,7 +57,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { validateAgentTools } from '../../shared/pluginAgentTools'
+import { validateAgentTools, agentToolViewId } from '../../shared/pluginAgentTools'
 import {
   canonicalContractJson,
   computeDisclosure,
@@ -112,9 +113,11 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
  */
 export function declaredAgentTools(manifest: PluginManifestV2): Pick<ThirdPartyBackendInfo, 'agentTools' | 'permissions'> | null {
   const declared = (manifest.backend as { agentTools?: unknown } | undefined)?.agentTools
-  if (declared === undefined) return null
-  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend })
-  if (errors.length > 0 || !Array.isArray(declared) || declared.length === 0) {
+  const viewDeclared = (manifest.contributes as { agentTools?: unknown } | undefined)?.agentTools
+  if (declared === undefined && viewDeclared === undefined) return null
+  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend, contributes: manifest.contributes })
+  const count = (Array.isArray(declared) ? declared.length : 0) + (Array.isArray(viewDeclared) ? viewDeclared.length : 0)
+  if (errors.length > 0 || count === 0) {
     if (errors.length > 0) {
       console.warn(`[plugin-backend] ${manifest.id} declares invalid agent tools: ${errors.map((error) => error.code).join(', ')}`)
     }
@@ -157,6 +160,9 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
+      ...(manifest.permissions.shell === 'allowlist' && manifest.permissions.shellExecutables
+        ? { shellExecutables: [...manifest.permissions.shellExecutables] }
+        : {}),
       ...(agentTools ?? {}),
     },
   }
@@ -253,11 +259,29 @@ export function firstPartyAgentToolSpec(
  * is what every third-party backend has on main.
  */
 export function consentedAgentMethods(
-  spec: ThirdPartyLaunchSpec,
+  spec: Pick<ThirdPartyLaunchSpec, 'thirdParty'>,
   gates: { masterSwitch: boolean; consentMatches: boolean },
 ): string[] {
   if (!gates.masterSwitch || !gates.consentMatches) return []
-  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
+  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method).filter((method) => agentToolViewId(method) === null))].sort()
+}
+
+/** Batch 4 (contract 2.9): the agent-tool catalog entry of a package without
+ * a backend whose views serve its tools; null when it declares none. A package
+ * with a backend carries its view-served tools in its launch spec instead. */
+export function viewAgentToolPackage(
+  installed: { pluginId: string; packageVersion: string; packageDir: string },
+  manifest: PluginManifestV2 = readInstalledManifestV2(installed.packageDir),
+): AgentToolPackage | null {
+  if (manifest.backend || !manifest.contributes?.agentTools?.length) return null
+  const declared = declaredAgentTools(manifest)
+  if (!declared) return null
+  return {
+    pluginId: installed.pluginId,
+    packageVersion: installed.packageVersion,
+    packageDir: installed.packageDir,
+    thirdParty: { name: manifest.name, system: [...(manifest.permissions.system ?? [])], ...declared },
+  }
 }
 
 /** SHA-256 of the canonical spelling of the disclosure's `agentTools` array.
@@ -274,6 +298,8 @@ export function backendPermissionsKey(spec: ThirdPartyLaunchSpec): string {
   return JSON.stringify({
     system: [...spec.thirdParty.system].sort(),
     shell: spec.thirdParty.shell ?? null,
+    // C2: a version that declares another executable set needs a new consent.
+    ...(spec.thirdParty.shellExecutables?.length ? { shellExecutables: [...spec.thirdParty.shellExecutables].sort() } : {}),
     methods: [...spec.approvedMethods].sort(),
     events: [...spec.approvedEvents].sort(),
     ...(agentTools.length > 0 ? { agentTools: agentToolsDigest(agentTools) } : {}),
@@ -477,6 +503,8 @@ export interface NativeBackendConsentPrompt {
   system: PluginSystemNamespace[]
   /** Declared shell mode; `allowlist` is disclosed as high risk (DB5). */
   shell?: 'allowlist' | 'full'
+  /** C2: executables declared beyond the Host's `git`, `gh`, `glab`. */
+  shellExecutables?: string[]
   methods: string[]
   /** Declared agent tools, listed in the dialog; empty when there are none. */
   agentTools: DisclosureAgentTool[]
@@ -504,6 +532,8 @@ interface NativeBackendConsentStrings {
   agentTool: (tool: string, method: string, write: boolean, seconds: number) => string
   agentToolsMore: (count: number, writes: number, names: string) => string
   agentToolsDetailIn: string
+  /** C3: allowing the package turns the third-party agent-tools switch on. */
+  agentToolsOn: string
   agentToolsOutro: string
 }
 
@@ -535,6 +565,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• and ${count} more${writes ? ` (${writes} declared as changing data)` : ''}: ${names}`,
     agentToolsDetailIn: 'Each tool\'s full description and input schema are shown in Settings → Navide Plugins.',
+    agentToolsOn: 'Allowing it lets agents call these tools: if "Let agents call tools from third-party Navide plugins" in Settings → Navide Plugins is still at its default (off, never set by you), allowing turns it on; a setting you made there stays as you left it. Turn it off there to stop every third-party tool at once.',
     agentToolsOutro: 'What these tools return is shown to the agent, which may pass it on elsewhere.',
     notNow: 'Don\'t allow',
     allow: 'Allow',
@@ -563,6 +594,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• 另外 ${count} 個${writes ? `（其中 ${writes} 個外掛宣告為寫入）` : ''}：${names}`,
     agentToolsDetailIn: '每個工具的完整說明和輸入結構描述，都在「設定 → Navide 外掛」。',
+    agentToolsOn: '允許後 agent 就能呼叫這些工具：若「設定 → Navide 外掛」裡的「允許 agent 呼叫第三方 Navide 外掛的工具」還是預設值（關、你沒動過），允許會把它打開；你自己設定過的就維持原狀。要一次停用所有第三方工具，請到那裡關掉。',
     agentToolsOutro: '這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。',
     notNow: '不允許',
     allow: '允許',
@@ -591,6 +623,7 @@ const NATIVE_BACKEND_CONSENT_STRINGS: HostStringTable<NativeBackendConsentString
     agentToolsMore: (count, writes, names) =>
       `• ほか ${count} 個${writes ? `（うち ${writes} 個はプラグインの宣言：書き込み）` : ''}：${names}`,
     agentToolsDetailIn: '各ツールの説明と入力スキーマの全文は「設定 → Navide プラグイン」に表示されます。',
+    agentToolsOn: '許可すると agent がこれらのツールを呼び出せます。「設定 → Navide プラグイン」の「エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可」がまだ初期値（オフ、未設定）なら、許可と同時にオンになります。あなたが設定した値はそのままです。サードパーティのツールをすべて止めるには、そこでオフにしてください。',
     agentToolsOutro: 'これらのツールが返す内容は agent に渡され、agent がそれを別の場所に渡すことがあります。',
     notNow: '許可しない',
     allow: '許可',
@@ -623,6 +656,7 @@ function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt, s: Nati
         )]
       : []),
     s.agentToolsDetailIn,
+    s.agentToolsOn,
     s.agentToolsOutro,
   ].join('\n')
 }
@@ -777,10 +811,10 @@ const SHELL_SYNTAX = /[;&|<>`\n\r]/u
 
 /** Lexical pre-check before the broker: one plain command whose first token
  * is a Host-allowlisted executable, with no shell syntax. */
-function isAllowlistedShellCommand(command: string): boolean {
+function isAllowlistedShellCommand(command: string, declared: readonly string[] = []): boolean {
   if (SHELL_SYNTAX.test(command)) return false
   const executable = command.trim().split(/\s+/u)[0] ?? ''
-  return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable)
+  return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable) || declared.includes(executable)
 }
 
 /** Read-only VCS commands an agent call made through a `read` tool may run
@@ -958,6 +992,19 @@ export class ThirdPartyBackendController {
       this.store.record(spec.pluginId).consent?.grantedAt)
   }
 
+  /** DB3 for a view-served tool of a package without a backend (batch 4):
+   * the same question, bound to the install grant the user gave this version
+   * (`grantedAt`), which is what a view-served tool's consent is. */
+  async confirmViewAgentToolWrite(
+    spec: AgentToolPackage,
+    workspacePath: string,
+    tool: { name: string; title: string },
+    grantedAt: string,
+    currentGrantedAt: () => string | undefined,
+  ): Promise<boolean> {
+    return this.confirmWriteFor(spec, workspacePath, tool, grantedAt, currentGrantedAt)
+  }
+
   /** DB3 for a first-party agent tool (navide.browser): the same question,
    * asked once per (package, version, workspace). A first-party package has
    * no native-backend consent, so the answer is bound to the version alone. */
@@ -971,7 +1018,7 @@ export class ThirdPartyBackendController {
   }
 
   private async confirmWriteFor(
-    spec: ThirdPartyLaunchSpec,
+    spec: AgentToolPackage,
     workspacePath: string,
     tool: { name: string; title: string },
     grantedAt: string,
@@ -1292,8 +1339,8 @@ export class ThirdPartyBackendController {
       throw new PlansBridgeError('INVALID_ARGUMENT', 'shell.run takes exactly { command }')
     }
     if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
-    if (!isAllowlistedShellCommand(args.command)) {
-      throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    if (!isAllowlistedShellCommand(args.command, spec.thirdParty.shellExecutables)) {
+      throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted or declared')
     }
     if (context.runtime.initiator.kind === 'agent') {
       // Agent calls: only inside an admitted agent-tool call; a read tool

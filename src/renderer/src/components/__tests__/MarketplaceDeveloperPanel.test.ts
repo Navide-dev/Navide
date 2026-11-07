@@ -9,7 +9,7 @@ import type { PluginApprovalRequest } from '../../../../shared/pluginAgentTools'
 
 const state = {
   registry: 'http://127.0.0.1:8787', signedIn: { account: false, publisher: false }, namespace: null,
-  tokenExpiresAt: { account: null, publisher: null }, keyFingerprint: null, keyRegistered: false,
+  tokenExpiresAt: { account: null, publisher: null }, keyFingerprint: null, keyRegistered: false, keyConflictFingerprint: null,
 }
 
 function draft(requester: PluginApprovalRequest['requester']): PluginApprovalRequest {

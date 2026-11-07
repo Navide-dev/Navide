@@ -53,6 +53,21 @@ class QualificationRequired(SelfServiceError):
         self.code = code
 
 
+class KeyConflict(SelfServiceError):
+    """The publisher already has a different public key (L1d). Replacing it
+    silently would make every package signed with the current key fail
+    verification, so a caller that did not ask to replace is refused and told
+    the current key's fingerprint."""
+
+    def __init__(self, fingerprint: str) -> None:
+        super().__init__(
+            "This publisher already has a signing key registered "
+            f"(fingerprint {fingerprint}). Replacing it stops packages signed with the current key from publishing; "
+            "ask to replace it explicitly."
+        )
+        self.fingerprint = fingerprint
+
+
 def _require_vetted(session: Session, publisher: Publisher) -> None:
     problem = qualification.publisher_problem(session, publisher)
     if problem is not None:
@@ -157,13 +172,23 @@ def claim_namespace(session: Session, *, member_id: str, display_name: str, name
     return session.exec(select(Publisher).where(Publisher.name == namespace)).one()
 
 
-def set_public_key(session: Session, publisher: Publisher, pem: str) -> str:
+def set_public_key(session: Session, publisher: Publisher, pem: str, *, replace: bool = False) -> str:
+    """Register ``pem`` as the publisher's signing key. A different key already
+    registered is kept unless ``replace`` is asked for (L1d): the web form is
+    the developer's explicit action and passes it; the App's sign-in does not."""
     pem = pem.strip() + "\n"
     try:
         fingerprint = public_key_fingerprint(pem)
     except Exception as exc:  # noqa: BLE001 - any parse failure is a bad key
         raise SelfServiceError("That is not an Ed25519 public key in PEM form.") from exc
     _require_vetted(session, publisher)
+    if publisher.public_key and not replace:
+        try:
+            current = public_key_fingerprint(publisher.public_key)
+        except Exception:  # noqa: BLE001 - an unreadable stored key is replaced
+            current = None
+        if current is not None and current != fingerprint:
+            raise KeyConflict(current)
     publisher.public_key = pem
     session.add(publisher)
     qualification.record_key(session, publisher, pem)

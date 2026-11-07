@@ -22,6 +22,7 @@ export function disclosureClauses(t: Translate, locale: string, disclosure: Mani
       return t(`pluginDisclosure.summary.shell.${String(p.mode)}`, { executables: disclosureList(locale, p.executables) })
     }
     if (clause.key === 'agentTools') return t('pluginDisclosure.summary.agentTools', p)
+    if (clause.key === 'network') return t('pluginDisclosure.summary.network', { hosts: disclosureList(locale, p.hosts) })
     return t(`pluginDisclosure.summary.${clause.key}`)
   })
 }

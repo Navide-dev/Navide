@@ -78,6 +78,9 @@ export interface HostCapabilityGrant {
   packageVersion: string
   system: readonly PluginSystemNamespace[]
   shell?: PluginShellMode
+  /** C2: the declared executables the user approved with this version; must
+   *  equal the manifest's set, so a version that adds one asks again. */
+  shellExecutables?: readonly string[]
   highRiskShellConfirmed?: boolean
   /** Host-managed storage grant. Not declared in a Manifest: the Host decides
    *  which packages may read/write their partition. */
@@ -233,6 +236,8 @@ export interface PublicCapabilityExecutionPlan {
   /** Policy revision captured when this plan was admitted. */
   policyRevision?: number
   shellMode?: PluginShellMode
+  /** C2: declared executables the backend broker admits beyond the Host's. */
+  shellExecutables?: readonly string[]
   session?: AuthenticatedRuntimeBinding
   storage?: StoragePlan
 }
@@ -749,6 +754,14 @@ function shellExecutables(command: string, depth: number): string[] | null {
   return executables.every((value) => value.length > 0) ? executables : null
 }
 
+/** C2: the approved and the declared executable sets, order-insensitive; an
+ *  absent list is the empty one. */
+export function sameExecutables(approved: readonly string[] | undefined, declared: readonly string[] | undefined): boolean {
+  const a = [...(approved ?? [])].sort()
+  const b = [...(declared ?? [])].sort()
+  return a.length === b.length && a.every((name, index) => name === b[index])
+}
+
 function shellCommandAllowed(command: string, allowlist: readonly string[]): boolean {
   const executables = shellTopLevelExecutables(command)
   return executables !== null && executables.every((executable) => allowlist.includes(executable))
@@ -852,6 +865,12 @@ export function planPublicCapabilityCall(
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'publisher is not eligible for this capability')
   }
+  // The method hands a file to whatever program the OS picks: only the full
+  // shell permission discloses "runs any program" (allowlist discloses
+  // git/gh/glab and the declared executables), so that is what it needs.
+  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') {
+    return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell "full"`)
+  }
 
   if (entry.storage === true) {
     return planStoragePartition(call, context)
@@ -876,11 +895,19 @@ export function planPublicCapabilityCall(
     if (grant.shell !== policy.shell) {
       return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell mode is not user-approved')
     }
+    if (!sameExecutables(grant.shellExecutables, policy.shellExecutables)) {
+      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executables are not user-approved')
+    }
     if (policy.shell === 'full' && grant.highRiskShellConfirmed !== true) {
       return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell requires high-risk confirmation')
     }
   } else if (!grant.system.includes(entry.namespace)) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not user-approved`)
+  }
+  // ...and the user must have approved that full shell for this version, as
+  // for shell.run itself.
+  if (entry.eligibility === 'declaredShell' && (grant.shell !== 'full' || grant.highRiskShellConfirmed !== true)) {
+    return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell is not user-approved for this version')
   }
 
   const args = publicRequestArgs(call)
@@ -941,8 +968,11 @@ export function planPublicCapabilityCall(
   }
 
   if (entry.namespace === 'shell' && policy.shell === 'allowlist') {
-    if (!shellCommandAllowed(entry.shellCommand ?? String(args.command), HOST_SHELL_EXECUTABLE_ALLOWLIST)) {
-      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    // C2: the Host's own three plus the executables the package declared
+    // (and the user approved with this version); nothing else, still lexically.
+    const allowlist = [...HOST_SHELL_EXECUTABLE_ALLOWLIST, ...(policy.shellExecutables ?? [])]
+    if (!shellCommandAllowed(entry.shellCommand ?? String(args.command), allowlist)) {
+      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executable is not Host-allowlisted or declared')
     }
   }
 
@@ -959,6 +989,9 @@ export function planPublicCapabilityCall(
         ? { policyRevision: context.executionPolicy.revision }
         : {}),
       ...(policy.shell && entry.namespace === 'shell' ? { shellMode: policy.shell } : {}),
+      ...(policy.shell === 'allowlist' && entry.namespace === 'shell' && policy.shellExecutables?.length
+        ? { shellExecutables: [...policy.shellExecutables] }
+        : {}),
       ...(session ? { session } : {}),
     },
   }
@@ -1085,6 +1118,7 @@ export function isPublicCapabilityEventAllowed(
   if (!entry || entry.kind !== 'event') return false
   if (entry.namespace === 'shell' ? !policy.shell : !policy.system.includes(entry.namespace as PluginSystemNamespace)) return false
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) return false
+  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') return false
   const binding = context.runtimeBinding
   if (!binding || !requiresWorkspace(binding)) return false
   const grant = context.userGrant

@@ -13,7 +13,7 @@
  */
 
 import { canonicalJson } from './canonicalJson'
-import { AGENT_TOOL_DEFAULT_TIMEOUT_MS } from './pluginAgentTools'
+import { AGENT_TOOL_DEFAULT_TIMEOUT_MS, AGENT_TOOL_VIEW_METHOD_PREFIX } from './pluginAgentTools'
 import type { AgentToolRisk } from './pluginAgentTools'
 import type { ScanReport } from './pluginDisclosureScan'
 
@@ -21,6 +21,12 @@ export const DISCLOSURE_SCHEMA_VERSION = 1
 export const DISCLOSURE_SUMMARY_TEMPLATE = 'plugin-disclosure.summary.v1'
 /** The Host shell allowlist (plugin-development-v2.md, "Host-managed storage partitions"). */
 export const HOST_SHELL_ALLOWLIST = ['gh', 'git', 'glab'] as const
+/** Executables that run any program handed to them (shells, interpreters,
+ *  package runners, privilege wrappers): a package that declares one is
+ *  disclosed as able to run any program (TA-2). Twin: disclosure_contract.py. */
+export const SHELL_ANY_PROGRAM_EXECUTABLES: ReadonlySet<string> = new Set([
+  'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd', 'node', 'deno', 'bun', 'python', 'python3', 'ruby', 'perl', 'php', 'lua', 'osascript', 'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn', 'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco', 'sudo', 'doas', 'su', 'runas', 'env', 'xargs', 'nohup', 'timeout', 'nice', 'find', 'awk', 'ssh', 'busybox', 'setsid',
+])
 
 export type DisclosureRiskLevel = 'low' | 'medium' | 'high' | 'highest'
 const RISK_RANK: Record<DisclosureRiskLevel, number> = { low: 0, medium: 1, high: 2, highest: 3 }
@@ -33,9 +39,11 @@ export type DisclosureRiskReasonKey =
   | 'system.agents'
   | 'system.agentMessages'
   | 'shell.allowlist'
+  | 'shell.executables'
   | 'nativeBackend'
   | 'agentTools.write'
   | 'shell.full'
+  | 'shell.interpreter'
   | 'network'
 
 /** Every reason with its level, in the order reasons are listed. */
@@ -47,9 +55,11 @@ export const DISCLOSURE_RISK_RULES: ReadonlyArray<readonly [DisclosureRiskReason
   ['system.agents', 'medium'],
   ['system.agentMessages', 'high'],
   ['shell.allowlist', 'high'],
+  ['shell.executables', 'high'],
   ['nativeBackend', 'high'],
   ['agentTools.write', 'high'],
   ['shell.full', 'highest'],
+  ['shell.interpreter', 'highest'],
   ['network', 'highest'],
 ]
 
@@ -63,7 +73,7 @@ export type DisclosureSummaryClause =
   | { key: 'agentMessages'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
-  | { key: 'network'; params: Record<string, never> }
+  | { key: 'network'; params: { hosts: string[] } }
   | { key: 'networkViaShell'; params: Record<string, never> }
   | { key: 'noPermissions'; params: Record<string, never> }
 
@@ -76,6 +86,8 @@ export interface DisclosurePermissions {
   system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
+  /** `permissions.network.hosts` sorted; present only when the manifest declares hosts. */
+  network?: { hosts: string[] }
 }
 
 export interface DisclosureAgentTool {
@@ -110,6 +122,11 @@ export interface ManifestDisclosure {
    * the manifest, R2 MED-6 on #436). Kept out of this signed field so cards
    * the Registry already signed still match. */
   network: 'none' | 'via-shell'
+  /** The hosts the package's views may connect to (`permissions.network.hosts`,
+   * sorted), enforced by the frame's `connect-src`. Present only when the
+   * manifest declares hosts, so the disclosure of every earlier manifest (and
+   * the digest the Registry signed for it) is unchanged. */
+  networkHosts?: string[]
   agentTools: DisclosureAgentTool[]
   dataLocations: { hostStorage: true; backendDataDirectory: boolean; projectWrites: DisclosureProjectWrites }
 }
@@ -150,6 +167,7 @@ export type DisclosureItemKind =
   | 'fsScopeWrite'
   | 'nativeBackend'
   | 'network'
+  | 'networkHost'
   | 'shell'
   | 'shellExecutable'
   | 'system'
@@ -182,8 +200,12 @@ export interface DisclosureManifestInput {
   publisher: string
   permissions?: {
     system?: string[]
-    shell?: 'allowlist' | 'full'
+    /** A mode, or (C2) the manifest's object form; a parsed manifest carries
+     *  the mode here and the declared names in `shellExecutables`. */
+    shell?: 'allowlist' | 'full' | { mode: 'allowlist'; executables: string[] }
+    shellExecutables?: string[]
     scopes?: { fs: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
+    network?: { hosts: string[] }
   }
   backend?: {
     methods?: string[]
@@ -191,6 +213,18 @@ export interface DisclosureManifestInput {
     agentTools?: Array<{
       name: string
       method: string
+      risk: AgentToolRisk
+      title: string
+      description: string
+      inputSchema: Record<string, unknown>
+      timeoutMs?: number
+    }>
+  }
+  contributes?: {
+    /** View-served tools (contract 2.9); disclosed with `method: "view:<view>"`. */
+    agentTools?: Array<{
+      name: string
+      view: string
       risk: AgentToolRisk
       title: string
       description: string
@@ -206,6 +240,14 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+/** Whether a declared executable is one that runs any program handed to it,
+ *  read with its version suffix stripped (`python3.12`, `node22`, `php8.3` are
+ *  `python`, `node`, `php`), so a versioned spelling is disclosed like the
+ *  plain one. Twin: runs_any_program. */
+export function runsAnyProgram(name: string): boolean {
+  return SHELL_ANY_PROGRAM_EXECUTABLES.has(name) || SHELL_ANY_PROGRAM_EXECUTABLES.has(name.replace(/[-.]?\d[\d.]*$/, ''))
+}
+
 /** The highest level among the reasons; low when there are none. */
 export function riskLevelForReasons(reasons: ReadonlyArray<{ key: string; level: DisclosureRiskLevel }>): DisclosureRiskLevel {
   let level: DisclosureRiskLevel = 'low'
@@ -216,19 +258,27 @@ export function riskLevelForReasons(reasons: ReadonlyArray<{ key: string; level:
 export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDisclosure {
   const declared = manifest.permissions ?? {}
   const system = sorted(declared.system) as DisclosurePermissions['system']
+  const declaredShell = typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.mode : declared.shell
+  const declaredExecutables = declaredShell === 'allowlist'
+    ? (typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.executables : declared.shellExecutables) ?? []
+    : []
   const shell: DisclosurePermissions['shell'] =
-    declared.shell === 'allowlist'
-      ? { mode: 'allowlist', executables: [...HOST_SHELL_ALLOWLIST] }
-      : declared.shell === 'full'
+    declaredShell === 'allowlist'
+      ? { mode: 'allowlist', executables: sorted([...new Set([...HOST_SHELL_ALLOWLIST, ...declaredExecutables])]) }
+      : declaredShell === 'full'
         ? { mode: 'full', executables: null }
         : null
   const fsScope = declared.scopes?.fs
   const scopes: DisclosurePermissions['scopes'] = fsScope
     ? { fs: { root: fsScope.root ?? 'workspace', read: sorted(fsScope.read), write: sorted(fsScope.write) } }
     : null
+  const networkHosts = sorted(declared.network?.hosts)
   const backend = manifest.backend
   const nativeBackend = backend ? { methods: sorted(backend.methods), events: sorted(backend.events) } : null
-  const agentTools: DisclosureAgentTool[] = [...(backend?.agentTools ?? [])]
+  const agentTools: DisclosureAgentTool[] = [
+    ...(backend?.agentTools ?? []),
+    ...(manifest.contributes?.agentTools ?? []).map(({ view, ...tool }) => ({ ...tool, method: `${AGENT_TOOL_VIEW_METHOD_PREFIX}${view}` })),
+  ]
     .map((tool) => ({
       name: tool.name,
       method: tool.method,
@@ -251,9 +301,14 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('agents')) present.add('system.agents')
   if (system.includes('agentMessages')) present.add('system.agentMessages')
   if (shell?.mode === 'allowlist') present.add('shell.allowlist')
+  if (declaredExecutables.length > 0) {
+    present.add('shell.executables')
+    if (declaredExecutables.some(runsAnyProgram)) present.add('shell.interpreter')
+  }
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
   if (shell?.mode === 'full') present.add('shell.full')
+  if (networkHosts.length > 0) present.add('network')
   const reasons = DISCLOSURE_RISK_RULES.filter(([key]) => present.has(key)).map(([key, level]) => ({ key, level }))
 
   const clauses: DisclosureSummaryClause[] = []
@@ -264,6 +319,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   }
   if (shell) clauses.push({ key: 'shell', params: shell })
   if (shell) clauses.push({ key: 'networkViaShell', params: {} })
+  if (networkHosts.length > 0) clauses.push({ key: 'network', params: { hosts: networkHosts } })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
   if (system.includes('web')) clauses.push({ key: 'web', params: {} })
   if (system.includes('agents')) clauses.push({ key: 'agents', params: {} })
@@ -285,9 +341,12 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     plugin: { id: manifest.id, version: manifest.version, publisher: manifest.publisher },
     summary: { template: DISCLOSURE_SUMMARY_TEMPLATE, clauses },
     risk: { level: riskLevelForReasons(reasons), reasons },
-    permissions: { system, shell, scopes },
+    permissions: { system, shell, scopes, ...(networkHosts.length > 0 ? { network: { hosts: networkHosts } } : {}) },
     nativeBackend,
+    // Commands and the native backend only (see ManifestDisclosure); the
+    // declared view hosts are `networkHosts`.
     network: shell ? 'via-shell' : 'none',
+    ...(networkHosts.length > 0 ? { networkHosts } : {}),
     agentTools,
     dataLocations: { hostStorage: true, backendDataDirectory: nativeBackend !== null, projectWrites },
   }
@@ -334,6 +393,7 @@ export function disclosureItems(disclosure: ManifestDisclosure): DisclosureItem[
     for (const event of disclosure.nativeBackend.events) add('backendEvent', event)
   }
   if (disclosure.network !== 'none') add('network', disclosure.network)
+  for (const host of disclosure.networkHosts ?? []) add('networkHost', host)
   for (const { name, ...detail } of disclosure.agentTools) add('agentTool', name, detail)
   return items.sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 }

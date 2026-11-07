@@ -2040,7 +2040,7 @@
           "firstParty": "Agents erlauben, Tools aus offiziellen Navide-Plug-ins aufzurufen",
           "firstPartyDescription": "Standardmäßig an. Lässt Agents in Ihren Bereichen die Tools offizieller Navide-Plug-ins aufrufen, also der von Navide selbst wie Navide Browser, ohne für jede Version zu fragen. Ihre Ergebnisse gelten weiterhin als externe Inhalte, und ein Tool, das etwas ändert, fragt weiterhin einmal pro Arbeitsbereich.",
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
-          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich.",
+          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich. Solange Sie ihn hier nie gesetzt haben, schaltet er sich selbst ein, wenn Sie ein Navide-Plug-in erlauben, dessen Zustimmungskarte Tools aufführt; eine Wahl, die Sie hier treffen, bleibt bestehen. Schalten Sie ihn hier aus, um alle Drittanbieter-Tools auf einmal zu stoppen.",
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
@@ -2109,6 +2109,8 @@
       "builtinSwitchBusy": "Wird angewendet … Navide lässt zuerst laufende Arbeit abschließen, was bei Plans etwa eine halbe Minute dauern kann.",
       "disabledBadge": "Deaktiviert",
       "disabledNote": "Deaktiviert: Seine Ansichten und sein Backend laufen nicht. Seine Dateien, Berechtigungen und gespeicherten Daten bleiben erhalten.",
+      "networkStrict": "Nur deklarierte Netzwerkhosts zulassen",
+      "networkStrictNote": "Aus (Standard): Eine Ansicht darf jeden Host erreichen; jede Anfrage wird aufgezeichnet, und eine an einen im Manifest nicht deklarierten Host wird in der Aktivität als solche markiert. An: nur die deklarierten Hosts, in der Frame-Richtlinie und im Anfrage-Hook; alles andere wird abgelehnt und aufgezeichnet.",
       "digestBlock": {
         "blocked": "Von Navide blockiert",
         "security": "Von Navide entfernt (Sicherheit)",
@@ -12138,13 +12140,15 @@
     "source": {
       "broker": "Navide-Fähigkeit",
       "shell": "Shell-Befehl",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "network": "Ansichtsnetzwerk"
     },
     "kind": {
       "system": "Berechtigung",
       "shell": "Shell-Zugriff",
       "backendMethod": "Native Backend-Methode",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "networkHost": "Netzwerk-Host"
     },
     "reason": {
       "undeclared": "nicht deklariert"
@@ -12220,6 +12224,10 @@
     "commands": {
       "heading": "Ausgeführte Befehle",
       "item": "{command} · {count}-mal · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Von seinen Ansichten erreichte Hosts",
+      "item": "{host} · {count}-mal · {outcome} · {date}"
     },
     "trend": {
       "heading": "Aufrufe pro Tag"
@@ -12308,6 +12316,7 @@
         "backendMethod": "Methode des nativen Codes: {key}",
         "backendEvent": "Ereignis des nativen Codes: {key}",
         "network": "Kann über Befehle entfernte Hosts erreichen",
+        "networkHost": "Ansichten können sich verbinden mit: {key}",
         "agentTool": "Agent-Tool: {key}"
       }
     },
@@ -12327,7 +12336,8 @@
     "undeclared": {
       "shell": "Führt {key} aus, deklariert aber keine Shell-Berechtigung",
       "shellDynamic": "Erstellt Befehle zur Laufzeit, deklariert aber keine Shell-Berechtigung",
-      "shellExecutable": "Führt {key} aus, aber sein deklarierter Shell-Bereich umfasst nur git, gh und glab",
+      "shellExecutable": "Führt {key} aus, das sein deklarierter Shell-Bereich nicht umfasst",
+      "networkHost": "Verbindet sich mit {key}, ohne es zu deklarieren",
       "system": "Verwendet {key}, deklariert diese Berechtigung aber nicht",
       "fsScopeWrite": "Schreibt {key}, außerhalb seines deklarierten Schreibbereichs",
       "fsScopeRead": "Liest {key}, außerhalb seines deklarierten Lesebereichs"
@@ -12335,7 +12345,8 @@
     "notSeenHeading": "Deklariert, vom statischen Scan nicht gefunden",
     "notSeen": {
       "shell": "Shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (deklarierter Host)"
     },
     "scanHeading": "Was der Scan bei der Veröffentlichung gefunden hat",
     "scanHeadingLocal": "Was der Scan dieser Datei durch Navide gefunden hat",
@@ -12353,8 +12364,8 @@
     "scannedLocally": "Der Scan fließt in diese Karte ein; über die Installation entscheidet er nie.",
     "limitsWithoutScan": "Für diese Version gibt es keinen Systemscan; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
     "limitsWithoutScanLocal": "Navide hat diese Datei nicht gescannt; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
-    "viewNetwork": "Die Ansichten eines Navide-Plug-ins können auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
-    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können diese auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
+    "viewNetwork": "Die Ansichten dieses Navide-Plug-ins können sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
+    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können sie sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
     "summary": {
       "nativeBackend": "Liefert nativen Code mit (läuft in einer Sandbox)",
       "files": {
@@ -12372,7 +12383,7 @@
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
-      "network": "Kann das Netzwerk verwenden",
+      "network": "Seine Ansichten können sich verbinden mit: {hosts}",
       "noPermissions": "Deklariert keine Berechtigungen"
     },
     "scan": {
@@ -12578,6 +12589,8 @@
       "no-key": "Wird bei Ihrer ersten Anmeldung als Herausgeber erstellt",
       "key-registered": "Registriert",
       "key-unregistered": "Noch nicht registriert",
+      "key-conflict": "Die Registry hat für diesen Publisher bereits einen anderen Signaturschlüssel (Fingerabdruck {fingerprint}), meist den für das Kommandozeilen-Veröffentlichungswerkzeug registrierten. Zum Veröffentlichen aus diesem Navide muss er ersetzt werden; bis dahin veröffentlicht das Kommandozeilenwerkzeug weiter.",
+      "replace-key": "Stattdessen den Schlüssel dieses Navide verwenden",
       "expires": "Anmeldung läuft ab",
       "sign-in": "Mit Navide Cloud anmelden",
       "sign-in-publish": "Als Herausgeber anmelden",

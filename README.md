@@ -193,6 +193,7 @@ The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant
 - **Use Navide:** [Getting started](docs/en-US/getting-started.md), [User guide](docs/en-US/user-guide.md), and [Troubleshooting](docs/en-US/troubleshooting.md)
 - **Understand the product:** [Manifesto](docs/en-US/manifesto.md), [Vision](docs/en-US/vision.md), [Positioning](docs/en-US/product-positioning.md), and [Roadmap](docs/en-US/roadmap.md)
 - **Review the boundaries:** [Privacy and data flows](docs/en-US/privacy.md) and [Security policy](SECURITY.md)
+- **Build for Navide:** [one page](docs/en-US/build-for-navide.md) from `npx navide-plugin init` to a reviewed Marketplace listing, and the [plugins we would like to see](docs/en-US/plugin-ideas.md)
 - **Explore everything:** [English documentation index](docs/en-US/README.md) or [language gateway](docs/README.md)
 
 ## License

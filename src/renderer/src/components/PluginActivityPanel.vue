@@ -266,6 +266,14 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
 
+      <h5>{{ $t('pluginActivity.network.heading') }}</h5>
+      <ul v-if="report.network.length" class="nv-activity-network">
+        <li v-for="entry in report.network" :key="`${entry.host}:${entry.workspace}:${entry.outcome}`">
+          {{ $t('pluginActivity.network.item', { host: entry.host, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+        </li>
+      </ul>
+      <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
+
       <h5>{{ $t('pluginActivity.trend.heading') }}</h5>
       <ul v-if="report.daily.length" class="nv-activity-trend">
         <li v-for="day in report.daily" :key="day.day">

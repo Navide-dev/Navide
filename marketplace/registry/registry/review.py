@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select, update
 
-from .disclosure import sign_disclosure
+from .disclosure import sign_disclosure, undeclared_network_hosts
 from .discovery import PACK_CATEGORY, pack_members
 from .manifest import manifest_capabilities
 from .models import Extension, ExtensionVersion, Publisher
@@ -231,6 +231,18 @@ def check_approvable(
             report = scans[row.id]
             if report is not None and report.get("artifactDigest") != row.package_digest:
                 raise ReviewError("stored package does not match its digest; it cannot be approved")
+    # C1 (2026-11-07): the same gate a direct public publish passes — a
+    # manifest that declares network hosts must declare the ones its code
+    # reaches — applies to a reviewed submission and a promoted Testplace
+    # build, on the freshest scan there is.
+    for row in rows:
+        missing_hosts = undeclared_network_hosts(row.manifest or {}, scans.get(row.id, row.scan))
+        if missing_hosts:
+            raise ReviewError(
+                "static scan found network hosts the manifest does not declare: "
+                + ", ".join(missing_hosts)
+                + "; the publisher must declare them under permissions.network.hosts"
+            )
     return publisher_id, scans
 
 

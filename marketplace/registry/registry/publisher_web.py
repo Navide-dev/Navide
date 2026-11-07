@@ -418,7 +418,8 @@ def create_publisher_router() -> APIRouter:
         with _session(request) as session:
             publisher = _owned_or_404(session, viewer, namespace)
             try:
-                set_public_key(session, publisher, public_key)
+                # The dashboard form is the developer's explicit action: it may replace the current key.
+                set_public_key(session, publisher, public_key, replace=True)
             except SelfServiceError as exc:
                 return _namespace_page(request, viewer, namespace, {"key_error": str(exc)}, status=400)
         return _redirect(request, f"/publisher/{namespace}")

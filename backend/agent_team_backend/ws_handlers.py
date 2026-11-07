@@ -56,7 +56,7 @@ from .ipc import make_error, make_event, make_response
 from .log_readers.claude import ClaudeLogReader, first_user_prompts
 from .applog import app_data_dir, in_data_dir
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
-from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text
+from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text, declared_executables
 from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
@@ -440,9 +440,9 @@ async def plugins_agent_action_result(
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
-#: The Host records broker and shell-broker calls; agent tool calls are the
-#: backend's own rows (B1).
-_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: The Host records broker and shell-broker calls, and (C1) its plugin frames'
+#: network requests and refusals; agent tool calls are the backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell", "network"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
 #: Card K4: the Host events a row may report, the Developer Mode switch and
@@ -583,7 +583,7 @@ async def plugin_activity_record(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
-_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool"))
+_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool", "networkHost"))
 
 
 def _declared_items(value: Any) -> list[dict[str, str]] | None:
@@ -7875,10 +7875,14 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": "invalid workspace path"}))
             return
         try:
+            # C2: the executables the package declared and the user approved,
+            # sent by the Host with the call; refused whole when malformed.
+            allowed = declared_executables(payload.get("allowed_executables"))
             argv = parse_public_allowlisted_command(
                 cmd,
                 cwd=str(resolved_cwd),
                 workspace_root=str(registered_root),
+                allowed_executables=allowed,
             )
         except ValueError as exc:
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": str(exc)}))
@@ -7888,6 +7892,9 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             str(resolved_cwd),
             workspace_root=str(registered_root),
             timeout=30.0,
+            # Only when the package declared any: a call without declared
+            # executables is exactly the call it was before C2.
+            **({"allowed_executables": allowed} if allowed else {}),
         )
         await session.send_json(make_response(msg_id, msg_type, {
             "ok": True,

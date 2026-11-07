@@ -1287,10 +1287,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('git-accounts:unbind', workspacePath),
     getBinding: (workspacePath: string): Promise<{ ok: boolean; accountId?: string | null; error?: string }> =>
       ipcRenderer.invoke('git-accounts:getBinding', workspacePath),
-    getCredential: (
-      workspacePath: string
-    ): Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }> =>
-      ipcRenderer.invoke('git-accounts:getCredential', workspacePath),
   },
   permissions: {
     status: (): Promise<Record<PermissionKey, PermissionStatus>> =>
@@ -1383,7 +1379,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     state: () => ipcRenderer.invoke('developer:state'),
     signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
     signOut: () => ipcRenderer.invoke('developer:signOut'),
-    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    registerKey: (options) => ipcRenderer.invoke('developer:registerKey', options ?? {}),
     application: () => ipcRenderer.invoke('developer:application'),
     submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
     versions: () => ipcRenderer.invoke('developer:versions'),
@@ -1622,6 +1618,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
+    setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>
+      ipcRenderer.invoke('plugins:setNetworkStrict', { id, strict }),
     marketplacePackMembers: (members: string[]): Promise<PackMemberSummary[]> =>
       ipcRenderer.invoke('plugins:marketplacePackMembers', { members }),
     preparePack: (args: { namespace: string; name: string }): Promise<PreparedPackSummary> =>

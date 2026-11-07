@@ -1422,6 +1422,14 @@ export interface StaticScanPermissions {
   system: string[]
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
+  /** C1: `permissions.network.hosts` sorted; absent when the manifest declares none. */
+  network?: { hosts: string[] }
+}
+
+/** Twin of pluginDisclosureScan.networkHostMatches: exact, or below a `*.` wildcard. */
+export function networkHostMatches(declared: string, host: string): boolean {
+  if (declared.startsWith('*.')) return host.endsWith(declared.slice(1)) && host.length > declared.length - 1
+  return host === declared
 }
 
 const compareCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -1431,20 +1439,28 @@ const sortedStrings = (values: readonly string[] | undefined): string[] => [...(
 export function disclosurePermissions(manifest: unknown): StaticScanPermissions {
   const declared = ((manifest as { permissions?: unknown } | null)?.permissions ?? {}) as {
     system?: string[]
-    shell?: string
+    shell?: string | { mode?: string; executables?: string[] }
+    shellExecutables?: string[]
     scopes?: { fs?: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
+    network?: { hosts?: string[] }
   }
+  // C2: `shell` may be the object form, or a parsed manifest's mode plus `shellExecutables`.
+  const mode = typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.mode : declared.shell
+  const declaredExecutables =
+    (typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.executables : declared.shellExecutables) ?? []
   const shell: StaticScanPermissions['shell'] =
-    declared.shell === 'allowlist'
-      ? { mode: 'allowlist', executables: [...HOST_SHELL_ALLOWLIST] }
-      : declared.shell === 'full'
+    mode === 'allowlist'
+      ? { mode: 'allowlist', executables: sortedStrings([...new Set([...HOST_SHELL_ALLOWLIST, ...declaredExecutables])]) }
+      : mode === 'full'
         ? { mode: 'full', executables: null }
         : null
   const fsScope = declared.scopes?.fs
+  const hosts = sortedStrings(declared.network?.hosts)
   return {
     system: sortedStrings(declared.system),
     shell,
     scopes: fsScope ? { fs: { root: fsScope.root ?? 'workspace', read: sortedStrings(fsScope.read), write: sortedStrings(fsScope.write) } } : null,
+    ...(hosts.length > 0 ? { network: { hosts } } : {}),
   }
 }
 
@@ -1478,7 +1494,7 @@ export function declaredVsScanned(
   disclosure: { permissions: StaticScanPermissions },
   scan: StaticScanReport
 ): { undeclared: StaticScanItem[]; declaredNotSeen: StaticScanItem[] } {
-  const { system, shell, scopes } = disclosure.permissions
+  const { system, shell, scopes, network } = disclosure.permissions
   const declared = new Set<string>(system)
   const undeclared = new Set<string>()
   const add = (set: Set<string>, kind: string, key: string): void => {
@@ -1509,12 +1525,25 @@ export function declaredVsScanned(
       if (!readPatterns.some((pattern) => scopePatternMatches(pattern, path))) add(undeclared, 'fsScopeRead', path)
     }
   }
+  // C1: hosts are compared only for a package that declares some.
+  const declaredHosts = network?.hosts
+  const scannedHosts = scan.network.hosts.map((entry) => entry.host)
+  if (declaredHosts !== undefined) {
+    for (const host of scannedHosts) {
+      if (!declaredHosts.some((candidate) => networkHostMatches(candidate, host))) add(undeclared, 'networkHost', host)
+    }
+  }
   const notSeen = new Set<string>()
   if (shell !== null && !calls.length && !scan.shell.dynamic.count && !namespaces.has('shell')) add(notSeen, 'shell', shell.mode)
   for (const namespace of system) {
     const seen = namespaces.has(namespace) ||
       (namespace === 'fs' && Boolean(files.readPaths.length || files.writePaths.length || files.dynamicPaths))
     if (!seen) add(notSeen, 'system', namespace)
+  }
+  if (declaredHosts !== undefined) {
+    for (const candidate of declaredHosts) {
+      if (!scannedHosts.some((host) => networkHostMatches(candidate, host))) add(notSeen, 'networkHost', candidate)
+    }
   }
   return { undeclared: listed(undeclared), declaredNotSeen: listed(notSeen) }
 }

@@ -28,20 +28,26 @@ manifest rules the Registry enforces, see
 
 ### Install the CLI
 
-`@navide/plugin-sdk` and `@navide/plugin-contracts` are not on the npm
-registry yet. Until they are, build them from a Navide checkout and install the
-tarballs into your plugin project:
+```bash
+npm install --save-dev @navide/plugin-sdk @navide/plugin-contracts
+npx navide-plugin
+```
+
+The packages are published to npm from the Navide repository with
+`scripts/publish-public-packages.sh` as a release step, under one shared 1.x
+version with a [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
+Before the first publication, or to try an unreleased build, pack them from a
+Navide checkout instead:
 
 ```bash
 # in the Navide checkout
 pnpm install
-pnpm run build:public-packages
-npm pack ./packages/plugin-contracts ./packages/plugin-sdk --pack-destination /tmp/navide-sdk
+scripts/publish-public-packages.sh        # dry run: builds and packs into dist/npm/
 
 # in your plugin project
 npm init -y
-npm install --save-dev /tmp/navide-sdk/navide-plugin-contracts-1.0.0.tgz \
-  /tmp/navide-sdk/navide-plugin-sdk-1.0.0.tgz
+npm install --save-dev <checkout>/dist/npm/navide-plugin-contracts-1.0.0.tgz \
+  <checkout>/dist/npm/navide-plugin-sdk-1.0.0.tgz
 npx navide-plugin
 ```
 
@@ -65,6 +71,17 @@ navide-plugin init acme-hello --id acme.hello
 namespace is the one you will claim on the Marketplace, and the id never
 changes once published. `--name "Acme Hello"` sets the display name (default:
 derived from the id). `init` refuses a directory that is not empty.
+
+`--template vue` writes a complete, buildable project instead of the no-build
+scaffold below: a Vue 3 view (Vite, `@navide/plugin-sdk`), a Python backend
+over Backend Wire v1 with one method, one agent tool that calls it, a vitest
+suite that drives the backend over stdio, and npm scripts — `build` (the view,
+staged into `dist/package` with `.navide-build-complete` written last),
+`build:backend` (PyInstaller, one executable for this machine), `check`
+(`validate` and `scan` on `dist/package`), `test`, `package`. The id's last
+segment, without hyphens, becomes the agent tool prefix, so it must be 2–16
+lowercase letters or digits. [Build for Navide](build-for-navide.md) walks
+through it in five minutes.
 
 It writes a frontend-only plugin that validates and packages as is:
 
@@ -168,11 +185,51 @@ navide-plugin dev-backend dist/package
   place. The backend has no network access and cannot read your home folder.
 - Calls to methods, and subscriptions to events, that `manifest.json` does not
   declare are refused before they reach the backend, as in Navide.
-- The Host bridge is not emulated: each `navide/host/call` the backend makes
-  is printed and answered with `CAPABILITY_DENIED`.
+- The Host bridge is served locally (0.2.39) when you name a workspace:
+  `--workspace <directory>` answers the backend's `navide/host/call` requests
+  under **the same admission rules Navide's Host applies** — the `filesystem`
+  port only when the manifest declares `fs`, inside that directory only
+  (`WORKSPACE_SCOPE_VIOLATION` outside it, symbolic links included), reads
+  always and writes only with `--allow-writes` (your stand-in for the
+  per-workspace write prompt a user answers in Navide); the `shell` port only
+  when it declares `shell: "allowlist"`, running git, gh, glab and the declared
+  executables through the same public command policy as the Host broker, in
+  that directory and the way the broker runs them (git, gh and glab in a
+  throw-away home with global and system Git config off, prompts, pagers and
+  editors disabled, git's program-selecting keys overridden, and a workspace
+  `.git/config` that selects a program refused; a declared executable as you
+  run it from a terminal); gh and glab see your own sign-in only with
+  `--provider-auth`, and its token values are redacted from what the backend
+  reads. A shell command never needs `--allow-writes`: in Navide the shell
+  grant is its own consent, separate from the per-workspace file-write
+  prompt. `agents` ports answer `BACKEND_UNAVAILABLE` (there are no
+  agents in dev-backend); every other port, and anything the manifest does not
+  declare, is `CAPABILITY_DENIED` with reason `undeclared`. A request the
+  local bridge refuses is one Navide refuses too. Without `--workspace`
+  every request is denied (reason `no-workspace`), as before.
+- Each bridge request is printed (`← bridge filesystem.read_file {...} →
+  allowed` or `→ denied CAPABILITY_DENIED (undeclared): ...`) and appended to
+  `<data>/activity.jsonl` as a row in the shape of Navide's Activity page
+  (`plugin_activity`: `at`, `plugin_id`, `plugin_version`, `workspace`,
+  `source`, `address`, `outcome`, `denied_reason`, `fs_path`,
+  `shell_command`), so what you see here is what a user would see in Settings
+  → Navide Plugins → Activity.
 - Results print as `← result`, events as `← event`, and the backend's stderr
   as `[backend]` lines. When the backend ends, `• backend exited` means exit
   code 0 and `× backend exited` means it failed or was killed.
+
+**Hot module replacement (assessed for 0.2.39, not built).** Developer Mode
+already reloads a loaded folder on change, re-opens each view hidden and
+checks its readiness before swapping, and restarts the backend only when
+`backend` changed; a Vite dev server can serve a view's entry (its origin is
+admitted by the network policy). What HMR would add is in-page state across
+an edit, which needs the dev server's HMR client inside the plugin frame (a
+WebSocket to the dev origin, allowed by the C1 policy), the view's own state
+restore (`createPluginViewState` covers the stored part), and a rule for a
+changed `manifest.json` (still a full reload with consent). The gain is
+seconds per edit; the cost is a second reload path next to the folder reload,
+so it waits for the SDK's in-memory Host mock (batch 3, E4), which gives a
+view a far faster loop than any reload: run it in vitest against the mock.
 
 ## 3. Test against a local registry
 
@@ -298,6 +355,18 @@ This writes `keys/acme.key` (private, owner-only, never overwritten) and
 your namespace's dashboard (`/publisher/acme`) and press **Save public key**.
 Keep `acme.key` out of Git and out of your package; anyone holding it can sign
 submissions for your namespace.
+
+A publisher has one signing key at a time. Signing in as a publisher from
+Navide's Settings → Navide Plugins → Developer creates a second key, kept in
+that computer's secure storage, and offers to register it — but it never
+replaces a key the dashboard already holds by itself (0.2.39): the Registry
+answers that a key is registered, the dashboard key keeps publishing, and
+Settings shows the registered key's fingerprint with a button to **use this
+Navide's key instead**. Press it only if you mean to publish from Navide from
+now on; packages signed with the CLI key are refused afterwards until you
+save that key on the dashboard again. (Before 0.2.39 the sign-in replaced
+the key silently and the next CLI publish failed with `403 invalid package
+signature`.)
 
 ### Log in from the CLI
 
@@ -643,6 +712,7 @@ workflows only build and pack. The registry side of this (registering the
 | `manifest references '...', but artifact-files.json does not list it` | The file is there but not in the `files` array; add it. |
 | `package entry '...' is listed in artifact-files.json but does not exist` | The `files` array names a file the staging directory does not have; build it or remove it from the list. |
 | `package entry '...' is dev-backend data (.navide-dev)` | `navide-plugin dev-backend` data was listed; remove it from `artifact-files.json`. |
+| `static scan found network hosts the manifest does not declare: ...` (Registry, public channel) | Your manifest declares `permissions.network.hosts`, and the code names other hosts (the card would show them red). Add them to the declaration, or remove the code that reaches them; `navide-plugin scan` lists them first. |
 | `backend package target '...' must match the build host target '...'` | Package each backend target on a machine of that platform and architecture. |
 | `frontend-only package target must be 'universal'` | Drop `--target` for a plugin without a backend. |
 | `private key must have owner-only permissions` | `chmod 600 keys/acme.key`. |
@@ -660,7 +730,7 @@ workflows only build and pack. The registry side of this (registering the
 ## Command reference
 
 ```text
-navide-plugin init <directory> --id <namespace.name> [--name <display name>]
+navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]
 navide-plugin validate <directory> [--target <target>]
 navide-plugin scan <package.vsix | directory> [--target <target>] [--json]
 navide-plugin package <directory> [--target <target>] [--out <file>]
@@ -676,5 +746,5 @@ navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-brow
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
 navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>
-navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]
+navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]
 ```

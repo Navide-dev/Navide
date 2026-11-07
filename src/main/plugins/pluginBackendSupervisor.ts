@@ -113,6 +113,8 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** C2: executables declared beyond the Host's `git`, `gh`, `glab`. */
+    shellExecutables?: readonly string[]
     /** The package's declared agent tools as the disclosure spells them
      *  (defaulted timeouts, sorted by name); absent when it declares none. */
     agentTools?: readonly DisclosureAgentTool[]

@@ -118,6 +118,13 @@ async function signOut(): Promise<void> {
   if (next) await refresh()
 }
 
+/** L1d: the user's explicit choice to make this Navide's key the publisher's
+ *  key; the key the Registry held (the CLI's) stops publishing. */
+async function replaceKey(): Promise<void> {
+  const next = await run('replace-key', () => api().registerKey({ replace: true }))
+  if (next) await refresh()
+}
+
 // ── the open form ─────────────────────────────────────────────────────────
 
 const appFields = reactive<Record<string, string | boolean>>({})
@@ -303,6 +310,12 @@ onMounted(() => {
             <code v-if="state.keyFingerprint">{{ state.keyFingerprint }}</code>
             <span v-else>{{ $t('marketplace-developer.account.no-key') }}</span>
             <span v-if="state.keyFingerprint" class="dev-chip">{{ state.keyRegistered ? $t('marketplace-developer.account.key-registered') : $t('marketplace-developer.account.key-unregistered') }}</span>
+            <template v-if="!state.keyRegistered && state.keyConflictFingerprint">
+              <p class="dev-muted dev-key-conflict">{{ $t('marketplace-developer.account.key-conflict', { fingerprint: state.keyConflictFingerprint }) }}</p>
+              <button class="nv-btn nv-btn--sm" :disabled="busy !== null" @click="replaceKey()">
+                {{ $t('marketplace-developer.account.replace-key') }}
+              </button>
+            </template>
           </dd>
           <dt>{{ $t('marketplace-developer.account.expires') }}</dt>
           <dd>{{ state.tokenExpiresAt.publisher ?? state.tokenExpiresAt.account ?? '—' }}</dd>

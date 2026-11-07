@@ -193,6 +193,7 @@ Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS �
 - **使用 Navide：**[開始使用](docs/zh-TW/getting-started.md)、[使用指南](docs/zh-TW/user-guide.md)與[疑難排解](docs/zh-TW/troubleshooting.md)
 - **理解產品：**[Navide 宣言](docs/zh-TW/manifesto.md)、[產品願景](docs/zh-TW/vision.md)、[產品定位](docs/zh-TW/product-positioning.md)與[產品 Roadmap](docs/zh-TW/roadmap.md)
 - **檢查能力邊界：**[隱私與資料流](docs/zh-TW/privacy.md)與英文版 [Security Policy](SECURITY.md)
+- **為 Navide 開發：**英文版 [Build for Navide](docs/en-US/build-for-navide.md) 一頁講完從 `npx navide-plugin init` 到 Marketplace 審核上架的流程，以及[我們想要的外掛](docs/en-US/plugin-ideas.md)
 - **瀏覽完整內容：**[Navide 繁體中文文件中心](docs/zh-TW/README.md)
 
 ## 授權

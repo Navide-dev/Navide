@@ -2040,7 +2040,7 @@
           "firstParty": "エージェントに純正 Navide プラグインのツール呼び出しを許可",
           "firstPartyDescription": "既定でオン。Navide Browser など Navide が作る純正 Navide プラグインのツールを、ペイン内のエージェントがバージョンごとの確認なしで呼び出せるようにします。結果は引き続き外部コンテンツとして扱われ、変更を伴うツールはワークスペースごとに一度確認します。",
           "enable": "エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可",
-          "description": "許可した Navide プラグインが宣言するツールを、ペイン内のエージェントが呼び出せるようにします。ファイルを変更するツールはワークスペースごとに一度だけ確認します。",
+          "description": "許可した Navide プラグインが宣言するツールを、ペイン内のエージェントが呼び出せるようにします。ファイルを変更するツールはワークスペースごとに一度だけ確認します。ここで一度も設定していない間は、同意カードにツールが載っている Navide プラグインを許可すると自動的にオンになります。ここで設定した値はそのままです。サードパーティのツールをすべて止めるには、ここでオフにしてください。",
           "externalCallers": "外部の MCP クライアントにも許可",
           "externalCallersDisclosure": "外部プログラムは 1 つのトークンを共有するため、呼び出しの記録には「外部クライアント」としか残らず、どのプログラムかは区別できません。Host の資格情報も同じ扱いです。"
         },
@@ -2109,6 +2109,8 @@
       "builtinSwitchBusy": "適用中… 進行中の処理が終わるのを待っています。Plans では 30 秒ほどかかることがあります。",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
+      "networkStrict": "宣言済みのネットワークホストのみ許可",
+      "networkStrictNote": "オフ（既定）：ビューはどのホストにも接続でき、各リクエストは記録され、manifest で宣言していないホストへの接続はアクティビティに「未宣言」と表示されます。オン：宣言済みホストのみ（フレームのポリシーとリクエストフックの両方）、それ以外は拒否して記録します。",
       "digestBlock": {
         "blocked": "Navide がブロック",
         "security": "Navide が取り下げ（セキュリティ）",
@@ -12138,13 +12140,15 @@
     "source": {
       "broker": "Navide の機能",
       "shell": "shell コマンド",
-      "agentTool": "agent ツール"
+      "agentTool": "agent ツール",
+      "network": "ビューのネットワーク"
     },
     "kind": {
       "system": "権限",
       "shell": "Shell",
       "backendMethod": "ネイティブ backend のメソッド",
-      "agentTool": "agent ツール"
+      "agentTool": "agent ツール",
+      "networkHost": "ネットワークホスト"
     },
     "reason": {
       "undeclared": "宣言なし"
@@ -12220,6 +12224,10 @@
     "commands": {
       "heading": "実行したコマンド",
       "item": "{command} · {count} 回 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "ビューが接続したホスト",
+      "item": "{host} · {count} 回 · {outcome} · {date}"
     },
     "trend": {
       "heading": "1 日あたりの呼び出し数"
@@ -12308,6 +12316,7 @@
         "backendMethod": "ネイティブコードのメソッド：{key}",
         "backendEvent": "ネイティブコードのイベント：{key}",
         "network": "コマンド経由でリモートに接続できる",
+        "networkHost": "ビューの接続先：{key}",
         "agentTool": "agent ツール：{key}"
       }
     },
@@ -12327,7 +12336,8 @@
     "undeclared": {
       "shell": "{key} を実行しますが、shell 権限を宣言していません",
       "shellDynamic": "実行時にコマンドを組み立てますが、shell 権限を宣言していません",
-      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲は git・gh・glab だけです",
+      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲に含まれていません",
+      "networkHost": "{key} に接続しますが、宣言していません",
       "system": "{key} を使いますが、この権限を宣言していません",
       "fsScopeWrite": "{key} に書き込みますが、宣言した書き込み範囲の外です",
       "fsScopeRead": "{key} を読み取りますが、宣言した読み取り範囲の外です"
@@ -12335,7 +12345,8 @@
     "notSeenHeading": "宣言あり・静的スキャンでは未検出",
     "notSeen": {
       "shell": "shell（{key}）",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key}（宣言済みのホスト）"
     },
     "scanHeading": "公開時のシステムスキャンの結果",
     "scanHeadingLocal": "Navide によるこのファイルのスキャン結果",
@@ -12353,8 +12364,8 @@
     "scannedLocally": "スキャン結果はこのカードの参考情報で、インストールの可否は決めません。",
     "limitsWithoutScan": "このバージョンにはシステムスキャンがありません。上記はこの Navide プラグイン自身の宣言だけです。",
     "limitsWithoutScanLocal": "Navide はこのファイルをスキャンしていません。上記はこの Navide プラグイン自身の宣言だけです。",
-    "viewNetwork": "Navide プラグインのビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
-    "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
+    "viewNetwork": "この Navide プラグインのビューは、宣言したホスト（上に列挙。列挙がなければ接続不可）にだけ接続でき、外部サイトは表示できません。Navide は接続したホストと拒否したホストを「アクティビティ」に記録します。上のネットワークの項目は、コマンドとネイティブバックエンドが対象です。",
+    "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューは宣言したホスト（上に列挙。列挙がなければ接続不可）にだけ接続でき、外部サイトは表示できません。Navide は接続したホストと拒否したホストを「アクティビティ」に記録します。上のネットワークの項目は、コマンドとネイティブバックエンドが対象です。",
     "summary": {
       "nativeBackend": "ネイティブコードを含む（サンドボックスで実行）",
       "files": {
@@ -12372,7 +12383,7 @@
       "agentMessages": "このプロジェクトのエージェント間のメッセージ本文をすべて読み取ります。本文にはコード、ファイルの内容、機密情報が含まれることがあります",
       "ui": "独自の画面を表示する",
       "agentTools": "agent が呼び出せるツールを提供（読み取り {read} 個、書き込み {write} 個）",
-      "network": "ネットワークを使える",
+      "network": "ビューの接続先：{hosts}",
       "noPermissions": "権限を宣言していません"
     },
     "scan": {
@@ -12578,6 +12589,8 @@
       "no-key": "公開者として初めてサインインしたときに作成されます",
       "key-registered": "登録済み",
       "key-unregistered": "未登録",
+      "key-conflict": "Registry にはこのパブリッシャーの別の署名鍵（フィンガープリント {fingerprint}）がすでに登録されています。多くは navide-plugin CLI 用に登録した鍵です。この Navide から公開するにはその鍵を置き換える必要があります。置き換えるまで CLI からの公開はそのまま使えます。",
+      "replace-key": "この Navide の鍵に置き換える",
       "expires": "サインインの期限",
       "sign-in": "Navide Cloud でサインイン",
       "sign-in-publish": "公開者としてサインイン",

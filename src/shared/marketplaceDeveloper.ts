@@ -9,6 +9,10 @@ export interface DeveloperPublicState {
   tokenExpiresAt: { account: string | null; publisher: string | null }
   keyFingerprint: string | null
   keyRegistered: boolean
+  /** L1d: the Registry already holds a different key (its fingerprint), so
+   *  this Navide's key was not registered; publishing from here needs the
+   *  user's explicit replacement, while the other key keeps working. */
+  keyConflictFingerprint: string | null
 }
 
 /** A Registry call's outcome as the renderer sees it. */
@@ -52,7 +56,7 @@ export interface DeveloperApi {
   state(): Promise<DeveloperPublicState>
   signIn(scope: 'account' | 'publish'): Promise<DeveloperPublicState>
   signOut(): Promise<DeveloperPublicState>
-  registerKey(): Promise<DeveloperPublicState>
+  registerKey(options?: { replace?: boolean }): Promise<DeveloperPublicState>
   application(): Promise<DeveloperCallResult>
   submitApplication(input: {
     fields: Record<string, string | boolean>

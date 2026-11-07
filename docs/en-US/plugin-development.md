@@ -62,7 +62,10 @@ and archive path safety each reject on failure. Nothing is granted implicitly.
 
 **Frontend view plugins** render a UI. They run in a fully sandboxed
 `WebContentsView` with `contextIsolation: true`, `nodeIntegration: false`, and
-`sandbox: true`. The only host interface they can reach is `window.nav`. Their
+`sandbox: true`. The only host interface they can reach is `window.nav`, the
+private preload transport; Manifest v2 code uses it only through
+`@navide/plugin-sdk` (see [Plugin development v2](plugin-development-v2.md#sdk-interface)),
+and only the no-build scaffold calls `window.nav.ready()` itself. Their
 manifest declares an `entry` pointing at an HTML file.
 
 **Backend plugins** extend the Python service. They register HTTP routes,
@@ -108,9 +111,10 @@ plugin requires its own build. The core renderer keeps the real WebSocket
 `useBackend`; the plugin build gets a shim that forwards every `send(type,
 payload)` through `window.nav.callCapability`.
 
-If you are writing fresh UI that calls `window.nav` directly, you do not need
-the shim — but you still need the separate build to produce a loadable plugin
-directory.
+If you are writing fresh UI, call the SDK (`createPluginCapabilityClient()`
+and friends from `@navide/plugin-sdk`) rather than `window.nav` directly: the
+channels behind `window.nav` are private and change without notice. You still
+need the separate build to produce a loadable plugin directory.
 
 The `emitManifest()` hook writes `manifest.json` into the output directory at
 `closeBundle`, so the build output is itself a valid, loadable plugin
@@ -591,16 +595,19 @@ Two conventions are worth copying:
 
 ## Current limits
 
-- Plugins can be installed and removed, but not disabled — there is no
-  enable/disable state. A third-party native backend has its own disable
-  switch in Settings.
+- A plugin can be installed, disabled and enabled (Settings → Navide Plugins,
+  or an agent's `plugins_disable` / `plugins_enable` request the user
+  approves) and removed. A third-party native backend also has its own
+  disable switch there.
 - `chat` and `ui` backend capabilities are interface-only for Python plugins;
   see the maturity table above.
 - In manifest v1, `contributes.views` and `contributes.commands` are accepted
   and validated by the manifest schema, but are not rendered or dispatched by
   the host.
-- Manifest v2 renders `contributes.views` of kind `custom` only and rejects
-  `contributes.commands`; there are no menu or keybinding contribution points.
+- Manifest v2 renders `contributes.views` of kind `custom` only and accepts
+  `contributes.commands` (commands the user runs from the command list and
+  may bind to a key in Settings); there are no menu or keybinding
+  contribution points.
 - The environment-variable Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
   cannot open a Manifest v2 view or run a backend; see
   [Local development](#local-development). Settings → Navide Plugins →

@@ -25,7 +25,7 @@ export * from './issues.js'
 export * from './agents.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
-export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
 export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
@@ -40,6 +40,39 @@ export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'win
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
 export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
+/** Most executables one package may declare in `permissions.shell.executables`. */
+export const MAX_SHELL_EXECUTABLES = 32
+/** One declared executable: a bare lowercase name as it is spelled on PATH
+ *  (`npm`, `python3.12`), never a path or a shell word. */
+export const V2_SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
+/** A declared name may not be a Host-family executable (those have their own
+ *  policy and are always admitted) nor spell one through a Windows extension
+ *  (`git.exe`, `gh.cmd`): the broker and the backend admit bare names only,
+ *  and a suffixed spelling would reach the Git family's binary without its
+ *  subcommand policy. Checked after the spelling rule. */
+export function shellExecutableRefusal(name: string): string | null {
+  const suffix = /\.(exe|cmd|bat|com|ps1)$/.exec(name)
+  if (suffix) return `a declared executable is a bare name: ${JSON.stringify(name)} must not carry the ${suffix[0]} extension`
+  if (HOST_SHELL_FAMILY.includes(name)) return `${JSON.stringify(name)} is always available to a shell: "allowlist" package and cannot be declared`
+  return null
+}
+const HOST_SHELL_FAMILY: readonly string[] = ['git', 'gh', 'glab']
+/** Executables that run any program handed to them (shells, interpreters,
+ *  package runners, privilege wrappers). Disclosure only: a package may
+ *  declare them; the card then says "can run any program" (TA-2, highest). */
+export const SHELL_ANY_PROGRAM_EXECUTABLES: readonly string[] = [
+  'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd',
+  'node', 'deno', 'bun', 'python', 'python3', 'ruby', 'perl', 'php', 'lua', 'osascript',
+  'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn',
+  'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco',
+  'sudo', 'doas', 'su', 'runas',
+  'env', 'xargs', 'nohup', 'timeout', 'nice', 'find', 'awk', 'ssh', 'busybox', 'setsid',
+]
+/** Most hosts one package may declare in `permissions.network.hosts`. */
+export const MAX_NETWORK_HOSTS = 32
+/** One declared network host: lowercase DNS labels, at most one leading `*.`
+ *  wildcard standing for one label; no scheme, port, path or user info. */
+export const V2_NETWORK_HOST = /^(?:\*\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
 export const EXECUTION_POLICY_SCHEMA_VERSION = 1 as const
@@ -74,11 +107,27 @@ export type PluginManifestV2Scopes = {
   fs: PluginManifestV2FsScopes
 }
 
+/** Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource).
+ *  Enforced by the plugin frame's `connect-src`; a request to any other host
+ *  is refused by the frame. The backend sandbox is not affected. */
+export type PluginManifestV2Network = {
+  hosts: string[]
+}
+
 export type PluginManifestV2Permissions = {
   system?: PluginSystemNamespace[]
+  /** The shell mode. The manifest may spell `allowlist` as
+   *  `{ "mode": "allowlist", "executables": [...] }`; the parser keeps the
+   *  mode here and the declared names in `shellExecutables`. */
   shell?: PluginShellMode
+  /** Executables a `shell: "allowlist"` package declares beyond the Host's
+   *  `git`, `gh`, `glab` (C2): bare names, enforced by the broker, each
+   *  disclosed; names that run any program are disclosed as highest risk. */
+  shellExecutables?: string[]
   /** Optional declared resource scopes; disclosure only, never a grant. */
   scopes?: PluginManifestV2Scopes
+  /** Optional declared network hosts; enforced on views, disclosed everywhere. */
+  network?: PluginManifestV2Network
 }
 
 export type PluginManifestV2Receiver = {
@@ -128,7 +177,7 @@ export type PluginManifestV2 = {
     categories?: string[]
     icon?: string
   }
-  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[] }
+  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[]; agentTools?: PluginManifestV2ViewAgentTool[] }
   backend?: {
     entry: string
     protocolVersion: 1
@@ -164,6 +213,9 @@ export type PluginManifestV2AgentTool = {
   inputSchema: Record<string, unknown>
   timeoutMs?: number
 }
+
+/** One `contributes.agentTools` entry (contract section 2.9): served by a declared view instead of a backend method. */
+export type PluginManifestV2ViewAgentTool = Omit<PluginManifestV2AgentTool, 'method'> & { view: string }
 
 export type PluginContractErrorCode =
   | 'INVALID_JSON'
@@ -501,7 +553,7 @@ function parseScopes(value: unknown): PluginManifestV2Scopes {
 
 function parsePermissions(value: unknown): PluginManifestV2Permissions {
   const permissions = assertObject(value, 'manifest permissions')
-  assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
+  assertOnlyKeys(permissions, ['system', 'shell', 'scopes', 'network'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
     const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, V2_SYSTEM_NAMESPACES.length)
@@ -516,16 +568,66 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
     system = values as PluginSystemNamespace[]
   }
   let shell: PluginShellMode | undefined
+  let shellExecutables: string[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'shell')) {
-    if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
-      fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}`)
+    if (typeof permissions.shell === 'object' && permissions.shell !== null && !Array.isArray(permissions.shell)) {
+      const declared = permissions.shell as Record<string, unknown>
+      assertOnlyKeys(declared, ['mode', 'executables'], 'manifest permissions.shell')
+      if (required(declared, 'mode', 'manifest permissions.shell') !== 'allowlist') {
+        fail(`manifest permissions.shell.mode must be "allowlist" when executables are declared, got ${JSON.stringify(declared.mode)}; full mode runs any executable and declares none`)
+      }
+      const executables = uniqueStringArray(
+        required(declared, 'executables', 'manifest permissions.shell'),
+        'manifest permissions.shell.executables',
+        1,
+        MAX_SHELL_EXECUTABLES
+      )
+      const invalid = executables.find((name) => !V2_SHELL_EXECUTABLE.test(name))
+      if (invalid !== undefined) {
+        fail(`manifest permissions.shell.executables contains an invalid name ${JSON.stringify(invalid)}; a name is lowercase such as npm or terraform, as spelled on PATH, with no path or shell word`)
+      }
+      for (const name of executables) {
+        const refusal = shellExecutableRefusal(name)
+        if (refusal) fail(`manifest permissions.shell.executables: ${refusal}`)
+      }
+      shell = 'allowlist'
+      shellExecutables = executables
+    } else {
+      if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
+        fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}, or { "mode": "allowlist", "executables": [...] }`)
+      }
+      shell = permissions.shell as PluginShellMode
     }
-    shell = permissions.shell as PluginShellMode
   }
   const scopes = Object.prototype.hasOwnProperty.call(permissions, 'scopes')
     ? parseScopes(permissions.scopes)
     : undefined
-  return { ...(system ? { system } : {}), ...(shell ? { shell } : {}), ...(scopes ? { scopes } : {}) }
+  const network = Object.prototype.hasOwnProperty.call(permissions, 'network')
+    ? parseNetwork(permissions.network)
+    : undefined
+  return {
+    ...(system ? { system } : {}),
+    ...(shell ? { shell } : {}),
+    ...(shellExecutables ? { shellExecutables } : {}),
+    ...(scopes ? { scopes } : {}),
+    ...(network ? { network } : {}),
+  }
+}
+
+function parseNetwork(value: unknown): PluginManifestV2Network {
+  const network = assertObject(value, 'manifest permissions.network')
+  assertOnlyKeys(network, ['hosts'], 'manifest permissions.network')
+  const hosts = uniqueStringArray(
+    required(network, 'hosts', 'manifest permissions.network'),
+    'manifest permissions.network.hosts',
+    1,
+    MAX_NETWORK_HOSTS
+  )
+  const invalid = hosts.find((host) => host.length > 253 || !V2_NETWORK_HOST.test(host))
+  if (invalid !== undefined) {
+    fail(`manifest permissions.network.hosts contains an invalid host ${JSON.stringify(invalid)}; a host is lowercase DNS labels such as api.example.com, optionally starting with *. for one wildcard label, with no scheme, port or path`)
+  }
+  return { hosts }
 }
 
 function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
@@ -557,7 +659,7 @@ function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
 
 function parseViews(value: unknown): { views: PluginManifestV2View[] } {
   const contributes = assertObject(value, 'manifest contributes')
-  assertOnlyKeys(contributes, ['views', 'commands'], 'manifest contributes')
+  assertOnlyKeys(contributes, ['views', 'commands', 'agentTools'], 'manifest contributes')
   if (!Array.isArray(contributes.views) || contributes.views.length < 1 || contributes.views.length > 16) {
     fail('manifest contributes.views must contain 1-16 view(s)')
   }
@@ -664,6 +766,7 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
 }
 
 const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
+const VIEW_AGENT_TOOL_KEYS = ['name', 'view', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
 const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
 // The Host backend supervisor's method-name rule (isMethodName in
 // src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
@@ -680,27 +783,49 @@ function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
     const tool = assertObject(raw, label)
     assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
     for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
-    if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
     if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
       fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
     }
-    if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
-    for (const key of ['title', 'description'] as const) {
-      const text = tool[key]
-      if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
-        fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
-      }
-    }
-    const schema = tool.inputSchema
-    if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
-    if (tool.timeoutMs !== undefined) {
-      const timeout = tool.timeoutMs
-      if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
-        fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
-      }
-    }
+    checkAgentToolFields(tool, label)
     return structuredClone(tool) as PluginManifestV2AgentTool
   })
+}
+
+/** The `viewAgentTool` definition: a tool a declared view serves (contract section 2.9). */
+function viewAgentToolList(value: unknown, viewIds: readonly string[]): PluginManifestV2ViewAgentTool[] {
+  if (!Array.isArray(value) || value.length === 0) fail('manifest contributes.agentTools must be a non-empty array')
+  return value.map((raw, index) => {
+    const label = `manifest contributes.agentTools[${index}]`
+    const tool = assertObject(raw, label)
+    assertOnlyKeys(tool, VIEW_AGENT_TOOL_KEYS, label)
+    for (const key of VIEW_AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
+    if (typeof tool.view !== 'string' || !VIEW_ID.test(tool.view)) fail(`${label}.view is invalid; ${VIEW_ID_RULE}`)
+    if (!viewIds.includes(tool.view as string)) {
+      fail(`${label}.view ${JSON.stringify(tool.view)} is not a declared view (declared: ${viewIds.join(', ')})`)
+    }
+    checkAgentToolFields(tool, label)
+    return structuredClone(tool) as PluginManifestV2ViewAgentTool
+  })
+}
+
+/** The fields a method-bound and a view-bound tool share. */
+function checkAgentToolFields(tool: Record<string, unknown>, label: string): void {
+  if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
+  if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
+  for (const key of ['title', 'description'] as const) {
+    const text = tool[key]
+    if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
+      fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
+    }
+  }
+  const schema = tool.inputSchema
+  if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
+  if (tool.timeoutMs !== undefined) {
+    const timeout = tool.timeoutMs
+    if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
+      fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
+    }
+  }
 }
 
 /** Most package-local methods / events one backend may declare. */
@@ -835,7 +960,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
     if (manifest.contributes !== undefined || manifest.backend !== undefined) {
       fail('an extension pack must not declare contributes or backend')
     }
-    if (permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined) {
+    if (
+      permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined ||
+      permissions.network !== undefined
+    ) {
       fail('an extension pack must not request permissions')
     }
   } else if (manifest.contributes === undefined && manifest.backend === undefined) {
@@ -846,6 +974,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   const declaredCommands = isRecord(manifest.contributes) ? manifest.contributes.commands : undefined
   if (contributes && declaredCommands !== undefined) {
     contributes.commands = parseCommands(declaredCommands, id, contributes.views, backend?.methods)
+  }
+  const declaredViewTools = isRecord(manifest.contributes) ? manifest.contributes.agentTools : undefined
+  if (contributes && declaredViewTools !== undefined) {
+    contributes.agentTools = viewAgentToolList(declaredViewTools, contributes.views.map((view) => view.id))
   }
   return {
     schemaVersion: 2,

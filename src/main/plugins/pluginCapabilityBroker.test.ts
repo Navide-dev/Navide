@@ -13,6 +13,7 @@ import {
   isCallAllowed,
   isEventAllowed,
   planPublicCapabilityCall,
+  sameExecutables,
   isPublicCapabilityEventAllowed,
   HOST_EVENT_SOURCE_PLUGIN_ID,
   shellTopLevelExecutables,
@@ -340,26 +341,58 @@ describe('Issue 03/04 public Host planner', () => {
     })
   })
 
-  it('requires first-party eligibility for Plans window navigation', () => {
-    const plansBinding = { ...binding, pluginId: 'navide.plans' }
+  it('opens Plans window navigation to any package with a ui grant (batch 4)', () => {
+    const plansBinding = { ...binding, pluginId: 'acme.ui' }
     const plansPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })
     const plansCall = call({
-      pluginId: 'navide.plans',
+      pluginId: 'acme.ui',
       ns: 'ui',
       method: 'openPlansWindow',
       args: { path: '.agent-team/plans/example.html' },
     })
 
-    expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
+    for (const publisherEligible of [true, false]) {
+      expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
+        runtimeBinding: plansBinding,
+        userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+        publisherEligible,
+      }))).toMatchObject({ kind: 'allow', plan: { address: 'ui.openPlansWindow' } })
+    }
+    expect(planPublicCapabilityCall(plansCall, manifestV2CapabilityPolicy({ system: ['fs'] }), context({
       runtimeBinding: plansBinding,
-      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
-      publisherEligible: true,
-    }))).toMatchObject({ kind: 'allow', plan: { address: 'ui.openPlansWindow' } })
-    expect(planPublicCapabilityCall(plansCall, plansPolicy, context({
-      runtimeBinding: plansBinding,
-      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+      userGrant: { packageVersion: '1.0.0', system: ['fs'] },
       publisherEligible: false,
     }))).toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+  })
+
+  it.each([
+    ['openPath', { path: 'run.command' }],
+    ['openTempFile', { name: 'x.bat', content: 'calc' }],
+  ])('lets a package with a user-approved full shell reach ui.%s, and no other (batch 4)', (method, args) => {
+    const uiBinding = { ...binding, pluginId: 'acme.ui' }
+    const uiCall = call({ pluginId: 'acme.ui', ns: 'ui', method, args })
+    const uiContext = (publisherEligible: boolean, grant: Partial<{ shell: 'allowlist' | 'full'; highRiskShellConfirmed: boolean }> = {}) => context({
+      runtimeBinding: uiBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'], ...grant },
+      publisherEligible,
+    })
+    const full = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'full' })
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'full', highRiskShellConfirmed: true })))
+      .toMatchObject({ kind: 'allow', plan: { address: `ui.${method}` } })
+    // Declared full, but the user has not confirmed the high-risk shell for this version.
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'full' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('not user-approved') } } })
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'allowlist' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+    // The allowlist discloses git/gh/glab and the declared executables, not "any program".
+    const allowlist = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'allowlist' })
+    expect(planPublicCapabilityCall(uiCall, allowlist, uiContext(true, { shell: 'allowlist' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
+    const withoutShell = manifestV2CapabilityPolicy({ system: ['ui'] })
+    for (const publisherEligible of [true, false]) {
+      expect(planPublicCapabilityCall(uiCall, withoutShell, uiContext(publisherEligible)))
+        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
+    }
   })
 
   it.each([
@@ -384,15 +417,13 @@ describe('Issue 03/04 public Host planner', () => {
   })
 
   it.each([
-    ['openPath', { path: 'run.command' }],
-    ['openTempFile', { name: 'x.bat', content: 'calc' }],
     ['writeKeybindings', { content: '[]' }],
     ['listGitAccounts', {}],
     ['getGitAccountBinding', {}],
     ['addGitAccount', { label: 'l', host: 'github.com', username: 'u', token: 't' }],
     ['bindGitAccount', { accountId: 'a' }],
     ['unbindGitAccount', {}],
-  ])('keeps ui.%s (launches files or reaches credentials) to first-party publishers', (method, args) => {
+  ])('keeps ui.%s (the Host configuration or its credential store) to first-party publishers', (method, args) => {
     const uiBinding = { ...binding, pluginId: 'acme.ui' }
     const uiPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })
     const uiCall = call({ pluginId: 'acme.ui', ns: 'ui', method, args })
@@ -1344,5 +1375,67 @@ describe('agent initiator pane', () => {
     expect(isAuthenticatedInitiator({ kind: 'user', id: 'u', pane: 'Reviewer' })).toBe(false)
     expect(isAuthenticatedInitiator({ ...base, pane: 'Reviewer', token: 't' })).toBe(false)
     expect(isAuthenticatedInitiator({ ...base, pane: 'Reviewer', caller: null })).toBe(false)
+  })
+})
+
+describe('C2: declared shell executables', () => {
+  const declaredPolicy = manifestV2CapabilityPolicy({ system: ['fs'], shell: 'allowlist', shellExecutables: ['npm', 'terraform'] })
+  const binding = {
+    pluginId: 'acme.builder',
+    packageVersion: '1.0.0',
+    workspaceId: 'workspace-1',
+    instanceId: 'instance-1',
+    audience: 'audience-1',
+  } as const
+  const grant = (overrides: Partial<HostCapabilityContext['userGrant'] & object> = {}) => ({
+    packageVersion: '1.0.0', system: ['fs'] as const, shell: 'allowlist' as const, shellExecutables: ['terraform', 'npm'], ...overrides,
+  })
+  const context = (userGrant: HostCapabilityContext['userGrant']): HostCapabilityContext => ({
+    publisherEligible: true,
+    userGrant,
+    runtimeBinding: binding,
+  })
+  const run = (command: string): CapabilityCall => ({
+    pluginId: 'acme.builder', ns: 'shell', method: 'run', args: { command }, reqId: 'r-1',
+  } as CapabilityCall)
+
+  it('carries the declared names on the policy, only for allowlist mode', () => {
+    expect(declaredPolicy).toMatchObject({ shell: 'allowlist', shellExecutables: ['npm', 'terraform'] })
+    expect(manifestV2CapabilityPolicy({ system: ['fs'], shell: 'full', shellExecutables: ['npm'] })).not.toHaveProperty('shellExecutables')
+  })
+
+  it('admits a declared executable beside the Host three and hands the names to the plan', () => {
+    expect(planPublicCapabilityCall(run('npm test'), declaredPolicy, context(grant()))).toMatchObject({
+      kind: 'allow', plan: { address: 'shell.run', shellMode: 'allowlist', shellExecutables: ['npm', 'terraform'] },
+    })
+    expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'allow' })
+    // A wrapper is an executable too: `env` is neither Host-allowlisted nor declared, so it stays denied.
+    expect(planPublicCapabilityCall(run('env npm test'), declaredPolicy, context(grant()))).toMatchObject({ kind: 'deny' })
+  })
+
+  it('still refuses anything not declared, a path, or a wrapper to something undeclared', () => {
+    for (const command of ['pnpm test', './npm test', 'NPM test', 'sh -c "npm test"', 'npm test && pnpm test']) {
+      expect(planPublicCapabilityCall(run(command), declaredPolicy, context(grant())), command)
+        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+    }
+  })
+
+  it('needs the user to have approved exactly the declared set', () => {
+    expect(planPublicCapabilityCall(run('npm test'), declaredPolicy, context(grant({ shellExecutables: ['npm'] }))))
+      .toMatchObject({ kind: 'deny', response: { error: { message: expect.stringContaining('shell executables are not user-approved') } } })
+    const withoutNames = grant()
+    delete (withoutNames as unknown as { shellExecutables?: string[] }).shellExecutables
+    expect(planPublicCapabilityCall(run('git status'), declaredPolicy, context(withoutNames))).toMatchObject({ kind: 'deny' })
+    expect(sameExecutables(undefined, [])).toBe(true)
+    expect(sameExecutables(['a', 'b'], ['b', 'a'])).toBe(true)
+    expect(sameExecutables(['a'], ['a', 'b'])).toBe(false)
+  })
+
+  it('does not widen a package that declares nothing', () => {
+    const plain = manifestV2CapabilityPolicy({ system: ['fs'], shell: 'allowlist' })
+    const plainGrant = { packageVersion: '1.0.0', system: ['fs'] as const, shell: 'allowlist' as const }
+    expect(planPublicCapabilityCall(run('npm test'), plain, context(plainGrant))).toMatchObject({ kind: 'deny' })
+    expect(planPublicCapabilityCall(run('git status'), plain, context(plainGrant))).toMatchObject({ kind: 'allow', plan: { address: 'shell.run' } })
+    expect((planPublicCapabilityCall(run('git status'), plain, context(plainGrant)) as { plan: { shellExecutables?: unknown } }).plan).not.toHaveProperty('shellExecutables')
   })
 })

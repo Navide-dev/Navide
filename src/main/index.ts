@@ -213,7 +213,7 @@ import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
-import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
+import { PluginAgentToolsHost, isBackendAgentToolPackage, type AgentToolPackage } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
@@ -221,6 +221,7 @@ import { isPluginWebGuest } from './plugins/pluginWebViews'
 import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   firstPartyAgentToolSpec,
+  viewAgentToolPackage,
   firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -1323,8 +1324,10 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
-  onConsentGranted: () => {
-    void agentToolsHost?.refresh().catch(() => undefined)
+  // C3: allowing a package whose consent card listed its agent tools turns
+  // the third-party agent-tools switch on (and refreshes the catalog).
+  onConsentGranted: (pluginId) => {
+    void agentToolsHost?.consented(pluginId).catch(() => undefined)
   },
   promptAgentToolWrite: promptAgentToolWorkspaceWrite,
   agentToolCall: (initiatorId) => frontendPluginManager.agentToolCallFor(initiatorId),
@@ -2023,10 +2026,42 @@ const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
       return []
     }
   })
+// Batch 4 (contract 2.9): packages without a backend whose views serve their
+// agent tools. Their consent is the install grant of the exact version, and
+// their manifest is read once per installed package directory.
+const viewAgentToolPackageCache = new Map<string, AgentToolPackage | null>()
+const registeredViewAgentToolPackages = (): AgentToolPackage[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (activation.backend || isFirstPartyAgentToolPlugin(activation.pluginId)) return []
+    const key = `${activation.pluginId}\u0000${activation.packageVersion}\u0000${activation.packageDir}`
+    if (!viewAgentToolPackageCache.has(key)) {
+      try {
+        viewAgentToolPackageCache.set(key, viewAgentToolPackage(activation))
+      } catch (error) {
+        console.warn(
+          `[main] agent tools of ${activation.pluginId} are unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        viewAgentToolPackageCache.set(key, null)
+      }
+    }
+    const spec = viewAgentToolPackageCache.get(key)
+    return spec ? [spec] : []
+  })
+const isViewAgentToolPackageId = (pluginId: string): boolean =>
+  registeredViewAgentToolPackages().some((spec) => spec.pluginId === pluginId)
+// The install grant is the consent of a view-served tool; its DB3 write
+// answer is bound to the version the grant covers.
+const VIEW_AGENT_TOOL_WRITE_GRANT = 'install-grant'
+const viewAgentToolGrant = (spec: AgentToolPackage): string | undefined =>
+  pluginCapabilityGrants.get(spec.pluginId, spec.packageVersion)?.packageVersion === spec.packageVersion
+    ? VIEW_AGENT_TOOL_WRITE_GRANT
+    : undefined
 agentToolsHost = new PluginAgentToolsHost({
   switches: () => nativeBackendStore.agentToolSwitches(),
   setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
-  listPackages: registeredThirdPartySpecs,
+  listPackages: () => [...registeredThirdPartySpecs(), ...registeredViewAgentToolPackages()],
   listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
   // A first-party package is not a third-party native backend: only its own
@@ -2035,10 +2070,16 @@ agentToolsHost = new PluginAgentToolsHost({
   isDisabled: (pluginId) =>
     isFirstPartyAgentToolPlugin(pluginId)
       ? frontendPluginManager.isPluginDisabled(pluginId) || frontendPluginManager.isBuiltinPluginDisabled(pluginId)
-      : !nativeBackendStore.isEnabled() ||
-        frontendPluginManager.isPluginDisabled(pluginId) ||
-        nativeBackendStore.record(pluginId).disabled === true,
-  hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
+      : isViewAgentToolPackageId(pluginId)
+        // No native backend: only the package's own Disabled switch applies.
+        ? frontendPluginManager.isPluginDisabled(pluginId)
+        : !nativeBackendStore.isEnabled() ||
+          frontendPluginManager.isPluginDisabled(pluginId) ||
+          nativeBackendStore.record(pluginId).disabled === true,
+  hasConsent: (spec) =>
+    isBackendAgentToolPackage(spec)
+      ? thirdPartyBackends.hasAgentToolsConsent(spec)
+      : Promise.resolve(viewAgentToolGrant(spec) !== undefined),
   // DB1 collision order, per name (B1-a): when a consented version first
   // declared this name, else when the package first declared tools.
   agentToolSince: (pluginId, name) => {
@@ -2048,9 +2089,13 @@ agentToolsHost = new PluginAgentToolsHost({
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
-    isFirstPartyAgentToolPlugin(spec.pluginId)
+    isFirstPartyAgentToolPlugin(spec.pluginId) && isBackendAgentToolPackage(spec)
       ? thirdPartyBackends.confirmFirstPartyAgentToolWrite(spec, workspaceRoot, tool)
-      : thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+      : isBackendAgentToolPackage(spec)
+        ? thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool)
+        : thirdPartyBackends.confirmViewAgentToolWrite(
+          spec, workspaceRoot, tool, VIEW_AGENT_TOOL_WRITE_GRANT, () => viewAgentToolGrant(spec),
+        ),
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)
@@ -2133,7 +2178,14 @@ const pluginTrustRefresh = registerPluginIpc(
     // run in a worker thread (the scanner's budget is up to 30 s).
     scanLocalPackage: scanLocalPackageInWorker,
     forgetBackendConsent: (pluginId, keepInstallConsentFor) => nativeBackendStore.forgetGrants(pluginId, keepInstallConsentFor),
-    noteInstallConsent: (pluginId, packageVersion) => nativeBackendStore.noteInstallConsent(pluginId, packageVersion),
+    noteInstallConsent: (pluginId, packageVersion) => {
+      nativeBackendStore.noteInstallConsent(pluginId, packageVersion)
+      // C3: the install consent card listed the package's agent tools. A
+      // package whose backend is not registered yet is caught by the
+      // controller's onConsentGranted when its first start records the
+      // install consent as the backend's consent.
+      void agentToolsHost?.consented(pluginId).catch(() => undefined)
+    },
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     carryPluginViewState: (pluginId, fromVersion, toVersion) =>
@@ -5746,21 +5798,6 @@ ipcMain.handle('git-accounts:getBinding', (event, workspacePath: string) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, accountId: getGitAccountsStore().getBinding(workspacePath) }
-  } catch (e) {
-    return { ok: false, error: String(e) }
-  }
-})
-
-ipcMain.handle('git-accounts:getCredential', (event, workspacePath: string) => {
-  // Sensitive: returns a decrypted PAT. Restrict to the top frame of a known
-  // app window so a sub-frame/iframe injected into rendered content can't call
-  // this to exfiltrate a token.
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win || !mainWindows.has(win) || event.senderFrame?.parent) {
-    return { ok: false, error: 'unauthorized' }
-  }
-  try {
-    return { ok: true, credential: getGitAccountsStore().getCredentialForWorkspace(workspacePath) }
   } catch (e) {
     return { ok: false, error: String(e) }
   }

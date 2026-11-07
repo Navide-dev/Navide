@@ -2040,7 +2040,7 @@
           "firstParty": "Cho phép agent gọi công cụ từ plugin Navide chính thức",
           "firstPartyDescription": "Bật theo mặc định. Cho phép agent trong pane gọi công cụ của plugin Navide chính thức, do Navide làm như Navide Browser, mà không hỏi cho từng phiên bản. Kết quả vẫn được đánh dấu là nội dung bên ngoài, và công cụ thay đổi thứ gì đó vẫn hỏi một lần cho mỗi không gian làm việc.",
           "enable": "Cho phép agent gọi công cụ từ plugin Navide của bên thứ ba",
-          "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc.",
+          "description": "Cho phép agent trong pane gọi công cụ do plugin Navide bạn đã cho phép khai báo; công cụ thay đổi tệp sẽ hỏi một lần cho mỗi không gian làm việc. Khi bạn chưa từng đặt nó ở đây, nó tự bật khi bạn cho phép một plugin Navide có thẻ đồng ý liệt kê công cụ; lựa chọn bạn đặt ở đây được giữ nguyên. Tắt ở đây để dừng mọi công cụ bên thứ ba cùng lúc.",
           "externalCallers": "Cho phép cả client MCP bên ngoài gọi chúng",
           "externalCallersDisclosure": "Các chương trình bên ngoài dùng chung một token, nên bản ghi một lệnh gọi chỉ có thể ghi là “một client bên ngoài”, không biết là chương trình nào. Thông tin xác thực của Host cũng được xử lý như vậy."
         },
@@ -2109,6 +2109,8 @@
       "builtinSwitchBusy": "Đang áp dụng… Navide để công việc hiện tại hoàn tất trước, với Plans có thể mất khoảng nửa phút.",
       "disabledBadge": "Đã tắt",
       "disabledNote": "Đã tắt: khung xem và backend của nó không chạy. Tệp, quyền và dữ liệu đã lưu được giữ lại.",
+      "networkStrict": "Chỉ cho phép các máy chủ mạng đã khai báo",
+      "networkStrictNote": "Tắt (mặc định): view có thể kết nối tới bất kỳ máy chủ nào; mỗi yêu cầu được ghi lại, và yêu cầu tới máy chủ mà manifest không khai báo sẽ được đánh dấu như vậy trong Hoạt động. Bật: chỉ các máy chủ đã khai báo, ở cả chính sách khung lẫn móc chặn yêu cầu; mọi thứ khác bị từ chối và ghi lại.",
       "digestBlock": {
         "blocked": "Bị Navide chặn",
         "security": "Bị Navide gỡ xuống (bảo mật)",
@@ -12138,13 +12140,15 @@
     "source": {
       "broker": "Khả năng của Navide",
       "shell": "lệnh shell",
-      "agentTool": "công cụ agent"
+      "agentTool": "công cụ agent",
+      "network": "mạng của chế độ xem"
     },
     "kind": {
       "system": "Quyền",
       "shell": "Shell",
       "backendMethod": "Phương thức backend gốc",
-      "agentTool": "Công cụ agent"
+      "agentTool": "Công cụ agent",
+      "networkHost": "Máy chủ mạng"
     },
     "reason": {
       "undeclared": "chưa khai báo"
@@ -12220,6 +12224,10 @@
     "commands": {
       "heading": "Lệnh đã chạy",
       "item": "{command} · {count} lần · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Máy chủ các chế độ xem đã kết nối",
+      "item": "{host} · {count} lần · {outcome} · {date}"
     },
     "trend": {
       "heading": "Số lần gọi mỗi ngày"
@@ -12308,6 +12316,7 @@
         "backendMethod": "Phương thức mã gốc: {key}",
         "backendEvent": "Sự kiện mã gốc: {key}",
         "network": "Có thể kết nối máy chủ từ xa qua các lệnh",
+        "networkHost": "Chế độ xem có thể kết nối tới: {key}",
         "agentTool": "Công cụ agent: {key}"
       }
     },
@@ -12327,7 +12336,8 @@
     "undeclared": {
       "shell": "Chạy {key}, nhưng không khai báo quyền shell",
       "shellDynamic": "Tạo lệnh lúc chạy, nhưng không khai báo quyền shell",
-      "shellExecutable": "Chạy {key}, nhưng phạm vi shell đã khai báo chỉ gồm git, gh và glab",
+      "shellExecutable": "Chạy {key}, không nằm trong phạm vi shell đã khai báo",
+      "networkHost": "Kết nối tới {key} nhưng không khai báo",
       "system": "Dùng {key}, nhưng không khai báo quyền đó",
       "fsScopeWrite": "Ghi {key}, nằm ngoài phạm vi ghi đã khai báo",
       "fsScopeRead": "Đọc {key}, nằm ngoài phạm vi đọc đã khai báo"
@@ -12335,7 +12345,8 @@
     "notSeenHeading": "Đã khai báo, nhưng quét tĩnh không tìm thấy",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (máy chủ đã khai báo)"
     },
     "scanHeading": "Lần quét lúc phát hành đã tìm thấy gì",
     "scanHeadingLocal": "Lần quét tệp này của Navide đã tìm thấy gì",
@@ -12353,8 +12364,8 @@
     "scannedLocally": "Lần quét chỉ cung cấp thông tin cho thẻ này; nó không bao giờ quyết định việc cài.",
     "limitsWithoutScan": "Phiên bản này không có lần quét hệ thống; nội dung trên chỉ là lời tự khai báo của plugin Navide này.",
     "limitsWithoutScanLocal": "Navide chưa quét tệp này; nội dung trên chỉ là lời tự khai báo của plugin Navide này.",
-    "viewNetwork": "Các chế độ xem của plugin Navide có thể truy cập mạng và hiển thị trang web bên ngoài ngay trong Navide; Navide không lọc hay ghi lại lưu lượng đó. Các mục mạng ở trên chỉ bao gồm lệnh và backend gốc của nó.",
-    "viewNetworkIfViews": "Nếu plugin Navide này có chế độ xem, chúng có thể truy cập mạng và hiển thị trang web bên ngoài ngay trong Navide; Navide không lọc hay ghi lại lưu lượng đó. Các mục mạng ở trên chỉ bao gồm lệnh và backend gốc của nó.",
+    "viewNetwork": "Các chế độ xem của plugin Navide này chỉ có thể kết nối tới các máy chủ nó khai báo (liệt kê ở trên; không có mục nào thì không kết nối được) và không hiển thị trang web bên ngoài. Navide ghi lại trong Hoạt động các máy chủ đã kết nối và các máy chủ bị từ chối. Các mục mạng ở trên bao gồm lệnh và backend gốc của nó.",
+    "viewNetworkIfViews": "Nếu plugin Navide này có chế độ xem, chúng chỉ có thể kết nối tới các máy chủ nó khai báo (liệt kê ở trên; không có mục nào thì không kết nối được) và không hiển thị trang web bên ngoài. Navide ghi lại trong Hoạt động các máy chủ đã kết nối và các máy chủ bị từ chối. Các mục mạng ở trên bao gồm lệnh và backend gốc của nó.",
     "summary": {
       "nativeBackend": "Kèm mã gốc (chạy trong sandbox)",
       "files": {
@@ -12372,7 +12383,7 @@
       "agentMessages": "Đọc toàn văn tin nhắn giữa các agent trong dự án này; nội dung có thể chứa mã, nội dung tệp hoặc bí mật",
       "ui": "Hiển thị chế độ xem riêng",
       "agentTools": "Cung cấp công cụ cho agent gọi ({read} chỉ đọc, {write} có ghi)",
-      "network": "Có thể dùng mạng",
+      "network": "Các chế độ xem của nó có thể kết nối tới: {hosts}",
       "noPermissions": "Không khai báo quyền nào"
     },
     "scan": {
@@ -12578,6 +12589,8 @@
       "no-key": "Được tạo khi bạn đăng nhập lần đầu với tư cách nhà phát hành",
       "key-registered": "Đã đăng ký",
       "key-unregistered": "Chưa đăng ký",
+      "key-conflict": "Registry đã có một khóa ký khác cho nhà phát hành này (vân tay {fingerprint}), thường là khóa bạn đã đăng ký cho công cụ xuất bản dòng lệnh. Để xuất bản từ Navide này cần thay khóa đó; công cụ dòng lệnh vẫn xuất bản được cho tới khi bạn thay.",
+      "replace-key": "Dùng khóa của Navide này thay thế",
       "expires": "Phiên đăng nhập hết hạn",
       "sign-in": "Đăng nhập bằng Navide Cloud",
       "sign-in-publish": "Đăng nhập với tư cách nhà phát hành",

@@ -1558,6 +1558,16 @@ describe('native backend consent text', () => {
     expect(nativeBackendConsentText(prompt, 'zh-TW').detail).toContain('它提供的方法：files.index、files.search。')
     expect(nativeBackendConsentText(prompt, 'ja-JP').detail).toContain('提供するメソッド：files.index、files.search。')
     expect(nativeBackendConsentText({ ...prompt, methods: [] }).detail).toContain('It declares no methods.')
+    // C3: a package that offers agent tools says that allowing it turns the switch on.
+    const withTools = {
+      ...prompt,
+      agentTools: [{ name: 'files_search', method: 'files.search', risk: 'read' as const, title: 'Search', description: 'Search files', timeoutMs: 30000, inputSchema: {} }],
+    }
+    expect(nativeBackendConsentText(withTools).detail).toContain('allowing turns it on')
+    expect(nativeBackendConsentText(withTools).detail).toContain('a setting you made there stays as you left it')
+    expect(nativeBackendConsentText(withTools, 'zh-TW').detail).toContain('允許會把它打開')
+    expect(nativeBackendConsentText(withTools, 'ja-JP').detail).toContain('許可と同時にオンになります')
+    expect(nativeBackendConsentText(prompt).detail).not.toContain('allowing turns it on')
   })
 
   it.each(['zh-TW', 'ja-JP'] as const)('localizes the whole dialog (%s) and keeps the shell disclosure honest', (locale) => {
