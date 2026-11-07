@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Enable {platform}",
     "bot": {
+      "sort-recent": "Recent",
+      "sort-name": "Name",
+      "group-workspace": "By workspace",
       "search-placeholder": "Search name, {'@'}handle, id, pane or workspace",
       "search-empty": "No bots match",
       "search-clear": "Clear",

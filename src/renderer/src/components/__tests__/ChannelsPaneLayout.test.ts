@@ -114,6 +114,7 @@ describe('ChannelsPane two columns', () => {
   })
 
   describe('search', () => {
+    afterEach(() => localStorage.clear())
     const many = () => {
       const target = account('bot-2e7877', '@NerdtechnicSalesBot', {
         status: { ...ready, identity: '@nt_test_bot', display_name: 'test' }, bot_id: '7421000',
@@ -164,6 +165,27 @@ describe('ChannelsPane two columns', () => {
       expect(activeKey(w)).toBe(keys(w)[0])
       await search(w).trigger('keydown', { key: 'ArrowDown' })
       expect(activeKey(w)).toBe(keys(w)[1])
+    })
+
+    it('lists the most recently active first, or by name, and groups by workspace', async () => {
+      const bound = (ws: string) => [{ pane_id: ws, pane_name: 'p', pane_exists: true, workspace_path: `/w/${ws}`,
+        workspace_name: ws, chat_title: '', created_at: 1 }]
+      const bots = [
+        account('bot-a', 'A', { status: { ...ready, identity: '@zeta_bot' }, last_activity_at: 100, bindings: bound('nt-notify-bridge') }),
+        account('bot-b', 'B', { status: { ...ready, identity: '@alpha_bot' }, last_activity_at: 300, bindings: [] }),
+        account('bot-c', 'C', { status: { ...ready, identity: '@mid_bot' }, last_activity_at: 200, bindings: bound('Agent-Team') }),
+        ...Array.from({ length: 3 }, (_, i) => account(`bot-x${i}`, `X${i}`, { status: { ...ready, identity: `@x${i}_bot` }, bindings: [] })),
+      ]
+      seed({ platforms: [platform('telegram', bots)] })
+      const w = await render()
+      expect(keys(w).slice(0, 3)).toEqual(['telegram:bot-b', 'telegram:bot-c', 'telegram:bot-a'])
+      await w.get('[data-testid="channel-nav-sort-name"]').trigger('click')
+      expect(keys(w).slice(0, 3)).toEqual(['telegram:bot-b', 'telegram:bot-c', 'telegram:bot-x0'])
+      await w.get('[data-testid="channel-nav-group-workspace"]').trigger('click')
+      expect(w.findAll('[data-testid="channel-nav-group"]').map((g) => g.text())).toEqual(['Agent-Team', 'nt-notify-bridge', 'Not linked'])
+      expect(keys(w).slice(0, 2)).toEqual(['telegram:bot-c', 'telegram:bot-a'])
+      expect(localStorage.getItem('navide.channels.navSort')).toBe('name')
+      expect(localStorage.getItem('navide.channels.navGroup')).toBe('workspace')
     })
 
     it('stays out of the way of a short list', async () => {

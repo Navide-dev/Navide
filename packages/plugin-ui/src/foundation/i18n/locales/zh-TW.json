@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "啟用 {platform}",
     "bot": {
+      "sort-recent": "最近活動",
+      "sort-name": "名稱",
+      "group-workspace": "依工作區",
       "search-placeholder": "搜尋名稱、{'@'}帳號、id、分格或工作區",
       "search-empty": "沒有符合的 bot",
       "search-clear": "清除",

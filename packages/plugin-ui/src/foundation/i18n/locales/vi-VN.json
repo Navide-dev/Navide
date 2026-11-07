@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Bật {platform}",
     "bot": {
+      "sort-recent": "Gần đây",
+      "sort-name": "Tên",
+      "group-workspace": "Theo workspace",
       "search-placeholder": "Tìm tên, {'@'}tài khoản, id, pane hoặc workspace",
       "search-empty": "Không có bot phù hợp",
       "search-clear": "Xóa",

@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "{platform} 사용",
     "bot": {
+      "sort-recent": "최근 활동",
+      "sort-name": "이름",
+      "group-workspace": "작업 영역별",
       "search-placeholder": "이름, {'@'}핸들, id, pane, 작업 영역 검색",
       "search-empty": "일치하는 bot이 없어요",
       "search-clear": "지우기",

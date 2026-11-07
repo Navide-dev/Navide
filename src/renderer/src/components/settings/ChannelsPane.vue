@@ -26,7 +26,7 @@ import { relativeTime } from '../../lib/relativeTime'
 import { channelBotSearchFields } from '../../lib/channelSearch'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
-import ChannelBotNav, { type ChannelNavGroup, type ChannelNavItem } from './ChannelBotNav.vue'
+import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -647,6 +647,36 @@ function onPaneKey(e: KeyboardEvent): void {
   botNav.value?.focusSearch()
 }
 
+// How the list is ordered and grouped, remembered on this machine.
+const NAV_SORT_KEY = 'navide.channels.navSort'
+const NAV_GROUP_KEY = 'navide.channels.navGroup'
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+const navSort = ref<ChannelNavSort>(readPref(NAV_SORT_KEY, ['recent', 'name'] as const, 'recent'))
+const navGrouping = ref<ChannelNavGrouping>(readPref(NAV_GROUP_KEY, ['none', 'workspace'] as const, 'none'))
+watch(navSort, (v) => { try { localStorage.setItem(NAV_SORT_KEY, v) } catch { /* this session only */ } })
+watch(navGrouping, (v) => { try { localStorage.setItem(NAV_GROUP_KEY, v) } catch { /* this session only */ } })
+
+/** Most recently active first (never active last), or by name; a bot being added stays last. */
+function sortBots(bots: BotRow[], items: Map<string, ChannelNavItem>): BotRow[] {
+  const byRecent = (a: BotRow, b: BotRow) => (b.last_activity_at ?? 0) - (a.last_activity_at ?? 0)
+  const byName = (a: BotRow, b: BotRow) => (items.get(a.key)?.name ?? '').localeCompare(items.get(b.key)?.name ?? '')
+  const set = bots.filter((b) => !b.isNew)
+  return [...set.sort(navSort.value === 'name' ? byName : byRecent), ...bots.filter((b) => b.isNew)]
+}
+
+/** The workspace a bot is listed under: that of its newest binding; '' when unbound. */
+function botWorkspace(bot: BotRow): string {
+  const newest = [...(bot.bindings ?? [])].sort((a, b) => b.created_at - a.created_at)[0]
+  return newest ? newest.workspace_name || newest.workspace_path : ''
+}
+
 const navGroups = computed<ChannelNavGroup[]>(() => {
   const groups = specs.value
     .map((spec) => ({
@@ -655,11 +685,24 @@ const navGroups = computed<ChannelNavGroup[]>(() => {
     }))
     .filter((g) => g.bots.length)
   const named = groups.length > 1
-  const list: ChannelNavGroup[] = groups.map(({ spec, bots }) => ({
-    id: spec.id,
-    label: named ? platformName(spec.id) : '',
-    items: bots.map((b) => navItem(spec, b)),
-  }))
+  const list: ChannelNavGroup[] = groups.flatMap(({ spec, bots }) => {
+    const items = new Map(bots.map((b) => [b.key, navItem(spec, b)]))
+    const sorted = sortBots(bots, items)
+    const platformLabel = named ? platformName(spec.id) : ''
+    if (navGrouping.value !== 'workspace') {
+      return [{ id: spec.id, label: platformLabel, items: sorted.map((b) => items.get(b.key)!) }]
+    }
+    // Platform outside, workspace inside; the unbound ones last.
+    const byWorkspace = new Map<string, BotRow[]>()
+    for (const b of sorted) byWorkspace.set(botWorkspace(b), [...(byWorkspace.get(botWorkspace(b)) ?? []), b])
+    const names = [...byWorkspace.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))
+    if (byWorkspace.has('')) names.push('')
+    return names.map((ws) => ({
+      id: `${spec.id}:${ws}`,
+      label: [platformLabel, ws || t('channels.bot.flag-unbound')].filter(Boolean).join(' · '),
+      items: byWorkspace.get(ws)!.map((b) => items.get(b.key)!),
+    }))
+  })
   if (hasOrphans.value) {
     list.push({
       id: ORPHAN_VIEW,
@@ -763,6 +806,8 @@ function removeEntry(entry: ChannelAllowEntry): void {
         ref="botNav"
         class="ch-layout-nav"
         :groups="navGroups"
+        v-model:sort="navSort"
+        v-model:grouping="navGrouping"
         :searchable="searchable"
         :active="activeView"
         :add-active="activeView === ADD_VIEW"

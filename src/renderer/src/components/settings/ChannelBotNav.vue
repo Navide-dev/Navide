@@ -28,6 +28,9 @@ export interface ChannelNavItem {
   botId?: string
 }
 
+export type ChannelNavSort = 'recent' | 'name'
+export type ChannelNavGrouping = 'none' | 'workspace'
+
 /** The bots of one platform; `label` is '' while there is only one platform to tell apart. */
 export interface ChannelNavGroup {
   id: string
@@ -52,6 +55,9 @@ const emit = defineEmits<{
   select: [key: string]
   add: []
 }>()
+
+const sort = defineModel<ChannelNavSort>('sort', { default: 'recent' })
+const grouping = defineModel<ChannelNavGrouping>('grouping', { default: 'none' })
 
 const { t } = useI18n()
 
@@ -129,6 +135,26 @@ watch(() => props.active, async (key) => {
         @keydown="onSearchKey"
       />
       <span v-if="query.trim()" class="ch-nav-search-count" data-testid="channel-nav-search-count">{{ shownItems.length }} / {{ total }}</span>
+    </div>
+    <div v-if="searchable" class="ch-nav-tools" data-testid="channel-nav-tools">
+      <button
+        v-for="mode in (['recent', 'name'] as const)"
+        :key="mode"
+        type="button"
+        class="ch-nav-chip"
+        :class="{ on: sort === mode }"
+        :aria-pressed="sort === mode"
+        :data-testid="`channel-nav-sort-${mode}`"
+        @click="sort = mode"
+      >{{ t(`channels.bot.sort-${mode}`) }}</button>
+      <button
+        type="button"
+        class="ch-nav-chip"
+        :class="{ on: grouping === 'workspace' }"
+        :aria-pressed="grouping === 'workspace'"
+        data-testid="channel-nav-group-workspace"
+        @click="grouping = grouping === 'workspace' ? 'none' : 'workspace'"
+      >{{ t('channels.bot.group-workspace') }}</button>
     </div>
     <div v-if="searchable && query.trim() && !shownItems.length" class="ch-nav-empty" data-testid="channel-nav-search-empty">
       <span>{{ t('channels.bot.search-empty') }}</span>
@@ -269,6 +295,19 @@ watch(() => props.active, async (key) => {
   font-size: var(--font-xs);
 }
 .ch-nav-search-input:focus { outline: none; border-color: var(--accent-muted); }
+.ch-nav-tools { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px 2px; }
+.ch-nav-chip {
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-2xs);
+  line-height: 18px;
+  cursor: pointer;
+}
+.ch-nav-chip.on { border-color: var(--accent-muted); background: var(--accent-subtle); color: var(--accent-fg); }
 .ch-nav-search-count { flex-shrink: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
 .ch-nav-empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px; font-size: var(--font-xs); color: var(--text-secondary); }
 .ch-nav-empty-clear { border: none; background: transparent; color: var(--accent-fg); font: inherit; cursor: pointer; padding: 0; }

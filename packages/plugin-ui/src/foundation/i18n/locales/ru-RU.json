@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Включить {platform}",
     "bot": {
+      "sort-recent": "Недавние",
+      "sort-name": "Имя",
+      "group-workspace": "По рабочим областям",
       "search-placeholder": "Поиск по имени, {'@'}нику, id, панели или рабочей области",
       "search-empty": "Нет подходящих ботов",
       "search-clear": "Очистить",

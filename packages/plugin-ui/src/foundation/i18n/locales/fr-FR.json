@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Activer {platform}",
     "bot": {
+      "sort-recent": "Récents",
+      "sort-name": "Nom",
+      "group-workspace": "Par espace de travail",
       "search-placeholder": "Rechercher un nom, {'@'}identifiant, id, pane ou espace de travail",
       "search-empty": "Aucun bot ne correspond",
       "search-clear": "Effacer",

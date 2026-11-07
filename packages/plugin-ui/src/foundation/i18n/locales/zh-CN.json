@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "激活 {platform}",
     "bot": {
+      "sort-recent": "最近活动",
+      "sort-name": "名称",
+      "group-workspace": "按工作区",
       "search-placeholder": "搜索名称、{'@'}账号、id、分格或工作区",
       "search-empty": "没有符合的 bot",
       "search-clear": "清除",

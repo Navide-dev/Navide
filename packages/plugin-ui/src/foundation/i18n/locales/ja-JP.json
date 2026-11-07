@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "{platform} を有効化",
     "bot": {
+      "sort-recent": "最近の活動",
+      "sort-name": "名前",
+      "group-workspace": "ワークスペース別",
       "search-placeholder": "名前、{'@'}ハンドル、id、pane、ワークスペースで検索",
       "search-empty": "一致する bot はありません",
       "search-clear": "クリア",
