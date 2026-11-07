@@ -44,11 +44,12 @@ def test_schema_goes_through_migrate_with_indexes(tmp_path: Path) -> None:
     db = Database(tmp_path / "navide.db")
     CostLedger(db)
     CostLedger(db)  # second open is a no-op step
-    assert db.schema_version("cost_ledger") == 2
+    assert db.schema_version("cost_ledger") == 3
     with db.transaction() as cur:
         names = {r["name"] for r in cur.execute("SELECT name FROM sqlite_master")}
     assert {"usage_calls", "usage_daily", "usage_calls_ts", "usage_calls_cwd_ts",
-            "usage_calls_session", "pane_sessions", "pane_sessions_session"} <= names
+            "usage_calls_session", "pane_sessions", "pane_sessions_session",
+            "usage_calls_profile_ts"} <= names
 
 
 def test_claude_call_splits_tokens_and_uses_transcript_cwd(
@@ -144,9 +145,10 @@ async def test_sink_records_ledger_and_survives_ledger_failure(
     monkeypatch.setattr(app, "_schedule_tokens_broadcast", lambda _ws: None)
 
     [ev] = ClaudeLogReader().parse_incremental(session, {}).events
+    monkeypatch.setattr(app.pane_account_history, "profile_at", lambda *_a: "acc" + "-7")
     result = await app._on_log_token_usage(ev)
     assert result.handled is True
-    assert [r["dedup_key"] for r in _rows(db)] == ["m9::r9"]
+    assert [(r["dedup_key"], r["profile_id"]) for r in _rows(db)] == [("m9::r9", "acc-7")]
 
     @contextmanager
     def broken():
@@ -309,3 +311,103 @@ def test_pane_reconciliation_lists_only_the_panes_that_disagree(tmp_path: Path) 
     report = ledger.report("pane", pricing=_pricing())
     assert report["differences"] == [{"pane": "02:qa", "tagged_tokens": 10, "session_tokens": 15}]
     assert ledger.report("pane", pane="01:dev", pricing=_pricing())["differences"] == []
+
+
+# ── account (profile_id, schema 3) ─────────────────────────────────────────
+
+
+def _profile_path(root: str, slot: str, sep: str = "/") -> str:
+    return sep.join([root, ".navide", "cli-profiles", "claude", slot, "config-dir",
+                     "projects", "-w", "s.jsonl"])
+
+
+def test_v2_to_v3_backfills_profile_from_log_path_for_30_days(tmp_path: Path) -> None:
+    import time as _time
+
+    db = Database(tmp_path / "navide.db")
+    db.migrate("cost_ledger", 1, cost_ledger._create_schema_v1)
+    db.migrate("cost_ledger", 2, cost_ledger._create_schema_v2)
+    now = int(_time.time())
+    day = 86400
+    slot_a, slot_b, slot_c = "a1" + "b2c3d4", "0f" + "0f0f0f", "9e" + "9e9e9e"
+    old_rows = [
+        ("recent", "claude", now - 2 * day, _profile_path("/Users/me", slot_a)),
+        ("deleted", "claude", now - 3 * day, _profile_path("/Users/me", slot_b + ".deleted-1784968180034567000")),
+        ("windows", "claude", now - 4 * day, _profile_path("C:\\Users\\me", slot_c, "\\")),
+        ("too-old", "claude", now - 40 * day, _profile_path("/Users/me", slot_a)),
+        ("live-login", "claude", now - day, "/Users/me/.claude/projects/-w/s.jsonl"),
+        ("other-vendor", "codex", now - day, _profile_path("/Users/me", slot_a)),
+    ]
+    with db.transaction() as cur:
+        for key, vendor, ts, src in old_rows:
+            cur.execute(
+                "INSERT INTO usage_calls VALUES (?, ?, 's', '/w', '', '', 'm', ?, 1, 0, 0, 0, 1, ?)",
+                (vendor, key, ts, src),
+            )
+    CostLedger(db)
+    assert db.schema_version("cost_ledger") == 3
+    with db.transaction() as cur:
+        got = dict(cur.execute("SELECT dedup_key, profile_id FROM usage_calls").fetchall())
+        daily = cur.execute("SELECT profile_id, SUM(calls) AS c FROM usage_daily"
+                            " GROUP BY profile_id ORDER BY profile_id").fetchall()
+    assert got == {"recent": slot_a, "deleted": slot_b, "windows": slot_c,
+                   "too-old": "", "live-login": "", "other-vendor": ""}
+    assert {r["profile_id"]: r["c"] for r in daily} == {"": 3, slot_a: 1, slot_b: 1, slot_c: 1}
+
+
+def test_record_stores_profile_and_unknown_is_blank(tmp_path: Path) -> None:
+    db = Database(tmp_path / "navide.db")
+    ledger = CostLedger(db)
+    ledger.record(_call("k1", "s1"), "/w", "01:dev", "acc-1")
+    ledger.record(_call("k2", "s2"), "/w", "01:dev", "unknown")
+    ledger.record(_call("k3", "s3"), "/w", "01:dev")
+    assert {r["session_id"]: r["profile_id"] for r in _rows(db)} == {"s1": "acc-1", "s2": "", "s3": ""}
+
+
+def test_record_many_reads_profile_off_the_log_path(tmp_path: Path) -> None:
+    db = Database(tmp_path / "navide.db")
+    ledger = CostLedger(db)
+    ev = TokenUsage(vendor="claude", input_tokens=3, output_tokens=1, cwd="/w", session_id="s",
+                    file_path=_profile_path("/Users/me", "acc-2"), dedup_key="m1::r1")
+    plain = TokenUsage(vendor="claude", input_tokens=3, output_tokens=1, cwd="/w", session_id="s",
+                       file_path="/Users/me/.claude/projects/-w/s.jsonl", dedup_key="m2::r2")
+    ledger.record_many([ev, plain])
+    assert {r["dedup_key"]: r["profile_id"] for r in _rows(db)} == {"m1::r1": "acc-2", "m2::r2": ""}
+
+
+def test_codex_totals_update_keeps_its_profile(tmp_path: Path) -> None:
+    from agent_team_backend.cli_vendors.codex import CodexLogReader
+
+    rollout = tmp_path / "rollout-2026-11-05T02-00-00-cx1.jsonl"
+    reader = CodexLogReader()
+    db = Database(tmp_path / "navide.db")
+    ledger = CostLedger(db)
+    _codex_rollout(rollout, [(1000, 600, 50)])
+    first = reader.parse_incremental(rollout, {})
+    for ev in first.events:
+        ledger.record(ev, "/ws", "pane-1", "acc-3")
+    _codex_rollout(rollout, [(1000, 600, 50), (2500, 1800, 90)])
+    for ev in reader.parse_incremental(rollout, first.checkpoint).events:
+        ledger.record(ev, "", "", "")
+    [row] = _rows(db)
+    assert (row["output"], row["profile_id"]) == (90, "acc-3")
+
+
+def test_report_by_account_and_model_account(tmp_path: Path) -> None:
+    ledger = CostLedger(Database(tmp_path / "navide.db"))
+    ledger.record(_call("k1", "s1", inp=1_000_000), "/w", "01:dev", "acc-1")
+    ledger.record(_call("k2", "s2", inp=1_000_000), "/w", "01:dev", "acc-1")
+    ledger.record(_call("k3", "s3", model="gpt-x"), "/w", "02:qa", "acc-1")
+    ledger.record(_call("k4", "s4", inp=1_000_000), "/w", "02:qa", "")
+
+    by_account = {g["key"]: (g["calls"], g["usd"], g["unpriced_calls"])
+                  for g in ledger.report("account", pricing=_pricing())["groups"]}
+    assert by_account == {"acc-1": (3, 10.0, 1), "": (1, 5.0, 0)}
+
+    groups = ledger.report("model_account", pricing=_pricing())["groups"]
+    cross = {(g["model"], g["account"]): (g["key"], g["calls"]) for g in groups}
+    assert cross == {
+        ("claude-opus-5-5", "acc-1"): ("claude-opus-5-5::acc-1", 2),
+        ("gpt-x", "acc-1"): ("gpt-x::acc-1", 1),
+        ("claude-opus-5-5", ""): ("claude-opus-5-5::", 1),
+    }

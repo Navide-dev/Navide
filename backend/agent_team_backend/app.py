@@ -2338,7 +2338,8 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
         # Never raises and does not feed `handled`: the ledger must not change
         # what tokens_store records or how its checkpoint advances.
         cost_ledger.record(
-            usage, workspace_path, attributed.slot_key or attributed.pane_id or ""
+            usage, workspace_path, attributed.slot_key or attributed.pane_id or "",
+            usage.profile_id,
         )
         # The watcher just told us this session's log grew — the cheapest and
         # most timely rescan trigger there is, since it already carries the
