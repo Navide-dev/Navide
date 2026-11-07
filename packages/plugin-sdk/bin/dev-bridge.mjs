@@ -80,10 +80,37 @@ const UNSAFE_CORE_KEYS = new Set([
   'fsmonitor', 'hookspath', 'sshcommand', 'gitproxy', 'worktree', 'editor', 'pager', 'askpass', 'attributesfile',
   'alternaterefscommand', 'excludesfile',
 ])
+/** Whole config sections that select programs, credentials, transports or signing. */
+const UNSAFE_SECTIONS = new Set([
+  'include', 'includeif', 'alias', 'credential', 'filter', 'gpg', 'protocol', 'ssh', 'safe', 'sendemail', 'submodule',
+  'interactive', 'pager', 'mergetool', 'difftool', 'uploadpack', 'receive',
+])
+const UNSAFE_KEYS = new Set([
+  'init.templatedir', 'gc.recentobjectshook', 'push.gpgsign', 'commit.gpgsign', 'tag.gpgsign', 'log.showsignature',
+  'sequence.editor', 'diff.external',
+])
+/** `section.<subsection>.key` tails that select a program or rewrite a remote. */
+const UNSAFE_SUBSECTION_KEYS = new Set([
+  'diff.command', 'diff.textconv', 'merge.driver', 'remote.uploadpack', 'remote.receivepack', 'remote.proxy', 'remote.vcs',
+  'url.insteadof', 'url.pushinsteadof',
+])
+
+/** The git argv and environment the Host broker runs git with: signing,
+ *  hooks, helpers and transports off, and the repository discovery stopped at
+ *  the workspace (no implicit bare repository above or at the root). */
+export const PUBLIC_GIT_OVERRIDES = [
+  '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.sshCommand=', '-c', 'credential.helper=',
+  '-c', 'protocol.ext.allow=never', '-c', 'core.gitProxy=', '-c', 'safe.bareRepository=explicit',
+  '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', '-c', 'log.showSignature=false',
+  '-c', 'gpg.program=false', '-c', 'gpg.ssh.program=false', '-c', 'gpg.x509.program=false',
+]
 
 /** git_security.assert_public_git_config_safe: refuse a workspace Git config
  *  that selects a program (global and system config are off for the run).
- *  Unknown structure is refused rather than interpreted. */
+ *  git parses the files itself (`git config --file … --list -z`, includes
+ *  not followed), so no second parser can read them differently; a config
+ *  git cannot read, or a missing git, refuses. The list is at least as
+ *  strict as the Host's. */
 export function assertPublicGitConfigSafe(cwd, workspaceRoot) {
   const refuse = () => new DevBridgeError('CAPABILITY_DENIED', 'policy', 'command is not permitted by the public shell policy')
   const root = realpathSync(workspaceRoot)
@@ -109,6 +136,8 @@ export function assertPublicGitConfigSafe(cwd, workspaceRoot) {
     if (dir === root) break
     dir = dirname(dir)
   }
+  // A workspace that is itself a bare repository (HEAD and config at the root).
+  if (!gitDir && existsSync(join(root, 'HEAD')) && existsSync(join(root, 'config'))) gitDir = root
   if (!gitDir) return
   const configs = [join(gitDir, 'config'), join(gitDir, 'config.worktree')]
   const commondir = join(gitDir, 'commondir')
@@ -120,27 +149,22 @@ export function assertPublicGitConfigSafe(cwd, workspaceRoot) {
   for (const path of new Set(configs)) {
     if (!existsSync(path)) continue
     if (statSync(path).size > 1024 * 1024) throw refuse()
-    let section = ''
-    for (const rawLine of readFileSync(path, 'utf8').split(/\r?\n/)) {
-      const line = rawLine.trim()
-      if (!line || line.startsWith('#') || line.startsWith(';')) continue
-      const header = /^\[([^\]]*)\]$/.exec(line)
-      if (header) {
-        section = header[1].trim().toLowerCase().split(/\s+/)[0]
-        if (section === 'include' || section.startsWith('includeif')) throw refuse()
-        continue
-      }
-      const eq = line.indexOf('=')
-      const key = (eq === -1 ? line : line.slice(0, eq)).trim().toLowerCase()
-      if (/\s/.test(key)) throw refuse()
-      if (section === 'core' && UNSAFE_CORE_KEYS.has(key)) throw refuse()
-      if (section === 'init' && key === 'templatedir') throw refuse()
-      if (section === 'gc' && key === 'recentobjectshook') throw refuse()
-      if (section === 'push' && key === 'gpgsign') throw refuse()
-      if (section === 'sequence' && key === 'editor') throw refuse()
-      if (['alias', 'credential', 'filter', 'diff', 'merge', 'mergetool', 'difftool', 'uploadpack', 'receive', 'remote', 'url', 'protocol', 'ssh'].includes(section) &&
-        /^(helper|external|textconv|command|cmd|driver|clean|smudge|process|uploadpack|receivepack|proxy|vcs|insteadof|pushinsteadof|allow|packobjectshook|.*hook)$/.test(key)) throw refuse()
-      if (section === 'alias') throw refuse()
+    const listed = spawnSync('git', ['config', '--file', path, '--list', '-z'], {
+      encoding: 'utf8', timeout: 5_000, shell: false,
+      env: { PATH: process.env.PATH ?? '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null', GIT_TERMINAL_PROMPT: '0' },
+    })
+    if (listed.status !== 0) throw refuse()
+    for (const entry of (listed.stdout ?? '').split('\0')) {
+      if (!entry) continue
+      const fullKey = entry.split('\n')[0]
+      const parts = fullKey.split('.')
+      if (parts.length < 2) throw refuse()
+      const section = parts[0].toLowerCase()
+      const key = parts[parts.length - 1].toLowerCase()
+      if (UNSAFE_SECTIONS.has(section)) throw refuse()
+      if (section === 'core' && parts.length === 2 && UNSAFE_CORE_KEYS.has(key)) throw refuse()
+      if (parts.length === 2 && UNSAFE_KEYS.has(`${section}.${key}`)) throw refuse()
+      if (parts.length >= 3 && UNSAFE_SUBSECTION_KEYS.has(`${section}.${key}`)) throw refuse()
     }
   }
 }
@@ -351,10 +375,8 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
         VISUAL: 'true',
       }
       if (argv[0] === 'git') {
-        command = [
-          'git', '-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${hooks}`, '-c', 'diff.external=', '-c', 'core.sshCommand=',
-          '-c', 'credential.helper=', '-c', 'protocol.ext.allow=never', '-c', 'core.gitProxy=', ...argv.slice(1),
-        ]
+        command = ['git', ...PUBLIC_GIT_OVERRIDES, '-c', `core.hooksPath=${hooks}`, ...argv.slice(1)]
+        env.GIT_CEILING_DIRECTORIES = dirname(cwd)
       } else if (providerAuth) {
         const userConfig = argv[0] === 'gh' ? (process.env.GH_CONFIG_DIR ?? join(xdgConfigHome(), 'gh')) : (process.env.GLAB_CONFIG_DIR ?? join(xdgConfigHome(), 'glab-cli'))
         if (argv[0] === 'gh') env.GH_CONFIG_DIR = userConfig

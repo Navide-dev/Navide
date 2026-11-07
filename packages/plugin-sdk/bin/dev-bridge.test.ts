@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 // @ts-expect-error - plain ESM module without type declarations
-import { createDevBridge } from './dev-bridge.mjs'
+import { PUBLIC_GIT_OVERRIDES, assertPublicGitConfigSafe, createDevBridge } from './dev-bridge.mjs'
 // @ts-expect-error - plain ESM module without type declarations
 import { parseCommand, validatePublicArgv } from './dev-shell-policy.mjs'
 
@@ -160,11 +160,13 @@ describe('dev-bridge execution hardening (security review of eeb2b0896)', () => 
     try {
       await expect(bridge.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
       const argv = readFileSync(spyOut, 'utf8').trim().split('\n')
-      expect(argv.slice(1)).toEqual(['-c', 'core.fsmonitor=false', '-c', expect.stringMatching(/^core\.hooksPath=/), '-c', 'diff.external=', '-c', 'core.sshCommand=', '-c', 'credential.helper=', '-c', 'protocol.ext.allow=never', '-c', 'core.gitProxy=', 'status'])
+      expect(argv.slice(1)).toEqual([...PUBLIC_GIT_OVERRIDES, '-c', expect.stringMatching(/^core\.hooksPath=/), 'status'])
+      expect(PUBLIC_GIT_OVERRIDES).toEqual(expect.arrayContaining(['safe.bareRepository=explicit', 'commit.gpgsign=false', 'gpg.program=false', 'credential.helper=']))
       const env = Object.fromEntries(readFileSync(`${spyOut}.env`, 'utf8').trim().split('\n').map((line) => line.split(/=(.*)/s).slice(0, 2) as [string, string]))
       expect(env.GIT_CONFIG_GLOBAL).toBe('/dev/null')
       expect(env.GIT_CONFIG_NOSYSTEM).toBe('1')
       expect(env.GIT_TERMINAL_PROMPT).toBe('0')
+      expect(env.GIT_CEILING_DIRECTORIES).toBe(dirname(root))
       expect(env.HOME).not.toBe(process.env.HOME)
       expect(env.NAVIDE_SPY_MARK).toBeUndefined()
       expect(existsSync(env.HOME)).toBe(false) // the throw-away home is removed after the run
@@ -194,7 +196,13 @@ describe('dev-bridge execution hardening (security review of eeb2b0896)', () => 
       runShell: () => { throw new Error('must not run') },
     })
     await expect(bridge.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ error: { code: 'CAPABILITY_DENIED', reason: 'policy' } })
-    writeFileSync(join(root, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n')
+    // git parses the file, so a spelling a hand parser could miss is still caught.
+    for (const text of ['[gpg "ssh"]\n\tprogram = /tmp/x\n', '[filter "lfs"]\n\tprocess = evil\n', '[include]\n\tpath = /tmp/x\n', '[diff "x"]\n\ttextconv = cat\n', '[alias]\n\tst = !sh\n', '[url "https://evil/"]\n\tinsteadOf = https://github.com/\n', '[core]\nhooksPath=/tmp/x\n']) {
+      writeFileSync(join(root, '.git', 'config'), text)
+      expect(() => assertPublicGitConfigSafe(root, root), text).toThrow('public shell policy')
+    }
+    writeFileSync(join(root, '.git', 'config'), '[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote "origin"]\n\turl = https://github.com/x/y.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n')
+    expect(() => assertPublicGitConfigSafe(root, root)).not.toThrow()
     const ran = createDevBridge({ manifest: manifest({ system: ['fs'], shell: 'allowlist' }), workspaceRoot: root, runShell: () => ({ exitCode: 0, stdout: '', stderr: '' }) })
     await expect(ran.handle(request('shell', 'run', { command: 'git status' }))).resolves.toMatchObject({ value: { exitCode: 0 } })
 
