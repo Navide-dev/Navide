@@ -93,16 +93,40 @@ def test_subagent_transcripts_follow_their_own_cwd(attribution, reader) -> None:
     assert attribution.attribute(_usage(path)).workspace_path == SECOND
 
 
-def test_a_session_of_neither_workspace_is_still_counted(attribution, reader) -> None:
-    """A third folder of the same length that was never opened: dropping it would
-    take the usage out of the account totals too, so it stays where it went."""
+def test_a_session_of_neither_workspace_counts_only_globally(attribution, reader) -> None:
+    """A third folder of the same length that was never opened belongs to neither
+    workspace. Dropping it would take the usage out of the account totals too."""
     path = _session(reader, FIRST, "third", cwd="/Users/x/Desktop/另一個七字資料夾")
-    assert attribution.attribute(_usage(path)).workspace_path == FIRST
+    attributed = attribution.attribute(_usage(path))
+    assert attributed.workspace_path is None
+    assert attributed.global_only
 
 
-def test_a_transcript_with_no_cwd_is_still_counted(attribution, reader) -> None:
+def test_a_neighbour_next_to_a_lone_workspace_counts_only_globally(tmp_path, reader) -> None:
+    """Only one of the two colliding folders was ever opened: its neighbour's
+    sessions are not its usage."""
+    attr = Attribution([reader], workspaces_path=tmp_path / "lone-workspaces.json")
+    attr.register_workspace(FIRST)
+    mine = _session(reader, FIRST, "mine")
+    theirs = _session(reader, SECOND, "theirs")
+    assert attr.attribute(_usage(mine)).workspace_path == FIRST
+    attributed = attr.attribute(_usage(theirs))
+    assert attributed.workspace_path is None
+    assert attributed.global_only
+
+
+def test_a_transcript_with_no_cwd_is_unattributed_between_two(attribution, reader) -> None:
+    """Two workspaces share the folder and the file names neither: picking one
+    would be a guess."""
     path = _session(reader, SECOND, "bare", cwd="")
-    assert attribution.attribute(_usage(path)).workspace_path == FIRST
+    attributed = attribution.attribute(_usage(path))
+    assert attributed.workspace_path is None
+    assert attributed.global_only
+
+
+def test_a_transcript_with_no_cwd_stays_on_a_lone_workspace(attribution, reader) -> None:
+    path = _session(reader, LONE, "bare", cwd="")
+    assert attribution.attribute(_usage(path)).workspace_path == LONE
 
 
 def test_the_owning_panes_workspace_wins(attribution, reader) -> None:
@@ -112,11 +136,13 @@ def test_the_owning_panes_workspace_wins(attribution, reader) -> None:
     assert attribution.attribute(_usage(path)).workspace_path == SECOND
 
 
-def test_a_path_with_one_workspace_never_opens_the_file(attribution, reader) -> None:
+def test_a_path_with_one_workspace_opens_the_file_once(attribution, reader) -> None:
+    """A never-opened neighbour can share even a lone workspace's folder, so the
+    transcript is read — once, then cached."""
     path = _session(reader, LONE, "lone")
     for i in range(5):
         assert attribution.attribute(_usage(path, str(i))).workspace_path == LONE
-    assert reader.opened == []
+    assert len(reader.opened) == 1
 
 
 def test_a_colliding_file_is_opened_once(attribution, reader) -> None:
@@ -128,7 +154,17 @@ def test_a_colliding_file_is_opened_once(attribution, reader) -> None:
 
 def test_an_outside_session_stays_outside(attribution, reader) -> None:
     path = _session(reader, "/Users/x/Desktop/elsewhere", "out")
-    assert attribution.attribute(_usage(path)).workspace_path is None
+    attributed = attribution.attribute(_usage(path))
+    assert attributed.workspace_path is None
+    assert not attributed.global_only
+
+
+def test_cwd_comes_from_the_transcript_not_the_folder_name(reader) -> None:
+    """Reversing the folder name turns every Chinese character into "/"."""
+    path = _session(reader, SECOND, "named")
+    assert reader.cwd_from_file(path) == SECOND
+    bare = _session(reader, SECOND, "bare", cwd="")
+    assert reader.cwd_from_file(bare) == encode_claude_cwd(SECOND).replace("-", "/")
 
 
 def test_totals_and_accounts_only_move_between_workspaces(tmp_path, attribution, reader) -> None:

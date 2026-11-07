@@ -4,6 +4,15 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+<<<<<<< HEAD
+=======
+### Fixed
+
+- Tokens (0.2.39): two workspaces whose folder names Claude Code files under the same project folder (two Chinese names of the same length, such as AI建模 and AI電商) no longer count each other's Claude usage, even when only one of them is open in Navide. Each Claude session now goes to the workspace its transcript says it ran in. A session that ran in a folder never opened in Navide, or that names no folder while several workspaces share the project folder, counts in the global and account totals and in no workspace. Numbers recorded before the update are not recalculated. The folder Navide reports for a Claude session also comes from its transcript, instead of being guessed from the project folder name.
+
+## [0.2.38] — 2026-11-07
+
+>>>>>>> origin/fix/project-dir-collision-0239
 ### Added
 
 - Navide (0.2.39): a per-call usage ledger in `navide.db` keeps each model call's session, working directory, model and uncached input, cache read, cache write and output tokens (one running total per session for Codex), so AI cost can be computed and re-priced from the ledger after the CLI's own session logs are gone.
