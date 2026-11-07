@@ -367,3 +367,42 @@ def test_manifest_v2_duplicate_key_fixture_rejected_before_validation() -> None:
 def test_manifest_v2_bom_fixture_rejected_before_validation() -> None:
     with pytest.raises(json.JSONDecodeError, match="BOM"):
         _read_strict(_read_fixture("invalid-raw", "manifest-utf8-bom.json"))
+
+
+# -- permissions.network (PR C1) ----------------------------------------------
+
+
+def test_manifest_v2_network_hosts_are_accepted_as_declared() -> None:
+    m = parse_manifest(contract_manifest("network-hosts.json"))
+    assert m.permissions.network is not None
+    assert m.permissions.network.hosts == ["api.github.com", "*.example.com", "localhost"]
+
+
+@pytest.mark.parametrize(
+    "hosts",
+    [
+        ["https://api.github.com"],  # a scheme
+        ["api.github.com:443"],  # a port
+        ["Api.GitHub.com"],  # upper case
+        ["*"],  # a bare wildcard
+        ["api.github.com", "api.github.com"],  # a duplicate
+        [],  # nothing declared
+        [f"h{i}.example.com" for i in range(33)],  # over the maximum
+    ],
+)
+def test_manifest_v2_network_hosts_rejected(hosts: list[str]) -> None:
+    manifest = contract_manifest("network-hosts.json")
+    manifest["permissions"]["network"] = {"hosts": hosts}
+    with pytest.raises(ManifestError, match="network"):
+        parse_manifest(manifest)
+
+
+def test_manifest_v2_network_rejects_unknown_keys_and_extension_packs() -> None:
+    manifest = contract_manifest("network-hosts.json")
+    manifest["permissions"]["network"] = {"hosts": ["api.github.com"], "ports": [443]}
+    with pytest.raises(ManifestError, match="network"):
+        parse_manifest(manifest)
+    pack = contract_manifest("extension-pack.json")
+    pack["permissions"] = {"network": {"hosts": ["api.github.com"]}}
+    with pytest.raises(ManifestError, match="permissions"):
+        parse_manifest(pack)

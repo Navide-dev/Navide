@@ -12117,13 +12117,15 @@
     "source": {
       "broker": "Capacidade do Navide",
       "shell": "comando de shell",
-      "agentTool": "ferramenta de agent"
+      "agentTool": "ferramenta de agent",
+      "network": "rede das visualizações"
     },
     "kind": {
       "system": "Permissão",
       "shell": "Shell",
       "backendMethod": "Método de back-end nativo",
-      "agentTool": "Ferramenta de agent"
+      "agentTool": "Ferramenta de agent",
+      "networkHost": "Host de rede"
     },
     "reason": {
       "undeclared": "não declarado"
@@ -12199,6 +12201,10 @@
     "commands": {
       "heading": "Comandos executados",
       "item": "{command} · {count} vezes · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Hosts alcançados pelas visualizações",
+      "item": "{host} · {count} vezes · {outcome} · {date}"
     },
     "trend": {
       "heading": "Chamadas por dia"
@@ -12287,6 +12293,7 @@
         "backendMethod": "Método de código nativo: {key}",
         "backendEvent": "Evento de código nativo: {key}",
         "network": "Pode acessar hosts remotos por meio de comandos",
+        "networkHost": "As visualizações podem se conectar a: {key}",
         "agentTool": "Ferramenta de agent: {key}"
       }
     },
@@ -12307,6 +12314,7 @@
       "shell": "Executa {key}, mas não declara permissão de shell",
       "shellDynamic": "Monta comandos durante a execução, mas não declara permissão de shell",
       "shellExecutable": "Executa {key}, mas o escopo de shell declarado é apenas git, gh e glab",
+      "networkHost": "Conecta-se a {key} sem declará-lo",
       "system": "Usa {key}, mas não declara essa permissão",
       "fsScopeWrite": "Grava {key}, fora do escopo de gravação declarado",
       "fsScopeRead": "Lê {key}, fora do escopo de leitura declarado"
@@ -12314,7 +12322,8 @@
     "notSeenHeading": "Declarado, mas não encontrado pela verificação estática",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (host declarado)"
     },
     "scanHeading": "O que a verificação na publicação encontrou",
     "scanHeadingLocal": "O que a verificação do Navide neste arquivo encontrou",
@@ -12332,8 +12341,8 @@
     "scannedLocally": "A verificação informa este cartão; ela nunca decide a instalação.",
     "limitsWithoutScan": "Esta versão não tem verificação do sistema; o que está acima é apenas a declaração do próprio plug-in do Navide.",
     "limitsWithoutScanLocal": "O Navide não verificou este arquivo; o que está acima é apenas a declaração do próprio plug-in do Navide.",
-    "viewNetwork": "As visualizações de um plug-in do Navide podem acessar a rede e exibir sites externos dentro do Navide; o Navide não filtra nem registra esse tráfego. As entradas de rede acima cobrem apenas os comandos e o back-end nativo dele.",
-    "viewNetworkIfViews": "Se este plug-in do Navide tiver visualizações, elas podem acessar a rede e exibir sites externos dentro do Navide; o Navide não filtra nem registra esse tráfego. As entradas de rede acima cobrem apenas os comandos e o back-end nativo dele.",
+    "viewNetwork": "As visualizações deste plug-in do Navide só podem se conectar aos hosts que ele declara (listados acima; a nenhum se não listar nenhum) e não exibem sites externos. O Navide registra em Atividade os hosts alcançados e os recusados. As entradas de rede acima cobrem seus comandos e seu backend nativo.",
+    "viewNetworkIfViews": "Se este plug-in do Navide tiver visualizações, elas só podem se conectar aos hosts que ele declara (listados acima; a nenhum se não listar nenhum) e não exibem sites externos. O Navide registra em Atividade os hosts alcançados e os recusados. As entradas de rede acima cobrem seus comandos e seu backend nativo.",
     "summary": {
       "nativeBackend": "Inclui código nativo (executado em sandbox)",
       "files": {
@@ -12351,7 +12360,7 @@
       "agentMessages": "Lê o texto completo das mensagens entre seus agents neste projeto, que pode conter código, conteúdo de arquivos ou segredos",
       "ui": "Mostra visualizações próprias",
       "agentTools": "Oferece ferramentas que os agents podem chamar ({read} somente leitura, {write} de escrita)",
-      "network": "Pode usar a rede",
+      "network": "Suas visualizações podem se conectar a: {hosts}",
       "noPermissions": "Não declara permissões"
     },
     "scan": {

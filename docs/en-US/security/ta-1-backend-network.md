@@ -107,10 +107,13 @@ One declaration, two enforcement points:
   backend would honour it through the bridge check (this assessment, option
   B). Declaring hosts without a backend grants only the view path.
 - The disclosure card lists the hosts once and says what can reach them:
-  "its panel" today, "its panel and its backend" once B ships. The risk level
-  for a declared host list is **high** (data can leave the machine to a named
-  party); an explicitly named local or private address raises it to
-  **highest**, as does any future "any host" mode.
+  "its views" today, "its views and its backend" once B ships. The risk level
+  for a declared host list is **highest**, the level the disclosure contract
+  already reserved for `network` (data a view can read through its
+  capabilities can leave the machine to a named party); whether a list of
+  named public hosts should read one level lower than a local or private
+  address, or than a future "any host" mode, is a wording decision for the
+  user (below), not a change to the enforcement.
 
 ## Decisions for the user
 
@@ -121,7 +124,11 @@ One declaration, two enforcement points:
    or a LAN appliance is a legitimate use).
 3. Whether the Activity row stores the full URL path or host only (the shell
    rows keep executable and subcommand only; the same restraint — host and
-   method — is recommended, because paths carry identifiers).
+   method — is recommended, because paths carry identifiers; C1 records the
+   host only).
+4. Whether a declared list of public hosts should read **high** on the card
+   while a local or private address, or an "any host" mode, reads
+   **highest**. C1 ships with one level, highest, as the contract reserved.
 
 ## Did we do enough (acceptance for the implementing PR)
 

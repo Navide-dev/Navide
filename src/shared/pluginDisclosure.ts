@@ -63,7 +63,7 @@ export type DisclosureSummaryClause =
   | { key: 'agentMessages'; params: Record<string, never> }
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
-  | { key: 'network'; params: Record<string, never> }
+  | { key: 'network'; params: { hosts: string[] } }
   | { key: 'networkViaShell'; params: Record<string, never> }
   | { key: 'noPermissions'; params: Record<string, never> }
 
@@ -76,6 +76,8 @@ export interface DisclosurePermissions {
   system: Array<'aiCli' | 'fs' | 'ui' | 'web' | 'agents' | 'agentMessages'>
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
+  /** `permissions.network.hosts` sorted; present only when the manifest declares hosts. */
+  network?: { hosts: string[] }
 }
 
 export interface DisclosureAgentTool {
@@ -110,6 +112,11 @@ export interface ManifestDisclosure {
    * the manifest, R2 MED-6 on #436). Kept out of this signed field so cards
    * the Registry already signed still match. */
   network: 'none' | 'via-shell'
+  /** The hosts the package's views may connect to (`permissions.network.hosts`,
+   * sorted), enforced by the frame's `connect-src`. Present only when the
+   * manifest declares hosts, so the disclosure of every earlier manifest (and
+   * the digest the Registry signed for it) is unchanged. */
+  networkHosts?: string[]
   agentTools: DisclosureAgentTool[]
   dataLocations: { hostStorage: true; backendDataDirectory: boolean; projectWrites: DisclosureProjectWrites }
 }
@@ -150,6 +157,7 @@ export type DisclosureItemKind =
   | 'fsScopeWrite'
   | 'nativeBackend'
   | 'network'
+  | 'networkHost'
   | 'shell'
   | 'shellExecutable'
   | 'system'
@@ -184,6 +192,7 @@ export interface DisclosureManifestInput {
     system?: string[]
     shell?: 'allowlist' | 'full'
     scopes?: { fs: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
+    network?: { hosts: string[] }
   }
   backend?: {
     methods?: string[]
@@ -226,6 +235,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   const scopes: DisclosurePermissions['scopes'] = fsScope
     ? { fs: { root: fsScope.root ?? 'workspace', read: sorted(fsScope.read), write: sorted(fsScope.write) } }
     : null
+  const networkHosts = sorted(declared.network?.hosts)
   const backend = manifest.backend
   const nativeBackend = backend ? { methods: sorted(backend.methods), events: sorted(backend.events) } : null
   const agentTools: DisclosureAgentTool[] = [...(backend?.agentTools ?? [])]
@@ -254,6 +264,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (nativeBackend) present.add('nativeBackend')
   if (writeTools > 0) present.add('agentTools.write')
   if (shell?.mode === 'full') present.add('shell.full')
+  if (networkHosts.length > 0) present.add('network')
   const reasons = DISCLOSURE_RISK_RULES.filter(([key]) => present.has(key)).map(([key, level]) => ({ key, level }))
 
   const clauses: DisclosureSummaryClause[] = []
@@ -264,6 +275,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   }
   if (shell) clauses.push({ key: 'shell', params: shell })
   if (shell) clauses.push({ key: 'networkViaShell', params: {} })
+  if (networkHosts.length > 0) clauses.push({ key: 'network', params: { hosts: networkHosts } })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
   if (system.includes('web')) clauses.push({ key: 'web', params: {} })
   if (system.includes('agents')) clauses.push({ key: 'agents', params: {} })
@@ -285,9 +297,12 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     plugin: { id: manifest.id, version: manifest.version, publisher: manifest.publisher },
     summary: { template: DISCLOSURE_SUMMARY_TEMPLATE, clauses },
     risk: { level: riskLevelForReasons(reasons), reasons },
-    permissions: { system, shell, scopes },
+    permissions: { system, shell, scopes, ...(networkHosts.length > 0 ? { network: { hosts: networkHosts } } : {}) },
     nativeBackend,
+    // Commands and the native backend only (see ManifestDisclosure); the
+    // declared view hosts are `networkHosts`.
     network: shell ? 'via-shell' : 'none',
+    ...(networkHosts.length > 0 ? { networkHosts } : {}),
     agentTools,
     dataLocations: { hostStorage: true, backendDataDirectory: nativeBackend !== null, projectWrites },
   }
@@ -334,6 +349,7 @@ export function disclosureItems(disclosure: ManifestDisclosure): DisclosureItem[
     for (const event of disclosure.nativeBackend.events) add('backendEvent', event)
   }
   if (disclosure.network !== 'none') add('network', disclosure.network)
+  for (const host of disclosure.networkHosts ?? []) add('networkHost', host)
   for (const { name, ...detail } of disclosure.agentTools) add('agentTool', name, detail)
   return items.sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 }

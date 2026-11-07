@@ -13,7 +13,7 @@ src/shared/pluginDisclosure.ts.
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, MAX_SAFE_INTEGER
 
@@ -42,7 +42,7 @@ DISCLOSURE_RISK_RULES = (
 
 DISCLOSURE_ITEM_KINDS = (
     "agentTool", "backendEvent", "backendMethod", "fsScopeRead", "fsScopeRoot", "fsScopeWrite",
-    "nativeBackend", "network", "shell", "shellExecutable", "system",
+    "nativeBackend", "network", "networkHost", "shell", "shellExecutable", "system",
 )
 
 
@@ -56,6 +56,10 @@ class ManifestDisclosure(TypedDict):
     permissions: dict[str, Any]
     nativeBackend: dict[str, list[str]] | None
     network: Literal["none", "via-shell"]
+    #: ``permissions.network.hosts`` sorted; present only when the manifest
+    #: declares hosts, so the disclosure of every earlier manifest (and the
+    #: digest the Registry signed for it) is unchanged.
+    networkHosts: NotRequired[list[str]]
     agentTools: list[dict[str, Any]]
     dataLocations: dict[str, Any]
 
@@ -125,6 +129,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
             "read": sorted(fs_scope.get("read") or []),
             "write": sorted(fs_scope.get("write") or []),
         }}
+    network_hosts = sorted((declared.get("network") or {}).get("hosts") or [])
     backend = manifest.get("backend")
     native = None
     if backend is not None:
@@ -169,6 +174,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("agentTools.write")
     if shell and shell["mode"] == "full":
         present.add("shell.full")
+    if network_hosts:
+        present.add("network")
     reasons = [{"key": key, "level": level} for key, level in DISCLOSURE_RISK_RULES if key in present]
 
     clauses: list[dict[str, Any]] = []
@@ -182,6 +189,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         # A declared shell runs git/gh/glab (or anything, in full mode), which
         # reach remote hosts even though the sandboxes have no network.
         clauses.append({"key": "networkViaShell", "params": {}})
+    if network_hosts:
+        clauses.append({"key": "network", "params": {"hosts": network_hosts}})
     if "aiCli" in system:
         clauses.append({"key": "aiCli", "params": {}})
     if "web" in system:
@@ -206,18 +215,26 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     else:
         project_writes = {"root": scopes["fs"]["root"], "patterns": scopes["fs"]["write"]}
 
-    return {
+    permissions: dict[str, Any] = {"system": system, "shell": shell, "scopes": scopes}
+    if network_hosts:
+        permissions["network"] = {"hosts": network_hosts}
+    disclosure: dict[str, Any] = {
         "schemaVersion": DISCLOSURE_SCHEMA_VERSION,
         "plugin": {"id": manifest["id"], "version": manifest["version"], "publisher": manifest["publisher"]},
         "summary": {"template": DISCLOSURE_SUMMARY_TEMPLATE, "clauses": clauses},
         "risk": {"level": risk_level_for_reasons(reasons), "reasons": reasons},
-        "permissions": {"system": system, "shell": shell, "scopes": scopes},
+        "permissions": permissions,
         "nativeBackend": native,
+        # Commands and the native backend only (see ManifestDisclosure); the
+        # declared view hosts are ``networkHosts``.
         "network": "via-shell" if shell else "none",
         "agentTools": tools,
         "dataLocations": {"hostStorage": True, "backendDataDirectory": native is not None,
                           "projectWrites": project_writes},
     }
+    if network_hosts:
+        disclosure["networkHosts"] = network_hosts
+    return disclosure  # type: ignore[return-value]
 
 
 def _normalized(value: Any) -> Any:
@@ -275,6 +292,8 @@ def disclosure_items(disclosure: ManifestDisclosure) -> list[DisclosureItem]:
             add("backendEvent", event)
     if disclosure["network"] != "none":
         add("network", disclosure["network"])
+    for host in disclosure.get("networkHosts") or []:
+        add("networkHost", host)
     for tool in disclosure["agentTools"]:
         add("agentTool", tool["name"], {key: value for key, value in tool.items() if key != "name"})
     return sorted(items, key=lambda item: (item["kind"], item["key"]))

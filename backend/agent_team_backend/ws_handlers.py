@@ -440,9 +440,9 @@ async def plugins_agent_action_result(
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
-#: The Host records broker and shell-broker calls; agent tool calls are the
-#: backend's own rows (B1).
-_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: The Host records broker and shell-broker calls, and (C1) its plugin frames'
+#: network requests and refusals; agent tool calls are the backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell", "network"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
 #: Card K4: the Host events a row may report, the Developer Mode switch and
@@ -583,7 +583,7 @@ async def plugin_activity_record(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
-_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool"))
+_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool", "networkHost"))
 
 
 def _declared_items(value: Any) -> list[dict[str, str]] | None:

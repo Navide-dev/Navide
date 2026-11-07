@@ -40,6 +40,11 @@ export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'win
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
 export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
+/** Most hosts one package may declare in `permissions.network.hosts`. */
+export const MAX_NETWORK_HOSTS = 32
+/** One declared network host: lowercase DNS labels, at most one leading `*.`
+ *  wildcard standing for one label; no scheme, port, path or user info. */
+export const V2_NETWORK_HOST = /^(?:\*\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
 export const EXECUTION_POLICY_SCHEMA_VERSION = 1 as const
@@ -74,11 +79,20 @@ export type PluginManifestV2Scopes = {
   fs: PluginManifestV2FsScopes
 }
 
+/** Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource).
+ *  Enforced by the plugin frame's `connect-src`; a request to any other host
+ *  is refused by the frame. The backend sandbox is not affected. */
+export type PluginManifestV2Network = {
+  hosts: string[]
+}
+
 export type PluginManifestV2Permissions = {
   system?: PluginSystemNamespace[]
   shell?: PluginShellMode
   /** Optional declared resource scopes; disclosure only, never a grant. */
   scopes?: PluginManifestV2Scopes
+  /** Optional declared network hosts; enforced on views, disclosed everywhere. */
+  network?: PluginManifestV2Network
 }
 
 export type PluginManifestV2Receiver = {
@@ -501,7 +515,7 @@ function parseScopes(value: unknown): PluginManifestV2Scopes {
 
 function parsePermissions(value: unknown): PluginManifestV2Permissions {
   const permissions = assertObject(value, 'manifest permissions')
-  assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
+  assertOnlyKeys(permissions, ['system', 'shell', 'scopes', 'network'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
     const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, V2_SYSTEM_NAMESPACES.length)
@@ -525,7 +539,31 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
   const scopes = Object.prototype.hasOwnProperty.call(permissions, 'scopes')
     ? parseScopes(permissions.scopes)
     : undefined
-  return { ...(system ? { system } : {}), ...(shell ? { shell } : {}), ...(scopes ? { scopes } : {}) }
+  const network = Object.prototype.hasOwnProperty.call(permissions, 'network')
+    ? parseNetwork(permissions.network)
+    : undefined
+  return {
+    ...(system ? { system } : {}),
+    ...(shell ? { shell } : {}),
+    ...(scopes ? { scopes } : {}),
+    ...(network ? { network } : {}),
+  }
+}
+
+function parseNetwork(value: unknown): PluginManifestV2Network {
+  const network = assertObject(value, 'manifest permissions.network')
+  assertOnlyKeys(network, ['hosts'], 'manifest permissions.network')
+  const hosts = uniqueStringArray(
+    required(network, 'hosts', 'manifest permissions.network'),
+    'manifest permissions.network.hosts',
+    1,
+    MAX_NETWORK_HOSTS
+  )
+  const invalid = hosts.find((host) => host.length > 253 || !V2_NETWORK_HOST.test(host))
+  if (invalid !== undefined) {
+    fail(`manifest permissions.network.hosts contains an invalid host ${JSON.stringify(invalid)}; a host is lowercase DNS labels such as api.example.com, optionally starting with *. for one wildcard label, with no scheme, port or path`)
+  }
+  return { hosts }
 }
 
 function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
@@ -835,7 +873,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
     if (manifest.contributes !== undefined || manifest.backend !== undefined) {
       fail('an extension pack must not declare contributes or backend')
     }
-    if (permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined) {
+    if (
+      permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined ||
+      permissions.network !== undefined
+    ) {
       fail('an extension pack must not request permissions')
     }
   } else if (manifest.contributes === undefined && manifest.backend === undefined) {

@@ -14,6 +14,7 @@
   },
   "manifestPermissionContract": {
     "shape": "system-namespace-array-plus-shell-mode",
+    "network": "declared-hosts-object-enforced-by-frame-connect-src",
     "scopeSource": "catalog",
     "duplicateObjectKeys": "reject-before-schema-validation",
     "unknownPermissionOrAccess": "reject"

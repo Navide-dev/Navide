@@ -12117,13 +12117,15 @@
     "source": {
       "broker": "Navide 기능",
       "shell": "셸 명령",
-      "agentTool": "agent 도구"
+      "agentTool": "agent 도구",
+      "network": "보기 네트워크"
     },
     "kind": {
       "system": "권한",
       "shell": "셸",
       "backendMethod": "네이티브 백엔드 메서드",
-      "agentTool": "Agent 도구"
+      "agentTool": "Agent 도구",
+      "networkHost": "네트워크 호스트"
     },
     "reason": {
       "undeclared": "선언되지 않음"
@@ -12199,6 +12201,10 @@
     "commands": {
       "heading": "실행한 명령",
       "item": "{command} · {count}회 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "보기가 연결한 호스트",
+      "item": "{host} · {count}회 · {outcome} · {date}"
     },
     "trend": {
       "heading": "일별 호출 수"
@@ -12287,6 +12293,7 @@
         "backendMethod": "네이티브 코드 메서드: {key}",
         "backendEvent": "네이티브 코드 이벤트: {key}",
         "network": "명령을 통해 원격 호스트에 연결 가능",
+        "networkHost": "보기가 연결할 수 있는 호스트: {key}",
         "agentTool": "Agent 도구: {key}"
       }
     },
@@ -12307,6 +12314,7 @@
       "shell": "{key}을(를) 실행하지만 셸 권한을 선언하지 않았어요",
       "shellDynamic": "실행 시점에 명령을 만들지만 셸 권한을 선언하지 않았어요",
       "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위는 git, gh, glab뿐이에요",
+      "networkHost": "{key}에 연결하지만 선언하지 않았어요",
       "system": "{key}을(를) 사용하지만 해당 권한을 선언하지 않았어요",
       "fsScopeWrite": "선언한 쓰기 범위 밖의 {key}에 써요",
       "fsScopeRead": "선언한 읽기 범위 밖의 {key}을(를) 읽어요"
@@ -12314,7 +12322,8 @@
     "notSeenHeading": "선언했지만 정적 검사에서 발견되지 않음",
     "notSeen": {
       "shell": "셸({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (선언한 호스트)"
     },
     "scanHeading": "게시 시점 검사에서 발견한 내용",
     "scanHeadingLocal": "이 파일에 대한 Navide 검사에서 발견한 내용",
@@ -12332,8 +12341,8 @@
     "scannedLocally": "검사 결과는 이 카드에 정보로만 쓰이며 설치 여부를 결정하지 않아요.",
     "limitsWithoutScan": "이 버전에는 시스템 검사가 없어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
     "limitsWithoutScanLocal": "Navide가 이 파일을 검사하지 않았어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
-    "viewNetwork": "Navide 플러그인의 보기는 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
-    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있다면 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
+    "viewNetwork": "이 Navide 플러그인의 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
+    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있으면, 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
     "summary": {
       "nativeBackend": "네이티브 코드 포함(샌드박스에서 실행)",
       "files": {
@@ -12351,7 +12360,7 @@
       "agentMessages": "이 프로젝트의 agent 간 메시지 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다",
       "ui": "자체 보기 표시",
       "agentTools": "agent가 호출할 수 있는 도구 제공(읽기 전용 {read}개, 쓰기 {write}개)",
-      "network": "네트워크 사용 가능",
+      "network": "보기가 연결할 수 있는 호스트: {hosts}",
       "noPermissions": "선언한 권한 없음"
     },
     "scan": {

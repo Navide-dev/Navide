@@ -326,8 +326,10 @@ optional manifest arrays become `[]`.
 | `permissions.system` | `permissions.system`, sorted; `[]` when absent |
 | `permissions.shell` | `allowlist` → `{mode: "allowlist", executables: ["gh","git","glab"]}` (the Host shell allowlist); `full` → `{mode: "full", executables: null}` (any executable); absent → `null` |
 | `permissions.scopes` | `scopes.fs` with `root` defaulted to `workspace` and `read`/`write` sorted (absent → `[]`); `null` when no scopes |
+| `permissions.network` | `{hosts}` with `permissions.network.hosts` sorted; the key is **absent** (not `null`) when the manifest declares no hosts, so the disclosure and digest of every earlier manifest are unchanged |
 | `nativeBackend` | `{methods, events}` sorted when the manifest has `backend` (also when it lists none); otherwise `null` |
-| `network` | `"via-shell"` when `permissions.shell` is declared, else `"none"`. The frame CSP (`connect-src 'none'`) and the backend sandbox have no network and DB10 (a network permission) is deferred, but a declared shell runs `git`/`gh`/`glab` (or, in `full` mode, any executable), which reach remote hosts. The scan report ([3.8](#38-scan-report)) names the hosts it can see |
+| `network` | `"via-shell"` when `permissions.shell` is declared, else `"none"`: commands and the native backend only. The backend sandbox has no network, but a declared shell runs `git`/`gh`/`glab` (or, in `full` mode, any executable), which reach remote hosts. The scan report ([3.8](#38-scan-report)) names the hosts it can see |
+| `networkHosts` | `permissions.network.hosts` sorted, the hosts the package's views may connect to (enforced by the frame CSP and the Host's session hook, PR C1); **absent** when the manifest declares none |
 | `agentTools` | each declared tool with `timeoutMs` defaulted, sorted by `name` |
 | `dataLocations.hostStorage` | always `true` (Host-managed storage partitions) |
 | `dataLocations.backendDataDirectory` | `true` when `nativeBackend` is not `null` (the sandbox's private data directory) |
@@ -357,7 +359,7 @@ in this order, each only when it applies:
 | `agentMessages` | `system` contains `agentMessages` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
-| `network` | reserved for DB10; never produced in v1 | `{}` |
+| `network` | `permissions.network.hosts` declared | `{hosts}` sorted, after `networkViaShell` |
 | `noPermissions` | none of the above | `{}` |
 
 ### 3.3 Risk level
@@ -377,7 +379,7 @@ none apply. Reasons are listed in this fixed order:
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
 | `shell.full` | `shell` is `full` | highest |
-| `network` | reserved for DB10; never produced in v1 | highest |
+| `network` | `permissions.network.hosts` declared (a view can send what it reads to a named party) | highest |
 
 These are the manifest reasons. The level every surface shows is
 `cardRiskLevel(disclosure, scan)`: the highest of this level and the scan
@@ -537,6 +539,7 @@ package envelope as before.
 | `nativeBackend` | `native` | backend |
 | `backendMethod`, `backendEvent` | name | name |
 | `network` | value | only when not `none` |
+| `networkHost` | host | declared host (`networkHosts`) |
 | `agentTool` | tool name | tool; `detail` is the tool entry without `name` |
 
 `detail` is `null` for every kind except `agentTool`. Two items are the same
@@ -728,13 +731,19 @@ publish (DS3).
 | read or write paths while `system` lacks `fs` | `system` / `fs` |
 | a write path matching no `scopes.fs.write` pattern (scopes declared) | `fsScopeWrite` / the path |
 | a read path matching no `scopes.fs.read` or `write` pattern (scopes declared) | `fsScopeRead` / the path |
+| a scanned host no declared host covers (`networkHosts` present) | `networkHost` / the host |
 | declared shell, but no call, no dynamic command and no `shell.*` address | `declaredNotSeen`: `shell` / the mode |
 | a declared `system` namespace with no address of it (for `fs`, also no path) | `declaredNotSeen`: `system` / the namespace |
+| a declared host no scanned host falls under (`networkHosts` present) | `declaredNotSeen`: `networkHost` / the declared host |
 
 Scope patterns match by `scopePatternMatches`: `**` is zero or more whole
 path segments, `*` any run of characters inside one segment, everything else
 literal. `fs` declared without scopes ("undeclared" project writes) flags no
-path.
+path. Hosts match by `networkHostMatches`: a declared `*.example.com` covers
+every name below `example.com` (as CSP reads it), never `example.com` itself;
+any other declared host matches exactly. A package without `networkHosts` has
+no view network, so the hosts its code names stay a scan sentence and are
+never flagged.
 
 ## 4. Host and backend messages
 
@@ -1565,7 +1574,8 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`backendMethod` keys `backend.<method>`, `agentTool` names) from the installed
+`backendMethod` keys `backend.<method>`, `agentTool` names, `networkHost`
+declared hosts) from the installed
 manifest, since the backend has no third-party manifest; without `declared`,
 `declaredUnused` is `[]`. Calls into a plugin's own backend, whichever path
 made them, are counted in `plugin_backend_call_days` under address
@@ -1603,8 +1613,9 @@ malformed one whole.
 | `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
 | `files[]` | fs paths, newest first: `path` (workspace-relative), `address`, `workspace`, `outcome`, `count`, `lastAt` |
 | `commands[]` | shell commands (executable and subcommand only), newest first: `command`, `workspace`, `outcome`, `count`, `lastAt` |
+| `network[]` | hosts the plugin's views reached (`allowed`), failed to reach (`error`) or were refused (`denied`, always `undeclared`), host only, newest first: `host`, `workspace`, `outcome`, `count`, `lastAt`. From the `network` rows the Host records (PR C1) under the address `network.<host>`; a refusal also appears in `undeclared[]` under that address |
 | `daily[]` | oldest first, up to the 90 days kept: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` (daily rows plus the detail rows not yet rolled up) |
-| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool`), `key`, `lastUsedAt` (or null) |
+| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool` / `networkHost`), `key`, `lastUsedAt` (or null); a declared `*.example.com` is used by any `network.<host>` row below it |
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |

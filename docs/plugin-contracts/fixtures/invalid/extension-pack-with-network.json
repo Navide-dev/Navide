@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.web-dev-pack",
+  "name": "Web Dev Pack",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {
+    "network": {
+      "hosts": [
+        "api.github.com"
+      ]
+    }
+  },
+  "marketplace": {
+    "description": "Three extensions for web work.",
+    "license": "MIT"
+  },
+  "extensionPack": [
+    "acme.hello",
+    "acme.lint-guard",
+    "acme.notes"
+  ]
+}

@@ -470,23 +470,57 @@ disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
 
-**Network reach of views.** The sandbox above is the backend's. A plugin view
-is an ordinary web page on the default session: it can `fetch` any host (and
-read the response where CORS allows), load images and scripts from anywhere,
-and embed an external website in an `<iframe>` whose scripts run. The Host
-installs no request filtering, CSP or frame-navigation rule on views (only the
-frame carrier, `navide-plugin-frame://`, has a CSP), so none of this traffic is
-filtered or recorded. A view that can read workspace content through its
-capabilities can therefore send it off the machine, and a view can show a
-remote page that looks like a sign-in page. The disclosure data's `network`
-field covers only commands and the native backend, so the disclosure card of
-a package with views (`contributes.views` in its manifest) states this
-separately, including for a view-only package whose `network` is `"none"`; a
-package without views (backend or agent tools only) gets no such line, and
-where the card shows Registry listing data without the manifest (the Navide
-Marketplace detail page, an agent's install request) it says so
-conditionally. Making view network access a declared permission (DB10) is planned
-for 0.2.27.
+#### Network hosts (`permissions.network`)
+
+A package names the hosts its views may connect to:
+
+```json
+"permissions": { "system": ["ui"], "network": { "hosts": ["api.github.com", "*.example.com", "localhost"] } }
+```
+
+`hosts` is 1–32 unique lowercase DNS names (`api.example.com`), optionally
+starting with `*.` for every name below a domain (`*.example.com` covers
+`a.example.com` and `a.b.example.com`, never `example.com` itself), or
+`localhost` / an IPv4 literal for a local service. No scheme, port, path or
+user info: a declared host is reached over `https:` and `wss:`, and a loopback
+host or IPv4 literal over `http:` and `ws:` as well. The same rule validates
+the manifest in the SDK (`navide-plugin validate`), the Host and the Registry,
+and the parser names the host it refused and what would pass.
+
+**What it governs.** A view's `fetch`, XHR, WebSocket and EventSource requests,
+its images, scripts, fonts and embedded frames: every request a view makes
+that leaves the machine or reaches a local port. A composed frame
+(`navide-plugin-frame://`) carries a Content-Security-Policy whose `connect-src`
+is exactly the declared hosts (`'none'` without a declaration; scripts and
+styles stay `'self'`, images `'self' data:`, frames and workers refused). A
+surface — a `<webview>` region view or a `window` view — has no CSP, so the
+Host's session hook refuses a request to an undeclared host before it leaves
+(`net::ERR_BLOCKED_BY_CLIENT` in the view). Omitting `network` means a view has
+no network, as omitting `shell` means no `shell.run`. The package's own assets,
+`navide-preview:` resources and the Host bridge are not network and are never
+affected; in development the dev server a view loads from is always admitted.
+A Manifest v1 (legacy) descriptor has no declaration model and is not filtered.
+
+**What it does not govern.** The backend sandbox: a declaration gives the
+native backend no network (it still has none; see
+[TA-1](security/ta-1-backend-network.md) for the planned bridge). The shell
+broker's `git`, `gh` and `glab` still reach the hosts those commands name
+(the "Network reach" paragraph above). The browser plugin's `web` namespace,
+which is a Host-owned browser partition disclosed as high risk on its own.
+
+**Disclosure and record.** The consent card lists the declared hosts as a
+summary clause ("Its views can connect to: …"), the disclosure data carries
+them as `permissions.network.hosts` and `networkHosts` (contract
+[3.1](plugin-agent-tools-contract.md#31-manifest-disclosure)), and declaring any
+host makes the manifest risk level **highest**: data the view can read through
+its capabilities can leave the machine to a named party. The Registry's static
+scan compares the hosts it finds in the code with the declaration: a found host
+no declared host covers is shown in red ("found by the scan but not
+declared"), a declared host the scan did not see in grey. A version that adds
+a host asks for consent again, as any added permission does. At run time the
+Host records every host a view reached, failed to reach or was refused, host
+only, under Settings → Navide Plugins → Activity ("Hosts reached from its
+views"); a refusal is listed under "used but not declared".
 
 #### Agent tools (`backend.agentTools`)
 
@@ -987,6 +1021,7 @@ matches.
 | `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages` | 1–6 unique entries; `agentMessages` requires `agents` |
 | `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
+| `permissions.network` | no | Object with a required hosts array | Hosts the package's views may connect to; enforced on views, see [Network hosts](#network-hosts-permissionsnetwork) |
 | `contributes.views[].id` | yes | Lowercase view id | |
 | `contributes.views[].kind` | yes | `custom` | |
 | `contributes.views[].location` | yes | `top`, `bottom`, `right`, `left`, `main`, `detail`, `window` | |

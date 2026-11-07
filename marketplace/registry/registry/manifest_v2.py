@@ -298,6 +298,30 @@ class ManifestV2Scopes(ManifestV2Model):
     fs: ManifestV2FsScopes
 
 
+_NETWORK_HOST_RE = re.compile(
+    r"^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
+
+class ManifestV2Network(ManifestV2Model):
+    """Hosts the package's views may connect to; enforced by the plugin
+    frame's connect-src on the App, disclosed here."""
+
+    hosts: list[str] = Field(min_length=1, max_length=32)
+
+    @field_validator("hosts")
+    @classmethod
+    def _check_hosts(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("must contain unique hosts")
+        if any(len(host) > 253 or _NETWORK_HOST_RE.fullmatch(host) is None for host in value):
+            raise ValueError(
+                "must contain lowercase DNS hosts such as api.example.com, optionally starting with *., "
+                "with no scheme, port or path"
+            )
+        return value
+
+
 class ManifestV2Permissions(ManifestV2Model):
     """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
 
@@ -306,6 +330,7 @@ class ManifestV2Permissions(ManifestV2Model):
     )
     shell: Literal["allowlist", "full"] | None = None
     scopes: ManifestV2Scopes | None = None
+    network: ManifestV2Network | None = None
 
     @field_validator("system")
     @classmethod
@@ -394,6 +419,7 @@ class ManifestV2(ManifestV2Model):
                 self.permissions.system is not None
                 or self.permissions.shell is not None
                 or self.permissions.scopes is not None
+                or self.permissions.network is not None
             ):
                 raise ValueError("an extension pack must not request permissions")
         elif self.contributes is None and self.backend is None:

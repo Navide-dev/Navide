@@ -12117,13 +12117,15 @@
     "source": {
       "broker": "Navide 功能",
       "shell": "shell 指令",
-      "agentTool": "agent 工具"
+      "agentTool": "agent 工具",
+      "network": "画面网络"
     },
     "kind": {
       "system": "权限",
       "shell": "Shell",
       "backendMethod": "原生 backend 方法",
-      "agentTool": "agent 工具"
+      "agentTool": "agent 工具",
+      "networkHost": "网络主机"
     },
     "reason": {
       "undeclared": "没有声明"
@@ -12199,6 +12201,10 @@
     "commands": {
       "heading": "运行过的指令",
       "item": "{command} · {count} 次 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "画面连过的主机",
+      "item": "{host} · {count} 次 · {outcome} · {date}"
     },
     "trend": {
       "heading": "每日调用量"
@@ -12287,6 +12293,7 @@
         "backendMethod": "原生程序的方法：{key}",
         "backendEvent": "原生程序的事件：{key}",
         "network": "可以通过指令连到远程",
+        "networkHost": "画面可以连到：{key}",
         "agentTool": "agent 工具：{key}"
       }
     },
@@ -12307,6 +12314,7 @@
       "shell": "会运行 {key}，但没有声明 shell 权限",
       "shellDynamic": "有运行时才组出来的指令，但没有声明 shell 权限",
       "shellExecutable": "会运行 {key}，但声明的 shell 范围只有 git、gh、glab",
+      "networkHost": "会连到 {key}，但没有声明",
       "system": "会使用 {key}，但没有声明这项权限",
       "fsScopeWrite": "会写入 {key}，不在声明的写入范围内",
       "fsScopeRead": "会读取 {key}，不在声明的读取范围内"
@@ -12314,7 +12322,8 @@
     "notSeenHeading": "声明了，静态扫描未发现",
     "notSeen": {
       "shell": "shell（{key}）",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key}（已声明的主机）"
     },
     "scanHeading": "上架时系统扫描的结果",
     "scanHeadingLocal": "Navide 扫描这个文件的结果",
@@ -12332,8 +12341,8 @@
     "scannedLocally": "扫描结果只供这张卡片参考，不会决定是否安装。",
     "limitsWithoutScan": "这个版本没有系统扫描，以上只有这个 Navide 插件自己的声明。",
     "limitsWithoutScanLocal": "Navide 没有扫描这个文件，以上只有这个 Navide 插件自己的声明。",
-    "viewNetwork": "Navide 插件的画面（view）可以连网，也可以在 Navide 里显示外部网站；Navide 不会过滤或记录这些流量。上面的网络项目只涵盖它的指令与原生后端。",
-    "viewNetworkIfViews": "如果这个 Navide 插件有画面（view），画面可以连网，也可以在 Navide 里显示外部网站；Navide 不会过滤或记录这些流量。上面的网络项目只涵盖它的指令与原生后端。",
+    "viewNetwork": "这个 Navide 插件的画面（view）只能连到它声明的主机（列在上方；没有列出就不能连网），也不能显示外部网站。Navide 会在“活动”记录它们连过的主机与被拒绝的主机。上面的网络项目涵盖它的指令与原生后端。",
+    "viewNetworkIfViews": "如果这个 Navide 插件有画面（view），画面只能连到它声明的主机（列在上方；没有列出就不能连网），也不能显示外部网站。Navide 会在“活动”记录它们连过的主机与被拒绝的主机。上面的网络项目涵盖它的指令与原生后端。",
     "summary": {
       "nativeBackend": "附带原生程序（在沙盒里运行）",
       "files": {
@@ -12351,7 +12360,7 @@
       "agentMessages": "可读取此项目中 agent 之间消息的完整正文，正文可能包含代码、文件内容或机密信息",
       "ui": "显示自己的画面",
       "agentTools": "提供 agent 可调用的工具（唯读 {read} 个、写入 {write} 个）",
-      "network": "可以连网",
+      "network": "它的画面（view）可以连到：{hosts}",
       "noPermissions": "没有声明任何权限"
     },
     "scan": {

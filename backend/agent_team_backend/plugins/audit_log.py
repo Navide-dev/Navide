@@ -120,7 +120,10 @@ TOOL_RISKS = ("read", "write")
 #: ``host``: a Host setting the user changed that governs which Navide plugins
 #: may run (card K4: the Developer Mode switch), filed under the Host's own
 #: event identity ``host``, never a plugin id.
-ACTIVITY_SOURCES = ("broker", "shell", "agentTool", "host")
+#: ``network``: a plugin view's request to a host (C1), recorded by the Host
+#: from the frame's requests and ``connect-src`` refusals under the address
+#: ``network.<host>`` (a refusal is ``denied`` / ``undeclared``).
+ACTIVITY_SOURCES = ("broker", "shell", "agentTool", "host", "network")
 ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 #: The contract's call error codes plus the codes the backend produces itself:
 #: two transport codes (contract 4.2), ``result_helper_failed`` (a result in
@@ -133,6 +136,9 @@ ERROR_CODES = frozenset((
 DENIED_REASONS = frozenset(contract.PLUGIN_ACTIVITY_DENIED_REASONS)
 
 _ADDRESS = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+")
+#: ``network.<host>``: a host's labels may start with a digit (``127.0.0.1``),
+#: which ``_ADDRESS`` does not allow; nothing else about the spelling is read.
+_NETWORK_ADDRESS = re.compile(r"network\.[a-z0-9][a-z0-9.:\[\]-]{0,252}")
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 _SUBCOMMAND = re.compile(r"[a-z][a-z0-9-]*")
 _EXECUTABLE = re.compile(r"[A-Za-z0-9._+-]+")
@@ -208,6 +214,14 @@ def _declared_match(kind: Any, key: str, source: str, address: str) -> bool:
         return address == key
     if kind == "shell":
         return source == "shell"
+    if kind == "networkHost":
+        # A declared `*.example.com` is used by any host below example.com.
+        if source != "network" or not address.startswith("network."):
+            return False
+        host = address[len("network."):]
+        if key.startswith("*."):
+            return host.endswith(key[1:]) and len(host) > len(key) - 1
+        return host == key
     return False
 
 
@@ -662,7 +676,10 @@ class PluginAuditLog:
             marker = contract.PLUGIN_ACTIVITY_DENIED_TARGET if outcome == "denied" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
             path = marker if fs_path else ""
             command = marker if shell_command else ""
-        known = address == contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS or _ADDRESS.fullmatch(address)
+        known = (
+            address == contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS or _ADDRESS.fullmatch(address)
+            or (source == "network" and _NETWORK_ADDRESS.fullmatch(address))
+        )
         key = (
             str(plugin_id), str(plugin_version), str(workspace), source, address if known else OTHER, outcome,
             (_code(denied_reason, DENIED_REASONS) or OTHER) if outcome == "denied" else "",
@@ -1238,7 +1255,7 @@ class PluginAuditLog:
             "schemaVersion": ACTIVITY_REPORT_SCHEMA_VERSION, "pluginId": plugin_id, "generatedAt": now,
             "window": {"from": window_from, "to": now}, "totals": {"calls": 0, "denied": 0, "errors": 0},
             "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "files": [], "commands": [],
-            "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
+            "network": [], "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
             "backendCalls": {"methods": [], "daily": []},
         }
         if not self.enabled:
@@ -1286,6 +1303,12 @@ class PluginAuditLog:
                 "  WHERE plugin_id = ? AND minute >= ? AND shell_command != '' GROUP BY 1, 2, 3"
                 ") GROUP BY 1, 2, 3 ORDER BY 5 DESC, 1, 2, 3",
                 (plugin_id, window_from, plugin_id, window_minute),
+            ).fetchall()
+            # C1: hosts the plugin's views reached or were refused, counted rows only.
+            network = cur.execute(
+                "SELECT address, workspace, outcome, SUM(count), MAX(last_at) FROM plugin_activity_counts"
+                " WHERE plugin_id = ? AND minute >= ? AND source = 'network' GROUP BY 1, 2, 3 ORDER BY 5 DESC, 1, 2, 3",
+                (plugin_id, window_minute),
             ).fetchall()
             daily = cur.execute(
                 "SELECT day, SUM(calls), SUM(denied), SUM(errors) FROM ("
@@ -1389,6 +1412,10 @@ class PluginAuditLog:
         report["commands"] = [
             {"command": command, "workspace": ws, "outcome": outcome, "count": int(n), "lastAt": last}
             for command, ws, outcome, n, last in commands
+        ]
+        report["network"] = [
+            {"host": address[len("network."):], "workspace": workspace, "outcome": outcome, "count": int(n), "lastAt": int(last_at)}
+            for address, workspace, outcome, n, last_at in network
         ]
         report["daily"] = [
             {"day": day, "calls": int(calls), "denied": int(denied or 0), "errors": int(errors or 0)}

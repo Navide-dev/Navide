@@ -2599,6 +2599,107 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "network-hosts-ui",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.status",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "network": {
+            "hosts": [
+              "api.github.com",
+              "*.example.com"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "right",
+              "title": "Status",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.status",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "network",
+              "params": {
+                "hosts": [
+                  "*.example.com",
+                  "api.github.com"
+                ]
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "network",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null,
+          "network": {
+            "hosts": [
+              "*.example.com",
+              "api.github.com"
+            ]
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "networkHosts": [
+          "*.example.com",
+          "api.github.com"
+        ],
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
     }
   ]
 }

@@ -58,6 +58,7 @@ import { dispatchWebBridge } from './webBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
+import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -259,6 +260,9 @@ export interface PluginLaunchDescriptor {
   capabilityPolicy?: PluginCapabilityPolicy
   /** Host-authenticated v2 grant/binding context; never serialized to a plugin. */
   capabilityContext?: HostCapabilityContext | null
+  /** `permissions.network.hosts` of a Manifest v2 package: the hosts its
+   *  frames' `connect-src` admits. Absent means no network from a view. */
+  networkHosts?: string[]
   /** Dev-server URL for the plugin entry (used when running under electron-vite dev). */
   devUrl: string
   /** Absolute file path to the built plugin entry (packaged / built runs). */
@@ -645,6 +649,11 @@ interface RunningPlugin {
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
   senderId: number
+  /** C1: the hosts this surface's requests may reach (`permissions.network.hosts`;
+   *  `[]` for a v2 package that declares none), null for a legacy descriptor
+   *  (no declaration model, unfiltered), and the dev-server origin the entry
+   *  loads from in development, which is always admitted. */
+  networkPolicy: { hosts: readonly string[] | null; devOrigin: string | null }
   /** Whether the view overlays the host's full content area (see {@link PluginViewBounds}). */
   fill: boolean
   /** Placement that the Host can restore after a package-version restart. */
@@ -1846,6 +1855,25 @@ export class FrontendPluginManager {
    * they must never enter the sender-id map used by native/GuestAttach views. */
   private readonly pluginFrameBindings = new PluginFrameBindingRegistry()
   private readonly pluginFrameAssets = new PluginFrameAssetProtocol()
+  /** C1: the network requests and `connect-src` refusals of plugin frames,
+   *  attributed to their package through the live mounts, as Activity rows. */
+  private readonly frameNetworkObserver = new PluginFrameNetworkObserver({
+    mountOf: (frameUrl) => this.pluginFrameAssets.mountOf(frameUrl),
+    surfaceOf: (webContentsId) => {
+      const instanceId = webContentsId === undefined ? undefined : this.bySender.get(webContentsId)
+      const plugin = instanceId === undefined ? undefined : this.running.get(instanceId)
+      if (!plugin) return null
+      const context = plugin.capabilityContext
+      return {
+        pluginId: plugin.id,
+        packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion ?? '',
+        workspace: plugin.workspacePath ?? '',
+        hosts: plugin.networkPolicy.hosts,
+        devOrigin: plugin.networkPolicy.devOrigin,
+      }
+    },
+    record: (row) => this.activityRecorder.record(row),
+  })
   private readonly pendingPluginFrames = new Map<string, PendingPluginFrame>()
   /** Receiver instance → opaque frame bindings owned by its current document. */
   private readonly receiverFrameBindings = new Map<string, Set<string>>()
@@ -11137,6 +11165,10 @@ export class FrontendPluginManager {
       backendBindingTask: null,
       query: input.query,
       senderId: input.surface.webContents.id,
+      networkPolicy: {
+        hosts: descriptor.capabilityPolicy?.kind === 'manifest-v2' ? [...(descriptor.networkHosts ?? [])] : null,
+        devOrigin: devServerOrigin(descriptor),
+      },
       fill: input.fill,
       restartBounds: input.restartBounds,
       detachHostResize: null,
@@ -11309,7 +11341,12 @@ export class FrontendPluginManager {
       this.pendingActivations.set(instanceId, null)
     }
     if (openedViaLegacyAdapter) this.legacyInstances.set(descriptor.id, instanceId)
-    if (record.carrier === 'surface') this.bySender.set(record.senderId, instanceId)
+    if (record.carrier === 'surface') {
+      this.bySender.set(record.senderId, instanceId)
+      // C1: what the surface reaches on the network is judged against its
+      // declared hosts and recorded from here on.
+      this.frameNetworkObserver.observe(record.view.webContents)
+    }
 
     this.bindViewBackend(instanceId, record, hostWindow, descriptor)
 
@@ -12593,10 +12630,14 @@ export class FrontendPluginManager {
         packageId: descriptor.id,
         packageVersion: descriptor.packageVersion,
         root: descriptor.packageDir,
+        ...(descriptor.networkHosts ? { connectHosts: descriptor.networkHosts } : {}),
       })
     } catch {
       return { ok: false, error: 'frame assets are unavailable' }
     }
+    // What the frame reaches on the network is recorded from here on (C1);
+    // the frame's own CSP is what admits or refuses each host.
+    this.frameNetworkObserver.observe(receiverWebContents)
     // A provider frame is the plugin's own UI for one workspace, so it needs the
     // same load-time context a contribution window gets. Without it the app
     // starts with an empty workspace and renders a blank pane — the query is
@@ -14853,6 +14894,19 @@ function gitQuery(
   if (theme) params.set('theme', theme)
   const qs = params.toString()
   return qs ? `?${qs}` : ''
+}
+
+/** The origin a view's entry loads from under the electron-vite dev server
+ *  (`loadEntry`), or null when it loads from the package directory. A surface's
+ *  requests to that origin are its own module and asset loads, never network
+ *  the package has to declare. */
+function devServerOrigin(descriptor: PluginLaunchDescriptor): string | null {
+  if (!process.env['ELECTRON_RENDERER_URL'] || !descriptor.devUrl) return null
+  try {
+    return new URL(descriptor.devUrl).origin
+  } catch {
+    return null
+  }
 }
 
 /**

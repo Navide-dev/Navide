@@ -12117,13 +12117,15 @@
     "source": {
       "broker": "Navide capability",
       "shell": "shell command",
-      "agentTool": "agent tool"
+      "agentTool": "agent tool",
+      "network": "view network"
     },
     "kind": {
       "system": "Permission",
       "shell": "Shell",
       "backendMethod": "Native backend method",
-      "agentTool": "Agent tool"
+      "agentTool": "Agent tool",
+      "networkHost": "Network host"
     },
     "reason": {
       "undeclared": "not declared"
@@ -12199,6 +12201,10 @@
     "commands": {
       "heading": "Commands run",
       "item": "{command} · {count} times · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Hosts reached from its views",
+      "item": "{host} · {count} times · {outcome} · {date}"
     },
     "trend": {
       "heading": "Calls per day"
@@ -12287,6 +12293,7 @@
         "backendMethod": "Native code method: {key}",
         "backendEvent": "Native code event: {key}",
         "network": "Can reach remote hosts through commands",
+        "networkHost": "Views can connect to: {key}",
         "agentTool": "Agent tool: {key}"
       }
     },
@@ -12307,6 +12314,7 @@
       "shell": "Runs {key}, but declares no shell permission",
       "shellDynamic": "Builds commands at run time, but declares no shell permission",
       "shellExecutable": "Runs {key}, but its declared shell scope is only git, gh and glab",
+      "networkHost": "Connects to {key}, which it does not declare",
       "system": "Uses {key}, but does not declare that permission",
       "fsScopeWrite": "Writes {key}, outside its declared write scope",
       "fsScopeRead": "Reads {key}, outside its declared read scope"
@@ -12314,7 +12322,8 @@
     "notSeenHeading": "Declared, not found by the static scan",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (declared host)"
     },
     "scanHeading": "What the publish-time scan found",
     "scanHeadingLocal": "What Navide's scan of this file found",
@@ -12332,8 +12341,8 @@
     "scannedLocally": "The scan informs this card; it never decides the install.",
     "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
     "limitsWithoutScanLocal": "Navide did not scan this file; the above is only this Navide plugin's own declaration.",
-    "viewNetwork": "A Navide plugin's views can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
-    "viewNetworkIfViews": "If this Navide plugin has views, they can reach the network and show external websites inside Navide; Navide does not filter or record that traffic. The network entries above cover only its commands and native backend.",
+    "viewNetwork": "This Navide plugin's views can connect only to the hosts it declares (listed above; to none when none are listed) and show no external website. Navide records the hosts they reach and the ones it refused under Activity. The network entries above cover its commands and native backend.",
+    "viewNetworkIfViews": "If this Navide plugin has views, they can connect only to the hosts it declares (listed above; to none when none are listed) and show no external website. Navide records the hosts they reach and the ones it refused under Activity. The network entries above cover its commands and native backend.",
     "summary": {
       "nativeBackend": "Ships native code (runs in a sandbox)",
       "files": {
@@ -12351,7 +12360,7 @@
       "agentMessages": "Reads the full text of messages between your agents in this project, which can contain code, file contents or secrets",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
-      "network": "Can use the network",
+      "network": "Its views can connect to: {hosts}",
       "noPermissions": "Declares no permissions"
     },
     "scan": {

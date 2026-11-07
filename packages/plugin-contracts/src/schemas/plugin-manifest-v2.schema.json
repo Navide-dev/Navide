@@ -38,6 +38,26 @@
           "then": { "contains": { "const": "agents" } }
         },
         "shell": { "enum": ["allowlist", "full"] },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hosts"],
+          "description": "Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource). The Host enforces the list through the plugin frame's connect-src and discloses it; the backend sandbox is unaffected.",
+          "properties": {
+            "hosts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "maxLength": 253,
+                "description": "Lowercase DNS labels, optionally one leading *. wildcard standing for one or more labels; no scheme, port, path or user info.",
+                "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+              }
+            }
+          }
+        },
         "scopes": {
           "type": "object",
           "additionalProperties": false,

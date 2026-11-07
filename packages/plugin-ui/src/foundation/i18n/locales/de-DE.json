@@ -12117,13 +12117,15 @@
     "source": {
       "broker": "Navide-Fähigkeit",
       "shell": "Shell-Befehl",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "network": "Ansichtsnetzwerk"
     },
     "kind": {
       "system": "Berechtigung",
       "shell": "Shell-Zugriff",
       "backendMethod": "Native Backend-Methode",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "networkHost": "Netzwerk-Host"
     },
     "reason": {
       "undeclared": "nicht deklariert"
@@ -12199,6 +12201,10 @@
     "commands": {
       "heading": "Ausgeführte Befehle",
       "item": "{command} · {count}-mal · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Von seinen Ansichten erreichte Hosts",
+      "item": "{host} · {count}-mal · {outcome} · {date}"
     },
     "trend": {
       "heading": "Aufrufe pro Tag"
@@ -12287,6 +12293,7 @@
         "backendMethod": "Methode des nativen Codes: {key}",
         "backendEvent": "Ereignis des nativen Codes: {key}",
         "network": "Kann über Befehle entfernte Hosts erreichen",
+        "networkHost": "Ansichten können sich verbinden mit: {key}",
         "agentTool": "Agent-Tool: {key}"
       }
     },
@@ -12307,6 +12314,7 @@
       "shell": "Führt {key} aus, deklariert aber keine Shell-Berechtigung",
       "shellDynamic": "Erstellt Befehle zur Laufzeit, deklariert aber keine Shell-Berechtigung",
       "shellExecutable": "Führt {key} aus, aber sein deklarierter Shell-Bereich umfasst nur git, gh und glab",
+      "networkHost": "Verbindet sich mit {key}, ohne es zu deklarieren",
       "system": "Verwendet {key}, deklariert diese Berechtigung aber nicht",
       "fsScopeWrite": "Schreibt {key}, außerhalb seines deklarierten Schreibbereichs",
       "fsScopeRead": "Liest {key}, außerhalb seines deklarierten Lesebereichs"
@@ -12314,7 +12322,8 @@
     "notSeenHeading": "Deklariert, vom statischen Scan nicht gefunden",
     "notSeen": {
       "shell": "Shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (deklarierter Host)"
     },
     "scanHeading": "Was der Scan bei der Veröffentlichung gefunden hat",
     "scanHeadingLocal": "Was der Scan dieser Datei durch Navide gefunden hat",
@@ -12332,8 +12341,8 @@
     "scannedLocally": "Der Scan fließt in diese Karte ein; über die Installation entscheidet er nie.",
     "limitsWithoutScan": "Für diese Version gibt es keinen Systemscan; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
     "limitsWithoutScanLocal": "Navide hat diese Datei nicht gescannt; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
-    "viewNetwork": "Die Ansichten eines Navide-Plug-ins können auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
-    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können diese auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
+    "viewNetwork": "Die Ansichten dieses Navide-Plug-ins können sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
+    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können sie sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
     "summary": {
       "nativeBackend": "Liefert nativen Code mit (läuft in einer Sandbox)",
       "files": {
@@ -12351,7 +12360,7 @@
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
-      "network": "Kann das Netzwerk verwenden",
+      "network": "Seine Ansichten können sich verbinden mit: {hosts}",
       "noPermissions": "Deklariert keine Berechtigungen"
     },
     "scan": {

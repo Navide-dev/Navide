@@ -419,7 +419,7 @@ const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'hi
 export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
-    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool' || item.kind === 'networkHost') {
       out.push({ kind: item.kind, key: item.key })
     } else if (item.kind === 'backendMethod') {
       out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })

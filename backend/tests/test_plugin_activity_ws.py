@@ -435,3 +435,19 @@ async def test_forgetting_a_plugin_drops_its_backend_call_counts(audit: PluginAu
     with audit.db.transaction() as cur:
         assert [r["plugin_id"] for r in cur.execute("SELECT plugin_id FROM plugin_backend_call_days")] == ["acme.other"]
 
+
+
+async def test_the_host_records_a_views_network_rows(audit: PluginAuditLog) -> None:
+    """C1: a plugin view's requests arrive as `network` rows under `network.<host>`."""
+    host = _session(host=True)
+    rows = [
+        _row(source="network", address="network.api.github.com", fs_path=""),
+        _row(source="network", address="network.tracker.evil.net", fs_path="", outcome="denied", denied_reason="undeclared"),
+    ]
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": rows})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
+    stored = _stored(audit)
+    assert [(r["source"], r["address"], r["outcome"], r["denied_reason"]) for r in stored] == [
+        ("network", "network.api.github.com", "allowed", ""),
+        ("network", "network.tracker.evil.net", "denied", "undeclared"),
+    ]
