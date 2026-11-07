@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "正在套用…Navide 會先讓進行中的工作完成，Plans 可能需要約半分鐘。",
       "disabledBadge": "已停用",
       "disabledNote": "已停用：它的畫面與後端不會執行，檔案、權限與儲存的資料都會保留。",
+      "networkStrict": "只允許已宣告的網路主機",
+      "networkStrictNote": "關（預設）：view 可連任何主機，每次請求都會記錄，連到 manifest 未宣告的主機會在活動紀錄標示「未宣告」。開：只放行已宣告的主機（frame 政策與請求攔截兩層一致），其他一律拒絕並記錄。",
       "digestBlock": {
         "blocked": "已被 Navide 封鎖",
         "security": "已被 Navide 下架（安全問題）",

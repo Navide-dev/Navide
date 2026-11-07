@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "적용하는 중… Navide가 먼저 현재 작업을 마무리하며, Plans는 30초 정도 걸릴 수 있어요.",
       "disabledBadge": "사용 안 함",
       "disabledNote": "사용 안 함: 보기와 백엔드가 실행되지 않아요. 파일, 권한, 저장된 데이터는 유지돼요.",
+      "networkStrict": "선언된 네트워크 호스트만 허용",
+      "networkStrictNote": "끔(기본): 뷰는 어떤 호스트에도 접근할 수 있고 요청마다 기록되며, manifest에 선언되지 않은 호스트로의 요청은 활동 기록에 '미선언'으로 표시됩니다. 켬: 선언된 호스트만(프레임 정책과 요청 후크 모두), 그 외는 거부하고 기록합니다.",
       "digestBlock": {
         "blocked": "Navide가 차단함",
         "security": "Navide가 내림(보안)",

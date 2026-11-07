@@ -47,6 +47,11 @@ describe('pluginFrameCsp', () => {
     expect(pluginFrameCsp([])).toContain("connect-src 'none'")
     const csp = pluginFrameCsp(['api.github.com'])
     expect(csp).toContain('connect-src https://api.github.com wss://api.github.com;')
+    // C1 switch off (the default): a v2 package's frame may connect anywhere and the session hook records it;
+    // a legacy descriptor (no list) keeps 'none' either way.
+    expect(pluginFrameCsp(['api.github.com'], false)).toContain('connect-src *;')
+    expect(pluginFrameCsp([], false)).toContain('connect-src *;')
+    expect(pluginFrameCsp(undefined, false)).toContain("connect-src 'none'")
     // Everything else is unchanged by a declaration.
     for (const fixed of ["default-src 'none'", "base-uri 'none'", "form-action 'none'", "img-src 'self' data:", "object-src 'none'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "worker-src 'none'"]) {
       expect(csp).toContain(fixed)

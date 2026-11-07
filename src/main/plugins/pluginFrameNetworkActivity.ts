@@ -163,6 +163,10 @@ export interface SurfaceNetworkPolicy {
   workspace: string
   /** The declared hosts; null for a legacy descriptor, which is not filtered. */
   hosts: readonly string[] | null
+  /** The user's "Only allow declared network hosts" switch for the package:
+   *  on, a request to an undeclared host is refused; off (the default), it is
+   *  allowed and recorded, and the Activity page says it was not declared. */
+  strict: boolean
   /** The dev server origin the entry loads from in development; always admitted. */
   devOrigin: string | null
 }
@@ -206,7 +210,9 @@ export class PluginFrameNetworkObserver {
 
   /** Whether a request may proceed: anything that is not a plugin view's
    *  network request is left alone; a view's request to an undeclared host is
-   *  cancelled and recorded as refused. Never throws (a failure allows). */
+   *  cancelled and recorded as refused when the package's strict switch is on,
+   *  and otherwise allowed (its completion is recorded as any other, and the
+   *  Activity page marks the host as not declared). Never throws (a failure allows). */
   decide(details: ObservedRequestDetails): { cancel?: boolean } {
     try {
       const host = networkHostOf(details.url)
@@ -218,6 +224,7 @@ export class PluginFrameNetworkObserver {
       if (!requester || requester.hosts === null) return {}
       if (requester.devOrigin && new URL(details.url).origin === requester.devOrigin) return {}
       if (hostDeclared(requester.hosts, host)) return {}
+      if (!requester.strict) return {}
       this.deps.record(this.rowFor(requester, host, 'denied'))
       return { cancel: true }
     } catch (error) {
@@ -265,7 +272,8 @@ export class PluginFrameNetworkObserver {
       pluginId: mount.packageId,
       packageVersion: mount.packageVersion,
       workspace: frameWorkspaceOf(frameUrl),
-      hosts: mount.connectHosts ?? [],
+      hosts: mount.connectHosts ?? null,
+      strict: mount.strictConnectHosts !== false,
       devOrigin: null,
     }
   }

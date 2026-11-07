@@ -114,6 +114,7 @@ import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgent
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
+import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
@@ -289,6 +290,9 @@ interface InstalledSummary {
   getsPrereleases?: boolean
   /** The user's "Disabled" switch; present only on rows it applies to. */
   disabled?: boolean
+  /** C1: the user's "Only allow declared network hosts" switch (default off:
+   *  an undeclared host is allowed and recorded); present with `disabled`. */
+  networkStrict?: boolean
 }
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
@@ -1069,6 +1073,10 @@ export function registerPluginIpc(
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // C1: the per-package network switch; the manager reads it on every request.
+  const networkStrictPlugins = new PluginNetworkStrictStore(pluginsRoot)
+  // Optional call: the tests' partial managers do not implement it.
+  manager.setNetworkStrictResolver?.((pluginId) => networkStrictPlugins.has(pluginId))
   // Who disabled each Marketplace package (B2-c option B). A write that fails
   // leaves an older entry behind, but the Disabled list changed since, so an
   // agent's entry then reads as the user: the conservative side.
@@ -1281,7 +1289,7 @@ export function registerPluginIpc(
       // "Disable" in its warning can enable it again.
       ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
         manager.canDisablePlugin(summary.id)
-        ? { disabled: disabledPlugins.has(summary.id) }
+        ? { disabled: disabledPlugins.has(summary.id), networkStrict: networkStrictPlugins.has(summary.id) }
         : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
@@ -4962,6 +4970,22 @@ export function registerPluginIpc(
 
   // Which built-ins are disabled, for the main window's tabs, commands and
   // "open in editor" entries.
+  // C1: the user's "Only allow declared network hosts" switch for one package.
+  // It takes effect on the next request a view makes (the session hook) and on
+  // the next load of a composed frame (its CSP).
+  ipcMain.handle(
+    'plugins:setNetworkStrict',
+    (event, args: { id?: unknown; strict?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const strict = args?.strict
+      if (typeof strict !== 'boolean') throw new Error('invalid plugin network setting')
+      if (strict) networkStrictPlugins.add(id)
+      else networkStrictPlugins.remove(id)
+      return { id, networkStrict: networkStrictPlugins.has(id) }
+    },
+  )
+
   ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
     assertAuthorized(event)
     return manager.listDisabledBuiltinPlugins()

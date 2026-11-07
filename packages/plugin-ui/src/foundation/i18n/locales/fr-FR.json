@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "Application… Navide laisse d’abord se terminer le travail en cours, ce qui peut prendre environ une demi-minute pour Plans.",
       "disabledBadge": "Désactivé",
       "disabledNote": "Désactivé : ses vues et son backend ne s’exécutent pas. Ses fichiers, autorisations et données stockées sont conservés.",
+      "networkStrict": "N'autoriser que les hôtes réseau déclarés",
+      "networkStrictNote": "Désactivé (par défaut) : une vue peut atteindre n'importe quel hôte ; chaque requête est enregistrée, et une requête vers un hôte non déclaré dans le manifeste est signalée comme telle dans l'activité. Activé : seulement les hôtes déclarés, dans la politique du cadre comme dans le crochet de requêtes ; tout le reste est refusé et enregistré.",
       "digestBlock": {
         "blocked": "Bloqué par Navide",
         "security": "Retiré par Navide (sécurité)",
@@ -12566,7 +12568,7 @@
       "no-key": "Créée lors de votre première connexion en tant qu’éditeur",
       "key-registered": "Enregistrée",
       "key-unregistered": "Pas encore enregistrée",
-      "key-conflict": "Le Registry a déjà une autre clé de signature pour cet éditeur (empreinte {fingerprint}), le plus souvent celle enregistrée pour la CLI navide-plugin. Publier depuis ce Navide demande de la remplacer ; la CLI continue de publier jusque-là.",
+      "key-conflict": "Le Registry a déjà une autre clé de signature pour cet éditeur (empreinte {fingerprint}), le plus souvent celle enregistrée pour l'outil de publication en ligne de commande. Publier depuis ce Navide demande de la remplacer ; l'outil en ligne de commande continue de publier jusque-là.",
       "replace-key": "Utiliser la clé de ce Navide à la place",
       "expires": "La connexion expire",
       "sign-in": "Se connecter avec Navide Cloud",

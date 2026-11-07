@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "Đang áp dụng… Navide để công việc hiện tại hoàn tất trước, với Plans có thể mất khoảng nửa phút.",
       "disabledBadge": "Đã tắt",
       "disabledNote": "Đã tắt: khung xem và backend của nó không chạy. Tệp, quyền và dữ liệu đã lưu được giữ lại.",
+      "networkStrict": "Chỉ cho phép các máy chủ mạng đã khai báo",
+      "networkStrictNote": "Tắt (mặc định): view có thể kết nối tới bất kỳ máy chủ nào; mỗi yêu cầu được ghi lại, và yêu cầu tới máy chủ mà manifest không khai báo sẽ được đánh dấu như vậy trong Hoạt động. Bật: chỉ các máy chủ đã khai báo, ở cả chính sách khung lẫn móc chặn yêu cầu; mọi thứ khác bị từ chối và ghi lại.",
       "digestBlock": {
         "blocked": "Bị Navide chặn",
         "security": "Bị Navide gỡ xuống (bảo mật)",
@@ -12566,7 +12568,7 @@
       "no-key": "Được tạo khi bạn đăng nhập lần đầu với tư cách nhà phát hành",
       "key-registered": "Đã đăng ký",
       "key-unregistered": "Chưa đăng ký",
-      "key-conflict": "Registry đã có một khóa ký khác cho nhà phát hành này (vân tay {fingerprint}), thường là khóa bạn đã đăng ký cho CLI navide-plugin. Để xuất bản từ Navide này cần thay khóa đó; CLI vẫn xuất bản được cho tới khi bạn thay.",
+      "key-conflict": "Registry đã có một khóa ký khác cho nhà phát hành này (vân tay {fingerprint}), thường là khóa bạn đã đăng ký cho công cụ xuất bản dòng lệnh. Để xuất bản từ Navide này cần thay khóa đó; công cụ dòng lệnh vẫn xuất bản được cho tới khi bạn thay.",
       "replace-key": "Dùng khóa của Navide này thay thế",
       "expires": "Phiên đăng nhập hết hạn",
       "sign-in": "Đăng nhập bằng Navide Cloud",

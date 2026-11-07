@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
       "disabledBadge": "Disabled",
       "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
+      "networkStrict": "Only allow declared network hosts",
+      "networkStrictNote": "Off (default): a view may reach any host; each request is recorded, and one to a host the manifest does not declare is marked as such in Activity. On: only the declared hosts, in both the frame policy and the request hook; anything else is refused and recorded.",
       "digestBlock": {
         "blocked": "Blocked by Navide",
         "security": "Taken down by Navide (security)",
@@ -12566,7 +12568,7 @@
       "no-key": "Created when you first sign in as a publisher",
       "key-registered": "Registered",
       "key-unregistered": "Not registered yet",
-      "key-conflict": "The Registry already has a different signing key for this publisher (fingerprint {fingerprint}), most likely the one you registered for the navide-plugin CLI. Publishing from this Navide needs that key replaced; the CLI keeps publishing until you do.",
+      "key-conflict": "The Registry already has a different signing key for this publisher (fingerprint {fingerprint}), most likely the one you registered for the command-line publishing tool. Publishing from this Navide needs that key replaced; the command-line tool keeps publishing until you do.",
       "replace-key": "Use this Navide's key instead",
       "expires": "Sign-in expires",
       "sign-in": "Sign In with Navide Cloud",

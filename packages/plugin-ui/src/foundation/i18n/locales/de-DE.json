@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "Wird angewendet … Navide lässt zuerst laufende Arbeit abschließen, was bei Plans etwa eine halbe Minute dauern kann.",
       "disabledBadge": "Deaktiviert",
       "disabledNote": "Deaktiviert: Seine Ansichten und sein Backend laufen nicht. Seine Dateien, Berechtigungen und gespeicherten Daten bleiben erhalten.",
+      "networkStrict": "Nur deklarierte Netzwerkhosts zulassen",
+      "networkStrictNote": "Aus (Standard): Eine Ansicht darf jeden Host erreichen; jede Anfrage wird aufgezeichnet, und eine an einen im Manifest nicht deklarierten Host wird in der Aktivität als solche markiert. An: nur die deklarierten Hosts, in der Frame-Richtlinie und im Anfrage-Hook; alles andere wird abgelehnt und aufgezeichnet.",
       "digestBlock": {
         "blocked": "Von Navide blockiert",
         "security": "Von Navide entfernt (Sicherheit)",
@@ -12566,7 +12568,7 @@
       "no-key": "Wird bei Ihrer ersten Anmeldung als Herausgeber erstellt",
       "key-registered": "Registriert",
       "key-unregistered": "Noch nicht registriert",
-      "key-conflict": "Die Registry hat für diesen Publisher bereits einen anderen Signaturschlüssel (Fingerabdruck {fingerprint}), meist den für das navide-plugin-CLI registrierten. Zum Veröffentlichen aus diesem Navide muss er ersetzt werden; bis dahin veröffentlicht das CLI weiter.",
+      "key-conflict": "Die Registry hat für diesen Publisher bereits einen anderen Signaturschlüssel (Fingerabdruck {fingerprint}), meist den für das Kommandozeilen-Veröffentlichungswerkzeug registrierten. Zum Veröffentlichen aus diesem Navide muss er ersetzt werden; bis dahin veröffentlicht das Kommandozeilenwerkzeug weiter.",
       "replace-key": "Stattdessen den Schlüssel dieses Navide verwenden",
       "expires": "Anmeldung läuft ab",
       "sign-in": "Mit Navide Cloud anmelden",

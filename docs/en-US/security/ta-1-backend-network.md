@@ -130,6 +130,18 @@ One declaration, two enforcement points:
    while a local or private address, or an "any host" mode, reads
    **highest**. C1 ships with one level, highest, as the contract reserved.
 
+### Decided 2026-11-07
+
+The user chose, for C1 (views), **"not declared = allowed and disclosed"**:
+a view's request to an undeclared host is let through and recorded, the
+Activity page marks it as not declared, the consent card and the Registry
+scan show undeclared hosts in red, a public listing that declares hosts must
+declare the ones its code reaches (the Registry refuses the publish), and a
+per-package switch **Only allow declared network hosts** (off by default)
+turns both the frame CSP and the session hook into the enforcing mode. The
+same stance is expected of the backend bridge of option B when it ships:
+record and disclose by default, enforce by the same switch.
+
 ## Did we do enough (acceptance for the implementing PR)
 
 - A request to an undeclared host, to a literal IP, to `localhost`, to a

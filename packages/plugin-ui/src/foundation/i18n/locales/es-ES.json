@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "Aplicando… Navide deja primero que termine el trabajo en curso, lo que en Plans puede tardar alrededor de medio minuto.",
       "disabledBadge": "Desactivado",
       "disabledNote": "Desactivado: sus vistas y su backend no se ejecutan. Sus archivos, permisos y datos guardados se conservan.",
+      "networkStrict": "Permitir solo los hosts de red declarados",
+      "networkStrictNote": "Apagado (predeterminado): una vista puede llegar a cualquier host; cada solicitud se registra y una a un host que el manifiesto no declara se marca como tal en Actividad. Encendido: solo los hosts declarados, tanto en la política del marco como en el gancho de solicitudes; todo lo demás se rechaza y se registra.",
       "digestBlock": {
         "blocked": "Bloqueado por Navide",
         "security": "Retirado por Navide (seguridad)",

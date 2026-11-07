@@ -588,6 +588,7 @@ declare global {
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
+        setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
         preparePack: (args: { namespace: string; name: string }) => Promise<PreparedPackSummary>
         finishPack: (id: string) => Promise<{ recorded: boolean; pack?: InstalledPackRecord }>
@@ -667,6 +668,8 @@ declare global {
     getsPrereleases?: boolean
     /** The user's "Disabled" switch; absent on rows it does not apply to. */
     disabled?: boolean
+    /** C1: the user's "Only allow declared network hosts" switch (present with `disabled`). */
+    networkStrict?: boolean
   }
 
   interface FactoryPluginSummary {

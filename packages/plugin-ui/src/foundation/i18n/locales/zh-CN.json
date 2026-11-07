@@ -2088,6 +2088,8 @@
       "builtinSwitchBusy": "正在应用…Navide 会先让进行中的工作完成，Plans 可能需要约半分钟。",
       "disabledBadge": "已禁用",
       "disabledNote": "已禁用：它的画面与后端不会运行，文件、权限与保存的数据都会保留。",
+      "networkStrict": "只允许已声明的网络主机",
+      "networkStrictNote": "关（默认）：视图可连接任何主机，每次请求都会记录，连接到 manifest 未声明的主机会在活动记录中标为「未声明」。开：只放行已声明的主机（frame 策略与请求拦截两层一致），其余一律拒绝并记录。",
       "digestBlock": {
         "blocked": "已被 Navide 封锁",
         "security": "已被 Navide 下架（安全问题）",

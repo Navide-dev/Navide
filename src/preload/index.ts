@@ -1651,6 +1651,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
+    setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>
+      ipcRenderer.invoke('plugins:setNetworkStrict', { id, strict }),
     marketplacePackMembers: (members: string[]): Promise<PackMemberSummary[]> =>
       ipcRenderer.invoke('plugins:marketplacePackMembers', { members }),
     preparePack: (args: { namespace: string; name: string }): Promise<PreparedPackSummary> =>

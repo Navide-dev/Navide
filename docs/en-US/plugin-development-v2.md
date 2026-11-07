@@ -576,17 +576,32 @@ and the parser names the host it refused and what would pass.
 
 **What it governs.** A view's `fetch`, XHR, WebSocket and EventSource requests,
 its images, scripts, fonts and embedded frames: every request a view makes
-that leaves the machine or reaches a local port. A composed frame
-(`navide-plugin-frame://`) carries a Content-Security-Policy whose `connect-src`
-is exactly the declared hosts (`'none'` without a declaration; scripts and
-styles stay `'self'`, images `'self' data:`, frames and workers refused). A
-surface — a `<webview>` region view or a `window` view — has no CSP, so the
-Host's session hook refuses a request to an undeclared host before it leaves
-(`net::ERR_BLOCKED_BY_CLIENT` in the view). Omitting `network` means a view has
-no network, as omitting `shell` means no `shell.run`. The package's own assets,
-`navide-preview:` resources and the Host bridge are not network and are never
-affected; in development the dev server a view loads from is always admitted.
-A Manifest v1 (legacy) descriptor has no declaration model and is not filtered.
+that leaves the machine or reaches a local port. Every such request is
+recorded (Settings → Navide Plugins → Activity, as `network.<host>`), and a
+request to a host the manifest does not declare is marked there as **not
+declared**. Whether such a request is also *refused* is the user's per-package
+switch **Only allow declared network hosts** (Settings → Navide Plugins, on the
+package's row; the user's decision of 2026-11-07, "disclose, don't restrict"):
+
+- **Off (the default).** The view reaches any host. A composed frame
+  (`navide-plugin-frame://`) carries `connect-src *`; a surface — a
+  `<webview>` region view or a `window` view — is let through by the Host's
+  session hook. The declaration is what the consent card, the Registry scan
+  and the Activity page measure the package against.
+- **On.** Both layers admit the declared hosts only: the frame's
+  Content-Security-Policy has `connect-src` set to exactly the declared hosts
+  (`'none'` without a declaration; scripts and styles stay `'self'`, images
+  `'self' data:`, frames and workers refused), and the session hook refuses a
+  surface's request to an undeclared host before it leaves
+  (`net::ERR_BLOCKED_BY_CLIENT` in the view), recording it as refused. The
+  hook reads the switch on every request; a frame's policy is set when the
+  frame loads, so a change applies to it on its next load.
+
+The package's own assets, `navide-preview:` resources and the Host bridge are
+not network and are never affected; in development the dev server a view
+loads from is always admitted. A Manifest v1 (legacy) descriptor has no
+declaration model and is not filtered (its frames keep `connect-src 'none'`
+as before).
 
 **What it does not govern.** The backend sandbox: a declaration gives the
 native backend no network (it still has none; see

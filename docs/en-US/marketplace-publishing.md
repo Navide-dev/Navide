@@ -676,6 +676,7 @@ publisher. Removals, and why, are listed publicly at
 | `manifest references '...', but artifact-files.json does not list it` | The file is there but not in the `files` array; add it. |
 | `package entry '...' is listed in artifact-files.json but does not exist` | The `files` array names a file the staging directory does not have; build it or remove it from the list. |
 | `package entry '...' is dev-backend data (.navide-dev)` | `navide-plugin dev-backend` data was listed; remove it from `artifact-files.json`. |
+| `static scan found network hosts the manifest does not declare: ...` (Registry, public channel) | Your manifest declares `permissions.network.hosts`, and the code names other hosts (the card would show them red). Add them to the declaration, or remove the code that reaches them; `navide-plugin scan` lists them first. |
 | `backend package target '...' must match the build host target '...'` | Package each backend target on a machine of that platform and architecture. |
 | `frontend-only package target must be 'universal'` | Drop `--target` for a plugin without a backend. |
 | `private key must have owner-only permissions` | `chmod 600 keys/acme.key`. |

@@ -17,10 +17,10 @@ import {
 
 const FRAME = 'navide-plugin-frame://aaaa/index.html?workspace_path=%2FUsers%2Fme%2Fproject&v2=1&contribution=main'
 const MOUNT: PluginFrameAssetMount = {
-  artifactId: 'a'.repeat(64), packageId: 'acme.status', packageVersion: '1.0.0', root: '/pkg', connectHosts: ['api.github.com', '*.example.com'],
+  artifactId: 'a'.repeat(64), packageId: 'acme.status', packageVersion: '1.0.0', root: '/pkg', connectHosts: ['api.github.com', '*.example.com'], strictConnectHosts: true,
 }
 const SURFACE: SurfaceNetworkPolicy = {
-  pluginId: 'acme.board', packageVersion: '2.0.0', workspace: '/Users/me/project', hosts: ['api.github.com'], devOrigin: null,
+  pluginId: 'acme.board', packageVersion: '2.0.0', workspace: '/Users/me/project', hosts: ['api.github.com'], strict: true, devOrigin: null,
 }
 
 /** A fake session: one listener per webRequest event, as Electron keeps. */
@@ -140,6 +140,31 @@ describe('PluginFrameNetworkObserver', () => {
     expect(decide({ url: 'https://api.github.com/repos', webContentsId: 7 })).toEqual({})
     listeners.completed!({ url: 'https://api.github.com/repos', webContentsId: 7 })
     expect(rows).toEqual([expect.objectContaining({ address: 'network.api.github.com', outcome: 'allowed', plugin_id: 'acme.board' })])
+  })
+
+  it('with the strict switch off (the default) lets a surface reach an undeclared host and records only the completion', () => {
+    const { obs, rows } = observer({ surface: { ...SURFACE, strict: false } })
+    const { ses, listeners, decide } = session()
+    obs.observe(contents(ses).wc)
+    expect(decide({ url: 'https://tracker.evil.net/collect', webContentsId: 7 })).toEqual({})
+    expect(rows).toEqual([])
+    listeners.completed!({ url: 'https://tracker.evil.net/collect', webContentsId: 7 })
+    // The Activity page tells the undeclared host from the declaration, not from this row.
+    expect(rows).toEqual([expect.objectContaining({ address: 'network.tracker.evil.net', outcome: 'allowed', source: 'network' })])
+    // The declared host is unaffected either way.
+    expect(decide({ url: 'https://api.github.com/repos', webContentsId: 7 })).toEqual({})
+  })
+
+  it('with the strict switch off lets a frame reach an undeclared host too; a legacy mount is not filtered at all', () => {
+    const lenient = observer({ mount: { ...MOUNT, strictConnectHosts: false } })
+    const { ses, decide } = session()
+    lenient.obs.observe(contents(ses).wc)
+    expect(decide({ url: 'https://tracker.evil.net/x', webContentsId: 1, frame: { url: FRAME } })).toEqual({})
+    expect(lenient.rows).toEqual([])
+    const legacy = observer({ mount: { artifactId: 'a'.repeat(64), packageId: 'acme.old', packageVersion: '0.1.0', root: '/old', strictConnectHosts: true } })
+    const other = session()
+    legacy.obs.observe(contents(other.ses).wc)
+    expect(other.decide({ url: 'https://anything.example.net/', webContentsId: 1, frame: { url: FRAME } })).toEqual({})
   })
 
   it('leaves requests that are not a plugin view’s alone and records nothing for them', () => {

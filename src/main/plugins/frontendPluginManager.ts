@@ -1918,6 +1918,7 @@ export class FrontendPluginManager {
         packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion ?? '',
         workspace: plugin.workspacePath ?? '',
         hosts: plugin.networkPolicy.hosts,
+        strict: this.networkStrictResolver?.(plugin.id) ?? false,
         devOrigin: plugin.networkPolicy.devOrigin,
       }
     },
@@ -2568,6 +2569,15 @@ export class FrontendPluginManager {
       error.code === 'INVALID_RUNTIME' ||
       error.code === 'PLUGIN_STOPPING'
     )
+  }
+
+  /** C1: the user's per-package "Only allow declared network hosts" switch,
+   *  read on every request (the session hook) and at every frame mount (the
+   *  frame's CSP); absent, every package reads as off. */
+  private networkStrictResolver: ((pluginId: string) => boolean) | null = null
+
+  setNetworkStrictResolver(resolver: ((pluginId: string) => boolean) | null): void {
+    this.networkStrictResolver = resolver
   }
 
   setCapabilityGrantResolver(
@@ -12749,7 +12759,11 @@ export class FrontendPluginManager {
         packageId: descriptor.id,
         packageVersion: descriptor.packageVersion,
         root: descriptor.packageDir,
-        ...(descriptor.networkHosts ? { connectHosts: descriptor.networkHosts } : {}),
+        // A v2 package always carries its list (empty when it declares none)
+        // so the switch applies; a legacy descriptor has no declaration model.
+        ...(descriptor.capabilityPolicy?.kind === 'manifest-v2'
+          ? { connectHosts: descriptor.networkHosts ?? [], strictConnectHosts: this.networkStrictResolver?.(descriptor.id) ?? false }
+          : {}),
       })
     } catch {
       return { ok: false, error: 'frame assets are unavailable' }

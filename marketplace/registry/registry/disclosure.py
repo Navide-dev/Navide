@@ -19,7 +19,27 @@ from .plugin_contract.disclosure_contract import (
     canonical_contract_json,
     compute_disclosure,
 )
+from .plugin_contract.disclosure_scan_contract import declared_vs_scanned
 from .registry_trust import RegistryTrustSigner
+
+
+def undeclared_network_hosts(manifest: dict, scan: dict | None) -> list[str]:
+    """The hosts a package's code names that its `permissions.network` does
+    not cover (contract 3.9, the red list of the card), for the publish gate
+    (C1, 2026-11-07): a public listing that declares hosts must declare the
+    ones its code reaches. A package that declares none is not judged here
+    (the strings its libraries carry are a scan sentence, not a use), and an
+    incomplete scan judges nothing."""
+    if scan is None:
+        return []
+    disclosure = manifest_disclosure(manifest)
+    if disclosure is None or disclosure.get("networkHosts") is None:
+        return []
+    try:
+        undeclared = declared_vs_scanned(disclosure, scan)["undeclared"]
+    except (KeyError, TypeError):
+        return []
+    return sorted({entry["key"] for entry in undeclared if entry.get("kind") == "networkHost"})
 
 
 def manifest_disclosure(manifest: dict) -> ManifestDisclosure | None:

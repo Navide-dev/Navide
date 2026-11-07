@@ -453,6 +453,22 @@ async function refreshDisabledStoreStatus(): Promise<void> {
     disabledStoreStatus.value = 'ok'
   }
 }
+// C1: the per-package "Only allow declared network hosts" switch.
+async function setNetworkStrict(id: string, strict: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setNetworkStrict) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setNetworkStrict(id, strict)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function resetDisabledStore(): Promise<void> {
   const api = pluginsApi()
   if (!api?.resetDisabledStore) return
@@ -1229,6 +1245,16 @@ watch(installed, () => {
                 >
                   {{ $t('settings.extensions.enable') }}
                 </button>
+                <!-- C1: the per-package network switch (off by default: record, do not refuse). -->
+                <label v-if="p.networkStrict !== undefined" class="ext-network-strict" :title="$t('settings.extensions.networkStrictNote')">
+                  <input
+                    type="checkbox"
+                    :checked="p.networkStrict"
+                    :disabled="busy"
+                    @change="setNetworkStrict(p.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ $t('settings.extensions.networkStrict') }}
+                </label>
                 <!-- `navide.` packages ship with Navide: they are disabled, never removed.
                      A Marketplace first-party package (navide.browser) is the
                      exception: the Host offers its Disabled switch, and it is

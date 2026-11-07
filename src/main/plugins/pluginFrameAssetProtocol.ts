@@ -9,9 +9,14 @@ export type PluginFrameAssetMount = {
   packageId: string
   packageVersion: string
   root: string
-  /** `permissions.network.hosts` of the package: the only hosts the frame's
-   *  `connect-src` admits. Absent or empty keeps `connect-src 'none'`. */
+  /** `permissions.network.hosts` of the package. With `strictConnectHosts`
+   *  they are the only hosts the frame's `connect-src` admits; without it
+   *  (the default since the user's decision of 2026-11-07) `connect-src *`,
+   *  and the session hook records what the frame reaches. Absent (a legacy
+   *  descriptor, no declaration model) keeps `connect-src 'none'`. */
   connectHosts?: readonly string[]
+  /** The user's per-package "Only allow declared network hosts" switch. */
+  strictConnectHosts?: boolean
 }
 
 const MIME_TYPES: Readonly<Record<string, string>> = {
@@ -48,12 +53,15 @@ export function pluginFrameConnectSources(hosts: readonly string[] | undefined):
 /** The frame's Content-Security-Policy. Everything but the declared network
  *  hosts is fixed: scripts and styles from the package only, no plugins, no
  *  workers, no form posts, no navigation base. */
-export function pluginFrameCsp(connectHosts: readonly string[] | undefined): string {
+export function pluginFrameCsp(connectHosts: readonly string[] | undefined, strict = true): string {
   const connect = pluginFrameConnectSources(connectHosts)
+  // A v2 package with the switch off reaches any host (recorded by the
+  // session hook); a legacy descriptor (no list at all) still gets none.
+  const connectSource = connectHosts !== undefined && !strict ? '*' : connect.length ? connect.join(' ') : "'none'"
   return [
     "default-src 'none'",
     "base-uri 'none'",
-    `connect-src ${connect.length ? connect.join(' ') : "'none'"}`,
+    `connect-src ${connectSource}`,
     "form-action 'none'",
     "img-src 'self' data:",
     "object-src 'none'",
@@ -79,8 +87,14 @@ export class PluginFrameAssetProtocol {
   async mount(mount: PluginFrameAssetMount): Promise<string> {
     const canonicalRoot = await realpath(mount.root)
     const hostname = randomBytes(32).toString('hex')
-    const connectHosts = [...(mount.connectHosts ?? [])]
-    this.mounts.set(hostname, { ...mount, connectHosts, canonicalRoot, csp: pluginFrameCsp(connectHosts) })
+    const connectHosts = mount.connectHosts === undefined ? undefined : [...mount.connectHosts]
+    this.mounts.set(hostname, {
+      ...mount,
+      ...(connectHosts === undefined ? {} : { connectHosts }),
+      canonicalRoot,
+      // Absent reads as strict: only the Host's lenient default passes false.
+      csp: pluginFrameCsp(connectHosts, mount.strictConnectHosts !== false),
+    })
     return `${PLUGIN_FRAME_SCHEME}://${hostname}/`
   }
 
