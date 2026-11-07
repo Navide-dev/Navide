@@ -17,6 +17,8 @@ export type PluginCapabilityPolicy =
       shell?: PluginShellMode
       /** `permissions.agents.events`: the Host events this package receives. */
       agentEvents?: readonly AgentsEventAddress[]
+      /** `permissions.plugins`: the plugins whose contributes.api this one calls. */
+      plugins?: readonly string[]
       // Reserved for B1 adapter composition; authorization currently reads
       // normalized system and shell fields directly.
       grants: readonly PluginPermissionGrant[]
@@ -44,6 +46,7 @@ export function manifestV2CapabilityPolicy(
     system: [...(permissions.system ?? [])],
     ...(permissions.shell ? { shell: permissions.shell } : {}),
     ...(permissions.agents ? { agentEvents: [...permissions.agents.events] } : {}),
+    ...(permissions.plugins ? { plugins: [...permissions.plugins] } : {}),
     grants,
   }
 }

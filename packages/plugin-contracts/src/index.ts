@@ -10,6 +10,7 @@ import type { GitCapabilityParams, GitCapabilityResults } from './gitCapabilitie
 import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from './gitAccounts.js'
 import type { IssueParams, IssueResults } from './issues.js'
 import type { AgentsEventAddress, AgentsEventPayloads, AgentsParams, AgentsResults } from './agents.js'
+import type { PluginsParams, PluginsResults } from './plugins.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -23,6 +24,7 @@ export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, Edito
 export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './agents.js'
+export * from './plugins.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
 export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
@@ -81,6 +83,15 @@ export type PluginManifestV2Permissions = {
   scopes?: PluginManifestV2Scopes
   /** Host events declared one by one; needs `agents` in `system`. */
   agents?: { events: AgentsEventAddress[] }
+  /** Ids of the installed plugins whose `contributes.api` this one calls. */
+  plugins?: string[]
+}
+
+/** One backend method other plugins may call (`plugins.call`); it must also be
+ *  listed in `backend.methods`. */
+export type PluginManifestV2ApiMethod = {
+  method: string
+  description: string
 }
 
 export type PluginManifestV2Receiver = {
@@ -130,7 +141,7 @@ export type PluginManifestV2 = {
     categories?: string[]
     icon?: string
   }
-  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[] }
+  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[]; api?: PluginManifestV2ApiMethod[] }
   backend?: {
     entry: string
     protocolVersion: 1
@@ -1032,7 +1043,7 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
@@ -1075,7 +1086,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string

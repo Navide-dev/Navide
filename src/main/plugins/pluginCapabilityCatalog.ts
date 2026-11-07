@@ -11,6 +11,7 @@ import { GIT_ACCOUNT_PUBLIC_METHODS, validateGitAccountRequest } from './gitAcco
 import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from './webCapability'
 import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
 import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
+import { PLUGINS_CALL_ADDRESS, validateInterPluginCallRequest } from './pluginInterCall'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -57,7 +58,7 @@ export interface PublicStorageCapabilityCatalogEntry extends PublicCapabilityCat
 }
 
 export interface PublicSystemCapabilityCatalogEntry extends PublicCapabilityCatalogBase {
-  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'shell'
+  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'shell' | 'plugins'
   /** Host-pinned scope for declared namespaces (`ui.openExternal` and every
    *  `web.*` address are `plugin`; storage has its own discriminated entry). */
   scope: PublicCapabilityScope
@@ -475,6 +476,16 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   ...Object.fromEntries(AGENTS_EVENTS.map(address => [address, {
     address, kind: 'event', namespace: 'agents', scope: 'workspace', eligibility: 'public',
   } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Another installed plugin's contributes.api method; the target must be in
+  // the caller's permissions.plugins (not a system namespace).
+  [PLUGINS_CALL_ADDRESS]: {
+    address: PLUGINS_CALL_ADDRESS,
+    kind: 'method',
+    namespace: 'plugins',
+    scope: 'workspace',
+    eligibility: 'public',
+    validateRequest: validateInterPluginCallRequest,
+  },
 }
 
 export const PUBLIC_CAPABILITY_EVENT_ADDRESSES: readonly string[] = [

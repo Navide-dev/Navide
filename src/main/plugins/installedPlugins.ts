@@ -195,6 +195,7 @@ export function manifestToDescriptor(
       ...(manifest.contributes?.commands
         ? { commands: manifest.contributes.commands, displayName: manifest.name }
         : {}),
+      ...(manifest.contributes?.api ? { api: manifest.contributes.api.map(entry => entry.method) } : {}),
     }
   }
   return {

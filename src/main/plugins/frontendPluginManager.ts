@@ -58,6 +58,12 @@ import { dispatchWebBridge } from './webBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
 import { HOST_AGENT_EVENT_TYPE, parseHostAgentEvent } from './agentsEvents'
+import {
+  InterPluginCallError,
+  interPluginBackendError,
+  interPluginTargetError,
+  PLUGINS_CALL_ADDRESS,
+} from './pluginInterCall'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
@@ -275,6 +281,8 @@ export interface PluginLaunchDescriptor {
   commands?: PluginManifestV2Command[]
   /** The manifest's name, carried for the commands that show it. */
   displayName?: string
+  /** `contributes.api` method names other plugins may call (`plugins.call`). */
+  api?: string[]
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -1568,6 +1576,9 @@ export class FrontendPluginManager {
   private agentToolWorkspaceResolver: ((root: string) => boolean) | null = null
   /** Headless third-party bindings created for agent-tool calls, by package/version/workspace. */
   private readonly headlessAgentToolInstances = new Map<string, string>()
+  /** Headless backend bindings serving `plugins.call`, keyed like the agent-tool ones. */
+  private readonly headlessApiInstances = new Map<string, string>()
+  private readonly pendingHeadlessApiBinds = new Map<string, Promise<string>>()
   private readonly pendingHeadlessAgentToolBinds = new Map<string, Promise<string>>()
   /** instanceId -> canonical workspace root of a headless agent-tool binding. */
   private readonly headlessAgentToolRoots = new Map<string, string>()
@@ -5588,6 +5599,7 @@ export class FrontendPluginManager {
           return buildSuccess(call.reqId, await handler(plan))
         } catch (error) {
           if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
+          if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
           // The Plugin keeps the fixed opaque message (it must not learn Host
           // paths or internals); the Host console keeps the cause.
           console.error(`[plugins] public capability '${plan.address}' failed:`, error)
@@ -6619,6 +6631,14 @@ export class FrontendPluginManager {
       )
     }
 
+    if (plan.address === PLUGINS_CALL_ADDRESS) {
+      if (!workspacePath) throw new Error('Inter-plugin call workspace binding is missing')
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      return await this.runInterPluginCall(plan, plugin, workspacePath)
+    }
+
     const agentsOp = agentsOperation(plan.address)
     if (agentsOp) {
       if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
@@ -7255,6 +7275,7 @@ export class FrontendPluginManager {
         return buildSuccess(call.reqId, await this.publicCapabilityHandler(plan))
       } catch (error) {
         if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
+        if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
         return buildError(call.reqId, 'INTERNAL_ERROR', 'public capability failed')
       }
     }
@@ -7790,6 +7811,92 @@ export class FrontendPluginManager {
   agentToolCallFor(initiatorId: string): { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined {
     const call = this.agentToolCalls.get(initiatorId)
     return call ? { pluginId: call.pluginId, risk: call.risk, workspaceRoot: call.workspaceRoot } : undefined
+  }
+
+  /** `plugins.call`: forward to the target's backend for the caller's
+   *  workspace. The broker already checked the caller (permissions.plugins and
+   *  the package-version grant); this checks the target is installed, enabled
+   *  and offers the method in contributes.api, and answers BACKEND_UNAVAILABLE
+   *  at once where the target has no backend (Windows) instead of waiting. The
+   *  call is recorded in the caller's Activity as plugins.call and in the
+   *  target's as a backend call. */
+  private async runInterPluginCall(
+    plan: PublicCapabilityExecutionPlan,
+    caller: RunningPlugin,
+    workspacePath: string,
+  ): Promise<JsonValue> {
+    const targetId = String(plan.args.pluginId)
+    const method = String(plan.args.method)
+    const descriptor = this.descriptors.get(targetId)
+    const usable = descriptor && descriptor.capabilityPolicy?.kind === 'manifest-v2' &&
+      !this.isPluginDisabled(targetId) && nonEmptyString(descriptor.packageVersion) &&
+      nonEmptyString(descriptor.packageDir)
+    const activation = usable
+      ? this.pluginBackendHost.activationFor(targetId, descriptor.packageVersion!, descriptor.packageDir!)
+      : undefined
+    const refusal = interPluginTargetError(caller.id, usable ? {
+      pluginId: targetId,
+      api: descriptor.api ?? [],
+      backendMethods: activation?.approvedMethods ?? [...(descriptor.api ?? [])],
+      backendAvailable: activation !== undefined && !this.isPackageVersionStopping(targetId, descriptor.packageVersion!),
+    } : null, method)
+    if (refusal) throw refusal
+    const root = resolve(workspacePath)
+    const workspaceId = this.workspaceIdForPath(root)
+    if (!workspaceId) throw new InterPluginCallError('BACKEND_UNAVAILABLE', 'the workspace is not bound')
+    try {
+      const instanceId = await this.bindHeadlessApiBackend(
+        targetId, descriptor!.packageVersion!, descriptor!.packageDir!, root, workspaceId,
+      )
+      const result = await this.pluginBackendHost.call(instanceId, method, plan.args.args as JsonValue, {
+        ...(plan.initiator ? { initiator: plan.initiator } : {}),
+      })
+      return { result }
+    } catch (error) {
+      throw interPluginBackendError(error instanceof BackendPluginError ? error.code : undefined)
+    }
+  }
+
+  /** One headless binding per target package version and workspace for
+   *  `plugins.call`. A binding the Host has since stopped is replaced. */
+  private bindHeadlessApiBackend(
+    pluginId: string,
+    packageVersion: string,
+    packageDir: string,
+    root: string,
+    workspaceId: string,
+  ): Promise<string> {
+    const key = `${pluginId}\u0000${packageVersion}\u0000${workspaceId}`
+    const existing = this.headlessApiInstances.get(key)
+    if (existing && this.pluginBackendHost.isBound(existing)) return Promise.resolve(existing)
+    if (existing) this.headlessApiInstances.delete(key)
+    const pending = this.pendingHeadlessApiBinds.get(key)
+    if (pending) return pending
+    let task!: Promise<string>
+    task = this.pluginBackendHost.bindWorkspace(
+      {
+        pluginId,
+        packageVersion,
+        workspaceId,
+        instanceId: null,
+        contributionKey: `${pluginId}.api`,
+        hostWindowId: null,
+        initiator: HOST_USER_INITIATOR,
+      },
+      packageDir,
+      root,
+    ).then((instanceId) => {
+      if (this.isPackageVersionStopping(pluginId, packageVersion)) {
+        void this.pluginBackendHost.unbindView(instanceId, 'plugin-stopping')
+        throw new BackendPluginError('PLUGIN_STOPPING')
+      }
+      this.headlessApiInstances.set(key, instanceId)
+      return instanceId
+    }).finally(() => {
+      if (this.pendingHeadlessApiBinds.get(key) === task) this.pendingHeadlessApiBinds.delete(key)
+    })
+    this.pendingHeadlessApiBinds.set(key, task)
+    return task
   }
 
   /** Forget headless agent-tool bindings the Host has since unbound. */
