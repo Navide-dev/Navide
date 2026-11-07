@@ -61,6 +61,7 @@ from .analyzer_ollama import (
     delete_model as _ollama_delete_model,
 )
 from .analyzer_settings import AnalyzerSettingsStore
+from . import session_archive
 from .ai_chat_settings import AIChatSettingsStore
 from .applog import app_data_dir, backend_log_path, backend_port_file, in_data_dir
 from .cli_vendors.registry import VENDORS as _CLI_VENDORS
@@ -249,6 +250,7 @@ plugin_host = PluginHost()
 mcp_settings_store = MCPSettingsStore()
 skills_store = SkillsStore()
 analyzer_settings_store = AnalyzerSettingsStore(db=database)
+archive_settings_store = session_archive.ArchiveSettingsStore(db=database)
 ai_chat_settings_store = AIChatSettingsStore(db=database)
 ui_settings_store = UiSettingsStore(db=database)
 cli_risk_service = CliRiskService(CliRiskStore(database))
@@ -1163,6 +1165,31 @@ _ownerless_sweeper_task: "asyncio.Task[None] | None" = None
 _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
+_session_archive_task: "asyncio.Task[None] | None" = None
+
+_SESSION_ARCHIVE_FIRST_S = 600
+_SESSION_ARCHIVE_EVERY_S = 86_400
+
+
+async def _session_archive_loop() -> None:
+    """The opt-in session-log archive, once a day (first ten minutes after
+    startup). Both switches start off, so by default this only reads the
+    settings; Claude Code's project folders are the logs it covers."""
+    await asyncio.sleep(_SESSION_ARCHIVE_FIRST_S)
+    while True:
+        settings = archive_settings_store.get()
+        if settings["compress_enabled"] or settings["upload_enabled"]:
+            claude = next((r for r in _readers if r.vendor == "claude"), None)
+            roots = claude.project_dirs() if claude is not None else []
+            try:
+                counts = await asyncio.to_thread(
+                    session_archive.run_once, settings, roots, database,
+                    open_sessions=attribution.bound_session_ids(),
+                )
+                log.info("session archive: %s", counts)
+            except Exception as err:  # noqa: BLE001 — the loop must survive
+                log.warning("session archive pass failed: %s", err)
+        await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -2599,6 +2626,10 @@ async def _start_log_watcher() -> None:
     global _plugin_audit_task
     _plugin_audit_task = asyncio.create_task(plugin_audit_log.run())
 
+    # Opt-in session-log archive (off by default; see session_archive.py).
+    global _session_archive_task
+    _session_archive_task = asyncio.create_task(_session_archive_loop())
+
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
     from . import scheduler
@@ -2774,6 +2805,8 @@ async def _stop_log_watcher() -> None:
             _mem_probe_task.cancel()
         if _dev_time_sweeper_task is not None:
             _dev_time_sweeper_task.cancel()
+        if _session_archive_task is not None:
+            _session_archive_task.cancel()
         if _plugin_audit_task is not None:
             # Cancelling runs its final flush; wait for it so queued rows land.
             _plugin_audit_task.cancel()

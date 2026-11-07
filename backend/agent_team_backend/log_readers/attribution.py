@@ -833,6 +833,11 @@ class Attribution:
                 session_file=session_file,
             )
 
+    def bound_session_ids(self) -> frozenset[str]:
+        """Every session id a pane has claimed (the session archive leaves these alone)."""
+        with self._lock:
+            return frozenset(self._session_owner)
+
     def pane_for_session(
         self, session_id: str
     ) -> tuple[str | None, str | None, str | None]:

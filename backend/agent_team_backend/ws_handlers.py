@@ -7355,6 +7355,22 @@ async def analyzer_settings_set(session: "Session", msg_id: str, msg_type: str, 
     await app.broadcast(make_event("analyzer.settings_changed", updated))
 
 
+@handler("archive.settings.get")
+async def archive_settings_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    await session.send_json(make_response(msg_id, msg_type, app.archive_settings_store.get()))
+
+
+@handler("archive.settings.set")
+async def archive_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    updated = app.archive_settings_store.set(payload)
+    await session.send_json(make_response(msg_id, msg_type, updated))
+    await app.broadcast(make_event("archive.settings_changed", updated))
+
+
 @handler("analyzer.health")
 async def analyzer_health_h(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "没有可接续的对话",
       "rebuild": "重建"
     },
+    "archive": {
+      "hint": "把一段时间没有写入的 Claude Code 会话记录压缩起来，需要的话再上传到你自己的 S3 存储桶。这里每一项都默认关闭，你打开才会执行。",
+      "compress": "压缩闲置的会话记录",
+      "compress-hint": "每天一次，把闲置达到设定天数的 Claude Code 会话记录在旁边另存一份 .zst，并确认解压后与原文件逐字节相同。打开的分格正在使用的会话不会被处理。",
+      "idle-days": "多少天没有写入才压缩",
+      "remove-originals": ".zst 验证通过后删除原文件",
+      "remove-originals-hint": "可以释放磁盘空间。原文件删除后，Claude Code 就不能再接续那个会话，Token 面板也读不到它，但 .zst 保留了每一个字节。关闭时两份都保留。",
+      "upload": "上传到你自己的 S3 存储桶",
+      "upload-hint": "把每份 .zst 上传到你自己的存储桶，放在下方的前缀之下，由 S3 端加密。凭证走 AWS 标准链（环境变量、~/.aws 配置文件或 SSO），Navide 不会保存任何 AWS 密钥。",
+      "upload-after-days": "多少天后上传",
+      "bucket": "S3 存储桶",
+      "prefix": "对象前缀",
+      "region": "区域",
+      "region-placeholder": "沿用你的 AWS 配置文件",
+      "save-failed": "无法保存归档设置"
+    },
     "limits": {
       "hint": "选用的限制，避免 Navide 与它启动的 agent 把这台电脑压垮。每一项在你调整之前都是关闭，或维持 Navide 原本的行为。",
       "test-workers": "限制新分格的测试 worker 数",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "一般行为",
       "resource-limits": "资源限制",
+      "session-archive": "会话记录归档",
       "settings-management": "设置管理",
       "theme": "主题",
       "other": "其他"

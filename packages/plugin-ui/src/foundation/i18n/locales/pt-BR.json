@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "Nenhuma conversa salva para retomar",
       "rebuild": "Reconstruir"
     },
+    "archive": {
+      "hint": "Comprime os logs de sessão do Claude Code em que ninguém escreve há algum tempo e, se você quiser, envia-os para o seu próprio bucket S3. Tudo aqui fica desligado até você ligar.",
+      "compress": "Comprimir logs de sessão ociosos",
+      "compress-hint": "Uma vez por dia, cada log de sessão do Claude Code ocioso pelo número de dias definido ganha uma cópia .zst ao lado, e o Navide confere que ela descomprime nos mesmos bytes. Sessões que um painel aberto está usando não são tocadas.",
+      "idle-days": "Dias sem gravação antes de comprimir",
+      "remove-originals": "Excluir o original depois que o .zst for verificado",
+      "remove-originals-hint": "Libera espaço em disco. Um log excluído não pode mais ser retomado no Claude Code nem lido pelo painel Token, mas o .zst guarda cada byte. Desligado mantém os dois arquivos.",
+      "upload": "Enviar arquivos para o seu próprio bucket S3",
+      "upload-hint": "Envia cada .zst para o seu próprio bucket, sob o prefixo abaixo, com criptografia do S3. As credenciais vêm da cadeia padrão da AWS (variáveis de ambiente, um perfil em ~/.aws ou SSO). O Navide nunca armazena uma chave da AWS.",
+      "upload-after-days": "Dias antes de enviar um arquivo",
+      "bucket": "Bucket S3",
+      "prefix": "Prefixo da chave",
+      "region": "Região",
+      "region-placeholder": "do seu perfil da AWS",
+      "save-failed": "Não foi possível salvar as configurações de arquivo"
+    },
     "limits": {
       "hint": "Limites opcionais que impedem o Navide e os agents que ele executa de sobrecarregar esta máquina. Cada um fica desativado, ou com o comportamento anterior do Navide, até que você o altere.",
       "test-workers": "Limitar os workers de teste nos novos panes",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "Comportamento geral",
       "resource-limits": "Limites de recursos",
+      "session-archive": "Arquivo de logs de sessão",
       "settings-management": "Gerenciamento de configurações",
       "theme": "Tema",
       "other": "Outros"
