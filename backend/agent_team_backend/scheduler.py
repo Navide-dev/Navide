@@ -52,6 +52,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import plugin_host_events
 from .scheduler_store import SchedulerStore
 
 log = logging.getLogger(__name__)
@@ -1123,6 +1124,7 @@ class SchedulerService:
                 await self.store.add_usage(_usage_day(started))
             task = asyncio.create_task(self._execute(job, started, manual))
             self._runs[job_id] = (task, manual)
+            plugin_host_events.on_schedule_fired(job, manual)
         await self._changed()
         return task
 

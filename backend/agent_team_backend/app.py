@@ -38,6 +38,7 @@ from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
+from . import plugin_host_events
 from . import portable_credentials_cleanup
 from . import push_delivery
 from . import resource_limits
@@ -909,6 +910,7 @@ async def _broadcast_plans_changed(ws_path: str) -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("plan snapshot scan failed for %s: %s", ws_path, err)
     await broadcast(make_event("plans.changed", {"workspace_path": ws_path}))
+    await plugin_host_events.on_plans_changed(ws_path)
 
 
 _PLAN_DOC_PREFIXES = (
@@ -2676,6 +2678,8 @@ async def _start_log_watcher() -> None:
     await server_link.start()
     # Chat channels (Telegram, Discord, ...): adapters start in the background.
     await channels.start()
+    # Plugin `agents.*` events (metadata only); the Host routes them by grant.
+    plugin_host_events.start(asyncio.get_running_loop())
 
     # Start MCP servers in the background so they're ready for the first pipeline run.
     asyncio.create_task(mcp_manager.startup())
@@ -2812,6 +2816,7 @@ async def _stop_log_watcher() -> None:
         if _credential_watcher is not None:
             _credential_watcher.stop()
         await channels.stop()
+        plugin_host_events.stop()
         await server_link.stop()
     finally:
         # Delivered message keys still in the batch: written now, or a message

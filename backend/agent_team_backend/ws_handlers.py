@@ -11696,7 +11696,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     """The renderer engine reports per-graph-node run state; stored on the
     project so MCP pipeline_status can read it, then broadcast for canvases in
     every window. Contract: src/renderer/src/lib/pipelineGraph.ts."""
-    from . import app
+    from . import app, plugin_host_events
 
     nodes = payload.get("nodes", {})
     gate = payload.get("gate")
@@ -11710,6 +11710,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     # dropped and named back. A pipeline the store cannot read (deleted
     # mid-run) filters nothing rather than dropping the run's states.
     before = app.project_store.peek(payload["workspace_path"])
+    before_statuses = plugin_host_events.node_statuses(getattr(before, "node_states", None))
     try:
         known = app.stages_store.node_ids(getattr(before, "pipeline_id", "") or None)
     except (KeyError, ValueError):
@@ -11726,6 +11727,9 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
         "nodes": project.node_states,
         "gate": project.node_gate,
     }))
+    plugin_host_events.on_pipeline_node_states(
+        project.workspace_path, project.pipeline_id, before_statuses, project.node_states
+    )
 
 
 @handler("pipeline.fetch_docs")
