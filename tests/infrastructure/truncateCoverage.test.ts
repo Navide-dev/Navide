@@ -16,7 +16,6 @@ const SKIP_DIRS = ['src/renderer/src/components/helpMocks']
  *  it does not get the tooltip. */
 const EXEMPT: Record<string, string> = {
   // The row clips, but its text sits in .cd-file-label, which carries v-truncate.
-  'src/renderer/src/components/GitPane.vue|cd-file': 'text is in the v-truncate .cd-file-label child',
   'plugins/navide-git/src/components/GitPane.vue|cd-file': 'text is in the v-truncate .cd-file-label child',
   // The chip's wrapper already has a native title with the whole usage summary;
   // a second tooltip with just the name would cover it.

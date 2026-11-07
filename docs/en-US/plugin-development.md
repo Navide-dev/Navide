@@ -97,8 +97,8 @@ window.nav.ready()
 ### 2. Add a Vite config
 
 Each plugin is a **separate Vite build**, not an entry in the core renderer
-build. Copy `vite.git.config.ts` and change `pluginRoot`, `outDir`, and the
-manifest emitted by the `emitManifest()` plugin.
+build. Copy `vite.mini-ide.config.ts` and change `pluginRoot`, `outDir`, and the
+manifest emitted by its manifest plugin.
 
 The separate build exists for a specific reason: it lets you alias
 `composables/useBackend` to a `capabilityBackend` shim. A single module graph

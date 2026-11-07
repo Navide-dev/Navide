@@ -1,26 +1,6 @@
-import { revealPath as shellRevealPath } from './hostShell'
-import { createHostFileAccessPort } from './hostFileAccess'
-import type { GitTransport } from '../../../shared/gitCompatibility'
 import { shellCommandArgv } from '../../../shared/osplat'
 import type { useBackend } from './useBackend'
-import type {
-  ConflictStages,
-  DiscoveredRepo,
-  GitBranch,
-  GitStatus,
-} from './useGit'
-import type { Issue, IssueDetail, IssueProviderInfo } from './useIssues'
-import type {
-  GitBranchDiffPort,
-  GitAccountPort,
-  GitCredential,
-  GitCredentialPort,
-  GitPaneUiPort,
-  GitWindowUiPort,
-  IssuePort,
-} from '../ports/gitSurface'
 import type { KeybindingsPort } from '@navide/plugin-ui/shared'
-import { useGitAccounts } from './useGitAccounts'
 import { encodeReason } from './useAgentMessaging'
 import { hasReplyRoute, isExternalDelivery, renderEnvelope } from '../lib/agentMessaging'
 import { pinFreshSessionAtLaunch } from '../lib/sessionHeal'
@@ -35,142 +15,6 @@ import type {
 } from '@navide/terminal'
 
 type HostBackend = ReturnType<typeof useBackend>
-type BackendResponse<T = unknown> = Awaited<ReturnType<HostBackend['send']>> & { payload?: T | null }
-
-function errorMessage(response: { error?: { message?: string } | null }): string {
-  return response.error?.message || 'Host capability failed'
-}
-
-async function requireOk<T>(promise: Promise<BackendResponse<T>>): Promise<T | null> {
-  const response = await promise
-  if (!response.ok) throw new Error(errorMessage(response))
-  return (response.payload as T | null) ?? null
-}
-
-export function createHostGitWindowUiPort(backend: HostBackend): GitWindowUiPort {
-  return {
-    async openInEditor({ workspacePath, filepath, line }): Promise<void> {
-      await requireOk(backend.send('ui.open_in_editor', {
-        workspace_path: workspacePath,
-        filepath,
-        ...(line === undefined ? {} : { line }),
-      }))
-    },
-    async openExternal(url: string): Promise<void> {
-      await requireOk(backend.send('ui.open_external', { url }))
-    },
-    // Not `backend.send('ui.reveal_path')`: that type has no backend handler
-    // (ws_handlers.py serves only ui.settings.*), so in a real editor window it
-    // answered ok:false and requireOk threw — and GitPane's two context-menu
-    // callers await it bare, turning that throw into a silent rejection. Route
-    // it through hostShell, which the mini-IDE build aliases to the capability
-    // shim, so both hosts land on shell.showItemInFolder.
-    async revealPath(path: string): Promise<void> {
-      await shellRevealPath(path)
-    },
-    async pickFolder(defaultPath?: string): Promise<string | null> {
-      const payload = await requireOk<{ ok: boolean; path: string | null }>(backend.send('ui.pick_folder', {
-        ...(defaultPath ? { default_path: defaultPath } : {}),
-      }))
-      return payload?.path ?? null
-    },
-    async openWorkspace(path: string): Promise<void> {
-      await requireOk(backend.send('ui.open_workspace', { workspace_path: path }))
-    },
-  }
-}
-
-export function createHostGitPaneUiPort(backend: HostBackend): GitPaneUiPort {
-  const windowUi = createHostGitWindowUiPort(backend)
-  return {
-    openInEditor: windowUi.openInEditor,
-    openExternal: windowUi.openExternal,
-    revealPath: windowUi.revealPath,
-    async openPath(path: string): Promise<void> {
-      await window.agentTeam?.openPath?.(path)
-    },
-    async openTempFile(name: string, content: string): Promise<void> {
-      await window.agentTeam?.openTempFile?.(name, content)
-    },
-    async pickWorkspace(defaultPath?: string): Promise<string | null> {
-      return (await window.agentTeam?.pickWorkspace?.(defaultPath)) ?? null
-    },
-    async openMainWindow(workspacePath: string): Promise<void> {
-      await window.agentTeam?.openMainWindow?.({ workspace_path: workspacePath })
-    },
-    async openBranchDiffWindow(workspacePath: string, base: string): Promise<void> {
-      await (window as Window & {
-        agentTeam?: { openBranchDiffWindow?: (args: { workspace_path: string; base: string }) => Promise<void> }
-      }).agentTeam?.openBranchDiffWindow?.({ workspace_path: workspacePath, base })
-    },
-    async openGitWindow(args): Promise<void> {
-      await window.agentTeam?.openGitWindow?.({
-        workspace_path: args.workspacePath,
-        ...(args.filepath === undefined ? {} : { filepath: args.filepath }),
-        ...(args.staged === undefined ? {} : { staged: args.staged }),
-        ...(args.commit === undefined ? {} : { commit: args.commit }),
-        ...(args.base === undefined ? {} : { base: args.base }),
-        ...(args.compare === undefined ? {} : { compare: args.compare }),
-      })
-    },
-    async openGitHistoryWindow(workspacePath: string): Promise<void> {
-      await window.agentTeam?.openGitHistoryWindow?.({ workspace_path: workspacePath })
-    },
-  }
-}
-
-type HostAgentTeam = {
-  gitDiffHead?: (args: { workspace_path: string; base?: string; compare?: string }) => Promise<{
-    ok: boolean
-    diff: string
-    error?: string
-  }>
-  gitAccounts?: { getCredential?: (workspacePath: string) => Promise<{ ok?: boolean; credential?: GitCredential | null }> }
-}
-
-function hostAgentTeam(): HostAgentTeam | undefined {
-  return (window as Window & { agentTeam?: HostAgentTeam }).agentTeam
-}
-
-export function createHostGitBranchDiffPort(backend: HostBackend): GitBranchDiffPort {
-  return {
-    async load(workspacePath: string, base: string, compare: string) {
-      const direct = hostAgentTeam()?.gitDiffHead
-      if (direct) return direct({
-        workspace_path: workspacePath,
-        base: base || undefined,
-        compare: compare || undefined,
-      })
-      const response = await backend.send<{ ok: boolean; diff: string; error?: string }>('git.diff_branches', {
-        workspace_path: workspacePath,
-        base,
-        compare: compare || '',
-      })
-      return {
-        ok: response.ok && response.payload?.ok === true,
-        diff: response.payload?.diff ?? '',
-        error: response.payload?.error || response.error?.message,
-      }
-    },
-  }
-}
-
-export function createHostGitCredentialPort(): GitCredentialPort {
-  return {
-    async getCredential(workspacePath: string): Promise<GitCredential | null> {
-      try {
-        const result = await hostAgentTeam()?.gitAccounts?.getCredential?.(workspacePath)
-        return result?.ok && result.credential ? result.credential : null
-      } catch {
-        return null
-      }
-    },
-  }
-}
-
-export function createHostGitAccountPort(): GitAccountPort {
-  return useGitAccounts()
-}
 
 export function createHostKeybindingsPort(): KeybindingsPort {
   const agentTeam = window.agentTeam
@@ -184,27 +28,6 @@ export function createHostKeybindingsPort(): KeybindingsPort {
     }
   }
   return port
-}
-
-export function createHostIssuePort(backend: HostBackend): IssuePort {
-  return {
-    provider: (workspacePath) => backend.send<IssueProviderInfo>('issues.provider', { workspace_path: workspacePath }),
-    list: (workspacePath, limit) => backend.send<{ ok: boolean; provider: string; issues: Issue[]; error?: string }>(
-      'issues.list', { workspace_path: workspacePath, limit }, 30_000,
-    ),
-    get: (workspacePath, number) => backend.send<{ ok: boolean; issue: IssueDetail; error?: string }>(
-      'issues.get', { workspace_path: workspacePath, number }, 30_000,
-    ),
-    create: (workspacePath, title, body) => backend.send<{ ok: boolean; url?: string; error?: string }>(
-      'issues.create', { workspace_path: workspacePath, title, body }, 30_000,
-    ),
-    comment: (workspacePath, number, body) => backend.send<{ ok: boolean; error?: string }>(
-      'issues.comment', { workspace_path: workspacePath, number, body }, 30_000,
-    ),
-    setState: (workspacePath, number, state) => backend.send<{ ok: boolean; error?: string }>(
-      'issues.set_state', { workspace_path: workspacePath, number, state }, 30_000,
-    ),
-  }
 }
 
 export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPort {
@@ -357,18 +180,5 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
     diagnostic: (category, message, level) => {
       try { void send('client.diagnostic', { category, message, level }).catch(() => {}) } catch { /* ignore */ }
     },
-  }
-}
-
-export function createHostGitSurfacePorts(backend: HostBackend, gitTransport: GitTransport) {
-  return {
-    gitTransport,
-    fileAccess: createHostFileAccessPort(backend),
-    ui: createHostGitWindowUiPort(backend),
-    paneUi: createHostGitPaneUiPort(backend),
-    branchDiff: createHostGitBranchDiffPort(backend),
-    credentials: createHostGitCredentialPort(),
-    accounts: createHostGitAccountPort(),
-    issues: createHostIssuePort(backend),
   }
 }

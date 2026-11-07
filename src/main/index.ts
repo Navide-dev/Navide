@@ -4639,62 +4639,6 @@ ipcMain.handle('window:openBranchDiff', (event, args: Record<string, string>) =>
   return { ok: true }
 })
 
-// Reject only what git itself forbids in ref names (git-check-ref-format), so
-// non-ASCII (e.g. CJK) branch names are allowed — matching the Python backend's
-// _INVALID_REF_RE. An ASCII allowlist here wrongly rejected branches like
-// "AI修改". Not the security boundary: execFile is exec-not-shell and the
-// leading-'-' check below blocks flag smuggling.
-const INVALID_GIT_REF_RE = /(\.\.|\x00|@\{|\\|[ ~^:?*[\]]|\/$|\.lock$|\.lock\/)/
-
-function validateRef(value: string, label: string): string | null {
-  if (!value) return null // empty is OK (means "omit")
-  if (value.startsWith('-')) return `invalid ${label}: must not start with '-'`
-  if (INVALID_GIT_REF_RE.test(value))
-    return `invalid ${label}: contains characters git disallows in ref names`
-  return null
-}
-
-// Run git diff directly in main process — no Python backend needed, always up-to-date.
-ipcMain.handle('git:diff-head', async (event, args: { workspace_path: string; base?: string; compare?: string }) => {
-  if (!isAppWindowSender(event)) return { ...UNTRUSTED_SENDER, diff: '' }
-  const { execFile } = await import('node:child_process')
-  const { promisify } = await import('node:util')
-  const execFileAsync = promisify(execFile)
-  const cwd = (args.workspace_path ?? '').trim()
-  if (!cwd) return { ok: false, diff: '', error: 'workspace_path required' }
-  const compare = (args.compare ?? '').trim()
-  const base = (args.base ?? '').trim()
-  const refErr = validateRef(base, 'base') ?? validateRef(compare, 'compare')
-  if (refErr) return { ok: false, diff: '', error: refErr }
-  // A compare target needs an explicit base — align with the backend, which
-  // errors here rather than silently diffing HEAD and ignoring compare.
-  if (compare && !base) return { ok: false, diff: '', error: 'base branch is required to compare' }
-  try {
-    const gitArgs: string[] = ['-c', 'core.quotePath=false', 'diff']
-    if (compare && base) {
-      gitArgs.push(`${base}...${compare}`)
-    } else {
-      gitArgs.push('HEAD')
-    }
-    // timeout+SIGKILL so a hung git (stale mount, wedged filter) can't spin the
-    // diff pane forever; generous maxBuffer since we only keep the first 100 K.
-    const { stdout } = await execFileAsync('git', gitArgs, {
-      cwd,
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: 30_000,
-      killSignal: 'SIGKILL'
-    })
-    const truncated = stdout.length > 100_000
-    return { ok: true, diff: stdout.slice(0, 100_000), truncated }
-  } catch (err: unknown) {
-    const e = err as { stderr?: string; message?: string; killed?: boolean; code?: string }
-    if (e.killed) return { ok: false, diff: '', error: 'git diff timed out' }
-    if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')
-      return { ok: false, diff: '', error: 'diff too large to display' }
-    return { ok: false, diff: '', error: e.stderr?.trim() || e.message || 'git error' }
-  }
-})
-
 // Reviewable plan doc: top-level, non-infrastructure `.agent-team/plans/*.html`
 // (mirrors PlanWindowApp's isHtmlPlanDoc). Such opens route to the Plan window,
 // which renders them; the mini-IDE would only show their raw HTML source.

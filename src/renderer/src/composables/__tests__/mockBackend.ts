@@ -1,12 +1,8 @@
 import { ref, effectScope, type EffectScope } from 'vue'
 import type { useBackend, WsResponse, BackendStatus } from '../useBackend'
-import {
-  createHostIssuePort,
-  createHostTerminalDockPort,
-} from '../hostSurfacePorts'
+import { createHostTerminalDockPort } from '../hostSurfacePorts'
 import { createHostFileAccessPort } from '../hostFileAccess'
 import { createHostSettingsPort } from '../hostSettingsPort'
-import type { IssuePort } from '../../ports/gitSurface'
 import type { FileAccessPort } from '../../ports/fileAccess'
 import type { SettingsPort } from '../../ports/settings'
 import type { TerminalDockPort } from '@navide/terminal'
@@ -107,32 +103,19 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
   const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on } as unknown as Backend
   const fileAccess = createHostFileAccessPort(rawBackend)
   const settingsPort = createHostSettingsPort(rawBackend)
-  const issuePort = createHostIssuePort(rawBackend)
   const terminalPort = createHostTerminalDockPort(rawBackend)
 
   // Keep the legacy-shaped mock usable by existing composable tests while the
   // production code consumes named ports. The assigned methods are the same
   // adapters used by the Host composition roots, so tests exercise the seam
   // rather than a second fake protocol.
-  Object.assign(rawBackend, fileAccess, settingsPort, issuePort, terminalPort)
-  // `create` is the only name shared by the issue and terminal ports. Preserve
-  // the legacy mock's ability to stand in for either consumer while production
-  // compositions keep the ports separate and therefore cannot cross-route.
-  ;(rawBackend as unknown as {
-    create: (...args: unknown[]) => Promise<unknown>
-  }).create = ((first: unknown, ...rest: unknown[]) => {
-    if (typeof first === 'string') {
-      return issuePort.create(first, rest[0] as string, rest[1] as string)
-    }
-    return terminalPort.create(first as Parameters<TerminalDockPort['create']>[0], rest[0] as number)
-  })
-  const backend = rawBackend as Backend & FileAccessPort & SettingsPort & IssuePort & TerminalDockPort
+  Object.assign(rawBackend, fileAccess, settingsPort, terminalPort)
+  const backend = rawBackend as Backend & FileAccessPort & SettingsPort & TerminalDockPort
 
   return {
     backend,
     fileAccess,
     settingsPort,
-    issuePort,
     terminalPort,
     status,
     autoRestart,
