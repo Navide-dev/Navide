@@ -543,7 +543,7 @@ function generateKeys(outDir, name) {
 function usage() {
   return [
     'Usage:',
-    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>]',
+    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]',
     '  navide-plugin validate <directory> [--target <target>]',
     '  navide-plugin scan <package.vsix | directory> [--target <target>] [--json]',
     '  navide-plugin package <directory> [--target <target>] [--out <file>]',
@@ -567,7 +567,7 @@ function usage() {
 
 // command -> [positional argument count, value options, boolean flags, positional is optional]
 const COMMANDS = {
-  init: [1, ['--id', '--name'], []],
+  init: [1, ['--id', '--name', '--template'], []],
   validate: [1, ['--target'], []],
   scan: [1, ['--target'], ['--json']],
   package: [1, ['--target', '--out'], []],
@@ -628,9 +628,11 @@ async function main(argv) {
   const [argument] = positional
   if (command === 'init') {
     if (!options.get('--id')) fail(usage())
-    const result = initPlugin(argument, options.get('--id'), options.get('--name'))
+    const result = initPlugin(argument, options.get('--id'), options.get('--name'), options.get('--template') ?? 'default')
     console.log(`Created ${result.id} (${result.name}) in ${result.root}`)
-    console.log(`Next: navide-plugin validate ${argument}`)
+    console.log(result.template === 'vue'
+      ? `Next: cd ${argument} && npm install && npm run build && npm run build:backend && npm run check`
+      : `Next: navide-plugin validate ${argument}`)
     return
   }
   if (command === 'validate') {

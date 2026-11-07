@@ -102,8 +102,8 @@ navide-plugin package dist/package           # a deterministic .vsix; one per ta
 - Readiness: every view must call `ready()` (`createPluginViewRuntimeClient().ready()`
   from `@navide/plugin-sdk`, or `window.nav.ready()` in the no-build scaffold)
   within 10 seconds of loading, or the install and the folder load fail
-  their check. The `vue` template's test suite runs the view against the
-  SDK's in-memory Host and asserts that.
+  their check. The `vue` template calls it in `src/main.ts`; its test suite
+  drives the backend over Backend Wire v1 the way the Host does.
 - The author checklist the reviewer applies — signature, name similarity,
   secret scan, permissions, size — is in
   [Review](marketplace-publishing.md#5-review); run `scan` and keep secrets out

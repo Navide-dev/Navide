@@ -64,6 +64,17 @@ namespace is the one you will claim on the Marketplace, and the id never
 changes once published. `--name "Acme Hello"` sets the display name (default:
 derived from the id). `init` refuses a directory that is not empty.
 
+`--template vue` writes a complete, buildable project instead of the no-build
+scaffold below: a Vue 3 view (Vite, `@navide/plugin-sdk`), a Python backend
+over Backend Wire v1 with one method, one agent tool that calls it, a vitest
+suite that drives the backend over stdio, and npm scripts — `build` (the view,
+staged into `dist/package` with `.navide-build-complete` written last),
+`build:backend` (PyInstaller, one executable for this machine), `check`
+(`validate` and `scan` on `dist/package`), `test`, `package`. The id's last
+segment, without hyphens, becomes the agent tool prefix, so it must be 2–16
+lowercase letters or digits. [Build for Navide](build-for-navide.md) walks
+through it in five minutes.
+
 It writes a frontend-only plugin that validates and packages as is:
 
 ```text
@@ -636,7 +647,7 @@ publisher. Removals, and why, are listed publicly at
 ## Command reference
 
 ```text
-navide-plugin init <directory> --id <namespace.name> [--name <display name>]
+navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]
 navide-plugin validate <directory> [--target <target>]
 navide-plugin scan <package.vsix | directory> [--target <target>] [--json]
 navide-plugin package <directory> [--target <target>] [--out <file>]

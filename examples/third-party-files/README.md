@@ -1,5 +1,9 @@
 # Third-party Files Example
 
+> Starting a plugin? Run `npx navide-plugin init <dir> --id <ns.name> --template vue`
+> and read [Build for Navide](../../docs/en-US/build-for-navide.md). This
+> directory is the fixture of the release smoke test described below.
+
 This example is intentionally outside Navide's package workspace boundary. It
 uses only the public `@navide/plugin-contracts`, `@navide/plugin-sdk`, and
 `@navide/plugin-ui` packages.

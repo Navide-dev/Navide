@@ -163,7 +163,7 @@ The SDK distribution includes a `navide-plugin` executable with these
 commands:
 
 ```text
-navide-plugin init <directory> --id <namespace.name> [--name <display name>]
+navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]
 navide-plugin validate <directory> [--target <target>]
 navide-plugin scan <package.vsix | directory> [--target <target>] [--json]
 navide-plugin package <directory> [--target <target>] [--out <file>]
@@ -188,7 +188,9 @@ their manifest. `package` emits a deterministic `.vsix` ZIP with a root
 packages must name the build host's exact platform-architecture target and
 contain one self-contained executable. `sign` and `verify` use a detached
 Ed25519 signature over the SHA-256 digest of the complete archive. `init`
-scaffolds a frontend-only package that validates without a build step;
+scaffolds a frontend-only package that validates without a build step, and
+`init --template vue` a buildable Vue view + Python backend + agent tool
+project with its own tests (see [Build for Navide](build-for-navide.md));
 `login` and `publish` talk to a Registry (see
 [Publishing to the Navide Marketplace](marketplace-publishing.md)). Apart from
 `dev-backend`, which launches a built backend under the sandbox, the CLI has
@@ -196,7 +198,9 @@ no Host transport, process execution, or development server.
 
 ## Issue 06 external workspace workflow
 
-The repository example at `examples/third-party-files/` is copied into a
+The repository example at `examples/third-party-files/` is the fixture of the
+release smoke test, not the starting point for a third party (that is
+`navide-plugin init --template vue`). It is copied into a
 temporary project outside the Navide workspace for the release smoke test. Its
 package manifest declares SemVer ranges for the three public packages. The
 smoke test replaces only those three public package ranges with local packed

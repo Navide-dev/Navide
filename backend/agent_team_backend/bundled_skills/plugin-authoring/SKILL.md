@@ -18,7 +18,10 @@ the two disagree, the spec wins.
 npx navide-plugin init acme-hello --id acme.hello
 ```
 
-That writes a frontend-only plugin that validates and packages as written:
+That writes a frontend-only plugin that validates and packages as written
+(add `--template vue` for a buildable Vue view + Python backend + agent tool +
+tests; its README lists the npm scripts, and `docs/en-US/build-for-navide.md`
+is the one-page walkthrough):
 
 ```text
 acme-hello/
