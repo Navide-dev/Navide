@@ -1427,6 +1427,16 @@ contextBridge.exposeInMainWorld('agentTeam', {
     listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
     /** Commands enabled packages put on the status bar, pane and Explorer menus. */
     listSlots: (): Promise<PluginSlotEntry[]> => ipcRenderer.invoke('plugins:listSlots'),
+    /** A package's declared settings and their values, or null. */
+    readSettings: (id: string): Promise<{
+      settings: Array<{
+        key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+        default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+      }>
+      values: Record<string, boolean | string | number>
+    } | null> => ipcRenderer.invoke('plugins:settings:read', { id }),
+    writeSetting: (id: string, key: string, value: boolean | string | number): Promise<boolean> =>
+      ipcRenderer.invoke('plugins:settings:write', { id, key, value }),
     runCommand: (args: { commandId: string; workspace_path: string; target?: PluginCommandTarget }): Promise<PluginCommandRunResult> =>
       ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{

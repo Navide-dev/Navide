@@ -2016,6 +2016,11 @@
       "cancel": "取消"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "設定",
+        "reset": "還原預設值",
+        "saveFailed": "無法儲存「{title}」。請再試一次；若一直失敗，請重新安裝這個 Navide 外掛。"
+      },
       "devUnpacked": "未簽章的本機資料夾，僅限開發者模式",
       "agentTools": {
         "heading": "agent 可呼叫的工具（{count} 個）",
@@ -12327,7 +12332,12 @@
         "backendEvent": "原生程式的事件：{key}",
         "network": "可以透過指令連到遠端",
         "networkHost": "畫面可以連到：{key}",
-        "agentTool": "agent 工具：{key}"
+        "agentTool": "agent 工具：{key}",
+        "agentEvent": "接收 Host 事件：{key}",
+        "pluginCall": "呼叫 Navide 外掛：{key}",
+        "apiMethod": "其他 Navide 外掛可呼叫：{key}",
+        "pipelineNode": "pipeline 步驟（由 agent 或排程啟動的 pipeline 也會執行）：{key}",
+        "commandSlot": "放在 Host 介面上的命令：{key}"
       }
     },
     "title": "揭露卡",
@@ -12387,6 +12397,10 @@
         "full": "執行任何指令"
       },
       "networkViaShell": "可以透過這些指令連到遠端",
+      "agentEvents": "接收 Host 的分格、Plan、pipeline 與排程事件（只有名稱與狀態）：{events}",
+      "pluginCalls": "呼叫這些 Navide 外掛：{plugins}",
+      "api": "讓其他 Navide 外掛呼叫它的 {count} 個方法",
+      "pipelineNodes": "新增 {count} 個 pipeline 步驟；由 agent、排程或 webhook 啟動的 pipeline 也會執行這些步驟",
       "aiCli": "啟動 AI CLI 工作階段並讀取其輸出",
       "web": "可開啟並瀏覽任何網站；網站登入資料會儲存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；可同時開啟多個網頁，每個網頁都會占用記憶體。",
       "agents": "可看到這個專案裡的 agent 分格、哪個分格開了哪個、訊息的送達紀錄（不含內容）與 session 清單（不含對話內容）",

@@ -21,6 +21,7 @@ import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import PluginBackgroundAiSessions from './PluginBackgroundAiSessions.vue'
+import PluginSettingsForm from './PluginSettingsForm.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import SettingsCard from './settings/SettingsCard.vue'
@@ -1310,6 +1311,8 @@ watch(installed, () => {
                 :plugin-id="p.id"
                 :paused="selectedId !== p.id"
               />
+              <!-- The settings it declares (contributes.settings), as a form. -->
+              <PluginSettingsForm v-if="selectedId === p.id" :plugin-id="p.id" />
               <details
                 v-if="p.manifestPermissions || p.packageVersion"
                 class="ext-permission-details"

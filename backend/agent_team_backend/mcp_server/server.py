@@ -10876,12 +10876,15 @@ _MQ_ENUMS = frozenset({
     # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
     "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
     "factory-bundled",
+    # 0.2.39 disclosure: summary clause keys and command slot surfaces.
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "statusBar", "paneActions", "explorerMenu",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
     # An installed package's source (W1); a scan's `source` stays fenced.
     "source",
+    "slot",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -10900,6 +10903,8 @@ _MQ_KNOWN_KEYS = frozenset({
     "capabilities", "address", "code", "frontend", "backend", "eval", "newFunction", "dynamicImport",
     "stringTimers", "obfuscationSignals", "native", "path", "format", "arch", "libraries", "notableImports",
     "importCount", "packer", "embeddedRuntime",
+    # 0.2.39 disclosure fields (agentEvents, pluginCalls, api, pipelineNodes, commandSlots).
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "commandSlots", "plugins", "slot", "command",
 })
 
 

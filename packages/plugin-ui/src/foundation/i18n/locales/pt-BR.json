@@ -2016,6 +2016,11 @@
       "cancel": "Cancelar"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Configurações",
+        "reset": "Restaurar o padrão",
+        "saveFailed": "Não foi possível salvar {title}. Tente de novo; se continuar falhando, reinstale este plugin do Navide."
+      },
       "devUnpacked": "Pasta local não assinada: somente no modo de desenvolvedor",
       "agentTools": {
         "heading": "Ferramentas que os agents podem chamar ({count})",
@@ -12327,7 +12332,12 @@
         "backendEvent": "Evento de código nativo: {key}",
         "network": "Pode acessar hosts remotos por meio de comandos",
         "networkHost": "As visualizações podem se conectar a: {key}",
-        "agentTool": "Ferramenta de agent: {key}"
+        "agentTool": "Ferramenta de agent: {key}",
+        "agentEvent": "Recebe o evento do Host: {key}",
+        "pluginCall": "Chama o plugin do Navide: {key}",
+        "apiMethod": "Outros plugins do Navide podem chamar: {key}",
+        "pipelineNode": "Etapa de pipeline (também em pipelines iniciados por um agente ou agendamento): {key}",
+        "commandSlot": "Comando em uma superfície do Host: {key}"
       }
     },
     "title": "Divulgação",
@@ -12387,6 +12397,10 @@
         "full": "Executa qualquer comando"
       },
       "networkViaShell": "Pode acessar hosts remotos por meio desses comandos",
+      "agentEvents": "Recebe eventos do Host sobre seus panes, planos, pipelines e agendamentos (apenas nomes e estados): {events}",
+      "pluginCalls": "Chama estes plugins do Navide: {plugins}",
+      "api": "Permite que outros plugins do Navide chamem {count} de seus métodos",
+      "pipelineNodes": "Adiciona {count} etapa(s) de pipeline; pipelines iniciados por um agente, um agendamento ou um webhook também as executam",
       "aiCli": "Inicia sessions de CLIs de AI e lê a saída delas",
       "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
       "agents": "Vê os panes de agent deste projeto, qual pane abriu qual, os registros de entrega das mensagens (sem o conteúdo) e a lista de sessions (sem o conteúdo das conversas)",

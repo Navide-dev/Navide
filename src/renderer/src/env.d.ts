@@ -443,6 +443,14 @@ declare global {
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
         listSlots?: () => Promise<import('../../shared/pluginCommands').PluginSlotEntry[]>
+        readSettings?: (id: string) => Promise<{
+          settings: Array<{
+            key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+            default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+          }>
+          values: Record<string, boolean | string | number>
+        } | null>
+        writeSetting?: (id: string, key: string, value: boolean | string | number) => Promise<boolean>
         runCommand: (args: { commandId: string; workspace_path: string; target?: import('../../shared/pluginCommands').PluginCommandTarget }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string

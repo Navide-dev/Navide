@@ -2016,6 +2016,11 @@
       "cancel": "Cancel"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Settings",
+        "reset": "Reset to default",
+        "saveFailed": "Could not save {title}. Try again; if it keeps failing, reinstall this Navide plugin."
+      },
       "devUnpacked": "Unsigned local folder — Developer Mode only",
       "agentTools": {
         "heading": "Tools agents can call ({count})",
@@ -12327,7 +12332,12 @@
         "backendEvent": "Native code event: {key}",
         "network": "Can reach remote hosts through commands",
         "networkHost": "Views can connect to: {key}",
-        "agentTool": "Agent tool: {key}"
+        "agentTool": "Agent tool: {key}",
+        "agentEvent": "Receives Host event: {key}",
+        "pluginCall": "Calls Navide plugin: {key}",
+        "apiMethod": "Other Navide plugins can call: {key}",
+        "pipelineNode": "Pipeline step (also in agent- and schedule-started pipelines): {key}",
+        "commandSlot": "Command on a Host surface: {key}"
       }
     },
     "title": "Disclosure",
@@ -12387,6 +12397,10 @@
         "full": "Runs any command"
       },
       "networkViaShell": "Can reach remote hosts through those commands",
+      "agentEvents": "Receives Host events about your panes, plans, pipelines and schedules (names and states only): {events}",
+      "pluginCalls": "Calls these Navide plugins: {plugins}",
+      "api": "Lets other Navide plugins call {count} of its methods",
+      "pipelineNodes": "Adds {count} pipeline step(s); pipelines started by an agent, a schedule or a webhook run them too",
       "aiCli": "Starts AI CLI sessions and reads their output",
       "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; it can open many web pages at once, and each one uses memory.",
       "agents": "Sees your agent panes in this project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content)",

@@ -11,6 +11,7 @@ import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents
 import { warnMain } from '../main-log'
 import type {
   PluginManifestV2Command,
+  PluginManifestV2Setting,
   PluginManifestV2ExplorerMenuItem,
   PluginManifestV2PaneAction,
   PluginManifestV2PipelineNode,
@@ -56,6 +57,7 @@ import {
   type HostCapabilityContext,
   type HostCapabilityGrant,
   type PublicCapabilityExecutionPlan,
+  type StorageSnapshotRef,
   type TerminalOutputBatcher,
   sameExecutables,
 } from './pluginCapabilityBroker'
@@ -305,6 +307,8 @@ export interface PluginLaunchDescriptor {
   api?: string[]
   /** `contributes.pipelineNodes`: deterministic steps a pipeline may run. */
   pipelineNodes?: PluginManifestV2PipelineNode[]
+  /** `contributes.settings`: the form Settings → Navide Plugins shows. */
+  settings?: PluginManifestV2Setting[]
   /** Batch 4 view slots: this plugin's commands on Host surfaces. */
   statusBar?: PluginManifestV2StatusBarItem[]
   paneActions?: PluginManifestV2PaneAction[]
@@ -861,6 +865,19 @@ const IPC_EVENT = 'plugin:cap:event'
 const IPC_READY = 'plugin:ready'
 const IPC_HIDE_SELF = 'plugin:hideSelf'
 const IPC_OPEN_TARGET = 'plugin:openTarget'
+/** Whether `value` is one `setting` allows (contributes.settings). */
+function pluginSettingAccepts(setting: PluginManifestV2Setting, value: unknown): boolean {
+  switch (setting.type) {
+    case 'boolean': return typeof value === 'boolean'
+    case 'enum': return typeof value === 'string' && (setting.options ?? []).includes(value)
+    case 'string': return typeof value === 'string' && Array.from(value).length <= (setting.maxLength ?? 1024)
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value) &&
+        (setting.minimum === undefined || value >= setting.minimum) &&
+        (setting.maximum === undefined || value <= setting.maximum)
+  }
+}
+
 /** Who started a pipeline run that reaches a plugin node (Activity only). */
 const PIPELINE_RUN_ORIGINS = ['user', 'agent', 'schedule', 'webhook'] as const
 type PipelineRunOrigin = (typeof PIPELINE_RUN_ORIGINS)[number]
@@ -12845,6 +12862,74 @@ export class FrontendPluginManager {
         ...(command.suggestedKey ? { suggestedKey: command.suggestedKey } : {}),
       }))
     )
+  }
+
+  /** One package's declared settings with the values in its own storage
+   *  (scope `plugin`, key `settings.<key>`); a key never written reads as its
+   *  default. Null when the package declares none or has no active snapshot. */
+  async readPluginSettings(pluginId: string): Promise<{
+    settings: PluginManifestV2Setting[]
+    values: Record<string, boolean | string | number>
+  } | null> {
+    const target = this.pluginSettingsTarget(pluginId)
+    const handler = this.publicStorageHandler
+    if (!target || !handler) return null
+    const values: Record<string, boolean | string | number> = {}
+    for (const setting of target.settings) {
+      const key = `settings.${setting.key}`
+      const stored: unknown = await Promise.resolve(handler({
+        address: 'storage.get',
+        args: { scope: 'plugin', key },
+        partition: { pluginId, workspaceId: null, key },
+        snapshot: target.snapshot,
+      })).catch(() => null)
+      const value = stored && typeof stored === 'object' && 'value' in stored ? (stored as { value: unknown }).value : undefined
+      values[setting.key] = pluginSettingAccepts(setting, value) ? value as boolean | string | number : setting.default
+    }
+    return { settings: target.settings, values }
+  }
+
+  /** Write one setting the user changed into the package's own storage and
+   *  tell its live views (`ui.pluginStorageChanged`). Refuses a key the
+   *  package does not declare or a value its declaration does not allow. */
+  async writePluginSetting(pluginId: string, key: string, value: unknown): Promise<boolean> {
+    const target = this.pluginSettingsTarget(pluginId)
+    const setting = target?.settings.find((candidate) => candidate.key === key)
+    if (!target || !setting || !this.publicStorageHandler || !pluginSettingAccepts(setting, value)) return false
+    const storageKey = `settings.${key}`
+    const partition = { pluginId, workspaceId: null, key: storageKey }
+    await this.publicStorageHandler({
+      address: 'storage.set',
+      args: { scope: 'plugin', key: storageKey, value },
+      partition,
+      snapshot: target.snapshot,
+      initiator: HOST_USER_INITIATOR,
+    })
+    const payload = { scope: 'plugin' as const, key: storageKey, value: value as JsonValue, deleted: false }
+    for (const receiver of this.running.values()) {
+      const context = receiver.capabilityContext
+      const binding = context?.runtimeBinding
+      if (
+        !context || !binding || binding.pluginId !== pluginId ||
+        binding.packageVersion !== target.snapshot.packageVersion ||
+        context.storageSnapshotTier !== 'active'
+      ) continue
+      if (this.isPublicEventAllowedForInstance(receiver, 'ui.pluginStorageChanged', payload, binding)) {
+        this.emitToInstance(receiver.instanceId, 'ui.pluginStorageChanged', payload)
+      }
+    }
+    return true
+  }
+
+  private pluginSettingsTarget(pluginId: string): {
+    settings: PluginManifestV2Setting[]
+    snapshot: StorageSnapshotRef
+  } | null {
+    const descriptor = this.descriptors.get(pluginId)
+    const version = descriptor?.packageVersion
+    if (!descriptor?.settings?.length || !nonEmptyString(version)) return null
+    if (this.pluginStorageSnapshotSelections.get(pluginId)?.activeVersion !== version) return null
+    return { settings: descriptor.settings, snapshot: { pluginId, tier: 'active', packageVersion: version } }
   }
 
   /** Commands enabled packages put on Host surfaces (view slots). An entry
