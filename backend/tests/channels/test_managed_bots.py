@@ -181,10 +181,11 @@ async def test_a_matching_update_adds_the_new_bot_through_quick_add(env: MEnv) -
     [event] = env.events()
     [account] = env.added_accounts()
     assert event["request_id"] == req["request_id"] and event["ok"] is True
-    assert event["account"] == account and event["name"] == "@made_bot"
+    # Its handle is read live; the name stays the user's label, empty until they give one.
+    assert event["account"] == account and event["name"] == ""
     assert event["link"]["target"] == "direct" and event["link"]["code"]
     assert env.fake.secrets[f"channel-telegram-{account}"] == f'{{"token":"{NEW_BOT}:NEWSECRET"}}'
-    assert env.store.accounts()[("telegram", account)]["config"]["name"] == "@made_bot"
+    assert env.store.accounts()[("telegram", account)]["config"].get("name", "") == ""
     # The request is spent: a second update for it does nothing.
     env.api.push_managed_bot(creator_id=CREATOR, bot_id=NEW_BOT + 1)
     await asyncio.sleep(0.5)
