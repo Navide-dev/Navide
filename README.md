@@ -188,6 +188,11 @@ pnpm dev
 
 The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant macOS permissions. Continue with [Getting Started](docs/en-US/getting-started.md) and the [User Guide](docs/en-US/user-guide.md).
 
+## Build for Navide
+
+Make your own Navide plugin and list it on the [Navide Marketplace](https://marketplace.navide.dev/). `npx navide-plugin init --template vue` gives you a buildable plugin in five minutes (Navide 0.2.39 or later), Developer Mode loads it without publishing, and one real-name application at [developers.navide.dev](https://developers.navide.dev/developer) lets you publish after review.
+Start with [Build for Navide](docs/en-US/build-for-navide.md), the one page for the whole flow; ask in [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions).
+
 ## Documentation and deeper reading
 
 - **Use Navide:** [Getting started](docs/en-US/getting-started.md), [User guide](docs/en-US/user-guide.md), and [Troubleshooting](docs/en-US/troubleshooting.md)

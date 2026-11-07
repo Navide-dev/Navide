@@ -188,6 +188,11 @@ pnpm dev
 
 Onboarding Wizard は Runtime を確認し、Agent CLI を検出し、関連する macOS 権限を説明します。続きは[はじめに](docs/ja-JP/getting-started.md)と[ユーザーガイド](docs/ja-JP/user-guide.md)を参照してください。
 
+## Navide 向けにプラグインを作る
+
+自分の Navide プラグインを作り、[Navide Marketplace](https://marketplace.navide.dev/) に公開できます。`npx navide-plugin init --template vue` で 5 分でビルドできるプラグインが手に入り（Navide 0.2.39 以降）、Developer Mode なら公開せずに読み込んで試せます。[developers.navide.dev](https://developers.navide.dev/developer) で一度だけ実名申請し、審査を通れば公開できます。
+流れ全体は [Build for Navide（英語）](docs/en-US/build-for-navide.md) の 1 ページにまとまっています。質問は [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions) へ。
+
 ## ドキュメントと詳細資料
 
 - **Navide を使う：** [はじめに](docs/ja-JP/getting-started.md)、[ユーザーガイド](docs/ja-JP/user-guide.md)、[トラブルシューティング](docs/ja-JP/troubleshooting.md)

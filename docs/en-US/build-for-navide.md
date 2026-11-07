@@ -119,15 +119,23 @@ navide-plugin package dist/package           # a deterministic .vsix; one per ta
 Each step says who acts, what to expect, and where to look when it fails.
 Everything here is in [Publishing to the Navide Marketplace](marketplace-publishing.md).
 
+The Marketplace has three addresses. [marketplace.navide.dev](https://marketplace.navide.dev/)
+is the storefront users browse and install from.
+[developers.navide.dev](https://developers.navide.dev/developer) is your
+console: the application, namespaces, signing key, tokens and review state;
+its `/developer` page lists these steps and what to prepare, without signing
+in. `server.navide.dev` is the API the Navide app and the `navide-plugin` CLI
+talk to; it has no pages of its own.
+
 | Step | You | Navide | How long | If it fails |
 |---|---|---|---|---|
-| Developer application | Sign in with a Navide Cloud account at `/developer/apply` (or from Navide's Settings → Developer) and apply once, real-name | A person reviews who is publishing and that you can be reached, never your permissions | Decision is a human review; the dashboard shows the state | A rejection carries a reason; apply again |
-| Namespace | Claim one at `/publisher/claim`; it must equal the first segment of your plugin id | First come, first served; reserved words and look-alikes refused; three per account | Immediate | Pick another name |
-| Signing key | `navide-plugin keygen`, paste the `.pub` on your namespace dashboard; keep the private key out of Git | Verifies every upload against the registered key; Navide's own Settings sign-in never replaces a key you registered without asking | Immediate | `403 invalid package signature`: sign the exact file you upload with the registered key |
+| Developer application | Sign in with a Navide Cloud account at `developers.navide.dev/developer/apply` (or from Navide's Settings → Developer) and apply once, real-name | A person reviews who is publishing and that you can be reached, never your permissions | A human review, target of 3 business days; the dashboard shows the state | A rejection carries a reason; apply again |
+| Namespace | Claim one at `developers.navide.dev/publisher/claim`; it must equal the first segment of your plugin id | First come, first served; reserved words and look-alikes refused; three per account | Immediate | Pick another name |
+| Signing key | `navide-plugin keygen`, paste the `.pub` on your namespace dashboard (`developers.navide.dev/publisher/<namespace>`); keep the private key out of Git | Verifies every upload against the registered key; Navide's own Settings sign-in never replaces a key you registered without asking | Immediate | `403 invalid package signature`: sign the exact file you upload with the registered key |
 | Test build (optional) | `navide-plugin publish <file> --channel testplace`, then `testplace invite add` or `testplace code create --max-testers <n>` | Automatic scan only; a public test code's first use gets a light human review; builds expire after 90 days | Minutes | A likely credential or a too-similar name refuses the build |
 | Promote or publish | `navide-plugin testplace promote <id> <version>`, or `navide-plugin publish <file>` per target | Human review: signature, name similarity, secret scan, permissions, size | Target of **3 business days**; no automatic approval | `navide-plugin status <id>` shows `pending`, `approved` or `rejected` with the reason; fix and publish a new version (a version number is never reused) |
 | Update | Publish the next version the same way | Users are offered the update; a version that adds a permission asks them again, and the card shows exactly what changed | Same review | Same as publish |
-| Withdraw | `yank` (CLI or dashboard) takes a version down everywhere; a Testplace build can also be `revoke`d early | Users keep what they installed; Navide no longer installs it | Immediate; a yank cannot be undone | Publish a new version |
+| Withdraw | A [yank](marketplace-publishing.md#8-yank-a-version) (Navide's yank form, or the Registry API) takes a version down everywhere; a Testplace build can also be `revoke`d early | Users keep what they installed; Navide no longer installs it | Immediate; a yank cannot be undone | Publish a new version |
 
 The MCP tools `marketplace_developer_application_*`, `marketplace_publish_*`,
 `marketplace_testplace_invite_*` and `marketplace_publish_yank_*` let an agent

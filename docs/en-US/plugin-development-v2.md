@@ -33,16 +33,9 @@
 > itself when its files change (see "Local testing" below).
 > The first-party Plans build scripts package the app's production artifact
 > and are not the public author workflow.
->
-> **Migration decision:** Plan B (the B0-B9 checkpoint path) was approved on
-> 2026-08-13. Plans A and C are not active implementation alternatives.
 
-> **Issue 19 production first-party package:** The approved Plan B Git
-> migration is now implemented as the bundled `navide.git` production case.
-> It is one Manifest v2 package with two isolated `custom` views (`left` and
-> `window`), and both views use the same active package version. This does not
-> open third-party publishing or complete the later Skills migration,
-> marketplace lifecycle, or legacy-removal work.
+> New to Navide plugins? Start with [Build for Navide](build-for-navide.md),
+> the one page for the whole flow; this document is the contract it links to.
 
 ## Design principle: disclose, don't restrict
 
@@ -3261,3 +3254,15 @@ with Settings → Navide Plugins → Developer Mode, installing it from a file, 
 installing it from a local Registry; only the environment-variable Developer
 Mode of a development build (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a v2
 view (see [Backend trust](#backend-trust)).
+
+## Appendix: migration history
+
+**Migration decision:** Plan B (the B0-B9 checkpoint path) was approved on
+2026-08-13. Plans A and C are not active implementation alternatives.
+
+**Issue 19 production first-party package:** The approved Plan B Git
+migration is implemented as the bundled `navide.git` production case. It is
+one Manifest v2 package with two isolated `custom` views (`left` and
+`window`), and both views use the same active package version. It did not by
+itself open third-party publishing or complete the later Skills migration,
+marketplace lifecycle, or legacy-removal work.

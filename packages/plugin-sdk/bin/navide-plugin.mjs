@@ -543,6 +543,43 @@ function generateKeys(outDir, name) {
   return { privatePath, publicPath }
 }
 
+const GUIDE_URL = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md'
+const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
+
+/** What to do after `init`: build, load, check, apply, read on. */
+function initNextSteps(result, directory) {
+  const vue = result.template === 'vue'
+  const packageDir = vue ? `${directory}/dist/package` : directory
+  return [
+    'Next:',
+    vue
+      ? `  1. Build:   cd ${directory} && npm install && npm run build && npm run build:backend`
+      : '  1. Build:   nothing to build; edit the files as they are',
+    `  2. Load:    Navide → Settings → Navide Plugins → Developer Mode → Load from folder… → ${packageDir}`,
+    vue
+      ? '  3. Check:   npm run check  (navide-plugin validate and scan, the checks review runs)'
+      : `  3. Check:   navide-plugin validate ${packageDir} && navide-plugin scan ${packageDir}`,
+    `  4. Publish: apply once as a developer at ${DEVELOPERS_URL}`,
+    `  5. Guide:   ${GUIDE_URL}`,
+  ].join('\n')
+}
+
+const PUBLISHING_URL = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md'
+
+/** For a publish the Registry refused: the one line that says where to read on. */
+function publishFailureHint(body) {
+  if (body.includes('invalid package signature')) {
+    return `Sign the exact file you upload with the key registered on your namespace dashboard: ${GUIDE_URL}#4-publishing-is-the-business-process`
+  }
+  if (body.includes('QUALIFICATION_REQUIRED')) {
+    return `Publishing needs an approved developer application: ${DEVELOPERS_URL}`
+  }
+  if (/% similar to/.test(body)) {
+    return `Names too close to an existing extension are refused; see ${PUBLISHING_URL}#5-review`
+  }
+  return ''
+}
+
 function usage() {
   return [
     'Usage:',
@@ -565,6 +602,8 @@ function usage() {
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
     'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
     'publish --via-navide hands the package to the running Navide, where you sign in and submit it; the CLI reads no token.',
+    '',
+    `New to Navide plugins? The whole flow, from init to a listed extension: ${GUIDE_URL}`,
   ].join('\n')
 }
 
@@ -633,9 +672,7 @@ async function main(argv) {
     if (!options.get('--id')) fail(usage())
     const result = initPlugin(argument, options.get('--id'), options.get('--name'), options.get('--template') ?? 'default')
     console.log(`Created ${result.id} (${result.name}) in ${result.root}`)
-    console.log(result.template === 'vue'
-      ? `Next: cd ${argument} && npm install && npm run build && npm run build:backend && npm run check`
-      : `Next: navide-plugin validate ${argument}`)
+    console.log(initNextSteps(result, argument))
     return
   }
   if (command === 'validate') {
@@ -771,8 +808,11 @@ async function main(argv) {
     channel: options.get('--channel'),
   })
   console.log(`${result.status} ${result.body}`)
-  if (result.status < 200 || result.status >= 300) process.exitCode = 1
-  else if (options.get('--channel') === 'testplace') {
+  if (result.status < 200 || result.status >= 300) {
+    process.exitCode = 1
+    const hint = publishFailureHint(result.body)
+    if (hint) console.error(`navide-plugin: ${hint}`)
+  } else if (options.get('--channel') === 'testplace') {
     console.log(
       'This is a Testplace build: only testers you invite can install it, and it expires in 90 days. Invite them with `navide-plugin testplace invite add`.',
     )
