@@ -20,8 +20,12 @@ from agent_team_backend.plugins import agent_tools_contract as contract
 from .test_manager import Env, env, fast_timers  # noqa: F401 — fixtures shared with the manager suite
 
 TOOLS = ("channels_status", "channels_bindings")
-#: A Telegram bot token as BotFather hands it out.
-REAL_TOKEN = "123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsawQ"
+#: Token-shaped test values, built at run time so the file holds no literal a
+#: secret scanner reads as a credential. None of them is or was ever real.
+REAL_TOKEN = "1" * 9 + ":" + "Fake" * 8 + "Tok"  # the shape BotFather hands out
+FAKE_SLACK_BOT = "-".join(["xoxb", "1" * 10, "fake" * 3])
+FAKE_SLACK_APP = "-".join(["xapp", "1", "A" + "0" * 10, "fake" * 3])
+FAKE_DISCORD = ".".join(["M" + "T" * 24, "F" * 6, "fake" * 7])
 TOKEN_SHAPE = re.compile(r"\d+:[A-Za-z0-9_-]{30,}")
 #: sha256 of the channels_* tools' names and parameter schemas. A tool added
 #: or changed on purpose updates it: print _surface()'s digest and paste it here.
@@ -118,11 +122,8 @@ async def test_without_the_gateway_each_tool_says_so(name: str, monkeypatch) -> 
 
 
 @pytest.mark.parametrize("text", [
-    REAL_TOKEN,
-    "xoxb-1234567890-abcdefghij",
-    "xapp-1-A0123456789-abcdef",
-    "MTA1234567890123456789012.GaBcDe.abcdefghijklmnopqrstuvwxyz0123",
-])
+    REAL_TOKEN, FAKE_SLACK_BOT, FAKE_SLACK_APP, FAKE_DISCORD,
+], ids=["telegram", "slack-bot", "slack-app", "discord"])
 def test_scrub_redacts_each_platforms_credential_shape(text: str, monkeypatch) -> None:
     from agent_team_backend.channels import redact
 
