@@ -20,12 +20,6 @@ export interface AgentSpec {
   agentKey: string
   label: string
   defaultCommand: string
-  /** Where the ＋ menu offers this agent. Undefined = a coding CLI (the CLI
-   *  list, Manual spawn, "Handle Issue As…"). 'standalone' = a general agent
-   *  with its own runtime and model keys (OpenClaw, Hermes Agent), offered
-   *  only in the menu's "Standalone agents" block. Mirrors the backend
-   *  VendorSpec.category (a test compares the two). */
-  category?: 'standalone'
   /** CLI-specific flag that bypasses interactive permission / trust prompts
    *  so the agent runs unattended. Appended automatically when the user
    *  enables YOLO mode (default) and hasn't supplied a custom command. */

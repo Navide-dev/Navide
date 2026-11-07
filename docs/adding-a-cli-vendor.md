@@ -218,14 +218,6 @@ Three consequences worth knowing before you go looking for a missing entry:
   built. Checking the menu of an installed release for a vendor that lives on
   a feature branch will always come up empty.
 
-A vendor that is a general agent with its own runtime and model keys rather
-than a coding CLI (OpenClaw, Hermes Agent) sets `category="standalone"` on the
-backend spec and `category: 'standalone'` on the frontend one
-(`test_category_matches_the_frontend_agent_spec` compares them).
-`manualAgentSpecs` then leaves it out of the CLI list, Manual spawn and
-"Handle Issue As…", and the ＋ menu offers it in its "Standalone agents"
-block instead, through the same spawn and guided-install path.
-
 ## Install detection
 
 Set `install_dep=Dep(...)` in your vendor's `SPEC` (see any existing

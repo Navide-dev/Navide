@@ -6,9 +6,6 @@ import type { AgentSpec } from './types'
 export const SPEC = {
   agentKey: 'hermes',
   label: 'Hermes Agent',
-  // A general agent with its own runtime and model keys, not a coding CLI:
-  // offered in the ＋ menu's "Standalone agents" block only.
-  category: 'standalone',
   // Bare `hermes` opens the interactive TUI, on Windows too (native PowerShell
   // install; hermes-agent.nousresearch.com docs, read 2026-11-07).
   defaultCommand: 'hermes',

@@ -1,5 +1,5 @@
 """OpenClaw (``openclaw``) — a general personal AI assistant, offered in the
-＋ menu's "Standalone agents" block rather than among the coding CLIs.
+＋ menu's CLI list like any other vendor.
 
 Read from the official docs on 2026-11-07, not yet run against a real install
 (no ``openclaw`` binary on the machine this was written on):
@@ -34,7 +34,6 @@ from .base import Dep, ExtensionsSpec, VendorSpec
 SPEC = VendorSpec(
     key="openclaw",
     label="OpenClaw",
-    category="standalone",
     extensions=ExtensionsSpec(
         supported=False,
         note="OpenClaw plugins and skills (~/.openclaw) are not inventoried yet",

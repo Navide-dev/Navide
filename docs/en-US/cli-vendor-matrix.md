@@ -9,11 +9,10 @@ the roster, the backend and frontend matrices and their totals are unchanged.
 New since then: the [support tiers](#support-tiers-l1l5) and the OpenCode 2.x
 reader note. Goose (`goose`) was added on 2026-10-21, making 16 vendors; its
 rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
-Hermes Agent (`hermes`) were added on 2026-11-07 as **standalone agents**
-(`category="standalone"`: offered in the ＋ menu's "Standalone agents" block,
-not among the coding CLIs), making 18; they appear in the roster only — no
+Hermes Agent (`hermes`) were added on 2026-11-07 as CLI vendors (the ＋
+menu's CLI list), making 18; they appear in the roster only — no
 reader, resume, model flag, usage or account switching to tabulate. Devin CLI
-(`devin`, Cognition) was added on 2026-11-07 as a **coding CLI** (the ＋ menu's
+(`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
 CLI list), making 19; it too appears in the roster only, for the same reason —
 it was wired from the docs with no binary installed (see the
 [integration record](cli-extension-guide.md)).

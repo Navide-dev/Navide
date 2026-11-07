@@ -1470,20 +1470,8 @@ onUnmounted(() => {
 })
 
 const manualAgentSpecs = computed(() =>
-  props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal' && spec.category !== 'standalone')
+  props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
-
-/** General agents with their own runtime and model keys (OpenClaw, Hermes
- *  Agent). Kept out of manualAgentSpecs — the CLI list, Manual spawn and
- *  "Handle Issue As…" are about coding CLIs — and offered in the ＋ menu's
- *  "Standalone agents" block instead, through the same spawnAs path. */
-const standaloneAgentSpecs = computed(() =>
-  props.agentSpecs.filter((spec) => spec.category === 'standalone')
-)
-
-/** Grok Bot runs on SpaceXAI's cloud with no API or CLI, so it cannot live in
- *  a pane; the ＋ menu opens its official page (app download and sign-in). */
-const GROK_BOT_URL = 'https://cursor.com/dashboard/bot'
 
 // Available agent types for "Handle Issue As…" pane spawn.
 const availableAgents = computed(() =>
@@ -2691,13 +2679,12 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  408px) plus the fixed furniture around it — role picker, three dividers,
- *  the Standalone agents block (~136px: heading, three rows, the Grok note),
+ *  456px) plus the fixed furniture around it — role picker, two dividers,
  *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 634
+const ADD_MENU_MAX_H = 546
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
@@ -2753,11 +2740,6 @@ function openTerminalFromMenu(): void {
   addMenuOpen.value = false
   if (!canSpawn.value) return
   emit('spawn', { agentKey: 'terminal', roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
-}
-
-function openGrokBotFromMenu(): void {
-  addMenuOpen.value = false
-  void window.agentTeam?.openExternal?.(GROK_BOT_URL)
 }
 
 function openSpawnCardFromMenu(): void {
@@ -2861,7 +2843,7 @@ async function spawnOrOfferInstall(agentKey: string): Promise<void> {
     emitSpawn(agentKey)
     return
   }
-  const spec = props.agentSpecs.find((s) => s.agentKey === agentKey)
+  const spec = manualAgentSpecs.value.find((s) => s.agentKey === agentKey)
   spawnWorkspaceOverride.value = ''
   spawnGroupOverride.value = ''
   emit('install-cli', { agentKey, label: spec?.label ?? agentKey })
@@ -4426,35 +4408,6 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
             </span>
           </button>
-        </div>
-        <div class="ws-add-div"></div>
-        <!-- Standalone agents: general agents with their own runtime and model
-             keys. OpenClaw and Hermes open in a pane through spawnAs (so a
-             missing one gets the guided install); Grok Bot has no CLI and
-             opens its official page instead. -->
-        <div class="ws-add-sa">
-          <div class="ws-add-sa-hd">{{ $t('label.standalone-agents') }}</div>
-          <button
-            v-for="spec in standaloneAgentSpecs"
-            :key="spec.agentKey"
-            class="ws-add-opt ws-add-sa-opt"
-            @click="spawnAs(spec.agentKey)"
-          >
-            <span class="ws-add-lb" v-truncate>{{ spec.label }}</span>
-            <span class="ws-add-sa-tag">{{
-              missingClis.has(spec.agentKey)
-                ? $t('label.standalone-badge-not-installed')
-                : $t('label.standalone-badge-pane')
-            }}</span>
-          </button>
-          <button
-            class="ws-add-opt ws-add-sa-opt ws-add-grokbot"
-            @click="openGrokBotFromMenu"
-          >
-            <span class="ws-add-lb" v-truncate>Grok Bot ↗</span>
-            <span class="ws-add-sa-tag">{{ $t('label.standalone-badge-opens-app') }}</span>
-          </button>
-          <div class="ws-add-sa-note">{{ $t('label.grok-bot-pane-hint') }}</div>
         </div>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
@@ -6576,9 +6529,9 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 408px carries seventeen. */
+ * 3px padding either side), so 456px carries nineteen. */
 .ws-add-scroll {
-  max-height: min(408px, 45vh);
+  max-height: min(456px, 45vh);
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
@@ -6611,13 +6564,6 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
-/* Standalone agents: tinted so the block reads as a different kind of entry
- * from the CLI list above it, with a tag saying what a click does. */
-.ws-add-sa { margin: 0 4px; padding: 3px 0; border-radius: var(--radius-sm, 4px); background: var(--accent-subtle); }
-.ws-add-sa-hd { padding: 2px 6px 3px 22px; color: var(--accent-fg); font-size: var(--font-3xs); font-weight: 600; }
-.ws-add-sa-opt { padding-left: 22px; }
-.ws-add-sa-tag { flex: none; margin-left: auto; color: var(--text-secondary); font-size: var(--font-3xs); }
-.ws-add-sa-note { padding: 2px 8px 2px 22px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */

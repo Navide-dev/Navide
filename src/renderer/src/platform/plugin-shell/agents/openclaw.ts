@@ -5,9 +5,6 @@ import type { AgentSpec } from './types'
 export const SPEC = {
   agentKey: 'openclaw',
   label: 'OpenClaw',
-  // A general assistant with its own runtime and model keys, not a coding
-  // CLI: offered in the ＋ menu's "Standalone agents" block only.
-  category: 'standalone',
   // Bare `openclaw` opens the TUI and chooses the mode itself — it attaches to
   // a running Gateway, else runs the agent locally (docs.openclaw.ai/web/tui,
   // read 2026-11-07). Navide never starts the Gateway.
