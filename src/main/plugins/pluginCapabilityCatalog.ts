@@ -11,7 +11,7 @@ import { GIT_ACCOUNT_PUBLIC_METHODS, validateGitAccountRequest } from './gitAcco
 import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from './webCapability'
 import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
 import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
-import { PLUGINS_CALL_ADDRESS, validateInterPluginCallRequest } from './pluginInterCall'
+import { validateInterPluginCallRequest } from './pluginInterCall'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -477,9 +477,10 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     address, kind: 'event', namespace: 'agents', scope: 'workspace', eligibility: 'public',
   } satisfies PublicSystemCapabilityCatalogEntry])),
   // Another installed plugin's contributes.api method; the target must be in
-  // the caller's permissions.plugins (not a system namespace).
-  [PLUGINS_CALL_ADDRESS]: {
-    address: PLUGINS_CALL_ADDRESS,
+  // the caller's permissions.plugins (not a system namespace). A literal, not
+  // pluginInterCall's constant: that module imports this one back.
+  'plugins.call': {
+    address: 'plugins.call',
     kind: 'method',
     namespace: 'plugins',
     scope: 'workspace',

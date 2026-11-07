@@ -15,6 +15,19 @@
     },
     "historicalPeakConcurrency": 2,
     "undeclaredSince": 1790208000000,
+    "pipelineNodeRuns": [
+      {
+        "id": 1,
+        "at": 1792799000000,
+        "pluginVersion": "1.4.0",
+        "workspace": "/Users/me/project",
+        "nodeId": "fetch",
+        "runOrigin": "schedule",
+        "outcome": "ok",
+        "errorCode": "",
+        "durationMs": 120
+      }
+    ],
     "toolCalls": [
       {
         "id": 12,

@@ -45,8 +45,8 @@ describe('plugins.host_event frame', () => {
 })
 
 describe('agents.* event catalog', () => {
-  const catalogEvents = (capabilities as unknown as { capabilities: Array<{ address: string; payload?: { required?: string[]; properties?: Record<string, unknown> } }> })
-    .capabilities.filter(entry => entry.payload && (AGENTS_EVENTS as readonly string[]).includes(entry.address))
+  const catalogEvents = (capabilities as unknown as { events: Array<{ address: string; payload?: { required?: string[]; properties?: Record<string, unknown> } }> })
+    .events.filter(entry => (AGENTS_EVENTS as readonly string[]).includes(entry.address))
 
   it('lists every event in capabilities-v1.json with the fields the Host validates', () => {
     expect(catalogEvents.map(entry => entry.address)).toEqual([...AGENTS_EVENTS])

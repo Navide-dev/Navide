@@ -71,8 +71,10 @@ type CatalogPermission = { id: string; access?: string }
 /** What each cataloged address needs declared, from capabilities-v1.json:
  *  the same catalog the Host enforces. */
 const PERMISSIONS: ReadonlyMap<string, CatalogPermission> = new Map(
-  (capabilitiesV1 as unknown as { capabilities: Array<{ address: string; permission: CatalogPermission }> })
-    .capabilities.map((entry) => [entry.address, entry.permission]),
+  (() => {
+    const catalog = capabilitiesV1 as unknown as Record<'methods' | 'events', Array<{ address: string; permission: CatalogPermission }>>
+    return [...catalog.methods, ...catalog.events].map((entry) => [entry.address, entry.permission] as const)
+  })(),
 )
 
 function deny(message: string): PluginError {

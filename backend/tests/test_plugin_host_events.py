@@ -151,10 +151,7 @@ async def test_nothing_is_sent_before_start(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_event_list_matches_capability_catalog() -> None:
     catalog = json.loads(CONTRACTS.read_text())
-    cataloged = [
-        entry["address"] for entry in catalog["capabilities"]
-        if "payload" in entry and entry["address"] in plugin_host_events.EVENTS
-    ]
+    cataloged = [entry["address"] for entry in catalog["events"] if entry["address"] in plugin_host_events.EVENTS]
     assert cataloged == list(plugin_host_events.EVENTS)
 
 
