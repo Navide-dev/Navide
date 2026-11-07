@@ -21,6 +21,7 @@ import {
   useReadbackAnnouncer,
 } from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
+import { requestChannelsBot } from './channelsBotRequest'
 import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
 import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
@@ -11304,9 +11305,14 @@ function togglePaneReadback(id: string): void {
 // ── External UI action bus (MCP-driven) ─────────────────────────────────────
 // Actions a UI-control MCP client can invoke via ui.invoke.request. See
 // useUiActionBus for the request/reply plumbing and ownership check.
-const UI_SETTINGS_TABS = ['general', 'mcp', 'analyzer', 'updates', 'appearance', 'accounts', 'keybindings'] as const
+const UI_SETTINGS_TABS = ['general', 'mcp', 'analyzer', 'updates', 'appearance', 'accounts', 'keybindings', 'channels'] as const
 registerCommand('ui.settings.open', (args) => {
-  const tab = (args as { tab?: string } | undefined)?.tab
+  const { tab, platform, account } = (args ?? {}) as { tab?: string; platform?: unknown; account?: unknown }
+  // On the Channels tab, platform (+ account, "default" when omitted) picks that
+  // bot; one the page does not have leaves it on its usual row.
+  if (tab === 'channels' && typeof platform === 'string' && platform) {
+    requestChannelsBot({ platform, account: typeof account === 'string' ? account : '' })
+  }
   if (tab && (UI_SETTINGS_TABS as readonly string[]).includes(tab)) {
     openSettingsAt(tab as typeof settingsInitialTab.value)
   } else {

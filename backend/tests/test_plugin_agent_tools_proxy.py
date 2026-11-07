@@ -192,6 +192,9 @@ W1_CORE_TOOLS = frozenset({
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: Self-evolution S5b: the reclaim retrospective tool.
 EVOLVE_RETRO_CORE_TOOLS = frozenset({"evolve_retro"})
+#: Plan mcp-bot_507912: the chat-channel tools (mcp_server/channel_tools.py); their own
+#: surface is pinned in tests/channels/test_mcp_channel_tools.py.
+CHANNEL_CORE_TOOLS = frozenset({"channels_status", "channels_bindings"})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when
 #: skills_set_delivery's description gained the approval for widening.
@@ -368,7 +371,7 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
     added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
-             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS)
+             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS)
     assert added <= {t["name"] for t in module_only}
     existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

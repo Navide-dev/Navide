@@ -411,7 +411,7 @@ window itself instead of this table.
 | Action | Args | Effect |
 |---|---|---|
 | `ui.actions.describe` | `{prefix?}` | Describe the registered actions, or only the ids starting with `prefix`. Returns one row per action: `{id, title, category, args?, summary?, humanOnly?, dedicatedTool?, workspaceScoped}`. `humanOnly` is `true`, or the condition it applies under, for what is refused with `ui_human_only`; `dedicatedTool` names the tool to use for what `ui_invoke` refuses. Only `ui.*` rows carry `args` and `summary` |
-| `ui.settings.open` | `{tab?}` (one of `general`, `mcp`, `analyzer`, `updates`, `appearance`, `accounts`, `keybindings`) | Open Settings, optionally to a specific tab |
+| `ui.settings.open` | `{tab?, platform?, account?}` (`tab` one of `general`, `mcp`, `analyzer`, `updates`, `appearance`, `accounts`, `keybindings`, `channels`) | Open Settings, optionally to a specific tab. With `tab: "channels"`, `platform` (`telegram`, `discord`, …) and `account` (the bot's id from `channels_status`, `default` when omitted) open the Channels page with that bot selected; a bot the page does not have just opens the page, without an error |
 | `ui.settings.close` | — | Close Settings |
 | `ui.settings.yolo` | `{yolo?}` | Read the global CLI permission-bypass switch, or set it when `yolo` is passed. Returns `{yolo, agents}`, each agent being `{agent, mode, skipFlag}`. Not workspace-scoped: any window answers it, and `skipFlag` — not `yolo` — is the per-vendor answer |
 | `ui.pane.create` | `{agent, name?, task?}` | Spawn a pane for `agent` in the window's open workspace; `task`, if given, is sent as the kickoff prompt and skips role injection |
@@ -553,6 +553,26 @@ servers are configured, and which prompts the user has saved.
 | `workspace_switch` | `path` | Switch the window that hosts the calling pane to another workspace it already holds (one window, many projects); panes are not affected. Refused with an error pointing at `workspace_open` when the window does not hold `path`, and refused while a pipeline is running in that window (`pipeline_abort` first, or switch from the sidebar). Pane callers only — a host or external caller has no window of its own and gets `ok: false` (use `ui_invoke` with a `workspace_path` and action `ui.workspace.switch` instead). Returns `{ok, path}` with the workspace now on screen |
 | `mcp_list` | — | The MCP servers configured here — the ones Navide connects to as a client, with their live state, and the ones each CLI keeps in its own config (`~/.claude.json`, `~/.codex/config.toml`, …), reflected as the file states them. Returns `{servers, native, agents}`. Each managed server is `{name, enabled, transport, command, args, env}` or `{name, enabled, transport, url, headers}` plus `status` (`disabled`, `connected`, `error`, `unknown`) and `tool_count`; the tool list itself is left out. Each native entry is `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}`. `agents` is every vendor with what Navide can do with its MCP (`wired`, `planned`, `unsupported`) and whether its own config is reflected. Every credential-shaped value — env and header values, `--api-key=` style arguments, URL userinfo and secret query parameters — is already masked as `***`; names and hosts are kept so an entry stays recognisable. Global, not per workspace. Read-only — adding, enabling or editing a server is the user's decision, made in Settings |
 | `prompt_list` | `id=""` | The prompt skills the user keeps in Settings → Prompts — saved instructions fired at a CLI pane from the app. With no `id` this lists metadata only: `{skills, default_id}`, each skill being `{id, name, icon, description, category, enabled, isDefault, maxTurns}`, and `default_id` the id of the skill marked default (`""` when none is). A `note` is added when the user has never saved any: the app then seeds a builtin skill on first use, which is not visible from here. With an `id` it returns that one skill in full — `{skill}`, carrying `prompt` and `resumePrompt` as well; an unknown id answers `{ok: false, error}`. Read-only: creating or editing one is done in Settings |
+
+### Chat channels (read-only in 0.2.39)
+
+Two read-only tools show Navide's chat-channel bots (Settings → Channels):
+which bots exist, how each is connected, and which pane each chat drives.
+They work for every caller and change nothing. To add a bot, link a chat or
+bind and unbind a pane, open the page with `ui_invoke` `ui.settings.open`
+`{tab: "channels", platform, account}` — it opens with that bot selected —
+and let the user do it there.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `channels_status` | — | Every bot per platform: `{ok, enabled, platforms: [{platform, configured, enabled, bots}], note}`, `enabled` being the global channels switch. Each bot is `{platform, account, name, configured, enabled, status, bot_id, bindings, last_activity_at}`: `status` is the connection (`lifecycle`, `connected`, `last_error`, `identity`, …), `bot_id` the Telegram bot id, `bindings` the panes it drives `{pane_id, pane_name, pane_exists, workspace_path, workspace_name, chat_title, created_at}` |
+| `channels_bindings` | — | Every binding: `{ok, bindings: [{pane_id, platform, account, chat_id, thread_id, title, verbosity, parent_pane_id, auto}], note}`. A chat drives one pane at a time; `auto` marks a child pane's topic made for it |
+
+A bot credential never reaches the caller: each bot's settings (where its
+secret hint lives) are left out, any key named like a credential is dropped,
+and credential-shaped text — a Telegram bot token quoted in a `last_error`,
+say — reads `[redacted]`. Both answer `{ok: false, error_code:
+"channels-not-running"}` while the channel gateway is not running.
 
 ### Navide Marketplace (read-only)
 

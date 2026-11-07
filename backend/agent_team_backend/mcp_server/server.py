@@ -12497,5 +12497,7 @@ from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  #
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
 # DESIGN-C S3: window_list / window_focus.
 from . import window_tools as _window_tools  # noqa: E402,F401
-# Self-evolution S5b: evolve_retro, the last core tool.
+# Self-evolution S5b: evolve_retro.
 from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
+# Plan mcp-bot_507912: chat-channel tools (channels_*).
+from . import channel_tools as _channel_tools  # noqa: E402,F401

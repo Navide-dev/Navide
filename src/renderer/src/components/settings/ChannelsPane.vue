@@ -24,6 +24,7 @@ import {
 import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
 import { relativeTime } from '../../lib/relativeTime'
 import { channelBotSearchFields } from '../../lib/channelSearch'
+import { channelsBotRequest, takeChannelsBotRequest } from '../../channelsBotRequest'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
 import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
@@ -744,6 +745,15 @@ function show(key: string): void {
 // Once the page has data it stays on its row: a request arriving later only shows a count.
 watch(() => store.loaded.value, (loaded) => {
   if (loaded && !picked.value && navGroups.value.length) picked.value = defaultView.value
+}, { immediate: true })
+
+// ui.settings.open {tab: "channels", platform, account}: show that bot once the page
+// has data. A bot this page does not have is dropped and the page stays where it was.
+watch(() => [channelsBotRequest.value, store.loaded.value] as const, ([request, loaded]) => {
+  if (!request || !loaded) return
+  takeChannelsBotRequest()
+  const key = botKey(request.platform, request.account || DEFAULT_ACCOUNT)
+  if (viewExists(key)) show(key)
 }, { immediate: true })
 
 function platformShown(spec: RegisteredChannelPlatform): boolean {
