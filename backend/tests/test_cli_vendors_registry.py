@@ -32,8 +32,8 @@ CLI_AGENTS_HELP = (
 
 EXPECTED_KEYS = {
     "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
-    "qwen",
+    "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
+    "opencode", "openclaw", "pi", "qwen",
 }
 
 # DEPS entries that are infrastructure, not CLI vendors.
@@ -346,6 +346,23 @@ def test_push_channel_matches_the_frontend_agent_spec() -> None:
         )
 
 
+def test_category_matches_the_frontend_agent_spec() -> None:
+    """The ＋ menu reads the frontend spec's `category`; the backend spec says
+    the same thing so a vendor cannot be standalone on one side only."""
+    assert {spec.category for spec in registry.VENDORS.values()} <= {"cli", "standalone"}
+    backend = {key for key, spec in registry.VENDORS.items() if spec.category == "standalone"}
+    frontend: set[str] = set()
+    for path in FRONTEND_AGENTS_DIR.glob("*.ts"):
+        if path.stem.startswith("_") or path.stem in {"index", "types"}:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if re.search(r"^\s*category:\s*'standalone'", source, re.MULTILINE):
+            frontend.update(re.findall(r"agentKey: '([a-z]+)'", source))
+    assert backend == frontend == {"hermes", "openclaw"}, (
+        f"standalone category drifted: backend={sorted(backend)} frontend={sorted(frontend)}"
+    )
+
+
 def test_help_panel_sign_in_column_matches_login_command_args() -> None:
     """Settings ▸ Help prints, per vendor, the command the Accounts pane's
     sign-in button runs. That table is a hand-maintained mirror, so it can
@@ -656,7 +673,9 @@ def test_vendors_without_session_ids() -> None:
     others = {
         k for k, s in registry.VENDORS.items() if not s.supports_session_resume
     }
-    assert others == {"aider", "mcode"}, (
+    # openclaw and hermes: standalone agents whose sessions live in their own
+    # runtime (OpenClaw's Gateway, Hermes's home), with no reader written yet.
+    assert others == {"aider", "mcode", "openclaw", "hermes"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

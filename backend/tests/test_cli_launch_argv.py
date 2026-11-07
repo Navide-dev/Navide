@@ -36,7 +36,8 @@ from agent_team_backend.terminals import TerminalService
 # first, so coverage cannot silently shrink.
 EXPECTED_VENDORS = frozenset({
     "aider", "antigravity", "claude", "codex", "copilot", "cursor", "droid",
-    "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi", "qwen",
+    "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse", "opencode",
+    "openclaw", "pi", "qwen",
 })
 
 # A literal second word so a merge into the first token is observable.

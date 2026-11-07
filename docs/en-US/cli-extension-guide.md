@@ -10,7 +10,8 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, and `goose`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, and the standalone agents `openclaw` and
+`hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -80,6 +81,24 @@ exist as described, and the per-layer instructions are superseded by Part 1.
 What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
+
+### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
+
+Standalone agents: general assistants that own their runtime and model keys,
+declared `category="standalone"` on both specs so the ＋ menu offers them in
+a "Standalone agents" block and keeps them out of the CLI list, Manual spawn
+and "Handle Issue As…". Read from the official docs on 2026-11-07; neither
+binary was installed, so nothing here is a live recording.
+
+| Question | OpenClaw | Hermes Agent |
+|---|---|---|
+| Launch | Bare `openclaw`: attaches to a running Gateway, else runs the agent locally (docs.openclaw.ai/web/tui). Navide never starts the Gateway. | Bare `hermes` opens the TUI (github.com/NousResearch/hermes-agent). |
+| Permissions | No bypass flag. | `--yolo` (top-level; docs/reference/cli-commands). |
+| Kickoff | Typed into the composer like every vendor. `--message` exists but is not resent when history is unavailable. | Typed into the composer. `hermes chat -q` exists. |
+| Install | `curl \| bash`; the install entry has no command, so the guided install shows the docs link. | `curl \| bash`, or `iex (irm …/install.ps1)` on native Windows (supported; data in `%LOCALAPPDATA%\hermes`). Same: docs link only. |
+| Keys | OpenClaw's own config (`~/.openclaw/openclaw.json`). Navide reads none. | `~/.hermes/.env` / `config.yaml` (`$HERMES_HOME`). Navide reads none. |
+| Instruction files | Agent workspace `~/.openclaw/workspace/AGENTS.md`, `SOUL.md` — not the TUI's cwd. | Project: `.hermes.md`/`HERMES.md`, `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; home: `SOUL.md`. |
+| Not wired | Reader, resume, model flag, MCP, skills, extensions inventory, usage, account switching. Busy/idle detection and the bare-line reply protocol are unverified on both TUIs. | Same. |
 
 ### Goose (`goose`, AAIF) — added 2026-10-21
 

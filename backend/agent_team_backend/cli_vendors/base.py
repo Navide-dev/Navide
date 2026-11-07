@@ -1083,3 +1083,10 @@ class VendorSpec:
     # override disables this vendor's default network profile; it is never
     # interpreted as a trusted endpoint or persisted as a credential URL.
     network_override_env_vars: tuple[str, ...] = ()
+
+    # Where the vendor is offered. "cli" = a coding CLI (the ＋ menu's CLI
+    # list, Manual spawn, "Handle Issue As…"). "standalone" = a general agent
+    # with its own runtime and model keys (OpenClaw, Hermes Agent), shown in
+    # the ＋ menu's "Standalone agents" block only. Mirrors the frontend spec's
+    # ``category`` (a test compares the two).
+    category: str = "cli"
