@@ -122,7 +122,7 @@ async def test_pipeline_start_asks_the_window_to_run_the_pipeline(
             "workspace_path": resolve_plan_root(str(tmp_path)),
             "op": "invoke",
             "action": "ui.pipeline.start",
-            "args": {"task": "ship the thing", "pipelineId": "pl-1"},
+            "args": {"task": "ship the thing", "origin": "agent", "pipelineId": "pl-1"},
         }
     ]
 
@@ -136,7 +136,7 @@ async def test_pipeline_start_leaves_out_a_pipeline_id_it_was_not_given(
 
     await plan_mcp.pipeline_start(_ctx(), task="ship the thing")
 
-    assert ui_calls[0]["args"] == {"task": "ship the thing"}
+    assert ui_calls[0]["args"] == {"task": "ship the thing", "origin": "agent"}
 
 
 async def test_pipeline_start_reports_a_window_that_refused(

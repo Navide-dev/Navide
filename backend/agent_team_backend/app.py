@@ -2816,7 +2816,6 @@ async def _stop_log_watcher() -> None:
         if _credential_watcher is not None:
             _credential_watcher.stop()
         await channels.stop()
-        plugin_host_events.stop()
         await server_link.stop()
     finally:
         # Delivered message keys still in the batch: written now, or a message

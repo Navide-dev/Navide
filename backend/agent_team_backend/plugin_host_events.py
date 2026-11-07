@@ -234,21 +234,28 @@ def on_schedule_fired(job: dict[str, Any], manual: bool) -> None:
 
 
 def start(loop: asyncio.AbstractEventLoop) -> None:
+    """Begin observing on ``loop``. Called at every backend start; a second
+    call (a restart in the same process) moves to the new loop and keeps one
+    registration of each listener, so no shutdown step is needed."""
     from . import agent_messaging
 
     global _loop
-    if _loop is not None:
+    if _loop is loop:
         return
     _loop = loop
+    _plan_stages.clear()
     for entry in agent_messaging.list_panes():
         _panes[entry.pane_id] = (
             entry.workspace_path, entry.name, bool(entry.busy), _text(entry.display_status)
         )
-    agent_messaging.pane_listeners.append(on_registry)
-    agent_messaging.message_row_listeners.append(on_message_rows)
+    if on_registry not in agent_messaging.pane_listeners:
+        agent_messaging.pane_listeners.append(on_registry)
+    if on_message_rows not in agent_messaging.message_row_listeners:
+        agent_messaging.message_row_listeners.append(on_message_rows)
 
 
 def stop() -> None:
+    """Stop observing (tests; the backend itself just exits)."""
     from . import agent_messaging
 
     global _loop
