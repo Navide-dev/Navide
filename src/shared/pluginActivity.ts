@@ -166,6 +166,13 @@ export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'err
  *  text, with no length or variety limit, so they are never keys. A report
  *  shows them as "called undeclared methods N times". */
 export const BACKEND_CALL_UNDECLARED_ADDRESS = 'backend.<undeclared>'
+/** C4: the life of a plugin's backend child, counted beside its calls under
+ *  three fixed addresses no declared method can spell (angle brackets): the
+ *  child failed (`error`), an automatic restart brought it back (`allowed`),
+ *  and the Host gave up restarting it within the crash window (`error`). */
+export const BACKEND_CRASHED_ADDRESS = 'backend.<crashed>'
+export const BACKEND_RESTARTED_ADDRESS = 'backend.<restarted>'
+export const BACKEND_STOPPED_AFTER_CRASHES_ADDRESS = 'backend.<stopped-after-crashes>'
 
 export interface PluginActivityBackendCalls {
   /** Per `backend.<method>` address and outcome, from the UTC day `window`

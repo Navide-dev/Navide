@@ -203,7 +203,13 @@ import {
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
 } from '../../shared/pluginAgentTools'
-import { BACKEND_CALL_UNDECLARED_ADDRESS, type PluginActivityReportRequest } from '../../shared/pluginActivity'
+import {
+  BACKEND_CALL_UNDECLARED_ADDRESS,
+  BACKEND_CRASHED_ADDRESS,
+  BACKEND_RESTARTED_ADDRESS,
+  BACKEND_STOPPED_AFTER_CRASHES_ADDRESS,
+  type PluginActivityReportRequest,
+} from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { redactDeveloperSecrets } from './developerAccount'
 import type { DeveloperQueryAnswer } from './developerIpc'
@@ -1490,6 +1496,9 @@ export class FrontendPluginManager {
       if (error.cause) {
         this.emitHostBackendFailureDiagnostic(runtime.pluginId, error)
       }
+      // C4: the child's failure is part of the plugin's record (third-party
+      // packages only, as for its calls).
+      this.recordBackendLifecycle(runtime, BACKEND_CRASHED_ADDRESS, 'error')
       if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE) {
         // The child stays stopped for good. Outside Plans nothing else tells
         // anyone, and the host's own line went only to the console.
@@ -1539,9 +1548,20 @@ export class FrontendPluginManager {
       }
     },
     onBackendRestarted: (runtime) => {
+      this.recordBackendLifecycle(runtime, BACKEND_RESTARTED_ADDRESS, 'allowed')
       if (runtime.pluginId !== PLANS_PLUGIN_ID) return
       if (runtime.instanceId) this.plansDeadBackendInstances.delete(runtime.instanceId)
       this.markPlansBackendReadyIfChildrenRecovered(runtime.packageVersion)
+    },
+    onBackendGaveUp: (runtime) => {
+      // C4: the child stays stopped. First-party children already say so
+      // through onBackendFailure's budget-spent message; a third-party child
+      // is reported here, in the record and in main.log.
+      if (!isReservedPluginId(runtime.pluginId)) {
+        warnMain(`[plugin-backend] ${runtime.pluginId} failed too often; leaving it stopped`)
+        recordMainFault('plugin.backend_gave_up', `${runtime.pluginId} (${runtime.instanceId ?? 'no instance'})`)
+      }
+      this.recordBackendLifecycle(runtime, BACKEND_STOPPED_AFTER_CRASHES_ADDRESS, 'error')
     },
     onBackendUnbound: (runtime) => {
       if (runtime.pluginId !== PLANS_PLUGIN_ID || !runtime.instanceId) return
@@ -1552,6 +1572,29 @@ export class FrontendPluginManager {
       this.headlessPlansWorkspacePaths.delete(runtime.instanceId)
     },
   })
+  /** C4: one counted row for a third-party child's crash, restart or
+   *  stop-after-crashes, under the fixed `backend.<…>` addresses, beside its
+   *  calls; bundled navide.* packages are not recorded, as for calls. */
+  private recordBackendLifecycle(
+    runtime: { pluginId: string; packageVersion: string; instanceId: string | null },
+    address: string,
+    outcome: 'allowed' | 'error',
+  ): void {
+    if (isReservedPluginId(runtime.pluginId)) return
+    try {
+      const plugin = runtime.instanceId ? this.running.get(runtime.instanceId) : undefined
+      this.activityRecorder.recordBackendCall({
+        plugin_id: runtime.pluginId,
+        plugin_version: runtime.packageVersion,
+        workspace: plugin?.workspacePath ?? '',
+        address,
+        outcome,
+      })
+    } catch (error) {
+      console.debug('[plugins] backend lifecycle not recorded:', error)
+    }
+  }
+
   private readonly pendingBackendCalls = new Map<string, Map<string, AbortController>>()
   private readonly pendingBackendSubscriptions = new Map<
     string,

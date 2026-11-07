@@ -640,7 +640,10 @@ The Host samples the child's process tree every 5 seconds and kills it after
 two samples over 512 MiB resident memory, more than 8 processes, a data
 directory over 1 GiB, or 5 minutes of a full core. A failed child restarts
 after 1 s, 5 s and 30 s; a fourth failure within 10 minutes keeps it stopped
-until the user allows it again. The kill switches are the global setting, the
+until the user allows it again (Settings → Navide Plugins shows it as
+"stopped after crashes"; each crash, restart and the final stop are counted in
+the plugin's Activity under `backend.<crashed>`, `backend.<restarted>` and
+`backend.<stopped-after-crashes>`). The kill switches are the global setting, the
 per-plugin disable switch, the Registry blocklist (a trust refresh revokes a
 blocked package's running child and quarantines the package, and the pre-spawn
 trust check refuses it) and the Registry trust metadata expiry (an expired
@@ -2193,9 +2196,14 @@ Plans documents remain workspace files. Filter, sort, and collapse preferences
 use the approved workspace storage partition with idempotent migration from
 the legacy local preference keys. Backend subscriptions, workspace binding,
 timeouts, cancellation, Grant revocation, and crash cleanup remain Host-owned
-and settle through the same Backend Wire lifecycle. Host-owned child restart
-is not implemented yet: the supervisor's restart path has no caller. Today a
-backend failure moves Plans to the legacy recovery adapter, and the user can
+and settle through the same Backend Wire lifecycle. A child that fails is
+restarted by the Host after 1 s, 5 s and 30 s; a fourth failure within 10
+minutes keeps it stopped (first-party and third-party children alike, each
+bound view with its own budget). A third-party child's crash, restart and
+stop-after-crashes are counted in its Activity under `backend.<crashed>`,
+`backend.<restarted>` and `backend.<stopped-after-crashes>`, and a child the
+Host gave up on is written to main.log. While a Plans child is down, Plans
+moves to the legacy recovery adapter, and the user can
 retry v2 from the Plans panel at most twice per session. If the
 combined package cannot be selected or activated, the retained legacy Plans
 adapter remains available without converting or deleting workspace documents.
