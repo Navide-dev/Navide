@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Bật {platform}",
     "bot": {
+      "search-placeholder": "Tìm tên, {'@'}tài khoản, id, pane hoặc workspace",
+      "search-empty": "Không có bot phù hợp",
+      "search-clear": "Xóa",
       "bound-none": "Chưa liên kết pane nào",
       "bound-many": "{n} pane ({workspaces})",
       "flag-running": "Đang chạy",

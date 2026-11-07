@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Enable {platform}",
     "bot": {
+      "search-placeholder": "Search name, {'@'}handle, id, pane or workspace",
+      "search-empty": "No bots match",
+      "search-clear": "Clear",
       "bound-none": "Not linked to any pane",
       "bound-many": "{n} panes ({workspaces})",
       "flag-running": "Running",

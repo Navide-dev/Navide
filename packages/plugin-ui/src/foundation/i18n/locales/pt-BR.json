@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "Ativar {platform}",
     "bot": {
+      "search-placeholder": "Pesquisar nome, {'@'}usuário, id, pane ou workspace",
+      "search-empty": "Nenhum bot corresponde",
+      "search-clear": "Limpar",
       "bound-none": "Nenhum pane vinculado",
       "bound-many": "{n} panes ({workspaces})",
       "flag-running": "Ativo",

@@ -23,6 +23,7 @@ import {
 } from '../../platform/channels'
 import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
 import { relativeTime } from '../../lib/relativeTime'
+import { channelBotSearchFields } from '../../lib/channelSearch'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
 import ChannelBotNav, { type ChannelNavGroup, type ChannelNavItem } from './ChannelBotNav.vue'
@@ -626,8 +627,24 @@ function navItem(spec: RegisteredChannelPlatform, bot: BotRow): ChannelNavItem {
       ids: [bot.account, bot.bot_id ? `id ${bot.bot_id}` : ''].filter(Boolean).join(' · '),
       binding: bindingText(bot),
       flag: botFlag(bot),
+      search: channelBotSearchFields(bot),
+      botId: bot.bot_id ?? '',
     } : {}),
   }
+}
+
+/** A handful of bots is read at a glance; from this many on, the list gets a search box. */
+const SEARCH_FROM = 6
+const searchable = computed(() => navGroups.value.reduce((n, g) => n + g.items.length, 0) >= SEARCH_FROM)
+const botNav = ref<InstanceType<typeof ChannelBotNav> | null>(null)
+
+// "/" jumps to the search box from anywhere on the page but a text field.
+function onPaneKey(e: KeyboardEvent): void {
+  if (e.key !== '/' || !searchable.value || e.metaKey || e.ctrlKey || e.altKey) return
+  const el = e.target as HTMLElement | null
+  if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return
+  e.preventDefault()
+  botNav.value?.focusSearch()
 }
 
 const navGroups = computed<ChannelNavGroup[]>(() => {
@@ -709,7 +726,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
 </script>
 
 <template>
-  <section class="channels-pane" data-settings-section="channels">
+  <section class="channels-pane" data-settings-section="channels" @keydown="onPaneKey">
     <SettingsCard>
       <SettingRow :title="t('channels.global.title')" :description="t('channels.global.desc')">
         <template #control>
@@ -743,8 +760,10 @@ function removeEntry(entry: ChannelAllowEntry): void {
     <div class="ch-layout" :class="{ 'ch-layout--solo': !navGroups.length }" :data-narrow-pane="narrowPane" data-testid="channel-layout">
       <ChannelBotNav
         v-if="navGroups.length"
+        ref="botNav"
         class="ch-layout-nav"
         :groups="navGroups"
+        :searchable="searchable"
         :active="activeView"
         :add-active="activeView === ADD_VIEW"
         @select="show"

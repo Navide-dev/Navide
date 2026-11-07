@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "{platform} を有効化",
     "bot": {
+      "search-placeholder": "名前、{'@'}ハンドル、id、pane、ワークスペースで検索",
+      "search-empty": "一致する bot はありません",
+      "search-clear": "クリア",
       "bound-none": "どの pane にも接続されていません",
       "bound-many": "{n} 個の pane（{workspaces}）",
       "flag-running": "稼働中",

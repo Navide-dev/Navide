@@ -113,6 +113,66 @@ describe('ChannelsPane two columns', () => {
     expect(navItem(w, 'telegram:bot-b1').get('[data-testid="channel-nav-binding"]').text()).toBe('Not linked to any pane')
   })
 
+  describe('search', () => {
+    const many = () => {
+      const target = account('bot-2e7877', '@NerdtechnicSalesBot', {
+        status: { ...ready, identity: '@nt_test_bot', display_name: 'test' }, bot_id: '7421000',
+        bindings: [{ pane_id: 'p1', pane_name: 'HelperCTO', pane_exists: true, workspace_path: '/w/nt-notify-bridge',
+          workspace_name: 'nt-notify-bridge', chat_title: 'HelperCTO', created_at: 1 }],
+      })
+      const others = Array.from({ length: 24 }, (_, i) => account(`bot-a${i}`, `Other ${i}`, {
+        status: { ...ready, identity: `@other_${i}_bot` }, bot_id: `6900${i}`, bindings: [],
+      }))
+      return [platform('telegram', [...others, target])]
+    }
+    const search = (w: VueWrapper) => w.get<HTMLInputElement>('[data-testid="channel-nav-search"]')
+    const keys = (w: VueWrapper) => navItems(w).map((i) => i.attributes('data-key'))
+
+    it.each(['test', '2e7877', 'HelperCTO', 'nt-notify-bridge', '7421', '@NT_TEST_BOT'])('finds the bot by %s', async (q) => {
+      seed({ platforms: many() })
+      const w = await render()
+      expect(navItems(w)).toHaveLength(25)
+      await search(w).setValue(q)
+      expect(keys(w)).toEqual(['telegram:bot-2e7877'])
+      expect(w.get('[data-testid="channel-nav-search-count"]').text()).toBe('1 / 25')
+    })
+
+    it('marks the hit and brings every row back when cleared', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('test')
+      expect(navItem(w, 'telegram:bot-2e7877').find('mark').text()).toBe('test')
+      await search(w).trigger('keydown', { key: 'Escape' })
+      expect(search(w).element.value).toBe('')
+      expect(navItems(w)).toHaveLength(25)
+    })
+
+    it('says when nothing matches, with a way to clear', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('zzz-nothing')
+      expect(navItems(w)).toHaveLength(0)
+      await w.get('[data-testid="channel-nav-search-clear"]').trigger('click')
+      expect(navItems(w)).toHaveLength(25)
+    })
+
+    it('moves through the kept rows with the arrow keys', async () => {
+      seed({ platforms: many() })
+      const w = await render()
+      await search(w).setValue('other_1')
+      await search(w).trigger('keydown', { key: 'ArrowDown' })
+      expect(activeKey(w)).toBe(keys(w)[0])
+      await search(w).trigger('keydown', { key: 'ArrowDown' })
+      expect(activeKey(w)).toBe(keys(w)[1])
+    })
+
+    it('stays out of the way of a short list', async () => {
+      seed()
+      const w = await render()
+      expect(w.find('[data-testid="channel-nav-search"]').exists()).toBe(false)
+    })
+  })
+
   it('opens on the first bot waiting for approval', async () => {
     seed({ requests: [{ platform: 'telegram', account: 'bot-c2', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1 }] })
     const w = await render()

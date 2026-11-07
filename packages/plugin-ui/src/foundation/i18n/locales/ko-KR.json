@@ -10999,6 +10999,9 @@
     },
     "enable-platform": "{platform} 사용",
     "bot": {
+      "search-placeholder": "이름, {'@'}핸들, id, pane, 작업 영역 검색",
+      "search-empty": "일치하는 bot이 없어요",
+      "search-clear": "지우기",
       "bound-none": "연결된 pane이 없어요",
       "bound-many": "pane {n}개 ({workspaces})",
       "flag-running": "작동 중",
