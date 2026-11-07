@@ -57,6 +57,7 @@ import {
   type HostCapabilityGrant,
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
+  sameExecutables,
 } from './pluginCapabilityBroker'
 import { WebViewError, type PluginWebViewRegistry, type WebGuestView, type WebHostSurface } from './pluginWebViews'
 import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebViewHost'
@@ -71,6 +72,7 @@ import {
   PLUGINS_CALL_ADDRESS,
 } from './pluginInterCall'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
+import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -215,7 +217,13 @@ import {
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
 } from '../../shared/pluginAgentTools'
-import { BACKEND_CALL_UNDECLARED_ADDRESS, type PluginActivityReportRequest } from '../../shared/pluginActivity'
+import {
+  BACKEND_CALL_UNDECLARED_ADDRESS,
+  BACKEND_CRASHED_ADDRESS,
+  BACKEND_RESTARTED_ADDRESS,
+  BACKEND_STOPPED_AFTER_CRASHES_ADDRESS,
+  type PluginActivityReportRequest,
+} from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { redactDeveloperSecrets } from './developerAccount'
 import type { DeveloperQueryAnswer } from './developerIpc'
@@ -234,12 +242,15 @@ import {
   reassembleAgentToolPayloadText,
   splitAgentToolPayloadText,
   utf8ByteLength,
+  agentToolResultBytes,
+  agentToolViewId,
   type AgentToolCaller,
   type AgentToolCallResponse,
   type AgentToolChunksInvalidReason,
   type AgentToolsSyncPayload,
 } from '../../shared/pluginAgentTools'
-import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { agentToolUnavailableMessage, isBackendAgentToolPackage, type AgentToolPackage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { IPC_AGENT_TOOL_CALL, IPC_AGENT_TOOL_RESULT, ViewAgentToolCalls } from './pluginViewAgentToolCalls'
 
 /** An agent tool answer as the Host sends it: a result longer than one piece
  *  stays the plugin's text in pieces, never parsed here (contract 4.4, R1 to R2). */
@@ -272,6 +283,9 @@ export interface PluginLaunchDescriptor {
   capabilityPolicy?: PluginCapabilityPolicy
   /** Host-authenticated v2 grant/binding context; never serialized to a plugin. */
   capabilityContext?: HostCapabilityContext | null
+  /** `permissions.network.hosts` of a Manifest v2 package: the hosts its
+   *  frames' `connect-src` admits. Absent means no network from a view. */
+  networkHosts?: string[]
   /** Dev-server URL for the plugin entry (used when running under electron-vite dev). */
   devUrl: string
   /** Absolute file path to the built plugin entry (packaged / built runs). */
@@ -666,6 +680,11 @@ interface RunningPlugin {
   query: string
   /** webContents.id captured at creation (not readable after destroy). */
   senderId: number
+  /** C1: the hosts this surface's requests may reach (`permissions.network.hosts`;
+   *  `[]` for a v2 package that declares none), null for a legacy descriptor
+   *  (no declaration model, unfiltered), and the dev-server origin the entry
+   *  loads from in development, which is always admitted. */
+  networkPolicy: { hosts: readonly string[] | null; devOrigin: string | null }
   /** Whether the view overlays the host's full content area (see {@link PluginViewBounds}). */
   fill: boolean
   /** Placement that the Host can restore after a package-version restart. */
@@ -1505,6 +1524,9 @@ export class FrontendPluginManager {
       if (error.cause) {
         this.emitHostBackendFailureDiagnostic(runtime.pluginId, error)
       }
+      // C4: the child's failure is part of the plugin's record (third-party
+      // packages only, as for its calls).
+      this.recordBackendLifecycle(runtime, BACKEND_CRASHED_ADDRESS, 'error')
       if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE) {
         // The child stays stopped for good. Outside Plans nothing else tells
         // anyone, and the host's own line went only to the console.
@@ -1554,9 +1576,20 @@ export class FrontendPluginManager {
       }
     },
     onBackendRestarted: (runtime) => {
+      this.recordBackendLifecycle(runtime, BACKEND_RESTARTED_ADDRESS, 'allowed')
       if (runtime.pluginId !== PLANS_PLUGIN_ID) return
       if (runtime.instanceId) this.plansDeadBackendInstances.delete(runtime.instanceId)
       this.markPlansBackendReadyIfChildrenRecovered(runtime.packageVersion)
+    },
+    onBackendGaveUp: (runtime) => {
+      // C4: the child stays stopped. First-party children already say so
+      // through onBackendFailure's budget-spent message; a third-party child
+      // is reported here, in the record and in main.log.
+      if (!isReservedPluginId(runtime.pluginId)) {
+        warnMain(`[plugin-backend] ${runtime.pluginId} failed too often; leaving it stopped`)
+        recordMainFault('plugin.backend_gave_up', `${runtime.pluginId} (${runtime.instanceId ?? 'no instance'})`)
+      }
+      this.recordBackendLifecycle(runtime, BACKEND_STOPPED_AFTER_CRASHES_ADDRESS, 'error')
     },
     onBackendUnbound: (runtime) => {
       if (runtime.pluginId !== PLANS_PLUGIN_ID || !runtime.instanceId) return
@@ -1567,6 +1600,29 @@ export class FrontendPluginManager {
       this.headlessPlansWorkspacePaths.delete(runtime.instanceId)
     },
   })
+  /** C4: one counted row for a third-party child's crash, restart or
+   *  stop-after-crashes, under the fixed `backend.<…>` addresses, beside its
+   *  calls; bundled navide.* packages are not recorded, as for calls. */
+  private recordBackendLifecycle(
+    runtime: { pluginId: string; packageVersion: string; instanceId: string | null },
+    address: string,
+    outcome: 'allowed' | 'error',
+  ): void {
+    if (isReservedPluginId(runtime.pluginId)) return
+    try {
+      const plugin = runtime.instanceId ? this.running.get(runtime.instanceId) : undefined
+      this.activityRecorder.recordBackendCall({
+        plugin_id: runtime.pluginId,
+        plugin_version: runtime.packageVersion,
+        workspace: plugin?.workspacePath ?? '',
+        address,
+        outcome,
+      })
+    } catch (error) {
+      console.debug('[plugins] backend lifecycle not recorded:', error)
+    }
+  }
+
   private readonly pendingBackendCalls = new Map<string, Map<string, AbortController>>()
   private readonly pendingBackendSubscriptions = new Map<
     string,
@@ -1614,8 +1670,10 @@ export class FrontendPluginManager {
     risk: 'read' | 'write'
     workspaceRoot: string
     caller: AgentToolCaller
-    spec: ThirdPartyLaunchSpec
+    spec: AgentToolPackage
   }>()
+  /** Batch 4: calls to view-served agent tools (contract 2.9) waiting for the view's answer. */
+  private readonly viewAgentToolCalls = new ViewAgentToolCalls()
   /** Headless Plans instance id → its workspace, to tell the user which
    *  workspace's backend stopped. */
   private readonly headlessPlansWorkspacePaths = new Map<string, string>()
@@ -1873,6 +1931,26 @@ export class FrontendPluginManager {
    * they must never enter the sender-id map used by native/GuestAttach views. */
   private readonly pluginFrameBindings = new PluginFrameBindingRegistry()
   private readonly pluginFrameAssets = new PluginFrameAssetProtocol()
+  /** C1: the network requests and `connect-src` refusals of plugin frames,
+   *  attributed to their package through the live mounts, as Activity rows. */
+  private readonly frameNetworkObserver = new PluginFrameNetworkObserver({
+    mountOf: (frameUrl) => this.pluginFrameAssets.mountOf(frameUrl),
+    surfaceOf: (webContentsId) => {
+      const instanceId = webContentsId === undefined ? undefined : this.bySender.get(webContentsId)
+      const plugin = instanceId === undefined ? undefined : this.running.get(instanceId)
+      if (!plugin) return null
+      const context = plugin.capabilityContext
+      return {
+        pluginId: plugin.id,
+        packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion ?? '',
+        workspace: plugin.workspacePath ?? '',
+        hosts: plugin.networkPolicy.hosts,
+        strict: this.networkStrictResolver?.(plugin.id) ?? false,
+        devOrigin: plugin.networkPolicy.devOrigin,
+      }
+    },
+    record: (row) => this.activityRecorder.record(row),
+  })
   private readonly pendingPluginFrames = new Map<string, PendingPluginFrame>()
   /** Receiver instance → opaque frame bindings owned by its current document. */
   private readonly receiverFrameBindings = new Map<string, Set<string>>()
@@ -2520,6 +2598,15 @@ export class FrontendPluginManager {
     )
   }
 
+  /** C1: the user's per-package "Only allow declared network hosts" switch,
+   *  read on every request (the session hook) and at every frame mount (the
+   *  frame's CSP); absent, every package reads as off. */
+  private networkStrictResolver: ((pluginId: string) => boolean) | null = null
+
+  setNetworkStrictResolver(resolver: ((pluginId: string) => boolean) | null): void {
+    this.networkStrictResolver = resolver
+  }
+
   setCapabilityGrantResolver(
     resolver: ((pluginId: string, packageVersion: string) => HostCapabilityGrant | null) | null
   ): void {
@@ -2915,6 +3002,8 @@ export class FrontendPluginManager {
     ) return false
     const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
     if (!grant || grant.packageVersion !== runtime.packageVersion || grant.shell !== 'allowlist') return false
+    // C2: the approved executables must be the declared ones, as for a view.
+    if (!sameExecutables(grant.shellExecutables, activation.thirdParty?.shellExecutables)) return false
     const root = canonicalExistingDirectory(context.workspacePath)
     return root !== null && root === context.authorizedPlanRoot
   }
@@ -2926,9 +3015,15 @@ export class FrontendPluginManager {
     }
     let response: unknown
     try {
+      const declared = this.pluginBackendHost.activationForPlugin(context.runtime.pluginId)?.thirdParty?.shellExecutables
       response = await this.sendPublicBackend(
         'shell.run',
-        { workspace_path: context.authorizedPlanRoot, command, host_mode: 'allowlist' },
+        {
+          workspace_path: context.authorizedPlanRoot,
+          command,
+          host_mode: 'allowlist',
+          ...(declared?.length ? { allowed_executables: [...declared] } : {}),
+        },
         () => this.thirdPartyShellGrantAllows(context),
         THIRD_PARTY_SHELL_RUN_TIMEOUT_MS,
       )
@@ -4475,6 +4570,7 @@ export class FrontendPluginManager {
         if (nonEmptyString(id)) this.cancelBackendRecord(plugin.instanceId, id)
       } else if (channel === IPC_READY) this.markPluginReady(plugin)
       else if (channel === IPC_HIDE_SELF) this.hidePlugin(plugin)
+      else if (channel === IPC_AGENT_TOOL_RESULT) this.viewAgentToolCalls.resolve(plugin.instanceId, payload)
       return
     }
     if (kind !== 'invoke' || !requestId || typeof channel !== 'string') return
@@ -6238,6 +6334,13 @@ export class FrontendPluginManager {
       this.backendCallHandler!(this.instanceForIpc(event.sender.id, event.senderFrame), payload)
     )
 
+    // A view answers a view-served agent tool call (batch 4): only the
+    // instance the call was sent to can settle it.
+    ipcMain.on(IPC_AGENT_TOOL_RESULT, (event, payload: unknown) => {
+      const plugin = this.instanceForIpc(event.sender.id, event.senderFrame)
+      if (plugin) this.viewAgentToolCalls.resolve(plugin.instanceId, payload)
+    })
+
     ipcMain.on(IPC_BACKEND_CANCEL, (event, payload: unknown) => {
       const plugin = this.instanceForIpc(event.sender.id, event.senderFrame)
       if (!plugin) return
@@ -7045,6 +7148,9 @@ export class FrontendPluginManager {
           workspace_path: workspacePath,
           command,
           host_mode: plan.shellMode ?? 'allowlist',
+          // C2: the executables the package declared and the user approved;
+          // the backend admits them beside git, gh and glab.
+          ...(plan.shellExecutables?.length ? { allowed_executables: [...plan.shellExecutables] } : {}),
         },
         () => this.publicPlanCanDispatch(plan, plugin),
       )
@@ -7626,6 +7732,8 @@ export class FrontendPluginManager {
     }, isStopping)
     if (!admission.ok) return agentToolUnavailable(admission.reason)
     const { spec, tool } = admission
+    // A view-served tool (contract 2.9): the package's running view answers it, no backend is bound.
+    const viewId = agentToolViewId(tool.method)
     // The core waits the tool's timeout plus a transport margin. The Host
     // never dispatches once its own deadline (the tool's timeout, counted from
     // receipt) has passed: an answer nobody waits for must not have side
@@ -7662,6 +7770,7 @@ export class FrontendPluginManager {
     const stoppedReason = (): AgentToolCallResponse | null => {
       const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
       if (!current.ok) return agentToolUnavailable(current.reason)
+      if (viewId !== null) return null
       const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
       if (
         !activation ||
@@ -7727,6 +7836,37 @@ export class FrontendPluginManager {
       (canonicalExistingDirectory(parsed.caller.workspace) ?? resolve(parsed.caller.workspace)) !== root
     const started = Date.now()
     const meta = (resultBytes: number) => ({ durationMs: Date.now() - started, resultBytes, crossWorkspace })
+    if (viewId !== null) {
+      const view = this.viewServingAgentTool(spec, viewId, root!)
+      if (!view) return { ...agentToolUnavailable('view-not-open'), meta: meta(0) }
+      const outcome = await this.viewAgentToolCalls.call(
+        view.instanceId,
+        (payload) => this.sendToPlugin(view, IPC_AGENT_TOOL_CALL, payload),
+        tool.name,
+        parsed.arguments as Record<string, unknown>,
+        deadline,
+      )
+      switch (outcome.kind) {
+        case 'result':
+          return { ok: true, result: outcome.result, meta: meta(agentToolResultBytes(outcome.result)) }
+        case 'failed':
+          return {
+            ...agentToolError('PLUGIN_TOOL_FAILED', outcome.message || 'The Navide plugin tool failed.'),
+            plugin_error: outcome.code,
+            meta: meta(0),
+          }
+        case 'timeout':
+          return {
+            ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin view did not answer in time.'),
+            reason: 'execution',
+            meta: meta(0),
+          }
+        default:
+          // The view went away (or refused the message) before answering.
+          return { ...agentToolUnavailable('view-not-open'), meta: meta(0) }
+      }
+    }
+    if (!isBackendAgentToolPackage(spec)) return { ...agentToolUnavailable('tool-not-consented'), meta: meta(0) }
     let instanceId: string
     try {
       instanceId = await this.bindHeadlessAgentToolBackend(spec, root!, workspaceId!)
@@ -8029,6 +8169,22 @@ export class FrontendPluginManager {
     return task
   }
 
+  /** The running view that serves a view-bound agent tool on `root`: this
+   *  package version's `<pluginId>.<viewId>` contribution, open in a window
+   *  of that workspace, ready and not stopping. A view that is not open
+   *  answers nothing: the Host never loads one behind the user's back. */
+  private viewServingAgentTool(spec: AgentToolPackage, viewId: string, root: string): RunningPlugin | undefined {
+    const key = `${spec.pluginId}.${viewId}`
+    for (const record of this.running.values()) {
+      if (record.id !== spec.pluginId || record.contributionKey !== key || !record.hasV2DescriptorIdentity) continue
+      if (record.capabilityContext?.runtimeBinding?.packageVersion !== spec.packageVersion) continue
+      if (!record.workspacePath || canonicalExistingDirectory(record.workspacePath) !== root) continue
+      if (!record.pluginReady || this.isPluginStopping(record)) continue
+      return record
+    }
+    return undefined
+  }
+
   /** Forget headless agent-tool bindings the Host has since unbound. */
   private pruneAgentToolBindings(): void {
     for (const [key, instanceId] of [...this.headlessAgentToolInstances]) {
@@ -8080,7 +8236,7 @@ export class FrontendPluginManager {
   private agentToolPolicyAllows(
     workspacePath: string,
     initiator: AuthenticatedInitiator,
-    spec: ThirdPartyLaunchSpec,
+    spec: AgentToolPackage,
   ): boolean {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
@@ -8099,7 +8255,7 @@ export class FrontendPluginManager {
 
   /** Why the policy refused a tool: a user policy that leaves out `web` says
    * so and where to add it; anything else keeps the generic text. */
-  private agentToolPolicyDeniedMessage(workspacePath: string, spec: ThirdPartyLaunchSpec): string {
+  private agentToolPolicyDeniedMessage(workspacePath: string, spec: AgentToolPackage): string {
     const generic = 'The agent execution policy denied the operation.'
     if (!spec.thirdParty.system.includes('web')) return generic
     let snapshot: ExecutionPolicySnapshot | undefined
@@ -10821,6 +10977,7 @@ export class FrontendPluginManager {
     this.webViewRegistry?.hostClosed(instanceId)
     if (plugin.carrier === 'frame') this.revokePluginFrameInstance(instanceId)
     this.filePickerHost?.cancelInstance(instanceId)
+    this.viewAgentToolCalls.cancelInstance(instanceId)
     this.aiTerminalOutputDecoder.dropInstance(instanceId)
     this.editorSelectionGrants.close(instanceId)
     this.editorAiCapability.close(instanceId)
@@ -11426,6 +11583,10 @@ export class FrontendPluginManager {
       backendBindingTask: null,
       query: input.query,
       senderId: input.surface.webContents.id,
+      networkPolicy: {
+        hosts: descriptor.capabilityPolicy?.kind === 'manifest-v2' ? [...(descriptor.networkHosts ?? [])] : null,
+        devOrigin: devServerOrigin(descriptor),
+      },
       fill: input.fill,
       restartBounds: input.restartBounds,
       detachHostResize: null,
@@ -11598,7 +11759,12 @@ export class FrontendPluginManager {
       this.pendingActivations.set(instanceId, null)
     }
     if (openedViaLegacyAdapter) this.legacyInstances.set(descriptor.id, instanceId)
-    if (record.carrier === 'surface') this.bySender.set(record.senderId, instanceId)
+    if (record.carrier === 'surface') {
+      this.bySender.set(record.senderId, instanceId)
+      // C1: what the surface reaches on the network is judged against its
+      // declared hosts and recorded from here on.
+      this.frameNetworkObserver.observe(record.view.webContents)
+    }
 
     this.bindViewBackend(instanceId, record, hostWindow, descriptor)
 
@@ -12908,10 +13074,18 @@ export class FrontendPluginManager {
         packageId: descriptor.id,
         packageVersion: descriptor.packageVersion,
         root: descriptor.packageDir,
+        // A v2 package always carries its list (empty when it declares none)
+        // so the switch applies; a legacy descriptor has no declaration model.
+        ...(descriptor.capabilityPolicy?.kind === 'manifest-v2'
+          ? { connectHosts: descriptor.networkHosts ?? [], strictConnectHosts: this.networkStrictResolver?.(descriptor.id) ?? false }
+          : {}),
       })
     } catch {
       return { ok: false, error: 'frame assets are unavailable' }
     }
+    // What the frame reaches on the network is recorded from here on (C1);
+    // the frame's own CSP is what admits or refuses each host.
+    this.frameNetworkObserver.observe(receiverWebContents)
     // A provider frame is the plugin's own UI for one workspace, so it needs the
     // same load-time context a contribution window gets. Without it the app
     // starts with an empty workspace and renders a blank pane — the query is
@@ -15106,68 +15280,17 @@ export async function openPlansPluginView(
 /** Id of the Git extension (the standalone Git client surface). */
 export const GIT_PLUGIN_ID = 'navide.git'
 
-/** Legacy Git bundle retained as an explicit rollback artifact. It is no
- *  longer selected by the production composition, but remains buildable and
- *  available until the next migration issue removes it. */
-export function bundledGitDir(source: BundledMiniIdeSource): string {
-  return source.isPackaged
-    ? join(source.resourcesPath, 'plugins', 'git')
-    : join(source.devRoot ?? join(__dirname, '../..'), 'dist-plugins', 'git')
-}
-
-/** Explicit rollback registration for diagnostics and recovery tooling. The
- *  normal Host startup prefers v2; this path replaces live v2 instances only
- *  when recovery is explicitly requested. */
-export function registerLegacyBundledGit(
-  manager: FrontendPluginManager,
-  source: BundledMiniIdeSource
-): { registered: boolean; reason?: string } {
-  const dir = bundledGitDir(source)
-  const scanned = loadPluginDir(dir)
-  if (!scanned.descriptor || scanned.descriptor.id !== GIT_PLUGIN_ID) {
-    return { registered: false, reason: `${dir}: legacy Git bundle unavailable` }
+/** The origin a view's entry loads from under the electron-vite dev server
+ *  (`loadEntry`), or null when it loads from the package directory. A surface's
+ *  requests to that origin are its own module and asset loads, never network
+ *  the package has to declare. */
+function devServerOrigin(descriptor: PluginLaunchDescriptor): string | null {
+  if (!process.env['ELECTRON_RENDERER_URL'] || !descriptor.devUrl) return null
+  try {
+    return new URL(descriptor.devUrl).origin
+  } catch {
+    return null
   }
-  if (!existsSync(scanned.descriptor.entryFile)) {
-    return { registered: false, reason: `${dir}: entry file missing (${scanned.descriptor.entryFile})` }
-  }
-  manager.replaceBuiltinForRecovery(scanned.descriptor)
-  return { registered: true }
-}
-
-/** Build the entry query GitWindowApp reads from `window.location.search`:
- *  `workspace_path`, the backend `http_url` (resolved by the Git package's
- *  capability backend), the current `theme` id so the plugin paints with the
- *  app theme before its first settings reconcile (zero-flash; see
- *  plugins/navide-git/src/mount.ts), plus `extraParams` forwarding an optional diff target
- *  (`git_diff_filepath`/`git_diff_staged`/`git_diff_commit`) GitWindowApp reads
- *  to show a file diff in its own panel instead of the mini-IDE.
- *  `workspaceDisplayName` carries the workspace's user-set alias and is only
- *  passed for the dedicated window, the one surface with a title of its own;
- *  blank/absent means "no alias" and GitWindowApp falls back to
- *  `basename(workspace_path)`. KNOWN LIMITATION: a load-time snapshot — a
- *  rename while the window is open does not retitle it (plugin views get no
- *  `project.ui_state_changed`). */
-function gitQuery(
-  workspacePath: string,
-  httpUrl: string,
-  theme: string,
-  extraParams: Record<string, string> = {},
-  v2 = true,
-  contribution: 'left' | 'window' = 'window',
-  workspaceDisplayName = '',
-): string {
-  const params = new URLSearchParams()
-  if (workspacePath) params.set('workspace_path', workspacePath)
-  if (workspaceDisplayName.trim()) params.set('workspace_display_name', workspaceDisplayName.trim())
-  if (httpUrl) params.set('http_url', httpUrl)
-  for (const [key, value] of Object.entries(extraParams)) {
-    if (value) params.set(key, value)
-  }
-  if (v2) params.set('v2', '1')
-  if (v2) params.set('contribution', contribution)
-  if (theme) params.set('theme', theme)
-  const qs = params.toString()
-  return qs ? `?${qs}` : ''
 }
 
 /**
@@ -15227,202 +15350,6 @@ export function devGitPluginDescriptor(
       },
     ],
   }
-}
-
-/** The dedicated Git host window (one at a time, recreated after close). The
- *  plugin WebContentsView fills its content bounds; the main window is never
- *  overlaid. Mirrors {@link ensureMiniIdeWindow} — the standalone SourceTree-
- *  style Git client lives in its own window, wider (1280x820) than the editor. */
-let gitWindow: BrowserWindow | null = null
-let gitWindowViewInstanceId: string | null = null
-const gitLeftViews = new Map<number, PluginViewHandle>()
-const gitLeftViewHostCleanup = new Map<number, () => void>()
-
-type GitLeftViewResult = { ok: boolean; fallback?: 'legacy' }
-
-function clearGitLeftView(hostWindow: BrowserWindow): void {
-  const handle = gitLeftViews.get(hostWindow.id)
-  if (handle) frontendPluginManager.destroyInstance(handle.instanceId)
-  gitLeftViews.delete(hostWindow.id)
-  gitLeftViewHostCleanup.get(hostWindow.id)?.()
-  gitLeftViewHostCleanup.delete(hostWindow.id)
-}
-
-function ensureGitWindow(): BrowserWindow {
-  if (gitWindow && !gitWindow.isDestroyed()) return gitWindow
-  const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    title: 'Git',
-    // See systemFrameUnlessMac: this window hosts plugin content that draws no
-    // window controls, so off macOS it needs the system's own frame.
-    ...systemFrameUnlessMac(),
-    backgroundColor: '#0d1117',
-  })
-  gitWindow = win
-  win.on('closed', () => {
-    if (gitWindow === win) {
-      gitWindow = null
-      gitWindowViewInstanceId = null
-    }
-    // The one window a git panel lives in (see the Mini-IDE window above).
-    frontendPluginManager.endDockSurface('git')
-  })
-  return win
-}
-
-/**
- * Open the Git plugin view in its own dedicated BrowserWindow (mini-IDE
- * parity): opening never touches or covers the main window, reopening
- * restores/focuses the live window and re-points its workspace, and closing the
- * window tears the view down so the next open recreates both cleanly. Looks the
- * descriptor up in the loader registry; returns false when the Git extension is
- * not registered (the caller surfaces the fallback).
- */
-export async function openGitPluginView(
-  workspacePath: string,
-  httpUrl = '',
-  theme = '',
-  extraParams: Record<string, string> = {}
-): Promise<boolean> {
-  const base = frontendPluginManager.getDescriptor(GIT_PLUGIN_ID)
-  if (!base) return false
-  const displayName = await frontendPluginManager.peekWorkspaceDisplayName(workspacePath)
-  const hostWindow = ensureGitWindow()
-  if (base.capabilityPolicy?.kind !== 'manifest-v2' || !base.views) {
-    // Explicit recovery may select the untouched V1 bundle. Keep this branch
-    // isolated from the production package path: it uses the legacy adapter,
-    // its original entry, and no v2 query/capability context.
-    frontendPluginManager.open(
-      hostWindow,
-      {
-        ...base,
-        query: gitQuery(workspacePath, httpUrl, theme, extraParams, false, 'window', displayName),
-      },
-      'fill',
-      { closeHostOnHide: true, mirrorTitle: true },
-    )
-    gitWindowViewInstanceId = null
-    return true
-  }
-  const query = gitQuery(workspacePath, httpUrl, theme, extraParams, true, 'window', displayName)
-  const currentWorkspace = gitWindowViewInstanceId
-    ? frontendPluginManager.workspacePathOfInstance(gitWindowViewInstanceId)
-    : null
-  if (gitWindowViewInstanceId && currentWorkspace && resolve(currentWorkspace) === resolve(workspacePath)) {
-    frontendPluginManager.updateViewQuery(gitWindowViewInstanceId, query)
-    frontendPluginManager.activate(gitWindowViewInstanceId)
-    frontendPluginManager.focusInstance(gitWindowViewInstanceId)
-    return true
-  }
-  if (gitWindowViewInstanceId) frontendPluginManager.destroyInstance(gitWindowViewInstanceId)
-  const context = frontendPluginManager.gitCapabilityContext(
-    base.packageVersion ?? '0.0.0-dev',
-    workspacePath,
-    'git-window'
-  )
-  const view = base.views?.find((candidate) => candidate.contributionKey === `${GIT_PLUGIN_ID}.window`)
-  if (!view) return false
-  const handle = await frontendPluginManager.openView(base, view, {
-    hostWindow,
-    bounds: 'fill',
-    query,
-    closeHostOnHide: true,
-    mirrorTitle: true,
-    workspacePath,
-    capabilityContext: context,
-  })
-  gitWindowViewInstanceId = handle.instanceId
-  return true
-}
-
-/** Open the same active package's left contribution in a Host-owned main
- *  window. One left instance is tracked per host window; workspace changes
- *  recreate only that instance and never touch the separate Git window. */
-export async function openGitLeftPluginView(
-  hostWindow: BrowserWindow,
-  workspacePath: string,
-  bounds: PluginBounds,
-  httpUrl = '',
-  theme = '',
-  extraParams: Record<string, string> = {}
-): Promise<GitLeftViewResult> {
-  const base = frontendPluginManager.getDescriptor(GIT_PLUGIN_ID)
-  if (!base) return { ok: false }
-  if (base.capabilityPolicy?.kind !== 'manifest-v2' || !base.packageVersion || !base.views) {
-    // Recovery swaps the descriptor before the renderer's next geometry tick.
-    // Clear any stale v2 handle and let the main-window renderer compose the
-    // retained legacy bundle in-process.
-    clearGitLeftView(hostWindow)
-    return { ok: true, fallback: 'legacy' }
-  }
-  const view = base.views?.find((candidate) => candidate.contributionKey === `${GIT_PLUGIN_ID}.left`)
-  if (!view) return { ok: false }
-  const existing = gitLeftViews.get(hostWindow.id)
-  if (existing) {
-    const existingWorkspace = frontendPluginManager.workspacePathOfInstance(existing.instanceId)
-    if (existingWorkspace && resolve(existingWorkspace) === resolve(workspacePath)) {
-      frontendPluginManager.setBounds(existing.instanceId, bounds)
-      frontendPluginManager.updateViewQuery(existing.instanceId, gitQuery(workspacePath, httpUrl, theme, extraParams, true, 'left'))
-      frontendPluginManager.activate(existing.instanceId)
-      return { ok: true }
-    }
-    clearGitLeftView(hostWindow)
-  }
-  const handle = await frontendPluginManager.openView(base, view, {
-    hostWindow,
-    bounds,
-    query: gitQuery(workspacePath, httpUrl, theme, extraParams, true, 'left'),
-    workspacePath,
-    capabilityContext: frontendPluginManager.gitCapabilityContext(
-      base.packageVersion,
-      workspacePath,
-      'git-left'
-    ),
-  })
-  gitLeftViews.set(hostWindow.id, handle)
-  const onHostClosed = (): void => {
-    if (gitLeftViews.get(hostWindow.id)?.instanceId !== handle.instanceId) return
-    gitLeftViews.delete(hostWindow.id)
-    gitLeftViewHostCleanup.delete(hostWindow.id)
-  }
-  hostWindow.once('closed', onHostClosed)
-  gitLeftViewHostCleanup.set(hostWindow.id, () => hostWindow.removeListener('closed', onHostClosed))
-  return { ok: true }
-}
-
-export function updateGitLeftPluginView(
-  hostWindow: BrowserWindow,
-  bounds: PluginBounds,
-  visible: boolean
-): GitLeftViewResult {
-  const base = frontendPluginManager.getDescriptor(GIT_PLUGIN_ID)
-  const isLegacy = !!base && (base.capabilityPolicy?.kind !== 'manifest-v2' || !base.packageVersion || !base.views)
-  if (isLegacy) {
-    clearGitLeftView(hostWindow)
-    return { ok: true, fallback: 'legacy' }
-  }
-  const handle = gitLeftViews.get(hostWindow.id)
-  if (!handle) return { ok: false }
-  frontendPluginManager.setBounds(handle.instanceId, bounds)
-  if (visible) frontendPluginManager.activate(handle.instanceId)
-  else frontendPluginManager.deactivate(handle.instanceId)
-  return { ok: true }
-}
-
-export function closeGitLeftPluginView(hostWindow: BrowserWindow): { ok: boolean } {
-  const handle = gitLeftViews.get(hostWindow.id)
-  const cleanup = gitLeftViewHostCleanup.get(hostWindow.id)
-  if (!handle) {
-    cleanup?.()
-    gitLeftViewHostCleanup.delete(hostWindow.id)
-    return { ok: true }
-  }
-  frontendPluginManager.destroyInstance(handle.instanceId)
-  gitLeftViews.delete(hostWindow.id)
-  cleanup?.()
-  gitLeftViewHostCleanup.delete(hostWindow.id)
-  return { ok: true }
 }
 
 function agentToolError(

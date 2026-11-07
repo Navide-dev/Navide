@@ -844,10 +844,30 @@
   }
  },
  {
-  "description": "Read how many tokens this workspace has spent, as Navide counts them.\n\n    The numbers behind the Token panel: what the current run has used, what the\n    project has used across every run, and what every vendor has used all time.\n    Read it when the user asks what a job has cost, or before starting\n    something long enough that the answer matters. cli_usage is the other half\n    — that is quota left with the vendor, this is spend recorded here.\n    Read-only.\n\n    Returns {workspace_path, current_run, cumulative, runs, runs_truncated,\n    live_sessions, live_session_count, all_time, by_vendor, by_day}. The three\n    aggregates come through whole: `cumulative` is this project's totals with\n    by_vendor and by_stage breakdowns, `all_time` and `by_vendor` are every\n    project's. `current_run` is null when no pipeline run is open. `runs` is the\n    last few archived runs, aggregate only, with runs_truncated true when older\n    ones were cut. `live_sessions` is the busiest CLI sessions running now\n    ({input, output, calls} each, keyed by session), `live_session_count` how\n    many there are in total, and `by_day` the last week of global usage.\n\n    A count is what a vendor's own session log holds, so a vendor whose log\n    Navide cannot read contributes nothing rather than a zero.\n\n    workspace_path defaults to your own pane's workspace; pass it only to ask\n    about another project.\n    ",
+  "description": "Read how many tokens this workspace has spent, as Navide counts them.\n\n    The numbers behind the Token panel: what the current run has used, what the\n    project has used across every run, and what every vendor has used all time.\n    Read it when the user asks what a job has cost, or before starting\n    something long enough that the answer matters. cli_usage is the other half\n    — that is quota left with the vendor, this is spend recorded here.\n    Read-only.\n\n    Returns {workspace_path, current_run, cumulative, runs, runs_truncated,\n    live_sessions, live_session_count, all_time, by_vendor, by_day}. The three\n    aggregates come through whole: `cumulative` is this project's totals with\n    by_vendor and by_stage breakdowns, `all_time` and `by_vendor` are every\n    project's. `current_run` is null when no pipeline run is open. `runs` is the\n    last few archived runs, aggregate only, with runs_truncated true when older\n    ones were cut. `live_sessions` is the busiest CLI sessions running now\n    ({input, output, calls} each, keyed by session), `live_session_count` how\n    many there are in total, and `by_day` the last week of global usage.\n\n    A count is what a vendor's own session log holds, so a vendor whose log\n    Navide cannot read contributes nothing rather than a zero.\n\n    workspace_path defaults to your own pane's workspace; pass it only to ask\n    about another project.\n\n    `cost_by` adds `cost`: dollars from Navide's per-call usage ledger, for the\n    calls made in this workspace's folder or below it, grouped by \"cwd\",\n    \"pane\", \"day\", \"session\" or \"model\". Each group is {key, calls, input,\n    cache_read, cache_write_5m, cache_write_1h, output, usd, unpriced_calls}:\n    input is the uncached part, and a model the price table does not know adds\n    to unpriced_calls, not to usd. `pricing` names the price table's version\n    and effective date. `since` and `until` (YYYY-MM-DD, UTC, inclusive) limit\n    the days and `pane` one pane. Grouped by pane, `differences` lists the\n    panes whose own calls and whose sessions' calls add up to different token\n    counts. The ledger keeps calls Navide has read since it started keeping\n    one, so earlier usage is missing from `cost` though the token counts above\n    include it.\n    ",
   "name": "cli_token_stats",
   "parameters": {
    "properties": {
+    "cost_by": {
+     "default": "",
+     "title": "Cost By",
+     "type": "string"
+    },
+    "pane": {
+     "default": "",
+     "title": "Pane",
+     "type": "string"
+    },
+    "since": {
+     "default": "",
+     "title": "Since",
+     "type": "string"
+    },
+    "until": {
+     "default": "",
+     "title": "Until",
+     "type": "string"
+    },
     "workspace_path": {
      "default": "",
      "title": "Workspace Path",

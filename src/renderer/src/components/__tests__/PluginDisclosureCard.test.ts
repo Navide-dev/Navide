@@ -164,15 +164,16 @@ describe('PluginDisclosureCard layout', () => {
   })
 })
 
-// R2 MED-3 on 0.2.26 (user option (a)): a view is an ordinary web page that can
-// reach the network and embed external sites, and the Host filters none of it.
-// The signed `network` field covers commands and the native backend only, so a
-// view-only Navide plugin's card must never read as having no network.
-describe('PluginDisclosureCard view network (R2 MED-3)', () => {
-  it('tells a Navide plugin with views that they can reach the network', () => {
+// R2 MED-3 on 0.2.26 said a view reaches any host; since C1 (0.2.39) a view
+// reaches only the hosts its manifest declares, enforced by the frame CSP and
+// the Host's session hook, and the line says so. The signed `network` field
+// still covers commands and the native backend only, so a view-only Navide
+// plugin's card must never read as having no network statement at all.
+describe('PluginDisclosureCard view network (R2 MED-3, C1)', () => {
+  it('tells a Navide plugin with views that they reach only the hosts it declares', () => {
     const disclosure = disclosureOf('ui-only')
     expect(disclosure.network).toBe('none')
-    for (const [locale, words] of [['en-US', 'can reach the network'], ['zh-TW', '可以連網'], ['ja-JP', 'ネットワークに接続でき']] as const) {
+    for (const [locale, words] of [['en-US', 'can connect only to the hosts it declares'], ['zh-TW', '只能連到它宣告的主機'], ['ja-JP', '宣言したホスト']] as const) {
       i18n.global.locale.value = locale
       for (const props of [
         { disclosure, scan: scanOf('nothing-found'), registry: REGISTRY, verified: true, hasViews: true },

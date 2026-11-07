@@ -123,6 +123,9 @@ export function registerNativeBackendIpc(
       change.firstParty = firstParty
     }
     if (Object.keys(change).length !== 1) throw new Error('invalid agent tool setting')
+    // C3: a choice the user makes here holds; a later consent card does not
+    // turn the switch back on by itself.
+    if (change.enabled !== undefined) change.enabledSetByUser = true
     await agentTools.setSwitches(change)
     return overview()
   })

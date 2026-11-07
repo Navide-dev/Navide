@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -3073,6 +3074,31 @@ class TestDiscoverBranchFromHead:
         (tmp_path / "a").mkdir()
         init_repo(tmp_path / "a")
         (tmp_path / "a" / ".git" / "HEAD").write_text("ref: refs/heads/../../config\n")
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="named pipes via mkfifo are POSIX-only")
+    def test_a_head_that_is_a_fifo_is_left_to_git_without_blocking(self, tmp_path):
+        # A .git file can point a gitdir anywhere; a FIFO named HEAD used to
+        # block the discovery thread on open.
+        (tmp_path / "a").mkdir()
+        (tmp_path / "trap").mkdir()
+        os.mkfifo(tmp_path / "trap" / "HEAD")
+        (tmp_path / "a" / ".git").write_text(f"gitdir: {tmp_path / 'trap'}\n")
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    def test_an_oversized_head_is_left_to_git(self, tmp_path):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        (tmp_path / "a" / ".git" / "HEAD").write_text("ref: refs/heads/main\n" + " " * 8192)
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    def test_oversized_packed_refs_are_left_to_git(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        expected = _git_out(tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD")
+        assert git_service._read_head_branch(str(tmp_path / "a")) == expected
+        (tmp_path / "a" / ".git" / "packed-refs").write_text("# pack-refs with: peeled\n" + "x" * 64)
+        monkeypatch.setattr(git_service, "_PACKED_REFS_LIMIT", 16)
         assert git_service._read_head_branch(str(tmp_path / "a")) is None
 
     def test_a_branch_sharing_a_tag_name_is_left_to_git(self, tmp_path):

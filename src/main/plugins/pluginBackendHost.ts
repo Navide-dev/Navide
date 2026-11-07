@@ -85,9 +85,13 @@ export interface PluginBackendHostOptions {
   ) => ExecutionPolicySnapshot | undefined
   /** Observe a bound child becoming unavailable before the next call. */
   onBackendFailure?: (runtime: BackendRuntimeContext, error: BackendPluginError) => void
-  /** Observe a failed first-party child that an automatic restart brought
-   * back, while its view is still bound. */
+  /** Observe a failed child that an automatic restart brought back, while
+   * its view is still bound (first-party and third-party alike). */
   onBackendRestarted?: (runtime: BackendRuntimeContext) => void
+  /** C4: observe the Host giving up on a child that failed more often than
+   * the restart delays allow within the crash window; it stays stopped until
+   * the user allows it again (or, for a first-party child, reopens the view). */
+  onBackendGaveUp?: (runtime: BackendRuntimeContext) => void
   /** Observe a bound view being unbound; its child is never reported again. */
   onBackendUnbound?: (runtime: BackendRuntimeContext) => void
   /** Observe child diagnostic output (stderr / startup failure diagnostics). */
@@ -297,6 +301,7 @@ export class PluginBackendHost {
   private readonly resolveExecutionPolicy?: PluginBackendHostOptions['resolveExecutionPolicy']
   private readonly onBackendFailure?: PluginBackendHostOptions['onBackendFailure']
   private readonly onBackendRestarted?: PluginBackendHostOptions['onBackendRestarted']
+  private readonly onBackendGaveUp?: PluginBackendHostOptions['onBackendGaveUp']
   private readonly onBackendUnbound?: PluginBackendHostOptions['onBackendUnbound']
   private readonly onStderr?: PluginBackendHostOptions['onStderr']
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
@@ -333,6 +338,7 @@ export class PluginBackendHost {
     this.resolveExecutionPolicy = options.resolveExecutionPolicy
     this.onBackendFailure = options.onBackendFailure
     this.onBackendRestarted = options.onBackendRestarted
+    this.onBackendGaveUp = options.onBackendGaveUp
     this.onBackendUnbound = options.onBackendUnbound
     this.onStderr = options.onStderr
     this.reverifyBeforeSpawn = options.reverifyBeforeSpawn
@@ -683,6 +689,7 @@ export class PluginBackendHost {
           }
           if (delay === null) {
             console.warn(`[plugin-backend] ${view.runtime.pluginId} failed too often; leaving it stopped`)
+            this.notifyGaveUp(view.runtime)
             return
           }
           const stillBound = (): boolean =>
@@ -760,10 +767,23 @@ export class PluginBackendHost {
             // A liveness observer must not change the child failure result.
           }
           const delay = admission.noteFailure()
-          if (delay === null) return
+          if (delay === null) {
+            console.warn(`[plugin-backend] ${view.runtime.pluginId} failed too often; leaving it stopped`)
+            this.notifyGaveUp(view.runtime)
+            return
+          }
+          const stillBound = (): boolean =>
+            this.views.get(instanceId) === view && !view.closing && view.supervisor === supervisor
           const timer = setTimeout(() => {
-            if (this.views.get(instanceId) !== view || view.closing || view.supervisor !== supervisor) return
-            supervisor.restart().catch(() => {
+            if (!stillBound()) return
+            supervisor.restart().then(() => {
+              if (!stillBound()) return
+              try {
+                this.onBackendRestarted?.(view.runtime)
+              } catch {
+                // A liveness observer must not change the restart result.
+              }
+            }, () => {
               // The next failure is reported through onFailure again.
             })
           }, delay)
@@ -775,6 +795,14 @@ export class PluginBackendHost {
     } catch (error) {
       if (error instanceof BackendPluginError) throw error
       throw new BackendPluginError('BACKEND_UNAVAILABLE')
+    }
+  }
+
+  private notifyGaveUp(runtime: BackendRuntimeContext): void {
+    try {
+      this.onBackendGaveUp?.(runtime)
+    } catch {
+      // A liveness observer must not change the child failure result.
     }
   }
 

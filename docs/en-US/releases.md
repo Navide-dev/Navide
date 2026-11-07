@@ -132,6 +132,14 @@ local development and must never be committed.
 6. Install the release DMG on a test Mac and the installers on a test Windows
    and Linux machine. Publish a newer patch release and use the in-app flow to
    verify check, download, restart, and the resulting app version.
+7. Publish the public plugin packages when their version changed in this
+   release: `scripts/publish-public-packages.sh` builds, packs and dry-runs
+   `@navide/plugin-contracts`, `@navide/plugin-sdk` and `@navide/plugin-ui`
+   (one shared 1.x version, dependency order); review its output, then rerun
+   it with `--publish` after `npm login`. The script takes no token and
+   refuses a version that is already on the registry; `release.sh` does not
+   run it. The compatibility commitment the publication carries is in
+   [Plugin development v2](plugin-development-v2.md#compatibility-commitment-1x).
 
 For the first public release, also verify the documented clean-machine install path, onboarding flow, privacy statements, and supported-agent matrix. Add the actual release entry to `CHANGELOG.md` only after the GitHub Release and assets exist.
 

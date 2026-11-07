@@ -99,7 +99,8 @@ import { sameRenderedPaneViews } from './lib/paneViews'
 import { paneStatusLabelText } from './lib/paneStatusLabel'
 import { statusBadgeStyle } from './composables/useStatusBadgePrefs'
 import { useBackend } from './composables/useBackend'
-import { createHostGitSettingsPort, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { useSettings } from './composables/useSettings'
 import { useRoles } from './composables/useRoles'
 import {
@@ -126,7 +127,7 @@ import { useUpdater } from './composables/useUpdater'
 import { usePaneReorderDrag } from './composables/usePaneReorderDrag'
 import { cliHealthGuideForLaunch, type CliHealthStatus, type OnboardStatus } from './composables/useOnboarding'
 import { playDoneSound, playAttentionSound } from './composables/useSoundNotify'
-import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './composables/useIssues'
+import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './lib/issueDispatch'
 import { normalizeGitContributionAction, type GitContributionAction } from './ports/gitContribution'
 import type { RoleKey } from './data/roles'
 import {
@@ -516,7 +517,7 @@ setDiagnosticSink((entry) => {
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 // Per-CLI quota badges: configure the backend poller and mirror its
 // usage.changed broadcasts (read by TerminalPane's UsageBadge).
@@ -1154,7 +1155,9 @@ const WS_PATH_KEY = 'agentTeam.currentWorkspace'
 // restore — see onWorkspaceCheck.
 const _bootWorkspace = new URLSearchParams(window.location.search).get('workspace_path') ?? ''
 const _bootIsDuplicate = new URLSearchParams(window.location.search).get('duplicate') === '1'
-const legacyGitRecovery = ref(new URLSearchParams(window.location.search).get('legacy_git_recovery') === '1')
+// Why the Git plugin could not start (null while it runs). The Git tab shows
+// it with a Reinstall action; the Host has no Git interface of its own.
+const gitActivationFailure = ref<string | null>(new URLSearchParams(window.location.search).get('git_activation_failure'))
 const legacyPlansRecovery = ref(new URLSearchParams(window.location.search).get('legacy_plans_recovery') === '1')
 // Why the Host downgraded. Only the Host knows it, and the recovery panel
 // has nothing honest to show without it.
@@ -6851,7 +6854,7 @@ function onGitContributionAction(envelope: {
 
 let stopGitContributionActions: (() => void) | null = null
 let stopPluginContributionChanges: (() => void) | null = null
-let stopGitRecoveryChanged: (() => void) | null = null
+let stopPluginActivationFailed: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
@@ -6860,11 +6863,10 @@ let stopPluginStagedUpdates: (() => void) | null = null
 let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
-  stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
-    // Both directions: the Host also reports recovery being *left* (Extensions
-    // restores the bundled v2 package). Latching on true left an open window
-    // showing the "Legacy recovery" panel for the rest of its life.
-    legacyGitRecovery.value = change.legacy
+  stopPluginActivationFailed = window.agentTeam?.onPluginActivationFailed?.((change) => {
+    // Both directions: the Host also reports Git running again (a retry or a
+    // reinstall), which must take the notice down in every open window.
+    if (change.pluginId === 'navide.git') gitActivationFailure.value = change.reason
   }) ?? null
   stopPlansRecoveryChanged = window.agentTeam?.onPlansRecoveryChanged?.((change) => {
     legacyPlansRecovery.value = change.legacy
@@ -6916,8 +6918,8 @@ onMounted(() => {
 onUnmounted(() => {
   stopGitContributionActions?.()
   stopGitContributionActions = null
-  stopGitRecoveryChanged?.()
-  stopGitRecoveryChanged = null
+  stopPluginActivationFailed?.()
+  stopPluginActivationFailed = null
   stopPlansRecoveryChanged?.()
   stopPlansRecoveryChanged = null
   stopPlansBackendStopped?.()
@@ -24818,7 +24820,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :run-pipeline-id="runPipelineId"
       :backend="backend"
       :plugin-contributions="pluginContributions"
-      :legacy-git-recovery="legacyGitRecovery"
+      :git-activation-failure="gitActivationFailure"
       :legacy-plans-recovery="legacyPlansRecovery"
       :legacy-plans-recovery-reason="legacyPlansRecoveryReason"
       :git-changes-count="gitChangesCount"
@@ -24867,7 +24869,6 @@ function paneIsCommander(p: ActivePane): boolean {
       @pipeline-restart="onPipelineRestart"
       @refresh-analyzer="onRefreshAnalyzer"
       @focus-pane="onSidebarFocusPane"
-      @changes-count="gitChangesCount = $event"
       @reorder-pane="reorderPane"
       @nest-pane="nestPane"
       @root-pane="rootPane"
@@ -24875,13 +24876,10 @@ function paneIsCommander(p: ActivePane): boolean {
       @select-panes="selectedPaneIds = new Set($event)"
       @open-settings="showSettings = true"
       @open-pipeline-manager="openPipelineManager"
-      @open-git-accounts="openSettingsAccounts"
       @open-history="onOpenWorkspaceHistory"
       @switch-workspace="onSwitchWorkspace"
       @workspace-browse="onWorkspaceBrowse"
       :issue-handoffs="issueHandoffView"
-      @dispatch-issue="onDispatchIssue"
-      @spawn-for-issue="onHandleIssue"
       @rename-pane="setPaneCustomName"
       @rename-workspace="onRenameWorkspace"
       @install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"

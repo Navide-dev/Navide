@@ -617,6 +617,11 @@
       "open-accounts": "Ouvrir les comptes Git"
     },
     "left-view-unavailable": "La vue Git intégrée est temporairement indisponible.",
+    "recovery-title": "Impossible de démarrer le Git intégré",
+    "recovery-reason": "Raison : {reason}",
+    "recovery-reinstall": "Réinstaller le Git intégré",
+    "recovery-reinstalling": "Réinstallation…",
+    "recovery-reinstall-failed": "Échec de la réinstallation : {reason}",
     "detail-open-failed": "Impossible d’ouvrir la vue détaillée. Le pane Git conserve la cible actuelle.",
     "open-workspace": "Ouvrez un espace de travail pour utiliser Git.",
     "settings-unavailable": "Impossible de charger les préférences Git.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "Aucune conversation enregistrée à reprendre",
       "rebuild": "Reconstruire"
     },
+    "archive": {
+      "hint": "Compresse les journaux de session de Claude Code dans lesquels rien n’a été écrit depuis un moment, et les envoie si vous le souhaitez dans votre propre bucket S3. Tout est désactivé ici tant que vous ne l’activez pas.",
+      "compress": "Compresser les journaux de session inactifs",
+      "compress-hint": "Une fois par jour, chaque journal de session de Claude Code inactif depuis le nombre de jours choisi reçoit une copie .zst à côté de lui, et Navide vérifie que cette copie se décompresse en octets identiques. Les sessions utilisées par un volet ouvert ne sont pas touchées.",
+      "idle-days": "Jours sans écriture avant la compression",
+      "remove-originals": "Supprimer l’original une fois le .zst vérifié",
+      "remove-originals-hint": "Libère de l’espace disque. Un journal supprimé ne peut plus être repris dans Claude Code ni lu par le panneau Token, mais le .zst en garde chaque octet. Désactivé, les deux fichiers sont conservés.",
+      "upload": "Envoyer les archives dans votre propre bucket S3",
+      "upload-hint": "Envoie chaque .zst dans votre propre bucket, sous le préfixe ci-dessous, chiffré par S3. Les identifiants viennent de la chaîne standard d’AWS (variables d’environnement, un profil ~/.aws ou SSO). Navide ne stocke jamais de clé AWS.",
+      "upload-after-days": "Jours avant l’envoi d’une archive",
+      "bucket": "Bucket S3",
+      "prefix": "Préfixe des clés",
+      "region": "Région",
+      "region-placeholder": "selon votre profil AWS",
+      "save-failed": "Impossible d’enregistrer les réglages d’archive"
+    },
     "limits": {
       "hint": "Limites facultatives qui empêchent Navide et les agents qu’il exécute de surcharger cette machine. Chacune est désactivée, ou conserve le comportement précédent de Navide, tant que vous ne la modifiez pas.",
       "test-workers": "Limiter les workers de test dans les nouveaux panes",
@@ -2019,7 +2040,7 @@
           "firstParty": "Autoriser les agents à appeler les outils des plugins Navide officiels",
           "firstPartyDescription": "Activé par défaut. Permet aux agents de vos panes d’appeler les outils des plugins Navide officiels, ceux que fait Navide comme Navide Browser, sans demander pour chaque version. Leurs résultats restent marqués comme contenu externe, et un outil qui modifie quelque chose demande toujours une fois par espace de travail.",
           "enable": "Autoriser les agents à appeler les outils des plugins Navide tiers",
-          "description": "Permet aux agents de vos panes d’appeler les outils déclarés par les plugins Navide que vous avez autorisés ; un outil qui modifie des fichiers demande une fois par espace de travail.",
+          "description": "Permet aux agents de vos panes d’appeler les outils déclarés par les plugins Navide que vous avez autorisés ; un outil qui modifie des fichiers demande une fois par espace de travail. Tant que vous ne l’avez jamais réglé ici, il s’active de lui-même lorsque vous autorisez un plugin Navide dont la carte de consentement liste des outils ; un choix fait ici est conservé. Désactivez-le ici pour arrêter d’un coup tous les outils tiers.",
           "externalCallers": "Les autoriser aussi pour les clients MCP externes",
           "externalCallersDisclosure": "Les programmes externes partagent un seul token ; l’enregistrement d’un appel peut donc seulement indiquer « un client externe », pas quel programme. L’identifiant de l’hôte est traité de la même façon."
         },
@@ -2088,6 +2109,8 @@
       "builtinSwitchBusy": "Application… Navide laisse d’abord se terminer le travail en cours, ce qui peut prendre environ une demi-minute pour Plans.",
       "disabledBadge": "Désactivé",
       "disabledNote": "Désactivé : ses vues et son backend ne s’exécutent pas. Ses fichiers, autorisations et données stockées sont conservés.",
+      "networkStrict": "N'autoriser que les hôtes réseau déclarés",
+      "networkStrictNote": "Désactivé (par défaut) : une vue peut atteindre n'importe quel hôte ; chaque requête est enregistrée, et une requête vers un hôte non déclaré dans le manifeste est signalée comme telle dans l'activité. Activé : seulement les hôtes déclarés, dans la politique du cadre comme dans le crochet de requêtes ; tout le reste est refusé et enregistré.",
       "digestBlock": {
         "blocked": "Bloqué par Navide",
         "security": "Retiré par Navide (sécurité)",
@@ -2114,7 +2137,6 @@
           "previousChanged": "Le paquet de la version précédente a changé sur le disque ; le retour en arrière n’a donc pas eu lieu.",
           "grantUnavailable": "Les autorisations accordées à {id} sont introuvables ; le retour en arrière n’a donc pas eu lieu.",
           "factoryUnavailable": "Le retour à la version fournie n’est pas disponible.",
-          "gitLegacyRecovery": "Impossible de restaurer le Git fourni tant que NAVIDE_GIT_RECOVERY=legacy force la récupération héritée.",
           "factoryRestoreFailed": "Impossible de charger la version fournie."
         }
       },
@@ -7654,6 +7676,7 @@
     "section": {
       "general-behavior": "Comportement général",
       "resource-limits": "Limites de ressources",
+      "session-archive": "Archive des journaux de session",
       "settings-management": "Gestion des paramètres",
       "theme": "Thème",
       "other": "Autres"
@@ -12117,13 +12140,15 @@
     "source": {
       "broker": "capacité Navide",
       "shell": "commande shell",
-      "agentTool": "outil d’agent"
+      "agentTool": "outil d’agent",
+      "network": "réseau des vues"
     },
     "kind": {
       "system": "Autorisation",
       "shell": "Shell",
       "backendMethod": "Méthode du backend natif",
-      "agentTool": "Outil d’agent"
+      "agentTool": "Outil d’agent",
+      "networkHost": "Hôte réseau"
     },
     "reason": {
       "undeclared": "non déclaré"
@@ -12209,6 +12234,10 @@
     "commands": {
       "heading": "Commandes exécutées",
       "item": "{command} · {count} fois · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Hôtes atteints depuis ses vues",
+      "item": "{host} · {count} fois · {outcome} · {date}"
     },
     "trend": {
       "heading": "Appels par jour"
@@ -12297,6 +12326,7 @@
         "backendMethod": "Méthode du code natif : {key}",
         "backendEvent": "Événement du code natif : {key}",
         "network": "Peut joindre des hôtes distants via des commandes",
+        "networkHost": "Les vues peuvent se connecter à : {key}",
         "agentTool": "Outil d’agent : {key}"
       }
     },
@@ -12316,7 +12346,8 @@
     "undeclared": {
       "shell": "Exécute {key}, mais ne déclare aucune autorisation shell",
       "shellDynamic": "Construit des commandes à l’exécution, mais ne déclare aucune autorisation shell",
-      "shellExecutable": "Exécute {key}, mais son périmètre shell déclaré se limite à git, gh et glab",
+      "shellExecutable": "Exécute {key}, qui n’est pas dans son périmètre shell déclaré",
+      "networkHost": "Se connecte à {key} sans le déclarer",
       "system": "Utilise {key}, mais ne déclare pas cette autorisation",
       "fsScopeWrite": "Écrit {key}, hors de son périmètre d’écriture déclaré",
       "fsScopeRead": "Lit {key}, hors de son périmètre de lecture déclaré"
@@ -12324,7 +12355,8 @@
     "notSeenHeading": "Déclaré, non trouvé par l’analyse statique",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (hôte déclaré)"
     },
     "scanHeading": "Ce qu’a trouvé l’analyse à la publication",
     "scanHeadingLocal": "Ce qu’a trouvé l’analyse de ce fichier par Navide",
@@ -12342,8 +12374,8 @@
     "scannedLocally": "L’analyse alimente cette fiche ; elle ne décide jamais de l’installation.",
     "limitsWithoutScan": "Cette version n’a pas d’analyse système ; ce qui précède n’est que la déclaration propre à ce plugin Navide.",
     "limitsWithoutScanLocal": "Navide n’a pas analysé ce fichier ; ce qui précède n’est que la déclaration propre à ce plugin Navide.",
-    "viewNetwork": "Les vues d’un plugin Navide peuvent accéder au réseau et afficher des sites web externes dans Navide ; Navide ne filtre ni n’enregistre ce trafic. Les entrées réseau ci-dessus ne concernent que ses commandes et son backend natif.",
-    "viewNetworkIfViews": "Si ce plugin Navide a des vues, elles peuvent accéder au réseau et afficher des sites web externes dans Navide ; Navide ne filtre ni n’enregistre ce trafic. Les entrées réseau ci-dessus ne concernent que ses commandes et son backend natif.",
+    "viewNetwork": "Les vues de ce plugin Navide ne peuvent se connecter qu’aux hôtes qu’il déclare (listés ci-dessus ; à aucun s’il n’en liste pas) et n’affichent aucun site web externe. Navide enregistre dans « Activité » les hôtes atteints et ceux refusés. Les entrées réseau ci-dessus couvrent ses commandes et son backend natif.",
+    "viewNetworkIfViews": "Si ce plugin Navide a des vues, elles ne peuvent se connecter qu’aux hôtes qu’il déclare (listés ci-dessus ; à aucun s’il n’en liste pas) et n’affichent aucun site web externe. Navide enregistre dans « Activité » les hôtes atteints et ceux refusés. Les entrées réseau ci-dessus couvrent ses commandes et son backend natif.",
     "summary": {
       "nativeBackend": "Fournit du code natif (exécuté dans un bac à sable)",
       "files": {
@@ -12361,7 +12393,7 @@
       "agentMessages": "Lit le texte intégral des messages entre vos agents dans ce projet, qui peut contenir du code, le contenu de fichiers ou des secrets",
       "ui": "Affiche ses propres vues",
       "agentTools": "Propose des outils que les agents peuvent appeler ({read} en lecture seule, {write} en écriture)",
-      "network": "Peut utiliser le réseau",
+      "network": "Ses vues peuvent se connecter à : {hosts}",
       "noPermissions": "Ne déclare aucune autorisation"
     },
     "scan": {
@@ -12567,6 +12599,8 @@
       "no-key": "Créée lors de votre première connexion en tant qu’éditeur",
       "key-registered": "Enregistrée",
       "key-unregistered": "Pas encore enregistrée",
+      "key-conflict": "Le Registry a déjà une autre clé de signature pour cet éditeur (empreinte {fingerprint}), le plus souvent celle enregistrée pour l'outil de publication en ligne de commande. Publier depuis ce Navide demande de la remplacer ; l'outil en ligne de commande continue de publier jusque-là.",
+      "replace-key": "Utiliser la clé de ce Navide à la place",
       "expires": "La connexion expire",
       "sign-in": "Se connecter avec Navide Cloud",
       "sign-in-publish": "Se connecter en tant qu’éditeur",

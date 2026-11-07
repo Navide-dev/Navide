@@ -87,6 +87,59 @@ ipcRenderer.on('plugin:cap:event', (_event, payload: { type: string; data: unkno
   listeners.get(payload.type)?.forEach((cb) => cb(payload.data))
 })
 
+// Batch 4: a view serves the agent tools its manifest declares under
+// contributes.agentTools (contract 2.9). The Host sends one
+// `plugin:agentTool:call` per call and the view answers one
+// `plugin:agentTool:result` with the same callId; a tool with no registered
+// handler is answered at once, so the Host never waits on silence.
+type AgentToolHandler = (args: Record<string, unknown>) => unknown
+type AgentToolReply =
+  | { callId: string; ok: true; result: unknown }
+  | { callId: string; ok: false; error: { code: string; message: string } }
+const agentToolHandlers = new Map<string, AgentToolHandler>()
+const AGENT_TOOL_ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/
+
+function registerAgentToolHandler(name: string, handler: AgentToolHandler): () => void {
+  if (typeof name !== 'string' || name === '' || typeof handler !== 'function') {
+    throw new TypeError('onAgentToolCall(name, handler) needs a tool name and a function')
+  }
+  agentToolHandlers.set(name, handler)
+  return () => {
+    if (agentToolHandlers.get(name) === handler) agentToolHandlers.delete(name)
+  }
+}
+
+async function serveAgentToolCall(payload: unknown, reply: (reply: AgentToolReply) => void): Promise<void> {
+  if (typeof payload !== 'object' || payload === null) return
+  const { callId, name, arguments: args } = payload as Record<string, unknown>
+  if (typeof callId !== 'string' || callId === '' || typeof name !== 'string') return
+  const handler = agentToolHandlers.get(name)
+  if (!handler) {
+    reply({ callId, ok: false, error: { code: 'PLUGIN_TOOL_UNHANDLED', message: `The view registered no handler for ${name}.` } })
+    return
+  }
+  try {
+    const input = typeof args === 'object' && args !== null && !Array.isArray(args) ? (args as Record<string, unknown>) : {}
+    const result: unknown = await handler(input)
+    // Only JSON travels: a value JSON cannot spell (a cycle, a BigInt) fails the call.
+    reply({ callId, ok: true, result: result === undefined ? null : JSON.parse(JSON.stringify(result)) })
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code
+    reply({
+      callId,
+      ok: false,
+      error: {
+        code: typeof code === 'string' && AGENT_TOOL_ERROR_CODE.test(code) ? code : 'PLUGIN_TOOL_FAILED',
+        message: error instanceof Error ? error.message : String(error),
+      },
+    })
+  }
+}
+
+ipcRenderer.on('plugin:agentTool:call', (_event, payload: unknown) => {
+  void serveAgentToolCall(payload, (reply) => ipcRenderer.send('plugin:agentTool:result', reply))
+})
+
 ipcRenderer.on(
   'plugin:backend:event',
   (_event, payload: { subscriptionId: string; event: string; payload: unknown }) => {
@@ -760,6 +813,11 @@ const nav = {
       ipcRenderer.removeListener('plugin:openTarget', listener)
     }
   },
+  /** Serve one of the agent tools the manifest declares under
+   *  contributes.agentTools from this view; returns a disposer. */
+  onAgentToolCall(name: string, handler: AgentToolHandler): () => void {
+    return registerAgentToolHandler(name, handler)
+  },
 }
 
 if (!packageBackendEnabled) {
@@ -853,6 +911,10 @@ ipcRenderer.on('plugin:frame:port', (event, payload: { documentGeneration?: unkn
       const payload = incoming.payload
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return
       frameOpenTargetListeners.forEach((listener) => listener(payload as Record<string, string>))
+      return
+    }
+    if (incoming.channel === 'plugin:agentTool:call') {
+      void serveAgentToolCall(incoming.payload, (reply) => { void frameRequest('plugin:agentTool:result', reply, true) })
       return
     }
     if (incoming.channel === 'plugin:backend:event') {
@@ -980,6 +1042,9 @@ const frameNav = {
   onOpenTarget(listener: (params: Record<string, string>) => void): () => void {
     frameOpenTargetListeners.add(listener)
     return () => frameOpenTargetListeners.delete(listener)
+  },
+  onAgentToolCall(name: string, handler: AgentToolHandler): () => void {
+    return registerAgentToolHandler(name, handler)
   },
 }
 

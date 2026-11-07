@@ -13,14 +13,22 @@ src/shared/pluginDisclosure.ts.
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, TypedDict
+import re
+from typing import Any, Literal, NotRequired, TypedDict
 
-from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, MAX_SAFE_INTEGER
+from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, AGENT_TOOL_VIEW_METHOD_PREFIX, MAX_SAFE_INTEGER
 
 DISCLOSURE_SCHEMA_VERSION = 1
 DISCLOSURE_SUMMARY_TEMPLATE = "plugin-disclosure.summary.v1"
 #: The Host shell allowlist (plugin-development-v2.md, "Host-managed storage partitions").
 HOST_SHELL_ALLOWLIST = ("gh", "git", "glab")
+#: Executables that run any program handed to them (shells, interpreters,
+#: package runners, privilege wrappers): a package that declares one is
+#: disclosed as able to run any program (TA-2). Twin: SHELL_ANY_PROGRAM_EXECUTABLES.
+SHELL_ANY_PROGRAM_EXECUTABLES = frozenset((
+    "sh", "bash", "zsh", "fish", "dash", "ksh", "pwsh", "powershell", "cmd", "node", "deno", "bun", "python", "python3", "ruby", "perl", "php", "lua", "osascript", "npx", "pnpm", "npm", "yarn", "pip", "pipx", "uv", "uvx", "cargo", "go", "make", "cmake", "gradle", "mvn", "docker", "podman", "kubectl", "nix", "brew", "apt", "winget", "choco", "sudo", "doas", "su", "runas",
+    "env", "xargs", "nohup", "timeout", "nice", "find", "awk", "ssh", "busybox", "setsid",
+))
 
 DisclosureRiskLevel = Literal["low", "medium", "high", "highest"]
 _RISK_RANK = {"low": 0, "medium": 1, "high": 2, "highest": 3}
@@ -34,15 +42,17 @@ DISCLOSURE_RISK_RULES = (
     ("system.agents", "medium"),
     ("system.agentMessages", "high"),
     ("shell.allowlist", "high"),
+    ("shell.executables", "high"),
     ("nativeBackend", "high"),
     ("agentTools.write", "high"),
     ("shell.full", "highest"),
+    ("shell.interpreter", "highest"),
     ("network", "highest"),
 )
 
 DISCLOSURE_ITEM_KINDS = (
     "agentTool", "backendEvent", "backendMethod", "fsScopeRead", "fsScopeRoot", "fsScopeWrite",
-    "nativeBackend", "network", "shell", "shellExecutable", "system",
+    "nativeBackend", "network", "networkHost", "shell", "shellExecutable", "system",
 )
 
 
@@ -56,6 +66,10 @@ class ManifestDisclosure(TypedDict):
     permissions: dict[str, Any]
     nativeBackend: dict[str, list[str]] | None
     network: Literal["none", "via-shell"]
+    #: ``permissions.network.hosts`` sorted; present only when the manifest
+    #: declares hosts, so the disclosure of every earlier manifest (and the
+    #: digest the Registry signed for it) is unchanged.
+    networkHosts: NotRequired[list[str]]
     agentTools: list[dict[str, Any]]
     dataLocations: dict[str, Any]
 
@@ -97,6 +111,17 @@ class CanonicalJsonError(TypeError):
     """A value with no canonical contract spelling (a non-integer or unsafe number, or a non-JSON type)."""
 
 
+_VERSION_SUFFIX = re.compile(r"[-.]?\d[\d.]*$")
+
+
+def runs_any_program(name: str) -> bool:
+    """Whether a declared executable is one that runs any program handed to
+    it, read with its version suffix stripped (``python3.12``, ``node22``,
+    ``php8.3`` are ``python``, ``node``, ``php``), so a versioned spelling is
+    disclosed like the plain one. Twin: runsAnyProgram."""
+    return name in SHELL_ANY_PROGRAM_EXECUTABLES or _VERSION_SUFFIX.sub("", name) in SHELL_ANY_PROGRAM_EXECUTABLES
+
+
 def risk_level_for_reasons(reasons: list[dict[str, Any]]) -> str:
     """The highest level among the reasons; low when there are none."""
     level = "low"
@@ -106,16 +131,39 @@ def risk_level_for_reasons(reasons: list[dict[str, Any]]) -> str:
     return level
 
 
+def _declared_agent_tools(backend: Any, contributes: Any) -> list[dict[str, Any]]:
+    """``backend.agentTools`` followed by ``contributes.agentTools`` spelled with
+    ``method: "view:<view>"`` (contract 2.9), so one disclosure shape covers both."""
+    tools = list((backend or {}).get("agentTools") or [])
+    for tool in (contributes or {}).get("agentTools") or []:
+        tools.append({**{key: value for key, value in tool.items() if key != "view"}, "method": f"{AGENT_TOOL_VIEW_METHOD_PREFIX}{tool['view']}"})
+    return tools
+
+
 def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     """The disclosure of a manifest that already passed Manifest v2 validation and validate_agent_tools."""
     declared = manifest.get("permissions") or {}
     system = sorted(declared.get("system") or [])
-    if declared.get("shell") == "allowlist":
-        shell: dict[str, Any] | None = {"mode": "allowlist", "executables": list(HOST_SHELL_ALLOWLIST)}
-    elif declared.get("shell") == "full":
+    # `shell` is a mode string, or (C2) `{mode: "allowlist", executables}`;
+    # a Registry-normalized manifest carries the names as `shellExecutables`.
+    declared_shell = declared.get("shell")
+    declared_executables: list[str] = []
+    if isinstance(declared_shell, dict):
+        declared_executables = list(declared_shell.get("executables") or [])
+        declared_shell = declared_shell.get("mode")
+    elif declared.get("shellExecutables"):
+        declared_executables = list(declared["shellExecutables"])
+    if declared_shell == "allowlist":
+        shell: dict[str, Any] | None = {
+            "mode": "allowlist",
+            "executables": sorted(set(HOST_SHELL_ALLOWLIST) | set(declared_executables)),
+        }
+    elif declared_shell == "full":
         shell = {"mode": "full", "executables": None}
+        declared_executables = []
     else:
         shell = None
+        declared_executables = []
     fs_scope = (declared.get("scopes") or {}).get("fs")
     scopes = None
     if fs_scope:
@@ -125,6 +173,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
             "read": sorted(fs_scope.get("read") or []),
             "write": sorted(fs_scope.get("write") or []),
         }}
+    network_hosts = sorted((declared.get("network") or {}).get("hosts") or [])
     backend = manifest.get("backend")
     native = None
     if backend is not None:
@@ -140,7 +189,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
                 "timeoutMs": tool.get("timeoutMs", AGENT_TOOL_DEFAULT_TIMEOUT_MS),
                 "inputSchema": tool["inputSchema"],
             }
-            for tool in ((backend or {}).get("agentTools") or [])
+            for tool in _declared_agent_tools(backend, manifest.get("contributes"))
         ),
         key=lambda tool: tool["name"],
     )
@@ -163,12 +212,18 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("system.agentMessages")
     if shell and shell["mode"] == "allowlist":
         present.add("shell.allowlist")
+    if declared_executables:
+        present.add("shell.executables")
+        if any(runs_any_program(name) for name in declared_executables):
+            present.add("shell.interpreter")
     if native is not None:
         present.add("nativeBackend")
     if write_tools:
         present.add("agentTools.write")
     if shell and shell["mode"] == "full":
         present.add("shell.full")
+    if network_hosts:
+        present.add("network")
     reasons = [{"key": key, "level": level} for key, level in DISCLOSURE_RISK_RULES if key in present]
 
     clauses: list[dict[str, Any]] = []
@@ -182,6 +237,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         # A declared shell runs git/gh/glab (or anything, in full mode), which
         # reach remote hosts even though the sandboxes have no network.
         clauses.append({"key": "networkViaShell", "params": {}})
+    if network_hosts:
+        clauses.append({"key": "network", "params": {"hosts": network_hosts}})
     if "aiCli" in system:
         clauses.append({"key": "aiCli", "params": {}})
     if "web" in system:
@@ -206,18 +263,26 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     else:
         project_writes = {"root": scopes["fs"]["root"], "patterns": scopes["fs"]["write"]}
 
-    return {
+    permissions: dict[str, Any] = {"system": system, "shell": shell, "scopes": scopes}
+    if network_hosts:
+        permissions["network"] = {"hosts": network_hosts}
+    disclosure: dict[str, Any] = {
         "schemaVersion": DISCLOSURE_SCHEMA_VERSION,
         "plugin": {"id": manifest["id"], "version": manifest["version"], "publisher": manifest["publisher"]},
         "summary": {"template": DISCLOSURE_SUMMARY_TEMPLATE, "clauses": clauses},
         "risk": {"level": risk_level_for_reasons(reasons), "reasons": reasons},
-        "permissions": {"system": system, "shell": shell, "scopes": scopes},
+        "permissions": permissions,
         "nativeBackend": native,
+        # Commands and the native backend only (see ManifestDisclosure); the
+        # declared view hosts are ``networkHosts``.
         "network": "via-shell" if shell else "none",
         "agentTools": tools,
         "dataLocations": {"hostStorage": True, "backendDataDirectory": native is not None,
                           "projectWrites": project_writes},
     }
+    if network_hosts:
+        disclosure["networkHosts"] = network_hosts
+    return disclosure  # type: ignore[return-value]
 
 
 def _normalized(value: Any) -> Any:
@@ -275,6 +340,8 @@ def disclosure_items(disclosure: ManifestDisclosure) -> list[DisclosureItem]:
             add("backendEvent", event)
     if disclosure["network"] != "none":
         add("network", disclosure["network"])
+    for host in disclosure.get("networkHosts") or []:
+        add("networkHost", host)
     for tool in disclosure["agentTools"]:
         add("agentTool", tool["name"], {key: value for key, value in tool.items() if key != "name"})
     return sorted(items, key=lambda item: (item["kind"], item["key"]))

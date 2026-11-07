@@ -367,3 +367,103 @@ def test_manifest_v2_duplicate_key_fixture_rejected_before_validation() -> None:
 def test_manifest_v2_bom_fixture_rejected_before_validation() -> None:
     with pytest.raises(json.JSONDecodeError, match="BOM"):
         _read_strict(_read_fixture("invalid-raw", "manifest-utf8-bom.json"))
+
+
+# -- permissions.network (PR C1) ----------------------------------------------
+
+
+def test_manifest_v2_network_hosts_are_accepted_as_declared() -> None:
+    m = parse_manifest(contract_manifest("network-hosts.json"))
+    assert m.permissions.network is not None
+    assert m.permissions.network.hosts == ["api.github.com", "*.example.com", "localhost"]
+
+
+@pytest.mark.parametrize(
+    "hosts",
+    [
+        ["https://api.github.com"],  # a scheme
+        ["api.github.com:443"],  # a port
+        ["Api.GitHub.com"],  # upper case
+        ["*"],  # a bare wildcard
+        ["api.github.com", "api.github.com"],  # a duplicate
+        [],  # nothing declared
+        [f"h{i}.example.com" for i in range(33)],  # over the maximum
+    ],
+)
+def test_manifest_v2_network_hosts_rejected(hosts: list[str]) -> None:
+    manifest = contract_manifest("network-hosts.json")
+    manifest["permissions"]["network"] = {"hosts": hosts}
+    with pytest.raises(ManifestError, match="network"):
+        parse_manifest(manifest)
+
+
+def test_manifest_v2_network_rejects_unknown_keys_and_extension_packs() -> None:
+    manifest = contract_manifest("network-hosts.json")
+    manifest["permissions"]["network"] = {"hosts": ["api.github.com"], "ports": [443]}
+    with pytest.raises(ManifestError, match="network"):
+        parse_manifest(manifest)
+    pack = contract_manifest("extension-pack.json")
+    pack["permissions"] = {"network": {"hosts": ["api.github.com"]}}
+    with pytest.raises(ManifestError, match="permissions"):
+        parse_manifest(pack)
+
+
+# -- permissions.shell.executables (PR C2) --------------------------------------
+
+
+def test_manifest_v2_shell_object_form_is_normalized() -> None:
+    m = parse_manifest(contract_manifest("shell-executables.json"))
+    assert m.permissions.shell == "allowlist"
+    assert m.permissions.shellExecutables == ["npm", "terraform"]
+    plain = parse_manifest(contract_manifest("frontend-multi-view.json"))
+    assert plain.permissions.shell == "allowlist" and plain.permissions.shellExecutables is None
+
+
+@pytest.mark.parametrize(
+    "shell",
+    [
+        {"mode": "full", "executables": ["npm"]},
+        {"mode": "allowlist", "executables": []},
+        {"mode": "allowlist", "executables": ["/usr/bin/npm"]},
+        {"mode": "allowlist", "executables": ["NPM"]},
+        {"mode": "allowlist", "executables": ["npm", "npm"]},
+        {"mode": "allowlist"},
+        {"mode": "allowlist", "executables": ["npm"], "extra": 1},
+        {"mode": "allowlist", "executables": [f"t{i}" for i in range(33)]},
+        {"mode": "allowlist", "executables": ["git"]},
+        {"mode": "allowlist", "executables": ["gh.cmd"]},
+        {"mode": "allowlist", "executables": ["npm.exe"]},
+    ],
+)
+def test_manifest_v2_shell_object_form_rejected(shell: dict) -> None:
+    manifest = contract_manifest("shell-executables.json")
+    manifest["permissions"]["shell"] = shell
+    with pytest.raises(ManifestError, match="shell"):
+        parse_manifest(manifest)
+
+
+def test_manifest_v2_shell_executables_is_not_a_manifest_field() -> None:
+    manifest = contract_manifest("fs-scopes-declared.json")
+    manifest["permissions"]["shellExecutables"] = ["npm"]
+    with pytest.raises(ManifestError, match="shell"):
+        parse_manifest(manifest)
+
+
+# -- contributes.agentTools (batch 4, contract 2.9) ----------------------------
+
+
+def test_manifest_v2_view_served_agent_tools_are_accepted_and_refused_like_backend_ones() -> None:
+    raw = contract_manifest("view-agent-tools.json")
+    m = parse_manifest(raw)
+    assert m.backend is None
+    assert [tool["name"] for tool in m.contributes.agentTools] == ["hello_greet", "hello_note"]
+    undeclared = contract_manifest("view-agent-tools.json")
+    undeclared["contributes"]["agentTools"][0]["view"] = "side"
+    with pytest.raises(ManifestError) as refused:
+        parse_manifest(undeclared)
+    assert "contributes.agentTools[0].view is invalid: AGENT_TOOL_VIEW_UNDECLARED" in str(refused.value)
+    mismatch = contract_manifest("view-agent-tools.json")
+    mismatch["contributes"]["agentTools"][0]["name"] = "other_greet"
+    with pytest.raises(ManifestError) as refused:
+        parse_manifest(mismatch)
+    assert "contributes.agentTools[0].name is invalid: AGENT_TOOL_PREFIX_MISMATCH ('other_greet' must start with 'hello_'" in str(refused.value)

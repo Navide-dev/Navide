@@ -39,6 +39,8 @@ interface StoredDeveloper {
   publicKeyPem?: string
   /** The fingerprint the Registry reported once the public key was registered. */
   registeredFingerprint?: string | null
+  /** L1d: the fingerprint of a different key the Registry already holds. */
+  conflictingFingerprint?: string | null
 }
 
 interface VaultDoc {
@@ -95,6 +97,7 @@ export class DeveloperVault {
       tokenExpiresAt: { account: entry.account?.expiresAt ?? null, publisher: entry.publisher?.expiresAt ?? null },
       keyFingerprint: fingerprint,
       keyRegistered: fingerprint !== null && entry.registeredFingerprint === fingerprint,
+      keyConflictFingerprint: entry.conflictingFingerprint ?? null,
     }
   }
 
@@ -142,6 +145,14 @@ export class DeveloperVault {
   markKeyRegistered(registry: string, fingerprint: string): void {
     this.update(registry, (entry) => {
       entry.registeredFingerprint = fingerprint
+      entry.conflictingFingerprint = null
+    })
+  }
+
+  /** L1d: the Registry refused this key because it holds another one. */
+  markKeyConflict(registry: string, fingerprint: string): void {
+    this.update(registry, (entry) => {
+      entry.conflictingFingerprint = fingerprint
     })
   }
 

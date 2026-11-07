@@ -188,6 +188,7 @@ export function manifestToDescriptor(
       packageDir: pluginDir,
       requires: manifestCapabilities(manifest),
       capabilityPolicy: manifestCapabilityPolicy(manifest),
+      ...(manifest.permissions.network ? { networkHosts: [...manifest.permissions.network.hosts] } : {}),
       devUrl: '',
       entryFile: launchViews[0].entryFile,
       query,

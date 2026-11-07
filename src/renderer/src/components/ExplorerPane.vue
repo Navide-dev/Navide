@@ -3,9 +3,8 @@ import { ref, computed, onMounted, onUnmounted, watch, toRef, nextTick } from 'v
 import type { useBackend } from '../composables/useBackend'
 import { useEditorTargets } from '../composables/useEditorTargets'
 import { useExplorer, type FsEntry } from '../composables/useExplorer'
-import { useGit } from '../composables/useGit'
+import { useGitStatusBadges } from '../composables/useGitStatusBadges'
 import { createHostGitTransport } from '../composables/hostGitTransport'
-import { createHostGitCredentialPort } from '../composables/hostSurfacePorts'
 import { revealPath } from '../composables/hostShell'
 import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 import type { PluginSlotEntry } from '../../../shared/pluginCommands'
@@ -43,12 +42,12 @@ const wsRef = toRef(props, 'workspacePath')
 // user's input is never clobbered. (`prompt` is declared below; the guard only
 // runs on later focus events.)
 const explorer = useExplorer(props.backend, wsRef, { isRefreshBlocked: () => prompt.value !== null })
-const git = useGit(() => props.workspacePath, createHostGitTransport(props.backend), createHostGitCredentialPort())
+const git = useGitStatusBadges(() => props.workspacePath, createHostGitTransport(props.backend))
 const { toast, alert, confirm } = useNotify()
 
 type FsResult = { ok: boolean; error?: string }
 
-const statusMap = computed(() => explorer.buildStatusMap(git.gitStatus.value))
+const statusMap = computed(() => explorer.buildStatusMap(git.status.value))
 
 interface Row {
   entry: FsEntry
@@ -573,7 +572,7 @@ async function moveEntries(draggedRel: string, targetDir: string): Promise<void>
 function doInitialLoad(): void {
   if (!props.workspacePath) return
   void explorer.loadDir('')
-  void git.loadStatus()
+  void git.load()
 }
 
 // The tree never loaded successfully: nothing cached yet, or the last load

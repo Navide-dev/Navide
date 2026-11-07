@@ -7,7 +7,7 @@
   <p class="muted">Member reports about published extensions. Dismiss a report, or act on
     it: yank the reported version, or block the package or its publisher. Blocking uses
     the resolution note as the public reason on the
-    <a href="{{ base }}/removed">removed extensions</a> list. Every action is recorded below.</p>
+    <a href="{{ store }}/removed">removed extensions</a> list. Every action is recorded below.</p>
   <ul class="summary-bar" aria-label="Reports summary">
     <li class="{{ 'is-alert' if open_items else '' }}"><b>{{ open_items|length }}</b><span>open</span></li>
     <li><b>{{ open_items|selectattr('version')|list|length }}</b><span>version-specific</span></li>
@@ -18,7 +18,7 @@
   <h2 class="section-title">Open ({{ open_items|length }})</h2>
   {% for r in open_items %}
   <div class="review-item">
-    <h3 class="review-title"><span class="mini-tile hue-{{ r.identity|tile_hue }}" aria-hidden="true">{{ r.name[:1]|upper }}</span>#{{ r.id }} · <a href="{{ base }}/extensions/{{ r.namespace }}/{{ r.name }}">{{ r.identity }}</a>{% if r.version %} @ {{ r.version }}{% endif %}
+    <h3 class="review-title"><span class="mini-tile hue-{{ r.identity|tile_hue }}" aria-hidden="true">{{ r.name[:1]|upper }}</span>#{{ r.id }} · <a href="{{ store }}/extensions/{{ r.namespace }}/{{ r.name }}">{{ r.identity }}</a>{% if r.version %} @ {{ r.version }}{% endif %}
       <span class="badge badge-danger">{{ reasons.get(r.reason, r.reason) }}</span></h3>
     <div class="muted">Reported {{ r.created_at.strftime('%Y-%m-%d %H:%M') }} UTC by <code>{{ r.reporter }}</code></div>
     {% if r.detail %}<p class="report-detail">{{ r.detail }}</p>{% else %}<p class="muted">No details given.</p>{% endif %}

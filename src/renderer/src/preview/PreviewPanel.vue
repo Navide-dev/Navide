@@ -12,7 +12,7 @@
 import { computed, ref, toRef } from 'vue'
 import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
-import { createHostGitFileAccessPort } from '../composables/hostSurfacePorts'
+import { createHostFileAccessPort } from '../composables/hostFileAccess'
 import { createHostGitTransport } from '../composables/hostGitTransport'
 import DiffPane from '../editor/DiffPane.vue'
 import FilePreviewPane from '../editor/FilePreviewPane.vue'
@@ -31,7 +31,7 @@ const props = defineProps<{
 
 const notify = useNotify()
 const gitTransport = createHostGitTransport(props.backend)
-const fileAccess = createHostGitFileAccessPort(props.backend)
+const fileAccess = createHostFileAccessPort(props.backend)
 const { current, clear, show } = usePreview()
 
 const target = computed<PreviewTarget | null>(() => current.value)

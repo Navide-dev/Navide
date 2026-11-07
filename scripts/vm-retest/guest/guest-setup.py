@@ -6,7 +6,7 @@ key = "stub-" + "key-for-local-test"
 c = home / ".claude.json"; d = json.loads(c.read_text()) if c.exists() else {}
 d.update(hasCompletedOnboarding=True, theme="dark", autoUpdates=False, customApiKeyResponses={"approved": [key[-20:]], "rejected": []})
 p = d.setdefault("projects", {})
-for w in ("wa", "wg", "wf"):
+for w in ("wa", "wg", "wf", "wm"):
     (root / w).mkdir(parents=True, exist_ok=True)
     p[str(root / w).replace("\\", "/")] = {"hasTrustDialogAccepted": True, "hasCompletedProjectOnboarding": True}
 c.write_text(json.dumps(d))

@@ -243,13 +243,56 @@ _MAX_PROVIDER_CONFIG_BYTES = 1024 * 1024
 _CAPPED_READ_CHUNK = 64 * 1024
 
 
-def validate_argv(args: Sequence[str]) -> list[str]:
-    """Validate and copy an argv intended for the Host shell broker."""
+#: C2: a declared executable is a bare lowercase name (plugin-contracts
+#: V2_SHELL_EXECUTABLE); the Host sends the package's declared set with each
+#: public call, and only names of that shape are ever admitted here.
+_DECLARED_EXECUTABLE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+_DECLARED_EXTENSION = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
+MAX_DECLARED_EXECUTABLES = 32
+#: Characters cmd.exe reads again when it runs a `.cmd`/`.bat` shim (TA-2,
+#: BatBadBut): an argument carrying one is refused for a declared executable
+#: rather than quoted, because no quoting makes cmd leave them alone.
+_CMD_SHIM_UNSAFE = re.compile(r'[%^"!]')
+
+
+def declared_executables(value: object) -> frozenset[str]:
+    """The declared executable names a Host call may add to the allowlist.
+
+    Anything that is not a short list of bare lowercase names is refused as a
+    whole: the Host built it from a validated manifest, so a malformed list is
+    a bug, not a request to be lenient with.
+    """
+    if value is None:
+        return frozenset()
+    if (
+        not isinstance(value, list)
+        or len(value) > MAX_DECLARED_EXECUTABLES
+        or any(not isinstance(name, str) or _DECLARED_EXECUTABLE.fullmatch(name) is None for name in value)
+    ):
+        raise ValueError("declared executables must be a short list of bare lowercase names")
+    # A Host-family name (or one spelled through a Windows extension, which
+    # CreateProcess resolves to the same binary) never comes in as "declared":
+    # it would reach git/gh/glab without their subcommand policy.
+    if any(_DECLARED_EXTENSION.search(name) or name in HOST_SHELL_EXECUTABLE_ALLOWLIST for name in value):
+        raise ValueError("declared executables may not name git, gh, glab or carry a .exe/.cmd/.bat/.com/.ps1 extension")
+    return frozenset(value)
+
+
+def validate_argv(args: Sequence[str], allowed_executables: frozenset[str] = frozenset()) -> list[str]:
+    """Validate and copy an argv intended for the Host shell broker.
+
+    ``allowed_executables`` (C2) are the names the package declared and the
+    user approved; they are admitted beside the Host's own three.
+    """
     if not args or any(not isinstance(arg, str) or "\x00" in arg for arg in args):
         raise ValueError("command arguments must be non-empty strings")
     executable = args[0]
-    if executable != Path(executable).name or executable not in HOST_SHELL_EXECUTABLE_ALLOWLIST:
-        raise ValueError("executable is not allowlisted")
+    if executable != Path(executable).name or (
+        executable not in HOST_SHELL_EXECUTABLE_ALLOWLIST and executable not in allowed_executables
+    ):
+        raise ValueError(
+            "executable is not allowlisted or declared" if allowed_executables else "executable is not allowlisted"
+        )
     return list(args)
 
 
@@ -526,16 +569,23 @@ def validate_public_argv(
     *,
     cwd: str | None = None,
     workspace_root: str | None = None,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Validate an argv supplied by a Manifest v2 public ``shell.run`` call.
 
     Internal Git and Issues services use :func:`validate_argv`; this stricter
-    policy exists only for commands authored by an installed plugin.
+    policy exists only for commands authored by an installed plugin. A
+    declared executable (C2) that is not one of the Host's three has no
+    subcommand policy of its own — the user's ruling of 2026-10-17 is that
+    what a plugin may run is disclosed, not curated — so it is admitted as
+    written, in the bound workspace only.
     """
-    argv = validate_argv(args)
+    argv = validate_argv(args, allowed_executables)
     executable = argv[0]
     root = workspace_root or cwd
     _validate_public_cwd(cwd, root)
+    if executable not in HOST_SHELL_EXECUTABLE_ALLOWLIST:
+        return argv
     command_index = _public_command_index(argv, executable)
     command = argv[command_index]
     command_args = argv[command_index + 1 :]
@@ -563,6 +613,7 @@ def parse_public_allowlisted_command(
     *,
     cwd: str | None = None,
     workspace_root: str | None = None,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Parse and validate one public plugin command without enabling a shell."""
     if not isinstance(command, str) or not command.strip() or _SHELL_SYNTAX.search(command):
@@ -571,7 +622,9 @@ def parse_public_allowlisted_command(
         args = terminal_backend.parse_command(command)
     except (ValueError, OSError) as exc:
         raise _public_policy_error() from exc
-    return validate_public_argv(args, cwd=cwd, workspace_root=workspace_root)
+    return validate_public_argv(
+        args, cwd=cwd, workspace_root=workspace_root, allowed_executables=allowed_executables
+    )
 
 
 def _platform_config_home(home: Path | None, xdg_config_home: str | None) -> Path | None:
@@ -854,6 +907,7 @@ async def run_allowlisted(
     timeout: float = 15.0,
     input_bytes: bytes | None = None,
     env: Mapping[str, str] | None = None,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> tuple[int, bytes, bytes]:
     """Run one allowlisted executable and return ``(rc, stdout, stderr)``.
 
@@ -863,12 +917,23 @@ async def run_allowlisted(
     ``validate_argv`` explicitly.
     """
     try:
-        argv = validate_argv(args)
+        argv = validate_argv(args, allowed_executables)
     except ValueError as exc:
         return 126, b"", str(exc).encode("utf-8")
     launch = _launch_argv(argv, env)
     if launch is None:
         return 127, b"", f"{argv[0]} not found".encode()
+    if argv[0] not in HOST_SHELL_EXECUTABLE_ALLOWLIST and launch[0] != argv[0] and launch[0].lower().endswith("cmd.exe"):
+        # A declared executable resolved to a batch shim: cmd.exe re-reads
+        # the arguments, so the ones it would read as more than text are
+        # refused (TA-2). The Host's three never reach this branch with such
+        # arguments; their argv is validated word by word above.
+        offending = next((arg for arg in argv[1:] if _CMD_SHIM_UNSAFE.search(arg)), None)
+        if offending is not None:
+            return 126, b"", (
+                f"argument {offending!r} is not allowed for {argv[0]} on Windows: "
+                "it runs through a .cmd shim, which would read %, ^, \" or ! as commands"
+            ).encode("utf-8")
     process: asyncio.subprocess.Process | None = None
     job: int | None = None
     try:
@@ -1013,6 +1078,7 @@ async def run_allowlisted_text(
     timeout: float = 15.0,
     input_text: str | None = None,
     env: Mapping[str, str] | None = None,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> tuple[int, str, str]:
     """Text-decoding wrapper used by Git and Issues services."""
     rc, stdout, stderr = await run_allowlisted(
@@ -1021,6 +1087,7 @@ async def run_allowlisted_text(
         timeout=timeout,
         input_bytes=input_text.encode("utf-8") if input_text is not None else None,
         env=env,
+        allowed_executables=allowed_executables,
     )
     return rc, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
 
@@ -1032,18 +1099,34 @@ async def run_public_allowlisted_text(
     workspace_root: str | None = None,
     timeout: float = 15.0,
     input_text: str | None = None,
+    allowed_executables: frozenset[str] = frozenset(),
 ) -> tuple[int, str, str]:
-    """Run one public command with a Host-owned environment and Git policy."""
+    """Run one public command with a Host-owned environment and Git policy.
+
+    A declared executable (C2) runs as the user runs it from a terminal: the
+    user's own environment and PATH, in the bound workspace. Nothing is
+    projected into it and nothing is hidden from it; the consent card said
+    "can run <name>" and, for a name that runs any program, "any program".
+    """
     try:
         argv = validate_public_argv(
             args,
             cwd=cwd,
             workspace_root=workspace_root or cwd,
+            allowed_executables=allowed_executables,
         )
         if argv[0] == "git":
             assert_public_git_config_safe(cwd, workspace_root or cwd)
     except ValueError as exc:
         return 126, "", str(exc)
+    if argv[0] not in HOST_SHELL_EXECUTABLE_ALLOWLIST:
+        try:
+            return await run_allowlisted_text(
+                list(argv), cwd, timeout=timeout, input_text=input_text,
+                env=dict(os.environ), allowed_executables=allowed_executables,
+            )
+        except (OSError, ValueError) as exc:
+            return 126, "", str(exc)
 
     try:
         with tempfile.TemporaryDirectory(prefix="navide-public-cli-") as isolated_home:

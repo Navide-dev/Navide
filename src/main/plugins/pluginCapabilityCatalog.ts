@@ -25,7 +25,15 @@ export type PublicCapabilityScope = 'workspace' | 'plugin'
  *  Host derives the actual partition identity; the request only selects one of
  *  these two classes. */
 export type StoragePartitionClass = StoragePartitionScope
-export type PublicCapabilityEligibility = 'public' | 'firstParty'
+/** Who may call an entry once its namespace is declared and granted:
+ *  `public` any package; `firstParty` Navide's own packages only (the Host's
+ *  credential store, its own configuration, or the user's cloud account and
+ *  chat channels, see the list in plugin-development-v2.md); `declaredShell`
+ *  any package whose manifest declares `permissions.shell: "full"` and whose
+ *  user approved it (0.2.39): the method hands a file to whatever program the
+ *  OS picks, which only the full shell disclosure ("runs any program") tells
+ *  the user; allowlist discloses git/gh/glab and the declared executables. */
+export type PublicCapabilityEligibility = 'public' | 'firstParty' | 'declaredShell'
 
 export const STORAGE_LIMITS = {
   maxKeyBytes: 256,
@@ -304,12 +312,18 @@ function storageMethod(
   }
 }
 
-/** Native `ui` methods a plain `ui` grant must not reach: opening a path or a
- *  plugin-written temp file hands it to the OS default app (a `.command` or
- *  `.bat` runs), and keybindings.json is the Host's own configuration. */
-const FIRST_PARTY_NATIVE_METHODS: ReadonlySet<string> = new Set([
+/** Native `ui` methods a plain `ui` grant must not reach. Opening a path or
+ *  a plugin-written temp file hands it to the OS default app (a `.command` or
+ *  `.bat` runs), so a package reaches them by declaring `permissions.shell:
+ *  "full"`, the permission that discloses "runs any program on your machine"
+ *  (batch 4, 0.2.39; allowlist is narrower). keybindings.json is the Host's own configuration: a package could
+ *  rebind any shortcut to any Host command, and no permission discloses
+ *  that, so it stays first-party. */
+const SHELL_DECLARED_NATIVE_METHODS: ReadonlySet<string> = new Set([
   'ui.openPath',
   'ui.openTempFile',
+])
+const FIRST_PARTY_NATIVE_METHODS: ReadonlySet<string> = new Set([
   'ui.writeKeybindings',
 ])
 
@@ -317,10 +331,12 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   'ui.openFilePicker': systemMethod('ui.openFilePicker', 'ui', (value): value is Record<string, unknown> => validFilePickerRequest(value)),
   ...Object.fromEntries(EDITOR_NATIVE_METHODS.map(address => [address, {
     address, kind: 'method', namespace: 'ui', scope: 'workspace',
-    eligibility: FIRST_PARTY_NATIVE_METHODS.has(address) ? 'firstParty' : 'public',
+    eligibility: FIRST_PARTY_NATIVE_METHODS.has(address) ? 'firstParty' : SHELL_DECLARED_NATIVE_METHODS.has(address) ? 'declaredShell' : 'public',
     validateRequest: (value: unknown) => validateEditorNativeRequest(address, value),
   } as PublicSystemCapabilityCatalogEntry])),
-  // Git accounts hold hosting tokens: first-party only.
+  // Git accounts hold hosting tokens (the Host's credential store): first-party
+  // only. A read side for third parties needs its own permission and
+  // disclosure clause first.
   ...Object.fromEntries(Object.keys(GIT_ACCOUNT_PUBLIC_METHODS).map(address => [address, {
     address, kind: 'method', namespace: 'ui', scope: 'workspace', eligibility: 'firstParty',
     validateRequest: (value: unknown) => validateGitAccountRequest(address, value),
@@ -377,13 +393,12 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   'fs.stat': systemMethod('fs.stat', 'fs', validateSelectedPathRequest),
   'fs.statPath': systemMethod('fs.statPath', 'fs', validateSelectedPathRequest),
   'ui.openInEditor': systemMethod('ui.openInEditor', 'ui', validateEditorRequest),
-  'ui.openPlansWindow': systemMethod(
-    'ui.openPlansWindow',
-    'ui',
-    validatePlansWindowRequest,
-    'firstParty',
-  ),
-  // Share links: the Plans view asks whether they work, then shares one plan.
+  // Opens the Plans window on a plan of the workspace, as ui.openPluginWindow
+  // (public) opens any installed window contribution: public since 0.2.39.
+  'ui.openPlansWindow': systemMethod('ui.openPlansWindow', 'ui', validatePlansWindowRequest),
+  // Share links publish workspace content through the user's Navide Cloud
+  // account and list their chat channels: first-party only until a `share`
+  // permission with its own disclosure clause exists.
   'ui.shareCaps': systemMethod('ui.shareCaps', 'ui', validateEmptyRequest, 'firstParty'),
   'ui.shareCreate': systemMethod('ui.shareCreate', 'ui', validateShareCreateRequest, 'firstParty'),
   'ui.shareChatTargets': systemMethod('ui.shareChatTargets', 'ui', validateEmptyRequest, 'firstParty'),

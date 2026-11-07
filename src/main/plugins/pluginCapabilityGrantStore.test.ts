@@ -47,3 +47,31 @@ describe('PluginCapabilityGrantStore', () => {
     }
   })
 })
+
+describe('C2: declared executables in a grant', () => {
+  it('persists the approved executables and refuses malformed ones', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-grants-'))
+    try {
+      const store = new PluginCapabilityGrantStore(root)
+      store.set('acme.builder', { packageVersion: '1.0.0', system: ['fs'], shell: 'allowlist', shellExecutables: ['npm', 'terraform'], storage: true })
+      expect(new PluginCapabilityGrantStore(root).get('acme.builder', '1.0.0')).toMatchObject({ shellExecutables: ['npm', 'terraform'] })
+
+      const file = join(root, '.navide-capability-grants.json')
+      for (const bad of [['/usr/bin/npm'], ['NPM'], ['npm', 'npm'], []]) {
+        writeFileSync(file, JSON.stringify({
+          schemaVersion: 1,
+          grants: { 'acme.builder': { packageVersion: '1.0.0', system: ['fs'], shell: 'allowlist', shellExecutables: bad, storage: true } },
+        }), { mode: 0o600 })
+        expect(new PluginCapabilityGrantStore(root).get('acme.builder', '1.0.0'), JSON.stringify(bad)).toBeNull()
+      }
+      // Executables without allowlist mode are not a grant either.
+      writeFileSync(file, JSON.stringify({
+        schemaVersion: 1,
+        grants: { 'acme.builder': { packageVersion: '1.0.0', system: ['fs'], shell: 'full', shellExecutables: ['npm'], storage: true } },
+      }), { mode: 0o600 })
+      expect(new PluginCapabilityGrantStore(root).get('acme.builder', '1.0.0')).toBeNull()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

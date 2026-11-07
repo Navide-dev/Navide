@@ -66,7 +66,8 @@ describe('native backend IPC: agent-tool switches (plan B1-b)', () => {
     await expect(invoke('plugins:nativeBackends:setAgentTools', { enabled: true })).resolves.toMatchObject({
       agentTools: { enabled: true, externalCallers: false },
     })
-    expect(controls.setSwitches).toHaveBeenCalledWith({ enabled: true })
+    // C3: a value set here is the user's; a consent card never overrides it.
+    expect(controls.setSwitches).toHaveBeenCalledWith({ enabled: true, enabledSetByUser: true })
     await expect(invoke('plugins:nativeBackends:setAgentTools', { externalCallers: true })).resolves.toMatchObject({
       agentTools: { enabled: true, externalCallers: true },
     })

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -109,7 +109,8 @@ async def test_normal_external_event_remains_retryable(
         app.attribution,
         "attribute",
         lambda _usage: SimpleNamespace(
-            workspace_path=None, slot_key=None, pane_id=None, stage_id=None
+            workspace_path=None, slot_key=None, pane_id=None, stage_id=None,
+            global_only=False,
         ),
     )
     usage = TokenUsage(
@@ -118,3 +119,30 @@ async def test_normal_external_event_remains_retryable(
     )
     result = await app._on_log_token_usage(usage)
     assert result.handled is False
+
+
+@pytest.mark.asyncio
+async def test_a_global_only_event_reaches_the_global_tally_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A neighbour's session in a registered workspace's Claude folder: no
+    workspace, but the global and account totals still count it."""
+    monkeypatch.setattr(
+        app.attribution,
+        "attribute",
+        lambda _usage: SimpleNamespace(
+            workspace_path=None, slot_key=None, pane_id=None, stage_id=None,
+            group_id="", global_only=True,
+        ),
+    )
+    record = MagicMock(return_value=True)
+    monkeypatch.setattr(app.tokens_store, "record", record)
+    monkeypatch.setattr(app, "_schedule_tokens_broadcast", lambda _ws: None)
+    usage = TokenUsage(
+        vendor="claude", input_tokens=10, output_tokens=2, cwd="/neighbour",
+        session_id="s1", file_path="/logs/session.jsonl", dedup_key="m::r",
+    )
+    result = await app._on_log_token_usage(usage)
+    assert result.handled is True
+    assert result.workspace_path == ""
+    assert record.call_args.args[0] is None

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.status",
+  "name": "Status",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {
+    "system": [
+      "ui"
+    ],
+    "network": {
+      "hosts": []
+    }
+  },
+  "marketplace": {
+    "description": "Shows build and issue status fetched from the declared hosts.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "right",
+        "title": "Status",
+        "entry": "frontend/main/index.html"
+      }
+    ]
+  }
+}

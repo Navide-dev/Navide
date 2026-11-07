@@ -617,6 +617,11 @@
       "open-accounts": "打开 Git 账号"
     },
     "left-view-unavailable": "嵌入式 Git View 暂时无法使用。",
+    "recovery-title": "内置 Git 无法启动",
+    "recovery-reason": "原因：{reason}",
+    "recovery-reinstall": "重新安装内置 Git",
+    "recovery-reinstalling": "正在重新安装…",
+    "recovery-reinstall-failed": "重新安装失败：{reason}",
     "detail-open-failed": "无法打开详细查看，Git 面板会保留目前的目标。",
     "open-workspace": "请先打开工作区以使用 Git。",
     "settings-unavailable": "Git 偏好设置加载失败。",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "没有可接续的对话",
       "rebuild": "重建"
     },
+    "archive": {
+      "hint": "把一段时间没有写入的 Claude Code 会话记录压缩起来，需要的话再上传到你自己的 S3 存储桶。这里每一项都默认关闭，你打开才会执行。",
+      "compress": "压缩闲置的会话记录",
+      "compress-hint": "每天一次，把闲置达到设定天数的 Claude Code 会话记录在旁边另存一份 .zst，并确认解压后与原文件逐字节相同。打开的分格正在使用的会话不会被处理。",
+      "idle-days": "多少天没有写入才压缩",
+      "remove-originals": ".zst 验证通过后删除原文件",
+      "remove-originals-hint": "可以释放磁盘空间。原文件删除后，Claude Code 就不能再接续那个会话，Token 面板也读不到它，但 .zst 保留了每一个字节。关闭时两份都保留。",
+      "upload": "上传到你自己的 S3 存储桶",
+      "upload-hint": "把每份 .zst 上传到你自己的存储桶，放在下方的前缀之下，由 S3 端加密。凭证走 AWS 标准链（环境变量、~/.aws 配置文件或 SSO），Navide 不会保存任何 AWS 密钥。",
+      "upload-after-days": "多少天后上传",
+      "bucket": "S3 存储桶",
+      "prefix": "对象前缀",
+      "region": "区域",
+      "region-placeholder": "沿用你的 AWS 配置文件",
+      "save-failed": "无法保存归档设置"
+    },
     "limits": {
       "hint": "选用的限制，避免 Navide 与它启动的 agent 把这台电脑压垮。每一项在你调整之前都是关闭，或维持 Navide 原本的行为。",
       "test-workers": "限制新分格的测试 worker 数",
@@ -2019,7 +2040,7 @@
           "firstParty": "允许 agent 调用官方 Navide 插件的工具",
           "firstPartyDescription": "默认开启。让分格里的 agent 调用官方 Navide 插件（Navide 自己做的，例如 Navide Browser）的工具，不必每个版本都询问。结果仍会标记为外部内容，会改动东西的工具在每个工作区仍会询问一次。",
           "enable": "允许 agent 调用第三方 Navide 插件的工具",
-          "description": "让分格里的 agent 调用你已允许的 Navide 插件所声明的工具；会改动文件的工具在每个工作区询问一次。",
+          "description": "让分格里的 agent 调用你已允许的 Navide 插件所声明的工具；会改动文件的工具在每个工作区询问一次。你没动过这个开关时，允许一个同意卡上列有工具的 Navide 插件会自动开启；你在这里设置过的就维持原状。要一次停用所有第三方工具，就在这里关掉。",
           "externalCallers": "外部 MCP 客户端也能调用",
           "externalCallersDisclosure": "外部程序只共用一组 token，审核记录分不出是哪个程序，只能记成“外部客户端”。Host 凭据也比照处理。"
         },
@@ -2088,6 +2109,8 @@
       "builtinSwitchBusy": "正在应用…Navide 会先让进行中的工作完成，Plans 可能需要约半分钟。",
       "disabledBadge": "已禁用",
       "disabledNote": "已禁用：它的画面与后端不会运行，文件、权限与保存的数据都会保留。",
+      "networkStrict": "只允许已声明的网络主机",
+      "networkStrictNote": "关（默认）：视图可连接任何主机，每次请求都会记录，连接到 manifest 未声明的主机会在活动记录中标为「未声明」。开：只放行已声明的主机（frame 策略与请求拦截两层一致），其余一律拒绝并记录。",
       "digestBlock": {
         "blocked": "已被 Navide 封锁",
         "security": "已被 Navide 下架（安全问题）",
@@ -2114,7 +2137,6 @@
           "previousChanged": "上一个版本的套件文件已被变更，因此没有回复。",
           "grantUnavailable": "找不到 {id} 已核准的权限，因此没有回复。",
           "factoryUnavailable": "目前无法回复为内置版本。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy 强制使用旧版恢复模式时，无法还原内置 Git。",
           "factoryRestoreFailed": "无法加载内置版本。"
         }
       },
@@ -7654,6 +7676,7 @@
     "section": {
       "general-behavior": "一般行为",
       "resource-limits": "资源限制",
+      "session-archive": "会话记录归档",
       "settings-management": "设置管理",
       "theme": "主题",
       "other": "其他"
@@ -12117,13 +12140,15 @@
     "source": {
       "broker": "Navide 功能",
       "shell": "shell 指令",
-      "agentTool": "agent 工具"
+      "agentTool": "agent 工具",
+      "network": "画面网络"
     },
     "kind": {
       "system": "权限",
       "shell": "Shell",
       "backendMethod": "原生 backend 方法",
-      "agentTool": "agent 工具"
+      "agentTool": "agent 工具",
+      "networkHost": "网络主机"
     },
     "reason": {
       "undeclared": "没有声明"
@@ -12209,6 +12234,10 @@
     "commands": {
       "heading": "运行过的指令",
       "item": "{command} · {count} 次 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "画面连过的主机",
+      "item": "{host} · {count} 次 · {outcome} · {date}"
     },
     "trend": {
       "heading": "每日调用量"
@@ -12297,6 +12326,7 @@
         "backendMethod": "原生程序的方法：{key}",
         "backendEvent": "原生程序的事件：{key}",
         "network": "可以通过指令连到远程",
+        "networkHost": "画面可以连到：{key}",
         "agentTool": "agent 工具：{key}"
       }
     },
@@ -12316,7 +12346,8 @@
     "undeclared": {
       "shell": "会运行 {key}，但没有声明 shell 权限",
       "shellDynamic": "有运行时才组出来的指令，但没有声明 shell 权限",
-      "shellExecutable": "会运行 {key}，但声明的 shell 范围只有 git、gh、glab",
+      "shellExecutable": "会运行 {key}，但不在它声明的 shell 范围内",
+      "networkHost": "会连到 {key}，但没有声明",
       "system": "会使用 {key}，但没有声明这项权限",
       "fsScopeWrite": "会写入 {key}，不在声明的写入范围内",
       "fsScopeRead": "会读取 {key}，不在声明的读取范围内"
@@ -12324,7 +12355,8 @@
     "notSeenHeading": "声明了，静态扫描未发现",
     "notSeen": {
       "shell": "shell（{key}）",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key}（已声明的主机）"
     },
     "scanHeading": "上架时系统扫描的结果",
     "scanHeadingLocal": "Navide 扫描这个文件的结果",
@@ -12342,8 +12374,8 @@
     "scannedLocally": "扫描结果只供这张卡片参考，不会决定是否安装。",
     "limitsWithoutScan": "这个版本没有系统扫描，以上只有这个 Navide 插件自己的声明。",
     "limitsWithoutScanLocal": "Navide 没有扫描这个文件，以上只有这个 Navide 插件自己的声明。",
-    "viewNetwork": "Navide 插件的画面（view）可以连网，也可以在 Navide 里显示外部网站；Navide 不会过滤或记录这些流量。上面的网络项目只涵盖它的指令与原生后端。",
-    "viewNetworkIfViews": "如果这个 Navide 插件有画面（view），画面可以连网，也可以在 Navide 里显示外部网站；Navide 不会过滤或记录这些流量。上面的网络项目只涵盖它的指令与原生后端。",
+    "viewNetwork": "这个 Navide 插件的画面（view）只能连到它声明的主机（列在上方；没有列出就不能连网），也不能显示外部网站。Navide 会在“活动”记录它们连过的主机与被拒绝的主机。上面的网络项目涵盖它的指令与原生后端。",
+    "viewNetworkIfViews": "如果这个 Navide 插件有画面（view），画面只能连到它声明的主机（列在上方；没有列出就不能连网），也不能显示外部网站。Navide 会在“活动”记录它们连过的主机与被拒绝的主机。上面的网络项目涵盖它的指令与原生后端。",
     "summary": {
       "nativeBackend": "附带原生程序（在沙盒里运行）",
       "files": {
@@ -12361,7 +12393,7 @@
       "agentMessages": "可读取此项目中 agent 之间消息的完整正文，正文可能包含代码、文件内容或机密信息",
       "ui": "显示自己的画面",
       "agentTools": "提供 agent 可调用的工具（唯读 {read} 个、写入 {write} 个）",
-      "network": "可以连网",
+      "network": "它的画面（view）可以连到：{hosts}",
       "noPermissions": "没有声明任何权限"
     },
     "scan": {
@@ -12567,6 +12599,8 @@
       "no-key": "第一次以发布者身分登录时创建",
       "key-registered": "已登记",
       "key-unregistered": "尚未登记",
+      "key-conflict": "Registry 上这个发布者已经登记了另一把签章密钥（指纹 {fingerprint}），通常是你为 navide-plugin CLI 登记的那把。要从这个 Navide 上架得先换成这把；换之前 CLI 仍可照常上架。",
+      "replace-key": "改用这个 Navide 的密钥",
       "expires": "登录到期",
       "sign-in": "用 Navide Cloud 登录",
       "sign-in-publish": "以发布者身分登录",

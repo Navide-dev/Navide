@@ -311,7 +311,17 @@ export interface PluginViewRuntimeClient {
   openContributionWindow(params: Params<'ui.openPluginWindow'>): Promise<Result<'ui.openPluginWindow'>>
   onOpenTarget(listener: (target: Record<string, string>) => void): Disposable
   onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable
+  /** Serve one of the agent tools the manifest declares under
+   *  `contributes.agentTools` from this view (contract section 2.9). The Host
+   *  calls the handler with the tool's arguments while this view is open on
+   *  the target workspace; what it returns (JSON) is the tool result, and a
+   *  thrown error fails the call with the error's `code` (upper-case) or
+   *  `PLUGIN_TOOL_FAILED`. */
+  onAgentToolCall(name: string, handler: AgentToolHandler): Disposable
 }
+
+/** A view-served agent tool handler: the arguments in, a JSON result out. */
+export type AgentToolHandler = (args: Record<string, JsonValue>) => JsonValue | void | Promise<JsonValue | void>
 
 type PluginReceiverRegistrationWire = {
   protocolVersion: 1
@@ -341,6 +351,8 @@ interface RuntimeViewBridge {
   onReceiverItemClosed(receiverId: string, listener: (item: PluginReceiverItemClosed) => void): () => void
   disposeReceiver(receiverId: string): Promise<void>
   onOpenTarget(listener: (target: Record<string, string>) => void): () => void
+  /** Absent on a Host older than 0.2.39. */
+  onAgentToolCall?(name: string, handler: AgentToolHandler): () => void
 }
 
 function runtimeCapabilityBridge(): RuntimeCapabilityBridge {
@@ -772,6 +784,9 @@ export function createPluginViewRuntimeClient(): PluginViewRuntimeClient {
       }
       return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
     },
+    onAgentToolCall(name: string, handler: AgentToolHandler): Disposable {
+      return onAgentToolCall(name, handler)
+    },
     onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable {
       return Object.freeze({ dispose: runtimeCapabilityBridge().on('nav.backend_status', payload => {
         const status = (payload as { status?: unknown } | null)?.status
@@ -807,6 +822,21 @@ export function onOpenTarget(listener: (target: Record<string, string>) => void)
     throw new PluginError('INVALID_ARGUMENT', 'Plugin target listener is invalid.')
   }
   return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
+}
+
+/** Same as `createPluginViewRuntimeClient().onAgentToolCall()`. */
+export function onAgentToolCall(name: string, handler: AgentToolHandler): Disposable {
+  if (typeof name !== 'string' || name === '') {
+    throw new PluginError('INVALID_ARGUMENT', 'Agent tool name is invalid.')
+  }
+  if (typeof handler !== 'function') {
+    throw new PluginError('INVALID_ARGUMENT', 'Agent tool handler is invalid.')
+  }
+  const bridge = runtimeViewBridge()
+  if (typeof bridge.onAgentToolCall !== 'function') {
+    throw new PluginError('BACKEND_UNAVAILABLE', 'This Navide does not route agent tools to views (0.2.39 or later is needed).')
+  }
+  return Object.freeze({ dispose: bridge.onAgentToolCall(name, handler) })
 }
 
 /** Same as `createPluginViewRuntimeClient().onBackendStatus()`. */

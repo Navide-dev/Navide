@@ -100,7 +100,7 @@ elif phase in ("intr2", "ustop2"):
           hdr.dispatchEvent(new MouseEvent('contextmenu',{{bubbles:true,cancelable:true,clientX:r.left+20,clientY:r.top+5}}));
           await new Promise(f=>setTimeout(f,400));
           const items=[...document.querySelectorAll('.pane-ctx-item')]; const desc=items.map(i=>i.innerText.trim()+'|'+i.className+'|'+(i.disabled?'dis':''));
-          const it=items.find(i=>/^(Interrupt|中斷)/i.test(i.innerText.trim()));
+          const it=items.find(i=>/^(Interrupt|中斷)$/i.test(i.innerText.trim().split('\\n')[0]) && !i.disabled && !i.classList.contains('disabled'));
           if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked of '+JSON.stringify(desc);}})()"""
         say("stop via the pane's Interrupt menu item:", c.ev(js))
     time.sleep(4); say("status after stop", status(f"wn/{nm}"))

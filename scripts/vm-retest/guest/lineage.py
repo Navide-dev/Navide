@@ -93,6 +93,7 @@ if phase == "setup":
         rr = mcp(url, "cli_open_agent", {"agent": "claude", "name": k, "task": "Reply with the word ok."}); kids.append(rr.get("pane_id")); say(k, json.dumps(rr)[:250])
     time.sleep(25)
     say_room("hi"); time.sleep(6); out = bot_out(); say("pairing reply", json.dumps(out[-2:], ensure_ascii=False)[:400])
+    b = B()  # the first socket sat idle while the panes opened; Windows drops it (WinError 10053)
     pl = b.call("channels.pairing.list", platform="matrix").get("payload") or {}; say("pairing.list", json.dumps(pl)[:300])
     code = (re.findall(r'"code":\s*"([^"]+)"', json.dumps(pl)) or [""])[0]
     if code: say("approve", json.dumps(b.call("channels.pairing.approve", platform="matrix", code=code).get("payload"))[:200])
@@ -154,6 +155,7 @@ elif phase == "closewake":
     # Option B: close every window of the workspace, wait until the commander is no longer registered, then /wake
     import urllib.parse
     enc = urllib.parse.quote(ws, safe="")
+    t_close = time.time()
     for p in pages():
         if p.get("type") == "page" and ("workspace_path=" + enc) in p["url"]:
             say("closing", p["url"][-70:], Cdp(p).ev("window.close(),'closed'"))
@@ -163,7 +165,10 @@ elif phase == "closewake":
         live = [t["name"] for t in r.get("targets", []) if t.get("workspace_path") == ws]
         if not live: break
     say("registered panes of the workspace after close:", live)
-    t0 = time.time(); say("WAKE", label, say_room("/wake"))
+    # WAKE_AFTER=<s>: wake only that long after the close (past the 90 s offline grace, for instance)
+    extra = float(os.environ.get("WAKE_AFTER", "0")) - (time.time() - t_close)
+    if extra > 0: say("waiting", round(extra), "s more before /wake"); time.sleep(extra)
+    t0 = time.time(); say("WAKE", label, f"+{round(t0 - t_close)}s after close", say_room("/wake"))
     for _ in range(60):
         time.sleep(2)
         if any(m["at"] > t0 and re.search(r"已喚醒|失敗|無法|不需要|拒|refus|fail", m["body"] or "") for m in bot_out()): break

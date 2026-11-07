@@ -182,6 +182,7 @@ export function createDeveloperQueryHandler(
           signed_in: { account: state.signedIn.account, publisher: state.signedIn.publisher },
           namespace: state.namespace,
           key_registered: state.keyRegistered,
+          key_conflict_fingerprint: state.keyConflictFingerprint,
           application: applicationView(res.body),
         },
       }
@@ -221,7 +222,8 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     return account.signIn(scope as DeveloperSignInScope)
   })
   on('developer:signOut', (): DeveloperPublicState => account.signOut())
-  on('developer:registerKey', (): Promise<DeveloperPublicState> => account.registerKey())
+  on('developer:registerKey', (_event, raw): Promise<DeveloperPublicState> =>
+    account.registerKey({ replace: asRecord(raw).replace === true }))
   on('developer:application', async (): Promise<DeveloperCallResult> =>
     callResult(await account.application(), (s) => s === 200))
   on('developer:submitApplication', async (_event, raw): Promise<DeveloperCallResult> => {

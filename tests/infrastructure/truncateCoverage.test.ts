@@ -16,7 +16,6 @@ const SKIP_DIRS = ['src/renderer/src/components/helpMocks']
  *  it does not get the tooltip. */
 const EXEMPT: Record<string, string> = {
   // The row clips, but its text sits in .cd-file-label, which carries v-truncate.
-  'src/renderer/src/components/GitPane.vue|cd-file': 'text is in the v-truncate .cd-file-label child',
   'plugins/navide-git/src/components/GitPane.vue|cd-file': 'text is in the v-truncate .cd-file-label child',
   // The chip's wrapper already has a native title with the whole usage summary;
   // a second tooltip with just the name would cover it.
@@ -122,7 +121,7 @@ it('every element a CSS rule cuts off with an ellipsis shows its full text on ho
 it('matches skip and exempt entries on Windows paths and CRLF sources', () => {
   const root = 'C:\\repo'
   expect(relPath(root, 'C:\\repo\\src\\renderer\\src\\components\\helpMocks', path.win32)).toBe(SKIP_DIRS[0])
-  const rel = relPath(root, 'C:\\repo\\src\\renderer\\src\\components\\GitPane.vue', path.win32)
+  const rel = relPath(root, 'C:\\repo\\plugins\\navide-git\\src\\components\\GitPane.vue', path.win32)
   const style = '<style scoped>\r\n.cd-file {\r\n  text-overflow: ellipsis;\r\n}\r\n.cd-name {\r\n  text-overflow: ellipsis;\r\n}\r\n</style>\r\n'
   const exempt = '<template>\r\n  <div class="cd-file">\r\n    x\r\n  </div>\r\n</template>\r\n'
   expect(missingIn(rel, exempt + style)).toEqual([])

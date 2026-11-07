@@ -3,6 +3,17 @@
   "version": "1.0.0",
   "description": "Framework-neutral activation and capability-call SDK for Navide plugins.",
   "license": "MIT",
+  "keywords": ["navide", "plugin", "sdk", "cli"],
+  "homepage": "https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Navide-dev/Navide.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "bugs": "https://github.com/Navide-dev/Navide/issues",
+  "engines": {
+    "node": ">=20"
+  },
   "publishConfig": {
     "access": "public"
   },

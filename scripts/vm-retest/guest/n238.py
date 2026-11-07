@@ -9,8 +9,12 @@
 #               task -> the kickoff answer (sent / failed), attempts in the log, and what is left in each input box
 #   reclaim   : qb opens a child (as qb, through qb's pane MCP URL); while the child's 40 s turn runs, the child
 #               cli_sends its report to qb (through the child's pane MCP URL); once the child is idle qb reclaims it
-#   browser   : Navide Browser: snapshot filter=interactive / root, act diff:true; a Space shared by qa and qb:
-#               qa handoff -> qb take_over / finish -> the Space must still show qa's need-action and note
+#   browser   : Navide Browser on a local http page (no Browser window opened): innerWidth, snapshot default and
+#               filter=interactive with @refs, root and act diff on a ref, screenshot (image within seconds); qa
+#               handoff (need-action + note); qb take_over / finish on its own Space of the same name (names are per pane).
+#               Run host/browser-allow.sh in the background first: the workspace's first write call asks for permission
+#   browsernoanswer : the workspace's first write call with nobody answering the permission dialog: it must end
+#               with PLUGIN_TOOL_TIMEOUT within about 30 s (run it before "browser", without browser-allow.sh)
 import json, os, re, signal, subprocess, sys, time
 ROOTP, PH = sys.argv[1:3]; ARG = sys.argv[3] if len(sys.argv) > 3 else ""
 sys.argv = [sys.argv[0], ROOTP, "status"]
@@ -29,7 +33,7 @@ def menu(nm, click=None):
       const items=[...document.querySelectorAll('.pane-ctx-item')];
       const desc=items.map(i=>i.innerText.trim().split('\\n')[0]+((i.disabled||i.classList.contains('disabled')||i.getAttribute('aria-disabled')==='true')?' [disabled]':''));
       const want={json.dumps(click)};
-      if(want){{ const it=items.find(i=>new RegExp(want,'i').test(i.innerText.trim())); if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked '+JSON.stringify(desc); }}
+      if(want){{ const it=items.find(i=>new RegExp(want,'i').test(i.innerText.trim().split('\\n')[0]) && !i.disabled && !i.classList.contains('disabled')); if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked '+JSON.stringify(desc); }}
       document.dispatchEvent(new KeyboardEvent('keydown',{{key:'Escape',bubbles:true}})); document.body.click();
       return JSON.stringify(desc);}})()"""
     return c.ev(js)
@@ -70,7 +74,7 @@ elif phase == "stopuser":
     (ROOT / "stub.log.tailsleep").write_text("300")
     say("send BGTURN", json.dumps(ext("cli_send", {"to": f"wn/{nm}", "text": f"BGTURN-{n} run it in the background"}))[:160])
     say("busy", wait_busy(nm)); time.sleep(8); t0 = time.time()
-    say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)"))
+    say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)$"))
     time.sleep(4); say("after STOP", ui(nm))
     p = _s.token_hex(4); r = ext("cli_send", {"to": f"wn/{nm}", "text": f"PING-{p} reply with ok"}); k = r.get("msg_key")
     say("sent PING", json.dumps(r)[:160])
@@ -150,24 +154,48 @@ elif phase == "reclaim":
     time.sleep(3); say("child status", status("wn/kid"))
     rc = mcp(purl, "cli_reclaim_agent", {"target": "kid"}); say("RESULT reclaim", json.dumps(rc)[:300])
     RULES.unlink()
-elif phase == "browser":
+elif phase in ("browser", "browsernoanswer"):
     qa, qb = pane_url(st["qa"]), pane_url(st["qb"]); sp = "shared-" + _s.token_hex(3)
-    page = "data:text/html," + "<h1>t</h1><p>static text</p><button id=b onclick=\"this.textContent='clicked'\">Press</button><input aria-label=name><div id=r><a href=#x>link</a></div>"
-    say("list (qa)", json.dumps(mcp(qa, "browser_list", {}))[:300])
-    o = mcp(qa, "browser_open", {"space": sp, "url": "http://127.0.0.1:8951/"}); say("open qa", json.dumps(o)[:300])
-    say("goto data page", json.dumps(mcp(qa, "browser_act", {"space": sp, "action": "goto", "url": page}))[:200])
-    full = mcp(qa, "browser_snapshot", {"space": sp}); say("snapshot default", json.dumps(full)[:600])
-    inter = mcp(qa, "browser_snapshot", {"space": sp, "filter": "interactive"}); say("snapshot interactive", json.dumps(inter)[:600])
-    ref = (re.findall(r"@\d+", json.dumps(inter)) or ["@0"])[0]
-    root = mcp(qa, "browser_snapshot", {"space": sp, "root": ref}); say("snapshot root", ref, json.dumps(root)[:400])
-    btn = next((m for m in re.findall(r'[^\\n"]*Press[^\\n"]*', json.dumps(full))), ""); bref = (re.findall(r"@\d+", btn) or [ref])[0]
-    act = mcp(qa, "browser_act", {"space": sp, "action": "click", "ref": bref, "diff": True}); say("act diff", bref, json.dumps(act)[:600])
-    h = mcp(qa, "browser_handoff", {"space": sp, "note": "please sign in (qa)"}); say("qa handoff", json.dumps(h)[:300])
-    def spc():
-        L = mcp(qb, "browser_list", {}); s = json.dumps(L)
-        return [x for x in (L.get("spaces") or L.get("tabs") or L.get("views") or []) if sp in json.dumps(x)] or s[:400]
-    say("space after handoff", spc())
-    say("qb take_over", json.dumps(mcp(qb, "browser_take_over", {"space": sp, "note": "qb wants to continue", "timeoutMs": 3000}))[:300])
-    say("space after qb take_over", spc())
-    say("qb finish", json.dumps(mcp(qb, "browser_finish", {"space": sp, "note": "qb done"}))[:300])
-    say("RESULT browser space after qb finish", spc())
+    def body(r):  # the plugin's JSON answer inside the MCP text wrapper, or the bare error
+        try:
+            t = r["result"]["content"][0]["text"]; return json.loads(t[t.index("{"):t.rindex("}") + 1])
+        except Exception: return r
+    def kinds(r):  # content item types / mime types of an MCP answer (a screenshot comes back as an image item)
+        return [(c.get("type"), c.get("mimeType"), len(c.get("data") or c.get("text") or "")) for c in ((r.get("result") or {}).get("content") or [])]
+    def timed(tool, args, who=None):
+        t0 = time.time(); r = mcp(who or qa, tool, args); return r, round(time.time() - t0, 1)
+    # The plugin only loads http(s) URLs: serve the test page from a throwaway local server (PID recorded, ended below).
+    pd = ROOTP + "/browser-page"; os.makedirs(pd, exist_ok=True)
+    open(pd + "/t.html", "w").write("<h1>t</h1><p>static text</p><button id=b onclick=\"this.textContent='clicked'\">Press</button><input aria-label=name><div id=r><a href=#x>link</a></div>")
+    srv = subprocess.Popen([sys.executable, "-m", "http.server", "8952", "--bind", "127.0.0.1", "--directory", pd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
+    page = "http://127.0.0.1:8952/t.html"; say("page server pid", srv.pid)
+    if phase == "browsernoanswer":
+        # the first write-type call in a workspace raises the native permission dialog; nobody answers it here:
+        # the call must end with PLUGIN_TOOL_TIMEOUT within about 30 s instead of hanging
+        r, dt = timed("browser_open", {"space": sp, "url": page})
+        say("RESULT browsernoanswer", f"after={dt}s", json.dumps(body(r))[:400])
+    else:
+        say("list (qa)", json.dumps(body(mcp(qa, "browser_list", {})))[:300])
+        r, dt = timed("browser_open", {"space": sp, "url": page}); say("open qa", f"{dt}s", json.dumps(body(r))[:300])
+        say("goto page", json.dumps(body(mcp(qa, "browser_act", {"space": sp, "action": "goto", "url": page}))))
+        ev = body(mcp(qa, "browser_evaluate", {"space": sp, "expression": "JSON.stringify({w:innerWidth,h:innerHeight,focus:document.hasFocus(),vis:document.visibilityState,ready:document.readyState})"}))
+        say("RESULT browser viewport", ev.get("value", ev))
+        full = body(mcp(qa, "browser_snapshot", {"space": sp})); say("snapshot default", json.dumps(full)[:800])
+        inter = body(mcp(qa, "browser_snapshot", {"space": sp, "filter": "interactive"})); say("snapshot interactive", json.dumps(inter)[:800])
+        snap = str(inter.get("snapshot") or ""); refs = re.findall(r"@\d+", snap)
+        say("RESULT browser snapshot", f"default_len={len(str(full.get('snapshot') or ''))} interactive_len={len(snap)} refs={refs[:8]}")
+        bref = next((re.findall(r"@\d+", l)[0] for l in snap.splitlines() if "Press" in l and re.search(r"@\d+", l)), refs[0] if refs else "@0")
+        root = body(mcp(qa, "browser_snapshot", {"space": sp, "root": bref})); say("RESULT browser root", bref, json.dumps(root)[:500])
+        act = body(mcp(qa, "browser_act", {"space": sp, "action": "click", "ref": bref, "diff": True})); say("RESULT browser act diff", bref, json.dumps(act)[:800])
+        r, dt = timed("browser_screenshot", {"space": sp}); say("RESULT browser screenshot", f"after={dt}s content={kinds(r)}", json.dumps(body(r))[:200] if not kinds(r) or kinds(r)[0][0] != "image" else "")
+        h = mcp(qa, "browser_handoff", {"space": sp, "note": "please sign in (qa)"}); say("qa handoff", json.dumps(body(h))[:300])
+        def spc():
+            L = body(mcp(qb, "browser_list", {}))
+            return [x for x in (L.get("views") or []) if sp in json.dumps(x)] or json.dumps(L)[:400]
+        say("space after handoff (as qb sees it)", spc())
+        # Space names are scoped per pane: qb opening the same name gets its own Space (the tool description says so)
+        say("qb open same space name", json.dumps(body(mcp(qb, "browser_open", {"space": sp})))[:400])
+        say("qb take_over", json.dumps(body(mcp(qb, "browser_take_over", {"space": sp, "note": "qb wants to continue", "timeoutMs": 3000})))[:300])
+        say("qb finish", json.dumps(body(mcp(qb, "browser_finish", {"space": sp, "note": "qb done"})))[:300])
+        say("RESULT browser qa list after qb finish", [x for x in (body(mcp(qa, "browser_list", {})).get("views") or []) if sp in json.dumps(x)])
+    srv.terminate(); srv.wait(10); say("page server ended", srv.pid)

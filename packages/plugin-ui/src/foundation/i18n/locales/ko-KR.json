@@ -617,6 +617,11 @@
       "open-accounts": "Git 계정 열기"
     },
     "left-view-unavailable": "내장 Git 보기를 일시적으로 사용할 수 없어요.",
+    "recovery-title": "내장 Git을 시작할 수 없어요",
+    "recovery-reason": "원인: {reason}",
+    "recovery-reinstall": "내장 Git 다시 설치",
+    "recovery-reinstalling": "다시 설치하는 중…",
+    "recovery-reinstall-failed": "다시 설치하지 못했어요: {reason}",
     "detail-open-failed": "세부 정보 보기를 열지 못했어요. Git pane은 현재 대상을 유지해요.",
     "open-workspace": "Git을 사용하려면 작업 영역을 여세요.",
     "settings-unavailable": "Git 환경설정을 불러오지 못했어요.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "이어갈 대화가 없습니다",
       "rebuild": "다시 빌드"
     },
+    "archive": {
+      "hint": "한동안 기록되지 않은 Claude Code 세션 로그를 압축하고, 원하면 본인의 S3 버킷에 업로드합니다. 여기 있는 항목은 모두 기본적으로 꺼져 있으며 켜기 전에는 아무것도 하지 않습니다.",
+      "compress": "유휴 세션 로그 압축",
+      "compress-hint": "하루에 한 번, 설정한 일수 동안 유휴 상태인 Claude Code 세션 로그 옆에 .zst 사본을 만들고, 압축을 풀면 원본과 같은 바이트가 되는지 확인합니다. 열려 있는 분할 창이 사용 중인 세션은 건드리지 않습니다.",
+      "idle-days": "압축하기 전까지 기록이 없는 일수",
+      "remove-originals": ".zst 확인 후 원본 삭제",
+      "remove-originals-hint": "디스크 공간을 확보합니다. 삭제된 로그는 Claude Code에서 다시 이어갈 수 없고 Token 패널에서도 읽을 수 없지만, .zst에는 모든 바이트가 남아 있습니다. 끄면 두 파일을 모두 유지합니다.",
+      "upload": "본인의 S3 버킷에 업로드",
+      "upload-hint": "각 .zst를 아래 접두사 아래에 S3 측 암호화로 본인의 버킷에 보냅니다. 자격 증명은 표준 AWS 체인(환경 변수, ~/.aws 프로필 또는 SSO)에서 가져오며, Navide는 AWS 키를 저장하지 않습니다.",
+      "upload-after-days": "업로드하기 전까지의 일수",
+      "bucket": "S3 버킷",
+      "prefix": "키 접두사",
+      "region": "리전",
+      "region-placeholder": "AWS 프로필 설정 사용",
+      "save-failed": "보관 설정을 저장하지 못했습니다"
+    },
     "limits": {
       "hint": "Navide와 Navide가 실행하는 agent가 이 컴퓨터에 과부하를 주지 않도록 하는 선택적 제한이에요. 직접 바꾸기 전까지는 각각 꺼져 있거나 Navide의 이전 동작을 따라요.",
       "test-workers": "새 pane의 테스트 러너 worker 수 제한",
@@ -2019,7 +2040,7 @@
           "firstParty": "agent가 공식 Navide 플러그인의 도구를 호출하도록 허용",
           "firstPartyDescription": "기본으로 켜져 있어요. Navide Browser처럼 Navide가 만든 공식 Navide 플러그인의 도구를 pane의 에이전트가 버전마다 묻지 않고 호출할 수 있게 해요. 결과는 계속 외부 콘텐츠로 표시되고, 무언가를 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
           "enable": "agent가 타사 Navide 플러그인의 도구를 호출하도록 허용",
-          "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
+          "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요. 여기서 한 번도 설정하지 않았다면, 동의 카드에 도구가 적힌 Navide 플러그인을 허용할 때 자동으로 켜져요. 여기서 정한 값은 그대로 유지돼요. 타사 도구를 한 번에 모두 멈추려면 여기서 꺼요.",
           "externalCallers": "외부 MCP 클라이언트도 호출하도록 허용",
           "externalCallersDisclosure": "외부 프로그램은 token 하나를 공유하므로 호출 기록에는 어떤 프로그램인지가 아니라 \"외부 클라이언트\"라고만 남아요. Host 자격 증명도 같은 방식으로 처리돼요."
         },
@@ -2088,6 +2109,8 @@
       "builtinSwitchBusy": "적용하는 중… Navide가 먼저 현재 작업을 마무리하며, Plans는 30초 정도 걸릴 수 있어요.",
       "disabledBadge": "사용 안 함",
       "disabledNote": "사용 안 함: 보기와 백엔드가 실행되지 않아요. 파일, 권한, 저장된 데이터는 유지돼요.",
+      "networkStrict": "선언된 네트워크 호스트만 허용",
+      "networkStrictNote": "끔(기본): 뷰는 어떤 호스트에도 접근할 수 있고 요청마다 기록되며, manifest에 선언되지 않은 호스트로의 요청은 활동 기록에 '미선언'으로 표시됩니다. 켬: 선언된 호스트만(프레임 정책과 요청 후크 모두), 그 외는 거부하고 기록합니다.",
       "digestBlock": {
         "blocked": "Navide가 차단함",
         "security": "Navide가 내림(보안)",
@@ -2114,7 +2137,6 @@
           "previousChanged": "디스크에 있는 이전 버전의 패키지가 바뀌어서 롤백하지 않았어요.",
           "grantUnavailable": "{id}에 부여한 권한을 찾지 못해서 롤백하지 않았어요.",
           "factoryUnavailable": "기본 포함 버전으로 롤백할 수 없어요.",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy로 레거시 복구를 강제하는 동안에는 기본 포함 Git을 복원할 수 없어요.",
           "factoryRestoreFailed": "기본 포함 버전을 불러오지 못했어요."
         }
       },
@@ -7654,6 +7676,7 @@
     "section": {
       "general-behavior": "일반 동작",
       "resource-limits": "리소스 제한",
+      "session-archive": "세션 로그 보관",
       "settings-management": "설정 관리",
       "theme": "테마",
       "other": "기타"
@@ -12117,13 +12140,15 @@
     "source": {
       "broker": "Navide 기능",
       "shell": "셸 명령",
-      "agentTool": "agent 도구"
+      "agentTool": "agent 도구",
+      "network": "보기 네트워크"
     },
     "kind": {
       "system": "권한",
       "shell": "셸",
       "backendMethod": "네이티브 백엔드 메서드",
-      "agentTool": "Agent 도구"
+      "agentTool": "Agent 도구",
+      "networkHost": "네트워크 호스트"
     },
     "reason": {
       "undeclared": "선언되지 않음"
@@ -12209,6 +12234,10 @@
     "commands": {
       "heading": "실행한 명령",
       "item": "{command} · {count}회 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "보기가 연결한 호스트",
+      "item": "{host} · {count}회 · {outcome} · {date}"
     },
     "trend": {
       "heading": "일별 호출 수"
@@ -12297,6 +12326,7 @@
         "backendMethod": "네이티브 코드 메서드: {key}",
         "backendEvent": "네이티브 코드 이벤트: {key}",
         "network": "명령을 통해 원격 호스트에 연결 가능",
+        "networkHost": "보기가 연결할 수 있는 호스트: {key}",
         "agentTool": "Agent 도구: {key}"
       }
     },
@@ -12316,7 +12346,8 @@
     "undeclared": {
       "shell": "{key}을(를) 실행하지만 셸 권한을 선언하지 않았어요",
       "shellDynamic": "실행 시점에 명령을 만들지만 셸 권한을 선언하지 않았어요",
-      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위는 git, gh, glab뿐이에요",
+      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위에 들어 있지 않아요",
+      "networkHost": "{key}에 연결하지만 선언하지 않았어요",
       "system": "{key}을(를) 사용하지만 해당 권한을 선언하지 않았어요",
       "fsScopeWrite": "선언한 쓰기 범위 밖의 {key}에 써요",
       "fsScopeRead": "선언한 읽기 범위 밖의 {key}을(를) 읽어요"
@@ -12324,7 +12355,8 @@
     "notSeenHeading": "선언했지만 정적 검사에서 발견되지 않음",
     "notSeen": {
       "shell": "셸({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (선언한 호스트)"
     },
     "scanHeading": "게시 시점 검사에서 발견한 내용",
     "scanHeadingLocal": "이 파일에 대한 Navide 검사에서 발견한 내용",
@@ -12342,8 +12374,8 @@
     "scannedLocally": "검사 결과는 이 카드에 정보로만 쓰이며 설치 여부를 결정하지 않아요.",
     "limitsWithoutScan": "이 버전에는 시스템 검사가 없어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
     "limitsWithoutScanLocal": "Navide가 이 파일을 검사하지 않았어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
-    "viewNetwork": "Navide 플러그인의 보기는 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
-    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있다면 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
+    "viewNetwork": "이 Navide 플러그인의 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
+    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있으면, 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
     "summary": {
       "nativeBackend": "네이티브 코드 포함(샌드박스에서 실행)",
       "files": {
@@ -12361,7 +12393,7 @@
       "agentMessages": "이 프로젝트의 agent 간 메시지 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다",
       "ui": "자체 보기 표시",
       "agentTools": "agent가 호출할 수 있는 도구 제공(읽기 전용 {read}개, 쓰기 {write}개)",
-      "network": "네트워크 사용 가능",
+      "network": "보기가 연결할 수 있는 호스트: {hosts}",
       "noPermissions": "선언한 권한 없음"
     },
     "scan": {
@@ -12567,6 +12599,8 @@
       "no-key": "게시자로 처음 로그인할 때 만들어져요",
       "key-registered": "등록됨",
       "key-unregistered": "아직 등록 안 됨",
+      "key-conflict": "Registry에 이 게시자의 다른 서명 키(지문 {fingerprint})가 이미 등록되어 있어요. 대개 navide-plugin CLI용으로 등록한 키예요. 이 Navide에서 게시하려면 그 키를 바꿔야 하고, 바꾸기 전까지 CLI는 그대로 게시할 수 있어요.",
+      "replace-key": "이 Navide의 키로 바꾸기",
       "expires": "로그인 만료",
       "sign-in": "Navide Cloud로 로그인",
       "sign-in-publish": "게시자로 로그인",

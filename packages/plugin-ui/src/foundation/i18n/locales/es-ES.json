@@ -617,6 +617,11 @@
       "open-accounts": "Abrir cuentas de Git"
     },
     "left-view-unavailable": "La vista de Git integrada no está disponible temporalmente.",
+    "recovery-title": "No se pudo iniciar el Git integrado",
+    "recovery-reason": "Motivo: {reason}",
+    "recovery-reinstall": "Reinstalar el Git integrado",
+    "recovery-reinstalling": "Reinstalando…",
+    "recovery-reinstall-failed": "Error al reinstalar: {reason}",
     "detail-open-failed": "No se pudo abrir la vista de detalle. El pane de Git mantiene el destino actual.",
     "open-workspace": "Abre un área de trabajo para usar Git.",
     "settings-unavailable": "No se pudieron cargar las preferencias de Git.",
@@ -1615,6 +1620,22 @@
       "cannot-rebuild": "No hay conversación guardada que reanudar",
       "rebuild": "Reconstruir"
     },
+    "archive": {
+      "hint": "Comprime los registros de sesión de Claude Code en los que nadie ha escrito desde hace un tiempo y, si quieres, los sube a tu propio bucket de S3. Todo está desactivado hasta que lo actives.",
+      "compress": "Comprimir registros de sesión inactivos",
+      "compress-hint": "Una vez al día, cada registro de sesión de Claude Code inactivo durante los días indicados recibe una copia .zst a su lado, y Navide comprueba que se descomprime en los mismos bytes. Las sesiones que usa un panel abierto no se tocan.",
+      "idle-days": "Días sin escrituras antes de comprimir",
+      "remove-originals": "Eliminar el original cuando el .zst esté verificado",
+      "remove-originals-hint": "Libera espacio en disco. Un registro eliminado ya no se puede reanudar en Claude Code ni leer en el panel Token, pero el .zst conserva cada byte. Desactivado conserva ambos archivos.",
+      "upload": "Subir los archivos a tu propio bucket de S3",
+      "upload-hint": "Envía cada .zst a tu propio bucket, bajo el prefijo de abajo, cifrado por S3. Las credenciales salen de la cadena estándar de AWS (variables de entorno, un perfil de ~/.aws o SSO). Navide nunca guarda una clave de AWS.",
+      "upload-after-days": "Días antes de subir un archivo",
+      "bucket": "Bucket de S3",
+      "prefix": "Prefijo de clave",
+      "region": "Región",
+      "region-placeholder": "según tu perfil de AWS",
+      "save-failed": "No se pudieron guardar los ajustes de archivo"
+    },
     "limits": {
       "hint": "Límites opcionales que evitan que Navide y los agents que ejecuta sobrecarguen este equipo. Cada uno está desactivado, o con el comportamiento anterior de Navide, hasta que lo cambies.",
       "test-workers": "Limitar los procesos de pruebas en los panes nuevos",
@@ -2019,7 +2040,7 @@
           "firstParty": "Permitir que los agents llamen a herramientas de complementos de Navide oficiales",
           "firstPartyDescription": "Activado de forma predeterminada. Permite que los agentes de tus panes llamen a las herramientas de los complementos de Navide oficiales, los que hace Navide como Navide Browser, sin preguntar por cada versión. Sus resultados se siguen marcando como contenido externo, y una herramienta que cambia algo sigue preguntando una vez por espacio de trabajo.",
           "enable": "Permitir que los agents llamen a herramientas de complementos de Navide de terceros",
-          "description": "Permite que los agentes de tus panes llamen a las herramientas que declaran los complementos de Navide que permitiste; una herramienta que cambia archivos pregunta una vez por espacio de trabajo.",
+          "description": "Permite que los agentes de tus panes llamen a las herramientas que declaran los complementos de Navide que permitiste; una herramienta que cambia archivos pregunta una vez por espacio de trabajo. Mientras nunca lo hayas ajustado aquí, se activa por sí solo cuando permites un complemento de Navide cuya tarjeta de consentimiento lista herramientas; una elección hecha aquí se conserva. Desactívalo aquí para detener de una vez todas las herramientas de terceros.",
           "externalCallers": "Permitir que también las llamen clientes MCP externos",
           "externalCallersDisclosure": "Los programas externos comparten un único token, así que el registro de una llamada solo puede indicar «un cliente externo», no qué programa fue. La credencial del host se trata de la misma forma."
         },
@@ -2088,6 +2109,8 @@
       "builtinSwitchBusy": "Aplicando… Navide deja primero que termine el trabajo en curso, lo que en Plans puede tardar alrededor de medio minuto.",
       "disabledBadge": "Desactivado",
       "disabledNote": "Desactivado: sus vistas y su backend no se ejecutan. Sus archivos, permisos y datos guardados se conservan.",
+      "networkStrict": "Permitir solo los hosts de red declarados",
+      "networkStrictNote": "Apagado (predeterminado): una vista puede llegar a cualquier host; cada solicitud se registra y una a un host que el manifiesto no declara se marca como tal en Actividad. Encendido: solo los hosts declarados, tanto en la política del marco como en el gancho de solicitudes; todo lo demás se rechaza y se registra.",
       "digestBlock": {
         "blocked": "Bloqueado por Navide",
         "security": "Retirado por Navide (seguridad)",
@@ -2114,7 +2137,6 @@
           "previousChanged": "El paquete de la versión anterior cambió en el disco, así que no se revirtió a ella.",
           "grantUnavailable": "No se encontraron los permisos concedidos a {id}, así que no se revirtió.",
           "factoryUnavailable": "No está disponible revertir a la versión integrada.",
-          "gitLegacyRecovery": "No se puede restaurar el Git integrado mientras NAVIDE_GIT_RECOVERY=legacy fuerce la recuperación heredada.",
           "factoryRestoreFailed": "No se pudo cargar la versión integrada."
         }
       },
@@ -7654,6 +7676,7 @@
     "section": {
       "general-behavior": "Comportamiento general",
       "resource-limits": "Límites de recursos",
+      "session-archive": "Archivo de registros de sesión",
       "settings-management": "Gestión de ajustes",
       "theme": "Tema",
       "other": "Otros"
@@ -12117,13 +12140,15 @@
     "source": {
       "broker": "Capacidad de Navide",
       "shell": "comando de shell",
-      "agentTool": "herramienta de agent"
+      "agentTool": "herramienta de agent",
+      "network": "red de las vistas"
     },
     "kind": {
       "system": "Permiso",
       "shell": "Shell",
       "backendMethod": "Método del backend nativo",
-      "agentTool": "Herramienta de agent"
+      "agentTool": "Herramienta de agent",
+      "networkHost": "Host de red"
     },
     "reason": {
       "undeclared": "no declarado"
@@ -12209,6 +12234,10 @@
     "commands": {
       "heading": "Comandos ejecutados",
       "item": "{command} · {count} veces · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Hosts alcanzados desde sus vistas",
+      "item": "{host} · {count} veces · {outcome} · {date}"
     },
     "trend": {
       "heading": "Llamadas por día"
@@ -12297,6 +12326,7 @@
         "backendMethod": "Método del código nativo: {key}",
         "backendEvent": "Evento del código nativo: {key}",
         "network": "Puede llegar a hosts remotos mediante comandos",
+        "networkHost": "Las vistas pueden conectarse a: {key}",
         "agentTool": "Herramienta de agent: {key}"
       }
     },
@@ -12316,7 +12346,8 @@
     "undeclared": {
       "shell": "Ejecuta {key}, pero no declara ningún permiso de shell",
       "shellDynamic": "Construye comandos en tiempo de ejecución, pero no declara ningún permiso de shell",
-      "shellExecutable": "Ejecuta {key}, pero su ámbito de shell declarado solo es git, gh y glab",
+      "shellExecutable": "Ejecuta {key}, que no está en su ámbito de shell declarado",
+      "networkHost": "Se conecta a {key} sin declararlo",
       "system": "Usa {key}, pero no declara ese permiso",
       "fsScopeWrite": "Escribe {key}, fuera de su ámbito de escritura declarado",
       "fsScopeRead": "Lee {key}, fuera de su ámbito de lectura declarado"
@@ -12324,7 +12355,8 @@
     "notSeenHeading": "Declarado, no encontrado por el análisis estático",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (host declarado)"
     },
     "scanHeading": "Lo que encontró el análisis al publicar",
     "scanHeadingLocal": "Lo que encontró el análisis de Navide de este archivo",
@@ -12342,8 +12374,8 @@
     "scannedLocally": "El análisis informa esta ficha; nunca decide la instalación.",
     "limitsWithoutScan": "Esta versión no tiene análisis del sistema; lo anterior es solo la propia declaración de este complemento de Navide.",
     "limitsWithoutScanLocal": "Navide no ha analizado este archivo; lo anterior es solo la propia declaración de este complemento de Navide.",
-    "viewNetwork": "Las vistas de un complemento de Navide pueden acceder a la red y mostrar sitios web externos dentro de Navide; Navide no filtra ni registra ese tráfico. Las entradas de red de arriba solo cubren sus comandos y su backend nativo.",
-    "viewNetworkIfViews": "Si este complemento de Navide tiene vistas, pueden acceder a la red y mostrar sitios web externos dentro de Navide; Navide no filtra ni registra ese tráfico. Las entradas de red de arriba solo cubren sus comandos y su backend nativo.",
+    "viewNetwork": "Las vistas de este complemento de Navide solo pueden conectarse a los hosts que declara (listados arriba; a ninguno si no lista ninguno) y no muestran sitios web externos. Navide registra en Actividad los hosts alcanzados y los rechazados. Las entradas de red de arriba cubren sus comandos y su backend nativo.",
+    "viewNetworkIfViews": "Si este complemento de Navide tiene vistas, solo pueden conectarse a los hosts que declara (listados arriba; a ninguno si no lista ninguno) y no muestran sitios web externos. Navide registra en Actividad los hosts alcanzados y los rechazados. Las entradas de red de arriba cubren sus comandos y su backend nativo.",
     "summary": {
       "nativeBackend": "Incluye código nativo (se ejecuta en un entorno aislado)",
       "files": {
@@ -12361,7 +12393,7 @@
       "agentMessages": "Lee el texto completo de los mensajes entre tus agents en este proyecto, que puede contener código, contenido de archivos o secretos",
       "ui": "Muestra sus propias vistas",
       "agentTools": "Ofrece herramientas que los agents pueden llamar ({read} de solo lectura, {write} de escritura)",
-      "network": "Puede usar la red",
+      "network": "Sus vistas pueden conectarse a: {hosts}",
       "noPermissions": "No declara ningún permiso"
     },
     "scan": {
@@ -12567,6 +12599,8 @@
       "no-key": "Se crea la primera vez que inicias sesión como editor",
       "key-registered": "Registrada",
       "key-unregistered": "Aún sin registrar",
+      "key-conflict": "El Registry ya tiene otra clave de firma para este publicador (huella {fingerprint}), normalmente la registrada para la CLI navide-plugin. Publicar desde este Navide requiere reemplazarla; la CLI sigue publicando hasta entonces.",
+      "replace-key": "Usar la clave de este Navide en su lugar",
       "expires": "El inicio de sesión caduca",
       "sign-in": "Iniciar sesión con Navide Cloud",
       "sign-in-publish": "Iniciar sesión como editor",

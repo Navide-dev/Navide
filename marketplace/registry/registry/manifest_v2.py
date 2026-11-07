@@ -207,6 +207,9 @@ class ManifestV2Command(ManifestV2Model):
 class ManifestV2Contributes(ManifestV2Model):
     views: list[ManifestV2View] = Field(min_length=1, max_length=16)
     commands: list[ManifestV2Command] | None = Field(default=None, min_length=1, max_length=32)
+    # View-served agent tools (contract 2.9), kept as plain JSON like
+    # backend.agentTools: every field rule is validate_agent_tools'.
+    agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _check_unique_view_ids(self) -> ManifestV2Contributes:
@@ -298,14 +301,91 @@ class ManifestV2Scopes(ManifestV2Model):
     fs: ManifestV2FsScopes
 
 
+_NETWORK_HOST_RE = re.compile(
+    r"^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
+
+class ManifestV2Network(ManifestV2Model):
+    """Hosts the package's views may connect to; enforced by the plugin
+    frame's connect-src on the App, disclosed here."""
+
+    hosts: list[str] = Field(min_length=1, max_length=32)
+
+    @field_validator("hosts")
+    @classmethod
+    def _check_hosts(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("must contain unique hosts")
+        if any(len(host) > 253 or _NETWORK_HOST_RE.fullmatch(host) is None for host in value):
+            raise ValueError(
+                "must contain lowercase DNS hosts such as api.example.com, optionally starting with *., "
+                "with no scheme, port or path"
+            )
+        return value
+
+
+_SHELL_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+_SHELL_EXTENSION_RE = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
+
+
 class ManifestV2Permissions(ManifestV2Model):
-    """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
+    """Coarse Manifest v2 grants; method access remains Host-catalog-owned.
+
+    ``shell`` may be spelled in the manifest as ``{"mode": "allowlist",
+    "executables": [...]}`` (C2): the object form is normalized here into
+    ``shell="allowlist"`` plus ``shellExecutables``, so every reader of
+    ``permissions.shell`` keeps comparing a mode string.
+    """
 
     system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages"]] | None = Field(
         default=None, min_length=1, max_length=6
     )
     shell: Literal["allowlist", "full"] | None = None
+    shellExecutables: list[str] | None = Field(default=None, min_length=1, max_length=32)
     scopes: ManifestV2Scopes | None = None
+    network: ManifestV2Network | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_shell_object(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        if "shellExecutables" in value:
+            raise ValueError("permissions.shellExecutables is not a manifest field; declare permissions.shell as an object")
+        shell = value.get("shell")
+        if not isinstance(shell, Mapping):
+            return value
+        if set(shell) != {"mode", "executables"}:
+            raise ValueError("permissions.shell as an object takes exactly mode and executables")
+        if shell["mode"] != "allowlist":
+            raise ValueError('permissions.shell.mode must be "allowlist" when executables are declared')
+        executables = shell["executables"]
+        if not isinstance(executables, list) or not all(isinstance(name, str) for name in executables):
+            raise ValueError("permissions.shell.executables must be a list of names")
+        normalized = dict(value)
+        normalized["shell"] = "allowlist"
+        normalized["shellExecutables"] = executables
+        return normalized
+
+    @field_validator("shellExecutables")
+    @classmethod
+    def _check_shell_executables(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.shell.executables must contain unique names")
+        if any(_SHELL_EXECUTABLE_RE.fullmatch(name) is None for name in value):
+            raise ValueError(
+                "permissions.shell.executables must contain lowercase names such as npm, as spelled on PATH, with no path or shell word"
+            )
+        # A Host-family name is always admitted and has its own policy; a
+        # Windows extension would reach that family's binary without it.
+        if any(_SHELL_EXTENSION_RE.search(name) for name in value):
+            raise ValueError("permissions.shell.executables must be bare names without a .exe/.cmd/.bat/.com/.ps1 extension")
+        if any(name in ("git", "gh", "glab") for name in value):
+            raise ValueError("permissions.shell.executables must not declare git, gh or glab, which allowlist always admits")
+        return value
 
     @field_validator("system")
     @classmethod
@@ -360,18 +440,19 @@ class ManifestV2(ManifestV2Model):
             errors = validate_agent_tools(dict(value))
             if errors:
                 first = errors[0]
+                owner = "contributes" if first.get("list") == "contributes" else "backend"
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
                 detail = ""
                 if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
                     # Name the prefix that would pass, as `navide-plugin validate` does.
-                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    name = value[owner]["agentTools"][first["index"]].get("name")
                     prefix = derive_agent_tool_prefix(value.get("id"))
                     detail = (
                         f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
                         f"from id {value.get('id')!r}: its last segment without hyphens)"
                     )
-                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
+                raise ValueError(f"{owner}.agentTools{where}{field} is invalid: {first['code']}{detail}")
             backend = value.get("backend")
             declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
             for index, tool in enumerate(declared if isinstance(declared, list) else []):
@@ -394,6 +475,7 @@ class ManifestV2(ManifestV2Model):
                 self.permissions.system is not None
                 or self.permissions.shell is not None
                 or self.permissions.scopes is not None
+                or self.permissions.network is not None
             ):
                 raise ValueError("an extension pack must not request permissions")
         elif self.contributes is None and self.backend is None:

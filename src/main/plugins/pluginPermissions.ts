@@ -7,7 +7,7 @@ import type { AgentsEventAddress } from '../../../packages/plugin-contracts/src/
 
 export type PluginPermissionGrant =
   | { permission: 'system'; namespace: PluginSystemNamespace }
-  | { permission: 'shell'; mode: PluginShellMode }
+  | { permission: 'shell'; mode: PluginShellMode; executables?: readonly string[] }
 
 export type PluginCapabilityPolicy =
   | { kind: 'legacy'; requires: readonly string[] }
@@ -19,6 +19,9 @@ export type PluginCapabilityPolicy =
       agentEvents?: readonly AgentsEventAddress[]
       /** `permissions.plugins`: the plugins whose contributes.api this one calls. */
       plugins?: readonly string[]
+      /** C2: executables a `shell: "allowlist"` package declares beyond the
+       *  Host's `git`, `gh`, `glab`; the broker admits exactly these too. */
+      shellExecutables?: readonly string[]
       // Reserved for B1 adapter composition; authorization currently reads
       // normalized system and shell fields directly.
       grants: readonly PluginPermissionGrant[]
@@ -40,13 +43,22 @@ export function manifestV2CapabilityPolicy(
   for (const namespace of permissions.system ?? []) {
     grants.push({ permission: 'system', namespace })
   }
-  if (permissions.shell) grants.push({ permission: 'shell', mode: permissions.shell })
+  if (permissions.shell) {
+    grants.push({
+      permission: 'shell',
+      mode: permissions.shell,
+      ...(permissions.shellExecutables ? { executables: [...permissions.shellExecutables] } : {}),
+    })
+  }
   return {
     kind: 'manifest-v2',
     system: [...(permissions.system ?? [])],
     ...(permissions.shell ? { shell: permissions.shell } : {}),
     ...(permissions.agents ? { agentEvents: [...permissions.agents.events] } : {}),
     ...(permissions.plugins ? { plugins: [...permissions.plugins] } : {}),
+    ...(permissions.shell === 'allowlist' && permissions.shellExecutables
+      ? { shellExecutables: [...permissions.shellExecutables] }
+      : {}),
     grants,
   }
 }

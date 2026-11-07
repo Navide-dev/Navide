@@ -8231,7 +8231,14 @@ def _token_stats_of(workspace_path: str) -> dict[str, Any]:
 
 
 @server.tool()
-async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, Any]:
+async def cli_token_stats(
+    ctx: Context,
+    workspace_path: str = "",
+    cost_by: str = "",
+    since: str = "",
+    until: str = "",
+    pane: str = "",
+) -> dict[str, Any]:
     """Read how many tokens this workspace has spent, as Navide counts them.
 
     The numbers behind the Token panel: what the current run has used, what the
@@ -8256,10 +8263,34 @@ async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, A
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
+
+    `cost_by` adds `cost`: dollars from Navide's per-call usage ledger, for the
+    calls made in this workspace's folder or below it, grouped by "cwd",
+    "pane", "day", "session" or "model". Each group is {key, calls, input,
+    cache_read, cache_write_5m, cache_write_1h, output, usd, unpriced_calls}:
+    input is the uncached part, and a model the price table does not know adds
+    to unpriced_calls, not to usd. `pricing` names the price table's version
+    and effective date. `since` and `until` (YYYY-MM-DD, UTC, inclusive) limit
+    the days and `pane` one pane. Grouped by pane, `differences` lists the
+    panes whose own calls and whose sessions' calls add up to different token
+    counts. The ledger keeps calls Navide has read since it started keeping
+    one, so earlier usage is missing from `cost` though the token counts above
+    include it.
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _plan_workspace(caller, workspace_path)
-    return await asyncio.to_thread(_token_stats_of, workspace_path)
+    stats = await asyncio.to_thread(_token_stats_of, workspace_path)
+    if cost_by:
+        from agent_team_backend import app as _app
+        from agent_team_backend.cost_ledger import COST_REPORT_GROUPS
+
+        if cost_by not in COST_REPORT_GROUPS:
+            return {"ok": False, "error": f"cost_by must be one of {', '.join(COST_REPORT_GROUPS)}"}
+        stats["cost"] = await asyncio.to_thread(
+            _app.cost_ledger.report, cost_by,
+            cwd=workspace_path, pane=pane, since=since, until=until,
+        )
+    return stats
 
 
 def _memory_workspace_root(workspace_path: str) -> Path | None:

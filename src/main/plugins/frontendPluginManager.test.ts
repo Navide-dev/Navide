@@ -406,8 +406,6 @@ import {
   openMiniIdePluginView,
   openPlansPluginView,
   plansQuery,
-  openGitLeftPluginView,
-  closeGitLeftPluginView,
   GIT_PLUGIN_ID,
   PLANS_PLUGIN_ID,
   PLANS_INITIATOR_PANE_VERSION,
@@ -416,7 +414,6 @@ import {
   bundledMiniIdeDir,
   bundledPlansDir,
   bundledPlansV2Dir,
-  bundledGitDir,
   officialPluginArtifactPackageDir,
   registerBundledMiniIde,
   registerBundledPlans,
@@ -3575,7 +3572,6 @@ describe('devPlansPluginDescriptor', () => {
       join('/resources', 'official-artifacts', PLANS_PLUGIN_ID, '4.5.6', `${process.platform}-${process.arch}`, 'package')
     )
     expect(bundledPlansDir(source)).toBe(join('/resources', 'plugins', 'plans'))
-    expect(bundledGitDir(source)).toBe(join('/resources', 'plugins', 'git'))
     expect(officialPluginArtifactPackageDir(
       { isPackaged: false, resourcesPath: '', artifactVersion: '4.5.6', devRoot: '/repo' },
       MINI_IDE_PLUGIN_ID,
@@ -16170,65 +16166,6 @@ describe('first-party Git private bridge', () => {
 })
 
 describe('Git left legacy rollback composition', () => {
-  it('returns an explicit legacy fallback after replacing a live v2 left view', async () => {
-    const host = new FakeBrowserWindow()
-    Object.defineProperty(host, 'id', { value: 77 })
-    const v2: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      packageVersion: '2.0.0',
-      requires: ['terminal'],
-      capabilityPolicy: manifestV2CapabilityPolicy({
-        system: ['fs', 'ui', 'aiCli'],
-        shell: 'allowlist',
-      }),
-      capabilityContext: frontendPluginManager.gitCapabilityContext('2.0.0', '/workspace', 'git-left'),
-      devUrl: '',
-      entryFile: '/plugins/navide-git/index.html',
-      views: [
-        {
-          id: 'left',
-          contributionKey: 'navide.git.left',
-          kind: 'custom',
-          location: 'left',
-          title: 'Git',
-          entryFile: '/plugins/navide-git/left.html',
-        },
-      ],
-    }
-    const legacy: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      requires: [],
-      devUrl: '',
-      entryFile: '/plugins/git/index.html',
-    }
-
-    frontendPluginManager.replaceBuiltinForRecovery(v2)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-      '',
-      '',
-      {
-        git_yolo: '0',
-        git_analyzer_model: 'qwen2:latest',
-        git_theme_custom: '{}',
-      },
-    )).resolves.toEqual({ ok: true })
-    expect((host.children[0] as FakeViewLike).webContents.loads).toEqual([
-      '/plugins/navide-git/left.html?workspace_path=%2Fworkspace&git_yolo=0&git_analyzer_model=qwen2%3Alatest&git_theme_custom=%7B%7D&v2=1&contribution=left',
-    ])
-
-    frontendPluginManager.replaceBuiltinForRecovery(legacy)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-    )).resolves.toEqual({ ok: true, fallback: 'legacy' })
-    expect(host.children).toHaveLength(0)
-    expect(closeGitLeftPluginView(asHost(host))).toEqual({ ok: true })
-  })
-
   describe('plansQuery and openPlansPluginView locale propagation', () => {
     it('formats plansQuery with validated locale', () => {
       const q1 = new URLSearchParams(plansQuery('/workspace', 'http://127.0.0.1:1', 'plan.html', 'dark', 'en-US'))

@@ -72,9 +72,11 @@ function assertSafePath(path, label) {
 
 /** One `validateAgentTools` error as the Registry would refuse it, with the value that would pass. */
 function agentToolMessage(raw, error) {
-  const tools = raw.backend?.agentTools
+  const owner = error.list === 'contributes' ? 'contributes' : 'backend'
+  const tools = raw[owner]?.agentTools
   const tool = error.index === null || !Array.isArray(tools) ? undefined : tools[error.index]
-  const where = `manifest backend.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const where = `manifest ${owner}.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const views = Array.isArray(raw.contributes?.views) ? raw.contributes.views.map((view) => view?.id).filter((id) => typeof id === 'string') : []
   const value = (field) => JSON.stringify(tool && typeof tool === 'object' ? tool[field] : undefined)
   const prefix = deriveAgentToolPrefix(raw.id)
   const methods = Array.isArray(raw.backend?.methods) ? raw.backend.methods : []
@@ -86,10 +88,11 @@ function agentToolMessage(raw, error) {
     AGENT_TOOL_NAME_RESERVED: ` ${value('name')} is a built-in Navide tool name; choose another '${prefix}_' name`,
     AGENT_TOOL_NAME_DUPLICATE: ` ${value('name')} is declared twice`,
     AGENT_TOOL_METHOD_UNDECLARED: ` ${value('method')} is not listed in backend.methods (declared: ${methods.length ? methods.join(', ') : 'none'})`,
+    AGENT_TOOL_VIEW_UNDECLARED: ` ${value('view')} is not a declared view id (declared: ${views.length ? views.join(', ') : 'none'})`,
     AGENT_TOOL_RISK_INVALID: ` ${value('risk')} must be 'read' or 'write'`,
     AGENT_TOOL_TIMEOUT_INVALID: ` ${value('timeoutMs')} must be an integer from 1 to 120000`,
     AGENT_TOOL_FIELD_MISSING: ' is required',
-    AGENT_TOOL_FIELD_UNKNOWN: ' is not a known field (allowed: name, method, risk, title, description, inputSchema, timeoutMs)',
+    AGENT_TOOL_FIELD_UNKNOWN: ` is not a known field (allowed: name, ${owner === 'backend' ? 'method' : 'view'}, risk, title, description, inputSchema, timeoutMs)`,
   }[error.code] ?? ' is invalid'
   return `${where}${detail} [${error.code}]`
 }
@@ -543,7 +546,7 @@ function generateKeys(outDir, name) {
 function usage() {
   return [
     'Usage:',
-    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>]',
+    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]',
     '  navide-plugin validate <directory> [--target <target>]',
     '  navide-plugin scan <package.vsix | directory> [--target <target>] [--json]',
     '  navide-plugin package <directory> [--target <target>] [--out <file>]',
@@ -557,7 +560,7 @@ function usage() {
     '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
     '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
     '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
-    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]',
+    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
     'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
@@ -567,7 +570,7 @@ function usage() {
 
 // command -> [positional argument count, value options, boolean flags, positional is optional]
 const COMMANDS = {
-  init: [1, ['--id', '--name'], []],
+  init: [1, ['--id', '--name', '--template'], []],
   validate: [1, ['--target'], []],
   scan: [1, ['--target'], ['--json']],
   package: [1, ['--target', '--out'], []],
@@ -579,7 +582,7 @@ const COMMANDS = {
   status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
   publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
-  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data'], []],
+  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data', '--workspace'], ['--allow-writes', '--provider-auth']],
 }
 
 function parseArgs(argv) {
@@ -628,9 +631,11 @@ async function main(argv) {
   const [argument] = positional
   if (command === 'init') {
     if (!options.get('--id')) fail(usage())
-    const result = initPlugin(argument, options.get('--id'), options.get('--name'))
+    const result = initPlugin(argument, options.get('--id'), options.get('--name'), options.get('--template') ?? 'default')
     console.log(`Created ${result.id} (${result.name}) in ${result.root}`)
-    console.log(`Next: navide-plugin validate ${argument}`)
+    console.log(result.template === 'vue'
+      ? `Next: cd ${argument} && npm install && npm run build && npm run build:backend && npm run check`
+      : `Next: navide-plugin validate ${argument}`)
     return
   }
   if (command === 'validate') {
@@ -667,6 +672,9 @@ async function main(argv) {
       args: options.get('--args'),
       subscribe: (options.get('--subscribe') ?? '').split(',').filter(Boolean),
       dataDir: options.get('--data'),
+      workspace: options.get('--workspace') ?? null,
+      allowWrites: options.has('--allow-writes'),
+      providerAuth: options.has('--provider-auth'),
     })
     return
   }

@@ -34,6 +34,18 @@ MAX_SAFE_INTEGER = 2**53 - 1
 
 AGENT_TOOL_REQUIRED_FIELDS = ("name", "method", "risk", "title", "description", "inputSchema")
 _AGENT_TOOL_FIELDS = frozenset((*AGENT_TOOL_REQUIRED_FIELDS, "timeoutMs"))
+#: A ``contributes.agentTools`` entry names the view that serves it instead of a backend method.
+VIEW_AGENT_TOOL_REQUIRED_FIELDS = ("name", "view", "risk", "title", "description", "inputSchema")
+_VIEW_AGENT_TOOL_FIELDS = frozenset((*VIEW_AGENT_TOOL_REQUIRED_FIELDS, "timeoutMs"))
+#: How a view-served tool is spelled in the disclosure and the catalog: ``method`` is ``view:<view id>``.
+AGENT_TOOL_VIEW_METHOD_PREFIX = "view:"
+
+
+def agent_tool_view_id(method: Any) -> str | None:
+    """The view id a disclosed or synced tool's ``method`` names, or None for a backend method."""
+    if isinstance(method, str) and method.startswith(AGENT_TOOL_VIEW_METHOD_PREFIX):
+        return method[len(AGENT_TOOL_VIEW_METHOD_PREFIX):]
+    return None
 
 #: Prefixes no plugin may derive. ``navide_`` is reserved on top of the design list (impersonation), and so
 #: are the prefixes the built-in packages derive (``git_``, ``plans_``, ``miniide_``).
@@ -99,6 +111,8 @@ class AgentToolValidationError(TypedDict):
     index: int | None
     field: str | None
     code: str
+    #: Present for a ``contributes.agentTools`` entry; absent for ``backend.agentTools``.
+    list: NotRequired[Literal["contributes"]]
 
 
 def derive_agent_tool_prefix(plugin_id: Any) -> str | None:
@@ -225,42 +239,69 @@ def _schema_bytes(schema: dict[str, Any]) -> int:
 
 
 def validate_agent_tools(manifest: dict[str, Any]) -> list[AgentToolValidationError]:
-    """Every rule of contract section 2.5; reads only ``id`` and ``backend``.
+    """Every rule of contract section 2.5 (and 2.9 for view-served tools);
+    reads only ``id``, ``backend`` and ``contributes``.
 
-    Returns all errors ordered by entry index, then check order.
+    Returns all errors ordered by list (backend first), entry index, then check order.
     """
-    backend = manifest.get("backend")
-    if not isinstance(backend, dict) or "agentTools" not in backend:
-        return []
-    declared = backend["agentTools"]
-    if not isinstance(declared, list):
-        return [{"index": None, "field": "agentTools", "code": "AGENT_TOOLS_NOT_ARRAY"}]
-    methods = backend.get("methods") if isinstance(backend.get("methods"), list) else []
     errors: list[AgentToolValidationError] = []
     seen: set[str] = set()
+    backend = manifest.get("backend")
+    if isinstance(backend, dict) and "agentTools" in backend:
+        methods = backend.get("methods") if isinstance(backend.get("methods"), list) else []
+        _validate_agent_tool_list(backend["agentTools"], manifest.get("id"), "method", methods, None, seen, errors)
+    contributes = manifest.get("contributes")
+    if isinstance(contributes, dict) and "agentTools" in contributes:
+        views = contributes.get("views") if isinstance(contributes.get("views"), list) else []
+        view_ids = [view["id"] for view in views if isinstance(view, dict) and isinstance(view.get("id"), str)]
+        _validate_agent_tool_list(contributes["agentTools"], manifest.get("id"), "view", view_ids, "contributes", seen, errors)
+    return errors
+
+
+def _validate_agent_tool_list(
+    declared: Any,
+    plugin_id: Any,
+    binding: Literal["method", "view"],
+    targets: list[Any],
+    list_name: Literal["contributes"] | None,
+    seen: set[str],
+    errors: list[AgentToolValidationError],
+) -> None:
+    """One list of tool declarations: ``backend.agentTools`` (bound to a
+    method) or ``contributes.agentTools`` (bound to a view). Names are unique
+    across both lists, so ``seen`` is shared."""
+    tag: dict[str, Any] = {} if list_name is None else {"list": list_name}
+    if not isinstance(declared, list):
+        errors.append({"index": None, "field": "agentTools", "code": "AGENT_TOOLS_NOT_ARRAY", **tag})
+        return
+    fields = _AGENT_TOOL_FIELDS if binding == "method" else _VIEW_AGENT_TOOL_FIELDS
+    required_fields = AGENT_TOOL_REQUIRED_FIELDS if binding == "method" else VIEW_AGENT_TOOL_REQUIRED_FIELDS
     for index, tool in enumerate(declared):
         def fail(field: str | None, code: str, index: int = index) -> None:
-            errors.append({"index": index, "field": field, "code": code})
+            errors.append({"index": index, "field": field, "code": code, **tag})
 
         if not isinstance(tool, dict):
             fail(None, "AGENT_TOOL_NOT_OBJECT")
             continue
         for field in sorted(tool):
-            if field not in _AGENT_TOOL_FIELDS:
+            if field not in fields:
                 fail(field, "AGENT_TOOL_FIELD_UNKNOWN")
-        for field in AGENT_TOOL_REQUIRED_FIELDS:
+        for field in required_fields:
             if field not in tool:
                 fail(field, "AGENT_TOOL_FIELD_MISSING")
         if "name" in tool:
-            name_error = validate_agent_tool_name(tool["name"], manifest.get("id"))
+            name_error = validate_agent_tool_name(tool["name"], plugin_id)
             if name_error:
                 fail("name", name_error)
             elif tool["name"] in seen:
                 fail("name", "AGENT_TOOL_NAME_DUPLICATE")
             else:
                 seen.add(tool["name"])
-        if "method" in tool and tool["method"] not in methods:
-            fail("method", "AGENT_TOOL_METHOD_UNDECLARED")
+        if binding == "method":
+            if "method" in tool and tool["method"] not in targets:
+                fail("method", "AGENT_TOOL_METHOD_UNDECLARED")
+        elif "view" in tool and tool["view"] not in targets:
+            fail("view", "AGENT_TOOL_VIEW_UNDECLARED")
         if "risk" in tool and tool["risk"] not in ("read", "write"):
             fail("risk", "AGENT_TOOL_RISK_INVALID")
         if "title" in tool and not is_valid_agent_tool_text(tool["title"]):
@@ -282,7 +323,6 @@ def validate_agent_tools(manifest: dict[str, Any]) -> list[AgentToolValidationEr
                 fail("inputSchema", "AGENT_TOOL_TOO_LARGE")
         if "timeoutMs" in tool and not _is_valid_timeout(tool["timeoutMs"]):
             fail("timeoutMs", "AGENT_TOOL_TIMEOUT_INVALID")
-    return errors
 
 
 # ── Host → backend: plugins.agentTools.sync ─────────────────────────────────
@@ -375,6 +415,8 @@ AGENT_TOOL_UNAVAILABLE_REASONS = (
     "consent-required",
     "tool-not-consented",
     "name-collision",
+    # A view-served tool (section 2.9) whose view is not open on the target workspace.
+    "view-not-open",
 )
 
 #: ``plugin_activity.denied_reason`` (section 5): why a call or broker request
@@ -951,6 +993,13 @@ PLUGIN_BACKEND_CALL_ADDRESS_PREFIX = "backend."
 #: under this one address: such names are the caller's free text, with no
 #: length or variety limit, so they are never keys.
 PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS = "backend.<undeclared>"
+#: C4: the life of a plugin's backend child, counted beside its calls under
+#: three fixed addresses no declared method can spell: the child failed
+#: (``error``), an automatic restart brought it back (``allowed``), and the
+#: Host gave up restarting it within the crash window (``error``).
+PLUGIN_BACKEND_CRASHED_ADDRESS = "backend.<crashed>"
+PLUGIN_BACKEND_RESTARTED_ADDRESS = "backend.<restarted>"
+PLUGIN_BACKEND_STOPPED_AFTER_CRASHES_ADDRESS = "backend.<stopped-after-crashes>"
 #: ``cancelled``: the caller cancelled the call (abort, cancel message); not a refusal.
 PLUGIN_BACKEND_CALL_OUTCOMES = ("allowed", "denied", "cancelled", "error")
 #: Minute counts are kept as long as activity detail rows, day counts as long
