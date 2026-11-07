@@ -2260,7 +2260,9 @@
           "downloads": "Downloads",
           "status": "Status"
         },
-        "prereleaseAvailable": "Vorabversion {version} verfügbar"
+        "prereleaseAvailable": "Vorabversion {version} verfügbar",
+        "buildOwnHint": "Selbst etwas bauen?",
+        "buildOwn": "Navide-Plug-in entwickeln"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Entwicklermodus",
         "switch": "Entwicklermodus einschalten",
         "hint": "Ermöglicht, ein Navide-Plug-in zum Entwickeln und Testen aus einem Ordner zu laden und Navide-Plug-ins statt aus dem Navide Marketplace von Ihrem eigenen Server zu installieren; beim Ausschalten werden diese Navide-Plug-ins entladen.",
+        "firstTime": "Ihr erstes Navide-Plug-in? Build for Navide führt Sie von der Vorlage bis in den Navide Marketplace.",
+        "openGuide": "Anleitung öffnen",
+        "agentSkill": "Oder lassen Sie sich von einem Agent führen: Bitten Sie ihn, diesen Skill zu installieren:",
         "banner": "Der Entwicklermodus ist aktiv. Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft.",
         "reminder": "Der Entwicklermodus ist aktiv: Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft. Schalten Sie ihn unter „Einstellungen → Navide-Plug-ins“ aus, wenn Sie ihn nicht mehr benötigen.",
         "reminderClose": "Verstanden",
@@ -12603,6 +12608,20 @@
       "label": "Ansichten des Navide Marketplace",
       "browse": "Durchsuchen",
       "developer": "Entwickler"
+    },
+    "entry": {
+      "title": "Build for Navide: Ihr eigenes Navide-Plug-in",
+      "step-init": "Ein Navide-Plug-in aus der Vorlage erstellen (ab Navide 0.2.39):",
+      "step-load": "Mit „Einstellungen → Navide-Plug-ins → Entwicklermodus → Aus Ordner laden …“ laden und ausprobieren",
+      "step-apply": "Unten anmelden und die Entwickler-Bewerbung einmal mit Ihrem echten Namen ausfüllen; ein Mensch prüft sie.",
+      "next": {
+        "apply": "Als Nächstes: Füllen Sie unten die Entwickler-Bewerbung aus.",
+        "pending": "Als Nächstes: Warten Sie auf die Prüfung. Bis dahin können Sie Ihr Navide-Plug-in bauen und im Entwicklermodus laden.",
+        "key": "Als Nächstes: Melden Sie sich als Herausgeber an, damit diese Navide ihren Signaturschlüssel registriert.",
+        "publish": "Als Nächstes: Veröffentlichen Sie eine Version; nach der Prüfung erscheint sie im Navide Marketplace."
+      },
+      "guide": "Build for Navide öffnen",
+      "console": "developers.navide.dev öffnen"
     },
     "account": {
       "title": "Entwicklerkonto",

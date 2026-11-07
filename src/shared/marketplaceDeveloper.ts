@@ -68,3 +68,8 @@ export interface DeveloperApi {
   publish(input: { stageId: string; target: string }): Promise<DeveloperCallResult & { digest?: string }>
   yank(input: { namespace: string; name: string; version: string }): Promise<DeveloperCallResult>
 }
+
+/** The one entry page for Navide plugin authors (docs/en-US/build-for-navide.md). */
+export const BUILD_FOR_NAVIDE_URL = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md'
+/** The developer console's open page: the publishing steps, before signing in. */
+export const DEVELOPERS_URL = 'https://developers.navide.dev/developer'

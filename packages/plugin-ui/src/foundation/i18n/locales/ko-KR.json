@@ -2260,7 +2260,9 @@
           "downloads": "다운로드",
           "status": "상태"
         },
-        "prereleaseAvailable": "시험판 {version} 있음"
+        "prereleaseAvailable": "시험판 {version} 있음",
+        "buildOwnHint": "직접 만들어 보고 싶나요?",
+        "buildOwn": "Navide 플러그인 만들기"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Developer Mode",
         "switch": "Developer Mode 켜기",
         "hint": "폴더에서 Navide 플러그인을 불러와 개발하고 테스트하며 Navide 마켓플레이스 대신 직접 운영하는 서버에서 Navide 플러그인을 설치할 수 있어요. 끄면 그 Navide 플러그인을 내려요.",
+        "firstTime": "첫 Navide 플러그인인가요? Build for Navide가 템플릿부터 Navide 마켓플레이스 게시까지 안내해요.",
+        "openGuide": "가이드 열기",
+        "agentSkill": "또는 agent의 안내를 받으세요. 이 skill을 설치해 달라고 요청하세요:",
         "banner": "Developer Mode가 켜져 있어요. 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요.",
         "reminder": "Developer Mode가 켜져 있어요: 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요. 더 이상 필요하지 않으면 설정 → Navide 플러그인에서 끄세요.",
         "reminderClose": "확인",
@@ -12603,6 +12608,20 @@
       "label": "Navide 마켓플레이스 보기",
       "browse": "찾아보기",
       "developer": "개발자"
+    },
+    "entry": {
+      "title": "Build for Navide: 나만의 Navide 플러그인 만들기",
+      "step-init": "템플릿으로 Navide 플러그인 만들기(Navide 0.2.39 이상):",
+      "step-load": "설정 → Navide 플러그인 → Developer Mode → 폴더에서 불러오기…로 불러와 써 보기",
+      "step-apply": "아래에서 로그인하고 개발자 신청서를 실명으로 한 번 작성해요. 담당자가 검토해요.",
+      "next": {
+        "apply": "다음: 아래 개발자 신청서를 작성하세요.",
+        "pending": "다음: 검토를 기다리세요. 그동안 Navide 플러그인을 빌드하고 Developer Mode로 불러와 써 볼 수 있어요.",
+        "key": "다음: 게시자로 로그인해 이 Navide의 서명 키를 등록하세요.",
+        "publish": "다음: 버전을 게시하세요. 검토를 통과하면 Navide 마켓플레이스에 공개돼요."
+      },
+      "guide": "Build for Navide 열기",
+      "console": "developers.navide.dev 열기"
     },
     "account": {
       "title": "개발자 계정",

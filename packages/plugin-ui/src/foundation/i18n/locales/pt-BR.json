@@ -2260,7 +2260,9 @@
           "downloads": "Downloads",
           "status": "Status"
         },
-        "prereleaseAvailable": "pré-lançamento {version} disponível"
+        "prereleaseAvailable": "pré-lançamento {version} disponível",
+        "buildOwnHint": "Quer criar o seu?",
+        "buildOwn": "Criar um plug-in do Navide"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Modo de desenvolvedor",
         "switch": "Ativar o modo de desenvolvedor",
         "hint": "Permite carregar um plug-in do Navide de uma pasta para desenvolvê-lo e testá-lo e instalar plug-ins do Navide do seu próprio servidor em vez do Navide Marketplace; desligar descarrega esses plug-ins do Navide.",
+        "firstTime": "Seu primeiro plug-in do Navide? O Build for Navide leva você do modelo ao Navide Marketplace.",
+        "openGuide": "Abrir o guia",
+        "agentSkill": "Ou deixe um agente guiar você: peça para ele instalar esta skill:",
         "banner": "O modo de desenvolvedor está ativado. Os plug-ins do Navide carregados de pastas não foram revisados.",
         "reminder": "O modo de desenvolvedor está ativado: os plug-ins do Navide carregados de pastas não foram revisados. Desative-o em Configurações → Plug-ins do Navide quando não precisar mais dele.",
         "reminderClose": "Entendi",
@@ -12603,6 +12608,20 @@
       "label": "Visualizações do Navide Marketplace",
       "browse": "Explorar",
       "developer": "Desenvolvedor"
+    },
+    "entry": {
+      "title": "Build for Navide: crie seu próprio plug-in do Navide",
+      "step-init": "Crie um plug-in do Navide a partir do modelo (Navide 0.2.39 ou posterior):",
+      "step-load": "Carregue-o em Configurações → Plug-ins do Navide → Modo de desenvolvedor → Carregar de uma pasta…",
+      "step-apply": "Entre abaixo e preencha uma vez a candidatura de desenvolvedor com seu nome real; uma pessoa a revisa.",
+      "next": {
+        "apply": "Próximo passo: preencha a candidatura de desenvolvedor abaixo.",
+        "pending": "Próximo passo: aguarde a revisão. Enquanto isso, crie seu plug-in do Navide e carregue-o com o modo de desenvolvedor.",
+        "key": "Próximo passo: entre como publicador para que este Navide registre sua chave de assinatura.",
+        "publish": "Próximo passo: publique uma versão; ela aparece no Navide Marketplace após a revisão."
+      },
+      "guide": "Abrir Build for Navide",
+      "console": "Abrir developers.navide.dev"
     },
     "account": {
       "title": "Conta de desenvolvedor",

@@ -8,6 +8,7 @@ import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import SettingsNavItem from '../settings/SettingsNavItem.vue'
 import { usePluginUpdates } from '../../composables/usePluginUpdates'
 import MarketplacePane from '../MarketplacePane.vue'
+import { marketplaceView, setMarketplaceView } from '../../composables/useMarketplaceForms'
 import MarketplaceIcon from '../MarketplaceIcon.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
 import { computeDisclosure } from '../../../../shared/pluginDisclosure'
@@ -445,6 +446,20 @@ describe('MarketplacePane', () => {
     await wrapper.get('.ext-search button').trigger('click')
     await flushPromises()
     expect(wrapper.get('.mkt-empty').text()).toContain('zzz')
+  })
+
+  it('offers to build a Navide plugin from the list and from an empty result (plan v2_8714c5 b3)', async () => {
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 }),
+    })
+    setMarketplaceView('browse')
+    wrapper = mountMarketplace()
+    await flushPromises()
+    const build = wrapper.get('[data-testid="marketplace-build-own"]')
+    expect(build.text()).toContain(i18n.global.t('settings.extensions.marketplace.buildOwnHint'))
+    await build.get('button').trigger('click')
+    expect(marketplaceView.value).toBe('developer')
+    setMarketplaceView('browse')
   })
 
   it('marks installed items and offers Update only when the main process reports one', async () => {

@@ -2260,7 +2260,9 @@
           "downloads": "ダウンロード数",
           "status": "状態"
         },
-        "prereleaseAvailable": "プレリリース {version} あり"
+        "prereleaseAvailable": "プレリリース {version} あり",
+        "buildOwnHint": "自分で作ってみませんか？",
+        "buildOwn": "Navide プラグインを作る"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "開発者モード",
         "switch": "開発者モードをオンにする",
         "hint": "フォルダーから Navide プラグインを読み込んで開発・テストでき、Navide マーケットプレイスの代わりに自分のサーバーから Navide プラグインをインストールすることもできます。オフにすると、それらの Navide プラグインは取り外されます。",
+        "firstTime": "初めての Navide プラグインですか？Build for Navide がテンプレートから Navide マーケットプレイス公開まで案内します。",
+        "openGuide": "ガイドを開く",
+        "agentSkill": "または agent に案内してもらう：この skill をインストールするよう頼んでください：",
         "banner": "開発者モードがオンです。フォルダーから読み込んだ Navide プラグインは審査されていません。",
         "reminder": "開発者モードがオンです：フォルダーから読み込んだ Navide プラグインは審査されていません。不要になったら「設定 → Navide プラグイン」でオフにしてください。",
         "reminderClose": "了解",
@@ -12603,6 +12608,20 @@
       "label": "Navide マーケットプレイスの表示",
       "browse": "閲覧",
       "developer": "開発者"
+    },
+    "entry": {
+      "title": "Build for Navide：自分の Navide プラグインを作る",
+      "step-init": "テンプレートから Navide プラグインを作成（Navide 0.2.39 以降）：",
+      "step-load": "「設定 → Navide プラグイン → 開発者モード → フォルダーから読み込む…」で読み込んで試す",
+      "step-apply": "下でサインインし、開発者申請を実名で一度だけ記入します。担当者が審査します。",
+      "next": {
+        "apply": "次へ：下の開発者申請を記入してください。",
+        "pending": "次へ：審査をお待ちください。その間に Navide プラグインをビルドし、開発者モードで読み込んで試せます。",
+        "key": "次へ：パブリッシャーとしてサインインし、この Navide の署名鍵を登録してください。",
+        "publish": "次へ：バージョンを公開してください。審査後に Navide マーケットプレイスに掲載されます。"
+      },
+      "guide": "Build for Navide を開く",
+      "console": "developers.navide.dev を開く"
     },
     "account": {
       "title": "開発者アカウント",

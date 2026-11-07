@@ -2260,7 +2260,9 @@
           "downloads": "Descargas",
           "status": "Estado"
         },
-        "prereleaseAvailable": "versión preliminar {version} disponible"
+        "prereleaseAvailable": "versión preliminar {version} disponible",
+        "buildOwnHint": "¿Quieres crear el tuyo?",
+        "buildOwn": "Crear un complemento de Navide"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Modo de desarrollador",
         "switch": "Activar el modo de desarrollador",
         "hint": "Te permite cargar un complemento de Navide desde una carpeta para desarrollarlo y probarlo, e instalar complementos de Navide desde tu propio servidor en lugar de Navide Marketplace; al desactivarlo se descargan esos complementos de Navide.",
+        "firstTime": "¿Tu primer complemento de Navide? Build for Navide te lleva de la plantilla a Navide Marketplace.",
+        "openGuide": "Abrir la guía",
+        "agentSkill": "O deja que un agente te guíe: pídele que instale este skill:",
         "banner": "El modo de desarrollador está activado. Los complementos de Navide cargados desde una carpeta no se han revisado.",
         "reminder": "El modo de desarrollador está activado: los complementos de Navide cargados desde una carpeta no se han revisado. Desactívalo en «Ajustes → Complementos de Navide» cuando ya no lo necesites.",
         "reminderClose": "Entendido",
@@ -12603,6 +12608,20 @@
       "label": "Vistas del Navide Marketplace",
       "browse": "Explorar",
       "developer": "Desarrollador"
+    },
+    "entry": {
+      "title": "Build for Navide: crea tu propio complemento de Navide",
+      "step-init": "Crea un complemento de Navide a partir de la plantilla (Navide 0.2.39 o posterior):",
+      "step-load": "Cárgalo con «Ajustes → Complementos de Navide → Modo de desarrollador → Cargar desde carpeta…»",
+      "step-apply": "Inicia sesión abajo y rellena una vez la solicitud de desarrollador con tu nombre real; una persona la revisa.",
+      "next": {
+        "apply": "Siguiente: rellena la solicitud de desarrollador de abajo.",
+        "pending": "Siguiente: espera la revisión. Mientras tanto, crea tu complemento de Navide y cárgalo con el modo de desarrollador.",
+        "key": "Siguiente: inicia sesión como editor para que este Navide registre su clave de firma.",
+        "publish": "Siguiente: publica una versión; aparecerá en Navide Marketplace tras la revisión."
+      },
+      "guide": "Abrir Build for Navide",
+      "console": "Abrir developers.navide.dev"
     },
     "account": {
       "title": "Cuenta de desarrollador",

@@ -51,6 +51,19 @@ describe('ExtensionsPane developer page', () => {
     expect(wrapper.get('[data-settings-section="extensions-developer-mode"]').text()).toContain(i18n.global.t('settings.extensions.developerMode.hint'))
   })
 
+  it('points a first-time author at Build for Navide and the plugin-authoring skill (plan v2_8714c5 b2)', async () => {
+    mockPlugins({ enabled: false, folders: [] })
+    const openExternal = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as unknown as { agentTeam: Record<string, unknown> }).agentTeam.openExternal = openExternal
+    wrapper = mount(ExtensionsPane, { props: { page: 'developer' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    const section = wrapper.get('[data-settings-section="extensions-developer-mode"]')
+    expect(section.get('[data-testid="developer-mode-first-time"]').text()).toContain(i18n.global.t('settings.extensions.developerMode.firstTime'))
+    expect(section.text()).toContain('navide:plugin-authoring')
+    await section.get('[data-testid="developer-mode-guide"]').trigger('click')
+    expect(openExternal).toHaveBeenCalledWith('https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md')
+  })
+
   it('turns Developer Mode off from its switch', async () => {
     const setDeveloperMode = mockPlugins({ enabled: true, folders: [] }, vi.fn().mockResolvedValue({ enabled: false, folders: [] }))
     wrapper = mount(ExtensionsPane, { props: { page: 'developer' }, global: { plugins: [i18n] } })

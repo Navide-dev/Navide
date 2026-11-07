@@ -29,6 +29,7 @@ import { useConfirmedExternalLink } from '../composables/useConfirmedExternalLin
 import { marketplaceDetailRequest, takeMarketplaceDetailRequest } from '../marketplaceDeepLink'
 import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { setMarketplaceView } from '../composables/useMarketplaceForms'
 
 type Sort = 'downloads' | 'updated' | 'rating'
 
@@ -1261,6 +1262,10 @@ watch(
           {{ $t('settings.extensions.marketplace.loadFailed', { error: loadMoreError }) }}
         </span>
       </div>
+      <p v-if="listState === 'ready'" class="mkt-build-own" data-testid="marketplace-build-own">
+        <span class="mkt-muted">{{ $t('settings.extensions.marketplace.buildOwnHint') }}</span>
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" @click="setMarketplaceView('developer')">{{ $t('settings.extensions.marketplace.buildOwn') }}</button>
+      </p>
     </section>
 
     <PluginTrustDialog
@@ -1977,6 +1982,14 @@ watch(
 }
 
 /* ── Load more ─────────────────────────────────────────────── */
+.mkt-build-own {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+}
 .mkt-load-more {
   display: flex;
   align-items: center;

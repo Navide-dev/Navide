@@ -2260,7 +2260,9 @@
           "downloads": "Téléchargements",
           "status": "État"
         },
-        "prereleaseAvailable": "préversion {version} disponible"
+        "prereleaseAvailable": "préversion {version} disponible",
+        "buildOwnHint": "Envie de créer le vôtre ?",
+        "buildOwn": "Créer un plugin Navide"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Mode développeur",
         "switch": "Activer le mode développeur",
         "hint": "Permet de charger un plugin Navide depuis un dossier pour le développer et le tester, et d’installer des plugins Navide depuis votre propre serveur au lieu de Navide Marketplace ; le désactiver décharge ces plugins Navide.",
+        "firstTime": "Votre premier plugin Navide ? Build for Navide vous guide du modèle jusqu’à Navide Marketplace.",
+        "openGuide": "Ouvrir le guide",
+        "agentSkill": "Ou laissez un agent vous guider : demandez-lui d’installer ce skill :",
         "banner": "Le mode développeur est activé. Les plugins Navide chargés depuis un dossier n’ont pas été examinés.",
         "reminder": "Le mode développeur est activé : les plugins Navide chargés depuis un dossier n’ont pas été examinés. Désactivez-le dans Paramètres → Plugins Navide quand vous n’en avez plus besoin.",
         "reminderClose": "J’ai compris",
@@ -12603,6 +12608,20 @@
       "label": "Vues de la Navide Marketplace",
       "browse": "Parcourir",
       "developer": "Développeur"
+    },
+    "entry": {
+      "title": "Build for Navide : créez votre plugin Navide",
+      "step-init": "Créer un plugin Navide à partir du modèle (Navide 0.2.39 ou ultérieur) :",
+      "step-load": "Le charger avec Paramètres → Plugins Navide → Mode développeur → Charger depuis un dossier…",
+      "step-apply": "Connectez-vous ci-dessous et remplissez une fois la demande de développeur sous votre vrai nom ; une personne l’examine.",
+      "next": {
+        "apply": "Étape suivante : remplissez la demande de développeur ci-dessous.",
+        "pending": "Étape suivante : attendez l’examen. En attendant, construisez votre plugin Navide et chargez-le avec le mode développeur.",
+        "key": "Étape suivante : connectez-vous en tant qu’éditeur pour que ce Navide enregistre sa clé de signature.",
+        "publish": "Étape suivante : publiez une version ; elle apparaît sur Navide Marketplace après examen."
+      },
+      "guide": "Ouvrir Build for Navide",
+      "console": "Ouvrir developers.navide.dev"
     },
     "account": {
       "title": "Compte développeur",

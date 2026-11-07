@@ -2260,7 +2260,9 @@
           "downloads": "下载次数",
           "status": "状态"
         },
-        "prereleaseAvailable": "有预览版 {version}"
+        "prereleaseAvailable": "有预览版 {version}",
+        "buildOwnHint": "想自己做一个？",
+        "buildOwn": "开发 Navide 插件"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "开发者模式",
         "switch": "打开开发者模式",
         "hint": "可从文件夹加载 Navide 插件来开发与测试，也能从你自己的服务器、而非 Navide 市场安装 Navide 插件；关闭时会卸下这些 Navide 插件。",
+        "firstTime": "第一次做 Navide 插件？Build for Navide 带你从模板走到 Navide 市场上架。",
+        "openGuide": "打开指南",
+        "agentSkill": "或让 agent 带你做：请它安装这个 skill：",
         "banner": "开发者模式已打开，从文件夹加载的 Navide 插件没有经过审核。",
         "reminder": "开发者模式已打开：从文件夹加载的 Navide 插件没有经过审核。不用时请到“设置 → Navide 插件”关闭。",
         "reminderClose": "知道了",
@@ -12603,6 +12608,20 @@
       "label": "Navide 市场查看",
       "browse": "浏览",
       "developer": "开发者"
+    },
+    "entry": {
+      "title": "Build for Navide：做你自己的 Navide 插件",
+      "step-init": "用模板创建 Navide 插件（Navide 0.2.39 起）：",
+      "step-load": "在“设置 → Navide 插件 → 开发者模式 → 从文件夹加载…”加载试用",
+      "step-apply": "在下方登录，实名填写一次开发者申请，由专人审核。",
+      "next": {
+        "apply": "下一步：填写下方的开发者申请。",
+        "pending": "下一步：等待审核。这段时间可以先构建 Navide 插件，用开发者模式 加载试用。",
+        "key": "下一步：以发布者身份登录，让这台 Navide 注册签名密钥。",
+        "publish": "下一步：上架一个版本，审核通过后就会出现在 Navide 市场。"
+      },
+      "guide": "打开 Build for Navide",
+      "console": "打开 developers.navide.dev"
     },
     "account": {
       "title": "开发者账号",
