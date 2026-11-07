@@ -2646,7 +2646,9 @@ and agent tools; it cannot be removed.
   is self-hosted and therefore requires this approval too. Packaged builds
   default to the Official Registry, `https://server.navide.dev/registry`; the
   path is part of its identity, so another path on the same host is not
-  official.
+  official. The Marketplace website (`https://marketplace.navide.dev`) and
+  developer console (`https://developers.navide.dev`) serve no API and are not
+  Registry identities.
 - Registry envelope signatures identify the Registry signer key ID. Root-signed
   trust metadata records active,
   rotating, expired, and revoked keys. Rotation has a bounded old/new overlap.

@@ -7,9 +7,11 @@ Electron app or `backend/agent_team_backend/` — it is purely additive under
 
 See [`FORMAT.md`](./FORMAT.md) for the `.vsix`-style package format.
 
-> **Deployment status.** The Official Registry is planned at
+> **Deployment status.** The Official Registry API is served at
 > `https://server.navide.dev/registry` (a path prefix on the Navide server
-> host); packaged App builds point there by default. See
+> host); packaged App builds point there by default. The website is at
+> `https://marketplace.navide.dev` (storefront) and
+> `https://developers.navide.dev` (developer console); see Host routing. See
 > [Deployment](#deployment-official-registry-at-servernavidedevregistry) for
 > the container, secrets and operational requirements. Known limit before
 > wider use: package blobs live on the local data volume
