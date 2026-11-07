@@ -165,7 +165,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for the 0.2.39 ledger account column (previous pin 2c066717…):
 #: cli_token_stats' description lists the "account", "model_account" and
 #: "day_model" groupings `cost_by` now accepts. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "67632d3e204f7e75dab83a5455f22b506d07c6937f1d48ca31d084d03f151fb9"
+#: Re-pinned for the 0.2.39 web panes (previous pin 67632d3e…): cli_send's
+#: description says a `web:*` pane is only focused (no injection, no msg_key).
+#: No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "f6e750300a0b53ecb83f8608ff4d17c31d6dc64f4ed06ddbdf33c166c9cab9bd"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
