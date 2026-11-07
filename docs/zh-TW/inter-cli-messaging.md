@@ -159,7 +159,11 @@ shell 指令執行**。所以寄給 Terminal 的訊息是裸打進去的 —— 
   系統服務、fork bomb、把下載內容 pipe 給 shell、憑證檔、force-push `main`，以及
   無法靜態判斷的指令。分類器只判為 high 的指令（`git push`、`git reset --hard`、
   workspace 內的 `rm -rf node_modules`）預設放行，除非你開啟該類別。呼叫端會收到 `error_code: "terminal-command-refused"`，附上
-  規則與片段；拒絕會寫進 Guard 稽核紀錄，分格上也會顯示通知。這類指令請自己執行。
+  規則與片段；拒絕會寫進 Guard 稽核紀錄，分格上也會顯示通知。接著 agent 可以改用
+  `submit: false` 再送一次（在 `cli_send` 或 `cli_open_agent(agent: "terminal")` 上）：
+  指令會預填在命令列上、不按 Enter，以預填的形式寫進稽核紀錄，由你檢查後自己按
+  Enter。在你於那個 terminal 打字之前，送給它的其他訊息會直接失敗，不會接在預填
+  內容後面打進去。
   每個類別都能在「設定 → 安全性 → 終端機指令防護」個別關閉，也能新增封鎖樣式與
   允許前綴。只有經 Navide 打進去的那一行會被檢查：你自己打的不會；若視窗假裝成你
   在打字，也無法與你區分。
@@ -221,6 +225,11 @@ Please review src/main.ts and reply with the blocking issues only.
 之間、MCP host 與 pipeline 的訊息是使用者自己的 agent，不會包。這只能降低注入
 被照做的機率；真正的防線是收過外部內容的分格會被標記，其高風險動作需要本機
 確認。內文裡寫的邊界行會被插入零寬字元破壞，寄件者無法提早結束區塊。
+
+分格的聊天室可由使用者在 Settings → Channels 綁定，也可由 agent 透過 `channels_bind`
+綁定（[外部 MCP 控制](external-mcp-control.md#聊天頻道)）。不論哪一種，聊天室都會
+收到通知，得知它現在驅動的是哪個分格；agent 做的綁定會連同那個 agent 的分格一起
+記錄，並在每個主視窗顯示 toast。
 
 第一行一律標明寄件者。結尾的提示是用來教會從未拿到協定的分格該怎麼回答；它只有
 一行，因此絕不會被誤認成 marker。
