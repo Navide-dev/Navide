@@ -1,5 +1,6 @@
 # Example Compose deployment of the Official Registry behind a reverse proxy
-# that routes https://server.navide.dev/registry/* to this container.
+# that routes https://server.navide.dev/registry/*, marketplace.navide.dev and
+# developers.navide.dev to this container, paths unchanged.
 # Copy next to the host's secrets and adjust paths; nothing here is a secret.
 #
 #   docker compose -f compose.example.yml up -d --build
@@ -16,6 +17,11 @@ services:
       REGISTRY_TRUST_PROFILE: official
       REGISTRY_TRUST_CONFIG_FILE: /etc/navide-registry/official-trust.json
       REGISTRY_ROOT_PATH: /registry
+      # Host routing (README "Host routing"): the website on its own hosts,
+      # the API kept on the legacy host under REGISTRY_ROOT_PATH.
+      REGISTRY_STORE_ORIGIN: https://marketplace.navide.dev
+      REGISTRY_DEVELOPER_ORIGIN: https://developers.navide.dev
+      REGISTRY_LEGACY_HOSTS: server.navide.dev
       # Proxies whose X-Forwarded-Proto/-For uvicorn trusts (default "*": the
       # port is reachable only through the load balancer). Narrow to the
       # proxy's subnet if it is not.

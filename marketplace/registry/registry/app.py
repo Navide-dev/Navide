@@ -196,7 +196,11 @@ def create_app(
         root_path=settings.root_path,
     )
     app.state.registry = state
-    if settings.root_path:
+    if settings.host_routing_enabled:
+        from .host_routing import HostRoutingMiddleware
+
+        app.add_middleware(HostRoutingMiddleware, settings=settings)
+    elif settings.root_path:
         app.add_middleware(_RootPathMiddleware, root_path=settings.root_path)
 
     @app.middleware("http")
