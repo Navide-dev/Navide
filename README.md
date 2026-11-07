@@ -119,7 +119,7 @@ Counts as of 2026-10-27 (v0.2.38). The badges at the top track the live numbers.
 
 ## Available today
 
-- **Multi-agent workspaces:** run any of 18 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Goose, Grok CLI, Hermes Agent, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, OpenClaw, Pi, Qwen Code — or a plain terminal, each in its own pane.
+- **Multi-agent workspaces:** run any of 19 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Devin CLI, Droid, Goose, Grok CLI, Hermes Agent, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, OpenClaw, Pi, Qwen Code — or a plain terminal, each in its own pane.
 - **CLI management:** detect installed coding CLIs, their versions and install methods, and run each CLI's own official update and diagnostic commands.
 - **Session lifecycle:** detect, persist, rebuild, and resume supported CLI sessions.
 - **Configurable pipelines:** define stages, parallel slots, agents, roles, kickoff prompts, questions, documentation queries, and completion sentinels.

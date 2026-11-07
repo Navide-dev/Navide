@@ -68,6 +68,7 @@ const vendors: VendorRow[] = [
   { name: 'Droid CLI (Factory)', bin: 'droid', agentKey: 'droid', skipFlag: '--auto high', usage: false, multiAccount: false, signIn: '' },
   { name: 'MiniMax Code', bin: 'mcode', agentKey: 'mcode', skipFlag: '', usage: false, multiAccount: false, signIn: 'login' },
   { name: 'Goose (AAIF)', bin: 'goose', agentKey: 'goose', skipFlag: '', flagNote: 'settings.help.cliAgents.s1.table.flagNoteGoose', usage: false, multiAccount: false, signIn: '' },
+  { name: 'Devin CLI (Cognition)', bin: 'devin', agentKey: 'devin', skipFlag: '--permission-mode dangerous', usage: false, multiAccount: false, signIn: '' },
   { name: 'OpenClaw', bin: 'openclaw', agentKey: 'openclaw', skipFlag: '', usage: false, multiAccount: false, signIn: '' },
   { name: 'Hermes Agent', bin: 'hermes', agentKey: 'hermes', skipFlag: '--yolo', usage: false, multiAccount: false, signIn: '' },
 ]

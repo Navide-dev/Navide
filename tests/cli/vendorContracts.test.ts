@@ -32,6 +32,7 @@ const contracts = [
   { key: 'muse', binary: 'muse', permission: '--disable-approval', resume: 'muse resume session-123', model: true, effort: '--reasoning-effort high', paste: false, fullScreen: false, silence: false },
   { key: 'mcode', binary: 'mcode', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'goose', binary: 'goose', permission: '', resume: 'goose session -r --session-id session-123', model: false, effort: null, paste: true, fullScreen: false, silence: false },
+  { key: 'devin', binary: 'devin', permission: '--permission-mode dangerous', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'openclaw', binary: 'openclaw', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'hermes', binary: 'hermes', permission: '--yolo', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
 ] as const
