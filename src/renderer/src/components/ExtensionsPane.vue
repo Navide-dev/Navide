@@ -38,8 +38,14 @@ import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { BUILD_FOR_NAVIDE_URL } from '../../../shared/marketplaceDeveloper'
 
 const { t, locale } = useI18n()
+
+/** Developer Mode page: the entry page for a first Navide plugin (plan v2_8714c5 b2). */
+function openBuildGuide(): void {
+  void window.agentTeam?.openExternal?.(BUILD_FOR_NAVIDE_URL)
+}
 
 function pluginsApi() {
   return window.agentTeam?.plugins
@@ -1393,6 +1399,11 @@ watch(installed, () => {
           </template>
         </SettingRow>
       </SettingsCard>
+      <p class="ext-devmode-first" data-testid="developer-mode-first-time">
+        {{ $t('settings.extensions.developerMode.firstTime') }}
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-mode-guide" @click="openBuildGuide">{{ $t('settings.extensions.developerMode.openGuide') }}</button>
+      </p>
+      <p class="ext-devmode-first">{{ $t('settings.extensions.developerMode.agentSkill') }} <code>navide:plugin-authoring</code></p>
       <button
         v-if="developerMode.enabled"
         class="ext-load-folder nv-btn nv-btn--sm"
@@ -1787,6 +1798,11 @@ watch(installed, () => {
 .ext-devmode,
 .ext-devmode-native {
   max-width: var(--settings-page-max);
+}
+.ext-devmode-first {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
 }
 .ext-devmode .ext-load-folder {
   margin-top: var(--space-3);

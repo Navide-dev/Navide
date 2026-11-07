@@ -2260,7 +2260,9 @@
           "downloads": "Downloads",
           "status": "Status"
         },
-        "prereleaseAvailable": "pre-release {version} available"
+        "prereleaseAvailable": "pre-release {version} available",
+        "buildOwnHint": "Want to make your own?",
+        "buildOwn": "Build a Navide Plugin"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Developer Mode",
         "switch": "Turn on Developer Mode",
         "hint": "Load a Navide plugin from a folder to develop and test it, and install Navide plugins from your own server instead of the Navide Marketplace. Turning it off unloads them.",
+        "firstTime": "First Navide plugin? Build for Navide takes you from the template to the Navide Marketplace.",
+        "openGuide": "Open the Guide",
+        "agentSkill": "Or let an agent walk you through it: ask it to install this skill:",
         "banner": "Developer Mode is on. Navide plugins loaded from a folder have not been reviewed.",
         "reminder": "Developer Mode is on: Navide plugins loaded from a folder have not been reviewed. Turn it off in Settings → Navide Plugins when you no longer need it.",
         "reminderClose": "Got It",
@@ -12616,6 +12621,20 @@
       "label": "Navide Marketplace views",
       "browse": "Browse",
       "developer": "Developer"
+    },
+    "entry": {
+      "title": "Build for Navide",
+      "step-init": "Create a Navide plugin from the template (Navide 0.2.39 or later):",
+      "step-load": "Load it with Settings → Navide Plugins → Developer Mode → Load from Folder…",
+      "step-apply": "Sign in below and fill in the developer application once, with your real name; a person reviews it.",
+      "next": {
+        "apply": "Next: fill in the developer application below.",
+        "pending": "Next: wait for the review. Meanwhile, build your Navide plugin and load it with Developer Mode.",
+        "key": "Next: sign in as a publisher so this Navide can register its signing key.",
+        "publish": "Next: publish a version; it goes public on the Navide Marketplace after review."
+      },
+      "guide": "Open Build for Navide",
+      "console": "Open developers.navide.dev"
     },
     "account": {
       "title": "Developer account",

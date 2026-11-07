@@ -2260,7 +2260,9 @@
           "downloads": "Lượt tải",
           "status": "Trạng thái"
         },
-        "prereleaseAvailable": "có bản thử nghiệm {version}"
+        "prereleaseAvailable": "có bản thử nghiệm {version}",
+        "buildOwnHint": "Muốn tự làm một cái?",
+        "buildOwn": "Tạo plugin Navide"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "Chế độ nhà phát triển",
         "switch": "Bật Chế độ nhà phát triển",
         "hint": "Cho phép tải plugin Navide từ một thư mục để phát triển và kiểm thử, và cài plugin Navide từ máy chủ của riêng bạn thay vì Navide Marketplace; khi tắt, các plugin Navide đó sẽ bị gỡ.",
+        "firstTime": "Plugin Navide đầu tiên? Build for Navide dẫn bạn từ mẫu đến Navide Marketplace.",
+        "openGuide": "Mở hướng dẫn",
+        "agentSkill": "Hoặc để một agent hướng dẫn bạn: hãy nhờ nó cài skill này:",
         "banner": "Chế độ nhà phát triển đang bật. Plugin Navide tải từ thư mục chưa được duyệt.",
         "reminder": "Chế độ nhà phát triển đang bật: plugin Navide tải từ thư mục chưa được duyệt. Hãy tắt nó trong Cài đặt → Plugin Navide khi không còn cần.",
         "reminderClose": "Đã hiểu",
@@ -12616,6 +12621,20 @@
       "label": "Chế độ xem Navide Marketplace",
       "browse": "Duyệt",
       "developer": "Nhà phát triển"
+    },
+    "entry": {
+      "title": "Build for Navide: tự làm plugin Navide của bạn",
+      "step-init": "Tạo plugin Navide từ mẫu (Navide 0.2.39 trở lên):",
+      "step-load": "Tải nó bằng Cài đặt → Plugin Navide → Chế độ nhà phát triển → Tải từ thư mục…",
+      "step-apply": "Đăng nhập bên dưới và điền đơn đăng ký nhà phát triển một lần bằng tên thật; một người sẽ xét duyệt.",
+      "next": {
+        "apply": "Tiếp theo: điền đơn đăng ký nhà phát triển bên dưới.",
+        "pending": "Tiếp theo: chờ xét duyệt. Trong lúc đó, hãy xây dựng plugin Navide và tải nó bằng Chế độ nhà phát triển.",
+        "key": "Tiếp theo: đăng nhập với tư cách nhà phát hành để Navide này đăng ký khóa ký của nó.",
+        "publish": "Tiếp theo: phát hành một phiên bản; sau khi xét duyệt, nó sẽ xuất hiện trên Navide Marketplace."
+      },
+      "guide": "Mở Build for Navide",
+      "console": "Mở developers.navide.dev"
     },
     "account": {
       "title": "Tài khoản nhà phát triển",

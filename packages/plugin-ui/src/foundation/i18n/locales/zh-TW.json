@@ -2260,7 +2260,9 @@
           "downloads": "下載次數",
           "status": "狀態"
         },
-        "prereleaseAvailable": "有預覽版 {version}"
+        "prereleaseAvailable": "有預覽版 {version}",
+        "buildOwnHint": "想自己做一個？",
+        "buildOwn": "開發 Navide 外掛"
       },
       "developerMode": {
         "errors": {
@@ -2276,6 +2278,9 @@
         "title": "開發者模式",
         "switch": "開啟開發者模式",
         "hint": "可從資料夾載入 Navide 外掛來開發與測試，也能從你自己的伺服器、而非 Navide 市集安裝 Navide 外掛；關閉時會卸下這些 Navide 外掛。",
+        "firstTime": "第一次做 Navide 外掛？Build for Navide 帶你從範本走到 Navide 市集上架。",
+        "openGuide": "開啟指南",
+        "agentSkill": "或讓 agent 帶你做：請它安裝這個 skill：",
         "banner": "開發者模式已開啟，從資料夾載入的 Navide 外掛沒有經過審核。",
         "reminder": "開發者模式已開啟：從資料夾載入的 Navide 外掛沒有經過審核。不用時請到「設定 → Navide 外掛」關閉。",
         "reminderClose": "知道了",
@@ -12616,6 +12621,20 @@
       "label": "Navide 市集檢視",
       "browse": "瀏覽",
       "developer": "開發者"
+    },
+    "entry": {
+      "title": "Build for Navide：做你自己的 Navide 外掛",
+      "step-init": "用範本建立 Navide 外掛（Navide 0.2.39 起）：",
+      "step-load": "在「設定 → Navide 外掛 → 開發者模式 → 從資料夾載入…」載入試用",
+      "step-apply": "在下方登入，實名填寫一次開發者申請，由專人審核。",
+      "next": {
+        "apply": "下一步：填寫下方的開發者申請。",
+        "pending": "下一步：等待審核。這段期間可以先建置 Navide 外掛，用開發者模式 載入試用。",
+        "key": "下一步：以發佈者身分登入，讓這台 Navide 註冊簽章金鑰。",
+        "publish": "下一步：上架一個版本，審核通過後就會出現在 Navide 市集。"
+      },
+      "guide": "開啟 Build for Navide",
+      "console": "開啟 developers.navide.dev"
     },
     "account": {
       "title": "開發者帳號",
