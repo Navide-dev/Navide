@@ -980,6 +980,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     memory: (webContentsIds: number[]): Promise<Record<string, number>> =>
       ipcRenderer.invoke('webPane:memory', webContentsIds),
     clearData: (siteId: string): Promise<boolean> => ipcRenderer.invoke('webPane:clearData', siteId),
+    /** Site ids whose desktop app is installed (macOS), and opening one. */
+    installedApps: (): Promise<string[]> => ipcRenderer.invoke('webPane:installedApps'),
+    openApp: (siteId: string): Promise<boolean> => ipcRenderer.invoke('webPane:openApp', siteId),
   },
   /** Move an instruction file the Memory page created to the Trash; main
    *  accepts only a path the backend recorded creating (memoryUndoCreate.ts). */

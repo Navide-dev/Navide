@@ -8651,6 +8651,8 @@
     }
   },
   "label": {
+    "standalone-badge-web-pane": "web pane",
+    "web-pane-menu-note": "web pane은 공식 사이트를 pane 안에서 열고 본인 계정으로 로그인합니다. 로그인 상태는 이 컴퓨터에만 남습니다. ↗ App은 데스크톱 앱이 설치된 경우에만 표시됩니다.",
     "step-count": "{count}개 단계",
     "imported-from-n8n": "n8n에서 가져옴",
     "resume-other-pipeline": "완료되지 않은 실행이 \"{name}\"에 속해 있어요. 계속하려면 해당 pipeline으로 전환하세요.",
