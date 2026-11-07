@@ -84,7 +84,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -395,6 +395,7 @@ import {
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
 import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared/pluginAgentTools'
+import type { PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -1285,10 +1286,11 @@ function markPluginIconFailed(entry: Pick<PluginRegionContribution, 'contributio
   failedPluginIcons.value = failures
 }
 
-async function runPluginCommand(commandId: string): Promise<void> {
+async function runPluginCommand(commandId: string, target?: PluginCommandTarget): Promise<void> {
   const result = await window.agentTeam?.plugins?.runCommand?.({
     commandId,
     workspace_path: currentWorkspace.value.trim(),
+    ...(target ? { target } : {}),
   })
   if (!result) return
   if (result.ok) {
@@ -1298,9 +1300,20 @@ async function runPluginCommand(commandId: string): Promise<void> {
   notifyRestore.toast(i18n.global.t(`settings.keybindings.plugin.run.${result.reason}`), { type: 'error' })
 }
 
+/** Commands enabled plugins put on the status bar and the pane menu (view
+ *  slots). Their text is the plugin's own, so it is always shown with the
+ *  plugin's name and with invisible characters made visible. */
+const pluginSlots = ref<PluginSlotEntry[]>([])
+const pluginStatusItems = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'statusBar'))
+const pluginPaneActions = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'paneActions'))
+const pluginSlotLabel = (entry: PluginSlotEntry): string => revealInvisibleText(entry.title)
+const pluginSlotTitle = (entry: PluginSlotEntry): string =>
+  `${revealInvisibleText(entry.pluginName)} · ${revealInvisibleText(entry.tooltip ?? entry.title)}`
+
 async function refreshPluginCommands(): Promise<void> {
   const commands = await window.agentTeam?.plugins?.listCommands?.()
   syncPluginCommands(commands ?? [], (commandId) => { void runPluginCommand(commandId) })
+  pluginSlots.value = (await window.agentTeam?.plugins?.listSlots?.()) ?? []
 }
 
 async function openPluginContributionWindow(contribution: PluginRegionContribution): Promise<void> {
@@ -11791,7 +11804,11 @@ registerCommand('ui.window.openPipeline', (args) => {
 // nothing, so these two actions drive the very functions the ControlPane
 // buttons emit into (@pipeline-start / @pipeline-abort) rather than a copy.
 registerCommand('ui.pipeline.start', async (args) => {
-  const a = (args as { pipelineId?: string; task?: string } | undefined) ?? {}
+  const a = (args as { pipelineId?: string; task?: string; origin?: string } | undefined) ?? {}
+  // The editor's Run button says 'user'; over the action bus the bus sets it
+  // (useUiActionBus remoteArgs): an agent, a schedule or a webhook.
+  const origin: PipelineRunOrigin =
+    a.origin === 'user' || a.origin === 'schedule' || a.origin === 'webhook' ? a.origin : 'agent'
   if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.start requires an open workspace'), { code: 'no-workspace' })
   // A second run would overwrite pipeline.task/stageIndex/state under the
   // panes the first one is still driving, so refuse rather than restart.
@@ -11807,7 +11824,7 @@ registerCommand('ui.pipeline.start', async (args) => {
     throw Object.assign(new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline'), { code: 'no-pipeline' })
   }
   const refused: { last?: StartRefusal } = {}
-  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId }, (r) => { refused.last = r })
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId, origin }, (r) => { refused.last = r })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -15795,10 +15812,17 @@ async function spawnPipelineStage(index: number): Promise<void> {
   }
 }
 
+/** Who started the current pipeline run: a person (the Run button), an agent
+ *  (ui.pipeline.start / pipeline_start), a schedule or a webhook. A child run
+ *  keeps its parent's. Recorded with every plugin node the run reaches. */
+type PipelineRunOrigin = 'user' | 'agent' | 'schedule' | 'webhook'
+let pipelineRunOrigin: PipelineRunOrigin = 'user'
+
 /** Returns why the run was refused, or '' when it was not (ui.pipeline.start
  *  reports the reason). `report` also gets the refusal's code, for a caller
  *  that says it in the UI language (pipelineErrors.startRefusalText). */
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }, report?: (refusal: StartRefusal) => void): Promise<string> {
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string; origin?: PipelineRunOrigin }, report?: (refusal: StartRefusal) => void): Promise<string> {
+  if (!payload.childOf) pipelineRunOrigin = payload.origin ?? 'user'
   const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
   // pipelineLog alone left a refusal nowhere durable: it persists only once
   // pipeline.workspacePath is set, which happens below, so after a reset or a
@@ -16494,7 +16518,43 @@ async function failRunOnCall(nodeId: string, label: string, reason: string): Pro
  *  (pipelineDag.nextCall): call it, or fail the run on it. */
 async function takeCall(call: NonNullable<ReturnType<typeof pipelineDag.nextCall>>, nextIndex: number): Promise<void> {
   if (call.kind === 'fail') await failRunOnCall(call.nodeId, call.label, call.reason)
+  else if (call.kind === 'plugin') await runPluginNode(call, nextIndex)
   else await startChildRun(call, nextIndex)
+}
+
+/** Run plugin node `call.nodeId` in place (no child run): the Host calls the
+ *  contributing plugin's backend with the node's expanded input. Its output is
+ *  external content, so it is recorded as the node's output and summary only,
+ *  never as an instruction. A failure is retried or routed like a sub-pipeline
+ *  failure; a plugin without a backend here (Windows) fails at once. Then the
+ *  hand-off to stage `nextIndex` goes on: the next call, or the stage. */
+async function runPluginNode(
+  call: { nodeId: string; label: string; pluginId: string; node: string; input: string; note: string },
+  nextIndex: number,
+): Promise<void> {
+  pipelineDag.callStarted(call.nodeId)
+  pipelineLog(`◇ Plugin node "${call.label}" → ${call.pluginId} ${call.node}`)
+  const run = window.agentTeam?.plugins?.runPipelineNode
+  const answer = run
+    ? await run({ workspacePath: pipeline.workspacePath, pluginId: call.pluginId, node: call.node, input: call.input, origin: pipelineRunOrigin })
+        .catch(() => ({ ok: false as const, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }))
+    : { ok: false as const, code: 'BACKEND_UNAVAILABLE', message: 'plugin nodes are unavailable in this window' }
+  if (pipeline.state !== 'running') return
+  if (answer.ok) {
+    const summary = typeof answer.output === 'string' ? answer.output : JSON.stringify(answer.output)
+    pipelineDag.callFinished(call.nodeId, { status: 'done', output: answer.output, summary: fenceExternalContent(`${call.pluginId}:\n${summary}`) })
+    pipelineLog(`◇ Plugin node "${call.label}" ✓`)
+  } else {
+    pipelineDag.callFinished(call.nodeId, { status: 'failed', error: `${answer.code}: ${answer.message}` })
+    pipelineLog(`◇ Plugin node "${call.label}" ✕ ${answer.code}: ${answer.message}`)
+  }
+  const next = pipelineDag.nextCall(nextIndex)
+  if (next) {
+    await takeCall(next, nextIndex)
+    return
+  }
+  if (nextIndex === pipeline.stageIndex + 1) await onPipelineNext()
+  else await activateStage(nextIndex)
 }
 
 /** Suspend this run at subpipeline node `call.nodeId` and start its child
@@ -25807,6 +25867,17 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="$t('action.remove-children-title')"
           @click="killDescendants(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.remove-children', { count: ctxDescendantIds.length }) }}</div>
+        <template v-if="pluginPaneActions.length">
+          <div class="pane-ctx-sep"></div>
+          <div
+            v-for="item in pluginPaneActions"
+            :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+            class="pane-ctx-item"
+            :title="pluginSlotTitle(item)"
+            @click="runPluginCommand(item.commandId, { paneId: paneCtxMenu!.paneId }); closePaneCtxMenu()"
+          >{{ pluginSlotLabel(item) }} <span class="pane-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></div>
+          <div class="pane-ctx-sep"></div>
+        </template>
         <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ $t('action.remove') }}</div>
         <div
           v-if="ctxDescendantIds.length"
@@ -25993,6 +26064,16 @@ function paneIsCommander(p: ActivePane): boolean {
         </span>
       </div>
       <div class="statusbar-right">
+        <span
+          v-for="item in pluginStatusItems"
+          :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+          class="sb-item sb-clickable sb-plugin"
+          role="button"
+          tabindex="0"
+          :title="pluginSlotTitle(item)"
+          @click="runPluginCommand(item.commandId)"
+          @keydown.enter="runPluginCommand(item.commandId)"
+        >{{ pluginSlotLabel(item) }}</span>
         <span v-if="pipeline.state !== 'idle'" class="sb-item sb-pipeline" :class="'sb-' + pipeline.state">
           {{ pipeline.state === 'running'
             ? $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: stagesApi.stages.value.length || '?' })
@@ -26700,6 +26781,8 @@ function paneIsCommander(p: ActivePane): boolean {
 .sb-update-check-failed .sb-dot { background: var(--text-muted); }
 .sb-announce-unread { color: var(--accent-fg); }
 .sb-clickable { cursor: pointer; }
+.sb-plugin { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-ctx-plugin { opacity: 0.6; }
 
 /* ── Backend supervisor popover ──────────────────────────────────────────── */
 .bp-backdrop {

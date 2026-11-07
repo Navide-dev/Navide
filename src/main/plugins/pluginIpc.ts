@@ -1316,6 +1316,22 @@ export function registerPluginIpc(
     return manager.listCommandCatalog()
   })
 
+  ipcMain.handle('plugins:listSlots', (event) => {
+    assertAuthorized(event)
+    return manager.listSlotCatalog()
+  })
+
+  // Settings → Navide Plugins: a package's declared settings (contributes.settings).
+  ipcMain.handle('plugins:settings:read', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.readPluginSettings(args.id) : null
+  })
+  ipcMain.handle('plugins:settings:write', async (event, args: { id?: unknown; key?: unknown; value?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.key !== 'string') return false
+    return manager.writePluginSetting(args.id, args.key, args.value)
+  })
+
   ipcMain.handle('plugins:listContributions', (event) => {
     assertAuthorized(event)
     const installed = new Map(manager.listInstalledPackages().map((pkg) => [pkg.id, pkg] as const))
@@ -4930,6 +4946,12 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
+  })
+
+  // A pipeline run in a Navide window reached a plugin node (contributes.pipelineNodes).
+  ipcMain.handle('plugins:runPipelineNode', async (event, args: unknown) => {
+    assertAuthorized(event)
+    return manager.runPipelineNode(args)
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as

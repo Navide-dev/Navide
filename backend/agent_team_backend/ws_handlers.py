@@ -369,6 +369,29 @@ async def plugins_agent_tools_sync(
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.pipelineNodes.result")
+async def plugins_pipeline_nodes_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.pipelineNodes.request`` (E2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.pipelineNodes.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_pipeline_nodes(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("marketplace.query.result")
 async def marketplace_query_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -502,6 +525,33 @@ def _backend_call_row(app: Any, row: dict) -> str | None:
         address=row["address"], outcome=row["outcome"], count=row["count"], at_ms=at,
     )
     return None if recorded else "refused"
+
+
+@handler("plugin.pipelineNode.record")
+async def plugin_pipeline_node_record(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store one pipeline plugin node run the Host ran (E2): who started the
+    run, which node of which plugin, how it ended and how long it took. A row
+    the audit refuses is dropped; nothing here fails the run it records."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    keys = {"plugin_id", "plugin_version", "workspace", "node_id", "run_origin", "outcome", "error_code",
+            "duration_ms", "at"}
+    if not isinstance(payload, dict) or set(payload) != keys or not isinstance(payload.get("at"), int) \
+            or isinstance(payload.get("at"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.pipelineNode.record is malformed")
+        )
+        return
+    fields = {key: payload[key] for key in keys - {"at"}}
+    recorded = app.plugin_audit_log.record_pipeline_node_run(**fields, at_ms=payload["at"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "recorded": recorded}))
 
 
 @handler("plugin.activity.record")
@@ -6889,6 +6939,9 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot import a pipeline while a project is running")
             )
             return
+    from .mcp_server import server as plan_mcp
+
+    plugin_nodes = await plan_mcp.host_plugin_pipeline_nodes()
     try:
         out = await asyncio.to_thread(
             import_into_store,
@@ -6897,6 +6950,7 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
             dry_run=dry_run,
             default_agent=str(payload.get("default_agent") or "claude"),
             name=str(payload.get("name") or ""),
+            plugin_nodes=plugin_nodes,
         )
     except N8nImportError as exc:
         code = {"too-large": "N8N_TOO_LARGE", "store-refused": "N8N_REFUSED"}.get(exc.reason, "N8N_INVALID")
@@ -11719,7 +11773,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     """The renderer engine reports per-graph-node run state; stored on the
     project so MCP pipeline_status can read it, then broadcast for canvases in
     every window. Contract: src/renderer/src/lib/pipelineGraph.ts."""
-    from . import app
+    from . import app, plugin_host_events
 
     nodes = payload.get("nodes", {})
     gate = payload.get("gate")
@@ -11733,6 +11787,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     # dropped and named back. A pipeline the store cannot read (deleted
     # mid-run) filters nothing rather than dropping the run's states.
     before = app.project_store.peek(payload["workspace_path"])
+    before_statuses = plugin_host_events.node_statuses(getattr(before, "node_states", None))
     try:
         known = app.stages_store.node_ids(getattr(before, "pipeline_id", "") or None)
     except (KeyError, ValueError):
@@ -11749,6 +11804,9 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
         "nodes": project.node_states,
         "gate": project.node_gate,
     }))
+    plugin_host_events.on_pipeline_node_states(
+        project.workspace_path, project.pipeline_id, before_statuses, project.node_states
+    )
 
 
 @handler("pipeline.fetch_docs")

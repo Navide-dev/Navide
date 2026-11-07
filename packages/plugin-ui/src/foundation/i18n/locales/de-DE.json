@@ -2016,6 +2016,11 @@
       "cancel": "Abbrechen"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Einstellungen",
+        "reset": "Auf Standard zurücksetzen",
+        "saveFailed": "{title} konnte nicht gespeichert werden. Versuchen Sie es erneut; schlägt es weiter fehl, installieren Sie dieses Navide-Plugin neu."
+      },
       "devUnpacked": "Unsignierter lokaler Ordner – nur im Entwicklermodus",
       "agentTools": {
         "heading": "Tools, die Agents aufrufen können ({count})",
@@ -12203,6 +12208,16 @@
       "crossWorkspace": "Arbeitsbereichsübergreifend: {from} → {to}",
       "totalSize": "Argumente {args} und Ergebnisse {result} insgesamt; {unknown} Größen sind unbekannt und nicht mitgezählt"
     },
+    "pipelineNodes": {
+      "heading": "Pipeline-Läufe, die seine Knoten erreicht haben",
+      "row": "{date} Lauf gestartet von {origin} → Knoten {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "Ihnen",
+        "agent": "einem Agenten",
+        "schedule": "einem Zeitplan",
+        "webhook": "einem Webhook"
+      }
+    },
     "caller": {
       "pane": "Bereich „{name}“",
       "external": "ein externer Client",
@@ -12317,7 +12332,12 @@
         "backendEvent": "Ereignis des nativen Codes: {key}",
         "network": "Kann über Befehle entfernte Hosts erreichen",
         "networkHost": "Ansichten können sich verbinden mit: {key}",
-        "agentTool": "Agent-Tool: {key}"
+        "agentTool": "Agent-Tool: {key}",
+        "agentEvent": "Empfängt Host-Ereignis: {key}",
+        "pluginCall": "Ruft Navide-Plugin auf: {key}",
+        "apiMethod": "Andere Navide-Plugins können aufrufen: {key}",
+        "pipelineNode": "Pipeline-Schritt (auch in von Agenten oder Zeitplänen gestarteten Pipelines): {key}",
+        "commandSlot": "Befehl auf einer Host-Oberfläche: {key}"
       }
     },
     "title": "Offenlegung",
@@ -12377,6 +12397,10 @@
         "full": "Führt beliebige Befehle aus"
       },
       "networkViaShell": "Kann über diese Befehle entfernte Hosts erreichen",
+      "agentEvents": "Empfängt Host-Ereignisse zu Ihren Bereichen, Plänen, Pipelines und Zeitplänen (nur Namen und Zustände): {events}",
+      "pluginCalls": "Ruft diese Navide-Plugins auf: {plugins}",
+      "api": "Andere Navide-Plugins können {count} seiner Methoden aufrufen",
+      "pipelineNodes": "Fügt {count} Pipeline-Schritt(e) hinzu; auch Pipelines, die ein Agent, ein Zeitplan oder ein Webhook startet, führen sie aus",
       "aiCli": "Startet AI-CLI-Sessions und liest ihre Ausgabe",
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-Bereiche in diesem Projekt, welcher Bereich welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",

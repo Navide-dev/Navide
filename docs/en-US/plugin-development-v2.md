@@ -1165,6 +1165,8 @@ matches.
 | `permissions.shell` | no | allowlist, full, or an object with mode allowlist and an executables list | Omission denies `shell.run`; the object form declares executables beyond git, gh and glab, see [Declared executables](#declared-executables-permissionsshellexecutables) |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
 | `permissions.network` | no | Object with a required hosts array | Hosts the package's views may connect to; enforced on views, see [Network hosts](#network-hosts-permissionsnetwork) |
+| `permissions.agents` | no | Object with a required events array | Host events the package receives; requires `agents` in `system`, see [Host events](#host-events-permissionsagentsevents) |
+| `permissions.plugins` | no | 1–16 unique plugin ids | Plugins whose `contributes.api` this package calls, see [Calling another plugin](#calling-another-plugin-pluginscall) |
 | `contributes.views[].id` | yes | Lowercase view id | |
 | `contributes.views[].kind` | yes | `custom` | |
 | `contributes.views[].location` | yes | `top`, `bottom`, `right`, `left`, `main`, `detail`, `window` | |
@@ -1666,6 +1668,17 @@ not call it directly. The one exception is the `navide-plugin init` scaffold:
 having no build step to bundle the SDK, its `main.js` calls `window.nav.ready()`,
 which is all `createPluginViewRuntimeClient().ready()` does.
 
+### Testing without Navide (`@navide/plugin-sdk/testing`)
+
+`createTestHost(options)` builds an in-memory Host for a plugin's own unit
+tests: a `PluginContext` whose `capabilities.invoke` answers from the handlers
+the test passes and refuses an address the test's `permissions` do not declare
+with `CAPABILITY_DENIED`, judged from the same `capabilities-v1.json` the Host
+enforces. `emit()` delivers Host events to the plugin's subscribers (an
+`agents.*` event only when `permissions.agentEvents` declares it), and `calls`
+and `effects` record what the plugin did. It runs no Host code and grants
+nothing real.
+
 ## Capabilities and permissions
 
 The normative method/event catalog is
@@ -2039,7 +2052,8 @@ Limits a plugin must plan for:
   and is listed for either workspace, with `sender` / `recipient` showing the
   other workspace's folder and pane name and `agentMessages.read` returning
   the text that pane wrote.
-- There is no change event yet; poll.
+- For changes, subscribe to the [Host events](#host-events-permissionsagentsevents)
+  instead of polling.
 
 #### Backend Bridge ports `agents` and `agent-message-bodies`
 
@@ -2051,6 +2065,83 @@ the `agents` Execution Policy namespace, and `agent-message-bodies`
 those of the matching capability above. Both run at the bound workspace root
 only. An agent reaches them only inside an admitted agent-tool call of the same
 package at that workspace; Plans and first-party packages do not get them.
+
+### Host events (`permissions.agents.events`)
+
+A view can subscribe to Host events about the bound workspace with
+`context.events.subscribe(event, listener)`. Each event is declared on its own
+in `permissions.agents.events` and needs `agents` in `permissions.system`; the
+disclosure card lists every declared event, and an update that adds one asks
+for consent again. Payloads are metadata only, the same fixed projections the
+`agents.*` methods return: message text stays behind `agentMessages.read`.
+
+| Event | Payload | When |
+|---|---|---|
+| `agents.paneCreated` | `paneId`, `name`, `agentKey`, `spawnedBy` | A pane registers in the workspace |
+| `agents.paneClosed` | `paneId`, `name` | It goes away |
+| `agents.turnEnded` | `paneId`, `name` | A pane's agent finishes a turn |
+| `agents.paneIdle` | `paneId`, `name` | A pane's status becomes idle |
+| `agents.messageReceived` | The `agents.listMessages` row (with `bodyLength`, never the text) | A message reaches a pane of the workspace |
+| `agents.planStageChanged` | `relPath`, `stage`, `previousStage` | A plan document's stage changes on disk |
+| `agents.pipelineNodeChanged` | `pipelineId`, `nodeId`, `status`, `previousStatus` | A pipeline node's run status changes |
+| `agents.scheduleFired` | `jobId`, `name`, `actionKind`, `manual` | A scheduled job starts a run |
+
+The backend observes its own registry, message log, plan files, pipeline
+states and scheduler (`backend/agent_team_backend/plugin_host_events.py`) and
+the Host delivers each event only to live instances bound to that workspace
+whose manifest declares it and whose grant holds `agents`. Nothing is
+rate-limited or filtered beyond that: what is declared is disclosed, and what is
+disclosed is delivered.
+
+### Calling another plugin (`plugins.call`)
+
+A package can call a backend method another installed plugin offers:
+
+- The target lists the methods in `contributes.api` (`method`, which must be in
+  its `backend.methods`, and a `description`).
+- The caller names the target in `permissions.plugins` and calls
+  `plugins.call` with `{ pluginId, method, args }`; the result is `{ result }`.
+
+The Host checks the caller's declaration and grant, then that the target is
+installed, enabled, offers the method and holds the user's grant for its own
+version (with `fs` when it declares `fs`), and runs the method on the target's
+backend for the caller's workspace. Both cards disclose the link (the caller's
+"Calls these Navide plugins", the target's "Lets other Navide plugins call");
+the call is recorded in the caller's Activity as `plugins.call` and in the
+target's as a backend call. A target with no backend on this machine (Windows)
+answers `BACKEND_UNAVAILABLE` at once. An agent driving the caller's view
+reaches `plugins.call` only under a `full` Execution Policy, since a policy
+cannot name plugins.
+
+### Pipeline nodes (`contributes.pipelineNodes`)
+
+A package can contribute deterministic pipeline steps: `id`, `title`, optional
+`description`, `method` (in `backend.methods`), optional `timeoutMs`
+(1000–600000) and optional `n8nTypes`. A pipeline graph's `plugin` node names
+`{ pluginId, node, input? }`; when a run reaches it the Host calls the method
+with `{ input }` (the node's input template expanded, or the run's task) on the
+package's backend for the run's workspace, and the JSON it returns becomes the
+node's output. That output is external content: wherever
+`{{node.<id>.output}}` puts it into a prompt it is fenced as such. Retries and
+error edges work as for other work nodes; a package with no backend on this
+machine (Windows) fails the node at once instead of holding the run.
+
+An n8n import asks the Host for the pipeline nodes of enabled, granted
+packages and turns a step whose n8n type one of them lists into a plugin node
+instead of an agent slot; with no match the agent slot stands in as before.
+
+Every run of a node is recorded in the package's Activity with who started the
+pipeline run (you, an agent, a schedule or a webhook), the node, how it ended
+and how long it took, and the disclosure card says the steps run in pipelines
+started by agents, schedules and webhooks too.
+
+**Design observation.** A plugin node runs as the Host user whoever started
+the run: the pipeline is the authority (its slots already run full agent CLIs),
+the steps are disclosed at install and need the user's grant, and the run's
+origin is disclosed in Activity. To run agent- and schedule-started nodes under
+the [Agent Execution Policy](#agent-execution-policy) instead, the one place to
+change is the initiator `FrontendPluginManager.runPipelineNode` passes to
+`callContributedMethod`.
 
 ### Declared filesystem scopes (disclosure only)
 
@@ -2693,6 +2784,37 @@ bound to it:
   that view's identity and an empty `args` object, under the same checks as a
   call from the view. With no view open the command fails: a key does not start
   a backend. The result is discarded; a failure tells the user.
+
+### Command slots (`statusBar`, `paneActions`, `explorerMenu`)
+
+A package can put one of its own commands on a Host surface:
+
+- `contributes.statusBar`: up to 4 items with `command`, `text` and an optional
+  `tooltip`, shown in the status bar.
+- `contributes.paneActions`: up to 8 entries with `command` and `title` in a
+  pane's context menu; the command gets `{ paneId }`.
+- `contributes.explorerMenu`: up to 8 entries with `command`, `title` and an
+  optional `when` (`file`, `directory` or `any`) in the Explorer's context menu;
+  the command gets `{ path }`, workspace-relative.
+
+The command must be one of this package's `contributes.commands`. A `run.view`
+command receives the target merged into its `run.target`; a `run.method`
+command receives it as its `args`. The text is the package's own, so the Host
+always shows it with the package's name, and the parser refuses control, zero-
+width and bidirectional characters in it. The disclosure card lists each
+placement.
+
+### Settings (`contributes.settings`)
+
+Up to 32 settings, each with a `key` (up to four dot-separated camelCase
+words), `title`, optional `description`, `type` (`boolean`, `string`, `number`
+or `enum`) and `default`; `enum` needs `options`, `number` may set `minimum`
+and `maximum`, `string` may set `maxLength` (default 1024). Settings → Navide
+Plugins shows them as a form. A value the user changes is written to the
+package's own storage, scope `plugin`, key `settings.<key>`, after the Host
+checks it against the declaration, and live views get
+`ui.pluginStorageChanged`. Read it with `storage.get`; until the user changes
+it nothing is stored and the package uses its `default`.
 
 **Agents do not run commands.** `ui_invoke` refuses a plugin command with
 `ui_human_only`, and this applies to `run.method` too. Opening a view with a

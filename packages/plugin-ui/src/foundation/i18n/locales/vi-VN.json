@@ -2016,6 +2016,11 @@
       "cancel": "Hủy"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Cài đặt",
+        "reset": "Khôi phục mặc định",
+        "saveFailed": "Không lưu được {title}. Hãy thử lại; nếu vẫn lỗi, hãy cài lại plugin Navide này."
+      },
       "devUnpacked": "Thư mục cục bộ chưa ký — chỉ trong Chế độ nhà phát triển",
       "agentTools": {
         "heading": "Công cụ agent có thể gọi ({count})",
@@ -12203,6 +12208,16 @@
       "crossWorkspace": "Giữa các workspace: {from} → {to}",
       "totalSize": "Tổng tham số {args} và kết quả {result}; {unknown} kích thước không rõ và không được tính"
     },
+    "pipelineNodes": {
+      "heading": "Các lần chạy pipeline đã tới nút của nó",
+      "row": "{date} lần chạy do {origin} bắt đầu → nút {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "bạn",
+        "agent": "một agent",
+        "schedule": "lịch hẹn",
+        "webhook": "webhook"
+      }
+    },
     "caller": {
       "pane": "pane “{name}”",
       "external": "một client bên ngoài",
@@ -12317,7 +12332,12 @@
         "backendEvent": "Sự kiện mã gốc: {key}",
         "network": "Có thể kết nối máy chủ từ xa qua các lệnh",
         "networkHost": "Chế độ xem có thể kết nối tới: {key}",
-        "agentTool": "Công cụ agent: {key}"
+        "agentTool": "Công cụ agent: {key}",
+        "agentEvent": "Nhận sự kiện của Host: {key}",
+        "pluginCall": "Gọi plugin Navide: {key}",
+        "apiMethod": "Plugin Navide khác có thể gọi: {key}",
+        "pipelineNode": "Bước pipeline (cả trong pipeline do agent hoặc lịch hẹn khởi chạy): {key}",
+        "commandSlot": "Lệnh trên giao diện của Host: {key}"
       }
     },
     "title": "Công khai thông tin",
@@ -12377,6 +12397,10 @@
         "full": "Chạy bất kỳ lệnh nào"
       },
       "networkViaShell": "Có thể kết nối máy chủ từ xa qua các lệnh đó",
+      "agentEvents": "Nhận sự kiện của Host về các pane, kế hoạch, pipeline và lịch hẹn (chỉ tên và trạng thái): {events}",
+      "pluginCalls": "Gọi các plugin Navide này: {plugins}",
+      "api": "Cho phép các plugin Navide khác gọi {count} phương thức của nó",
+      "pipelineNodes": "Thêm {count} bước pipeline; các pipeline do agent, lịch hẹn hoặc webhook khởi chạy cũng chạy chúng",
       "aiCli": "Khởi chạy các session AI CLI và đọc đầu ra của chúng",
       "web": "Có thể mở và duyệt bất kỳ trang web nào; đăng nhập trang web được lưu trên máy tính này; agent dùng các lần đăng nhập của bạn trong plugin Navide này (agent có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; nó có thể mở nhiều trang web cùng lúc, và mỗi trang đều tốn bộ nhớ.",
       "agents": "Xem các pane agent trong dự án này, pane nào đã mở pane nào, nhật ký gửi tin nhắn (không có nội dung) và danh sách phiên (không có nội dung hội thoại)",

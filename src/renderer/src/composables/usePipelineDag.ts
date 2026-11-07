@@ -357,6 +357,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
 
   type CallTurn =
     | { kind: 'call'; nodeId: string; label: string; pipelineId: string; task: string; note: string }
+    | { kind: 'plugin'; nodeId: string; label: string; pluginId: string; node: string; input: string; note: string }
     | { kind: 'fail'; nodeId: string; label: string; reason: string }
 
   /** The sub-pipeline the run must call before stage `nextIndex`, or why
@@ -394,8 +395,23 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     const id = callBefore(p, run, nextIndex)
     if (!id) return null
     const n = p.graph.nodes.find((x) => x.id === id)!
+    if (n.kind === 'plugin') {
+      const input = n.plugin?.input?.trim() ? n.plugin.input : '{{task}}'
+      return {
+        kind: 'plugin', nodeId: id, label: n.label || id, pluginId: n.plugin?.pluginId ?? '',
+        node: n.plugin?.node ?? '', input: expandFor(id, input), note,
+      }
+    }
     const template = n.subpipeline?.task?.trim() ? n.subpipeline.task : '{{task}}'
     return { kind: 'call', nodeId: id, label: n.label || id, pipelineId: n.subpipeline?.pipelineId ?? '', task: expandFor(id, template), note }
+  }
+
+  /** A plugin node ran in this run (no child run): record how it ended. */
+  function callFinished(nodeId: string, state: NodeRunState): void {
+    if (!run) return
+    const prev = run.nodes[nodeId]
+    run.nodes[nodeId] = { ...prev, ...state, endedAt: now() }
+    void report()
   }
 
   function setRunStack(frames: unknown): void {
@@ -637,6 +653,7 @@ export function usePipelineDag(deps: PipelineDagDeps) {
     adoptCallOutputs,
     nextCall,
     callStarted,
+    callFinished,
     childResult,
     takeNote,
     looped,

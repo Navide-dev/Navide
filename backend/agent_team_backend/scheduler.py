@@ -52,6 +52,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import plugin_host_events
 from .scheduler_store import SchedulerStore
 
 log = logging.getLogger(__name__)
@@ -722,7 +723,7 @@ class LiveBridge:
             return {"status": "error", "reason": SKIP_NO_WINDOW, "detail": _no_window_detail(workspace)}
         answer = await mcp._start_pipeline_run(
             mcp._Caller(kind="host"), workspace, action["task"], pipeline_id,
-            taint_detail=action.get(TAINT_KEY) or "",
+            taint_detail=action.get(TAINT_KEY) or "", origin="schedule",
         )
         if answer.get("ok"):
             return {"status": "ok", "detail": f'started pipeline "{pipeline_id}"'}
@@ -1123,6 +1124,7 @@ class SchedulerService:
                 await self.store.add_usage(_usage_day(started))
             task = asyncio.create_task(self._execute(job, started, manual))
             self._runs[job_id] = (task, manual)
+            plugin_host_events.on_schedule_fired(job, manual)
         await self._changed()
         return task
 

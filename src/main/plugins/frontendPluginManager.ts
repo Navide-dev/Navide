@@ -9,8 +9,15 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
-import type { PluginManifestV2Command } from '../../../packages/plugin-contracts/src/index'
-import type { PluginCommandEntry, PluginCommandRunResult } from '../../shared/pluginCommands'
+import type {
+  PluginManifestV2Command,
+  PluginManifestV2Setting,
+  PluginManifestV2ExplorerMenuItem,
+  PluginManifestV2PaneAction,
+  PluginManifestV2PipelineNode,
+  PluginManifestV2StatusBarItem,
+} from '../../../packages/plugin-contracts/src/index'
+import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
@@ -50,6 +57,7 @@ import {
   type HostCapabilityContext,
   type HostCapabilityGrant,
   type PublicCapabilityExecutionPlan,
+  type StorageSnapshotRef,
   type TerminalOutputBatcher,
   sameExecutables,
 } from './pluginCapabilityBroker'
@@ -58,6 +66,13 @@ import { pluginWebViewRegistry, setPluginWebViewChangedHook } from './pluginWebV
 import { dispatchWebBridge } from './webBridge'
 import { firstPartyBridgePorts, isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { WebViewInfo, WebViewOwner, WebViewRect } from './webCapability'
+import { HOST_AGENT_EVENT_TYPE, parseHostAgentEvent } from './agentsEvents'
+import {
+  InterPluginCallError,
+  interPluginBackendError,
+  interPluginTargetError,
+  PLUGINS_CALL_ADDRESS,
+} from './pluginInterCall'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -94,7 +109,7 @@ import {
   type InstalledRegistryTrustContext,
 } from './pluginInstalledTrust'
 import { verifyLocalInstalledPackage } from './pluginLocalInstall'
-import { legacyCapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
+import { legacyCapabilityPolicy, type ManifestV2CapabilityPolicy, type PluginCapabilityPolicy } from './pluginPermissions'
 import {
   createWsClient,
   type WsClient,
@@ -288,6 +303,16 @@ export interface PluginLaunchDescriptor {
   commands?: PluginManifestV2Command[]
   /** The manifest's name, carried for the commands that show it. */
   displayName?: string
+  /** `contributes.api` method names other plugins may call (`plugins.call`). */
+  api?: string[]
+  /** `contributes.pipelineNodes`: deterministic steps a pipeline may run. */
+  pipelineNodes?: PluginManifestV2PipelineNode[]
+  /** `contributes.settings`: the form Settings → Navide Plugins shows. */
+  settings?: PluginManifestV2Setting[]
+  /** Batch 4 view slots: this plugin's commands on Host surfaces. */
+  statusBar?: PluginManifestV2StatusBarItem[]
+  paneActions?: PluginManifestV2PaneAction[]
+  explorerMenu?: PluginManifestV2ExplorerMenuItem[]
 }
 
 export interface PluginViewLaunchDescriptor {
@@ -840,6 +865,22 @@ const IPC_EVENT = 'plugin:cap:event'
 const IPC_READY = 'plugin:ready'
 const IPC_HIDE_SELF = 'plugin:hideSelf'
 const IPC_OPEN_TARGET = 'plugin:openTarget'
+/** Whether `value` is one `setting` allows (contributes.settings). */
+function pluginSettingAccepts(setting: PluginManifestV2Setting, value: unknown): boolean {
+  switch (setting.type) {
+    case 'boolean': return typeof value === 'boolean'
+    case 'enum': return typeof value === 'string' && (setting.options ?? []).includes(value)
+    case 'string': return typeof value === 'string' && Array.from(value).length <= (setting.maxLength ?? 1024)
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value) &&
+        (setting.minimum === undefined || value >= setting.minimum) &&
+        (setting.maximum === undefined || value <= setting.maximum)
+  }
+}
+
+/** Who started a pipeline run that reaches a plugin node (Activity only). */
+const PIPELINE_RUN_ORIGINS = ['user', 'agent', 'schedule', 'webhook'] as const
+type PipelineRunOrigin = (typeof PIPELINE_RUN_ORIGINS)[number]
 const IPC_BACKEND_CALL = 'plugin:backend:call'
 const IPC_BACKEND_CANCEL = 'plugin:backend:cancel'
 const IPC_BACKEND_SUBSCRIBE = 'plugin:backend:subscribe'
@@ -1623,6 +1664,9 @@ export class FrontendPluginManager {
   private agentToolWorkspaceResolver: ((root: string) => boolean) | null = null
   /** Headless third-party bindings created for agent-tool calls, by package/version/workspace. */
   private readonly headlessAgentToolInstances = new Map<string, string>()
+  /** Headless backend bindings serving `plugins.call`, keyed like the agent-tool ones. */
+  private readonly headlessApiInstances = new Map<string, string>()
+  private readonly pendingHeadlessApiBinds = new Map<string, Promise<string>>()
   private readonly pendingHeadlessAgentToolBinds = new Map<string, Promise<string>>()
   /** instanceId -> canonical workspace root of a headless agent-tool binding. */
   private readonly headlessAgentToolRoots = new Map<string, string>()
@@ -5683,6 +5727,7 @@ export class FrontendPluginManager {
           return buildSuccess(call.reqId, await handler(plan))
         } catch (error) {
           if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
+          if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
           // The Plugin keeps the fixed opaque message (it must not learn Host
           // paths or internals); the Host console keeps the cause.
           console.error(`[plugins] public capability '${plan.address}' failed:`, error)
@@ -6721,6 +6766,14 @@ export class FrontendPluginManager {
       )
     }
 
+    if (plan.address === PLUGINS_CALL_ADDRESS) {
+      if (!workspacePath) throw new Error('Inter-plugin call workspace binding is missing')
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      return await this.runInterPluginCall(plan, plugin, workspacePath)
+    }
+
     const agentsOp = agentsOperation(plan.address)
     if (agentsOp) {
       if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
@@ -7360,6 +7413,7 @@ export class FrontendPluginManager {
         return buildSuccess(call.reqId, await this.publicCapabilityHandler(plan))
       } catch (error) {
         if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
+        if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
         return buildError(call.reqId, 'INTERNAL_ERROR', 'public capability failed')
       }
     }
@@ -7929,6 +7983,207 @@ export class FrontendPluginManager {
   agentToolCallFor(initiatorId: string): { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined {
     const call = this.agentToolCalls.get(initiatorId)
     return call ? { pluginId: call.pluginId, risk: call.risk, workspaceRoot: call.workspaceRoot } : undefined
+  }
+
+  /** `plugins.call`: forward to the target's backend for the caller's
+   *  workspace. The broker already checked the caller (permissions.plugins and
+   *  the package-version grant); {@link callContributedMethod} checks the
+   *  target. The call is recorded in the caller's Activity as plugins.call and
+   *  in the target's as a backend call. */
+  private async runInterPluginCall(
+    plan: PublicCapabilityExecutionPlan,
+    caller: RunningPlugin,
+    workspacePath: string,
+  ): Promise<JsonValue> {
+    const result = await this.callContributedMethod(
+      caller.id,
+      String(plan.args.pluginId),
+      (descriptor) => descriptor.api ?? [],
+      String(plan.args.method),
+      workspacePath,
+      plan.args.args as JsonValue,
+      // A person in the caller's view, or the agent driving it (which the
+      // broker allowed only under a full Execution Policy).
+      plan.initiator ?? HOST_USER_INITIATOR,
+    )
+    return { result }
+  }
+
+  /** A pipeline run reached a plugin node (contributes.pipelineNodes): run the
+   *  node's backend method for the run's workspace with the node's expanded
+   *  input. The output is external content; the renderer marks it so. A
+   *  target with no backend here (Windows) answers BACKEND_UNAVAILABLE at once,
+   *  so the run fails that node (or takes its error edge) instead of hanging. */
+  async runPipelineNode(request: unknown): Promise<
+    { ok: true; output: JsonValue } | { ok: false; code: string; message: string }
+  > {
+    const record = typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {}
+    const { workspacePath, pluginId, node, input, origin } = record
+    if (
+      Object.keys(record).some((key) => !['workspacePath', 'pluginId', 'node', 'input', 'origin'].includes(key)) ||
+      !nonEmptyString(workspacePath) || !nonEmptyString(pluginId) || !nonEmptyString(node) ||
+      typeof input !== 'string' || !PIPELINE_RUN_ORIGINS.includes(origin as PipelineRunOrigin)
+    ) {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: 'malformed pipeline node request' }
+    }
+    const started = Date.now()
+    let contributed: { method: string; timeoutMs?: number } | undefined
+    let answer: { ok: true; output: JsonValue } | { ok: false; code: string; message: string }
+    try {
+      const output = await this.callContributedMethod(
+        null,
+        pluginId,
+        (descriptor) => {
+          contributed = descriptor.pipelineNodes?.find((entry) => entry.id === node)
+          return contributed ? [contributed.method] : []
+        },
+        () => contributed?.method ?? '',
+        workspacePath,
+        { input },
+        // Whoever started the run, the node runs as the Host user; the run's
+        // origin is disclosed in Activity instead (decision on plan 53b862 n7).
+        HOST_USER_INITIATOR,
+        () => contributed?.timeoutMs,
+      )
+      answer = { ok: true, output }
+    } catch (error) {
+      answer = error instanceof InterPluginCallError
+        ? { ok: false, code: error.code, message: error.message }
+        : { ok: false, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }
+    }
+    this.recordPipelineNodeRun(pluginId, node, workspacePath, origin as PipelineRunOrigin, answer, started)
+    return answer
+  }
+
+  /** One pipeline plugin node run into the plugin's Activity: who started the
+   *  run, the node, how it ended and how long it took. Never throws. */
+  private recordPipelineNodeRun(
+    pluginId: string,
+    node: string,
+    workspacePath: string,
+    origin: PipelineRunOrigin,
+    answer: { ok: true } | { ok: false; code: string },
+    started: number,
+  ): void {
+    const client = this.wsClient
+    const version = this.descriptors.get(pluginId)?.packageVersion
+    if (!client || !this.hostSessionRegistered || !nonEmptyString(version)) return
+    const at = Date.now()
+    void client.send('plugin.pipelineNode.record', {
+      plugin_id: pluginId,
+      plugin_version: version,
+      workspace: resolve(workspacePath),
+      node_id: node,
+      run_origin: origin,
+      outcome: answer.ok ? 'ok' : 'error',
+      error_code: answer.ok ? '' : answer.code,
+      duration_ms: at - started,
+      at,
+    }, 10_000).catch(() => {
+      // A row the backend did not take is dropped, like any activity row.
+    })
+  }
+
+  /** Call a method another installed plugin offers (its contributes.api, or a
+   *  pipeline node's method) on that plugin's backend for `workspacePath`. The
+   *  target must be installed, enabled, offer the method, have a backend on
+   *  this machine, and hold the user's Grant for this exact version (with fs
+   *  when it declares fs). Failures are InterPluginCallErrors. */
+  private async callContributedMethod(
+    callerId: string | null,
+    targetId: string,
+    offered: (descriptor: PluginLaunchDescriptor) => readonly string[],
+    method: string | (() => string),
+    workspacePath: string,
+    args: JsonValue,
+    initiator: AuthenticatedInitiator,
+    timeoutMs?: () => number | undefined,
+  ): Promise<JsonValue> {
+    const descriptor = this.descriptors.get(targetId)
+    const usable = descriptor && descriptor.capabilityPolicy?.kind === 'manifest-v2' &&
+      !this.isPluginDisabled(targetId) && nonEmptyString(descriptor.packageVersion) &&
+      nonEmptyString(descriptor.packageDir)
+    const activation = usable
+      ? this.pluginBackendHost.activationFor(targetId, descriptor.packageVersion!, descriptor.packageDir!)
+      : undefined
+    const api = usable ? offered(descriptor) : []
+    const name = typeof method === 'function' ? method() : method
+    const refusal = interPluginTargetError(callerId ?? '', usable ? {
+      pluginId: targetId,
+      api,
+      backendMethods: activation?.approvedMethods ?? [...api],
+      backendAvailable: activation !== undefined && !this.isPackageVersionStopping(targetId, descriptor.packageVersion!),
+    } : null, name)
+    if (refusal) throw refusal
+    const root = resolve(workspacePath)
+    const workspaceId = this.workspaceIdForPath(root)
+    if (!workspaceId) throw new InterPluginCallError('BACKEND_UNAVAILABLE', 'the workspace is not bound')
+    // The target runs only under its own user Grant for this exact version,
+    // which includes `fs` when it declares fs (as for its agent tools).
+    const targetPolicy = descriptor!.capabilityPolicy as ManifestV2CapabilityPolicy
+    const targetGrant = this.capabilityGrantResolver?.(targetId, descriptor!.packageVersion!) ?? null
+    if (
+      !targetGrant || targetGrant.packageVersion !== descriptor!.packageVersion ||
+      (targetPolicy.system.includes('fs') && !targetGrant.system.includes('fs'))
+    ) {
+      throw new InterPluginCallError('METHOD_NOT_FOUND', `'${targetId}' is not approved by the user`)
+    }
+    const limit = timeoutMs?.()
+    try {
+      const instanceId = await this.bindHeadlessApiBackend(
+        targetId, descriptor!.packageVersion!, descriptor!.packageDir!, root, workspaceId,
+      )
+      return await this.pluginBackendHost.call(instanceId, name, args, {
+        initiator,
+        ...(limit === undefined ? {} : { timeoutMs: limit }),
+      })
+    } catch (error) {
+      throw interPluginBackendError(error instanceof BackendPluginError ? error.code : undefined)
+    }
+  }
+
+  /** One headless binding per target package version and workspace for
+   *  `plugins.call`. A binding the Host has since stopped is replaced. */
+  private bindHeadlessApiBackend(
+    pluginId: string,
+    packageVersion: string,
+    packageDir: string,
+    root: string,
+    workspaceId: string,
+  ): Promise<string> {
+    const key = `${pluginId}\u0000${packageVersion}\u0000${workspaceId}`
+    const existing = this.headlessApiInstances.get(key)
+    if (existing && this.pluginBackendHost.isBound(existing)) return Promise.resolve(existing)
+    if (existing) this.headlessApiInstances.delete(key)
+    const pending = this.pendingHeadlessApiBinds.get(key)
+    if (pending) return pending
+    let task!: Promise<string>
+    task = this.pluginBackendHost.bindWorkspace(
+      {
+        pluginId,
+        packageVersion,
+        workspaceId,
+        instanceId: null,
+        contributionKey: `${pluginId}.api`,
+        hostWindowId: null,
+        initiator: HOST_USER_INITIATOR,
+      },
+      packageDir,
+      root,
+    ).then((instanceId) => {
+      if (this.isPackageVersionStopping(pluginId, packageVersion)) {
+        void this.pluginBackendHost.unbindView(instanceId, 'plugin-stopping')
+        throw new BackendPluginError('PLUGIN_STOPPING')
+      }
+      this.headlessApiInstances.set(key, instanceId)
+      return instanceId
+    }).finally(() => {
+      if (this.pendingHeadlessApiBinds.get(key) === task) this.pendingHeadlessApiBinds.delete(key)
+    })
+    this.pendingHeadlessApiBinds.set(key, task)
+    return task
   }
 
   /** The running view that serves a view-bound agent tool on `root`: this
@@ -9162,6 +9417,24 @@ export class FrontendPluginManager {
     }
   }
 
+  /** An `agents.*` Host event (backend plugin_host_events.py) to every live
+   *  instance bound to that event's workspace whose Manifest declares the event
+   *  and whose Grant holds `agents`. Each receiver's own binding is the source:
+   *  the backend frame is Host-produced, never package-supplied. */
+  private dispatchHostAgentEvent(frame: unknown): void {
+    const parsed = parseHostAgentEvent(frame)
+    if (!parsed) return
+    const workspaceId = this.workspaceIdForPath(parsed.workspacePath)
+    if (!workspaceId) return
+    for (const receiver of this.running.values()) {
+      const binding = receiver.capabilityContext?.runtimeBinding
+      if (!binding || binding.workspaceId !== workspaceId || this.isPluginStopping(receiver)) continue
+      if (this.isPublicEventAllowedForInstance(receiver, parsed.event, parsed.payload, binding)) {
+        this.emitToInstance(receiver.instanceId, parsed.event, parsed.payload)
+      }
+    }
+  }
+
   /** Host-only event ingress for cataloged public events. The target package id
    * is Host-selected and never comes from renderer payload. The source binding
    * must come from the Host producer, not the master package context: AI CLI
@@ -9419,6 +9692,12 @@ export class FrontendPluginManager {
           }
         })
       }
+      client.on(HOST_AGENT_EVENT_TYPE, (payload) => {
+        this.dispatchHostAgentEvent(payload)
+      })
+      client.on('plugins.pipelineNodes.request', (payload) => {
+        void this.handlePipelineNodesRequest(client, payload)
+      })
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
       })
@@ -9881,6 +10160,33 @@ export class FrontendPluginManager {
     if (this.wsClient !== client) return
     await client.send(MARKETPLACE_DEVELOPER_RESULT_MESSAGE, { request_id: requestId, ...answer }, 10_000).catch(() => {
       // The backend's waiter has its own timeout and reports it there.
+    })
+  }
+
+  /** Answer one `plugins.pipelineNodes.request` (E2): the pipeline nodes of
+   *  enabled Manifest v2 packages the user granted, for an n8n import to map
+   *  steps onto. Names and n8n types only; nothing runs. */
+  private async handlePipelineNodesRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null || this.wsClient !== client || !this.hostSessionRegistered) return
+    const nodes: Array<{ pluginId: string; node: string; title: string; n8nTypes: string[] }> = []
+    for (const descriptor of this.enabledDescriptors()) {
+      if (descriptor.capabilityPolicy?.kind !== 'manifest-v2' || !nonEmptyString(descriptor.packageVersion)) continue
+      if (this.isPluginDisabled(descriptor.id)) continue
+      const grant = this.capabilityGrantResolver?.(descriptor.id, descriptor.packageVersion) ?? null
+      if (!grant || grant.packageVersion !== descriptor.packageVersion) continue
+      for (const entry of descriptor.pipelineNodes ?? []) {
+        if (entry.n8nTypes?.length) {
+          nodes.push({ pluginId: descriptor.id, node: entry.id, title: entry.title, n8nTypes: [...entry.n8nTypes] })
+        }
+      }
+    }
+    await client.send('plugins.pipelineNodes.result', { request_id: requestId, ok: true, nodes }, 10_000).catch(() => {
+      // The backend's waiter has its own timeout; an import then keeps agent slots.
     })
   }
 
@@ -12558,6 +12864,96 @@ export class FrontendPluginManager {
     )
   }
 
+  /** One package's declared settings with the values in its own storage
+   *  (scope `plugin`, key `settings.<key>`); a key never written reads as its
+   *  default. Null when the package declares none or has no active snapshot. */
+  async readPluginSettings(pluginId: string): Promise<{
+    settings: PluginManifestV2Setting[]
+    values: Record<string, boolean | string | number>
+  } | null> {
+    const target = this.pluginSettingsTarget(pluginId)
+    const handler = this.publicStorageHandler
+    if (!target || !handler) return null
+    const values: Record<string, boolean | string | number> = {}
+    for (const setting of target.settings) {
+      const key = `settings.${setting.key}`
+      const stored: unknown = await Promise.resolve(handler({
+        address: 'storage.get',
+        args: { scope: 'plugin', key },
+        partition: { pluginId, workspaceId: null, key },
+        snapshot: target.snapshot,
+      })).catch(() => null)
+      const value = stored && typeof stored === 'object' && 'value' in stored ? (stored as { value: unknown }).value : undefined
+      values[setting.key] = pluginSettingAccepts(setting, value) ? value as boolean | string | number : setting.default
+    }
+    return { settings: target.settings, values }
+  }
+
+  /** Write one setting the user changed into the package's own storage and
+   *  tell its live views (`ui.pluginStorageChanged`). Refuses a key the
+   *  package does not declare or a value its declaration does not allow. */
+  async writePluginSetting(pluginId: string, key: string, value: unknown): Promise<boolean> {
+    const target = this.pluginSettingsTarget(pluginId)
+    const setting = target?.settings.find((candidate) => candidate.key === key)
+    if (!target || !setting || !this.publicStorageHandler || !pluginSettingAccepts(setting, value)) return false
+    const storageKey = `settings.${key}`
+    const partition = { pluginId, workspaceId: null, key: storageKey }
+    await this.publicStorageHandler({
+      address: 'storage.set',
+      args: { scope: 'plugin', key: storageKey, value },
+      partition,
+      snapshot: target.snapshot,
+      initiator: HOST_USER_INITIATOR,
+    })
+    const payload = { scope: 'plugin' as const, key: storageKey, value: value as JsonValue, deleted: false }
+    for (const receiver of this.running.values()) {
+      const context = receiver.capabilityContext
+      const binding = context?.runtimeBinding
+      if (
+        !context || !binding || binding.pluginId !== pluginId ||
+        binding.packageVersion !== target.snapshot.packageVersion ||
+        context.storageSnapshotTier !== 'active'
+      ) continue
+      if (this.isPublicEventAllowedForInstance(receiver, 'ui.pluginStorageChanged', payload, binding)) {
+        this.emitToInstance(receiver.instanceId, 'ui.pluginStorageChanged', payload)
+      }
+    }
+    return true
+  }
+
+  private pluginSettingsTarget(pluginId: string): {
+    settings: PluginManifestV2Setting[]
+    snapshot: StorageSnapshotRef
+  } | null {
+    const descriptor = this.descriptors.get(pluginId)
+    const version = descriptor?.packageVersion
+    if (!descriptor?.settings?.length || !nonEmptyString(version)) return null
+    if (this.pluginStorageSnapshotSelections.get(pluginId)?.activeVersion !== version) return null
+    return { settings: descriptor.settings, snapshot: { pluginId, tier: 'active', packageVersion: version } }
+  }
+
+  /** Commands enabled packages put on Host surfaces (view slots). An entry
+   *  whose command the same package does not declare is left out. */
+  listSlotCatalog(): PluginSlotEntry[] {
+    return this.enabledDescriptors().flatMap((descriptor) => {
+      const declared = new Set((descriptor.commands ?? []).map((command) => command.id))
+      const base = { pluginId: descriptor.id, pluginName: descriptor.displayName ?? descriptor.id }
+      const entries: PluginSlotEntry[] = [
+        ...(descriptor.statusBar ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'statusBar', commandId: item.command, title: item.text,
+          ...(item.tooltip ? { tooltip: item.tooltip } : {}),
+        })),
+        ...(descriptor.paneActions ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'paneActions', commandId: item.command, title: item.title,
+        })),
+        ...(descriptor.explorerMenu ?? []).map((item): PluginSlotEntry => ({
+          ...base, slot: 'explorerMenu', commandId: item.command, title: item.title, when: item.when ?? 'any',
+        })),
+      ]
+      return entries.filter((entry) => declared.has(entry.commandId))
+    })
+  }
+
   /** Decide what one command does in `hostWindow`, delivering its target when
    *  the view is already there. Opening a window view needs Electron main, so
    *  that comes back to the caller; a view nobody opened is reported, never
@@ -12566,9 +12962,10 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     commandId: string,
     workspacePath: string,
+    target?: PluginCommandTarget,
   ): PluginCommandRunResult
     | { ok: true; window: { contributionKey: string; params: Record<string, string> } }
-    | { ok: true; call: { plugin: RunningPlugin; method: string } } {
+    | { ok: true; call: { plugin: RunningPlugin; method: string; target?: PluginCommandTarget } } {
     const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.commands?.some((command) => command.id === commandId)
     )
@@ -12578,11 +12975,12 @@ export class FrontendPluginManager {
       const isHere = (candidate: RunningPlugin): boolean => candidate.hostWindow === hostWindow &&
         (candidate.workspacePath === null || resolve(candidate.workspacePath) === resolve(workspacePath))
       const plugin = this.instancesForPlugin(descriptor.id).find(isHere)
-      return plugin ? { ok: true, call: { plugin, method: run.method } } : { ok: false, reason: 'view-not-open' }
+      return plugin ? { ok: true, call: { plugin, method: run.method, target } } : { ok: false, reason: 'view-not-open' }
     }
     const view = descriptor.views?.find((candidate) => candidate.id === run.view)
     if (!view) return { ok: false, reason: 'not-installed' }
-    const params = run.target ?? {}
+    // A slot's target (the Explorer entry, the pane) joins the manifest's own.
+    const params = { ...(run.target ?? {}), ...(target ?? {}) }
     if (view.location === 'window') {
       return { ok: true, window: { contributionKey: view.contributionKey, params } }
     }
@@ -12608,11 +13006,13 @@ export class FrontendPluginManager {
     hostWindow: BrowserWindow,
     commandId: string,
     workspacePath: string,
+    target?: PluginCommandTarget,
   ): Promise<PluginCommandRunResult | { ok: true; window: { contributionKey: string; params: Record<string, string> } }> {
-    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath)
+    const outcome = this.resolveCommandRun(hostWindow, commandId, workspacePath, target)
     if (!outcome.ok || !('call' in outcome)) return outcome
     const { plugin, method } = outcome.call
-    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args: {} })
+    const args = outcome.call.target ? { ...outcome.call.target } : {}
+    const response = await this.backendCallHandler?.(plugin, { reqId: randomUUID(), name: method, args })
     return response?.ok ? { ok: true } : { ok: false, reason: 'method-failed' }
   }
 

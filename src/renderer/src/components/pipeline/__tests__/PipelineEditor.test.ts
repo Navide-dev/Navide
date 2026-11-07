@@ -338,7 +338,7 @@ describe('PipelineEditor', () => {
     expect(btn.attributes('disabled')).toBeUndefined()
     await w.find('.pe-start').trigger('submit')
     await flushPromises()
-    expect(calls).toEqual([{ pipelineId: 'p1', task: 'Ship it' }])
+    expect(calls).toEqual([{ pipelineId: 'p1', task: 'Ship it', origin: 'user' }])
     expect((w.find('.pe-start-input').element as HTMLInputElement).value).toBe('')
   })
 

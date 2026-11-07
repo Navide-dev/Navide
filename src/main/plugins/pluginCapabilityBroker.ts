@@ -9,6 +9,7 @@ import { warnDeprecatedCapability } from './pluginCapabilityDeprecation'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
 import { validateWebChangedEvent } from './webCapability'
+import { isAgentsEvent } from './agentsEvents'
 import {
   HOST_SHELL_EXECUTABLE_ALLOWLIST,
   publicCapabilityEntry,
@@ -773,7 +774,7 @@ function shellCommandAllowed(command: string, allowlist: readonly string[]): boo
 export function executionPolicyAllows(
   initiator: AuthenticatedInitiator | undefined,
   snapshot: ExecutionPolicySnapshot | undefined,
-  namespace: PluginSystemNamespace | 'shell',
+  namespace: PluginSystemNamespace | 'shell' | 'plugins',
   command?: string,
 ): boolean {
   // Direct user work is governed by the existing Host checks, not by the
@@ -817,6 +818,9 @@ export function executionPolicyAllows(
   if (namespace === 'agents' || namespace === 'agentMessages') {
     return policy.mode === 'allowlist' && policy.system.includes(namespace)
   }
+  // The target backend may write; an Execution Policy cannot name plugins, so
+  // like `web` it is never allowed by omission: only full mode reaches it.
+  if (namespace === 'plugins') return false
   return policy.mode === 'allowlist'
     ? policy.system.includes(namespace)
     : !policy.system.includes(namespace)
@@ -858,6 +862,8 @@ export function planPublicCapabilityCall(
     // `permissions.system` namespace array.
   } else if (entry.namespace === 'shell') {
     if (!policy.shell) return undeclaredDenied(call.reqId, 'shell access is not declared')
+  } else if (entry.namespace === 'plugins') {
+    if (!policy.plugins?.length) return undeclaredDenied(call.reqId, 'no plugin is declared in permissions.plugins')
   } else if (!policy.system.includes(entry.namespace)) {
     return undeclaredDenied(call.reqId, `system namespace '${entry.namespace}' is not declared`)
   }
@@ -901,7 +907,9 @@ export function planPublicCapabilityCall(
     if (policy.shell === 'full' && grant.highRiskShellConfirmed !== true) {
       return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell requires high-risk confirmation')
     }
-  } else if (!grant.system.includes(entry.namespace)) {
+  } else if (entry.namespace !== 'plugins' && !grant.system.includes(entry.namespace)) {
+    // permissions.plugins is part of the manifest the package-version grant
+    // was given for; it holds no system namespace of its own.
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not user-approved`)
   }
   // ...and the user must have approved that full shell for this version, as
@@ -913,6 +921,9 @@ export function planPublicCapabilityCall(
   const args = publicRequestArgs(call)
   if (!args || !entry.validateRequest?.(args)) {
     return publicDenied(call.reqId, 'INVALID_ARGUMENT', `invalid request for '${address}'`)
+  }
+  if (entry.namespace === 'plugins' && !policy.plugins?.includes(String(args.pluginId))) {
+    return undeclaredDenied(call.reqId, `plugin '${String(args.pluginId)}' is not declared in permissions.plugins`)
   }
   if (
     entry.address === 'aiCli.startSession' &&
@@ -1181,6 +1192,11 @@ export function isPublicCapabilityEventAllowed(
   }
   if (event === 'web.changed') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateWebChangedEvent(payload))
+  }
+  if (isAgentsEvent(event)) {
+    // Each agents.* event is declared on its own (permissions.agents.events);
+    // the payload was validated field by field when the Host parsed the frame.
+    return Boolean(policy.agentEvents?.includes(event) && sourceBinding && sameBinding(sourceBinding, binding))
   }
   if ((EDITOR_AI_EVENTS as readonly string[]).includes(event)) {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) &&

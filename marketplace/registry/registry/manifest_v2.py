@@ -204,12 +204,105 @@ class ManifestV2Command(ManifestV2Model):
     suggestedKey: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+# Text the Host shows on its own surfaces next to its own controls: no line
+# breaks, angle brackets, control, zero-width or bidirectional characters.
+_SLOT_TEXT_RE = r"^[^\r\n<>\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069]+$"
+_BACKEND_METHOD_NAME_RE = r"^[a-z][a-zA-Z0-9._-]{0,63}$"
+
+
+class ManifestV2ApiMethod(ManifestV2Model):
+    method: str = Field(pattern=_BACKEND_METHOD_NAME_RE)
+    description: str = Field(min_length=1, max_length=280)
+
+
+class ManifestV2PipelineNode(ManifestV2Model):
+    id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,39}$")
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    description: str | None = Field(default=None, min_length=1, max_length=280)
+    method: str = Field(pattern=_BACKEND_METHOD_NAME_RE)
+    timeoutMs: int | None = Field(default=None, ge=1000, le=600000)
+    n8nTypes: list[str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("n8nTypes")
+    @classmethod
+    def _check_n8n_types(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("must contain unique n8n node types")
+        if any(re.fullmatch(r"[A-Za-z0-9@][A-Za-z0-9@/._-]{0,127}", item) is None for item in value):
+            raise ValueError("must contain n8n node types such as n8n-nodes-base.httpRequest")
+        return value
+
+
+class ManifestV2Setting(ManifestV2Model):
+    key: str = Field(pattern=r"^[a-z][a-zA-Z0-9]{0,31}(\.[a-z][a-zA-Z0-9]{0,31}){0,3}$")
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    description: str | None = Field(default=None, min_length=1, max_length=280)
+    type: Literal["boolean", "string", "number", "enum"]
+    default: bool | int | float | str
+    options: list[str] | None = Field(default=None, min_length=1, max_length=32)
+    minimum: float | None = None
+    maximum: float | None = None
+    maxLength: int | None = Field(default=None, ge=1, le=4096)
+
+    @model_validator(mode="after")
+    def _check_type_rules(self) -> ManifestV2Setting:
+        only = {"options": "enum", "minimum": "number", "maximum": "number", "maxLength": "string"}
+        for field, kind in only.items():
+            if getattr(self, field) is not None and self.type != kind:
+                raise ValueError(f"settings {field} is only for type {kind}")
+        value = self.default
+        if self.type == "boolean" and not isinstance(value, bool):
+            raise ValueError("a boolean setting's default must be a boolean")
+        if self.type == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("a number setting's default must be a number")
+            if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+                raise ValueError("a number setting's minimum is above its maximum")
+            if (self.minimum is not None and value < self.minimum) or (self.maximum is not None and value > self.maximum):
+                raise ValueError("a number setting's default must be within its bounds")
+        if self.type == "string" and (not isinstance(value, str) or len(value) > (self.maxLength or 1024)):
+            raise ValueError("a string setting's default must be a string within its maxLength")
+        if self.type == "enum":
+            if not self.options or len(set(self.options)) != len(self.options):
+                raise ValueError("an enum setting needs unique options")
+            if any(re.fullmatch(_SLOT_TEXT_RE, option) is None or len(option) > 80 for option in self.options):
+                raise ValueError("an enum setting's options must be display text of at most 80 characters")
+            if not isinstance(value, str) or value not in self.options:
+                raise ValueError("an enum setting's default must be one of its options")
+        return self
+
+
+class ManifestV2StatusBarItem(ManifestV2Model):
+    command: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    tooltip: str | None = Field(default=None, min_length=1, max_length=200, pattern=_SLOT_TEXT_RE)
+
+
+class ManifestV2PaneAction(ManifestV2Model):
+    command: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+
+
+class ManifestV2ExplorerMenuItem(ManifestV2Model):
+    command: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    when: Literal["file", "directory", "any"] | None = None
+
+
 class ManifestV2Contributes(ManifestV2Model):
     views: list[ManifestV2View] = Field(min_length=1, max_length=16)
     commands: list[ManifestV2Command] | None = Field(default=None, min_length=1, max_length=32)
     # View-served agent tools (contract 2.9), kept as plain JSON like
     # backend.agentTools: every field rule is validate_agent_tools'.
     agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
+    api: list[ManifestV2ApiMethod] | None = Field(default=None, min_length=1, max_length=32)
+    pipelineNodes: list[ManifestV2PipelineNode] | None = Field(default=None, min_length=1, max_length=16)
+    settings: list[ManifestV2Setting] | None = Field(default=None, min_length=1, max_length=32)
+    statusBar: list[ManifestV2StatusBarItem] | None = Field(default=None, min_length=1, max_length=4)
+    paneActions: list[ManifestV2PaneAction] | None = Field(default=None, min_length=1, max_length=8)
+    explorerMenu: list[ManifestV2ExplorerMenuItem] | None = Field(default=None, min_length=1, max_length=8)
 
     @model_validator(mode="after")
     def _check_unique_view_ids(self) -> ManifestV2Contributes:
@@ -325,6 +418,30 @@ class ManifestV2Network(ManifestV2Model):
         return value
 
 
+AGENT_EVENTS = (
+    "agents.paneCreated", "agents.paneClosed", "agents.turnEnded", "agents.paneIdle",
+    "agents.messageReceived", "agents.planStageChanged", "agents.pipelineNodeChanged", "agents.scheduleFired",
+)
+
+
+class ManifestV2AgentEvents(ManifestV2Model):
+    """Host events the package receives, each disclosed on its own (E1)."""
+
+    events: list[
+        Literal[
+            "agents.paneCreated", "agents.paneClosed", "agents.turnEnded", "agents.paneIdle",
+            "agents.messageReceived", "agents.planStageChanged", "agents.pipelineNodeChanged", "agents.scheduleFired",
+        ]
+    ] = Field(min_length=1, max_length=8)
+
+    @field_validator("events")
+    @classmethod
+    def _check_unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.agents.events must contain unique events")
+        return value
+
+
 _SHELL_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
 _SHELL_EXTENSION_RE = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
 
@@ -345,6 +462,25 @@ class ManifestV2Permissions(ManifestV2Model):
     shellExecutables: list[str] | None = Field(default=None, min_length=1, max_length=32)
     scopes: ManifestV2Scopes | None = None
     network: ManifestV2Network | None = None
+    agents: ManifestV2AgentEvents | None = None
+    plugins: list[str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("plugins")
+    @classmethod
+    def _check_plugins(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.plugins must contain unique plugin ids")
+        if any(PACKAGE_ID_RE.fullmatch(item) is None for item in value):
+            raise ValueError("permissions.plugins must contain plugin ids such as acme.tools")
+        return value
+
+    @model_validator(mode="after")
+    def _check_agent_events_need_agents(self) -> ManifestV2Permissions:
+        if self.agents is not None and (self.system is None or "agents" not in self.system):
+            raise ValueError("permissions.agents declares events without agents in permissions.system")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -476,6 +612,8 @@ class ManifestV2(ManifestV2Model):
                 or self.permissions.shell is not None
                 or self.permissions.scopes is not None
                 or self.permissions.network is not None
+                or self.permissions.agents is not None
+                or self.permissions.plugins is not None
             ):
                 raise ValueError("an extension pack must not request permissions")
         elif self.contributes is None and self.backend is None:
@@ -483,7 +621,35 @@ class ManifestV2(ManifestV2Model):
         if self.publisher != self.namespace:
             raise ValueError("publisher must match id namespace")
         self._check_commands()
+        self._check_contributed_extras()
         return self
+
+    def _check_contributed_extras(self) -> None:
+        """api / pipelineNodes name backend methods; view slots name this
+        package's own commands; ids and keys are unique."""
+        contributes = self.contributes
+        if contributes is None:
+            return
+        methods = set(self.backend.methods or []) if self.backend is not None else set()
+        for field in ("api", "pipelineNodes"):
+            entries = getattr(contributes, field) or []
+            for index, entry in enumerate(entries):
+                if entry.method not in methods:
+                    raise ValueError(f"contributes.{field}[{index}].method {entry.method!r} is not in backend.methods")
+        api = [entry.method for entry in contributes.api or []]
+        if len(set(api)) != len(api):
+            raise ValueError("contributes.api must list each method once")
+        nodes = [entry.id for entry in contributes.pipelineNodes or []]
+        if len(set(nodes)) != len(nodes):
+            raise ValueError("contributes.pipelineNodes must contain unique ids")
+        keys = [entry.key for entry in contributes.settings or []]
+        if len(set(keys)) != len(keys):
+            raise ValueError("contributes.settings must contain unique keys")
+        commands = {command.id for command in contributes.commands or []}
+        for field in ("statusBar", "paneActions", "explorerMenu"):
+            for index, entry in enumerate(getattr(contributes, field) or []):
+                if entry.command not in commands:
+                    raise ValueError(f"contributes.{field}[{index}].command {entry.command!r} is not one of contributes.commands")
 
     def _check_commands(self) -> None:
         contributes = self.contributes

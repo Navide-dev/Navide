@@ -20,7 +20,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityReport } from '../shared/pluginActivity'
-import type { PluginCommandEntry, PluginCommandRunResult } from '../shared/pluginCommands'
+import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -1425,7 +1425,19 @@ contextBridge.exposeInMainWorld('agentTeam', {
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
     listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
-    runCommand: (args: { commandId: string; workspace_path: string }): Promise<PluginCommandRunResult> =>
+    /** Commands enabled packages put on the status bar, pane and Explorer menus. */
+    listSlots: (): Promise<PluginSlotEntry[]> => ipcRenderer.invoke('plugins:listSlots'),
+    /** A package's declared settings and their values, or null. */
+    readSettings: (id: string): Promise<{
+      settings: Array<{
+        key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+        default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+      }>
+      values: Record<string, boolean | string | number>
+    } | null> => ipcRenderer.invoke('plugins:settings:read', { id }),
+    writeSetting: (id: string, key: string, value: boolean | string | number): Promise<boolean> =>
+      ipcRenderer.invoke('plugins:settings:write', { id, key, value }),
+    runCommand: (args: { commandId: string; workspace_path: string; target?: PluginCommandTarget }): Promise<PluginCommandRunResult> =>
       ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string
@@ -1614,6 +1626,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
+    /** Run a pipeline's plugin node on the contributing plugin's backend. */
+    runPipelineNode: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }): Promise<
+      { ok: true; output: unknown } | { ok: false; code: string; message: string }
+    > => ipcRenderer.invoke('plugins:runPipelineNode', request),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>

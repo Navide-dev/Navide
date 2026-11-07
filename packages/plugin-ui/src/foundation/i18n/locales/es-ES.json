@@ -2016,6 +2016,11 @@
       "cancel": "Cancelar"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Ajustes",
+        "reset": "Restablecer el valor predeterminado",
+        "saveFailed": "No se pudo guardar {title}. Inténtalo de nuevo; si sigue fallando, reinstala este plugin de Navide."
+      },
       "devUnpacked": "Carpeta local sin firmar: solo en modo de desarrollador",
       "agentTools": {
         "heading": "Herramientas que pueden llamar los agents ({count})",
@@ -12203,6 +12208,16 @@
       "crossWorkspace": "Entre áreas de trabajo: {from} → {to}",
       "totalSize": "Argumentos {args} y resultados {result} en total; {unknown} tamaños son desconocidos y no se cuentan"
     },
+    "pipelineNodes": {
+      "heading": "Ejecuciones de pipeline que llegaron a sus nodos",
+      "row": "{date} ejecución iniciada por {origin} → nodo {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "ti",
+        "agent": "un agente",
+        "schedule": "una programación",
+        "webhook": "un webhook"
+      }
+    },
     "caller": {
       "pane": "pane «{name}»",
       "external": "un cliente externo",
@@ -12317,7 +12332,12 @@
         "backendEvent": "Evento del código nativo: {key}",
         "network": "Puede llegar a hosts remotos mediante comandos",
         "networkHost": "Las vistas pueden conectarse a: {key}",
-        "agentTool": "Herramienta de agent: {key}"
+        "agentTool": "Herramienta de agent: {key}",
+        "agentEvent": "Recibe el evento del Host: {key}",
+        "pluginCall": "Llama al plugin de Navide: {key}",
+        "apiMethod": "Otros plugins de Navide pueden llamar: {key}",
+        "pipelineNode": "Paso de pipeline (también en pipelines iniciadas por un agente o una programación): {key}",
+        "commandSlot": "Comando en una superficie del Host: {key}"
       }
     },
     "title": "Declaración",
@@ -12377,6 +12397,10 @@
         "full": "Ejecuta cualquier comando"
       },
       "networkViaShell": "Puede llegar a hosts remotos mediante esos comandos",
+      "agentEvents": "Recibe eventos del Host sobre tus panes, planes, pipelines y programaciones (solo nombres y estados): {events}",
+      "pluginCalls": "Llama a estos plugins de Navide: {plugins}",
+      "api": "Permite que otros plugins de Navide llamen a {count} de sus métodos",
+      "pipelineNodes": "Añade {count} paso(s) de pipeline; también los ejecutan las pipelines que inicia un agente, una programación o un webhook",
       "aiCli": "Inicia sessions de CLI de AI y lee su salida",
       "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este ordenador; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar peticiones a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; después de tomar el control, los scripts del agent que ya se estén ejecutando en una página solo se detienen cuando la recargas; puede abrir muchas páginas web a la vez, y cada una usa memoria.",
       "agents": "Ve los panes de agent de este proyecto, qué pane abrió cada uno, los registros de entrega de mensajes (sin su contenido) y la lista de sesiones (sin el contenido de las conversaciones)",

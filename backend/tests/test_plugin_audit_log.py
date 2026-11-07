@@ -1003,6 +1003,10 @@ def _seeded_report(tmp_path: Path) -> dict[str, Any]:
             plugin_id=_PLUGIN, plugin_version="0.2.0", workspace="/Users/me/project",
             address="backend.devmap.block.import", outcome=outcome, count=count, at_ms=NOW - DAY_MS,
         )
+    audit.record_pipeline_node_run(
+        plugin_id=_PLUGIN, plugin_version="0.2.0", workspace="/Users/me/project", node_id="import",
+        run_origin="schedule", outcome="ok", duration_ms=120, at_ms=NOW - DAY_MS,
+    )
     audit.flush()
     return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
 
@@ -1013,7 +1017,8 @@ def test_the_report_has_the_contract_fixtures_shape(tmp_path: Path) -> None:
     valid = json.loads((_REPORT_FIXTURES / "activity-report.json").read_text(encoding="utf-8"))["valid"]
     report = _seeded_report(tmp_path)
     assert all(isinstance(report[key], list) and report[key] for key in (
-        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies", "agentActions",
+        "toolCalls", "pipelineNodeRuns", "files", "commands", "daily", "declaredUnused", "undeclared",
+        "anomalies", "agentActions",
     )), "the seed fills every list"
     assert _conforms(report, valid)
     # The check does refuse a wrong shape.

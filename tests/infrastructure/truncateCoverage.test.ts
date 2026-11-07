@@ -24,6 +24,8 @@ const EXEMPT: Record<string, string> = {
   // A Navide plugin tab's button already has a title with the full name, the
   // plugin id, publisher and source; a second tooltip would cover it.
   'src/renderer/src/components/StageTabBar.vue|tab-plugin-label': 'parent plugin tab button has the full pluginTabTitle title',
+  // A plugin's status bar item has a title naming the plugin with its full text.
+  'src/renderer/src/App.vue|sb-plugin': 'the item has a pluginSlotTitle title with the plugin name and full text',
 }
 
 /** Repo-relative path with `/` separators, whatever the platform's `path` gives. */

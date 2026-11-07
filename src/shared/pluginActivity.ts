@@ -129,6 +129,23 @@ export interface PluginAgentAction {
   version: string
 }
 
+/** Who started the pipeline run a plugin node ran in. */
+export type PluginPipelineRunOrigin = 'user' | 'agent' | 'schedule' | 'webhook'
+
+/** One row of `plugin_pipeline_node_runs` (newest first): a pipeline run
+ *  reached one of this plugin's pipeline nodes (contributes.pipelineNodes). */
+export interface PluginActivityPipelineNodeRun {
+  id: number
+  at: number
+  pluginVersion: string
+  workspace: string
+  nodeId: string
+  runOrigin: PluginPipelineRunOrigin
+  outcome: 'ok' | 'error'
+  errorCode: string
+  durationMs: number
+}
+
 export interface PluginActivityReport {
   schemaVersion: typeof PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION
   pluginId: string
@@ -144,6 +161,7 @@ export interface PluginActivityReport {
   /** Start of the window `undeclared` covers (30 days). */
   undeclaredSince: number
   toolCalls: PluginActivityToolCall[]
+  pipelineNodeRuns: PluginActivityPipelineNodeRun[]
   files: PluginActivityFile[]
   commands: PluginActivityCommand[]
   /** C1: hosts the plugin's views reached or were refused, from `network` rows. */
@@ -258,6 +276,18 @@ function toolCall(e: Rec): PluginActivityToolCall | null {
   }
 }
 
+function pipelineNodeRun(e: Rec): PluginActivityPipelineNodeRun | null {
+  if (
+    !isCount(e.id) || !isTime(e.at) || !isText(e.pluginVersion) || !isText(e.workspace) || !isText(e.nodeId) ||
+    !oneOf(['user', 'agent', 'schedule', 'webhook'] as const, e.runOrigin) ||
+    !oneOf(['ok', 'error'] as const, e.outcome) || !isText(e.errorCode) || !isCount(e.durationMs)
+  ) return null
+  return {
+    id: e.id, at: e.at, pluginVersion: e.pluginVersion, workspace: e.workspace, nodeId: e.nodeId,
+    runOrigin: e.runOrigin, outcome: e.outcome, errorCode: e.errorCode, durationMs: e.durationMs,
+  }
+}
+
 function file(e: Rec): PluginActivityFile | null {
   if (!isText(e.path) || !isText(e.address) || !isText(e.workspace) || !oneOf(OUTCOMES, e.outcome) ||
     !isCount(e.count) || !isTime(e.lastAt)) return null
@@ -318,6 +348,8 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     !isTime(span.to) || !isRec(totals) || !isCount(totals.calls) || !isCount(totals.denied) ||
     !isCount(totals.errors) || !isCount(value.historicalPeakConcurrency) || !isTime(value.undeclaredSince)) return null
   const toolCalls = list(value.toolCalls, toolCall)
+  // A backend from before pipeline plugin nodes sends no such list.
+  const pipelineNodeRuns = value.pipelineNodeRuns === undefined ? [] : list(value.pipelineNodeRuns, pipelineNodeRun)
   const files = list(value.files, file)
   const commands = list(value.commands, command)
   const network = list(value.network, host)
@@ -327,7 +359,7 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
   const anomalies = list(value.anomalies, anomaly)
   const agentActions = value.agentActions === null ? null : list(value.agentActions, agentAction)
   const backendCalls = backendCallsOf(value.backendCalls)
-  if (!toolCalls || !files || !commands || !network || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
+  if (!toolCalls || !pipelineNodeRuns || !files || !commands || !network || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
     (value.agentActions !== null && agentActions === null) || !backendCalls) return null
   return {
     schemaVersion: PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION,
@@ -337,7 +369,7 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     totals: { calls: totals.calls, denied: totals.denied, errors: totals.errors },
     historicalPeakConcurrency: value.historicalPeakConcurrency,
     undeclaredSince: value.undeclaredSince,
-    toolCalls, files, commands, network, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
+    toolCalls, pipelineNodeRuns, files, commands, network, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
     backendCalls,
   }
 }

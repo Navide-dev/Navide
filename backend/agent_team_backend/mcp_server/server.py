@@ -6902,6 +6902,11 @@ async def ui_invoke(
     refusal = _human_only_refusal(action, args)
     if refusal is not None:
         return refusal
+    if action == "ui.pipeline.start":
+        # Who started the run is recorded with its plugin nodes; a caller of
+        # this tool is an agent, whatever its args say. Only the scheduler and
+        # webhook paths (_start_pipeline_run) name another origin.
+        args = {**(args or {}), "origin": "agent"}
     if action in _PANE_PRIVATE_UI_ACTIONS:
         # Refused here as well as in the window: the renderer check is the one
         # that holds for every path a request can take, this one gives the
@@ -8905,7 +8910,8 @@ async def pipeline_start(
 
 
 async def _start_pipeline_run(
-    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = ""
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = "",
+    origin: str = "agent",
 ) -> dict[str, Any]:
     """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
     ui.pipeline.start in the window holding the workspace, with the caller's
@@ -8917,7 +8923,9 @@ async def _start_pipeline_run(
     if await asyncio.to_thread(_run_is_active, workspace_path):
         refused = PipelineAlreadyRunning("start a pipeline run")
         return {"ok": False, "error": str(refused), "error_code": refused.error_code}
-    args: dict[str, Any] = {"task": str(task or "")}
+    # Who started the run (agent, schedule or webhook): the window records it
+    # with every plugin node the run reaches (plugin Activity).
+    args: dict[str, Any] = {"task": str(task or ""), "origin": origin}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
         args["pipelineId"] = pipeline_id
@@ -9754,6 +9762,7 @@ async def pipeline_import_n8n(
         workspace_path = await _definition_workspace(caller, workspace_path)
         if await asyncio.to_thread(_run_is_active, workspace_path):
             return _run_in_progress("import a pipeline")
+    plugin_nodes = await host_plugin_pipeline_nodes()
     try:
         out = await asyncio.to_thread(
             import_into_store,
@@ -9762,6 +9771,7 @@ async def pipeline_import_n8n(
             dry_run=bool(dry_run),
             default_agent=str(default_agent or "claude"),
             name=str(name or ""),
+            plugin_nodes=plugin_nodes,
         )
     except N8nImportError as exc:
         code = {"too-large": "too_large", "store-refused": "refused"}.get(exc.reason, "invalid")
@@ -10726,6 +10736,59 @@ async def share_revoke(link_id: str, ctx: Context) -> dict:
     return await _share_run(call)
 
 
+# ── Plugin pipeline nodes (E2) ───────────────────────────────────────────────
+# An n8n import asks the authenticated Host which installed plugins contribute
+# pipeline nodes for which n8n types (contributes.pipelineNodes[].n8nTypes):
+# the backend unicasts `plugins.pipelineNodes.request`, the Host answers with
+# `plugins.pipelineNodes.result`. No answer means no plugin nodes, and every
+# step keeps its agent slot, exactly as before.
+PIPELINE_NODES_REQUEST_EVENT = "plugins.pipelineNodes.request"
+_PIPELINE_NODES_TIMEOUT_S = 5.0
+_pipeline_nodes_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
+_PIPELINE_NODE_ID = re.compile(r"[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+")
+
+
+def resolve_pipeline_nodes(request_id: str, response: dict[str, Any]) -> bool:
+    """Resolve one ``plugins.pipelineNodes.request`` with the Host's answer."""
+    return _pipeline_nodes_pending.resolve(request_id, response)
+
+
+def _pipeline_nodes_by_type(answer: Any) -> dict[str, dict[str, str]]:
+    """n8n type -> {pluginId, node, title}; the first plugin (by id) wins a type."""
+    nodes = answer.get("nodes") if isinstance(answer, dict) and answer.get("ok") is True else None
+    out: dict[str, dict[str, str]] = {}
+    if not isinstance(nodes, list):
+        return out
+    entries = [n for n in nodes if isinstance(n, dict)]
+    for n in sorted(entries, key=lambda e: (str(e.get("pluginId")), str(e.get("node")))):
+        pid, node, title, types = n.get("pluginId"), n.get("node"), n.get("title"), n.get("n8nTypes")
+        if not (isinstance(pid, str) and _PIPELINE_NODE_ID.fullmatch(pid) and isinstance(node, str) and node
+                and isinstance(title, str) and isinstance(types, list)):
+            continue
+        for t in types:
+            if isinstance(t, str) and t and t not in out:
+                out[t] = {"pluginId": pid, "node": node, "title": title}
+    return out
+
+
+async def host_plugin_pipeline_nodes() -> dict[str, dict[str, str]]:
+    """Installed plugins' pipeline nodes by n8n type, from the Host; {} when
+    the Host is not connected or does not answer in time."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = f"pn:{secrets.token_hex(16)}"
+    future = _pipeline_nodes_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(PIPELINE_NODES_REQUEST_EVENT, {"request_id": request_id}))
+        if not sent:
+            return {}
+        result = await _pipeline_nodes_pending.wait(request_id, future, timeout=_PIPELINE_NODES_TIMEOUT_S)
+        return {} if result is TIMEOUT else _pipeline_nodes_by_type(result)
+    finally:
+        _pipeline_nodes_pending.discard(request_id)
+
+
 # ── Marketplace, read-only (plan B, B2-a) ───────────────────────────────────
 # marketplace_search / marketplace_detail / plugins_list_installed ask the
 # Electron Host over its authenticated session (contract section 4.3): the
@@ -10813,12 +10876,15 @@ _MQ_ENUMS = frozenset({
     # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
     "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
     "factory-bundled",
+    # 0.2.39 disclosure: summary clause keys and command slot surfaces.
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "statusBar", "paneActions", "explorerMenu",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
     # An installed package's source (W1); a scan's `source` stays fenced.
     "source",
+    "slot",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -10837,6 +10903,8 @@ _MQ_KNOWN_KEYS = frozenset({
     "capabilities", "address", "code", "frontend", "backend", "eval", "newFunction", "dynamicImport",
     "stringTimers", "obfuscationSignals", "native", "path", "format", "arch", "libraries", "notableImports",
     "importCount", "packer", "embeddedRuntime",
+    # 0.2.39 disclosure fields (agentEvents, pluginCalls, api, pipelineNodes, commandSlots).
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "commandSlots", "plugins", "slot", "command",
 })
 
 

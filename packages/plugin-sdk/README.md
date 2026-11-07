@@ -45,3 +45,26 @@ open targets, window and detail composition) and `createPluginBackendClient()`
 `definePlugin` only returns a frozen `{ activate }` object; Navide never calls
 `activate`. See
 [SDK interface](../../docs/en-US/plugin-development-v2.md#sdk-interface).
+
+## Testing without Navide
+
+`@navide/plugin-sdk/testing` exports `createTestHost(options)`, an in-memory
+Host for a plugin's own unit tests. It builds a `PluginContext` whose
+`capabilities.invoke` answers from the handlers you pass and refuses an address
+your test permissions do not declare with `CAPABILITY_DENIED`, judged from the
+same capability catalog (`capabilities-v1.json`) Navide enforces. `emit()`
+delivers Host events to the plugin's subscribers (an `agents.*` event only when
+it is declared), and `calls` and `effects` record what the plugin did. It runs
+no Host code and grants nothing real.
+
+<!-- docs-typecheck: skip (test snippet; `plugin` and `expect` come from the reader's own test file) -->
+```ts
+import { createTestHost } from '@navide/plugin-sdk/testing'
+
+const host = createTestHost({
+  permissions: { system: ['fs'] },
+  handlers: { 'fs.readFile': () => ({ content: '# Readme' }) },
+})
+await plugin.activate(host.context)
+expect(host.calls.map((call) => call.outcome)).toEqual(['ok'])
+```

@@ -76,6 +76,10 @@ export type DisclosureSummaryClause =
   | { key: 'network'; params: { hosts: string[] } }
   | { key: 'networkViaShell'; params: Record<string, never> }
   | { key: 'noPermissions'; params: Record<string, never> }
+  | { key: 'agentEvents'; params: { events: string[] } }
+  | { key: 'pluginCalls'; params: { plugins: string[] } }
+  | { key: 'api'; params: { count: number } }
+  | { key: 'pipelineNodes'; params: { count: number } }
 
 export interface DisclosureSummary {
   template: typeof DISCLOSURE_SUMMARY_TEMPLATE
@@ -127,6 +131,20 @@ export interface ManifestDisclosure {
    * manifest declares hosts, so the disclosure of every earlier manifest (and
    * the digest the Registry signed for it) is unchanged. */
   networkHosts?: string[]
+  /** 0.2.39, each present only when declared so earlier disclosures (and the
+   *  digests the Registry signed for them) are unchanged:
+   *  `permissions.agents.events` sorted, */
+  agentEvents?: string[]
+  /** `permissions.plugins` sorted, */
+  pluginCalls?: string[]
+  /** `contributes.api` by method, */
+  api?: Array<{ method: string; description: string }>
+  /** `contributes.pipelineNodes` by id (they run in agent- and schedule-started
+   *  pipelines too), */
+  pipelineNodes?: Array<{ id: string; title: string; method: string }>
+  /** and the commands placed on Host surfaces (status bar, pane and Explorer
+   *  menus), by slot then command. */
+  commandSlots?: Array<{ slot: 'statusBar' | 'paneActions' | 'explorerMenu'; command: string; title: string }>
   agentTools: DisclosureAgentTool[]
   dataLocations: { hostStorage: true; backendDataDirectory: boolean; projectWrites: DisclosureProjectWrites }
 }
@@ -171,6 +189,11 @@ export type DisclosureItemKind =
   | 'shell'
   | 'shellExecutable'
   | 'system'
+  | 'agentEvent'
+  | 'pluginCall'
+  | 'apiMethod'
+  | 'pipelineNode'
+  | 'commandSlot'
 
 export interface DisclosureItem {
   kind: DisclosureItemKind
@@ -206,6 +229,8 @@ export interface DisclosureManifestInput {
     shellExecutables?: string[]
     scopes?: { fs: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
     network?: { hosts: string[] }
+    agents?: { events: string[] }
+    plugins?: string[]
   }
   backend?: {
     methods?: string[]
@@ -221,6 +246,11 @@ export interface DisclosureManifestInput {
     }>
   }
   contributes?: {
+    api?: Array<{ method: string; description: string }>
+    pipelineNodes?: Array<{ id: string; title: string; method: string }>
+    statusBar?: Array<{ command: string; text: string }>
+    paneActions?: Array<{ command: string; title: string }>
+    explorerMenu?: Array<{ command: string; title: string }>
     /** View-served tools (contract 2.9); disclosed with `method: "view:<view>"`. */
     agentTools?: Array<{
       name: string
@@ -273,6 +303,20 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     ? { fs: { root: fsScope.root ?? 'workspace', read: sorted(fsScope.read), write: sorted(fsScope.write) } }
     : null
   const networkHosts = sorted(declared.network?.hosts)
+  const agentEvents = sorted(declared.agents?.events)
+  const pluginCalls = sorted(declared.plugins)
+  const contributed = manifest.contributes
+  const api = (contributed?.api ?? [])
+    .map(({ method, description }) => ({ method, description }))
+    .sort((a, b) => compareCodeUnits(a.method, b.method))
+  const pipelineNodes = (contributed?.pipelineNodes ?? [])
+    .map(({ id, title, method }) => ({ id, title, method }))
+    .sort((a, b) => compareCodeUnits(a.id, b.id))
+  const commandSlots = [
+    ...(contributed?.statusBar ?? []).map((entry) => ({ slot: 'statusBar' as const, command: entry.command, title: entry.text })),
+    ...(contributed?.paneActions ?? []).map((entry) => ({ slot: 'paneActions' as const, command: entry.command, title: entry.title })),
+    ...(contributed?.explorerMenu ?? []).map((entry) => ({ slot: 'explorerMenu' as const, command: entry.command, title: entry.title })),
+  ].sort((a, b) => compareCodeUnits(a.slot, b.slot) || compareCodeUnits(a.command, b.command) || compareCodeUnits(a.title, b.title))
   const backend = manifest.backend
   const nativeBackend = backend ? { methods: sorted(backend.methods), events: sorted(backend.events) } : null
   const agentTools: DisclosureAgentTool[] = [
@@ -326,6 +370,10 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   if (system.includes('agentMessages')) clauses.push({ key: 'agentMessages', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
+  if (agentEvents.length > 0) clauses.push({ key: 'agentEvents', params: { events: agentEvents } })
+  if (pluginCalls.length > 0) clauses.push({ key: 'pluginCalls', params: { plugins: pluginCalls } })
+  if (api.length > 0) clauses.push({ key: 'api', params: { count: api.length } })
+  if (pipelineNodes.length > 0) clauses.push({ key: 'pipelineNodes', params: { count: pipelineNodes.length } })
   if (clauses.length === 0) clauses.push({ key: 'noPermissions', params: {} })
 
   const projectWrites: DisclosureProjectWrites = !hasFs
@@ -347,6 +395,11 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     // declared view hosts are `networkHosts`.
     network: shell ? 'via-shell' : 'none',
     ...(networkHosts.length > 0 ? { networkHosts } : {}),
+    ...(agentEvents.length > 0 ? { agentEvents } : {}),
+    ...(pluginCalls.length > 0 ? { pluginCalls } : {}),
+    ...(api.length > 0 ? { api } : {}),
+    ...(pipelineNodes.length > 0 ? { pipelineNodes } : {}),
+    ...(commandSlots.length > 0 ? { commandSlots } : {}),
     agentTools,
     dataLocations: { hostStorage: true, backendDataDirectory: nativeBackend !== null, projectWrites },
   }
@@ -394,6 +447,11 @@ export function disclosureItems(disclosure: ManifestDisclosure): DisclosureItem[
   }
   if (disclosure.network !== 'none') add('network', disclosure.network)
   for (const host of disclosure.networkHosts ?? []) add('networkHost', host)
+  for (const event of disclosure.agentEvents ?? []) add('agentEvent', event)
+  for (const plugin of disclosure.pluginCalls ?? []) add('pluginCall', plugin)
+  for (const entry of disclosure.api ?? []) add('apiMethod', entry.method)
+  for (const node of disclosure.pipelineNodes ?? []) add('pipelineNode', `${node.id}:${node.method}`)
+  for (const slot of disclosure.commandSlots ?? []) add('commandSlot', `${slot.slot}:${slot.command}`)
   for (const { name, ...detail } of disclosure.agentTools) add('agentTool', name, detail)
   return items.sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 }

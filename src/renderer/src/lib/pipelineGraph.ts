@@ -57,7 +57,7 @@ export interface GraphPosition {
   y: number
 }
 
-export type GraphNodeKind = 'trigger' | 'slot' | 'gate' | 'subpipeline'
+export type GraphNodeKind = 'trigger' | 'slot' | 'gate' | 'subpipeline' | 'plugin'
 
 /** A slot node's agent configuration — the same fields a stage slot has. */
 export type SlotConfig = StageSlot
@@ -79,6 +79,18 @@ export interface SubpipelineConfig {
   wait?: true
 }
 
+/** A plugin node runs a deterministic step another installed plugin
+ *  contributes (contributes.pipelineNodes) on that plugin's backend, through
+ *  the Host. Its result is external content: it becomes this node's output. */
+export interface PluginNodeConfig {
+  pluginId: string
+  /** The contributed node's id. */
+  node: string
+  /** Text handed to the node; may use {{task}}, {{prev.summary}} and
+   *  {{node.<id>.output…}}. Empty or absent: the run's task. */
+  input?: string
+}
+
 export interface GraphNode {
   id: string
   kind: GraphNodeKind
@@ -90,6 +102,8 @@ export interface GraphNode {
   gate?: GateConfig
   /** Required for kind 'subpipeline', absent otherwise. */
   subpipeline?: SubpipelineConfig
+  /** Required for kind 'plugin', absent otherwise. */
+  plugin?: PluginNodeConfig
   /** The stage this node came from; used to keep stage metadata (title,
    *  sentinel, question, …) when stages are re-derived from layers. */
   stageId?: string
@@ -149,7 +163,7 @@ export interface PipelineGraph {
 export type GraphOp =
   | { op: 'add_node'; node: GraphNode; after?: string[]; before?: string[] }
   | { op: 'remove_node'; id: string; reconnect?: boolean }
-  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig; subpipeline?: Partial<SubpipelineConfig> }
+  | { op: 'update_node'; id: string; label?: string; slot?: Partial<SlotConfig>; gate?: GateConfig; subpipeline?: Partial<SubpipelineConfig>; plugin?: Partial<PluginNodeConfig> }
   | { op: 'move_node'; id: string; position: GraphPosition }
   | { op: 'add_edge'; edge: GraphEdge }
   | { op: 'remove_edge'; id: string }
@@ -282,7 +296,25 @@ export function hasBranchingEdges(graph: PipelineGraph): boolean {
 /** Nodes that run work and can fail: they may carry retry and start branch
  *  and error edges. */
 function isWorkNode(n: GraphNode | undefined): boolean {
-  return n?.kind === 'slot' || n?.kind === 'subpipeline'
+  return n?.kind === 'slot' || n?.kind === 'subpipeline' || n?.kind === 'plugin'
+}
+
+/** The Manifest v2 plugin id grammar (packages/plugin-contracts). */
+const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
+
+function pluginNodeErrors(n: GraphNode): CodedErrors {
+  const c = n.plugin as unknown
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return [['plugin-config', `plugin node ${n.id} needs plugin.pluginId and plugin.node`]]
+  const o = c as Record<string, unknown>
+  const errors: CodedErrors = []
+  const push = (message: string): void => { errors.push(['plugin-config', message]) }
+  if (typeof o.pluginId !== 'string' || !PLUGIN_ID.test(o.pluginId)) push(`plugin node ${n.id} needs plugin.pluginId (a plugin id such as acme.tools)`)
+  if (typeof o.node !== 'string' || !o.node.trim()) push(`plugin node ${n.id} needs plugin.node`)
+  if (o.input !== undefined && typeof o.input !== 'string') push(`plugin node ${n.id}: input must be a string`)
+  if (Object.keys(o).some((k) => k !== 'pluginId' && k !== 'node' && k !== 'input')) {
+    push(`plugin node ${n.id}: plugin takes only pluginId, node and input`)
+  }
+  return errors
 }
 
 /** [problem code, message] pairs; see GraphProblem. */
@@ -562,9 +594,11 @@ export function graphProblems(graph: PipelineGraph): GraphProblem[] {
     if (!n?.id) { add('node-no-id', 'node without id'); continue }
     if (nodes.has(n.id)) add('duplicate-node', `duplicate node id ${n.id}`, n.id)
     nodes.set(n.id, n)
-    if (!['trigger', 'slot', 'gate', 'subpipeline'].includes(n.kind)) add('unknown-kind', `node ${n.id}: unknown kind ${String(n.kind)}`, n.id)
+    if (!['trigger', 'slot', 'gate', 'subpipeline', 'plugin'].includes(n.kind)) add('unknown-kind', `node ${n.id}: unknown kind ${String(n.kind)}`, n.id)
     if (n.kind === 'subpipeline') for (const [code, m] of subpipelineErrors(n)) add(code, m, n.id)
     else if (n.subpipeline != null) add('misplaced-config', `node ${n.id}: only subpipeline nodes carry subpipeline config`, n.id)
+    if (n.kind === 'plugin') for (const [code, m] of pluginNodeErrors(n)) add(code, m, n.id)
+    else if (n.plugin != null) add('misplaced-config', `node ${n.id}: only plugin nodes carry plugin config`, n.id)
     if (n.kind === 'slot' && (!n.slot || !n.slot.agentKey || !n.slot.label)) {
       add('slot-incomplete', `slot node ${n.id} needs slot.agentKey and slot.label`, n.id)
     }
@@ -716,6 +750,10 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
           if (n.kind !== 'subpipeline') throw new Error(`node ${op.id} is not a subpipeline`)
           n.subpipeline = { ...(n.subpipeline as SubpipelineConfig), ...op.subpipeline }
         }
+        if (op.plugin) {
+          if (n.kind !== 'plugin') throw new Error(`node ${op.id} is not a plugin node`)
+          n.plugin = { ...(n.plugin as PluginNodeConfig), ...op.plugin }
+        }
         break
       }
       case 'move_node':
@@ -747,7 +785,7 @@ export function applyGraphOps(graph: PipelineGraph, ops: readonly GraphOp[]): Pi
       }
       case 'set_retry': {
         const n = node(op.id)
-        if (n.kind !== 'slot' && n.kind !== 'subpipeline') throw new Error(`only slot and subpipeline nodes can retry: ${op.id}`)
+        if (!isWorkNode(n)) throw new Error(`only slot and subpipeline nodes can retry: ${op.id}`)
         if (op.retry) n.retry = { ...op.retry }
         else delete n.retry
         break

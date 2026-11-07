@@ -262,6 +262,7 @@ describe('ui.pipeline.start', () => {
       task: 'ship it',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-7',
+      origin: 'agent',
     }, expect.any(Function)) // the refusal reporter (PR-B)
     // The run's pipeline, which is not made the default (PR-E E4).
     expect(result).toEqual({
@@ -280,6 +281,7 @@ describe('ui.pipeline.start', () => {
       task: 'go',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-current',
+      origin: 'agent',
     }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 
@@ -291,6 +293,7 @@ describe('ui.pipeline.start', () => {
       task: '',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-active',
+      origin: 'agent',
     }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 

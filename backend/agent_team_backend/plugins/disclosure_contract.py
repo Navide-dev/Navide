@@ -53,6 +53,7 @@ DISCLOSURE_RISK_RULES = (
 DISCLOSURE_ITEM_KINDS = (
     "agentTool", "backendEvent", "backendMethod", "fsScopeRead", "fsScopeRoot", "fsScopeWrite",
     "nativeBackend", "network", "networkHost", "shell", "shellExecutable", "system",
+    "agentEvent", "pluginCall", "apiMethod", "pipelineNode", "commandSlot",
 )
 
 
@@ -70,6 +71,15 @@ class ManifestDisclosure(TypedDict):
     #: declares hosts, so the disclosure of every earlier manifest (and the
     #: digest the Registry signed for it) is unchanged.
     networkHosts: NotRequired[list[str]]
+    #: 0.2.39, each present only when declared (so earlier digests hold):
+    #: ``permissions.agents.events`` and ``permissions.plugins`` sorted,
+    #: ``contributes.api`` by method, ``contributes.pipelineNodes`` by id, and
+    #: the commands placed on Host surfaces by slot then command.
+    agentEvents: NotRequired[list[str]]
+    pluginCalls: NotRequired[list[str]]
+    api: NotRequired[list[dict[str, str]]]
+    pipelineNodes: NotRequired[list[dict[str, str]]]
+    commandSlots: NotRequired[list[dict[str, str]]]
     agentTools: list[dict[str, Any]]
     dataLocations: dict[str, Any]
 
@@ -174,6 +184,27 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
             "write": sorted(fs_scope.get("write") or []),
         }}
     network_hosts = sorted((declared.get("network") or {}).get("hosts") or [])
+    agent_events = sorted((declared.get("agents") or {}).get("events") or [])
+    plugin_calls = sorted(declared.get("plugins") or [])
+    contributed = manifest.get("contributes") or {}
+    api = sorted(
+        ({"method": entry["method"], "description": entry["description"]} for entry in contributed.get("api") or []),
+        key=lambda entry: entry["method"],
+    )
+    pipeline_nodes = sorted(
+        ({"id": node["id"], "title": node["title"], "method": node["method"]}
+         for node in contributed.get("pipelineNodes") or []),
+        key=lambda node: node["id"],
+    )
+    command_slots = sorted(
+        [{"slot": "statusBar", "command": entry["command"], "title": entry["text"]}
+         for entry in contributed.get("statusBar") or []]
+        + [{"slot": "paneActions", "command": entry["command"], "title": entry["title"]}
+           for entry in contributed.get("paneActions") or []]
+        + [{"slot": "explorerMenu", "command": entry["command"], "title": entry["title"]}
+           for entry in contributed.get("explorerMenu") or []],
+        key=lambda slot: (slot["slot"], slot["command"], slot["title"]),
+    )
     backend = manifest.get("backend")
     native = None
     if backend is not None:
@@ -251,6 +282,14 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         clauses.append({"key": "ui", "params": {}})
     if tools:
         clauses.append({"key": "agentTools", "params": {"read": read_tools, "write": write_tools}})
+    if agent_events:
+        clauses.append({"key": "agentEvents", "params": {"events": agent_events}})
+    if plugin_calls:
+        clauses.append({"key": "pluginCalls", "params": {"plugins": plugin_calls}})
+    if api:
+        clauses.append({"key": "api", "params": {"count": len(api)}})
+    if pipeline_nodes:
+        clauses.append({"key": "pipelineNodes", "params": {"count": len(pipeline_nodes)}})
     if not clauses:
         clauses.append({"key": "noPermissions", "params": {}})
 
@@ -282,6 +321,10 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     }
     if network_hosts:
         disclosure["networkHosts"] = network_hosts
+    for key, value in (("agentEvents", agent_events), ("pluginCalls", plugin_calls), ("api", api),
+                       ("pipelineNodes", pipeline_nodes), ("commandSlots", command_slots)):
+        if value:
+            disclosure[key] = value
     return disclosure  # type: ignore[return-value]
 
 
@@ -342,6 +385,16 @@ def disclosure_items(disclosure: ManifestDisclosure) -> list[DisclosureItem]:
         add("network", disclosure["network"])
     for host in disclosure.get("networkHosts") or []:
         add("networkHost", host)
+    for event in disclosure.get("agentEvents") or []:
+        add("agentEvent", event)
+    for plugin in disclosure.get("pluginCalls") or []:
+        add("pluginCall", plugin)
+    for entry in disclosure.get("api") or []:
+        add("apiMethod", entry["method"])
+    for node in disclosure.get("pipelineNodes") or []:
+        add("pipelineNode", f"{node['id']}:{node['method']}")
+    for slot in disclosure.get("commandSlots") or []:
+        add("commandSlot", f"{slot['slot']}:{slot['command']}")
     for tool in disclosure["agentTools"]:
         add("agentTool", tool["name"], {key: value for key, value in tool.items() if key != "name"})
     return sorted(items, key=lambda item: (item["kind"], item["key"]))

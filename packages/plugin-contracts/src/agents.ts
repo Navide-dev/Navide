@@ -94,3 +94,33 @@ export interface AgentsResults {
   'agents.listSessions': { sessions: AgentSessionInfo[] }
   'agentMessages.read': { message: AgentMessageInfo & { body: string } }
 }
+
+/** Host events a plugin can subscribe to with `context.events.subscribe`.
+ *  Each one is declared individually under `permissions.agents.events` (and
+ *  disclosed one by one); all of them also need the `agents` system grant.
+ *  Payloads are metadata only: message text stays behind `agentMessages.read`. */
+export const AGENTS_EVENTS = [
+  'agents.paneCreated',
+  'agents.paneClosed',
+  'agents.turnEnded',
+  'agents.paneIdle',
+  'agents.messageReceived',
+  'agents.planStageChanged',
+  'agents.pipelineNodeChanged',
+  'agents.scheduleFired',
+] as const
+
+export type AgentsEventAddress = (typeof AGENTS_EVENTS)[number]
+
+export interface AgentsEventPayloads {
+  'agents.paneCreated': { paneId: string; name: string; agentKey: string; spawnedBy: string }
+  'agents.paneClosed': { paneId: string; name: string }
+  'agents.turnEnded': { paneId: string; name: string }
+  'agents.paneIdle': { paneId: string; name: string }
+  'agents.messageReceived': AgentMessageInfo
+  /** relPath is workspace-relative, e.g. `.agent-team/plans/x_1a2b3c.html`. */
+  'agents.planStageChanged': { relPath: string; stage: string; previousStage: string }
+  /** previousStatus is '' the first time a node reports in a run. */
+  'agents.pipelineNodeChanged': { pipelineId: string; nodeId: string; status: string; previousStatus: string }
+  'agents.scheduleFired': { jobId: string; name: string; actionKind: string; manual: boolean }
+}

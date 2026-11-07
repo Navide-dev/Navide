@@ -442,7 +442,16 @@ declare global {
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
-        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
+        listSlots?: () => Promise<import('../../shared/pluginCommands').PluginSlotEntry[]>
+        readSettings?: (id: string) => Promise<{
+          settings: Array<{
+            key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+            default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+          }>
+          values: Record<string, boolean | string | number>
+        } | null>
+        writeSetting?: (id: string, key: string, value: boolean | string | number) => Promise<boolean>
+        runCommand: (args: { commandId: string; workspace_path: string; target?: import('../../shared/pluginCommands').PluginCommandTarget }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
@@ -572,6 +581,10 @@ declare global {
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
+        /** Run a pipeline's plugin node on the contributing plugin's backend. */
+        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }) => Promise<
+          { ok: true; output: unknown } | { ok: false; code: string; message: string }
+        >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>

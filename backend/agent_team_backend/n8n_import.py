@@ -221,6 +221,7 @@ _ROLE_CATEGORY = {
     "step": "agent", "app": "agent", "if": "native", "switch": "native", "loop": "agent",
     "trigger_schedule": "pending", "trigger_webhook": "pending", "trigger_error": "pending",
     "trigger_app": "pending", "subworkflow": "pending", "respond": "pending",
+    "plugin": "native",
 }
 
 _TRIGGER_ROLES = ("trigger", "trigger_schedule", "trigger_webhook", "trigger_error", "trigger_app")
@@ -573,8 +574,13 @@ def convert_n8n_workflow(
     imported_at: str | None = None,
     subpipelines: Mapping[str, str] | None = None,
     recursive_workflows: Collection[str] = (),
+    plugin_nodes: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Convert an n8n workflow into {graph, report, credentials, source}.
+
+    `plugin_nodes` maps n8n node types to installed plugins' pipeline nodes
+    ({pluginId, node, title}): a deterministic or app step of such a type
+    becomes a plugin node instead of an agent slot standing in for it.
 
     `default_agent` is the agentKey for slots no AI Agent model decides.
     `imported_at` (ISO 8601) defaults to now in UTC. `subpipelines` maps n8n
@@ -590,7 +596,15 @@ def convert_n8n_workflow(
     by_name: dict[str, dict[str, Any]] = {n["name"]: n for n in wf["nodes"]}
     order_index = {n["name"]: i for i, n in enumerate(wf["nodes"])}
     info = {name: _classify(n) for name, n in by_name.items()}
+    plugin_of: dict[str, Mapping[str, str]] = {}
     for name, n in by_name.items():
+        mapped = (plugin_nodes or {}).get(str(n.get("type") or ""))
+        if mapped and info[name]["role"] in ("step", "app") and not n.get("disabled"):
+            # An installed plugin offers this step: it runs there, not by an agent.
+            plugin_of[name] = mapped
+            info[name].update(role="plugin", needsReview=False, reason="",
+                              detail=f"runs as the pipeline node of the installed plugin {mapped['pluginId']}",
+                              detailCode="plugin-node", detailParams={"pluginId": mapped["pluginId"]})
         info[name]["category"] = _ROLE_CATEGORY.get(info[name]["role"], "agent")
     warnings: list[str] = []
     warning_items: list[dict[str, Any]] = []
@@ -739,6 +753,8 @@ def convert_n8n_workflow(
             return "agent"
         if role == "subpipeline":
             return "subpipeline"
+        if role == "plugin":
+            return "plugin"
         return "step"
 
     uf = _UF(flow)
@@ -890,6 +906,7 @@ def convert_n8n_workflow(
     slots_report: list[dict[str, Any]] = []
     gates_report: list[dict[str, Any]] = []
     subpipelines_report: list[dict[str, Any]] = []
+    plugin_nodes_report: list[dict[str, Any]] = []
     group_cat: dict[str, str] = {}
     group_agent: dict[str, str] = {}
 
@@ -897,6 +914,7 @@ def convert_n8n_workflow(
     is_slot_group = {gid[g]: not (len(members[g]) == 1 and kind_of(members[g][0]) in ("trigger", "gate"))
                      for g in group_list}
     is_sub_group = {gid[g]: len(members[g]) == 1 and kind_of(members[g][0]) == "subpipeline" for g in group_list}
+    is_plugin_group = {gid[g]: len(members[g]) == 1 and kind_of(members[g][0]) == "plugin" for g in group_list}
     edges_out: list[dict[str, Any]] = []
     seen_edges: set[tuple[str, str, str]] = set()
 
@@ -973,14 +991,15 @@ def convert_n8n_workflow(
     contract: set[str] = set()
     for g in group_list:
         nid = gid[g]
-        if is_sub_group[nid]:
-            continue  # its task carries the inputs verbatim
+        if is_sub_group[nid] or is_plugin_group[nid]:
+            continue  # its task (input) carries the inputs verbatim
         for m in members[g]:
             for x in _referenced_nodes(by_name[m]):
                 if x not in by_name or x in removed:
                     continue
                 owner = node_of.get(cluster_of.get(x, x))
-                if owner is None or owner == nid or not is_slot_group.get(owner) or is_sub_group.get(owner):
+                if owner is None or owner == nid or not is_slot_group.get(owner) or is_sub_group.get(owner) \
+                        or is_plugin_group.get(owner):
                     continue
                 if owner in ancestors[nid]:
                     refs.setdefault(nid, []).append((m, x, owner))
@@ -1037,6 +1056,20 @@ def convert_n8n_workflow(
             nodes_out.append(sub_node)
             subpipelines_report.append({"id": nid, "label": mem[0], "pipelineId": sub_target[mem[0]], "task": task,
                                         "tainted": True, **({"retry": retry_of[nid]} if nid in retry_of else {})})
+            continue
+        if is_plugin_group[nid]:
+            mapped = plugin_of[mem[0]]
+            # The node's own (redacted) parameters are its input: external content.
+            plugin_input = _dump(by_name[mem[0]].get("parameters") or {})
+            plugin_node: dict[str, Any] = {"id": nid, "kind": "plugin", "label": mem[0], "position": {"x": 0, "y": 0},
+                                           "plugin": {"pluginId": mapped["pluginId"], "node": mapped["node"],
+                                                      "input": plugin_input}}
+            if nid in retry_of:
+                plugin_node["retry"] = retry_of[nid]
+            nodes_out.append(plugin_node)
+            plugin_nodes_report.append({"id": nid, "label": mem[0], "pluginId": mapped["pluginId"],
+                                        "node": mapped["node"], "title": mapped.get("title", ""), "tainted": True,
+                                        **({"retry": retry_of[nid]} if nid in retry_of else {})})
             continue
         agent_key = default_agent
         if len(mem) == 1 and kind_of(mem[0]) == "agent":
@@ -1178,6 +1211,7 @@ def convert_n8n_workflow(
         "slots": slots_report,
         "gates": gates_report,
         "subpipelines": subpipelines_report,
+        "pluginNodes": plugin_nodes_report,
         "nodeCategories": group_cat,
         "secretsRemoved": secrets_removed,
         "credentials": credentials,
@@ -1529,8 +1563,12 @@ def import_into_store(
     dry_run: bool = True,
     default_agent: str = DEFAULT_AGENT,
     name: str = "",
+    plugin_nodes: Mapping[str, Mapping[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Convert, and unless dry_run store the result as a new pipeline.
+
+    `plugin_nodes` is passed to convert_n8n_workflow (installed plugins'
+    pipeline nodes by n8n type, from the Host).
 
     Shared by the MCP tool and the ws handler. `workflow` is one n8n workflow
     or a list of them: the main one is the first that no other listed one
@@ -1610,7 +1648,7 @@ def import_into_store(
             else:
                 known.pop(w, None)
         return convert_n8n_workflow(wfs[i], default_agent=default_agent, subpipelines=known,
-                                    recursive_workflows=recursive[i])
+                                    recursive_workflows=recursive[i], plugin_nodes=plugin_nodes)
 
     # Convert everything once first, so a bad workflow fails before any write.
     results = {i: convert(i, preview=True) for i in order}
