@@ -723,6 +723,22 @@
     }
   },
   "pane": {
+    "web": {
+      "signed-in": "Angemeldet",
+      "signed-out": "Nicht angemeldet",
+      "unloaded": "Entladen",
+      "memory": "{mb} MB",
+      "reload": "Neu laden",
+      "open-browser": "Im Systembrowser öffnen",
+      "clear": "Abmelden und löschen",
+      "clear-confirm": "Erneut klicken, um dich von dieser Website abzumelden und ihre Daten in allen Web-Bereichen zu löschen",
+      "clear-confirm-short": "Bestätigen",
+      "unloaded-title": "Entladen, um Speicher zu sparen",
+      "unloaded-hint": "Klicken, um sie neu zu laden. Du bleibst angemeldet.",
+      "google-hint": "Google kann die Anmeldung in einem eingebetteten Browser ablehnen. Melde dich in diesem Fall im Systembrowser an.",
+      "cloudflare-hint": "Browser wird geprüft. Bitte warten; erscheint ein Kästchen „Verify you are human“, hake es selbst an.",
+      "privacy": "Melde dich mit deinem eigenen Konto an. Die Anmeldung bleibt auf diesem Computer, Navide liest sie nicht."
+    },
     "acp": {
       "unconfirmed": "Nicht bestätigt",
       "unsent": "Nicht gesendet",
@@ -2628,6 +2644,10 @@
       "download-retry": "Download wiederholen"
     },
     "general": {
+      "web-pane-idle": "Web-Bereich bei Leerlauf entladen (Minuten)",
+      "web-pane-idle-hint": "Ein Web-Bereich, der so lange keinen Fokus hatte, entlädt seine Seite, um Speicher freizugeben. Ein Klick lädt sie neu, weiterhin angemeldet.",
+      "web-pane-limit": "Limit aktiver Web-Bereiche",
+      "web-pane-limit-hint": "Wie viele Web-Bereiche gleichzeitig eine geladene Seite behalten. Wird einer mehr geöffnet, wird der am längsten ungenutzte entladen.",
       "auto-resume-reconnect": "Sessions nach einem Neustart des Navide-Hintergrunddienstes fortsetzen",
       "resume-interrupted-on-launch": "Arbeitende Bereiche nach dem Neustart von Navide fortsetzen",
       "system-notify": "Systembenachrichtigungen",

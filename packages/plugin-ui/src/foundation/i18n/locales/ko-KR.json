@@ -723,6 +723,22 @@
     }
   },
   "pane": {
+    "web": {
+      "signed-in": "로그인됨",
+      "signed-out": "로그인 안 됨",
+      "unloaded": "언로드됨",
+      "memory": "{mb} MB",
+      "reload": "새로 고침",
+      "open-browser": "시스템 브라우저에서 열기",
+      "clear": "로그아웃 및 삭제",
+      "clear-confirm": "한 번 더 클릭하면 이 사이트에서 로그아웃하고 모든 web pane에서 이 사이트의 데이터를 삭제합니다",
+      "clear-confirm-short": "확인",
+      "unloaded-title": "메모리를 아끼려고 언로드했습니다",
+      "unloaded-hint": "클릭하면 다시 불러옵니다. 로그인 상태는 유지됩니다.",
+      "google-hint": "Google은 내장 브라우저에서 로그인을 거부할 수 있습니다. 거부되면 시스템 브라우저에서 로그인하세요.",
+      "cloudflare-hint": "브라우저를 확인하는 중입니다. 잠시 기다리세요. \"Verify you are human\" 확인란이 나타나면 직접 체크하세요.",
+      "privacy": "본인 계정으로 로그인하세요. 로그인 상태는 이 컴퓨터에만 남으며 Navide는 읽지 않습니다."
+    },
     "acp": {
       "unconfirmed": "확인되지 않음",
       "unsent": "보내지 못함",
@@ -2628,6 +2644,10 @@
       "download-retry": "다운로드 다시 시도"
     },
     "general": {
+      "web-pane-idle": "web pane 유휴 언로드(분)",
+      "web-pane-idle-hint": "이 시간 동안 포커스되지 않은 web pane은 페이지를 언로드해 메모리를 확보합니다. 클릭하면 로그인된 채로 다시 불러옵니다.",
+      "web-pane-limit": "활성 web pane 한도",
+      "web-pane-limit-hint": "동시에 페이지를 불러 둔 web pane 수입니다. 하나 더 열면 가장 오래 사용하지 않은 것을 언로드합니다.",
       "auto-resume-reconnect": "Navide 백그라운드 서비스가 다시 시작된 뒤 session 재개",
       "resume-interrupted-on-launch": "Navide를 다시 시작한 뒤 작업 중이던 pane 재개",
       "system-notify": "시스템 알림",

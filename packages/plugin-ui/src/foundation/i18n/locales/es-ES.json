@@ -723,6 +723,22 @@
     }
   },
   "pane": {
+    "web": {
+      "signed-in": "Sesión iniciada",
+      "signed-out": "Sin sesión",
+      "unloaded": "Descargado",
+      "memory": "{mb} MB",
+      "reload": "Recargar",
+      "open-browser": "Abrir en el navegador del sistema",
+      "clear": "Cerrar sesión y borrar",
+      "clear-confirm": "Haz clic otra vez para cerrar sesión en este sitio y borrar sus datos en todos los web panes",
+      "clear-confirm-short": "Confirmar",
+      "unloaded-title": "Descargado para ahorrar memoria",
+      "unloaded-hint": "Haz clic para volver a cargarlo. Tu sesión sigue iniciada.",
+      "google-hint": "Google puede rechazar el inicio de sesión dentro de un navegador integrado. Si ocurre, inicia sesión desde el navegador del sistema.",
+      "cloudflare-hint": "Comprobando el navegador. Espera un momento; si aparece una casilla \"Verify you are human\", márcala tú.",
+      "privacy": "Inicia sesión con tu propia cuenta. La sesión se queda en este equipo y Navide no la lee."
+    },
     "acp": {
       "unconfirmed": "Sin confirmar",
       "unsent": "No enviado",
@@ -2628,6 +2644,10 @@
       "download-retry": "Reintentar descarga"
     },
     "general": {
+      "web-pane-idle": "Descarga por inactividad del web pane (minutos)",
+      "web-pane-idle-hint": "Un web pane sin foco durante este tiempo descarga su página para liberar memoria. Al hacer clic se vuelve a cargar con la sesión iniciada.",
+      "web-pane-limit": "Límite de web panes activos",
+      "web-pane-limit-hint": "Cuántos web panes mantienen una página cargada a la vez. Al abrir uno más se descarga el que lleva más tiempo sin usarse.",
       "auto-resume-reconnect": "Reanudar las sessions tras reiniciarse el servicio en segundo plano de Navide",
       "resume-interrupted-on-launch": "Reanudar los panes que estaban trabajando tras reiniciar Navide",
       "system-notify": "Notificaciones del sistema",

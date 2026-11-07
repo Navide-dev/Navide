@@ -225,6 +225,10 @@ declare global {
       stabilizeDroppedPaths: (paths: string[]) => Promise<{ ok: boolean; paths: string[] }>
       saveClipboardImage: (args: { bytes: Uint8Array; mediaType: string }) => Promise<{ ok: boolean; path?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>
+      webPane?: {
+        memory: (webContentsIds: number[]) => Promise<Record<string, number>>
+        clearData: (siteId: string) => Promise<boolean>
+      }
       trashCreatedMemoryFile: (
         path: string,
         acceptChanged?: boolean,
