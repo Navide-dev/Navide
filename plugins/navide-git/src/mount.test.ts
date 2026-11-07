@@ -35,6 +35,7 @@ vi.mock('./pluginSurfacePorts', () => ({
   createPluginGitContributionHostPort: vi.fn(() => ({})),
   createPluginGitWorkspaceGrantPort: vi.fn(() => ({})),
   createPluginGitSettingsPort: vi.fn(() => ({})),
+  createPluginGitReviewPort: vi.fn(() => ({})),
   createPluginLegacyRepoSelectionPort: vi.fn(() => ({})),
 }))
 vi.mock('./GitWindowApp.vue', () => ({ default: { template: '<button>{{ $t("action.close") }}</button>' } }))

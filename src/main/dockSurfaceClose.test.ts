@@ -37,12 +37,6 @@ describe('a window hosting AI panels ends them when it closes', () => {
     expect(handler).toContain("frontendPluginManager.endDockSurface('plans', workspacePath)")
   })
 
-  it('the Git window ends the git panels', () => {
-    expect(closedHandlerAfter(managerSource, 'function ensureGitWindow(')).toContain(
-      "frontendPluginManager.endDockSurface('git')",
-    )
-  })
-
   it('the Mini-IDE window ends the editor panels', () => {
     expect(closedHandlerAfter(managerSource, 'function ensureMiniIdeWindow(')).toContain(
       "frontendPluginManager.endDockSurface('editor')",

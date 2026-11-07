@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, inject } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useReview } from '../composables/useReview'
-import { GIT_REVIEW_KEY, type GitReviewFinding as ReviewFinding } from '../ports/gitSurface'
+import { GIT_REVIEW_KEY, type GitReviewFinding as ReviewFinding, type GitReviewPort } from '../ports/gitSurface'
 import type { GitBranch, GitStatus } from '../composables/useGit'
 
 // AI review of the working tree or a branch comparison. The Host's analyzer
@@ -20,8 +20,9 @@ const emit = defineEmits<{
   (e: 'ask-ai-fix', text: string): void
 }>()
 
-const review = inject(GIT_REVIEW_KEY)
-if (!review) throw new Error('ReviewPane requires the Git review port')
+const injectedReview = inject(GIT_REVIEW_KEY)
+if (!injectedReview) throw new Error('ReviewPane requires the Git review port')
+const review: GitReviewPort = injectedReview
 const { isReviewing, reviewResult, reviewError, reviewElapsed, startReview, stopReview } = useReview(review)
 
 const mode = ref<'working' | 'branch'>('working')
