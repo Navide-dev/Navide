@@ -8342,6 +8342,9 @@ async def cli_token_stats(
 
         if cost_by not in COST_REPORT_GROUPS:
             return {"ok": False, "error": f"cost_by must be one of {', '.join(COST_REPORT_GROUPS)}"}
+        if not _app.cost_ledger.enabled:
+            stats["cost_ledger_disabled"] = _app.cost_ledger.disabled_reason
+            return stats
         stats["cost"] = await asyncio.to_thread(
             _app.cost_ledger.report, cost_by,
             cwd=workspace_path, pane=pane, since=since, until=until,

@@ -332,6 +332,8 @@ async def test_token_stats_adds_ledger_cost_only_when_asked(
     asked: list[tuple[str, dict[str, Any]]] = []
 
     class _Ledger:
+        enabled = True
+
         def report(self, by: str, **filters: Any) -> dict[str, Any]:
             asked.append((by, filters))
             return {"by": by, "groups": []}
@@ -347,6 +349,29 @@ async def test_token_stats_adds_ledger_cost_only_when_asked(
 
     refused = await plan_mcp.cli_token_stats(_ctx(), cost_by="vendor")
     assert refused["ok"] is False and "cwd, pane, day, session, model" in refused["error"]
+
+
+@pytest.mark.asyncio
+async def test_token_stats_reports_a_disabled_ledger_instead_of_cost(
+    tokens: _FakeTokensStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, workspace: str
+) -> None:
+    """A ledger whose migration failed at startup leaves the token counts as
+    they are and says why there is no `cost`."""
+    agent_messaging.register("pa", "caller", str(tmp_path))
+
+    class _DisabledLedger:
+        enabled = False
+        disabled_reason = "OperationalError: disk I/O error"
+
+        def report(self, by: str, **filters: Any) -> dict[str, Any]:
+            raise AssertionError("a disabled ledger is not read")
+
+    monkeypatch.setattr(backend_app, "cost_ledger", _DisabledLedger())
+
+    result = await plan_mcp.cli_token_stats(_ctx(), cost_by="model")
+    assert "cost" not in result
+    assert result["cost_ledger_disabled"] == "OperationalError: disk I/O error"
+    assert result["workspace_path"] == workspace
 
 
 # ── C. memory_list ──────────────────────────────────────────────────────────

@@ -3949,12 +3949,23 @@ function showPlansPreviewUnavailable(workspacePath: string): void {
 function openDiffWindow(host: BrowserWindow | null, params: Record<string, string>): void {
   // Diff surfaces belong to the Git extension: the request is forwarded to its
   // window, which selects the file there. The IDE never renders a diff.
-  void openGitWindow(params.workspace_path ?? '', gitWindowExtraParams({
+  void openGitWindowOrExplain(host, params.workspace_path ?? '', gitWindowExtraParams({
     filepath: params.filepath,
     ...(params.name === undefined ? {} : { name: params.name }),
     ...(params.staged === undefined ? {} : { staged: params.staged }),
     ...(params.commit === undefined ? {} : { commit: params.commit }),
   }))
+}
+
+/** Open the Git window for a diff request; when it cannot open, say why
+ *  (a disabled Git plugin already explains itself through refuseDisabledBuiltin). */
+async function openGitWindowOrExplain(
+  host: BrowserWindow | null,
+  workspacePath: string,
+  extraParams: Record<string, string>,
+): Promise<void> {
+  if (refuseDisabledBuiltin('navide.git', host)) return
+  if (!(await openGitWindow(workspacePath, extraParams))) await showGitViewUnavailable(host)
 }
 
 /** Route a diff-shaped editor request to the Git extension's own window. The
@@ -4708,7 +4719,7 @@ ipcMain.handle('window:setUiScale', (event, next: unknown) => {
 })
 
 function openBranchDiffWindow(host: BrowserWindow | null, params: Record<string, string>): void {
-  void openGitWindow(params.workspace_path ?? '', {
+  void openGitWindowOrExplain(host, params.workspace_path ?? '', {
     git_diff_base: params.branch_diff_base ?? 'main',
     git_diff_compare: params.branch_diff_compare ?? '',
   })

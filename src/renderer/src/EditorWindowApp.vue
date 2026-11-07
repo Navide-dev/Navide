@@ -1186,7 +1186,6 @@ const PALETTE_COMMANDS: PaletteCmd[] = [
   { id: 'editor.action.triggerGhost',    label: 'AI Completion (Cmd+I)',keys: '⌘I' },
   { id: 'workbench.action.toggleSidebar',label: 'Toggle Sidebar',     keys: '⌘B' },
   { id: 'workbench.action.focusExplorer',label: 'Show Explorer',   keys: '⌘⇧E' },
-  { id: 'workbench.action.focusSourceControl', label: 'Show Source Control', keys: '⌘⇧G' },
   { id: 'workbench.action.focusActiveEditorGroup', label: 'Focus Editor', keys: '⌘K ⌘E' },
   { id: 'workbench.action.findInFiles',  label: 'Find in Files',   keys: '⌘⇧F' },
   { id: 'workbench.action.openMiniIDE', label: 'Open Mini-IDE',   keys: '⌘⇧I' },

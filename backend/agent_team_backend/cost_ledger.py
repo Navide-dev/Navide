@@ -263,10 +263,17 @@ def _row(usage: TokenUsage, workspace: str, pane: str, profile_id: str = "") -> 
 class CostLedger:
     def __init__(self, db: Database) -> None:
         self._db = db
-        self._db.migrate("cost_ledger", 1, _create_schema_v1)
-        self._db.migrate("cost_ledger", 2, _create_schema_v2)
-        self._db.migrate("cost_ledger", 3, _create_schema_v3)
         self._keyless_vendors: set[str] = set()
+        self.enabled = False
+        self.disabled_reason = ""
+        try:
+            self._db.migrate("cost_ledger", 1, _create_schema_v1)
+            self._db.migrate("cost_ledger", 2, _create_schema_v2)
+            self._db.migrate("cost_ledger", 3, _create_schema_v3)
+            self.enabled = True
+        except Exception as err:  # noqa: BLE001 - the backend starts without the ledger
+            self.disabled_reason = f"{type(err).__name__}: {err}"
+            log.warning("cost ledger disabled: its schema could not be migrated: %s", self.disabled_reason)
 
     def _accept(self, usage: TokenUsage) -> bool:
         if usage.dedup_key:
@@ -282,6 +289,8 @@ class CostLedger:
         """Insert one call. Never raises: the token sink must not depend on it.
         Returns True when a new row was written. ``profile_id`` is the account
         slot the sink attributed the call to ("unknown" is stored as '')."""
+        if not self.enabled:
+            return False
         try:
             if not self._accept(usage):
                 return False
@@ -300,7 +309,10 @@ class CostLedger:
             return False
 
     def report(self, by: str, **filters: Any) -> dict[str, Any]:
-        """cost_report over this ledger's database."""
+        """cost_report over this ledger's database. ValueError while the
+        ledger is disabled, as for a bad grouping."""
+        if not self.enabled:
+            raise ValueError(f"cost ledger is disabled: {self.disabled_reason}")
         return cost_report(self._db, by, **filters)
 
     def record_many(self, events: Iterable[TokenUsage]) -> tuple[int, int]:

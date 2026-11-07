@@ -386,11 +386,36 @@ describe('Issue 03/04 public Host planner', () => {
       .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
     // The allowlist discloses git/gh/glab and the declared executables, not "any program".
     const allowlist = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'allowlist' })
-    expect(planPublicCapabilityCall(uiCall, allowlist, uiContext(true, { shell: 'allowlist' })))
+    expect(planPublicCapabilityCall(uiCall, allowlist, uiContext(false, { shell: 'allowlist' })))
       .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
     const withoutShell = manifestV2CapabilityPolicy({ system: ['ui'] })
-    for (const publisherEligible of [true, false]) {
-      expect(planPublicCapabilityCall(uiCall, withoutShell, uiContext(publisherEligible)))
+    expect(planPublicCapabilityCall(uiCall, withoutShell, uiContext(false)))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
+  })
+
+  it.each([
+    ['openPath', { path: 'docs/preview.html' }],
+    ['openTempFile', { name: 'preview.png', content: 'x' }],
+  ])('keeps ui.%s open for the bundled Plans (no shell) and Mini-IDE (allowlist) packages', (method, args) => {
+    const cases = [
+      { pluginId: 'navide.plans', policy: manifestV2CapabilityPolicy({ system: ['fs', 'ui', 'aiCli'] }), grant: {} },
+      {
+        pluginId: 'navide.mini-ide',
+        policy: manifestV2CapabilityPolicy({ system: ['fs', 'ui', 'aiCli'], shell: 'allowlist' }),
+        grant: { shell: 'allowlist' as const },
+      },
+    ]
+    for (const { pluginId, policy: firstPartyPolicy, grant } of cases) {
+      const firstPartyCall = call({ pluginId, ns: 'ui', method, args })
+      const firstPartyContext = (publisherEligible: boolean) => context({
+        runtimeBinding: { ...binding, pluginId },
+        userGrant: { packageVersion: '1.0.0', system: ['fs', 'ui', 'aiCli'], ...grant },
+        publisherEligible,
+      })
+      expect(planPublicCapabilityCall(firstPartyCall, firstPartyPolicy, firstPartyContext(true)))
+        .toMatchObject({ kind: 'allow', plan: { address: `ui.${method}` } })
+      // The same manifest from a third-party publisher still needs the full shell.
+      expect(planPublicCapabilityCall(firstPartyCall, firstPartyPolicy, firstPartyContext(false)))
         .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
     }
   })

@@ -873,8 +873,9 @@ export function planPublicCapabilityCall(
   }
   // The method hands a file to whatever program the OS picks: only the full
   // shell permission discloses "runs any program" (allowlist discloses
-  // git/gh/glab and the declared executables), so that is what it needs.
-  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') {
+  // git/gh/glab and the declared executables), so that is what a third-party
+  // package needs. Navide's own packages keep the first-party access they had.
+  if (entry.eligibility === 'declaredShell' && !context.publisherEligible && policy.shell !== 'full') {
     return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell "full"`)
   }
 
@@ -914,7 +915,11 @@ export function planPublicCapabilityCall(
   }
   // ...and the user must have approved that full shell for this version, as
   // for shell.run itself.
-  if (entry.eligibility === 'declaredShell' && (grant.shell !== 'full' || grant.highRiskShellConfirmed !== true)) {
+  if (
+    entry.eligibility === 'declaredShell' &&
+    !context.publisherEligible &&
+    (grant.shell !== 'full' || grant.highRiskShellConfirmed !== true)
+  ) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell is not user-approved for this version')
   }
 
