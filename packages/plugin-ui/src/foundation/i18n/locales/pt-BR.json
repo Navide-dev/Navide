@@ -13080,5 +13080,25 @@
       "select": "Lista",
       "checkbox": "Caixa de seleção"
     }
+  },
+  "token-views": {
+    "by-model": "Por modelo",
+    "by-account-quota": "Cota por conta",
+    "range": "Período",
+    "range-day": "Dia",
+    "range-week": "Semana",
+    "cache": "Memória cache",
+    "cache-read": "Cache lido",
+    "cache-write": "Cache gravado",
+    "usd": "Dólares",
+    "other-models": "Outros",
+    "no-ledger-data": "Nenhuma chamada registrada neste período ainda",
+    "no-quota-history": "Nenhuma leitura de cota ainda",
+    "window-session": "Sessão",
+    "window-weekly": "Semanal",
+    "resets": "Redefine {time}",
+    "trend-7d": "Pico diário, últimos 7 dias",
+    "week-tokens": "Tokens nesta semana",
+    "day-tokens": "Tokens hoje"
   }
 }

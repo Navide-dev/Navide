@@ -13080,5 +13080,25 @@
       "select": "Danh sách",
       "checkbox": "Hộp chọn"
     }
+  },
+  "token-views": {
+    "by-model": "Theo mô hình",
+    "by-account-quota": "Hạn mức theo tài khoản",
+    "range": "Khoảng thời gian",
+    "range-day": "Ngày",
+    "range-week": "Tuần",
+    "cache": "Bộ nhớ đệm",
+    "cache-read": "Đọc bộ nhớ đệm",
+    "cache-write": "Ghi bộ nhớ đệm",
+    "usd": "Đô la Mỹ",
+    "other-models": "Khác",
+    "no-ledger-data": "Chưa có lệnh gọi nào trong khoảng này",
+    "no-quota-history": "Chưa có dữ liệu hạn mức",
+    "window-session": "Phiên",
+    "window-weekly": "Hàng tuần",
+    "resets": "Đặt lại {time}",
+    "trend-7d": "Mức cao nhất mỗi ngày, 7 ngày qua",
+    "week-tokens": "Token tuần này",
+    "day-tokens": "Token hôm nay"
   }
 }

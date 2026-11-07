@@ -13080,5 +13080,25 @@
       "select": "목록",
       "checkbox": "체크박스"
     }
+  },
+  "token-views": {
+    "by-model": "모델별",
+    "by-account-quota": "계정별 할당량",
+    "range": "기간",
+    "range-day": "일",
+    "range-week": "주",
+    "cache": "캐시",
+    "cache-read": "캐시 읽기",
+    "cache-write": "캐시 쓰기",
+    "usd": "달러",
+    "other-models": "기타",
+    "no-ledger-data": "이 기간에 기록된 호출이 아직 없습니다",
+    "no-quota-history": "아직 할당량 기록이 없습니다",
+    "window-session": "세션",
+    "window-weekly": "주간",
+    "resets": "{time} 초기화",
+    "trend-7d": "최근 7일 일별 최고치",
+    "week-tokens": "이번 주 토큰",
+    "day-tokens": "오늘 토큰"
   }
 }

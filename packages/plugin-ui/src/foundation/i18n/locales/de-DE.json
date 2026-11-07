@@ -13080,5 +13080,25 @@
       "select": "Liste",
       "checkbox": "Kontrollkästchen"
     }
+  },
+  "token-views": {
+    "by-model": "Nach Modell",
+    "by-account-quota": "Kontingent nach Konto",
+    "range": "Zeitraum",
+    "range-day": "Tag",
+    "range-week": "Woche",
+    "cache": "Zwischenspeicher",
+    "cache-read": "Zwischenspeicher gelesen",
+    "cache-write": "Zwischenspeicher geschrieben",
+    "usd": "US-Dollar",
+    "other-models": "Sonstige",
+    "no-ledger-data": "In diesem Zeitraum noch keine Aufrufe erfasst",
+    "no-quota-history": "Noch keine Kontingentwerte erfasst",
+    "window-session": "Sitzung",
+    "window-weekly": "Wöchentlich",
+    "resets": "Zurücksetzung {time}",
+    "trend-7d": "Tageshöchstwert, letzte 7 Tage",
+    "week-tokens": "Tokens diese Woche",
+    "day-tokens": "Tokens heute"
   }
 }
