@@ -147,6 +147,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { secretsIdentity } from './pluginSecrets'
 import { PackageStagingStore } from './pluginStagingStore'
 import {
   agentPackagePath,
@@ -916,6 +917,26 @@ export function registerPluginIpc(
       return undefined
     }
   }
+  // The trust identity a package's own secrets (`secrets`) are bound to: its
+  // installed source, and for a local file the publisher key that signed it.
+  // A Registry install whose channel this release does not know still comes
+  // through the Registry. Null (refused) when nothing says where it came from.
+  manager.setPluginSecretIdentityResolver?.((pluginId) => {
+    const summary = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if (!summary) return null
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (source === 'local-unsigned' || source === 'local-signed') {
+      const path = summary.packageVersion ? localTrustRecordFor(pluginsRoot, pluginId, summary.packageVersion) : null
+      let signer: { publisherId: string; keyId: string } | null = null
+      try {
+        signer = path ? readLocalTrustRecord(path).signer : null
+      } catch {
+        return null
+      }
+      return signer ? secretsIdentity('local-signed', signer) : secretsIdentity('local-unsigned')
+    }
+    return secretsIdentity(source) ?? (summary.provenance === 'official-registry' ? secretsIdentity('marketplace') : null)
+  })
   // Decision d5 (W6): the block on the `.vsix` a local install came from.
   const localDigestBlockFor = (summary: { id: string; packageVersion?: string }): LocalDigestBlock | null => {
     if (!summary.packageVersion) return null
@@ -4936,6 +4957,14 @@ export function registerPluginIpc(
     },
   )
 
+  // An agent's plugin-clear-secrets request the user approved in this main
+  // window: delete the package's own secrets (the Host tells the user).
+  ipcMain.handle('plugins:clearSecrets', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    manager.clearPluginSecrets(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    return { ok: true }
+  })
+
   // What the remove dialog asks about: how many secrets (`secrets`) the plugin
   // keeps on this device. Never their names or values.
   ipcMain.handle('plugins:secretCount', async (event, args: { id?: unknown } | null) => {
@@ -5160,7 +5189,6 @@ export function registerPluginIpc(
         return result
       },
       notify: (notice) => options.onPluginAgentAction?.(notice),
-      clearSecrets: (pluginId) => manager.clearPluginSecrets(pluginId),
       isDisabled: (pluginId) => disabledPlugins.has(pluginId),
       disableSource: (pluginId) => disableSources.get(pluginId),
       now: () => Date.now(),

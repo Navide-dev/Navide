@@ -1042,10 +1042,16 @@ For `plugins_disable` / `plugins_enable`. The backend unicasts
   "requester": { "paneId": "p-41", "paneName": "dev", "workspace": "/Users/me/project", "callerKind": "pane" } }
 ```
 
-A `disable` may carry `"clear_secrets": true` (from `plugins_disable` with
-`clear_secrets=true`; never `false`, never on another action): the Host then
-also deletes the package's own secrets (`secrets`), which otherwise survive a
-disable, and adds `secretsCleared: true` to its answer.
+`plugins_disable` with `clear_secrets=true` sends the Host the same
+`disable` as without it: the request never carries `clear_secrets`, and the
+Host refuses one that does (`BAD_REQUEST`). Deleting the package's own secrets
+is filed afterwards by the backend as a `plugin-clear-secrets` request
+(section 6, target version = the installed version) for the user's decision,
+whether or not the switch changed; the agent's answer adds
+`secretsClear: {ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status, expires_at}`,
+and the audit records `request-clear-secrets`. The main window deletes them
+(`plugins:clearSecrets`) only when the user approves the card, and tells the
+user whenever secrets were deleted.
 
 The Host answers with the WebSocket message `plugins.agent_action.result`:
 `{request_id, ok: true, pluginId, pluginVersion, disabled, changed}` or `{request_id,
@@ -1828,6 +1834,16 @@ B2-c tools and messages:
   kind. On approval the window turns the user's Enable switch on (its own
   action); a rejection leaves the package disabled. Recovery counts it
   `completed` when the package is installed and enabled.
+
+- `plugin-clear-secrets`: filed by `plugins_disable` with `clear_secrets=true`
+  after the disable, whatever it changed. `owner`
+  `plugin-clear-secrets:<id>@<installed version>`, `target.version` the
+  installed version, `fromVersion` null, `card` null, `reason` empty. The card
+  says the deletion cannot be undone and its approve button reads "Delete
+  secrets"; on approval the window calls `plugins:clearSecrets` and the Host
+  deletes the package's own secrets and tells the user how many went. A
+  rejection deletes nothing. Recovery counts one a restart left `applying` as
+  `failed` (`interrupted`): the package list cannot show a deletion.
 
 - `marketplace_request_install` / `_update` / `_rollback` `(namespace, name,
   version, reason)` and `plugins_request_remove` `(namespace, name, reason)`

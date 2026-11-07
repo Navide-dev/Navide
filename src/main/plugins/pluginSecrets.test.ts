@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { capabilitiesV1, parseManifestV2, type PluginSystemNamespace } from '../../../packages/plugin-contracts/src/index'
 import { MAX_SECRETS_PER_PLUGIN, MAX_SECRET_VALUE_BYTES } from '../../../packages/plugin-contracts/src/secrets'
 import { executionPolicyAllows, planPublicCapabilityCall } from './pluginCapabilityBroker'
@@ -16,6 +16,7 @@ import {
   PluginSecretsLimitError,
   SECRETS_METHODS,
   redactSecretValues,
+  secretsIdentity,
   validateSecretsOperation,
   validateSecretsRequest,
   type PluginSecretsCrypto,
@@ -278,5 +279,64 @@ describe('agent tool result redaction', () => {
   it('cannot break the JSON structure with a value that looks like syntax', () => {
     const response = { ok: true, result: [1, 2, { a: '{"x":1}' }] }
     expect(redactSecretValues(response, ['1,2', '{', '"'])).toEqual({ ok: true, result: [1, 2, { a: '[secret redacted][secret redacted]x[secret redacted]:1}' }] })
+  })
+})
+
+describe('secrets bound to the package trust identity', () => {
+  const mismatch = { ok: false, code: 'SECRETS_IDENTITY_MISMATCH' }
+
+  it('maps installed sources to identities, a developer folder and a local file to their own', () => {
+    expect(secretsIdentity('marketplace')).toBe('registry')
+    expect(secretsIdentity('prerelease')).toBe('registry')
+    expect(secretsIdentity('testplace')).toBe('registry')
+    expect(secretsIdentity('factory-bundled')).toBe('registry')
+    expect(secretsIdentity('developer-unpacked')).toBe('developer-unpacked')
+    expect(secretsIdentity('local-unsigned')).toBe('local-unsigned')
+    expect(secretsIdentity('local-signed', { publisherId: 'acme', keyId: 'k1' })).toBe('local-signed:acme:k1')
+    expect(secretsIdentity('local-signed', null)).toBeNull()
+    expect(secretsIdentity(undefined)).toBeNull()
+  })
+
+  it('binds on the first write and keeps serving the same identity (an upgrade or rollback)', () => {
+    const { store: secrets, root } = store()
+    const value = fakeSecret('id-a')
+    expect(secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })).toEqual({ ok: true })
+    expect(JSON.parse(readFileSync(join(root, 'acme.tokens.json'), 'utf8')).identity).toBe('registry')
+    expect(secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
+  })
+
+  it('refuses every operation for another identity, and neither reads, writes nor deletes', () => {
+    for (const other of ['developer-unpacked', 'local-unsigned', 'local-signed:acme:k2']) {
+      const { store: secrets, root } = store()
+      const value = fakeSecret(`id-${other}`)
+      secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })
+      const file = join(root, 'acme.tokens.json')
+      const before = readFileSync(file, 'utf8')
+      const onMismatch = vi.fn()
+      for (const [operation, args] of [
+        ['get', { name: 'API_KEY' }], ['set', { name: 'API_KEY', value: fakeSecret('new') }],
+        ['delete', { name: 'API_KEY' }], ['list', {}],
+      ] as const) {
+        const answer = secrets.run('acme.tokens', other, operation, args, onMismatch)
+        expect(answer).toEqual(mismatch)
+        expect(JSON.stringify(answer)).not.toContain(value)
+      }
+      expect(onMismatch).toHaveBeenCalledTimes(4)
+      expect(readFileSync(file, 'utf8')).toBe(before)
+      expect(secrets.identityMismatch('acme.tokens', other)).toBe(true)
+      // The user's explicit delete still works on an isolated file.
+      secrets.clear('acme.tokens')
+      expect(readdirSync(root)).toEqual([])
+    }
+  })
+
+  it('refuses when the Host cannot tell the identity, and binds a file written before identities', () => {
+    const { store: secrets } = store()
+    expect(secrets.run('acme.tokens', null, 'list', {})).toEqual({ ok: false, code: 'SECRETS_UNAVAILABLE' })
+    const value = fakeSecret('legacy')
+    secrets.set('acme.tokens', 'API_KEY', value)
+    expect(secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
+    secrets.run('acme.tokens', 'registry', 'set', { name: 'OTHER', value })
+    expect(secrets.run('acme.tokens', 'developer-unpacked', 'list', {})).toEqual(mismatch)
   })
 })

@@ -6859,6 +6859,7 @@ let stopPluginActivationFailed: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginSecretsNotice: (() => void) | null = null
 let stopPluginStagedCandidate: (() => void) | null = null
 let stopPluginStagedUpdates: (() => void) | null = null
 let stopPluginSwitched: (() => void) | null = null
@@ -6881,6 +6882,14 @@ onMounted(() => {
   stopPluginAgentAction = window.agentTeam?.onPluginAgentAction?.((notice) => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
+  }) ?? null
+  // A plugin's own secrets were isolated (same id, another source or
+  // publisher) or deleted: say so, never a name or a value.
+  stopPluginSecretsNotice = window.agentTeam?.onPluginSecretsNotice?.((notice) => {
+    notifyRestore.toast(notice.kind === 'cleared'
+      ? i18n.global.t('plugin-secrets.notice.cleared', { plugin: notice.pluginId, count: notice.count })
+      : i18n.global.t('plugin-secrets.notice.identityMismatch', { plugin: notice.pluginId }),
+    { type: notice.kind === 'cleared' ? 'info' : 'error' })
   }) ?? null
   // A plugin installed without Restart could not be activated at launch.
   stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
@@ -6926,6 +6935,7 @@ onUnmounted(() => {
   stopPlansBackendStopped?.()
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
+  stopPluginSecretsNotice?.()
   stopPluginAgentAction = null
   stopPluginStagedCandidate?.()
   stopPluginStagedCandidate = null

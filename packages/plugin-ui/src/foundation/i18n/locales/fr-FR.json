@@ -10003,7 +10003,8 @@
       "update": "Mettre à jour le plugin Navide {plugin} de {from} vers {version} ?",
       "rollback": "Ramener le plugin Navide {plugin} de {from} à {version} ?",
       "remove": "Supprimer le plugin Navide {plugin} ?",
-      "enable": "Réactiver le plugin Navide {plugin} ?"
+      "enable": "Réactiver le plugin Navide {plugin} ?",
+      "clear-secrets": "Supprimer les secrets enregistrés par le plugin Navide {plugin} ?"
     },
     "desc": "Un agent a demandé cette modification. Rien ne change tant que vous ne l’approuvez pas ici ; l’agent ne peut pas l’approuver à votre place.",
     "queue": "{count} en attente",
@@ -10030,6 +10031,7 @@
     "finished-late": "Une autre fenêtre avait marqué cette demande comme interrompue pendant que celle-ci se reconnectait ; l’enregistrement indique maintenant ce résultat.",
     "failed": "Non effectué : {error}",
     "not-appliable": "Cette version de Navide ne peut pas encore traiter ce type de demande ; vous pouvez la refuser.",
+    "clear-secrets-note": "Cela supprime les clés d’API et les jetons que le plugin Navide {plugin} conserve chiffrés sur cet appareil. C’est irréversible, et {plugin} les redemandera.",
     "unavailable": "Les actions sur les plugins Navide ne sont pas disponibles dans cette fenêtre."
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "Appliquer maintenant"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Le plugin Navide {plugin} provient désormais d’une autre source ou d’un autre éditeur. Les secrets enregistrés par la copie précédente sont donc isolés et il ne peut pas les lire. Pour les supprimer, désinstallez {plugin} et choisissez Supprimer les secrets.",
+      "cleared": "Les secrets du plugin Navide {plugin} ont été supprimés ({count})."
     }
   },
   "plugin-switch": {

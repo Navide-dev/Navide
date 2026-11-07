@@ -10003,7 +10003,8 @@
       "update": "要把 Navide 插件 {plugin} 从 {from} 更新到 {version} 吗？",
       "rollback": "要把 Navide 插件 {plugin} 从 {from} 回退到 {version} 吗？",
       "remove": "要移除 Navide 插件 {plugin} 吗？",
-      "enable": "要重新激活 Navide 插件 {plugin} 吗？"
+      "enable": "要重新激活 Navide 插件 {plugin} 吗？",
+      "clear-secrets": "要删除 Navide 插件 {plugin} 保存的密钥吗？"
     },
     "desc": "有 agent 要求这项变更。你在这里核准之前，什么都不会改变；agent 无法代你核准。",
     "queue": "{count} 笔待处理",
@@ -10030,6 +10031,7 @@
     "finished-late": "这个窗口重新连接期间，另一个窗口已把这笔请求标成中断；记录已改成这里的结果。",
     "failed": "没有完成：{error}",
     "not-appliable": "这个版本的 Navide 还不能运行这种请求；你可以拒绝它。",
+    "clear-secrets-note": "这会删除 Navide 插件 {plugin} 在这台设备上加密保存的 API 密钥与 token，无法恢复，之后 {plugin} 会再请你输入。",
     "unavailable": "这个窗口无法运行 Navide 插件的操作。"
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "立即应用"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Navide 插件 {plugin} 换了来源或发布者，旧版保存的密钥已隔离，新的这一份读不到。要删除它们，请移除 {plugin} 并选择“删除密钥”。",
+      "cleared": "Navide 插件 {plugin} 的密钥已删除（{count} 个）。"
     }
   },
   "plugin-switch": {

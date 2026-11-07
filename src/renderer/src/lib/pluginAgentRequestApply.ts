@@ -10,11 +10,14 @@ export type PluginRequestKind =
   | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
   /** W1 (S2): a local file or folder the Host staged for an agent. */
   | 'plugin-install-file'
+  /** plugins_disable with clear_secrets: delete the package's own secrets. */
+  | 'plugin-clear-secrets'
 
 /** The kinds applyApprovedRequest carries out. A card must not approve any
  *  other kind: approving moves it to `applying`, and nothing here would apply it. */
 const APPLIABLE_KINDS: ReadonlySet<string> = new Set<PluginRequestKind>([
   'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable', 'plugin-install-file',
+  'plugin-clear-secrets',
 ])
 
 export function isAppliableKind(kind: string): kind is PluginRequestKind {
@@ -61,6 +64,8 @@ export interface PluginRequestApplyDeps {
   remove(pluginId: string): Promise<void>
   /** The Extensions Enable switch (the user's own action: plugins.setDisabled(id, false)). */
   enable(pluginId: string): Promise<void>
+  /** Delete the package's own secrets (plugins:clearSecrets); the Host tells the user. */
+  clearSecrets(pluginId: string): Promise<void>
   listInstalled(): Promise<InstalledPackage[]>
   /** `plugins.agent_request.finish` with a window confirmation (subject: approval_id). */
   finish(approvalId: string, result: FinishStatus): Promise<void>
@@ -68,6 +73,9 @@ export interface PluginRequestApplyDeps {
 
 /** Whether the installed packages show the request carried out. */
 export function requestApplied(record: PluginRequestRecord, installed: readonly InstalledPackage[]): boolean {
+  // The installed packages cannot show a deletion of secrets; a restart that
+  // left one applying reads as interrupted.
+  if (record.kind === 'plugin-clear-secrets') return false
   const current = installed.find((pkg) => pkg.id === record.target.id)
   if (record.kind === 'plugin-remove') return current === undefined
   if (record.kind === 'plugin-enable') return current !== undefined && current.disabled === false
@@ -119,6 +127,7 @@ export async function applyApprovedRequest(record: PluginRequestRecord, deps: Pl
   try {
     if (record.kind === 'plugin-remove') await deps.remove(id)
     else if (record.kind === 'plugin-enable') await deps.enable(id)
+    else if (record.kind === 'plugin-clear-secrets') await deps.clearSecrets(id)
     else if (record.kind === 'plugin-rollback') failure = await rollbackToApproved(id, version, deps)
     else if (record.kind === 'plugin-install-file') {
       if (record.target.stagingId) await deps.installStaged(record.target.stagingId, record.target.digest ?? null)
@@ -132,6 +141,9 @@ export async function applyApprovedRequest(record: PluginRequestRecord, deps: Pl
   let result: FinishStatus
   if (failure !== null) {
     result = { status: 'failed', error: failure }
+  } else if (record.kind === 'plugin-clear-secrets') {
+    // The Host answered the deletion; nothing in the package list shows it.
+    result = { status: 'completed', error: null }
   } else {
     const installed = await deps.listInstalled()
     result = requestApplied(record, installed)

@@ -73,7 +73,7 @@ import {
   interPluginTargetError,
   PLUGINS_CALL_ADDRESS,
 } from './pluginInterCall'
-import { PluginSecretsLimitError, redactSecretValues, secretsOperation, type PluginSecretStore } from './pluginSecrets'
+import { PluginSecretsLimitError, redactSecretValues, secretsOperation, type PluginSecretStore, type PluginSecretsNotice, type SecretsOperation } from './pluginSecrets'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -1769,6 +1769,13 @@ export class FrontendPluginManager {
   private webViewRegistry: PluginWebViewRegistry | null = null
   /** The plugins' own encrypted secrets (`secrets`); absent, every call fails. */
   private pluginSecretStore: PluginSecretStore | null = null
+  /** The installed package's trust identity its secrets are bound to
+   *  (secretsIdentity); absent or null, every secrets call is refused. */
+  private pluginSecretIdentityResolver: ((pluginId: string) => string | null) | null = null
+  /** Tells the main window about a package's secrets: isolated after an
+   *  identity change (once per package and session), or deleted. */
+  private pluginSecretsNoticeHandler: ((notice: PluginSecretsNotice) => void) | null = null
+  private readonly pluginSecretsMismatchNoticed = new Set<string>()
   /** Host-owned executor seam for cataloged v2 plans. */
   private publicCapabilityHandler:
     | ((plan: PublicCapabilityExecutionPlan) => unknown | Promise<unknown>)
@@ -2632,6 +2639,31 @@ export class FrontendPluginManager {
     this.pluginSecretStore = store
   }
 
+  setPluginSecretIdentityResolver(resolver: ((pluginId: string) => string | null) | null): void {
+    this.pluginSecretIdentityResolver = resolver
+  }
+
+  setPluginSecretsNoticeHandler(handler: ((notice: PluginSecretsNotice) => void) | null): void {
+    this.pluginSecretsNoticeHandler = handler
+  }
+
+  /** One secrets operation as the installed package's trust identity. */
+  private runPluginSecrets(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): unknown {
+    const store = this.pluginSecretStore
+    if (!store) throw new Error('plugin secrets are unavailable')
+    let identity: string | null
+    try {
+      identity = this.pluginSecretIdentityResolver?.(pluginId) ?? null
+    } catch {
+      identity = null
+    }
+    return store.run(pluginId, identity, operation, args, () => {
+      if (this.pluginSecretsMismatchNoticed.has(pluginId)) return
+      this.pluginSecretsMismatchNoticed.add(pluginId)
+      this.pluginSecretsNoticeHandler?.({ kind: 'identityMismatch', pluginId })
+    })
+  }
+
   /** How many secrets a package keeps (0 when the store is unavailable). */
   pluginSecretCount(pluginId: string): number {
     try {
@@ -2642,9 +2674,13 @@ export class FrontendPluginManager {
   }
 
   /** Delete every secret of a package: only on the user's explicit choice
-   *  (remove with its data, or plugins_disable with clear_secrets). */
+   *  (the remove dialog, or an agent's clear request the user approved). The
+   *  user is told whenever something was deleted. */
   clearPluginSecrets(pluginId: string): void {
+    const count = this.pluginSecretCount(pluginId)
     this.pluginSecretStore?.clear(pluginId)
+    this.pluginSecretsMismatchNoticed.delete(pluginId)
+    if (count > 0) this.pluginSecretsNoticeHandler?.({ kind: 'cleared', pluginId, count })
   }
 
   /** An agent tool answer with the package's own secret values redacted.
@@ -3128,10 +3164,9 @@ export class FrontendPluginManager {
         if (!this.thirdPartyAgentsGrantAllows('secrets', context)) {
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Secrets capability is denied.')
         }
-        const store = this.pluginSecretStore
-        if (!store) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Plugin secrets are unavailable.')
+        if (!this.pluginSecretStore) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Plugin secrets are unavailable.')
         try {
-          return store.run(context.runtime.pluginId, operation, args) as JsonValue
+          return this.runPluginSecrets(context.runtime.pluginId, operation, args) as JsonValue
         } catch (error) {
           if (error instanceof PluginSecretsLimitError) throw new PlansBridgeError('RESOURCE_LIMIT', error.message)
           throw new PlansBridgeError('INTERNAL_ERROR', 'Plugin secrets request failed.')
@@ -6853,9 +6888,8 @@ export class FrontendPluginManager {
       if (!this.publicPlanCanDispatch(plan, plugin)) {
         throw new Error('agent execution policy denied the operation')
       }
-      if (!this.pluginSecretStore) throw new Error('plugin secrets are unavailable')
       // The plugin id is the Host binding's, never the request's.
-      return this.pluginSecretStore.run(plan.runtime.pluginId, secretsOp, plan.args)
+      return this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
     }
 
     const agentsOp = agentsOperation(plan.address)

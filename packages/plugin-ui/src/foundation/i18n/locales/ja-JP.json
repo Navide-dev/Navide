@@ -10003,7 +10003,8 @@
       "update": "Navide プラグイン {plugin} を {from} から {version} に更新しますか？",
       "rollback": "Navide プラグイン {plugin} を {from} から {version} に戻しますか？",
       "remove": "Navide プラグイン {plugin} を削除しますか？",
-      "enable": "Navide プラグイン {plugin} を再び有効にしますか？"
+      "enable": "Navide プラグイン {plugin} を再び有効にしますか？",
+      "clear-secrets": "Navide プラグイン {plugin} が保存したシークレットを削除しますか？"
     },
     "desc": "agent がこの変更を求めています。ここで承認するまで何も変わりません。agent が代わりに承認することはできません。",
     "queue": "{count} 件待ち",
@@ -10030,6 +10031,7 @@
     "finished-late": "このウィンドウの再接続中に別のウィンドウがこのリクエストを中断扱いにしていました。記録はこの結果に更新されています。",
     "failed": "完了しませんでした：{error}",
     "not-appliable": "このバージョンの Navide ではまだこの種類のリクエストを実行できません。拒否はできます。",
+    "clear-secrets-note": "Navide プラグイン {plugin} がこのデバイスに暗号化して保存している API キーとトークンを削除します。元に戻せません。{plugin} は再び入力を求めます。",
     "unavailable": "このウィンドウでは Navide プラグインの操作を実行できません。"
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "今すぐ適用"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Navide プラグイン {plugin} の入手元または発行者が変わったため、以前のコピーが保存したシークレットは隔離され、読み取れません。削除するには {plugin} を削除して「シークレットを削除」を選んでください。",
+      "cleared": "Navide プラグイン {plugin} のシークレットを削除しました（{count} 件）。"
     }
   },
   "plugin-switch": {

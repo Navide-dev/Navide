@@ -7,6 +7,13 @@
 // removing the plugin with its data, or plugins_disable with clear_secrets)
 // deletes it.
 //
+// The file is also bound to the package's trust identity (secretsIdentity):
+// the first write records it, and every later operation with another
+// identity — the same id installed from another source or signed by another
+// publisher key, or a developer folder — answers SECRETS_IDENTITY_MISMATCH,
+// without reading, writing or deleting anything. Only the user's explicit
+// clear (the remove dialog) deletes a mismatched file.
+//
 // The values never leave this device: this directory is outside every Navide
 // Cloud sync scope, settings export and share bundle, Activity records only
 // the address, nothing here logs, and agent tool results are redacted against
@@ -23,6 +30,8 @@ import {
   MAX_SECRET_VALUE_BYTES,
   SECRET_NAME_PATTERN,
 } from '../../../packages/plugin-contracts/src/secrets'
+
+export type { PluginSecretsNotice } from '../../shared/pluginSecretsNotice'
 
 export const SECRETS_METHODS = ['secrets.set', 'secrets.get', 'secrets.delete', 'secrets.list'] as const
 /** Operations of the backend Bridge port `secrets`; same arguments and results. */
@@ -53,8 +62,42 @@ const UNAVAILABLE = Object.freeze({ ok: false, code: 'SECRETS_UNAVAILABLE' }) as
   code: 'SECRETS_UNAVAILABLE'
 }
 
+const IDENTITY_MISMATCH = Object.freeze({ ok: false, code: 'SECRETS_IDENTITY_MISMATCH' }) as {
+  ok: false
+  code: 'SECRETS_IDENTITY_MISMATCH'
+}
+
+/** The trust identity a secrets file is bound to, from the installed
+ *  package's source: one value for every Registry-reviewed or bundled copy
+ *  (the Registry binds the id's namespace to its publisher), the publisher
+ *  and key for a locally installed signed file, and a class of its own for an
+ *  unsigned local file and for a developer folder. Null when the Host cannot
+ *  tell, which makes every operation refuse. */
+export function secretsIdentity(
+  source: string | undefined,
+  signer?: { publisherId: string; keyId: string } | null,
+): string | null {
+  switch (source) {
+    case 'marketplace':
+    case 'prerelease':
+    case 'testplace':
+    case 'factory-bundled':
+      return 'registry'
+    case 'local-signed':
+      return signer ? `local-signed:${signer.publisherId}:${signer.keyId}` : null
+    case 'local-unsigned':
+      return 'local-unsigned'
+    case 'developer-unpacked':
+      return 'developer-unpacked'
+    default:
+      return null
+  }
+}
+
 interface SecretsFile {
   schemaVersion: 1
+  /** The package trust identity the secrets belong to (secretsIdentity). */
+  identity?: string
   secrets: Record<string, string>
 }
 
@@ -102,22 +145,45 @@ export class PluginSecretStore {
     private readonly crypto: PluginSecretsCrypto,
   ) {}
 
-  /** Run one validated operation for `pluginId` (always the Host binding's). */
-  run(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): unknown {
+  /** Run one validated operation for `pluginId` (always the Host binding's)
+   *  as the installed package's trust `identity` (secretsIdentity). A file
+   *  bound to another identity answers SECRETS_IDENTITY_MISMATCH and is left
+   *  as it is; `onMismatch` is told so the user can be. */
+  run(
+    pluginId: string,
+    identity: string | null,
+    operation: SecretsOperation,
+    args: Record<string, unknown>,
+    onMismatch?: () => void,
+  ): unknown {
+    if (identity === null) return UNAVAILABLE
+    const stored = this.read(pluginId).identity
+    if (stored !== undefined && stored !== identity) {
+      onMismatch?.()
+      return IDENTITY_MISMATCH
+    }
     switch (operation) {
-      case 'set': return this.set(pluginId, String(args.name), String(args.value))
+      case 'set': return this.set(pluginId, String(args.name), String(args.value), identity)
       case 'get': return this.get(pluginId, String(args.name))
       case 'delete': return this.delete(pluginId, String(args.name))
       case 'list': return this.list(pluginId)
     }
   }
 
-  set(pluginId: string, name: string, value: string): { ok: true } | typeof UNAVAILABLE {
+  /** Whether the stored secrets belong to another identity than `identity`. */
+  identityMismatch(pluginId: string, identity: string | null): boolean {
+    const stored = this.read(pluginId).identity
+    return stored !== undefined && stored !== identity
+  }
+
+  set(pluginId: string, name: string, value: string, identity?: string): { ok: true } | typeof UNAVAILABLE {
     if (!this.crypto.available) return UNAVAILABLE
     if (Buffer.byteLength(value, 'utf8') > MAX_SECRET_VALUE_BYTES) {
       throw new PluginSecretsLimitError(`a secret value is at most ${MAX_SECRET_VALUE_BYTES} bytes`)
     }
     const file = this.read(pluginId)
+    // The first write binds the file to the package's trust identity.
+    if (file.identity === undefined && identity !== undefined) file.identity = identity
     if (!Object.hasOwn(file.secrets, name) && Object.keys(file.secrets).length >= MAX_SECRETS_PER_PLUGIN) {
       throw new PluginSecretsLimitError(`a plugin keeps at most ${MAX_SECRETS_PER_PLUGIN} secrets`)
     }
@@ -187,11 +253,16 @@ export class PluginSecretStore {
     const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
     if (
       !isPlainObject(parsed) || parsed.schemaVersion !== 1 || !isPlainObject(parsed.secrets) ||
+      (parsed.identity !== undefined && (typeof parsed.identity !== 'string' || parsed.identity.length === 0)) ||
       !Object.entries(parsed.secrets).every(([name, value]) => isSecretName(name) && typeof value === 'string')
     ) {
       throw new Error('plugin secrets file is damaged')
     }
-    return { schemaVersion: 1, secrets: { ...(parsed.secrets as Record<string, string>) } }
+    return {
+      schemaVersion: 1,
+      ...(typeof parsed.identity === 'string' ? { identity: parsed.identity } : {}),
+      secrets: { ...(parsed.secrets as Record<string, string>) },
+    }
   }
 
   private write(pluginId: string, file: SecretsFile): void {

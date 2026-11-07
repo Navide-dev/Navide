@@ -11651,7 +11651,6 @@ async def _plugin_agent_action(
     try:
         sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
             "request_id": request_id, "action": action, "plugin_id": plugin_id, "requester": requester,
-            **({"clear_secrets": True} if clear_secrets else {}),
         }))
         if not sent:
             return finish(_marketplace_error("HOST_UNAVAILABLE", "Navide Host is not connected"))
@@ -11664,8 +11663,12 @@ async def _plugin_agent_action(
         version = result["pluginVersion"]
         answer = {"ok": True, "pluginId": plugin_id, "pluginVersion": version,
                   "disabled": action == "disable", "changed": result.get("changed") is True}
-        if result.get("secretsCleared") is True:
-            answer["secretsCleared"] = True
+        if action == "disable" and clear_secrets:
+            # Deleting the package's secrets is never an agent's to do: it is
+            # filed for the user's decision, whatever the switch did.
+            answer["secretsClear"] = await _file_clear_secrets_request(
+                caller, requester, plugin_id, str(namespace), str(name), version,
+            )
         return finish(answer, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
@@ -11682,6 +11685,43 @@ async def _plugin_agent_action(
     else:
         error = _fenced_request_error(caller, host_error, tool=f"plugins_{action}")
     return finish(_marketplace_error(code, error))
+
+
+async def _file_clear_secrets_request(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, namespace: str, name: str, version: str,
+) -> dict[str, Any]:
+    """plugins_disable with clear_secrets: file a plugin-clear-secrets request
+    for the user's decision. Nothing is deleted until the user approves it in a
+    main window; the user is told when the secrets are deleted."""
+    from agent_team_backend import app, skills_approvals
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    if not _MQ_SEMVER.fullmatch(version):
+        return {"ok": False, "error_code": "ACTION_FAILED", "error": f"Navide could not file a request for {plugin_id}"}
+    target = {"id": plugin_id, "namespace": namespace, "name": name, "version": version, "fromVersion": None}
+    try:
+        record = skills_approvals.registry.request_plugin(
+            kind="plugin-clear-secrets", requester=requester, reason="", target=target, card=None, diff=None,
+        )
+    except skills_approvals.SkillApprovalError as err:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                            action="request-clear-secrets", outcome="denied", error_code=err.code)
+        return {"ok": False, "error_code": err.code, "error": str(err)}
+    _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                        action="request-clear-secrets", outcome="allowed", approval_id=record["approval_id"])
+    await app.broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    return {
+        "ok": False,
+        "error_code": "APPROVAL_REQUIRED",
+        "error": (
+            f"Deleting the secrets of {plugin_id} needs the user's approval. A request was filed "
+            "for their decision in Navide; poll marketplace_request_status."
+        ),
+        "approval_id": record["approval_id"],
+        "status": record["status"],
+        "expires_at": record["expires_at"],
+    }
 
 
 async def _file_enable_request(
@@ -11742,14 +11782,20 @@ async def plugins_disable(ctx: Context, namespace: str, name: str, clear_secrets
     bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
 
     The plugin's own encrypted secrets (`secrets`: its API keys and tokens)
-    stay by default, so enabling it again finds them. `clear_secrets=true`
-    deletes them too; that cannot be undone. No secret value is ever returned.
+    stay, so enabling it again finds them. `clear_secrets=true` asks to delete
+    them too: the plugin is disabled at once, and the deletion is filed as a
+    request for the user's decision in Navide (it cannot be undone, so only
+    the user approves it; the user is told when they are deleted). No secret
+    value is ever returned.
 
-    Returns {ok, pluginId, pluginVersion, disabled: true, changed} (plus
-    `secretsCleared: true` when they were deleted) or {ok: false, error,
-    error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST, ACTION_FAILED,
-    HOST_UNAVAILABLE). `changed` is false when it was already disabled:
-    nothing happens then and the user is not notified.
+    Returns {ok, pluginId, pluginVersion, disabled: true, changed} or {ok:
+    false, error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
+    ACTION_FAILED, HOST_UNAVAILABLE). With clear_secrets the answer also has
+    `secretsClear`: {ok: false, error_code: "APPROVAL_REQUIRED", error,
+    approval_id, status: "pending", expires_at}; follow it with
+    marketplace_request_status. `changed` is false when it was already
+    disabled: the switch is then left alone and the user is not notified of
+    it.
     """
     return await _plugin_agent_action(ctx, "disable", namespace, name, clear_secrets=clear_secrets is True)
 
