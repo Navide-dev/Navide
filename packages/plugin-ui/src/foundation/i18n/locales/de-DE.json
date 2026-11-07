@@ -10003,7 +10003,8 @@
       "update": "Navide-Plug-in {plugin} von {from} auf {version} aktualisieren?",
       "rollback": "Navide-Plug-in {plugin} von {from} auf {version} zurücksetzen?",
       "remove": "Navide-Plug-in {plugin} entfernen?",
-      "enable": "Navide-Plug-in {plugin} wieder aktivieren?"
+      "enable": "Navide-Plug-in {plugin} wieder aktivieren?",
+      "clear-secrets": "Die Geheimnisse löschen, die das Navide-Plug-in {plugin} gespeichert hat?"
     },
     "desc": "Ein Agent hat um diese Änderung gebeten. Nichts ändert sich, bis Sie sie hier genehmigen; der Agent kann sie nicht für Sie genehmigen.",
     "queue": "{count} ausstehend",
@@ -10030,6 +10031,7 @@
     "finished-late": "Ein anderes Fenster hatte diese Anfrage als unterbrochen markiert, während dieses Fenster sich neu verbunden hat; der Eintrag zeigt jetzt stattdessen dieses Ergebnis.",
     "failed": "Nicht erledigt: {error}",
     "not-appliable": "Diese Version von Navide kann diese Art von Anfrage noch nicht ausführen; Sie können sie ablehnen.",
+    "clear-secrets-note": "Damit werden die API-Schlüssel und Tokens gelöscht, die das Navide-Plug-in {plugin} verschlüsselt auf diesem Gerät speichert. Das lässt sich nicht rückgängig machen, und {plugin} fragt erneut danach.",
     "unavailable": "Navide-Plug-in-Aktionen sind in diesem Fenster nicht verfügbar."
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "Jetzt anwenden"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Das Navide-Plug-in {plugin} stammt jetzt aus einer anderen Quelle oder von einem anderen Herausgeber. Die Geheimnisse der früheren Kopie sind deshalb isoliert und für es nicht lesbar. Um sie zu löschen, entferne {plugin} und wähle Geheimnisse löschen.",
+      "cleared": "Die Geheimnisse des Navide-Plug-ins {plugin} wurden gelöscht ({count})."
     }
   },
   "plugin-switch": {

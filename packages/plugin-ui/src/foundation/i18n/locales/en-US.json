@@ -10003,7 +10003,8 @@
       "update": "Update the Navide plugin {plugin} from {from} to {version}?",
       "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
       "remove": "Remove the Navide plugin {plugin}?",
-      "enable": "Enable the Navide plugin {plugin} again?"
+      "enable": "Enable the Navide plugin {plugin} again?",
+      "clear-secrets": "Delete the secrets the Navide plugin {plugin} saved?"
     },
     "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
     "queue": "{count} pending",
@@ -10030,6 +10031,7 @@
     "finished-late": "Another window had marked this request interrupted while this one reconnected; the record now shows this result instead.",
     "failed": "Not done: {error}",
     "not-appliable": "This version of Navide cannot carry out this kind of request yet; you can reject it.",
+    "clear-secrets-note": "This deletes the API keys and tokens the Navide plugin {plugin} keeps encrypted on this device. It cannot be undone, and {plugin} will ask for them again.",
     "unavailable": "Navide plugin actions are not available in this window."
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "Apply Now"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "The Navide plugin {plugin} now comes from another source or publisher, so the secrets the earlier copy saved are isolated and it cannot read them. To delete them, remove {plugin} and choose Delete secrets.",
+      "cleared": "The secrets of the Navide plugin {plugin} were deleted ({count})."
     }
   },
   "plugin-switch": {

@@ -10003,7 +10003,8 @@
       "update": "Cập nhật plugin Navide {plugin} từ {from} lên {version}?",
       "rollback": "Đưa plugin Navide {plugin} từ {from} về lại {version}?",
       "remove": "Gỡ plugin Navide {plugin}?",
-      "enable": "Bật lại plugin Navide {plugin}?"
+      "enable": "Bật lại plugin Navide {plugin}?",
+      "clear-secrets": "Xóa các bí mật plugin Navide {plugin} đã lưu?"
     },
     "desc": "Một agent đã yêu cầu thay đổi này. Không có gì thay đổi cho đến khi bạn phê duyệt ở đây; agent không thể phê duyệt thay bạn.",
     "queue": "{count} đang chờ",
@@ -10030,6 +10031,7 @@
     "finished-late": "Một cửa sổ khác đã đánh dấu yêu cầu này bị gián đoạn trong lúc cửa sổ này kết nối lại; bản ghi giờ cho thấy kết quả này.",
     "failed": "Chưa xong: {error}",
     "not-appliable": "Phiên bản Navide này chưa thực hiện được loại yêu cầu này; bạn có thể từ chối nó.",
+    "clear-secrets-note": "Thao tác này xóa khóa API và token mà plugin Navide {plugin} lưu ở dạng mã hóa trên thiết bị này. Không thể hoàn tác, và {plugin} sẽ hỏi lại chúng.",
     "unavailable": "Các thao tác plugin Navide không có trong cửa sổ này."
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "Áp dụng ngay"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Plugin Navide {plugin} giờ đến từ nguồn hoặc nhà phát hành khác, nên các bí mật bản trước đã lưu bị cô lập và nó không đọc được. Để xóa chúng, hãy gỡ {plugin} và chọn Xóa bí mật.",
+      "cleared": "Đã xóa các bí mật của plugin Navide {plugin} ({count})."
     }
   },
   "plugin-switch": {

@@ -769,10 +769,12 @@ export type FormApprovalKind = 'developer-application' | 'plugin-publish' | 'plu
 export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
   /** W1 (S2): a local `.vsix` or developer folder an agent named, staged by the Host. */
   | 'plugin-install-file'
+  /** plugins_disable with clear_secrets: delete the package's own secrets, only on the user's approval. */
+  | 'plugin-clear-secrets'
   | FormApprovalKind
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
   'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
-  'plugin-install-file',
+  'plugin-install-file', 'plugin-clear-secrets',
   'developer-application', 'plugin-publish', 'plugin-yank', 'testplace-invite',
 ]
 /** Requests that are a draft for a main-window form (P4 *_fill), not an approval
@@ -901,7 +903,7 @@ export interface PluginAgentActionRequest {
 }
 
 export type PluginAgentActionAnswer =
-  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean; secretsCleared?: true }
+  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean }
   | { ok: false; error: string; error_code: Exclude<PluginAgentActionErrorCode, 'APPROVAL_REQUIRED'> }
   /** enable of a package the user disabled (or with no recorded source): the backend files a plugin-enable request. */
   | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }

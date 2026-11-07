@@ -10003,7 +10003,8 @@
       "update": "Atualizar o plug-in do Navide {plugin} de {from} para {version}?",
       "rollback": "Reverter o plug-in do Navide {plugin} de {from} para {version}?",
       "remove": "Remover o plug-in do Navide {plugin}?",
-      "enable": "Ativar novamente o plug-in do Navide {plugin}?"
+      "enable": "Ativar novamente o plug-in do Navide {plugin}?",
+      "clear-secrets": "Excluir os segredos que o plug-in do Navide {plugin} salvou?"
     },
     "desc": "Um agent pediu esta alteração. Nada muda até que você a aprove aqui; o agent não pode aprovar por você.",
     "queue": "{count} pendentes",
@@ -10030,6 +10031,7 @@
     "finished-late": "Outra janela tinha marcado este pedido como interrompido enquanto esta se reconectava; o registro agora mostra este resultado.",
     "failed": "Não concluído: {error}",
     "not-appliable": "Esta versão do Navide ainda não consegue executar este tipo de pedido; você pode rejeitá-lo.",
+    "clear-secrets-note": "Isso exclui as chaves de API e os tokens que o plug-in do Navide {plugin} guarda criptografados neste dispositivo. Não dá para desfazer, e {plugin} vai pedi-los de novo.",
     "unavailable": "As ações de plug-ins do Navide não estão disponíveis nesta janela."
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "Aplicar agora"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "O plug-in do Navide {plugin} agora vem de outra origem ou outro editor, então os segredos que a cópia anterior salvou estão isolados e ele não consegue lê-los. Para excluí-los, remova {plugin} e escolha Excluir segredos.",
+      "cleared": "Os segredos do plug-in do Navide {plugin} foram excluídos ({count})."
     }
   },
   "plugin-switch": {

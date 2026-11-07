@@ -10003,7 +10003,8 @@
       "update": "要把 Navide 外掛 {plugin} 從 {from} 更新到 {version} 嗎？",
       "rollback": "要把 Navide 外掛 {plugin} 從 {from} 回退到 {version} 嗎？",
       "remove": "要移除 Navide 外掛 {plugin} 嗎？",
-      "enable": "要重新啟用 Navide 外掛 {plugin} 嗎？"
+      "enable": "要重新啟用 Navide 外掛 {plugin} 嗎？",
+      "clear-secrets": "要刪除 Navide 外掛 {plugin} 保存的金鑰嗎？"
     },
     "desc": "有 agent 要求這項變更。你在這裡核准之前，什麼都不會改變；agent 無法代你核准。",
     "queue": "{count} 筆待處理",
@@ -10030,6 +10031,7 @@
     "finished-late": "這個視窗重新連線期間，另一個視窗已把這筆請求標成中斷；紀錄已改成這裡的結果。",
     "failed": "沒有完成：{error}",
     "not-appliable": "這個版本的 Navide 還不能執行這種請求；你可以拒絕它。",
+    "clear-secrets-note": "這會刪除 Navide 外掛 {plugin} 在這台裝置上加密保存的 API 金鑰與 token，無法復原，之後 {plugin} 會再請你輸入。",
     "unavailable": "這個視窗無法執行 Navide 外掛的操作。"
   },
   "skill-approval": {
@@ -12572,6 +12574,12 @@
     },
     "button": {
       "apply": "立即套用"
+    }
+  },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Navide 外掛 {plugin} 換了來源或發行者，舊版保存的金鑰已隔離，新的這一份讀不到。要刪除它們，請移除 {plugin} 並選「刪除金鑰」。",
+      "cleared": "Navide 外掛 {plugin} 的金鑰已刪除（{count} 個）。"
     }
   },
   "plugin-switch": {

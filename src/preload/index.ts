@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AgentToolsResultHelperState } from '../shared/pluginAgentTools'
+import { isPluginSecretsNotice, type PluginSecretsNotice } from '../shared/pluginSecretsNotice'
 import { normalizePlatformId } from '../shared/osplat'
 import type {
   UpdateActionResult,
@@ -714,6 +715,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:agentAction', listener)
     return () => ipcRenderer.removeListener('plugins:agentAction', listener)
+  },
+  // A plugin's own secrets were isolated after an identity change, or deleted.
+  onPluginSecretsNotice: (cb: (notice: PluginSecretsNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSecretsNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:secretsNotice', listener)
+    return () => ipcRenderer.removeListener('plugins:secretsNotice', listener)
   },
   // A plugin installed without Restart could not be activated at launch.
   onPluginStagedCandidateNotActivated: (cb: (notice: PluginStagedCandidateNotice) => void): (() => void) => {
@@ -1629,6 +1638,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       }),
     /** How many secrets (`secrets`) the plugin keeps on this device; never names or values. */
     secretCount: (id: string): Promise<{ count: number }> => ipcRenderer.invoke('plugins:secretCount', { id }),
+    /** Delete the plugin's own secrets: an agent's clear request the user approved. */
+    clearSecrets: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:clearSecrets', { id }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),

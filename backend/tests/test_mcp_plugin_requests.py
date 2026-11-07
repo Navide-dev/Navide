@@ -388,6 +388,38 @@ async def test_disable_goes_through_the_host_names_the_caller_and_is_audited(hos
     ]
 
 
+async def test_clear_secrets_files_a_request_for_the_user_and_never_reaches_the_host(
+    host, broadcasts, audit, caller,
+) -> None:
+    for changed in (True, False):
+        host.action_answer = {"ok": True, "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.2.0",
+                              "disabled": True, "changed": changed}
+        out = await mcp.plugins_disable(None, "nerdtechnic", "devmap", clear_secrets=True)
+        assert out["ok"] is True and out["disabled"] is True and out["changed"] is changed
+        clear = out["secretsClear"]
+        assert clear["ok"] is False and clear["error_code"] == "APPROVAL_REQUIRED" and clear["status"] == "pending"
+    # The Host is asked only to disable; deleting is never sent to it.
+    for event in host.events:
+        if event["type"] == contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT:
+            assert "clear_secrets" not in event["payload"]
+    # One pending request (the second asks again for the same one), shown in the main windows.
+    filed = [e["payload"] for e in broadcasts if e["type"] == contract.PLUGIN_APPROVAL_REQUEST_EVENT]
+    assert {r["kind"] for r in filed} == {"plugin-clear-secrets"}
+    assert len({r["approval_id"] for r in filed}) == 1
+    assert filed[0]["target"]["id"] == "nerdtechnic.devmap" and filed[0]["target"]["version"] == "0.2.0"
+    status = await mcp.marketplace_request_status(None, filed[0]["approval_id"])
+    assert status["kind"] == "plugin-clear-secrets" and status["status"] == "pending"
+    assert "request-clear-secrets" in [r["action"] for r in _actions(audit)]
+
+
+async def test_a_disable_without_clear_secrets_files_nothing(host, broadcasts, audit, caller) -> None:
+    host.action_answer = {"ok": True, "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.2.0", "disabled": True,
+                          "changed": True}
+    out = await mcp.plugins_disable(None, "nerdtechnic", "devmap")
+    assert "secretsClear" not in out
+    assert not [e for e in broadcasts if e["type"] == contract.PLUGIN_APPROVAL_REQUEST_EVENT]
+
+
 async def test_a_disable_that_changed_nothing_is_a_no_op_in_the_audit(host, broadcasts, audit, caller) -> None:
     host.action_answer = {"ok": True, "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.2.0", "disabled": True,
                           "changed": False}

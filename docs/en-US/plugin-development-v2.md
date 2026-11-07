@@ -2146,9 +2146,41 @@ package version. Unlike Host-managed storage, which is partitioned per version
 snapshot, secrets survive an update, a rollback, a disable, a re-enable and a
 restart. They are deleted only on the user's explicit choice: removing the
 plugin with "Delete secrets" (see [Removing a plugin](#removing-a-plugin)) or
-`plugins_disable` with `clear_secrets: true`. Every package sees only its own
+approving an agent's clear request (below). Every package sees only its own
 names: the Host takes the plugin id from the authenticated runtime binding,
 never from the request.
+
+**Identity binding.** The secrets file is also bound to the trust identity of
+the package that wrote it first, taken from the installed source: one identity
+for a Marketplace, pre-release, Testplace or bundled copy (the Registry binds
+the id's namespace to its publisher); `local-signed:<publisher>:<key id>` for a
+local file a vetted publisher signed. Nothing vouches for the id of an unsigned
+local file or a Developer Mode folder (it is only what the manifest claims), so,
+like their native backend data, their secrets are never handed to another
+package: an unsigned file is bound to its exact content digest (another
+unsigned file of the same id, an update of it included, starts with none) and a
+Developer Mode folder to that folder. An update or rollback from the Registry,
+or a signed file from the same publisher key, keeps the same identity and keeps
+working.
+When the same id is later installed from another source or signed with another
+key (including a Developer Mode folder of a Marketplace package), every
+`secrets.*` call and every Bridge `secrets` operation answers
+`{ ok: false, code: "SECRETS_IDENTITY_MISMATCH" }`: nothing is read, written or
+deleted, and the main window says once per session that the earlier copy's
+secrets are isolated. The user deletes them with "Delete secrets" in the
+remove dialog, which works on an isolated file too; after that the new copy
+starts with none. A file with no secrets left is deleted, so the next write
+binds again. When the Host cannot tell where the installed copy came from,
+the calls answer `SECRETS_UNAVAILABLE`.
+
+**Clearing needs the user's approval.** `plugins_disable` with
+`clear_secrets=true` disables the plugin at once, as without it, but never
+deletes anything itself: it files a `plugin-clear-secrets` request, shown in a
+main window as an approval card, and the answer carries
+`secretsClear: { ok: false, error_code: "APPROVAL_REQUIRED", approval_id, status, expires_at }`
+(follow it with `marketplace_request_status`). The secrets are deleted only
+when the user presses "Delete secrets" on that card. Whenever secrets are
+actually deleted, whichever way, the main window tells the user how many.
 
 **Where secrets never go.** Navide does not upload, display or copy them:
 

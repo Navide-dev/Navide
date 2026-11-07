@@ -50,6 +50,7 @@ import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
 import { DeveloperVault } from './plugins/developerVault'
 import { PluginSecretStore } from './plugins/pluginSecrets'
+import type { PluginSecretsNotice } from '../shared/pluginSecretsNotice'
 import { createDeveloperQueryHandler, registerDeveloperIpc } from './plugins/developerIpc'
 import { prepareLocalInstall } from './plugins/pluginInstaller'
 import { contributionIcon } from './plugins/pluginContributionIcon'
@@ -789,6 +790,7 @@ async function createWindow(
   // A Plans notice that found no loaded main window is handed to this one.
   win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
   win.webContents.on('did-finish-load', () => pluginAgentActionRelay.flush(win))
+  win.webContents.on('did-finish-load', () => flushPluginSecretsNotices(win))
   win.webContents.on('did-finish-load', () => pluginStagedCandidateRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
@@ -1749,6 +1751,17 @@ const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
 // An agent disabled or enabled a Navide plugin (B2-c): the main window names
 // the caller and offers the undo; held until one has loaded.
 const pluginAgentActionRelay = createPluginAgentActionRelay({ window: () => mainWindow })
+// A plugin's own secrets were isolated (the same id from another source or
+// publisher) or deleted: the main window says so; held until one has loaded.
+const heldPluginSecretsNotices: PluginSecretsNotice[] = []
+const flushPluginSecretsNotices = (win: BrowserWindow): void => {
+  if (win.isDestroyed() || win.webContents.isLoading()) return
+  for (const notice of heldPluginSecretsNotices.splice(0)) win.webContents.send('plugins:secretsNotice', notice)
+}
+frontendPluginManager.setPluginSecretsNoticeHandler((notice) => {
+  heldPluginSecretsNotices.push(notice)
+  if (mainWindow) flushPluginSecretsNotices(mainWindow)
+})
 // A plugin installed without Restart that the launch could not activate: the
 // main window says why and where Restart and Discard are; held until one has loaded.
 const pluginStagedCandidateRelay = createPluginStagedCandidateRelay({ window: () => mainWindow })

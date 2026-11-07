@@ -107,6 +107,7 @@ declare global {
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
+      onPluginSecretsNotice?: (cb: (notice: import('../../shared/pluginSecretsNotice').PluginSecretsNotice) => void) => () => void
       onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
       onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
       onPluginSwitching?: (cb: (notice: { pluginId: string; toVersion: string; phase: 'start' | 'end' }) => void) => () => void
@@ -579,6 +580,7 @@ declare global {
         discardCandidate?: (id: string) => Promise<{ ok: boolean }>
         remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete') => Promise<{ ok: boolean }>
         secretCount?: (id: string) => Promise<{ count: number }>
+        clearSecrets?: (id: string) => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>

@@ -73,12 +73,36 @@ describe('agent tool answers never carry plugin secrets', () => {
     expect(redact('other.plugin', other)).toBe(other)
   })
 
-  it('counts and clears a package’s secrets only on request', () => {
+  it('counts and clears a package’s secrets only on request, and tells the user each time', () => {
     const value = fakeSecret('d')
     const { manager } = managerWithSecret('acme.tokens', value)
+    const notices: unknown[] = []
+    manager.setPluginSecretsNoticeHandler((notice) => notices.push(notice))
     expect(manager.pluginSecretCount('acme.tokens')).toBe(1)
     expect(manager.pluginSecretCount('other.plugin')).toBe(0)
     manager.clearPluginSecrets('acme.tokens')
     expect(manager.pluginSecretCount('acme.tokens')).toBe(0)
+    expect(notices).toEqual([{ kind: 'cleared', pluginId: 'acme.tokens', count: 1 }])
+    // Nothing left to delete: nothing to tell.
+    manager.clearPluginSecrets('acme.tokens')
+    expect(notices).toHaveLength(1)
+  })
+
+  it('isolates the secrets after an identity change and tells the user once', () => {
+    const value = fakeSecret('e')
+    const { manager } = managerWithSecret('acme.tokens', value)
+    let identity = 'registry'
+    manager.setPluginSecretIdentityResolver(() => identity)
+    const run = (manager as unknown as {
+      runPluginSecrets: (pluginId: string, operation: string, args: Record<string, unknown>) => unknown
+    }).runPluginSecrets.bind(manager)
+    expect(run('acme.tokens', 'set', { name: 'API_KEY', value })).toEqual({ ok: true })
+    const notices: unknown[] = []
+    manager.setPluginSecretsNoticeHandler((notice) => notices.push(notice))
+    identity = 'developer-unpacked'
+    expect(run('acme.tokens', 'get', { name: 'API_KEY' })).toEqual({ ok: false, code: 'SECRETS_IDENTITY_MISMATCH' })
+    expect(run('acme.tokens', 'list', {})).toEqual({ ok: false, code: 'SECRETS_IDENTITY_MISMATCH' })
+    expect(notices).toEqual([{ kind: 'identityMismatch', pluginId: 'acme.tokens' }])
+    expect(manager.pluginSecretCount('acme.tokens')).toBe(1)
   })
 })
