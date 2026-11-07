@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "沒有可接續的對話",
       "rebuild": "重建"
     },
+    "archive": {
+      "hint": "把一段時間沒有寫入的 Claude Code Session 紀錄壓縮起來，需要的話再上傳到你自己的 S3 bucket。這裡每一項都預設關閉，你打開才會動作。",
+      "compress": "壓縮閒置的 Session 紀錄",
+      "compress-hint": "每天一次，把閒置達設定天數的 Claude Code Session 紀錄在旁邊另存一份 .zst，並確認解壓後與原檔逐位元相同。開著的分格正在用的 Session 不會動。",
+      "idle-days": "多少天沒有寫入才壓縮",
+      "remove-originals": ".zst 驗證通過後刪除原檔",
+      "remove-originals-hint": "可以釋出磁碟空間。原檔刪除後，Claude Code 就不能再接續那個 Session，Token 面板也讀不到它，但 .zst 保有每一個位元組。關閉時兩份都保留。",
+      "upload": "上傳到你自己的 S3 bucket",
+      "upload-hint": "把每份 .zst 上傳到你自己的 bucket，放在下方的前綴之下，由 S3 端加密。憑證走 AWS 標準鏈（環境變數、~/.aws 設定檔或 SSO），Navide 不會儲存任何 AWS 金鑰。",
+      "upload-after-days": "多少天後上傳",
+      "bucket": "S3 Bucket",
+      "prefix": "物件前綴",
+      "region": "區域",
+      "region-placeholder": "沿用你的 AWS 設定檔",
+      "save-failed": "無法儲存歸檔設定"
+    },
     "limits": {
       "hint": "選用的限制，避免 Navide 與它啟動的 agent 把這台電腦壓垮。每一項在你調整之前都是關閉，或維持 Navide 原本的行為。",
       "test-workers": "限制新分格的測試 worker 數",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "一般行為",
       "resource-limits": "資源限制",
+      "session-archive": "Session 紀錄歸檔",
       "settings-management": "設定管理",
       "theme": "主題",
       "other": "其他"

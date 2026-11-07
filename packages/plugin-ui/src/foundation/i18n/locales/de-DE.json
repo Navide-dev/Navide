@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "Keine gespeicherte Unterhaltung zum Fortsetzen",
       "rebuild": "Neu aufbauen"
     },
+    "archive": {
+      "hint": "Komprimiert Claude-Code-Sitzungsprotokolle, in die eine Weile nichts geschrieben wurde, und lädt sie auf Wunsch in Ihren eigenen S3-Bucket hoch. Alles hier ist aus, bis Sie es einschalten.",
+      "compress": "Ruhende Sitzungsprotokolle komprimieren",
+      "compress-hint": "Einmal am Tag erhält jedes Claude-Code-Sitzungsprotokoll, das die eingestellte Anzahl Tage ruht, eine .zst-Kopie daneben, und Navide prüft, dass sie zu denselben Bytes entpackt. Sitzungen, die ein offener Bereich nutzt, bleiben unberührt.",
+      "idle-days": "Tage ohne Schreibzugriff bis zur Komprimierung",
+      "remove-originals": "Original löschen, sobald die .zst geprüft ist",
+      "remove-originals-hint": "Gibt Speicherplatz frei. Ein gelöschtes Protokoll lässt sich in Claude Code nicht mehr fortsetzen und nicht mehr im Token-Bereich lesen, die .zst behält aber jedes Byte. Aus behält beide Dateien.",
+      "upload": "Archive in Ihren eigenen S3-Bucket hochladen",
+      "upload-hint": "Sendet jede .zst unter dem Präfix unten in Ihren eigenen Bucket, von S3 verschlüsselt. Die Zugangsdaten kommen aus der Standardkette von AWS (Umgebungsvariablen, ein ~/.aws-Profil oder SSO). Navide speichert nie einen AWS-Schlüssel.",
+      "upload-after-days": "Tage bis zum Hochladen eines Archivs",
+      "bucket": "S3-Bucket",
+      "prefix": "Schlüsselpräfix",
+      "region": "Region (AWS)",
+      "region-placeholder": "aus Ihrem AWS-Profil",
+      "save-failed": "Die Archiveinstellungen konnten nicht gespeichert werden"
+    },
     "limits": {
       "hint": "Optionale Grenzen, die verhindern, dass Navide und die von Navide gestarteten Agents diesen Rechner überlasten. Jede ist ausgeschaltet bzw. entspricht dem bisherigen Verhalten von Navide, bis Sie sie ändern.",
       "test-workers": "Test-Worker in neuen Bereichen begrenzen",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "Allgemeines Verhalten",
       "resource-limits": "Ressourcengrenzen",
+      "session-archive": "Archiv der Sitzungsprotokolle",
       "settings-management": "Einstellungsverwaltung",
       "theme": "Design",
       "other": "Sonstiges"

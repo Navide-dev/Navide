@@ -161,6 +161,7 @@ import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
 import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
+import SessionArchiveSection from './settings/SessionArchiveSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
 import { formatBytes } from '../lib/formatBytes'
 import { UI_SCALE_STEPS, formatUiScale, getUiScale, setUiScale } from '../lib/uiScale'
@@ -4253,6 +4254,8 @@ watch(activeTab, (tab) => {
           </SettingsSection>
 
           <ResourceLimitsSection :backend="backend" />
+
+          <SessionArchiveSection :backend="backend" />
 
           <SettingsSection :label="$t('settings.section.settings-management')">
             <SettingsCard data-settings-section="settings-management">

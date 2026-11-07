@@ -51,6 +51,7 @@ def test_open_and_already_archived_sessions_are_skipped(tmp_path: Path) -> None:
     _log(tmp_path / "p" / "bound.jsonl", 30)
     done = _log(tmp_path / "p" / "done.jsonl", 30)
     done.with_name("done.jsonl.zst").write_bytes(b"x")
+    os.utime(done.with_name("done.jsonl.zst"), (NOW, NOW))
     keep = _log(tmp_path / "p" / "keep.jsonl", 30)
     found = archive_candidates([tmp_path], now=NOW, open_sessions=frozenset({"bound"}))
     assert [c.path for c in found] == [keep]
@@ -143,3 +144,55 @@ def test_upload_is_encrypted_keyed_under_the_prefix_and_confirmed(tmp_path: Path
         upload_archive(archive, tmp_path, settings, client=_S3(stored_size=1))
     with pytest.raises(ValueError, match="s3_bucket"):
         upload_archive(archive, tmp_path, {"s3_bucket": ""}, client=_S3())
+
+
+def test_a_resumed_log_is_archived_again(tmp_path: Path) -> None:
+    log = _log(tmp_path / "p" / "s.jsonl", 30, "{}\n" * 10)
+    archive = compress_log(log).archive
+    assert archive.stat().st_mtime == log.stat().st_mtime
+    assert archive_candidates([tmp_path], now=NOW) == []
+    _log(log, 20, "{}\n" * 20)  # resumed and written to, then idle again
+    assert [c.path for c in archive_candidates([tmp_path], now=NOW)] == [log]
+
+
+def test_a_pass_with_every_switch_off_touches_nothing(tmp_path: Path) -> None:
+    _log(tmp_path / "p" / "s.jsonl", 60)
+    before = _snapshot(tmp_path)
+    s3 = _S3()
+    counts = session_archive.run_once(
+        ArchiveSettingsStore.DEFAULTS, [tmp_path], Database(tmp_path.parent / "off.db"),
+        now=NOW, client=s3,
+    )
+    assert counts == {"compressed": 0, "uploaded": 0, "failed": 0}
+    assert _snapshot(tmp_path) == before and s3.calls == []
+
+
+def test_a_pass_compresses_then_uploads_each_old_archive_once(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    old = _log(root / "p" / "old.jsonl", 40, "{}\n" * 50)
+    _log(root / "p" / "week.jsonl", 10, "{}\n" * 50)
+    _log(root / "p" / "open.jsonl", 40)
+    db = Database(tmp_path / "navide.db")
+    settings = {**ArchiveSettingsStore.DEFAULTS, "compress_enabled": True,
+                "upload_enabled": True, "s3_bucket": "nt-archive"}
+    s3 = _S3()
+    counts = session_archive.run_once(settings, [root], db, now=NOW, client=s3,
+                                      open_sessions=frozenset({"open"}))
+    # Both idle logs are compressed; only the one past upload_after_days (30) goes up.
+    assert counts == {"compressed": 2, "uploaded": 1, "failed": 0}
+    assert [c[2] for c in s3.calls] == ["navide-sessions/p/old.jsonl.zst"]
+    assert old.exists() and not (root / "p" / "open.jsonl.zst").exists()
+    again = session_archive.run_once(settings, [root], db, now=NOW, client=s3,
+                                     open_sessions=frozenset({"open"}))
+    assert again == {"compressed": 0, "uploaded": 0, "failed": 0}
+    assert len(s3.calls) == 1
+
+
+def test_one_failing_upload_does_not_stop_the_pass(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    for name in ("a", "b"):
+        compress_log(_log(root / "p" / f"{name}.jsonl", 40, "{}\n" * 5))
+    settings = {**ArchiveSettingsStore.DEFAULTS, "upload_enabled": True, "s3_bucket": "nt"}
+    counts = session_archive.run_once(settings, [root], Database(tmp_path / "navide.db"),
+                                      now=NOW, client=_S3(stored_size=1))
+    assert counts == {"compressed": 0, "uploaded": 0, "failed": 2}

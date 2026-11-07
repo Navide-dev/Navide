@@ -14,6 +14,7 @@ credential chain: Navide stores no AWS key.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from typing import Any, Iterable
 
 from .applog import app_data_dir
 from .db import DB_FILENAME, Database
+
+log = logging.getLogger("agent_team_backend.session_archive")
 
 #: A log idle this long is finished: a CLI resuming it would write to it.
 DEFAULT_IDLE_DAYS = 7
@@ -46,8 +49,10 @@ def archive_candidates(
     """jsonl logs under ``roots`` (any depth) idle for ``idle_days`` or more.
 
     A log whose stem is in ``open_sessions`` (a session a pane is bound to) is
-    skipped however old it is, and so is one with an archive next to it.
-    Unreadable entries are skipped, never raised. Oldest first.
+    skipped however old it is, and so is one whose archive next to it is
+    current (compress_log stamps the archive with the log's mtime, so a log
+    resumed and written to since then qualifies again). Unreadable entries are
+    skipped, never raised. Oldest first.
     """
     cutoff = (time.time() if now is None else now) - idle_days * 86_400
     out: list[Candidate] = []
@@ -59,15 +64,22 @@ def archive_candidates(
         for path in paths:
             if path.stem in open_sessions:
                 continue
-            if path.with_name(path.name + ARCHIVE_SUFFIX).exists():
-                continue
             try:
                 st = path.stat()
             except OSError:
                 continue
+            if _archived_mtime(path) >= st.st_mtime:
+                continue
             if st.st_mtime <= cutoff:
                 out.append(Candidate(path, st.st_size, st.st_mtime))
     return sorted(out, key=lambda c: c.mtime)
+
+
+def _archived_mtime(path: Path) -> float:
+    try:
+        return path.with_name(path.name + ARCHIVE_SUFFIX).stat().st_mtime
+    except OSError:
+        return -1.0
 
 
 _KV_KEY = "session_archive_settings"
@@ -161,6 +173,9 @@ def compress_log(path: Path, *, remove_original: bool = False, level: int = 19) 
         if _sha256(_zst_chunks(tmp)) != original:
             raise RuntimeError(f"{tmp} does not decompress to {path}")
         os.replace(tmp, archive)
+        # The archive carries the log's own age: uploads wait on it, and a log
+        # written to later is newer than its archive again.
+        os.utime(archive, ns=(before.st_atime_ns, before.st_mtime_ns))
     finally:
         tmp.unlink(missing_ok=True)
     if remove_original:
@@ -172,6 +187,12 @@ def s3_key(prefix: str, archive: Path, root: Path) -> str:
     """The object key: the prefix, then the archive's path under its root."""
     rel = archive.relative_to(root).as_posix()
     return f"{prefix.rstrip('/')}/{rel}" if prefix.strip("/") else rel
+
+
+def _s3_client(settings: dict[str, Any]) -> Any:
+    import boto3
+
+    return boto3.client("s3", region_name=settings.get("s3_region") or None)
 
 
 def upload_archive(
@@ -187,9 +208,7 @@ def upload_archive(
     if not bucket:
         raise ValueError("s3_bucket is not set")
     if client is None:
-        import boto3
-
-        client = boto3.client("s3", region_name=settings.get("s3_region") or None)
+        client = _s3_client(settings)
     key = s3_key(str(settings.get("s3_prefix") or ""), archive, root)
     client.upload_file(
         str(archive), bucket, key, ExtraArgs={"ServerSideEncryption": "AES256"},
@@ -198,3 +217,77 @@ def upload_archive(
     if int(head.get("ContentLength", -1)) != archive.stat().st_size:
         raise RuntimeError(f"s3://{bucket}/{key} does not match {archive}")
     return key
+
+
+def _create_uploads_v1(cur: Any) -> None:
+    cur.execute(
+        "CREATE TABLE session_archive_uploads ("
+        " archive TEXT PRIMARY KEY,"
+        " mtime_ns INTEGER NOT NULL,"
+        " bucket TEXT NOT NULL,"
+        " key TEXT NOT NULL,"
+        " uploaded_at INTEGER NOT NULL)"
+    )
+
+
+def run_once(
+    settings: dict[str, Any],
+    roots: Iterable[Path],
+    db: Database,
+    *,
+    open_sessions: frozenset[str] = frozenset(),
+    now: float | None = None,
+    client: Any = None,
+) -> dict[str, int]:
+    """One archive pass: compress what qualifies, then upload what is old enough.
+
+    Does nothing for a switch that is off. One file failing is logged and
+    counted and never stops the pass. An archive is uploaded once per version
+    (its path and mtime are recorded in navide.db).
+    """
+    roots = list(roots)
+    now = time.time() if now is None else now
+    counts = {"compressed": 0, "uploaded": 0, "failed": 0}
+    if settings.get("compress_enabled"):
+        for cand in archive_candidates(
+            roots, idle_days=int(settings["idle_days"]), open_sessions=open_sessions, now=now,
+        ):
+            try:
+                compress_log(cand.path, remove_original=bool(settings.get("remove_originals")))
+                counts["compressed"] += 1
+            except Exception as err:  # noqa: BLE001 — one log must not stop the pass
+                log.warning("archive: compress %s failed: %s", cand.path, err)
+                counts["failed"] += 1
+    if settings.get("upload_enabled") and settings.get("s3_bucket"):
+        db.migrate("session_archive", 1, _create_uploads_v1)
+        cutoff = now - int(settings["upload_after_days"]) * 86_400
+        with db.transaction() as cur:
+            done = {
+                (row[0], row[1]) for row in cur.execute(
+                    "SELECT archive, mtime_ns FROM session_archive_uploads"
+                ).fetchall()
+            }
+        for root in roots:
+            try:
+                archives = sorted(root.rglob("*.jsonl" + ARCHIVE_SUFFIX))
+            except OSError:
+                continue
+            for archive in archives:
+                try:
+                    st = archive.stat()
+                    if st.st_mtime > cutoff or (str(archive), st.st_mtime_ns) in done:
+                        continue
+                    if client is None:
+                        client = _s3_client(settings)
+                    key = upload_archive(archive, root, settings, client=client)
+                    with db.transaction() as cur:
+                        cur.execute(
+                            "INSERT OR REPLACE INTO session_archive_uploads"
+                            " (archive, mtime_ns, bucket, key, uploaded_at) VALUES (?, ?, ?, ?, ?)",
+                            (str(archive), st.st_mtime_ns, settings["s3_bucket"], key, int(now)),
+                        )
+                    counts["uploaded"] += 1
+                except Exception as err:  # noqa: BLE001
+                    log.warning("archive: upload %s failed: %s", archive, err)
+                    counts["failed"] += 1
+    return counts

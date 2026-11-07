@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "No hay conversación guardada que reanudar",
       "rebuild": "Reconstruir"
     },
+    "archive": {
+      "hint": "Comprime los registros de sesión de Claude Code en los que nadie ha escrito desde hace un tiempo y, si quieres, los sube a tu propio bucket de S3. Todo está desactivado hasta que lo actives.",
+      "compress": "Comprimir registros de sesión inactivos",
+      "compress-hint": "Una vez al día, cada registro de sesión de Claude Code inactivo durante los días indicados recibe una copia .zst a su lado, y Navide comprueba que se descomprime en los mismos bytes. Las sesiones que usa un panel abierto no se tocan.",
+      "idle-days": "Días sin escrituras antes de comprimir",
+      "remove-originals": "Eliminar el original cuando el .zst esté verificado",
+      "remove-originals-hint": "Libera espacio en disco. Un registro eliminado ya no se puede reanudar en Claude Code ni leer en el panel Token, pero el .zst conserva cada byte. Desactivado conserva ambos archivos.",
+      "upload": "Subir los archivos a tu propio bucket de S3",
+      "upload-hint": "Envía cada .zst a tu propio bucket, bajo el prefijo de abajo, cifrado por S3. Las credenciales salen de la cadena estándar de AWS (variables de entorno, un perfil de ~/.aws o SSO). Navide nunca guarda una clave de AWS.",
+      "upload-after-days": "Días antes de subir un archivo",
+      "bucket": "Bucket de S3",
+      "prefix": "Prefijo de clave",
+      "region": "Región",
+      "region-placeholder": "según tu perfil de AWS",
+      "save-failed": "No se pudieron guardar los ajustes de archivo"
+    },
     "limits": {
       "hint": "Límites opcionales que evitan que Navide y los agents que ejecuta sobrecarguen este equipo. Cada uno está desactivado, o con el comportamiento anterior de Navide, hasta que lo cambies.",
       "test-workers": "Limitar los procesos de pruebas en los panes nuevos",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "Comportamiento general",
       "resource-limits": "Límites de recursos",
+      "session-archive": "Archivo de registros de sesión",
       "settings-management": "Gestión de ajustes",
       "theme": "Tema",
       "other": "Otros"

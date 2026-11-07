@@ -1615,6 +1615,22 @@
       "cannot-rebuild": "No saved conversation to resume",
       "rebuild": "Rebuild"
     },
+    "archive": {
+      "hint": "Compress Claude Code session logs nobody has written to for a while, and upload them to your own S3 bucket if you want. Everything here is off until you turn it on.",
+      "compress": "Compress idle session logs",
+      "compress-hint": "Once a day, each Claude Code session log idle for the set number of days gets a .zst copy next to it, and Navide checks that the copy decompresses to the same bytes. Sessions an open pane is using are left alone.",
+      "idle-days": "Days without a write before a log is compressed",
+      "remove-originals": "Delete each original once its .zst is verified",
+      "remove-originals-hint": "Frees the disk space. A deleted log can no longer be resumed in Claude Code or read by the Token panel, but the .zst keeps every byte. Off keeps both files.",
+      "upload": "Upload archives to your own S3 bucket",
+      "upload-hint": "Sends each .zst to your own bucket, encrypted by S3, under the prefix below. Credentials come from the standard AWS chain (environment variables, an ~/.aws profile or SSO). Navide never stores an AWS key.",
+      "upload-after-days": "Days before an archive is uploaded",
+      "bucket": "S3 bucket",
+      "prefix": "Key prefix",
+      "region": "Region",
+      "region-placeholder": "from your AWS profile",
+      "save-failed": "Could not save the archive settings"
+    },
     "limits": {
       "hint": "Optional limits that keep Navide and the agents it runs from overloading this machine. Each one is off, or at Navide's previous behavior, until you change it.",
       "test-workers": "Cap test-runner workers in new panes",
@@ -7654,6 +7670,7 @@
     "section": {
       "general-behavior": "General behavior",
       "resource-limits": "Resource limits",
+      "session-archive": "Session log archive",
       "settings-management": "Settings management",
       "theme": "Theme",
       "other": "Other"
