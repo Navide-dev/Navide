@@ -228,7 +228,6 @@ import { createHostGitSurfacePorts, createHostTerminalDockPort } from '../../com
 import {
   GIT_BRANCH_DIFF_KEY,
   GIT_ACCOUNTS_KEY,
-  GIT_CREDENTIALS_KEY,
   GIT_FILE_ACCESS_KEY,
   GIT_ISSUES_KEY,
   GIT_TRANSPORT_KEY,
@@ -311,7 +310,6 @@ async function mountApp(workspacePath = '/tmp/ws', workspaceDisplayName = ''): P
         [GIT_FILE_ACCESS_KEY as symbol]: surfacePorts.fileAccess,
         [GIT_UI_KEY as symbol]: surfacePorts.ui,
         [GIT_BRANCH_DIFF_KEY as symbol]: surfacePorts.branchDiff,
-        [GIT_CREDENTIALS_KEY as symbol]: surfacePorts.credentials,
         [GIT_ACCOUNTS_KEY as symbol]: surfacePorts.accounts,
         [GIT_ISSUES_KEY as symbol]: surfacePorts.issues,
         [TERMINAL_DOCK_KEY as symbol]: terminalPort,

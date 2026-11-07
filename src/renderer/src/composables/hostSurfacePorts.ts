@@ -12,8 +12,6 @@ import type { Issue, IssueDetail, IssueProviderInfo } from './useIssues'
 import type {
   GitBranchDiffPort,
   GitAccountPort,
-  GitCredential,
-  GitCredentialPort,
   GitFileAccessPort,
   GitFileReadResult,
   GitFileWriteResult,
@@ -162,7 +160,6 @@ type HostAgentTeam = {
     diff: string
     error?: string
   }>
-  gitAccounts?: { getCredential?: (workspacePath: string) => Promise<{ ok?: boolean; credential?: GitCredential | null }> }
 }
 
 function hostAgentTeam(): HostAgentTeam | undefined {
@@ -187,19 +184,6 @@ export function createHostGitBranchDiffPort(backend: HostBackend): GitBranchDiff
         ok: response.ok && response.payload?.ok === true,
         diff: response.payload?.diff ?? '',
         error: response.payload?.error || response.error?.message,
-      }
-    },
-  }
-}
-
-export function createHostGitCredentialPort(): GitCredentialPort {
-  return {
-    async getCredential(workspacePath: string): Promise<GitCredential | null> {
-      try {
-        const result = await hostAgentTeam()?.gitAccounts?.getCredential?.(workspacePath)
-        return result?.ok && result.credential ? result.credential : null
-      } catch {
-        return null
       }
     },
   }
@@ -422,7 +406,6 @@ export function createHostGitSurfacePorts(backend: HostBackend, gitTransport: Gi
     ui: createHostGitWindowUiPort(backend),
     paneUi: createHostGitPaneUiPort(backend),
     branchDiff: createHostGitBranchDiffPort(backend),
-    credentials: createHostGitCredentialPort(),
     accounts: createHostGitAccountPort(),
     issues: createHostIssuePort(backend),
   }

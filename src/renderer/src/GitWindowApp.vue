@@ -39,7 +39,6 @@ import { settingsGet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import {
   GIT_BRANCH_DIFF_KEY,
   GIT_ACCOUNTS_KEY,
-  GIT_CREDENTIALS_KEY,
   GIT_FILE_ACCESS_KEY,
   GIT_ISSUES_KEY,
   GIT_TRANSPORT_KEY,
@@ -75,16 +74,17 @@ const gitTransport = inject(GIT_TRANSPORT_KEY)!
 const fileAccess = inject(GIT_FILE_ACCESS_KEY)!
 const uiPort = inject(GIT_UI_KEY)!
 const branchDiff = inject(GIT_BRANCH_DIFF_KEY)!
-const credentialPort = inject(GIT_CREDENTIALS_KEY)!
 const accountPort = inject(GIT_ACCOUNTS_KEY)!
 const issuePort = inject(GIT_ISSUES_KEY)!
 const terminalPort = inject(TERMINAL_DOCK_KEY)!
-if (!gitTransport || !fileAccess || !uiPort || !branchDiff || !credentialPort || !accountPort || !issuePort || !terminalPort) {
+if (!gitTransport || !fileAccess || !uiPort || !branchDiff || !accountPort || !issuePort || !terminalPort) {
   throw new Error('Git plugin ports were not provided by the composition root')
 }
 const { loadTheme } = useTheme()
 const notify = useNotify()
-const git = useGit(() => workspacePath, gitTransport, credentialPort)
+// Remote credentials are Host-owned: the git-accounts:getCredential IPC was
+// removed in 0.2.39, so remote operations go through the interactive askpass flow.
+const git = useGit(() => workspacePath, gitTransport)
 
 const {
   gitStatus,

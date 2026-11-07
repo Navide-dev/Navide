@@ -6009,21 +6009,6 @@ ipcMain.handle('git-accounts:getBinding', (event, workspacePath: string) => {
   }
 })
 
-ipcMain.handle('git-accounts:getCredential', (event, workspacePath: string) => {
-  // Sensitive: returns a decrypted PAT. Restrict to the top frame of a known
-  // app window so a sub-frame/iframe injected into rendered content can't call
-  // this to exfiltrate a token.
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win || !mainWindows.has(win) || event.senderFrame?.parent) {
-    return { ok: false, error: 'unauthorized' }
-  }
-  try {
-    return { ok: true, credential: getGitAccountsStore().getCredentialForWorkspace(workspacePath) }
-  } catch (e) {
-    return { ok: false, error: String(e) }
-  }
-})
-
 // Disable hardware-accelerated rendering entirely.
 // --disable-gpu eliminates the GPU subprocess without running GPU code in-process.
 // Previously we used --in-process-gpu to prevent a separate GPU process from

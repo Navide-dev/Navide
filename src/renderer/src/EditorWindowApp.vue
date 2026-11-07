@@ -2038,7 +2038,6 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
         :file-access="surfacePorts.fileAccess"
         :ui="surfacePorts.paneUi"
         :issue-port="surfacePorts.issues"
-        :credentials="surfacePorts.credentials"
         :accounts="surfacePorts.accounts"
         embedded
         @open-file="openFile"
@@ -2193,7 +2192,6 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
             :compare="f.compare ?? ''"
             :git-transport="gitTransport"
             :branch-diff="surfacePorts.branchDiff"
-            :credentials="surfacePorts.credentials"
             @open-file="(p) => openFile({ ...p, wsPath: f.wsPath })"
             @ask-ai-fix="(text) => pasteToCli(text)"
           >

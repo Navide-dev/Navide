@@ -388,9 +388,6 @@ declare global {
         bind: (workspacePath: string, accountId: string) => Promise<{ ok: boolean; error?: string }>
         unbind: (workspacePath: string) => Promise<{ ok: boolean; error?: string }>
         getBinding: (workspacePath: string) => Promise<{ ok: boolean; accountId?: string | null; error?: string }>
-        getCredential: (
-          workspacePath: string
-        ) => Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }>
       }
       permissions?: {
         status: () => Promise<Record<TccPermissionKey, TccPermissionStatus>>

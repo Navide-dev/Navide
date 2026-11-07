@@ -1316,10 +1316,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('git-accounts:unbind', workspacePath),
     getBinding: (workspacePath: string): Promise<{ ok: boolean; accountId?: string | null; error?: string }> =>
       ipcRenderer.invoke('git-accounts:getBinding', workspacePath),
-    getCredential: (
-      workspacePath: string
-    ): Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }> =>
-      ipcRenderer.invoke('git-accounts:getCredential', workspacePath),
   },
   permissions: {
     status: (): Promise<Record<PermissionKey, PermissionStatus>> =>
