@@ -25,7 +25,7 @@ DAY = 86_400
 
 def _log(path: Path, age_days: float, body: str = "{}\n") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body, encoding="utf-8")
+    path.write_text(body, encoding="utf-8", newline="")
     os.utime(path, (NOW - age_days * DAY, NOW - age_days * DAY))
     return path
 

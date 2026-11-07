@@ -144,7 +144,8 @@ describe('the ported public shell policy', () => {
 })
 
 describe('dev-bridge execution hardening (security review of eeb2b0896)', () => {
-  it('runs git, gh and glab in an isolated environment with the Host overrides, and declared executables as the user', async () => {
+  // The spy is a /bin/sh script reached through a ':'-joined PATH, which Windows cannot run as git.
+  it.skipIf(process.platform === 'win32')('runs git, gh and glab in an isolated environment with the Host overrides, and declared executables as the user', async () => {
     const root = workspace()
     const bridge = createDevBridge({ manifest: manifest({ system: ['fs'], shell: { mode: 'allowlist', executables: ['npm'] } }), workspaceRoot: root })
     const spawnPath = join(root, 'spy.sh')

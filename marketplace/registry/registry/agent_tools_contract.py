@@ -670,6 +670,8 @@ APPROVAL_KINDS = (
     "skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable",
     # W1 (S2): a local .vsix or developer folder an agent named, staged by the Host.
     "plugin-install-file",
+    # plugins_disable with clear_secrets: delete the package's own secrets, only on the user's approval.
+    "plugin-clear-secrets",
     "developer-application", "plugin-publish", "plugin-yank", "testplace-invite",
 )
 #: Kinds whose request is a draft for a main-window form (P4 *_fill), not an
@@ -745,7 +747,9 @@ class PluginApprovalDisabledBy(TypedDict):
 
 class PluginApprovalRequest(TypedDict):
     approval_id: str
-    kind: Literal["plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable"]
+    kind: Literal[
+        "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable", "plugin-clear-secrets",
+    ]
     owner: str
     requester: PluginApprovalRequester
     reason: str
@@ -951,6 +955,8 @@ PLUGIN_AGENT_ACTIONS = (
     "finish-late-completed", "finish-late-failed",
     # W1 (S2): plugins_install_file_fill.
     "request-install-file",
+    # plugins_disable with clear_secrets: the deletion filed for the user's decision.
+    "request-clear-secrets",
     # W3: an agent's draft for a main-window form, and O3's upload to a loopback Registry.
     "request-developer-application", "request-plugin-publish", "request-plugin-yank", "request-testplace-invite",
     "publish-loopback",

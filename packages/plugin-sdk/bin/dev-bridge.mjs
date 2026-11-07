@@ -15,7 +15,7 @@ import {
   realpathSync, renameSync, rmSync, statSync, writeSync, closeSync,
 } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './dev-shell-policy.mjs'
 import { declaredExecutables, parseCommand, validatePublicArgv, ShellPolicyError } from './dev-shell-policy.mjs'
@@ -116,12 +116,12 @@ export function assertPublicGitConfigSafe(cwd, workspaceRoot) {
   const root = realpathSync(workspaceRoot)
   const inside = (path) => {
     const real = realpathOrResolve(path)
-    if (real !== root && !real.startsWith(`${root}/`)) throw refuse()
+    if (real !== root && !real.startsWith(`${root}${sep}`)) throw refuse()
     return real
   }
   let dir = realpathOrResolve(cwd)
   let gitDir = null
-  while (dir === root || dir.startsWith(`${root}/`)) {
+  while (dir === root || dir.startsWith(`${root}${sep}`)) {
     const candidate = join(dir, '.git')
     if (existsSync(candidate)) {
       const stat = statSync(candidate)
@@ -220,7 +220,7 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
       probe = dirname(probe)
     }
     const real = realpathSync(probe)
-    if (real !== root && !real.startsWith(`${root}/`)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    if (real !== root && !real.startsWith(`${root}${sep}`)) throw new DevBridgeError('WORKSPACE_SCOPE_VIOLATION')
     return target
   }
 
