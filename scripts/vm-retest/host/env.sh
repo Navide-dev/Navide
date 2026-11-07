@@ -13,6 +13,11 @@
 #   LINUX_USER / WINDOWS_USER            test account in the guest (never a real person's account)
 #   SSH_KEY           key the test accounts accept; the guests hold no other credential
 #   VMRUN             vmrun binary on the VM host
+#   macOS guest (tart, Apple Virtualization.framework; Fusion runs no macOS guest on Apple silicon):
+#   MACOS_BASE        the clean tart VM every round is cloned from (never booted by a round)
+#   MACOS_VM          the round's throwaway clone (vm.sh macos revert deletes it and clones MACOS_BASE again)
+#   MACOS_USER        test account in the guest (the cirruslabs image's own "admin")
+#   TART              tart binary on the VM host
 #   The guest working folder is always ~/wh (several guest scripts assume it).
 [ -n "${VM_RETEST_ENV:-}" ] && [ -f "$VM_RETEST_ENV" ] && . "$VM_RETEST_ENV"
 
@@ -29,6 +34,10 @@ LINUX_USER="${LINUX_USER:-navide}"
 WINDOWS_USER="${WINDOWS_USER:-navide}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/navide_vm_ed25519}"
 VMRUN="${VMRUN:-/Applications/VMware Fusion.app/Contents/Library/vmrun}"
+MACOS_BASE="${MACOS_BASE:-navide-macos-clean}"
+MACOS_VM="${MACOS_VM:-navide-macos-run}"
+MACOS_USER="${MACOS_USER:-admin}"
+TART="${TART:-/opt/homebrew/bin/tart}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUEST_DIR="$(cd "$HERE/../guest" && pwd)"
@@ -44,9 +53,17 @@ HOST_SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15)
 
 die() { echo "vm-retest: $*" >&2; exit 1; }
 need_platform() { case "$1" in linux|windows) ;; *) die "first argument is linux or windows" ;; esac; }
+# the scripts that also drive the macOS guest (vm.sh, gsh.sh, gcp.sh, collect.sh)
+need_any_platform() { case "$1" in linux|windows|macos) ;; *) die "first argument is linux, windows or macos" ;; esac; }
 
 # vmrun on the VM host (local, or over ssh). Its output is never piped: a pipe that closes early can take a
 # `vmrun start` down with it.
+# tart on the VM host (local, or over ssh)
+tartr() {
+  if [ -z "$VM_HOST" ]; then "$TART" "$@"
+  else ssh "${HOST_SSH_OPTS[@]}" "$VM_HOST" "$(printf '%q ' "$TART" "$@")"; fi
+}
+
 vmr() {
   if [ -z "$VM_HOST" ]; then "$VMRUN" -T fusion "$@"
   else ssh "${HOST_SSH_OPTS[@]}" "$VM_HOST" "$(printf '%q ' "$VMRUN" -T fusion "$@")"; fi
@@ -54,10 +71,15 @@ vmr() {
 
 vmx_of() { case "$1" in linux) echo "$LINUX_VMX" ;; windows) echo "$WINDOWS_VMX" ;; *) die "platform is linux or windows" ;; esac; }
 snapshot_of() { case "$1" in linux) echo "$LINUX_SNAPSHOT" ;; windows) echo "$WINDOWS_SNAPSHOT" ;; esac; }
-user_of() { case "$1" in linux) echo "$LINUX_USER" ;; windows) echo "$WINDOWS_USER" ;; esac; }
+user_of() { case "$1" in linux) echo "$LINUX_USER" ;; windows) echo "$WINDOWS_USER" ;; macos) echo "$MACOS_USER" ;; esac; }
 
 guest_of() {
   local p="$1" a
+  if [ "$p" = macos ]; then  # tart ip waits for the guest's DHCP lease
+    a="$(tartr ip --wait 120 "$MACOS_VM" 2>/dev/null | tr -d '\r')"
+    printf '%s' "$a" | grep -Eq '^[0-9]+(\.[0-9]+){3}$' || die "no address for the macos guest (is $MACOS_VM running?)"
+    echo "$a"; return
+  fi
   case "$p" in linux) a="$LINUX_GUEST" ;; windows) a="$WINDOWS_GUEST" ;; esac
   # vmrun prints "Error: The VMware Tools are not running ..." on stdout while the guest boots: keep asking (up to
   # a minute) until the answer is an IPv4 address. A guest without VMware Tools never answers: set <PLATFORM>_GUEST

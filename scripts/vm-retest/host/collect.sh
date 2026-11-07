@@ -1,15 +1,19 @@
 #!/bin/bash
-# collect.sh <linux|windows> <local out dir>: copy the round's evidence out of the guest before the VM is reverted:
+# collect.sh <linux|windows|macos> <local out dir>: copy the round's evidence out of the guest before the VM is reverted:
 #   fpre.out / fpost.out (the full list), results.jsonl, the totals (guest/totals.py), stub.log, the app's backend.log,
 #   and every run log of the test workspaces (as one archive).
 set -u
 . "$(dirname "$0")/env.sh"
-p="${1:-}"; need_platform "$p"; out="${2:-}"; [ -n "$out" ] || die "usage: collect.sh <linux|windows> <local out dir>"
+p="${1:-}"; need_any_platform "$p"; out="${2:-}"; [ -n "$out" ] || die "usage: collect.sh <linux|windows|macos> <local out dir>"
 mkdir -p "$out"
 if [ "$p" = linux ]; then
   "$HERE/gsh.sh" linux 'python3 totals.py > totals.txt 2>&1; cp ~/.local/share/Agent-Team/logs/backend.log backend.log 2>/dev/null
     tar czf evidence.tgz fpre.out fpost.out results.jsonl totals.txt stub.log backend.log w*/.agent-team/runs sw/.agent-team/runs 2>/dev/null; ls -la evidence.tgz'
   "$HERE/gcp.sh" linux get evidence.tgz "$out"
+elif [ "$p" = macos ]; then  # the smoke round: macsmoke.out, its results and screenshots, the stub log, backend.log
+  "$HERE/gsh.sh" macos 'cp ~/Library/"Application Support"/Agent-Team/logs/backend.log backend.log 2>/dev/null
+    tar czf evidence.tgz macup.out macsmoke.out results.jsonl stub.log backend.log shots w*/.agent-team/runs 2>/dev/null; ls -la evidence.tgz'
+  "$HERE/gcp.sh" macos get evidence.tgz "$out"
 else
   "$HERE/gsh.sh" windows 'py:python totals.py > totals.txt'
   "$HERE/gsh.sh" windows "\$w=\"\$env:USERPROFILE\\wh\"; \$t=\"\$w\\evcopy\"; New-Item -ItemType Directory -Force \$t | Out-Null

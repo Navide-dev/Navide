@@ -1,14 +1,14 @@
 #!/bin/bash
-# gsh.sh <linux|windows> [command]: run a command in the guest's test account (command text from the argument, or stdin).
-#   linux:   a bash command line, run in the guest root (~/wh by default)
+# gsh.sh <linux|windows|macos> [command]: run a command in the guest's test account (command text from the argument, or stdin).
+#   linux, macos: a shell command line, run in the guest root (~/wh by default)
 #   windows: PowerShell text, sent as -EncodedCommand (no quoting layer in between); $env:USERPROFILE\wh is the root.
 #            Prefix the text with "py:" to run a cmd.exe line in the root with UTF-8 Python instead.
 set -u
 . "$(dirname "$0")/env.sh"
-p="${1:-}"; need_platform "$p"; shift
+p="${1:-}"; need_any_platform "$p"; shift
 s="${1:-$(cat)}"
 dest="$(user_of "$p")@$(guest_of "$p")"
-if [ "$p" = linux ]; then
+if [ "$p" != windows ]; then
   exec ssh "${SSH_OPTS[@]}" "$dest" "cd ~/wh 2>/dev/null; $s"
 fi
 case "$s" in

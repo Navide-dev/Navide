@@ -2,6 +2,8 @@
 
 The packaged-build acceptance run for webhook triggers, pipelines, inter-CLI messaging and channels. Every
 release runs the same list on a Linux arm64 and a Windows arm64 VM, plus the items that release fixed.
+A macOS arm64 VM adds a shorter fresh-install smoke (install the dmg, first-launch wizard, first pane; see
+[macOS](#macos)).
 
 Nothing here talks to a real model, chat service or account:
 
@@ -23,6 +25,7 @@ Nothing here talks to a real model, chat service or account:
 | `host/restart-app.sh` | VM host | Quit the app the way a person does, check nothing is left, start it again |
 | `host/load-sampler.sh`, `host/load-supervisor.sh` | VM host | Record the host load; pause and resume the VM around load spikes |
 | `host/collect.sh` | VM host | Copy the evidence out before the revert |
+| `host/macos-base.sh`, `host/macos-up.sh`, `host/macos-smoke.sh` | VM host | macOS: build the clean tart base once; install the dmg and start the app; one timed smoke round |
 | `guest/` | guest (`~/wh`) | The test scripts. Python 3.12 standard library only, plus PowerShell on Windows |
 
 The guest working folder is always `~/wh` (`%USERPROFILE%\wh` on Windows).
@@ -107,6 +110,26 @@ Windows uses the same steps, with `windows-up.sh <dir with the .exe>` in place o
 On Windows, anything that has to outlive the ssh session runs as a scheduled task in the desktop session, at Normal
 priority. A process started over ssh dies when the session closes. A plain `schtasks /Create` task runs at
 BelowNormal, and then any Normal-priority load starves the app.
+
+### macOS
+
+VMware Fusion runs no macOS guest on Apple silicon (its arm64 guest types are Linux, Windows and ESXi only), so the
+macOS VM is a [tart](https://tart.run) VM on Apple's Virtualization.framework. Install it on the VM host with
+`brew install cirruslabs/cli/tart` (Fair Source license: free for small internal use). Its images come only from
+`ghcr.io/cirruslabs`. There are no snapshots: `MACOS_BASE` (`navide-macos-clean`) is never booted by a round, and
+`vm.sh macos revert` deletes the round's VM (`MACOS_VM`, `navide-macos-run`) and clones the base again. The clone is an
+APFS copy-on-write clone, so it takes seconds and no extra disk until the guest writes.
+
+```bash
+./macos-base.sh            # once: clone the cirruslabs vanilla image into navide-macos-clean, put SSH_KEY in,
+                           # install Python (python.org) and Claude Code, shut it down
+./macos-smoke.sh <dir with the .dmg> <evidence dir>
+#   revert -> start -> macos-up.sh -> guest/macsmoke.py (wizard, first pane) -> collect -> stop -> revert, timed
+```
+
+The test account is the image's own `admin`, which logs on to the desktop by itself, so `open -a` over ssh starts
+the app in that session. `tart run --no-graphics` runs detached on the VM host (`~/vm-retest-tart/run.pid` there),
+so no Fusion or tart window opens.
 
 ## Load rules
 
