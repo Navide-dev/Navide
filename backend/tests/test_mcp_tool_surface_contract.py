@@ -9,6 +9,23 @@ from agent_team_backend.plugins.builtin.navide_plans import plan_tools
 from agent_team_backend.plugins.builtin.navide_skills import skills_tools
 
 MCP_TOOLS = [
+    "channels_bind",
+    "channels_bindings",
+    "channels_bot_add_fill",
+    "channels_bot_add_open",
+    "channels_bot_remove_request",
+    "channels_bot_rename",
+    "channels_bot_set_enabled",
+    "channels_chats",
+    "channels_link_code",
+    "channels_managed_bot_create",
+    "channels_pairing_approve_request",
+    "channels_pairing_reject",
+    "channels_pairing_requests",
+    "channels_request_status",
+    "channels_set_verbosity",
+    "channels_status",
+    "channels_unbind",
     "cli_account_sign_in",
     "cli_account_switch",
     "cli_accounts_list",
