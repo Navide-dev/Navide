@@ -368,21 +368,30 @@ describe('Issue 03/04 public Host planner', () => {
   it.each([
     ['openPath', { path: 'run.command' }],
     ['openTempFile', { name: 'x.bat', content: 'calc' }],
-  ])('lets any package that declares permissions.shell reach ui.%s, and no other (batch 4)', (method, args) => {
+  ])('lets a package with a user-approved full shell reach ui.%s, and no other (batch 4)', (method, args) => {
     const uiBinding = { ...binding, pluginId: 'acme.ui' }
     const uiCall = call({ pluginId: 'acme.ui', ns: 'ui', method, args })
-    const uiContext = (publisherEligible: boolean, shell?: 'allowlist' | 'full') => context({
+    const uiContext = (publisherEligible: boolean, grant: Partial<{ shell: 'allowlist' | 'full'; highRiskShellConfirmed: boolean }> = {}) => context({
       runtimeBinding: uiBinding,
-      userGrant: { packageVersion: '1.0.0', system: ['ui'], ...(shell ? { shell } : {}) },
+      userGrant: { packageVersion: '1.0.0', system: ['ui'], ...grant },
       publisherEligible,
     })
-    const withShell = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'allowlist' })
-    expect(planPublicCapabilityCall(uiCall, withShell, uiContext(false, 'allowlist')))
+    const full = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'full' })
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'full', highRiskShellConfirmed: true })))
       .toMatchObject({ kind: 'allow', plan: { address: `ui.${method}` } })
+    // Declared full, but the user has not confirmed the high-risk shell for this version.
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'full' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('not user-approved') } } })
+    expect(planPublicCapabilityCall(uiCall, full, uiContext(false, { shell: 'allowlist' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+    // The allowlist discloses git/gh/glab and the declared executables, not "any program".
+    const allowlist = manifestV2CapabilityPolicy({ system: ['ui'], shell: 'allowlist' })
+    expect(planPublicCapabilityCall(uiCall, allowlist, uiContext(true, { shell: 'allowlist' })))
+      .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
     const withoutShell = manifestV2CapabilityPolicy({ system: ['ui'] })
     for (const publisherEligible of [true, false]) {
       expect(planPublicCapabilityCall(uiCall, withoutShell, uiContext(publisherEligible)))
-        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell') } } })
+        .toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('permissions.shell "full"') } } })
     }
   })
 

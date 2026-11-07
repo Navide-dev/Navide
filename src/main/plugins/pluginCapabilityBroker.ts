@@ -865,10 +865,11 @@ export function planPublicCapabilityCall(
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'publisher is not eligible for this capability')
   }
-  // The method starts a program with a file: a package reaches it by
-  // declaring the shell permission, which discloses exactly that.
-  if (entry.eligibility === 'declaredShell' && !policy.shell) {
-    return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell`)
+  // The method hands a file to whatever program the OS picks: only the full
+  // shell permission discloses "runs any program" (allowlist discloses
+  // git/gh/glab and the declared executables), so that is what it needs.
+  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') {
+    return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell "full"`)
   }
 
   if (entry.storage === true) {
@@ -902,6 +903,11 @@ export function planPublicCapabilityCall(
     }
   } else if (!grant.system.includes(entry.namespace)) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not user-approved`)
+  }
+  // ...and the user must have approved that full shell for this version, as
+  // for shell.run itself.
+  if (entry.eligibility === 'declaredShell' && (grant.shell !== 'full' || grant.highRiskShellConfirmed !== true)) {
+    return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell is not user-approved for this version')
   }
 
   const args = publicRequestArgs(call)
@@ -1112,7 +1118,7 @@ export function isPublicCapabilityEventAllowed(
   if (!entry || entry.kind !== 'event') return false
   if (entry.namespace === 'shell' ? !policy.shell : !policy.system.includes(entry.namespace as PluginSystemNamespace)) return false
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) return false
-  if (entry.eligibility === 'declaredShell' && !policy.shell) return false
+  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') return false
   const binding = context.runtimeBinding
   if (!binding || !requiresWorkspace(binding)) return false
   const grant = context.userGrant

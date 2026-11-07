@@ -27,9 +27,10 @@ export type StoragePartitionClass = StoragePartitionScope
  *  `public` any package; `firstParty` Navide's own packages only (the Host's
  *  credential store, its own configuration, or the user's cloud account and
  *  chat channels, see the list in plugin-development-v2.md); `declaredShell`
- *  any package whose manifest declares `permissions.shell` (0.2.39): the
- *  method starts a program with a file, which is what the shell disclosure
- *  already tells the user. */
+ *  any package whose manifest declares `permissions.shell: "full"` and whose
+ *  user approved it (0.2.39): the method hands a file to whatever program the
+ *  OS picks, which only the full shell disclosure ("runs any program") tells
+ *  the user; allowlist discloses git/gh/glab and the declared executables. */
 export type PublicCapabilityEligibility = 'public' | 'firstParty' | 'declaredShell'
 
 export const STORAGE_LIMITS = {
@@ -311,9 +312,9 @@ function storageMethod(
 
 /** Native `ui` methods a plain `ui` grant must not reach. Opening a path or
  *  a plugin-written temp file hands it to the OS default app (a `.command` or
- *  `.bat` runs), so a package reaches them by declaring `permissions.shell`,
- *  the permission that discloses "runs programs on your machine" (batch 4,
- *  0.2.39). keybindings.json is the Host's own configuration: a package could
+ *  `.bat` runs), so a package reaches them by declaring `permissions.shell:
+ *  "full"`, the permission that discloses "runs any program on your machine"
+ *  (batch 4, 0.2.39; allowlist is narrower). keybindings.json is the Host's own configuration: a package could
  *  rebind any shortcut to any Host command, and no permission discloses
  *  that, so it stays first-party. */
 const SHELL_DECLARED_NATIVE_METHODS: ReadonlySet<string> = new Set([
