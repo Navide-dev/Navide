@@ -11,6 +11,10 @@ All notable released changes to Navide will be documented in this file. The form
 - Git (0.2.39): Navide no longer ships the old copy of the Git interface it kept for a Git plugin that fails to start, and `NAVIDE_GIT_RECOVERY=legacy` no longer does anything. When the built-in Git plugin fails to start, Navide closes its Git windows and the Git tab shows why with Reinstall built-in Git; opening the Git tab again retries it, as before. Navide Git 1.0.4.
 - Mini-IDE (0.2.39): the fallback editor Navide opens when the Mini-IDE plugin fails to start no longer has its own Git sidebar, conflict tabs or branch-comparison tabs; Git, its conflict resolution and branch diffs are in the Navide Git plugin, which those requests already opened. Files, search, problems and file diffs work as before.
 
+### Fixed
+
+- Git (0.2.39): finding repositories under a workspace no longer hangs or reads without limit when a `.git` file points its HEAD, commondir or packed-refs at something that is not a small regular file (such as a named pipe or a very large file). Navide now reads only regular files up to a size cap there and otherwise asks git for the branch, as it already did for any file it could not read.
+
 ## [0.2.38] — 2026-11-07
 
 ### Added

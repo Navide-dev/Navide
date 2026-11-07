@@ -17,6 +17,7 @@ import queue
 import re
 import secrets
 import shutil
+import stat
 import sys
 import threading
 import time
@@ -911,6 +912,31 @@ def _discover_repository_paths(
 
 _DETACHED_HEAD_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
+# Size caps for the files _read_head_branch reads. A real HEAD, .git file or
+# commondir is one short line; packed-refs grows with refs but a repository
+# past this cap simply falls back to `git rev-parse`.
+_SMALL_GIT_FILE_LIMIT = 4 * 1024
+_PACKED_REFS_LIMIT = 4 * 1024 * 1024
+
+
+def _read_regular_text(path: Path, limit: int) -> str:
+    """Read *path* as UTF-8 text only if it is a regular file of at most
+    *limit* bytes. A .git file can point anywhere, so a FIFO, device or huge
+    file named HEAD must not block or exhaust the discovery thread: the file is
+    opened non-blocking, checked on the open descriptor, and read with a cap.
+    Raises OSError or ValueError otherwise; the caller then asks git."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            raise ValueError(f"{path} is not a small regular file")
+        data = os.read(fd, limit + 1)
+    finally:
+        os.close(fd)
+    if len(data) > limit:
+        raise ValueError(f"{path} is larger than {limit} bytes")
+    return data.decode("utf-8")
+
 
 def _read_head_branch(repo: str) -> str | None:
     """What ``git rev-parse --abbrev-ref HEAD`` prints for *repo*, read from its
@@ -925,13 +951,13 @@ def _read_head_branch(repo: str) -> str | None:
     try:
         dot = Path(repo) / ".git"
         if dot.is_file():
-            line = dot.read_text(encoding="utf-8").strip()
+            line = _read_regular_text(dot, _SMALL_GIT_FILE_LIMIT).strip()
             if not line.startswith("gitdir:"):
                 return None
             gitdir = Path(repo) / line[len("gitdir:"):].strip()
         else:
             gitdir = dot
-        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+        head = _read_regular_text(gitdir / "HEAD", _SMALL_GIT_FILE_LIMIT).strip()
         if _DETACHED_HEAD_RE.match(head):
             return "HEAD"
         prefix = "ref: refs/heads/"
@@ -939,7 +965,11 @@ def _read_head_branch(repo: str) -> str | None:
             return None
         name = head[len(prefix):]
         commondir = gitdir / "commondir"
-        common = gitdir / commondir.read_text(encoding="utf-8").strip() if commondir.is_file() else gitdir
+        common = (
+            gitdir / _read_regular_text(commondir, _SMALL_GIT_FILE_LIMIT).strip()
+            if commondir.is_file()
+            else gitdir
+        )
         # A name git would reject (`..`, a leading '/') is git's to report,
         # and must not steer these lookups outside the refs directory.
         if (
@@ -952,7 +982,7 @@ def _read_head_branch(repo: str) -> str | None:
         packed_path = common / "packed-refs"
         packed = set()
         if packed_path.is_file():
-            for row in packed_path.read_text(encoding="utf-8").splitlines():
+            for row in _read_regular_text(packed_path, _PACKED_REFS_LIMIT).splitlines():
                 parts = row.split(" ", 1)
                 if len(parts) == 2 and not row.startswith(("#", "^")):
                     packed.add(parts[1].strip())
