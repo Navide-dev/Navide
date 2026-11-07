@@ -207,6 +207,9 @@ class ManifestV2Command(ManifestV2Model):
 class ManifestV2Contributes(ManifestV2Model):
     views: list[ManifestV2View] = Field(min_length=1, max_length=16)
     commands: list[ManifestV2Command] | None = Field(default=None, min_length=1, max_length=32)
+    # View-served agent tools (contract 2.9), kept as plain JSON like
+    # backend.agentTools: every field rule is validate_agent_tools'.
+    agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def _check_unique_view_ids(self) -> ManifestV2Contributes:
@@ -437,18 +440,19 @@ class ManifestV2(ManifestV2Model):
             errors = validate_agent_tools(dict(value))
             if errors:
                 first = errors[0]
+                owner = "contributes" if first.get("list") == "contributes" else "backend"
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
                 detail = ""
                 if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
                     # Name the prefix that would pass, as `navide-plugin validate` does.
-                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    name = value[owner]["agentTools"][first["index"]].get("name")
                     prefix = derive_agent_tool_prefix(value.get("id"))
                     detail = (
                         f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
                         f"from id {value.get('id')!r}: its last segment without hyphens)"
                     )
-                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
+                raise ValueError(f"{owner}.agentTools{where}{field} is invalid: {first['code']}{detail}")
             backend = value.get("backend")
             declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
             for index, tool in enumerate(declared if isinstance(declared, list) else []):

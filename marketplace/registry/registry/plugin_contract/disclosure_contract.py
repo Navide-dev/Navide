@@ -16,7 +16,7 @@ import json
 import re
 from typing import Any, Literal, NotRequired, TypedDict
 
-from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, MAX_SAFE_INTEGER
+from .agent_tools_contract import AGENT_TOOL_DEFAULT_TIMEOUT_MS, AGENT_TOOL_VIEW_METHOD_PREFIX, MAX_SAFE_INTEGER
 
 DISCLOSURE_SCHEMA_VERSION = 1
 DISCLOSURE_SUMMARY_TEMPLATE = "plugin-disclosure.summary.v1"
@@ -131,6 +131,15 @@ def risk_level_for_reasons(reasons: list[dict[str, Any]]) -> str:
     return level
 
 
+def _declared_agent_tools(backend: Any, contributes: Any) -> list[dict[str, Any]]:
+    """``backend.agentTools`` followed by ``contributes.agentTools`` spelled with
+    ``method: "view:<view>"`` (contract 2.9), so one disclosure shape covers both."""
+    tools = list((backend or {}).get("agentTools") or [])
+    for tool in (contributes or {}).get("agentTools") or []:
+        tools.append({**{key: value for key, value in tool.items() if key != "view"}, "method": f"{AGENT_TOOL_VIEW_METHOD_PREFIX}{tool['view']}"})
+    return tools
+
+
 def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     """The disclosure of a manifest that already passed Manifest v2 validation and validate_agent_tools."""
     declared = manifest.get("permissions") or {}
@@ -180,7 +189,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
                 "timeoutMs": tool.get("timeoutMs", AGENT_TOOL_DEFAULT_TIMEOUT_MS),
                 "inputSchema": tool["inputSchema"],
             }
-            for tool in ((backend or {}).get("agentTools") or [])
+            for tool in _declared_agent_tools(backend, manifest.get("contributes"))
         ),
         key=lambda tool: tool["name"],
     )

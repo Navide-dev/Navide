@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import type { AgentToolPackage } from './pluginAgentToolsHost'
 import { createReadStream, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readdir, readlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -56,7 +57,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { validateAgentTools } from '../../shared/pluginAgentTools'
+import { validateAgentTools, agentToolViewId } from '../../shared/pluginAgentTools'
 import {
   canonicalContractJson,
   computeDisclosure,
@@ -112,9 +113,11 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
  */
 export function declaredAgentTools(manifest: PluginManifestV2): Pick<ThirdPartyBackendInfo, 'agentTools' | 'permissions'> | null {
   const declared = (manifest.backend as { agentTools?: unknown } | undefined)?.agentTools
-  if (declared === undefined) return null
-  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend })
-  if (errors.length > 0 || !Array.isArray(declared) || declared.length === 0) {
+  const viewDeclared = (manifest.contributes as { agentTools?: unknown } | undefined)?.agentTools
+  if (declared === undefined && viewDeclared === undefined) return null
+  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend, contributes: manifest.contributes })
+  const count = (Array.isArray(declared) ? declared.length : 0) + (Array.isArray(viewDeclared) ? viewDeclared.length : 0)
+  if (errors.length > 0 || count === 0) {
     if (errors.length > 0) {
       console.warn(`[plugin-backend] ${manifest.id} declares invalid agent tools: ${errors.map((error) => error.code).join(', ')}`)
     }
@@ -256,11 +259,29 @@ export function firstPartyAgentToolSpec(
  * is what every third-party backend has on main.
  */
 export function consentedAgentMethods(
-  spec: ThirdPartyLaunchSpec,
+  spec: Pick<ThirdPartyLaunchSpec, 'thirdParty'>,
   gates: { masterSwitch: boolean; consentMatches: boolean },
 ): string[] {
   if (!gates.masterSwitch || !gates.consentMatches) return []
-  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
+  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method).filter((method) => agentToolViewId(method) === null))].sort()
+}
+
+/** Batch 4 (contract 2.9): the agent-tool catalog entry of a package without
+ * a backend whose views serve its tools; null when it declares none. A package
+ * with a backend carries its view-served tools in its launch spec instead. */
+export function viewAgentToolPackage(
+  installed: { pluginId: string; packageVersion: string; packageDir: string },
+  manifest: PluginManifestV2 = readInstalledManifestV2(installed.packageDir),
+): AgentToolPackage | null {
+  if (manifest.backend || !manifest.contributes?.agentTools?.length) return null
+  const declared = declaredAgentTools(manifest)
+  if (!declared) return null
+  return {
+    pluginId: installed.pluginId,
+    packageVersion: installed.packageVersion,
+    packageDir: installed.packageDir,
+    thirdParty: { name: manifest.name, system: [...(manifest.permissions.system ?? [])], ...declared },
+  }
 }
 
 /** SHA-256 of the canonical spelling of the disclosure's `agentTools` array.
@@ -971,6 +992,19 @@ export class ThirdPartyBackendController {
       this.store.record(spec.pluginId).consent?.grantedAt)
   }
 
+  /** DB3 for a view-served tool of a package without a backend (batch 4):
+   * the same question, bound to the install grant the user gave this version
+   * (`grantedAt`), which is what a view-served tool's consent is. */
+  async confirmViewAgentToolWrite(
+    spec: AgentToolPackage,
+    workspacePath: string,
+    tool: { name: string; title: string },
+    grantedAt: string,
+    currentGrantedAt: () => string | undefined,
+  ): Promise<boolean> {
+    return this.confirmWriteFor(spec, workspacePath, tool, grantedAt, currentGrantedAt)
+  }
+
   /** DB3 for a first-party agent tool (navide.browser): the same question,
    * asked once per (package, version, workspace). A first-party package has
    * no native-backend consent, so the answer is bound to the version alone. */
@@ -984,7 +1018,7 @@ export class ThirdPartyBackendController {
   }
 
   private async confirmWriteFor(
-    spec: ThirdPartyLaunchSpec,
+    spec: AgentToolPackage,
     workspacePath: string,
     tool: { name: string; title: string },
     grantedAt: string,

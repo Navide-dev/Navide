@@ -659,8 +659,31 @@ workspace.
 | `timeoutMs` | no | Integer 1–120000; default 30000 |
 
 A package with any invalid tool is refused at install and at publish, exactly
-like a schema error. `agentTools` needs a native backend, so frontend-only
-packages cannot declare it.
+like a schema error.
+
+**View-served tools (`contributes.agentTools`, 0.2.39).** A package without a
+native backend, which is also the only kind that runs on Windows, declares its
+tools under `contributes.agentTools[]` with the same fields and rules, except
+that `view` names one of its `contributes.views` in place of `method`
+(contract [section 2.9](plugin-agent-tools-contract.md#29-view-served-tools-contributesagenttools)).
+The view serves them with the SDK: it registers a handler per tool name, the
+Host calls it with the tool's arguments, and what it returns (JSON) is the
+result; a thrown error fails the call with the error's upper-case `code` or
+`PLUGIN_TOOL_FAILED`. Everything the user sees is the same (the install card
+lists the tools with their read/write claim, Settings → Navide Plugins shows
+them, a `write` tool asks once per workspace), the consent is the install
+grant of the version, and the tool is served only while that view is **open
+on the target workspace**: with the view closed, a call answers
+`PLUGIN_TOOL_UNAVAILABLE` with reason `view-not-open`; the Host never opens a
+view for a call. The disclosure spells such a tool with `method:
+"view:<view id>"`.
+
+```ts
+import { onAgentToolCall, viewReady } from '@navide/plugin-sdk'
+
+onAgentToolCall('hello_greet', async (args) => ({ message: `Hello, ${String(args.who ?? 'Navide')}!` }))
+viewReady()
+```
 
 What the user sees and consents to: the install confirmation lists every
 declared tool with its name, the method it calls, its full description, its
@@ -1543,7 +1566,7 @@ const file = await context.capabilities.invoke('fs.readFile', { path: 'README.md
 | Factory | Provides |
 |---|---|
 | `createPluginCapabilityClient()` | `capabilities.invoke(method, params)` and `events.subscribe(event, listener)` for the public catalog |
-| `createPluginViewRuntimeClient()` | `ready()`, `hide()`, `onOpenTarget`, `onBackendStatus`, `openContributionWindow`, and the composed-view receiver, detail and close methods |
+| `createPluginViewRuntimeClient()` | `ready()`, `hide()`, `onOpenTarget`, `onAgentToolCall`, `onBackendStatus`, `openContributionWindow`, and the composed-view receiver, detail and close methods |
 | `createPluginBackendClient()` | `call` and `subscribe` for the package's own backend (see [Navide Backend Wire v1](#navide-backend-wire-v1)) |
 
 `@navide/plugin-sdk` and `@navide/plugin-contracts` declare
@@ -1560,6 +1583,7 @@ unchanged:
 | `viewReady()` | `createPluginViewRuntimeClient().ready()` |
 | `hideView()` | `createPluginViewRuntimeClient().hide()` |
 | `onOpenTarget(listener)` | `createPluginViewRuntimeClient().onOpenTarget(listener)` |
+| `onAgentToolCall(name, handler)` | `createPluginViewRuntimeClient().onAgentToolCall(name, handler)`: serve a `contributes.agentTools` entry from this view (0.2.39) |
 | `onBackendStatus(listener)` | `createPluginViewRuntimeClient().onBackendStatus(listener)` |
 | `openContributionWindow(params)` | `createPluginViewRuntimeClient().openContributionWindow(params)` |
 

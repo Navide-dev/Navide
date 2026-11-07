@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentToolCaller, AgentToolsSyncPayload } from '../../shared/pluginAgentTools'
 import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
-import { agentToolUnavailableMessage, PluginAgentToolsHost, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
+import { agentToolUnavailableMessage, isBackendAgentToolPackage, PluginAgentToolsHost, type AgentToolPackage, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
 import type { AgentToolSwitches } from './pluginNativeBackendStore'
 import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -46,7 +46,7 @@ const DEVMAP = spec('nerdtechnic.devmap', '0.2.0', [
 interface Harness {
   host: PluginAgentToolsHost
   switches: AgentToolSwitches
-  packages: ThirdPartyLaunchSpec[]
+  packages: AgentToolPackage[]
   disabled: Set<string>
   consented: Set<string>
   /** B1-a's agentToolsSince per package. */
@@ -96,6 +96,56 @@ function harness(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: 
 }
 
 const notStopping = (): boolean => false
+
+/** Batch 4: a package without a backend whose view serves its tools (contract 2.9). */
+function viewPackage(pluginId: string, version: string, tools: DisclosureAgentTool[]): AgentToolPackage {
+  return {
+    pluginId,
+    packageVersion: version,
+    packageDir: `/pkgs/${pluginId}/${version}`,
+    thirdParty: { name: pluginId, system: ['fs'], agentTools: tools, permissions: { system: ['fs'], shell: null, scopes: null } },
+  }
+}
+
+describe('PluginAgentToolsHost with a view-served package (batch 4, contract 2.9)', () => {
+  const HELLO = viewPackage('acme.hello', '1.0.0', [tool('hello_greet', 'view:main'), tool('hello_note', 'view:main', 'write')])
+
+  it('lists and admits its tools like a backend package, with no backend methods to open', async () => {
+    const h = harness({}, { enabled: true })
+    h.packages = [DEVMAP, HELLO]
+    h.consented.add('acme.hello')
+    await h.host.refresh()
+    expect(isBackendAgentToolPackage(HELLO)).toBe(false)
+    expect(isBackendAgentToolPackage(DEVMAP)).toBe(true)
+    const hello = h.sent[0].tools.filter((entry) => entry.pluginId === 'acme.hello')
+    expect(hello.map((entry) => [entry.name, entry.method, entry.risk, entry.state])).toEqual([
+      ['hello_greet', 'view:main', 'read', 'available'],
+      ['hello_note', 'view:main', 'write', 'available'],
+    ])
+    // consentedAgentMethods leaves view methods out: nothing to open on a backend.
+    expect(h.methods.get('acme.hello@1.0.0')).toEqual([])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual(['devmap.read', 'devmap.setStatus'])
+    await expect(h.host.admit({ pluginId: 'acme.hello', toolName: 'hello_note', pluginVersion: '1.0.0', caller: PANE }, notStopping))
+      .resolves.toMatchObject({ ok: true, spec: { pluginId: 'acme.hello' }, tool: { name: 'hello_note', method: 'view:main' } })
+  })
+
+  it('needs the install grant (hasConsent) and follows the Disabled switch', async () => {
+    const h = harness({}, { enabled: true })
+    h.packages = [HELLO]
+    await h.host.refresh()
+    expect(h.sent[0].tools.map((entry) => entry.state)).toEqual(['consent-required', 'consent-required'])
+    h.consented.add('acme.hello')
+    h.disabled.add('acme.hello')
+    await h.host.refresh()
+    expect(h.sent[1].tools.map((entry) => entry.state)).toEqual(['plugin-disabled', 'plugin-disabled'])
+    await expect(h.host.admit({ pluginId: 'acme.hello', toolName: 'hello_greet', pluginVersion: '1.0.0', caller: PANE }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'plugin-disabled' })
+  })
+
+  it('names the view-not-open refusal', () => {
+    expect(agentToolUnavailableMessage('view-not-open')).toContain('not open')
+  })
+})
 
 describe('PluginAgentToolsHost with the master switch off (golden: same as main)', () => {
   it('sends nothing and keeps every third-party agentMethods empty on every lifecycle refresh', async () => {
@@ -500,7 +550,7 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
   })
 
   it('serves first-party tools with the master switch on and no consent', async () => {
-    const hasConsent = vi.fn(async (candidate: ThirdPartyLaunchSpec) => candidate.pluginId === 'nerdtechnic.devmap')
+    const hasConsent = vi.fn(async (candidate: AgentToolPackage) => candidate.pluginId === 'nerdtechnic.devmap')
     const { h } = withBrowser({ hasConsent }, { enabled: true })
     await h.host.refresh()
     expect(h.sent).toHaveLength(1)

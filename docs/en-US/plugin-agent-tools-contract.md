@@ -112,9 +112,11 @@ publishing and is then refused when the backend activates. The rule above is
 the intersection of the two. Closing the gap in the schema is a separate
 change.
 
-No other field is allowed. `agentTools` requires a native backend, so a package
-that declares it is at least risk **high**. Frontend-only packages cannot
-declare agent tools (DB13 is open).
+No other field is allowed. `backend.agentTools` requires a native backend, so
+a package that declares it is at least risk **high**. Since 0.2.39 a package
+without a backend declares its tools under `contributes.agentTools` instead,
+served by one of its views ([2.9](#29-view-served-tools-contributesagenttools));
+DB13 is closed by that section.
 
 ### 2.2 Names and the prefix
 
@@ -262,6 +264,64 @@ without agent tools keeps its existing key and its existing consent records
 stay valid. Any change to any tool (name, method, risk, text, schema, timeout)
 then requires new consent, and until then all of that package's tools are in
 state `consent-required`.
+
+### 2.9 View-served tools (`contributes.agentTools`)
+
+A package with no native backend (and so one that runs on Windows, where
+third-party backends do not) may declare the same tools under
+`contributes.agentTools[]`. Each entry has the fields of [2.1](#21-fields)
+with **`view`** (the id of one of `contributes.views`) in place of `method`;
+every other rule of this section applies unchanged: the name pattern and the
+prefix derived from the id ([2.2](#22-names-and-the-prefix)), the reserved
+names ([2.3](#23-reserved-names)), the text rules ([2.4](#24-text-rules)),
+the validation order ([2.5](#25-validation-order-and-error-codes)) with one
+more code, `AGENT_TOOL_VIEW_UNDECLARED` (the view id is not declared), and the
+DB9 cap ([2.7](#27-db9-stability-cap)). Names are unique across both lists; a
+`validateAgentTools` error for a `contributes` entry carries `list:
+"contributes"`. A package with a backend may declare both lists.
+
+```json
+"contributes": {
+  "views": [{ "id": "main", "kind": "custom", "location": "right", "title": "Hello", "entry": "frontend/main/index.html" }],
+  "agentTools": [
+    { "name": "hello_greet", "view": "main", "risk": "read", "title": "Say hello",
+      "description": "Returns a greeting from the open Hello view.",
+      "inputSchema": { "type": "object", "properties": { "who": { "type": "string" } } } }
+  ]
+}
+```
+
+In the disclosure ([3.1](#31-shape)), the catalog ([4.1](#41-host--backend-pluginsagenttoolssync))
+and every surface that shows them, a view-served tool is spelled exactly like
+a backend one with `method: "view:<view id>"` (`agentToolViewId()` reads it
+back), so the disclosure of a package that declares none is unchanged, as is
+its digest. Its risk is the package's own permissions plus `agentTools.write`
+for a write tool; it does not add `nativeBackend`.
+
+Consent is the install grant of the exact package version: the install card
+lists the tools like a backend's, and the version's grant is what
+`hasConsent` checks. The C3 rule applies (allowing the package turns the
+master switch on while it is still at its default). The Disabled switch of
+the package applies; the native-backend switches do not.
+
+A call ([4.2](#42-backend--host-the-agent-tool-call)) reaches the view only
+while that view is **open on the target workspace**: the Host finds the
+running `<pluginId>.<view>` contribution of the consented version in a
+window of that workspace, ready and not stopping, and sends it one
+`plugin:agentTool:call` `{callId, name, arguments, timeoutMs}` over the
+view's own bridge (ipc for a surface, the private MessagePort for a frame).
+The view answers one `plugin:agentTool:result` `{callId, ok: true, result}`
+or `{callId, ok: false, error: {code, message}}`; the SDK's
+`onAgentToolCall(name, handler)` does this for it, answering a tool with no
+handler at once with `PLUGIN_TOOL_UNHANDLED`. The Host accepts the answer
+only from the instance it sent the call to, and settles the call at the
+tool's deadline (`PLUGIN_TOOL_TIMEOUT`, `reason: "execution"`) or when the
+view goes away. No view open on that workspace answers
+`PLUGIN_TOOL_UNAVAILABLE` with `reason: "view-not-open"`; the Host never
+loads a view behind the user's back for a call. Every other check of 4.2
+(master switch, caller kind, package state, consent, workspace grant, DB3
+first write, execution policy) runs before the dispatch, the same as for a
+backend tool; the headless backend binding is skipped.
 
 ## 3. Disclosure
 
@@ -852,7 +912,7 @@ headless binding → `callBound`.
 | `error_code` | Meaning |
 |---|---|
 | `BAD_REQUEST` | malformed request |
-| `PLUGIN_TOOL_UNAVAILABLE` | not callable now; `reason` is one of `master-switch-off`, `external-callers-off`, `plugin-not-installed`, `plugin-disabled`, `plugin-quarantined`, `plugin-revoked`, `plugin-stopping`, `consent-required`, `tool-not-consented`, `name-collision` |
+| `PLUGIN_TOOL_UNAVAILABLE` | not callable now; `reason` is one of `master-switch-off`, `external-callers-off`, `plugin-not-installed`, `plugin-disabled`, `plugin-quarantined`, `plugin-revoked`, `plugin-stopping`, `consent-required`, `tool-not-consented`, `name-collision`, `view-not-open` (a view-served tool, [2.9](#29-view-served-tools-contributesagenttools), whose view is not open on the target workspace) |
 | `WORKSPACE_NOT_AUTHORIZED` | no grant for the target workspace |
 | `WORKSPACE_WRITE_DECLINED` | the user declined the first-write confirmation |
 | `EXECUTION_POLICY_DENIED` | the user's agent execution policy refused it |

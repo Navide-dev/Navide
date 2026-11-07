@@ -25,7 +25,7 @@ export * from './issues.js'
 export * from './agents.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
-export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
 export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
@@ -177,7 +177,7 @@ export type PluginManifestV2 = {
     categories?: string[]
     icon?: string
   }
-  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[] }
+  contributes?: { views: PluginManifestV2View[]; commands?: PluginManifestV2Command[]; agentTools?: PluginManifestV2ViewAgentTool[] }
   backend?: {
     entry: string
     protocolVersion: 1
@@ -213,6 +213,9 @@ export type PluginManifestV2AgentTool = {
   inputSchema: Record<string, unknown>
   timeoutMs?: number
 }
+
+/** One `contributes.agentTools` entry (contract section 2.9): served by a declared view instead of a backend method. */
+export type PluginManifestV2ViewAgentTool = Omit<PluginManifestV2AgentTool, 'method'> & { view: string }
 
 export type PluginContractErrorCode =
   | 'INVALID_JSON'
@@ -656,7 +659,7 @@ function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
 
 function parseViews(value: unknown): { views: PluginManifestV2View[] } {
   const contributes = assertObject(value, 'manifest contributes')
-  assertOnlyKeys(contributes, ['views', 'commands'], 'manifest contributes')
+  assertOnlyKeys(contributes, ['views', 'commands', 'agentTools'], 'manifest contributes')
   if (!Array.isArray(contributes.views) || contributes.views.length < 1 || contributes.views.length > 16) {
     fail('manifest contributes.views must contain 1-16 view(s)')
   }
@@ -763,6 +766,7 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
 }
 
 const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
+const VIEW_AGENT_TOOL_KEYS = ['name', 'view', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
 const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
 // The Host backend supervisor's method-name rule (isMethodName in
 // src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
@@ -779,27 +783,49 @@ function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
     const tool = assertObject(raw, label)
     assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
     for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
-    if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
     if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
       fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
     }
-    if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
-    for (const key of ['title', 'description'] as const) {
-      const text = tool[key]
-      if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
-        fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
-      }
-    }
-    const schema = tool.inputSchema
-    if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
-    if (tool.timeoutMs !== undefined) {
-      const timeout = tool.timeoutMs
-      if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
-        fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
-      }
-    }
+    checkAgentToolFields(tool, label)
     return structuredClone(tool) as PluginManifestV2AgentTool
   })
+}
+
+/** The `viewAgentTool` definition: a tool a declared view serves (contract section 2.9). */
+function viewAgentToolList(value: unknown, viewIds: readonly string[]): PluginManifestV2ViewAgentTool[] {
+  if (!Array.isArray(value) || value.length === 0) fail('manifest contributes.agentTools must be a non-empty array')
+  return value.map((raw, index) => {
+    const label = `manifest contributes.agentTools[${index}]`
+    const tool = assertObject(raw, label)
+    assertOnlyKeys(tool, VIEW_AGENT_TOOL_KEYS, label)
+    for (const key of VIEW_AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
+    if (typeof tool.view !== 'string' || !VIEW_ID.test(tool.view)) fail(`${label}.view is invalid; ${VIEW_ID_RULE}`)
+    if (!viewIds.includes(tool.view as string)) {
+      fail(`${label}.view ${JSON.stringify(tool.view)} is not a declared view (declared: ${viewIds.join(', ')})`)
+    }
+    checkAgentToolFields(tool, label)
+    return structuredClone(tool) as PluginManifestV2ViewAgentTool
+  })
+}
+
+/** The fields a method-bound and a view-bound tool share. */
+function checkAgentToolFields(tool: Record<string, unknown>, label: string): void {
+  if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
+  if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
+  for (const key of ['title', 'description'] as const) {
+    const text = tool[key]
+    if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
+      fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
+    }
+  }
+  const schema = tool.inputSchema
+  if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
+  if (tool.timeoutMs !== undefined) {
+    const timeout = tool.timeoutMs
+    if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
+      fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
+    }
+  }
 }
 
 /** Most package-local methods / events one backend may declare. */
@@ -948,6 +974,10 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
   const declaredCommands = isRecord(manifest.contributes) ? manifest.contributes.commands : undefined
   if (contributes && declaredCommands !== undefined) {
     contributes.commands = parseCommands(declaredCommands, id, contributes.views, backend?.methods)
+  }
+  const declaredViewTools = isRecord(manifest.contributes) ? manifest.contributes.agentTools : undefined
+  if (contributes && declaredViewTools !== undefined) {
+    contributes.agentTools = viewAgentToolList(declaredViewTools, contributes.views.map((view) => view.id))
   }
   return {
     schemaVersion: 2,

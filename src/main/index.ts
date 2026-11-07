@@ -217,7 +217,7 @@ import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
-import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
+import { PluginAgentToolsHost, isBackendAgentToolPackage, type AgentToolPackage } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
@@ -225,6 +225,7 @@ import { isPluginWebGuest } from './plugins/pluginWebViews'
 import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   firstPartyAgentToolSpec,
+  viewAgentToolPackage,
   firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -2071,10 +2072,42 @@ const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
       return []
     }
   })
+// Batch 4 (contract 2.9): packages without a backend whose views serve their
+// agent tools. Their consent is the install grant of the exact version, and
+// their manifest is read once per installed package directory.
+const viewAgentToolPackageCache = new Map<string, AgentToolPackage | null>()
+const registeredViewAgentToolPackages = (): AgentToolPackage[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (activation.backend || isFirstPartyAgentToolPlugin(activation.pluginId)) return []
+    const key = `${activation.pluginId}\u0000${activation.packageVersion}\u0000${activation.packageDir}`
+    if (!viewAgentToolPackageCache.has(key)) {
+      try {
+        viewAgentToolPackageCache.set(key, viewAgentToolPackage(activation))
+      } catch (error) {
+        console.warn(
+          `[main] agent tools of ${activation.pluginId} are unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        viewAgentToolPackageCache.set(key, null)
+      }
+    }
+    const spec = viewAgentToolPackageCache.get(key)
+    return spec ? [spec] : []
+  })
+const isViewAgentToolPackageId = (pluginId: string): boolean =>
+  registeredViewAgentToolPackages().some((spec) => spec.pluginId === pluginId)
+// The install grant is the consent of a view-served tool; its DB3 write
+// answer is bound to the version the grant covers.
+const VIEW_AGENT_TOOL_WRITE_GRANT = 'install-grant'
+const viewAgentToolGrant = (spec: AgentToolPackage): string | undefined =>
+  pluginCapabilityGrants.get(spec.pluginId, spec.packageVersion)?.packageVersion === spec.packageVersion
+    ? VIEW_AGENT_TOOL_WRITE_GRANT
+    : undefined
 agentToolsHost = new PluginAgentToolsHost({
   switches: () => nativeBackendStore.agentToolSwitches(),
   setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
-  listPackages: registeredThirdPartySpecs,
+  listPackages: () => [...registeredThirdPartySpecs(), ...registeredViewAgentToolPackages()],
   listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
   // A first-party package is not a third-party native backend: only its own
@@ -2083,10 +2116,16 @@ agentToolsHost = new PluginAgentToolsHost({
   isDisabled: (pluginId) =>
     isFirstPartyAgentToolPlugin(pluginId)
       ? frontendPluginManager.isPluginDisabled(pluginId) || frontendPluginManager.isBuiltinPluginDisabled(pluginId)
-      : !nativeBackendStore.isEnabled() ||
-        frontendPluginManager.isPluginDisabled(pluginId) ||
-        nativeBackendStore.record(pluginId).disabled === true,
-  hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
+      : isViewAgentToolPackageId(pluginId)
+        // No native backend: only the package's own Disabled switch applies.
+        ? frontendPluginManager.isPluginDisabled(pluginId)
+        : !nativeBackendStore.isEnabled() ||
+          frontendPluginManager.isPluginDisabled(pluginId) ||
+          nativeBackendStore.record(pluginId).disabled === true,
+  hasConsent: (spec) =>
+    isBackendAgentToolPackage(spec)
+      ? thirdPartyBackends.hasAgentToolsConsent(spec)
+      : Promise.resolve(viewAgentToolGrant(spec) !== undefined),
   // DB1 collision order, per name (B1-a): when a consented version first
   // declared this name, else when the package first declared tools.
   agentToolSince: (pluginId, name) => {
@@ -2096,9 +2135,13 @@ agentToolsHost = new PluginAgentToolsHost({
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
-    isFirstPartyAgentToolPlugin(spec.pluginId)
+    isFirstPartyAgentToolPlugin(spec.pluginId) && isBackendAgentToolPackage(spec)
       ? thirdPartyBackends.confirmFirstPartyAgentToolWrite(spec, workspaceRoot, tool)
-      : thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+      : isBackendAgentToolPackage(spec)
+        ? thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool)
+        : thirdPartyBackends.confirmViewAgentToolWrite(
+          spec, workspaceRoot, tool, VIEW_AGENT_TOOL_WRITE_GRANT, () => viewAgentToolGrant(spec),
+        ),
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)

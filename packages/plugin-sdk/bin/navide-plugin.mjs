@@ -72,9 +72,11 @@ function assertSafePath(path, label) {
 
 /** One `validateAgentTools` error as the Registry would refuse it, with the value that would pass. */
 function agentToolMessage(raw, error) {
-  const tools = raw.backend?.agentTools
+  const owner = error.list === 'contributes' ? 'contributes' : 'backend'
+  const tools = raw[owner]?.agentTools
   const tool = error.index === null || !Array.isArray(tools) ? undefined : tools[error.index]
-  const where = `manifest backend.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const where = `manifest ${owner}.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const views = Array.isArray(raw.contributes?.views) ? raw.contributes.views.map((view) => view?.id).filter((id) => typeof id === 'string') : []
   const value = (field) => JSON.stringify(tool && typeof tool === 'object' ? tool[field] : undefined)
   const prefix = deriveAgentToolPrefix(raw.id)
   const methods = Array.isArray(raw.backend?.methods) ? raw.backend.methods : []
@@ -86,10 +88,11 @@ function agentToolMessage(raw, error) {
     AGENT_TOOL_NAME_RESERVED: ` ${value('name')} is a built-in Navide tool name; choose another '${prefix}_' name`,
     AGENT_TOOL_NAME_DUPLICATE: ` ${value('name')} is declared twice`,
     AGENT_TOOL_METHOD_UNDECLARED: ` ${value('method')} is not listed in backend.methods (declared: ${methods.length ? methods.join(', ') : 'none'})`,
+    AGENT_TOOL_VIEW_UNDECLARED: ` ${value('view')} is not a declared view id (declared: ${views.length ? views.join(', ') : 'none'})`,
     AGENT_TOOL_RISK_INVALID: ` ${value('risk')} must be 'read' or 'write'`,
     AGENT_TOOL_TIMEOUT_INVALID: ` ${value('timeoutMs')} must be an integer from 1 to 120000`,
     AGENT_TOOL_FIELD_MISSING: ' is required',
-    AGENT_TOOL_FIELD_UNKNOWN: ' is not a known field (allowed: name, method, risk, title, description, inputSchema, timeoutMs)',
+    AGENT_TOOL_FIELD_UNKNOWN: ` is not a known field (allowed: name, ${owner === 'backend' ? 'method' : 'view'}, risk, title, description, inputSchema, timeoutMs)`,
   }[error.code] ?? ' is invalid'
   return `${where}${detail} [${error.code}]`
 }

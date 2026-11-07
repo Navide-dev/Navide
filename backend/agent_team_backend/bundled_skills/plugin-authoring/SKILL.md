@@ -73,7 +73,7 @@ simply missing at runtime.
 | Open real web pages | `permissions.system: ["web"]` (disclosed as high risk) | `plugins/navide-browser` |
 | Remember settings or view state | `createPluginViewState(key, fallback)` from `@navide/plugin-sdk` (keeps state across reloads), or `storage.get` / `storage.set`; no permission to declare | spec, "SDK interface" and "Host-managed storage partitions" |
 | Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | `plugins/navide-plans` |
-| A tool agents can call | `backend.methods` + `backend.agentTools` | `plugins/navide-browser`; spec, "Agent tools" |
+| A tool agents can call | `backend.methods` + `backend.agentTools`; with no backend, `contributes.agentTools` (`view` instead of `method`) served by the view with `onAgentToolCall` | `plugins/navide-browser`; spec, "Agent tools" |
 
 The capability catalog with every method, its schema and the permission it
 needs is `docs/plugin-contracts/capabilities-v1.json`.

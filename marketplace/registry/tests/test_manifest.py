@@ -447,3 +447,23 @@ def test_manifest_v2_shell_executables_is_not_a_manifest_field() -> None:
     manifest["permissions"]["shellExecutables"] = ["npm"]
     with pytest.raises(ManifestError, match="shell"):
         parse_manifest(manifest)
+
+
+# -- contributes.agentTools (batch 4, contract 2.9) ----------------------------
+
+
+def test_manifest_v2_view_served_agent_tools_are_accepted_and_refused_like_backend_ones() -> None:
+    raw = contract_manifest("view-agent-tools.json")
+    m = parse_manifest(raw)
+    assert m.backend is None
+    assert [tool["name"] for tool in m.contributes.agentTools] == ["hello_greet", "hello_note"]
+    undeclared = contract_manifest("view-agent-tools.json")
+    undeclared["contributes"]["agentTools"][0]["view"] = "side"
+    with pytest.raises(ManifestError) as refused:
+        parse_manifest(undeclared)
+    assert "contributes.agentTools[0].view is invalid: AGENT_TOOL_VIEW_UNDECLARED" in str(refused.value)
+    mismatch = contract_manifest("view-agent-tools.json")
+    mismatch["contributes"]["agentTools"][0]["name"] = "other_greet"
+    with pytest.raises(ManifestError) as refused:
+        parse_manifest(mismatch)
+    assert "contributes.agentTools[0].name is invalid: AGENT_TOOL_PREFIX_MISMATCH ('other_greet' must start with 'hello_'" in str(refused.value)

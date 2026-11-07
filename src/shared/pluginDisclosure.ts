@@ -13,7 +13,7 @@
  */
 
 import { canonicalJson } from './canonicalJson'
-import { AGENT_TOOL_DEFAULT_TIMEOUT_MS } from './pluginAgentTools'
+import { AGENT_TOOL_DEFAULT_TIMEOUT_MS, AGENT_TOOL_VIEW_METHOD_PREFIX } from './pluginAgentTools'
 import type { AgentToolRisk } from './pluginAgentTools'
 import type { ScanReport } from './pluginDisclosureScan'
 
@@ -220,6 +220,18 @@ export interface DisclosureManifestInput {
       timeoutMs?: number
     }>
   }
+  contributes?: {
+    /** View-served tools (contract 2.9); disclosed with `method: "view:<view>"`. */
+    agentTools?: Array<{
+      name: string
+      view: string
+      risk: AgentToolRisk
+      title: string
+      description: string
+      inputSchema: Record<string, unknown>
+      timeoutMs?: number
+    }>
+  }
 }
 
 const sorted = (values: readonly string[] | undefined): string[] => [...(values ?? [])].sort(compareCodeUnits)
@@ -263,7 +275,10 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
   const networkHosts = sorted(declared.network?.hosts)
   const backend = manifest.backend
   const nativeBackend = backend ? { methods: sorted(backend.methods), events: sorted(backend.events) } : null
-  const agentTools: DisclosureAgentTool[] = [...(backend?.agentTools ?? [])]
+  const agentTools: DisclosureAgentTool[] = [
+    ...(backend?.agentTools ?? []),
+    ...(manifest.contributes?.agentTools ?? []).map(({ view, ...tool }) => ({ ...tool, method: `${AGENT_TOOL_VIEW_METHOD_PREFIX}${view}` })),
+  ]
     .map((tool) => ({
       name: tool.name,
       method: tool.method,

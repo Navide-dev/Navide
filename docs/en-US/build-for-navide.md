@@ -73,7 +73,7 @@ reference is [Plugin development v2](plugin-development-v2.md).
 | Run other executables (`npm`, `terraform`, …) | `permissions.shell: { "mode": "allowlist", "executables": [...] }` (0.2.39) | high; highest for a name that runs any program | [Declared executables](plugin-development-v2.md#declared-executables-permissionsshellexecutables) |
 | Let your views call network hosts (`fetch`, WebSocket) | `permissions.network: { "hosts": ["api.example.com"] }` (0.2.39) | highest | [Network hosts](plugin-development-v2.md#network-hosts-permissionsnetwork) |
 | Logic that outlives the view; one executable per platform, sandboxed | `backend` (Backend Wire v1) | high | [Third-party backends](plugin-development-v2.md#third-party-backends-sandbox-consent-and-publishing) |
-| A tool agents can call | `backend.agentTools[]` with `risk` `read` or `write` | high for `write` | [Agent tools](plugin-development-v2.md#agent-tools-backendagenttools) |
+| A tool agents can call | `backend.agentTools[]` with `risk` `read` or `write`; without a backend, `contributes.agentTools[]` served by one of your views through `onAgentToolCall` (0.2.39, so Windows too) | high for `write` | [Agent tools](plugin-development-v2.md#agent-tools-backendagenttools) |
 | Remember settings or view state | `storage.*` through the SDK; no declaration | — | [Storage](plugin-development-v2.md#host-managed-storage-partitions) |
 
 Not available yet, and tracked: a backend reaching the network directly

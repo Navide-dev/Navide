@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.hello",
+  "name": "Hello",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {
+    "system": [
+      "fs"
+    ]
+  },
+  "marketplace": {
+    "description": "A Vue view that also serves two agent tools, with no native backend.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "right",
+        "title": "Hello",
+        "entry": "frontend/main/index.html"
+      }
+    ],
+    "agentTools": [
+      {
+        "name": "hello_greet",
+        "risk": "read",
+        "title": "hello_greet title",
+        "description": "hello_greet description.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "who": {
+              "type": "string"
+            }
+          }
+        },
+        "method": "hello.greet"
+      }
+    ]
+  }
+}

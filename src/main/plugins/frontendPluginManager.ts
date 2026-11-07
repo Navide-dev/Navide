@@ -229,12 +229,15 @@ import {
   reassembleAgentToolPayloadText,
   splitAgentToolPayloadText,
   utf8ByteLength,
+  agentToolResultBytes,
+  agentToolViewId,
   type AgentToolCaller,
   type AgentToolCallResponse,
   type AgentToolChunksInvalidReason,
   type AgentToolsSyncPayload,
 } from '../../shared/pluginAgentTools'
-import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { agentToolUnavailableMessage, isBackendAgentToolPackage, type AgentToolPackage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { IPC_AGENT_TOOL_CALL, IPC_AGENT_TOOL_RESULT, ViewAgentToolCalls } from './pluginViewAgentToolCalls'
 
 /** An agent tool answer as the Host sends it: a result longer than one piece
  *  stays the plugin's text in pieces, never parsed here (contract 4.4, R1 to R2). */
@@ -1640,8 +1643,10 @@ export class FrontendPluginManager {
     risk: 'read' | 'write'
     workspaceRoot: string
     caller: AgentToolCaller
-    spec: ThirdPartyLaunchSpec
+    spec: AgentToolPackage
   }>()
+  /** Batch 4: calls to view-served agent tools (contract 2.9) waiting for the view's answer. */
+  private readonly viewAgentToolCalls = new ViewAgentToolCalls()
   /** Headless Plans instance id → its workspace, to tell the user which
    *  workspace's backend stopped. */
   private readonly headlessPlansWorkspacePaths = new Map<string, string>()
@@ -4528,6 +4533,7 @@ export class FrontendPluginManager {
         if (nonEmptyString(id)) this.cancelBackendRecord(plugin.instanceId, id)
       } else if (channel === IPC_READY) this.markPluginReady(plugin)
       else if (channel === IPC_HIDE_SELF) this.hidePlugin(plugin)
+      else if (channel === IPC_AGENT_TOOL_RESULT) this.viewAgentToolCalls.resolve(plugin.instanceId, payload)
       return
     }
     if (kind !== 'invoke' || !requestId || typeof channel !== 'string') return
@@ -6290,6 +6296,13 @@ export class FrontendPluginManager {
       this.backendCallHandler!(this.instanceForIpc(event.sender.id, event.senderFrame), payload)
     )
 
+    // A view answers a view-served agent tool call (batch 4): only the
+    // instance the call was sent to can settle it.
+    ipcMain.on(IPC_AGENT_TOOL_RESULT, (event, payload: unknown) => {
+      const plugin = this.instanceForIpc(event.sender.id, event.senderFrame)
+      if (plugin) this.viewAgentToolCalls.resolve(plugin.instanceId, payload)
+    })
+
     ipcMain.on(IPC_BACKEND_CANCEL, (event, payload: unknown) => {
       const plugin = this.instanceForIpc(event.sender.id, event.senderFrame)
       if (!plugin) return
@@ -7672,6 +7685,8 @@ export class FrontendPluginManager {
     }, isStopping)
     if (!admission.ok) return agentToolUnavailable(admission.reason)
     const { spec, tool } = admission
+    // A view-served tool (contract 2.9): the package's running view answers it, no backend is bound.
+    const viewId = agentToolViewId(tool.method)
     // The core waits the tool's timeout plus a transport margin. The Host
     // never dispatches once its own deadline (the tool's timeout, counted from
     // receipt) has passed: an answer nobody waits for must not have side
@@ -7708,6 +7723,7 @@ export class FrontendPluginManager {
     const stoppedReason = (): AgentToolCallResponse | null => {
       const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
       if (!current.ok) return agentToolUnavailable(current.reason)
+      if (viewId !== null) return null
       const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
       if (
         !activation ||
@@ -7773,6 +7789,37 @@ export class FrontendPluginManager {
       (canonicalExistingDirectory(parsed.caller.workspace) ?? resolve(parsed.caller.workspace)) !== root
     const started = Date.now()
     const meta = (resultBytes: number) => ({ durationMs: Date.now() - started, resultBytes, crossWorkspace })
+    if (viewId !== null) {
+      const view = this.viewServingAgentTool(spec, viewId, root!)
+      if (!view) return { ...agentToolUnavailable('view-not-open'), meta: meta(0) }
+      const outcome = await this.viewAgentToolCalls.call(
+        view.instanceId,
+        (payload) => this.sendToPlugin(view, IPC_AGENT_TOOL_CALL, payload),
+        tool.name,
+        parsed.arguments as Record<string, unknown>,
+        deadline,
+      )
+      switch (outcome.kind) {
+        case 'result':
+          return { ok: true, result: outcome.result, meta: meta(agentToolResultBytes(outcome.result)) }
+        case 'failed':
+          return {
+            ...agentToolError('PLUGIN_TOOL_FAILED', outcome.message || 'The Navide plugin tool failed.'),
+            plugin_error: outcome.code,
+            meta: meta(0),
+          }
+        case 'timeout':
+          return {
+            ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin view did not answer in time.'),
+            reason: 'execution',
+            meta: meta(0),
+          }
+        default:
+          // The view went away (or refused the message) before answering.
+          return { ...agentToolUnavailable('view-not-open'), meta: meta(0) }
+      }
+    }
+    if (!isBackendAgentToolPackage(spec)) return { ...agentToolUnavailable('tool-not-consented'), meta: meta(0) }
     let instanceId: string
     try {
       instanceId = await this.bindHeadlessAgentToolBackend(spec, root!, workspaceId!)
@@ -7874,6 +7921,22 @@ export class FrontendPluginManager {
     return call ? { pluginId: call.pluginId, risk: call.risk, workspaceRoot: call.workspaceRoot } : undefined
   }
 
+  /** The running view that serves a view-bound agent tool on `root`: this
+   *  package version's `<pluginId>.<viewId>` contribution, open in a window
+   *  of that workspace, ready and not stopping. A view that is not open
+   *  answers nothing: the Host never loads one behind the user's back. */
+  private viewServingAgentTool(spec: AgentToolPackage, viewId: string, root: string): RunningPlugin | undefined {
+    const key = `${spec.pluginId}.${viewId}`
+    for (const record of this.running.values()) {
+      if (record.id !== spec.pluginId || record.contributionKey !== key || !record.hasV2DescriptorIdentity) continue
+      if (record.capabilityContext?.runtimeBinding?.packageVersion !== spec.packageVersion) continue
+      if (!record.workspacePath || canonicalExistingDirectory(record.workspacePath) !== root) continue
+      if (!record.pluginReady || this.isPluginStopping(record)) continue
+      return record
+    }
+    return undefined
+  }
+
   /** Forget headless agent-tool bindings the Host has since unbound. */
   private pruneAgentToolBindings(): void {
     for (const [key, instanceId] of [...this.headlessAgentToolInstances]) {
@@ -7925,7 +7988,7 @@ export class FrontendPluginManager {
   private agentToolPolicyAllows(
     workspacePath: string,
     initiator: AuthenticatedInitiator,
-    spec: ThirdPartyLaunchSpec,
+    spec: AgentToolPackage,
   ): boolean {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
@@ -7944,7 +8007,7 @@ export class FrontendPluginManager {
 
   /** Why the policy refused a tool: a user policy that leaves out `web` says
    * so and where to add it; anything else keeps the generic text. */
-  private agentToolPolicyDeniedMessage(workspacePath: string, spec: ThirdPartyLaunchSpec): string {
+  private agentToolPolicyDeniedMessage(workspacePath: string, spec: AgentToolPackage): string {
     const generic = 'The agent execution policy denied the operation.'
     if (!spec.thirdParty.system.includes('web')) return generic
     let snapshot: ExecutionPolicySnapshot | undefined
@@ -10615,6 +10678,7 @@ export class FrontendPluginManager {
     this.webViewRegistry?.hostClosed(instanceId)
     if (plugin.carrier === 'frame') this.revokePluginFrameInstance(instanceId)
     this.filePickerHost?.cancelInstance(instanceId)
+    this.viewAgentToolCalls.cancelInstance(instanceId)
     this.aiTerminalOutputDecoder.dropInstance(instanceId)
     this.editorSelectionGrants.close(instanceId)
     this.editorAiCapability.close(instanceId)
