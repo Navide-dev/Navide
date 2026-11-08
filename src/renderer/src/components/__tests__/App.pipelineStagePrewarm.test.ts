@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import { waitUntilTurnEnds } from '../../lib/pipelineDelivery'
 import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 
@@ -292,6 +292,7 @@ async function loadActivate(over: {
     'watchKickoffAfterFailure',
     'runPaneSentAt',
     'kickoffPacing',
+    'KICKOFF_ECHO_WAIT_MS',
     code,
   )
   const api = factory(
@@ -354,6 +355,7 @@ async function loadActivate(over: {
     vi.fn(),
     new Map(),
     () => ({}),
+    KICKOFF_ECHO_WAIT_MS,
   )
   return {
     api,
