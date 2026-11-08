@@ -41,3 +41,49 @@ def restore_bundled_library_path(environ: MutableMapping[str, str] = os.environ)
         environ["LD_LIBRARY_PATH"] = original
     else:
         environ.pop("LD_LIBRARY_PATH", None)
+
+
+#: How often the extraction directory is touched. macOS purges files under
+#: $TMPDIR that have not been accessed for three days; systemd-tmpfiles defaults
+#: to ten days for /tmp. Twice a day keeps either from seeing the files as idle.
+EXTRACTION_KEEPALIVE_INTERVAL_S = 12 * 60 * 60
+
+
+def touch_extraction_tree(root: str | os.PathLike[str] | None = None) -> int:
+    """Mark every file under ``root`` (default ``sys._MEIPASS``) as used now.
+
+    A onefile build unpacks itself into the OS temp directory and reads most
+    of it lazily: package metadata, data files and rarely imported extensions
+    stay untouched for days. The temp cleaners then delete them under the
+    running process (2026-11-08: every dist-info's METADATA went, and from then
+    on each new MCP session failed to initialize). Returns the number of files
+    touched; 0 when there is no such directory.
+    """
+    if root is None:
+        root = getattr(sys, "_MEIPASS", None)
+    if not root or not os.path.isdir(root):
+        return 0
+    touched = 0
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for name in filenames:
+            try:
+                os.utime(os.path.join(dirpath, name), None)
+                touched += 1
+            except OSError:
+                continue
+    return touched
+
+
+async def keep_extraction_warm(interval_s: float = EXTRACTION_KEEPALIVE_INTERVAL_S) -> None:
+    """Touch the extraction directory now and every ``interval_s`` seconds.
+
+    Returns at once in a dev run (nothing is extracted); in a frozen build it
+    runs for the life of the backend.
+    """
+    if not getattr(sys, "frozen", False) or not getattr(sys, "_MEIPASS", None):
+        return
+    import asyncio
+
+    while True:
+        touch_extraction_tree()
+        await asyncio.sleep(interval_s)

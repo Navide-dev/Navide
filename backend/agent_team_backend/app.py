@@ -1168,6 +1168,7 @@ _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
 _session_archive_task: "asyncio.Task[None] | None" = None
+_frozen_keepalive_task: "asyncio.Task[None] | None" = None
 
 _SESSION_ARCHIVE_FIRST_S = 600
 _SESSION_ARCHIVE_EVERY_S = 86_400
@@ -2633,6 +2634,13 @@ async def _start_log_watcher() -> None:
     global _session_archive_task
     _session_archive_task = asyncio.create_task(_session_archive_loop())
 
+    # Frozen build only: keep the onefile extraction directory from being
+    # purged as idle temp while the backend stays up (see frozen_env).
+    from . import frozen_env
+
+    global _frozen_keepalive_task
+    _frozen_keepalive_task = asyncio.create_task(frozen_env.keep_extraction_warm())
+
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
     from . import scheduler
@@ -2812,6 +2820,8 @@ async def _stop_log_watcher() -> None:
             _dev_time_sweeper_task.cancel()
         if _session_archive_task is not None:
             _session_archive_task.cancel()
+        if _frozen_keepalive_task is not None:
+            _frozen_keepalive_task.cancel()
         if _plugin_audit_task is not None:
             # Cancelling runs its final flush; wait for it so queued rows land.
             _plugin_audit_task.cancel()
