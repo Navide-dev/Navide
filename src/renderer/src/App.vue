@@ -183,7 +183,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, quietTurnEndDone, TURN_END_QUIET_FALLBACK_MS, turnCompleteDone,turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
@@ -20336,6 +20336,29 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
       ) {
         cancelWatcher(paneId)
         pipelineLog(`Stage ${stage.id} ✓ turn_complete reported by CLI`)
+        onStageSlotCompleted(stageIndex, paneId, 'turn_complete')
+        return
+      }
+      // 2b. Fallback: a turn ended after arming but a later activity record
+      //     overtook it, so the verdict above can never hold. See
+      //     quietTurnEndDone.
+      if (
+        !stage.allowQuestions &&
+        quietTurnEndDone({
+          turnEndTimes: paneTurnCompleteTimes.get(paneId) ?? [],
+          lastActiveAt: paneLastActiveAt.get(paneId) ?? 0,
+          armedAt: watcher.armedAt,
+          now: Date.now(),
+          running: (ref.displayStatus as string | undefined) === 'running',
+          quietMs: TURN_END_QUIET_FALLBACK_MS,
+          quotaBlocked,
+          quotaSeenAt: panes.value.find((p) => p.id === paneId)?.usageLimitSeenAt ?? 0,
+          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0,
+          backgroundRunning: paneBackgroundRunning(paneId)
+        })
+      ) {
+        cancelWatcher(paneId)
+        pipelineLog(`Stage ${stage.id} ✓ turn_complete reported by CLI (overtaken by a later activity record; pane idle ${TURN_END_QUIET_FALLBACK_MS / 1000}s since)`)
         onStageSlotCompleted(stageIndex, paneId, 'turn_complete')
         return
       }
