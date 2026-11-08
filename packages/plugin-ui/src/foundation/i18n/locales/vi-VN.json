@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Mở mục Chế độ nhà phát triển trong cài đặt",
+      "ui_plugins_openInstallFromFile": "Mở mục Cài từ tệp trong cài đặt",
+      "ui_plugins_openMarketplace": "Mở Navide Marketplace hoặc trang của một plugin Navide",
+      "ui_settings_open": "Mở cài đặt, có thể đến một tab cụ thể",
+      "ui_window_openGit": "Mở cửa sổ Git của workspace hiện tại",
+      "ui_window_openPipeline": "Mở cửa sổ Pipeline Manager",
+      "ui_window_openPlans": "Mở cửa sổ Plan, có thể mở thẳng một tài liệu",
+      "ui_window_openResourceManager": "Mở Resource Manager",
+      "ui_window_openTurnStats": "Mở Turn Stats"
+    },
     "add-step": "Thêm bước",
     "confirm-title": "Chạy nút này?",
     "confirm-message": "Sẽ chạy: {actions}. Thao tác này đóng hoặc đặt lại một thứ gì đó và không thể hoàn tác.",
@@ -10236,6 +10247,7 @@
     "settings-title": "Huy hiệu hạn mức CLI",
     "settings-enabled": "Hiện hạn mức còn lại trên thanh tiêu đề pane CLI",
     "settings-refresh": "Khoảng làm mới",
+    "settings-refresh-minutes": "{n} phút",
     "settings-hint": "Hiển thị hạn mức của 11 nhà cung cấp CLI, chỉ đọc, từ API sử dụng của từng nhà cung cấp (với Claude là từ bảng /usage tích hợp).",
     "failover-title": "Chuyển tài khoản khi hết hạn mức",
     "failover-hint": "Navide làm gì khi tài khoản CLI hết hạn mức: không làm gì, liệt kê tài khoản có thể chuyển (mặc định), hoặc tự chuyển, tối đa 3 lần mỗi 5 giờ cho mỗi CLI.",

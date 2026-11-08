@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "設定の「開発者モード」セクションを開く",
+      "ui_plugins_openInstallFromFile": "設定の「ファイルからインストール」セクションを開く",
+      "ui_plugins_openMarketplace": "Navide マーケットプレイス、または Navide プラグインのページを開く",
+      "ui_settings_open": "設定を開く（タブを指定可能）",
+      "ui_window_openGit": "現在のワークスペースの Git ウィンドウを開く",
+      "ui_window_openPipeline": "パイプライン管理ウィンドウを開く",
+      "ui_window_openPlans": "プランウィンドウを開く（ドキュメントを指定可能）",
+      "ui_window_openResourceManager": "リソースマネージャーを開く",
+      "ui_window_openTurnStats": "ターン統計を開く"
+    },
     "add-step": "ステップを追加",
     "confirm-title": "このボタンを実行しますか？",
     "confirm-message": "実行される内容：{actions}。何かを閉じるかリセットするため、元に戻せません。",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI 利用枠バッジ",
     "settings-enabled": "CLI ペインのヘッダーに残りの利用枠を表示",
     "settings-refresh": "更新間隔",
+    "settings-refresh-minutes": "{n} 分",
     "settings-hint": "11 の CLI プロバイダーの利用枠を、各プロバイダーの使用量 API から読み取り専用で表示します（Claude は組み込みの /usage パネルから）。",
     "settings-signing-title": "Antigravity 認証情報（メンテナー用）",
     "settings-signing-hint": "開発用です。~/navide-signing/usage_secrets.py に書き込み、次回のリリースビルドに Antigravity のインストール型アプリ用の公開 OAuth 定数を組み込みます。リポジトリには保存されません。",

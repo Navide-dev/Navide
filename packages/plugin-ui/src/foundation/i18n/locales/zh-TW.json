@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "開啟設定的「開發者模式」區段",
+      "ui_plugins_openInstallFromFile": "開啟設定的「從檔案安裝」區段",
+      "ui_plugins_openMarketplace": "開啟 Navide 市集，或某個 Navide 外掛的頁面",
+      "ui_settings_open": "開啟設定，可指定分頁",
+      "ui_window_openGit": "開啟目前工作區的 Git 視窗",
+      "ui_window_openPipeline": "開啟流程管理視窗",
+      "ui_window_openPlans": "開啟 Plan 視窗，可指定單一文件",
+      "ui_window_openResourceManager": "開啟資源控管",
+      "ui_window_openTurnStats": "開啟每輪消耗"
+    },
     "add-step": "加入步驟",
     "confirm-title": "要執行這顆按鈕嗎？",
     "confirm-message": "將會執行：{actions}。這會關閉或重設某些東西，無法復原。",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI 額度徽章",
     "settings-enabled": "在 CLI 分格標題列顯示剩餘額度",
     "settings-refresh": "重新整理間隔",
+    "settings-refresh-minutes": "{n} 分鐘",
     "settings-hint": "以唯讀方式顯示 11 家 CLI 提供者的額度，來自各家的用量 API（Claude 則來自內建的 /usage 面板）。",
     "failover-title": "額度耗盡時的帳號切換",
     "failover-hint": "CLI 帳號額度用完時 Navide 的做法：不處理、列出可切換的帳號（預設），或自動切換（每個 CLI 每 5 小時最多 3 次）。",

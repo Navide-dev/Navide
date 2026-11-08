@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "설정의 Developer Mode 섹션 열기",
+      "ui_plugins_openInstallFromFile": "설정의 \"파일에서 설치\" 섹션 열기",
+      "ui_plugins_openMarketplace": "Navide 마켓플레이스 또는 Navide 플러그인 페이지 열기",
+      "ui_settings_open": "설정 열기(특정 탭 지정 가능)",
+      "ui_window_openGit": "현재 작업 영역의 Git 창 열기",
+      "ui_window_openPipeline": "Pipeline Manager 창 열기",
+      "ui_window_openPlans": "계획 창 열기(문서 하나 지정 가능)",
+      "ui_window_openResourceManager": "리소스 관리자 열기",
+      "ui_window_openTurnStats": "Turn Stats 열기"
+    },
     "add-step": "단계 추가",
     "confirm-title": "이 버튼을 실행할까요?",
     "confirm-message": "실행할 작업: {actions}. 무언가를 닫거나 재설정하며 되돌릴 수 없어요.",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI 할당량 배지",
     "settings-enabled": "CLI pane 헤더에 남은 할당량 표시",
     "settings-refresh": "새로 고침 간격",
+    "settings-refresh-minutes": "{n}분",
     "settings-hint": "CLI 제공자 11곳의 할당량을 각 제공자의 사용량 API에서 읽기 전용으로 보여 줘요(Claude는 내장 /usage 패널에서).",
     "failover-title": "할당량 소진 시 계정 전환",
     "failover-hint": "CLI 계정의 할당량이 떨어졌을 때 Navide가 할 일이에요: 아무것도 안 함, 전환할 계정 표시(기본값), 또는 자동 전환(CLI마다 5시간에 최대 3회).",

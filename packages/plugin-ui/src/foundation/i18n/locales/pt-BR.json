@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Abrir a seção Modo de desenvolvedor das configurações",
+      "ui_plugins_openInstallFromFile": "Abrir a seção Instalar de arquivo das configurações",
+      "ui_plugins_openMarketplace": "Abrir o Navide Marketplace ou a página de um plugin do Navide",
+      "ui_settings_open": "Abrir as configurações, opcionalmente em uma guia específica",
+      "ui_window_openGit": "Abrir a janela do Git do workspace atual",
+      "ui_window_openPipeline": "Abrir a janela do Pipeline Manager",
+      "ui_window_openPlans": "Abrir a janela de Plans, opcionalmente em um documento",
+      "ui_window_openResourceManager": "Abrir o Resource Manager",
+      "ui_window_openTurnStats": "Abrir Turn Stats"
+    },
     "add-step": "Adicionar etapa",
     "confirm-title": "Executar este botão?",
     "confirm-message": "Será executado: {actions}. Isso fecha ou redefine algo e não pode ser desfeito.",
@@ -10236,6 +10247,7 @@
     "settings-title": "Selo de cota da CLI",
     "settings-enabled": "Mostrar a cota restante no cabeçalho dos panes de CLI",
     "settings-refresh": "Intervalo de atualização",
+    "settings-refresh-minutes": "{n} min",
     "settings-hint": "Mostra a cota de 11 provedores de CLI, somente leitura, pela API de uso de cada provedor (no Claude, pelo painel /usage integrado).",
     "failover-title": "Troca de conta quando a cota acaba",
     "failover-hint": "O que o Navide faz quando uma conta de CLI esgota a cota: nada, listar contas para trocar (padrão) ou trocar automaticamente, no máximo 3 vezes a cada 5 horas por CLI.",

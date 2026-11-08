@@ -56,7 +56,9 @@ function removeStep(index: number): void {
 function actionLabel(entry: UiActionInfo): string {
   const key = commandI18nKey(entry.id)
   if (te(key)) return t(key)
-  return entry.id.startsWith('ui.') ? (entry.summary ?? entry.title) : entry.title
+  if (!entry.id.startsWith('ui.')) return entry.title
+  const summaryKey = `actionBar.action.${entry.id.replace(/\./g, '_')}`
+  return te(summaryKey) ? t(summaryKey) : (entry.summary ?? entry.title)
 }
 
 function categoryLabel(entry: UiActionInfo): string {
