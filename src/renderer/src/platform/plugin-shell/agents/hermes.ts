@@ -16,4 +16,5 @@ export const SPEC = {
   // resumeArgs: `--resume <id>` exists but no reader can name the id of a
   // session Navide started. bracketedPaste / fullScreenTui not measured.
   hint: 'generalist',
+  kind: 'agent',
 } as const satisfies AgentSpec

@@ -106,10 +106,10 @@ describe('ControlPane – the ＋ menu', () => {
     // Agents; Devin stays a CLI.
     wrapper = mountWith({
       agentSpecs: [
-        { agentKey: 'hermes', label: 'Hermes Agent' },
+        { agentKey: 'hermes', label: 'Hermes Agent', kind: 'agent' },
         { agentKey: 'claude', label: 'Claude Code' },
         { agentKey: 'devin', label: 'Devin CLI' },
-        { agentKey: 'openclaw', label: 'OpenClaw' },
+        { agentKey: 'openclaw', label: 'OpenClaw', kind: 'agent' },
         { agentKey: 'terminal', label: 'Terminal' }
       ]
     })
@@ -128,6 +128,12 @@ describe('ControlPane – the ＋ menu', () => {
     ])
   })
 
+  it('files exactly OpenClaw and Hermes Agent under Agents in the real roster', () => {
+    const agents = CLI_AGENT_SPECS.filter((s) => s.kind === 'agent').map((s) => s.agentKey)
+    expect(agents.sort()).toEqual(['hermes', 'openclaw'])
+    expect(CLI_AGENT_SPECS.find((s) => s.agentKey === 'devin')?.kind ?? 'cli').toBe('cli')
+  })
+
   it('drops the Agents block, heading included, when none of its agents is enabled', async () => {
     wrapper = mountWith()
     await openMenu(wrapper)
@@ -143,7 +149,7 @@ describe('ControlPane – the ＋ menu', () => {
       ({ top: 100, bottom: 120, left: 0, right: 20, width: 20, height: 20, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect
     await add.trigger('click')
     const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
-    expect(style.maxHeight).toBe(`${window.innerHeight - 120 - 12}px`)
+    expect(style.maxHeight).toBe(`${window.innerHeight - 120 - 24}px`)
   })
 
   it('opens with an icon rather than a text glyph', async () => {

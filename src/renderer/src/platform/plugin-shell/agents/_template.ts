@@ -40,5 +40,7 @@ export const SPEC = {
   // shiftEnterSequence: '\x1b[13;2u',  // only if bracketed-LF default won't do
   // ── Recovery ──
   // loginExpired: { pattern: /.../i, loginCommand: '/login' },
+  // ── Kind ──
+  // kind: 'agent',                     // long-lived agent, not a coding CLI (cli-extension-guide.md)
   hint: 'generalist'
 } as const satisfies AgentSpec

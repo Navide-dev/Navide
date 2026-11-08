@@ -70,6 +70,53 @@ one carry `evidence="source"` — no real-account round-trip has been recorded; 
 Code's adapter (region-scoped compound file plus a companion `auth-state`
 write, no session resume) is the newest.
 
+### Two kinds of vendors: CLI and Agent
+
+Since 0.2.39 a vendor is one of two kinds:
+
+- **CLI** — a tool that writes code for the user inside a repository and is
+  done when its session ends: Claude Code, Codex, Devin CLI, Goose and the
+  rest. Navide runs it in a pane, reads its transcript where it can, resumes
+  it, and switches its accounts.
+- **Agent** — a long-lived, independent agent with its own identity, memory,
+  schedules and chat channels, which keeps running whether or not a pane is
+  open. Navide is a console onto it, not its runtime.
+
+How to decide: if the vendor's own state (who it is, what it remembers, what
+it is scheduled to do, which channels it answers) lives outside the session
+and outlives it, it is an Agent. If a session is the unit of work and the
+repository is where the work lands, it is a CLI. A vendor that merely
+*can* run unattended (`--yolo`, a headless mode) is still a CLI.
+
+The kind is the frontend spec's `kind` field
+(`src/renderer/src/platform/plugin-shell/agents/types.ts`): `'agent'` for an
+Agent, left out (or `'cli'`) for a CLI. Set it in `agents/<key>.ts`; nothing
+else needs an edit, and no surface keeps a list of names. The backend spec has
+no counterpart.
+
+Where it shows: the ＋ menu on a workspace heading lists its entries in two
+blocks, each under a small heading — **CLI** first, then **Agents**. Inside
+each block the order and the disabled set of Settings → CLI Agents apply as
+before, and a block with no enabled entry is left out with its heading.
+Terminal, Manual spawn and the cloud-agents Marketplace hint sit below both
+blocks. Every other surface (Manual spawn's dropdown, "Handle Issue As…",
+accounts, token stats) lists both kinds together.
+
+Current members: Agent = `openclaw` (OpenClaw) and `hermes` (Hermes Agent);
+every other vendor, Devin CLI included, is a CLI.
+
+What 0.2.39 wires for an Agent: launching it in a pane (the bare command; the
+TUI attaches to the agent's own runtime where it has one), the guided install
+(docs link only — both official installers pipe a script into a shell), its
+data directories, and the YOLO flag where one exists (`hermes --yolo`). Not
+wired: session resume, a turn-end signal (no transcript reader or hook, so
+busy/idle and the bare-line reply protocol are unverified), a kickoff flag
+(the role text is typed into the composer like every vendor's), and a model
+flag. Keys and account switching are left alone on purpose: an Agent's
+providers and keys live in its own home (`~/.openclaw`, `~/.hermes`), and
+Navide reads none of it, offers no account switching and fetches no usage.
+Part 2's OpenClaw and Hermes Agent record has the per-vendor detail.
+
 ---
 
 ## Part 2 — Integration records
@@ -106,7 +153,8 @@ was installed, so nothing here is a live recording.
 ### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
 
 General assistants that own their runtime and model keys, wired as ordinary
-CLI vendors: the ＋ menu's CLI list, Manual spawn and "Handle Issue As…".
+vendors of `kind: 'agent'` (see "Two kinds of vendors" in Part 1): the ＋
+menu's Agents block, Manual spawn and "Handle Issue As…".
 Read from the official docs on 2026-11-07; neither binary was installed, so
 nothing here is a live recording.
 

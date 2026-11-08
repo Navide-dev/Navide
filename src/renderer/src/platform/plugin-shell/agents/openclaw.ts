@@ -14,4 +14,5 @@ export const SPEC = {
   // no resumeArgs (sessions are Gateway keys with no reader to name them, see
   // the backend spec); bracketedPaste / fullScreenTui not measured.
   hint: 'generalist',
+  kind: 'agent',
 } as const satisfies AgentSpec

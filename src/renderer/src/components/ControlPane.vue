@@ -1473,16 +1473,16 @@ const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
 
-/** General agents with their own runtime (not coding CLIs). The ＋ menu lists
- *  them under their own "Agents" heading below the CLI block; everywhere else
- *  they stay ordinary entries of manualAgentSpecs. Both blocks keep the order
- *  and enabled set of Settings → CLI Agents, since they filter agentSpecs. */
-const AGENT_SECTION_KEYS = new Set(['openclaw', 'hermes'])
+/** The ＋ menu lists vendors of `kind: 'agent'` (long-lived agents such as
+ *  OpenClaw and Hermes Agent) under their own "Agents" heading below the CLI
+ *  block; everywhere else they stay ordinary entries of manualAgentSpecs.
+ *  Both blocks keep the order and enabled set of Settings → CLI Agents, since
+ *  they filter agentSpecs. */
 const addMenuCliSpecs = computed(() =>
-  manualAgentSpecs.value.filter((spec) => !AGENT_SECTION_KEYS.has(spec.agentKey))
+  manualAgentSpecs.value.filter((spec) => spec.kind !== 'agent')
 )
 const addMenuAgentSpecs = computed(() =>
-  manualAgentSpecs.value.filter((spec) => AGENT_SECTION_KEYS.has(spec.agentKey))
+  manualAgentSpecs.value.filter((spec) => spec.kind === 'agent')
 )
 
 // Available agent types for "Handle Issue As…" pane spawn.
@@ -2689,7 +2689,7 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 }
 // Fixed, not absolute: the pane list scrolls under `overflow-y: auto`, which
 // would clip a menu positioned inside it.
-const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
+const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
  *  510px: the rows plus the CLI and Agents headings) plus the fixed
  *  furniture around it — role picker, two dividers,
@@ -2703,14 +2703,17 @@ const ADD_MENU_MAX_H = 672
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
   if (!a) return {}
-  // Flip upwards when there is not enough room below the button.
-  const below = window.innerHeight - a.bottom
+  // Flip upwards when there is not enough room below the button. "Below"
+  // ends at the sidebar's bottom edge, not the window's: the status bar under
+  // it sits on top of the menu.
+  const below = a.floor - a.bottom
   const up = below < ADD_MENU_MAX_H && a.top > below
   // The menu is a flex column capped at the room on its side (less the 4px
-  // gap and an 8px edge margin), and only the roster scroller shrinks to fit.
-  // A fixed `45vh` cap cut the last entry off in a 900px window that had room
-  // for the whole list.
-  const maxHeight = `${Math.max(0, (up ? a.top : below) - 12)}px`
+  // gap and an 8px edge margin, and its own 5px padding and 1px border either
+  // side, which max-height does not include), and only the roster scroller
+  // shrinks to fit. A fixed `45vh` cap cut the last entry off in a 900px
+  // window that had room for the whole list.
+  const maxHeight = `${Math.max(0, (up ? a.top : below) - 24)}px`
   return up
     ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px`, maxHeight }
     : { top: `${a.bottom + 4}px`, right: `${a.right}px`, maxHeight }
@@ -2723,7 +2726,8 @@ function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
     return
   }
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
-  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right }
+  const floor = (ev.currentTarget as HTMLElement).closest('.sidebar')?.getBoundingClientRect().bottom || window.innerHeight
+  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right, floor }
   addMenuWorkspace.value = wsPath
   addMenuGroup.value = groupId
   addMenuOpen.value = true
@@ -6591,8 +6595,8 @@ button.icon-btn.muted:hover {
    * dark theme's menu was all but invisible, so a cut-off list still read as
    * complete there. */
   background:
-    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 30%, transparent) top / 100% 20px no-repeat local,
-    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 70%) bottom / 100% 20px no-repeat local,
+    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 50%, transparent) top / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 50%) bottom / 100% 20px no-repeat local,
     radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) top / 100% 10px no-repeat scroll,
     radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
 }
