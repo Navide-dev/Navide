@@ -4,7 +4,9 @@
 #               ui.status must leave "stopped" and the pane menu's Interrupt must be enabled
 #   stopuser  : qa launches a background Bash (sleep 45) and stays busy; a person's STOP (menu Interrupt); a PING is sent;
 #               when the background job ends Claude starts its own turn -> the badge clears, the PING stays queued;
-#               then a person types (space + Backspace) -> the PING goes in
+#               then a person types (space + Backspace) -> the PING goes in. qa must be idle first and the STOP waits
+#               for the background Bash to run, else the RESULT says INVALID; the own turn is a new assistant record
+#               in qa's transcript, not busy alone
 #   kick <n>  : <n> busy processes (PIDs recorded, ended by PID), the window minimized; 3x external cli_open_agent with a
 #               task -> the kickoff answer (sent / failed), attempts in the log, and what is left in each input box
 #   reclaim   : qb opens a child (as qb, through qb's pane MCP URL); while the child's 40 s turn runs, the child
@@ -15,7 +17,7 @@
 #               Run host/browser-allow.sh in the background first: the workspace's first write call asks for permission
 #   browsernoanswer : the workspace's first write call with nobody answering the permission dialog: it must end
 #               with PLUGIN_TOOL_TIMEOUT within about 30 s (run it before "browser", without browser-allow.sh)
-import json, os, re, signal, subprocess, sys, time
+import glob, json, os, pathlib, re, signal, subprocess, sys, time
 ROOTP, PH = sys.argv[1:3]; ARG = sys.argv[3] if len(sys.argv) > 3 else ""
 sys.argv = [sys.argv[0], ROOTP, "status"]
 _src = open(ROOTP + "/newtests.py", encoding="utf-8").read().split('\nif phase == "setup":')[0]
@@ -42,6 +44,21 @@ def ui(nm):
     r = ext("cli_get_status", {"target": f"wn/{nm}", "workspace_path": ws})
     u = r.get("ui") or {}
     return {"busy": r.get("busy"), "status": r.get("status"), "ui.status": u.get("status"), "stopped": u.get("stopped", r.get("stopped"))}
+def transcript():
+    """The newest Claude transcript of window "wn"'s workspace, or ""."""
+    t = sorted(glob.glob(str(pathlib.Path.home() / ".claude/projects/*wn*/*.jsonl")), key=os.path.getmtime)
+    return t[-1] if t else ""
+def assistant_since(path, off):
+    """True when `path` gained an assistant record after byte `off`."""
+    if not path: return False
+    with open(path, "rb") as f:
+        f.seek(off)
+        for line in f:
+            try:
+                if json.loads(line).get("type") == "assistant": return True
+            except ValueError:
+                pass
+    return False
 def wait_busy(nm, s=40):
     for _ in range(s):
         time.sleep(1)
@@ -70,19 +87,39 @@ if phase == "stopagent":
     RULES.unlink(); time.sleep(40); say("status end", ui(nm))
 elif phase == "stopuser":
     nm = "qa"; n = _s.token_hex(4)
+    # An earlier phase's turn still running makes this one meaningless: the STOP lands on that turn, BGTURN only
+    # queues, and "busy" afterwards is the old turn, not one Claude started (0.2.39 Linux run on 46786b8e6).
+    for _ in range(60):
+        if not ui(nm).get("busy"): break
+        time.sleep(2)
+    else:
+        say("RESULT stopuser INVALID: qa still busy from an earlier turn"); sys.exit(0)
     rules([{"match": f"BGTURN-{n}", "sleep": 0, "text": "", "bg": "sleep 45; echo bg-done"}])
-    (ROOT / "stub.log.tailsleep").write_text("300")
+    tail = ROOT / "stub.log.tailsleep"; tail.write_text("300")
     say("send BGTURN", json.dumps(ext("cli_send", {"to": f"wn/{nm}", "text": f"BGTURN-{n} run it in the background"}))[:160])
-    say("busy", wait_busy(nm)); time.sleep(8); t0 = time.time()
+    say("busy", wait_busy(nm))
+    # The stub consumes tailsleep when the background Bash's tool result reaches it: the job runs, the request is held.
+    for _ in range(40):
+        if not tail.exists(): break
+        time.sleep(1)
+    else:
+        say("RESULT stopuser INVALID: the background Bash never ran (tailsleep not consumed)")
+        RULES.unlink(missing_ok=True); tail.unlink(missing_ok=True); sys.exit(0)
+    time.sleep(3); t0 = time.time()
+    tr = transcript(); tr_off = os.path.getsize(tr) if tr else 0
     say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)$"))
     time.sleep(4); say("after STOP", ui(nm))
     p = _s.token_hex(4); r = ext("cli_send", {"to": f"wn/{nm}", "text": f"PING-{p} reply with ok"}); k = r.get("msg_key")
     say("sent PING", json.dumps(r)[:160])
+    # Claude's own turn is a new assistant record in qa's transcript after the STOP. busy alone is not one: it is
+    # also the interrupted turn still running.
     own = None
     for _ in range(40):
         time.sleep(3); u = ui(nm)
-        if u.get("busy") and own is None: own = time.time() - t0; say(f"agent's own turn at +{round(own,1)}s", u)
+        if own is None and assistant_since(tr, tr_off):
+            own = time.time() - t0; say(f"agent's own turn (assistant record) at +{round(own,1)}s", u)
         if own and not u.get("busy"): break
+    if own is None: say("no assistant record after STOP: no own turn to judge")
     time.sleep(5); u_after = ui(nm); c_after = check(k)
     say("after the agent's own turn", u_after, "PING", c_after, "menu:", menu(nm))
     hits_before, _ = stub_hits(f"PING-{p}", t0)
