@@ -49,7 +49,7 @@ export interface StageTabInput {
 const DEFAULT_GROUP_ID = 'rg-default'
 const DEFAULT_GROUP_STORED_NAME = '預設'
 
-function groupLabel(group: RunGroupLike, defaultLabel: string): string {
+export function groupLabel(group: RunGroupLike, defaultLabel: string): string {
   return group.id === DEFAULT_GROUP_ID && group.name === DEFAULT_GROUP_STORED_NAME
     ? defaultLabel
     : group.name
