@@ -152,6 +152,29 @@ describe('ControlPane – the ＋ menu', () => {
     expect(style.maxHeight).toBe(`${window.innerHeight - 120 - 24}px`)
   })
 
+  it('keeps the widened menu inside the window when the button sits near the left edge', async () => {
+    // The menu hangs leftwards from the button and is wider than the narrowest
+    // sidebar; right-aligned there, its left edge would leave the window.
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: 170, right: 190, width: 20, height: 20, x: 170, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.right).toBe(`${window.innerWidth - 320 - 8}px`)
+  })
+
+  it('stays right-aligned with the button when there is room on its left', async () => {
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    const right = 600
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: right - 20, right, width: 20, height: 20, x: right - 20, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.right).toBe(`${window.innerWidth - right}px`)
+  })
+
   it('opens with an icon rather than a text glyph', async () => {
     // It used to be the full-width character ＋. A glyph takes its weight from
     // the typeface, so it could not match the stroke icons beside it at any

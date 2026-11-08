@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildTokenGroupRows } from '../tokenGroups'
 
 const bucket = (input: number, output: number, calls: number) => ({ input, output, calls })
-const labels = { manual: 'Manual', orphan: 'Recovered' }
+const labels = { manual: 'Manual', orphan: 'Recovered', default: 'Default' }
 
 describe('buildTokenGroupRows', () => {
   it('lists one row per group in the order the sidebar gives them', () => {
@@ -49,5 +49,18 @@ describe('buildTokenGroupRows', () => {
       labels,
     )
     expect(rows.map((r) => r.key)).toEqual(['rg-1', 'manual', 'orphan'])
+  })
+
+  it('shows the default group in the UI language until it is renamed', () => {
+    // project.json stores the default group's name as the fixed string '預設'
+    // whatever the UI language was; only a rename replaces it.
+    const rows = buildTokenGroupRows(
+      [{ id: 'rg-default', name: '預設' }, { id: 'rg-default-2', name: '預設' }],
+      {},
+      labels,
+    )
+    expect(rows.map((r) => r.label)).toEqual(['Default', '預設'])
+    const renamed = buildTokenGroupRows([{ id: 'rg-default', name: 'Main' }], {}, labels)
+    expect(renamed[0].label).toBe('Main')
   })
 })

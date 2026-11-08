@@ -287,6 +287,7 @@ const groupRows = computed(() =>
   buildTokenGroupRows(props.runGroups ?? [], cumulativeByGroup.value, {
     manual: i18n.global.t('label.manual'),
     orphan: i18n.global.t('label.orphan-group'),
+    default: i18n.global.t('label.default'),
   })
 )
 

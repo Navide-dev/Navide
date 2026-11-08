@@ -1209,7 +1209,7 @@
     "new-workspace": "添加…",
     "open-home": "家目录",
     "add-to-grid": "打开 Agent",
-    "open-terminal": ">_ 打开 Terminal",
+    "open-terminal": ">_ 打开终端",
     "resume-agent": "↻ 接续",
     "resume-session": "↻ 接续 Session",
     "open-pane": "→ 跳到分格",
@@ -4359,15 +4359,15 @@
           "note": "“额度”＝ Navide 读得到剩余用量（第 6 章）。“多账号”＝ 可以在设置里挂多组登录并切换（第 5 章）。四家没有略过权限旗标的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因为它们本身就没有这个旗标，不是 Navide 没接。“登录指令”＝ 在设置 ▸ 账号按“登录”时，Navide 实际会运行的指令；标示“在 CLI 内登录”的那几家没有独立的登录指令，按下去就是照常启动该 CLI，登录在它自己的画面里完成。",
           "callout": {
             "title": "第 16 个选项不是 agent",
-            "text": "＋ 菜单最下方的 <strong>>_ 打开 Terminal</strong> 是一般 shell，不挂任何 agent，也不会注入角色。它刻意独立放在清单外，不会被 CLI 清单的卷动吃掉。"
+            "text": "＋ 菜单最下方的 <strong>>_ 打开终端</strong> 是一般 shell，不挂任何 agent，也不会注入角色。它刻意独立放在清单外，不会被 CLI 清单的卷动吃掉。"
           }
         },
         "s2": {
           "title": "安装与侦测",
           "p1": "Navide 不自己下载或安装任何 CLI，它只运行各家原厂自己的指令，而且运行前一定先把完整指令印给你看。",
           "h1": "没安装的 CLI 长什么样",
-          "p2": "＋ 菜单与“启动Agent”的 agent 下拉里，侦测不到可执行文件的那几家名称后面会多一个后缀：<code>Kimi Code（未安装）</code>。除此之外<strong>没有变灰、也没有被禁用</strong>——选项照样可以点。",
-          "p3": "侦测结果有 10 秒节流，并在这几个时机刷新：backend 连上、＋ 菜单打开、启动Agent 的 agent 下拉取得焦点。",
+          "p2": "＋ 菜单与“启动 Agent”的 agent 下拉里，侦测不到可执行文件的那几家名称后面会多一个后缀：<code>Kimi Code（未安装）</code>。除此之外<strong>没有变灰、也没有被禁用</strong>——选项照样可以点。",
+          "p3": "侦测结果有 10 秒节流，并在这几个时机刷新：backend 连上、＋ 菜单打开、启动 Agent 的 agent 下拉取得焦点。",
           "h2": "点下去会发生什么",
           "p4": "点一个标示未安装的 CLI，Navide 会先重新侦测一次（可能你刚刚在别的地方装好了）；如果确定还是缺，就不会开一个注定死掉的分格，而是直接叫出安装引导对话框。引导只在三种情形出现：分格以 exit 127 结束、后端在启动前的探测回报找不到可执行文件、或你自己从 ＋ 菜单或手动开分格选了未安装的那一家。它以前也会盖在一个其实开得起来的分格上，现在不会。",
           "h3": "安装引导对话框",
@@ -4378,7 +4378,7 @@
           },
           "dialogSources": {
             "spawn": {
-              "when": "你在 ＋ 菜单或 启动Agent 选了一个没安装的 CLI。"
+              "when": "你在 ＋ 菜单或 启动 Agent 选了一个没安装的 CLI。"
             },
             "pane": {
               "when": "分格真的开起来但 CLI 找不到——PTY 以 127 结束；或后端启动前的探测直接回报找不到可执行文件（涵盖“打开 Agent”、“↻ 接续”、问题处理流程开出的分格、pipeline 阶段）。"
@@ -4418,7 +4418,7 @@
           "p3": "<strong>流程管理窗口</strong>（菜单 窗口 ▸ 流程管理）的 <strong>角色</strong> 标签页。左边是角色清单，右边编辑四个字段。可以添加、删除、重设为默认值，以及导出／导入 JSON。",
           "note": "改了角色不会影响已经在跑的分格——编辑区底下就写着“变更仅应用于之后新启动的 agent”。设置窗口只是读取同一份角色清单，它自己没有编辑界面。",
           "h3": "开分格时怎么应用",
-          "p4": "＋ 菜单最上方与“启动Agent”对话框各有一个 <strong>选择角色…</strong> 下拉，两者共用同一个选择。“启动Agent”里还可以展开预览该角色的一行摘要与完整提示词。",
+          "p4": "＋ 菜单最上方与“启动 Agent”对话框各有一个 <strong>选择角色…</strong> 下拉，两者共用同一个选择。“启动 Agent”里还可以展开预览该角色的一行摘要与完整提示词。",
           "p5": "应用的机制很直白：<strong>把角色的系统提示词当成你自己打的字，贴进 CLI 的输入框并按 Enter</strong>。不是改参数、不是写设置档。实际贴进去的内容是角色提示词加上一段固定的待命后缀（要求 agent 回复“准备就绪，等待任务”后停下来），再加上该分格的 session 标记。",
           "p6": "分格在这个阶段的状态会显示<strong>注入角色中</strong>。注入前 Navide 会先自动关掉 CLI 的启动信任对话框（送一个 Enter），并等画面安静下来再贴。",
           "callout": {
@@ -4433,7 +4433,7 @@
           "title": "设置 ▸ CLI Agents",
           "p1": "这个标签页先是一份<strong>卡片清单</strong>，每家 CLI 一张卡。要调整某一家，点那张卡的任何地方或卡上的 <em>{manage} ›</em>，右侧会滑出那一家专属的<strong>设置抽屉</strong>。以前摊在同一页的启动覆写、权限略过、推送通道、安装与更新，现在全都在抽屉里，一次只看一家。",
           "h1": "1 · 卡片清单",
-          "p2": "清单上方是一行工具：搜索框（<code>{search}</code>，比对名称）、三颗筛选钮 <em>{all}</em>／<em>{enabled}</em>／<em>{attention}</em>，以及 <em>{redetect}</em>。底下一行写着目前显示几家、共几家、几家已激活。每张卡的底部有 <em>{enabledBox}</em> 勾选，决定这家要不要出现在 ＋ 菜单与 启动Agent 下拉里；至少要保留一家激活，所以最后一家的勾选会锁住。拖曳卡片左上角的 <code>⠿</code> 可以排序，这个顺序同时决定 <kbd class=\"cah-kbd\">Ctrl</kbd>+<kbd class=\"cah-kbd\">1</kbd>…<kbd class=\"cah-kbd\">9</kbd> 对应哪一家——但<strong>只有在筛选是“{all}”而且搜索框是空的时候才能拖</strong>，否则那一行会改成提示“{reorderFiltered}”。",
+          "p2": "清单上方是一行工具：搜索框（<code>{search}</code>，比对名称）、三颗筛选钮 <em>{all}</em>／<em>{enabled}</em>／<em>{attention}</em>，以及 <em>{redetect}</em>。底下一行写着目前显示几家、共几家、几家已激活。每张卡的底部有 <em>{enabledBox}</em> 勾选，决定这家要不要出现在 ＋ 菜单与 启动 Agent 下拉里；至少要保留一家激活，所以最后一家的勾选会锁住。拖曳卡片左上角的 <code>⠿</code> 可以排序，这个顺序同时决定 <kbd class=\"cah-kbd\">Ctrl</kbd>+<kbd class=\"cah-kbd\">1</kbd>…<kbd class=\"cah-kbd\">9</kbd> 对应哪一家——但<strong>只有在筛选是“{all}”而且搜索框是空的时候才能拖</strong>，否则那一行会改成提示“{reorderFiltered}”。",
           "attention": "卡片名称旁出现 <strong>!</strong> 就代表“{attention}”，判准有四个，任一成立就算：没安装、版本过旧、侦测到未登录，或环境检查对这家 CLI 有发现。“{attention}”筛选列出的就是这些卡。",
           "h2": "3 · 启动覆写",
           "p3": "多数 CLI 有一个“略过权限提示”的旗标，让 agent 无人值守地跑下去。这里是两层设置：",
@@ -4446,7 +4446,7 @@
             "title": "改了不会影响正在跑的分格",
             "text": "旗标是在分格<strong>启动的那一刻</strong>就写进它的命令行的。这里的变更只影响之后开的分格；已经在跑的会保留它启动时的设置，直到你重建或还原它。"
           },
-          "h3": "延伸：“启动Agent”对话框的模型与推理强度",
+          "h3": "延伸：“启动 Agent”对话框的模型与推理强度",
           "p5": "四家 CLI（Claude Code、Kilo Code、OpenCode、Qwen Code）可以直接收下消息，不必把字打进输入框。逐家开关，在那一家的抽屉里，旁边写着那家的代价（开一个没有密码的本机端口、开一个带每个分格各自的密码的本机端口、写明文的暂存盘、装一个背景 hook）。其他 CLI 的抽屉这一段只有一行说明：没有声明推送通道，消息会通过一般终端输入送达。改一次，所有已经开着的窗口会同步，不必重开设置。细节见“CLI 互传消息”与“MCP”标签页。",
           "h4": "4 · 权限略过",
           "p6": "抽屉最后一段只列这一家：状态徽章（已安装／未安装／版本过旧）、版本号、安装来源（npm / Homebrew / 官方安装程序 / 官方安装脚本）、可执行文件完整路径，以及上一次更新的结果（成功或失败、时间、版本从哪里到哪里）。可用的动作：",
@@ -4556,7 +4556,7 @@
           "launchReject": "同时指定模型会被<strong>硬拒绝</strong>，而不是悄悄忽略。由 agent 通过 MCP 开分格时，只要那家 CLI 设了自订启动指令又带了 model 或 effort，整个请求会被挡下并说明原因（<strong>resume 是例外</strong>——它的指令是依厂商语法重组的，本来就不读这个设置）。理由是：模型悄悄落回默认值时，开出来的分格和拿到指定模型的分格长得一模一样。",
           "launchEnv": "环境变量这一栏有一份 Navide 自己管的<strong>保留名单</strong>（区块底下会逐字列出目前的完整清单，以那一份为准）。保留变量<strong>不是不准填</strong>：你照样存得起来，行上只会多一个红色的“不会传进去”——哪天 Navide 不再管那个变量，它就会开始生效。真正被丢掉是在开分格的时候，而且会在你按下打开的那个窗口跳一则提示。提示分两种：<strong>被挡下</strong>（值从来没进到分格的环境里）与<strong>被盖掉</strong>（进去了，但后面被 Navide 自己的设置改写或删掉——看起来像应用了，其实没有）。两种都不会阻止分格开起来。",
           "launchEnvNote": "保留名单是全域的，不分厂商——在 Claude Code 那一行填 <code>CODEX_HOME</code> 一样会被挡。它会随着 Navide 自己管的东西增减，所以不要背数字，看区块底下那一份。",
-          "spawnIntro": "“启动Agent”对话框多了 <strong>模型</strong> 与 <strong>推理强度</strong> 两栏，默认值就是该 CLI 在启动覆写设的那一组（每次打开对话框重读一次，不吃缓存）。模型是自由输入，推理强度是下拉、选项来自那家 CLI 自己列出的强度。两栏出现与否<strong>不是硬编的名单</strong>，而是看厂商 spec 有没有声明对应的启动参数：",
+          "spawnIntro": "“启动 Agent”对话框多了 <strong>模型</strong> 与 <strong>推理强度</strong> 两栏，默认值就是该 CLI 在启动覆写设的那一组（每次打开对话框重读一次，不吃缓存）。模型是自由输入，推理强度是下拉、选项来自那家 CLI 自己列出的强度。两栏出现与否<strong>不是硬编的名单</strong>，而是看厂商 spec 有没有声明对应的启动参数：",
           "spawnTable": {
             "group": "出现哪几栏",
             "vendors": "哪几家"
@@ -5265,9 +5265,9 @@
           "addMenu": {
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
             "cliList": "中间是 CLI 清单，没安装的会标示出来。",
-            "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动Agent…</strong>。"
+            "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。"
           },
-          "p2": "<em>启动Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
+          "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
           "table": {
             "action": "操作",
             "how": "做法"
@@ -5897,7 +5897,7 @@
             "openAgent": {
               "name": "<code>打开 Agent</code>（后面接目前选定的 CLI 名称）",
               "where": "工作区行最右",
-              "what": "开新分格的主入口。按下去弹出 角色 下拉＋CLI 清单＋Terminal／启动Agent。工作区路径还没设置时会变成 <code>请先设置工作区路径</code> 且不可按。"
+              "what": "开新分格的主入口。按下去弹出 角色 下拉＋CLI 清单＋Terminal／启动 Agent。工作区路径还没设置时会变成 <code>请先设置工作区路径</code> 且不可按。"
             },
             "newGroup": {
               "where": "侧栏最左缘色轨的飞出菜单",
@@ -8298,7 +8298,7 @@
         "workbench_action_saveAll": "全部存盘",
         "workbench_action_selectTheme": "选择布景主题",
         "workbench_action_showCommands": "打开命令面板",
-        "workbench_action_spawnAgent": "开新 agent",
+        "workbench_action_spawnAgent": "开新 Agent",
         "workbench_action_splitEditor": "分割编辑器",
         "workbench_action_toggleAIChat": "开关 AI 终端面板",
         "workbench_action_toggleSidebar": "开关侧边栏",
@@ -8752,7 +8752,7 @@
     "descendant-count": "{count} 个子代",
     "no-agents-running": "没有运行中的 Agent。",
     "no-agents-yet": "尚无 agent — 添加一个开始",
-    "manual-spawn": "启动Agent",
+    "manual-spawn": "启动 Agent",
     "run-group-empty": "未打开 — 这个分组的分格都还没还原",
     "run-group-idle": "闲置 — agent 已打开，但都没在跑",
     "run-group-active": "运行中 — 这个分组有 agent 正在跑",

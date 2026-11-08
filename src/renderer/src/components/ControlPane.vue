@@ -2699,10 +2699,21 @@ const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: n
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
 const ADD_MENU_MAX_H = 672
+/** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
+ *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
+ *  ~276px of bold system-font text plus 36px of check mark and padding); at
+ *  200px eight English rows lost their suffix. Used to keep the menu's left
+ *  edge inside the window: the menu hangs leftwards from the button, and the
+ *  narrowest sidebar (200px) is narrower than the menu. */
+const ADD_MENU_W = 320
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
   if (!a) return {}
+  // Right-aligned with the button, unless that would push the left edge past
+  // an 8px margin; then it slides right just enough. A window narrower than
+  // the menu is handled by the CSS max-width (and v-truncate on the rows).
+  const right = `${Math.max(8, Math.min(a.right, window.innerWidth - ADD_MENU_W - 8))}px`
   // Flip upwards when there is not enough room below the button. "Below"
   // ends at the sidebar's bottom edge, not the window's: the status bar under
   // it sits on top of the menu.
@@ -2715,8 +2726,8 @@ const addMenuStyle = computed(() => {
   // window that had room for the whole list.
   const maxHeight = `${Math.max(0, (up ? a.top : below) - 24)}px`
   return up
-    ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px`, maxHeight }
-    : { top: `${a.bottom + 4}px`, right: `${a.right}px`, maxHeight }
+    ? { bottom: `${window.innerHeight - a.top + 4}px`, right, maxHeight }
+    : { top: `${a.bottom + 4}px`, right, maxHeight }
 })
 
 function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
@@ -4477,7 +4488,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <button class="spawn-modal-close" :aria-label="$t('action.close')" @click="manualSpawnOpen = false">✕</button>
         </div>
         <div class="spawn-card-body">
-          <div class="row two-col">
+          <!-- One control per line: side by side, each select got ~145px and
+               "Claude Code (Anthropic)" was cut to "Claude Code (Anth". -->
+          <div class="row spawn-pick-row">
             <select v-model="modalAgent" @focus="refreshCliStatus">
               <option v-for="spec in manualAgentSpecs" :key="spec.agentKey" :value="spec.agentKey">
                 {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
@@ -5098,6 +5111,11 @@ textarea.drag-over {
 .row.two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.row.spawn-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .row.between {
@@ -6550,8 +6568,9 @@ button.icon-btn.muted:hover {
 .ws-add-menu {
   position: fixed;
   z-index: 60;
-  width: 200px;
-  max-width: calc(100vw - 24px);
+  /* ADD_MENU_W in the script tracks this. */
+  width: 320px;
+  max-width: calc(100vw - 16px);
   padding: 5px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -7466,8 +7485,10 @@ button.icon-btn.muted:hover {
   -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
 }
 .spawn-card--modal {
-  /* Keeps its own 320px: it is a compact spawn card, not a dialog tier. */
-  width: min(320px, 92vw);
+  /* Keeps its own compact width: it is a spawn card, not a dialog tier.
+   * 360px leaves the agent select room for the longest
+   * "<label> — not installed" entry. */
+  width: min(360px, 92vw);
   max-width: 100%;
   max-height: calc(100vh - 48px);
   overflow-y: auto;
