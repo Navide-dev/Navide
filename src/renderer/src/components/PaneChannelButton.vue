@@ -641,7 +641,7 @@ function openSettings(): void {
 .pch-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pch-chip-x { font: inherit; line-height: 1; color: inherit; background: transparent; border: none; padding: 0 3px; cursor: pointer; opacity: 0.8; }
 .pch-chip-x:hover { opacity: 1; }
-.pch-pop { position: fixed; z-index: 300; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; display: flex; flex-direction: column; gap: 4px; background: var(--bg-overlay); border: 1px solid var(--border-default); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); font-size: var(--font-2xs); color: var(--text-secondary); }
+.pch-pop { position: fixed; z-index: 300; box-sizing: border-box; width: 300px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; display: flex; flex-direction: column; gap: 4px; background: var(--bg-overlay); border: 1px solid var(--border-default); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); font-family: var(--font-ui); font-size: var(--font-2xs); color: var(--text-secondary); }
 .pch-pop-head { font-weight: 600; color: var(--text-bright); margin-bottom: 2px; }
 .pch-sub { color: var(--text-secondary); }
 .pch-note { margin: 0; font-size: var(--font-3xs); }
