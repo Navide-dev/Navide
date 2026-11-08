@@ -13741,7 +13741,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
   if (toRestore.length < beforeDedupe) {
     pipelineLog(`↩ Skipped ${beforeDedupe - toRestore.length} duplicate resume record(s)`)
   }
-  if (toRestore.length > 0) pipelineLog(`↩ Restoring ${toRestore.length} pane(s)`)
+  if (toRestore.length > 0) pipelineLog(`↩ ${i18n.global.t('label.pipeline-log-restoring-panes', { n: toRestore.length })}`)
   // Guarded like its sibling in onWorkspaceCheck. The gate above used to make
   // this unreachable while a run was live; now a restore for ANOTHER workspace
   // gets here, and overwriting the path would point the run at the wrong
@@ -21802,6 +21802,7 @@ const stageTabShapes = computed<StageTabShape[]>(() =>
     // existed all along.
     manualLabel: i18n.global.t('label.manual'),
     orphanLabel: i18n.global.t('label.orphan-group'),
+    defaultLabel: i18n.global.t('label.default'),
   })
 )
 

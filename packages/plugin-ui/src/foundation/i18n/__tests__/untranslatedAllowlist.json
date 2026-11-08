@@ -45,6 +45,7 @@
     "label.pipelines",
     "label.review-general-finding",
     "label.stashes",
+    "label.terminal",
     "label.total",
     "label.worktrees",
     "pane.plans.format-html",
@@ -430,7 +431,8 @@
     "webhooks.nav",
     "webhooks.reveal.secret",
     "webhooks.form.fieldType",
-    "webhooks.fieldType.date"
+    "webhooks.fieldType.date",
+    "label.terminal"
   ],
   "de-DE": [
     "account.title",
@@ -611,7 +613,8 @@
     "webhooks.kind.webhook",
     "webhooks.nav",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.text"
+    "webhooks.fieldType.text",
+    "label.terminal"
   ],
   "pt-BR": [
     "account.title",
@@ -661,6 +664,7 @@
     "label.stashes",
     "label.status",
     "label.tags",
+    "label.terminal",
     "label.total",
     "label.workspace",
     "label.worktrees",
@@ -1060,7 +1064,8 @@
     "webhooks.kind.webhook",
     "webhooks.outcome.ping",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.email"
+    "webhooks.fieldType.email",
+    "label.terminal"
   ],
   "ja-JP": [
     "webhooks.form.pipeline",

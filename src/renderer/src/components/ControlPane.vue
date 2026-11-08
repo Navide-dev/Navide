@@ -4425,7 +4425,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           v-if="terminalSpec"
           class="ws-add-opt ws-add-more ws-add-term"
           @click="openTerminalFromMenu"
-        >{{ terminalSpec.label }}</button>
+        >{{ $t('label.terminal') }}</button>
         <button class="ws-add-opt ws-add-more ws-add-card" @click="openSpawnCardFromMenu">
           {{ $t('label.manual-spawn') }}…
         </button>

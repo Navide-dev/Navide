@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "Totalmente automático: avanço forçado em 5 s…",
     "pipeline-starting": "Iniciando o pipeline…",
     "pipeline-log-session-bound": "session vinculada",
+    "pipeline-log-restoring-panes": "Restaurando panes ({n})",
+    "terminal": "Terminal",
     "pipeline-log-answer-manually": "responda manualmente",
     "pipeline-log-manager-ready": "assumindo (processando {count} mensagem) | assumindo (processando {count} mensagens)",
     "pipeline-log-slot-not-found": "nenhuma posição “{slot}”",

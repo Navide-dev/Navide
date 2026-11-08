@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "Полностью автоматически: принудительный переход через 5 с…",
     "pipeline-starting": "Запуск pipeline…",
     "pipeline-log-session-bound": "сеанс привязан",
+    "pipeline-log-restoring-panes": "Восстановление панелей: {n}",
+    "terminal": "Терминал",
     "pipeline-log-answer-manually": "ответьте вручную",
     "pipeline-log-manager-ready": "берёт управление (обрабатывается {count} сообщение) | берёт управление (обрабатывается {count} сообщения) | берёт управление (обрабатывается {count} сообщений)",
     "pipeline-log-slot-not-found": "нет слота «{slot}»",

@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "Vollautomatisch: erzwungenes Weiterschalten in 5 s …",
     "pipeline-starting": "Pipeline wird gestartet …",
     "pipeline-log-session-bound": "Session gebunden",
+    "pipeline-log-restoring-panes": "{n} Bereich(e) werden wiederhergestellt",
+    "terminal": "Terminal",
     "pipeline-log-answer-manually": "manuell beantworten",
     "pipeline-log-manager-ready": "übernimmt ({count} Nachricht wird abgearbeitet) | übernimmt ({count} Nachrichten werden abgearbeitet)",
     "pipeline-log-slot-not-found": "kein Platz „{slot}“",
