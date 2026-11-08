@@ -231,6 +231,8 @@ watch(() => props.active, async (key) => {
 .ch-nav-group:first-child { padding-top: 6px; }
 .ch-nav-item {
   display: flex;
+  /* The list scrolls; a row squeezed below its content would overlap the next. */
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   width: 100%;
