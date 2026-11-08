@@ -24,19 +24,26 @@ function releasedFixture() {
   const root = mkdtempSync(join(tmpdir(), 'navide-plugin-fingerprints-'))
   roots.push(root)
   git(root, 'init', '-q')
-  const file = (path: string, content: string) => {
+  const write = (path: string, content: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), content)
+  }
+  const file = (path: string, content: string) => {
+    write(path, content)
     git(root, 'add', '--', path)
   }
-  const setVersion = (pluginId: string, version: string) =>
-    file(`${OFFICIAL_PLUGIN_SOURCES[pluginId].directory}/manifest.json`, JSON.stringify({ id: pluginId, version }))
+  const manifest = (pluginId: string, version: string) =>
+    [`${OFFICIAL_PLUGIN_SOURCES[pluginId].directory}/manifest.json`, JSON.stringify({ id: pluginId, version })] as const
+  const setVersion = (pluginId: string, version: string) => file(...manifest(pluginId, version))
+  // The baseline is staged with one `git add`: a spawn per file made this
+  // fixture slow enough on a loaded Windows runner to hit the 5 s test timeout.
   for (const [pluginId, source] of Object.entries(OFFICIAL_PLUGIN_SOURCES)) {
-    setVersion(pluginId, '1.0.0')
-    file(`${source.directory}/src/index.ts`, 'export {}')
-    for (const extra of source.extra) file(extra, '# shared')
+    write(...manifest(pluginId, '1.0.0'))
+    write(`${source.directory}/src/index.ts`, 'export {}')
+    for (const extra of source.extra) write(extra, '# shared')
   }
-  file('packages/plugin-ui/src/index.ts', 'export {}')
+  write('packages/plugin-ui/src/index.ts', 'export {}')
+  git(root, 'add', '-A')
   const record = {
     baseline: 'v1.0.0',
     plugins: Object.fromEntries(Object.keys(OFFICIAL_PLUGIN_SOURCES).map((pluginId) =>
