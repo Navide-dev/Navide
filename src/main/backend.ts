@@ -13,6 +13,7 @@ import {
   needsLoginShellPath,
 } from '../shared/osplat'
 import { registerPendingBackend, releasePendingBackend } from './backend-pending'
+import { persistentBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
 import { defaultHealthCheckTimeoutSec } from './health-timeout'
 import { killProcessTree } from './process-tree'
 import {
@@ -433,6 +434,17 @@ export async function startBackend(
       'bin',
       isWindows() ? 'agent_team_backend.exe' : 'agent_team_backend'
     )
+    // The onefile backend unpacks into, and keeps reading from, its temp
+    // directory; the OS temp cleaner removed parts of it under a running
+    // backend (see backend-tmpdir.ts). Give it one under the data dir instead.
+    // TMPDIR is what POSIX and the Python tempfile module read, TMP/TEMP what
+    // Windows (GetTempPath) does; the two unused ones are harmless.
+    const tmpDir = prepareBackendTmpDir(persistentBackendTmpDir(backendDataDir(env)))
+    if (tmpDir) {
+      env.TMPDIR = tmpDir
+      env.TMP = tmpDir
+      env.TEMP = tmpDir
+    }
     proc = spawn(binaryPath, ['--port', String(port), '--log-level', 'info'], {
       env,
       // stdin hands over the trust-confirmation key and the host token and is
