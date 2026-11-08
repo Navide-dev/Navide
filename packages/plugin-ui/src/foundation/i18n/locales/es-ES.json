@@ -8759,6 +8759,8 @@
     "run-group-awaiting": "Te necesita: un agent de este grupo está bloqueado por un permiso o una pregunta",
     "agent-not-installed": "{label}: no instalado",
     "cloud-agents-plugin-hint": "Los agentes en la nube (Grok Bot, dots y otros) se instalan como complemento de Navide desde Navide Marketplace.",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "Agents",
     "select-role": "Seleccionar rol…",
     "waiting-backend": "Esperando al backend…",
     "set-workspace-first": "Define primero la ruta del área de trabajo",
