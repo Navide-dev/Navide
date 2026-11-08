@@ -101,7 +101,7 @@ async function runSiteWhereTheRunFailsMidInjection(site: string) {
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
     'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'kickoffCopyInBox', 'paneParkedOnPrompt',
-    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'runEnding', 'runPaneSentAt', code,
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'runEnding', 'runPaneSentAt', 'kickoffPacing', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff', origin: 'pipeline' }, { id: 'stage' },
@@ -109,6 +109,7 @@ async function runSiteWhereTheRunFailsMidInjection(site: string) {
     // An empty box: retries type again, as before.
     () => ({ holds: () => false, submit: async () => false }), () => false,
     () => pipeline.state === 'running' && pipeline.stageIndex === 0, pipeline, false, 0, () => {}, () => false, new Map(),
+    () => ({}),
   ) as () => ReturnType<typeof runPipelineKickoff>
   return { result: await run(), injectPane, sleep }
 }

@@ -28,7 +28,7 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
     'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'kickoffCopyInBox', 'paneParkedOnPrompt',
-    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', 'runPaneSentAt', code,
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', 'runPaneSentAt', 'kickoffPacing', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
@@ -37,6 +37,8 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
     () => ({ holds: () => false, submit: async () => false }), () => false,
     // The run is running: both sites check it before each attempt.
     () => true, { state: 'running' }, false, 0, () => {}, () => {}, new Map(),
+    // No pacing: the attempts stop at MAX_KICKOFF_ATTEMPTS, as before.
+    () => ({}),
   ) as () => ReturnType<typeof runPipelineKickoff>
   const result = await run()
   return { result, injectPane, sleep }

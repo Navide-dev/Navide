@@ -3713,6 +3713,30 @@ async function waitForPromptReady(paneId: string, timeoutMs: number): Promise<bo
   return false
 }
 
+/** runPipelineKickoff's pacing for a pipeline pane: cli_open_agent's
+ *  prompt-ready gate before every attempt, and the clock for its retry
+ *  budget. A pane that already reads idle with nothing painted for
+ *  PROMPT_READY_QUIET_MS is typed into at once; the gate's own quiet window
+ *  only starts when it is called. Without the gate a Windows host with every
+ *  core busy had all three attempts typed into a CLI not yet reading, while
+ *  cli_open_agent's kickoffs under the same load went out (0.2.39 VM). */
+function kickoffPacing(paneId: string): { awaitReady: (timeoutMs: number) => Promise<unknown>; now: () => number } {
+  return {
+    awaitReady: async (timeoutMs) => {
+      const ref = paneRefs[paneId]
+      const quietMs = Date.now() - Number((ref?.lastRawActivityAt as unknown as number | undefined) ?? 0)
+      if (promptReadyNow({
+        status: ref?.displayStatus as string | undefined,
+        cleanBytes: paneCleanBytes(paneId),
+        quietMs,
+        quietNeededMs: PROMPT_READY_QUIET_MS,
+      })) return true
+      return waitForPromptReady(paneId, timeoutMs)
+    },
+    now: Date.now,
+  }
+}
+
 /** Wait for a freshly created pane's CLI to reach its prompt, then inject its
  *  task. Slow by nature: a cold CLI can take tens of seconds to print its
  *  first byte.
@@ -7743,11 +7767,12 @@ function scheduleInjection(pane: ActivePane): void {
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
-        onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}; ${MAX_KICKOFF_ATTEMPTS} or more while the retry budget lasts) — retrying in 3s, once the pane reads ready`),
         copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
+        ...kickoffPacing(pane.id),
       })
       if (kickoffResult.stopped) {
         pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
@@ -7766,7 +7791,7 @@ function scheduleInjection(pane: ActivePane): void {
       if (!ok2) {
         pipelineLog(parked
           ? `${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`
-          : `${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+          : `${tag} ✕ kickoff injection failed after ${kickoffAttempt} attempts`)
         // A pipeline slot without its task cannot finish its stage (#448).
         if (stageIndexForPane >= 0) {
           if (held) heldKickoffPanes.add(pane.id)
@@ -7777,7 +7802,7 @@ function scheduleInjection(pane: ActivePane): void {
               ? PARKED_ON_PROMPT_REASON
               : held
               ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
-              : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+              : `kickoff never reached the agent after ${kickoffAttempt} attempts`,
             held,
             false,
             parked,
@@ -15601,12 +15626,13 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
         watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
       },
-      onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+      onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}; ${MAX_KICKOFF_ATTEMPTS} or more while the retry budget lasts) — retrying in 3s, once the pane reads ready`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff, slotStillWanted),
       copyInBox: kickoffCopyInBox(pane.id, kickoff, slotStillWanted),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
+      ...kickoffPacing(pane.id),
     })
     if (kickoffResult.stopped) {
       pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff was not submitted`)
@@ -15623,7 +15649,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       ? PARKED_ON_PROMPT_REASON
       : held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
-      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+      : `kickoff never reached the agent after ${kickoffAttempt} attempts`
     if (!ok) markRunEnding(index, slot.label, parked)
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
@@ -15670,7 +15696,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       kickoff_status: ok ? 'sent' : 'failed',
     })
     if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
-    else if (!parked) pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+    else if (!parked) pipelineLog(`${tag} ✕ kickoff injection failed after ${kickoffAttempt} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.

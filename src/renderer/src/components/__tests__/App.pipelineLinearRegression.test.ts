@@ -143,6 +143,8 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     failRunOnKickoff: async () => {},
     runEndingSlots: new Set<string>(),
     runPaneSentAt: new Map<string, number>(),
+    // No pacing: the trace is the pre-gate one.
+    kickoffPacing: () => ({}),
     runEnding: () => false,
     markRunEnding: () => {},
     // No pane in these traces sits on a CLI prompt.
