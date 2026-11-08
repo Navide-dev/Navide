@@ -53,6 +53,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Fixed
 
+- Pipelines (0.2.39): a stage whose agent finished its turn almost immediately no longer leaves the run stuck in `running`, which made the next webhook trigger get a 409. When the conversation log reported that turn after the Stop hook had already ended it, its late records outranked the turn end and the stage never finished. The stage now also finishes once a turn has ended since its kickoff and the pane has been idle for 30 seconds.
 - Backend (0.2.39): on Linux the backend no longer shuts itself down within seconds of starting when the system clock is corrected (after a VM is restored, an NTP step, or waking from sleep), which dropped every connected client. It took the shifted start time `ps` reports for the app as the app being replaced; it now identifies the app by its start time in `/proc`, which a clock change does not move. macOS is unchanged.
 - MCP (0.2.39): Navide's MCP server now reports its own version on every session. Before, it read the version from the bundled `mcp` package metadata, and once macOS had purged that file from the backend's temp extraction directory (three idle days) every new MCP session failed to initialize until Navide was restarted.
 - Backend (0.2.39): the packaged backend now marks its own unpacked files as in use twice a day, so the operating system's temp-folder cleanup (macOS after three idle days, Linux after ten) no longer removes parts of a Navide that has been running for days.

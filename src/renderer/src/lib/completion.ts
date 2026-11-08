@@ -195,6 +195,48 @@ export function loopContinueReady(s: TurnCompleteState): boolean {
   return turnCompleteDone(s) && s.lastActiveAt > s.armedAt
 }
 
+/** How long a pane must have been quiet, badge idle, before the stage
+ *  watcher's fallback accepts a turn end that a later activity record
+ *  overtook. Far longer than any gap between two records of one live turn. */
+export const TURN_END_QUIET_FALLBACK_MS = 30_000
+
+export interface QuietTurnEndState {
+  /** Receipt times of the pane's recent turn ends (recordTurnComplete's
+   *  `timesMap`), oldest first. */
+  turnEndTimes: readonly number[]
+  lastActiveAt: number
+  armedAt: number
+  now: number
+  /** The pane's badge reads RUNNING. */
+  running: boolean
+  quietMs: number
+  quotaBlocked?: boolean
+  quotaSeenAt?: number
+  turnSourceAt?: number
+  backgroundRunning?: boolean
+}
+
+/** The stage watcher's fallback when turnCompleteDone stays false: a turn
+ *  ended after the watcher armed, and the pane has been idle since — badge not
+ *  RUNNING, no activity and no turn end for quietMs.
+ *
+ *  turnCompleteDone needs the turn end to be the LATEST signal, and nothing
+ *  re-sends one. A zero-second turn breaks that: the Stop hook's turn end lands
+ *  first, then the conversation-log reader's records of the same turn — its
+ *  user record arrives as an agent_active stamped with the receive time, and its
+ *  turn end, more than the replay tolerance late on a loaded machine, is dropped
+ *  as a replay. The agent_active then outranks the only turn end recorded, and
+ *  the run stays `running` with a finished agent. */
+export function quietTurnEndDone(s: QuietTurnEndState): boolean {
+  if (s.quotaBlocked === true) return false
+  if (s.backgroundRunning === true) return false
+  if (s.running) return false
+  if (!quotaTurnIsFresh(s.quotaSeenAt, s.turnSourceAt)) return false
+  const lastEnd = s.turnEndTimes.length ? s.turnEndTimes[s.turnEndTimes.length - 1] : 0
+  if (lastEnd <= s.armedAt) return false
+  return s.now - Math.max(lastEnd, s.lastActiveAt) >= s.quietMs
+}
+
 /** Settle window for the loop's continue verdict on a pane whose turn end is
  *  INFERRED from silence — grok / kimi / pi / qwen, whose readers synthesize
  *  turn_complete once the log has been quiet for 8 seconds (their
