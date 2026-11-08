@@ -20,6 +20,7 @@ import {
 } from './backend'
 import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
+import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
 import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
@@ -1203,8 +1204,14 @@ async function preflightCandidateBackend(
     approvedEvents: [],
     approvedBridgePorts: [],
   }
+  // Same temp directory as the plugin's views get, never swept here: those
+  // views may be running while a new version is checked.
+  const tmpDir = app.isPackaged ? pluginBackendTmpDir(backendDataDir(process.env), launch.pluginId) : null
+  const preparedTmpDir = tmpDir ? prepareBackendTmpDir(tmpDir, false) : null
   const supervisor = new PluginBackendSupervisor(launch, {
-    environment: createPluginBackendChildEnvironment(),
+    environment: preparedTmpDir
+      ? { ...createPluginBackendChildEnvironment(), TMPDIR: preparedTmpDir, TMP: preparedTmpDir, TEMP: preparedTmpDir }
+      : createPluginBackendChildEnvironment(),
     beforeSpawn: () => verifyCurrentInstalledBackendTrust(launch),
   })
   try {
@@ -1290,6 +1297,13 @@ frontendPluginManager.setAppQuittingProbe(() => dockQuitInProgress || quittingWi
 frontendPluginManager.setCapabilityGrantResolver((pluginId, packageVersion) =>
   pluginCapabilityGrants.get(pluginId, packageVersion)
 )
+// Packaged plugin backends are onefile binaries that unpack into their temp
+// directory; keep them out of the OS temp sweep, as the core backend is.
+if (app.isPackaged) {
+  frontendPluginManager.setPluginBackendTmpDir((pluginId) =>
+    pluginBackendTmpDir(backendDataDir(process.env), pluginId)
+  )
+}
 frontendPluginManager.setBackendSpawnTrustVerifier((activation) => {
   try {
     verifyCurrentInstalledBackendTrust(activation)
