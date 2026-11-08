@@ -27,8 +27,12 @@ class H(BaseHTTPRequestHandler):
         tool = has_tools and not done and not __import__("os").path.exists(LOG + ".notool")
         rule_text = None; bg = None
         # rule "bg": answer with a Bash call that runs in the background; when it finishes Claude starts a turn of its own
-        # stub.log.tailsleep (seconds): the next request that carries a tool result waits that long (one shot)
-        if has_tools and done and os_.path.exists(LOG + ".tailsleep"):
+        # stub.log.tailsleep (seconds): the next request whose LAST message carries a tool result waits that long (one
+        # shot). Not "done": that is true for any request of a session with an earlier tool call, so a new prompt to a
+        # pane that already ran Bash once would be held before its background Bash ever ran.
+        lm = msgs[-1].get("content") if msgs else None
+        last_tr = isinstance(lm, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in lm)
+        if has_tools and last_tr and os_.path.exists(LOG + ".tailsleep"):
             sl = int(open(LOG + ".tailsleep").read() or 0); os_.remove(LOG + ".tailsleep"); __import__("time").sleep(sl)
         if has_tools and msgs and os_.path.exists(LOG + ".rules.json"):
             lu = next((m for m in reversed(msgs) if m.get("role") == "user"), msgs[-1]); lc = lu.get("content")
