@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Open the Developer Mode section of Settings",
+      "ui_plugins_openInstallFromFile": "Open the install-from-file section of Settings",
+      "ui_plugins_openMarketplace": "Open the Navide Marketplace, or one Navide plugin's page",
+      "ui_settings_open": "Open Settings, optionally to a specific tab",
+      "ui_window_openGit": "Open the Git window for the current workspace",
+      "ui_window_openPipeline": "Open the Pipeline Manager window",
+      "ui_window_openPlans": "Open the Plan window, optionally on one document",
+      "ui_window_openResourceManager": "Open the Resource Manager",
+      "ui_window_openTurnStats": "Open Turn Stats"
+    },
     "add-step": "Add step",
     "confirm-title": "Run this button?",
     "confirm-message": "This will run: {actions}. It closes or resets something and can't be undone.",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI quota badge",
     "settings-enabled": "Show remaining quota in CLI pane headers",
     "settings-refresh": "Refresh interval",
+    "settings-refresh-minutes": "{n} min",
     "settings-hint": "Shows quota for 11 CLI providers, read-only, from each provider’s usage API (for Claude, from its built-in /usage panel).",
     "failover-title": "Account switch when quota runs out",
     "failover-hint": "What Navide does when a CLI account runs out of quota: nothing, list accounts to switch to (default), or switch automatically, at most 3 times per 5 hours per CLI.",

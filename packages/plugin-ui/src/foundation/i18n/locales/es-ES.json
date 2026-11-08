@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Abrir la sección Modo de desarrollador de los ajustes",
+      "ui_plugins_openInstallFromFile": "Abrir la sección Instalar desde archivo de los ajustes",
+      "ui_plugins_openMarketplace": "Abrir Navide Marketplace o la página de un plugin de Navide",
+      "ui_settings_open": "Abrir los ajustes, opcionalmente en una pestaña concreta",
+      "ui_window_openGit": "Abrir la ventana de Git del área de trabajo actual",
+      "ui_window_openPipeline": "Abrir la ventana de Pipeline Manager",
+      "ui_window_openPlans": "Abrir la ventana de Plans, opcionalmente en un documento",
+      "ui_window_openResourceManager": "Abrir el Administrador de recursos",
+      "ui_window_openTurnStats": "Abrir Turn Stats"
+    },
     "add-step": "Añadir paso",
     "confirm-title": "¿Ejecutar este botón?",
     "confirm-message": "Se ejecutará: {actions}. Cierra o restablece algo y no se puede deshacer.",
@@ -10236,6 +10247,7 @@
     "settings-title": "Insignia de cuota de las CLI",
     "settings-enabled": "Mostrar la cuota restante en la cabecera de los panes de CLI",
     "settings-refresh": "Intervalo de actualización",
+    "settings-refresh-minutes": "{n} min",
     "settings-hint": "Muestra la cuota de 11 proveedores de CLI, solo lectura, desde la API de uso de cada proveedor (en Claude, desde su panel /usage integrado).",
     "failover-title": "Cambio de cuenta cuando se agota la cuota",
     "failover-hint": "Qué hace Navide cuando una cuenta de CLI agota su cuota: nada, mostrar las cuentas a las que cambiar (predeterminado) o cambiar automáticamente, como máximo 3 veces cada 5 horas por CLI.",

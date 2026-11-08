@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Открыть раздел «Режим разработчика» в настройках",
+      "ui_plugins_openInstallFromFile": "Открыть раздел «Установить из файла» в настройках",
+      "ui_plugins_openMarketplace": "Открыть Navide Marketplace или страницу плагина Navide",
+      "ui_settings_open": "Открыть настройки, при необходимости на нужной вкладке",
+      "ui_window_openGit": "Открыть окно Git текущей рабочей области",
+      "ui_window_openPipeline": "Открыть окно Pipeline Manager",
+      "ui_window_openPlans": "Открыть окно Plans, при необходимости с одним документом",
+      "ui_window_openResourceManager": "Открыть диспетчер ресурсов",
+      "ui_window_openTurnStats": "Открыть Turn Stats"
+    },
     "add-step": "Добавить шаг",
     "confirm-title": "Выполнить эту кнопку?",
     "confirm-message": "Будет выполнено: {actions}. Это закроет или сбросит что-то, отменить нельзя.",
@@ -10236,6 +10247,7 @@
     "settings-title": "Значок квоты CLI",
     "settings-enabled": "Показывать оставшуюся квоту в заголовках панелей CLI",
     "settings-refresh": "Интервал обновления",
+    "settings-refresh-minutes": "{n} мин",
     "settings-hint": "Показывает квоту 11 поставщиков CLI, только чтение, из API использования каждого поставщика (для Claude — из встроенной панели /usage).",
     "failover-title": "Смена аккаунта при исчерпании квоты",
     "failover-hint": "Что делает Navide, когда у аккаунта CLI заканчивается квота: ничего, показывает аккаунты для переключения (по умолчанию) или переключает автоматически, не более 3 раз за 5 часов на каждый CLI.",

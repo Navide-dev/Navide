@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "打开设置的“开发者模式”部分",
+      "ui_plugins_openInstallFromFile": "打开设置的“从文件安装”部分",
+      "ui_plugins_openMarketplace": "打开 Navide 市场，或某个 Navide 插件的页面",
+      "ui_settings_open": "打开设置，可指定标签页",
+      "ui_window_openGit": "打开当前工作区的 Git 窗口",
+      "ui_window_openPipeline": "打开流程管理窗口",
+      "ui_window_openPlans": "打开 Plan 窗口，可指定单个文档",
+      "ui_window_openResourceManager": "打开资源控管",
+      "ui_window_openTurnStats": "打开每轮消耗"
+    },
     "add-step": "添加步骤",
     "confirm-title": "要执行这个按钮吗？",
     "confirm-message": "将会执行：{actions}。这会关闭或重置某些内容，无法撤销。",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI 额度徽章",
     "settings-enabled": "在 CLI 分格标题栏显示剩余额度",
     "settings-refresh": "刷新间隔",
+    "settings-refresh-minutes": "{n} 分钟",
     "settings-hint": "以只读方式显示 11 家 CLI 提供商的额度，来自各家的用量 API（Claude 则来自内置的 /usage 面板）。",
     "failover-title": "额度耗尽时的账号切换",
     "failover-hint": "CLI 账号额度用完时 Navide 的做法：不处理、列出可切换的账号（默认），或自动切换（每个 CLI 每 5 小时最多 3 次）。",

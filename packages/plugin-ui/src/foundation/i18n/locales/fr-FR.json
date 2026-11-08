@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Ouvrir la section Mode développeur des paramètres",
+      "ui_plugins_openInstallFromFile": "Ouvrir la section Installer depuis un fichier des paramètres",
+      "ui_plugins_openMarketplace": "Ouvrir le Navide Marketplace ou la page d’un plugin Navide",
+      "ui_settings_open": "Ouvrir les paramètres, éventuellement sur un onglet précis",
+      "ui_window_openGit": "Ouvrir la fenêtre Git de l’espace de travail actuel",
+      "ui_window_openPipeline": "Ouvrir la fenêtre du Pipeline Manager",
+      "ui_window_openPlans": "Ouvrir la fenêtre Plans, éventuellement sur un document",
+      "ui_window_openResourceManager": "Ouvrir le Resource Manager",
+      "ui_window_openTurnStats": "Ouvrir Turn Stats"
+    },
     "add-step": "Ajouter une étape",
     "confirm-title": "Exécuter ce bouton ?",
     "confirm-message": "Sera exécuté : {actions}. Cela ferme ou réinitialise quelque chose, sans retour possible.",
@@ -10236,6 +10247,7 @@
     "settings-title": "Badge de quota des CLI",
     "settings-enabled": "Afficher le quota restant dans l’en-tête des panes CLI",
     "settings-refresh": "Intervalle d’actualisation",
+    "settings-refresh-minutes": "{n} min",
     "settings-hint": "Affiche le quota de 11 fournisseurs de CLI, en lecture seule, via l’API d’utilisation de chacun (pour Claude, via son panneau /usage intégré).",
     "failover-title": "Changement de compte à l’épuisement du quota",
     "failover-hint": "Ce que fait Navide quand un compte CLI épuise son quota : rien, lister les comptes possibles (par défaut) ou changer automatiquement, au plus 3 fois par 5 heures et par CLI.",

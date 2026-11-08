@@ -4110,7 +4110,7 @@ watch(activeTab, (tab) => {
                       @change="onUsageRefreshChange(($event.target as HTMLSelectElement).value)"
                     >
                       <option v-for="sec in USAGE_REFRESH_OPTIONS" :key="sec" :value="sec">
-                        {{ `${sec / 60} min` }}
+                        {{ $t('usage.settings-refresh-minutes', { n: sec / 60 }) }}
                       </option>
                     </select>
                   </div>

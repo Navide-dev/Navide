@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Bereich „Entwicklermodus“ in den Einstellungen öffnen",
+      "ui_plugins_openInstallFromFile": "Bereich „Aus Datei installieren“ in den Einstellungen öffnen",
+      "ui_plugins_openMarketplace": "Navide Marketplace oder die Seite eines Navide-Plugins öffnen",
+      "ui_settings_open": "Einstellungen öffnen, optional auf einem bestimmten Tab",
+      "ui_window_openGit": "Git-Fenster des aktuellen Arbeitsbereichs öffnen",
+      "ui_window_openPipeline": "Fenster „Pipeline Manager“ öffnen",
+      "ui_window_openPlans": "Plan-Fenster öffnen, optional mit einem Dokument",
+      "ui_window_openResourceManager": "Ressourcenverwaltung öffnen",
+      "ui_window_openTurnStats": "Turn Stats öffnen"
+    },
     "add-step": "Schritt hinzufügen",
     "confirm-title": "Diese Schaltfläche ausführen?",
     "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
@@ -10236,6 +10247,7 @@
     "settings-title": "CLI-Kontingent-Badge",
     "settings-enabled": "Verbleibendes Kontingent in den Kopfzeilen der CLI-Bereiche anzeigen",
     "settings-refresh": "Aktualisierungsintervall",
+    "settings-refresh-minutes": "{n} Min.",
     "settings-hint": "Zeigt das Kontingent von 11 CLI-Anbietern, nur lesend, aus der Nutzungs-API jedes Anbieters (bei Claude aus dem integrierten /usage-Panel).",
     "failover-title": "Kontowechsel, wenn das Kontingent aufgebraucht ist",
     "failover-hint": "Was Navide tut, wenn einem CLI-Konto das Kontingent ausgeht: nichts, wechselbare Konten auflisten (Standard) oder automatisch wechseln, höchstens 3-mal pro 5 Stunden pro CLI.",
