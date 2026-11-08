@@ -184,7 +184,7 @@ import {
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, quietTurnEndDone, TURN_END_QUIET_FALLBACK_MS, turnCompleteDone,turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
-import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
@@ -4694,6 +4694,9 @@ async function injectText(
   // flagged so the backend accepts a refused command onto the command line
   // and holds the terminal until the user types.
   prefill = false,
+  // Pipeline kickoff only (KICKOFF_ECHO_WAIT_MS): how long the echo is watched
+  // for, through silent and painting rounds alike, before giving up.
+  echoWaitMs?: number,
 ): Promise<boolean> {
   // Log the full injection text to the session's output log file BEFORE
   // chunking so the log file shows one readable block per send.
@@ -4954,6 +4957,7 @@ async function injectText(
       now: Date.now,
       roundMs: readyTimeout,
       maxSilentRounds: onInputBlocked ? null : 2,
+      waitMs: echoWaitMs,
     })
     if (watched.outcome === 'aborted') return giveUp()
     if (watched.outcome === 'ready') {
@@ -5224,6 +5228,7 @@ async function injectPane(
   onInputBlocked?: (held: boolean) => void,
   stillWanted?: () => boolean,
   prefill = false,
+  echoWaitMs?: number,
 ): Promise<boolean> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return false
@@ -5234,7 +5239,7 @@ async function injectPane(
   pane.resumeContinueAvailable = false
   paneLastInjectedText.set(paneId, text)
   return injectText(
-    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted, prefill,
+    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted, prefill, echoWaitMs,
   )
 }
 
@@ -7754,6 +7759,7 @@ function scheduleInjection(pane: ActivePane): void {
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
             // Asked again right before its Enter: the run can fail mid-paste.
             () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
+            false, KICKOFF_ECHO_WAIT_MS,
           )
           logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
           if (evidence.stopped) runPaneSentAt.delete(pane.id)
@@ -15613,7 +15619,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
         // Asked again right before its Enter: a sibling can fail the run in
         // the second this kickoff is being typed.
-        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
+        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted, false, KICKOFF_ECHO_WAIT_MS)
         logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
         if (evidence.stopped) runPaneSentAt.delete(pane.id)
         return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }

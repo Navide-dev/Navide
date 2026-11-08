@@ -11,6 +11,13 @@ export const KICKOFF_RETRY_BUDGET_MS = 90_000
 /** Upper bound on one wait for the pane to read ready before an attempt —
  *  cli_open_agent's prompt-ready deadline (KICKOFF_PROMPT_READY_TIMEOUT_MS). */
 export const KICKOFF_READY_WAIT_MS = 30_000
+/** How long one pipeline kickoff attempt watches for its echo before it gives
+ *  up, clears the box and lets a retry type it again. A CLI starved of CPU
+ *  reads its input late, not never: on the 0.2.39 Windows VM (`load 12`) it
+ *  read the first paste 40-100 s after it was typed, together with the
+ *  516 Ctrl-U three early give-ups had queued behind it, took the lot as one
+ *  paste, and held several copies of the kickoff for review. */
+export const KICKOFF_ECHO_WAIT_MS = 120_000
 export const MAX_PERSIST_PANE_ATTEMPTS = 8
 
 /** Retry only an injection that left the composer empty. A failed submit with
