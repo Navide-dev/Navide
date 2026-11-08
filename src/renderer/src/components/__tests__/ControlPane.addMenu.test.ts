@@ -101,6 +101,57 @@ describe('ControlPane – the ＋ menu', () => {
     expect(opts[0].classes()).toContain('on')
   })
 
+  it('splits the roster into a CLI block and an Agents block, each under its heading', async () => {
+    // Order inside each block is the order of agentSpecs, i.e. Settings → CLI
+    // Agents; Devin stays a CLI.
+    wrapper = mountWith({
+      agentSpecs: [
+        { agentKey: 'hermes', label: 'Hermes Agent', kind: 'agent' },
+        { agentKey: 'claude', label: 'Claude Code' },
+        { agentKey: 'devin', label: 'Devin CLI' },
+        { agentKey: 'openclaw', label: 'OpenClaw', kind: 'agent' },
+        { agentKey: 'terminal', label: 'Terminal' }
+      ]
+    })
+    await openMenu(wrapper)
+    const rows = wrapper.findAll('.ws-add-scroll > *').map((el) =>
+      el.classes().includes('ws-add-sec') ? `# ${el.text()}` : `${el.attributes('data-section')}: ${el.text()}`
+    )
+    expect(rows).toEqual([
+      '# label.add-menu-cli',
+      'cli: Claude Code',
+      'cli: Devin CLI',
+      '# label.add-menu-agents',
+      // ✓ is the default pick, which falls on the first spec.
+      'agents: ✓Hermes Agent',
+      'agents: OpenClaw'
+    ])
+  })
+
+  it('files exactly OpenClaw and Hermes Agent under Agents in the real roster', () => {
+    const agents = CLI_AGENT_SPECS.filter((s) => s.kind === 'agent').map((s) => s.agentKey)
+    expect(agents.sort()).toEqual(['hermes', 'openclaw'])
+    expect(CLI_AGENT_SPECS.find((s) => s.agentKey === 'devin')?.kind ?? 'cli').toBe('cli')
+  })
+
+  it('drops the Agents block, heading included, when none of its agents is enabled', async () => {
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    expect(wrapper.findAll('.ws-add-sec').map((h) => h.text())).toEqual(['label.add-menu-cli'])
+  })
+
+  it('caps the menu at the room on its side of the button', async () => {
+    // The scroller shrinks into the menu's max-height instead of a fixed 45vh,
+    // which cut the last entry off in a 900px window that had room for it.
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: 0, right: 20, width: 20, height: 20, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.maxHeight).toBe(`${window.innerHeight - 120 - 24}px`)
+  })
+
   it('opens with an icon rather than a text glyph', async () => {
     // It used to be the full-width character ＋. A glyph takes its weight from
     // the typeface, so it could not match the stroke icons beside it at any
@@ -445,6 +496,9 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
+/** A `.ws-add-sec` heading (CLI, Agents): ~14px text plus 8px padding. */
+const HEADING_PX = 22
+
 /** Everything in the menu that is not the scroller: its own padding, the role
  *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
  *  the Terminal + Manual-spawn buttons. */
@@ -464,7 +518,7 @@ function flipThresholdPx(): number {
 
 describe('ControlPane – the ＋ menu fits its roster', () => {
   it('the scroller is tall enough to show every CLI at once', () => {
-    const needed = CLI_AGENT_SPECS.length * ROW_PX
+    const needed = CLI_AGENT_SPECS.length * ROW_PX + 2 * HEADING_PX
     expect(scrollerCapPx()).toBeGreaterThanOrEqual(needed)
   })
 

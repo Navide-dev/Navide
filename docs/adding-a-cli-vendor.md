@@ -116,6 +116,10 @@ You never need to read or modify the shared orchestration code.
    flags — the template lists every optional field with pointers to the
    full docs in `agents/types.ts`).
 2. Register it in `agents/index.ts` (one line, display order).
+   Decide whether the vendor is a CLI or an Agent ("Two kinds of vendors" in
+   `docs/en-US/cli-extension-guide.md`) and set the spec's `kind` field:
+   `kind: 'agent'` for an Agent, left out for a CLI. It picks the ＋ menu
+   block the vendor is listed in.
 3. Add a row to `vendors` in `src/renderer/src/components/CliAgentsHelp.vue`
    (Settings ▸ Help). It is a hand-maintained mirror, and
    `test_help_panel_sign_in_column_matches_login_command_args` compares its

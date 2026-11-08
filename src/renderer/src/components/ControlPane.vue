@@ -1473,6 +1473,18 @@ const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
 
+/** The ＋ menu lists vendors of `kind: 'agent'` (long-lived agents such as
+ *  OpenClaw and Hermes Agent) under their own "Agents" heading below the CLI
+ *  block; everywhere else they stay ordinary entries of manualAgentSpecs.
+ *  Both blocks keep the order and enabled set of Settings → CLI Agents, since
+ *  they filter agentSpecs. */
+const addMenuCliSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind !== 'agent')
+)
+const addMenuAgentSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind === 'agent')
+)
+
 // Available agent types for "Handle Issue As…" pane spawn.
 const availableAgents = computed(() =>
   manualAgentSpecs.value.map((spec) => ({ key: spec.agentKey, label: spec.label }))
@@ -2677,24 +2689,34 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 }
 // Fixed, not absolute: the pane list scrolls under `overflow-y: auto`, which
 // would clip a menu positioned inside it.
-const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
+const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  456px) plus the fixed furniture around it — role picker, two dividers,
+ *  510px: the rows plus the CLI and Agents headings) plus the fixed
+ *  furniture around it — role picker, two dividers,
  *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 618
+const ADD_MENU_MAX_H = 672
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
   if (!a) return {}
-  // Flip upwards when there is not enough room below the button.
-  const below = window.innerHeight - a.bottom
-  return below < ADD_MENU_MAX_H && a.top > below
-    ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px` }
-    : { top: `${a.bottom + 4}px`, right: `${a.right}px` }
+  // Flip upwards when there is not enough room below the button. "Below"
+  // ends at the sidebar's bottom edge, not the window's: the status bar under
+  // it sits on top of the menu.
+  const below = a.floor - a.bottom
+  const up = below < ADD_MENU_MAX_H && a.top > below
+  // The menu is a flex column capped at the room on its side (less the 4px
+  // gap and an 8px edge margin, and its own 5px padding and 1px border either
+  // side, which max-height does not include), and only the roster scroller
+  // shrinks to fit. A fixed `45vh` cap cut the last entry off in a 900px
+  // window that had room for the whole list.
+  const maxHeight = `${Math.max(0, (up ? a.top : below) - 24)}px`
+  return up
+    ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px`, maxHeight }
+    : { top: `${a.bottom + 4}px`, right: `${a.right}px`, maxHeight }
 })
 
 function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
@@ -2704,7 +2726,8 @@ function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
     return
   }
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
-  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right }
+  const floor = (ev.currentTarget as HTMLElement).closest('.sidebar')?.getBoundingClientRect().bottom || window.innerHeight
+  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right, floor }
   addMenuWorkspace.value = wsPath
   addMenuGroup.value = groupId
   addMenuOpen.value = true
@@ -4397,18 +4420,31 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         </select>
         <div class="ws-add-div"></div>
         <div class="ws-add-scroll">
-          <button
-            v-for="spec in manualAgentSpecs"
-            :key="spec.agentKey"
-            class="ws-add-opt"
-            :class="{ on: spec.agentKey === pickedAgent }"
-            @click="spawnAs(spec.agentKey)"
+          <!-- Two blocks, each under its own heading: coding CLIs, then general
+               agents (OpenClaw, Hermes Agent). A block with no enabled entry
+               drops out with its heading. -->
+          <template
+            v-for="sec in [
+              { id: 'cli', label: $t('label.add-menu-cli'), specs: addMenuCliSpecs },
+              { id: 'agents', label: $t('label.add-menu-agents'), specs: addMenuAgentSpecs }
+            ]"
+            :key="sec.id"
           >
-            <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
-            <span class="ws-add-lb" v-truncate>
-              {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
-            </span>
-          </button>
+            <div v-if="sec.specs.length" class="ws-add-sec" :data-section="sec.id">{{ sec.label }}</div>
+            <button
+              v-for="spec in sec.specs"
+              :key="spec.agentKey"
+              class="ws-add-opt"
+              :class="{ on: spec.agentKey === pickedAgent }"
+              :data-section="sec.id"
+              @click="spawnAs(spec.agentKey)"
+            >
+              <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
+              <span class="ws-add-lb" v-truncate>
+                {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
+              </span>
+            </button>
+          </template>
         </div>
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
              ship as Navide plugins, so the menu points there. -->
@@ -6522,7 +6558,13 @@ button.icon-btn.muted:hover {
   background: var(--bg-elevated, var(--bg-secondary));
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   font-size: var(--font-xs);
+  /* A column whose max-height (set inline by addMenuStyle) is the room on its
+   * side of the button: everything but the roster scroller keeps its size,
+   * and the scroller gives way. */
+  display: flex;
+  flex-direction: column;
 }
+.ws-add-menu > * { flex-shrink: 0; }
 .ws-add-role {
   width: calc(100% - 12px);
   margin: 2px 6px 4px;
@@ -6533,9 +6575,14 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 456px carries nineteen. */
+ * 3px padding either side), so 456px carries nineteen, and 510px adds the
+ * two ~22px section headings. The viewport cap is no longer a guessed 45vh:
+ * the menu's own max-height is the room it has, and this box shrinks into it
+ * (never below three rows). */
 .ws-add-scroll {
-  max-height: min(456px, 45vh);
+  max-height: min(510px, 100vh);
+  flex-shrink: 1;
+  min-height: 72px;
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
@@ -6543,12 +6590,15 @@ button.icon-btn.muted:hover {
    * (`scroll`) and are covered by a fade once that end is reached. Pure CSS —
    * no scroll listener. The list must never again look complete when it is
    * not: that mistake has now been made twice here (see the Terminal entry's
-   * comment in the template). */
+   * comment in the template).
+   * The shadows are drawn in the text colour, not black: a black shadow on the
+   * dark theme's menu was all but invisible, so a cut-off list still read as
+   * complete there. */
   background:
-    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 30%, transparent) top / 100% 14px no-repeat local,
-    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 70%) bottom / 100% 14px no-repeat local,
-    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 22%), transparent) top / 100% 5px no-repeat scroll,
-    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 22%), transparent) bottom / 100% 5px no-repeat scroll;
+    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 50%, transparent) top / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 50%) bottom / 100% 20px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
 }
 .ws-add-opt {
   display: flex;
@@ -6568,6 +6618,9 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
+/* Section heading in the roster ("CLI", "Agents"): small and muted, aligned
+ * with the entry labels, so it reads as a label rather than an option. */
+.ws-add-sec { padding: 6px 10px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); font-weight: 600; line-height: 1.35; }
 .ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason

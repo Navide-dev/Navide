@@ -8759,6 +8759,8 @@
     "run-group-awaiting": "Нужно ваше участие — агент в этой группе ждёт разрешения или ответа на вопрос",
     "agent-not-installed": "{label} — не установлен",
     "cloud-agents-plugin-hint": "Облачные агенты (Grok Bot, dots и другие) устанавливаются как плагин Navide из Navide Marketplace.",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "Агенты",
     "select-role": "Выбрать роль…",
     "waiting-backend": "Ожидание бэкенда…",
     "set-workspace-first": "Сначала укажите путь к рабочей области",
