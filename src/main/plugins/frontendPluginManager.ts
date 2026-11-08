@@ -3274,6 +3274,11 @@ export class FrontendPluginManager {
     this.pluginBackendHost.setBeforeSpawnVerifier(verifier ?? undefined)
   }
 
+  /** Delegate where first-party plugin backends keep their temporary files. */
+  setPluginBackendTmpDir(resolver: ((pluginId: string) => string | null) | null): void {
+    this.pluginBackendHost.setPluginTmpDir(resolver ?? undefined)
+  }
+
   setExecutionPolicyResolver(
     resolver: ((workspacePath?: string) => ExecutionPolicySnapshot) | null
   ): void {

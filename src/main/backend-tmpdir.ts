@@ -19,20 +19,41 @@ export function persistentBackendTmpDir(dataDir: string): string {
 }
 
 /**
+ * Where one plugin's packaged backend children keep their temporary files:
+ * `backend-tmp/plugins/<pluginId>/`. Bundled plugin backends (Plans and the
+ * like) are PyInstaller onefile binaries too, and the same three-day temp
+ * sweep applies to them. All instances of one plugin share the directory;
+ * each child unpacks into its own uniquely named `_MEI*` inside it.
+ *
+ * Returns `null` for an id that is not one plain path component, so a bad id
+ * can never point a child outside its own directory.
+ */
+export function pluginBackendTmpDir(dataDir: string, pluginId: string): string | null {
+  if (pluginId === '' || pluginId === '.' || pluginId === '..' || /[/\\\0]/.test(pluginId)) return null
+  return join(persistentBackendTmpDir(dataDir), 'plugins', pluginId)
+}
+
+/**
  * Create `dir` and drop extraction directories (`_MEI*`) a backend left behind
  * when it did not exit cleanly; a clean exit removes its own. Called right
  * before a backend is spawned, when no earlier backend of this app is running.
+ *
+ * Only `dir`'s own entries are looked at: plugin backends live in
+ * `plugins/` below the main backend's directory and may still be running.
+ * With `sweep` false the directory is only created -- for a plugin whose
+ * other instances may be running and reading their own `_MEI*`.
  *
  * Returns `dir`, or `null` when it cannot be created -- the caller then leaves
  * the OS default temp directory alone rather than point the backend at a path
  * it cannot unpack into.
  */
-export function prepareBackendTmpDir(dir: string): string | null {
+export function prepareBackendTmpDir(dir: string, sweep = true): string | null {
   try {
     mkdirSync(dir, { recursive: true })
   } catch {
     return null
   }
+  if (!sweep) return dir
   let entries: string[]
   try {
     entries = readdirSync(dir)

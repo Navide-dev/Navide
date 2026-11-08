@@ -27,6 +27,7 @@ import {
 } from './plansBridge'
 import { noteBackendFailure, type ThirdPartyAdmission } from './pluginThirdPartyBackends'
 import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import { prepareBackendTmpDir } from '../backend-tmpdir'
 import {
   canonicalExistingDirectory,
   isWorkspaceContainedPath,
@@ -101,6 +102,9 @@ export interface PluginBackendHostOptions {
   /** Admit a third-party backend (sandbox, consent, kill switches). Without
    * it every third-party activation is refused. */
   admitThirdParty?: ThirdPartyAdmitter
+  /** Where a first-party plugin's children keep their temporary files, or
+   * `null` to leave the inherited TMPDIR/TMP/TEMP as they are (dev runs). */
+  pluginTmpDir?: (pluginId: string) => string | null
   /** Idle stop delay for third-party children (default THIRD_PARTY_BACKEND_IDLE_MS). */
   thirdPartyIdleMs?: number
   /** Observe every settled call, whichever path made it (a plugin's own
@@ -306,6 +310,7 @@ export class PluginBackendHost {
   private readonly onStderr?: PluginBackendHostOptions['onStderr']
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
   private admitThirdParty?: ThirdPartyAdmitter
+  private pluginTmpDir?: PluginBackendHostOptions['pluginTmpDir']
   private readonly onCallSettled?: (call: BackendCallSettled) => void
   private readonly observesCallsOf?: (pluginId: string) => boolean
   private readonly thirdPartyIdleMs: number
@@ -343,6 +348,7 @@ export class PluginBackendHost {
     this.onStderr = options.onStderr
     this.reverifyBeforeSpawn = options.reverifyBeforeSpawn
     this.admitThirdParty = options.admitThirdParty
+    this.pluginTmpDir = options.pluginTmpDir
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
     this.onCallSettled = options.onCallSettled
     this.observesCallsOf = options.observesCallsOf
@@ -427,6 +433,35 @@ export class PluginBackendHost {
       )
     }
     this.reverifyBeforeSpawn = verifier
+  }
+
+  /** Install the per-plugin temp directory resolver before views are bound. */
+  setPluginTmpDir(resolver: PluginBackendHostOptions['pluginTmpDir'] | undefined): void {
+    if (this.views.size > 0) {
+      throw new BackendPluginError(
+        'INVALID_RUNTIME',
+        'Backend temp directory cannot change while a view is bound.',
+      )
+    }
+    this.pluginTmpDir = resolver
+  }
+
+  /** The child environment for one first-party view: the Host map, with its
+   * temp directory moved under the data dir when a resolver is installed.
+   * Leftover `_MEI*` are swept only when no other child of this plugin can be
+   * running -- no other bound view, no unbind still closing one, and no
+   * failed close anywhere whose child may live on. */
+  private firstPartyEnvironment(view: BoundView): Readonly<Record<string, string>> {
+    const pluginId = view.activation.pluginId
+    const dir = this.pluginTmpDir?.(pluginId)
+    if (!dir) return this.environment
+    const othersMayRun =
+      this.retainedChildSlots > 0 ||
+      [...this.views.values()].some((other) => other !== view && other.activation.pluginId === pluginId) ||
+      [...this.unbindTasks.values()].some(({ packageKey }) => packageKey.startsWith(`${pluginId}\u0000`))
+    const prepared = prepareBackendTmpDir(dir, !othersMayRun)
+    if (!prepared) return this.environment
+    return Object.freeze({ ...this.environment, TMPDIR: prepared, TMP: prepared, TEMP: prepared })
   }
 
   register(activation: BackendPluginLaunchSpec): void {
@@ -650,7 +685,7 @@ export class PluginBackendHost {
         throw new BackendPluginError('USER_CANCELLED')
       }
       const supervisorOptions: PluginBackendSupervisorOptions = {
-        environment: this.environment,
+        environment: this.firstPartyEnvironment(view),
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
         bridgeDispatcher: this.bridgeDispatcher,
         onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
