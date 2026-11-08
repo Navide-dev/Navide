@@ -40,11 +40,32 @@ export interface StageTabInput {
   manualLabel: string
   /** Label for a tab rebuilt from panes whose group record is missing. */
   orphanLabel: string
+  /** Label for the default tab while it still has the name it was created with. */
+  defaultLabel: string
+}
+
+/** The default tab is created with a fixed id and a Chinese name that
+ *  project.json keeps. Until the user renames it, it shows in the UI language. */
+const DEFAULT_GROUP_ID = 'rg-default'
+const DEFAULT_GROUP_STORED_NAME = '預設'
+
+function groupLabel(group: RunGroupLike, defaultLabel: string): string {
+  return group.id === DEFAULT_GROUP_ID && group.name === DEFAULT_GROUP_STORED_NAME
+    ? defaultLabel
+    : group.name
 }
 
 export function buildStageTabs(input: StageTabInput): StageTabShape[] {
-  const { panes, groups, isDetached, detachedGroupId, detachedGroupIds, manualLabel, orphanLabel } =
-    input
+  const {
+    panes,
+    groups,
+    isDetached,
+    detachedGroupId,
+    detachedGroupIds,
+    manualLabel,
+    orphanLabel,
+    defaultLabel,
+  } = input
 
   const byGroup = new Map<string, string[]>()
   const ungrouped: string[] = []
@@ -69,7 +90,7 @@ export function buildStageTabs(input: StageTabInput): StageTabShape[] {
       continue
     }
     const paneIds = byGroup.get(group.id) ?? []
-    shapes.push({ key: group.id, label: group.name, count: paneIds.length, type: 'stage', paneIds })
+    shapes.push({ key: group.id, label: groupLabel(group, defaultLabel), count: paneIds.length, type: 'stage', paneIds })
   }
 
   // Every pane must be reachable from some tab.

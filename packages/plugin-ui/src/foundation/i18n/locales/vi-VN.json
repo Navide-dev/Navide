@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "Hoàn toàn tự động: buộc chuyển tiếp sau 5 giây…",
     "pipeline-starting": "Đang khởi động pipeline…",
     "pipeline-log-session-bound": "đã gắn session",
+    "pipeline-log-restoring-panes": "Đang khôi phục {n} pane",
+    "terminal": "Terminal",
     "pipeline-log-answer-manually": "hãy trả lời thủ công",
     "pipeline-log-manager-ready": "đang tiếp quản (đang xử lý {count} tin nhắn)",
     "pipeline-log-slot-not-found": "không có vị trí “{slot}”",

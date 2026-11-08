@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "완전 자동: 5초 후 강제로 진행…",
     "pipeline-starting": "Pipeline 시작하는 중…",
     "pipeline-log-session-bound": "session 연결됨",
+    "pipeline-log-restoring-panes": "창 {n}개를 복원하는 중",
+    "terminal": "터미널",
     "pipeline-log-answer-manually": "직접 답변하세요",
     "pipeline-log-manager-ready": "인계하는 중(메시지 {count}개 처리)",
     "pipeline-log-slot-not-found": "슬롯 \"{slot}\" 없음",

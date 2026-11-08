@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "Full auto: 5 秒后自动强制推进…",
     "pipeline-starting": "启动 Pipeline 中…",
     "pipeline-log-session-bound": "session 已绑定",
+    "pipeline-log-restoring-panes": "正在还原 {n} 个分格",
+    "terminal": "终端",
     "pipeline-log-answer-manually": "请手动回答",
     "pipeline-log-manager-ready": "开始控场（drain {count} 则消息）",
     "pipeline-log-slot-not-found": "找不到 slot \"{slot}\"",

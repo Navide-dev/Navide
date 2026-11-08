@@ -9165,6 +9165,8 @@
     "stall-auto-advance": "全自動：5 秒後に強制的に次へ進みます…",
     "pipeline-starting": "パイプラインを開始中…",
     "pipeline-log-session-bound": "セッションを関連付けました",
+    "pipeline-log-restoring-panes": "{n} 個のペインを復元しています",
+    "terminal": "ターミナル",
     "pipeline-log-answer-manually": "手動で回答してください",
     "pipeline-log-manager-ready": "引き継ぎ中（{count} 件のメッセージを処理）",
     "pipeline-log-slot-not-found": "スロット「{slot}」がありません",

@@ -1203,7 +1203,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
 /* Bots on the left, the picked one on the right. */
 .ch-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 248px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   margin-top: var(--space-group);
