@@ -291,6 +291,7 @@ async function loadActivate(over: {
     'awaitRoleTurn',
     'watchKickoffAfterFailure',
     'runPaneSentAt',
+    'kickoffPacing',
     code,
   )
   const api = factory(
@@ -352,6 +353,7 @@ async function loadActivate(over: {
     async () => 'ended',
     vi.fn(),
     new Map(),
+    () => ({}),
   )
   return {
     api,
