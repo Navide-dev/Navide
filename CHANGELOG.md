@@ -24,6 +24,8 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 - Pipelines (0.2.40): starting a pipeline and opening its stage panes no longer freezes Navide while the disk is slow: the run records are now saved on a background thread, in order, so every window keeps responding even when a save takes seconds (a VM measured one at 21.7s).
 
+- Navide plugins (0.2.40): Settings → Navide Plugins → Installed opens with an Activity monitor, every installed Navide plugin on one table, refreshed every few seconds: its status, agent tool calls and capability calls in the last minute, the network hosts its views reached in the last 7 days (a host the manifest does not declare, or one that was refused, in red), how many tool calls in a row failed, and its backend's memory, marked when a resource is over its threshold. Opening a row shows that plugin's full Activity. Records only: the monitor changes nothing a plugin may do. Navide Browser 1.1.2, Navide Git 1.0.5, Mini-IDE 1.0.4 and Plans 1.1.4 carry the new interface strings.
+
 ## [0.2.39] — 2026-11-09
 
 ### Added

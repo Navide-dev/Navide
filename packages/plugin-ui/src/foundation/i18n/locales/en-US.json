@@ -12328,6 +12328,30 @@
       "activity": "Recent activity",
       "undeclaredCount": "{count} undeclared uses refused",
       "anomalyCount": "{count} unusual items"
+    },
+    "monitor": {
+      "title": "Activity monitor",
+      "intro": "Every installed Navide plugin on one table, refreshed every few seconds. Records only; nothing here changes what a Navide plugin may do. Open a row for its full activity.",
+      "empty": "No Navide plugins are installed.",
+      "open": "Show the activity of {id}",
+      "builtin": "built-in",
+      "noHosts": "None",
+      "noBackend": "No backend",
+      "hostUndeclared": "{host} (not declared)",
+      "hostRefused": "{host} (refused)",
+      "status": {
+        "running": "Running",
+        "disabled": "Disabled"
+      },
+      "column": {
+        "plugin": "Navide plugin",
+        "status": "Status",
+        "toolCalls": "Tool calls / min",
+        "capabilityCalls": "Capability calls / min",
+        "hosts": "Network hosts (7 days)",
+        "failures": "Failed in a row",
+        "resources": "Resources"
+      }
     }
   },
   "backendResource": {

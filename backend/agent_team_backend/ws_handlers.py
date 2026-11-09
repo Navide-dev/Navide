@@ -779,6 +779,36 @@ async def plugins_activity_report(
     await session.send_json(make_response(msg_id, msg_type, report))
 
 
+@handler("plugins.activity.overview")
+async def plugins_activity_overview(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Every asked plugin's ``PluginActivityOverviewRow`` for the Settings monitor (plan P1).
+
+    Host-authenticated, like ``plugins.activity.report``: the Host sends the
+    installed ids and marks which hosts each manifest declares.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_ids = payload.get("plugin_ids") if isinstance(payload, dict) else None
+    if (
+        not isinstance(plugin_ids, list)
+        or not all(isinstance(plugin_id, str) and plugin_id for plugin_id in plugin_ids)
+        or set(payload) != {"plugin_ids"}
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.overview is malformed")
+        )
+        return
+    overview = await asyncio.to_thread(app.plugin_audit_log.activity_overview, plugin_ids)
+    await session.send_json(make_response(msg_id, msg_type, overview))
+
+
 @handler("editor.rewrite")
 async def editor_rewrite(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

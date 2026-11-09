@@ -389,3 +389,56 @@ function backendCallsOf(value: unknown): PluginActivityBackendCalls | null {
       : null)
   return methods && daily ? { methods, daily } : null
 }
+
+// ── The Settings monitor (plan P1): every plugin on one table ──
+
+export const PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION = 1
+
+/** A host one of the plugin's views reached or was refused, in the 7 days of
+ *  detail. `refused`: some request to it was refused. `declared` is filled by
+ *  the Host from the installed manifest: null when the manifest has no
+ *  network declaration to compare against (Manifest v1, or none read). */
+export interface PluginActivityOverviewHost {
+  host: string
+  refused: boolean
+  lastAt: number
+  declared: boolean | null
+}
+
+/** One plugin's row on the monitor. Records only; nothing here is enforced. */
+export interface PluginActivityOverviewRow {
+  pluginId: string
+  /** Agent tool calls that ended in the last 60 s. */
+  toolCallsLastMinute: number
+  /** Broker and shell-broker calls from the minute 60 s ago started in. */
+  capabilityCallsLastMinute: number
+  /** The newest run of tool calls that did not end ok (read from at most 100). */
+  consecutiveFailures: number
+  hosts: PluginActivityOverviewHost[]
+}
+
+export interface PluginActivityOverview {
+  schemaVersion: typeof PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION
+  generatedAt: number
+  plugins: PluginActivityOverviewRow[]
+}
+
+/** The backend's overview rebuilt from validated fields (`declared` is the
+ *  Host's to add), or null when anything is malformed. */
+export function parsePluginActivityOverview(value: unknown): Omit<PluginActivityOverview, 'plugins'> & {
+  plugins: Array<Omit<PluginActivityOverviewRow, 'hosts'> & { hosts: Array<Omit<PluginActivityOverviewHost, 'declared'>> }>
+} | null {
+  if (!isRec(value) || value.schemaVersion !== PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION || !isTime(value.generatedAt)) return null
+  const plugins = list(value.plugins, (e) => {
+    const hosts = list(e.hosts, (h) => (isText(h.host) && typeof h.refused === 'boolean' && isTime(h.lastAt)
+      ? { host: h.host, refused: h.refused, lastAt: h.lastAt }
+      : null))
+    if (!isText(e.pluginId) || !isCount(e.toolCallsLastMinute) || !isCount(e.capabilityCallsLastMinute) ||
+      !isCount(e.consecutiveFailures) || !hosts) return null
+    return {
+      pluginId: e.pluginId, toolCallsLastMinute: e.toolCallsLastMinute,
+      capabilityCallsLastMinute: e.capabilityCallsLastMinute, consecutiveFailures: e.consecutiveFailures, hosts,
+    }
+  })
+  return plugins ? { schemaVersion: PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION, generatedAt: value.generatedAt, plugins } : null
+}

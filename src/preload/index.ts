@@ -20,7 +20,7 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
-import type { PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1413,6 +1413,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
     activityReport: (id: string): Promise<
       { ok: true; report: PluginActivityReport } | { ok: false; error: string }
     > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+    activityOverview: (): Promise<
+      { ok: true; overview: PluginActivityOverview } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityOverview'),
     /** D-f: installed Registry packages' disclosures and install-time scans. */
     installedDisclosures: (): Promise<Array<{
       id: string

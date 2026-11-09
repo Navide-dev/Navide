@@ -12328,6 +12328,30 @@
       "activity": "最近のアクティビティ",
       "undeclaredCount": "宣言されていない使用の拒否 {count} 回",
       "anomalyCount": "異常 {count} 件"
+    },
+    "monitor": {
+      "title": "Activity 一覧",
+      "intro": "インストール済みのすべての Navide プラグインを 1 つの表に表示し、数秒ごとに更新します。記録のみで、ここで Navide プラグインにできることは変わりません。行を開くと詳細な Activity を表示します。",
+      "empty": "Navide プラグインはインストールされていません。",
+      "open": "{id} の Activity を表示",
+      "builtin": "組み込み",
+      "noHosts": "なし",
+      "noBackend": "バックエンドなし",
+      "hostUndeclared": "{host}（未宣言）",
+      "hostRefused": "{host}（拒否）",
+      "status": {
+        "running": "実行中",
+        "disabled": "無効"
+      },
+      "column": {
+        "plugin": "Navide プラグイン",
+        "status": "状態",
+        "toolCalls": "ツール呼び出し／分",
+        "capabilityCalls": "機能呼び出し／分",
+        "hosts": "ネットワークホスト（7 日）",
+        "failures": "連続失敗",
+        "resources": "リソース"
+      }
     }
   },
   "backendResource": {

@@ -1848,6 +1848,45 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('P1: asks the backend for every installed plugin\'s monitor row and marks the declared hosts', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { network: { hosts: ['*.acme.dev'] } }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-overview-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const row = {
+        pluginId: 'acme.demo', toolCallsLastMinute: 61, capabilityCallsLastMinute: 8, consecutiveFailures: 3,
+        hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2 }, { host: 'evil.io', refused: true, lastAt: 1 }],
+      }
+      const ask = vi.spyOn(manager, 'requestPluginActivityOverview').mockResolvedValue({ schemaVersion: 1, generatedAt: 5, plugins: [row] })
+      const overview = handlers.get('plugins:activityOverview')!
+      await expect(overview(null)).resolves.toEqual({
+        ok: true,
+        overview: {
+          schemaVersion: 1, generatedAt: 5,
+          plugins: [{
+            ...row,
+            hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2, declared: true }, { host: 'evil.io', refused: true, lastAt: 1, declared: false }],
+          }],
+        },
+      })
+      expect(ask).toHaveBeenCalledWith(expect.arrayContaining(['acme.demo']))
+
+      ask.mockResolvedValue({ schemaVersion: 1, generatedAt: 5, plugins: [{ ...row, consecutiveFailures: -1 }] })
+      await expect(overview(null)).resolves.toEqual({ ok: false, error: 'the activity overview was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(overview(null)).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   // A frontend's calls to its own backend (plugin:backend:call) are recorded
   // in plugin_activity as source "backend", address "backend.<method>" (#374),
   // so each declared method is offered under that address. (Before, #371 left

@@ -12328,6 +12328,30 @@
       "activity": "Activité récente",
       "undeclaredCount": "{count} utilisations non déclarées refusées",
       "anomalyCount": "{count} éléments inhabituels"
+    },
+    "monitor": {
+      "title": "Vue d’ensemble de l’Activity",
+      "intro": "Tous les plugins Navide installés dans un seul tableau, actualisé toutes les quelques secondes. Ce sont des enregistrements uniquement ; rien ici ne change ce qu’un plugin Navide peut faire. Ouvrez une ligne pour voir toute son Activity.",
+      "empty": "Aucun plugin Navide n’est installé.",
+      "open": "Afficher l’Activity de {id}",
+      "builtin": "intégré",
+      "noHosts": "Aucun",
+      "noBackend": "Pas de backend",
+      "hostUndeclared": "{host} (non déclaré)",
+      "hostRefused": "{host} (refusé)",
+      "status": {
+        "running": "En cours",
+        "disabled": "Désactivé"
+      },
+      "column": {
+        "plugin": "Plugin Navide",
+        "status": "État",
+        "toolCalls": "Appels d’outils / min",
+        "capabilityCalls": "Appels de capacités / min",
+        "hosts": "Hôtes réseau (7 jours)",
+        "failures": "Échecs consécutifs",
+        "resources": "Ressources"
+      }
     }
   },
   "backendResource": {

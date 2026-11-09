@@ -641,6 +641,9 @@ PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
 #: Host-authenticated: ``{plugin_id, declared?: [{kind, key}]}`` → a
 #: ``PluginActivityReport`` (contract 5.1, ``src/shared/pluginActivity.ts``).
 PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
+#: Host-authenticated: ``{plugin_ids: [string]}`` → a ``PluginActivityOverview``,
+#: one row per id (plan P1, the Settings monitor; ``src/shared/pluginActivity.ts``).
+PLUGIN_ACTIVITY_OVERVIEW_MESSAGE = "plugins.activity.overview"
 #: Host-authenticated: ``{plugin_id}``, sent when a plugin is removed: its
 #: first-seen rows go, so a reinstalled plugin's first writes are new again.
 PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"

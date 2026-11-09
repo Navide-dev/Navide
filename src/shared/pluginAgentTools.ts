@@ -760,6 +760,8 @@ export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
 /** Host-authenticated: `{plugin_id, declared?}` → a `PluginActivityReport` (contract 5.1). */
 export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
+/** Host-authenticated: `{plugin_ids}` → a `PluginActivityOverview`, one row per id (plan P1). */
+export const PLUGIN_ACTIVITY_OVERVIEW_MESSAGE = 'plugins.activity.overview'
 /** Host-authenticated: `{plugin_id}`, sent when a plugin is removed. */
 export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 

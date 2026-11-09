@@ -1717,6 +1717,27 @@ known: such a value is shown as "unknown", never summed, averaged or counted
 in a statistic. Every string is shown as plain text: no link is made from a
 path or a command, and nothing is rendered as HTML.
 
+#### Every plugin on one table: `plugins.activity.overview`
+
+The Activity monitor at the top of Settings → Navide Plugins → Installed
+reads `plugins.activity.overview` (`PLUGIN_ACTIVITY_OVERVIEW_MESSAGE`), also
+accepted only from the Host's authenticated session: the Host sends
+`{plugin_ids: [string]}`, the ids it has installed, and the backend answers
+`{schemaVersion: 1, generatedAt, plugins[]}`, one row per id in order. It
+reads the last minute and a bounded tail of the tables, never the 7-day
+detail lists, so it can be polled every few seconds. Records only.
+
+| Field of a row | Meaning |
+|---|---|
+| `pluginId` | the id asked about |
+| `toolCallsLastMinute` | `plugin_tool_calls` rows that ended in the last 60 s |
+| `capabilityCallsLastMinute` | broker and shell-broker calls (`plugin_activity` and `plugin_activity_counts`, `network` rows excluded) from the minute 60 s ago started in: counted rows are per minute, so this covers between one and two minutes |
+| `consecutiveFailures` | the newest run of `plugin_tool_calls` whose `outcome` is not `ok`, read from at most the newest 100 calls |
+| `hosts[]` | the `network.<host>` rows of the 7 days of detail, newest first, at most 50: `host`, `refused` (some request was refused), `lastAt`. The Host adds `declared`: whether the installed manifest's `permissions.network.hosts` match it, or `null` without a Manifest v2 disclosure |
+
+The page adds the Host's live numbers itself: the status from the installed
+list and the backend's resources from the watchdog (section 5.2).
+
 ### 5.2 Resource thresholds: notice, then the user decides
 
 The Host samples every third-party native backend's process tree

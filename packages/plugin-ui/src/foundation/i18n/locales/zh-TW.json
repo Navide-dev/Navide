@@ -12328,6 +12328,30 @@
       "activity": "最近活動",
       "undeclaredCount": "{count} 次沒宣告的使用被拒絕",
       "anomalyCount": "{count} 項異常"
+    },
+    "monitor": {
+      "title": "Activity 總覽",
+      "intro": "所有已安裝的 Navide 外掛列在同一張表，每幾秒更新一次。只是紀錄，這裡不會改變 Navide 外掛能做什麼。點開任一列可看完整 Activity。",
+      "empty": "尚未安裝任何 Navide 外掛。",
+      "open": "顯示 {id} 的 Activity",
+      "builtin": "內建",
+      "noHosts": "無",
+      "noBackend": "沒有後端",
+      "hostUndeclared": "{host}（未宣告）",
+      "hostRefused": "{host}（已拒絕）",
+      "status": {
+        "running": "運作中",
+        "disabled": "已停用"
+      },
+      "column": {
+        "plugin": "Navide 外掛",
+        "status": "狀態",
+        "toolCalls": "工具呼叫／分",
+        "capabilityCalls": "能力呼叫／分",
+        "hosts": "網路主機（7 天）",
+        "failures": "連續失敗",
+        "resources": "資源"
+      }
     }
   },
   "backendResource": {

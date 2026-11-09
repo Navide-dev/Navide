@@ -217,6 +217,7 @@ import {
   MARKETPLACE_QUERY_RESULT_MESSAGE,
   PLUGIN_ACTIVITY_FORGET_MESSAGE,
   PLUGIN_ACTIVITY_REPORT_MESSAGE,
+  PLUGIN_ACTIVITY_OVERVIEW_MESSAGE,
   PLUGIN_AGENT_ACTION_REQUEST_EVENT,
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
@@ -10242,6 +10243,17 @@ export class FrontendPluginManager {
     if (!client || !this.hostSessionRegistered) throw new Error('Navide Host session is not ready')
     const response = await client.send(PLUGIN_ACTIVITY_REPORT_MESSAGE, { ...request }, 15_000)
     if (!response.ok) throw new Error(response.error?.message ?? 'the backend did not answer the activity report')
+    return response.payload
+  }
+
+  /** Plan P1: the Settings monitor's row for each id, asked over this Host's
+   *  authenticated session like the activity report. Throws when the session
+   *  is not ready or the backend refuses. */
+  async requestPluginActivityOverview(pluginIds: string[]): Promise<unknown> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) throw new Error('Navide Host session is not ready')
+    const response = await client.send(PLUGIN_ACTIVITY_OVERVIEW_MESSAGE, { plugin_ids: pluginIds }, 15_000)
+    if (!response.ok) throw new Error(response.error?.message ?? 'the backend did not answer the activity overview')
     return response.payload
   }
 

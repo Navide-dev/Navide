@@ -12328,6 +12328,30 @@
       "activity": "최근 활동",
       "undeclaredCount": "선언되지 않은 사용 {count}회 거부",
       "anomalyCount": "특이 사항 {count}개"
+    },
+    "monitor": {
+      "title": "Activity 개요",
+      "intro": "설치된 모든 Navide 플러그인을 한 표에 보여 주며 몇 초마다 새로 고칩니다. 기록일 뿐이며 여기서 Navide 플러그인이 할 수 있는 일은 바뀌지 않습니다. 행을 열면 전체 Activity를 볼 수 있습니다.",
+      "empty": "설치된 Navide 플러그인이 없습니다.",
+      "open": "{id}의 Activity 보기",
+      "builtin": "기본 제공",
+      "noHosts": "없음",
+      "noBackend": "백엔드 없음",
+      "hostUndeclared": "{host} (선언되지 않음)",
+      "hostRefused": "{host} (거부됨)",
+      "status": {
+        "running": "실행 중",
+        "disabled": "사용 안 함"
+      },
+      "column": {
+        "plugin": "Navide 플러그인",
+        "status": "상태",
+        "toolCalls": "도구 호출 / 분",
+        "capabilityCalls": "기능 호출 / 분",
+        "hosts": "네트워크 호스트 (7일)",
+        "failures": "연속 실패",
+        "resources": "리소스"
+      }
     }
   },
   "backendResource": {

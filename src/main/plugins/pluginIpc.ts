@@ -127,7 +127,9 @@ import {
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
 import {
+  parsePluginActivityOverview,
   parsePluginActivityReport,
+  type PluginActivityOverview,
   type PluginActivityReport,
   type PluginActivityReportRequest,
 } from '../../shared/pluginActivity'
@@ -140,7 +142,7 @@ import {
   type DisclosureRiskLevel,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
-import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { cardRiskLevel, networkHostMatches, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
 import { pluginSourceFromLegacyProvenance, type LocalInstallDetails, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
@@ -1433,6 +1435,39 @@ export function registerPluginIpc(
         ...(installedAt !== null ? { installedAt } : {}),
       }))
       return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  // Plan P1: the Settings monitor, one row per installed package. The backend
+  // counts; the Host marks each host its manifest declares (null when there
+  // is no Manifest v2 disclosure to compare against). Read only.
+  ipcMain.handle('plugins:activityOverview', async (event): Promise<
+    { ok: true; overview: PluginActivityOverview } | { ok: false; error: string }
+  > => {
+    assertAuthorized(event)
+    const ids = manager.listInstalledPackages().map((pkg) => pkg.id)
+    try {
+      const parsed = parsePluginActivityOverview(await manager.requestPluginActivityOverview(ids))
+      if (!parsed) return { ok: false, error: 'the activity overview was malformed' }
+      return {
+        ok: true,
+        overview: {
+          ...parsed,
+          plugins: parsed.plugins.map((row) => {
+            const disclosure = activeDisclosure(row.pluginId)
+            const declared = disclosure?.networkHosts ?? []
+            return {
+              ...row,
+              hosts: row.hosts.map((entry) => ({
+                ...entry,
+                declared: disclosure ? declared.some((pattern) => networkHostMatches(pattern, entry.host)) : null,
+              })),
+            }
+          }),
+        },
+      }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }

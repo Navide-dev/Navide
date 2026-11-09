@@ -12328,6 +12328,30 @@
       "activity": "Hoạt động gần đây",
       "undeclaredCount": "{count} lần dùng chưa khai báo bị từ chối",
       "anomalyCount": "{count} mục bất thường"
+    },
+    "monitor": {
+      "title": "Tổng quan Activity",
+      "intro": "Mọi plugin Navide đã cài trong một bảng, cập nhật vài giây một lần. Chỉ là bản ghi; ở đây không thay đổi những gì một plugin Navide được làm. Mở một hàng để xem toàn bộ Activity.",
+      "empty": "Chưa cài plugin Navide nào.",
+      "open": "Hiện Activity của {id}",
+      "builtin": "tích hợp sẵn",
+      "noHosts": "Không có",
+      "noBackend": "Không có backend",
+      "hostUndeclared": "{host} (chưa khai báo)",
+      "hostRefused": "{host} (bị từ chối)",
+      "status": {
+        "running": "Đang chạy",
+        "disabled": "Đã tắt"
+      },
+      "column": {
+        "plugin": "Plugin Navide",
+        "status": "Trạng thái",
+        "toolCalls": "Lệnh gọi công cụ / phút",
+        "capabilityCalls": "Lệnh gọi capability / phút",
+        "hosts": "Máy chủ mạng (7 ngày)",
+        "failures": "Lỗi liên tiếp",
+        "resources": "Tài nguyên"
+      }
     }
   },
   "backendResource": {

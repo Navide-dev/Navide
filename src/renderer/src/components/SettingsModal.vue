@@ -132,6 +132,7 @@ import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
 import TestplacePane from './TestplacePane.vue'
 import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
 import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
+import PluginActivityMonitor from './PluginActivityMonitor.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
 import McpPane from './McpPane.vue'
@@ -419,6 +420,8 @@ onBeforeUnmount(() => { sidebarHeadObserver?.disconnect() })
 // first time its page is shown (opening Settings, or another page, reads
 // nothing), and it polls only while that page is shown.
 const disclosurePageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'disclosure')
+// Plan P1: the activity monitor at the top of the Installed page polls only while shown.
+const installedPageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'plugins')
 const visitedDisclosureOverview = ref(false)
 watch(disclosurePageShown, (shown) => { if (shown) visitedDisclosureOverview.value = true }, { immediate: true })
 // A plugin card's link: the Disclosure page, then that plugin's entry once the
@@ -4914,6 +4917,8 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
+            <!-- Plan P1: records only, it changes nothing a Navide plugin may do. -->
+            <PluginActivityMonitor v-show="pluginsPage === 'plugins'" :paused="!installedPageShown" />
             <ExtensionsPane
               v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
               :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
