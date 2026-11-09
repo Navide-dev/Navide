@@ -1461,6 +1461,7 @@ export class PluginError extends Error {
 export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
+  /** `encoding: 'base64'` (Navide 0.2.40+) writes binary: `content` is the base64 text of the bytes. */
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
   'fs.readImage': { path: string; selectionGrant?: string }
   'fs.listDirectory': { path: string; showHidden?: boolean }
