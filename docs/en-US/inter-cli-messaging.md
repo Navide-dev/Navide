@@ -1170,8 +1170,9 @@ quoted, plus a withdraw button), and once the pane leaves the prompt the kept
 messages go in, in order, each one confirmed in the chat as sent. At most 20
 are kept per pane; a kept message still waiting after 30 minutes is dropped
 and the chat told, and so are those kept for a pane that goes away, for a
-chat that is unbound or rebound, or from a sender taken off the allowlist
-meanwhile (checked again just before each one goes in). `/cancel`
+chat that is unbound or rebound, from a sender taken off the allowlist, or
+while its bot is stopped or removed or channels are turned off (checked again
+just before each one goes in). `/cancel`
 withdraws them. A bare `yes`, `no` or option number that answered nothing is
 never kept: sent in later, it would answer whatever is on screen by then.
 Keeping a message never answers or allows the prompt. `/status` is answered

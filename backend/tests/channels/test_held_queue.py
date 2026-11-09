@@ -206,3 +206,31 @@ async def test_a_sender_taken_off_the_allowlist_while_kept_is_not_sent_for(env: 
     await _until(lambda: _revoked(env))
     await env.m.wait_idle()
     assert ASK not in _texts_into_pane(env)
+
+
+async def _not_sent_after_clear(env: Env) -> None:
+    _idle(env)
+    await _until(lambda: not env.m._prompt_held.get("pane-1"))
+    for _ in range(20):  # several more watch ticks
+        await _until(lambda: True)
+    await env.m.wait_idle()
+    assert ASK not in _texts_into_pane(env)
+
+
+async def test_channels_turned_off_while_kept_is_not_sent(env: Env) -> None:
+    await _held_one(env)
+    await env.m.set_global_enabled(False)
+    await _not_sent_after_clear(env)
+
+
+async def test_the_bot_removed_while_kept_is_not_sent(env: Env) -> None:
+    await _held_one(env)
+    await env.m.remove("telegram", "default")
+    await _not_sent_after_clear(env)
+
+
+async def test_the_bot_turned_off_while_kept_is_not_sent(env: Env) -> None:
+    # Its binding stays; only the bot stops.
+    await _held_one(env)
+    await env.m.set_enabled("telegram", False)
+    await _not_sent_after_clear(env)
