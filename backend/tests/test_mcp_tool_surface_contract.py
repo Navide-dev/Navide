@@ -99,6 +99,7 @@ MCP_TOOLS = [
     "plan_update_todo",
     "plugins_developer_mode_open",
     "plugins_disable",
+    "plugins_disable_all",
     "plugins_enable",
     "plugins_install_file_fill",
     "plugins_install_file_open",

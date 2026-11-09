@@ -116,12 +116,15 @@ import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBacke
 import {
   type PluginStopRecord,
   type PluginStopSummary,
+  type PluginGlobalStopRecord,
+  type PluginGlobalStopSwitches,
   type PluginStopVia,
 } from '../../shared/pluginStop'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
-import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
+import { PluginDisableSourceStore, type DisableSource, type DisablingAgent } from './pluginDisableSource'
+import { PluginGlobalStopStore } from './pluginGlobalStopStore'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
@@ -633,6 +636,13 @@ export interface PluginIpcOptions {
   listFactoryPackages?: () => FactoryPackageSummary[]
   /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
   backendCallConcurrency?: () => BackendCallConcurrency[]
+  /** Plan P3: the third-party switches a global stop turns off (native
+   *  backends, DB8, DB4) and "Resume all" puts back. */
+  globalStopSwitches?: {
+    read: () => PluginGlobalStopSwitches
+    turnOff: () => Promise<void>
+    restore: (previous: PluginGlobalStopSwitches) => Promise<void>
+  }
   /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most; none are capped. */
   backendResourceUsage?: () => BackendResourceUsage
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
@@ -817,6 +827,17 @@ export function isTrustedPluginManagementSender(
 
 /** Register every `plugins:*` handler exactly once. `pluginsRoot` is where
  *  verified packages are written (`userData/plugins`). */
+/** Plan P3: the agent a `stop-all` from plugins_disable_all names (the
+ *  backend resolved it from the MCP credential), or null when malformed. */
+function requestingAgent(value: unknown): DisablingAgent | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const text = (v: unknown): v is string | null => v === null || typeof v === 'string'
+  if (record.callerKind !== 'pane' && record.callerKind !== 'external' && record.callerKind !== 'host') return null
+  if (!text(record.paneId) || !text(record.paneName) || !text(record.workspace)) return null
+  return { callerKind: record.callerKind, paneId: record.paneId, paneName: record.paneName }
+}
+
 export function registerPluginIpc(
   manager: FrontendPluginManager,
   pluginsRoot: string,
@@ -1119,6 +1140,8 @@ export function registerPluginIpc(
   // leaves an older entry behind, but the Disabled list changed since, so an
   // agent's entry then reads as the user: the conservative side.
   const disableSources = new PluginDisableSourceStore(pluginsRoot)
+  // Plan P3: the global stop in effect, kept across restarts.
+  const globalStops = new PluginGlobalStopStore(pluginsRoot)
   const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
     try {
       if (disabled && source) disableSources.set(id, source)
@@ -5297,6 +5320,97 @@ export function registerPluginIpc(
     return stopPlugin(id, via, { by: 'user', agent: null })
   })
 
+  // Plan P3: stop every running third-party plugin at once. The third-party
+  // switches go off first (native backends, DB8 and DB4), so nothing starts
+  // again while the plugins drain; each plugin is then stopped as in P2. The
+  // switches' earlier state and the stopped ids are kept on disk until the
+  // user chooses "Resume all" in Settings. Bundled Navide plugins, and the
+  // switch for agents calling their tools, are not touched.
+  const stoppableRows = () => listInstalledSummaries()
+    .filter((row) => row.disabled !== undefined && !BUILTIN_PLUGIN_NAMES.has(row.id) && !isReservedPluginId(row.id))
+  const stopAllPlugins = async (
+    via: PluginStopVia,
+    who: Pick<DisableSource, 'by' | 'agent'>,
+  ): Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }>; record: PluginGlobalStopRecord }> => {
+    const existing = globalStops.get()
+    const switches = options.globalStopSwitches
+    const previous = existing?.previous ?? switches?.read() ?? { nativeBackends: false, agentTools: false, externalCallers: false }
+    const at = Date.now()
+    // Recorded before anything changes, so a crash mid-way still restarts as stopped.
+    const pending: PluginGlobalStopRecord = existing
+      ? { ...existing, ...(who.by === 'user' ? { by: 'user' as const } : {}) }
+      : { at, via, by: who.by, stopped: [], previous }
+    globalStops.set(pending)
+    const failed: Array<{ id: string; error: string }> = []
+    try {
+      await switches?.turnOff()
+    } catch (error) {
+      failed.push({ id: '', error: error instanceof Error ? error.message : String(error) })
+    }
+    // A user's stop takes over what an agent's global stop disabled (as a
+    // single stop does), so the agent cannot enable it again by itself.
+    const targets = stoppableRows()
+      .filter((row) => row.disabled === false || (who.by === 'user' && pending.stopped.includes(row.id)))
+      .map((row) => row.id)
+    const results = await Promise.allSettled(targets.map((id) => stopPlugin(id, via, who)))
+    const stopped: string[] = []
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') stopped.push(targets[index]!)
+      else failed.push({ id: targets[index]!, error: result.reason instanceof Error ? result.reason.message : String(result.reason) })
+    })
+    const record: PluginGlobalStopRecord = { ...pending, stopped: [...new Set([...pending.stopped, ...stopped])] }
+    globalStops.set(record)
+    return { stopped, failed, record }
+  }
+
+  // "Resume all": the user's own, in Settings only. The plugins the global
+  // stop disabled are enabled again (one that is gone or that the user
+  // enabled meanwhile is skipped), then the switches are put back as they were.
+  const resumeAllPlugins = async (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> => {
+    const record = globalStops.get()
+    if (!record) return { resumed: [], failed: [] }
+    const resumed: string[] = []
+    const failed: Array<{ id: string; error: string }> = []
+    try {
+      await options.globalStopSwitches?.restore(record.previous)
+    } catch (error) {
+      failed.push({ id: '', error: error instanceof Error ? error.message : String(error) })
+    }
+    const installed = new Set(stoppableRows().map((row) => row.id))
+    for (const id of record.stopped) {
+      if (!installed.has(id) || !disabledPlugins.has(id)) continue
+      try {
+        const result = await setInstalledPackageDisabled(id, false)
+        if (result.changed) {
+          recordDisableSource(id, false)
+          resumed.push(id)
+        }
+      } catch (error) {
+        failed.push({ id, error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    globalStops.clear()
+    return { resumed, failed }
+  }
+
+  ipcMain.handle('plugins:stopAll', async (event, args: { via?: unknown } | null) => {
+    assertAuthorized(event)
+    const via = args?.via
+    if (via !== 'settings' && via !== 'status-bar') throw new Error('invalid plugin stop request')
+    const { stopped, failed } = await stopAllPlugins(via, { by: 'user', agent: null })
+    return { stopped, failed }
+  })
+
+  ipcMain.handle('plugins:resumeAll', async (event) => {
+    assertAuthorized(event)
+    return resumeAllPlugins()
+  })
+
+  ipcMain.handle('plugins:globalStopState', (event): PluginGlobalStopRecord | null => {
+    assertAuthorized(event)
+    return globalStops.get()
+  })
+
   // A chat command (`/plugins status`, `/plugins stop <id>`), relayed by the
   // backend over the Host session. It can stop, never start: enabling stays
   // in this window.
@@ -5307,6 +5421,29 @@ export function registerPluginIpc(
     const stoppable = listInstalledSummaries().filter((row) => row.disabled !== undefined && !BUILTIN_PLUGIN_NAMES.has(row.id) && !isReservedPluginId(row.id))
     if (record.action === 'status' && Object.keys(record).length === 1) {
       return { ok: true, plugins: stoppable.map((row) => ({ id: row.id, version: row.packageVersion ?? '', disabled: row.disabled === true })) }
+    }
+    if (record.action === 'stop-all') {
+      // From a chat: the user's own. From MCP (plugins_disable_all): the agent
+      // the backend resolved from its credential, recorded as an agent's stop.
+      const agent = record.requester === undefined ? null : requestingAgent(record.requester)
+      if (Object.keys(record).length !== (record.requester === undefined ? 1 : 2) || (record.requester !== undefined && !agent)) {
+        return { ok: false, error: 'plugin stop request is malformed', error_code: 'BAD_REQUEST' }
+      }
+      try {
+        const { stopped, failed } = await stopAllPlugins(agent ? 'mcp' : 'telegram', agent ? { by: 'agent', agent } : { by: 'user', agent: null })
+        if (agent) {
+          for (const id of stopped) {
+            const pluginVersion = stoppable.find((row) => row.id === id)?.packageVersion ?? ''
+            options.onPluginAgentAction?.({
+              action: 'disable', pluginId: id, pluginVersion,
+              requester: record.requester as PluginAgentActionNotice['requester'],
+            })
+          }
+        }
+        return { ok: true, stopped, failed: failed.map((entry) => entry.id).filter((id) => id !== '') }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+      }
     }
     const id = record.plugin_id
     if (record.action !== 'stop' || typeof id !== 'string' || Object.keys(record).length !== 2) {

@@ -27,6 +27,8 @@ function mockPlugins(list: unknown[], overrides: Record<string, unknown> = {}) {
   const api = {
     listInstalled: vi.fn().mockResolvedValue(list),
     stop: vi.fn().mockResolvedValue({ id: 'acme.grok', disabled: true, changed: true, summary: {} }),
+    stopAll: vi.fn().mockResolvedValue({ stopped: ['acme.grok'], failed: [] }),
+    globalStopState: vi.fn().mockResolvedValue(null),
     ...overrides,
   }
   ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: api }
@@ -76,5 +78,25 @@ describe('PluginStopStatusItem (plan P2)', () => {
     expect(w.emitted('open-settings')).toHaveLength(1)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(w.emitted('close')).toHaveLength(1)
+  })
+
+  it('P3: stops all from the popover, and turns red while every third-party plugin is stopped', async () => {
+    const api = mockPlugins(THIRD_PARTY)
+    const w = await render(true)
+    await w.get('.nv-sbp-stop-all').trigger('click')
+    expect(api.stopAll).not.toHaveBeenCalled()
+    api.globalStopState.mockResolvedValue({
+      at: 1, via: 'status-bar', by: 'user', stopped: ['acme.grok'],
+      previous: { nativeBackends: true, agentTools: false, externalCallers: false },
+    })
+    await w.get('.nv-sbp-stop-all').trigger('click')
+    await flushPromises()
+    expect(api.stopAll).toHaveBeenCalledWith('status-bar')
+    const item = w.get('.nv-sb-plugins')
+    expect(item.classes()).toContain('nv-sb-plugins--stopped')
+    expect(item.text()).toBe('Navide plugins stopped')
+    // Resume is in Settings only.
+    expect(w.find('.nv-sbp-stop-all').exists()).toBe(false)
+    expect(w.get('.nv-sbp-global').text()).toContain('Resume all in Settings')
   })
 })

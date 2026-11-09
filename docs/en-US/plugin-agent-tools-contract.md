@@ -1131,7 +1131,7 @@ switch, recorded with `via: "mcp"` and the plugin's activity at that moment
 
 A chat command in a bound Channels chat (`/plugins status`, `/plugins stop
 <id>`; the sender is one the user approved) reaches the Host as the event
-`plugins.stop.request` `{request_id, action: "status" | "stop", plugin_id?}`
+`plugins.stop.request` `{request_id, action: "status" | "stop" | "stop-all", plugin_id?, requester?}`
 over its authenticated session, and the Host answers with the message
 `plugins.stop.result` `{request_id, ok, ...}`; the backend waits 30 s.
 
@@ -1141,6 +1141,17 @@ over its authenticated session, and the Host answers with the message
   changed}`, or `{ok: false, error_code: "NOT_INSTALLED" | "BAD_REQUEST" |
   "ACTION_FAILED" | "HOST_UNAVAILABLE", error}`. A bundled Navide plugin is
   `NOT_INSTALLED` here. There is no `start`: enabling stays in the window.
+- `stop-all` (plan P3): from a chat (`/plugins stop all`, no `requester`, the
+  user's own, `via: "telegram"`) or from `plugins_disable_all` (with the
+  `requester` the backend resolved from the MCP credential, an agent's stop,
+  `via: "mcp"`, each stopped plugin told to the user like plugins_disable).
+  The Host turns off third-party native backends, DB8 and DB4, stops every
+  running third-party plugin and keeps `{at, via, by, stopped, previous}` on
+  disk (`previous`: the three switches before it) until the user's Resume all
+  in Settings; a user's `stop-all` takes over plugins an agent's stopped.
+  Answer: `{ok: true, stopped: [ids], failed: [ids]}`. `plugins_disable_all`
+  answers the agent the same, ids filtered to the package-id grammar, and
+  audits a `disable` row per plugin.
 
 Every stop (Settings, the status bar, a chat, `plugins_disable`) disables the
 package as the Disabled switch does and records, beside who disabled it,

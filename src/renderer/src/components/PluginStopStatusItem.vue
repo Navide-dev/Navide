@@ -4,15 +4,19 @@
 // (asked once more in place), the same stop as Settings → Navide Plugins.
 // It never starts a plugin: enabling stays in Settings, which shows what the
 // plugin was doing when it was stopped. Plugin ids are shown as plain text.
+// Plan P3: Stop all, and the item turns red while every third-party plugin
+// is stopped (kept across restarts); Resume all is in Settings only.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
+import type { PluginGlobalStopRecord } from '../../../shared/pluginStop'
 
 const props = withDefaults(defineProps<{ open: boolean; pollMs?: number }>(), { pollMs: 30_000 })
 const emit = defineEmits<{ toggle: []; close: []; 'open-settings': [] }>()
 const { t } = useI18n()
 
 const rows = ref<InstalledPluginSummary[]>([])
+const globalStop = ref<PluginGlobalStopRecord | null>(null)
 const confirming = ref<string | null>(null)
 const stopping = ref<string | null>(null)
 const error = ref('')
@@ -25,11 +29,14 @@ const running = computed(() => stoppable.value.filter((row) => row.disabled === 
 async function load(): Promise<void> {
   try {
     rows.value = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    globalStop.value = (await window.agentTeam?.plugins?.globalStopState?.()) ?? null
   } catch {
     // Advisory: the item hides until the list can be read.
   }
 }
 
+/** `id` is a plugin id, or ALL for Stop all. */
+const ALL = '\u0000all'
 async function stop(id: string): Promise<void> {
   if (confirming.value !== id) {
     confirming.value = id
@@ -39,9 +46,17 @@ async function stop(id: string): Promise<void> {
   stopping.value = id
   error.value = ''
   try {
-    await window.agentTeam?.plugins?.stop?.(id, 'status-bar')
+    if (id === ALL) {
+      const result = await window.agentTeam?.plugins?.stopAll?.('status-bar')
+      const failed = (result?.failed ?? []).map((entry) => entry.id).filter((entry) => entry !== '')
+      if (failed.length) error.value = t('pluginStop.all.stopFailed', { ids: failed.map((entry) => reveal(entry)).join(', ') })
+    } else {
+      await window.agentTeam?.plugins?.stop?.(id, 'status-bar')
+    }
   } catch (err) {
-    error.value = t('pluginStop.failed', { id: reveal(id), error: err instanceof Error ? err.message : String(err) })
+    error.value = id === ALL
+      ? t('pluginStop.all.stopFailed', { ids: err instanceof Error ? err.message : String(err) })
+      : t('pluginStop.failed', { id: reveal(id), error: err instanceof Error ? err.message : String(err) })
   } finally {
     stopping.value = null
     await load()
@@ -72,17 +87,18 @@ onBeforeUnmount(() => {
   <span
     v-if="stoppable.length > 0"
     class="sb-item sb-clickable nv-sb-plugins"
+    :class="{ 'nv-sb-plugins--stopped': globalStop }"
     role="button"
     tabindex="0"
-    :title="t('pluginStop.statusBar.title')"
-    :aria-label="t('pluginStop.statusBar.title')"
+    :title="globalStop ? t('pluginStop.statusBar.allStoppedTitle') : t('pluginStop.statusBar.title')"
+    :aria-label="globalStop ? t('pluginStop.statusBar.allStoppedTitle') : t('pluginStop.statusBar.title')"
     @click="emit('toggle')"
     @keydown.enter="emit('toggle')"
   >
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M9 2v4M15 2v4M6 6h12v5a6 6 0 0 1-12 0z M12 17v5" />
     </svg>
-    {{ t('pluginStop.statusBar.label', { running: running.length }) }}
+    {{ globalStop ? t('pluginStop.statusBar.allStopped') : t('pluginStop.statusBar.label', { running: running.length }) }}
   </span>
   <template v-if="props.open && stoppable.length > 0">
     <div class="nv-sbp-backdrop" @click="emit('close')" />
@@ -92,6 +108,17 @@ onBeforeUnmount(() => {
         <button class="nv-sbp-btn" data-act="close" :title="t('pluginStop.cancel')" @click="emit('close')">✕</button>
       </div>
       <p v-if="error" class="nv-sbp-error" role="alert">{{ error }}</p>
+      <p v-if="globalStop" class="nv-sbp-global" role="status">{{ t('pluginStop.statusBar.resumeInSettings') }}</p>
+      <div v-else-if="running.length > 0" class="nv-sbp-all">
+        <button
+          class="nv-sbp-stop nv-sbp-stop-all nv-btn nv-btn--sm"
+          :class="{ 'nv-sbp-stop--confirm': confirming === ALL }"
+          :disabled="stopping !== null"
+          :title="t('pluginStop.all.note')"
+          @click="stop(ALL)"
+        >{{ stopping === ALL ? t('pluginStop.stopping') : confirming === ALL ? t('pluginStop.all.confirm') : t('pluginStop.all.stop') }}</button>
+        <button v-if="confirming === ALL" class="nv-btn nv-btn--sm" @click="confirming = null">{{ t('pluginStop.cancel') }}</button>
+      </div>
       <ul class="nv-sbp-rows">
         <li v-for="row in stoppable" :key="row.id" class="nv-sbp-row" :data-id="row.id">
           <span class="nv-sbp-id">{{ reveal(row.id) }}</span>
@@ -128,9 +155,18 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   transition: background 0.12s, color 0.12s;
 }
+.nv-sb-plugins--stopped {
+  background: var(--danger-emphasis);
+  color: var(--text-on-emphasis);
+}
 .nv-sb-plugins:hover {
   background: var(--bg-hover);
   color: var(--text-bright);
+}
+.nv-sb-plugins--stopped:hover {
+  background: var(--danger-emphasis);
+  color: var(--text-on-emphasis);
+  filter: brightness(1.1);
 }
 .nv-sbp-backdrop {
   position: fixed;
@@ -181,6 +217,17 @@ onBeforeUnmount(() => {
   padding: 2px 7px;
   font-size: var(--font-3xs);
   cursor: pointer;
+}
+.nv-sbp-global {
+  margin: 0;
+  padding: 6px 10px 0;
+  color: var(--danger-fg);
+  font-weight: 600;
+}
+.nv-sbp-all {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 0;
 }
 .nv-sbp-error {
   margin: 0;

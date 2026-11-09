@@ -12384,11 +12384,26 @@
       "heading": "Bật lại {id}?",
       "confirm": "Bật"
     },
+    "all": {
+      "stop": "Dừng tất cả",
+      "confirm": "Dừng tất cả ngay",
+      "note": "Dừng ngay mọi plugin Navide bên thứ ba đang chạy và tắt backend gốc cùng công cụ agent của bên thứ ba. Các plugin Navide tích hợp sẵn vẫn chạy.",
+      "heading": "Mọi plugin Navide bên thứ ba đều đã dừng.",
+      "banner": "Đã dừng lúc {date} từ {via}: {count} plugin Navide; backend gốc và công cụ agent của bên thứ ba đã tắt.",
+      "resume": "Tiếp tục tất cả",
+      "resumeConfirm": "Tiếp tục tất cả ngay",
+      "resumeNote": "Đưa các công tắc về như trước và bật lại các plugin Navide mà lần dừng này đã tắt.",
+      "stopFailed": "Không thể dừng: {ids}",
+      "resumeFailed": "Không thể bật lại: {ids}"
+    },
     "statusBar": {
       "label": "Plugin Navide {running}",
       "title": "Plugin Navide: dừng ngay một plugin Navide",
       "heading": "Plugin Navide bên thứ ba",
-      "openSettings": "Mở tổng quan Activity"
+      "openSettings": "Mở tổng quan Activity",
+      "allStopped": "Plugin Navide đã dừng",
+      "allStoppedTitle": "Mọi plugin Navide bên thứ ba đều đã dừng; tiếp tục chúng trong Cài đặt",
+      "resumeInSettings": "Mọi plugin Navide bên thứ ba đều đã dừng. Tiếp tục bằng \"Tiếp tục tất cả\" trong Cài đặt."
     }
   },
   "backendResource": {

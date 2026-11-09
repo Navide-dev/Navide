@@ -22,6 +22,7 @@ type PluginActivityReport = import('../../shared/pluginActivity').PluginActivity
 type PluginActivityOverview = import('../../shared/pluginActivity').PluginActivityOverview
 type PluginStopSummary = import('../../shared/pluginStop').PluginStopSummary
 type PluginStopRecord = import('../../shared/pluginStop').PluginStopRecord
+type PluginGlobalStopRecord = import('../../shared/pluginStop').PluginGlobalStopRecord
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -597,6 +598,12 @@ declare global {
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
         stop?: (id: string, via: 'settings' | 'status-bar') => Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }>
+        /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+        stopAll?: (via: 'settings' | 'status-bar') => Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the user's "Resume all". */
+        resumeAll?: () => Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the global stop in effect, or null. */
+        globalStopState?: () => Promise<PluginGlobalStopRecord | null>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>

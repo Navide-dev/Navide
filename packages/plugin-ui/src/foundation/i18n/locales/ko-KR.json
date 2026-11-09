@@ -12384,11 +12384,26 @@
       "heading": "{id}을(를) 다시 사용하시겠습니까?",
       "confirm": "사용"
     },
+    "all": {
+      "stop": "모두 중지",
+      "confirm": "지금 모두 중지",
+      "note": "실행 중인 서드파티 Navide 플러그인을 모두 바로 중지하고 서드파티 네이티브 백엔드와 에이전트 도구를 끕니다. 기본 제공 Navide 플러그인은 계속 실행됩니다.",
+      "heading": "서드파티 Navide 플러그인이 모두 중지되었습니다.",
+      "banner": "{date}에 {via}에서 중지: Navide 플러그인 {count}개, 서드파티 네이티브 백엔드와 에이전트 도구가 꺼져 있습니다.",
+      "resume": "모두 다시 시작",
+      "resumeConfirm": "지금 모두 다시 시작",
+      "resumeNote": "스위치를 중지 전 상태로 되돌리고 이번에 중지한 Navide 플러그인을 다시 켭니다.",
+      "stopFailed": "중지할 수 없음: {ids}",
+      "resumeFailed": "다시 켤 수 없음: {ids}"
+    },
     "statusBar": {
       "label": "Navide 플러그인 {running}",
       "title": "Navide 플러그인: 하나를 바로 중지",
       "heading": "서드파티 Navide 플러그인",
-      "openSettings": "Activity 개요 열기"
+      "openSettings": "Activity 개요 열기",
+      "allStopped": "Navide 플러그인 모두 중지됨",
+      "allStoppedTitle": "서드파티 Navide 플러그인이 모두 중지되었습니다. 설정에서 다시 시작하세요",
+      "resumeInSettings": "서드파티 Navide 플러그인이 모두 중지되었습니다. 설정의 \"모두 다시 시작\"으로 다시 켜세요."
     }
   },
   "backendResource": {

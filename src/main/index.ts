@@ -2161,6 +2161,24 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    // Plan P3: a global stop turns the third-party switches off (native
+    // backends, DB8, DB4) and "Resume all" puts them back as they were. A
+    // choice made this way counts as the user's own (C3).
+    globalStopSwitches: {
+      read: () => {
+        const switches = nativeBackendStore.agentToolSwitches()
+        return { nativeBackends: nativeBackendStore.isEnabled(), agentTools: switches.enabled, externalCallers: switches.externalCallers }
+      },
+      turnOff: async () => {
+        await thirdPartyBackends.setEnabled(false)
+        await agentToolsControls.setSwitches({ enabled: false, enabledSetByUser: true })
+      },
+      restore: async (previous) => {
+        await thirdPartyBackends.setEnabled(previous.nativeBackends)
+        await agentToolsControls.setSwitches({ enabled: previous.agentTools, enabledSetByUser: true })
+        if (previous.agentTools) await agentToolsControls.setSwitches({ externalCallers: previous.externalCallers })
+      },
+    },
     onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
     // H1: a switch drains the plugin's views now, or has settled; only
     // Navide's own main windows hear it, never a plugin guest or window.

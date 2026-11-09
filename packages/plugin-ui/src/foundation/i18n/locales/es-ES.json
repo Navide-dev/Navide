@@ -12384,11 +12384,26 @@
       "heading": "¿Volver a activar {id}?",
       "confirm": "Activar"
     },
+    "all": {
+      "stop": "Detener todo",
+      "confirm": "Detener todo ahora",
+      "note": "Detiene al instante todos los plugins de Navide de terceros en ejecución y apaga los backends nativos y las herramientas de agente de terceros. Los plugins de Navide integrados siguen funcionando.",
+      "heading": "Todos los plugins de Navide de terceros están detenidos.",
+      "banner": "Detenidos el {date} desde {via}: {count} plugins de Navide; los backends nativos y las herramientas de agente de terceros están apagados.",
+      "resume": "Reanudar todo",
+      "resumeConfirm": "Reanudar todo ahora",
+      "resumeNote": "Devuelve los interruptores a como estaban y vuelve a activar los plugins de Navide que esta detención desactivó.",
+      "stopFailed": "No se pudo detener: {ids}",
+      "resumeFailed": "No se pudo volver a activar: {ids}"
+    },
     "statusBar": {
       "label": "Plugins de Navide {running}",
       "title": "Plugins de Navide: detener uno al instante",
       "heading": "Plugins de Navide de terceros",
-      "openSettings": "Abrir el resumen de Activity"
+      "openSettings": "Abrir el resumen de Activity",
+      "allStopped": "Plugins de Navide detenidos",
+      "allStoppedTitle": "Todos los plugins de Navide de terceros están detenidos; reanúdalos en Ajustes",
+      "resumeInSettings": "Todos los plugins de Navide de terceros están detenidos. Reanúdalos con «Reanudar todo» en Ajustes."
     }
   },
   "backendResource": {

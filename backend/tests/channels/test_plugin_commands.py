@@ -45,6 +45,7 @@ def host(monkeypatch) -> FakeHost:
     ("/plugins stop acme.grok", ("stop", "acme.grok")),
     ("/plugins@navide_bot STOP acme.grok", ("stop", "acme.grok")),
     ("/plugins stop", ("stop", "")),
+    ("/plugins stop all", ("stop", "all")),
     ("/plugins", None),
     ("/plugins start acme.grok", None),
     ("/plugins status now", None),
@@ -112,7 +113,7 @@ async def test_a_bare_plugins_command_stays_the_panes(env: Env, host: FakeHost) 
 
 def test_every_language_has_the_plugin_strings() -> None:
     keys = {key for key in qm.STRINGS["en-US"] if key.startswith("plugins_")}
-    assert len(keys) == 12
+    assert len(keys) == 13
     for lang, strings in qm.STRINGS.items():
         assert keys <= set(strings), lang
 
@@ -142,3 +143,29 @@ async def test_only_the_host_answers_a_stop_request() -> None:
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "delivered": False}
     assert contract.PLUGIN_STOP_REQUEST_EVENT == "plugins.stop.request"
     assert contract.PLUGIN_STOP_RESULT_MESSAGE == "plugins.stop.result"
+
+
+async def test_stop_all_stops_every_third_party_plugin_as_the_user(env: Env, host: FakeHost) -> None:
+    host.answer = {"ok": True, "stopped": ["acme.grok", "acme.manus"], "failed": []}
+    await env.inbound("/plugins stop ALL")
+    assert host.requests[-1] == {"request_id": host.requests[-1]["request_id"], "action": "stop-all"}
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "plugins_stopped_all", count=2)
+    host.answer = {"ok": False, "error": "drain failed", "error_code": "ACTION_FAILED"}
+    await env.inbound("/plugins stop all")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "plugins_stop_failed", id="all", error="drain failed")
+
+
+async def test_plugins_disable_all_asks_the_host_as_the_agent_and_audits_each_plugin(host: FakeHost, monkeypatch) -> None:
+    from agent_team_backend.mcp_server import server as mcp
+
+    monkeypatch.setattr(mcp, "_resolve_caller", lambda ctx: mcp._Caller(kind="external", pane_id=None))
+    audited: list[dict[str, Any]] = []
+    monkeypatch.setattr(mcp, "_audit_agent_action", lambda caller, requester, **row: audited.append(row))
+    host.answer = {"ok": True, "stopped": ["acme.grok", "not an id", 7], "failed": ["acme.manus"]}
+    answer = await mcp.plugins_disable_all(None)
+    assert answer == {"ok": True, "stopped": ["acme.grok"], "failed": ["acme.manus"]}
+    request = host.requests[-1]
+    assert request["action"] == "stop-all" and request["requester"]["callerKind"] == "external"
+    assert [(row["plugin_id"], row["outcome"]) for row in audited] == [("acme.grok", "allowed"), ("acme.manus", "error")]
+    host.connected = False
+    assert (await mcp.plugins_disable_all(None))["error_code"] == "HOST_UNAVAILABLE"

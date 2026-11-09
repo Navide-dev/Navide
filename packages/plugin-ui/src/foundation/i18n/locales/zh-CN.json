@@ -12384,11 +12384,26 @@
       "heading": "要重新启用 {id} 吗？",
       "confirm": "启用"
     },
+    "all": {
+      "stop": "全部停止",
+      "confirm": "立即全部停止",
+      "note": "立即停止所有运行中的第三方 Navide 插件，并关闭第三方原生后端与 agent 工具。内置 Navide 插件照常运行。",
+      "heading": "所有第三方 Navide 插件都已停止。",
+      "banner": "{date} 从{via}停止：共 {count} 个 Navide 插件，第三方原生后端与 agent 工具已关闭。",
+      "resume": "全部恢复",
+      "resumeConfirm": "立即全部恢复",
+      "resumeNote": "把各开关恢复成停止前的状态，并重新启用这次停止的 Navide 插件。",
+      "stopFailed": "无法停止：{ids}",
+      "resumeFailed": "无法重新启用：{ids}"
+    },
     "statusBar": {
       "label": "Navide 插件 {running}",
       "title": "Navide 插件：立即停止其中一个",
       "heading": "第三方 Navide 插件",
-      "openSettings": "打开 Activity 总览"
+      "openSettings": "打开 Activity 总览",
+      "allStopped": "Navide 插件已全部停止",
+      "allStoppedTitle": "所有第三方 Navide 插件都已停止；请到设置恢复",
+      "resumeInSettings": "所有第三方 Navide 插件都已停止。请到设置按“全部恢复”。"
     }
   },
   "backendResource": {

@@ -12384,11 +12384,26 @@
       "heading": "Ativar {id} de novo?",
       "confirm": "Ativar"
     },
+    "all": {
+      "stop": "Parar tudo",
+      "confirm": "Parar tudo agora",
+      "note": "Para na hora todos os plugins do Navide de terceiros em execução e desliga os backends nativos e as ferramentas de agente de terceiros. Os plugins do Navide integrados continuam rodando.",
+      "heading": "Todos os plugins do Navide de terceiros estão parados.",
+      "banner": "Parados em {date} por {via}: {count} plugins do Navide; os backends nativos e as ferramentas de agente de terceiros estão desligados.",
+      "resume": "Retomar tudo",
+      "resumeConfirm": "Retomar tudo agora",
+      "resumeNote": "Volta os interruptores ao que eram e ativa de novo os plugins do Navide que esta parada desativou.",
+      "stopFailed": "Não foi possível parar: {ids}",
+      "resumeFailed": "Não foi possível ativar de novo: {ids}"
+    },
     "statusBar": {
       "label": "Plugins do Navide {running}",
       "title": "Plugins do Navide: parar um na hora",
       "heading": "Plugins do Navide de terceiros",
-      "openSettings": "Abrir a visão geral da Activity"
+      "openSettings": "Abrir a visão geral da Activity",
+      "allStopped": "Plugins do Navide parados",
+      "allStoppedTitle": "Todos os plugins do Navide de terceiros estão parados; retome-os nas Configurações",
+      "resumeInSettings": "Todos os plugins do Navide de terceiros estão parados. Retome-os com \"Retomar tudo\" nas Configurações."
     }
   },
   "backendResource": {

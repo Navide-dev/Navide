@@ -3223,9 +3223,20 @@ class ChannelManager:
         if command == "stop" and not arg:
             await self._reply(msg, quick_menu.text(lang, "plugins_stop_usage"))
             return True
-        answer = await plugin_stop.ask_host(command, arg if command == "stop" else None)
+        stop_all = command == "stop" and arg.lower() == "all"
+        if stop_all:
+            answer = await plugin_stop.ask_host("stop-all")
+        else:
+            answer = await plugin_stop.ask_host(command, arg if command == "stop" else None)
         if answer is None:
             await self._reply(msg, quick_menu.text(lang, "plugins_unavailable"))
+        elif stop_all:
+            stopped = answer.get("stopped") if isinstance(answer.get("stopped"), list) else None
+            if answer.get("ok") is True and stopped is not None:
+                await self._reply(msg, quick_menu.text(lang, "plugins_stopped_all", count=len(stopped)))
+            else:
+                error = str(answer.get("error") or answer.get("error_code") or "")
+                await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id="all", error=error)))
         elif command == "status":
             if answer.get("ok") is True and isinstance(answer.get("plugins"), list):
                 await self._reply(msg, redact.redact_text(plugin_cmds.render_status(lang, answer["plugins"])))

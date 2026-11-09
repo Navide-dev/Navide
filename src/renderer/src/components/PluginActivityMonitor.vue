@@ -11,12 +11,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PluginActivityOverviewHost, PluginActivityOverviewRow } from '../../../shared/pluginActivity'
+import type { PluginGlobalStopRecord } from '../../../shared/pluginStop'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import { formatBytes } from '../lib/formatBytes'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 
 const props = withDefaults(defineProps<{ pollMs?: number; paused?: boolean }>(), { pollMs: 5000, paused: false })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 interface Row {
   id: string
@@ -40,6 +41,10 @@ const open = ref<string | null>(null)
 const confirming = ref<string | null>(null)
 const stopping = ref<string | null>(null)
 const stopError = ref('')
+// Plan P3: the global stop in effect, and the two-step Stop all / Resume all.
+const globalStop = ref<PluginGlobalStopRecord | null>(null)
+const confirmingAll = ref<'stop' | 'resume' | null>(null)
+const busyAll = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 
 function api() {
@@ -48,15 +53,17 @@ function api() {
 
 async function load(): Promise<void> {
   try {
-    const [list, builtins, answer, statuses] = await Promise.all([
+    const [list, builtins, answer, statuses, global] = await Promise.all([
       api()?.listInstalled?.() ?? [],
       api()?.disabledBuiltins?.() ?? [],
       api()?.activityOverview?.(),
       api()?.nativeBackends?.resourceStatus?.() ?? [],
+      api()?.globalStopState?.() ?? null,
     ])
     installed.value = list
     disabledBuiltins.value = builtins
     resources.value = statuses
+    globalStop.value = global
     if (!answer) error.value = t('pluginActivity.unavailable', { error: t('pluginActivity.notSupported') })
     else if (answer.ok) {
       activity.value = new Map(answer.overview.plugins.map((row) => [row.pluginId, row]))
@@ -114,6 +121,29 @@ async function stop(id: string): Promise<void> {
   }
 }
 
+const runningStoppable = computed(() => rows.value.filter((row) => row.stoppable && !row.disabled).length)
+
+/** Stop all or Resume all, each asked once more in place. */
+async function all(action: 'stop' | 'resume'): Promise<void> {
+  if (confirmingAll.value !== action) {
+    confirmingAll.value = action
+    return
+  }
+  confirmingAll.value = null
+  busyAll.value = true
+  stopError.value = ''
+  try {
+    const result = action === 'stop' ? await api()?.stopAll?.('settings') : await api()?.resumeAll?.()
+    const failed = (result?.failed ?? []).map((entry) => entry.id).filter((id) => id !== '')
+    if (failed.length) stopError.value = t(`pluginStop.all.${action}Failed`, { ids: failed.map((id) => reveal(id)).join(', ') })
+  } catch (err) {
+    stopError.value = t(`pluginStop.all.${action}Failed`, { ids: err instanceof Error ? err.message : String(err) })
+  } finally {
+    busyAll.value = false
+    await load()
+  }
+}
+
 function toggle(id: string): void {
   open.value = open.value === id ? null : id
 }
@@ -137,7 +167,36 @@ onBeforeUnmount(stopPolling)
 <template>
   <section class="nv-monitor" data-settings-section="pluginActivityMonitor" :aria-label="$t('pluginActivity.monitor.title')">
     <h2 class="nv-monitor-title">{{ $t('pluginActivity.monitor.title') }}</h2>
-    <p class="nv-monitor-muted">{{ $t('pluginActivity.monitor.intro') }}</p>
+    <div class="nv-monitor-head">
+      <p class="nv-monitor-muted">{{ $t('pluginActivity.monitor.intro') }}</p>
+      <div v-if="!globalStop && runningStoppable > 0" class="nv-monitor-head-actions">
+        <button
+          type="button"
+          class="nv-btn nv-btn--sm nv-monitor-stop-all"
+          :class="{ 'nv-monitor-stop--confirm': confirmingAll === 'stop' }"
+          :disabled="busyAll"
+          :title="$t('pluginStop.all.note')"
+          @click="all('stop')"
+        >{{ busyAll ? $t('pluginStop.stopping') : confirmingAll === 'stop' ? $t('pluginStop.all.confirm') : $t('pluginStop.all.stop') }}</button>
+        <button v-if="confirmingAll === 'stop'" type="button" class="nv-btn nv-btn--sm" @click="confirmingAll = null">{{ $t('pluginStop.cancel') }}</button>
+      </div>
+    </div>
+    <div v-if="globalStop" class="nv-monitor-global" role="status">
+      <p>
+        <strong>{{ $t('pluginStop.all.heading') }}</strong>
+        {{ $t('pluginStop.all.banner', { date: new Date(globalStop.at).toLocaleString(locale), via: $t(`pluginStop.via.${globalStop.via}`), count: globalStop.stopped.length }) }}
+      </p>
+      <div class="nv-monitor-head-actions">
+        <button
+          type="button"
+          class="nv-btn nv-btn--sm nv-btn--primary nv-monitor-resume-all"
+          :disabled="busyAll"
+          :title="$t('pluginStop.all.resumeNote')"
+          @click="all('resume')"
+        >{{ confirmingAll === 'resume' ? $t('pluginStop.all.resumeConfirm') : $t('pluginStop.all.resume') }}</button>
+        <button v-if="confirmingAll === 'resume'" type="button" class="nv-btn nv-btn--sm" @click="confirmingAll = null">{{ $t('pluginStop.cancel') }}</button>
+      </div>
+    </div>
     <p v-if="loading" class="nv-monitor-muted">{{ $t('pluginActivity.loading') }}</p>
     <template v-else>
       <p v-if="error" class="nv-monitor-muted nv-monitor-error" role="status">{{ error }}</p>
@@ -337,13 +396,45 @@ onBeforeUnmount(stopPolling)
   color: var(--attention-fg);
   font-weight: 600;
 }
+.nv-monitor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+}
+.nv-monitor-head > p {
+  flex: 1 1 24em;
+}
+.nv-monitor-head-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+/* Plan P3: every third-party plugin is stopped. */
+.nv-monitor-global {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--danger-fg);
+  border-radius: var(--radius-sm);
+  background: var(--danger-subtle);
+  color: var(--danger-fg);
+}
+.nv-monitor-global p {
+  flex: 1 1 24em;
+}
 .nv-monitor-actions {
   white-space: nowrap;
 }
 .nv-monitor-actions .nv-btn + .nv-btn {
   margin-left: var(--space-1);
 }
-.nv-monitor-stop.nv-monitor-stop--confirm {
+.nv-monitor-stop.nv-monitor-stop--confirm,
+.nv-monitor-stop-all.nv-monitor-stop--confirm {
   background: var(--danger-emphasis);
   border-color: var(--danger-emphasis);
   color: var(--text-on-emphasis);

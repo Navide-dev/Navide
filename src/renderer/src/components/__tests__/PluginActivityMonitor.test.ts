@@ -51,6 +51,9 @@ function mockPlugins(overrides: Record<string, unknown> = {}) {
     activityReport: vi.fn().mockResolvedValue({ ok: false, error: 'not in this test' }),
     backendCallConcurrency: vi.fn().mockResolvedValue([]),
     stop: vi.fn().mockResolvedValue({ id: '', disabled: true, changed: true, summary: {} }),
+    stopAll: vi.fn().mockResolvedValue({ stopped: ['acme.grok'], failed: [] }),
+    resumeAll: vi.fn().mockResolvedValue({ resumed: ['acme.grok'], failed: [] }),
+    globalStopState: vi.fn().mockResolvedValue(null),
     nativeBackends: {
       resourceStatus: vi.fn().mockResolvedValue([
         { pluginId: 'acme.grok', name: 'Grok', packageVersion: '1.2.0', usage: { ...values(1), memory: 210 * 1024 * 1024, processes: 9 }, thresholds: values(8), levels: values(0), waiting: [] },
@@ -146,6 +149,29 @@ describe('PluginActivityMonitor (plan P1)', () => {
     await row(w, 'acme.grok').get('.nv-monitor-stop').trigger('click')
     await flushPromises()
     expect(w.get('[role="alert"]').text()).toBe('acme.grok could not be stopped: drain failed')
+  })
+
+  it('P3: Stop all after a second press, then the stopped banner offers Resume all', async () => {
+    const api = mockPlugins()
+    const w = await render()
+    await w.get('.nv-monitor-stop-all').trigger('click')
+    expect(api.stopAll).not.toHaveBeenCalled()
+    expect(w.get('.nv-monitor-stop-all').text()).toBe('Stop all now')
+    api.globalStopState.mockResolvedValue({
+      at: 1_792_108_800_000, via: 'settings', by: 'user', stopped: ['acme.grok'],
+      previous: { nativeBackends: true, agentTools: true, externalCallers: false },
+    })
+    await w.get('.nv-monitor-stop-all').trigger('click')
+    await flushPromises()
+    expect(api.stopAll).toHaveBeenCalledWith('settings')
+    expect(w.find('.nv-monitor-stop-all').exists()).toBe(false)
+    expect(w.get('.nv-monitor-global').text()).toContain('Every third-party Navide plugin is stopped.')
+    expect(w.get('.nv-monitor-global').text()).toContain('1 Navide plugins')
+    await w.get('.nv-monitor-resume-all').trigger('click')
+    expect(api.resumeAll).not.toHaveBeenCalled()
+    await w.get('.nv-monitor-resume-all').trigger('click')
+    await flushPromises()
+    expect(api.resumeAll).toHaveBeenCalledTimes(1)
   })
 
   it('polls while shown and stops while paused', async () => {

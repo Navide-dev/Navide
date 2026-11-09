@@ -12384,11 +12384,26 @@
       "heading": "Enable {id} again?",
       "confirm": "Enable"
     },
+    "all": {
+      "stop": "Stop all",
+      "confirm": "Stop all now",
+      "note": "Stops every running third-party Navide plugin at once and turns off third-party native backends and agent tools. Bundled Navide plugins keep running.",
+      "heading": "Every third-party Navide plugin is stopped.",
+      "banner": "Stopped {date} from {via}: {count} Navide plugins, and third-party native backends and agent tools are off.",
+      "resume": "Resume all",
+      "resumeConfirm": "Resume all now",
+      "resumeNote": "Puts the switches back as they were and enables the Navide plugins this stop disabled.",
+      "stopFailed": "Could not stop: {ids}",
+      "resumeFailed": "Could not enable again: {ids}"
+    },
     "statusBar": {
       "label": "Navide plugins {running}",
       "title": "Navide plugins: stop one at once",
       "heading": "Third-party Navide plugins",
-      "openSettings": "Open the Activity monitor"
+      "openSettings": "Open the Activity monitor",
+      "allStopped": "Navide plugins stopped",
+      "allStoppedTitle": "Every third-party Navide plugin is stopped; resume them in Settings",
+      "resumeInSettings": "Every third-party Navide plugin is stopped. Resume them with Resume all in Settings."
     }
   },
   "backendResource": {

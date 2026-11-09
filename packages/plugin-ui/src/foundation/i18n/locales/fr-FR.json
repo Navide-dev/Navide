@@ -12384,11 +12384,26 @@
       "heading": "Réactiver {id} ?",
       "confirm": "Activer"
     },
+    "all": {
+      "stop": "Tout arrêter",
+      "confirm": "Tout arrêter maintenant",
+      "note": "Arrête tout de suite tous les plugins Navide tiers en cours et coupe les backends natifs et les outils d’agent tiers. Les plugins Navide intégrés continuent de tourner.",
+      "heading": "Tous les plugins Navide tiers sont arrêtés.",
+      "banner": "Arrêtés le {date} depuis {via} : {count} plugins Navide ; les backends natifs et les outils d’agent tiers sont coupés.",
+      "resume": "Tout reprendre",
+      "resumeConfirm": "Tout reprendre maintenant",
+      "resumeNote": "Remet les interrupteurs comme avant et réactive les plugins Navide que cet arrêt a désactivés.",
+      "stopFailed": "Impossible d’arrêter : {ids}",
+      "resumeFailed": "Impossible de réactiver : {ids}"
+    },
     "statusBar": {
       "label": "Plugins Navide {running}",
       "title": "Plugins Navide : en arrêter un tout de suite",
       "heading": "Plugins Navide tiers",
-      "openSettings": "Ouvrir la vue d’ensemble de l’Activity"
+      "openSettings": "Ouvrir la vue d’ensemble de l’Activity",
+      "allStopped": "Plugins Navide arrêtés",
+      "allStoppedTitle": "Tous les plugins Navide tiers sont arrêtés ; reprenez-les dans les réglages",
+      "resumeInSettings": "Tous les plugins Navide tiers sont arrêtés. Reprenez-les avec « Tout reprendre » dans les réglages."
     }
   },
   "backendResource": {

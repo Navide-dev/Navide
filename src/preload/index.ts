@@ -21,7 +21,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
-import type { PluginStopSummary } from '../shared/pluginStop'
+import type { PluginGlobalStopRecord, PluginStopSummary } from '../shared/pluginStop'
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1657,6 +1657,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
     stop: (id: string, via: 'settings' | 'status-bar'): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> =>
       ipcRenderer.invoke('plugins:stop', { id, via }),
+    /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+    stopAll: (via: 'settings' | 'status-bar'): Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:stopAll', { via }),
+    /** Plan P3: the user's "Resume all": enable what the global stop disabled and put the switches back. */
+    resumeAll: (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:resumeAll'),
+    /** Plan P3: the global stop in effect, or null. */
+    globalStopState: (): Promise<PluginGlobalStopRecord | null> => ipcRenderer.invoke('plugins:globalStopState'),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>
