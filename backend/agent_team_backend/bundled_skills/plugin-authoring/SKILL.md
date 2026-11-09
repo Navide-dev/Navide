@@ -97,7 +97,8 @@ needs is `docs/plugin-contracts/capabilities-v1.json`.
   `@navide/plugin-sdk`, `@navide/plugin-ui`. Never import Navide's renderer
   sources, and never call `window.nav` directly from built code.
 - **Declare the smallest permissions.** `permissions.system` accepts only
-  `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, `secrets` (the
+  `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, `agentNotify`
+  (a notification into one agent pane, off until the user allows it), `secrets` (the
   plugin's own API keys, encrypted on the device: the only place a key may
   live, never in code, manifest, tests or a commit); `permissions.shell`
   is `allowlist` (git, gh, glab), `full`, or

@@ -1665,6 +1665,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:resumeAll'),
     /** Plan P3: the global stop in effect, or null. */
     globalStopState: (): Promise<PluginGlobalStopRecord | null> => ipcRenderer.invoke('plugins:globalStopState'),
+    /** Plan P4: the user's "Notify agent panes" switch for a package that declares agentNotify. */
+    setNotifyAgents: (id: string, allowed: boolean): Promise<{ id: string; notifyAgents: boolean }> =>
+      ipcRenderer.invoke('plugins:setNotifyAgents', { id, allowed }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>

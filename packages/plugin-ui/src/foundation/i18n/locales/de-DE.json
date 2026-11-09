@@ -1980,6 +1980,7 @@
         "web": "Surfen im Web",
         "agents": "Agent-Bereiche",
         "agentMessages": "Agent-Nachrichten",
+        "agentNotify": "Agent-Benachrichtigungen",
         "secrets": "Geheimnisse des Navide-Plug-ins"
       },
       "shellLabel": "Ausführbare Shell-Dateien",
@@ -2436,6 +2437,7 @@
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-Bereiche, welcher Bereich welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
+          "agentNotify": "Sendet nach Ihrer Freigabe Benachrichtigungen an Ihre Agent-Bereiche; sie kommen als Daten an, nie als Anweisungen.",
           "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an.",
           "shell": "Befehle auf Ihrem Computer ausführen.",
           "terminal": "Navide-Terminals öffnen und steuern."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Alle Navide-Plugins von Drittanbietern sind gestoppt. Setzen Sie sie mit „Alle fortsetzen“ in den Einstellungen fort."
     }
   },
+  "pluginNotify": {
+    "switch": "Agent-Bereiche benachrichtigen",
+    "switchNote": "Erlaubt diesem Navide-Plugin, die Agent-Bereiche seines Projekts zu benachrichtigen, höchstens 6 pro Minute. Die Nachrichten kommen als Daten an, nie als Anweisungen. Standardmäßig aus.",
+    "paneMenu": {
+      "refuse": "Benachrichtigungen von Navide-Plugins ablehnen",
+      "accept": "Benachrichtigungen von Navide-Plugins annehmen",
+      "title": "Solange abgelehnt, können Navide-Plugins, die Agent-Bereiche benachrichtigen dürfen, diesem Bereich nichts senden"
+    }
+  },
   "backendResource": {
     "title": "Das Backend eines Navide-Plug-ins überschreitet einen Ressourcen-Schwellenwert",
     "body": "{name} ({id} {version}): {item} liegt bei {usage} und damit über dem Schwellenwert von {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-Bereiche in diesem Projekt, welcher Bereich welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
+      "agentNotify": "Kann nach dem Einschalten in den Einstellungen die Agent-Bereiche dieses Projekts benachrichtigen; die Nachrichten kommen als Daten an, nie als Anweisungen",
       "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",

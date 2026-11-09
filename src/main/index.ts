@@ -1339,6 +1339,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
   secretsPort: () => frontendPluginManager.createThirdPartySecretsPort(),
+  agentNotifyPort: () => frontendPluginManager.createThirdPartyAgentNotifyPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,

@@ -1980,6 +1980,7 @@
         "web": "Navigation web",
         "agents": "Panes des agents",
         "agentMessages": "Messages entre agents",
+        "agentNotify": "Notifications aux agents",
         "secrets": "Secrets du plugin Navide"
       },
       "shellLabel": "Exécutables shell",
@@ -2436,6 +2437,7 @@
           "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur des sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après votre reprise en main, les scripts d’agent déjà en cours dans une page ne s’arrêtent que lorsque vous la rechargez ; tant que vous laissez les agents piloter une page, ce plugin Navide peut lui aussi y exécuter des scripts et la lire ainsi que son état de connexion ; il peut ouvrir de nombreuses pages web à la fois, et chacune consomme de la mémoire.",
           "agents": "Voit vos panes d’agent, quel pane a ouvert lequel et quand ils se sont envoyé des messages, mais pas ce qu’ils ont dit.",
           "agentMessages": "Lit le texte intégral des messages entre vos agents ; il peut contenir du code, le contenu de fichiers ou des secrets.",
+          "agentNotify": "Envoie des notifications à vos volets d’agent une fois que vous l’autorisez ; elles arrivent comme des données, jamais comme des instructions.",
           "secrets": "Conserve ses propres clés d’API et jetons chiffrés sur cet ordinateur ; Navide ne les envoie jamais et ne les affiche jamais.",
           "shell": "Exécuter des commandes sur votre ordinateur.",
           "terminal": "Ouvrir et contrôler des terminaux Navide."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Tous les plugins Navide tiers sont arrêtés. Reprenez-les avec « Tout reprendre » dans les réglages."
     }
   },
+  "pluginNotify": {
+    "switch": "Notifier les volets d’agent",
+    "switchNote": "Permet à ce plugin Navide d’envoyer des notifications aux volets d’agent de son projet, 6 par minute au plus. Elles arrivent comme des données, jamais comme des instructions. Désactivé par défaut.",
+    "paneMenu": {
+      "refuse": "Refuser les notifications des plugins Navide",
+      "accept": "Accepter les notifications des plugins Navide",
+      "title": "Tant qu’il les refuse, les plugins Navide autorisés à notifier les volets d’agent ne peuvent rien envoyer à ce volet"
+    }
+  },
   "backendResource": {
     "title": "Le backend d’un plugin Navide dépasse un seuil de ressources",
     "body": "{name} ({id} {version}) : {item} est à {usage}, au-dessus de son seuil de {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Peut ouvrir et parcourir n’importe quel site web ; les connexions aux sites sont conservées sur cet ordinateur ; les agents utilisent vos connexions dans ce plugin Navide (ils peuvent envoyer des requêtes sur les sites web en votre nom) et peuvent lire chaque page qu’il ouvre ainsi que son état de connexion ; après une prise de contrôle, les scripts d’agent déjà en cours sur une page ne s’arrêtent que lorsque vous la rechargez ; tant que vous laissez les agents piloter une page, ce plugin Navide peut lui aussi y exécuter des scripts et la lire ainsi que son état de connexion ; il peut ouvrir de nombreuses pages web à la fois, et chacune utilise de la mémoire.",
       "agents": "Voit les panes d’agent de ce projet, quel pane a ouvert lequel, les journaux de remise des messages (sans leur contenu) et la liste des sessions (sans le contenu des conversations)",
       "agentMessages": "Lit le texte intégral des messages entre vos agents dans ce projet, qui peut contenir du code, le contenu de fichiers ou des secrets",
+      "agentNotify": "Peut envoyer des notifications aux volets d’agent de ce projet une fois activé dans les réglages ; elles arrivent comme des données, jamais comme des instructions",
       "secrets": "Conserve ses propres clés d’API et jetons chiffrés sur cet ordinateur ; Navide ne les envoie jamais et ne les affiche jamais",
       "ui": "Affiche ses propres vues",
       "agentTools": "Propose des outils que les agents peuvent appeler ({read} en lecture seule, {write} en écriture)",

@@ -13,6 +13,7 @@ import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
 import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
 import { validateInterPluginCallRequest } from './pluginInterCall'
 import { SECRETS_METHODS, validateSecretsRequest } from './pluginSecrets'
+import { AGENT_NOTIFY_METHODS, validateAgentNotifyRequest } from './agentNotify'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -67,7 +68,7 @@ export interface PublicStorageCapabilityCatalogEntry extends PublicCapabilityCat
 }
 
 export interface PublicSystemCapabilityCatalogEntry extends PublicCapabilityCatalogBase {
-  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'secrets' | 'shell' | 'plugins'
+  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'secrets' | 'agentNotify' | 'shell' | 'plugins'
   /** Host-pinned scope for declared namespaces (`ui.openExternal` and every
    *  `web.*` address are `plugin`; storage has its own discriminated entry). */
   scope: PublicCapabilityScope
@@ -500,6 +501,11 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   ...Object.fromEntries(SECRETS_METHODS.map(address => [address, {
     address, kind: 'method', namespace: 'secrets', scope: 'plugin', eligibility: 'public',
     validateRequest: (value: unknown): value is Record<string, unknown> => validateSecretsRequest(address, value),
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Plan P4: a notification to one agent pane of the bound workspace.
+  ...Object.fromEntries(AGENT_NOTIFY_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: 'agentNotify', scope: 'workspace', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateAgentNotifyRequest(address, value),
   } satisfies PublicSystemCapabilityCatalogEntry])),
   // Another installed plugin's contributes.api method; the target must be in
   // the caller's permissions.plugins (not a system namespace). A literal, not

@@ -18,8 +18,8 @@ from .js_tokens import Token, iter_tokens
 from .limits import NO_DEADLINE, Deadline
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
-CAPABILITY_NAMESPACES = frozenset({"agentMessages", "agents", "aiCli", "fs", "secrets", "shell", "storage", "ui", "web", "workspace"})
-CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(agentMessages|agents|aiCli|fs|secrets|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
+CAPABILITY_NAMESPACES = frozenset({"agentMessages", "agentNotify", "agents", "aiCli", "fs", "secrets", "shell", "storage", "ui", "web", "workspace"})
+CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(agentMessages|agentNotify|agents|aiCli|fs|secrets|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
 
 
 def is_capability_address(value: str) -> bool:

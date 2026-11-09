@@ -12,6 +12,7 @@ from __future__ import annotations
 
 CATALOG_ADDRESSES = frozenset({
     "agentMessages.read",
+    "agentNotify.send",
     "agents.lineage",
     "agents.listMessages",
     "agents.listPanes",

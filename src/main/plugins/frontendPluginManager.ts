@@ -74,6 +74,7 @@ import {
   PLUGINS_CALL_ADDRESS,
 } from './pluginInterCall'
 import { PluginSecretsLimitError, redactSecretValues, secretsOperation, type PluginSecretStore, type PluginSecretsNotice, type SecretsOperation } from './pluginSecrets'
+import { AgentNotifyError, AgentNotifyLimiter, validateAgentNotifyOperation } from './agentNotify'
 import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import { PluginFrameNetworkObserver } from './pluginFrameNetworkActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
@@ -156,6 +157,7 @@ import {
   NativeBackendRefusal,
   type NativeBackendStatus,
   type PackageAgentsPort,
+  type PackageAgentNotifyPort,
   type PackageSecretsPort,
   type PackageShellPort,
 } from './pluginThirdPartyBackends'
@@ -1773,6 +1775,9 @@ export class FrontendPluginManager {
   private webViewRegistry: PluginWebViewRegistry | null = null
   /** The plugins' own encrypted secrets (`secrets`); absent, every call fails. */
   private pluginSecretStore: PluginSecretStore | null = null
+  /** Plan P4: the user's per-plugin "Notify agent panes" switch (pluginIpc), and the per-minute limit. */
+  private agentNotifyAllowedResolver: ((pluginId: string) => boolean) | null = null
+  private readonly agentNotifyLimiter = new AgentNotifyLimiter()
   /** The installed package's trust identity its secrets are bound to
    *  (secretsIdentity); absent or null, every secrets call is refused. */
   private pluginSecretIdentityResolver: ((pluginId: string) => string | null) | null = null
@@ -3156,6 +3161,71 @@ export class FrontendPluginManager {
     }
   }
 
+  /** Plan P4: install the user's per-plugin "Notify agent panes" switch. */
+  setAgentNotifyAllowedResolver(resolver: ((pluginId: string) => boolean) | null): void {
+    this.agentNotifyAllowedResolver = resolver
+  }
+
+  /** One `agentNotify.send` (a view's capability or the `agent-notify` port),
+   *  after the broker's checks: the user's switch, the per-minute limit, then
+   *  the backend delivers to the named pane of the bound workspace. */
+  private async runAgentNotify(
+    pluginId: string,
+    packageVersion: string,
+    workspacePath: string,
+    args: Record<string, unknown>,
+    beforeDispatch?: () => boolean,
+  ): Promise<{ queued: true }> {
+    if (!validateAgentNotifyOperation('send', args)) throw new AgentNotifyError('INVALID_ARGUMENT', 'agentNotify.send takes {to, text, ref?}')
+    if (this.agentNotifyAllowedResolver?.(pluginId) !== true) {
+      throw new AgentNotifyError('CAPABILITY_DENIED', 'Notify agent panes is off for this Navide plugin in Settings.')
+    }
+    if (!this.agentNotifyLimiter.take(pluginId)) {
+      throw new AgentNotifyError('RESOURCE_LIMIT', 'A Navide plugin may notify agent panes 6 times a minute.')
+    }
+    let response: unknown
+    try {
+      response = await this.sendPublicBackend('plugins.agent_notify', {
+        plugin_id: pluginId,
+        plugin_version: packageVersion,
+        workspace_path: resolve(workspacePath),
+        to: args.to,
+        text: args.text,
+        ...(args.ref === undefined ? {} : { ref: args.ref }),
+      }, beforeDispatch)
+    } catch {
+      throw new AgentNotifyError('BACKEND_UNAVAILABLE', 'The notification could not be delivered now.')
+    }
+    const answer = response !== null && typeof response === 'object' && !Array.isArray(response)
+      ? response as Record<string, unknown>
+      : {}
+    if (answer.ok === true) return { queued: true }
+    if (answer.error_code === 'TARGET_NOT_FOUND') throw new AgentNotifyError('INVALID_ARGUMENT', 'No agent pane of this workspace has that name.')
+    if (answer.error_code === 'TARGET_REFUSES') throw new AgentNotifyError('CAPABILITY_DENIED', 'That pane does not take notifications from Navide plugins.')
+    throw new AgentNotifyError('BACKEND_UNAVAILABLE', 'The notification could not be delivered now.')
+  }
+
+  /** Plan P4: `agentNotify.send` for a third-party backend that declares
+   *  `agentNotify`, under the same checks as the agents ports. */
+  createThirdPartyAgentNotifyPort(): PackageAgentNotifyPort {
+    return {
+      run: async (operation, args, context) => {
+        if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+        const allows = (): boolean => this.thirdPartyAgentsGrantAllows('agentNotify', context)
+        const root = context.authorizedPlanRoot
+        if (operation !== 'send' || !root || !allows()) throw new PlansBridgeError('CAPABILITY_DENIED', 'Agent notifications are denied.')
+        try {
+          return await this.runAgentNotify(
+            context.runtime.pluginId, context.runtime.packageVersion ?? '', root, args, allows,
+          )
+        } catch (error) {
+          if (error instanceof AgentNotifyError) throw new PlansBridgeError(error.code, error.message)
+          throw new PlansBridgeError('INTERNAL_ERROR', 'Agent notification failed.')
+        }
+      },
+    }
+  }
+
   /** The package's own secrets for a third-party backend that declares
    *  `secrets`, under the same checks as the agents ports: the registered
    *  version declares it, its Grant holds it, and the call comes from a live
@@ -3192,7 +3262,7 @@ export class FrontendPluginManager {
    *  the namespace and its user Grant holds it, at the canonical bound root;
    *  and the call comes from a live view of the package there, or from an
    *  agent-tool call the Host bound headless at that root and still serves. */
-  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages' | 'secrets', context: PlansBridgeContext): boolean {
+  private thirdPartyAgentsGrantAllows(namespace: 'agents' | 'agentMessages' | 'secrets' | 'agentNotify', context: PlansBridgeContext): boolean {
     const runtime = context.runtime
     if (
       context.signal.aborted ||
@@ -5846,6 +5916,7 @@ export class FrontendPluginManager {
           if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
           if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
           if (error instanceof PluginSecretsLimitError) return buildError(call.reqId, 'RESOURCE_LIMIT', error.message)
+          if (error instanceof AgentNotifyError) return buildError(call.reqId, error.code, error.message)
           // The Plugin keeps the fixed opaque message (it must not learn Host
           // paths or internals); the Host console keeps the cause.
           console.error(`[plugins] public capability '${plan.address}' failed:`, error)
@@ -6912,6 +6983,18 @@ export class FrontendPluginManager {
       return this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
     }
 
+    if (plan.address === 'agentNotify.send') {
+      if (!workspacePath) throw new Error('Agent notification workspace binding is missing')
+      if (!this.publicPlanCanDispatch(plan, plugin)) {
+        throw new Error('agent execution policy denied the operation')
+      }
+      // The plugin id and workspace are the Host binding's, never the request's.
+      return await this.runAgentNotify(
+        plan.runtime.pluginId, plan.runtime.packageVersion ?? '', workspacePath, plan.args,
+        () => this.publicPlanCanDispatch(plan, plugin),
+      )
+    }
+
     const agentsOp = agentsOperation(plan.address)
     if (agentsOp) {
       if (!workspacePath) throw new Error('Agents capability workspace binding is missing')
@@ -7564,6 +7647,7 @@ export class FrontendPluginManager {
         if (error instanceof WebViewError) return webViewCapabilityError(call.reqId, error)
         if (error instanceof InterPluginCallError) return buildError(call.reqId, error.code, error.message)
         if (error instanceof PluginSecretsLimitError) return buildError(call.reqId, 'RESOURCE_LIMIT', error.message)
+        if (error instanceof AgentNotifyError) return buildError(call.reqId, error.code, error.message)
         return buildError(call.reqId, 'INTERNAL_ERROR', 'public capability failed')
       }
     }
@@ -8575,7 +8659,8 @@ export class FrontendPluginManager {
     const namespace = plan.address.split('.', 1)[0]
     if (
       namespace !== 'fs' && namespace !== 'ui' && namespace !== 'aiCli' && namespace !== 'web' &&
-      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'secrets' && namespace !== 'shell'
+      namespace !== 'agents' && namespace !== 'agentMessages' && namespace !== 'secrets' && namespace !== 'agentNotify' &&
+      namespace !== 'shell'
     ) {
       return true
     }
