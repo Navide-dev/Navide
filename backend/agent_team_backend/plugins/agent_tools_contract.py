@@ -776,6 +776,11 @@ class PluginApprovalDecision(TypedDict):
 # ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
 
 PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
+#: Plan P2, backend → Host: ``{request_id, action: "status" | "stop", plugin_id?}``
+#: from a chat's ``/plugins status`` or ``/plugins stop <id>``; it can stop, never start.
+PLUGIN_STOP_REQUEST_EVENT = "plugins.stop.request"
+#: Host → backend: ``{request_id, ok, ...}``, the answer to one stop request.
+PLUGIN_STOP_RESULT_MESSAGE = "plugins.stop.result"
 PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
 #: ``update``: marketplace_request_update when the disclosure is unchanged (O1).
 PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable", "update")

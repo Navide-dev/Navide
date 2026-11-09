@@ -5,6 +5,8 @@
 // failed tool calls and its backend's resources. Records only: nothing on
 // this table changes what a plugin may do. A row opens that plugin's existing
 // Activity panel. Every string a plugin supplied is shown as plain text.
+// Plan P2: a running third-party plugin's row has Stop (asked once more in
+// place): the Disabled switch, recorded as a stop with what it was doing.
 // `paused` stops the polling while the table is out of view.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -21,6 +23,8 @@ interface Row {
   version: string
   builtin: boolean
   disabled: boolean
+  /** A third-party package with the Disabled switch: it can be stopped here. */
+  stoppable: boolean
   activity: PluginActivityOverviewRow | null
   resources: BackendResourceStatusView | null
 }
@@ -32,6 +36,10 @@ const resources = ref<BackendResourceStatusView[]>([])
 const error = ref('')
 const loading = ref(true)
 const open = ref<string | null>(null)
+/** The row whose Stop was pressed once and waits for the second press. */
+const confirming = ref<string | null>(null)
+const stopping = ref<string | null>(null)
+const stopError = ref('')
 let timer: ReturnType<typeof setInterval> | null = null
 
 function api() {
@@ -66,6 +74,7 @@ const rows = computed<Row[]>(() => installed.value.map((pkg) => ({
   version: pkg.packageVersion ?? '',
   builtin: pkg.provenance === 'factory-bundled',
   disabled: pkg.disabled === true || disabledBuiltins.value.includes(pkg.id),
+  stoppable: pkg.disabled !== undefined && pkg.provenance !== 'factory-bundled',
   activity: activity.value.get(pkg.id) ?? null,
   resources: resources.value.find((entry) => entry.pluginId === pkg.id) ?? null,
 })))
@@ -85,6 +94,24 @@ function hostText(host: PluginActivityOverviewHost): string {
 function resourcesOver(entry: BackendResourceStatusView): boolean {
   return (Object.keys(entry.usage) as Array<keyof BackendResourceStatusView['usage']>)
     .some((item) => entry.usage[item] > entry.thresholds[item])
+}
+
+async function stop(id: string): Promise<void> {
+  if (confirming.value !== id) {
+    confirming.value = id
+    return
+  }
+  confirming.value = null
+  stopping.value = id
+  stopError.value = ''
+  try {
+    await api()?.stop?.(id, 'settings')
+  } catch (err) {
+    stopError.value = t('pluginStop.failed', { id: reveal(id), error: err instanceof Error ? err.message : String(err) })
+  } finally {
+    stopping.value = null
+    await load()
+  }
 }
 
 function toggle(id: string): void {
@@ -114,6 +141,7 @@ onBeforeUnmount(stopPolling)
     <p v-if="loading" class="nv-monitor-muted">{{ $t('pluginActivity.loading') }}</p>
     <template v-else>
       <p v-if="error" class="nv-monitor-muted nv-monitor-error" role="status">{{ error }}</p>
+      <p v-if="stopError" class="nv-monitor-error" role="alert">{{ stopError }}</p>
       <p v-if="rows.length === 0" class="nv-monitor-muted">{{ $t('pluginActivity.monitor.empty') }}</p>
       <div v-else class="nv-monitor-scroll">
         <table class="nv-monitor-table">
@@ -126,6 +154,7 @@ onBeforeUnmount(stopPolling)
               <th scope="col">{{ $t('pluginActivity.monitor.column.hosts') }}</th>
               <th scope="col" class="nv-monitor-num">{{ $t('pluginActivity.monitor.column.failures') }}</th>
               <th scope="col">{{ $t('pluginActivity.monitor.column.resources') }}</th>
+              <th scope="col"><span class="nv-monitor-sr">{{ $t('pluginStop.column') }}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -170,9 +199,27 @@ onBeforeUnmount(stopPolling)
                   </template>
                   <span v-else class="nv-monitor-muted">{{ $t('pluginActivity.monitor.noBackend') }}</span>
                 </td>
+                <td class="nv-monitor-actions">
+                  <template v-if="row.stoppable && !row.disabled">
+                    <button
+                      type="button"
+                      class="nv-btn nv-btn--sm nv-monitor-stop"
+                      :class="{ 'nv-monitor-stop--confirm': confirming === row.id }"
+                      :disabled="stopping !== null"
+                      :title="$t('pluginStop.note', { id: reveal(row.id) })"
+                      @click="stop(row.id)"
+                    >{{ stopping === row.id ? $t('pluginStop.stopping') : confirming === row.id ? $t('pluginStop.confirm') : $t('pluginStop.stop') }}</button>
+                    <button
+                      v-if="confirming === row.id"
+                      type="button"
+                      class="nv-btn nv-btn--sm nv-monitor-cancel"
+                      @click="confirming = null"
+                    >{{ $t('pluginStop.cancel') }}</button>
+                  </template>
+                </td>
               </tr>
               <tr v-if="open === row.id" class="nv-monitor-detail">
-                <td colspan="7">
+                <td colspan="8">
                   <PluginActivityPanel :plugin-id="row.id" :poll-ms="props.pollMs" :paused="props.paused" />
                 </td>
               </tr>
@@ -289,6 +336,25 @@ onBeforeUnmount(stopPolling)
 .nv-monitor-attention {
   color: var(--attention-fg);
   font-weight: 600;
+}
+.nv-monitor-actions {
+  white-space: nowrap;
+}
+.nv-monitor-actions .nv-btn + .nv-btn {
+  margin-left: var(--space-1);
+}
+.nv-monitor-stop.nv-monitor-stop--confirm {
+  background: var(--danger-emphasis);
+  border-color: var(--danger-emphasis);
+  color: var(--text-on-emphasis);
+}
+.nv-monitor-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .nv-monitor-detail > td {
   background: var(--bg-subtle);

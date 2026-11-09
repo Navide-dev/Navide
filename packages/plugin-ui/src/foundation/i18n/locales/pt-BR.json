@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Parar",
+    "confirm": "Parar agora",
+    "cancel": "Cancelar",
+    "stopping": "Parando…",
+    "note": "Para {id} na hora: as chamadas em andamento terminam, suas visualizações fecham e seu backend para. Seus arquivos, permissões e dados ficam; ative-o de novo nas Configurações.",
+    "failed": "Não foi possível parar {id}: {error}",
+    "column": "Parar",
+    "via": {
+      "settings": "a visão geral da Activity nas Configurações",
+      "status-bar": "a barra de status",
+      "telegram": "um comando do chat",
+      "mcp": "um agente (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Parado em {date} por {via}. Naquele momento:",
+      "inFlight": "Chamadas em andamento, encerradas: {count}",
+      "toolCalls": "Chamadas de ferramentas no último minuto: {count}",
+      "capabilityCalls": "Chamadas de capacidades no último minuto: {count}",
+      "failures": "Chamadas de ferramentas com falha seguidas: {count}",
+      "notRead": "não lido a tempo",
+      "hosts": "Hosts não declarados ou recusados: {hosts}",
+      "noHosts": "Hosts não declarados ou recusados: nenhum"
+    },
+    "enable": {
+      "heading": "Ativar {id} de novo?",
+      "confirm": "Ativar"
+    },
+    "statusBar": {
+      "label": "Plugins do Navide {running}",
+      "title": "Plugins do Navide: parar um na hora",
+      "heading": "Plugins do Navide de terceiros",
+      "openSettings": "Abrir a visão geral da Activity"
+    }
+  },
   "backendResource": {
     "title": "O back-end de um plug-in do Navide está acima de um limite de recursos",
     "body": "{name} ({id} {version}): {item} está em {usage}, acima do limite de {threshold}.",

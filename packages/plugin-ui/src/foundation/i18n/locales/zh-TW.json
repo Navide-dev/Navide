@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "停止",
+    "confirm": "立即停止",
+    "cancel": "取消",
+    "stopping": "停止中…",
+    "note": "立即停止 {id}：進行中的呼叫會被結束、視圖關閉、後端停止。檔案、授權與資料都保留；要重新啟用請到設定。",
+    "failed": "無法停止 {id}：{error}",
+    "column": "停止",
+    "via": {
+      "settings": "設定的 Activity 總覽",
+      "status-bar": "狀態列",
+      "telegram": "聊天室指令",
+      "mcp": "agent（plugins_disable）"
+    },
+    "summary": {
+      "heading": "{date} 從{via}停止。當時：",
+      "inFlight": "進行中的呼叫（已結束）：{count}",
+      "toolCalls": "最近一分鐘工具呼叫：{count}",
+      "capabilityCalls": "最近一分鐘能力呼叫：{count}",
+      "failures": "連續失敗的工具呼叫：{count}",
+      "notRead": "未及時讀到",
+      "hosts": "未宣告或被拒絕的主機：{hosts}",
+      "noHosts": "未宣告或被拒絕的主機：無"
+    },
+    "enable": {
+      "heading": "要重新啟用 {id} 嗎？",
+      "confirm": "啟用"
+    },
+    "statusBar": {
+      "label": "Navide 外掛 {running}",
+      "title": "Navide 外掛：立即停止其中一個",
+      "heading": "第三方 Navide 外掛",
+      "openSettings": "開啟 Activity 總覽"
+    }
+  },
   "backendResource": {
     "title": "Navide 外掛的 backend 用量超過門檻",
     "body": "{name}（{id} {version}）：{item}目前是 {usage}，超過門檻 {threshold}。",

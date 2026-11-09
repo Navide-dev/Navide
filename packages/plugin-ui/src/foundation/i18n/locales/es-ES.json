@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Detener",
+    "confirm": "Detener ahora",
+    "cancel": "Cancelar",
+    "stopping": "Deteniendo…",
+    "note": "Detiene {id} al instante: las llamadas en curso terminan, sus vistas se cierran y su backend se para. Sus archivos, permisos y datos se conservan; vuelve a activarlo en Ajustes.",
+    "failed": "No se pudo detener {id}: {error}",
+    "column": "Detener",
+    "via": {
+      "settings": "el resumen de Activity de Ajustes",
+      "status-bar": "la barra de estado",
+      "telegram": "un comando del chat",
+      "mcp": "un agente (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Detenido el {date} desde {via}. En ese momento:",
+      "inFlight": "Llamadas en curso, terminadas: {count}",
+      "toolCalls": "Llamadas a herramientas en el último minuto: {count}",
+      "capabilityCalls": "Llamadas a capacidades en el último minuto: {count}",
+      "failures": "Llamadas a herramientas fallidas seguidas: {count}",
+      "notRead": "no se leyó a tiempo",
+      "hosts": "Hosts no declarados o rechazados: {hosts}",
+      "noHosts": "Hosts no declarados o rechazados: ninguno"
+    },
+    "enable": {
+      "heading": "¿Volver a activar {id}?",
+      "confirm": "Activar"
+    },
+    "statusBar": {
+      "label": "Plugins de Navide {running}",
+      "title": "Plugins de Navide: detener uno al instante",
+      "heading": "Plugins de Navide de terceros",
+      "openSettings": "Abrir el resumen de Activity"
+    }
+  },
   "backendResource": {
     "title": "El backend de un complemento de Navide supera un umbral de recursos",
     "body": "{name} ({id} {version}): {item} está en {usage}, por encima de su umbral de {threshold}.",

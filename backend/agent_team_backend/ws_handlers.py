@@ -461,6 +461,29 @@ async def plugins_agent_action_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("plugins.stop.result")
+async def plugins_stop_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.stop.request`` (plan P2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .plugins import plugin_stop
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.stop.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plugin_stop.resolve(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
 #: The Host records broker and shell-broker calls, and (C1) its plugin frames'

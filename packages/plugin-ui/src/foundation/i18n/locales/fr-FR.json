@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Arrêter",
+    "confirm": "Arrêter maintenant",
+    "cancel": "Annuler",
+    "stopping": "Arrêt…",
+    "note": "Arrête {id} tout de suite : les appels en cours sont terminés, ses vues se ferment et son backend s’arrête. Ses fichiers, autorisations et données restent ; réactivez-le dans les réglages.",
+    "failed": "Impossible d’arrêter {id} : {error}",
+    "column": "Arrêter",
+    "via": {
+      "settings": "la vue d’ensemble de l’Activity des réglages",
+      "status-bar": "la barre d’état",
+      "telegram": "une commande de chat",
+      "mcp": "un agent (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Arrêté le {date} depuis {via}. À ce moment :",
+      "inFlight": "Appels en cours, terminés : {count}",
+      "toolCalls": "Appels d’outils dans la dernière minute : {count}",
+      "capabilityCalls": "Appels de capacités dans la dernière minute : {count}",
+      "failures": "Appels d’outils échoués à la suite : {count}",
+      "notRead": "non lu à temps",
+      "hosts": "Hôtes non déclarés ou refusés : {hosts}",
+      "noHosts": "Hôtes non déclarés ou refusés : aucun"
+    },
+    "enable": {
+      "heading": "Réactiver {id} ?",
+      "confirm": "Activer"
+    },
+    "statusBar": {
+      "label": "Plugins Navide {running}",
+      "title": "Plugins Navide : en arrêter un tout de suite",
+      "heading": "Plugins Navide tiers",
+      "openSettings": "Ouvrir la vue d’ensemble de l’Activity"
+    }
+  },
   "backendResource": {
     "title": "Le backend d’un plugin Navide dépasse un seuil de ressources",
     "body": "{name} ({id} {version}) : {item} est à {usage}, au-dessus de son seuil de {threshold}.",

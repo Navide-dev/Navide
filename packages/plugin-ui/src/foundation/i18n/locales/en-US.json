@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Stop",
+    "confirm": "Stop now",
+    "cancel": "Cancel",
+    "stopping": "Stopping…",
+    "note": "Stops {id} at once: calls in flight are ended, its views close and its backend stops. Its files, grants and data stay; enable it again in Settings.",
+    "failed": "{id} could not be stopped: {error}",
+    "column": "Stop",
+    "via": {
+      "settings": "the Settings Activity monitor",
+      "status-bar": "the status bar",
+      "telegram": "a chat command",
+      "mcp": "an agent (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Stopped {date} from {via}. At that moment:",
+      "inFlight": "Calls in flight, ended: {count}",
+      "toolCalls": "Tool calls in the last minute: {count}",
+      "capabilityCalls": "Capability calls in the last minute: {count}",
+      "failures": "Tool calls failed in a row: {count}",
+      "notRead": "not read in time",
+      "hosts": "Undeclared or refused hosts: {hosts}",
+      "noHosts": "Undeclared or refused hosts: none"
+    },
+    "enable": {
+      "heading": "Enable {id} again?",
+      "confirm": "Enable"
+    },
+    "statusBar": {
+      "label": "Navide plugins {running}",
+      "title": "Navide plugins: stop one at once",
+      "heading": "Third-party Navide plugins",
+      "openSettings": "Open the Activity monitor"
+    }
+  },
   "backendResource": {
     "title": "A Navide plugin's backend is over a resource threshold",
     "body": "{name} ({id} {version}): {item} is {usage}, over its threshold of {threshold}.",

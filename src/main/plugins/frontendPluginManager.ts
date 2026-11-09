@@ -193,6 +193,7 @@ import { AiTerminalOutputDecoder } from './aiTerminalOutput'
 import { MINI_IDE_STORAGE_KEYS } from '../../shared/miniIdePreferences'
 import { copyManifestPermissionsSummary } from '../../shared/executionPolicy'
 import type { AgentToolCallErrorCode, AgentToolUnavailableReason } from '../../shared/pluginAgentTools'
+import { PLUGIN_STOP_REQUEST_EVENT, PLUGIN_STOP_RESULT_MESSAGE } from '../../shared/pluginStop'
 import type { MiniIdeLegacyPreferences } from './miniIdeLegacyPreferences'
 import type { FilePickerHost, FilePickerInvocation } from '../filePicker'
 import { PluginActivationSelector } from './pluginActivationSelector'
@@ -1742,6 +1743,8 @@ export class FrontendPluginManager {
   private developerQueryHandler: ((query: unknown) => Promise<DeveloperQueryAnswer>) | null = null
   /** Answers `plugins.agent_action.request` (B2-c); set by registerPluginIpc. */
   private pluginAgentActionHandler: ((request: unknown) => Promise<PluginAgentActionAnswer>) | null = null
+  /** Plan P2: answers a chat command's `/plugins status` or `/plugins stop` (pluginIpc). */
+  private pluginStopHandler: ((request: unknown) => Promise<Record<string, unknown>>) | null = null
   private readonly editorAiCapability = new EditorAiCapability({
     request: (type, payload, beforeDispatch) => this.sendPublicBackend(type, payload, beforeDispatch),
     createReviewClient: (onDisconnected) => {
@@ -9851,6 +9854,9 @@ export class FrontendPluginManager {
       client.on(PLUGIN_AGENT_ACTION_REQUEST_EVENT, (payload) => {
         void this.handlePluginAgentActionRequest(client, payload)
       })
+      client.on(PLUGIN_STOP_REQUEST_EVENT, (payload) => {
+        void this.handlePluginStopRequest(client, payload)
+      })
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
@@ -10247,6 +10253,38 @@ export class FrontendPluginManager {
    *  installed Marketplace package, then a notice naming the caller. */
   setPluginAgentActionHandler(handler: (request: unknown) => Promise<PluginAgentActionAnswer>): void {
     this.pluginAgentActionHandler = handler
+  }
+
+  /** Plan P2: install the function that answers a chat command's plugin stop request. */
+  setPluginStopHandler(handler: (request: unknown) => Promise<Record<string, unknown>>): void {
+    this.pluginStopHandler = handler
+  }
+
+  /** Answer one `plugins.stop.request` on the registered Host session: only
+   *  the backend this Host authenticated to can ask, over this client. */
+  private async handlePluginStopRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null) return
+    const request = Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'request_id'))
+    let answer: Record<string, unknown>
+    const handler = this.pluginStopHandler
+    if (this.wsClient !== client || !this.hostSessionRegistered || !handler) {
+      answer = { ok: false, error: 'Navide Host cannot stop plugins now', error_code: 'HOST_UNAVAILABLE' }
+    } else {
+      try {
+        answer = await handler(request)
+      } catch (error) {
+        answer = { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+      }
+    }
+    if (this.wsClient !== client) return
+    await client.send(PLUGIN_STOP_RESULT_MESSAGE, { ...answer, request_id: requestId }, 10_000).catch(() => {
+      // The backend's waiter has its own timeout and reports it there.
+    })
   }
 
   /** Answer one `plugins.agent_action.request` on the registered Host session.

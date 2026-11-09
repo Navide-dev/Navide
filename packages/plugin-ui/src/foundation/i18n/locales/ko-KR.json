@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "중지",
+    "confirm": "지금 중지",
+    "cancel": "취소",
+    "stopping": "중지 중…",
+    "note": "{id}을(를) 바로 중지합니다. 진행 중인 호출은 끝나고, 뷰는 닫히며, 백엔드는 멈춥니다. 파일, 권한, 데이터는 남으며 설정에서 다시 켤 수 있습니다.",
+    "failed": "{id}을(를) 중지할 수 없습니다: {error}",
+    "column": "중지",
+    "via": {
+      "settings": "설정의 Activity 개요",
+      "status-bar": "상태 표시줄",
+      "telegram": "채팅 명령",
+      "mcp": "에이전트(plugins_disable)"
+    },
+    "summary": {
+      "heading": "{date}에 {via}에서 중지했습니다. 그때:",
+      "inFlight": "진행 중이던 호출(종료됨): {count}",
+      "toolCalls": "최근 1분간 도구 호출: {count}",
+      "capabilityCalls": "최근 1분간 기능 호출: {count}",
+      "failures": "연속으로 실패한 도구 호출: {count}",
+      "notRead": "제때 읽지 못함",
+      "hosts": "선언되지 않았거나 거부된 호스트: {hosts}",
+      "noHosts": "선언되지 않았거나 거부된 호스트: 없음"
+    },
+    "enable": {
+      "heading": "{id}을(를) 다시 사용하시겠습니까?",
+      "confirm": "사용"
+    },
+    "statusBar": {
+      "label": "Navide 플러그인 {running}",
+      "title": "Navide 플러그인: 하나를 바로 중지",
+      "heading": "서드파티 Navide 플러그인",
+      "openSettings": "Activity 개요 열기"
+    }
+  },
   "backendResource": {
     "title": "Navide 플러그인의 백엔드가 리소스 기준치를 넘었어요",
     "body": "{name}({id} {version}): {item}이(가) {usage}로 기준치 {threshold}을(를) 넘었어요.",

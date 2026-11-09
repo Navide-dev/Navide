@@ -506,6 +506,8 @@ const AnnouncementsPanel = defineAsyncComponent(() => import('./components/Annou
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
+// Plan P2: the status bar's Navide plugins item and its Stop popover.
+const PluginStopStatusItem = defineAsyncComponent(() => import('./components/PluginStopStatusItem.vue'))
 
 const backend = useBackend()
 // Warn and error diagnostics also go to the backend's on-disk error ledger,
@@ -26241,6 +26243,13 @@ function paneIsCommander(p: ActivePane): boolean {
           >⚡ {{ $t('reconnect.banner', { count: disconnectedCount }) }}</span>
           <span class="sb-reconnect-dismiss" :title="$t('restore.dismiss')" @click="dismissReconnectBanner">✕</span>
         </span>
+        <PluginStopStatusItem
+          v-if="!isDetachedWindow"
+          :open="openPopover === 'plugins'"
+          @toggle="togglePopover('plugins')"
+          @close="closePopover()"
+          @open-settings="closePopover(); openSettingsAt('extensions')"
+        />
         <span
           class="sb-item sb-clickable sb-notify"
           :class="{ 'sb-off': !systemNotifyOn, 'sb-warn': notifyPermissionDenied }"

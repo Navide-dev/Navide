@@ -50,6 +50,7 @@ function mockPlugins(overrides: Record<string, unknown> = {}) {
     activityOverview: vi.fn().mockResolvedValue({ ok: true, overview: overview() }),
     activityReport: vi.fn().mockResolvedValue({ ok: false, error: 'not in this test' }),
     backendCallConcurrency: vi.fn().mockResolvedValue([]),
+    stop: vi.fn().mockResolvedValue({ id: '', disabled: true, changed: true, summary: {} }),
     nativeBackends: {
       resourceStatus: vi.fn().mockResolvedValue([
         { pluginId: 'acme.grok', name: 'Grok', packageVersion: '1.2.0', usage: { ...values(1), memory: 210 * 1024 * 1024, processes: 9 }, thresholds: values(8), levels: values(0), waiting: [] },
@@ -116,6 +117,35 @@ describe('PluginActivityMonitor (plan P1)', () => {
     const w = await render()
     expect(w.get('.nv-monitor-error').text()).toContain('Navide Host session is not ready')
     expect(w.findAll('.nv-monitor-row')).toHaveLength(3)
+  })
+
+  it('P2: stops a running third-party plugin after a second press, never a bundled or disabled one', async () => {
+    const api = mockPlugins()
+    const w = await render()
+    expect(row(w, 'navide.plans').find('.nv-monitor-stop').exists()).toBe(false)
+    expect(row(w, 'acme.off').find('.nv-monitor-stop').exists()).toBe(false)
+    const stop = () => row(w, 'acme.grok').get('.nv-monitor-stop')
+    expect(stop().text()).toBe('Stop')
+    await stop().trigger('click')
+    expect(api.stop).not.toHaveBeenCalled()
+    expect(stop().text()).toBe('Stop now')
+    await row(w, 'acme.grok').get('.nv-monitor-cancel').trigger('click')
+    expect(stop().text()).toBe('Stop')
+    await stop().trigger('click')
+    await stop().trigger('click')
+    await flushPromises()
+    expect(api.stop).toHaveBeenCalledWith('acme.grok', 'settings')
+    // The table is read again after the stop.
+    expect(api.activityOverview).toHaveBeenCalledTimes(2)
+  })
+
+  it('P2: says why a stop failed', async () => {
+    mockPlugins({ stop: vi.fn().mockRejectedValue(new Error('drain failed')) })
+    const w = await render()
+    await row(w, 'acme.grok').get('.nv-monitor-stop').trigger('click')
+    await row(w, 'acme.grok').get('.nv-monitor-stop').trigger('click')
+    await flushPromises()
+    expect(w.get('[role="alert"]').text()).toBe('acme.grok could not be stopped: drain failed')
   })
 
   it('polls while shown and stops while paused', async () => {

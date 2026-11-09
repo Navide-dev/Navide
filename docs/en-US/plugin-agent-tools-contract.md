@@ -1111,6 +1111,34 @@ answers the agent `{ok: false, status: "staged", applied: false, error_code:
 "SWITCH_FAILED", error, pluginId, fromVersion, pluginVersion}` (audited as
 `error` with `ACTION_FAILED`), without the Host's text and without filing a request.
 
+Since 0.2.40 (plan P2) a `disable` the Host carries out is a **stop**: the same
+switch, recorded with `via: "mcp"` and the plugin's activity at that moment
+(see 4.3.2). The answer to the agent is unchanged.
+
+### 4.3.2 Backend → Host: `plugins.stop` (plan P2)
+
+A chat command in a bound Channels chat (`/plugins status`, `/plugins stop
+<id>`; the sender is one the user approved) reaches the Host as the event
+`plugins.stop.request` `{request_id, action: "status" | "stop", plugin_id?}`
+over its authenticated session, and the Host answers with the message
+`plugins.stop.result` `{request_id, ok, ...}`; the backend waits 30 s.
+
+- `status`: `{ok: true, plugins: [{id, version, disabled}]}`, the installed
+  third-party packages that have the Disabled switch.
+- `stop`: the user's own stop, `via: "telegram"`: `{ok: true, pluginId,
+  changed}`, or `{ok: false, error_code: "NOT_INSTALLED" | "BAD_REQUEST" |
+  "ACTION_FAILED" | "HOST_UNAVAILABLE", error}`. A bundled Navide plugin is
+  `NOT_INSTALLED` here. There is no `start`: enabling stays in the window.
+
+Every stop (Settings, the status bar, a chat, `plugins_disable`) disables the
+package as the Disabled switch does and records, beside who disabled it,
+`stop: {at, via, summary}`; `summary` is `{inFlightCalls, toolCallsLastMinute,
+capabilityCallsLastMinute, consecutiveFailures, undeclaredHosts}`, read beside
+the stop from `plugins.activity.overview` (5.1) for at most 2 s, its counts
+null when the backend did not answer in time. `plugins:listInstalled` carries
+it as `stopRecord` while the package stays disabled; the installed list shows
+it before Enable goes through.
+
 ### 4.4 Chunked transfer of results and arguments
 
 A result or an argument object of any size reaches the other end intact. A

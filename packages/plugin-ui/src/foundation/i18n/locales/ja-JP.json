@@ -12354,6 +12354,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "停止",
+    "confirm": "今すぐ停止",
+    "cancel": "キャンセル",
+    "stopping": "停止中…",
+    "note": "{id} をすぐに停止します。実行中の呼び出しは終了し、ビューは閉じ、バックエンドは止まります。ファイル、許可、データは残ります。再び有効にするには設定を使います。",
+    "failed": "{id} を停止できませんでした：{error}",
+    "column": "停止",
+    "via": {
+      "settings": "設定の Activity 一覧",
+      "status-bar": "ステータスバー",
+      "telegram": "チャットのコマンド",
+      "mcp": "エージェント（plugins_disable）"
+    },
+    "summary": {
+      "heading": "{date} に{via}から停止しました。その時点：",
+      "inFlight": "実行中だった呼び出し（終了済み）：{count}",
+      "toolCalls": "直近 1 分間のツール呼び出し：{count}",
+      "capabilityCalls": "直近 1 分間の機能呼び出し：{count}",
+      "failures": "連続して失敗したツール呼び出し：{count}",
+      "notRead": "時間内に読み取れませんでした",
+      "hosts": "未宣言または拒否されたホスト：{hosts}",
+      "noHosts": "未宣言または拒否されたホスト：なし"
+    },
+    "enable": {
+      "heading": "{id} を再び有効にしますか？",
+      "confirm": "有効にする"
+    },
+    "statusBar": {
+      "label": "Navide プラグイン {running}",
+      "title": "Navide プラグイン：1 つをすぐに停止",
+      "heading": "サードパーティの Navide プラグイン",
+      "openSettings": "Activity 一覧を開く"
+    }
+  },
   "backendResource": {
     "title": "Navide プラグインの backend がリソースのしきい値を超えました",
     "body": "{name}（{id} {version}）：{item}が {usage} で、しきい値 {threshold} を超えています。",
