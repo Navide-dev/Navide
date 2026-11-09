@@ -1985,6 +1985,21 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       }
     })
 
+    it('a user stop of a package an agent already disabled takes the disable over, so the agent cannot enable it', async () => {
+      const { root, manager, row, agentAction } = await installed()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await agentAction()({ request_id: 'pa:1', action: 'disable', plugin_id: 'acme.demo', requester })
+        await expect(handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'status-bar' })).resolves.toMatchObject({ changed: false })
+        expect(row()).toMatchObject({ disabled: true, stopRecord: { via: 'status-bar' } })
+        await expect(agentAction()({ request_id: 'pa:2', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
     it('a chat command lists the stoppable plugins and stops one as the user, which an agent cannot undo', async () => {
       const { root, manager, row, agentAction, stopRequest } = await installed()
       const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }

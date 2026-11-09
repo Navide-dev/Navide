@@ -5280,7 +5280,11 @@ export function registerPluginIpc(
     const at = Date.now()
     const inFlightCalls = options.backendCallConcurrency?.().find((row) => row.pluginId === id)?.current ?? 0
     const [summary, result] = await Promise.all([stopSummary(id, inFlightCalls), setInstalledPackageDisabled(id, true)])
-    if (result.changed) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary } })
+    // A user's stop of a package an agent had disabled takes that disable over:
+    // otherwise the agent could enable what the user meant to stop. A package
+    // the user already disabled keeps its first record.
+    const takesOver = !result.changed && who.by === 'user' && disableSources.get(id).by !== 'user'
+    if (result.changed || takesOver) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary } })
     return { id: result.id, disabled: true, changed: result.changed, summary }
   }
 
