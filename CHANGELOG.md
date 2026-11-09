@@ -4,6 +4,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Chat channels: a message sent from a chat (Telegram and the others) to a pane that is waiting on a permission prompt is no longer refused. It is kept and the chat is told so, with the prompt and its buttons quoted and a withdraw button; once the prompt clears the kept messages go in, in order, and each is confirmed as sent. Up to 20 per pane are kept for 30 minutes; one still waiting after that, or kept for a pane that goes away, is dropped and the chat told. `/cancel` withdraws them, and a bare `yes` or option number that answered nothing is never kept. Nothing here can allow a prompt from the chat: Navide Guard's remote-approval rules are unchanged.
+- Chat channels: `/status`, answered by Navide without reaching the pane, now also says how long the pane has waited on a prompt, how many kept messages follow it, and its last turn text on one line (redacted).
+
 ### New on Navide Marketplace
 
 <!-- Listings first published on Navide Marketplace in this release, and

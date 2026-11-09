@@ -780,7 +780,8 @@ class Mirror:
         kids = [p for _, p in self.descendants(pane_id, directory)]
         if cmd == "status":
             root = directory.get(pane_id) or {"name": binding.title or pane_id, "display_status": ""}
-            await self.m._reply(msg, format_tree(root, self.descendants(pane_id, directory)))
+            tree = format_tree(root, self.descendants(pane_id, directory))
+            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id)]))
             return True
         if cmd == "stop":
             target = match_name(arg, kids + ([directory[pane_id]] if pane_id in directory else []))
@@ -807,8 +808,8 @@ class Mirror:
         import dataclasses
 
         forwarded = dataclasses.replace(msg, text=text)
-        if await self.m._held_by_prompt(forwarded, str(child["pane_id"])):
-            return  # not routed: the chat was told how to answer the child's prompt
+        if await self.m._held_by_prompt(forwarded, str(child["pane_id"]), binding):
+            return  # not routed yet: kept until the child's prompt clears, and the chat told
         await self.m._deliver(forwarded, binding, str(child["pane_id"]))
         await self.m._reply(msg, MSG_ROUTED.format(child=child["name"]))
 
