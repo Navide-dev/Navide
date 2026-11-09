@@ -1,21 +1,27 @@
 # Navide Plugin Agent Tools and Disclosure: Interface Contract (v1)
 
-Status: **contract only**. This is step 0 ("介面約定") of plan B in
-`.agent-team/plans/navide_b5ecff.html` (section `plan-b`). It fixes the shapes
-that the parallel work lines B1 (agent tools), B2 (Navide Marketplace MCP
-tools) and D (disclosure) build against. Nothing described here is wired into
-the app yet:
+Status: **implemented** (current as of 0.2.39). This began as step 0
+("介面約定") of plan B in `.agent-team/plans/navide_b5ecff.html` (section
+`plan-b`), which fixed the shapes the work lines B1 (agent tools), B2 (Navide
+Marketplace MCP tools) and D (disclosure) were built against. All three now
+run on it:
 
-- B1-a turned on `backend.agentTools` in `plugin-manifest-v2.schema.json`
-  ([section 2.6](#26-schema-fragment)): the Host and the
-  Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
-  the consent key carries the tools digest (section 2.8), and the consent
-  surfaces list the tools. The Registry image is built from
+- B1: `backend.agentTools` ([section 2](#2-manifest-backendagenttools)) and,
+  since 0.2.39, view-served `contributes.agentTools`
+  ([2.9](#29-view-served-tools-contributesagenttools)) are offered to agents.
+  The Host and the Registry run `validateAgentTools` / `validate_agent_tools`
+  on every manifest, the consent key carries the tools digest (section 2.8),
+  and the consent surfaces list the tools. The Registry image is built from
   `marketplace/registry` alone, so it ships a byte-identical copy of
   `agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
-- No MCP tool, Host route, WebSocket handler, Registry endpoint or database
-  table exists for anything else below. The reference code is types, constants and
-  pure functions:
+- B2: the `marketplace_*` and `plugins_*` MCP tools read listings and file
+  install, update, rollback and removal requests the user approves.
+- D: the consent card, Settings → Navide Plugins and the Registry listing show
+  the disclosure ([section 3](#3-disclosure)), and the Registry signs the
+  static scan report ([3.8](#38-scan-report)).
+
+The reference code the Host, the backend and the Registry share is types,
+constants and pure functions:
 
 | Language | Module | Contents |
 |---|---|---|
@@ -100,17 +106,23 @@ is disclosed and they travel in pieces
 | `timeoutMs` | no | integer | 1 to 120000 (the Host's existing backend-call bound, `MAX_BACKEND_TIMEOUT_MS`); default 30000 |
 
 Backend method and event names must be lowercase dotted names,
-`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$` (as `devmap.block.status`). The
-manifest schema also accepts upper-case letters
-(`plugin-manifest-v2.schema.json:192`,
-`marketplace/registry/registry/manifest_v2.py:18`), but the Host backend
-supervisor accepts only `^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$`
-(`src/main/plugins/pluginBackendSupervisor.ts:655-657`, applied to the
-approved method and event lists at `:2791-2794` and `:2807-2810` and to every
-call at `:2374`), so a camelCase method such as `devmap.setStatus` passes
-publishing and is then refused when the backend activates. The rule above is
-the intersection of the two. Closing the gap in the schema is a separate
-change.
+`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$` (as `devmap.block.status`). The Host
+backend supervisor accepts only `^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$`
+(`isMethodName` in `src/main/plugins/pluginBackendSupervisor.ts`, applied to
+the approved method and event lists when the backend activates and to every
+call), and the rule above is the intersection of that and the manifest
+schema. As of 0.2.39:
+
+- `agentTools[].method`: the Host refuses a name the supervisor would refuse
+  when the package is installed (`src/main/plugins/pluginManifestV2.ts`), and
+  the Registry when it is published (`_AGENT_TOOL_METHOD_RE` in
+  `marketplace/registry/registry/manifest_v2.py`).
+- `backend.methods` and `backend.events`: the manifest schema (`backendNames`
+  in `plugin-manifest-v2.schema.json`) and the Registry
+  (`_V2_BACKEND_NAME_RE`) still accept upper-case letters, so a camelCase
+  method no tool names, such as `devmap.setStatus`, passes publishing and
+  install and is then refused when the backend activates. Closing that gap in
+  the schema is a separate change.
 
 No other field is allowed. `backend.agentTools` requires a native backend, so
 a package that declares it is at least risk **high**. Since 0.2.39 a package

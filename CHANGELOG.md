@@ -20,6 +20,10 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
 - Plugins (0.2.40): plugin views can follow the Navide interface language. `ui.getLocale` answers the language in effect (the one chosen in Settings, or the one picked from the system), and `ui.localeChanged` fires when the user switches; the SDK wraps them as `getHostLocale()` and `onHostLocaleChanged()`. Both need `permissions.system: ["ui"]`; plugin API 1.4.0.
 
+### Changed
+
+- Plugin docs (0.2.40): the developer spec says what a plugin view's `Origin` is (`navide-plugin-frame://` plus 64 random hex characters per mount, so a service allows `^navide-plugin-frame://[0-9a-f]{64}$` and identifies the caller another way), that a namespace and each id segment contain no `.`, and that `permissions.network` covers only the requests a plugin's own views make, not the sites a Host browser view loads; the agent tools contract and the spec's stale 0.2.38 passages describe 0.2.39.
+
 ### Fixed
 
 - Pipelines (0.2.40): starting a pipeline and opening its stage panes no longer freezes Navide while the disk is slow: the run records are now saved on a background thread, in order, so every window keeps responding even when a save takes seconds (a VM measured one at 21.7s).
