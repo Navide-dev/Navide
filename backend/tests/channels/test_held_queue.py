@@ -5,8 +5,11 @@ Nothing here can allow a prompt from the chat."""
 
 from __future__ import annotations
 
+import secrets
+
 from agent_team_backend.channels import held
 from agent_team_backend.channels import manager as mgr_mod
+from agent_team_backend.channels import redact
 
 from .test_manager import (  # noqa: F401 — fixtures and helpers shared with the manager suite
     Env, _awaiting, _relay_id, _until, _until_relay_prompt, clocked, env, fast_timers,
@@ -153,3 +156,53 @@ async def test_status_text_follows_the_navide_language(env: Env) -> None:
     await env.inbound("/status")
     status = next(t for t in reversed(env.tg.texts()) if t.startswith("📋"))
     assert "📥 1 message(s) to send after it" in status
+
+
+async def test_status_never_shows_a_piece_of_a_secret_cut_at_the_limit(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(redact._filter, "_secrets", set())
+    secret = secrets.token_hex(16)  # built at run time, never a real credential
+    redact.add_secret(secret)
+    # Raw, the secret straddles the status cut: a cut before redaction would leave its head.
+    head = "w" * (mgr_mod.STATUS_LAST_CHARS - 15)
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: mgr_mod.MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", f"{head}{secret} done")
+    await _until(lambda: any(head in t for t in env.tg.texts()))
+    await env.inbound("/status")
+    status = next(t for t in reversed(env.tg.texts()) if t.startswith("📋"))
+    assert "最後輸出：" in status
+    assert not any(secret[i:i + 6] in status for i in range(len(secret) - 5))
+
+
+def _revoked(env: Env) -> bool:
+    return any(t.startswith("⚠️ 這個聊天室已不再連接") and ASK in t for t in env.tg.texts())
+
+
+async def test_unbinding_while_kept_drops_it(env: Env) -> None:
+    await _held_one(env)
+    await env.m.unbind("pane-1")
+    _idle(env)
+    await _until(lambda: _revoked(env))
+    for _ in range(20):
+        await _until(lambda: True)
+    await env.m.wait_idle()
+    assert ASK not in _texts_into_pane(env)
+
+
+async def test_rebinding_while_kept_drops_it(env: Env) -> None:
+    await _held_one(env)
+    await env.m.rebind("pane-1", "pane-9")
+    _idle(env)
+    await _until(lambda: _revoked(env))
+    await env.m.wait_idle()
+    assert ASK not in _texts_into_pane(env)
+
+
+async def test_a_sender_taken_off_the_allowlist_while_kept_is_not_sent_for(env: Env) -> None:
+    await _held_one(env)
+    env.store.remove_allow("telegram", "7")
+    _idle(env)
+    await _until(lambda: _revoked(env))
+    await env.m.wait_idle()
+    assert ASK not in _texts_into_pane(env)
