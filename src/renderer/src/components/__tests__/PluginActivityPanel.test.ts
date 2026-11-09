@@ -63,6 +63,12 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(text).toContain('Arguments 16 B and results 2.0 KB in total; 2 sizes are unknown and not counted')
   })
 
+  it('P5: lists each automatic pause with its rule, number, threshold and detail', async () => {
+    mockPlugins()
+    const text = (await render()).get('.nv-activity-auto-pauses').text()
+    expect(text).toContain('R2 (an undeclared or refused network host): 1, threshold 0 · evil.example · 0.2.0')
+  })
+
   it('shows paths and commands as plain text, never as links or HTML', async () => {
     mockPlugins()
     const panel = await render()

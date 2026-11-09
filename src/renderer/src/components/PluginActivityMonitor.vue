@@ -45,6 +45,8 @@ const stopError = ref('')
 const globalStop = ref<PluginGlobalStopRecord | null>(null)
 const confirmingAll = ref<'stop' | 'resume' | null>(null)
 const busyAll = ref(false)
+// Plan P5: the automatic-pause switch and the fixed thresholds it discloses.
+const autoPause = ref<{ enabled: boolean; thresholds: Record<string, number> } | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
 
 function api() {
@@ -53,6 +55,7 @@ function api() {
 
 async function load(): Promise<void> {
   try {
+    autoPause.value = (await api()?.autoPauseState?.()) ?? null
     const [list, builtins, answer, statuses, global] = await Promise.all([
       api()?.listInstalled?.() ?? [],
       api()?.disabledBuiltins?.() ?? [],
@@ -144,6 +147,14 @@ async function all(action: 'stop' | 'resume'): Promise<void> {
   }
 }
 
+async function setAutoPause(enabled: boolean): Promise<void> {
+  try {
+    autoPause.value = (await api()?.setAutoPause?.(enabled)) ?? autoPause.value
+  } catch (err) {
+    stopError.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 function toggle(id: string): void {
   open.value = open.value === id ? null : id
 }
@@ -180,6 +191,13 @@ onBeforeUnmount(stopPolling)
         >{{ busyAll ? $t('pluginStop.stopping') : confirmingAll === 'stop' ? $t('pluginStop.all.confirm') : $t('pluginStop.all.stop') }}</button>
         <button v-if="confirmingAll === 'stop'" type="button" class="nv-btn nv-btn--sm" @click="confirmingAll = null">{{ $t('pluginStop.cancel') }}</button>
       </div>
+    </div>
+    <div v-if="autoPause" class="nv-monitor-auto">
+      <label class="nv-monitor-auto-switch">
+        <input type="checkbox" :checked="autoPause.enabled" @change="setAutoPause(($event.target as HTMLInputElement).checked)" />
+        {{ $t('pluginStop.autoPause.label') }}
+      </label>
+      <p class="nv-monitor-muted">{{ $t('pluginStop.autoPause.thresholds', autoPause.thresholds) }}</p>
     </div>
     <div v-if="globalStop" class="nv-monitor-global" role="status">
       <p>
@@ -395,6 +413,19 @@ onBeforeUnmount(stopPolling)
 .nv-monitor-attention {
   color: var(--attention-fg);
   font-weight: 600;
+}
+.nv-monitor-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-xs);
+}
+.nv-monitor-auto-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .nv-monitor-head {
   display: flex;

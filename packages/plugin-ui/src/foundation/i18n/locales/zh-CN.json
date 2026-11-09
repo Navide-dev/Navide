@@ -12356,6 +12356,10 @@
         "failures": "连续失败",
         "resources": "资源"
       }
+    },
+    "autoPauses": {
+      "heading": "自动暂停记录",
+      "item": "{date} {rule}（{reason}）：{value}，阈值 {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "设置的 Activity 总览",
       "status-bar": "状态栏",
       "telegram": "聊天室指令",
-      "mcp": "agent（plugins_disable）"
+      "mcp": "agent（plugins_disable）",
+      "auto": "Navide 异常规则"
     },
     "summary": {
       "heading": "{date} 从{via}停止。当时：",
@@ -12397,6 +12402,20 @@
       "resumeNote": "把各开关恢复成停止前的状态，并重新启用这次停止的 Navide 插件。",
       "stopFailed": "无法停止：{ids}",
       "resumeFailed": "无法重新启用：{ids}"
+    },
+    "rule": {
+      "R1": "工具或能力调用过于频繁",
+      "R2": "未声明或被拒绝的网络主机",
+      "R3": "连续失败或反复重启",
+      "R4": "资源超过阈值",
+      "R5": "通知分格过于频繁"
+    },
+    "autoPause": {
+      "label": "Navide 插件行为异常时自动暂停",
+      "thresholds": "R1 每分钟超过 {toolCallsPerMinute} 次工具调用或 {capabilityCallsPerMinute} 次能力调用 · R2 视图连到未声明或被拒绝的主机 · R3 连续 {consecutiveFailures} 次工具调用失败，或 10 分钟内后端重启 {restartsInTenMinutes} 次 · R4 后端超过资源阈值 · R5 每分钟超过 {notificationsPerMinute} 条通知。暂停就是停止；要恢复请在这里重新启用 Navide 插件。",
+      "toast": "Navide 自动暂停了 Navide 插件 {id}：{reason}。请到 设置 → Navide 插件 查看。",
+      "badge": "已暂停（{rule}）",
+      "because": "因规则 {rule} 暂停：{reason}"
     },
     "statusBar": {
       "label": "Navide 插件 {running}",

@@ -12356,6 +12356,10 @@
         "failures": "Failed in a row",
         "resources": "Resources"
       }
+    },
+    "autoPauses": {
+      "heading": "Automatic pauses",
+      "item": "{date} {rule} ({reason}): {value}, threshold {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "the Settings Activity monitor",
       "status-bar": "the status bar",
       "telegram": "a chat command",
-      "mcp": "an agent (plugins_disable)"
+      "mcp": "an agent (plugins_disable)",
+      "auto": "Navide's anomaly rules"
     },
     "summary": {
       "heading": "Stopped {date} from {via}. At that moment:",
@@ -12397,6 +12402,20 @@
       "resumeNote": "Puts the switches back as they were and enables the Navide plugins this stop disabled.",
       "stopFailed": "Could not stop: {ids}",
       "resumeFailed": "Could not enable again: {ids}"
+    },
+    "rule": {
+      "R1": "too many tool or capability calls",
+      "R2": "an undeclared or refused network host",
+      "R3": "failures in a row, or restarts",
+      "R4": "a resource over its threshold",
+      "R5": "too many notifications to agent panes"
+    },
+    "autoPause": {
+      "label": "Pause a Navide plugin on its own when it behaves unusually",
+      "thresholds": "R1 more than {toolCallsPerMinute} tool calls or {capabilityCallsPerMinute} capability calls a minute · R2 a view reaching an undeclared or refused host · R3 {consecutiveFailures} failed tool calls in a row, or {restartsInTenMinutes} backend restarts in 10 minutes · R4 a backend over a resource threshold · R5 more than {notificationsPerMinute} notifications a minute. A pause is a stop; enable the Navide plugin again here.",
+      "toast": "Navide paused the Navide plugin {id}: {reason}. Check it in Settings → Navide Plugins.",
+      "badge": "Paused ({rule})",
+      "because": "Paused on rule {rule}: {reason}"
     },
     "statusBar": {
       "label": "Navide plugins {running}",

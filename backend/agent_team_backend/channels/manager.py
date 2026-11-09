@@ -3355,6 +3355,21 @@ class ChannelManager:
             log.warning("channels: a share-link notice to %s failed: %s", loc.platform,
                         share_cmds.mask_links(str(exc)))
 
+    async def notify_plugin_paused(self, plugin_id: str, rule: str) -> None:
+        """Plan P5: every bound direct chat once, in the user's language."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "plugins_auto_paused", id=plugin_id, reason=quick_menu.text(lang, f"plugins_rule_{rule}"))
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
+
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         chat_id = str(link.get("chatId") or "")
         targets = self._share_targets(str(link.get("paneId") or ""), chat_id)

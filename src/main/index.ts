@@ -2162,6 +2162,16 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    // Plan P5: the anomaly rules run every 30 s; R4 reads the watchdog's
+    // notices, and the main windows hear each automatic pause.
+    autoPauseIntervalMs: 30_000,
+    resourceNotices: () => thirdPartyBackends.resourceNotices(),
+    onPluginAutoPaused: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:autoPaused', notice)
+      }
+    },
     // Plan P3: a global stop turns the third-party switches off (native
     // backends, DB8, DB4) and "Resume all" puts them back as they were. A
     // choice made this way counts as the user's own (C3).

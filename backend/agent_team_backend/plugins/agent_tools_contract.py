@@ -982,6 +982,29 @@ PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES = (
 PLUGIN_AGENT_ACTIONS_RETENTION_DAYS = PLUGIN_TOOL_CALLS_RETENTION_DAYS
 PLUGIN_AGENT_ACTIONS_MAX_ROWS = PLUGIN_TOOL_CALLS_MAX_ROWS
 
+#: Plan P5: each automatic pause, with the rule, the number that tripped it,
+#: its threshold and a short detail (a host for R2, a resource item for R4);
+#: never a path or a command line. Its own schema component: if it cannot be
+#: created only this record is off.
+PLUGIN_AUTO_PAUSES_DDL = (
+    "CREATE TABLE IF NOT EXISTS plugin_auto_pauses ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL DEFAULT '',"
+    " rule TEXT NOT NULL,"
+    " value REAL NOT NULL,"
+    " threshold REAL NOT NULL,"
+    " detail TEXT NOT NULL DEFAULT '')",
+    "CREATE INDEX IF NOT EXISTS plugin_auto_pauses_plugin_at ON plugin_auto_pauses (plugin_id, at)",
+)
+#: The anomaly rules (plan P5, section 4.2): R1 frequency, R2 undeclared host,
+#: R3 failures in a row or restarts, R4 resources, R5 notification flood.
+PLUGIN_AUTO_PAUSE_RULES = ("R1", "R2", "R3", "R4", "R5")
+#: Host-authenticated: ``{plugin_id, plugin_version, rule, value, threshold, detail}``
+#: after the Host paused a plugin on its own; recorded, and told to the bound chats.
+PLUGIN_AUTO_PAUSED_MESSAGE = "plugins.auto_paused"
+
 PLUGIN_AGENT_ACTIONS_DDL = (
     "CREATE TABLE IF NOT EXISTS plugin_agent_actions ("
     " id INTEGER PRIMARY KEY AUTOINCREMENT,"

@@ -12356,6 +12356,10 @@
         "failures": "연속 실패",
         "resources": "리소스"
       }
+    },
+    "autoPauses": {
+      "heading": "자동 일시 중지 기록",
+      "item": "{date} {rule}({reason}): {value}, 임계값 {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "설정의 Activity 개요",
       "status-bar": "상태 표시줄",
       "telegram": "채팅 명령",
-      "mcp": "에이전트(plugins_disable)"
+      "mcp": "에이전트(plugins_disable)",
+      "auto": "Navide 이상 규칙"
     },
     "summary": {
       "heading": "{date}에 {via}에서 중지했습니다. 그때:",
@@ -12397,6 +12402,20 @@
       "resumeNote": "스위치를 중지 전 상태로 되돌리고 이번에 중지한 Navide 플러그인을 다시 켭니다.",
       "stopFailed": "중지할 수 없음: {ids}",
       "resumeFailed": "다시 켤 수 없음: {ids}"
+    },
+    "rule": {
+      "R1": "도구 또는 기능 호출이 너무 많음",
+      "R2": "선언되지 않았거나 거부된 네트워크 호스트",
+      "R3": "연속 실패 또는 재시작",
+      "R4": "리소스 임계값 초과",
+      "R5": "에이전트 창 알림이 너무 많음"
+    },
+    "autoPause": {
+      "label": "Navide 플러그인이 이상하게 동작하면 자동으로 일시 중지",
+      "thresholds": "R1 1분에 도구 호출 {toolCallsPerMinute}회 또는 기능 호출 {capabilityCallsPerMinute}회 초과 · R2 뷰가 선언되지 않았거나 거부된 호스트에 연결 · R3 도구 호출이 {consecutiveFailures}회 연속 실패하거나 10분 안에 백엔드가 {restartsInTenMinutes}회 다시 시작 · R4 백엔드가 리소스 임계값 초과 · R5 1분에 알림 {notificationsPerMinute}개 초과. 일시 중지는 중지와 같으며, 여기서 Navide 플러그인을 다시 켭니다.",
+      "toast": "Navide가 Navide 플러그인 {id}을(를) 일시 중지했습니다: {reason}. 설정 → Navide 플러그인에서 확인하세요.",
+      "badge": "일시 중지됨({rule})",
+      "because": "규칙 {rule}(으)로 일시 중지: {reason}"
     },
     "statusBar": {
       "label": "Navide 플러그인 {running}",

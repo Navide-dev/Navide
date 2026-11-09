@@ -1872,6 +1872,9 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           schemaVersion: 1, generatedAt: 5,
           plugins: [{
             ...row,
+            // An older backend sends neither P5 field.
+            lastToolCallAt: null,
+            backendRestartsLast10Minutes: 0,
             hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2, declared: true }, { host: 'evil.io', refused: true, lastAt: 1, declared: false }],
           }],
         },
@@ -1913,6 +1916,118 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  describe('P5: pausing a plugin on an anomaly rule', () => {
+    const quiet = { pluginId: 'acme.demo', toolCallsLastMinute: 0, capabilityCallsLastMinute: 0, consecutiveFailures: 0, lastToolCallAt: null, backendRestartsLast10Minutes: 0, hosts: [] as unknown[] }
+
+    async function watched(row: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      const pkg = buildPkg('acme.demo', 'acme', { network: { hosts: ['api.acme.dev'] } }, '1.0.0')
+      const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-auto-'))
+      const manager = new FrontendPluginManager()
+      let limit: ((pluginId: string) => void) | null = null
+      let agentAction: ((request: unknown) => Promise<unknown>) | undefined
+      vi.spyOn(manager, 'setAgentNotifyLimitHandler').mockImplementation((handler) => { limit = handler })
+      vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+      const overview = vi.spyOn(manager, 'requestPluginActivityOverview').mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet }] })
+      const reported = vi.spyOn(manager, 'reportPluginAutoPause').mockImplementation(() => {})
+      manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const onPluginAutoPaused = vi.fn()
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS, autoPauseIntervalMs: 30_000, onPluginAutoPaused, ...extra,
+      })
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, ...row }] })
+      const tick = async () => { await vi.advanceTimersByTimeAsync(30_000) }
+      const record = () => (handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>)[0]!.stopRecord as Record<string, unknown> | undefined
+      const cleanup = async () => {
+        vi.useRealTimers()
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+      return { manager, tick, record, reported, onPluginAutoPaused, overview, limit: () => limit!, agentAction: () => agentAction!, cleanup }
+    }
+
+    it('R1: too many tool calls pause it as a stop the user owns, recorded and told', async () => {
+      const t = await watched({ toolCallsLastMinute: 61 })
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(t.record()).toMatchObject({ via: 'auto', rule: 'R1' })
+        expect(t.reported).toHaveBeenCalledWith({ plugin_id: 'acme.demo', plugin_version: '1.0.0', rule: 'R1', value: 61, threshold: 60, detail: 'toolCalls' })
+        expect(t.onPluginAutoPaused).toHaveBeenCalledWith({ pluginId: 'acme.demo', rule: 'R1', value: 61, threshold: 60, detail: 'toolCalls' })
+        await expect(t.agentAction()({ request_id: 'pa:1', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R2: a new undeclared host pauses it; a declared one does not', async () => {
+      const t = await watched({ hosts: [{ host: 'api.acme.dev', refused: false, lastAt: Date.now() + 1 }] })
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        t.overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, hosts: [{ host: 'evil.io', refused: false, lastAt: Date.now() + 1 }] }] })
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R2', detail: 'evil.io' }))
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R3: only failures since the last check count; restarts count in their own window', async () => {
+      const t = await watched({ consecutiveFailures: 12, lastToolCallAt: 1 })
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        t.overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, backendRestartsLast10Minutes: 3 }] })
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R3', value: 3, threshold: 3, detail: 'restarts' }))
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R4 and R5: a watchdog notice, and going over the notification limit', async () => {
+      const notices = [{ pluginId: 'acme.demo', item: 'memory', usage: 600, threshold: 512 }]
+      const t = await watched({}, { resourceNotices: () => notices })
+      try {
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R4', value: 600, threshold: 512, detail: 'memory' }))
+      } finally {
+        await t.cleanup()
+      }
+      const u = await watched({})
+      try {
+        u.limit()('acme.demo')
+        await vi.waitFor(() => expect(u.record()).toMatchObject({ via: 'auto', rule: 'R5' }))
+        expect(u.manager.isPluginDisabled('acme.demo')).toBe(true)
+      } finally {
+        await u.cleanup()
+      }
+    })
+
+    it('pauses nothing while the user turned it off, and nothing during a global stop', async () => {
+      const t = await watched({ toolCallsLastMinute: 100 })
+      try {
+        expect(handlers.get('plugins:autoPauseState')!(null)).toMatchObject({ enabled: true, thresholds: { toolCallsPerMinute: 60 } })
+        expect(handlers.get('plugins:setAutoPause')!(null, { enabled: false })).toMatchObject({ enabled: false })
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        expect(handlers.get('plugins:setAutoPause')!(null, { enabled: true })).toMatchObject({ enabled: true })
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(t.reported).toHaveBeenCalledTimes(1)
+      } finally {
+        await t.cleanup()
+      }
+    })
   })
 
   describe('P3: stopping every third-party plugin at once', () => {

@@ -195,7 +195,7 @@ import { AiTerminalOutputDecoder } from './aiTerminalOutput'
 import { MINI_IDE_STORAGE_KEYS } from '../../shared/miniIdePreferences'
 import { copyManifestPermissionsSummary } from '../../shared/executionPolicy'
 import type { AgentToolCallErrorCode, AgentToolUnavailableReason } from '../../shared/pluginAgentTools'
-import { PLUGIN_STOP_REQUEST_EVENT, PLUGIN_STOP_RESULT_MESSAGE } from '../../shared/pluginStop'
+import { PLUGIN_AUTO_PAUSED_MESSAGE, PLUGIN_STOP_REQUEST_EVENT, PLUGIN_STOP_RESULT_MESSAGE } from '../../shared/pluginStop'
 import type { MiniIdeLegacyPreferences } from './miniIdeLegacyPreferences'
 import type { FilePickerHost, FilePickerInvocation } from '../filePicker'
 import { PluginActivationSelector } from './pluginActivationSelector'
@@ -1778,6 +1778,8 @@ export class FrontendPluginManager {
   /** Plan P4: the user's per-plugin "Notify agent panes" switch (pluginIpc), and the per-minute limit. */
   private agentNotifyAllowedResolver: ((pluginId: string) => boolean) | null = null
   private readonly agentNotifyLimiter = new AgentNotifyLimiter()
+  /** Plan P5's R5: told when a plugin goes over the notification limit. */
+  private agentNotifyLimitHandler: ((pluginId: string) => void) | null = null
   /** The installed package's trust identity its secrets are bound to
    *  (secretsIdentity); absent or null, every secrets call is refused. */
   private pluginSecretIdentityResolver: ((pluginId: string) => string | null) | null = null
@@ -3161,6 +3163,29 @@ export class FrontendPluginManager {
     }
   }
 
+  /** Plan P5: install the handler told when a plugin's notification is refused for the per-minute limit. */
+  setAgentNotifyLimitHandler(handler: ((pluginId: string) => void) | null): void {
+    this.agentNotifyLimitHandler = handler
+  }
+
+  /** Plan P5: tell the backend a plugin was paused on an anomaly rule, over
+   *  this Host's authenticated session (recorded in Activity, told to the
+   *  bound chats). Never throws and never waits. */
+  reportPluginAutoPause(payload: {
+    plugin_id: string; plugin_version: string; rule: string; value: number; threshold: number; detail: string
+  }): void {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) {
+      console.warn(`[plugins] automatic pause of ${payload.plugin_id} not recorded: Navide Host session is not ready`)
+      return
+    }
+    void client.send(PLUGIN_AUTO_PAUSED_MESSAGE, payload, 10_000).then((response) => {
+      if (!response.ok) console.warn(`[plugins] automatic pause of ${payload.plugin_id} not recorded: ${response.error?.message ?? 'refused'}`)
+    }).catch((error: unknown) => {
+      console.warn(`[plugins] automatic pause of ${payload.plugin_id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
+
   /** Plan P4: install the user's per-plugin "Notify agent panes" switch. */
   setAgentNotifyAllowedResolver(resolver: ((pluginId: string) => boolean) | null): void {
     this.agentNotifyAllowedResolver = resolver
@@ -3181,6 +3206,11 @@ export class FrontendPluginManager {
       throw new AgentNotifyError('CAPABILITY_DENIED', 'Notify agent panes is off for this Navide plugin in Settings.')
     }
     if (!this.agentNotifyLimiter.take(pluginId)) {
+      try {
+        this.agentNotifyLimitHandler?.(pluginId)
+      } catch (error) {
+        console.warn('[plugins] notification limit handler failed', error)
+      }
       throw new AgentNotifyError('RESOURCE_LIMIT', 'A Navide plugin may notify agent panes 6 times a minute.')
     }
     let response: unknown

@@ -838,6 +838,17 @@ they were and enables the plugins the global stop disabled (a plugin removed
 or enabled meanwhile is skipped). Resume all is the user's alone; an agent can
 stop, never resume, and a user's Stop all takes over what an agent's stopped.
 
+**Automatic pauses** (0.2.40). Navide also pauses a running third-party
+plugin on its own when it behaves unusually: more than 60 agent tool calls or
+600 capability calls a minute (R1), a view reaching a host the manifest does
+not declare or a refused one (R2), 10 failed tool calls in a row or 3 backend
+restarts in 10 minutes (R3), a backend over a resource threshold (R4), or
+going over the 6-a-minute notification limit (R5). A pause is a stop recorded
+with its rule; it shows in the plugin's Activity with the number that tripped
+it, in a notice in the main window and in each bound chat, and the status
+bar's Navide plugins item turns orange. The thresholds are fixed in 0.2.40 and
+shown on the Activity monitor, whose switch turns automatic pauses off.
+
 Publishing a package with a backend from a self-service namespace requires an
 administrator to allowlist the publisher and a verified publisher domain
 (DNS). The package must declare `engines.navide` of at least `>=0.2.14`

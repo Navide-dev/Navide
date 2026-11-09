@@ -90,6 +90,7 @@ log = logging.getLogger(__name__)
 _COMPONENT = "plugin_audit"
 _ACTIONS_COMPONENT = "plugin_agent_actions"
 _BACKEND_CALLS_COMPONENT = "plugin_backend_calls"
+_AUTO_PAUSES_COMPONENT = "plugin_auto_pauses"
 _MINUTE_MS = 60_000
 _DAY_MS = 86_400_000
 #: Rows per prune transaction (an internal batch size, not a retention cap):
@@ -445,6 +446,11 @@ def _create_backend_calls_schema(cur: sqlite3.Cursor) -> None:
         cur.execute(statement)
 
 
+def _create_auto_pauses_schema(cur: sqlite3.Cursor) -> None:
+    for statement in contract.PLUGIN_AUTO_PAUSES_DDL:
+        cur.execute(statement)
+
+
 def _create_actions_schema(cur: sqlite3.Cursor) -> None:
     for statement in contract.PLUGIN_AGENT_ACTIONS_DDL:
         cur.execute(statement)
@@ -515,6 +521,12 @@ class PluginAuditLog:
                 self.backend_calls_disabled_reason, "PLUGIN_BACKEND_CALLS_AUDIT_DISABLED",
                 "Navide plugin backend-call record",
             )
+        self.auto_pauses_enabled = False
+        try:
+            self.db.migrate(_AUTO_PAUSES_COMPONENT, 1, _create_auto_pauses_schema)
+            self.auto_pauses_enabled = True
+        except Exception as err:  # noqa: BLE001 - the backend starts without this record
+            log.error("plugin auto-pause record disabled: the table could not be created: %s", err)
 
     def _now_ms(self) -> int:
         return int(self._clock() * 1000)
@@ -776,6 +788,51 @@ class PluginAuditLog:
             log.warning("plugin audit: resource decision not recorded: %s", err)
             return False
         return True
+
+    def record_auto_pause(
+        self, *, plugin_id: str, plugin_version: str, rule: str, value: float, threshold: float, detail: str,
+    ) -> bool:
+        """Write one automatic pause (plan P5) at once: they are rare, and each
+        is what the user reads to judge whether it was a false alarm. False when
+        it is not recorded."""
+        if not self.auto_pauses_enabled:
+            return False
+        try:
+            if not isinstance(plugin_id, str) or not plugin_id or not isinstance(plugin_version, str):
+                raise ValueError("plugin_id and plugin_version are required")
+            if rule not in contract.PLUGIN_AUTO_PAUSE_RULES:
+                raise ValueError(f"unknown rule {rule!r}")
+            row = (
+                self._now_ms(), plugin_id, plugin_version, rule,
+                _non_negative_number(value), _non_negative_number(threshold), str(detail)[:253],
+            )
+            with self.db.transaction() as cur:
+                cur.execute(
+                    "INSERT INTO plugin_auto_pauses (at, plugin_id, plugin_version, rule, value, threshold, detail)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    row,
+                )
+        except Exception as err:  # noqa: BLE001 - the audit never fails the pause it records
+            log.warning("plugin audit: auto pause not recorded: %s", err)
+            return False
+        return True
+
+    def _auto_pauses(self, plugin_id: str, since: int) -> list[dict[str, Any]]:
+        if not self.auto_pauses_enabled:
+            return []
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT at, rule, value, threshold, detail, plugin_version FROM plugin_auto_pauses"
+                " WHERE plugin_id = ? AND at >= ? ORDER BY at DESC, id DESC LIMIT 100",
+                (plugin_id, since),
+            ).fetchall()
+        def number(value: float) -> float | int:
+            return int(value) if float(value).is_integer() else float(value)
+        return [
+            {"at": int(at), "rule": rule, "value": number(value), "threshold": number(threshold), "detail": detail,
+             "pluginVersion": version}
+            for at, rule, value, threshold, detail, version in rows
+        ]
 
     def record_agent_action(
         self,
@@ -1276,7 +1333,10 @@ class PluginAuditLog:
           minute 60 s ago started in (counted rows are per minute, so this
           reads up to two minutes, never less than one).
         - ``consecutiveFailures``: the newest run of tool calls whose outcome
-          is not ok, read from at most ``OVERVIEW_FAILURE_RUN_MAX`` rows.
+          is not ok, read from at most ``OVERVIEW_FAILURE_RUN_MAX`` rows;
+          ``lastToolCallAt`` when the newest one ended (or null).
+        - ``backendRestartsLast10Minutes``: automatic restarts of its backend
+          (``backend.<restarted>``) from the minute 10 minutes ago started in.
         - ``hosts``: the hosts its views reached or were refused in the
           7 days of detail, newest first, at most ``OVERVIEW_MAX_HOSTS``;
           ``refused`` when any request to it was refused. Whether a host is
@@ -1287,7 +1347,7 @@ class PluginAuditLog:
         now = self._now_ms() if now_ms is None else int(now_ms)
         rows = [
             {"pluginId": plugin_id, "toolCallsLastMinute": 0, "capabilityCallsLastMinute": 0,
-             "consecutiveFailures": 0, "hosts": []}
+             "consecutiveFailures": 0, "lastToolCallAt": None, "backendRestartsLast10Minutes": 0, "hosts": []}
             for plugin_id in plugin_ids
         ]
         overview: dict[str, Any] = {"schemaVersion": ACTIVITY_OVERVIEW_SCHEMA_VERSION, "generatedAt": now, "plugins": rows}
@@ -1311,6 +1371,15 @@ class PluginAuditLog:
                     "  WHERE plugin_id = ? AND minute >= ? AND source IN ('broker', 'shell'))",
                     (plugin_id, since, plugin_id, since_minute),
                 ).fetchone()
+                (last_tool,) = cur.execute(
+                    "SELECT MAX(at) FROM plugin_tool_calls WHERE plugin_id = ?", (plugin_id,)
+                ).fetchone()
+                restart_from = now - 10 * _MINUTE_MS
+                (restarts,) = cur.execute(
+                    "SELECT COALESCE(SUM(count), 0) FROM plugin_backend_call_minutes"
+                    " WHERE plugin_id = ? AND minute >= ? AND address = 'backend.<restarted>'",
+                    (plugin_id, restart_from - restart_from % _MINUTE_MS),
+                ).fetchone()
                 failures = 0
                 for (outcome,) in cur.execute(
                     "SELECT outcome FROM plugin_tool_calls WHERE plugin_id = ? ORDER BY at DESC, id DESC LIMIT ?",
@@ -1328,6 +1397,8 @@ class PluginAuditLog:
                     "toolCallsLastMinute": int(tools or 0),
                     "capabilityCallsLastMinute": int(calls or 0),
                     "consecutiveFailures": failures,
+                    "lastToolCallAt": int(last_tool) if last_tool is not None else None,
+                    "backendRestartsLast10Minutes": int(restarts),
                     "hosts": [
                         {"host": address.removeprefix("network."), "refused": bool(refused), "lastAt": int(last_at)}
                         for address, refused, last_at in hosts
@@ -1391,7 +1462,12 @@ class PluginAuditLog:
             "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "pipelineNodeRuns": [], "files": [], "commands": [],
             "network": [], "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
             "backendCalls": {"methods": [], "daily": []},
+            "autoPauses": [],
         }
+        try:
+            report["autoPauses"] = self._auto_pauses(plugin_id, since)
+        except Exception as err:  # noqa: BLE001 - the rest of the report still answers
+            log.warning("plugin audit: auto pauses not read: %s", err)
         if not self.enabled:
             return report
         self.flush()
@@ -1624,6 +1700,8 @@ class PluginAuditLog:
                 if self.enabled:
                     cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
                     cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
+                    if self.auto_pauses_enabled:
+                        cur.execute("DELETE FROM plugin_auto_pauses WHERE plugin_id = ?", (plugin_id,))
                     cur.execute("DELETE FROM plugin_activity_counts WHERE plugin_id = ?", (plugin_id,))
                 if self.backend_calls_enabled:
                     cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))

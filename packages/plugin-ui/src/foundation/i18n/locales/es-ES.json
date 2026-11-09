@@ -12356,6 +12356,10 @@
         "failures": "Fallos seguidos",
         "resources": "Recursos"
       }
+    },
+    "autoPauses": {
+      "heading": "Pausas automáticas",
+      "item": "{date} {rule} ({reason}): {value}, umbral {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "el resumen de Activity de Ajustes",
       "status-bar": "la barra de estado",
       "telegram": "un comando del chat",
-      "mcp": "un agente (plugins_disable)"
+      "mcp": "un agente (plugins_disable)",
+      "auto": "las reglas de anomalías de Navide"
     },
     "summary": {
       "heading": "Detenido el {date} desde {via}. En ese momento:",
@@ -12397,6 +12402,20 @@
       "resumeNote": "Devuelve los interruptores a como estaban y vuelve a activar los plugins de Navide que esta detención desactivó.",
       "stopFailed": "No se pudo detener: {ids}",
       "resumeFailed": "No se pudo volver a activar: {ids}"
+    },
+    "rule": {
+      "R1": "demasiadas llamadas a herramientas o capacidades",
+      "R2": "un host de red no declarado o rechazado",
+      "R3": "fallos seguidos o reinicios",
+      "R4": "un recurso por encima de su umbral",
+      "R5": "demasiadas notificaciones a paneles de agente"
+    },
+    "autoPause": {
+      "label": "Pausar por su cuenta un plugin de Navide cuando se comporte de forma inusual",
+      "thresholds": "R1 más de {toolCallsPerMinute} llamadas a herramientas o {capabilityCallsPerMinute} a capacidades por minuto · R2 una vista llega a un host no declarado o rechazado · R3 {consecutiveFailures} llamadas a herramientas fallidas seguidas, o {restartsInTenMinutes} reinicios del backend en 10 minutos · R4 un backend por encima de un umbral de recursos · R5 más de {notificationsPerMinute} notificaciones por minuto. Una pausa es una detención; vuelve a activar el plugin de Navide aquí.",
+      "toast": "Navide pausó el plugin de Navide {id}: {reason}. Revísalo en Ajustes → Plugins de Navide.",
+      "badge": "En pausa ({rule})",
+      "because": "En pausa por la regla {rule}: {reason}"
     },
     "statusBar": {
       "label": "Plugins de Navide {running}",
