@@ -115,6 +115,28 @@ def _asks_user_question(msg: dict) -> bool:
 # line, because an end record can name several tasks at once.
 BACKGROUND_START_DETAIL = "background:start"
 BACKGROUND_END_DETAIL = "background:end"
+# A STOP the CLI acted on: Claude writes this user record (as a text block, as
+# the cut-off tool's result, or as a plain string) when a turn is interrupted.
+# The frontend keeps the STOP badge on it; with no such record the badge reads
+# "STOP not applied" (Ctrl-C only cleared the input box).
+INTERRUPT_DETAIL = "user:interrupted"
+_INTERRUPT_PREFIX = "[Request interrupted by user"
+
+
+def _is_interrupt_record(content: Any) -> bool:
+    if isinstance(content, str):
+        return content.startswith(_INTERRUPT_PREFIX)
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        text = block.get("text") if block.get("type") == "text" else block.get("content")
+        if _is_interrupt_record(text):
+            return True
+    return False
+
+
 # Tools the agent uses to stop a background task itself. Such a stop writes no
 # <task-notification>, so the tool call is the only end record it leaves.
 _TASK_STOP_TOOLS = frozenset({"TaskStop", "KillShell", "KillBash"})
@@ -751,6 +773,15 @@ class ClaudeLogReader(LogReader):
                             dedup_key=key, timestamp=ts,
                             detail=str(rtype), text=text,
                         ))
+                        msg = rec.get("message")
+                        if rtype == "user" and isinstance(msg, dict) and _is_interrupt_record(msg.get("content")):
+                            out.append(ActivityEvent(
+                                vendor="claude",
+                                event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"int:{line_no}", timestamp=ts,
+                                detail=INTERRUPT_DETAIL,
+                            ))
                         started = _background_task_started(rec) if rtype == "user" else ""
                         if started:
                             out.append(ActivityEvent(

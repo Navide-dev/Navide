@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "Der Prozess läuft noch, aber der Agent hat seine letzte Runde beendet und wartet an der Eingabeaufforderung",
       "awaiting-status-tooltip": "Der Agent wartet auf eine Berechtigungsabfrage – nichts geht weiter, bis Sie antworten",
       "question-status-tooltip": "Der Agent hat Ihnen eine Frage gestellt und wartet auf die Antwort – nichts geht weiter, bis Sie antworten",
+      "stop-ineffective": "STOP nicht wirksam",
+      "stop-ineffective-tooltip": "Die Unterbrechung hat die CLI erreicht, aber der Durchgang läuft weiter (Ctrl-C hat womöglich nur die wartende Eingabe gelöscht). Drücke Interrupt erneut, um ihn zu stoppen.",
       "rename-title-tooltip": "Doppelklicken, um diesen Bereich umzubenennen",
       "auto-named-tooltip": "Automatisch nach der ersten Anweisung dieser Session benannt – benennen Sie es um, dann bleibt Ihr Name",
       "loop-tag-tooltip": "In diesem Bereich läuft ein Loop",

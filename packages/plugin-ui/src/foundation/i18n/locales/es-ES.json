@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "El proceso sigue en ejecución, pero el agent ha terminado su último turno y está esperando en el prompt de entrada",
       "awaiting-status-tooltip": "El agent está detenido en una solicitud de permiso: no avanza nada hasta que respondas",
       "question-status-tooltip": "El agent te ha preguntado algo y espera la respuesta: no avanza nada hasta que contestes",
+      "stop-ineffective": "STOP sin efecto",
+      "stop-ineffective-tooltip": "La interrupción llegó a la CLI, pero el turno siguió en marcha (Ctrl-C quizá solo borró la entrada en cola). Pulsa Interrupt otra vez para detenerlo.",
       "rename-title-tooltip": "Haz doble clic para cambiar el nombre de este pane",
       "auto-named-tooltip": "Nombre puesto automáticamente a partir de la primera instrucción de esta session; si lo cambias, se queda el tuyo",
       "loop-tag-tooltip": "Hay un loop en ejecución en este pane",

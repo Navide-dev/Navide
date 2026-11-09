@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "Le processus tourne toujours, mais l’agent a terminé son dernier tour et attend à l’invite de saisie",
       "awaiting-status-tooltip": "L’agent est bloqué sur une demande d’autorisation – rien n’avance tant que vous ne répondez pas",
       "question-status-tooltip": "L’agent vous a posé une question et attend la réponse – rien n’avance tant que vous ne répondez pas",
+      "stop-ineffective": "STOP sans effet",
+      "stop-ineffective-tooltip": "L’interruption a atteint la CLI, mais le tour continue (Ctrl-C n’a peut-être effacé que la saisie en attente). Appuyez de nouveau sur Interrupt pour l’arrêter.",
       "rename-title-tooltip": "Double-cliquer pour renommer ce pane",
       "auto-named-tooltip": "Nommé automatiquement d’après la première instruction de cette session – renommez-le et le nom restera le vôtre",
       "loop-tag-tooltip": "Une boucle tourne dans ce pane",

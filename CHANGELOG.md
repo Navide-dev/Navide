@@ -10,6 +10,10 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
+### Fixed
+
+- Panes (0.2.40): a STOP the CLI did not act on no longer looks like it worked. When Claude spends the Ctrl-C on clearing queued input and the turn keeps running, a Claude or Codex pane that shows no sign of the interrupt within 5 seconds (no "[Request interrupted by user]" record, no turn end) puts its live status back with a "STOP not applied" badge beside it, so Interrupt can be pressed again. A STOP a person pressed still holds queued messages until they type, and a late interrupt record brings the STOP badge back. Navide does not send a second Ctrl-C on its own, since two in a row quit Claude.
+
 ## [0.2.39] — 2026-11-09
 
 ### Added
