@@ -10,6 +10,8 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
+## [0.2.39] — 2026-11-09
+
 ### Added
 
 - Navide plugins (0.2.39): a new `secrets` permission lets a plugin keep its own API keys and tokens on this device (`secrets.set`, `get`, `delete`, `list`; `createPluginSecretStore` in the SDK; the `secrets` Bridge port for native backends; plugin API 1.3.0). Values are encrypted with the operating system's secure storage under the plugin id, survive updates and disabling, and are never synced to Navide Cloud, exported, shared, logged, recorded in Activity or returned to an agent: every agent tool answer is redacted against them. Without secure storage the calls answer `SECRETS_UNAVAILABLE` and nothing is written in plain text. Declaring it is high risk and asks the second confirmation. Removing a plugin asks whether its secrets go too (kept by default); `plugins_disable` takes `clear_secrets`, which files a request the user approves before anything is deleted, and the user is told whenever secrets are deleted. Secrets are bound to the installing package's source and publisher key (an unsigned local file to its exact content, a Developer Mode folder to that folder): the same plugin id from another source, publisher, unsigned file or folder gets `SECRETS_IDENTITY_MISMATCH` and cannot read, change or delete them.
@@ -78,6 +80,68 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 - Plugins (0.2.39): docs/en-US/build-for-navide.md is the one starting point for building a Navide plugin (five-minute start, capabilities and permissions, testing, publishing, taking part), the READMEs in English, Chinese and Japanese link it, and the docs index lists it first. Eight places where the plugin docs contradicted each other are fixed, docs/en-US/plugin-ideas.md lists plugins people want, and docs/en-US/marketplace-featured-policy.md says how a listing gets Featured.
 - Docs (0.2.39): the zh-TW and ja-JP README, inter-cli-messaging and user guide now match English: building plugins for Navide, prefilling a terminal command with `submit: false`, binding a chat with `channels_bind`, and the Git tab that cannot be removed and offers a reinstall when it fails to load.
+
+### Known limitations
+
+- Agents (0.2.39): OpenClaw and Hermes Agent were not tested on a machine that has them installed, so starting, `--yolo`, version output, busy and idle detection and bare-line replies are unverified, and a change to their terminal interface may need a Navide update.
+- Agents (0.2.39): OpenClaw support on Windows has not been checked.
+- Agents (0.2.39): Devin was not tested on a machine that has it installed, so starting, busy and idle detection, bracketed paste, bare-line replies and the kickoff are unverified, and no Devin version is marked as verified.
+- Agents (0.2.39): Navide does not read Devin's session log, so a Devin pane has no resume, no token counts and no turn signals, and the output of `devin --version` is unverified.
+- Agents (0.2.39): Devin's own `/handoff` uploads uncommitted changes to Cognition's cloud, and Navide shows no extra warning about it.
+- MCP (0.2.39): the App already refuses plugin tools named with the reserved `channels_` prefix, but the Registry's publish review refuses them only after the Registry is redeployed.
+- MCP (0.2.39): requests an agent files through the `channels_*` tools (adding or removing a bot, approving a pairing, a bind that needs approval, creating a Managed Bot and following its link code) live only in backend memory, expire after 15 minutes without a decision and are all gone when the backend restarts, after which `channels_request_status` answers `unknown-request` and the agent has to file them again.
+- MCP (0.2.39): an agent can bind directly only a Telegram private chat with a sender you already approved; groups and other platforms always go through approval in the main window.
+- MCP (0.2.39): left as designed: an agent can raise a group mirror's verbosity without asking you, each bot keeps at most 3 pending pairings and 5 link codes so an agent creating codes repeatedly pushes out older ones, and Navide cannot delete the Telegram side of a Managed Bot once it is created.
+- Navide plugins (0.2.39): clearing a plugin's secrets through `plugins_disable` with `clear_secrets` needs your approval in the main window and cannot be completed remotely, such as from Telegram; you are told whenever secrets are deleted.
+- Navide plugins (0.2.39): an unsigned local plugin file gets a new identity whenever its content changes, and so does a Developer Mode folder that is moved, so its secrets have to be entered again; the same plugin id installed from another source or publisher cannot reach the old secrets (`SECRETS_IDENTITY_MISMATCH`), though the remove dialog can still delete the orphaned secrets file.
+- Navide plugins (0.2.39): Activity records each secrets operation but not the secret's name, and on a machine without system secure storage the calls answer `SECRETS_UNAVAILABLE` and nothing is written in plain text.
+- Plugin SDK (0.2.39): `docs/plugin-contracts/validate-fixtures.py` already failed before this version because its `plugins.call` fixture is out of date, and it is still to be fixed.
+- Registry (0.2.39): the public Registry still runs the build deployed on 2026-11-07, so the new developer pages, validation of the plugin API 1.3.0 manifest fields, the reserved `channels_` prefix, the network check on public publishing and the 409 for a different signing key take effect only once it is redeployed, and until then it refuses a plugin that uses the new manifest fields.
+- Marketplace (0.2.39): website pages at the old `server.navide.dev/registry` address redirect to the navide.dev home page instead of the matching page, everyone has to sign in again because sign-in cookies belong to each host, and browsers cache the redirect, so visitors who saw it would still be sent away if it were rolled back.
+- Marketplace (0.2.39): removing the old address from search engines is in progress, and making it permanent still needs the old host to answer with noindex or a robots disallow.
+- Marketplace (0.2.39): signing in from Settings → Developer in a 0.2.38 App and with `navide-plugin login` from an older SDK have not been tested end to end against the new addresses.
+- Channels (0.2.39): quick add no longer writes a bot's @handle into its name, so a name you gave a bot that happens to start with @ is shown as the bot's display name instead; nothing in the database changes.
+- Tokens (0.2.39): the usage of a workspace opened through a symlink, a path in a different letter case or `/tmp` instead of `/private/tmp` counts only in the global and account totals, nothing is lost, and earlier numbers are not recalculated.
+- Settings (0.2.39): with Session log archive's switch for deleting originals on, the original log of a Claude session idle for 7 days or more and used by no pane is deleted, so `claude --resume` and the session list no longer show it; every switch is off by default.
+- Guard (0.2.39): the new rule against reading a credential and piping it into an upload cannot be exempted with an allow prefix, on purpose, and whether to make it exemptable is still open.
+- Plugins (0.2.39): the App refuses a whole third-party package whose id ends in `channels` and that declares `agentTools`, the Registry answers 422 to a new version of a package that declares network hosts but reaches others, and a 0.2.38 App fails with 409 when publishing with a second signing key.
+- Git (0.2.39): the Ask AI to fix button in the Git detail panel on the left does nothing, because it has nowhere to send the prompt; the one in the Git window works.
+- Plugins (0.2.39): a plugin that declares no network hosts is allowed and recorded, and the Registry does not check it, because the scanner has no evidence of where the code connects and library strings would cause false refusals; requiring every new listing to declare its hosts is planned for 0.2.40.
+- Marketplace (0.2.39): an existing developer account whose signing key the App already replaced needs the CLI public key pasted again in the dashboard, and an account still cannot have several active keys.
+- Pipelines (0.2.39): a pipeline started by an agent or a schedule still runs a plugin node as the Host user, which is disclosed rather than restricted.
+- Plugins (0.2.39): a view-based agent tool (`contributes.agentTools`) answers view-not-open when its view is not open in the target workspace, and Navide does not open the view for the call; headless views are planned for 0.2.40.
+- Plugin SDK (0.2.39): `navide-plugin dev-backend` answers host calls only through its local bridge, hot reload is not supported, and `plugins_developer_backend_call` is planned for 0.2.40.
+- Plugins (0.2.39): `web.cdp` works only on a web view the plugin opened itself, through the same 17-method allowlist, and is refused while you have taken over the page; the six cloud agent plugins come when they are published on their own (0.2.40).
+- Plugin SDK (0.2.39): until the npm packages `@navide/plugin-contracts`, `@navide/plugin-sdk` and `@navide/plugin-ui` 1.x are published, the `npx navide-plugin` the developer pages, READMEs and getting-started card name does not run.
+- Developers (0.2.39): the Plugin ideas and Show and tell links answer 404 until their GitHub Discussions categories exist.
+- Developers (0.2.39): entries from the Help menu and onboarding, the Testplace section, documentation fields and links in Registry API answers, and the website's /developers page are planned for 0.2.40.
+- Developers (0.2.39): the developer journey, the wording across the six entry points and a link check of the new developer pages have not been recorded as tested.
+- Channels (0.2.39): right after Navide starts, while panes are still being restored, a bot row can briefly show the pane closed badge.
+- Channels (0.2.39): the three Telegram /start replies and finding a bot with the Settings search are still to be checked on a real device after release.
+- Tokens (0.2.39): the account backfill reaches back only 30 days, so older calls and calls made on the CLI's own login show as unattributed when grouped by account.
+- Token panel (0.2.39): only CLIs whose session logs Navide reads have model data, so By model shows the others as token totals only or not at all.
+- Token panel (0.2.39): quota history only reads the quota samples already recorded, and weekly reports, suggestions, export and scheduled emails are planned for 0.2.42–0.2.43.
+- Interface wording (0.2.39): the zh-TW, zh-CN, ja-JP and ko-KR interfaces still have short strings identical to English (95, 93, 103 and 138, mostly example values and brand and platform names), and the zh-TW and ja-JP inter-cli-messaging, troubleshooting and privacy docs have a few sections fewer than English; both predate this version.
+- Settings (0.2.39): whether Session log archive can install zstandard on Windows arm64 is unconfirmed, uploading archives has not been tested against a real S3 bucket, and backfilling the usage ledger has not been run on a real `navide.db`.
+- Terminal panes (0.2.39): after a command is prefilled, other messages to that terminal fail until you type into it, on purpose.
+- Git (0.2.39): Explorer badges, preview diffs, Git account settings, the notice when the Git plugin fails to start, reinstalling it, an installer without the old Git interface and the Mini-IDE fallback are still to be verified on all three platforms, and since the old Git interface is gone, Reinstall built-in Git is the only way back when the Git plugin is broken.
+- Channels (0.2.39): while a pane waits on a permission prompt (such as a command Guard rates high), a regular message from Telegram is refused instead of queued and the chat can only decline the prompt; an improvement is planned for 0.2.40.
+- Release (0.2.39): the release gate's timing tests (KeyboardShortcutsEditor, useTerminal.startStall, MiniIdeApp.workspaceAlias) and the 3-second wait in the Windows gate's test_old_server_no_rotation_no_writes can still fail under heavy load, so the gate is run with a load average under 15 and no busy panes.
+- Git (0.2.39): the backend still runs `git rev-parse` about every 10 seconds for each open workspace that is not a repository, left over from 0.2.38 and an efficiency issue rather than a leak.
+- Settings (0.2.39): the "no account-switch adapter" text on the General page is not translated.
+- Guard (0.2.39): Guard rule descriptions are still in English.
+- Backend (0.2.39): on Linux, after the system clock is corrected, the MCP manager and the agent tool result worker still judge processes by their shifted start time and lean toward not ending them, while the backend itself now reads its start time from `/proc`.
+- Interface wording (0.2.39): in Japanese, 「Navide マーケットプレイス」 in the sidebar wraps onto a second line.
+- Token panel (0.2.39): By model shows a dash for the dollars of a model that has no price.
+- Interface wording (0.2.39): the zh-CN language list shows the zh-TW and ja-JP names as 「繁体中文」 and 「日本语」.
+- Panes (0.2.39): the STOP badge shows even when Ctrl-C did not interrupt the agent; a fix is planned for 0.2.40.
+- Release (0.2.39): the freeze check and the Navide Browser check of the VM release round were not verified because their test prerequisites were missing, not because the product failed.
+- Plugins (0.2.39): a third-party plugin backend's temporary directory can be left behind.
+- Pipelines (0.2.39): with every CPU busy, a pipeline kickoff can wait more than 6 minutes before it is sent, as the waits for the pane to read and for the echo add up.
+- Pipelines (0.2.39): a pipeline kickoff can still fail when the CLI takes more than 120 seconds to read input.
+- Release (0.2.39): during load spikes on CI's Windows runners, tests that start git processes can time out, a test flake rather than a product failure; the officialPluginFingerprints test now allows 30 seconds.
+- Backend (0.2.39): synchronous SQLite writes on the backend's event loop stall it while disk fsync is slow (21.7 and 14.2 seconds measured in a VM, 2.5–5.7 seconds three times on Linux); this version fixes the 2-minute false webhook refusals that caused, and moving those writes off the main loop is planned for 0.2.40.
+- Release (0.2.39): the VM evidence archives of release rounds 11 and 12 were lost when `/private/tmp` was cleared on a restart, so their results rest on the reports made at the time.
 
 ## [0.2.38] — 2026-11-07
 
