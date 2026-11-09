@@ -10284,6 +10284,7 @@
     "failover-resume-none": "新しい会話",
     "failover-unverified": "実際のアカウントでは未検証",
     "failover-platform-unsupported": "このプラットフォームでは非対応",
+    "failover-no-adapter": "アカウント切り替えアダプターなし",
     "failover-audit-degraded": "切り替えの監査記録を書き込めなかったため、書き込めるようになるまで自動切り替えを停止しています。手動での切り替えは引き続き利用できます。"
   },
   "onboard": {
@@ -11164,9 +11165,9 @@
       "client_secret": "Client Secret",
       "access_token": "アクセストークン",
       "server_url": "サーバー URL",
-      "homeserver": "Homeserver URL",
+      "homeserver": "ホームサーバー URL",
       "domain": "リージョン",
-      "robot_code": "Robot code"
+      "robot_code": "ロボットコード"
     },
     "secret-stored": "保存済み ••••••••（空欄のままなら変更なし）",
     "remove": "削除",
@@ -11272,7 +11273,7 @@
       "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。",
       "unnamed-pane": "名前のないペイン",
       "pane-closed": "閉じています",
-      "chat-id": "chat {id}"
+      "chat-id": "チャット {id}"
     }
   },
   "guard": {

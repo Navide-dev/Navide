@@ -1047,7 +1047,7 @@
       "loop-start-failed": "無法在此分格以「{name}」啟動 Loop",
       "loop-badge-tooltip": "已對此分格送出 Loop 提示詞 — 點擊標籤可關閉 Loop",
       "loop-waiting-tooltip": "Loop 暫停 — 已達工作階段上限；將於 {time} 自動續跑，點擊標籤可立即續跑",
-      "loop-badge-estimate": "∞ Loop · ~{time}",
+      "loop-badge-estimate": "∞ Loop · 約 {time}",
       "loop-badge-resume": "∞ {time} 續跑",
       "loop-estimate-tooltip": "額度重置時間估計約 {time}（依 5 小時工作階段視窗推算）；若撞到上限訊息會換成準確時間。點擊標籤可關閉 Loop",
       "loop-estimate-weekly-tooltip": "週額度於 {time} 重置；此帳號沒有 5 小時窗口。點擊標籤可關閉 Loop",
@@ -4488,7 +4488,7 @@
           },
           "chipsIntro": "卡片上只放三個 chip：安裝狀態、登入與帳號數、推送通道。完整的一排 chip 在抽屜最上面的「{overview}」，把那家 CLI 目前的設定現況直接讀回來。順序是固定的，照著「它是什麼 → 它會用什麼跑 → 怎麼找得到它」排：",
           "chipsTable": {
-            "chip": "Chip",
+            "chip": "標籤",
             "shows": "顯示什麼"
           },
           "chips": {
@@ -7846,7 +7846,7 @@
         "tab-login": "登入",
         "tab-register": "建立帳號",
         "tab-token": "使用 Token",
-        "email": "Email",
+        "email": "電子郵件",
         "password": "密碼",
         "password-placeholder": "至少 8 個字元",
         "display-name": "顯示名稱",
@@ -8228,7 +8228,7 @@
         "editor_unfoldRecursively": "遞迴展開",
         "git_amend": "修改上一次 commit",
         "git_commit": "Commit",
-        "git_fetch": "Fetch",
+        "git_fetch": "擷取（Fetch）",
         "git_focusAgent": "聚焦 AI 面板",
         "git_generateMessage": "產生 commit 訊息",
         "git_pull": "Pull",
@@ -8401,7 +8401,7 @@
           "back-unknown": "重置時間不明",
           "wait": "等待重置"
         },
-        "kind": "API key",
+        "kind": "API 金鑰",
         "list": {
           "aria": "帳號",
           "search": "搜尋帳號",
@@ -8427,7 +8427,7 @@
           "title": "貼上 API key",
           "billing": "這個帳號依用量計費，不會使用訂閱額度。",
           "name": "名稱",
-          "key": "API key",
+          "key": "API 金鑰",
           "key-new": "新的 API key",
           "key-hint": "儲存後不會再顯示。",
           "reminder": "每月預算備註（USD）",
@@ -10277,6 +10277,7 @@
     "failover-resume-none": "另開新對話",
     "failover-unverified": "尚未以真實帳號驗證",
     "failover-platform-unsupported": "不支援此平台",
+    "failover-no-adapter": "尚無帳號切換轉接器",
     "failover-audit-degraded": "切換稽核紀錄無法寫入；自動切換暫停，直到可以寫入為止。手動切換不受影響。",
     "settings-signing-title": "Antigravity 憑證（maintainer）",
     "settings-signing-hint": "僅開發模式顯示。寫入 ~/navide-signing/usage_secrets.py，讓下次 release build 打包 Antigravity 的公開 installed-app OAuth 常數。不會存進 repo。",
@@ -11164,9 +11165,9 @@
       "client_secret": "Client Secret",
       "access_token": "存取權杖",
       "server_url": "伺服器 URL",
-      "homeserver": "Homeserver URL",
+      "homeserver": "主伺服器（Homeserver）URL",
       "domain": "區域",
-      "robot_code": "Robot code"
+      "robot_code": "機器人代碼"
     },
     "secret-stored": "已儲存 ••••••••（留空則保留原值）",
     "remove": "移除",
@@ -11272,7 +11273,7 @@
       "auto-child-hint": "為子分格自動建立的話題；關閉父分格的連線時會一併關閉。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已關閉",
-      "chat-id": "chat {id}"
+      "chat-id": "聊天 {id}"
     }
   },
   "guard": {

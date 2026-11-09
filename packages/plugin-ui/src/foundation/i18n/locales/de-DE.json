@@ -10277,6 +10277,7 @@
     "failover-resume-none": "Neue Unterhaltung",
     "failover-unverified": "Nicht mit einem echten Konto verifiziert",
     "failover-platform-unsupported": "Nicht auf dieser Plattform",
+    "failover-no-adapter": "Kein Adapter für den Kontowechsel",
     "failover-audit-degraded": "Der Prüfeintrag für den Wechsel konnte nicht geschrieben werden; automatische Wechsel pausieren, bis das möglich ist. Manuelle Wechsel funktionieren weiterhin.",
     "settings-signing-title": "Antigravity-Anmeldeinformationen (Maintainer)",
     "settings-signing-hint": "Nur für die Entwicklung. Schreibt ~/navide-signing/usage_secrets.py, damit der nächste Release-Build die öffentlichen OAuth-Konstanten der installierten Antigravity-App enthält. Wird nie im Repository gespeichert.",

@@ -10277,6 +10277,7 @@
     "failover-resume-none": "Cuộc hội thoại mới",
     "failover-unverified": "Chưa xác minh trên tài khoản thật",
     "failover-platform-unsupported": "Không có trên nền tảng này",
+    "failover-no-adapter": "Chưa có bộ chuyển đổi tài khoản",
     "failover-audit-degraded": "Không ghi được bản ghi kiểm tra việc chuyển; việc tự động chuyển tạm dừng cho đến khi ghi được. Chuyển thủ công vẫn hoạt động.",
     "settings-signing-title": "Thông tin xác thực Antigravity (người bảo trì)",
     "settings-signing-hint": "Chỉ dành cho phát triển. Ghi ~/navide-signing/usage_secrets.py để bản dựng phát hành tiếp theo đóng gói các hằng số OAuth công khai dành cho ứng dụng cài đặt của Antigravity. Không bao giờ lưu trong kho.",

@@ -699,7 +699,7 @@
       "apply-blocked": "먼저 모든 충돌을 해결하세요",
       "apply": "적용 및 스테이징",
       "ours-default": "HEAD(현재 쪽)",
-      "versus": "vs",
+      "versus": "대",
       "theirs-default": "상대 쪽",
       "empty-side": "(비어 있음)",
       "accepted-ours": "현재 쪽 적용됨",
@@ -1344,7 +1344,7 @@
     "commit-and-push": "커밋 및 푸시",
     "commit-and-sync": "커밋 및 동기화",
     "undo-last-commit": "마지막 커밋 실행 취소",
-    "auto-commit": "Auto Commit",
+    "auto-commit": "자동 커밋",
     "publish": "게시",
     "fetch": "페치",
     "sync-title": "동기화(pull --rebase + push)",
@@ -1516,21 +1516,21 @@
         "slack-app-token": "Slack 앱 token",
         "aws-access-key": "AWS 액세스 키",
         "jwt": "JWT",
-        "bot-token": "bot token",
-        "telegram-bot-token": "Telegram bot token",
-        "discord-bot-token": "Discord bot token",
+        "bot-token": "봇 토큰",
+        "telegram-bot-token": "Telegram 봇 토큰",
+        "discord-bot-token": "Discord 봇 토큰",
         "authorization-header": "Authorization 헤더",
-        "bearer-token": "bearer token",
+        "bearer-token": "Bearer 토큰",
         "credential-assignment": "자격 증명",
         "credential-flag": "자격 증명 플래그",
         "url-credentials": "URL 안의 자격 증명",
         "google-api-key": "Google API 키",
         "gitlab-token": "GitLab token",
         "stripe-key": "Stripe 키",
-        "npm-token": "npm token",
-        "huggingface-token": "Hugging Face token",
+        "npm-token": "npm 토큰",
+        "huggingface-token": "Hugging Face 토큰",
         "sendgrid-key": "SendGrid 키",
-        "pypi-token": "PyPI token",
+        "pypi-token": "PyPI 토큰",
         "private-key": "개인 키",
         "possible-secret": "비밀 정보"
       }
@@ -1846,7 +1846,7 @@
           "summary": "Resource Manager를 열어 앱 데이터, Electron 캐시, CLI 홈, 작업 영역의 디스크 사용량을 검사하고 정리해요."
         },
         "execution-policy": {
-          "title": "Execution Policy",
+          "title": "실행 정책",
           "summary": "전역 agent 정책을 편집하고, 작업 영역 소스를 선택하고, 저장소 권장 사항을 검토하고, 손상된 정책 저장소를 복구해요."
         },
         "marketplace": {
@@ -1958,7 +1958,7 @@
       "notCreated": "만들지 않음",
       "userHint": "작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책을 편집해요. 저장하면 현재 사용자 정책을 대체해요.",
       "mode": {
-        "full": "Full",
+        "full": "전체",
         "allowlist": "허용한 명령만",
         "denylist": "거부 목록"
       },
@@ -2782,7 +2782,7 @@
       "accounts": "🔑 계정",
       "shortcuts": "⌨️ 단축키",
       "extensions": "🧩 Navide 플러그인",
-      "executionPolicy": "🛡️ Execution Policy"
+      "executionPolicy": "🛡️ 실행 정책"
     },
     "nav": {
       "title": "설정",
@@ -2815,7 +2815,7 @@
       "extensions": "Navide 플러그인",
       "marketplace": "Navide 마켓플레이스",
       "disclosureOverview": "공개 정보 개요",
-      "executionPolicy": "Execution Policy",
+      "executionPolicy": "실행 정책",
       "statusBadges": "상태 배지",
       "voice": "음성 입력",
       "appLock": "App Lock",
@@ -3715,7 +3715,7 @@
             "theirs": "상대",
             "progress": "1 / 3 해결됨",
             "apply": "적용 및 스테이징",
-            "base": "Base"
+            "base": "공통 조상"
           }
         },
         "intro": "Git 패널, 계획 문서, 기본 제공 편집기와 미리 보기 — agent가 무엇을 바꿨는지 보고, 검토하고, 커밋하는 데 필요한 모든 것이에요. 작업 영역/pane 용어를 그대로 사용해요.",
@@ -5830,7 +5830,7 @@
             "pane2": "reviewer",
             "sub1": "claude · design",
             "sub2": "codex · review",
-            "group": "Build"
+            "group": "빌드"
           }
         }
       },
@@ -6763,7 +6763,7 @@
           },
           "sample": {
             "workspace": "Agent-Team",
-            "group": "Build",
+            "group": "빌드",
             "pane1": "architect",
             "pane2": "reviewer",
             "sub1": "claude · design",
@@ -8807,7 +8807,7 @@
     "explorer": "탐색기",
     "git": "Git",
     "plans": "계획",
-    "cli-stage": "CLI Stage",
+    "cli-stage": "CLI 스테이지",
     "history": "기록",
     "tokens": "Token",
     "tasker": "일정",
@@ -9226,7 +9226,7 @@
     "focus-pane": "pane에 포커스",
     "manager-badge": "🎯 관리자",
     "docked": "도킹됨",
-    "pane-origin-stage": "stage {id}",
+    "pane-origin-stage": "스테이지 {id}",
     "pane-origin-manual": "수동",
     "session-id-tooltip": "CLI session ID — 재시작할 때 이 agent의 기억을 이어 가는 데 쓰여요",
     "role-system-prompt": "{role} 시스템 프롬프트",
@@ -9853,7 +9853,7 @@
       "runtime": "런타임",
       "paths": "경로",
       "open": "열기",
-      "app": "App",
+      "app": "앱",
       "backend": "백엔드",
       "started": "시작 시각",
       "shell": "셸"
@@ -10277,6 +10277,7 @@
     "failover-resume-none": "새 대화",
     "failover-unverified": "실제 계정으로 검증되지 않음",
     "failover-platform-unsupported": "이 플랫폼에서는 지원 안 함",
+    "failover-no-adapter": "계정 전환 어댑터 없음",
     "failover-audit-degraded": "전환 감사 기록을 쓰지 못했어요. 기록할 수 있을 때까지 자동 전환이 일시 중지돼요. 수동 전환은 계속 사용할 수 있어요.",
     "settings-signing-title": "Antigravity 자격 증명(관리자용)",
     "settings-signing-hint": "개발 전용이에요. ~/navide-signing/usage_secrets.py를 작성해 다음 릴리스 빌드에 Antigravity의 공개 설치형 앱 OAuth 상수가 포함되게 해요. repo에는 절대 저장되지 않아요.",
@@ -10607,7 +10608,7 @@
     "pane": "Pane",
     "pane-placeholder": "시작 안 됨",
     "no-token-usage": "token 사용량 없음",
-    "session": "Session",
+    "session": "세션",
     "summary": "턴 {turns}개 · 호출 {calls}개 · 합계 {total}",
     "rescan": "다시 검색",
     "export": "CSV 내보내기",
@@ -11155,9 +11156,9 @@
     "needs": "필요: {fields}",
     "imessage-note": "token이 필요 없어요. macOS 전용이에요.",
     "field": {
-      "token": "Bot token",
+      "token": "봇 토큰",
       "app_token": "앱 수준 token",
-      "bot_token": "Bot token",
+      "bot_token": "봇 토큰",
       "app_id": "App ID",
       "app_secret": "App Secret",
       "client_id": "Client ID",

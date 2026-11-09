@@ -1587,6 +1587,10 @@ interface FailoverCapabilityRow {
   platformUnsupported: boolean
   todo: string
 }
+// The backend's fixed note for a CLI with no account switch
+// (cli_vendors/registry.py account_capability); shown translated. Any other
+// reason is the backend's own text and is shown as is.
+const NO_SWITCH_ADAPTER = 'no account-switch adapter'
 const failoverRows = computed<FailoverCapabilityRow[]>(() => {
   const caps = quotaFailover.state.value?.capabilities
   if (!caps) return []
@@ -2973,7 +2977,7 @@ watch(activeTab, (tab) => {
                   @select="openPluginsPage(page.id)"
                 />
               </template>
-              <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
+              <SettingsNavItem :label="$t('settings.nav.marketplace')" class="settings-nav-item--marketplace" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
                 </template>
@@ -4188,7 +4192,7 @@ watch(activeTab, (tab) => {
                       <td class="failover-notes">
                         <span v-if="row.platformUnsupported" class="failover-tag">{{ $t('usage.failover-platform-unsupported') }}</span>
                         <span v-if="row.unverified" class="failover-tag">{{ $t('usage.failover-unverified') }}</span>
-                        <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo }}</span>
+                        <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo === NO_SWITCH_ADAPTER ? $t('usage.failover-no-adapter') : row.todo }}</span>
                       </td>
                     </tr>
                   </tbody>
