@@ -13,12 +13,19 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 from ..plugin_contract.disclosure_scan_contract import classify_shell_command
+from .catalog_addresses import CATALOG_ADDRESSES
 from .js_tokens import Token, iter_tokens
 from .limits import NO_DEADLINE, Deadline
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
 CAPABILITY_NAMESPACES = frozenset({"agentMessages", "agents", "aiCli", "fs", "secrets", "shell", "storage", "ui", "web", "workspace"})
 CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(agentMessages|agents|aiCli|fs|secrets|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
+
+
+def is_capability_address(value: str) -> bool:
+    """Whether ``value`` is a catalog address, not merely shaped like one."""
+    return _ADDRESS_RE.fullmatch(value) is not None and value in CATALOG_ADDRESSES
+
 FS_READ_ADDRESSES = frozenset({
     "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.queryFiles", "fs.glob", "fs.stat", "fs.statPath",
 })
@@ -42,6 +49,11 @@ _XML_NAMESPACE_URLS = (
     "http://www.w3.org/2000/svg", "http://www.w3.org/1999/xhtml", "http://www.w3.org/1999/xlink",
     "http://www.w3.org/XML/1998/namespace", "http://www.w3.org/2000/xmlns/", "http://www.w3.org/1998/Math/MathML",
 )
+#: Error-reference links frameworks print in production builds, never fetched:
+#: Vue's runtime builds `https://vuejs.org/error-reference/#runtime-${code}`.
+#: Only a bare fragment that ends the URL is dropped, so anything appended
+#: after it (another URL, a path) is still scanned.
+_REFERENCE_URL_RE = re.compile(r"https://vuejs\.org/error-reference/#[A-Za-z0-9_-]*(?=$|\$\{|[\s'\"`])")
 _PATH_RE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._*/-]+$")
 _HEX_IDENTIFIER_RE = re.compile(r"^_0x[0-9a-f]{4,}$")
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
@@ -114,6 +126,7 @@ def command_like(value: str) -> tuple[str, str | None, str] | None:
 def _hosts(value: str) -> list[str]:
     for namespace in _XML_NAMESPACE_URLS:
         value = value.replace(namespace, "")
+    value = _REFERENCE_URL_RE.sub("", value)
     found = []
     for match in [*_URL_RE.finditer(value), *_SCP_RE.finditer(value)]:
         host = match.group(1).lower().strip(".")
@@ -191,7 +204,7 @@ def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEAD
             ):
                 facts.obfuscation_signals.add("longBase64")
         if value is not None:
-            if _ADDRESS_RE.fullmatch(value):
+            if is_capability_address(value):
                 facts.capabilities.add(value)
                 if value in FS_READ_ADDRESSES or value in FS_WRITE_ADDRESSES:
                     _collect_path(at, index, value in FS_WRITE_ADDRESSES, facts, max_path_length)

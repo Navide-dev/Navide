@@ -26,7 +26,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -116,7 +116,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -183,7 +183,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -341,7 +341,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -405,7 +405,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -488,21 +488,21 @@
    },
    "files": {
     "frontend/a.js": {
-     "text": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('ui.showMessage', {}); invoke('aiCli.start', {}); invoke('storage.get', {key: 'k'})"
+     "text": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('ui.openExternal', {url}); invoke('aiCli.startSession', {}); invoke('storage.get', {key: 'k'});t('ui.title'); const w = 'ui.sidebarWidth'; invoke('aiCli.start', {})"
     }
    },
    "expected": {
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
     "coverage": {
      "filesTotal": 1,
      "filesScanned": 1,
-     "bytesScanned": 371,
+     "bytesScanned": 452,
      "skipped": [],
      "truncated": false,
      "timedOut": false
@@ -529,7 +529,7 @@
     },
     "capabilities": [
      {
-      "address": "aiCli.start",
+      "address": "aiCli.startSession",
       "source": "frontend"
      },
      {
@@ -553,10 +553,83 @@
       "source": "frontend"
      },
      {
-      "address": "ui.showMessage",
+      "address": "ui.openExternal",
       "source": "frontend"
      }
     ],
+    "code": {
+     "frontend": {
+      "eval": 0,
+      "newFunction": 0,
+      "dynamicImport": 0,
+      "stringTimers": 0,
+      "obfuscationSignals": []
+     },
+     "backend": null
+    },
+    "native": []
+   }
+  },
+  {
+   "name": "reference-urls",
+   "target": "universal",
+   "manifest": {
+    "schemaVersion": 2,
+    "id": "acme.scoped",
+    "version": "1.0.0",
+    "publisher": "acme"
+   },
+   "files": {
+    "frontend/vue.js": {
+     "text": "const errorInfo = `https://vuejs.org/error-reference/#runtime-${type}`;s=`https://vuejs.org/error-reference/#runtime-${n}`;"
+    },
+    "frontend/real.js": {
+     "text": "fetch('https://vuejs.org/api/'); const r = 'https://vuejs.org/error-reference/#x/../../api';const e = 'https://vuejs.org/error-reference/#https://evil.example.com/x'"
+    }
+   },
+   "expected": {
+    "schemaVersion": 1,
+    "scanner": {
+     "id": "navide-static-scan",
+     "version": "1.1.0"
+    },
+    "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target": "universal",
+    "coverage": {
+     "filesTotal": 2,
+     "filesScanned": 2,
+     "bytesScanned": 288,
+     "skipped": [],
+     "truncated": false,
+     "timedOut": false
+    },
+    "shell": {
+     "calls": [],
+     "dynamic": {
+      "count": 0,
+      "files": 0
+     }
+    },
+    "network": {
+     "hosts": [
+      {
+       "host": "evil.example.com",
+       "source": "frontend",
+       "count": 1
+      },
+      {
+       "host": "vuejs.org",
+       "source": "frontend",
+       "count": 3
+      }
+     ]
+    },
+    "files": {
+     "readPaths": [],
+     "writePaths": [],
+     "dynamicPaths": 0
+    },
+    "capabilities": [],
     "code": {
      "frontend": {
       "eval": 0,
@@ -594,7 +667,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -662,7 +735,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -737,7 +810,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -1303,7 +1376,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -1379,7 +1452,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -1450,7 +1523,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
@@ -1560,7 +1633,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "linux-arm64",
@@ -1652,7 +1725,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "win32-x64",
@@ -1743,7 +1816,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
@@ -1835,7 +1908,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "linux-x64",
@@ -1907,7 +1980,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.1.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
