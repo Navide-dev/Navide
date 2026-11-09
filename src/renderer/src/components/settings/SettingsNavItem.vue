@@ -190,6 +190,18 @@ const emit = defineEmits<{
   overflow-wrap: break-word;
   line-height: 1.3;
 }
+/* ja-JP "Navide マーケットプレイス" needs 184px at the row's size and the
+   sidebar gives it 159px: one size smaller and with the trimmed right
+   padding of a row with a badge, it stays on one line. Other languages keep
+   the row as is. */
+@media (min-width: 721px) {
+  .settings-nav-item--marketplace:lang(ja) {
+    padding-right: 6px;
+  }
+  .settings-nav-item--marketplace:lang(ja) .settings-nav-item-label {
+    font-size: var(--font-sm);
+  }
+}
 
 /* Expanded parent: a heading for the page rows under it, not a second
    selection. Normal text and icon colour, normal weight, no fill, no

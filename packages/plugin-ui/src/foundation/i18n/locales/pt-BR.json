@@ -10277,6 +10277,7 @@
     "failover-resume-none": "Nova conversa",
     "failover-unverified": "Não verificado em uma conta real",
     "failover-platform-unsupported": "Não disponível nesta plataforma",
+    "failover-no-adapter": "Sem adaptador para troca de conta",
     "failover-audit-degraded": "Não foi possível gravar o registro de auditoria da troca; a troca automática fica pausada até que isso seja possível. A troca manual continua funcionando.",
     "settings-signing-title": "Credenciais do Antigravity (mantenedor)",
     "settings-signing-hint": "Somente para desenvolvimento. Grava ~/navide-signing/usage_secrets.py para que o próximo build de versão inclua as constantes OAuth públicas de app instalado do Antigravity. Nunca armazenado no repositório.",

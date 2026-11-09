@@ -10277,6 +10277,7 @@
     "failover-resume-none": "Nouvelle conversation",
     "failover-unverified": "Non vérifié sur un compte réel",
     "failover-platform-unsupported": "Pas sur cette plateforme",
+    "failover-no-adapter": "Aucun adaptateur de changement de compte",
     "failover-audit-degraded": "L’enregistrement d’audit du changement n’a pas pu être écrit ; les changements automatiques sont suspendus jusqu’à ce que ce soit possible. Le changement manuel fonctionne toujours.",
     "settings-signing-title": "Identifiants Antigravity (mainteneur)",
     "settings-signing-hint": "Développement uniquement. Écrit ~/navide-signing/usage_secrets.py pour que la prochaine version inclue les constantes OAuth publiques de l’application installée Antigravity. Jamais stocké dans le dépôt.",

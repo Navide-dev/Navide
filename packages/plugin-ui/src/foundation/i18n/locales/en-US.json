@@ -10277,6 +10277,7 @@
     "failover-resume-none": "New conversation",
     "failover-unverified": "Not verified on a real account",
     "failover-platform-unsupported": "Not on this platform",
+    "failover-no-adapter": "No account-switch adapter",
     "failover-audit-degraded": "The switch audit record could not be written; automatic switching is paused until it can. Manual switching still works.",
     "settings-signing-title": "Antigravity credentials (maintainer)",
     "settings-signing-hint": "Dev-only. Writes ~/navide-signing/usage_secrets.py so the next release build bundles Antigravity's public installed-app OAuth constants. Never stored in the repo.",

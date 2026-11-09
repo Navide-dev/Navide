@@ -1047,7 +1047,7 @@
       "loop-start-failed": "无法在此分格以“{name}”启动 Loop",
       "loop-badge-tooltip": "已对此分格送出 Loop 提示词 — 点击标签可关闭 Loop",
       "loop-waiting-tooltip": "Loop 暂停 — 已达工作阶段上限；将于 {time} 自动续跑，点击标签可立即续跑",
-      "loop-badge-estimate": "∞ Loop · ~{time}",
+      "loop-badge-estimate": "∞ Loop · 约 {time}",
       "loop-badge-resume": "∞ {time} 续跑",
       "loop-estimate-tooltip": "额度重置时间估计约 {time}（依 5 小时工作阶段窗口推算）；若撞到上限消息会换成准确时间。点击标签可关闭 Loop",
       "loop-estimate-weekly-tooltip": "周额度于 {time} 重置；此账号没有 5 小时窗口。点击标签可关闭 Loop",
@@ -4488,7 +4488,7 @@
           },
           "chipsIntro": "卡片上只放三个 chip：安装状态、登录与账号数、推送通道。完整的一排 chip 在抽屉最上面的“{overview}”，把那家 CLI 目前的设置现况直接读回来。顺序是固定的，照着“它是什么 → 它会用什么跑 → 怎么找得到它”排：",
           "chipsTable": {
-            "chip": "Chip",
+            "chip": "标签",
             "shows": "显示什么"
           },
           "chips": {
@@ -7846,7 +7846,7 @@
         "tab-login": "登录",
         "tab-register": "创建账号",
         "tab-token": "使用 Token",
-        "email": "Email",
+        "email": "邮箱",
         "password": "密码",
         "password-placeholder": "至少 8 个字符",
         "display-name": "显示名称",
@@ -8228,7 +8228,7 @@
         "editor_unfoldRecursively": "递归展开",
         "git_amend": "修改上一次 commit",
         "git_commit": "Commit",
-        "git_fetch": "Fetch",
+        "git_fetch": "获取（Fetch）",
         "git_focusAgent": "聚焦 AI 面板",
         "git_generateMessage": "产生 commit 消息",
         "git_pull": "Pull",
@@ -10277,6 +10277,7 @@
     "failover-resume-none": "另开新对话",
     "failover-unverified": "尚未以真实账号验证",
     "failover-platform-unsupported": "不支持此平台",
+    "failover-no-adapter": "尚无账号切换适配器",
     "failover-audit-degraded": "切换审核记录无法写入；自动切换暂停，直到可以写入为止。手动切换不受影响。",
     "settings-signing-title": "Antigravity 凭据（maintainer）",
     "settings-signing-hint": "仅开发模式显示。写入 ~/navide-signing/usage_secrets.py，让下次 release build 打包 Antigravity 的公开 installed-app OAuth 常数。不会存进 repo。",
@@ -11164,9 +11165,9 @@
       "client_secret": "Client Secret",
       "access_token": "访问令牌",
       "server_url": "服务器 URL",
-      "homeserver": "Homeserver URL",
+      "homeserver": "主服务器（Homeserver）URL",
       "domain": "区域",
-      "robot_code": "Robot code"
+      "robot_code": "机器人编码"
     },
     "secret-stored": "已保存 ••••••••（留空则保留原值）",
     "remove": "移除",
@@ -11272,7 +11273,7 @@
       "auto-child-hint": "为子分格自动创建的话题；关闭父分格的连接时会一并关闭。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已关闭",
-      "chat-id": "chat {id}"
+      "chat-id": "聊天 {id}"
     }
   },
   "guard": {
