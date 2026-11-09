@@ -1192,6 +1192,10 @@ export function isPublicCapabilityEventAllowed(
   if (event === 'ui.editorPreferencesChanged') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateEditorPreferencesEvent(payload))
   }
+  if (event === 'ui.localeChanged') {
+    return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && isRecord(payload) &&
+      Object.keys(payload).every(key => key === 'locale') && typeof payload.locale === 'string' && payload.locale.length > 0)
+  }
   if (event === 'ui.pluginStorageChanged') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && isRecord(payload) &&
       Object.keys(payload).every(key => ['scope', 'key', 'value', 'deleted'].includes(key)) &&

@@ -1612,6 +1612,8 @@ unchanged:
 | `onAgentToolCall(name, handler)` | `createPluginViewRuntimeClient().onAgentToolCall(name, handler)`: serve a `contributes.agentTools` entry from this view (0.2.39) |
 | `onBackendStatus(listener)` | `createPluginViewRuntimeClient().onBackendStatus(listener)` |
 | `openContributionWindow(params)` | `createPluginViewRuntimeClient().openContributionWindow(params)` |
+| `getHostLocale()` | `context.capabilities.invoke('ui.getLocale', {})`, resolved to the `locale` string (0.2.40) |
+| `onHostLocaleChanged(listener)` | `context.events.subscribe('ui.localeChanged', …)`, called with the new `locale` string (0.2.40) |
 
 The receiver, detail and close methods exist only on the client.
 
@@ -1671,6 +1673,31 @@ not call it directly. The one exception is the `navide-plugin init` scaffold:
 having no build step to bundle the SDK, its `main.js` calls `window.nav.ready()`,
 which is all `createPluginViewRuntimeClient().ready()` does.
 
+### Host language (`ui.getLocale`)
+
+A view that translates its own text reads the language the Navide interface
+shows instead of guessing from `navigator.language`. `ui.getLocale` answers
+`{ locale }`, a BCP 47 tag such as `en-US`, `zh-TW` or `ja-JP`: the language
+the user chose in Settings, or the one Navide picked from the operating system
+when they chose none. When the user switches language, every running view gets
+`ui.localeChanged` with the new tag; nothing reloads, so the view re-renders
+its own text. Both need `permissions.system: ["ui"]` and exist since plugin API
+1.4.0 (Navide 0.2.40); on an older Host the call fails with `METHOD_NOT_FOUND`,
+so keep a fallback:
+
+```ts
+import { getHostLocale, onHostLocaleChanged } from '@navide/plugin-sdk'
+
+declare function applyLocale(locale: string): void // your view's own i18n
+
+applyLocale(await getHostLocale().catch(() => 'en-US'))
+onHostLocaleChanged(applyLocale)
+```
+
+A tag your view has no translation for should fall back to your default
+language. Manifest text (`displayName`, `description`, contribution titles) is
+not translated by the Host.
+
 ### Testing without Navide (`@navide/plugin-sdk/testing`)
 
 `createTestHost(options)` builds an in-memory Host for a plugin's own unit
@@ -1711,6 +1738,7 @@ are not Manifest v2 permissions.
 |---|---|---|
 | `system:fs` | `fs.readFile`, `fs.listDirectory`, `fs.glob`, `fs.queryFiles`, `fs.stat`, `workspace.filesChanged` | `workspace` |
 | `system:ui` | `ui.openInEditor` | `workspace` |
+| `system:ui` | `ui.getLocale`, `ui.localeChanged` | `plugin` (the interface language, see [Host language](#host-language-uigetlocale)) |
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
