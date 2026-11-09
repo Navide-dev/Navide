@@ -1169,13 +1169,15 @@ the chat is told at once that it was kept (with the prompt and its buttons
 quoted, plus a withdraw button), and once the pane leaves the prompt the kept
 messages go in, in order, each one confirmed in the chat as sent. At most 20
 are kept per pane; a kept message still waiting after 30 minutes is dropped
-and the chat told, and so are those kept for a pane that goes away. `/cancel`
+and the chat told, and so are those kept for a pane that goes away, for a
+chat that is unbound or rebound, or from a sender taken off the allowlist
+meanwhile (checked again just before each one goes in). `/cancel`
 withdraws them. A bare `yes`, `no` or option number that answered nothing is
 never kept: sent in later, it would answer whatever is on screen by then.
 Keeping a message never answers or allows the prompt. `/status` is answered
 by Navide itself, never sent to the pane, even while it waits on a prompt:
 the pane tree, how long the prompt has waited, how many kept messages follow
-it, and the pane's last turn text on one line (redacted).
+it, and the pane's last turn text on one line (redacted in full, then shortened).
 
 **Security note:** anyone on the allowlist can approve tool calls on your
 machine while the relay is on. Keep the allowlist short; Navide Guard refuses

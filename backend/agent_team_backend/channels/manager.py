@@ -1326,6 +1326,7 @@ class ChannelManager:
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
         removed = self.store.unbind(pane_id)
         self._drop_pending(pane_id)
+        self._drop_held(pane_id)
         if removed:
             # What was kept for the chat's wake goes with the binding it was kept for.
             self._set_kept(removed.location().key(), [])
@@ -1349,6 +1350,7 @@ class ChannelManager:
         if from_pane_id == to_pane_id or not self.store.rename_pane(from_pane_id, to_pane_id):
             return {"ok": True}
         self.mirror.rename_pane(from_pane_id, to_pane_id)
+        self._drop_held(from_pane_id)
         pending = self._pending.pop(from_pane_id, None)
         if pending is not None:
             if pending.task:
@@ -1424,7 +1426,7 @@ class ChannelManager:
         for is left to the log, which mirrors it at the binding's verbosity, as before."""
         if log_ended or not text.strip():
             return
-        self._last_turn_text[pane_id] = text
+        self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
         pending = self._pending.get(pane_id)
         if pending is None or pending.armed_at is None:
             return
@@ -1476,7 +1478,7 @@ class ChannelManager:
         text = str(entry.get("text") or "")
         source = str(entry.get("source") or "")
         if is_turn_end and text.strip():
-            self._last_turn_text[pane_id] = text
+            self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
         if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
             # The log ended this turn before its hook came, and that log turn end has
             # already answered the run. The run armed now is the NEXT message's: a late
@@ -2365,18 +2367,45 @@ class ChannelManager:
 
     async def _send_held(self, msg: InboundMessage, binding: Binding, pane_id: str, since: float,
                          lang: str) -> None:
+        current = self._binding_for(msg)
+        if current is None or current.pane_id != binding.pane_id \
+                or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            # Unbound, rebound elsewhere, or its sender taken off the allowlist while it was
+            # kept: what the chat may no longer send is not sent for it now.
+            await self._tell_held([(since, msg, binding)], lang, "revoked")
+            return
         if await self._deliver(msg, binding, pane_id, held_since=since):
             await self._reply(msg, held.text(lang, "sent", items=wake.quoted([_preview(msg)])))
 
     async def _tell_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str, key: str,
                          **kw: Any) -> None:
-        """Tell each chat which of its kept messages were dropped (``key``: expired / gone)."""
+        """Tell each chat which of its kept messages were dropped (``key``: expired / gone /
+        revoked)."""
         by_loc: dict[str, list[InboundMessage]] = {}
         for _since, msg, _binding in dropped:
             by_loc.setdefault(msg.location_key(), []).append(msg)
         for msgs in by_loc.values():
             items = wake.quoted([_preview(m) for m in msgs])
             await self._reply(msgs[0], held.text(lang, key, count=len(msgs), items=items, **kw))
+
+    def _drop_held(self, pane_id: str) -> None:
+        """Unbind / rebind: forget what was kept for ``pane_id`` or through its binding (a
+        child's prompt), each chat told on its own worker; never sent in afterwards."""
+        dropped: list[tuple[float, InboundMessage, Binding]] = []
+        for held_pane, kept in list(self._prompt_held.items()):
+            gone = [k for k in kept if held_pane == pane_id or k[2].pane_id == pane_id]
+            if gone:
+                dropped += gone
+                self._prompt_held[held_pane] = [k for k in kept if k not in gone]
+        by_loc: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        for k in dropped:
+            by_loc.setdefault(k[1].location_key(), []).append(k)
+
+        async def tell(items: list[tuple[float, InboundMessage, Binding]]) -> None:
+            await self._tell_held(items, prompt_skills.language(await self._ui_settings()), "revoked")
+
+        for key, items in by_loc.items():
+            self._enqueue(key, lambda i=items: tell(i))
 
     async def status_details(self, pane_id: str) -> list[str]:
         """What /status adds under the pane tree: how long the pane has waited on a prompt,
@@ -2391,11 +2420,13 @@ class ChannelManager:
                 lines.append(held.text(lang, "status_awaiting", minutes=minutes))
         if kept:
             lines.append(held.text(lang, "status_held", count=len(kept)))
-        last = " ".join(self._last_turn_text.get(pane_id, "").split())
+        # Redacted whole (again: a secret registered since it was stored), then cut: a cut
+        # first could split a secret where redaction no longer recognises it.
+        last = " ".join(redact.redact_text(self._last_turn_text.get(pane_id, "")).split())
         if last:
             if len(last) > STATUS_LAST_CHARS:
                 last = last[:STATUS_LAST_CHARS - 1] + "…"
-            lines.append(held.text(lang, "status_last", text=redact.redact_text(last)))
+            lines.append(held.text(lang, "status_last", text=last))
         return lines
 
     async def _list_pending(self, msg: InboundMessage) -> None:
