@@ -755,6 +755,7 @@
     {
       "address": "fs.writeFile",
       "since": "1.0.0",
+      "description": "Create or overwrite a workspace file. content is text encoded with encoding (UTF-8 when omitted). encoding base64 writes binary files: content is then the base64 text of the exact bytes (Navide 0.2.40 or newer; older Hosts answer ok false). expectedMtime refuses the write with conflict true when the file changed on disk.",
       "visibility": "public",
       "permission": { "id": "system", "access": "fs", "scope": "workspace" },
       "params": { "type": "object", "additionalProperties": false, "required": ["path", "content"], "properties": { "selectionGrant": { "type": "string", "minLength": 1 }, "path": { "type": "string" }, "content": { "type": "string" }, "encoding": { "type": "string", "minLength": 1 }, "expectedMtime": { "type": "number" } } },

@@ -1750,6 +1750,20 @@ that needs the whole output asks for less at a time (for example `git log -n`,
 a path filter). Whether the limit is lifted is the user's decision and not part
 of this change.
 
+**`fs.writeFile` binary content.** `content` is always a string. By default
+it is text, encoded with `encoding` (UTF-8 when omitted; the labels
+`fs.readFile` returns, such as `UTF-8 with BOM`, are accepted). Since 0.2.40
+`encoding: 'base64'` writes binary files: `content` is then the standard
+base64 text of the exact bytes to store, and text that is not valid base64 is
+refused with `ok: false`. The 50 MB limit counts the decoded bytes. Older
+Hosts answer `ok: false` for `base64`, because it is not a text codec there:
+
+```ts
+declare const pngBytes: Uint8Array
+const content = btoa(Array.from(pngBytes, (byte) => String.fromCharCode(byte)).join(''))
+await context.capabilities.invoke('fs.writeFile', { path: 'out/cover.png', content, encoding: 'base64' })
+```
+
 The table shows representative entries; `capabilities-v1.json` lists all of
 them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and
 `shell.*` methods). Entries marked with an `eligibility` requirement there

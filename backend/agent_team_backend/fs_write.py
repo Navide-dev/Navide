@@ -221,10 +221,11 @@ def write_file(
     expected_mtime: float | None = None,
     expected_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Overwrite (or create) a text file with `content`.
+    """Overwrite (or create) a file with `content`.
 
     ``encoding`` is the codec used to encode ``content`` (read_file's display
-    labels, e.g. "UTF-8 with BOM", are accepted too). When ``expected_mtime``
+    labels, e.g. "UTF-8 with BOM", are accepted too). ``"base64"`` writes binary
+    files: ``content`` is then the base64 text of the exact bytes to store. When ``expected_mtime``
     is given and the file on disk has a different mtime, or ``expected_sha256``
     is given and its bytes hash differently, the write is refused with
     ``conflict=True`` so the caller can surface a conflict dialog.
@@ -236,11 +237,17 @@ def write_file(
             raise FsError("invalid path")
         if target.exists() and target.is_dir():
             raise FsError("path is a directory")
-        codec = _ENC_FROM_LABEL.get(encoding, encoding)
-        try:
-            encoded = content.encode(codec)
-        except (LookupError, UnicodeEncodeError) as exc:
-            return {"ok": False, "error": f"cannot encode content as {encoding}: {exc}"}
+        if encoding.lower() == "base64":
+            try:
+                encoded = base64.b64decode(content, validate=True)
+            except ValueError:
+                return {"ok": False, "error": "content is not valid base64"}
+        else:
+            codec = _ENC_FROM_LABEL.get(encoding, encoding)
+            try:
+                encoded = content.encode(codec)
+            except (LookupError, UnicodeEncodeError) as exc:
+                return {"ok": False, "error": f"cannot encode content as {encoding}: {exc}"}
         if len(encoded) > _WRITE_SIZE_LIMIT:
             raise FsError(f"content too large ({len(encoded) // 1024} KB; limit 50 MB)")
         target.parent.mkdir(parents=True, exist_ok=True)
