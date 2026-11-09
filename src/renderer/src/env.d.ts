@@ -54,8 +54,9 @@ interface GitCredential {
   expectedHost: string
 }
 
-interface GitRecoveryChanged {
-  legacy: boolean
+interface PluginActivationFailed {
+  pluginId: string
+  reason: string | null
 }
 
 interface PlansRecoveryChanged {
@@ -94,7 +95,7 @@ declare global {
       retryGitV2: () => Promise<{ ok: boolean; reason?: string }>
       retryPlansV2: () => Promise<{ ok: boolean; reason?: string }>
       repairPlansStorageRecord: () => Promise<{ ok: boolean; repaired: boolean; reason?: string }>
-      onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
+      onPluginActivationFailed: (cb: (change: PluginActivationFailed) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onPluginAgentAction?: (cb: (notice: {
@@ -106,6 +107,7 @@ declare global {
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
+      onPluginSecretsNotice?: (cb: (notice: import('../../shared/pluginSecretsNotice').PluginSecretsNotice) => void) => () => void
       onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
       onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
       onPluginSwitching?: (cb: (notice: { pluginId: string; toVersion: string; phase: 'start' | 'end' }) => void) => () => void
@@ -178,18 +180,7 @@ declare global {
         compare?: string
       }) => Promise<{ ok: boolean }>
       openBranchDiffWindow?: (args: { workspace_path: string; base: string }) => Promise<{ ok: boolean }>
-      openGitLeftView: (args: {
-        workspace_path: string
-        bounds: { x: number; y: number; width: number; height: number }
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      updateGitLeftView: (args: {
-        bounds: { x: number; y: number; width: number; height: number }
-        visible: boolean
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      closeGitLeftView: () => Promise<{ ok: boolean }>
-      getZoomFactor?: () => Promise<number>
       setUiScale?: (scale: number) => Promise<number>
-      onZoomChanged?: (cb: () => void) => () => void
       onPlanOpenDoc: (handler: (relPath: string) => void) => () => void
       openDiffWindow: (args: {
         workspace_path: string
@@ -388,9 +379,6 @@ declare global {
         bind: (workspacePath: string, accountId: string) => Promise<{ ok: boolean; error?: string }>
         unbind: (workspacePath: string) => Promise<{ ok: boolean; error?: string }>
         getBinding: (workspacePath: string) => Promise<{ ok: boolean; accountId?: string | null; error?: string }>
-        getCredential: (
-          workspacePath: string
-        ) => Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }>
       }
       permissions?: {
         status: () => Promise<Record<TccPermissionKey, TccPermissionStatus>>
@@ -455,7 +443,16 @@ declare global {
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
-        runCommand: (args: { commandId: string; workspace_path: string }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
+        listSlots?: () => Promise<import('../../shared/pluginCommands').PluginSlotEntry[]>
+        readSettings?: (id: string) => Promise<{
+          settings: Array<{
+            key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+            default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+          }>
+          values: Record<string, boolean | string | number>
+        } | null>
+        writeSetting?: (id: string, key: string, value: boolean | string | number) => Promise<boolean>
+        runCommand: (args: { commandId: string; workspace_path: string; target?: import('../../shared/pluginCommands').PluginCommandTarget }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
@@ -581,13 +578,20 @@ declare global {
           skippedDestroyedHostWindows: number
         }>
         discardCandidate?: (id: string) => Promise<{ ok: boolean }>
-        remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        secretCount?: (id: string) => Promise<{ count: number }>
+        clearSecrets?: (id: string) => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
+        /** Run a pipeline's plugin node on the contributing plugin's backend. */
+        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }) => Promise<
+          { ok: true; output: unknown } | { ok: false; code: string; message: string }
+        >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
+        setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
         preparePack: (args: { namespace: string; name: string }) => Promise<PreparedPackSummary>
         finishPack: (id: string) => Promise<{ recorded: boolean; pack?: InstalledPackRecord }>
@@ -667,6 +671,8 @@ declare global {
     getsPrereleases?: boolean
     /** The user's "Disabled" switch; absent on rows it does not apply to. */
     disabled?: boolean
+    /** C1: the user's "Only allow declared network hosts" switch (present with `disabled`). */
+    networkStrict?: boolean
   }
 
   interface FactoryPluginSummary {

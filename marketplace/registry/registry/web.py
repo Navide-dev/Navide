@@ -21,11 +21,12 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 from sqlmodel import Session
 
+from . import host_routing
 from .cloud_auth import current_viewer, viewer_context
 from .discovery import CATEGORIES, engine_requirement, min_navide_version
 from .manifest import manifest_capabilities, manifest_icon
@@ -50,6 +51,17 @@ _TEMPLATES_DIR = Path(__file__).parent / "web_templates"
 
 # Raw HTML disabled -> README markdown cannot inject active markup (XSS-safe).
 _MD = MarkdownIt("commonmark", {"html": False, "linkify": False})
+
+# Where a third-party developer reads on: the one entry page in the
+# repository (docs/en-US/build-for-navide.md) and its community links.
+_REPO_URL = "https://github.com/Navide-dev/Navide"
+SITE_LINKS = {
+    "repo_url": _REPO_URL,
+    "guide_url": f"{_REPO_URL}/blob/main/docs/en-US/build-for-navide.md",
+    "ideas_url": f"{_REPO_URL}/blob/main/docs/en-US/plugin-ideas.md",
+    "discussions_url": f"{_REPO_URL}/discussions",
+    "security_url": f"{_REPO_URL}/security/policy",
+}
 
 _README_NAMES = {"readme.md", "readme.markdown", "readme"}
 
@@ -226,6 +238,7 @@ _CAPABILITY_HINTS = {
     "aiCli": "drives AI CLI agents",
     "web": "browses websites with your sign-ins and keeps them",
     "agentMessages": "reads the text of messages between your agents",
+    "secrets": "keeps its own API keys encrypted on your device",
 }
 
 
@@ -235,8 +248,28 @@ def capability_hint(capability: str) -> str:
 
 
 def _base_path_context(request: Request) -> dict[str, str]:
-    """Expose the public path prefix so every emitted link carries it."""
-    return {"base": request.scope.get("root_path", "").rstrip("/")}
+    """Expose the public path prefix so every emitted link carries it.
+
+    `store` and `dev` prefix links to the storefront and developer console
+    pages, `api` links to the JSON API, and `canonical_url` is the
+    storefront's own address of a storefront page. With host routing off they
+    all collapse to the one site. SITE_LINKS (the developer guide and the
+    community links) ride along so every page's footer can use them."""
+    base = request.scope.get("root_path", "").rstrip("/")
+    settings = request.app.state.registry.settings
+    role = host_routing.request_role(request)
+    if role is None:
+        return {"base": base, "store": base, "dev": base, "api": base, "canonical_url": "", **SITE_LINKS}
+    return {
+        **SITE_LINKS,
+        "base": base,
+        "store": base if role == host_routing.STORE else settings.store_origin,
+        "dev": base if role == host_routing.DEVELOPER else settings.developer_origin,
+        "api": host_routing.api_base(settings) if settings.legacy_hosts else base,
+        "canonical_url": settings.store_origin + request.url.path
+        if role == host_routing.STORE
+        else "",
+    }
 
 
 def create_web_router() -> APIRouter:
@@ -248,6 +281,12 @@ def create_web_router() -> APIRouter:
     templates.env.filters["category_label"] = category_label
     templates.env.filters["tile_hue"] = tile_hue
     templates.env.filters["capability_hint"] = capability_hint
+
+    @router.get("/robots.txt", response_class=PlainTextResponse)
+    def robots(request: Request) -> str:
+        return host_routing.robots_txt(
+            request.app.state.registry.settings, host_routing.request_role(request)
+        )
 
     @router.get("/", response_class=HTMLResponse)
     def home(

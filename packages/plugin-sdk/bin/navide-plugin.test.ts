@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createPluginViewRuntimeClient } from '../src/index'
+import { parseManifestV2, validateAgentTools } from '../../plugin-contracts/src/index'
 import { readZipEntries } from '../../../src/main/plugins/pluginPackage'
 
 const roots: string[] = []
@@ -234,7 +235,7 @@ function body(request: IncomingMessage): Promise<Buffer> {
 
 /** A stand-in Registry: /api/cli/token checks the PKCE pair the CLI sent to
  *  /cli/authorize, /api/publish records the upload. */
-async function fakeRegistry(publishResponse = '{"review_status":"pending"}') {
+async function fakeRegistry(publishResponse = '{"review_status":"pending"}', publishStatus = 201) {
   const uploads: Array<{ url: URL; authorization?: string; body: Buffer }> = []
   let challenge = ''
   const server: Server = createServer(async (request, response) => {
@@ -249,7 +250,7 @@ async function fakeRegistry(publishResponse = '{"review_status":"pending"}') {
     }
     if (url.pathname === '/api/publish') {
       uploads.push({ url, authorization: request.headers.authorization, body: raw })
-      response.writeHead(201, { 'Content-Type': 'application/json' })
+      response.writeHead(publishStatus, { 'Content-Type': 'application/json' })
       response.end(publishResponse)
       return
     }
@@ -316,6 +317,9 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const directory = root()
     const created = run(['init', 'hello', '--id', 'acme.hello-world'], directory)
     expect(created.status, created.stderr).toBe(0)
+    expect(created.stdout).toContain('navide-plugin validate hello && navide-plugin scan hello')
+    expect(created.stdout).toContain('https://developers.navide.dev/developer')
+    expect(created.stdout).toContain('docs/en-US/build-for-navide.md')
     const manifest = JSON.parse(readFileSync(join(directory, 'hello', 'manifest.json'), 'utf8'))
     expect(manifest).toMatchObject({ schemaVersion: 2, id: 'acme.hello-world', publisher: 'acme', name: 'Hello World' })
     expect(run(['validate', 'hello'], directory).status).toBe(0)
@@ -327,6 +331,61 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     ])
     expect(run(['init', 'hello', '--id', 'acme.other'], directory).status).not.toBe(0)
     expect(run(['init', 'bad', '--id', 'NoNamespace'], directory).status).not.toBe(0)
+    const bare = run([], directory)
+    expect(bare.status).not.toBe(0)
+    expect(bare.stderr).toContain('New to Navide plugins?')
+    expect(bare.stderr).toContain('docs/en-US/build-for-navide.md')
+  })
+
+  it('scaffolds a buildable Vue view, Python backend and agent tool with --template vue', async () => {
+    const directory = root()
+    const created = run(['init', 'hello', '--id', 'acme.hello-world', '--template', 'vue'], directory)
+    expect(created.status, created.stderr).toBe(0)
+    expect(created.stdout).toContain('npm run check')
+    expect(created.stdout).toContain('Load from folder… → hello/dist/package')
+    const project = join(directory, 'hello')
+    for (const file of [
+      'manifest.json', 'package.json', 'tsconfig.json', 'vite.config.ts', 'frontend/main/index.html',
+      'src/main.ts', 'src/App.vue', 'src/hello.ts', 'backend/src/main.py',
+      'scripts/stage-package.mjs', 'scripts/build-backend.mjs', 'scripts/check.mjs', 'tests/hello.test.ts', 'README.md', '.gitignore',
+    ]) expect(existsSync(join(project, file)), file).toBe(true)
+
+    // The manifest is a valid Manifest v2 whose agent tool names, prefix and method all pass the contract.
+    const raw = JSON.parse(readFileSync(join(project, 'manifest.json'), 'utf8'))
+    const manifest = parseManifestV2(raw)
+    expect(manifest.backend).toMatchObject({ entry: 'backend/hello-world', protocolVersion: 1, methods: ['helloworld.hello'] })
+    expect(validateAgentTools(raw)).toEqual([])
+    expect(raw.backend.agentTools[0]).toMatchObject({ name: 'helloworld_hello', method: 'helloworld.hello', risk: 'read' })
+    expect(readFileSync(join(project, 'src/main.ts'), 'utf8')).toContain('viewReady()')
+    const packageJson = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8'))
+    expect(packageJson.scripts.check).toBe('node scripts/check.mjs')
+    expect(packageJson.dependencies).toMatchObject({ '@navide/plugin-sdk': expect.any(String), vue: expect.any(String) })
+
+    // The backend speaks Backend Wire v1 as written: health, the declared method, an unknown method.
+    const python = ['python3', 'python'].find((candidate) => spawnSync(candidate, ['--version'], { stdio: 'ignore' }).status === 0)
+    if (python) {
+      const meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} }
+      const frames = [
+        { jsonrpc: '2.0', id: 1, method: 'navide/health', params: { _meta: meta } },
+        { jsonrpc: '2.0', id: 'r1', method: 'navide/call', params: { _meta: meta, name: 'helloworld.hello', arguments: { who: 'tests' }, runtime: {} } },
+        { jsonrpc: '2.0', id: 'r2', method: 'navide/call', params: { _meta: meta, name: 'nope.nothing', arguments: {}, runtime: {} } },
+      ]
+      const backend = spawnSync(python, [join(project, 'backend/src/main.py')], {
+        input: frames.map((frame) => `${JSON.stringify(frame)}\n`).join(''), encoding: 'utf8',
+      })
+      expect(backend.status, backend.stderr).toBe(0)
+      const answers = backend.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+      expect(answers[0]).toMatchObject({ id: 1, result: { resultType: 'complete', value: { ok: true } } })
+      expect(answers[1]).toMatchObject({ id: 'r1', result: { value: { message: 'Hello, tests!' }, _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'acme.hello-world' } } } })
+      expect(answers[2]).toMatchObject({ id: 'r2', error: { code: 1000, data: { code: 'METHOD_NOT_FOUND' } } })
+    }
+
+    // An id whose last segment cannot be a tool prefix is refused before anything is written.
+    const refused = run(['init', 'short', '--id', 'acme.a', '--template', 'vue'], directory)
+    expect(refused.status).not.toBe(0)
+    expect(refused.stderr).toContain('agent tool')
+    expect(existsSync(join(directory, 'short'))).toBe(false)
+    expect(run(['init', 'other', '--id', 'acme.other', '--template', 'react'], directory).status).not.toBe(0)
   })
 
   it('scaffolds a view that sends the same readiness handshake as the SDK', () => {
@@ -462,6 +521,33 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
         expect(await new Promise((resolve) => child.on('close', resolve))).toBe(0)
         expect(stdout.includes(hint), `${version}: ${stdout}`).toBe(shown)
         if (shown) expect(stdout).toContain('publish with --channel testplace instead')
+      } finally {
+        await registry.close()
+      }
+    }
+  })
+
+  it('points a refused publish at the document that explains it', async () => {
+    const directory = root()
+    const env = { ...process.env, NAVIDE_PLUGIN_CONFIG_DIR: join(directory, 'config'), NAVIDE_PLUGIN_TOKEN: 'nvp_env' }
+    packageDirectory(directory, frontendManifest(), { 'frontend/main/index.html': '<!doctype html>' })
+    expect(run(['package', directory, '--out', 'f.vsix'], directory).status).toBe(0)
+    for (const [status, detail, shown] of [
+      [403, { detail: 'invalid package signature' }, 'build-for-navide.md#4-publishing-is-the-business-process'],
+      [403, { detail: { code: 'QUALIFICATION_REQUIRED', message: 'not approved' } }, 'https://developers.navide.dev/developer'],
+      [409, { detail: '“hello” is 91% similar to “navide.hello”' }, 'marketplace-publishing.md#5-review'],
+      [500, { detail: 'boom' }, ''],
+    ] as const) {
+      const registry = await fakeRegistry(JSON.stringify(detail), status)
+      try {
+        const child = spawn(process.execPath, [cli, 'publish', 'f.vsix', '--registry', registry.url], { cwd: directory, env })
+        let stderr = ''
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString('utf8')
+        })
+        expect(await new Promise((resolve) => child.on('close', resolve))).toBe(1)
+        if (shown) expect(stderr, String(status)).toContain(shown)
+        else expect(stderr).not.toContain('https://')
       } finally {
         await registry.close()
       }

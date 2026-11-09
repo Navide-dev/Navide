@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import cloud_auth, qualification, ratings, reports, review
+from . import cloud_auth, host_routing, qualification, ratings, reports, review
 from .account_auth import exchange_account_code, find_account_code, issue_account_code
 from .developer_web import register_developer_routes
 from .app import _require_admin_token as require_admin_token
@@ -103,6 +103,21 @@ def _settings(request: Request):
 
 def _base(request: Request) -> str:
     return request.scope.get("root_path", "").rstrip("/")
+
+
+def _registry_api_url(request: Request) -> str:
+    """The --registry value the dashboard tells the CLI to use: the API host
+    under host routing, otherwise this site."""
+    settings = _settings(request)
+    if host_routing.request_role(request) is not None and settings.legacy_hosts:
+        return host_routing.api_base(settings)
+    return str(request.base_url).rstrip("/")
+
+
+def _default_next(request: Request) -> str:
+    """Where sign-in lands without a `next`: the storefront signs members in
+    to rate and report, so it returns home rather than to the dashboard."""
+    return "/" if host_routing.request_role(request) == host_routing.STORE else "/publisher"
 
 
 def _redirect(request: Request, path: str) -> RedirectResponse:
@@ -188,6 +203,64 @@ def _manifest_check(report: dict) -> str:
     return report.get("signature", "unsigned")
 
 
+# The seven steps of build-for-navide.md §4, numbered as the step bar shows
+# them: 1 application, 2 namespace, 3 signing key, 4 Testplace (optional),
+# 5 publish and review, 6 update, 7 withdraw.
+_JOURNEY_STEP = {
+    "apply": 1,
+    "apply-pending": 1,
+    "apply-rejected": 1,
+    "apply-revoked": 1,
+    "claim": 2,
+    "key": 3,
+    "first-version": 5,
+    "in-review": 5,
+    "rejected": 5,
+    "live": 6,
+}
+
+
+def next_step(publisher: Publisher, rows: list[dict]) -> str | None:
+    """The one thing a namespace's owner should do next, or None when its
+    latest version is live. `rows` is `_version_rows`, newest first."""
+    if not publisher.public_key:
+        return "key"
+    if not rows:
+        return "first-version"
+    if rows[0]["status"] == review.PENDING:
+        return "in-review"
+    if rows[0]["status"] == review.REJECTED:
+        return "rejected"
+    return None
+
+
+def journey(session: Session, member_id: str) -> dict:
+    """Where a signed-in developer stands in the seven steps, from the data
+    the dashboard already shows: application, namespace, key, versions."""
+    application = qualification.view(qualification.get(session, member_id))
+    publishers = owned_publishers(session, member_id)
+    namespace = row = None
+    if publishers:
+        rows = _version_rows(session, publishers[0])
+        state = next_step(publishers[0], rows) or "live"
+        namespace = publishers[0].name
+        row = rows[0] if rows else None
+    else:
+        state = {
+            qualification.APPROVED: "claim",
+            qualification.PENDING: "apply-pending",
+            qualification.REJECTED: "apply-rejected",
+            qualification.REVOKED: "apply-revoked",
+        }.get(application["status"], "apply")
+    return {
+        "state": state,
+        "step": _JOURNEY_STEP[state],
+        "application": application,
+        "namespace": namespace,
+        "row": row,
+    }
+
+
 def create_publisher_router() -> APIRouter:
     router = APIRouter(include_in_schema=False)
     templates = Jinja2Templates(
@@ -213,17 +286,29 @@ def create_publisher_router() -> APIRouter:
 
     # -- sign in (card 7) ------------------------------------------------
     @router.get("/publish", response_class=HTMLResponse)
+    @guarded
     def publish_landing(request: Request) -> Response:
-        if cloud_auth.current_viewer(request) is not None:
-            return _redirect(request, "/publisher")
-        return page(request, "publish_signin.html", {"enabled": _settings(request).cloud_auth_enabled})
+        # Open to everyone: an anonymous visitor sees the seven steps and the
+        # checklist with a sign-in button, a developer sees which step they
+        # are on.
+        context: dict = {"enabled": _settings(request).cloud_auth_enabled}
+        viewer = cloud_auth.current_viewer(request) if context["enabled"] else None
+        if viewer is not None:
+            with _session(request) as session:
+                context["journey"] = journey(session, viewer.member_id)
+        return page(request, "publish_signin.html", context)
 
     @router.get("/login")
     def login(request: Request, next: str | None = None) -> Response:
         settings = _settings(request)
         if not settings.cloud_auth_enabled:
             raise HTTPException(status_code=503, detail="Navide Cloud sign-in is not configured")
-        state, location = cloud_auth.start_login(settings, cloud_auth.safe_next(next), time.time())
+        state, location = cloud_auth.start_login(
+            settings,
+            cloud_auth.safe_next(next, _default_next(request)),
+            time.time(),
+            cloud_auth.return_url(request),
+        )
         response = RedirectResponse(location, status_code=303, headers=_NO_STORE)
         cloud_auth.set_cookie(
             response, request, settings, cloud_auth.LOGIN_STATE_COOKIE, state, cloud_auth.LOGIN_STATE_TTL_SECONDS
@@ -253,7 +338,9 @@ def create_publisher_router() -> APIRouter:
             )
             cloud_auth.clear_cookie(response, request, settings, cloud_auth.LOGIN_STATE_COOKIE)
             return response
-        response = _redirect(request, cloud_auth.safe_next(str(state.get("next", ""))))
+        response = _redirect(
+            request, cloud_auth.safe_next(str(state.get("next", "")), _default_next(request))
+        )
         response.headers["Cache-Control"] = "no-store"
         cloud_auth.clear_cookie(response, request, settings, cloud_auth.LOGIN_STATE_COOKIE)
         cloud_auth.set_cookie(
@@ -277,7 +364,9 @@ def create_publisher_router() -> APIRouter:
         viewer = _require_viewer(request)
         _check_csrf(request, viewer, csrf)
         cloud_auth.revoke_sessions(request.app.state.registry.engine, viewer.member_id)
-        response = _redirect(request, "/")
+        # The storefront home: on the developer console "/" is the dashboard,
+        # which would send a signed-out visitor straight back to sign-in.
+        response = RedirectResponse(_base_path_context(request)["store"] + "/", status_code=303)
         cloud_auth.clear_cookie(response, request, _settings(request), cloud_auth.SESSION_COOKIE)
         return response
 
@@ -299,10 +388,12 @@ def create_publisher_router() -> APIRouter:
                 for p in publishers
             ]
             counted = session.exec(select(counted_namespaces(viewer.member_id))).one()
+            steps = journey(session, viewer.member_id) if not items else None
         return page(
             request,
             "publisher_home.html",
             {
+                "journey": steps,
                 "items": items,
                 "can_claim": counted < MAX_NAMESPACES_PER_ACCOUNT,
                 "max": MAX_NAMESPACES_PER_ACCOUNT,
@@ -374,7 +465,8 @@ def create_publisher_router() -> APIRouter:
                 "tokens": tokens,
                 "max_token_days": MAX_TOKEN_DAYS,
                 "owned_count": len(owned_publishers(session, viewer.member_id)),
-                "registry_url": str(request.base_url).rstrip("/"),
+                "registry_url": _registry_api_url(request),
+                "next_step": next_step(publisher, rows),
             }
         context.update(extra or {})
         return page(request, "publisher_dashboard.html", context, status=status)
@@ -393,7 +485,8 @@ def create_publisher_router() -> APIRouter:
         with _session(request) as session:
             publisher = _owned_or_404(session, viewer, namespace)
             try:
-                set_public_key(session, publisher, public_key)
+                # The dashboard form is the developer's explicit action: it may replace the current key.
+                set_public_key(session, publisher, public_key, replace=True)
             except SelfServiceError as exc:
                 return _namespace_page(request, viewer, namespace, {"key_error": str(exc)}, status=400)
         return _redirect(request, f"/publisher/{namespace}")

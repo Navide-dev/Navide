@@ -7,12 +7,26 @@ import { DEFAULT_ACCOUNT, type ChannelAccountState, type ChannelBinding } from '
 /** Translator shape: vue-i18n's `t` for a bare key. */
 export type ChannelIdentityT = (key: string) => string
 
+// A name shaped like a handle ("@old_bot") is not a label the user chose: quick add
+// once copied the bot's handle into it at first connect, and it went stale when the
+// token changed. Such a name, current or old, counts as no label at all.
+function customLabel(state: ChannelAccountState): string {
+  return state.name.startsWith('@') ? '' : state.name
+}
+
 // The name the user gave the bot, else the display name its platform reports
-// (Telegram's getMe first_name, say). A quick-added bot is named after its handle,
-// so that copy gives way to the platform's display name when there is one.
+// (Telegram's getMe first_name, say), else whatever name is stored.
 function givenOrDisplayName(state: ChannelAccountState): string {
-  const { identity, display_name: displayName } = state.status
-  return (state.name !== identity && state.name) || displayName || state.name
+  return customLabel(state) || state.status.display_name || state.name
+}
+
+/**
+ * The words beside a bot's live handle in a list row: the user's label, else its
+ * display name; '' when that would only repeat `shown`.
+ */
+export function channelBotTag(state: ChannelAccountState, shown: string): string {
+  const tag = customLabel(state) || state.status.display_name || ''
+  return tag === shown ? '' : tag
 }
 
 /** The name a bot goes by, falling back to its handle ("@navide_bot"); '' when nothing is known yet. */

@@ -253,3 +253,10 @@ describe('O1: an agent update whose disclosure is unchanged', () => {
     expect(prepareUpdate).not.toHaveBeenCalled()
   })
 })
+
+describe('plugins_disable clear_secrets', () => {
+  it('never reaches the Host as an action: the backend files a request for the user instead', () => {
+    expect(parsePluginAgentActionRequest({ ...request, clear_secrets: true })).toBeNull()
+    expect(parsePluginAgentActionRequest({ ...request, action: 'enable', clear_secrets: true })).toBeNull()
+  })
+})

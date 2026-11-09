@@ -170,6 +170,10 @@ async def plugins_developer_mode_open(ctx: Context) -> dict[str, Any]:
     the user wants to manage developer folders), then stop and wait for the
     user. It changes nothing by itself.
 
+    New to Navide plugins? First install the guide with
+    skills_prepare_install(source="navide:plugin-authoring"); it covers
+    writing, checking and loading a plugin folder.
+
     Returns {ok, opened, note} or {ok: false, error, error_code}.
     """
     return await _open(ctx, "ui.plugins.openDeveloperMode", None)

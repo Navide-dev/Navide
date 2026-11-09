@@ -156,7 +156,23 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for ui_invoke's new `snapshot` parameter (plan agent-desktop_f10dcb,
 #: previous pin 94228b18…): with main's ui_invoke entry the list still hashes to
 #: the previous pin, so no other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "8a95e7e9e69fd5b2785c31e6257b1a4aa5ec33a617e78932ff8bca969ca250c7"
+#: Re-pinned for 0.2.39 terminal prefill (previous pin 8a95e7e9…): cli_send and
+#: cli_open_agent take `submit` (false prefills a terminal command without
+#: Enter) and their descriptions say so. No other tool changed.
+#: Re-pinned for the 0.2.39 cost ledger (previous pin fa11a5ab…): cli_token_stats
+#: takes `cost_by`, `since`, `until` and `pane`, and its description says what
+#: `cost` holds. No other tool changed.
+#: Re-pinned for the 0.2.39 ledger account column (previous pin 2c066717…):
+#: cli_token_stats' description lists the "account", "model_account" and
+#: "day_model" groupings `cost_by` now accepts. No other tool changed.
+#: Re-pinned for the 0.2.39 web panes (previous pin 67632d3e…): cli_send's
+#: description says a `web:*` pane is only focused (no injection, no msg_key).
+#: No other tool changed.
+#: Re-pinned for removing the 0.2.39 web panes (previous pin f6e75030…): the
+#: user moved web panes to a third-party plugin on 11/8, so cli_send's
+#: description drops the `web:*` paragraph again and the list hashes back to
+#: the pin before it (67632d3e…). No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "67632d3e204f7e75dab83a5455f22b506d07c6937f1d48ca31d084d03f151fb9"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -186,6 +202,14 @@ W1_CORE_TOOLS = frozenset({
 DESIGN_C_CORE_TOOLS = frozenset({"window_list", "window_focus", "window_close", "workspace_close", "window_move_pane"})
 #: Self-evolution S5b: the reclaim retrospective tool.
 EVOLVE_RETRO_CORE_TOOLS = frozenset({"evolve_retro"})
+#: Plan mcp-bot_507912: the chat-channel tools (mcp_server/channel_tools.py); their own
+#: surface is pinned in tests/channels/test_mcp_channel_tools.py.
+CHANNEL_CORE_TOOLS = frozenset({
+    "channels_status", "channels_bindings", "channels_chats", "channels_pairing_requests", "channels_link_code",
+    "channels_bind", "channels_unbind", "channels_set_verbosity", "channels_bot_rename", "channels_bot_set_enabled",
+    "channels_pairing_reject", "channels_bot_add_open", "channels_bot_add_fill", "channels_managed_bot_create",
+    "channels_pairing_approve_request", "channels_bot_remove_request", "channels_request_status",
+})
 #: The same for the plan_* and skills_* tools the built-in Plans and Skills
 #: packages install (computed on a probe server). Re-pinned in 0.2.32 when
 #: skills_set_delivery's description gained the approval for widening.
@@ -362,7 +386,7 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
     added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
-             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS)
+             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS)
     assert added <= {t["name"] for t in module_only}
     existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

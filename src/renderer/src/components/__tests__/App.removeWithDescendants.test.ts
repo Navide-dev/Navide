@@ -37,7 +37,7 @@ describe('App pane context menu — Remove with sub-panes', () => {
     )
     expect(appSource).toContain("$t('action.remove-with-children-title')")
     expect(enLocale).toContain('"remove-with-children": "Remove All {count} Panes"')
-    expect(zhLocale).toContain('"remove-with-children": "移除全部 {count} 個面板"')
+    expect(zhLocale).toContain('"remove-with-children": "移除全部 {count} 個分格"')
     expect(enLocale).toContain('"remove-with-children-title"')
     expect(zhLocale).toContain('"remove-with-children-title"')
   })

@@ -13,7 +13,7 @@ from agent_team_backend.db import Database
 from agent_team_backend.guard import runtime
 from agent_team_backend.guard.store import GuardStore
 
-from .test_manager import _MIDS, Env, _awaiting, _relay_id, _until, env, fast_timers  # noqa: F401
+from .test_manager import _MIDS, Env, _awaiting, _relay_id, _relay_posted, _until, env, fast_timers  # noqa: F401
 
 CRITICAL = "Bash command\n\n  rm -rf ~\n  Clean up\n\nDo you want to proceed?"
 HIGH = "Bash command\n\n  git push origin feature\n\nDo you want to proceed?"
@@ -34,7 +34,11 @@ async def _request(env: Env, prompt: str, *, kind: str = "permission", options=N
     env.fake.options = options or []
     await _awaiting(env)
     await _until(lambda: env.m.relay._by_id)
-    return _relay_id(env)
+    rid = _relay_id(env)
+    # The relay registers the id before the prompt is sent: wait for the prompt
+    # itself to reach the chat, and its message id, before anyone reads or answers it.
+    await _until(lambda: any(rid in t for t in env.tg.texts()) and _relay_posted(env))
+    return rid
 
 
 async def _press(env: Env, data: str) -> None:

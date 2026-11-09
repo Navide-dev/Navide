@@ -24,7 +24,6 @@ describe('mini-IDE shell composition', () => {
     for (const file of [
       'src/renderer/src/EditorWindowApp.vue',
       'src/renderer/src/components/ExplorerPane.vue',
-      'src/renderer/src/composables/hostSurfacePorts.ts',
     ]) {
       const source = read(file)
       expect(source, `${file} must not reveal through the preload bridge directly`)

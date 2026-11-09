@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import { registerStage } from '../../lib/stageTracker'
 import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 import { usePipelineDag } from '../../composables/usePipelineDag'
@@ -143,6 +143,9 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     failRunOnKickoff: async () => {},
     runEndingSlots: new Set<string>(),
     runPaneSentAt: new Map<string, number>(),
+    // No pacing: the trace is the pre-gate one.
+    kickoffPacing: () => ({}),
+    KICKOFF_ECHO_WAIT_MS,
     runEnding: () => false,
     markRunEnding: () => {},
     // No pane in these traces sits on a CLI prompt.

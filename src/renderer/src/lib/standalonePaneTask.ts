@@ -46,6 +46,7 @@ export interface StandaloneTaskInjectionDeps {
   paneAlive: (paneId: string) => boolean
   injectPane: (
     paneId: string, text: string, logLabel: string, preserveNewlines: boolean, evidence?: StandaloneKickoffEvidence,
+    prefill?: boolean,
   ) => Promise<boolean>
   onKill: (paneId: string) => Promise<void>
 }
@@ -64,7 +65,7 @@ export async function injectStandaloneTask(
   task: string,
   logLabel: string,
   deps: StandaloneTaskInjectionDeps,
-  opts: { resume?: boolean; evidence?: StandaloneKickoffEvidence } = {},
+  opts: { resume?: boolean; evidence?: StandaloneKickoffEvidence; prefill?: boolean } = {},
 ): Promise<boolean> {
   if (!task) return true
 
@@ -100,9 +101,11 @@ export async function injectStandaloneTask(
     if (opts.evidence) opts.evidence.untyped = true
     return false
   }
-  const injected = opts.evidence
-    ? await deps.injectPane(paneId, task, logLabel, true, opts.evidence)
-    : await deps.injectPane(paneId, task, logLabel, true)
+  const injected = opts.prefill
+    ? await deps.injectPane(paneId, task, logLabel, true, opts.evidence, true)
+    : opts.evidence
+      ? await deps.injectPane(paneId, task, logLabel, true, opts.evidence)
+      : await deps.injectPane(paneId, task, logLabel, true)
   if (!injected && opts.evidence) opts.evidence.injectFailed = true
   return injected
 }
@@ -116,7 +119,7 @@ export async function injectStandaloneTask(
  *  right cure for it. */
 export function standaloneKickoffVerdict(
   evidence: StandaloneKickoffEvidence,
-  opts: { task?: string } = {},
+  opts: { task?: string; prefill?: boolean } = {},
 ): { kickoff: KickoffVerdict; reason?: string } {
   if (opts.task === '') return { kickoff: 'sent', reason: 'no task — the pane was left as it was' }
   if (evidence.paneGone) return { kickoff: 'failed', reason: 'the pane exited before its task could be typed' }
@@ -128,6 +131,8 @@ export function standaloneKickoffVerdict(
         + 'read cli_get_status, then resend the task to it',
     }
   }
+  // Typed without Enter (submit: false): no submit to observe.
+  if (opts.prefill && evidence.echo) return { kickoff: 'sent' }
   if (!evidence.injectFailed
     && kickoffVerified(evidence.echo ?? null, evidence.submit ?? null, evidence.promptReady ?? false)) {
     return { kickoff: 'sent' }

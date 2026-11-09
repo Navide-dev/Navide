@@ -322,6 +322,58 @@ async def test_token_stats_of_a_workspace_that_has_spent_nothing(
     assert result["by_day"] == {}
 
 
+@pytest.mark.asyncio
+async def test_token_stats_adds_ledger_cost_only_when_asked(
+    tokens: _FakeTokensStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, workspace: str
+) -> None:
+    """cost_by reads the per-call ledger for this workspace's folder; without it
+    the answer is exactly what it was."""
+    agent_messaging.register("pa", "caller", str(tmp_path))
+    asked: list[tuple[str, dict[str, Any]]] = []
+
+    class _Ledger:
+        enabled = True
+
+        def report(self, by: str, **filters: Any) -> dict[str, Any]:
+            asked.append((by, filters))
+            return {"by": by, "groups": []}
+
+    monkeypatch.setattr(backend_app, "cost_ledger", _Ledger())
+
+    plain = await plan_mcp.cli_token_stats(_ctx())
+    assert "cost" not in plain and asked == []
+
+    result = await plan_mcp.cli_token_stats(_ctx(), cost_by="pane", since="2026-11-01", pane="01:dev")
+    assert result["cost"] == {"by": "pane", "groups": []}
+    assert asked == [("pane", {"cwd": workspace, "pane": "01:dev", "since": "2026-11-01", "until": ""})]
+
+    refused = await plan_mcp.cli_token_stats(_ctx(), cost_by="vendor")
+    assert refused["ok"] is False and "cwd, pane, day, session, model" in refused["error"]
+
+
+@pytest.mark.asyncio
+async def test_token_stats_reports_a_disabled_ledger_instead_of_cost(
+    tokens: _FakeTokensStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, workspace: str
+) -> None:
+    """A ledger whose migration failed at startup leaves the token counts as
+    they are and says why there is no `cost`."""
+    agent_messaging.register("pa", "caller", str(tmp_path))
+
+    class _DisabledLedger:
+        enabled = False
+        disabled_reason = "OperationalError: disk I/O error"
+
+        def report(self, by: str, **filters: Any) -> dict[str, Any]:
+            raise AssertionError("a disabled ledger is not read")
+
+    monkeypatch.setattr(backend_app, "cost_ledger", _DisabledLedger())
+
+    result = await plan_mcp.cli_token_stats(_ctx(), cost_by="model")
+    assert "cost" not in result
+    assert result["cost_ledger_disabled"] == "OperationalError: disk I/O error"
+    assert result["workspace_path"] == workspace
+
+
 # ── C. memory_list ──────────────────────────────────────────────────────────
 
 
@@ -941,7 +993,7 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
         "before",
     }
     assert set(tools["cli_token_stats"].inputSchema.get("properties") or {}) == {
-        "workspace_path"
+        "workspace_path", "cost_by", "since", "until", "pane",
     }
     assert set(tools["memory_list"].inputSchema.get("properties") or {}) == {
         "workspace_path",

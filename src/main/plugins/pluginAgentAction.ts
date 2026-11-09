@@ -111,6 +111,8 @@ export function parsePluginAgentActionRequest(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
   const record = value as Record<string, unknown>
   const keys = Object.keys(record)
+  // An agent's clear_secrets never reaches the Host as an action: the backend
+  // files a plugin-clear-secrets request for the user's decision instead.
   const expected = ['request_id', 'action', 'plugin_id', 'requester', ...(record.action === 'update' ? ['version'] : [])]
   if (keys.length !== expected.length || !expected.every((key) => keys.includes(key))) {
     return null

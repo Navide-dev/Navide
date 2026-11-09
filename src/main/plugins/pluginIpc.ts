@@ -114,6 +114,7 @@ import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgent
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
+import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
@@ -146,6 +147,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { secretsIdentity } from './pluginSecrets'
 import { PackageStagingStore } from './pluginStagingStore'
 import {
   agentPackagePath,
@@ -289,6 +291,9 @@ interface InstalledSummary {
   getsPrereleases?: boolean
   /** The user's "Disabled" switch; present only on rows it applies to. */
   disabled?: boolean
+  /** C1: the user's "Only allow declared network hosts" switch (default off:
+   *  an undeclared host is allowed and recorded); present with `disabled`. */
+  networkStrict?: boolean
 }
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
@@ -419,7 +424,7 @@ const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'hi
 export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
-    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool' || item.kind === 'networkHost') {
       out.push({ kind: item.kind, key: item.key })
     } else if (item.kind === 'backendMethod') {
       out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
@@ -912,6 +917,33 @@ export function registerPluginIpc(
       return undefined
     }
   }
+  // The trust identity a package's own secrets (`secrets`) are bound to: its
+  // installed source; for a local file the publisher key that signed it, or
+  // its exact content when unsigned; for a developer folder, the folder
+  // (MED-4: neither id is vouched for). A Registry install whose channel this
+  // release does not know still comes through the Registry. Null (refused)
+  // when nothing says where it came from.
+  manager.setPluginSecretIdentityResolver?.((pluginId) => {
+    const summary = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if (!summary) return null
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (source === 'developer-unpacked') {
+      return secretsIdentity(source, { folderPath: developerMode.folder(pluginId)?.path })
+    }
+    if (source === 'local-unsigned' || source === 'local-signed') {
+      const path = summary.packageVersion ? localTrustRecordFor(pluginsRoot, pluginId, summary.packageVersion) : null
+      if (!path) return null
+      try {
+        const record = readLocalTrustRecord(path)
+        return record.signer
+          ? secretsIdentity('local-signed', { signer: record.signer })
+          : secretsIdentity('local-unsigned', { contentDigest: record.contentDigest })
+      } catch {
+        return null
+      }
+    }
+    return secretsIdentity(source) ?? (summary.provenance === 'official-registry' ? secretsIdentity('marketplace') : null)
+  })
   // Decision d5 (W6): the block on the `.vsix` a local install came from.
   const localDigestBlockFor = (summary: { id: string; packageVersion?: string }): LocalDigestBlock | null => {
     if (!summary.packageVersion) return null
@@ -1069,6 +1101,10 @@ export function registerPluginIpc(
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // C1: the per-package network switch; the manager reads it on every request.
+  const networkStrictPlugins = new PluginNetworkStrictStore(pluginsRoot)
+  // Optional call: the tests' partial managers do not implement it.
+  manager.setNetworkStrictResolver?.((pluginId) => networkStrictPlugins.has(pluginId))
   // Who disabled each Marketplace package (B2-c option B). A write that fails
   // leaves an older entry behind, but the Disabled list changed since, so an
   // agent's entry then reads as the user: the conservative side.
@@ -1253,6 +1289,7 @@ export function registerPluginIpc(
                     packageVersion: grant.packageVersion,
                     system: [...grant.system],
                     ...(grant.shell ? { shell: grant.shell } : {}),
+                    ...(grant.shellExecutables ? { shellExecutables: [...grant.shellExecutables] } : {}),
                     ...(grant.highRiskShellConfirmed !== undefined
                       ? { highRiskShellConfirmed: grant.highRiskShellConfirmed }
                       : {}),
@@ -1280,7 +1317,7 @@ export function registerPluginIpc(
       // "Disable" in its warning can enable it again.
       ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
         manager.canDisablePlugin(summary.id)
-        ? { disabled: disabledPlugins.has(summary.id) }
+        ? { disabled: disabledPlugins.has(summary.id), networkStrict: networkStrictPlugins.has(summary.id) }
         : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
@@ -1305,6 +1342,22 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:listCommands', (event) => {
     assertAuthorized(event)
     return manager.listCommandCatalog()
+  })
+
+  ipcMain.handle('plugins:listSlots', (event) => {
+    assertAuthorized(event)
+    return manager.listSlotCatalog()
+  })
+
+  // Settings → Navide Plugins: a package's declared settings (contributes.settings).
+  ipcMain.handle('plugins:settings:read', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.readPluginSettings(args.id) : null
+  })
+  ipcMain.handle('plugins:settings:write', async (event, args: { id?: unknown; key?: unknown; value?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.key !== 'string') return false
+    return manager.writePluginSetting(args.id, args.key, args.value)
   })
 
   ipcMain.handle('plugins:listContributions', (event) => {
@@ -2622,6 +2675,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' && args.riskConfirmed === true
               ? { highRiskShellConfirmed: true as const }
               : {}),
@@ -2930,6 +2984,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
             storage: true,
           }
@@ -3262,6 +3317,7 @@ export function registerPluginIpc(
         packageVersion: scanned.descriptor.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       })
@@ -4038,6 +4094,7 @@ export function registerPluginIpc(
         packageVersion: selectedBeforeRestart.candidate.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(fullShellConfirmed ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }
@@ -4553,6 +4610,7 @@ export function registerPluginIpc(
         packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }
@@ -4781,7 +4839,7 @@ export function registerPluginIpc(
     }
   })
 
-  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
+  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown, rawSecretsChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
     // Plans, Git, Mini-IDE and Browser ship with Navide and can only be
     // disabled; no other `navide.` package is removable, so its storage and
@@ -4796,6 +4854,11 @@ export function registerPluginIpc(
       throw new Error('invalid native backend data choice')
     }
     const deleteNativeBackendData = rawDataChoice === 'delete'
+    // The plugin's own secrets (`secrets`) are kept unless the user chose to
+    // delete them too, so a reinstall finds them again.
+    if (rawSecretsChoice !== undefined && rawSecretsChoice !== 'keep' && rawSecretsChoice !== 'delete') {
+      throw new Error('invalid plugin secrets choice')
+    }
     const nativeBackendDataRoot = options.nativeBackendDataRoot
     if (deleteNativeBackendData && !nativeBackendDataRoot) {
       throw new Error('native backend data cleanup is unavailable')
@@ -4829,6 +4892,7 @@ export function registerPluginIpc(
         // data here keeps a refused deletion on the same fail-closed path:
         // the package stays installed and its backend registration returns.
         if (deleteNativeBackendData) removeNativeBackendData(nativeBackendDataRoot!, id)
+        if (rawSecretsChoice === 'delete') manager.clearPluginSecrets(id)
       } catch (error) {
         if (previousBackend) {
           try {
@@ -4894,11 +4958,26 @@ export function registerPluginIpc(
 
   ipcMain.handle(
     'plugins:remove',
-    async (event, args: { id?: unknown; nativeBackendData?: unknown } | null) => {
+    async (event, args: { id?: unknown; nativeBackendData?: unknown; secrets?: unknown } | null) => {
       assertAuthorized(event)
-      return uninstallPlugin(args?.id, args?.nativeBackendData)
+      return uninstallPlugin(args?.id, args?.nativeBackendData, args?.secrets)
     },
   )
+
+  // An agent's plugin-clear-secrets request the user approved in this main
+  // window: delete the package's own secrets (the Host tells the user).
+  ipcMain.handle('plugins:clearSecrets', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    manager.clearPluginSecrets(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    return { ok: true }
+  })
+
+  // What the remove dialog asks about: how many secrets (`secrets`) the plugin
+  // keeps on this device. Never their names or values.
+  ipcMain.handle('plugins:secretCount', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return { count: manager.pluginSecretCount(assertPluginRemovalTarget(pluginsRoot, args?.id)) }
+  })
 
   // What the remove dialog discloses: whether this plugin's native backend left
   // private data on this device, how large it is and where.
@@ -4916,6 +4995,12 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
+  })
+
+  // A pipeline run in a Navide window reached a plugin node (contributes.pipelineNodes).
+  ipcMain.handle('plugins:runPipelineNode', async (event, args: unknown) => {
+    assertAuthorized(event)
+    return manager.runPipelineNode(args)
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
@@ -4956,6 +5041,22 @@ export function registerPluginIpc(
 
   // Which built-ins are disabled, for the main window's tabs, commands and
   // "open in editor" entries.
+  // C1: the user's "Only allow declared network hosts" switch for one package.
+  // It takes effect on the next request a view makes (the session hook) and on
+  // the next load of a composed frame (its CSP).
+  ipcMain.handle(
+    'plugins:setNetworkStrict',
+    (event, args: { id?: unknown; strict?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const strict = args?.strict
+      if (typeof strict !== 'boolean') throw new Error('invalid plugin network setting')
+      if (strict) networkStrictPlugins.add(id)
+      else networkStrictPlugins.remove(id)
+      return { id, networkStrict: networkStrictPlugins.has(id) }
+    },
+  )
+
   ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
     assertAuthorized(event)
     return manager.listDisabledBuiltinPlugins()

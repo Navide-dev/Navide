@@ -86,6 +86,25 @@ def _ps_snapshot() -> dict[int, ProcInfo]:
     return snap
 
 
+def _proc_starttime(pid: int) -> str:
+    """Field 22 of /proc/<pid>/stat (start time in clock ticks since boot),
+    or "" where there is no /proc (macOS) or it cannot be read. comm (field 2)
+    may hold spaces and parentheses, so fields are counted from the last ')'."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            raw = f.read().decode("ascii", "replace")
+    except OSError:
+        return ""
+    close = raw.rfind(")")
+    if close < 0:
+        return ""
+    # After ')' come fields 3..; starttime (22) is the 20th of them.
+    fields = raw[close + 1 :].split()
+    if len(fields) < 20 or not fields[19].isdigit():
+        return ""
+    return fields[19]
+
+
 def _signal_for(force: bool) -> int:
     return signal.SIGKILL if force else signal.SIGTERM
 
@@ -112,6 +131,14 @@ class PosixProcessTree:
         return _ps(pid, "lstart=") or ""
 
     def identity(self, pid: int) -> str:
+        # Linux first: ps derives lstart from the current wall clock minus
+        # uptime, so a clock step (NTP, VM resume, wake from sleep) moves the
+        # same process's lstart by a second or more. /proc's starttime counts
+        # clock ticks since boot and never moves. start_time() stays lstart
+        # because the pty registry compares it against snapshot() rows.
+        ticks = _proc_starttime(pid)
+        if ticks:
+            return f"{pid}:ticks:{ticks}"
         start = self.start_time(pid)
         return f"{pid}:{start}" if start else ""
 

@@ -311,7 +311,17 @@ export interface PluginViewRuntimeClient {
   openContributionWindow(params: Params<'ui.openPluginWindow'>): Promise<Result<'ui.openPluginWindow'>>
   onOpenTarget(listener: (target: Record<string, string>) => void): Disposable
   onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable
+  /** Serve one of the agent tools the manifest declares under
+   *  `contributes.agentTools` from this view (contract section 2.9). The Host
+   *  calls the handler with the tool's arguments while this view is open on
+   *  the target workspace; what it returns (JSON) is the tool result, and a
+   *  thrown error fails the call with the error's `code` (upper-case) or
+   *  `PLUGIN_TOOL_FAILED`. */
+  onAgentToolCall(name: string, handler: AgentToolHandler): Disposable
 }
+
+/** A view-served agent tool handler: the arguments in, a JSON result out. */
+export type AgentToolHandler = (args: Record<string, JsonValue>) => JsonValue | void | Promise<JsonValue | void>
 
 type PluginReceiverRegistrationWire = {
   protocolVersion: 1
@@ -341,6 +351,8 @@ interface RuntimeViewBridge {
   onReceiverItemClosed(receiverId: string, listener: (item: PluginReceiverItemClosed) => void): () => void
   disposeReceiver(receiverId: string): Promise<void>
   onOpenTarget(listener: (target: Record<string, string>) => void): () => void
+  /** Absent on a Host older than 0.2.39. */
+  onAgentToolCall?(name: string, handler: AgentToolHandler): () => void
 }
 
 function runtimeCapabilityBridge(): RuntimeCapabilityBridge {
@@ -772,6 +784,9 @@ export function createPluginViewRuntimeClient(): PluginViewRuntimeClient {
       }
       return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
     },
+    onAgentToolCall(name: string, handler: AgentToolHandler): Disposable {
+      return onAgentToolCall(name, handler)
+    },
     onBackendStatus(listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void): Disposable {
       return Object.freeze({ dispose: runtimeCapabilityBridge().on('nav.backend_status', payload => {
         const status = (payload as { status?: unknown } | null)?.status
@@ -807,6 +822,21 @@ export function onOpenTarget(listener: (target: Record<string, string>) => void)
     throw new PluginError('INVALID_ARGUMENT', 'Plugin target listener is invalid.')
   }
   return Object.freeze({ dispose: runtimeViewBridge().onOpenTarget(listener) })
+}
+
+/** Same as `createPluginViewRuntimeClient().onAgentToolCall()`. */
+export function onAgentToolCall(name: string, handler: AgentToolHandler): Disposable {
+  if (typeof name !== 'string' || name === '') {
+    throw new PluginError('INVALID_ARGUMENT', 'Agent tool name is invalid.')
+  }
+  if (typeof handler !== 'function') {
+    throw new PluginError('INVALID_ARGUMENT', 'Agent tool handler is invalid.')
+  }
+  const bridge = runtimeViewBridge()
+  if (typeof bridge.onAgentToolCall !== 'function') {
+    throw new PluginError('BACKEND_UNAVAILABLE', 'This Navide does not route agent tools to views (0.2.39 or later is needed).')
+  }
+  return Object.freeze({ dispose: bridge.onAgentToolCall(name, handler) })
 }
 
 /** Same as `createPluginViewRuntimeClient().onBackendStatus()`. */
@@ -1042,6 +1072,30 @@ export function createPluginSettingsStore(
     delete(key: string) {
       return context.capabilities.invoke('storage.delete', { scope, key })
     },
+  })
+}
+
+/** The plugin's own secrets (declare `secrets` in `permissions.system`).
+ *  Values are encrypted on this device under the plugin id and survive
+ *  updates and disabling; they never reach Navide Cloud, an export, Activity,
+ *  a log or an agent tool result. Never put a key in code, the manifest,
+ *  tests, a README or a commit: keep it here. `set` and `get` answer
+ *  `{ ok: false, code: 'SECRETS_UNAVAILABLE' }` when the system has no secure
+ *  storage; nothing is then written. */
+export interface PluginSecretStore {
+  set(name: string, value: string): Promise<Result<'secrets.set'>>
+  get(name: string): Promise<Result<'secrets.get'>>
+  delete(name: string): Promise<Result<'secrets.delete'>>
+  /** Names only, never values. */
+  list(): Promise<Result<'secrets.list'>>
+}
+
+export function createPluginSecretStore(context: Pick<PluginContext, 'capabilities'>): PluginSecretStore {
+  return Object.freeze({
+    set: (name: string, value: string) => context.capabilities.invoke('secrets.set', { name, value }),
+    get: (name: string) => context.capabilities.invoke('secrets.get', { name }),
+    delete: (name: string) => context.capabilities.invoke('secrets.delete', { name }),
+    list: () => context.capabilities.invoke('secrets.list', {}),
   })
 }
 

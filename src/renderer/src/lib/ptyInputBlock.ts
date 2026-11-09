@@ -191,6 +191,12 @@ export interface EchoWatchDeps<E> {
    *  that neither echoes nor paints would otherwise hold a kickoff in
    *  `pending` forever, and the idle gate with it. */
   maxSilentRounds: number | null
+  /** A capped watch keeps watching, through rounds silent or painting, until
+   *  this long after it began, and only then answers as its cap says. For a
+   *  kickoff on a host starved of CPU: its CLI read the paste a minute late,
+   *  and the Ctrl-U each early give-up typed queued behind it unread (0.2.39
+   *  Windows VM, `load 12`). */
+  waitMs?: number
   pollMs?: number
 }
 
@@ -213,6 +219,7 @@ export async function awaitEcho<E>(deps: EchoWatchDeps<E>): Promise<EchoWatchRes
   let silentRounds = 0
   let outputRounds = 0
   let held = false
+  const startedAt = deps.now()
   try {
     for (;;) {
       const base = deps.outputBytes()
@@ -223,6 +230,7 @@ export async function awaitEcho<E>(deps: EchoWatchDeps<E>): Promise<EchoWatchRes
         const echo = deps.echoed()
         if (echo !== null) return { outcome: 'ready', echo }
       }
+      if (deps.maxSilentRounds !== null && deps.waitMs !== undefined && deps.now() - startedAt < deps.waitMs) continue
       if (deps.outputBytes() - base > 0) {
         if (deps.maxSilentRounds !== null) return { outcome: 'resend' }
         // Output without our tail is not proof the bytes were dropped — the

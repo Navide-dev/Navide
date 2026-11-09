@@ -23,6 +23,7 @@
  * hooks are all no-ops, so linear runs behave exactly as before.
  */
 import type { Stage } from '../data/stages'
+import { fenceExternalContent } from './agentMessaging'
 import {
   BRANCH_DEFAULT,
   DEFAULT_MAX_LOOPS,
@@ -110,8 +111,10 @@ function planFor(graph: PipelineGraph, stages: readonly Stage[]): DagPlan | null
     if (labels.length !== want.length || labels.some((l, i) => l !== want[i])) return null
   }
   const gateIds = graph.nodes.filter((n) => n.kind === 'gate' && n.id in nodeLayer).map((n) => n.id)
+  // Plugin nodes are calls too: the run stops at each one, the Host runs it on
+  // the contributing plugin's backend, and the run goes on.
   const callIds = graph.nodes
-    .filter((n) => n.kind === 'subpipeline' && n.id in nodeLayer)
+    .filter((n) => (n.kind === 'subpipeline' || n.kind === 'plugin') && n.id in nodeLayer)
     .map((n) => n.id)
     .sort((a, b) => nodeLayer[a] - nodeLayer[b])
   const hasBranching = hasBranchingEdges(graph)
@@ -286,8 +289,8 @@ export function upstreamSlotNodes(plan: DagPlan, nodeId: string): string[] {
       if (!isForwardEdge(e) || e.to !== id || seen.has(e.from)) continue
       seen.add(e.from)
       const n = node(plan, e.from)
-      // A subpipeline node hands on its child run's output, as a slot does.
-      if (n?.kind === 'slot' || n?.kind === 'subpipeline') out.push(n.id)
+      // A subpipeline or plugin node hands on its output, as a slot does.
+      if (n?.kind === 'slot' || n?.kind === 'subpipeline' || n?.kind === 'plugin') out.push(n.id)
       else visit(e.from)
     }
   }
@@ -580,11 +583,15 @@ export function expandNodeOutputs(
 ): string {
   if (!text.includes('{{node.')) return text
   const ids = new Set(graph.nodes.map((n) => n.id))
+  // A plugin node's output came from a third-party package: external content
+  // wherever it lands in a prompt, never an instruction.
+  const external = new Set(graph.nodes.filter((n) => n.kind === 'plugin').map((n) => n.id))
   return text.replace(NODE_OUTPUT_RE, (whole, id: string, path: string) => {
     if (!ids.has(id)) return whole
     const v = path ? valueAtPath(outputOf(id), path.slice(1)) : outputOf(id)
     if (v === undefined || v === null) return ''
-    return typeof v === 'string' ? v : JSON.stringify(v)
+    const value = typeof v === 'string' ? v : JSON.stringify(v)
+    return external.has(id) ? fenceExternalContent(value) : value
   })
 }
 

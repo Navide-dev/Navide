@@ -11,14 +11,17 @@ import { SPEC as claude } from './claude'
 import { SPEC as codex } from './codex'
 import { SPEC as copilot } from './copilot'
 import { SPEC as cursor } from './cursor'
+import { SPEC as devin } from './devin'
 import { SPEC as droid } from './droid'
 import { SPEC as goose } from './goose'
 import { SPEC as grok } from './grok'
+import { SPEC as hermes } from './hermes'
 import { SPEC as kilo } from './kilo'
 import { SPEC as kimi } from './kimi'
 import { SPEC as mcode } from './mcode'
 import { SPEC as muse } from './muse'
 import { SPEC as opencode } from './opencode'
+import { SPEC as openclaw } from './openclaw'
 import { SPEC as pi } from './pi'
 import { SPEC as qwen } from './qwen'
 import { SPEC as terminal } from './terminal'
@@ -43,6 +46,9 @@ const ORDERED = [
   droid,
   mcode,
   goose,
+  devin,
+  openclaw,
+  hermes,
   terminal
 ] as const
 

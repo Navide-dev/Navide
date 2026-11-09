@@ -5,10 +5,12 @@ import {
   createPluginViewRuntimeClient,
   createPluginBackendClient,
   PluginBackendError,
+  createPluginSecretStore,
   createPluginSettingsStore,
   createPluginViewState,
   hideView,
   onBackendStatus,
+  onAgentToolCall,
   onOpenTarget,
   openContributionWindow,
   viewReady,
@@ -761,7 +763,7 @@ describe('standalone view runtime functions', () => {
     expect(Object.isFrozen(client)).toBe(true)
     expect(Object.keys(client)).toEqual([
       'openDetail', 'onDetailTarget', 'onPrepareClose', 'onCloseCancelled', 'openContributionWindow',
-      'ready', 'hide', 'registerReceiver', 'onOpenTarget', 'onBackendStatus',
+      'ready', 'hide', 'registerReceiver', 'onOpenTarget', 'onAgentToolCall', 'onBackendStatus',
     ])
   })
 
@@ -810,6 +812,22 @@ describe('standalone view runtime functions', () => {
     deliver({ status: 'bogus' })
     deliver(null)
     expect(statuses).toEqual(['connected'])
+  })
+
+  it('registers a view-served agent tool handler through the bridge, and says when the Host is too old', () => {
+    const remove = vi.fn()
+    const bridge = { ready: vi.fn(), onOpenTarget: vi.fn(() => vi.fn()), onAgentToolCall: vi.fn(() => remove) }
+    ;(globalThis as unknown as { nav: typeof bridge }).nav = bridge
+    const handler = vi.fn(() => ({ ok: true }))
+    const registered = onAgentToolCall('hello_greet', handler)
+    expect(Object.isFrozen(registered)).toBe(true)
+    expect(registered.dispose).toBe(remove)
+    expect(bridge.onAgentToolCall).toHaveBeenCalledWith('hello_greet', handler)
+    expect(createPluginViewRuntimeClient().onAgentToolCall('hello_greet', handler).dispose).toBe(remove)
+    expect(() => onAgentToolCall('', handler)).toThrow('Agent tool name is invalid.')
+    expect(() => onAgentToolCall('hello_greet', undefined as unknown as () => void)).toThrow('Agent tool handler is invalid.')
+    ;(globalThis as unknown as { nav: object }).nav = { ready: vi.fn(), onOpenTarget: vi.fn() }
+    expect(() => onAgentToolCall('hello_greet', handler)).toThrow('0.2.39 or later')
   })
 
   it('reports an unavailable runtime the same way as the client', () => {
@@ -863,17 +881,37 @@ describe('createPluginViewState', () => {
   })
 })
 
+describe('createPluginSecretStore', () => {
+  it('maps each method to its secrets.* capability and passes nothing else', async () => {
+    const invoke = vi.fn(async () => ({ ok: true }))
+    const secrets = createPluginSecretStore({ capabilities: { invoke } } as never)
+    const value = ['sk', 'test', 'sdk'].join('-')
+    await secrets.set('API_KEY', value)
+    await secrets.get('API_KEY')
+    await secrets.delete('API_KEY')
+    await secrets.list()
+    expect(invoke.mock.calls).toEqual([
+      ['secrets.set', { name: 'API_KEY', value }],
+      ['secrets.get', { name: 'API_KEY' }],
+      ['secrets.delete', { name: 'API_KEY' }],
+      ['secrets.list', {}],
+    ])
+  })
+})
+
 const SDK_EXPORTS = [
   'PluginBackendError',
   'PluginError',
   'createPluginBackendClient',
   'createPluginCapabilityClient',
+  'createPluginSecretStore',
   'createPluginSettingsStore',
   'createPluginViewRuntimeClient',
   'createPluginViewState',
   'definePlugin',
   'hideView',
   'hostApiVersion',
+  'onAgentToolCall',
   'onBackendStatus',
   'onOpenTarget',
   'openContributionWindow',

@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "설정의 Developer Mode 섹션 열기",
+      "ui_plugins_openInstallFromFile": "설정의 \"파일에서 설치\" 섹션 열기",
+      "ui_plugins_openMarketplace": "Navide 마켓플레이스 또는 Navide 플러그인 페이지 열기",
+      "ui_settings_open": "설정 열기(특정 탭 지정 가능)",
+      "ui_window_openGit": "현재 작업 영역의 Git 창 열기",
+      "ui_window_openPipeline": "Pipeline Manager 창 열기",
+      "ui_window_openPlans": "계획 창 열기(문서 하나 지정 가능)",
+      "ui_window_openResourceManager": "리소스 관리자 열기",
+      "ui_window_openTurnStats": "Turn Stats 열기"
+    },
     "add-step": "단계 추가",
     "confirm-title": "이 버튼을 실행할까요?",
     "confirm-message": "실행할 작업: {actions}. 무언가를 닫거나 재설정하며 되돌릴 수 없어요.",
@@ -544,6 +555,17 @@
     "agent-closed-workspace-kept": "“{caller}”이(가) {name}을(를) 닫았어요. CLI는 계속 실행 중이에요",
     "agent-closed-workspace-ended": "“{caller}”이(가) {name}을(를) 닫고 그 안의 CLI를 끝냈어요",
     "agent-closed-window": "“{caller}”이(가) {names} 창을 닫았어요. CLI {count}개는 계속 실행 중이에요",
+    "agent-channels-bind": "“{caller}”이(가) {bot}의 채팅 {chat}을(를) 창 “{pane}”에 연결했어요",
+    "agent-channels-unbind": "“{caller}”이(가) 창 “{pane}”의 채팅 연결을 해제했어요",
+    "agent-channels-verbosity": "“{caller}”이(가) 창 “{pane}”의 채팅이 받는 내용을 {verbosity}(으)로 바꿨어요",
+    "agent-channels-rename": "“{caller}”이(가) bot {bot}의 이름을 “{name}”(으)로 바꿨어요",
+    "agent-channels-enabled": "“{caller}”이(가) bot {bot}을(를) 연결했어요",
+    "agent-channels-disabled": "“{caller}”이(가) bot {bot}의 연결을 끊었어요",
+    "agent-channels-link": "“{caller}”이(가) bot {bot}의 연결 코드를 만들었어요",
+    "agent-channels-reject": "“{caller}”이(가) {bot}의 페어링 요청 {code}을(를) 거절했어요",
+    "agent-channels-managed": "“{caller}”이(가) Telegram bot {bot}에 새 bot 생성을 요청했어요",
+    "agent-channels-request": "“{caller}”의 채팅 채널 요청을 결정해 주세요",
+    "agent-channels-request-open": "열기",
     "undo": "되돌리기",
     "cross-workspace-toast": "다른 작업 영역의 지시: “{from}” → “{target}”",
     "cross-workspace-badge": "작업 영역 간",
@@ -617,6 +639,11 @@
       "open-accounts": "Git 계정 열기"
     },
     "left-view-unavailable": "내장 Git 보기를 일시적으로 사용할 수 없어요.",
+    "recovery-title": "내장 Git을 시작할 수 없어요",
+    "recovery-reason": "원인: {reason}",
+    "recovery-reinstall": "내장 Git 다시 설치",
+    "recovery-reinstalling": "다시 설치하는 중…",
+    "recovery-reinstall-failed": "다시 설치하지 못했어요: {reason}",
     "detail-open-failed": "세부 정보 보기를 열지 못했어요. Git pane은 현재 대상을 유지해요.",
     "open-workspace": "Git을 사용하려면 작업 영역을 여세요.",
     "settings-unavailable": "Git 환경설정을 불러오지 못했어요.",
@@ -1615,6 +1642,22 @@
       "cannot-rebuild": "이어갈 대화가 없습니다",
       "rebuild": "다시 빌드"
     },
+    "archive": {
+      "hint": "한동안 기록되지 않은 Claude Code 세션 로그를 압축하고, 원하면 본인의 S3 버킷에 업로드합니다. 여기 있는 항목은 모두 기본적으로 꺼져 있으며 켜기 전에는 아무것도 하지 않습니다.",
+      "compress": "유휴 세션 로그 압축",
+      "compress-hint": "하루에 한 번, 설정한 일수 동안 유휴 상태인 Claude Code 세션 로그 옆에 .zst 사본을 만들고, 압축을 풀면 원본과 같은 바이트가 되는지 확인합니다. 열려 있는 분할 창이 사용 중인 세션은 건드리지 않습니다.",
+      "idle-days": "압축하기 전까지 기록이 없는 일수",
+      "remove-originals": ".zst 확인 후 원본 삭제",
+      "remove-originals-hint": "디스크 공간을 확보합니다. 삭제된 로그는 Claude Code에서 다시 이어갈 수 없고 Token 패널에서도 읽을 수 없지만, .zst에는 모든 바이트가 남아 있습니다. 끄면 두 파일을 모두 유지합니다.",
+      "upload": "본인의 S3 버킷에 업로드",
+      "upload-hint": "각 .zst를 아래 접두사 아래에 S3 측 암호화로 본인의 버킷에 보냅니다. 자격 증명은 표준 AWS 체인(환경 변수, ~/.aws 프로필 또는 SSO)에서 가져오며, Navide는 AWS 키를 저장하지 않습니다.",
+      "upload-after-days": "업로드하기 전까지의 일수",
+      "bucket": "S3 버킷",
+      "prefix": "키 접두사",
+      "region": "리전",
+      "region-placeholder": "AWS 프로필 설정 사용",
+      "save-failed": "보관 설정을 저장하지 못했습니다"
+    },
     "limits": {
       "hint": "Navide와 Navide가 실행하는 agent가 이 컴퓨터에 과부하를 주지 않도록 하는 선택적 제한이에요. 직접 바꾸기 전까지는 각각 꺼져 있거나 Navide의 이전 동작을 따라요.",
       "test-workers": "새 pane의 테스트 러너 worker 수 제한",
@@ -1934,7 +1977,8 @@
         "aiCli": "AI CLI 세션",
         "web": "웹 탐색",
         "agents": "에이전트 pane",
-        "agentMessages": "에이전트 메시지"
+        "agentMessages": "에이전트 메시지",
+        "secrets": "Navide 플러그인 시크릿"
       },
       "shellLabel": "셸 실행 파일",
       "shellHint": "최상위 실행 파일 이름만 허용해요. 경로와 셸 표현식은 받지 않아요.",
@@ -1995,6 +2039,11 @@
       "cancel": "취소"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "설정",
+        "reset": "기본값으로 되돌리기",
+        "saveFailed": "“{title}”을(를) 저장하지 못했습니다. 다시 시도하고, 계속 실패하면 이 Navide 플러그인을 다시 설치하세요."
+      },
       "devUnpacked": "서명되지 않은 로컬 폴더 — Developer Mode 전용",
       "agentTools": {
         "heading": "agent가 호출할 수 있는 도구 ({count})",
@@ -2019,7 +2068,7 @@
           "firstParty": "agent가 공식 Navide 플러그인의 도구를 호출하도록 허용",
           "firstPartyDescription": "기본으로 켜져 있어요. Navide Browser처럼 Navide가 만든 공식 Navide 플러그인의 도구를 pane의 에이전트가 버전마다 묻지 않고 호출할 수 있게 해요. 결과는 계속 외부 콘텐츠로 표시되고, 무언가를 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
           "enable": "agent가 타사 Navide 플러그인의 도구를 호출하도록 허용",
-          "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요.",
+          "description": "허용한 Navide 플러그인이 선언한 도구를 pane의 에이전트가 호출할 수 있게 해요. 파일을 바꾸는 도구는 작업 공간마다 한 번 물어봐요. 여기서 한 번도 설정하지 않았다면, 동의 카드에 도구가 적힌 Navide 플러그인을 허용할 때 자동으로 켜져요. 여기서 정한 값은 그대로 유지돼요. 타사 도구를 한 번에 모두 멈추려면 여기서 꺼요.",
           "externalCallers": "외부 MCP 클라이언트도 호출하도록 허용",
           "externalCallersDisclosure": "외부 프로그램은 token 하나를 공유하므로 호출 기록에는 어떤 프로그램인지가 아니라 \"외부 클라이언트\"라고만 남아요. Host 자격 증명도 같은 방식으로 처리돼요."
         },
@@ -2088,6 +2137,8 @@
       "builtinSwitchBusy": "적용하는 중… Navide가 먼저 현재 작업을 마무리하며, Plans는 30초 정도 걸릴 수 있어요.",
       "disabledBadge": "사용 안 함",
       "disabledNote": "사용 안 함: 보기와 백엔드가 실행되지 않아요. 파일, 권한, 저장된 데이터는 유지돼요.",
+      "networkStrict": "선언된 네트워크 호스트만 허용",
+      "networkStrictNote": "끔(기본): 뷰는 어떤 호스트에도 접근할 수 있고 요청마다 기록되며, manifest에 선언되지 않은 호스트로의 요청은 활동 기록에 '미선언'으로 표시됩니다. 켬: 선언된 호스트만(프레임 정책과 요청 후크 모두), 그 외는 거부하고 기록합니다.",
       "digestBlock": {
         "blocked": "Navide가 차단함",
         "security": "Navide가 내림(보안)",
@@ -2114,7 +2165,6 @@
           "previousChanged": "디스크에 있는 이전 버전의 패키지가 바뀌어서 롤백하지 않았어요.",
           "grantUnavailable": "{id}에 부여한 권한을 찾지 못해서 롤백하지 않았어요.",
           "factoryUnavailable": "기본 포함 버전으로 롤백할 수 없어요.",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy로 레거시 복구를 강제하는 동안에는 기본 포함 Git을 복원할 수 없어요.",
           "factoryRestoreFailed": "기본 포함 버전을 불러오지 못했어요."
         }
       },
@@ -2174,6 +2224,10 @@
         "uninstallConfirmBody": "{name}이(가) 이 기기에서 제거돼요. Navide 마켓플레이스에서 다시 설치할 수 있어요.",
         "uninstallConfirmBodyWithData": "{name}이(가) 이 기기에서 제거돼요. 네이티브 백엔드가 이 기기의 아래 위치에 비공개 데이터 {size}도 저장했어요. 보관하도록 선택하지 않으면 Navide가 이 데이터도 삭제해요.",
         "uninstallKeepNativeData": "다시 설치할 때 쓸 수 있도록 이 데이터 보관",
+        "uninstallSecretsTitle": "이 Navide 플러그인이 저장한 시크릿도 삭제할까요?",
+        "uninstallSecretsBody": "{name}이(가) 이 기기에 API 키 또는 토큰을 암호화해 보관하고 있습니다(총 {count}개). 다시 설치할 때 쓸 수 있도록 유지하거나 지금 삭제할 수 있습니다.",
+        "uninstallSecretsDelete": "시크릿 삭제",
+        "uninstallSecretsKeep": "시크릿 유지",
         "uninstallClearsWebData": "{name}을(를) 제거하면 이 컴퓨터에 있는 사이트 로그인, 쿠키, 캐시도 삭제돼요.",
         "updatesCount": "사용 가능한 업데이트: {count}",
         "retry": "다시 시도",
@@ -2233,7 +2287,9 @@
           "downloads": "다운로드",
           "status": "상태"
         },
-        "prereleaseAvailable": "시험판 {version} 있음"
+        "prereleaseAvailable": "시험판 {version} 있음",
+        "buildOwnHint": "직접 만들어 보고 싶나요?",
+        "buildOwn": "Navide 플러그인 만들기"
       },
       "developerMode": {
         "errors": {
@@ -2249,6 +2305,9 @@
         "title": "Developer Mode",
         "switch": "Developer Mode 켜기",
         "hint": "폴더에서 Navide 플러그인을 불러와 개발하고 테스트하며 Navide 마켓플레이스 대신 직접 운영하는 서버에서 Navide 플러그인을 설치할 수 있어요. 끄면 그 Navide 플러그인을 내려요.",
+        "firstTime": "첫 Navide 플러그인인가요? Build for Navide가 템플릿부터 Navide 마켓플레이스 게시까지 안내해요.",
+        "openGuide": "가이드 열기",
+        "agentSkill": "또는 agent의 안내를 받으세요. 이 skill을 설치해 달라고 요청하세요:",
         "banner": "Developer Mode가 켜져 있어요. 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요.",
         "reminder": "Developer Mode가 켜져 있어요: 폴더에서 불러온 Navide 플러그인은 검토되지 않았어요. 더 이상 필요하지 않으면 설정 → Navide 플러그인에서 끄세요.",
         "reminderClose": "확인",
@@ -2372,9 +2431,10 @@
         "capability": {
           "fs": "작업 영역의 파일을 읽고 써요.",
           "aiCli": "Navide에 설정된 AI CLI agent를 시작하고, 입력을 보내고, 출력하는 모든 내용을 읽어요. 창을 닫은 뒤에도 AI CLI를 백그라운드에서 계속 실행할 수 있어요.",
-          "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인은 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 사용자의 로그인을 사용하며(사용자 대신 웹사이트에 요청을 보낼 수 있어요), 열린 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 제어로 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 다시 불러와야 멈춰요. 웹 페이지를 동시에 여러 개 열 수 있으며 각각 메모리를 사용해요.",
+          "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인은 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 사용자의 로그인을 사용하며(사용자 대신 웹사이트에 요청을 보낼 수 있어요), 열린 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 제어로 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 다시 불러와야 멈춰요. agent에게 맡긴 페이지에서는 이 Navide 플러그인 자체도 스크립트를 실행하고 내용과 로그인 상태를 읽을 수 있어요. 웹 페이지를 동시에 여러 개 열 수 있으며 각각 메모리를 사용해요.",
           "agents": "agent pane, 어떤 pane이 어떤 pane을 열었는지, 서로 언제 메시지를 보냈는지 볼 수 있습니다. 메시지 내용은 볼 수 없습니다.",
           "agentMessages": "agent 간 메시지의 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다.",
+          "secrets": "자체 API 키와 토큰을 이 컴퓨터에 암호화해 보관합니다. Navide는 이를 업로드하거나 표시하지 않습니다.",
           "shell": "컴퓨터에서 명령을 실행해요.",
           "terminal": "Navide 터미널을 열고 제어해요."
         }
@@ -7654,6 +7714,7 @@
     "section": {
       "general-behavior": "일반 동작",
       "resource-limits": "리소스 제한",
+      "session-archive": "세션 로그 보관",
       "settings-management": "설정 관리",
       "theme": "테마",
       "other": "기타"
@@ -8697,6 +8758,9 @@
     "run-group-active": "실행 중 — 이 그룹의 agent가 작업하고 있어요",
     "run-group-awaiting": "확인 필요 — 이 그룹의 agent가 권한이나 질문 때문에 멈춰 있어요",
     "agent-not-installed": "{label} — 설치되지 않음",
+    "cloud-agents-plugin-hint": "클라우드 에이전트(Grok Bot, dots 등)는 Navide 마켓플레이스에서 해당 Navide 플러그인을 설치하세요.",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "Agent",
     "select-role": "역할 선택…",
     "waiting-backend": "백엔드를 기다리는 중…",
     "set-workspace-first": "먼저 작업 영역 경로를 설정하세요",
@@ -9114,6 +9178,8 @@
     "stall-auto-advance": "완전 자동: 5초 후 강제로 진행…",
     "pipeline-starting": "Pipeline 시작하는 중…",
     "pipeline-log-session-bound": "session 연결됨",
+    "pipeline-log-restoring-panes": "창 {n}개를 복원하는 중",
+    "terminal": "터미널",
     "pipeline-log-answer-manually": "직접 답변하세요",
     "pipeline-log-manager-ready": "인계하는 중(메시지 {count}개 처리)",
     "pipeline-log-slot-not-found": "슬롯 \"{slot}\" 없음",
@@ -9952,7 +10018,8 @@
       "update": "Navide 플러그인 {plugin}을(를) {from}에서 {version}(으)로 업데이트할까요?",
       "rollback": "Navide 플러그인 {plugin}을(를) {from}에서 {version}(으)로 되돌릴까요?",
       "remove": "Navide 플러그인 {plugin}을(를) 제거할까요?",
-      "enable": "Navide 플러그인 {plugin}을(를) 다시 사용할까요?"
+      "enable": "Navide 플러그인 {plugin}을(를) 다시 사용할까요?",
+      "clear-secrets": "Navide 플러그인 {plugin}이(가) 저장한 시크릿을 삭제할까요?"
     },
     "desc": "agent가 이 변경을 요청했어요. 여기서 승인하기 전에는 아무것도 바뀌지 않으며, agent가 대신 승인할 수 없어요.",
     "queue": "{count}개 대기 중",
@@ -9979,6 +10046,7 @@
     "finished-late": "이 창이 다시 연결되는 동안 다른 창에서 이 요청을 중단됨으로 표시했어요. 지금 기록에는 대신 이 결과가 표시돼요.",
     "failed": "완료되지 않음: {error}",
     "not-appliable": "이 버전의 Navide는 아직 이런 종류의 요청을 처리할 수 없어요. 거부해도 돼요.",
+    "clear-secrets-note": "Navide 플러그인 {plugin}이(가) 이 기기에 암호화해 보관하는 API 키와 토큰을 삭제합니다. 되돌릴 수 없으며 {plugin}이(가) 다시 입력을 요청합니다.",
     "unavailable": "이 창에서는 Navide 플러그인 작업을 사용할 수 없어요."
   },
   "skill-approval": {
@@ -10181,6 +10249,7 @@
     "settings-title": "CLI 할당량 배지",
     "settings-enabled": "CLI pane 헤더에 남은 할당량 표시",
     "settings-refresh": "새로 고침 간격",
+    "settings-refresh-minutes": "{n}분",
     "settings-hint": "CLI 제공자 11곳의 할당량을 각 제공자의 사용량 API에서 읽기 전용으로 보여 줘요(Claude는 내장 /usage 패널에서).",
     "failover-title": "할당량 소진 시 계정 전환",
     "failover-hint": "CLI 계정의 할당량이 떨어졌을 때 Navide가 할 일이에요: 아무것도 안 함, 전환할 계정 표시(기본값), 또는 자동 전환(CLI마다 5시간에 최대 3회).",
@@ -10919,6 +10988,19 @@
     "token-linked": "token으로 연결됨"
   },
   "channels": {
+    "agent": {
+      "title": "에이전트의 요청",
+      "from": "{requester}의 요청",
+      "kind-bot-add": "{platform} bot 추가",
+      "kind-bot-remove": "bot {bot} 제거",
+      "kind-bind": "{bot}의 채팅 {chat}을(를) 창 “{pane}”에 연결",
+      "kind-pairing": "{sender}이(가) {bot}과(와) 대화하도록 허용",
+      "kind-pairing-bind": "{sender}이(가) {bot}과(와) 대화하도록 허용하고 그 채팅을 창 “{pane}”에 연결",
+      "approve": "승인",
+      "decline": "거절",
+      "fill": "양식 열기",
+      "add-note": "이 bot은 {requester}이(가) 추가를 요청했고 이름은 에이전트가 적었어요. 자격 증명은 직접 여기에 붙여 넣으세요. 에이전트에게는 전달되지 않아요."
+    },
     "shareOpenNotify": {
       "title": "공유 링크 열림 알림",
       "desc": "이 컴퓨터에서 만든 공유 링크를 새 기기가 열면 연결된 채팅에 알려요(링크 URL은 보내지 않아요). Navide Cloud가 필요해요."
@@ -10971,6 +11053,19 @@
     },
     "enable-platform": "{platform} 사용",
     "bot": {
+      "sort-recent": "최근 활동",
+      "sort-name": "이름",
+      "group-workspace": "작업 영역별",
+      "search-placeholder": "이름, {'@'}핸들, id, pane, 작업 영역 검색",
+      "search-empty": "일치하는 bot이 없어요",
+      "search-clear": "지우기",
+      "bound-none": "연결된 pane이 없어요",
+      "bound-many": "pane {n}개 ({workspaces})",
+      "flag-running": "작동 중",
+      "flag-unbound": "연결 안 됨",
+      "flag-pane-closed": "pane 닫힘",
+      "flag-token": "token 무효",
+      "flag-failed": "연결 실패",
       "default": "기본 bot",
       "add": "bot 추가",
       "new": "새 bot",
@@ -12117,13 +12212,15 @@
     "source": {
       "broker": "Navide 기능",
       "shell": "셸 명령",
-      "agentTool": "agent 도구"
+      "agentTool": "agent 도구",
+      "network": "보기 네트워크"
     },
     "kind": {
       "system": "권한",
       "shell": "셸",
       "backendMethod": "네이티브 백엔드 메서드",
-      "agentTool": "Agent 도구"
+      "agentTool": "Agent 도구",
+      "networkHost": "네트워크 호스트"
     },
     "reason": {
       "undeclared": "선언되지 않음"
@@ -12178,6 +12275,16 @@
       "crossWorkspace": "작업 영역 간: {from} → {to}",
       "totalSize": "인수 총 {args}, 결과 총 {result}. 크기를 알 수 없는 {unknown}개는 포함하지 않았어요"
     },
+    "pipelineNodes": {
+      "heading": "노드를 실행한 Pipeline",
+      "row": "{date} {origin}이(가) 시작한 Pipeline → 노드 {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "사용자",
+        "agent": "에이전트",
+        "schedule": "예약 작업",
+        "webhook": "웹훅"
+      }
+    },
     "caller": {
       "pane": "pane “{name}”",
       "external": "외부 클라이언트",
@@ -12199,6 +12306,10 @@
     "commands": {
       "heading": "실행한 명령",
       "item": "{command} · {count}회 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "보기가 연결한 호스트",
+      "item": "{host} · {count}회 · {outcome} · {date}"
     },
     "trend": {
       "heading": "일별 호출 수"
@@ -12287,7 +12398,13 @@
         "backendMethod": "네이티브 코드 메서드: {key}",
         "backendEvent": "네이티브 코드 이벤트: {key}",
         "network": "명령을 통해 원격 호스트에 연결 가능",
-        "agentTool": "Agent 도구: {key}"
+        "networkHost": "보기가 연결할 수 있는 호스트: {key}",
+        "agentTool": "Agent 도구: {key}",
+        "agentEvent": "Host 이벤트 수신: {key}",
+        "pluginCall": "Navide 플러그인 호출: {key}",
+        "apiMethod": "다른 Navide 플러그인이 호출 가능: {key}",
+        "pipelineNode": "Pipeline 단계(agent나 예약 작업이 시작한 Pipeline에서도 실행): {key}",
+        "commandSlot": "Host 화면에 놓이는 명령: {key}"
       }
     },
     "title": "공개 정보",
@@ -12306,7 +12423,8 @@
     "undeclared": {
       "shell": "{key}을(를) 실행하지만 셸 권한을 선언하지 않았어요",
       "shellDynamic": "실행 시점에 명령을 만들지만 셸 권한을 선언하지 않았어요",
-      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위는 git, gh, glab뿐이에요",
+      "shellExecutable": "{key}을(를) 실행하지만 선언한 셸 범위에 들어 있지 않아요",
+      "networkHost": "{key}에 연결하지만 선언하지 않았어요",
       "system": "{key}을(를) 사용하지만 해당 권한을 선언하지 않았어요",
       "fsScopeWrite": "선언한 쓰기 범위 밖의 {key}에 써요",
       "fsScopeRead": "선언한 읽기 범위 밖의 {key}을(를) 읽어요"
@@ -12314,7 +12432,8 @@
     "notSeenHeading": "선언했지만 정적 검사에서 발견되지 않음",
     "notSeen": {
       "shell": "셸({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (선언한 호스트)"
     },
     "scanHeading": "게시 시점 검사에서 발견한 내용",
     "scanHeadingLocal": "이 파일에 대한 Navide 검사에서 발견한 내용",
@@ -12332,8 +12451,8 @@
     "scannedLocally": "검사 결과는 이 카드에 정보로만 쓰이며 설치 여부를 결정하지 않아요.",
     "limitsWithoutScan": "이 버전에는 시스템 검사가 없어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
     "limitsWithoutScanLocal": "Navide가 이 파일을 검사하지 않았어요. 위 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
-    "viewNetwork": "Navide 플러그인의 보기는 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
-    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있다면 네트워크에 연결하고 Navide 안에서 외부 웹사이트를 표시할 수 있어요. Navide는 그 트래픽을 필터링하거나 기록하지 않아요. 위의 네트워크 항목은 명령과 네이티브 백엔드만 다뤄요.",
+    "viewNetwork": "이 Navide 플러그인의 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
+    "viewNetworkIfViews": "이 Navide 플러그인에 보기가 있으면, 보기는 선언한 호스트(위에 나열됨, 나열된 것이 없으면 연결 불가)에만 연결할 수 있고 외부 웹사이트는 표시할 수 없어요. Navide는 보기가 연결한 호스트와 거부된 호스트를 활동에 기록해요. 위의 네트워크 항목은 명령과 네이티브 백엔드를 다뤄요.",
     "summary": {
       "nativeBackend": "네이티브 코드 포함(샌드박스에서 실행)",
       "files": {
@@ -12345,13 +12464,18 @@
         "full": "모든 명령 실행"
       },
       "networkViaShell": "이 명령을 통해 원격 호스트에 연결 가능",
+      "agentEvents": "pane, Plan, Pipeline, 예약 작업에 관한 Host 이벤트를 받습니다(이름과 상태만): {events}",
+      "pluginCalls": "다음 Navide 플러그인을 호출합니다: {plugins}",
+      "api": "다른 Navide 플러그인이 메서드 {count}개를 호출할 수 있습니다",
+      "pipelineNodes": "Pipeline 단계를 {count}개 추가합니다. agent, 예약 작업, 웹훅이 시작한 Pipeline에서도 실행됩니다",
       "aiCli": "AI CLI session을 시작하고 출력을 읽음",
-      "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인 정보는 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 내 로그인 정보를 사용하며(나 대신 웹사이트에 요청을 보낼 수 있어요), 여기서 여는 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 조작을 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 새로 고쳐야 멈춰요. 여러 웹 페이지를 동시에 열 수 있으며 각 페이지가 메모리를 사용해요.",
+      "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인 정보는 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 내 로그인 정보를 사용하며(나 대신 웹사이트에 요청을 보낼 수 있어요), 여기서 여는 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 조작을 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 새로 고쳐야 멈춰요. agent에게 맡긴 페이지에서는 이 Navide 플러그인 자체도 스크립트를 실행하고 내용과 로그인 상태를 읽을 수 있어요. 여러 웹 페이지를 동시에 열 수 있으며 각 페이지가 메모리를 사용해요.",
       "agents": "이 프로젝트의 agent pane, 어떤 pane이 어떤 pane을 열었는지, 메시지 전달 기록(내용 제외), session 목록(대화 내용 제외)을 볼 수 있습니다",
       "agentMessages": "이 프로젝트의 agent 간 메시지 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다",
+      "secrets": "자체 API 키와 토큰을 이 컴퓨터에 암호화해 보관합니다. Navide는 이를 업로드하거나 표시하지 않습니다",
       "ui": "자체 보기 표시",
       "agentTools": "agent가 호출할 수 있는 도구 제공(읽기 전용 {read}개, 쓰기 {write}개)",
-      "network": "네트워크 사용 가능",
+      "network": "보기가 연결할 수 있는 호스트: {hosts}",
       "noPermissions": "선언한 권한 없음"
     },
     "scan": {
@@ -12468,6 +12592,12 @@
       "apply": "지금 적용"
     }
   },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Navide 플러그인 {plugin}의 출처나 게시자가 바뀌어 이전 사본이 저장한 시크릿은 격리되었고 읽을 수 없습니다. 삭제하려면 {plugin}을(를) 제거하고 시크릿 삭제를 선택하세요.",
+      "cleared": "Navide 플러그인 {plugin}의 시크릿을 삭제했습니다({count}개)."
+    }
+  },
   "plugin-switch": {
     "notice": {
       "title": "{plugin}이(가) {from}에서 {to}(으)로 전환됐어요",
@@ -12548,6 +12678,20 @@
       "browse": "찾아보기",
       "developer": "개발자"
     },
+    "entry": {
+      "title": "Build for Navide: 나만의 Navide 플러그인 만들기",
+      "step-init": "템플릿으로 Navide 플러그인 만들기(Navide 0.2.39 이상):",
+      "step-load": "설정 → Navide 플러그인 → Developer Mode → 폴더에서 불러오기…로 불러와 써 보기",
+      "step-apply": "아래에서 로그인하고 개발자 신청서를 실명으로 한 번 작성해요. 담당자가 검토해요.",
+      "next": {
+        "apply": "다음: 아래 개발자 신청서를 작성하세요.",
+        "pending": "다음: 검토를 기다리세요. 그동안 Navide 플러그인을 빌드하고 Developer Mode로 불러와 써 볼 수 있어요.",
+        "key": "다음: 게시자로 로그인해 이 Navide의 서명 키를 등록하세요.",
+        "publish": "다음: 버전을 게시하세요. 검토를 통과하면 Navide 마켓플레이스에 공개돼요."
+      },
+      "guide": "Build for Navide 열기",
+      "console": "developers.navide.dev 열기"
+    },
     "account": {
       "title": "개발자 계정",
       "desc": "Navide Cloud 계정으로 로그인해 신청하고, Navide 플러그인을 게시하고, 검토 상황을 확인하세요. Navide는 로그인 정보와 서명 키를 이 컴퓨터의 보안 저장소에 보관하며 agent는 절대 볼 수 없어요.",
@@ -12557,6 +12701,8 @@
       "no-key": "게시자로 처음 로그인할 때 만들어져요",
       "key-registered": "등록됨",
       "key-unregistered": "아직 등록 안 됨",
+      "key-conflict": "Registry에 이 게시자의 다른 서명 키(지문 {fingerprint})가 이미 등록되어 있어요. 대개 navide-plugin CLI용으로 등록한 키예요. 이 Navide에서 게시하려면 그 키를 바꿔야 하고, 바꾸기 전까지 CLI는 그대로 게시할 수 있어요.",
+      "replace-key": "이 Navide의 키로 바꾸기",
       "expires": "로그인 만료",
       "sign-in": "Navide Cloud로 로그인",
       "sign-in-publish": "게시자로 로그인",
@@ -12961,5 +13107,25 @@
       "select": "목록",
       "checkbox": "체크박스"
     }
+  },
+  "token-views": {
+    "by-model": "모델별",
+    "by-account-quota": "계정별 할당량",
+    "range": "기간",
+    "range-day": "일",
+    "range-week": "주",
+    "cache": "캐시",
+    "cache-read": "캐시 읽기",
+    "cache-write": "캐시 쓰기",
+    "usd": "달러",
+    "other-models": "기타",
+    "no-ledger-data": "이 기간에 기록된 호출이 아직 없습니다",
+    "no-quota-history": "아직 할당량 기록이 없습니다",
+    "window-session": "세션",
+    "window-weekly": "주간",
+    "resets": "{time} 초기화",
+    "trend-7d": "최근 7일 일별 최고치",
+    "week-tokens": "이번 주 토큰",
+    "day-tokens": "오늘 토큰"
   }
 }

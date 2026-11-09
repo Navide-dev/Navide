@@ -17,4 +17,7 @@ export const CLI_AGENT_SPECS = [
   { agentKey: 'droid', label: 'Droid CLI (Factory)', hint: 'generalist' },
   { agentKey: 'mcode', label: 'MiniMax Code', hint: 'generalist' },
   { agentKey: 'goose', label: 'Goose (AAIF)', hint: 'generalist' },
+  { agentKey: 'devin', label: 'Devin CLI (Cognition)', hint: 'generalist' },
+  { agentKey: 'openclaw', label: 'OpenClaw', hint: 'generalist' },
+  { agentKey: 'hermes', label: 'Hermes Agent', hint: 'generalist' },
 ] as const

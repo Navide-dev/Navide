@@ -21,7 +21,7 @@ from . import audit, qualification, review
 from .account_auth import SCOPE_PUBLISHER, Bearer, BearerError, require_bearer
 from .models import Extension, ExtensionVersion, Publisher
 from .plugin_contract.disclosure_scan_contract import card_risk_level, declared_vs_scanned
-from .self_service import QualificationRequired, SelfServiceError, owned_publishers, set_public_key
+from .self_service import KeyConflict, QualificationRequired, SelfServiceError, owned_publishers, set_public_key
 from .signing import public_key_fingerprint
 from .versions import version_channel
 
@@ -37,6 +37,8 @@ class ApplicationRequest(BaseModel):
 
 class KeyRequest(BaseModel):
     public_key: str
+    #: L1d: replace a different key already registered; without it a conflict is a 409.
+    replace: bool = False
 
 
 class UnfreezeRequest(BaseModel):
@@ -225,9 +227,11 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
         with session_of(request) as session:
             publisher = session.get(Publisher, publisher.id)
             try:
-                fingerprint = set_public_key(session, publisher, body.public_key)
+                fingerprint = set_public_key(session, publisher, body.public_key, replace=body.replace)
             except QualificationRequired as exc:
                 raise _error(403, exc.code, str(exc)) from exc
+            except KeyConflict as exc:
+                raise _error(409, "KEY_EXISTS", str(exc), public_key_fingerprint=exc.fingerprint) from exc
             except SelfServiceError as exc:
                 raise _error(400, "KEY_INVALID", str(exc)) from exc
         return JSONResponse({"public_key_fingerprint": fingerprint}, headers=_NO_STORE)
@@ -264,6 +268,14 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
         }
         context.update(extra or {})
         return page(request, "developer_apply.html", context, status=status)
+
+    @router.get("/developer")
+    def landing(request: Request) -> Response:
+        # The console's one page open without signing in: the seven steps,
+        # what an application needs, what to do before signing in. Like every
+        # console page it is noindex; discovery is the storefront's job.
+        enabled = request.app.state.registry.settings.cloud_auth_enabled
+        return page(request, "developer_landing.html", {"enabled": enabled})
 
     @router.get("/developer/apply")
     @guarded

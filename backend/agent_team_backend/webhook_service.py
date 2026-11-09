@@ -227,7 +227,7 @@ class LiveWindow:
         from .mcp_server import server as mcp
 
         return await mcp._start_pipeline_run(
-            mcp._Caller(kind="host"), workspace, task, pipeline_id, taint_detail=taint_detail,
+            mcp._Caller(kind="host"), workspace, task, pipeline_id, taint_detail=taint_detail, origin="webhook",
         )
 
 
@@ -323,6 +323,10 @@ class WebhookService:
         self._active: dict[str, dict[str, Any]] = {run["workspace"]: run for run in store.open_runs()}
         self._armed: dict[str, dict[str, Any]] = {}
         self._starting: set[str] = set()
+        #: Workspaces whose armed start was adopted by run_started, until the
+        #: start's answer is read: a run that ended before a late answer is
+        #: still a started run, not one that never came up.
+        self._adopted: set[str] = set()
         #: Workspaces whose start went unanswered and wait for the run to come
         #: up (_adopted_late): a run adopted then never runs unattended.
         self._late: set[str] = set()
@@ -454,7 +458,9 @@ class WebhookService:
                 workspace, webhook_payload.build_task(trigger["name"], text), trigger["pipeline_id"],
                 f'webhook trigger "{trigger["name"]}"',
             )
-            if answer.get("error_code") == "ui_action_timeout" and await self._adopted_late(workspace, before):
+            if answer.get("error_code") == "ui_action_timeout" and (
+                workspace in self._adopted or await self._adopted_late(workspace, before)
+            ):
                 answer = {"ok": True, "late": True}
         except Exception:  # noqa: BLE001 - the caller already has its 202
             log.exception("webhook: starting a run failed")
@@ -462,6 +468,7 @@ class WebhookService:
         finally:
             self._armed.pop(workspace, None)
             self._starting.discard(workspace)
+            self._adopted.discard(workspace)
         started = bool(answer.get("ok"))
         self.audit([{
             "trigger_id": trigger["id"],
@@ -530,6 +537,7 @@ class WebhookService:
             # The watchdog only looks every WATCH_EVERY_S, so the last run can
             # still be open here, and overwriting it would leave it open for good.
             self.finish_run(workspace, ended)
+            self._adopted.add(workspace)
             self._active[workspace] = self.store.open_run(
                 trigger_id=trigger["id"], workspace=workspace, project_id=project.id,
                 pipeline_id=getattr(project, "pipeline_id", ""),

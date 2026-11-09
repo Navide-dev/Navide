@@ -1,0 +1,65 @@
+{# The seven steps of docs/en-US/build-for-navide.md §4. Every console page
+   that shows the publishing flow uses this one list, so the steps read the
+   same everywhere. `current` is the step the developer is on (0: none,
+   for a page that only lists them); `muted` greys them all out. #}
+{% macro journey_bar(current=0, muted=False) %}
+<ol class="journey{% if muted %} journey--muted{% endif %}" aria-label="Seven steps from application to listing">
+  {% for label in ("Developer application", "Namespace", "Signing key", "Testplace (optional)", "Publish & review", "Update", "Withdraw") %}
+  {% set done = current and loop.index < current %}
+  <li class="journey-step{% if done %} is-done{% elif loop.index == current %} is-current{% endif %}"{% if loop.index == current %} aria-current="step"{% endif %}>
+    <span class="journey-num" aria-hidden="true">{{ '✓' if done else loop.index }}</span>
+    <span class="journey-label">{{ label }}</span>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+{# "You are on step N": one sentence and one link for the state `journey()`
+   in publisher_web.py computed. `base` is passed in because an imported
+   macro does not see the page's context. #}
+{% macro journey_here(j, base) %}
+<div class="next-card" role="status">
+  <p class="next-card-title">You are on step {{ j.step }}</p>
+  {% if j.state == 'apply' %}
+    <p>Apply for developer qualification once, with your real name. A person reviews who is
+      publishing and that you can be reached.</p>
+    <a class="install-button" href="{{ base }}/developer/apply">Apply now</a>
+  {% elif j.state == 'apply-pending' %}
+    <p>Your developer application is waiting for review. While you wait, build and load your
+      plugin locally; the checklist below is what review looks at.</p>
+    <a href="{{ base }}/developer/apply">See your application</a>
+  {% elif j.state == 'apply-rejected' %}
+    <p>Your developer application was rejected{% if j.application.reason %}: {{ j.application.reason }}{% endif %}.
+      Fix what the reason names and apply again.</p>
+    <a class="install-button" href="{{ base }}/developer/apply">Apply again</a>
+  {% elif j.state == 'apply-revoked' %}
+    <p>This account's developer qualification was revoked{% if j.application.reason %}: {{ j.application.reason }}{% endif %}.</p>
+  {% elif j.state == 'claim' %}
+    <p>You are approved. Claim a namespace: it must equal the first segment of your plugin id,
+      such as <code>acme</code> in <code>acme.hello</code>, and it never changes.</p>
+    <a class="install-button" href="{{ base }}/publisher/claim">Claim a namespace</a>
+  {% elif j.state == 'key' %}
+    <p>No public key is registered yet. Run <code>navide-plugin keygen</code> and paste the
+      <code>.pub</code> file into {{ j.namespace }}'s Signing key. Keep the private key out of Git.</p>
+    <a class="install-button" href="{{ base }}/publisher/{{ j.namespace }}#signing-key">Go to Signing key</a>
+  {% elif j.state == 'first-version' %}
+    <p>Publish your first version with <code>navide-plugin publish &lt;file&gt;</code>; the id must
+      start with <code>{{ j.namespace }}.</code>. Want testers first? Publish with
+      <code>--channel testplace</code>.</p>
+    <a href="{{ base }}/publisher/{{ j.namespace }}#publish-cli">Open the dashboard</a>
+  {% elif j.state == 'in-review' %}
+    <p><code>{{ j.row.identity }}</code> {{ j.row.version }} was submitted on
+      {{ j.row.submitted_at.strftime('%Y-%m-%d') }} and is in review (target: 3 business days).
+      Meanwhile you can send a Testplace build to testers.</p>
+    <a href="{{ base }}/publisher/{{ j.namespace }}#versions">See review status</a>
+  {% elif j.state == 'rejected' %}
+    <p><code>{{ j.row.identity }}</code> {{ j.row.version }} was rejected{% if j.row.reason %}: {{ j.row.reason }}{% endif %}.
+      Fix it and publish again with a new version number (a version number is never reused).</p>
+    <a href="{{ base }}/publisher/{{ j.namespace }}#versions">See review status</a>
+  {% else %}
+    <p>Your latest version is live. Publish the next one the same way; a version that adds a
+      permission asks users again.</p>
+    <a href="{{ base }}/publisher/{{ j.namespace }}">Open the dashboard</a>
+  {% endif %}
+</div>
+{% endmacro %}

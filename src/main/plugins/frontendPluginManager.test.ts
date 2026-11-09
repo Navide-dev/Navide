@@ -406,8 +406,6 @@ import {
   openMiniIdePluginView,
   openPlansPluginView,
   plansQuery,
-  openGitLeftPluginView,
-  closeGitLeftPluginView,
   GIT_PLUGIN_ID,
   PLANS_PLUGIN_ID,
   PLANS_INITIATOR_PANE_VERSION,
@@ -416,7 +414,6 @@ import {
   bundledMiniIdeDir,
   bundledPlansDir,
   bundledPlansV2Dir,
-  bundledGitDir,
   officialPluginArtifactPackageDir,
   registerBundledMiniIde,
   registerBundledPlans,
@@ -3575,7 +3572,6 @@ describe('devPlansPluginDescriptor', () => {
       join('/resources', 'official-artifacts', PLANS_PLUGIN_ID, '4.5.6', `${process.platform}-${process.arch}`, 'package')
     )
     expect(bundledPlansDir(source)).toBe(join('/resources', 'plugins', 'plans'))
-    expect(bundledGitDir(source)).toBe(join('/resources', 'plugins', 'git'))
     expect(officialPluginArtifactPackageDir(
       { isPackaged: false, resourcesPath: '', artifactVersion: '4.5.6', devRoot: '/repo' },
       MINI_IDE_PLUGIN_ID,
@@ -16170,65 +16166,6 @@ describe('first-party Git private bridge', () => {
 })
 
 describe('Git left legacy rollback composition', () => {
-  it('returns an explicit legacy fallback after replacing a live v2 left view', async () => {
-    const host = new FakeBrowserWindow()
-    Object.defineProperty(host, 'id', { value: 77 })
-    const v2: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      packageVersion: '2.0.0',
-      requires: ['terminal'],
-      capabilityPolicy: manifestV2CapabilityPolicy({
-        system: ['fs', 'ui', 'aiCli'],
-        shell: 'allowlist',
-      }),
-      capabilityContext: frontendPluginManager.gitCapabilityContext('2.0.0', '/workspace', 'git-left'),
-      devUrl: '',
-      entryFile: '/plugins/navide-git/index.html',
-      views: [
-        {
-          id: 'left',
-          contributionKey: 'navide.git.left',
-          kind: 'custom',
-          location: 'left',
-          title: 'Git',
-          entryFile: '/plugins/navide-git/left.html',
-        },
-      ],
-    }
-    const legacy: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      requires: [],
-      devUrl: '',
-      entryFile: '/plugins/git/index.html',
-    }
-
-    frontendPluginManager.replaceBuiltinForRecovery(v2)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-      '',
-      '',
-      {
-        git_yolo: '0',
-        git_analyzer_model: 'qwen2:latest',
-        git_theme_custom: '{}',
-      },
-    )).resolves.toEqual({ ok: true })
-    expect((host.children[0] as FakeViewLike).webContents.loads).toEqual([
-      '/plugins/navide-git/left.html?workspace_path=%2Fworkspace&git_yolo=0&git_analyzer_model=qwen2%3Alatest&git_theme_custom=%7B%7D&v2=1&contribution=left',
-    ])
-
-    frontendPluginManager.replaceBuiltinForRecovery(legacy)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-    )).resolves.toEqual({ ok: true, fallback: 'legacy' })
-    expect(host.children).toHaveLength(0)
-    expect(closeGitLeftPluginView(asHost(host))).toEqual({ ok: true })
-  })
-
   describe('plansQuery and openPlansPluginView locale propagation', () => {
     it('formats plansQuery with validated locale', () => {
       const q1 = new URLSearchParams(plansQuery('/workspace', 'http://127.0.0.1:1', 'plan.html', 'dark', 'en-US'))
@@ -18982,6 +18919,56 @@ describe('web.* view capabilities (Host web view registry)', () => {
     })
     expect(webEvents(ungranted.view)).toEqual([])
     expect(webEvents(other.view)).toEqual([])
+  })
+
+  it('web.cdp drives the plugin\'s own view through the Host allowlist while agents own and control it', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-cdp')
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    const evaluate = { viewId, method: 'Runtime.evaluate', params: { expression: 'document.title' } }
+
+    // A Space the user owns or took over is USER_IN_CONTROL, answered as CAPABILITY_DENIED.
+    await expect(a.call('cdp', evaluate)).resolves.toMatchObject({
+      ok: false, error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('user-owned') },
+    })
+    await a.call('setOwner', { viewId, owner: 'agent' }, gesture)
+    await expect(a.call('cdp', evaluate)).resolves.toEqual({ reqId: expect.any(String), ok: true, result: { result: {} } })
+    expect(pluginWebViewRegistry().list('acme.web-cdp')[0]).toMatchObject({ agentScriptSinceLoad: true })
+    await a.call('takeControl', { viewId }, gesture)
+    await expect(a.call('cdp', evaluate)).resolves.toMatchObject({
+      ok: false, error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('manual_takeover') },
+    })
+    pluginWebViewRegistry().destroyPlugin('acme.web-cdp')
+  })
+
+  it('web.cdp refuses methods off the allowlist, malformed requests, other plugins\' views and ungranted callers', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-cdp-deny')
+    const b = await openWeb(mgr, 'acme.web-cdp-deny-other')
+    const ungranted = await openWeb(mgr, 'acme.web-cdp-deny', ['ui'])
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    await a.call('setOwner', { viewId, owner: 'agent' }, gesture)
+
+    for (const method of ['Network.getCookies', 'Storage.getCookies', 'Page.addScriptToEvaluateOnNewDocument', 'Fetch.enable']) {
+      await expect(a.call('cdp', { viewId, method })).resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    }
+    // A view is not a pane: it has no workspace to upload files from.
+    await expect(a.call('cdp', { viewId, method: 'DOM.setFileInputFiles', params: { files: ['/etc/hosts'], nodeId: 1 } }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    for (const args of [
+      { viewId, method: 'runtime.evaluate' },
+      { viewId, method: 'Runtime.evaluate', params: [] },
+      { viewId, method: 'Runtime.evaluate', sessionId: 'other' },
+      { viewId },
+    ]) {
+      await expect(a.call('cdp', args)).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    }
+    await expect(b.call('cdp', { viewId, method: 'Runtime.evaluate' }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    await expect(ungranted.call('cdp', { viewId, method: 'Runtime.evaluate' }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    expect(pluginWebViewRegistry().list('acme.web-cdp-deny')[0]).toMatchObject({ agentScriptSinceLoad: false })
+    pluginWebViewRegistry().destroyPlugin('acme.web-cdp-deny')
   })
 
   it('refuses agent-initiated web calls unless the execution policy names web', async () => {

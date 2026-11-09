@@ -38,7 +38,7 @@ describe('install-from-file entry points', () => {
       /export type FormApprovalKind = 'developer-application' \| 'plugin-publish' \| 'plugin-yank' \| 'testplace-invite'\n/,
     )
     expect(kinds).toMatch(
-      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable'\n  \/\*\*[^\n]*\*\/\n  \| 'plugin-install-file'\n  \| FormApprovalKind\n/,
+      /export type ApprovalKind = 'skill' \| 'plugin-install' \| 'plugin-update' \| 'plugin-rollback' \| 'plugin-remove' \| 'plugin-enable'\n  \/\*\*[^\n]*\*\/\n  \| 'plugin-install-file'\n  \/\*\*[^\n]*\*\/\n  \| 'plugin-clear-secrets'\n  \| FormApprovalKind\n/,
     )
     // The MCP tools file a request or read; they never decide, finish or commit it.
     expect(read('backend/agent_team_backend/mcp_server/plugin_local_tools.py')).not.toMatch(/decide|finish_plugin|commit/i)

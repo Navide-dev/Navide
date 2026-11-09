@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_journey.html" import journey_bar, journey_here %}
 {% block title %}Publisher dashboard — Navide Marketplace{% endblock %}
 {% block content %}
 <section class="panel">
@@ -6,11 +7,8 @@
   {% if not items %}
     <p>You don't own a namespace yet. The namespace is the first half of every
       extension id (<code>namespace.name</code>).</p>
-    <ol class="steps">
-      <li><div><b>Claim a namespace</b><span>First come, first served; it cannot be changed later.</span></div></li>
-      <li><div><b>Create a publisher token</b><span>Or run <code>navide-plugin login</code> and let the CLI fetch one.</span></div></li>
-      <li><div><b>Publish with the CLI</b><span><code>navide-plugin publish</code> uploads a version; it goes public after review.</span></div></li>
-    </ol>
+    {{ journey_bar(journey.step) }}
+    {{ journey_here(journey, base) }}
   {% endif %}
   {% for item in items %}
     <div class="ns-row">

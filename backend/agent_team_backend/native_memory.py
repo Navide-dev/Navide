@@ -173,6 +173,18 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("cursor", USER_SCOPE, ("AGENTS.md",)),
     MemorySource("cursor", USER_SCOPE, ("CLAUDE.md",)),
     MemorySource("cursor", USER_SCOPE, ("CLAUDE.local.md",)),
+    # -- devin: every standard file is an always-on rule, user and project
+    # loaded together; ~/.config/devin/AGENTS.md is %APPDATA%\devin on Windows
+    # (docs.devin.ai/cli/extensibility/rules, read 2026-11-07 -- docs only).
+    MemorySource("devin", USER_SCOPE, (".config", "devin", "AGENTS.md"), canonical=True),
+    MemorySource("devin", USER_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", USER_SCOPE, (".devin", "rules"), glob="*.md"),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.local.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENT.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("CLAUDE.md",)),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "rules"), glob="*.md"),
     # -- droid: three personal dot dirs (the bare home is explicitly skipped),
     # and the same dirs per project level. The Claude.md/Agents.md/agents.md
     # spellings are the same files on a case-insensitive volume, so one row.
@@ -193,6 +205,16 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("goose", USER_SCOPE, (".agents", "AGENTS.md")),
     MemorySource("goose", PROJECT_SCOPE, (".goosehints",), canonical=True),
     MemorySource("goose", PROJECT_SCOPE, ("AGENTS.md",)),
+    # -- hermes: one project file per session, first match of .hermes.md /
+    # HERMES.md (up to the git root), AGENTS.override.md, AGENTS.md (merged
+    # git root -> cwd), CLAUDE.md, .cursorrules; SOUL.md only from the Hermes
+    # home (docs/user-guide/features/context-files, read 2026-11-07).
+    MemorySource("hermes", USER_SCOPE, (".hermes", "SOUL.md"), canonical=True),
+    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("hermes", PROJECT_SCOPE, (".hermes.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("HERMES.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.override.md",)),
+    MemorySource("hermes", PROJECT_SCOPE, ("CLAUDE.md",)),
     # -- grok: ~/.grok/AGENTS.md, then AGENTS.override.md/AGENTS.md per level.
     MemorySource("grok", USER_SCOPE, (".grok", "AGENTS.md"), canonical=True),
     MemorySource("grok", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
@@ -226,6 +248,11 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     MemorySource("opencode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
     MemorySource("opencode", PROJECT_SCOPE, ("CLAUDE.md",)),
     MemorySource("opencode", PROJECT_SCOPE, ("CONTEXT.md",)),
+    # -- openclaw: bootstrap files come from the agent workspace
+    # (~/.openclaw/workspace; OPENCLAW_WORKSPACE_DIR / profile relocate it),
+    # not from the TUI's cwd (docs/concepts/agent-workspace, read 2026-11-07).
+    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "AGENTS.md"), canonical=True),
+    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "SOUL.md")),
     # -- pi: ~/.pi/agent/ and every ancestor directory, override first.
     MemorySource("pi", USER_SCOPE, (".pi", "agent", "AGENTS.md"), canonical=True),
     MemorySource("pi", USER_SCOPE, (".pi", "agent", "CLAUDE.md")),

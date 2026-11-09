@@ -465,8 +465,9 @@ describe('execution policy IPC', () => {
         defaultPolicy: {
           schemaVersion: 1,
           mode: 'allowlist',
-          // agentMessages is left out of the default on purpose.
-          system: ['fs', 'ui', 'aiCli', 'web', 'agents'],
+          // agentMessages is left out of the default on purpose; secrets is in
+          // it so an agent tool can use the package's key (answers are redacted).
+          system: ['fs', 'ui', 'aiCli', 'web', 'agents', 'secrets'],
           shell: ['git', 'gh', 'glab'],
         },
         userPolicy: null,

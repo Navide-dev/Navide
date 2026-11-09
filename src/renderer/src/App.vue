@@ -21,6 +21,7 @@ import {
   useReadbackAnnouncer,
 } from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
+import { requestChannelsBot } from './channelsBotRequest'
 import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
 import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
@@ -42,7 +43,7 @@ import { countUntouchedElsewhere, parseSidebarMode, SIDEBAR_MODE_KEY, type Sideb
 import { formatBytes } from './lib/formatBytes'
 import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/resourceSampling'
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
-import { channelsKey, useChannels } from './composables/useChannels'
+import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
 import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
@@ -84,7 +85,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -99,7 +100,8 @@ import { sameRenderedPaneViews } from './lib/paneViews'
 import { paneStatusLabelText } from './lib/paneStatusLabel'
 import { statusBadgeStyle } from './composables/useStatusBadgePrefs'
 import { useBackend } from './composables/useBackend'
-import { createHostGitSettingsPort, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { useSettings } from './composables/useSettings'
 import { useRoles } from './composables/useRoles'
 import {
@@ -126,7 +128,7 @@ import { useUpdater } from './composables/useUpdater'
 import { usePaneReorderDrag } from './composables/usePaneReorderDrag'
 import { cliHealthGuideForLaunch, type CliHealthStatus, type OnboardStatus } from './composables/useOnboarding'
 import { playDoneSound, playAttentionSound } from './composables/useSoundNotify'
-import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './composables/useIssues'
+import { formatIssueForDispatch, buildIssueKickoff, type IssueDetail, type Issue, type IssueProvider, type IssueHandlerMode } from './lib/issueDispatch'
 import { normalizeGitContributionAction, type GitContributionAction } from './ports/gitContribution'
 import type { RoleKey } from './data/roles'
 import {
@@ -181,8 +183,8 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
-import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
+import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, quietTurnEndDone, TURN_END_QUIET_FALLBACK_MS, turnCompleteDone,turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
@@ -394,6 +396,7 @@ import {
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
 import { PLUGIN_APPROVAL_RECOVER_EVENT, revealInvisibleText } from '../../shared/pluginAgentTools'
+import type { PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -515,7 +518,7 @@ setDiagnosticSink((entry) => {
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 // Per-CLI quota badges: configure the backend poller and mirror its
 // usage.changed broadcasts (read by TerminalPane's UsageBadge).
@@ -1153,7 +1156,9 @@ const WS_PATH_KEY = 'agentTeam.currentWorkspace'
 // restore — see onWorkspaceCheck.
 const _bootWorkspace = new URLSearchParams(window.location.search).get('workspace_path') ?? ''
 const _bootIsDuplicate = new URLSearchParams(window.location.search).get('duplicate') === '1'
-const legacyGitRecovery = ref(new URLSearchParams(window.location.search).get('legacy_git_recovery') === '1')
+// Why the Git plugin could not start (null while it runs). The Git tab shows
+// it with a Reinstall action; the Host has no Git interface of its own.
+const gitActivationFailure = ref<string | null>(new URLSearchParams(window.location.search).get('git_activation_failure'))
 const legacyPlansRecovery = ref(new URLSearchParams(window.location.search).get('legacy_plans_recovery') === '1')
 // Why the Host downgraded. Only the Host knows it, and the recovery panel
 // has nothing honest to show without it.
@@ -1282,10 +1287,11 @@ function markPluginIconFailed(entry: Pick<PluginRegionContribution, 'contributio
   failedPluginIcons.value = failures
 }
 
-async function runPluginCommand(commandId: string): Promise<void> {
+async function runPluginCommand(commandId: string, target?: PluginCommandTarget): Promise<void> {
   const result = await window.agentTeam?.plugins?.runCommand?.({
     commandId,
     workspace_path: currentWorkspace.value.trim(),
+    ...(target ? { target } : {}),
   })
   if (!result) return
   if (result.ok) {
@@ -1295,9 +1301,20 @@ async function runPluginCommand(commandId: string): Promise<void> {
   notifyRestore.toast(i18n.global.t(`settings.keybindings.plugin.run.${result.reason}`), { type: 'error' })
 }
 
+/** Commands enabled plugins put on the status bar and the pane menu (view
+ *  slots). Their text is the plugin's own, so it is always shown with the
+ *  plugin's name and with invisible characters made visible. */
+const pluginSlots = ref<PluginSlotEntry[]>([])
+const pluginStatusItems = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'statusBar'))
+const pluginPaneActions = computed(() => pluginSlots.value.filter((entry) => entry.slot === 'paneActions'))
+const pluginSlotLabel = (entry: PluginSlotEntry): string => revealInvisibleText(entry.title)
+const pluginSlotTitle = (entry: PluginSlotEntry): string =>
+  `${revealInvisibleText(entry.pluginName)} · ${revealInvisibleText(entry.tooltip ?? entry.title)}`
+
 async function refreshPluginCommands(): Promise<void> {
   const commands = await window.agentTeam?.plugins?.listCommands?.()
   syncPluginCommands(commands ?? [], (commandId) => { void runPluginCommand(commandId) })
+  pluginSlots.value = (await window.agentTeam?.plugins?.listSlots?.()) ?? []
 }
 
 async function openPluginContributionWindow(contribution: PluginRegionContribution): Promise<void> {
@@ -2790,6 +2807,30 @@ function unregisterPaneMessaging(paneId: string, opts: { keepPersisted?: boolean
   if (!opts.keepPersisted) dropPersistedMessagingName(paneId)
 }
 
+/** deliver() dep for a plain terminal prefill (cli_send submit: false): type
+ *  the command onto the shell's command line and stop — no Enter, the user
+ *  runs it. Settles like deliverAgentMessage's terminal outcomes: refused for
+ *  good, back to the queue head while a program holds the tty, or typed. */
+async function deliverTerminalPrefill(
+  paneId: string,
+  text: string,
+  shouldAbort?: () => boolean,
+): Promise<boolean | null | { failed: MessageReason }> {
+  const outcome: { foregroundBusy?: boolean; commandRefused?: string } = {}
+  const ok = await injectPane(
+    paneId, text, 'agent-msg', true, shouldAbort, outcome,
+    (held) => messaging.setDeliveringHold(paneId, held ? { key: 'pty-blocked' } : undefined),
+    undefined, true,
+  )
+  if (ok) return true
+  if (outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }
+  if (outcome.foregroundBusy) {
+    terminalAtPrompt.set(paneId, false)
+    return null
+  }
+  return false
+}
+
 /** deliver() dep: inject the envelope via the same primitive as all other pane
  *  injections (bracketed paste + verified submit), then push the target's
  *  stage-watcher scan window past the injected text so sentinel/analyzer
@@ -3514,7 +3555,8 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
       cleanBytes: paneCleanBytes(id),
     }),
     paneAlive: (id) => paneAlive(id),
-    injectPane: (id, text, label, preserveNewlines, evidence) => injectPane(id, text, label, preserveNewlines, undefined, evidence),
+    injectPane: (id, text, label, preserveNewlines, evidence, prefill) =>
+      injectPane(id, text, label, preserveNewlines, undefined, evidence, undefined, undefined, prefill === true),
     onKill: (id) => onKill(id),
   }
 }
@@ -3531,7 +3573,7 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
  *  only 40s for this answer — so the caller reports the pane first. */
 async function createStandaloneRequestedPane(
   workspacePath: string,
-  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
+  req: { agentKey: string; name: string; task: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string; prefill?: boolean },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3671,6 +3713,30 @@ async function waitForPromptReady(paneId: string, timeoutMs: number): Promise<bo
   return false
 }
 
+/** runPipelineKickoff's pacing for a pipeline pane: cli_open_agent's
+ *  prompt-ready gate before every attempt, and the clock for its retry
+ *  budget. A pane that already reads idle with nothing painted for
+ *  PROMPT_READY_QUIET_MS is typed into at once; the gate's own quiet window
+ *  only starts when it is called. Without the gate a Windows host with every
+ *  core busy had all three attempts typed into a CLI not yet reading, while
+ *  cli_open_agent's kickoffs under the same load went out (0.2.39 VM). */
+function kickoffPacing(paneId: string): { awaitReady: (timeoutMs: number) => Promise<unknown>; now: () => number } {
+  return {
+    awaitReady: async (timeoutMs) => {
+      const ref = paneRefs[paneId]
+      const quietMs = Date.now() - Number((ref?.lastRawActivityAt as unknown as number | undefined) ?? 0)
+      if (promptReadyNow({
+        status: ref?.displayStatus as string | undefined,
+        cleanBytes: paneCleanBytes(paneId),
+        quietMs,
+        quietNeededMs: PROMPT_READY_QUIET_MS,
+      })) return true
+      return waitForPromptReady(paneId, timeoutMs)
+    },
+    now: Date.now,
+  }
+}
+
 /** Wait for a freshly created pane's CLI to reach its prompt, then inject its
  *  task. Slow by nature: a cold CLI can take tens of seconds to print its
  *  first byte.
@@ -3683,7 +3749,7 @@ async function kickoffRequestedPane(
   parentName: string,
   task: string,
   requestId?: string,
-  opts: { resume?: boolean; crossParent?: boolean } = {},
+  opts: { resume?: boolean; crossParent?: boolean; prefill?: boolean } = {},
 ): Promise<boolean> {
   // Built before the pane lookup: that lookup has its own early return, and a
   // caller blocked on the verdict would otherwise wait out the whole deadline
@@ -3763,10 +3829,10 @@ async function kickoffRequestedPane(
       }
       const seen: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; commandRefused?: string } = {}
       const typed = promptReady || !paneStarting
-        ? await injectPane(paneId, task, 'agent-spawn', true, undefined, seen)
+        ? await injectPane(paneId, task, 'agent-spawn', true, undefined, seen, undefined, undefined, opts.prefill === true)
         : false
       const outcome = terminalKickoffOutcome({
-        typed, echo: seen.echo ?? null, submit: seen.submit ?? null, promptReady,
+        typed, echo: seen.echo ?? null, submit: seen.submit ?? null, promptReady, prefill: opts.prefill === true,
       })
       pane.kickoffStatus = outcome
       emitKickoffVerdict(outcome, outcome === 'sent' ? undefined : seen.commandRefused ?? TERMINAL_KICKOFF_REASON[outcome])
@@ -4025,6 +4091,9 @@ async function handleMcpSpawnRequest(ev: {
   /** cli_open_agent's `account`, resolved by the backend to an explicit pin.
    *  Absent when the pane runs on the live login. */
   profile_id?: string
+  /** false for a terminal prefill (cli_open_agent submit: false): the task is
+   *  typed onto the command line without Enter. Absent otherwise. */
+  submit?: boolean
 }): Promise<void> {
   const standalone = !!ev.target_workspace
   const cross = !!ev.cross_workspace
@@ -4095,7 +4164,7 @@ async function handleMcpSpawnRequest(ev: {
   try {
     // The gate decides identity (name collisions, model/effort); the session to
     // resume is not its business, so it rides alongside rather than through it.
-    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined }
+    const spawnReq = { ...gate, sessionId: (ev.session_id ?? '').trim(), resumeSpawnedBy: ev.resume_spawned_by ?? '', resumeRunGroupId: ev.resume_run_group_id ?? '', runGroupId: ev.run_group_id, profileId: (ev.profile_id ?? '').trim() || undefined, prefill: ev.submit === false }
     paneId = cross
       ? await createRequestedPane(
           { id: ev.requester_pane_id, workspacePath: ev.target_workspace as string, runGroupId: undefined },
@@ -4144,6 +4213,7 @@ async function handleMcpSpawnRequest(ev: {
       await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
         resume: !!(ev.session_id ?? '').trim(),
         evidence: standaloneEvidence,
+        ...(ev.submit === false ? { prefill: true } : {}),
       })
     } catch { /* judged below on whatever evidence was recorded */ }
     // Judged on the echo/submit evidence injectPane recorded, not on its
@@ -4152,7 +4222,7 @@ async function handleMcpSpawnRequest(ev: {
     // the server's "read cli_get_status first" hint; payload-level evidence is
     // 'sent'. Hard-coding 'unverified' here reported every external spawn as
     // failed, the task already running (Linux VM 0.2.38).
-    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task })
+    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task, prefill: ev.submit === false })
     backend.send('agent_spawn.kickoff', {
       request_id: ev.request_id,
       pane_id: paneId,
@@ -4171,6 +4241,7 @@ async function handleMcpSpawnRequest(ev: {
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
     crossParent: cross,
+    prefill: ev.submit === false,
   })
     .then((ok) => {
       if (!ok) {
@@ -4302,7 +4373,9 @@ const onStaleConfigFocus = (): void => { void refreshStaleConfigPanes() }
 onMounted(() => {
   messaging.configureMessaging({
     now: () => Date.now(),
-    deliver: deliverAgentMessage,
+    deliver: (paneId, text, shouldAbort, prefill) => prefill
+      ? deliverTerminalPrefill(paneId, text, shouldAbort)
+      : deliverAgentMessage(paneId, text, shouldAbort),
     isPaneIdle: (paneId: string) => deliveryHoldKey(paneId) === null,
     idleHoldKey: deliveryHoldKey,
     refuseDelivery: (paneId, envelope) => {
@@ -4315,6 +4388,15 @@ onMounted(() => {
       const refusal = paneMultilineRefusal(paneId, envelope)
       return refusal ? rawReason(refusal) : null
     },
+    // The same STOP reading messagingHoldKey applies, for the Stop-hook drain,
+    // which bypasses that gate: a turn Claude starts on its own after a person's
+    // STOP must not carry a queued message in with it.
+    stopHeld: (paneId) => messagingGateStatus(
+      paneRefs[paneId]?.displayStatus as string | undefined,
+      paneRefs[paneId]?.liveStatus as string | undefined,
+      paneRefs[paneId]?.stoppedBy as string | null | undefined,
+      !!paneRefs[paneId]?.stopHeldForUser,
+    ) === 'stopped',
     // A push skips refuseDelivery, so a sign-in pane is never offered one.
     pushTarget: (paneId) => (panes.value.find((p) => p.id === paneId)?.isLogin ? null : pushTargetForMessaging(paneId)),
     pushDeliver: pushDeliverAgentMessage,
@@ -4615,7 +4697,15 @@ async function injectText(
   // pipeline slot whose sibling fails the run while its kickoff is being
   // typed. No means the box is cleared instead of submitted. An Enter already
   // sent is not chased.
-  stillWanted?: () => boolean
+  stillWanted?: () => boolean,
+  // Plain terminal only (cli_send / cli_open_agent submit: false): type the
+  // line and stop — no Enter. The user reads it and runs it. Every write is
+  // flagged so the backend accepts a refused command onto the command line
+  // and holds the terminal until the user types.
+  prefill = false,
+  // Pipeline kickoff only (KICKOFF_ECHO_WAIT_MS): how long the echo is watched
+  // for, through silent and painting rounds alike, before giving up.
+  echoWaitMs?: number,
 ): Promise<boolean> {
   // Log the full injection text to the session's output log file BEFORE
   // chunking so the log file shows one readable block per send.
@@ -4682,8 +4772,9 @@ async function injectText(
     ? paneRefs[paneId as string]?.isBracketedPasteActive?.() === true
     : agentBracketed
   if (shellTarget && paneMultilineRefusal(paneId as string, body)) return false
+  if (prefill && !shellTarget) return false
   const chunks = injectionChunks(body, CHUNK, bracketed)
-  const shellGuard = shellTarget ? { require_shell_prompt: true } : {}
+  const shellGuard = shellTarget ? { require_shell_prompt: true, ...(prefill ? { prefill: true } : {}) } : {}
   // Why the backend refused a guarded write: a program in front of the shell
   // (try again later) or a command it will not type (never).
   const noteShellRefusal = (payload?: { error?: string; refusal?: { message?: string } } | null): void => {
@@ -4875,6 +4966,7 @@ async function injectText(
       now: Date.now,
       roundMs: readyTimeout,
       maxSilentRounds: onInputBlocked ? null : 2,
+      waitMs: echoWaitMs,
     })
     if (watched.outcome === 'aborted') return giveUp()
     if (watched.outcome === 'ready') {
@@ -4901,6 +4993,8 @@ async function injectText(
     })
     return giveUp()
   }
+  // A prefill is done once it is on the command line: Enter is the user's.
+  if (prefill) return true
 
   // Past this point the payload is confirmed to be IN the input box, so every
   // remaining failure exit means "still sitting there, unsubmitted" rather
@@ -5141,7 +5235,9 @@ async function injectPane(
     enters?: number
   },
   onInputBlocked?: (held: boolean) => void,
-  stillWanted?: () => boolean
+  stillWanted?: () => boolean,
+  prefill = false,
+  echoWaitMs?: number,
 ): Promise<boolean> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return false
@@ -5152,7 +5248,7 @@ async function injectPane(
   pane.resumeContinueAvailable = false
   paneLastInjectedText.set(paneId, text)
   return injectText(
-    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted,
+    ref.sessionId, text, logLabel, preserveNewlines, shouldAbort, evidence, onInputBlocked, stillWanted, prefill, echoWaitMs,
   )
 }
 
@@ -6797,20 +6893,20 @@ function onGitContributionAction(envelope: {
 
 let stopGitContributionActions: (() => void) | null = null
 let stopPluginContributionChanges: (() => void) | null = null
-let stopGitRecoveryChanged: (() => void) | null = null
+let stopPluginActivationFailed: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
 let stopPluginAgentAction: (() => void) | null = null
+let stopPluginSecretsNotice: (() => void) | null = null
 let stopPluginStagedCandidate: (() => void) | null = null
 let stopPluginStagedUpdates: (() => void) | null = null
 let stopPluginSwitched: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
-  stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
-    // Both directions: the Host also reports recovery being *left* (Extensions
-    // restores the bundled v2 package). Latching on true left an open window
-    // showing the "Legacy recovery" panel for the rest of its life.
-    legacyGitRecovery.value = change.legacy
+  stopPluginActivationFailed = window.agentTeam?.onPluginActivationFailed?.((change) => {
+    // Both directions: the Host also reports Git running again (a retry or a
+    // reinstall), which must take the notice down in every open window.
+    if (change.pluginId === 'navide.git') gitActivationFailure.value = change.reason
   }) ?? null
   stopPlansRecoveryChanged = window.agentTeam?.onPlansRecoveryChanged?.((change) => {
     legacyPlansRecovery.value = change.legacy
@@ -6824,6 +6920,14 @@ onMounted(() => {
   stopPluginAgentAction = window.agentTeam?.onPluginAgentAction?.((notice) => {
     announcements.notePluginAgentNotice(notice)
     notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
+  }) ?? null
+  // A plugin's own secrets were isolated (same id, another source or
+  // publisher) or deleted: say so, never a name or a value.
+  stopPluginSecretsNotice = window.agentTeam?.onPluginSecretsNotice?.((notice) => {
+    notifyRestore.toast(notice.kind === 'cleared'
+      ? i18n.global.t('plugin-secrets.notice.cleared', { plugin: notice.pluginId, count: notice.count })
+      : i18n.global.t('plugin-secrets.notice.identityMismatch', { plugin: notice.pluginId }),
+    { type: notice.kind === 'cleared' ? 'info' : 'error' })
   }) ?? null
   // A plugin installed without Restart could not be activated at launch.
   stopPluginStagedCandidate = window.agentTeam?.onPluginStagedCandidateNotActivated?.((notice) => {
@@ -6862,13 +6966,14 @@ onMounted(() => {
 onUnmounted(() => {
   stopGitContributionActions?.()
   stopGitContributionActions = null
-  stopGitRecoveryChanged?.()
-  stopGitRecoveryChanged = null
+  stopPluginActivationFailed?.()
+  stopPluginActivationFailed = null
   stopPlansRecoveryChanged?.()
   stopPlansRecoveryChanged = null
   stopPlansBackendStopped?.()
   stopPlansBackendStopped = null
   stopPluginAgentAction?.()
+  stopPluginSecretsNotice?.()
   stopPluginAgentAction = null
   stopPluginStagedCandidate?.()
   stopPluginStagedCandidate = null
@@ -7663,6 +7768,7 @@ function scheduleInjection(pane: ActivePane): void {
             pane.id, pane.kickoffPrompt, `kickoff:stage-${pane.stageId}`, true, undefined, evidence, undefined,
             // Asked again right before its Enter: the run can fail mid-paste.
             () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
+            false, KICKOFF_ECHO_WAIT_MS,
           )
           logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
           if (evidence.stopped) runPaneSentAt.delete(pane.id)
@@ -7676,11 +7782,12 @@ function scheduleInjection(pane: ActivePane): void {
           pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
           watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
         },
-        onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+        onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}; ${MAX_KICKOFF_ATTEMPTS} or more while the retry budget lasts) — retrying in 3s, once the pane reads ready`),
         copyInBox: kickoffCopyInBox(pane.id, pane.kickoffPrompt, () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding())),
         parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
         // A sibling slot can fail the run during the role's 30s settle.
         stillWanted: () => pane.origin !== 'pipeline' || (pipeline.state === 'running' && !runEnding()),
+        ...kickoffPacing(pane.id),
       })
       if (kickoffResult.stopped) {
         pipelineLog(`${tag} ⏹ the run is no longer running — not sending the kickoff`)
@@ -7699,7 +7806,7 @@ function scheduleInjection(pane: ActivePane): void {
       if (!ok2) {
         pipelineLog(parked
           ? `${tag} ⏸ ${PARKED_ON_PROMPT_REASON} — not typing into it`
-          : `${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+          : `${tag} ✕ kickoff injection failed after ${kickoffAttempt} attempts`)
         // A pipeline slot without its task cannot finish its stage (#448).
         if (stageIndexForPane >= 0) {
           if (held) heldKickoffPanes.add(pane.id)
@@ -7710,7 +7817,7 @@ function scheduleInjection(pane: ActivePane): void {
               ? PARKED_ON_PROMPT_REASON
               : held
               ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
-              : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`,
+              : `kickoff never reached the agent after ${kickoffAttempt} attempts`,
             held,
             false,
             parked,
@@ -11248,9 +11355,14 @@ function togglePaneReadback(id: string): void {
 // ── External UI action bus (MCP-driven) ─────────────────────────────────────
 // Actions a UI-control MCP client can invoke via ui.invoke.request. See
 // useUiActionBus for the request/reply plumbing and ownership check.
-const UI_SETTINGS_TABS = ['general', 'mcp', 'analyzer', 'updates', 'appearance', 'accounts', 'keybindings'] as const
+const UI_SETTINGS_TABS = ['general', 'mcp', 'analyzer', 'updates', 'appearance', 'accounts', 'keybindings', 'channels'] as const
 registerCommand('ui.settings.open', (args) => {
-  const tab = (args as { tab?: string } | undefined)?.tab
+  const { tab, platform, account } = (args ?? {}) as { tab?: string; platform?: unknown; account?: unknown }
+  // On the Channels tab, platform (+ account, "default" when omitted) picks that
+  // bot; one the page does not have leaves it on its usual row.
+  if (tab === 'channels' && typeof platform === 'string' && platform) {
+    requestChannelsBot({ platform, account: typeof account === 'string' ? account : '' })
+  }
   if (tab && (UI_SETTINGS_TABS as readonly string[]).includes(tab)) {
     openSettingsAt(tab as typeof settingsInitialTab.value)
   } else {
@@ -11748,7 +11860,11 @@ registerCommand('ui.window.openPipeline', (args) => {
 // nothing, so these two actions drive the very functions the ControlPane
 // buttons emit into (@pipeline-start / @pipeline-abort) rather than a copy.
 registerCommand('ui.pipeline.start', async (args) => {
-  const a = (args as { pipelineId?: string; task?: string } | undefined) ?? {}
+  const a = (args as { pipelineId?: string; task?: string; origin?: string } | undefined) ?? {}
+  // The editor's Run button says 'user'; over the action bus the bus sets it
+  // (useUiActionBus remoteArgs): an agent, a schedule or a webhook.
+  const origin: PipelineRunOrigin =
+    a.origin === 'user' || a.origin === 'schedule' || a.origin === 'webhook' ? a.origin : 'agent'
   if (!currentWorkspace.value) throw Object.assign(new Error('ui.pipeline.start requires an open workspace'), { code: 'no-workspace' })
   // A second run would overwrite pipeline.task/stageIndex/state under the
   // panes the first one is still driving, so refuse rather than restart.
@@ -11764,7 +11880,7 @@ registerCommand('ui.pipeline.start', async (args) => {
     throw Object.assign(new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline'), { code: 'no-pipeline' })
   }
   const refused: { last?: StartRefusal } = {}
-  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId }, (r) => { refused.last = r })
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId, origin }, (r) => { refused.last = r })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -13665,7 +13781,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
   if (toRestore.length < beforeDedupe) {
     pipelineLog(`↩ Skipped ${beforeDedupe - toRestore.length} duplicate resume record(s)`)
   }
-  if (toRestore.length > 0) pipelineLog(`↩ Restoring ${toRestore.length} pane(s)`)
+  if (toRestore.length > 0) pipelineLog(`↩ ${i18n.global.t('label.pipeline-log-restoring-panes', { n: toRestore.length })}`)
   // Guarded like its sibling in onWorkspaceCheck. The gate above used to make
   // this unreachable while a run was live; now a restore for ANOTHER workspace
   // gets here, and overwriting the path would point the run at the wrong
@@ -15512,7 +15628,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         const evidence: { echo?: EchoEvidence | null; submit?: SubmitEvidence | null; stopped?: boolean; enters?: number; late?: LateSubmit; lateMs?: number } = {}
         // Asked again right before its Enter: a sibling can fail the run in
         // the second this kickoff is being typed.
-        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted)
+        const injected = await injectPane(pane.id, kickoff, `kickoff:stage-${stage.id}`, true, undefined, evidence, undefined, slotStillWanted, false, KICKOFF_ECHO_WAIT_MS)
         logInjectEvidence(tag, 'kickoff', ++kickoffAttempt, injected, evidence)
         if (evidence.stopped) runPaneSentAt.delete(pane.id)
         return { injected, echo: evidence.echo, submit: evidence.submit, stopped: evidence.stopped }
@@ -15525,12 +15641,13 @@ async function activateStage(index: number, opts: { only?: string; note?: string
         pipelineLog(`${tag} ✕ kickoff reached the input box but never submitted — not resending`)
         watchKickoffAfterFailure(pane.id, kickoffStartedAt, tag)
       },
-      onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}/${MAX_KICKOFF_ATTEMPTS}) — retrying in 3s`),
+      onRetry: (attempt) => pipelineLog(`${tag} ✕ kickoff injection failed (attempt ${attempt}; ${MAX_KICKOFF_ATTEMPTS} or more while the retry budget lasts) — retrying in 3s, once the pane reads ready`),
       // A resume after a held kickoff: submit the copy still in the box.
       heldCopy: heldKickoffCopy(pane.id, kickoff, slotStillWanted),
       copyInBox: kickoffCopyInBox(pane.id, kickoff, slotStillWanted),
       parkedOnPrompt: () => roleParked || paneParkedOnPrompt(pane.id),
       stillWanted: slotStillWanted,
+      ...kickoffPacing(pane.id),
     })
     if (kickoffResult.stopped) {
       pipelineLog(`${tag} ⏹ the run is no longer running — the kickoff was not submitted`)
@@ -15547,7 +15664,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       ? PARKED_ON_PROMPT_REASON
       : held
       ? 'kickoff is waiting in the input box: leave it and resume submits it, or clear it'
-      : `kickoff never reached the agent after ${MAX_KICKOFF_ATTEMPTS} attempts`
+      : `kickoff never reached the agent after ${kickoffAttempt} attempts`
     if (!ok) markRunEnding(index, slot.label, parked)
     // Another slot failed the run (or the user stopped it) while this kickoff
     // was in flight: record nothing and arm nothing for a run that is over.
@@ -15594,7 +15711,7 @@ async function activateStage(index: number, opts: { only?: string; note?: string
       kickoff_status: ok ? 'sent' : 'failed',
     })
     if (ok) pipelineLog(`${tag} ✓ kickoff sent`)
-    else if (!parked) pipelineLog(`${tag} ✕ kickoff injection failed after ${MAX_KICKOFF_ATTEMPTS} attempts`)
+    else if (!parked) pipelineLog(`${tag} ✕ kickoff injection failed after ${kickoffAttempt} attempts`)
 
     // For question-interactive stages (P01): capture scanFrom AFTER kickoff is
     // confirmed so the watcher only scans content produced after the kickoff.
@@ -15752,10 +15869,17 @@ async function spawnPipelineStage(index: number): Promise<void> {
   }
 }
 
+/** Who started the current pipeline run: a person (the Run button), an agent
+ *  (ui.pipeline.start / pipeline_start), a schedule or a webhook. A child run
+ *  keeps its parent's. Recorded with every plugin node the run reaches. */
+type PipelineRunOrigin = 'user' | 'agent' | 'schedule' | 'webhook'
+let pipelineRunOrigin: PipelineRunOrigin = 'user'
+
 /** Returns why the run was refused, or '' when it was not (ui.pipeline.start
  *  reports the reason). `report` also gets the refusal's code, for a caller
  *  that says it in the UI language (pipelineErrors.startRefusalText). */
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string }, report?: (refusal: StartRefusal) => void): Promise<string> {
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string; childOf?: string; origin?: PipelineRunOrigin }, report?: (refusal: StartRefusal) => void): Promise<string> {
+  if (!payload.childOf) pipelineRunOrigin = payload.origin ?? 'user'
   const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
   // pipelineLog alone left a refusal nowhere durable: it persists only once
   // pipeline.workspacePath is set, which happens below, so after a reset or a
@@ -16451,7 +16575,43 @@ async function failRunOnCall(nodeId: string, label: string, reason: string): Pro
  *  (pipelineDag.nextCall): call it, or fail the run on it. */
 async function takeCall(call: NonNullable<ReturnType<typeof pipelineDag.nextCall>>, nextIndex: number): Promise<void> {
   if (call.kind === 'fail') await failRunOnCall(call.nodeId, call.label, call.reason)
+  else if (call.kind === 'plugin') await runPluginNode(call, nextIndex)
   else await startChildRun(call, nextIndex)
+}
+
+/** Run plugin node `call.nodeId` in place (no child run): the Host calls the
+ *  contributing plugin's backend with the node's expanded input. Its output is
+ *  external content, so it is recorded as the node's output and summary only,
+ *  never as an instruction. A failure is retried or routed like a sub-pipeline
+ *  failure; a plugin without a backend here (Windows) fails at once. Then the
+ *  hand-off to stage `nextIndex` goes on: the next call, or the stage. */
+async function runPluginNode(
+  call: { nodeId: string; label: string; pluginId: string; node: string; input: string; note: string },
+  nextIndex: number,
+): Promise<void> {
+  pipelineDag.callStarted(call.nodeId)
+  pipelineLog(`◇ Plugin node "${call.label}" → ${call.pluginId} ${call.node}`)
+  const run = window.agentTeam?.plugins?.runPipelineNode
+  const answer = run
+    ? await run({ workspacePath: pipeline.workspacePath, pluginId: call.pluginId, node: call.node, input: call.input, origin: pipelineRunOrigin })
+        .catch(() => ({ ok: false as const, code: 'INTERNAL_ERROR', message: 'the plugin node failed' }))
+    : { ok: false as const, code: 'BACKEND_UNAVAILABLE', message: 'plugin nodes are unavailable in this window' }
+  if (pipeline.state !== 'running') return
+  if (answer.ok) {
+    const summary = typeof answer.output === 'string' ? answer.output : JSON.stringify(answer.output)
+    pipelineDag.callFinished(call.nodeId, { status: 'done', output: answer.output, summary: fenceExternalContent(`${call.pluginId}:\n${summary}`) })
+    pipelineLog(`◇ Plugin node "${call.label}" ✓`)
+  } else {
+    pipelineDag.callFinished(call.nodeId, { status: 'failed', error: `${answer.code}: ${answer.message}` })
+    pipelineLog(`◇ Plugin node "${call.label}" ✕ ${answer.code}: ${answer.message}`)
+  }
+  const next = pipelineDag.nextCall(nextIndex)
+  if (next) {
+    await takeCall(next, nextIndex)
+    return
+  }
+  if (nextIndex === pipeline.stageIndex + 1) await onPipelineNext()
+  else await activateStage(nextIndex)
 }
 
 /** Suspend this run at subpipeline node `call.nodeId` and start its child
@@ -17411,6 +17571,8 @@ backend.on('agent_msg.deliver', (raw) => {
     reply_to?: string
     kind?: string
     origin?: string
+    // false only for a terminal prefill (cli_send submit: false).
+    submit?: boolean
   }
   if (!ev?.msg_key || !ev.target_pane_id || !ev.content) return
   if (ev.from_pane_id) {
@@ -17462,6 +17624,7 @@ backend.on('agent_msg.deliver', (raw) => {
     external: isExternalDelivery(ev),
     // An MCP caller with no pane: a MSG reply to it would bounce (hasReplyRoute).
     noReplyRoute: !hasReplyRoute(ev),
+    ...(ev.submit === false ? { prefill: true } : {}),
   })
   if (!accepted) return
   // Say where the instruction came from — another machine, a chat channel or
@@ -17503,6 +17666,65 @@ backend.on('agent.window_action', (raw) => {
     },
   )
 })
+// An agent changed a chat channel through the channels_* MCP tools: every main
+// window says so, since the chat it touched may be watched from any of them.
+const AGENT_CHANNEL_TOASTS: Record<string, string> = {
+  channels_bind: 'msg.agent-channels-bind',
+  channels_unbind: 'msg.agent-channels-unbind',
+  channels_set_verbosity: 'msg.agent-channels-verbosity',
+  channels_bot_rename: 'msg.agent-channels-rename',
+  channels_link_code: 'msg.agent-channels-link',
+  channels_pairing_reject: 'msg.agent-channels-reject',
+  channels_managed_bot_create: 'msg.agent-channels-managed',
+}
+backend.on('channels.agent_action', (raw) => {
+  const ev = (raw ?? {}) as { tool?: string; caller?: string; target?: Record<string, unknown> }
+  const target = ev.target ?? {}
+  const text = (key: string) => String(target[key] ?? '')
+  const bot = text('account') && text('account') !== 'default' ? `${text('platform')}/${text('account')}` : text('platform')
+  const key = ev.tool === 'channels_bot_set_enabled'
+    ? (target.enabled ? 'msg.agent-channels-enabled' : 'msg.agent-channels-disabled')
+    : AGENT_CHANNEL_TOASTS[ev.tool ?? '']
+  if (!key) return
+  notifyRestore.toast(
+    i18n.global.t(key, {
+      caller: ev.caller || 'an agent', bot, chat: text('chat_id'), pane: text('pane'),
+      verbosity: text('verbosity'), name: text('name'), code: text('code'),
+    }),
+    { type: 'info', duration: 8000 },
+  )
+})
+// channels_bot_add_open: show the add-a-bot form for that platform, empty.
+backend.on('channels.agent_form.open', (raw) => {
+  const ev = (raw ?? {}) as { platform?: string; requester?: { address?: string; pane_id?: string } }
+  if (!ev.platform) return
+  requestChannelsBot({
+    platform: ev.platform, account: '',
+    add: { name: '', requestId: '', requester: ev.requester?.address || ev.requester?.pane_id || '' },
+  })
+  openSettingsAt('channels')
+})
+// A new request from a channels_* tool: a bot to add opens its form at once (the
+// agent asked for a form, like the Marketplace *_fill tools); anything the user
+// decides shows on the Channels page, and a toast says so with a way there.
+backend.on('channels.agent_request.changed', (raw) => {
+  const req = (raw ?? {}) as Partial<ChannelAgentRequest>
+  if (req.status !== 'pending' || !req.id || !req.target) return
+  const requester = req.requester?.address || req.requester?.pane_id || ''
+  if (req.kind === 'bot-add') {
+    requestChannelsBot({
+      platform: req.target.platform ?? '', account: '',
+      add: { name: req.draft?.name ?? '', requestId: req.id, requester },
+    })
+    openSettingsAt('channels')
+    return
+  }
+  notifyRestore.toast(i18n.global.t('msg.agent-channels-request', { caller: requester || 'an agent' }), {
+    type: 'info',
+    duration: 15000,
+    action: { label: i18n.global.t('msg.agent-channels-request-open'), run: () => openSettingsAt('channels') },
+  })
+})
 backend.on('agent_spawn.request', (raw) => {
   const ev = raw as {
     request_id?: string
@@ -17530,6 +17752,8 @@ backend.on('agent_spawn.request', (raw) => {
     // cli_open_agent's account pin; dropped here, the pane would open on the
     // live login while the tool reports the account it asked for.
     profile_id?: string
+    // false only for a terminal prefill (submit: false): typed without Enter.
+    submit?: boolean
   }
   // An external caller (no requesting pane) addresses this by target_workspace
   // instead — accept the event as long as one of the two identifies an owner.
@@ -17556,6 +17780,7 @@ backend.on('agent_spawn.request', (raw) => {
     cross_workspace: ev.cross_workspace === true,
     parent_address: ev.parent_address ?? '',
     profile_id: ev.profile_id ?? '',
+    ...(ev.submit === false ? { submit: false } : {}),
   })
 })
 
@@ -20155,6 +20380,29 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
         onStageSlotCompleted(stageIndex, paneId, 'turn_complete')
         return
       }
+      // 2b. Fallback: a turn ended after arming but a later activity record
+      //     overtook it, so the verdict above can never hold. See
+      //     quietTurnEndDone.
+      if (
+        !stage.allowQuestions &&
+        quietTurnEndDone({
+          turnEndTimes: paneTurnCompleteTimes.get(paneId) ?? [],
+          lastActiveAt: paneLastActiveAt.get(paneId) ?? 0,
+          armedAt: watcher.armedAt,
+          now: Date.now(),
+          running: (ref.displayStatus as string | undefined) === 'running',
+          quietMs: TURN_END_QUIET_FALLBACK_MS,
+          quotaBlocked,
+          quotaSeenAt: panes.value.find((p) => p.id === paneId)?.usageLimitSeenAt ?? 0,
+          turnSourceAt: paneTurnCompleteSourceAt.get(paneId) ?? 0,
+          backgroundRunning: paneBackgroundRunning(paneId)
+        })
+      ) {
+        cancelWatcher(paneId)
+        pipelineLog(`Stage ${stage.id} ✓ turn_complete reported by CLI (overtaken by a later activity record; pane idle ${TURN_END_QUIET_FALLBACK_MS / 1000}s since)`)
+        onStageSlotCompleted(stageIndex, paneId, 'turn_complete')
+        return
+      }
 
       // 3. Analyzer — now ONLY detects questions. Completion judgement moved to
       //    the CLI-state signals above (sentinel / turn_complete); the analyzer
@@ -21618,6 +21866,7 @@ const stageTabShapes = computed<StageTabShape[]>(() =>
     // existed all along.
     manualLabel: i18n.global.t('label.manual'),
     orphanLabel: i18n.global.t('label.orphan-group'),
+    defaultLabel: i18n.global.t('label.default'),
   })
 )
 
@@ -24711,7 +24960,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :run-pipeline-id="runPipelineId"
       :backend="backend"
       :plugin-contributions="pluginContributions"
-      :legacy-git-recovery="legacyGitRecovery"
+      :git-activation-failure="gitActivationFailure"
       :legacy-plans-recovery="legacyPlansRecovery"
       :legacy-plans-recovery-reason="legacyPlansRecoveryReason"
       :git-changes-count="gitChangesCount"
@@ -24760,7 +25009,6 @@ function paneIsCommander(p: ActivePane): boolean {
       @pipeline-restart="onPipelineRestart"
       @refresh-analyzer="onRefreshAnalyzer"
       @focus-pane="onSidebarFocusPane"
-      @changes-count="gitChangesCount = $event"
       @reorder-pane="reorderPane"
       @nest-pane="nestPane"
       @root-pane="rootPane"
@@ -24768,13 +25016,10 @@ function paneIsCommander(p: ActivePane): boolean {
       @select-panes="selectedPaneIds = new Set($event)"
       @open-settings="showSettings = true"
       @open-pipeline-manager="openPipelineManager"
-      @open-git-accounts="openSettingsAccounts"
       @open-history="onOpenWorkspaceHistory"
       @switch-workspace="onSwitchWorkspace"
       @workspace-browse="onWorkspaceBrowse"
       :issue-handoffs="issueHandoffView"
-      @dispatch-issue="onDispatchIssue"
-      @spawn-for-issue="onHandleIssue"
       @rename-pane="setPaneCustomName"
       @rename-workspace="onRenameWorkspace"
       @install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"
@@ -25762,6 +26007,17 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="$t('action.remove-children-title')"
           @click="killDescendants(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.remove-children', { count: ctxDescendantIds.length }) }}</div>
+        <template v-if="pluginPaneActions.length">
+          <div class="pane-ctx-sep"></div>
+          <div
+            v-for="item in pluginPaneActions"
+            :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+            class="pane-ctx-item"
+            :title="pluginSlotTitle(item)"
+            @click="runPluginCommand(item.commandId, { paneId: paneCtxMenu!.paneId }); closePaneCtxMenu()"
+          >{{ pluginSlotLabel(item) }} <span class="pane-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></div>
+          <div class="pane-ctx-sep"></div>
+        </template>
         <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ $t('action.remove') }}</div>
         <div
           v-if="ctxDescendantIds.length"
@@ -25948,6 +26204,16 @@ function paneIsCommander(p: ActivePane): boolean {
         </span>
       </div>
       <div class="statusbar-right">
+        <span
+          v-for="item in pluginStatusItems"
+          :key="`${item.pluginId}:${item.commandId}:${item.title}`"
+          class="sb-item sb-clickable sb-plugin"
+          role="button"
+          tabindex="0"
+          :title="pluginSlotTitle(item)"
+          @click="runPluginCommand(item.commandId)"
+          @keydown.enter="runPluginCommand(item.commandId)"
+        >{{ pluginSlotLabel(item) }}</span>
         <span v-if="pipeline.state !== 'idle'" class="sb-item sb-pipeline" :class="'sb-' + pipeline.state">
           {{ pipeline.state === 'running'
             ? $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: stagesApi.stages.value.length || '?' })
@@ -26655,6 +26921,8 @@ function paneIsCommander(p: ActivePane): boolean {
 .sb-update-check-failed .sb-dot { background: var(--text-muted); }
 .sb-announce-unread { color: var(--accent-fg); }
 .sb-clickable { cursor: pointer; }
+.sb-plugin { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-ctx-plugin { opacity: 0.6; }
 
 /* ── Backend supervisor popover ──────────────────────────────────────────── */
 .bp-backdrop {

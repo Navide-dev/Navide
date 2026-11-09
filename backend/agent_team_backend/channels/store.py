@@ -335,6 +335,12 @@ class ChannelStore:
                 for r in self._rows("SELECT * FROM channel_chats WHERE platform = ? AND bot = ?"
                                     " ORDER BY last_seen DESC", (platform, bot))]
 
+    def chats_last_seen(self, platform: str, bot: str) -> int | None:
+        """When ``bot`` last saw any chat (None if it never did)."""
+        rows = self._rows("SELECT MAX(last_seen) AS t FROM channel_chats WHERE platform = ? AND bot = ?",
+                          (platform, bot))
+        return int(rows[0]["t"]) if rows and rows[0]["t"] is not None else None
+
     # --- pairing --------------------------------------------------------------
 
     @staticmethod

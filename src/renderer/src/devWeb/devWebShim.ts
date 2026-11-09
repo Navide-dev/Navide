@@ -26,7 +26,6 @@ const PREFIX = '/__navide_dev_web/'
 const EMPTY_RESULTS: Record<string, unknown> = {
   readHealthCheckTimeout: { ok: false },
   readKeybindings: { ok: false },
-  getZoomFactor: 1,
   getHomeDir: '',
   listOpenWorkspaces: [],
   getDetachedGroups: [],

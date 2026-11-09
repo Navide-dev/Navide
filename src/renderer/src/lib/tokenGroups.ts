@@ -8,6 +8,7 @@
  */
 
 import type { TokenBucket } from '../composables/useTokens'
+import { groupLabel } from './stageTabs'
 
 export interface TokenGroupLike {
   id: string
@@ -29,11 +30,11 @@ function isZero(b: TokenBucket): boolean {
 export function buildTokenGroupRows(
   groups: readonly TokenGroupLike[],
   byGroup: Record<string, TokenBucket>,
-  labels: { manual: string; orphan: string },
+  labels: { manual: string; orphan: string; default: string },
 ): TokenGroupRow[] {
   const rows: TokenGroupRow[] = groups.map((g) => ({
     key: g.id,
-    label: g.name,
+    label: groupLabel(g, labels.default),
     bucket: byGroup[g.id] ?? EMPTY,
   }))
 

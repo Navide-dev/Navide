@@ -119,7 +119,7 @@ Counts as of 2026-10-27 (v0.2.38). The badges at the top track the live numbers.
 
 ## Available today
 
-- **Multi-agent workspaces:** run any of 16 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Goose, Grok CLI, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, Pi, Qwen Code — or a plain terminal, each in its own pane.
+- **Multi-agent workspaces:** run any of 19 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Devin CLI, Droid, Goose, Grok CLI, Hermes Agent, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, OpenClaw, Pi, Qwen Code — or a plain terminal, each in its own pane.
 - **CLI management:** detect installed coding CLIs, their versions and install methods, and run each CLI's own official update and diagnostic commands.
 - **Session lifecycle:** detect, persist, rebuild, and resume supported CLI sessions.
 - **Configurable pipelines:** define stages, parallel slots, agents, roles, kickoff prompts, questions, documentation queries, and completion sentinels.
@@ -188,11 +188,17 @@ pnpm dev
 
 The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant macOS permissions. Continue with [Getting Started](docs/en-US/getting-started.md) and the [User Guide](docs/en-US/user-guide.md).
 
+## Build for Navide
+
+Make your own Navide plugin and list it on the [Navide Marketplace](https://marketplace.navide.dev/). `npx navide-plugin init --template vue` gives you a buildable plugin in five minutes (Navide 0.2.39 or later), Developer Mode loads it without publishing, and one real-name application at [developers.navide.dev](https://developers.navide.dev/developer) lets you publish after review.
+Start with [Build for Navide](docs/en-US/build-for-navide.md), the one page for the whole flow; ask in [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions).
+
 ## Documentation and deeper reading
 
 - **Use Navide:** [Getting started](docs/en-US/getting-started.md), [User guide](docs/en-US/user-guide.md), and [Troubleshooting](docs/en-US/troubleshooting.md)
 - **Understand the product:** [Manifesto](docs/en-US/manifesto.md), [Vision](docs/en-US/vision.md), [Positioning](docs/en-US/product-positioning.md), and [Roadmap](docs/en-US/roadmap.md)
 - **Review the boundaries:** [Privacy and data flows](docs/en-US/privacy.md) and [Security policy](SECURITY.md)
+- **Build for Navide:** [one page](docs/en-US/build-for-navide.md) from `npx navide-plugin init` to a reviewed Marketplace listing, and the [plugins we would like to see](docs/en-US/plugin-ideas.md)
 - **Explore everything:** [English documentation index](docs/en-US/README.md) or [language gateway](docs/README.md)
 
 ## License

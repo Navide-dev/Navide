@@ -1,7 +1,23 @@
 import { isReplayedTurnComplete, parseEventMs, turnTextFingerprint } from './completion'
 import type { EchoEvidence, SubmitEvidence } from './injectEcho'
 
+/** Attempts a kickoff always gets, however long they take. */
 export const MAX_KICKOFF_ATTEMPTS = 3
+/** Past MAX_KICKOFF_ATTEMPTS, a kickoff keeps being retried while this much
+ *  time has not passed since its first attempt began. Three attempts fit in
+ *  about 25 s, and a Windows host with every core busy took longer than that
+ *  to echo a paste (0.2.39 VM, `load 12`: three fresh panes, none reached). */
+export const KICKOFF_RETRY_BUDGET_MS = 90_000
+/** Upper bound on one wait for the pane to read ready before an attempt —
+ *  cli_open_agent's prompt-ready deadline (KICKOFF_PROMPT_READY_TIMEOUT_MS). */
+export const KICKOFF_READY_WAIT_MS = 30_000
+/** How long one pipeline kickoff attempt watches for its echo before it gives
+ *  up, clears the box and lets a retry type it again. A CLI starved of CPU
+ *  reads its input late, not never: on the 0.2.39 Windows VM (`load 12`) it
+ *  read the first paste 40-100 s after it was typed, together with the
+ *  516 Ctrl-U three early give-ups had queued behind it, took the lot as one
+ *  paste, and held several copies of the kickoff for review. */
+export const KICKOFF_ECHO_WAIT_MS = 120_000
 export const MAX_PERSIST_PANE_ATTEMPTS = 8
 
 /** Retry only an injection that left the composer empty. A failed submit with
@@ -38,6 +54,15 @@ export async function runPipelineKickoff(input: {
    *  started a turn of its own. False holds it, as a kickoff left in the box
    *  is held, and is never typed again. */
   confirmQueued?: () => Promise<boolean>
+  /** Resolves once the pane reads ready to be typed into — the prompt-ready
+   *  gate cli_open_agent waits on — or `timeoutMs` ran out; it is typed into
+   *  either way. Awaited before every attempt, and before a retry looks for
+   *  a copy in the box, so a CLI starved of CPU is not typed into while it
+   *  cannot read, and an echo it was late to paint has shown by then. */
+  awaitReady?: (timeoutMs: number) => Promise<unknown>
+  /** Clock for KICKOFF_RETRY_BUDGET_MS. Without it the attempts stop at
+   *  MAX_KICKOFF_ATTEMPTS, as they always did. */
+  now?: () => number
 }): Promise<{ sent: boolean; cancelled: boolean; parked?: boolean; stopped?: boolean }> {
   if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
   if (input.heldCopy?.holds()) {
@@ -48,7 +73,20 @@ export async function runPipelineKickoff(input: {
     input.onHeld?.()
     return { sent: false, cancelled: false }
   }
-  for (let attempt = 1; attempt <= MAX_KICKOFF_ATTEMPTS; attempt++) {
+  const now = input.now
+  const startedAt = now?.() ?? 0
+  const budgetLeft = (): number => (now ? Math.max(0, startedAt + KICKOFF_RETRY_BUDGET_MS - now()) : 0)
+  const awaitReady = async (): Promise<void> => {
+    if (input.awaitReady) await input.awaitReady(now ? Math.min(KICKOFF_READY_WAIT_MS, budgetLeft()) : KICKOFF_READY_WAIT_MS)
+  }
+  if (input.awaitReady) {
+    await awaitReady()
+    if (!input.paneAlive()) return { sent: false, cancelled: true }
+    if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
+  }
+  let attempt = 0
+  for (;;) {
+    attempt++
     if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
     const result = await input.inject()
     if (result.injected && result.submit === 'queued' && input.confirmQueued) {
@@ -62,18 +100,22 @@ export async function runPipelineKickoff(input: {
       input.onHeld?.()
       break
     }
-    if (attempt < MAX_KICKOFF_ATTEMPTS) {
-      input.onRetry?.(attempt)
-      await input.sleep(3000)
+    if (attempt >= MAX_KICKOFF_ATTEMPTS && budgetLeft() <= 0) break
+    input.onRetry?.(attempt)
+    await input.sleep(3000)
+    if (!input.paneAlive()) return { sent: false, cancelled: true }
+    if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
+    if (input.awaitReady) {
+      await awaitReady()
       if (!input.paneAlive()) return { sent: false, cancelled: true }
       if (input.parkedOnPrompt?.()) return { sent: false, cancelled: false, parked: true }
-      if (input.copyInBox?.holds()) {
-        if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
-        if (await input.copyInBox.submit()) return { sent: true, cancelled: false }
-        if (input.copyInBox.cleared?.()) return { sent: false, cancelled: false, stopped: true }
-        input.onHeld?.()
-        return { sent: false, cancelled: false }
-      }
+    }
+    if (input.copyInBox?.holds()) {
+      if (input.stillWanted && !input.stillWanted()) return { sent: false, cancelled: false, stopped: true }
+      if (await input.copyInBox.submit()) return { sent: true, cancelled: false }
+      if (input.copyInBox.cleared?.()) return { sent: false, cancelled: false, stopped: true }
+      input.onHeld?.()
+      return { sent: false, cancelled: false }
     }
   }
   return { sent: false, cancelled: false }

@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Abrir a seção Modo de desenvolvedor das configurações",
+      "ui_plugins_openInstallFromFile": "Abrir a seção Instalar de arquivo das configurações",
+      "ui_plugins_openMarketplace": "Abrir o Navide Marketplace ou a página de um plugin do Navide",
+      "ui_settings_open": "Abrir as configurações, opcionalmente em uma guia específica",
+      "ui_window_openGit": "Abrir a janela do Git do workspace atual",
+      "ui_window_openPipeline": "Abrir a janela do Pipeline Manager",
+      "ui_window_openPlans": "Abrir a janela de Plans, opcionalmente em um documento",
+      "ui_window_openResourceManager": "Abrir o Resource Manager",
+      "ui_window_openTurnStats": "Abrir Turn Stats"
+    },
     "add-step": "Adicionar etapa",
     "confirm-title": "Executar este botão?",
     "confirm-message": "Será executado: {actions}. Isso fecha ou redefine algo e não pode ser desfeito.",
@@ -544,6 +555,17 @@
     "agent-closed-workspace-kept": "“{caller}” fechou {name}; as CLIs dele continuam em execução",
     "agent-closed-workspace-ended": "“{caller}” fechou {name} e encerrou as CLIs dele",
     "agent-closed-window": "“{caller}” fechou a janela com {names}; CLIs que continuam em execução: {count}",
+    "agent-channels-bind": "“{caller}” vinculou o chat {chat} de {bot} ao pane “{pane}”",
+    "agent-channels-unbind": "“{caller}” desvinculou o pane “{pane}” do chat",
+    "agent-channels-verbosity": "“{caller}” definiu o que o chat do pane “{pane}” recebe como {verbosity}",
+    "agent-channels-rename": "“{caller}” renomeou o bot {bot} para “{name}”",
+    "agent-channels-enabled": "“{caller}” conectou o bot {bot}",
+    "agent-channels-disabled": "“{caller}” desconectou o bot {bot}",
+    "agent-channels-link": "“{caller}” criou um código de vínculo para o bot {bot}",
+    "agent-channels-reject": "“{caller}” recusou o pedido de pareamento {code} de {bot}",
+    "agent-channels-managed": "“{caller}” pediu ao bot do Telegram {bot} para criar um novo bot",
+    "agent-channels-request": "“{caller}” pede que você decida uma solicitação de canal de chat",
+    "agent-channels-request-open": "Abrir",
     "undo": "Desfazer",
     "cross-workspace-toast": "Instrução de outro workspace: “{from}” → “{target}”",
     "cross-workspace-badge": "entre workspaces",
@@ -617,6 +639,11 @@
       "open-accounts": "Abrir contas Git"
     },
     "left-view-unavailable": "A visualização Git incorporada está temporariamente indisponível.",
+    "recovery-title": "Não foi possível iniciar o Git integrado",
+    "recovery-reason": "Motivo: {reason}",
+    "recovery-reinstall": "Reinstalar o Git integrado",
+    "recovery-reinstalling": "Reinstalando…",
+    "recovery-reinstall-failed": "Falha ao reinstalar: {reason}",
     "detail-open-failed": "Não foi possível abrir a visualização de detalhes. O pane Git mantém o destino atual.",
     "open-workspace": "Abra um workspace para usar o Git.",
     "settings-unavailable": "Não foi possível carregar as preferências do Git.",
@@ -1615,6 +1642,22 @@
       "cannot-rebuild": "Nenhuma conversa salva para retomar",
       "rebuild": "Reconstruir"
     },
+    "archive": {
+      "hint": "Comprime os logs de sessão do Claude Code em que ninguém escreve há algum tempo e, se você quiser, envia-os para o seu próprio bucket S3. Tudo aqui fica desligado até você ligar.",
+      "compress": "Comprimir logs de sessão ociosos",
+      "compress-hint": "Uma vez por dia, cada log de sessão do Claude Code ocioso pelo número de dias definido ganha uma cópia .zst ao lado, e o Navide confere que ela descomprime nos mesmos bytes. Sessões que um painel aberto está usando não são tocadas.",
+      "idle-days": "Dias sem gravação antes de comprimir",
+      "remove-originals": "Excluir o original depois que o .zst for verificado",
+      "remove-originals-hint": "Libera espaço em disco. Um log excluído não pode mais ser retomado no Claude Code nem lido pelo painel Token, mas o .zst guarda cada byte. Desligado mantém os dois arquivos.",
+      "upload": "Enviar arquivos para o seu próprio bucket S3",
+      "upload-hint": "Envia cada .zst para o seu próprio bucket, sob o prefixo abaixo, com criptografia do S3. As credenciais vêm da cadeia padrão da AWS (variáveis de ambiente, um perfil em ~/.aws ou SSO). O Navide nunca armazena uma chave da AWS.",
+      "upload-after-days": "Dias antes de enviar um arquivo",
+      "bucket": "Bucket S3",
+      "prefix": "Prefixo da chave",
+      "region": "Região",
+      "region-placeholder": "do seu perfil da AWS",
+      "save-failed": "Não foi possível salvar as configurações de arquivo"
+    },
     "limits": {
       "hint": "Limites opcionais que impedem o Navide e os agents que ele executa de sobrecarregar esta máquina. Cada um fica desativado, ou com o comportamento anterior do Navide, até que você o altere.",
       "test-workers": "Limitar os workers de teste nos novos panes",
@@ -1934,7 +1977,8 @@
         "aiCli": "Sessões de AI CLI",
         "web": "Navegação na web",
         "agents": "Panes de agentes",
-        "agentMessages": "Mensagens entre agentes"
+        "agentMessages": "Mensagens entre agentes",
+        "secrets": "Segredos do plug-in do Navide"
       },
       "shellLabel": "Executáveis de shell",
       "shellHint": "Permita apenas nomes de executáveis de nível superior. Caminhos e expressões de shell não são aceitos.",
@@ -1995,6 +2039,11 @@
       "cancel": "Cancelar"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Configurações",
+        "reset": "Restaurar o padrão",
+        "saveFailed": "Não foi possível salvar {title}. Tente de novo; se continuar falhando, reinstale este plugin do Navide."
+      },
       "devUnpacked": "Pasta local não assinada: somente no modo de desenvolvedor",
       "agentTools": {
         "heading": "Ferramentas que os agents podem chamar ({count})",
@@ -2019,7 +2068,7 @@
           "firstParty": "Permitir que os agents chamem ferramentas de plug-ins do Navide oficiais",
           "firstPartyDescription": "Ativado por padrão. Permite que os agentes dos seus panes chamem as ferramentas dos plug-ins do Navide oficiais, os que o Navide faz como o Navide Browser, sem perguntar a cada versão. Os resultados continuam marcados como conteúdo externo, e uma ferramenta que altera algo continua perguntando uma vez por espaço de trabalho.",
           "enable": "Permitir que os agents chamem ferramentas de plug-ins do Navide de terceiros",
-          "description": "Permite que os agentes dos seus panes chamem ferramentas declaradas por plug-ins do Navide que você permitiu; uma ferramenta que altera arquivos pergunta uma vez por espaço de trabalho.",
+          "description": "Permite que os agentes dos seus panes chamem ferramentas declaradas por plug-ins do Navide que você permitiu; uma ferramenta que altera arquivos pergunta uma vez por espaço de trabalho. Enquanto você nunca o tiver ajustado aqui, ele é ativado sozinho quando você permite um plug-in do Navide cujo cartão de consentimento lista ferramentas; uma escolha feita aqui é mantida. Desative-o aqui para parar de uma vez todas as ferramentas de terceiros.",
           "externalCallers": "Permitir que clientes MCP externos também as chamem",
           "externalCallersDisclosure": "Programas externos compartilham um único token, então o registro de uma chamada só pode dizer “um cliente externo”, não qual programa foi. A credencial do host é tratada da mesma forma."
         },
@@ -2088,6 +2137,8 @@
       "builtinSwitchBusy": "Aplicando… O Navide primeiro deixa o trabalho atual terminar, o que pode levar cerca de meio minuto no Plans.",
       "disabledBadge": "Desativado",
       "disabledNote": "Desativado: as visualizações e o back-end dele não são executados. Os arquivos, permissões e dados armazenados são mantidos.",
+      "networkStrict": "Permitir apenas hosts de rede declarados",
+      "networkStrictNote": "Desligado (padrão): uma visualização pode alcançar qualquer host; cada solicitação é registrada, e uma a um host que o manifesto não declara é marcada como tal em Atividade. Ligado: apenas os hosts declarados, tanto na política do frame quanto no gancho de solicitações; todo o resto é recusado e registrado.",
       "digestBlock": {
         "blocked": "Bloqueado pelo Navide",
         "security": "Removido pelo Navide (segurança)",
@@ -2114,7 +2165,6 @@
           "previousChanged": "O pacote da versão anterior mudou no disco, então a reversão para ela não foi feita.",
           "grantUnavailable": "As permissões concedidas a {id} não foram encontradas, então ele não foi revertido.",
           "factoryUnavailable": "A reversão para a versão integrada não está disponível.",
-          "gitLegacyRecovery": "Não é possível restaurar o Git integrado enquanto NAVIDE_GIT_RECOVERY=legacy estiver forçando a recuperação legada.",
           "factoryRestoreFailed": "Não foi possível carregar a versão integrada."
         }
       },
@@ -2174,6 +2224,10 @@
         "uninstallConfirmBody": "{name} será removido deste dispositivo. Você pode instalá-lo de novo pelo Navide Marketplace.",
         "uninstallConfirmBodyWithData": "{name} será removido deste dispositivo. O back-end nativo dele também armazenou {size} de dados privados neste dispositivo, no local abaixo. O Navide exclui esses dados também, a menos que você escolha mantê-los.",
         "uninstallKeepNativeData": "Manter estes dados para que uma reinstalação possa usá-los de novo",
+        "uninstallSecretsTitle": "Excluir também os segredos salvos por este plug-in do Navide?",
+        "uninstallSecretsBody": "{name} guarda chaves de API ou tokens criptografados neste dispositivo ({count} no total). Mantenha-os para que uma reinstalação possa usá-los de novo, ou exclua-os agora.",
+        "uninstallSecretsDelete": "Excluir segredos",
+        "uninstallSecretsKeep": "Manter segredos",
         "uninstallClearsWebData": "Remover {name} também exclui os logins em sites, os cookies e o cache dele neste computador.",
         "updatesCount": "Atualizações disponíveis: {count}",
         "retry": "Tentar novamente",
@@ -2233,7 +2287,9 @@
           "downloads": "Downloads",
           "status": "Status"
         },
-        "prereleaseAvailable": "pré-lançamento {version} disponível"
+        "prereleaseAvailable": "pré-lançamento {version} disponível",
+        "buildOwnHint": "Quer criar o seu?",
+        "buildOwn": "Criar um plug-in do Navide"
       },
       "developerMode": {
         "errors": {
@@ -2249,6 +2305,9 @@
         "title": "Modo de desenvolvedor",
         "switch": "Ativar o modo de desenvolvedor",
         "hint": "Permite carregar um plug-in do Navide de uma pasta para desenvolvê-lo e testá-lo e instalar plug-ins do Navide do seu próprio servidor em vez do Navide Marketplace; desligar descarrega esses plug-ins do Navide.",
+        "firstTime": "Seu primeiro plug-in do Navide? O Build for Navide leva você do modelo ao Navide Marketplace.",
+        "openGuide": "Abrir o guia",
+        "agentSkill": "Ou deixe um agente guiar você: peça para ele instalar esta skill:",
         "banner": "O modo de desenvolvedor está ativado. Os plug-ins do Navide carregados de pastas não foram revisados.",
         "reminder": "O modo de desenvolvedor está ativado: os plug-ins do Navide carregados de pastas não foram revisados. Desative-o em Configurações → Plug-ins do Navide quando não precisar mais dele.",
         "reminderClose": "Entendi",
@@ -2372,9 +2431,10 @@
         "capability": {
           "fs": "Ler e gravar arquivos no seu workspace.",
           "aiCli": "Iniciar os agents de CLI de AI configurados no Navide, enviar entradas a eles e ler tudo o que exibem; também pode manter uma CLI de AI em execução em segundo plano depois que a janela for fechada.",
-          "web": "Pode abrir e navegar por qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (eles podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent que já estão em execução em uma página só param quando você a recarrega; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
+          "web": "Pode abrir e navegar por qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (eles podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent que já estão em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
           "agents": "Vê seus panes de agent, qual pane abriu qual e quando trocaram mensagens, mas não o que disseram.",
           "agentMessages": "Lê o texto completo das mensagens entre seus agents; ele pode conter código, conteúdo de arquivos ou segredos.",
+          "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra.",
           "shell": "Executar comandos no seu computador.",
           "terminal": "Abrir e controlar terminais do Navide."
         }
@@ -7654,6 +7714,7 @@
     "section": {
       "general-behavior": "Comportamento geral",
       "resource-limits": "Limites de recursos",
+      "session-archive": "Arquivo de logs de sessão",
       "settings-management": "Gerenciamento de configurações",
       "theme": "Tema",
       "other": "Outros"
@@ -8697,6 +8758,9 @@
     "run-group-active": "Em execução: um agent deste grupo está ativo",
     "run-group-awaiting": "Precisa de você: um agent deste grupo está bloqueado por uma permissão ou pergunta",
     "agent-not-installed": "{label}: não instalado",
+    "cloud-agents-plugin-hint": "Agentes na nuvem (Grok Bot, dots e outros) são instalados como plug-in do Navide pelo Navide Marketplace.",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "Agents",
     "select-role": "Selecionar papel…",
     "waiting-backend": "Aguardando o back-end…",
     "set-workspace-first": "Defina primeiro o caminho do workspace",
@@ -9114,6 +9178,8 @@
     "stall-auto-advance": "Totalmente automático: avanço forçado em 5 s…",
     "pipeline-starting": "Iniciando o pipeline…",
     "pipeline-log-session-bound": "session vinculada",
+    "pipeline-log-restoring-panes": "Restaurando panes ({n})",
+    "terminal": "Terminal",
     "pipeline-log-answer-manually": "responda manualmente",
     "pipeline-log-manager-ready": "assumindo (processando {count} mensagem) | assumindo (processando {count} mensagens)",
     "pipeline-log-slot-not-found": "nenhuma posição “{slot}”",
@@ -9952,7 +10018,8 @@
       "update": "Atualizar o plug-in do Navide {plugin} de {from} para {version}?",
       "rollback": "Reverter o plug-in do Navide {plugin} de {from} para {version}?",
       "remove": "Remover o plug-in do Navide {plugin}?",
-      "enable": "Ativar novamente o plug-in do Navide {plugin}?"
+      "enable": "Ativar novamente o plug-in do Navide {plugin}?",
+      "clear-secrets": "Excluir os segredos que o plug-in do Navide {plugin} salvou?"
     },
     "desc": "Um agent pediu esta alteração. Nada muda até que você a aprove aqui; o agent não pode aprovar por você.",
     "queue": "{count} pendentes",
@@ -9979,6 +10046,7 @@
     "finished-late": "Outra janela tinha marcado este pedido como interrompido enquanto esta se reconectava; o registro agora mostra este resultado.",
     "failed": "Não concluído: {error}",
     "not-appliable": "Esta versão do Navide ainda não consegue executar este tipo de pedido; você pode rejeitá-lo.",
+    "clear-secrets-note": "Isso exclui as chaves de API e os tokens que o plug-in do Navide {plugin} guarda criptografados neste dispositivo. Não dá para desfazer, e {plugin} vai pedi-los de novo.",
     "unavailable": "As ações de plug-ins do Navide não estão disponíveis nesta janela."
   },
   "skill-approval": {
@@ -10181,6 +10249,7 @@
     "settings-title": "Selo de cota da CLI",
     "settings-enabled": "Mostrar a cota restante no cabeçalho dos panes de CLI",
     "settings-refresh": "Intervalo de atualização",
+    "settings-refresh-minutes": "{n} min",
     "settings-hint": "Mostra a cota de 11 provedores de CLI, somente leitura, pela API de uso de cada provedor (no Claude, pelo painel /usage integrado).",
     "failover-title": "Troca de conta quando a cota acaba",
     "failover-hint": "O que o Navide faz quando uma conta de CLI esgota a cota: nada, listar contas para trocar (padrão) ou trocar automaticamente, no máximo 3 vezes a cada 5 horas por CLI.",
@@ -10919,6 +10988,19 @@
     "token-linked": "Vinculado com um token"
   },
   "channels": {
+    "agent": {
+      "title": "Solicitações de agents",
+      "from": "Solicitado por {requester}",
+      "kind-bot-add": "Adicionar um bot do {platform}",
+      "kind-bot-remove": "Remover o bot {bot}",
+      "kind-bind": "Vincular o chat {chat} de {bot} ao pane “{pane}”",
+      "kind-pairing": "Permitir que {sender} converse com {bot}",
+      "kind-pairing-bind": "Permitir que {sender} converse com {bot} e vincular o chat ao pane “{pane}”",
+      "approve": "Aprovar",
+      "decline": "Recusar",
+      "fill": "Abrir o formulário",
+      "add-note": "{requester} pediu este bot; o nome foi escrito por um agent. Cole você mesmo a credencial aqui — ela nunca chega ao agent."
+    },
     "shareOpenNotify": {
       "title": "Avisos de abertura de link compartilhado",
       "desc": "Quando um novo dispositivo abre um link de compartilhamento criado neste computador, avisar os chats vinculados (a URL do link nunca é enviada). Requer o Navide Cloud."
@@ -10971,6 +11053,19 @@
     },
     "enable-platform": "Ativar {platform}",
     "bot": {
+      "sort-recent": "Recentes",
+      "sort-name": "Nome",
+      "group-workspace": "Por workspace",
+      "search-placeholder": "Pesquisar nome, {'@'}usuário, id, pane ou workspace",
+      "search-empty": "Nenhum bot corresponde",
+      "search-clear": "Limpar",
+      "bound-none": "Nenhum pane vinculado",
+      "bound-many": "{n} panes ({workspaces})",
+      "flag-running": "Ativo",
+      "flag-unbound": "Não vinculado",
+      "flag-pane-closed": "Pane fechado",
+      "flag-token": "Token inválido",
+      "flag-failed": "Falha na conexão",
       "default": "Bot principal",
       "add": "Adicionar bot",
       "new": "Novo bot",
@@ -12117,13 +12212,15 @@
     "source": {
       "broker": "Capacidade do Navide",
       "shell": "comando de shell",
-      "agentTool": "ferramenta de agent"
+      "agentTool": "ferramenta de agent",
+      "network": "rede das visualizações"
     },
     "kind": {
       "system": "Permissão",
       "shell": "Shell",
       "backendMethod": "Método de back-end nativo",
-      "agentTool": "Ferramenta de agent"
+      "agentTool": "Ferramenta de agent",
+      "networkHost": "Host de rede"
     },
     "reason": {
       "undeclared": "não declarado"
@@ -12178,6 +12275,16 @@
       "crossWorkspace": "Entre workspaces: {from} → {to}",
       "totalSize": "Argumentos {args} e resultados {result} no total; {unknown} tamanhos são desconhecidos e não foram contados"
     },
+    "pipelineNodes": {
+      "heading": "Execuções de pipeline que chegaram aos seus nós",
+      "row": "{date} execução iniciada por {origin} → nó {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "você",
+        "agent": "um agente",
+        "schedule": "um agendamento",
+        "webhook": "um webhook"
+      }
+    },
     "caller": {
       "pane": "pane “{name}”",
       "external": "um cliente externo",
@@ -12199,6 +12306,10 @@
     "commands": {
       "heading": "Comandos executados",
       "item": "{command} · {count} vezes · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Hosts alcançados pelas visualizações",
+      "item": "{host} · {count} vezes · {outcome} · {date}"
     },
     "trend": {
       "heading": "Chamadas por dia"
@@ -12287,7 +12398,13 @@
         "backendMethod": "Método de código nativo: {key}",
         "backendEvent": "Evento de código nativo: {key}",
         "network": "Pode acessar hosts remotos por meio de comandos",
-        "agentTool": "Ferramenta de agent: {key}"
+        "networkHost": "As visualizações podem se conectar a: {key}",
+        "agentTool": "Ferramenta de agent: {key}",
+        "agentEvent": "Recebe o evento do Host: {key}",
+        "pluginCall": "Chama o plugin do Navide: {key}",
+        "apiMethod": "Outros plugins do Navide podem chamar: {key}",
+        "pipelineNode": "Etapa de pipeline (também em pipelines iniciados por um agente ou agendamento): {key}",
+        "commandSlot": "Comando em uma superfície do Host: {key}"
       }
     },
     "title": "Divulgação",
@@ -12306,7 +12423,8 @@
     "undeclared": {
       "shell": "Executa {key}, mas não declara permissão de shell",
       "shellDynamic": "Monta comandos durante a execução, mas não declara permissão de shell",
-      "shellExecutable": "Executa {key}, mas o escopo de shell declarado é apenas git, gh e glab",
+      "shellExecutable": "Executa {key}, que não está no escopo de shell declarado",
+      "networkHost": "Conecta-se a {key} sem declará-lo",
       "system": "Usa {key}, mas não declara essa permissão",
       "fsScopeWrite": "Grava {key}, fora do escopo de gravação declarado",
       "fsScopeRead": "Lê {key}, fora do escopo de leitura declarado"
@@ -12314,7 +12432,8 @@
     "notSeenHeading": "Declarado, mas não encontrado pela verificação estática",
     "notSeen": {
       "shell": "shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (host declarado)"
     },
     "scanHeading": "O que a verificação na publicação encontrou",
     "scanHeadingLocal": "O que a verificação do Navide neste arquivo encontrou",
@@ -12332,8 +12451,8 @@
     "scannedLocally": "A verificação informa este cartão; ela nunca decide a instalação.",
     "limitsWithoutScan": "Esta versão não tem verificação do sistema; o que está acima é apenas a declaração do próprio plug-in do Navide.",
     "limitsWithoutScanLocal": "O Navide não verificou este arquivo; o que está acima é apenas a declaração do próprio plug-in do Navide.",
-    "viewNetwork": "As visualizações de um plug-in do Navide podem acessar a rede e exibir sites externos dentro do Navide; o Navide não filtra nem registra esse tráfego. As entradas de rede acima cobrem apenas os comandos e o back-end nativo dele.",
-    "viewNetworkIfViews": "Se este plug-in do Navide tiver visualizações, elas podem acessar a rede e exibir sites externos dentro do Navide; o Navide não filtra nem registra esse tráfego. As entradas de rede acima cobrem apenas os comandos e o back-end nativo dele.",
+    "viewNetwork": "As visualizações deste plug-in do Navide só podem se conectar aos hosts que ele declara (listados acima; a nenhum se não listar nenhum) e não exibem sites externos. O Navide registra em Atividade os hosts alcançados e os recusados. As entradas de rede acima cobrem seus comandos e seu backend nativo.",
+    "viewNetworkIfViews": "Se este plug-in do Navide tiver visualizações, elas só podem se conectar aos hosts que ele declara (listados acima; a nenhum se não listar nenhum) e não exibem sites externos. O Navide registra em Atividade os hosts alcançados e os recusados. As entradas de rede acima cobrem seus comandos e seu backend nativo.",
     "summary": {
       "nativeBackend": "Inclui código nativo (executado em sandbox)",
       "files": {
@@ -12345,13 +12464,18 @@
         "full": "Executa qualquer comando"
       },
       "networkViaShell": "Pode acessar hosts remotos por meio desses comandos",
+      "agentEvents": "Recebe eventos do Host sobre seus panes, planos, pipelines e agendamentos (apenas nomes e estados): {events}",
+      "pluginCalls": "Chama estes plugins do Navide: {plugins}",
+      "api": "Permite que outros plugins do Navide chamem {count} de seus métodos",
+      "pipelineNodes": "Adiciona {count} etapa(s) de pipeline; pipelines iniciados por um agente, um agendamento ou um webhook também as executam",
       "aiCli": "Inicia sessions de CLIs de AI e lê a saída delas",
-      "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
+      "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
       "agents": "Vê os panes de agent deste projeto, qual pane abriu qual, os registros de entrega das mensagens (sem o conteúdo) e a lista de sessions (sem o conteúdo das conversas)",
       "agentMessages": "Lê o texto completo das mensagens entre seus agents neste projeto, que pode conter código, conteúdo de arquivos ou segredos",
+      "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra",
       "ui": "Mostra visualizações próprias",
       "agentTools": "Oferece ferramentas que os agents podem chamar ({read} somente leitura, {write} de escrita)",
-      "network": "Pode usar a rede",
+      "network": "Suas visualizações podem se conectar a: {hosts}",
       "noPermissions": "Não declara permissões"
     },
     "scan": {
@@ -12468,6 +12592,12 @@
       "apply": "Aplicar agora"
     }
   },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "O plug-in do Navide {plugin} agora vem de outra origem ou outro editor, então os segredos que a cópia anterior salvou estão isolados e ele não consegue lê-los. Para excluí-los, remova {plugin} e escolha Excluir segredos.",
+      "cleared": "Os segredos do plug-in do Navide {plugin} foram excluídos ({count})."
+    }
+  },
   "plugin-switch": {
     "notice": {
       "title": "{plugin} mudou de {from} para {to}",
@@ -12548,6 +12678,20 @@
       "browse": "Explorar",
       "developer": "Desenvolvedor"
     },
+    "entry": {
+      "title": "Build for Navide: crie seu próprio plug-in do Navide",
+      "step-init": "Crie um plug-in do Navide a partir do modelo (Navide 0.2.39 ou posterior):",
+      "step-load": "Carregue-o em Configurações → Plug-ins do Navide → Modo de desenvolvedor → Carregar de uma pasta…",
+      "step-apply": "Entre abaixo e preencha uma vez a candidatura de desenvolvedor com seu nome real; uma pessoa a revisa.",
+      "next": {
+        "apply": "Próximo passo: preencha a candidatura de desenvolvedor abaixo.",
+        "pending": "Próximo passo: aguarde a revisão. Enquanto isso, crie seu plug-in do Navide e carregue-o com o modo de desenvolvedor.",
+        "key": "Próximo passo: entre como publicador para que este Navide registre sua chave de assinatura.",
+        "publish": "Próximo passo: publique uma versão; ela aparece no Navide Marketplace após a revisão."
+      },
+      "guide": "Abrir Build for Navide",
+      "console": "Abrir developers.navide.dev"
+    },
     "account": {
       "title": "Conta de desenvolvedor",
       "desc": "Entre com sua conta do Navide Cloud para se candidatar, publicar plug-ins do Navide e acompanhar a revisão deles. O Navide guarda o login e a chave de assinatura no armazenamento seguro deste computador; os agents nunca os veem.",
@@ -12557,6 +12701,8 @@
       "no-key": "Criada no seu primeiro login como publicador",
       "key-registered": "Registrada",
       "key-unregistered": "Ainda não registrada",
+      "key-conflict": "O Registry já tem outra chave de assinatura para este publicador (impressão digital {fingerprint}), normalmente a registrada para a ferramenta de publicação de linha de comando. Publicar deste Navide exige substituí-la; a ferramenta de linha de comando continua publicando até então.",
+      "replace-key": "Usar a chave deste Navide no lugar",
       "expires": "O login expira em",
       "sign-in": "Entrar com o Navide Cloud",
       "sign-in-publish": "Entrar como publicador",
@@ -12961,5 +13107,25 @@
       "select": "Lista",
       "checkbox": "Caixa de seleção"
     }
+  },
+  "token-views": {
+    "by-model": "Por modelo",
+    "by-account-quota": "Cota por conta",
+    "range": "Período",
+    "range-day": "Dia",
+    "range-week": "Semana",
+    "cache": "Memória cache",
+    "cache-read": "Cache lido",
+    "cache-write": "Cache gravado",
+    "usd": "Dólares",
+    "other-models": "Outros",
+    "no-ledger-data": "Nenhuma chamada registrada neste período ainda",
+    "no-quota-history": "Nenhuma leitura de cota ainda",
+    "window-session": "Sessão",
+    "window-weekly": "Semanal",
+    "resets": "Redefine {time}",
+    "trend-7d": "Pico diário, últimos 7 dias",
+    "week-tokens": "Tokens nesta semana",
+    "day-tokens": "Tokens hoje"
   }
 }

@@ -150,6 +150,21 @@
         }
       }
     },
+    "devin": {
+      "capabilities": [
+        "launch",
+        "unsupported_session"
+      ],
+      "fixture": "devin.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[devin]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[devin]"
+        }
+      }
+    },
     "droid": {
       "capabilities": [
         "launch",
@@ -208,6 +223,21 @@
         },
         "login": {
           "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_login[grok]"
+        }
+      }
+    },
+    "hermes": {
+      "capabilities": [
+        "launch",
+        "unsupported_session"
+      ],
+      "fixture": "hermes.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[hermes]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[hermes]"
         }
       }
     },
@@ -300,6 +330,21 @@
         },
         "login": {
           "nodeid": "tests/cli_regression/test_vendor_transport.py::test_login_subcommand_excludes_repl_wiring[muse]"
+        }
+      }
+    },
+    "openclaw": {
+      "capabilities": [
+        "launch",
+        "unsupported_session"
+      ],
+      "fixture": "openclaw.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[openclaw]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[openclaw]"
         }
       }
     },

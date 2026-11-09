@@ -24,19 +24,26 @@ function releasedFixture() {
   const root = mkdtempSync(join(tmpdir(), 'navide-plugin-fingerprints-'))
   roots.push(root)
   git(root, 'init', '-q')
-  const file = (path: string, content: string) => {
+  const write = (path: string, content: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true })
     writeFileSync(join(root, path), content)
+  }
+  const file = (path: string, content: string) => {
+    write(path, content)
     git(root, 'add', '--', path)
   }
-  const setVersion = (pluginId: string, version: string) =>
-    file(`${OFFICIAL_PLUGIN_SOURCES[pluginId].directory}/manifest.json`, JSON.stringify({ id: pluginId, version }))
+  const manifest = (pluginId: string, version: string) =>
+    [`${OFFICIAL_PLUGIN_SOURCES[pluginId].directory}/manifest.json`, JSON.stringify({ id: pluginId, version })] as const
+  const setVersion = (pluginId: string, version: string) => file(...manifest(pluginId, version))
+  // The baseline is staged with one `git add`: a spawn per file made this
+  // fixture slow enough on a loaded Windows runner to hit the 5 s test timeout.
   for (const [pluginId, source] of Object.entries(OFFICIAL_PLUGIN_SOURCES)) {
-    setVersion(pluginId, '1.0.0')
-    file(`${source.directory}/src/index.ts`, 'export {}')
-    for (const extra of source.extra) file(extra, '# shared')
+    write(...manifest(pluginId, '1.0.0'))
+    write(`${source.directory}/src/index.ts`, 'export {}')
+    for (const extra of source.extra) write(extra, '# shared')
   }
-  file('packages/plugin-ui/src/index.ts', 'export {}')
+  write('packages/plugin-ui/src/index.ts', 'export {}')
+  git(root, 'add', '-A')
   const record = {
     baseline: 'v1.0.0',
     plugins: Object.fromEntries(Object.keys(OFFICIAL_PLUGIN_SOURCES).map((pluginId) =>
@@ -52,12 +59,12 @@ describe('official plugin release baseline', () => {
     expect(record.baseline).toMatch(/^v\d+\.\d+\.\d+$/)
     expect(Object.keys(record.plugins).sort()).toEqual(Object.keys(OFFICIAL_PLUGIN_VERSIONS).sort())
     expect(checkRecord(process.cwd())).toEqual([])
-  })
+  }, 30_000)
 
   it('accepts unchanged content at the released version', () => {
     const { root, record } = releasedFixture()
     expect(checkRecord(root, record)).toEqual([])
-  })
+  }, 30_000)
 
   it.each([
     ['its own source', 'plugins/navide-git/src/index.ts'],
@@ -68,7 +75,7 @@ describe('official plugin release baseline', () => {
     expect(checkRecord(root, record)).toEqual(expect.arrayContaining([
       expect.stringContaining('navide.git: content changed since v1.0.0 but the version is still 1.0.0'),
     ]))
-  })
+  }, 30_000)
 
   it('refuses a change to a core module the Plans backend bundles', () => {
     const { root, file, record } = releasedFixture()
@@ -76,7 +83,7 @@ describe('official plugin release baseline', () => {
     expect(checkRecord(root, record)).toEqual([
       expect.stringContaining('navide.plans: content changed since v1.0.0'),
     ])
-  })
+  }, 30_000)
 
   it('ignores tests, fixtures and Markdown', () => {
     const { root, file, record } = releasedFixture()
@@ -85,7 +92,7 @@ describe('official plugin release baseline', () => {
     file('packages/plugin-sdk/test-fixtures/a.json', '{}')
     file('plugins/navide-mini-ide/README.md', '# notes')
     expect(checkRecord(root, record)).toEqual([])
-  })
+  }, 30_000)
 
   it('needs one bump per release cycle, not one per change', () => {
     const { root, file, setVersion, record } = releasedFixture()
@@ -98,7 +105,7 @@ describe('official plugin release baseline', () => {
     setVersion('navide.mini-ide', '1.1.0')
     setVersion('navide.plans', '1.0.1')
     expect(checkRecord(root, record)).toEqual([])
-  })
+  }, 30_000)
 
   it('always refuses a version lower than the released one', () => {
     const { root, setVersion, record } = releasedFixture()
@@ -106,7 +113,7 @@ describe('official plugin release baseline', () => {
     expect(checkRecord(root, record)).toEqual([
       expect.stringContaining('navide.plans: 0.9.0 is lower than 1.0.0 released in v1.0.0'),
     ])
-  })
+  }, 30_000)
 
   it('records a release only when the rule holds, as release.sh does', () => {
     const { root, file, setVersion, record } = releasedFixture()
@@ -120,7 +127,7 @@ describe('official plugin release baseline', () => {
     expect(next.record.baseline).toBe('v1.1.0')
     expect(next.record.plugins['navide.git']).toEqual({ version: '1.0.1', fingerprint: fingerprint(root, 'navide.git') })
     expect(checkRecord(root, next.record)).toEqual([])
-  })
+  }, 30_000)
 
   it('reads the same fingerprint from a release tag as from the index', () => {
     const { root } = releasedFixture()
@@ -128,5 +135,5 @@ describe('official plugin release baseline', () => {
     for (const pluginId of Object.keys(OFFICIAL_PLUGIN_SOURCES)) {
       expect(fingerprint(root, pluginId, 'v1.0.0')).toBe(fingerprint(root, pluginId))
     }
-  })
+  }, 30_000)
 })

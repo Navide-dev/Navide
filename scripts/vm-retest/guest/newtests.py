@@ -100,7 +100,7 @@ elif phase in ("intr2", "ustop2"):
           hdr.dispatchEvent(new MouseEvent('contextmenu',{{bubbles:true,cancelable:true,clientX:r.left+20,clientY:r.top+5}}));
           await new Promise(f=>setTimeout(f,400));
           const items=[...document.querySelectorAll('.pane-ctx-item')]; const desc=items.map(i=>i.innerText.trim()+'|'+i.className+'|'+(i.disabled?'dis':''));
-          const it=items.find(i=>/^(Interrupt|中斷)/i.test(i.innerText.trim()));
+          const it=items.find(i=>/^(Interrupt|中斷)$/i.test(i.innerText.trim().split('\\n')[0]) && !i.disabled && !i.classList.contains('disabled'));
           if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked of '+JSON.stringify(desc);}})()"""
         say("stop via the pane's Interrupt menu item:", c.ev(js))
     time.sleep(4); say("status after stop", status(f"wn/{nm}"))
@@ -181,8 +181,10 @@ elif phase == "load":
     (ROOT / "load.pids").write_text(" ".join(map(str, pids))); say("busy pids", pids, "load", gload())
     time.sleep(90); say("warmed up, load", gload())
     try:
+        # Under full CPU the kickoff may take the app's whole budget (ready 30 s + echo 120 s) before the stub sees it.
         for i in range(1, 4):
-            o = subprocess.run([sys.executable, "y.py", ROOTP, "go", "sw", "webhook", "done", f"load{i}"], capture_output=True, text=True).stdout
+            o = subprocess.run([sys.executable, "y.py", ROOTP, "go", "sw", "webhook", "done", f"load{i}"], capture_output=True, text=True,
+                               env={**os.environ, "Y_REACH_S": "180"}).stdout
             say(f"load{i}", " | ".join(l for l in o.splitlines() if "ends" in l or "FAIL" in l or "PASS" in l)[:300], "load", gload())
     finally:
         for p in pids: os.kill(p, signal.SIGTERM)

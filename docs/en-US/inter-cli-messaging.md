@@ -189,8 +189,13 @@ The rest follows from that:
   (`git push`, `git reset --hard`, `rm -rf node_modules` inside the workspace)
   go through unless you turn that category on. The caller gets
   `error_code: "terminal-command-refused"` with the rule and the segment, the
-  refusal is written to the Guard audit log, and the pane shows a notice. Run
-  such a command yourself. Each category can be switched off, and block
+  refusal is written to the Guard audit log, and the pane shows a notice. An
+  agent can then send it again with `submit: false` (on `cli_send` or
+  `cli_open_agent(agent: "terminal")`): the command is prefilled on the
+  command line without Enter, written to the audit log as a prefill, and you
+  check it and press Enter yourself. Until you type into that terminal, other
+  messages to it fail instead of being typed after the prefill. Each category
+  can be switched off, and block
   patterns and allow prefixes added, in Settings → Security → Terminal command
   protection. A line typed through Navide is the only thing checked: what you
   type yourself is not, and a window that typed as if it were you could not be
@@ -272,6 +277,11 @@ being obeyed but cannot guarantee it — the real defence is that a pane which
 received external content is marked tainted and its high-risk actions need
 local confirmation. A boundary line written inside the body is broken with a
 zero-width space, so the sender cannot close the block early.
+
+A pane's chat can be bound by the user in Settings → Channels or by an agent
+through `channels_bind` ([External MCP Control](external-mcp-control.md#chat-channels)).
+Either way the chat is told which pane it now drives, and a bind an agent made
+is recorded with that agent's pane and shown as a toast in every main window.
 
 ### Answering a chat sender
 

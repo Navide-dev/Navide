@@ -27,7 +27,7 @@ from .testplace_api import register_testplace_routes
 from .blocklist import db_blocklists, digest_blocked
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
-from .disclosure import registry_facts, sign_disclosure
+from .disclosure import registry_facts, sign_disclosure, undeclared_network_hosts
 from .static_scan import run_scan
 from .plugin_contract.disclosure_contract import CanonicalJsonError
 from .plugin_contract.disclosure_scan_contract import card_risk_level
@@ -191,12 +191,16 @@ def create_app(
     # accepts both prefixed (ALB forwards the path unchanged) and prefix-stripped
     # request paths, and every URL the website emits carries the prefix.
     app = FastAPI(
-        title="Navide Marketplace Registry",
+        title="Navide Registry API",
         version="0.1.0",
         root_path=settings.root_path,
     )
     app.state.registry = state
-    if settings.root_path:
+    if settings.host_routing_enabled:
+        from .host_routing import HostRoutingMiddleware
+
+        app.add_middleware(HostRoutingMiddleware, settings=settings)
+    elif settings.root_path:
         app.add_middleware(_RootPathMiddleware, root_path=settings.root_path)
 
     @app.middleware("http")
@@ -720,6 +724,17 @@ def _register_routes(app: FastAPI) -> None:
         # for the reviewer; approval scans again and signs that report.
         scan = run_scan(data, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
+        if not testplace_publish:
+            # C1 (2026-11-07): a public listing that declares network hosts must
+            # declare the ones its code reaches; the card would show them red.
+            missing_hosts = undeclared_network_hosts(manifest.model_dump(exclude_none=True), scan)
+            if missing_hosts:
+                raise HTTPException(
+                    status_code=422,
+                    detail="static scan found network hosts the manifest does not declare: "
+                    + ", ".join(missing_hosts)
+                    + "; declare them under permissions.network.hosts",
+                )
         expires_at = None
         if testplace_publish:
             # D2: an invite-list build gets the automatic checks only, so a

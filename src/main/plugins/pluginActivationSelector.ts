@@ -137,13 +137,18 @@ function validateGrant(value: unknown, selection: PluginPackageSelection | undef
   if (!selection || !isObject(value)) throw new Error('invalid plugin lifecycle previous grant')
   const keys = Object.keys(value)
   if (
-    keys.some((key) => !['packageVersion', 'system', 'shell', 'highRiskShellConfirmed', 'storage'].includes(key)) ||
+    keys.some((key) => !['packageVersion', 'system', 'shell', 'shellExecutables', 'highRiskShellConfirmed', 'storage'].includes(key)) ||
     value.packageVersion !== selection.packageVersion ||
     !Array.isArray(value.system) ||
     value.system.some((item) => item !== 'fs' && item !== 'ui' && item !== 'aiCli' && item !== 'web' &&
-      item !== 'agents' && item !== 'agentMessages') ||
+      item !== 'agents' && item !== 'agentMessages' && item !== 'secrets') ||
     new Set(value.system).size !== value.system.length ||
     (value.shell !== undefined && value.shell !== 'allowlist' && value.shell !== 'full') ||
+    (value.shellExecutables !== undefined && (
+      value.shell !== 'allowlist' || !Array.isArray(value.shellExecutables) || value.shellExecutables.length === 0 ||
+      value.shellExecutables.some((name) => typeof name !== 'string' || !/^[a-z0-9][a-z0-9._+-]{0,63}$/.test(name)) ||
+      new Set(value.shellExecutables).size !== value.shellExecutables.length
+    )) ||
     (value.highRiskShellConfirmed !== undefined && value.highRiskShellConfirmed !== true) ||
     value.storage !== true
   ) throw new Error('invalid plugin lifecycle previous grant')
@@ -151,6 +156,7 @@ function validateGrant(value: unknown, selection: PluginPackageSelection | undef
     packageVersion: value.packageVersion,
     system: [...value.system] as HostCapabilityGrant['system'],
     ...(value.shell ? { shell: value.shell } : {}),
+    ...(value.shellExecutables ? { shellExecutables: [...(value.shellExecutables as string[])] } : {}),
     ...(value.highRiskShellConfirmed ? { highRiskShellConfirmed: true } : {}),
     storage: true,
   }

@@ -113,6 +113,8 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** C2: executables declared beyond the Host's `git`, `gh`, `glab`. */
+    shellExecutables?: readonly string[]
     /** The package's declared agent tools as the disclosure spells them
      *  (defaulted timeouts, sorted by name); absent when it declares none. */
     agentTools?: readonly DisclosureAgentTool[]
@@ -806,6 +808,8 @@ function executionPolicyNamespaceForBridgePort(
       return 'agents'
     case 'agent-message-bodies':
       return 'agentMessages'
+    case 'secrets':
+      return 'secrets'
     case 'shell':
       // The agent shell policy is judged on the command itself, like shell.run.
       return 'shell'

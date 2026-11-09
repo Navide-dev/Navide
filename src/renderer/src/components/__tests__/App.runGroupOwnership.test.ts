@@ -183,6 +183,7 @@ describe('restore puts back a tab whose record was lost', () => {
         detachedGroupIds: new Set<string>(),
         manualLabel: 'manual',
         orphanLabel: 'recovered',
+        defaultLabel: 'Default',
       })
     expect(strip('rg-7')[0].paneIds).toEqual(['p1'])
     // A fresh id still leaves the pane reachable — the safety net catches it —

@@ -9,7 +9,6 @@ from agent_team_backend.channels.base import Capabilities, Location
 from agent_team_backend.channels.manager import (
     MCP_CALLBACK,
     MENU_MOVED_BUTTONS,
-    MSG_OFFLINE,
     PROMPTS_CALLBACK,
     SKILLS_CALLBACK,
 )
@@ -131,10 +130,33 @@ async def test_unbound_chat_is_told_to_connect_first(env: Env) -> None:
     assert env.tg.menus == []
 
 
+async def test_start_in_a_bound_chat_whose_pane_is_closed_names_the_pane(env: Env) -> None:
+    env.store.set_wake_target("pane-1", "/w/nt-notify-bridge", "s-1")
+    env.fake.gone.add("pane-1")
+    await env.inbound("/start")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "bound_pane_closed", where="nt-notify-bridge / api")
+    assert "nt-notify-bridge / api" in env.tg.texts()[-1] and "/wake" in env.tg.texts()[-1]
+    assert env.fake.delivered == []
+
+
+async def test_a_numbered_pick_in_a_chat_whose_pane_is_closed_names_the_pane(env: Env) -> None:
+    _no_buttons(env)  # where /prompts answers with numbered lines
+    env.fake.gone.add("pane-1")
+    await env.inbound("/prompts 1")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "bound_pane_closed", where="api")
+
+
+async def test_start_in_an_unbound_chat_explains_how_to_pair(env: Env) -> None:
+    await env.inbound("/start", thread="99")
+    text = env.tg.texts()[-1]
+    assert text == qm.text("zh-TW", "not_bound")
+    assert "1." in text and "2." in text and "3." in text
+
+
 async def test_offline_pane_and_buttonless_platform(env: Env) -> None:
     env.fake.gone.add("pane-1")
     await env.inbound("/prompts")
-    assert env.tg.texts()[-1] == MSG_OFFLINE
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "bound_pane_closed", where="api")
     env.fake.gone.clear()
     _no_buttons(env)
     await env.inbound("/prompts")

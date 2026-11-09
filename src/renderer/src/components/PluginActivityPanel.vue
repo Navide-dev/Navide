@@ -242,6 +242,19 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         {{ $t('pluginActivity.tools.totalSize', { args: formatBytes(sizes.args.bytes), result: formatBytes(sizes.result.bytes), unknown: sizes.args.unknown + sizes.result.unknown }) }}
       </p>
 
+      <template v-if="report.pipelineNodeRuns.length">
+        <h5>{{ $t('pluginActivity.pipelineNodes.heading') }}</h5>
+        <ul class="nv-activity-tools">
+          <li v-for="run in report.pipelineNodeRuns" :key="`node-${run.id}`">
+            {{ $t('pluginActivity.pipelineNodes.row', {
+              date: date(run.at), origin: $t(`pluginActivity.pipelineNodes.origin.${run.runOrigin}`), node: reveal(run.nodeId),
+              workspace: reveal(run.workspace), duration: run.durationMs,
+              outcome: run.outcome === 'ok' ? $t('pluginActivity.tools.ok') : $t('pluginActivity.tools.failed', { code: reveal(run.errorCode) }),
+            }) }}
+          </li>
+        </ul>
+      </template>
+
       <h5>{{ $t('pluginActivity.files.heading') }}</h5>
       <ul v-if="report.files.length" class="nv-activity-files">
         <li
@@ -262,6 +275,14 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
           :class="{ 'nv-activity-marker': isMarker(entry.command, entry.outcome) }"
         >
           {{ $t('pluginActivity.commands.item', { command: shown(entry.command, entry.outcome), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+        </li>
+      </ul>
+      <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
+
+      <h5>{{ $t('pluginActivity.network.heading') }}</h5>
+      <ul v-if="report.network.length" class="nv-activity-network">
+        <li v-for="entry in report.network" :key="`${entry.host}:${entry.workspace}:${entry.outcome}`">
+          {{ $t('pluginActivity.network.item', { host: entry.host, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>

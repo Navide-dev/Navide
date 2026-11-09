@@ -56,7 +56,7 @@ from .ipc import make_error, make_event, make_response
 from .log_readers.claude import ClaudeLogReader, first_user_prompts
 from .applog import app_data_dir, in_data_dir
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
-from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text
+from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text, declared_executables
 from .mcp_settings import (
     MCPSettingsConflictError,
     MCPSettingsError,
@@ -369,6 +369,29 @@ async def plugins_agent_tools_sync(
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.pipelineNodes.result")
+async def plugins_pipeline_nodes_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.pipelineNodes.request`` (E2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.pipelineNodes.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_pipeline_nodes(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("marketplace.query.result")
 async def marketplace_query_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -440,9 +463,9 @@ async def plugins_agent_action_result(
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
-#: The Host records broker and shell-broker calls; agent tool calls are the
-#: backend's own rows (B1).
-_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: The Host records broker and shell-broker calls, and (C1) its plugin frames'
+#: network requests and refusals; agent tool calls are the backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell", "network"))
 #: Calls into a plugin's own backend, counted by the Host per batch.
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
 #: Card K4: the Host events a row may report, the Developer Mode switch and
@@ -502,6 +525,33 @@ def _backend_call_row(app: Any, row: dict) -> str | None:
         address=row["address"], outcome=row["outcome"], count=row["count"], at_ms=at,
     )
     return None if recorded else "refused"
+
+
+@handler("plugin.pipelineNode.record")
+async def plugin_pipeline_node_record(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store one pipeline plugin node run the Host ran (E2): who started the
+    run, which node of which plugin, how it ended and how long it took. A row
+    the audit refuses is dropped; nothing here fails the run it records."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    keys = {"plugin_id", "plugin_version", "workspace", "node_id", "run_origin", "outcome", "error_code",
+            "duration_ms", "at"}
+    if not isinstance(payload, dict) or set(payload) != keys or not isinstance(payload.get("at"), int) \
+            or isinstance(payload.get("at"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.pipelineNode.record is malformed")
+        )
+        return
+    fields = {key: payload[key] for key in keys - {"at"}}
+    recorded = app.plugin_audit_log.record_pipeline_node_run(**fields, at_ms=payload["at"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "recorded": recorded}))
 
 
 @handler("plugin.activity.record")
@@ -583,7 +633,7 @@ async def plugin_activity_record(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
-_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool"))
+_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool", "networkHost"))
 
 
 def _declared_items(value: Any) -> list[dict[str, str]] | None:
@@ -6889,6 +6939,9 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
                 make_error(msg_id, msg_type, "PIPELINE_RUNNING", "Cannot import a pipeline while a project is running")
             )
             return
+    from .mcp_server import server as plan_mcp
+
+    plugin_nodes = await plan_mcp.host_plugin_pipeline_nodes()
     try:
         out = await asyncio.to_thread(
             import_into_store,
@@ -6897,6 +6950,7 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
             dry_run=dry_run,
             default_agent=str(payload.get("default_agent") or "claude"),
             name=str(payload.get("name") or ""),
+            plugin_nodes=plugin_nodes,
         )
     except N8nImportError as exc:
         code = {"too-large": "N8N_TOO_LARGE", "store-refused": "N8N_REFUSED"}.get(exc.reason, "N8N_INVALID")
@@ -7355,6 +7409,22 @@ async def analyzer_settings_set(session: "Session", msg_id: str, msg_type: str, 
     await app.broadcast(make_event("analyzer.settings_changed", updated))
 
 
+@handler("archive.settings.get")
+async def archive_settings_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    await session.send_json(make_response(msg_id, msg_type, app.archive_settings_store.get()))
+
+
+@handler("archive.settings.set")
+async def archive_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    updated = app.archive_settings_store.set(payload)
+    await session.send_json(make_response(msg_id, msg_type, updated))
+    await app.broadcast(make_event("archive.settings_changed", updated))
+
+
 @handler("analyzer.health")
 async def analyzer_health_h(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -7638,6 +7708,43 @@ async def tokens_monitor(session: "Session", msg_id: str, msg_type: str, payload
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("tokens.cost_report")
+async def tokens_cost_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    # The Token panel's by-model / by-account views: the per-call ledger
+    # grouped one way, optionally limited to a folder (cwd) and a local-day
+    # range. A bad grouping answers ok: false rather than raising.
+    try:
+        result = await asyncio.to_thread(
+            app.cost_ledger.report, str(payload.get("by") or ""),
+            cwd=str(payload.get("cwd") or ""),
+            since=str(payload.get("since") or ""),
+            until=str(payload.get("until") or ""),
+            utc_offset_min=int(payload.get("utc_offset_min") or 0),
+        )
+        result["ok"] = True
+    except ValueError as err:
+        result = {"ok": False, "error": str(err)}
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
+@handler("tokens.quota_history")
+async def tokens_quota_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+    from .quota_history_read import daily_peaks
+
+    # Read-only: each account window's highest used % per local day.
+    try:
+        result = await asyncio.to_thread(
+            daily_peaks, app.database, int(payload.get("days") or 7),
+            int(payload.get("utc_offset_min") or 0),
+        )
+    except ValueError as err:
+        result = {"ok": False, "error": str(err)}
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("devtime.snapshot")
 async def devtime_snapshot(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -7859,10 +7966,14 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": "invalid workspace path"}))
             return
         try:
+            # C2: the executables the package declared and the user approved,
+            # sent by the Host with the call; refused whole when malformed.
+            allowed = declared_executables(payload.get("allowed_executables"))
             argv = parse_public_allowlisted_command(
                 cmd,
                 cwd=str(resolved_cwd),
                 workspace_root=str(registered_root),
+                allowed_executables=allowed,
             )
         except ValueError as exc:
             await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": str(exc)}))
@@ -7872,6 +7983,9 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
             str(resolved_cwd),
             workspace_root=str(registered_root),
             timeout=30.0,
+            # Only when the package declared any: a call without declared
+            # executables is exactly the call it was before C2.
+            **({"allowed_executables": allowed} if allowed else {}),
         )
         await session.send_json(make_response(msg_id, msg_type, {
             "ok": True,
@@ -9578,13 +9692,29 @@ async def terminal_create_cancel(
 #: of the command.
 _GUARDED_LINES: dict[str, str] = {}
 _PASTE_GUARDS = ("\x1b[200~", "\x1b[201~")
+#: Terminal sessions whose command line holds a prefill (cli_send /
+#: cli_open_agent submit: false) the user has not run or cleared yet. Every
+#: guarded write is refused meanwhile: one with an Enter would run the prefill,
+#: which is the user's to run. The prefill is also the session's pending line in
+#: _GUARDED_LINES. Only the user's own keystroke that ends the line (a
+#: terminal.input flagged human carrying Enter, Ctrl-C or Ctrl-U) releases both:
+#: any other key, or a focus or mouse report, leaves the prefill on the line.
+_PREFILL_HELD: set[str] = set()
+#: Keys that run or discard the command line: Enter, Ctrl-C, Ctrl-U.
+_LINE_ENDING_KEYS = ("\r", "\x03", "\x15")
 
 
-def _guarded_terminal_write_refusal(session: "Session", session_id: str, data: str) -> Any:
+def _guarded_terminal_write_refusal(
+    session: "Session", session_id: str, data: str, *, prefill: bool = False
+) -> Any:
     """terminal_policy's refusal for a guarded write to a plain terminal, or
     None (also for a PTY that is not a terminal pane: only a shell runs what it
     is typed). Records the write into the session's pending line when it
-    passes; an Enter clears it."""
+    passes; an Enter clears it.
+
+    A ``prefill`` write is typed without Enter for the user: it is judged (and
+    audited) by the MCP tool that asked for it, so here it only has to be one
+    printable line. It then holds the session (see _PREFILL_HELD)."""
     term = session.terminals.get(session_id)
     if term is None or getattr(term, "agent_key", "") != "terminal":
         return None
@@ -9593,6 +9723,19 @@ def _guarded_terminal_write_refusal(session: "Session", session_id: str, data: s
     text = data
     for guard in _PASTE_GUARDS:
         text = text.replace(guard, "")
+    if prefill:
+        problem = terminal_policy.prefill_line_error(text)
+        if problem:
+            return terminal_policy.Refusal("prefill-not-single-line", text[:200], problem)
+        _GUARDED_LINES[session_id] = _GUARDED_LINES.get(session_id, "") + text
+        _PREFILL_HELD.add(session_id)
+        return None
+    if session_id in _PREFILL_HELD:
+        return terminal_policy.Refusal(
+            "prefill-pending", text[:200],
+            "a command prefilled for the user is still on this terminal's command line — "
+            "it is the user's to run or clear",
+        )
     submit = "\r" in text
     line = _GUARDED_LINES.get(session_id, "") + text.replace("\r", "")
     workspace = str(term.metadata.get("workspace_path") or term.cwd)
@@ -9627,7 +9770,9 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
         # Everything a guarded injection has typed since its last Enter is one
         # command line, checked as a whole before each write — a line split
         # across chunks is judged together, and the Enter re-checks it.
-        refusal = _guarded_terminal_write_refusal(session, session_id, payload["data"])
+        refusal = _guarded_terminal_write_refusal(
+            session, session_id, payload["data"], prefill=payload.get("prefill") is True
+        )
         if refusal is not None:
             await session.send_json(
                 make_response(
@@ -9638,7 +9783,11 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
     elif payload["data"]:
         # Anything else written (a person typing, a kill-line after a failed
         # injection) means the line is no longer only what was injected.
-        _GUARDED_LINES.pop(session_id, None)
+        if session_id not in _PREFILL_HELD:
+            _GUARDED_LINES.pop(session_id, None)
+        elif payload.get("human") is True and any(k in payload["data"] for k in _LINE_ENDING_KEYS):
+            _PREFILL_HELD.discard(session_id)
+            _GUARDED_LINES.pop(session_id, None)
     pending = session.terminals.write(session_id, payload["data"])
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending}))
     # A keyboard frame (the renderer flags only those: not mouse/focus reports,
@@ -11661,7 +11810,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     """The renderer engine reports per-graph-node run state; stored on the
     project so MCP pipeline_status can read it, then broadcast for canvases in
     every window. Contract: src/renderer/src/lib/pipelineGraph.ts."""
-    from . import app
+    from . import app, plugin_host_events
 
     nodes = payload.get("nodes", {})
     gate = payload.get("gate")
@@ -11675,6 +11824,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
     # dropped and named back. A pipeline the store cannot read (deleted
     # mid-run) filters nothing rather than dropping the run's states.
     before = app.project_store.peek(payload["workspace_path"])
+    before_statuses = plugin_host_events.node_statuses(getattr(before, "node_states", None))
     try:
         known = app.stages_store.node_ids(getattr(before, "pipeline_id", "") or None)
     except (KeyError, ValueError):
@@ -11691,6 +11841,9 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
         "nodes": project.node_states,
         "gate": project.node_gate,
     }))
+    plugin_host_events.on_pipeline_node_states(
+        project.workspace_path, project.pipeline_id, before_statuses, project.node_states
+    )
 
 
 @handler("pipeline.fetch_docs")

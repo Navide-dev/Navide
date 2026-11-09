@@ -111,8 +111,8 @@ def live(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         calls.probed.append(workspace)
         return calls.probe
 
-    async def start(caller, workspace, task, pipeline_id, *, taint_detail=""):
-        calls.started.append({"caller": caller.kind, "workspace": workspace, "task": task, "pipeline_id": pipeline_id, "taint": taint_detail})
+    async def start(caller, workspace, task, pipeline_id, *, taint_detail="", origin="agent"):
+        calls.started.append({"caller": caller.kind, "workspace": workspace, "task": task, "pipeline_id": pipeline_id, "taint": taint_detail, "origin": origin})
         return calls.answer
 
     monkeypatch.setattr(mcp, "_probe_window", probe)
@@ -124,7 +124,7 @@ async def test_live_bridge_starts_the_run_through_pipeline_starts_path(live) -> 
     action = {**pipeline_job()["action"], sched_mod.TAINT_KEY: "scheduled by worker"}
     outcome = await LiveBridge().deliver_pipeline(action)
     assert outcome == {"status": "ok", "detail": 'started pipeline "p1"'}
-    assert live.started == [{"caller": "host", "workspace": "/ws", "task": "refresh the report", "pipeline_id": "p1", "taint": "scheduled by worker"}]
+    assert live.started == [{"caller": "host", "workspace": "/ws", "task": "refresh the report", "pipeline_id": "p1", "taint": "scheduled by worker", "origin": "schedule"}]
 
 
 async def test_live_bridge_never_opens_a_window(live) -> None:

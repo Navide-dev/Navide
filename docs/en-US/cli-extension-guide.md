@@ -10,7 +10,7 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, and `goose`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, `devin`, `openclaw`, and `hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -70,6 +70,53 @@ one carry `evidence="source"` — no real-account round-trip has been recorded; 
 Code's adapter (region-scoped compound file plus a companion `auth-state`
 write, no session resume) is the newest.
 
+### Two kinds of vendors: CLI and Agent
+
+Since 0.2.39 a vendor is one of two kinds:
+
+- **CLI** — a tool that writes code for the user inside a repository and is
+  done when its session ends: Claude Code, Codex, Devin CLI, Goose and the
+  rest. Navide runs it in a pane, reads its transcript where it can, resumes
+  it, and switches its accounts.
+- **Agent** — a long-lived, independent agent with its own identity, memory,
+  schedules and chat channels, which keeps running whether or not a pane is
+  open. Navide is a console onto it, not its runtime.
+
+How to decide: if the vendor's own state (who it is, what it remembers, what
+it is scheduled to do, which channels it answers) lives outside the session
+and outlives it, it is an Agent. If a session is the unit of work and the
+repository is where the work lands, it is a CLI. A vendor that merely
+*can* run unattended (`--yolo`, a headless mode) is still a CLI.
+
+The kind is the frontend spec's `kind` field
+(`src/renderer/src/platform/plugin-shell/agents/types.ts`): `'agent'` for an
+Agent, left out (or `'cli'`) for a CLI. Set it in `agents/<key>.ts`; nothing
+else needs an edit, and no surface keeps a list of names. The backend spec has
+no counterpart.
+
+Where it shows: the ＋ menu on a workspace heading lists its entries in two
+blocks, each under a small heading — **CLI** first, then **Agents**. Inside
+each block the order and the disabled set of Settings → CLI Agents apply as
+before, and a block with no enabled entry is left out with its heading.
+Terminal, Manual spawn and the cloud-agents Marketplace hint sit below both
+blocks. Every other surface (Manual spawn's dropdown, "Handle Issue As…",
+accounts, token stats) lists both kinds together.
+
+Current members: Agent = `openclaw` (OpenClaw) and `hermes` (Hermes Agent);
+every other vendor, Devin CLI included, is a CLI.
+
+What 0.2.39 wires for an Agent: launching it in a pane (the bare command; the
+TUI attaches to the agent's own runtime where it has one), the guided install
+(docs link only — both official installers pipe a script into a shell), its
+data directories, and the YOLO flag where one exists (`hermes --yolo`). Not
+wired: session resume, a turn-end signal (no transcript reader or hook, so
+busy/idle and the bare-line reply protocol are unverified), a kickoff flag
+(the role text is typed into the composer like every vendor's), and a model
+flag. Keys and account switching are left alone on purpose: an Agent's
+providers and keys live in its own home (`~/.openclaw`, `~/.hermes`), and
+Navide reads none of it, offers no account switching and fetches no usage.
+Part 2's OpenClaw and Hermes Agent record has the per-vendor detail.
+
 ---
 
 ## Part 2 — Integration records
@@ -80,6 +127,46 @@ exist as described, and the per-layer instructions are superseded by Part 1.
 What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
+
+### Devin CLI (`devin`, Cognition) — added 2026-11-07
+
+A coding CLI (the ＋ menu's CLI list). Read from the
+official docs on 2026-11-07 (docs.devin.ai/cli, /cli/reference/commands,
+/cli/essential-commands, /cli/handoff, /cli/extensibility/rules,
+/cli/reference/configuration/config-file, /cli/changelog/stable); no binary
+was installed, so nothing here is a live recording.
+
+| Question | Finding (docs, 2026-11-07) |
+|---|---|
+| Install | `curl -fsSL https://cli.devin.ai/install.sh \| bash` (macOS / Linux / WSL), `brew install --cask devin-cli`, or on Windows an x86_64/ARM64 installer or `irm https://static.devin.ai/cli/setup.ps1 \| iex` in PowerShell (not Git Bash or CMD). The install entry has no command, so the guided install shows the docs link. `devin update` / `devin doctor` are the update and diagnostic commands. |
+| Version | `devin --version` = `devin version`; the output line is undocumented. Releases are numbered `v3000.12.17`; the generic `(\d+\.\d+\.\d+)` reads `3000.12.17`. No verified version is declared (`test_spawn_probe_version_drift` exempts it). |
+| Launch | Bare `devin` opens the TUI. `devin -- <prompt>` preloads a prompt; Navide types the kickoff into the composer like every vendor. |
+| Permissions | `--permission-mode normal\|accept-edits\|smart\|dangerous\|autonomous` (`DEVIN_PERMISSION_MODE`); `dangerous` = `yolo` = `bypass`, admin deny/ask rules still apply; `autonomous` needs `--sandbox`. YOLO mode appends `--permission-mode dangerous`. |
+| Non-interactive | `-p/--print [PROMPT]`, `--prompt-file`; Navide never spawns it. |
+| Resume | `-c/--continue` (latest in cwd), `-r/--resume <id>`; `devin list` lists sessions. The session store's location is undocumented and no reader exists, so `supports_session_resume=False` and no `resumeArgs`. |
+| Cloud | `/handoff [task]` moves the session — repo, branch, conversation and **uncommitted changes** — to a cloud Devin VM; from a cloud session it pulls the PR branch back. Devin's own command and account; Navide adds nothing. |
+| Sign-in | `devin auth login` / `/login`; credential location undocumented. No `login_command_args`, no account switching, no usage. |
+| Instruction files | User: `~/.config/devin/AGENTS.md` (`%APPDATA%\devin\AGENTS.md` on Windows), `~/.devin/global_rules.md`, `~/.devin/rules/*.md`, `~/.claude/CLAUDE.md`. Project: `AGENTS.md`, `AGENTS.local.md`, `AGENT.md`, `CLAUDE.md`, `.windsurfrules`, `.devin/rules/*.md`, `.devin/global_rules.md`, plus `.windsurf/` and `.cursor/rules`. All always-on, loaded together. `native_memory` maps the Devin-specific ones and the standard files; the Windows user path is not covered (rows are home-relative). |
+| Config | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json`), project `.devin/config.json` / `config.local.json`. No relocation variable documented, so no `home_env_vars`; `data_dirs` declares that user config directory only (session and credential locations are undocumented). |
+| Not wired | Reader, resume, model flag (`--model` documented, not checked against an invalid value), MCP, skills, plugins/hooks inventory, usage, account switching. Busy/idle detection, paste protocol and the bare-line reply protocol are unverified. |
+
+### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
+
+General assistants that own their runtime and model keys, wired as ordinary
+vendors of `kind: 'agent'` (see "Two kinds of vendors" in Part 1): the ＋
+menu's Agents block, Manual spawn and "Handle Issue As…".
+Read from the official docs on 2026-11-07; neither binary was installed, so
+nothing here is a live recording.
+
+| Question | OpenClaw | Hermes Agent |
+|---|---|---|
+| Launch | Bare `openclaw`: attaches to a running Gateway, else runs the agent locally (docs.openclaw.ai/web/tui). Navide never starts the Gateway. | Bare `hermes` opens the TUI (github.com/NousResearch/hermes-agent). |
+| Permissions | No bypass flag. | `--yolo` (top-level; docs/reference/cli-commands). |
+| Kickoff | Typed into the composer like every vendor. `--message` exists but is not resent when history is unavailable. | Typed into the composer. `hermes chat -q` exists. |
+| Install | `curl \| bash`; the install entry has no command, so the guided install shows the docs link. | `curl \| bash`, or `iex (irm …/install.ps1)` on native Windows (supported; data in `%LOCALAPPDATA%\hermes`). Same: docs link only. |
+| Keys | OpenClaw's own config (`~/.openclaw/openclaw.json`). Navide reads none. | `~/.hermes/.env` / `config.yaml` (`$HERMES_HOME`). Navide reads none. |
+| Instruction files | Agent workspace `~/.openclaw/workspace/AGENTS.md`, `SOUL.md` — not the TUI's cwd. | Project: `.hermes.md`/`HERMES.md`, `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; home: `SOUL.md`. |
+| Not wired | Reader, resume, model flag, MCP, skills, extensions inventory, usage, account switching. Busy/idle detection and the bare-line reply protocol are unverified on both TUIs. | Same. |
 
 ### Goose (`goose`, AAIF) — added 2026-10-21
 

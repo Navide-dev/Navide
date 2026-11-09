@@ -21,6 +21,7 @@ import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import PluginBackgroundAiSessions from './PluginBackgroundAiSessions.vue'
+import PluginSettingsForm from './PluginSettingsForm.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import SettingsCard from './settings/SettingsCard.vue'
@@ -37,8 +38,14 @@ import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
 import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { BUILD_FOR_NAVIDE_URL } from '../../../shared/marketplaceDeveloper'
 
 const { t, locale } = useI18n()
+
+/** Developer Mode page: the entry page for a first Navide plugin (plan v2_8714c5 b2). */
+function openBuildGuide(): void {
+  void window.agentTeam?.openExternal?.(BUILD_FOR_NAVIDE_URL)
+}
 
 function pluginsApi() {
   return window.agentTeam?.plugins
@@ -260,7 +267,6 @@ const HOST_REFUSALS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^previous package artifact identity changed before rollback$/, 'previousChanged'],
   [/^active package grant is unavailable for (?<id>.+)$/, 'grantUnavailable'],
   [/^factory package rollback is unavailable$/, 'factoryUnavailable'],
-  [/^Bundled Git cannot be restored while NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery$/, 'gitLegacyRecovery'],
   [/^Factory package restoration failed: (?<detail>.+)$/s, 'factoryRestoreFailed'],
 ]
 
@@ -453,6 +459,22 @@ async function refreshDisabledStoreStatus(): Promise<void> {
     disabledStoreStatus.value = 'ok'
   }
 }
+// C1: the per-package "Only allow declared network hosts" switch.
+async function setNetworkStrict(id: string, strict: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setNetworkStrict) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setNetworkStrict(id, strict)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function resetDisabledStore(): Promise<void> {
   const api = pluginsApi()
   if (!api?.resetDisabledStore) return
@@ -1229,6 +1251,16 @@ watch(installed, () => {
                 >
                   {{ $t('settings.extensions.enable') }}
                 </button>
+                <!-- C1: the per-package network switch (off by default: record, do not refuse). -->
+                <label v-if="p.networkStrict !== undefined" class="ext-network-strict" :title="$t('settings.extensions.networkStrictNote')">
+                  <input
+                    type="checkbox"
+                    :checked="p.networkStrict"
+                    :disabled="busy"
+                    @change="setNetworkStrict(p.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ $t('settings.extensions.networkStrict') }}
+                </label>
                 <!-- `navide.` packages ship with Navide: they are disabled, never removed.
                      A Marketplace first-party package (navide.browser) is the
                      exception: the Host offers its Disabled switch, and it is
@@ -1285,6 +1317,8 @@ watch(installed, () => {
                 :plugin-id="p.id"
                 :paused="selectedId !== p.id"
               />
+              <!-- The settings it declares (contributes.settings), as a form. -->
+              <PluginSettingsForm v-if="selectedId === p.id" :plugin-id="p.id" />
               <details
                 v-if="p.manifestPermissions || p.packageVersion"
                 class="ext-permission-details"
@@ -1365,6 +1399,11 @@ watch(installed, () => {
           </template>
         </SettingRow>
       </SettingsCard>
+      <p class="ext-devmode-first" data-testid="developer-mode-first-time">
+        {{ $t('settings.extensions.developerMode.firstTime') }}
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-mode-guide" @click="openBuildGuide">{{ $t('settings.extensions.developerMode.openGuide') }}</button>
+      </p>
+      <p class="ext-devmode-first">{{ $t('settings.extensions.developerMode.agentSkill') }} <code>navide:plugin-authoring</code></p>
       <button
         v-if="developerMode.enabled"
         class="ext-load-folder nv-btn nv-btn--sm"
@@ -1759,6 +1798,11 @@ watch(installed, () => {
 .ext-devmode,
 .ext-devmode-native {
   max-width: var(--settings-page-max);
+}
+.ext-devmode-first {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
 }
 .ext-devmode .ext-load-folder {
   margin-top: var(--space-3);

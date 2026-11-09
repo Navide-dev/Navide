@@ -50,6 +50,12 @@ export interface AgentSpec {
    *  error. */
   knownEfforts?: readonly string[]
   hint?: string
+  /** Which of the two vendor kinds this is (docs/en-US/cli-extension-guide.md,
+   *  "Two kinds of vendors"): a coding CLI that works in the repo for one
+   *  session, or a long-lived agent with its own identity, memory, schedules
+   *  and channels that Navide is a console for. Sorts the ＋ menu into its CLI
+   *  and Agents blocks. Undefined = 'cli'. */
+  kind?: 'cli' | 'agent'
   /** Vendor resume arguments WITHOUT the binary (the binary comes from
    *  `defaultCommand`, or the caller's custom command override) — e.g.
    *  `resume <id>` (codex subcommand) or `--resume=<id>`. Undefined = the

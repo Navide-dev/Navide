@@ -82,6 +82,18 @@ beforeEach(() => {
   i18n.global.locale.value = 'en-US'
   exec.mockReset()
   mock = createMockBackend('connected')
+  // The picker asks for every bot's chats at once ({ all: true }); a test's preset
+  // `locations` stands for each connected bot's answer.
+  const send = mock.backend.send.bind(mock.backend)
+  mock.backend.send = (async (type: string, payload: Record<string, unknown> = {}, timeoutMs?: number) => {
+    const res = await send(type, payload, timeoutMs)
+    const data = res.payload as { locations?: unknown[] } | null
+    if (type !== 'channels.locations' || payload.all !== true || !data?.locations) return res
+    const bots = (lastStore?.configuredPlatforms.value ?? []).flatMap((p) => p.accounts
+      .filter((a) => a.status.connected)
+      .map((a) => ({ platform: p.platform, account: a.account, locations: data.locations })))
+    return { ...res, payload: { bots } }
+  }) as typeof mock.backend.send
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -112,7 +124,7 @@ describe('PaneChannelButton', () => {
     })
     const w = await render()
     await openPopover(w)
-    expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([{ platform: 'telegram' }])
+    expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([{ all: true }])
     const group = q('[data-testid="channel-group"]')!
     expect(group.textContent).toContain('Telegram')
     expect(group.textContent).toContain('@navide_bot')
@@ -149,10 +161,8 @@ describe('PaneChannelButton', () => {
     })
     const w = await render()
     await openPopover(w)
-    expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([
-      { platform: 'telegram' },
-      { platform: 'discord' },
-    ])
+    // One request for every connected bot, however many.
+    expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([{ all: true }])
     expect(qa('[data-testid="channel-group"]')).toHaveLength(4)
     const off = qa('[data-testid="channel-platform-off"]').map((r) => r.textContent)
     expect(off).toEqual(['Blocked — check the credentials', 'Off'])
@@ -423,7 +433,7 @@ describe('PaneChannelButton', () => {
     expect(newBtn.getAttribute('title')).toContain('api-refactor')
     newBtn.click()
     await flushPromises()
-    expect(mock.sent.find((s) => s.type === 'channels.locations')?.payload).toEqual({ platform: 'telegram' })
+    expect(mock.sent.find((s) => s.type === 'channels.locations')?.payload).toEqual({ all: true })
     expect(bindsSent()).toEqual([])
     expect(q('[data-testid="channel-bind-chosen"]')?.textContent).toContain('New topic “api-refactor”')
     q('[data-testid="channel-bind-confirm"]')!.click()
@@ -476,9 +486,7 @@ describe('PaneChannelButton', () => {
       const groups = qa('[data-testid="channel-group"]')
       expect(groups.map((g) => g.getAttribute('data-account'))).toEqual(['default', 'bot-b1'])
       expect(qa('[data-testid="channel-group-bot"]').map((e) => e.textContent)).toEqual(['Main bot', 'Ops'])
-      expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([
-        { platform: 'telegram' }, { platform: 'telegram', account: 'bot-b1' },
-      ])
+      expect(mock.sent.filter((s) => s.type === 'channels.locations').map((s) => s.payload)).toEqual([{ all: true }])
       groups[1].querySelector<HTMLElement>('[data-testid="channel-bind-existing"]')!.click()
       await flushPromises()
       expect(q('[data-testid="channel-bind-chosen"]')!.textContent).toContain('Telegram · Ops')
@@ -519,12 +527,12 @@ describe('PaneChannelButton', () => {
       expect(ops.querySelector('[data-testid="channel-link-pairing"]')?.textContent).toContain('neil asks to pair')
     })
 
-    it('one bot: no bot label and no account in the request', async () => {
+    it('one bot: no bot label, its chats in the one request', async () => {
       seed({ configured: true })
       const w = await render()
       await openPopover(w)
       expect(q('[data-testid="channel-group-bot"]')).toBeNull()
-      expect(mock.sent.find((s) => s.type === 'channels.locations')?.payload).toEqual({ platform: 'telegram' })
+      expect(mock.sent.find((s) => s.type === 'channels.locations')?.payload).toEqual({ all: true })
     })
   })
 
@@ -667,6 +675,69 @@ describe('PaneChannelButton', () => {
     expect(Array.from(bMenu.querySelectorAll('[role="menuitemradio"]')).map((e) => e.getAttribute('aria-checked'))).toEqual(['false', 'false', 'false', 'true'])
     a.unmount()
     b.unmount()
+  })
+
+  describe('search among many bots', () => {
+    const ready = { lifecycle: 'ready', connected: true, identity: '' }
+    const caps = { threads: true, create_location: true, edit: true, typing: true, buttons: true, text_limit: 4000 }
+    function seedMany(count: number): void {
+      seed({ configured: true })
+      const ids = ['bot-2e7877', ...Array.from({ length: count - 1 }, (_, i) => `bot-a${i}`)]
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled: true,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: ready, config: {}, capabilities: caps,
+          accounts: ids.map((id, i) => ({ account: id, name: '', configured: true, enabled: true,
+            status: { ...ready, identity: `@bot_${i}` }, config: {}, capabilities: caps })),
+        }],
+      })
+      mock.setResponse('channels.locations', {
+        ok: true,
+        bots: ids.map((id, i) => ({ platform: 'telegram', account: id,
+          locations: [{ chat_id: `-${i}`, title: i === 3 ? 'HelperCTO group' : `chat ${i}`, kind: 'group', supports_topics: false }] })),
+      })
+    }
+    const search = () => q('[data-testid="channel-search"]') as HTMLInputElement | null
+    async function type(text: string): Promise<void> {
+      const input = search()!
+      input.value = text
+      input.dispatchEvent(new Event('input'))
+      await flushPromises()
+    }
+    const accounts = () => qa('[data-testid="channel-group"]').map((g) => g.getAttribute('data-account'))
+
+    it('keeps only the bots whose name, id or chat matches', async () => {
+      seedMany(8)
+      const w = await render()
+      await openPopover(w)
+      expect(accounts()).toHaveLength(8)
+      await type('2e7877')
+      expect(accounts()).toEqual(['bot-2e7877'])
+      await type('helperCTO')
+      expect(accounts()).toEqual(['bot-a2'])
+      await type('nothing-here')
+      expect(accounts()).toEqual([])
+      expect(q('[data-testid="channel-search-empty"]')).not.toBeNull()
+    })
+
+    it('clears the search on Escape before closing', async () => {
+      seedMany(8)
+      const w = await render()
+      await openPopover(w)
+      await type('2e7877')
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await flushPromises()
+      expect(q('[data-testid="channel-popover"]')).not.toBeNull()
+      expect(accounts()).toHaveLength(8)
+    })
+
+    it('shows no search box for a few bots', async () => {
+      seedMany(3)
+      const w = await render()
+      await openPopover(w)
+      expect(search()).toBeNull()
+    })
   })
 
   describe('Guard warning for a CLI Guard cannot block', () => {

@@ -14,6 +14,7 @@ applied to it unless a caller asks for its derived graph.
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 
 GRAPH_VERSION = 1
@@ -25,10 +26,12 @@ MAX_RETRY_WAIT_MS = 300_000
 # How deep sub-pipelines may nest at run time (the outermost run is depth 1).
 MAX_SUBPIPELINE_DEPTH = 3
 TRIGGER_NODE_ID = "trigger"
-NODE_KINDS = ("trigger", "slot", "gate", "subpipeline")
+NODE_KINDS = ("trigger", "slot", "gate", "subpipeline", "plugin")
 # Nodes that run work and can fail: they may carry retry and start branch and
 # error edges.
-WORK_NODE_KINDS = ("slot", "subpipeline")
+WORK_NODE_KINDS = ("slot", "subpipeline", "plugin")
+# A plugin node's pluginId: the Manifest v2 id grammar (pluginManifestV2.ts).
+_PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$")
 EDGE_KINDS = ("main", "reject", "branch", "error")
 # Edge kinds that carry flow forward (layering, cycle check, readiness).
 FORWARD_EDGE_KINDS = ("main", "branch", "error")
@@ -126,6 +129,26 @@ def subpipeline_cycle_errors(graphs: dict[str, dict[str, Any]]) -> list[str]:
             stack.pop()
 
         walk(start)
+    return errors
+
+
+def _plugin_errors(nid: str, config: Any) -> list[str]:
+    """A plugin node's {pluginId, node, input?} (see the TS twin): a
+    deterministic step another installed plugin contributes
+    (contributes.pipelineNodes), run by the Host on that plugin's backend."""
+    if not isinstance(config, dict):
+        return [f"plugin node {nid} needs plugin.pluginId and plugin.node"]
+    errors: list[str] = []
+    pid = config.get("pluginId")
+    if not isinstance(pid, str) or not _PLUGIN_ID_RE.match(pid):
+        errors.append(f"plugin node {nid} needs plugin.pluginId (a plugin id such as acme.tools)")
+    name = config.get("node")
+    if not isinstance(name, str) or not name.strip():
+        errors.append(f"plugin node {nid} needs plugin.node")
+    if "input" in config and not isinstance(config["input"], str):
+        errors.append(f"plugin node {nid}: input must be a string")
+    if set(config) - {"pluginId", "node", "input"}:
+        errors.append(f"plugin node {nid}: plugin takes only pluginId, node and input")
     return errors
 
 
@@ -371,6 +394,10 @@ def validate_graph(graph: Any) -> list[str]:
             errors.extend(_subpipeline_errors(nid, n.get("subpipeline")))
         elif n.get("subpipeline") is not None:
             errors.append(f"node {nid}: only subpipeline nodes carry subpipeline config")
+        if k == "plugin":
+            errors.extend(_plugin_errors(nid, n.get("plugin")))
+        elif n.get("plugin") is not None:
+            errors.append(f"node {nid}: only plugin nodes carry plugin config")
         pos = n.get("position")
         if not isinstance(pos, dict) or not _finite(pos.get("x")) or not _finite(pos.get("y")):
             errors.append(f"node {nid} needs a numeric position")
@@ -596,6 +623,10 @@ def _apply_ops(graph: dict[str, Any], ops: list[dict[str, Any]]) -> dict[str, An
                 if n.get("kind") != "subpipeline":
                     raise GraphError([f"node {n['id']} is not a subpipeline"])
                 n["subpipeline"] = {**(n.get("subpipeline") or {}), **op["subpipeline"]}
+            if op.get("plugin"):
+                if n.get("kind") != "plugin":
+                    raise GraphError([f"node {n['id']} is not a plugin node"])
+                n["plugin"] = {**(n.get("plugin") or {}), **op["plugin"]}
         elif kind == "move_node":
             pos = op.get("position") or {}
             node(op.get("id"))["position"] = {"x": pos.get("x"), "y": pos.get("y")}

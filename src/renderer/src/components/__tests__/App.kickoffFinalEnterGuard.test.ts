@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { composerClearKeys, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { composerClearKeys, KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import type { EchoEvidence } from '../../lib/injectEcho'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -101,7 +101,7 @@ async function runSiteWhereTheRunFailsMidInjection(site: string) {
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
     'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'kickoffCopyInBox', 'paneParkedOnPrompt',
-    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'runEnding', 'runPaneSentAt', code,
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'runEnding', 'runPaneSentAt', 'kickoffPacing', 'KICKOFF_ECHO_WAIT_MS', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff', origin: 'pipeline' }, { id: 'stage' },
@@ -109,6 +109,8 @@ async function runSiteWhereTheRunFailsMidInjection(site: string) {
     // An empty box: retries type again, as before.
     () => ({ holds: () => false, submit: async () => false }), () => false,
     () => pipeline.state === 'running' && pipeline.stageIndex === 0, pipeline, false, 0, () => {}, () => false, new Map(),
+    () => ({}),
+    KICKOFF_ECHO_WAIT_MS,
   ) as () => ReturnType<typeof runPipelineKickoff>
   return { result: await run(), injectPane, sleep }
 }
@@ -147,7 +149,7 @@ describe('injectText asks right before every Enter', () => {
   it('injectPane passes the check through', () => {
     const pane = functionSource('injectPane')
     expect(pane).toMatch(/stillWanted\?: \(\) => boolean/)
-    expect(pane).toMatch(/onInputBlocked, stillWanted,?\s*\)/)
+    expect(pane).toMatch(/onInputBlocked, stillWanted, prefill, echoWaitMs,?\s*\)/)
   })
 })
 

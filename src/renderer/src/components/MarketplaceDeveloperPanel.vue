@@ -32,6 +32,7 @@ import type {
   DeveloperVersionRow,
   StagedPackage,
 } from '../../../shared/marketplaceDeveloper'
+import { BUILD_FOR_NAVIDE_URL, DEVELOPERS_URL } from '../../../shared/marketplaceDeveloper'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
@@ -62,6 +63,22 @@ const application = ref<{
   namespaces?: Array<{ namespace: string; frozen_at: string | null; frozen_reason: string | null }>
 } | null>(null)
 const versions = ref<DeveloperVersionRow[]>([])
+
+/** The entry card's one next step (plan v2_8714c5 b1): signed out it lists
+ *  three steps instead; revoked has none. */
+const entryStep = computed<'signed-out' | 'apply' | 'pending' | 'key' | 'publish' | null>(() => {
+  const current = state.value
+  if (!current || !(current.signedIn.account || current.signedIn.publisher)) return 'signed-out'
+  const status = application.value?.status ?? 'none'
+  if (status === 'none' || status === 'rejected') return 'apply'
+  if (status === 'pending') return 'pending'
+  if (status !== 'approved') return null
+  return current.keyRegistered ? 'publish' : 'key'
+})
+
+function openLink(url: string): void {
+  void window.agentTeam?.openExternal?.(url)
+}
 
 const form = computed(() => openMarketplaceForm.value)
 const request = computed(() => form.value?.request ?? null)
@@ -115,6 +132,13 @@ async function signIn(scope: 'account' | 'publish'): Promise<void> {
 
 async function signOut(): Promise<void> {
   const next = await run('sign-out', () => api().signOut())
+  if (next) await refresh()
+}
+
+/** L1d: the user's explicit choice to make this Navide's key the publisher's
+ *  key; the key the Registry held (the CLI's) stops publishing. */
+async function replaceKey(): Promise<void> {
+  const next = await run('replace-key', () => api().registerKey({ replace: true }))
   if (next) await refresh()
 }
 
@@ -291,6 +315,20 @@ onMounted(() => {
 
 <template>
   <div class="dev-panel">
+    <section class="dev-section dev-entry" data-testid="developer-entry" :aria-label="$t('marketplace-developer.entry.title')">
+      <h2 class="dev-title">{{ $t('marketplace-developer.entry.title') }}</h2>
+      <ol v-if="entryStep === 'signed-out'" class="dev-entry-steps">
+        <li>{{ $t('marketplace-developer.entry.step-init') }} <code>npx navide-plugin init acme-hello --id acme.hello --template vue</code></li>
+        <li>{{ $t('marketplace-developer.entry.step-load') }}</li>
+        <li>{{ $t('marketplace-developer.entry.step-apply') }}</li>
+      </ol>
+      <p v-else-if="entryStep" class="dev-muted" data-testid="developer-entry-next">{{ $t(`marketplace-developer.entry.next.${entryStep}`) }}</p>
+      <div class="dev-actions">
+        <button class="nv-btn nv-btn--sm" data-testid="developer-entry-guide" @click="openLink(BUILD_FOR_NAVIDE_URL)">{{ $t('marketplace-developer.entry.guide') }}</button>
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-entry-console" @click="openLink(DEVELOPERS_URL)">{{ $t('marketplace-developer.entry.console') }}</button>
+      </div>
+    </section>
+
     <section class="dev-section" :aria-label="$t('marketplace-developer.account.title')">
       <h2 class="dev-title">{{ $t('marketplace-developer.account.title') }}</h2>
       <p class="dev-muted">{{ $t('marketplace-developer.account.desc') }}</p>
@@ -303,6 +341,12 @@ onMounted(() => {
             <code v-if="state.keyFingerprint">{{ state.keyFingerprint }}</code>
             <span v-else>{{ $t('marketplace-developer.account.no-key') }}</span>
             <span v-if="state.keyFingerprint" class="dev-chip">{{ state.keyRegistered ? $t('marketplace-developer.account.key-registered') : $t('marketplace-developer.account.key-unregistered') }}</span>
+            <template v-if="!state.keyRegistered && state.keyConflictFingerprint">
+              <p class="dev-muted dev-key-conflict">{{ $t('marketplace-developer.account.key-conflict', { fingerprint: state.keyConflictFingerprint }) }}</p>
+              <button class="nv-btn nv-btn--sm" :disabled="busy !== null" @click="replaceKey()">
+                {{ $t('marketplace-developer.account.replace-key') }}
+              </button>
+            </template>
           </dd>
           <dt>{{ $t('marketplace-developer.account.expires') }}</dt>
           <dd>{{ state.tokenExpiresAt.publisher ?? state.tokenExpiresAt.account ?? '—' }}</dd>
@@ -485,6 +529,8 @@ onMounted(() => {
 .dev-facts dt { color: var(--text-secondary); }
 .dev-facts dd { margin: 0; word-break: break-all; }
 .dev-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.dev-entry-steps { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-1); font-size: var(--font-xs); color: var(--text-secondary); }
+.dev-entry-steps code { overflow-wrap: anywhere; }
 .dev-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .dev-field { display: flex; flex-direction: column; gap: var(--space-1, 4px); font-size: var(--font-xs); }
 .dev-field label { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }

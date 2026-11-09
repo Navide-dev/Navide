@@ -98,6 +98,7 @@ async function harness(segment: string, locals: Record<string, unknown>, ends: {
     paneRefs: {},
     PARKED_ON_PROMPT_REASON: 'parked',
     MAX_KICKOFF_ATTEMPTS: 3,
+    kickoffAttempt: 3,
     index: 0,
     tag: '[01/w]',
     slot: { label: 'w', agentKey: 'claude', roleKey: '' },

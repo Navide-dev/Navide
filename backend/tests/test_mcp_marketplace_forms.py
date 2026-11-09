@@ -274,12 +274,35 @@ async def test_publish_status_answers_states_without_secrets(host, windows, call
 async def test_developer_status_errors_are_redacted_and_coded(host, windows, caller) -> None:
     host.answer = {"ok": False, "error": f"refused {FAKE_TOKEN}", "error_code": "NOT_SIGNED_IN"}
     out = await forms.marketplace_developer_status(None)
-    assert out == {"ok": False, "error": "refused [redacted]", "error_code": "NOT_SIGNED_IN"}
+    assert out == {
+        "ok": False, "error": "refused [redacted]", "error_code": "NOT_SIGNED_IN",
+        "next_step": "sign-in", "guide": forms.BUILD_FOR_NAVIDE_URL,
+    }
     host.answer = {"ok": False, "error": "x", "error_code": "SOMETHING_ELSE"}
     out = await forms.marketplace_developer_status(None)
     assert out["error_code"] == "HOST_UNAVAILABLE"
     out = await forms.marketplace_publish_status(None, "not an id")
     assert out["error_code"] == "BAD_REQUEST"
+
+
+@pytest.mark.parametrize(("application", "key_registered", "step"), [
+    (None, False, "apply"),
+    ({"status": "none"}, False, "apply"),
+    ({"status": "rejected", "reason": "x"}, False, "apply"),
+    ({"status": "pending"}, False, "wait-for-review"),
+    ({"status": "approved"}, False, "register-key"),
+    ({"status": "approved"}, True, "publish"),
+    ({"status": "revoked"}, True, None),
+])
+async def test_developer_status_says_the_next_step(host, windows, caller, application, key_registered, step) -> None:
+    host.answer = {"ok": True, "result": {
+        "kind": "developer-status", "signed_in": {"account": True, "publisher": key_registered},
+        "namespace": "acme", "key_registered": key_registered, "application": application,
+    }}
+    out = await forms.marketplace_developer_status(None)
+    assert out["ok"] is True
+    assert out["next_step"] == step
+    assert out["guide"].endswith("/docs/en-US/build-for-navide.md")
 
 
 async def test_nothing_secret_or_personal_is_logged_or_audited(host, windows, audit, caller, caplog) -> None:

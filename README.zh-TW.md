@@ -119,7 +119,7 @@ Navide 已經是創辦人持續開發這個專案時使用的主要工程環境�
 
 ## 目前已具備
 
-- **多 Agent Workspace：**在獨立 pane 中執行 16 種支援的 coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Goose、Grok CLI、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、Pi、Qwen Code）或一般 Terminal。
+- **多 Agent Workspace：**在獨立 pane 中執行 19 種支援的 coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code）或一般 Terminal。
 - **CLI 管理：**偵測已安裝的 Coding CLI、版本與安裝方式，並執行各 CLI 官方自己的更新與診斷指令。
 - **Session 生命週期：**偵測、保存、重建並恢復受支援的 CLI Session。
 - **可設定 Pipeline：**定義 Stage、平行 slot、Agent、角色、kickoff prompt、提問規則、文件查詢與完成 sentinel。
@@ -188,11 +188,17 @@ pnpm dev
 
 Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS 權限。接著可閱讀[開始使用](docs/zh-TW/getting-started.md)與[使用指南](docs/zh-TW/user-guide.md)。
 
+## 為 Navide 開發外掛
+
+自己做一個 Navide 外掛，上架到 [Navide Marketplace](https://marketplace.navide.dev/)。`npx navide-plugin init --template vue` 五分鐘就有一個可以建置的外掛（Navide 0.2.39 起），用 Developer Mode 不必上架就能載入試用；在 [developers.navide.dev](https://developers.navide.dev/developer) 實名申請一次，通過審核後即可發佈。
+從英文版 [Build for Navide](docs/en-US/build-for-navide.md) 開始，一頁講完整個流程；問題請到 [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)。
+
 ## 文件與深入閱讀
 
 - **使用 Navide：**[開始使用](docs/zh-TW/getting-started.md)、[使用指南](docs/zh-TW/user-guide.md)與[疑難排解](docs/zh-TW/troubleshooting.md)
 - **理解產品：**[Navide 宣言](docs/zh-TW/manifesto.md)、[產品願景](docs/zh-TW/vision.md)、[產品定位](docs/zh-TW/product-positioning.md)與[產品 Roadmap](docs/zh-TW/roadmap.md)
 - **檢查能力邊界：**[隱私與資料流](docs/zh-TW/privacy.md)與英文版 [Security Policy](SECURITY.md)
+- **為 Navide 開發：**英文版 [Build for Navide](docs/en-US/build-for-navide.md) 一頁講完從 `npx navide-plugin init` 到 Marketplace 審核上架的流程，以及[我們想要的外掛](docs/en-US/plugin-ideas.md)
 - **瀏覽完整內容：**[Navide 繁體中文文件中心](docs/zh-TW/README.md)
 
 ## 授權

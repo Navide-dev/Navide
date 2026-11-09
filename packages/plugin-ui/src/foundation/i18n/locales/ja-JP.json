@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "設定の「開発者モード」セクションを開く",
+      "ui_plugins_openInstallFromFile": "設定の「ファイルからインストール」セクションを開く",
+      "ui_plugins_openMarketplace": "Navide マーケットプレイス、または Navide プラグインのページを開く",
+      "ui_settings_open": "設定を開く（タブを指定可能）",
+      "ui_window_openGit": "現在のワークスペースの Git ウィンドウを開く",
+      "ui_window_openPipeline": "パイプライン管理ウィンドウを開く",
+      "ui_window_openPlans": "プランウィンドウを開く（ドキュメントを指定可能）",
+      "ui_window_openResourceManager": "リソースマネージャーを開く",
+      "ui_window_openTurnStats": "ターン統計を開く"
+    },
     "add-step": "ステップを追加",
     "confirm-title": "このボタンを実行しますか？",
     "confirm-message": "実行される内容：{actions}。何かを閉じるかリセットするため、元に戻せません。",
@@ -544,6 +555,17 @@
     "agent-closed-workspace-kept": "「{caller}」が {name} を閉じました。CLI は動作を続けています",
     "agent-closed-workspace-ended": "「{caller}」が {name} を閉じ、その CLI を終了しました",
     "agent-closed-window": "「{caller}」が {names} のウィンドウを閉じました。{count} 個の CLI は動作を続けています",
+    "agent-channels-bind": "「{caller}」が {bot} のチャット {chat} をペイン「{pane}」に紐付けました",
+    "agent-channels-unbind": "「{caller}」がペイン「{pane}」のチャット紐付けを解除しました",
+    "agent-channels-verbosity": "「{caller}」がペイン「{pane}」のチャットに送る内容を {verbosity} に変更しました",
+    "agent-channels-rename": "「{caller}」が bot {bot} の名前を「{name}」に変更しました",
+    "agent-channels-enabled": "「{caller}」が bot {bot} を接続しました",
+    "agent-channels-disabled": "「{caller}」が bot {bot} を切断しました",
+    "agent-channels-link": "「{caller}」が bot {bot} のリンクコードを作成しました",
+    "agent-channels-reject": "「{caller}」が {bot} のペアリング要求 {code} を拒否しました",
+    "agent-channels-managed": "「{caller}」が Telegram bot {bot} に新しい bot の作成を依頼しました",
+    "agent-channels-request": "「{caller}」からチャットチャンネルのリクエストが届いています",
+    "agent-channels-request-open": "開く",
     "undo": "元に戻す",
     "cross-workspace-toast": "別のワークスペースからの指示：「{from}」→「{target}」",
     "cross-workspace-badge": "ワークスペース間",
@@ -617,6 +639,11 @@
       "open-accounts": "Git アカウントを開く"
     },
     "left-view-unavailable": "埋め込み Git ビューは一時的に利用できません。",
+    "recovery-title": "内蔵 Git を起動できませんでした",
+    "recovery-reason": "原因: {reason}",
+    "recovery-reinstall": "内蔵 Git を再インストール",
+    "recovery-reinstalling": "再インストール中…",
+    "recovery-reinstall-failed": "再インストールに失敗しました: {reason}",
     "detail-open-failed": "詳細ビューを開けませんでした。Git パネルは現在のターゲットを保持します。",
     "open-workspace": "Git を使用するにはワークスペースを開いてください。",
     "settings-unavailable": "Git の設定を読み込めませんでした。",
@@ -1615,6 +1642,22 @@
       "cannot-rebuild": "再開できる会話がありません",
       "rebuild": "再構築"
     },
+    "archive": {
+      "hint": "しばらく書き込みのない Claude Code の Session ログを圧縮し、必要ならご自身の S3 バケットへアップロードします。ここの項目はすべて既定でオフで、オンにするまで何もしません。",
+      "compress": "アイドル状態の Session ログを圧縮する",
+      "compress-hint": "1 日 1 回、設定した日数だけアイドル状態の Claude Code Session ログの隣に .zst のコピーを作り、展開すると元と同じバイト列になることを確認します。開いている Pane が使っている Session には触れません。",
+      "idle-days": "圧縮するまでの書き込みなしの日数",
+      "remove-originals": ".zst の検証後に元のファイルを削除する",
+      "remove-originals-hint": "ディスク容量を空けられます。削除したログは Claude Code で再開できず、Token パネルでも読めなくなりますが、.zst にはすべてのバイトが残ります。オフなら両方を残します。",
+      "upload": "ご自身の S3 バケットへアップロードする",
+      "upload-hint": "各 .zst を下のプレフィックスの下に、S3 側で暗号化してご自身のバケットへ送ります。認証情報は AWS の標準チェーン（環境変数、~/.aws のプロファイル、SSO）から取得し、Navide が AWS キーを保存することはありません。",
+      "upload-after-days": "アップロードするまでの日数",
+      "bucket": "S3 バケット",
+      "prefix": "キーのプレフィックス",
+      "region": "リージョン",
+      "region-placeholder": "AWS プロファイルの設定を使用",
+      "save-failed": "アーカイブ設定を保存できませんでした"
+    },
     "limits": {
       "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",
       "test-workers": "新しいペインのテストワーカー数を制限",
@@ -1934,7 +1977,8 @@
         "aiCli": "AI CLI セッション",
         "web": "Web の閲覧",
         "agents": "エージェントのペイン",
-        "agentMessages": "エージェント間のメッセージ"
+        "agentMessages": "エージェント間のメッセージ",
+        "secrets": "Navide プラグインのシークレット"
       },
       "shellLabel": "シェルの実行ファイル",
       "shellHint": "最上位の実行ファイル名のみ指定できます。パスやシェル式は使用できません。",
@@ -1995,6 +2039,11 @@
       "cancel": "キャンセル"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "設定",
+        "reset": "既定値に戻す",
+        "saveFailed": "「{title}」を保存できませんでした。もう一度お試しください。失敗が続く場合は、この Navide プラグインを再インストールしてください。"
+      },
       "devUnpacked": "署名なしのローカルフォルダー（開発者モードのみ）",
       "agentTools": {
         "heading": "エージェントが呼び出せるツール（{count} 個）",
@@ -2019,7 +2068,7 @@
           "firstParty": "エージェントに純正 Navide プラグインのツール呼び出しを許可",
           "firstPartyDescription": "既定でオン。Navide Browser など Navide が作る純正 Navide プラグインのツールを、ペイン内のエージェントがバージョンごとの確認なしで呼び出せるようにします。結果は引き続き外部コンテンツとして扱われ、変更を伴うツールはワークスペースごとに一度確認します。",
           "enable": "エージェントにサードパーティ製 Navide プラグインのツール呼び出しを許可",
-          "description": "許可した Navide プラグインが宣言するツールを、ペイン内のエージェントが呼び出せるようにします。ファイルを変更するツールはワークスペースごとに一度だけ確認します。",
+          "description": "許可した Navide プラグインが宣言するツールを、ペイン内のエージェントが呼び出せるようにします。ファイルを変更するツールはワークスペースごとに一度だけ確認します。ここで一度も設定していない間は、同意カードにツールが載っている Navide プラグインを許可すると自動的にオンになります。ここで設定した値はそのままです。サードパーティのツールをすべて止めるには、ここでオフにしてください。",
           "externalCallers": "外部の MCP クライアントにも許可",
           "externalCallersDisclosure": "外部プログラムは 1 つのトークンを共有するため、呼び出しの記録には「外部クライアント」としか残らず、どのプログラムかは区別できません。Host の資格情報も同じ扱いです。"
         },
@@ -2088,6 +2137,8 @@
       "builtinSwitchBusy": "適用中… 進行中の処理が終わるのを待っています。Plans では 30 秒ほどかかることがあります。",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
+      "networkStrict": "宣言済みのネットワークホストのみ許可",
+      "networkStrictNote": "オフ（既定）：ビューはどのホストにも接続でき、各リクエストは記録され、manifest で宣言していないホストへの接続はアクティビティに「未宣言」と表示されます。オン：宣言済みホストのみ（フレームのポリシーとリクエストフックの両方）、それ以外は拒否して記録します。",
       "digestBlock": {
         "blocked": "Navide がブロック",
         "security": "Navide が取り下げ（セキュリティ）",
@@ -2114,7 +2165,6 @@
           "previousChanged": "以前のバージョンのパッケージがディスク上で変更されたため、戻しませんでした。",
           "grantUnavailable": "{id} に付与された権限が見つからないため、戻しませんでした。",
           "factoryUnavailable": "同梱版に戻す操作は現在利用できません。",
-          "gitLegacyRecovery": "NAVIDE_GIT_RECOVERY=legacy でレガシー復旧が強制されている間は、同梱の Git を復元できません。",
           "factoryRestoreFailed": "同梱版を読み込めませんでした。"
         }
       },
@@ -2174,6 +2224,10 @@
         "uninstallConfirmBody": "{name} をこのデバイスから削除します。Navide マーケットプレイスから再インストールできます。",
         "uninstallConfirmBodyWithData": "{name} をこのデバイスから削除します。{name} のネイティブバックエンドは、このデバイスに {size} の専用データを保存しています（場所は下記）。保持を選ばない限り、Navide はこのデータも削除します。",
         "uninstallKeepNativeData": "このデータを保持し、再インストール時に引き続き使う",
+        "uninstallSecretsTitle": "この Navide プラグインが保存したシークレットも削除しますか？",
+        "uninstallSecretsBody": "{name} はこのデバイスに API キーやトークンを暗号化して保存しています（合計 {count} 件）。再インストール時に使えるよう残すか、今すぐ削除できます。",
+        "uninstallSecretsDelete": "シークレットを削除",
+        "uninstallSecretsKeep": "シークレットを残す",
         "uninstallClearsWebData": "{name} を削除すると、このコンピューター上のサイトのサインイン、Cookie、キャッシュも削除されます。",
         "updatesCount": "利用可能なアップデート：{count} 件",
         "retry": "再試行",
@@ -2233,7 +2287,9 @@
           "downloads": "ダウンロード数",
           "status": "状態"
         },
-        "prereleaseAvailable": "プレリリース {version} あり"
+        "prereleaseAvailable": "プレリリース {version} あり",
+        "buildOwnHint": "自分で作ってみませんか？",
+        "buildOwn": "Navide プラグインを作る"
       },
       "developerMode": {
         "errors": {
@@ -2249,6 +2305,9 @@
         "title": "開発者モード",
         "switch": "開発者モードをオンにする",
         "hint": "フォルダーから Navide プラグインを読み込んで開発・テストでき、Navide マーケットプレイスの代わりに自分のサーバーから Navide プラグインをインストールすることもできます。オフにすると、それらの Navide プラグインは取り外されます。",
+        "firstTime": "初めての Navide プラグインですか？Build for Navide がテンプレートから Navide マーケットプレイス公開まで案内します。",
+        "openGuide": "ガイドを開く",
+        "agentSkill": "または agent に案内してもらう：この skill をインストールするよう頼んでください：",
         "banner": "開発者モードがオンです。フォルダーから読み込んだ Navide プラグインは審査されていません。",
         "reminder": "開発者モードがオンです：フォルダーから読み込んだ Navide プラグインは審査されていません。不要になったら「設定 → Navide プラグイン」でオフにしてください。",
         "reminderClose": "了解",
@@ -2372,9 +2431,10 @@
         "capability": {
           "fs": "ワークスペース内のファイルを読み書きします。",
           "aiCli": "Navide に設定済みの AI CLI エージェントを起動し、入力を送り、出力をすべて読み取ります。ウィンドウを閉じた後も AI CLI をバックグラウンドで動かし続けることができます。",
-          "web": "任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインでのあなたのログイン情報を使い（あなたの代わりにウェブページでリクエストを送信できます）、この Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。複数のウェブページを同時に開くことができ、ページごとにメモリを使います。",
+          "web": "任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインでのあなたのログイン情報を使い（あなたの代わりにウェブページでリクエストを送信できます）、この Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。agent に任せているページでは、この Navide プラグイン自身もスクリプトを実行し、内容とログイン状態を読み取れます。複数のウェブページを同時に開くことができ、ページごとにメモリを使います。",
           "agents": "エージェントのペイン、どのペインがどれを開いたか、いつ互いにメッセージを送ったかを見られます。メッセージの内容は見られません。",
           "agentMessages": "エージェント間のメッセージ本文をすべて読み取ります。本文にはコード、ファイルの内容、機密情報が含まれることがあります。",
+          "secrets": "自身の API キーやトークンをこのコンピューターに暗号化して保存します。Navide がアップロードしたり表示したりすることはありません。",
           "shell": "コンピューター上でコマンドを実行します。",
           "terminal": "Navide のターミナルを開いて操作します。"
         }
@@ -7654,6 +7714,7 @@
     "section": {
       "general-behavior": "一般的な動作",
       "resource-limits": "リソース制限",
+      "session-archive": "Session ログのアーカイブ",
       "settings-management": "設定の管理",
       "theme": "テーマ",
       "other": "その他"
@@ -8697,6 +8758,9 @@
     "run-group-active": "実行中 — このグループのエージェントが稼働しています",
     "run-group-awaiting": "対応が必要 — このグループのエージェントが許可または質問への回答を待っています",
     "agent-not-installed": "{label} — 未インストール",
+    "cloud-agents-plugin-hint": "クラウドエージェント（Grok Bot、dots など）は Navide マーケットプレイスで対応する Navide プラグインをインストールしてください。",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "エージェント",
     "select-role": "ロールを選択…",
     "waiting-backend": "バックエンドを待機中…",
     "set-workspace-first": "まずワークスペースのパスを設定してください",
@@ -9114,6 +9178,8 @@
     "stall-auto-advance": "全自動：5 秒後に強制的に次へ進みます…",
     "pipeline-starting": "パイプラインを開始中…",
     "pipeline-log-session-bound": "セッションを関連付けました",
+    "pipeline-log-restoring-panes": "{n} 個のペインを復元しています",
+    "terminal": "ターミナル",
     "pipeline-log-answer-manually": "手動で回答してください",
     "pipeline-log-manager-ready": "引き継ぎ中（{count} 件のメッセージを処理）",
     "pipeline-log-slot-not-found": "スロット「{slot}」がありません",
@@ -9952,7 +10018,8 @@
       "update": "Navide プラグイン {plugin} を {from} から {version} に更新しますか？",
       "rollback": "Navide プラグイン {plugin} を {from} から {version} に戻しますか？",
       "remove": "Navide プラグイン {plugin} を削除しますか？",
-      "enable": "Navide プラグイン {plugin} を再び有効にしますか？"
+      "enable": "Navide プラグイン {plugin} を再び有効にしますか？",
+      "clear-secrets": "Navide プラグイン {plugin} が保存したシークレットを削除しますか？"
     },
     "desc": "agent がこの変更を求めています。ここで承認するまで何も変わりません。agent が代わりに承認することはできません。",
     "queue": "{count} 件待ち",
@@ -9979,6 +10046,7 @@
     "finished-late": "このウィンドウの再接続中に別のウィンドウがこのリクエストを中断扱いにしていました。記録はこの結果に更新されています。",
     "failed": "完了しませんでした：{error}",
     "not-appliable": "このバージョンの Navide ではまだこの種類のリクエストを実行できません。拒否はできます。",
+    "clear-secrets-note": "Navide プラグイン {plugin} がこのデバイスに暗号化して保存している API キーとトークンを削除します。元に戻せません。{plugin} は再び入力を求めます。",
     "unavailable": "このウィンドウでは Navide プラグインの操作を実行できません。"
   },
   "skill-approval": {
@@ -10181,6 +10249,7 @@
     "settings-title": "CLI 利用枠バッジ",
     "settings-enabled": "CLI ペインのヘッダーに残りの利用枠を表示",
     "settings-refresh": "更新間隔",
+    "settings-refresh-minutes": "{n} 分",
     "settings-hint": "11 の CLI プロバイダーの利用枠を、各プロバイダーの使用量 API から読み取り専用で表示します（Claude は組み込みの /usage パネルから）。",
     "settings-signing-title": "Antigravity 認証情報（メンテナー用）",
     "settings-signing-hint": "開発用です。~/navide-signing/usage_secrets.py に書き込み、次回のリリースビルドに Antigravity のインストール型アプリ用の公開 OAuth 定数を組み込みます。リポジトリには保存されません。",
@@ -10919,6 +10988,19 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "agent": {
+      "title": "エージェントからのリクエスト",
+      "from": "{requester} からの依頼",
+      "kind-bot-add": "{platform} の bot を追加",
+      "kind-bot-remove": "bot {bot} を削除",
+      "kind-bind": "{bot} のチャット {chat} をペイン「{pane}」に紐付け",
+      "kind-pairing": "{sender} が {bot} と話せるようにする",
+      "kind-pairing-bind": "{sender} が {bot} と話せるようにし、そのチャットをペイン「{pane}」に紐付け",
+      "approve": "承認",
+      "decline": "拒否",
+      "fill": "フォームを開く",
+      "add-note": "この bot は {requester} が追加を依頼したもので、名前はエージェントが入力しました。認証情報はご自身でここに貼り付けてください。エージェントには渡りません。"
+    },
     "shareOpenNotify": {
       "title": "共有リンクの開封通知",
       "desc": "このコンピューターで作成した共有リンクが新しいデバイスで開かれたとき、バインド済みのチャットに通知します（リンクの URL は送信しません）。Navide Cloud が必要です。"
@@ -10971,6 +11053,19 @@
     },
     "enable-platform": "{platform} を有効化",
     "bot": {
+      "sort-recent": "最近の活動",
+      "sort-name": "名前",
+      "group-workspace": "ワークスペース別",
+      "search-placeholder": "名前、{'@'}ハンドル、id、pane、ワークスペースで検索",
+      "search-empty": "一致する bot はありません",
+      "search-clear": "クリア",
+      "bound-none": "どの pane にも接続されていません",
+      "bound-many": "{n} 個の pane（{workspaces}）",
+      "flag-running": "稼働中",
+      "flag-unbound": "未接続",
+      "flag-pane-closed": "pane が閉じています",
+      "flag-token": "token が無効",
+      "flag-failed": "接続に失敗",
       "default": "メイン bot",
       "add": "bot を追加",
       "new": "新しい bot",
@@ -12117,13 +12212,15 @@
     "source": {
       "broker": "Navide の機能",
       "shell": "shell コマンド",
-      "agentTool": "agent ツール"
+      "agentTool": "agent ツール",
+      "network": "ビューのネットワーク"
     },
     "kind": {
       "system": "権限",
       "shell": "Shell",
       "backendMethod": "ネイティブ backend のメソッド",
-      "agentTool": "agent ツール"
+      "agentTool": "agent ツール",
+      "networkHost": "ネットワークホスト"
     },
     "reason": {
       "undeclared": "宣言なし"
@@ -12178,6 +12275,16 @@
       "crossWorkspace": "ワークスペースをまたぐ呼び出し：{from} → {to}",
       "totalSize": "引数の合計 {args}、結果の合計 {result}。サイズ不明の {unknown} 件は含めていません"
     },
+    "pipelineNodes": {
+      "heading": "このノードを実行した Pipeline",
+      "row": "{date} {origin}が開始した Pipeline → ノード {node}（{workspace}）：{outcome}、{duration} ms",
+      "origin": {
+        "user": "あなた",
+        "agent": "エージェント",
+        "schedule": "スケジュール",
+        "webhook": "Webhook"
+      }
+    },
     "caller": {
       "pane": "pane「{name}」",
       "external": "外部クライアント",
@@ -12199,6 +12306,10 @@
     "commands": {
       "heading": "実行したコマンド",
       "item": "{command} · {count} 回 · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "ビューが接続したホスト",
+      "item": "{host} · {count} 回 · {outcome} · {date}"
     },
     "trend": {
       "heading": "1 日あたりの呼び出し数"
@@ -12287,7 +12398,13 @@
         "backendMethod": "ネイティブコードのメソッド：{key}",
         "backendEvent": "ネイティブコードのイベント：{key}",
         "network": "コマンド経由でリモートに接続できる",
-        "agentTool": "agent ツール：{key}"
+        "networkHost": "ビューの接続先：{key}",
+        "agentTool": "agent ツール：{key}",
+        "agentEvent": "Host のイベントを受け取る：{key}",
+        "pluginCall": "Navide プラグインを呼び出す：{key}",
+        "apiMethod": "ほかの Navide プラグインが呼び出せる：{key}",
+        "pipelineNode": "Pipeline のステップ（エージェントやスケジュールが開始した Pipeline でも実行）：{key}",
+        "commandSlot": "Host の画面に置くコマンド：{key}"
       }
     },
     "title": "開示",
@@ -12306,7 +12423,8 @@
     "undeclared": {
       "shell": "{key} を実行しますが、shell 権限を宣言していません",
       "shellDynamic": "実行時にコマンドを組み立てますが、shell 権限を宣言していません",
-      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲は git・gh・glab だけです",
+      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲に含まれていません",
+      "networkHost": "{key} に接続しますが、宣言していません",
       "system": "{key} を使いますが、この権限を宣言していません",
       "fsScopeWrite": "{key} に書き込みますが、宣言した書き込み範囲の外です",
       "fsScopeRead": "{key} を読み取りますが、宣言した読み取り範囲の外です"
@@ -12314,7 +12432,8 @@
     "notSeenHeading": "宣言あり・静的スキャンでは未検出",
     "notSeen": {
       "shell": "shell（{key}）",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key}（宣言済みのホスト）"
     },
     "scanHeading": "公開時のシステムスキャンの結果",
     "scanHeadingLocal": "Navide によるこのファイルのスキャン結果",
@@ -12332,8 +12451,8 @@
     "scannedLocally": "スキャン結果はこのカードの参考情報で、インストールの可否は決めません。",
     "limitsWithoutScan": "このバージョンにはシステムスキャンがありません。上記はこの Navide プラグイン自身の宣言だけです。",
     "limitsWithoutScanLocal": "Navide はこのファイルをスキャンしていません。上記はこの Navide プラグイン自身の宣言だけです。",
-    "viewNetwork": "Navide プラグインのビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
-    "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューはネットワークに接続でき、Navide の中に外部サイトを表示できます。Navide はその通信をフィルターも記録もしません。上のネットワークの項目は、コマンドとネイティブバックエンドだけが対象です。",
+    "viewNetwork": "この Navide プラグインのビューは、宣言したホスト（上に列挙。列挙がなければ接続不可）にだけ接続でき、外部サイトは表示できません。Navide は接続したホストと拒否したホストを「アクティビティ」に記録します。上のネットワークの項目は、コマンドとネイティブバックエンドが対象です。",
+    "viewNetworkIfViews": "この Navide プラグインにビューがある場合、ビューは宣言したホスト（上に列挙。列挙がなければ接続不可）にだけ接続でき、外部サイトは表示できません。Navide は接続したホストと拒否したホストを「アクティビティ」に記録します。上のネットワークの項目は、コマンドとネイティブバックエンドが対象です。",
     "summary": {
       "nativeBackend": "ネイティブコードを含む（サンドボックスで実行）",
       "files": {
@@ -12345,13 +12464,18 @@
         "full": "任意のコマンドを実行"
       },
       "networkViaShell": "これらのコマンド経由でリモートに接続できる",
+      "agentEvents": "ペイン、Plan、Pipeline、スケジュールに関する Host のイベントを受け取ります（名前と状態のみ）：{events}",
+      "pluginCalls": "次の Navide プラグインを呼び出します：{plugins}",
+      "api": "ほかの Navide プラグインが {count} 個のメソッドを呼び出せます",
+      "pipelineNodes": "Pipeline のステップを {count} 個追加します。エージェント、スケジュール、Webhook が開始した Pipeline でも実行されます",
       "aiCli": "AI CLI のセッションを起動し、出力を読み取る",
-      "web": "任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインでのあなたのログイン情報を使い（あなたの代わりにウェブページでリクエストを送信できます）、この Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。複数のウェブページを同時に開くことができ、ページごとにメモリを使います。",
+      "web": "任意のウェブサイトを開いて閲覧できます。サイトのログイン情報はこのコンピューターに保存されます。agent はこの Navide プラグインでのあなたのログイン情報を使い（あなたの代わりにウェブページでリクエストを送信できます）、この Navide プラグインが開いたすべてのページの内容とログイン状態を読み取れます。操作を引き継いだ後も、ページ内ですでに動いている agent のスクリプトは、再読み込みするまで止まりません。agent に任せているページでは、この Navide プラグイン自身もスクリプトを実行し、内容とログイン状態を読み取れます。複数のウェブページを同時に開くことができ、ページごとにメモリを使います。",
       "agents": "このプロジェクトのエージェントのペイン、どのペインがどれを開いたか、メッセージの配信記録（内容は含まない）、セッション一覧（会話の内容は含まない）を見られます",
       "agentMessages": "このプロジェクトのエージェント間のメッセージ本文をすべて読み取ります。本文にはコード、ファイルの内容、機密情報が含まれることがあります",
+      "secrets": "自身の API キーやトークンをこのコンピューターに暗号化して保存します。Navide がアップロードしたり表示したりすることはありません",
       "ui": "独自の画面を表示する",
       "agentTools": "agent が呼び出せるツールを提供（読み取り {read} 個、書き込み {write} 個）",
-      "network": "ネットワークを使える",
+      "network": "ビューの接続先：{hosts}",
       "noPermissions": "権限を宣言していません"
     },
     "scan": {
@@ -12468,6 +12592,12 @@
       "apply": "今すぐ適用"
     }
   },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Navide プラグイン {plugin} の入手元または発行者が変わったため、以前のコピーが保存したシークレットは隔離され、読み取れません。削除するには {plugin} を削除して「シークレットを削除」を選んでください。",
+      "cleared": "Navide プラグイン {plugin} のシークレットを削除しました（{count} 件）。"
+    }
+  },
   "plugin-switch": {
     "notice": {
       "title": "{plugin} を {from} から {to} に切り替えました",
@@ -12548,6 +12678,20 @@
       "browse": "閲覧",
       "developer": "開発者"
     },
+    "entry": {
+      "title": "Build for Navide：自分の Navide プラグインを作る",
+      "step-init": "テンプレートから Navide プラグインを作成（Navide 0.2.39 以降）：",
+      "step-load": "「設定 → Navide プラグイン → 開発者モード → フォルダーから読み込む…」で読み込んで試す",
+      "step-apply": "下でサインインし、開発者申請を実名で一度だけ記入します。担当者が審査します。",
+      "next": {
+        "apply": "次へ：下の開発者申請を記入してください。",
+        "pending": "次へ：審査をお待ちください。その間に Navide プラグインをビルドし、開発者モードで読み込んで試せます。",
+        "key": "次へ：パブリッシャーとしてサインインし、この Navide の署名鍵を登録してください。",
+        "publish": "次へ：バージョンを公開してください。審査後に Navide マーケットプレイスに掲載されます。"
+      },
+      "guide": "Build for Navide を開く",
+      "console": "developers.navide.dev を開く"
+    },
     "account": {
       "title": "開発者アカウント",
       "desc": "Navide Cloud アカウントでサインインすると、開発者の申請、Navide プラグインの公開、審査状況の確認ができます。サインイン情報と署名鍵は Navide がこのコンピューターの安全な保存領域に保管し、エージェントには見えません。",
@@ -12557,6 +12701,8 @@
       "no-key": "公開者として初めてサインインしたときに作成されます",
       "key-registered": "登録済み",
       "key-unregistered": "未登録",
+      "key-conflict": "Registry にはこのパブリッシャーの別の署名鍵（フィンガープリント {fingerprint}）がすでに登録されています。多くは navide-plugin CLI 用に登録した鍵です。この Navide から公開するにはその鍵を置き換える必要があります。置き換えるまで CLI からの公開はそのまま使えます。",
+      "replace-key": "この Navide の鍵に置き換える",
       "expires": "サインインの期限",
       "sign-in": "Navide Cloud でサインイン",
       "sign-in-publish": "公開者としてサインイン",
@@ -12961,5 +13107,25 @@
       "select": "リスト",
       "checkbox": "チェックボックス"
     }
+  },
+  "token-views": {
+    "by-model": "モデル別",
+    "by-account-quota": "アカウント別クォータ",
+    "range": "期間",
+    "range-day": "日",
+    "range-week": "週",
+    "cache": "キャッシュ",
+    "cache-read": "キャッシュ読み取り",
+    "cache-write": "キャッシュ書き込み",
+    "usd": "米ドル",
+    "other-models": "その他",
+    "no-ledger-data": "この期間の呼び出しはまだ記録されていません",
+    "no-quota-history": "クォータの記録はまだありません",
+    "window-session": "セッション",
+    "window-weekly": "週間",
+    "resets": "{time} にリセット",
+    "trend-7d": "直近 7 日の日別最大",
+    "week-tokens": "今週のトークン",
+    "day-tokens": "今日のトークン"
   }
 }

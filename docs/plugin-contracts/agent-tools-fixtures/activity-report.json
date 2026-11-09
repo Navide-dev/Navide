@@ -15,6 +15,19 @@
     },
     "historicalPeakConcurrency": 2,
     "undeclaredSince": 1790208000000,
+    "pipelineNodeRuns": [
+      {
+        "id": 1,
+        "at": 1792799000000,
+        "pluginVersion": "1.4.0",
+        "workspace": "/Users/me/project",
+        "nodeId": "fetch",
+        "runOrigin": "schedule",
+        "outcome": "ok",
+        "errorCode": "",
+        "durationMs": 120
+      }
+    ],
     "toolCalls": [
       {
         "id": 12,
@@ -111,6 +124,22 @@
         "outcome": "denied",
         "count": 1,
         "lastAt": 1792799920000
+      }
+    ],
+    "network": [
+      {
+        "host": "api.github.com",
+        "workspace": "/Users/me/project",
+        "outcome": "allowed",
+        "count": 12,
+        "lastAt": 1792799940000
+      },
+      {
+        "host": "tracker.example.net",
+        "workspace": "/Users/me/project",
+        "outcome": "denied",
+        "count": 3,
+        "lastAt": 1792799935000
       }
     ],
     "daily": [
@@ -268,6 +297,24 @@
         "outcome"
       ],
       "value": "maybe"
+    },
+    {
+      "name": "network-unknown-outcome",
+      "path": [
+        "network",
+        1,
+        "outcome"
+      ],
+      "value": "blocked"
+    },
+    {
+      "name": "network-host-not-text",
+      "path": [
+        "network",
+        0,
+        "host"
+      ],
+      "value": 12
     },
     {
       "name": "undeclared-without-reasons",

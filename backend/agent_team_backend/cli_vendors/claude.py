@@ -247,6 +247,9 @@ def claude_projects_root() -> Path | None:
 #: A transcript's first lines carry its cwd; anything past these never will.
 SESSION_CWD_SCAN_LINES = 50
 _session_cwds: dict[tuple[str, int], str] = {}
+# Files whose first SESSION_CWD_SCAN_LINES lines name no cwd: they never will, and
+# re-scanning them on every parse would read those lines again on each append.
+_session_cwd_misses: set[tuple[str, int]] = set()
 
 
 class ClaudeLogReader(LogReader):
@@ -342,6 +345,8 @@ class ClaudeLogReader(LogReader):
             key = (str(path), path.stat().st_ino)
         except OSError:
             return ""
+        if key in _session_cwd_misses:
+            return ""
         cwd = _session_cwds.get(key) or self._read_session_cwd(path)
         if cwd:
             _session_cwds[key] = cwd
@@ -350,7 +355,9 @@ class ClaudeLogReader(LogReader):
     def _read_session_cwd(self, path: Path) -> str:
         try:
             with path.open(encoding="utf-8", errors="replace") as fh:
+                scanned = 0
                 for raw in islice(fh, SESSION_CWD_SCAN_LINES):
+                    scanned += 1
                     try:
                         rec = json.loads(raw)
                     except json.JSONDecodeError:
@@ -358,16 +365,23 @@ class ClaudeLogReader(LogReader):
                     cwd = rec.get("cwd") if isinstance(rec, dict) else None
                     if cwd and isinstance(cwd, str):
                         return cwd
+                if scanned >= SESSION_CWD_SCAN_LINES:
+                    _session_cwd_misses.add((str(path), os.fstat(fh.fileno()).st_ino))
         except OSError as err:
             log.debug("read cwd of %s failed: %s", path, err)
         return ""
 
     def cwd_from_file(self, path: Path) -> str:
-        """Reverse cwd-hash: project-dir-name `-foo-bar-baz` → `/foo/bar/baz`.
+        """The cwd the transcript records (read once per file, then cached).
 
-        Edge case: a literal `-` in the original path is ambiguous. Best-effort
-        only; attribution layer handles "unmatched cwd" gracefully.
+        Only a transcript that names none falls back to reversing the folder
+        name, `-foo-bar-baz` → `/foo/bar/baz`: that guess is lossy (a literal
+        `-`, or any non-ASCII name, comes back wrong), and folders that encode
+        alike would all get the same answer.
         """
+        cwd = self._session_cwd(path)
+        if cwd:
+            return unicodedata.normalize("NFC", cwd)
         try:
             project_dir_name = path.parent.name
         except Exception:
@@ -479,6 +493,9 @@ class ClaudeLogReader(LogReader):
             recent.append(dedup_key)
             recent = recent[-64:]
             recent_set = set(recent)
+            cache_split = usage.get("cache_creation")
+            if not isinstance(cache_split, dict):
+                cache_split = {}
             event_checkpoint = dict(final_checkpoint)
             event_checkpoint["offset"] = end
             event_checkpoint["recent_keys"] = list(recent)
@@ -496,6 +513,9 @@ class ClaudeLogReader(LogReader):
                 cache_read_tokens=_int(usage.get("cache_read_input_tokens")),
                 cache_creation_tokens=_int(usage.get("cache_creation_input_tokens")),
                 cli_version=str(rec.get("version") or ""),
+                # The 1-hour TTL share of cache_creation, priced 2x input rather
+                # than 1.25x (cost_ledger).
+                raw={"cache_write_1h": _int(cache_split.get("ephemeral_1h_input_tokens"))},
             ))
 
         final_checkpoint["recent_keys"] = recent

@@ -131,7 +131,7 @@ describe('ControlPane – shared split padding is scoped to the Plans panel', ()
     // recovery, so the Plans panel's insets moved with an unrelated feature.
     wrapper = mountPane({
       pluginContributions: [gitContribution, plansContribution],
-      legacyGitRecovery: true,
+      gitActivationFailure: 'activation timed out',
     })
     await clickTab(wrapper, 'plans')
 

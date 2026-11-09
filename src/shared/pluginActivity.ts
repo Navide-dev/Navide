@@ -17,7 +17,9 @@ export const PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION = 1
  *  summed, never averaged; the page shows "unknown". */
 export const UNKNOWN_BYTES = -1
 
-export type PluginActivitySource = 'broker' | 'shell' | 'agentTool'
+/** `network`: a view's request to a host (C1), recorded from the frame's
+ *  requests and `connect-src` refusals under the address `network.<host>`. */
+export type PluginActivitySource = 'broker' | 'shell' | 'agentTool' | 'network'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
 export type PluginToolCallerKind = 'pane' | 'external' | 'host'
 
@@ -62,6 +64,16 @@ export interface PluginActivityCommand {
   lastAt: number
 }
 
+/** A host a view reached (`allowed`), failed to reach (`error`) or was refused
+ *  by its frame policy (`denied`, always undeclared), newest first. Host only. */
+export interface PluginActivityHost {
+  host: string
+  workspace: string
+  outcome: PluginActivityOutcome
+  count: number
+  lastAt: number
+}
+
 /** One UTC day of `plugin_activity_daily`, oldest first. */
 export interface PluginActivityDay {
   day: string
@@ -72,7 +84,7 @@ export interface PluginActivityDay {
 
 /** A declared permission or tool with no call in the last 30 days ("never used"). */
 export interface PluginActivityDeclaredUnused {
-  kind: 'system' | 'shell' | 'backendMethod' | 'agentTool'
+  kind: 'system' | 'shell' | 'backendMethod' | 'agentTool' | 'networkHost'
   key: string
   /** Last call ever recorded (within the 90-day daily rows), or null. */
   lastUsedAt: number | null
@@ -117,6 +129,23 @@ export interface PluginAgentAction {
   version: string
 }
 
+/** Who started the pipeline run a plugin node ran in. */
+export type PluginPipelineRunOrigin = 'user' | 'agent' | 'schedule' | 'webhook'
+
+/** One row of `plugin_pipeline_node_runs` (newest first): a pipeline run
+ *  reached one of this plugin's pipeline nodes (contributes.pipelineNodes). */
+export interface PluginActivityPipelineNodeRun {
+  id: number
+  at: number
+  pluginVersion: string
+  workspace: string
+  nodeId: string
+  runOrigin: PluginPipelineRunOrigin
+  outcome: 'ok' | 'error'
+  errorCode: string
+  durationMs: number
+}
+
 export interface PluginActivityReport {
   schemaVersion: typeof PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION
   pluginId: string
@@ -132,8 +161,11 @@ export interface PluginActivityReport {
   /** Start of the window `undeclared` covers (30 days). */
   undeclaredSince: number
   toolCalls: PluginActivityToolCall[]
+  pipelineNodeRuns: PluginActivityPipelineNodeRun[]
   files: PluginActivityFile[]
   commands: PluginActivityCommand[]
+  /** C1: hosts the plugin's views reached or were refused, from `network` rows. */
+  network: PluginActivityHost[]
   daily: PluginActivityDay[]
   declaredUnused: PluginActivityDeclaredUnused[]
   undeclared: PluginActivityUndeclared[]
@@ -152,6 +184,13 @@ export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'err
  *  text, with no length or variety limit, so they are never keys. A report
  *  shows them as "called undeclared methods N times". */
 export const BACKEND_CALL_UNDECLARED_ADDRESS = 'backend.<undeclared>'
+/** C4: the life of a plugin's backend child, counted beside its calls under
+ *  three fixed addresses no declared method can spell (angle brackets): the
+ *  child failed (`error`), an automatic restart brought it back (`allowed`),
+ *  and the Host gave up restarting it within the crash window (`error`). */
+export const BACKEND_CRASHED_ADDRESS = 'backend.<crashed>'
+export const BACKEND_RESTARTED_ADDRESS = 'backend.<restarted>'
+export const BACKEND_STOPPED_AFTER_CRASHES_ADDRESS = 'backend.<stopped-after-crashes>'
 
 export interface PluginActivityBackendCalls {
   /** Per `backend.<method>` address and outcome, from the UTC day `window`
@@ -203,10 +242,10 @@ const oneOf = <T extends string>(values: readonly T[], value: unknown): value is
   typeof value === 'string' && (values as readonly string[]).includes(value)
 const nullable = <T>(value: unknown, check: (v: unknown) => v is T): value is T | null => value === null || check(value)
 
-const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool']
+const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool', 'network']
 const OUTCOMES: readonly PluginActivityOutcome[] = ['allowed', 'denied', 'error']
 const CALLER_KINDS: readonly PluginToolCallerKind[] = ['pane', 'external', 'host']
-const UNUSED_KINDS: readonly PluginActivityDeclaredUnused['kind'][] = ['system', 'shell', 'backendMethod', 'agentTool']
+const UNUSED_KINDS: readonly PluginActivityDeclaredUnused['kind'][] = ['system', 'shell', 'backendMethod', 'agentTool', 'networkHost']
 const ANOMALY_KINDS: readonly PluginActivityAnomalyKind[] = ['volumeSpike', 'writeToolNewWorkspace', 'undeclaredDenied']
 
 /** Each entry rebuilt by `build`; null when the value is not an array or any entry is malformed. */
@@ -237,6 +276,18 @@ function toolCall(e: Rec): PluginActivityToolCall | null {
   }
 }
 
+function pipelineNodeRun(e: Rec): PluginActivityPipelineNodeRun | null {
+  if (
+    !isCount(e.id) || !isTime(e.at) || !isText(e.pluginVersion) || !isText(e.workspace) || !isText(e.nodeId) ||
+    !oneOf(['user', 'agent', 'schedule', 'webhook'] as const, e.runOrigin) ||
+    !oneOf(['ok', 'error'] as const, e.outcome) || !isText(e.errorCode) || !isCount(e.durationMs)
+  ) return null
+  return {
+    id: e.id, at: e.at, pluginVersion: e.pluginVersion, workspace: e.workspace, nodeId: e.nodeId,
+    runOrigin: e.runOrigin, outcome: e.outcome, errorCode: e.errorCode, durationMs: e.durationMs,
+  }
+}
+
 function file(e: Rec): PluginActivityFile | null {
   if (!isText(e.path) || !isText(e.address) || !isText(e.workspace) || !oneOf(OUTCOMES, e.outcome) ||
     !isCount(e.count) || !isTime(e.lastAt)) return null
@@ -247,6 +298,12 @@ function command(e: Rec): PluginActivityCommand | null {
   if (!isText(e.command) || !isText(e.workspace) || !oneOf(OUTCOMES, e.outcome) || !isCount(e.count) ||
     !isTime(e.lastAt)) return null
   return { command: e.command, workspace: e.workspace, outcome: e.outcome, count: e.count, lastAt: e.lastAt }
+}
+
+function host(e: Rec): PluginActivityHost | null {
+  if (!isText(e.host) || !isText(e.workspace) || !oneOf(OUTCOMES, e.outcome) || !isCount(e.count) ||
+    !isTime(e.lastAt)) return null
+  return { host: e.host, workspace: e.workspace, outcome: e.outcome, count: e.count, lastAt: e.lastAt }
 }
 
 function day(e: Rec): PluginActivityDay | null {
@@ -291,15 +348,18 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     !isTime(span.to) || !isRec(totals) || !isCount(totals.calls) || !isCount(totals.denied) ||
     !isCount(totals.errors) || !isCount(value.historicalPeakConcurrency) || !isTime(value.undeclaredSince)) return null
   const toolCalls = list(value.toolCalls, toolCall)
+  // A backend from before pipeline plugin nodes sends no such list.
+  const pipelineNodeRuns = value.pipelineNodeRuns === undefined ? [] : list(value.pipelineNodeRuns, pipelineNodeRun)
   const files = list(value.files, file)
   const commands = list(value.commands, command)
+  const network = list(value.network, host)
   const daily = list(value.daily, day)
   const declaredUnused = list(value.declaredUnused, unused)
   const undeclaredUses = list(value.undeclared, undeclared)
   const anomalies = list(value.anomalies, anomaly)
   const agentActions = value.agentActions === null ? null : list(value.agentActions, agentAction)
   const backendCalls = backendCallsOf(value.backendCalls)
-  if (!toolCalls || !files || !commands || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
+  if (!toolCalls || !pipelineNodeRuns || !files || !commands || !network || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
     (value.agentActions !== null && agentActions === null) || !backendCalls) return null
   return {
     schemaVersion: PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION,
@@ -309,7 +369,7 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     totals: { calls: totals.calls, denied: totals.denied, errors: totals.errors },
     historicalPeakConcurrency: value.historicalPeakConcurrency,
     undeclaredSince: value.undeclaredSince,
-    toolCalls, files, commands, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
+    toolCalls, pipelineNodeRuns, files, commands, network, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
     backendCalls,
   }
 }

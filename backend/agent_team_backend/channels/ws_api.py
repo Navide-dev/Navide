@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ..ipc import make_response
-from . import get_manager
+from . import agent_requests, get_manager
 from .manager import ChannelManager
 from .store import DEFAULT_ACCOUNT
 
@@ -85,6 +85,8 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
     if msg_type == "channels.allow.remove":
         return await m.allow_remove(_s(p, "platform"), _s(p, "sender_id"), _account(p))
     if msg_type == "channels.locations":
+        if p.get("all") is True:
+            return m.all_locations()
         return m.locations(_s(p, "platform"), _account(p))
     if msg_type == "channels.bind":
         return await m.bind(_s(p, "pane_id"), _s(p, "pane_name"), _s(p, "platform"), _s(p, "mode"),
@@ -125,7 +127,21 @@ MESSAGE_TYPES = (
     "channels.unbind", "channels.rebind", "channels.bindings", "channels.set_binding_options",
     "channels.overview", "channels.unbind_many", "channels.focus_pane",
     "channels.get_share_open_notify", "channels.set_share_open_notify", "channels.share_targets",
+    "channels.agent_request.list", "channels.agent_request.decide", "channels.agent_request.finish",
 )
+
+
+async def _agent_request(session: "Session", m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]:
+    """An agent's request (channels_* MCP tools): only a main window lists or decides one."""
+    from .. import app
+
+    if not app.is_main_window(session):
+        return {"ok": False, "error": "only a Navide main window decides agent requests"}
+    if msg_type == "channels.agent_request.list":
+        return {"ok": True, "requests": [agent_requests.public(r) for r in agent_requests.registry.pending()]}
+    if msg_type == "channels.agent_request.decide":
+        return await agent_requests.decide(m, _s(p, "id"), p.get("approve") is True)
+    return await agent_requests.finish(_s(p, "id"), p.get("ok") is True, _s(p, "account"), _s(p, "error"))
 
 
 async def handle(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
@@ -134,7 +150,10 @@ async def handle(session: "Session", msg_id: str, msg_type: str, payload: dict) 
         result: dict[str, Any] = {"ok": False, "error": "chat channels are not running"}
     else:
         try:
-            result = await _dispatch(manager, msg_type, payload or {})
+            if msg_type.startswith("channels.agent_request."):
+                result = await _agent_request(session, manager, msg_type, payload or {})
+            else:
+                result = await _dispatch(manager, msg_type, payload or {})
         except ValueError as exc:
             result = {"ok": False, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001 — answer instead of dropping the request

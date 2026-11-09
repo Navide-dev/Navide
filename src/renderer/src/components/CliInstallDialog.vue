@@ -592,7 +592,9 @@ h2 { margin: 0 0 8px; color: var(--text-bright); font-size: 19px; }
 .ci-footer { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 14px 28px; border-top: 1px solid var(--border-muted); flex-wrap: wrap; }
 .ci-footer span { flex: 1; }
 .ci-dont-ask { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: var(--font-xs); cursor: pointer; }
-.ci-btn { border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 8px 13px; cursor: pointer; color: var(--text-primary); background: var(--bg-subtle); text-decoration: none; font-size: var(--font-sm); transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
+.ci-btn { display: inline-block; border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 8px 13px; cursor: pointer; color: var(--text-primary); background: var(--bg-subtle); text-decoration: none; font-size: var(--font-sm); transition: background var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
+/* The docs link is an <a>: inline, its padding would overlap the note's last line. */
+.ci-note + .ci-btn { margin-top: 12px; }
 .ci-btn.primary { border-color: var(--accent-emphasis); background: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ci-btn.ghost { background: transparent; }
 .ci-btn:hover:not(:disabled) { background: var(--bg-hover-strong); border-color: var(--border-strong); }

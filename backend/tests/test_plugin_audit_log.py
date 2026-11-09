@@ -1003,6 +1003,10 @@ def _seeded_report(tmp_path: Path) -> dict[str, Any]:
             plugin_id=_PLUGIN, plugin_version="0.2.0", workspace="/Users/me/project",
             address="backend.devmap.block.import", outcome=outcome, count=count, at_ms=NOW - DAY_MS,
         )
+    audit.record_pipeline_node_run(
+        plugin_id=_PLUGIN, plugin_version="0.2.0", workspace="/Users/me/project", node_id="import",
+        run_origin="schedule", outcome="ok", duration_ms=120, at_ms=NOW - DAY_MS,
+    )
     audit.flush()
     return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
 
@@ -1013,7 +1017,8 @@ def test_the_report_has_the_contract_fixtures_shape(tmp_path: Path) -> None:
     valid = json.loads((_REPORT_FIXTURES / "activity-report.json").read_text(encoding="utf-8"))["valid"]
     report = _seeded_report(tmp_path)
     assert all(isinstance(report[key], list) and report[key] for key in (
-        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies", "agentActions",
+        "toolCalls", "pipelineNodeRuns", "files", "commands", "daily", "declaredUnused", "undeclared",
+        "anomalies", "agentActions",
     )), "the seed fills every list"
     assert _conforms(report, valid)
     # The check does refuse a wrong shape.
@@ -1265,3 +1270,37 @@ def test_a_future_installed_at_counts_as_now(audit: PluginAuditLog, clock: Clock
              if a["kind"] == "writeToolNewWorkspace"]
     assert flags == ["/w/c"]
 
+
+
+# ── C1: hosts a plugin's views reached, counted like broker calls ───────────
+
+
+def test_network_rows_are_counted_and_reported_by_host(audit: PluginAuditLog) -> None:
+    for _ in range(3):
+        _act(audit, NOW - DAY_MS, "network.api.github.com", source="network")
+    _act(audit, NOW - DAY_MS + 1000, "network.127.0.0.1", source="network")
+    _act(audit, NOW - 2 * DAY_MS, "network.tracker.evil.net", source="network", outcome="denied", denied_reason="undeclared")
+    report = audit.activity_report(_PLUGIN, declared=[{"kind": "networkHost", "key": "*.github.com"}], now_ms=NOW)
+    assert report["network"] == [
+        {"host": "127.0.0.1", "workspace": "/Users/me/project", "outcome": "allowed", "count": 1, "lastAt": NOW - DAY_MS + 1000},
+        {"host": "api.github.com", "workspace": "/Users/me/project", "outcome": "allowed", "count": 3, "lastAt": NOW - DAY_MS},
+        {"host": "tracker.evil.net", "workspace": "/Users/me/project", "outcome": "denied", "count": 1,
+         "lastAt": NOW - 2 * DAY_MS},
+    ]
+    # A host's labels may start with a digit: the address is kept, never read as "other".
+    rows = _rows(audit, "plugin_activity")
+    assert {r["address"] for r in rows} == {"network.api.github.com", "network.127.0.0.1", "network.tracker.evil.net"}
+    assert all(r["source"] == "network" for r in rows)
+    # The refusal reads as an undeclared use, as a refused broker call does.
+    assert [(u["source"], u["address"]) for u in report["undeclared"]] == [("network", "network.tracker.evil.net")]
+    # A declared wildcard host is used by any host below it.
+    assert report["declaredUnused"] == []
+    unused = audit.activity_report(_PLUGIN, declared=[{"kind": "networkHost", "key": "api.gitlab.com"}], now_ms=NOW)
+    assert unused["declaredUnused"] == [{"kind": "networkHost", "key": "api.gitlab.com", "lastUsedAt": None}]
+    assert report["totals"]["calls"] == 5 and report["totals"]["denied"] == 1
+
+
+def test_a_network_row_needs_a_network_address(audit: PluginAuditLog) -> None:
+    assert _activity(audit, source="network", address="not an address", outcome="allowed") is True
+    rows = _rows(audit, "plugin_activity")
+    assert rows[0]["address"] == "other"

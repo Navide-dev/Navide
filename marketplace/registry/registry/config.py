@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,6 +31,13 @@ ENV_AUTH_RETURN_URL = "REGISTRY_AUTH_RETURN_URL"
 ENV_SESSION_SECRET = "REGISTRY_SESSION_SECRET"
 ENV_ADMIN_MEMBER_IDS = "REGISTRY_ADMIN_MEMBER_IDS"
 ENV_COOKIE_SECURE = "REGISTRY_COOKIE_SECURE"
+ENV_STORE_ORIGIN = "REGISTRY_STORE_ORIGIN"
+ENV_DEVELOPER_ORIGIN = "REGISTRY_DEVELOPER_ORIGIN"
+ENV_LEGACY_HOSTS = "REGISTRY_LEGACY_HOSTS"
+ENV_LEGACY_REDIRECT_TO = "REGISTRY_LEGACY_REDIRECT_TO"
+ENV_LEGACY_ROBOTS_DISALLOW = "REGISTRY_LEGACY_ROBOTS_DISALLOW"
+DEFAULT_LEGACY_REDIRECT_TO = "https://navide.dev/"
+_ORIGIN_PATTERN = re.compile(r"^https?://[a-z0-9.-]+(?::[0-9]{1,5})?$")
 MIN_AUTH_SECRET_LENGTH = 32
 
 TRUST_PROFILE_OFFICIAL = "official"
@@ -97,6 +105,22 @@ class Settings:
     """Navide Cloud member ids allowed into the review queue and blocklist UI."""
     cookie_secure: bool = True
     """Only a plain-http local run turns this off."""
+    store_origin: str | None = None
+    """Public storefront origin, e.g. https://marketplace.navide.dev. Set
+    together with developer_origin to turn on host routing (host_routing.py)."""
+    developer_origin: str | None = None
+    """Developer console origin, e.g. https://developers.navide.dev."""
+    legacy_hosts: tuple[str, ...] = ()
+    """Hosts that keep serving the API under root_path only, e.g.
+    server.navide.dev; their website pages redirect to legacy_redirect_to."""
+    legacy_redirect_to: str = DEFAULT_LEGACY_REDIRECT_TO
+    legacy_robots_disallow: bool = False
+    """Off while search engines still need to crawl the legacy pages to see
+    their redirect and noindex; turn on once the old URLs left the index."""
+
+    @property
+    def host_routing_enabled(self) -> bool:
+        return self.store_origin is not None
 
     @property
     def cloud_auth_enabled(self) -> bool:
@@ -138,6 +162,7 @@ class Settings:
             raise ValueError(
                 "root_path must be empty or start with '/' and have no trailing '/'"
             )
+        self._validate_host_routing()
         if self.trust_profile != TRUST_PROFILE_OFFICIAL:
             return
         if self.verifier_kind != VERIFIER_ED25519:
@@ -152,6 +177,35 @@ class Settings:
             raise ValueError("official registry cannot allow open admin endpoints")
         if not self.cookie_secure:
             raise ValueError("official registry requires Secure cookies")
+
+    def _validate_host_routing(self) -> None:
+        if (self.store_origin is None) != (self.developer_origin is None):
+            raise ValueError("store_origin and developer_origin must be set together")
+        if self.store_origin is None:
+            if self.legacy_hosts:
+                raise ValueError("legacy_hosts needs store_origin and developer_origin")
+            return
+        for origin in (self.store_origin, self.developer_origin):
+            if not _ORIGIN_PATTERN.match(origin) or (
+                self.cookie_secure and not origin.startswith("https://")
+            ):
+                raise ValueError(
+                    "store_origin and developer_origin must be https origins "
+                    "with no path, e.g. https://marketplace.navide.dev"
+                )
+        hosts = [
+            urllib.parse.urlsplit(self.store_origin).hostname,
+            urllib.parse.urlsplit(self.developer_origin).hostname,
+            *self.legacy_hosts,
+        ]
+        if len(set(hosts)) != len(hosts) or any(
+            not re.fullmatch(r"[a-z0-9.-]+", host) for host in self.legacy_hosts
+        ):
+            raise ValueError(
+                "store, developer and legacy hosts must be distinct lowercase host names"
+            )
+        if not self.legacy_redirect_to.startswith("https://"):
+            raise ValueError("legacy_redirect_to must be an https URL")
 
     @property
     def db_path(self) -> Path:
@@ -388,5 +442,15 @@ def load_settings() -> Settings:
             if item.strip()
         ),
         cookie_secure=_env_bool(ENV_COOKIE_SECURE, True),
+        store_origin=(os.environ.get(ENV_STORE_ORIGIN) or "").strip().rstrip("/") or None,
+        developer_origin=(os.environ.get(ENV_DEVELOPER_ORIGIN) or "").strip().rstrip("/") or None,
+        legacy_hosts=tuple(
+            item.strip().lower()
+            for item in os.environ.get(ENV_LEGACY_HOSTS, "").split(",")
+            if item.strip()
+        ),
+        legacy_redirect_to=(os.environ.get(ENV_LEGACY_REDIRECT_TO) or "").strip()
+        or DEFAULT_LEGACY_REDIRECT_TO,
+        legacy_robots_disallow=_env_bool(ENV_LEGACY_ROBOTS_DISALLOW, False),
         **trust_config,
     )

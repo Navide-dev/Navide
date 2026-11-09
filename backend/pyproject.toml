@@ -5,6 +5,10 @@ description = "Python backend for the Navide AI-native engineering environment"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.40",
+    # Opt-in session-log archive (session_archive.py): uploads compressed logs
+    # to the user's own S3 bucket through the standard AWS credential chain.
+    # Imported only when an upload runs; off by default.
+    "boto3>=1.35",
     # Trust roots for the outbound Navide-Server link (server_link.py imports
     # it directly). Transitive via httpx/anthropic already, but a frozen build
     # has no other CA store it can find, so its presence must not be a side
@@ -59,6 +63,10 @@ dependencies = [
     # declared here because we import it directly. >=14 is where
     # `websockets.connect` became the asyncio client this module uses.
     "websockets>=14",
+    # Compresses idle session logs for the opt-in archive (session_archive.py).
+    # Binary wheels for every platform the backend ships on, so a packaged
+    # build needs no zstd program on the user's machine.
+    "zstandard>=0.23",
 ]
 
 [dependency-groups]

@@ -9,6 +9,11 @@
     qualification. Review checks who you are and that you can be reached — never
     which permissions your plugins ask for. Your legal name and contact details are
     seen only by you and the reviewers; the marketplace shows your display name.</p>
+  <ul class="checklist">
+    <li><b>Checked:</b> that you are who you say you are, and that the contact email reaches you.</li>
+    <li><b>Not checked:</b> which permissions your plugins ask for — users see those when they install.</li>
+    <li><b>How long:</b> a person reviews it, target: 3 business days. A rejection comes with a reason, and you can apply again.</li>
+  </ul>
   <table class="version-table cli-request">
     <tr><th>Status</th><td><b>{{ current.status }}</b></td></tr>
     {% if current.submitted_at %}<tr><th>Submitted</th><td>{{ current.submitted_at[:10] }}</td></tr>{% endif %}
@@ -17,7 +22,12 @@
   {% if current.status == 'approved' %}
     <p class="ok-line">✓ Approved. <a href="{{ base }}/publisher/claim">Claim a namespace</a></p>
   {% elif current.status == 'pending' %}
-    <p>Your application is waiting for review.</p>
+    <p>Your application is waiting for review. While you wait, you can:</p>
+    <ul class="checklist">
+      <li><a href="{{ guide_url }}#1-five-minutes-to-a-running-plugin">Build the template and load it in Developer Mode ↗</a></li>
+      <li><a href="{{ guide_url }}#3-check-it-yourself-before-anyone-else-does">Run the checks review runs ↗</a></li>
+      <li><a href="{{ base }}/publish">Read the publishing checklist</a></li>
+    </ul>
   {% elif current.status == 'revoked' %}
     <p class="field-error" role="alert">This account's developer qualification was revoked.</p>
   {% endif %}

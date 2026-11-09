@@ -25,6 +25,7 @@ function deps(installed: InstalledPackage[]): PluginRequestApplyDeps & {
     rollback: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
     enable: vi.fn(async () => undefined),
+    clearSecrets: vi.fn(async () => undefined),
     listInstalled: vi.fn(async () => installed),
     finish: vi.fn(async () => undefined),
   }
@@ -181,5 +182,25 @@ describe('W1 (S2): an approved agent file request', () => {
     expect(none.installStaged).not.toHaveBeenCalled()
     const cancelled = deps([])
     expect(await applyApprovedRequest(fileRecord('cd'.repeat(16)), cancelled)).toEqual({ status: 'failed', error: 'not-applied' })
+  })
+})
+
+describe('plugin-clear-secrets', () => {
+  it('deletes the secrets only when carried out after approval, and finishes completed', async () => {
+    expect(isAppliableKind('plugin-clear-secrets')).toBe(true)
+    const d = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.2.0' }])
+    await expect(applyApprovedRequest(record('plugin-clear-secrets', '0.2.0'), d))
+      .resolves.toEqual({ status: 'completed', error: null })
+    expect(d.clearSecrets).toHaveBeenCalledWith('nerdtechnic.devmap')
+    expect(d.finish).toHaveBeenCalledWith('a-plugin-clear-secrets', { status: 'completed', error: null })
+  })
+
+  it('reports a failed deletion, and reads a restart that left one applying as interrupted', async () => {
+    const d = deps([])
+    ;(d.clearSecrets as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('store unavailable'))
+    await expect(applyApprovedRequest(record('plugin-clear-secrets', '0.2.0'), d))
+      .resolves.toEqual({ status: 'failed', error: 'store unavailable' })
+    expect(recoveryResult(record('plugin-clear-secrets', '0.2.0'), [{ id: 'nerdtechnic.devmap', packageVersion: '0.2.0' }]))
+      .toEqual({ status: 'failed', error: 'interrupted' })
   })
 })

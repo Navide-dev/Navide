@@ -40,7 +40,8 @@ class WS:
             out += p
             if a & 0x80: return out.decode("utf-8", "replace")
 def data_dir():
-    bases = [pathlib.Path(os.environ["APPDATA"])] if WIN else [pathlib.Path.home() / ".config", pathlib.Path.home() / ".local/share"]
+    bases = ([pathlib.Path(os.environ["APPDATA"])] if WIN else [pathlib.Path.home() / "Library/Application Support"] if sys.platform == "darwin"
+             else [pathlib.Path.home() / ".config", pathlib.Path.home() / ".local/share"])
     hits = [p.parent for b in bases for p in b.glob("*/backend-ws-token") if "agent-team" in str(p).lower() or "navide" in str(p).lower()]
     return max(hits, key=lambda p: (p / "backend-ws-token").stat().st_mtime)
 class B:

@@ -27,17 +27,93 @@
     "permissions": {
       "type": "object",
       "additionalProperties": false,
+      "if": { "required": ["agents"] },
+      "then": { "required": ["system"], "properties": { "system": { "contains": { "const": "agents" } } } },
       "properties": {
         "system": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 6,
+          "maxItems": 7,
           "uniqueItems": true,
-          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages"] },
+          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"] },
           "if": { "contains": { "const": "agentMessages" } },
           "then": { "contains": { "const": "agents" } }
         },
-        "shell": { "enum": ["allowlist", "full"] },
+        "shell": {
+          "description": "The shell mode: allowlist (the Host's git, gh and glab, no shell syntax) or full. allowlist may be spelled as an object that also declares the executables the package needs beyond the Host's three; each declared name is enforced by the broker and disclosed, names that run any program as highest risk.",
+          "oneOf": [
+            { "enum": ["allowlist", "full"] },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "executables"],
+              "properties": {
+                "mode": { "const": "allowlist" },
+                "executables": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 32,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._+-]{0,63}$" }
+                }
+              }
+            }
+          ]
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hosts"],
+          "description": "Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource). The Host enforces the list through the plugin frame's connect-src and discloses it; the backend sandbox is unaffected.",
+          "properties": {
+            "hosts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "maxLength": 253,
+                "description": "Lowercase DNS labels, optionally one leading *. wildcard standing for one or more labels; no scheme, port, path or user info.",
+                "pattern": "^(\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+              }
+            }
+          }
+        },
+        "agents": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["events"],
+          "description": "Host events the package receives (events.subscribe), each declared and disclosed on its own. Metadata only: message text stays behind agentMessages. Needs agents in system.",
+          "properties": {
+            "events": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "agents.paneCreated",
+                  "agents.paneClosed",
+                  "agents.turnEnded",
+                  "agents.paneIdle",
+                  "agents.messageReceived",
+                  "agents.planStageChanged",
+                  "agents.pipelineNodeChanged",
+                  "agents.scheduleFired"
+                ]
+              }
+            }
+          }
+        },
+        "plugins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "description": "Installed plugins whose contributes.api this package calls through plugins.call; disclosed on both plugins' cards.",
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$" }
+        },
         "scopes": {
           "type": "object",
           "additionalProperties": false,
@@ -79,6 +155,54 @@
           "maxItems": 32,
           "items": { "$ref": "#/$defs/command" },
           "description": "Commands the plugin offers. Each id is the plugin id, a dot and a name; the parser checks that prefix, duplicates, and that run names a declared view or a method in backend.methods."
+        },
+        "agentTools": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/viewAgentTool" },
+          "description": "Tools an agent may call that one of the declared views serves (0.2.39): the rules of backend.agentTools with `view` (a declared view id) in place of `method`, names unique across both lists; checked by validateAgentTools; see docs/en-US/plugin-agent-tools-contract.md section 2.9."
+        },
+        "api": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/apiMethod" },
+          "description": "Backend methods other installed plugins may call through plugins.call (each also in backend.methods); disclosed on this plugin's card."
+        },
+        "pipelineNodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/pipelineNode" },
+          "description": "Deterministic pipeline steps the Host runs on this plugin's backend (method in backend.methods). Runs started by an agent, a schedule or a webhook run them too; every run is recorded in the plugin's Activity."
+        },
+        "settings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/setting" },
+          "description": "Settings the Host shows as a form in Settings, Navide Plugins; values are kept in the plugin's own storage under settings.<key>."
+        },
+        "statusBar": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/statusBarItem" },
+          "description": "Status bar items that run one of this plugin's commands; shown with the plugin's name."
+        },
+        "paneActions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/slotEntry" },
+          "description": "Entries in a pane's context menu that run one of this plugin's commands with { paneId }."
+        },
+        "explorerMenu": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/explorerMenuItem" },
+          "description": "Entries in the Explorer's context menu that run one of this plugin's commands with { path } (workspace-relative)."
         }
       }
     },
@@ -103,6 +227,84 @@
     "properties": { "permissions": { "maxProperties": 0 } }
   },
   "$defs": {
+    "slotText": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\r\\n<>\\u0000-\\u001f\\u007f\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]+$" },
+    "commandRef": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+\\.[a-z][a-zA-Z0-9]*$" },
+    "slotEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "title"],
+      "properties": { "command": { "$ref": "#/$defs/commandRef" }, "title": { "$ref": "#/$defs/slotText" } }
+    },
+    "statusBarItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "text"],
+      "properties": {
+        "command": { "$ref": "#/$defs/commandRef" },
+        "text": { "$ref": "#/$defs/slotText" },
+        "tooltip": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\r\\n<>\\u0000-\\u001f\\u007f\\u200b-\\u200f\\u202a-\\u202e\\u2066-\\u2069]+$" }
+      }
+    },
+    "explorerMenuItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "title"],
+      "properties": {
+        "command": { "$ref": "#/$defs/commandRef" },
+        "title": { "$ref": "#/$defs/slotText" },
+        "when": { "enum": ["file", "directory", "any"] }
+      }
+    },
+    "apiMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "description"],
+      "properties": {
+        "method": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9._-]{0,63}$" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 280 }
+      }
+    },
+    "pipelineNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "method"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
+        "title": { "$ref": "#/$defs/slotText" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "method": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9._-]{0,63}$" },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 600000 },
+        "n8nTypes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9@][A-Za-z0-9@/._-]{0,127}$" }
+        }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "title", "type", "default"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]{0,31}(\\.[a-z][a-zA-Z0-9]{0,31}){0,3}$" },
+        "title": { "$ref": "#/$defs/slotText" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "type": { "enum": ["boolean", "string", "number", "enum"] },
+        "default": { "type": ["boolean", "string", "number"] },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/slotText" }
+        },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "maxLength": { "type": "integer", "minimum": 1, "maximum": 4096 }
+      }
+    },
     "marketplace": {
       "type": "object",
       "additionalProperties": false,
@@ -242,6 +444,24 @@
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
         "method": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$" },
+        "risk": { "enum": ["read", "write"] },
+        "title": { "$ref": "#/$defs/agentToolText" },
+        "description": { "$ref": "#/$defs/agentToolText" },
+        "inputSchema": {
+          "type": "object",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } }
+        },
+        "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 30000 }
+      }
+    },
+    "viewAgentTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "view", "risk", "title", "description", "inputSchema"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
+        "view": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "risk": { "enum": ["read", "write"] },
         "title": { "$ref": "#/$defs/agentToolText" },
         "description": { "$ref": "#/$defs/agentToolText" },

@@ -23,6 +23,7 @@ import type {
   MarketplaceQueryResponse,
 } from '../../shared/pluginAgentTools'
 import { AGENT_TOOL_NAME_PATTERN } from '../../shared/pluginAgentTools'
+import { V2_NETWORK_HOST, V2_SHELL_EXECUTABLE } from '../../../packages/plugin-contracts/src/index'
 import {
   DISCLOSURE_RISK_RULES,
   DISCLOSURE_SUMMARY_TEMPLATE,
@@ -125,12 +126,20 @@ const nullableString = (value: unknown): string | null | undefined =>
 const isEmptyParams = (value: unknown): boolean => isRecord(value) && Object.keys(value).length === 0
 const REASON_LEVELS = new Map<string, DisclosureRiskLevel>(DISCLOSURE_RISK_RULES.map(([key, level]) => [key, level]))
 const SHELL_EXECUTABLES = new Set<string>(HOST_SHELL_ALLOWLIST)
+/** C2: an allowlist's executables are the Host's three plus names the package
+ *  declared, each a bare lowercase name (the manifest's own spelling rule). */
+const isShellExecutable = (name: string): boolean => SHELL_EXECUTABLES.has(name) || V2_SHELL_EXECUTABLE.test(name)
+/** C1: declared view hosts, each spelled as the manifest rule allows. */
+const hostList = (value: unknown): string[] | null => {
+  const hosts = strings(value)
+  return hosts && hosts.length > 0 && hosts.every((host) => host.length <= 253 && V2_NETWORK_HOST.test(host)) ? hosts : null
+}
 
 function shellParams(value: unknown): DisclosurePermissions['shell'] | undefined {
   if (!isRecord(value)) return undefined
   if (value.mode === 'full' && value.executables === null) return { mode: 'full', executables: null }
   const executables = strings(value.executables)
-  if (value.mode === 'allowlist' && executables && executables.every((name) => SHELL_EXECUTABLES.has(name))) {
+  if (value.mode === 'allowlist' && executables && executables.every(isShellExecutable)) {
     return { mode: 'allowlist', executables }
   }
   return undefined
@@ -140,8 +149,12 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'network': case 'networkViaShell': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'secrets': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
+    case 'network': {
+      const hosts = isRecord(params) ? hostList(params.hosts) : null
+      return hosts ? { key: 'network', params: { hosts } } : null
+    }
     case 'files':
       return isRecord(params) && (params.access === 'read' || params.access === 'readWrite')
         ? { key: 'files', params: { access: params.access } }
@@ -153,6 +166,20 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
     case 'agentTools':
       return isRecord(params) && isSafeCount(params.read) && isSafeCount(params.write)
         ? { key: 'agentTools', params: { read: params.read, write: params.write } }
+        : null
+    case 'agentEvents': {
+      const events = isRecord(params) && Object.keys(params).length === 1 ? strings(params.events) : null
+      return events && events.length > 0 ? { key: 'agentEvents', params: { events } } : null
+    }
+    case 'pluginCalls': {
+      const plugins = isRecord(params) && Object.keys(params).length === 1 ? strings(params.plugins) : null
+      return plugins && plugins.length > 0 && plugins.every(isValidManifestV2PluginId)
+        ? { key: 'pluginCalls', params: { plugins } }
+        : null
+    }
+    case 'api': case 'pipelineNodes':
+      return isRecord(params) && Object.keys(params).length === 1 && isSafeCount(params.count) && params.count > 0
+        ? { key: value.key, params: { count: params.count } }
         : null
     default:
       return null
@@ -185,7 +212,7 @@ function permissionsBlock(value: unknown): DisclosurePermissions | null {
   if (!isRecord(value)) return null
   const system = strings(value.system)
   if (!system || !system.every((name) => name === 'aiCli' || name === 'fs' || name === 'ui' || name === 'web' ||
-    name === 'agents' || name === 'agentMessages')) return null
+    name === 'agents' || name === 'agentMessages' || name === 'secrets')) return null
   const shell = value.shell === null ? null : shellParams(value.shell)
   if (shell === undefined) return null
   let scopes: DisclosurePermissions['scopes'] = null
@@ -196,7 +223,14 @@ function permissionsBlock(value: unknown): DisclosurePermissions | null {
     if (!isRecord(fs) || (fs.root !== 'workspace' && fs.root !== 'repository') || !read || !write) return null
     scopes = { fs: { root: fs.root, read, write } }
   }
-  return { system: system as DisclosurePermissions['system'], shell, scopes }
+  // C1: present only when the manifest declares hosts (never null).
+  let network: DisclosurePermissions['network'] | undefined
+  if (value.network !== undefined) {
+    const hosts = isRecord(value.network) ? hostList(value.network.hosts) : null
+    if (!hosts) return null
+    network = { hosts }
+  }
+  return { system: system as DisclosurePermissions['system'], shell, scopes, ...(network ? { network } : {}) }
 }
 
 function agentToolEntry(value: unknown): DisclosureAgentTool | null {
@@ -249,10 +283,15 @@ function manifestDisclosure(value: unknown): ManifestDisclosure | null {
   const tools = Array.isArray(value.agentTools) ? value.agentTools.map(agentToolEntry) : null
   const locations = value.dataLocations
   const writes = isRecord(locations) ? projectWrites(locations.projectWrites) : null
+  // C1: `networkHosts` is present only when hosts are declared, and then
+  // equals the permissions' list (the contract computes both from one field).
+  const networkHosts = value.networkHosts === undefined ? undefined : hostList(value.networkHosts)
+  const extras = disclosureExtras(value)
   if (
     !summary || !risk || !permissions || !tools || tools.some((tool) => tool === null) ||
     !isRecord(locations) || locations.hostStorage !== true || typeof locations.backendDataDirectory !== 'boolean' ||
-    writes === null
+    writes === null || networkHosts === null || extras === null ||
+    JSON.stringify(networkHosts ?? null) !== JSON.stringify(permissions.network?.hosts ?? null)
   ) return null
   return {
     schemaVersion: 1,
@@ -262,9 +301,52 @@ function manifestDisclosure(value: unknown): ManifestDisclosure | null {
     permissions,
     nativeBackend,
     network: value.network,
+    ...(networkHosts ? { networkHosts } : {}),
+    ...extras,
     agentTools: tools as DisclosureAgentTool[],
     dataLocations: { hostStorage: true, backendDataDirectory: locations.backendDataDirectory, projectWrites: writes },
   }
+}
+
+/** The 0.2.39 optional disclosure fields, each absent or well formed; null
+ *  when one is present but malformed. */
+function disclosureExtras(value: Record<string, unknown>): Pick<
+  ManifestDisclosure, 'agentEvents' | 'pluginCalls' | 'api' | 'pipelineNodes' | 'commandSlots'
+> | null {
+  const out: Pick<ManifestDisclosure, 'agentEvents' | 'pluginCalls' | 'api' | 'pipelineNodes' | 'commandSlots'> = {}
+  const rows = (raw: unknown, keys: readonly string[]): Array<Record<string, string>> | null =>
+    Array.isArray(raw) && raw.length > 0 && raw.every((row) =>
+      isRecord(row) && Object.keys(row).length === keys.length && keys.every((key) => typeof row[key] === 'string'))
+      ? raw as Array<Record<string, string>>
+      : null
+  if (value.agentEvents !== undefined) {
+    const events = strings(value.agentEvents)
+    if (!events || events.length === 0) return null
+    out.agentEvents = events
+  }
+  if (value.pluginCalls !== undefined) {
+    const plugins = strings(value.pluginCalls)
+    if (!plugins || plugins.length === 0 || !plugins.every(isValidManifestV2PluginId)) return null
+    out.pluginCalls = plugins
+  }
+  if (value.api !== undefined) {
+    const api = rows(value.api, ['method', 'description'])
+    if (!api) return null
+    out.api = api.map((row) => ({ method: row.method, description: row.description }))
+  }
+  if (value.pipelineNodes !== undefined) {
+    const nodes = rows(value.pipelineNodes, ['id', 'title', 'method'])
+    if (!nodes) return null
+    out.pipelineNodes = nodes.map((row) => ({ id: row.id, title: row.title, method: row.method }))
+  }
+  if (value.commandSlots !== undefined) {
+    const slots = rows(value.commandSlots, ['slot', 'command', 'title'])
+    if (!slots || !slots.every((row) => ['statusBar', 'paneActions', 'explorerMenu'].includes(row.slot))) return null
+    out.commandSlots = slots.map((row) => ({
+      slot: row.slot as 'statusBar' | 'paneActions' | 'explorerMenu', command: row.command, title: row.title,
+    }))
+  }
+  return out
 }
 
 function registryFacts(value: unknown): RegistryDisclosureFacts | null {

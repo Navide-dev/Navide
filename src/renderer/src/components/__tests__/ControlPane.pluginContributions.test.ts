@@ -230,28 +230,29 @@ describe('ControlPane manifest-driven plugin placement', () => {
     wrapper.unmount()
   })
 
-  it('does not render the legacy Git tab in normal mode', () => {
+  it('does not render the Git failure tab while Git runs', () => {
     const wrapper = mountPane([])
-    expect(wrapper.find('[data-legacy-git-tab]').exists()).toBe(false)
-    expect(wrapper.findComponent({ name: 'GitPluginHostSlot' }).exists()).toBe(false)
+    expect(wrapper.find('[data-git-activation-failed]').exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'GitRecoveryPanel' }).exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('renders the legacy Git tab and host slot only in recovery mode', async () => {
+  it('shows the reinstall notice with its reason when the Git plugin failed to start', async () => {
     const wrapper = mountPane([], {
       backend: { status: { value: 'connected' } },
       workspace: '/workspace',
-      legacyGitRecovery: true,
+      gitActivationFailure: 'activation timed out',
     })
 
-    const tab = wrapper.find('[data-legacy-git-tab]')
+    const tab = wrapper.find('[data-git-activation-failed]')
     expect(tab.exists()).toBe(true)
-    expect(wrapper.findComponent({ name: 'GitPluginHostSlot' }).exists()).toBe(false)
+    expect(wrapper.findComponent({ name: 'GitRecoveryPanel' }).exists()).toBe(false)
 
     await tab.trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findComponent({ name: 'GitPluginHostSlot' }).exists()).toBe(true)
-    expect(wrapper.get('[data-legacy-recovery-label]').text()).toBe('label.legacy-recovery')
+    const panel = wrapper.findComponent({ name: 'GitRecoveryPanel' })
+    expect(panel.exists()).toBe(true)
+    expect(panel.props('reason')).toBe('activation timed out')
     wrapper.unmount()
   })
 
@@ -261,16 +262,16 @@ describe('ControlPane manifest-driven plugin placement', () => {
     const wrapper = mountPane([], {
       backend: { status: { value: 'connected' } },
       workspace: '/workspace',
-      legacyGitRecovery: true,
+      gitActivationFailure: 'activation timed out',
     })
 
-    await wrapper.get('[data-legacy-git-tab]').trigger('click')
+    await wrapper.get('[data-git-activation-failed]').trigger('click')
     expect(retryGitV2).toHaveBeenCalledTimes(1)
 
     // The Host answers in two steps: recovery clears first, the refreshed
     // contribution catalog arrives after. Bouncing to Agents in between would
     // drop the user somewhere they never asked for.
-    await wrapper.setProps({ legacyGitRecovery: false } as never)
+    await wrapper.setProps({ gitActivationFailure: null } as never)
     expect(sessionStorage.getItem('agentTeam.sidebarTab')).toBe('git')
 
     await wrapper.setProps({
@@ -389,12 +390,12 @@ describe('ControlPane manifest-driven plugin placement', () => {
     const wrapper = mountPane([], {
       backend: { status: { value: 'connected' } },
       workspace: '/workspace',
-      legacyGitRecovery: true,
+      gitActivationFailure: 'activation timed out',
     })
-    await wrapper.get('[data-legacy-git-tab]').trigger('click')
+    await wrapper.get('[data-git-activation-failed]').trigger('click')
     expect(sessionStorage.getItem('agentTeam.sidebarTab')).toBe('git')
 
-    await wrapper.setProps({ legacyGitRecovery: false } as never)
+    await wrapper.setProps({ gitActivationFailure: null } as never)
     expect(sessionStorage.getItem('agentTeam.sidebarTab')).toBe('agents')
     wrapper.unmount()
   })

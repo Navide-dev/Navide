@@ -12,7 +12,6 @@ import { clampUiScale, DEFAULT_UI_SCALE, UI_SCALE_SETTING_KEY } from '../shared/
 type ZoomableContents = {
   setZoomFactor(factor: number): void
   isDestroyed(): boolean
-  send(channel: string): void
 }
 
 export interface UiZoomStore {
@@ -58,12 +57,6 @@ export function createUiZoomStore(initial: unknown = DEFAULT_UI_SCALE): UiZoomSt
     }
     try {
       contents.setZoomFactor(scale)
-      // A renderer that positions a native WebContentsView converts CSS pixels
-      // to device-independent pixels by dividing by the zoom factor
-      // (GitPluginHostSlot). Electron only emits 'zoom-changed' for user
-      // gestures, so without this push an app-driven scale change would leave
-      // those views at stale bounds.
-      contents.send('window:zoom-changed')
     } catch {
       tracked.delete(contents)
     }

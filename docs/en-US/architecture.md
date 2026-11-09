@@ -263,6 +263,35 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   and its panes lose the permission bypass unless the trigger is explicitly
   unattended, including when a pane reopens one of the run's sessions under a
   new pane id. Claude Code is the only CLI a webhook run can use. See [Pipeline webhooks](pipeline-webhooks.md).
+- An agent works the chat channels through the `channels_*` MCP tools
+  ([External MCP Control](external-mcp-control.md#chat-channels)). It binds a
+  chat directly only to a pane of its own workspace, and only the Telegram DM
+  of a sender already let in; letting a person in, adding or removing a bot and
+  every other bind are requests a main window decides
+  (`channels/agent_requests.py`), accepted only from a main window's own WS
+  session, which an agent does not have. No tool takes or returns a bot
+  credential. Because pane identity is not a process boundary (below), "its
+  own workspace" is the workspace of the pane the caller presents itself as.
+- **Secrets never leave the machine.** No API key, token, password or signing
+  key — the user's or a third-party service's — is synced to Navide Cloud or
+  Navide Server, uploaded to S3 or any backup, attached to a plan, report or
+  chat message, or written into a commit, branch, PR, issue, CHANGELOG, test
+  fixture, log or screenshot. Secrets stay on this device: encrypted with
+  Electron `safeStorage`, in the OS keychain, or in a 0600 file. Tests build
+  fake values at run time. A Navide plugin keeps its own keys through the
+  `secrets` namespace: safeStorage ciphertext in
+  `<userData>/plugin-secrets/<pluginId>.json` (0600), keyed by plugin id,
+  never in plain text (without secure storage the call answers
+  `SECRETS_UNAVAILABLE`). Checked against the code: the Navide Cloud sync
+  scopes are `prompts`, `mcp`, `skills` and `memory` (`credentials` is
+  local-only, `sync_engine.LOCAL_ONLY_SCOPES`); the settings export
+  (`app._settings_bundle`) holds roles, pipelines, MCP servers with their
+  secrets redacted, analyzer and AI chat settings with keys redacted; a share
+  bundle (`settings_bundle.py`) holds prompts, MCP servers, skills and memory.
+  None of the three reads `plugin-secrets/` or a plugin's Host-managed storage,
+  both of which live in the Electron main process's data directory. Activity
+  records a `secrets.*` call by its address only, and every agent tool answer
+  is redacted against the package's own values.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
@@ -302,15 +331,16 @@ fresh profile. A verified Marketplace version takes precedence. Removing the
 factory package records a durable opt-out; restart does not reinstall it, and
 the Navide Plugins view is the only place that restores it.
 
-Electron main tries the selected v2 descriptor first. A load, mount, or ready
-failure retires the whole v2 Git package and selects the retained legacy
-descriptor for the remainder of that process. Trust, signature, revocation,
-grant, and capability denials fail closed without fallback. An installed
-`navide.git` directory that fails validation also remains a visible hard
-failure instead of being hidden by the factory or legacy copy.
-`NAVIDE_GIT_RECOVERY=legacy` forces the recovery descriptor before activation.
-Neither recovery path mutates Plugin Storage snapshots or legacy seeds. This
-is a compatibility recovery path, not a generic version lifecycle.
+The Host has no Git interface of its own. When the selected v2 package fails to
+load, mount, or report ready, Electron main records the reason and sends
+`plugins:activationFailed`; the main window's Git tab then shows that reason
+with Reinstall built-in Git (the same factory restore as Settings → Navide
+Plugins), and opening the tab again retries the package a bounded number of
+times. Trust, signature, revocation, grant, and capability denials fail closed
+without that notice. An installed `navide.git` directory that fails validation
+also remains a visible hard failure instead of being hidden by the factory
+copy. The failure path does not mutate Plugin Storage snapshots or legacy
+seeds.
 
 ## Plugin backends and core sources
 

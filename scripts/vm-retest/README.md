@@ -2,6 +2,8 @@
 
 The packaged-build acceptance run for webhook triggers, pipelines, inter-CLI messaging and channels. Every
 release runs the same list on a Linux arm64 and a Windows arm64 VM, plus the items that release fixed.
+A macOS arm64 VM adds a shorter fresh-install smoke (install the dmg, first-launch wizard, first pane; see
+[macOS](#macos)).
 
 Nothing here talks to a real model, chat service or account:
 
@@ -23,6 +25,7 @@ Nothing here talks to a real model, chat service or account:
 | `host/restart-app.sh` | VM host | Quit the app the way a person does, check nothing is left, start it again |
 | `host/load-sampler.sh`, `host/load-supervisor.sh` | VM host | Record the host load; pause and resume the VM around load spikes |
 | `host/collect.sh` | VM host | Copy the evidence out before the revert |
+| `host/macos-base.sh`, `host/macos-up.sh`, `host/macos-smoke.sh` | VM host | macOS: build the clean tart base once; install the dmg and start the app; one timed smoke round |
 | `guest/` | guest (`~/wh`) | The test scripts. Python 3.12 standard library only, plus PowerShell on Windows |
 
 The guest working folder is always `~/wh` (`%USERPROFILE%\wh` on Windows).
@@ -40,11 +43,36 @@ LINUX_GUEST= WINDOWS_GUEST=                       # empty: ask `vmrun getGuestIP
 LINUX_USER=navide WINDOWS_USER=navide             # test accounts
 SSH_KEY="$HOME/.ssh/navide_vm_ed25519"            # the key those accounts accept
 VM_HOST=                                          # empty: VMware Fusion runs here
+VM_HOST_KEY=                                      # key for VM_HOST (empty: ssh's defaults)
 ```
 
-To run against VMs on another machine (for example a Mac mini), set `VM_HOST=user@host`. `vmrun` then runs there
-over ssh, and the guests are reached with `ProxyJump` through it. The script that samples the host load also
-samples that machine.
+To run against VMs on another machine (for example a Mac mini), set `VM_HOST=user@host` (and `VM_HOST_KEY`).
+`vmrun` then runs there over ssh, and the guests are reached through it with `ssh -W`. The script that samples the
+host load also samples that machine. The VMs' VNC servers listen on that machine's 127.0.0.1 only, so `vnc.sh`
+opens an ssh tunnel for each `vncdo` call (it needs `vncdo` on this machine only).
+
+### Setting up another Mac as the VM host
+
+Install VMware Fusion there from the official installer (Broadcom's Fusion dmg; drag it to Applications, open it
+once, enter the administrator password and accept the license, quit it). That is all the host needs: copy the
+`.vmwarevm` bundles into `VM_DIR` (rsync -a; the disks are not sparse) and `vmrun ... nogui` runs them over ssh.
+Checked on the Mac mini on 2026-11-05 with Fusion 26.0.1: the vmx log says "Services_Init: Successfully opened the
+services", `vmnet-dhcpd`, `vmnet-natd` and `vmnet-bridge` run from
+`/Library/Application Support/VMware/VMware Fusion/Services`, and the Linux guest gets 192.168.22.129 with working
+HTTPS out.
+
+Do not copy `VMware Fusion.app` itself to the other Mac. A copy made by a non-root user loses its set-UID root
+helpers, and even after an administrator repaired those (opening Fusion, `Initialize VMware Fusion.tool set`,
+the network settings and `/var/db/vmware` lease files by hand), Fusion kept failing to locate itself
+("LocationGetRoot: ... never been run on this machine", "Services_Init: Failed to open the services") and rebuilt
+its Services copy without `Contents/Frameworks`, so `vmnet-dhcpd` / `vmnet-natd` crashed at launch ("Library not
+loaded: @loader_path/../Frameworks/libvnetlib.dylib" in `~/Library/Logs/DiagnosticReports`) and guests got no
+address or no Internet. The official installer fixed all of it.
+
+A copied VM also gets a new `uuid.bios` on its first start (Fusion treats it as copied), so its MAC address
+changes; the guest still gets 192.168.22.129 from DHCP there, but set `LINUX_GUEST` / `WINDOWS_GUEST` (the guests
+have no VMware Tools answering `getGuestIPAddress`). `vm.sh start` over ssh returns only when the VM stops: run it
+in the background, as on a local host.
 
 The scripts never create or change credentials, with one exception: the Windows auto-logon password. Windows
 needs a password for the test account to log on to the desktop by itself, so `windows-up.sh` makes a new random one
@@ -82,6 +110,33 @@ Windows uses the same steps, with `windows-up.sh <dir with the .exe>` in place o
 On Windows, anything that has to outlive the ssh session runs as a scheduled task in the desktop session, at Normal
 priority. A process started over ssh dies when the session closes. A plain `schtasks /Create` task runs at
 BelowNormal, and then any Normal-priority load starves the app.
+
+### macOS
+
+VMware Fusion runs no macOS guest on Apple silicon (its arm64 guest types are Linux, Windows and ESXi only), so the
+macOS VM is a [tart](https://tart.run) VM on Apple's Virtualization.framework. Install it on the VM host with
+`brew install cirruslabs/cli/tart` (Fair Source license: free for small internal use). Its images come only from
+`ghcr.io/cirruslabs`. There are no snapshots: `MACOS_BASE` (`navide-macos-clean`) is never booted by a round, and
+`vm.sh macos revert` deletes the round's VM (`MACOS_VM`, `navide-macos-run`) and clones the base again. The clone is an
+APFS copy-on-write clone, so it takes seconds and no extra disk until the guest writes.
+
+```bash
+./macos-base.sh            # once: clone the cirruslabs vanilla image into navide-macos-clean, put SSH_KEY in,
+                           # install Python (python.org) and Claude Code, shut it down
+./macos-smoke.sh <dir with the .dmg> <evidence dir>
+#   revert -> start -> macos-up.sh -> guest/macsmoke.py (wizard, first pane) -> collect -> stop -> revert, timed
+```
+
+The test account is the image's own `admin`, which logs on to the desktop by itself, so `open -a` over ssh starts
+the app in that session. `tart run --no-graphics` runs detached on the VM host (`~/vm-retest-tart/run.pid` there),
+so no Fusion or tart window opens.
+
+The cirruslabs vanilla image ships with Gatekeeper assessments disabled (`spctl --status` says "assessments
+disabled", and `spctl -a` adds "override=security disabled"). `macos-up.sh` runs `sudo -n spctl --global-enable` in
+the guest before it installs the app and stops the round if that fails, so the spctl verdict it records is the one
+an enforcing Gatekeeper gives. The first-launch "downloaded from the Internet" prompt of a quarantined app cannot be
+clicked over ssh (Accessibility and Screen Recording need TCC grants that SIP keeps read-only), so pressing Open on it
+is checked by hand on a real Mac.
 
 ## Load rules
 

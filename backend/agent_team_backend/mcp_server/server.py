@@ -49,6 +49,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
+from agent_team_backend import __version__ as _backend_version
 from agent_team_backend import login_panes
 from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
@@ -195,6 +196,13 @@ server = NavideMCP(
         "sane advisory thresholds gets logged as a diagnostic warning (readable "
         "via ui_diagnostics) rather than refused.\n"
         "\n"
+        "Commands the user must type into: when a step needs the user at a "
+        "terminal (a password, sudo, a login, ssh-copy-id), open a plain shell "
+        "pane with cli_open_agent(agent=\"terminal\") instead of asking the user "
+        "to type `!` in your own CLI. A command the terminal protection refuses "
+        "can still go there with submit: false — it is prefilled on the command "
+        "line without Enter, and the user checks it and presses Enter.\n"
+        "\n"
         "Picking up an earlier conversation: a CLI session outlives the pane "
         "that ran it — the pane closes, the app restarts, and the vendor's "
         "transcript stays on disk. cli_list_sessions lists the ones this "
@@ -215,9 +223,24 @@ server = NavideMCP(
         "last known activity, and cli_wait_idle blocks until it goes idle or a "
         "timeout passes — the reliable way to learn a pane is done, and the "
         "only way for an external caller, which gets no completion message at "
-        "all."
+        "all.\n"
+        "\n"
+        "Chat channels (Telegram, Discord, Slack, ...): the channels_* tools "
+        "read the bots, chats, bindings and pairing requests and make the "
+        "changes within your reach; what only the user can grant — letting a "
+        "person in, adding or removing a bot, a bind outside your reach — they "
+        "file as a request the user decides in the main window "
+        "(channels_request_status follows it). A bot's credential never goes "
+        "through a tool: if the user pastes one to you, ask them to paste it "
+        "into the form channels_bot_add_open or channels_bot_add_fill opens."
     ),
 )
+# Every initialize response carries a server version. Left unset, the MCP SDK
+# reads it from the installed ``mcp`` package metadata on each new session; in
+# the onefile backend that metadata lives in the temp extraction directory,
+# which macOS purges after three idle days -- after that every session failed
+# to initialize until the app was restarted (2026-11-08).
+server._mcp_server.version = _backend_version
 
 #: Tools owned by a built-in Navide plugin, hidden from tools/list while the
 #: user has that plugin disabled. Filled by the plugin's installer.
@@ -1124,6 +1147,7 @@ async def cli_open_agent(
     window: str = "",
     window_id: str = "",
     account: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1149,6 +1173,14 @@ async def cli_open_agent(
     before resending. A destructive `task` is refused before the pane opens
     (error_code "terminal-command-refused" — see cli_send). Talk to it
     afterwards with cli_send — see there.
+
+    `submit: false` (terminal only) prefills `task` on the shell's command
+    line without pressing Enter: the user reads it and runs it themselves —
+    the way to hand over a command that needs the user (a password, sudo,
+    ssh-copy-id) or that the protection refuses. One printable line only. A
+    refused command is still prefilled, audited as a prefill, and the answer
+    carries `guard_refused` {rule, segment, reason}. `kickoff: "sent"` then
+    means it is on the command line, not that it ran.
 
     The pane you open is related to you: you opened it, so its result needs to
     come back to you. When you talk to the user about it, use whatever reads
@@ -1353,6 +1385,12 @@ async def cli_open_agent(
             "ok": False,
             "error": "a terminal pane is a plain shell — it takes no model, effort or session_id",
         }
+    if not submit and agent_key != _TERMINAL_AGENT:
+        return {
+            "ok": False,
+            "error": 'submit: false prefills a command for the user — it applies to agent "terminal" only',
+            "error_code": "prefill-terminal-only",
+        }
     refusal = _refuse_unsupported_model(agent_key, (model or "").strip(), (effort or "").strip())
     if refusal:
         return {"ok": False, "error": refusal}
@@ -1445,12 +1483,17 @@ async def cli_open_agent(
             _resume_lineage, resume_workspace, agent_key, resume_id
         )
 
+    guard_refused: dict[str, str] | None = None
     if agent_key == _TERMINAL_AGENT and (task or "").strip():
         # Checked before the pane exists: a refused first command should not
         # leave a shell behind that the caller then types into another way.
-        refused = _terminal_refusal(
-            task, workspace=target_workspace or _caller_workspace(caller), pane_id="", via="cli_open_agent"
-        )
+        terminal_workspace = target_workspace or _caller_workspace(caller)
+        if submit:
+            refused = _terminal_refusal(task, workspace=terminal_workspace, pane_id="", via="cli_open_agent")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                task, workspace=terminal_workspace, pane_id="", via="cli_open_agent"
+            )
         if refused:
             return refused
     prepared = ""
@@ -1506,6 +1549,10 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # Only for a prefill: an older window ignores the key, and the backend's
+        # terminal.input guard still refuses whatever this refused.
+        if not submit:
+            spawn_payload["submit"] = False
         # The explicit pin the window hands to spawnPane, the same pin a 📌
         # pinned pane is spawned with. Absent when the pane runs on the live
         # login: the payload is then exactly what it was before `account`.
@@ -1619,6 +1666,10 @@ async def cli_open_agent(
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
         advisories.append(_TERMINAL_NO_PROMPT_CHECK)
+    if not submit:
+        result["submit"] = False
+        if guard_refused:
+            result["guard_refused"] = guard_refused
     # Two answers only. "unverified" is the window's honest word for "bytes
     # written, nothing seen" — to the caller that is a task that did not
     # arrive, and the cure is the same as for an outright failure.
@@ -2360,6 +2411,24 @@ def _terminal_refusal(text: str, *, workspace: str, pane_id: str, via: str) -> d
     }
 
 
+def _terminal_prefill(
+    text: str, *, workspace: str, pane_id: str, via: str
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """(refusal answer, guard note) for prefilling ``text`` — typing it into a
+    terminal without Enter (submit: false). Only a single printable line is
+    refused; a command the protection refuses is still prefilled, because the
+    user runs it, but enforce() audits it as a prefill and the note says why."""
+    from agent_team_backend.guard import terminal_policy
+
+    problem = terminal_policy.prefill_line_error(text)
+    if problem:
+        return {"ok": False, "error": problem, "error_code": "prefill-not-single-line"}, None
+    refusal = terminal_policy.enforce(text, workspace=workspace, pane_id=pane_id, via=via, prefill=True)
+    if refusal is None:
+        return None, None
+    return None, {"rule": refusal.rule, "segment": refusal.segment, "reason": refusal.reason}
+
+
 class TerminalExternalRefused(Exception):
     """External content (a chat channel, another device) addressed to a plain
     terminal pane. Refused here, before it is broadcast or taints anything:
@@ -2396,6 +2465,7 @@ async def _dispatch_delivery(
     entry: Any, text: str, *, caller: "_Caller", me: str, cross_workspace: bool,
     reply_to: str = "", kind: str = "", from_display: str = "",
     origin: str = "", taint_detail: str = "", taint_source: str = "agent",
+    prefill: bool = False,
 ) -> str:
     """Hand one message to the windows and record it; returns its msg_key.
 
@@ -2465,6 +2535,9 @@ async def _dispatch_delivery(
                 # "channel" for a chat-channel message, so the window can mark
                 # it as external; absent otherwise.
                 **({"origin": origin} if origin else {}),
+                # Only for a terminal prefill (cli_send submit: false): typed
+                # without Enter. Absent otherwise.
+                **({"submit": False} if prefill else {}),
             },
         )
     )
@@ -2482,6 +2555,7 @@ async def cli_send(
     reply_to: str = "",
     kind: str = "message",
     open_target: bool = False,
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Send an instruction to another CLI pane, in this or another workspace.
 
@@ -2526,8 +2600,24 @@ async def cli_send(
     services, fork bombs, piping a download into a shell, credential files,
     force-pushing main, and lines that cannot be judged statically. The answer
     is ok: false with error_code "terminal-command-refused" and `refused`
-    {rule, segment, reason}; tell the user to run it themselves. The user
-    tunes the categories and patterns in Settings → Security.
+    {rule, segment, reason}. Then resend it with `submit: false` so the user
+    can check it and press Enter, or ask the user to add an allow prefix in
+    Settings → Security (where the categories and patterns are tuned), or to
+    run it themselves.
+
+    `submit` (default true) applies to a terminal pane only. `submit: false`
+    prefills `text` on the shell's command line — written as a bracketed paste
+    where the shell supports it, and Enter is NOT pressed: the user reads it
+    and runs it (or clears it). Use it for anything the user has to see first
+    or type into (a password, sudo, ssh-copy-id) and for a refused command.
+    One printable line only: a newline, carriage return or other control
+    character fails with error_code "prefill-not-single-line". A refused
+    command is still prefilled, audited as a prefill, and the answer carries
+    `guard_refused` {rule, segment, reason}. Until the user types into that
+    terminal, every other message to it fails rather than being typed after
+    the prefill. "delivered" means it is on the command line, not that it
+    ran. Refused for any other pane, a group or another device
+    ("prefill-terminal-only").
 
     `to: "group"` broadcasts instead: every other pane in YOUR OWN tab group,
     in your own workspace. Deliberately narrower than the bare-line protocol's
@@ -2676,6 +2766,7 @@ async def cli_send(
         reply_to=reply_to,
         kind=kind,
         open_target=open_target,
+        submit=submit,
     )
 
 
@@ -2690,6 +2781,7 @@ async def _send(
     kind: str = "message",
     open_target: bool = False,
     taint_detail: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """cli_send once its caller is resolved.
 
@@ -2707,6 +2799,15 @@ async def _send(
     send_kind = "ack" if kind == "ack" else ""
     me = caller.pane_id if caller.kind == "pane" else ""
     target_id = (pane_id or "").strip()
+    prefill_only = {
+        "ok": False,
+        "error": "submit: false prefills a command for the user — it applies to one terminal pane on this machine only",
+        "error_code": "prefill-terminal-only",
+    }
+    if not submit and send_kind == "ack":
+        return prefill_only
+    if not submit and not target_id and _is_group_target(to):
+        return prefill_only
     if not target_id and _is_group_target(to):
         if caller.kind != "pane":
             return {
@@ -2751,6 +2852,8 @@ async def _send(
         # The resolution order lives in message_routing, shared with the
         # bare-line path so the two cannot answer the same address differently.
         routed = message_routing.route(me, to)
+        if routed.remote is not None and not submit:
+            return prefill_only
         if routed.remote is not None:
             if send_kind == "ack":
                 # Refused rather than relayed, because the relay cannot carry
@@ -2816,8 +2919,16 @@ async def _send(
         opened = {"realized": True, "reason": open_result["reason"]}
         target = open_result["pane"]
 
+    if not submit and target.agent_key != _TERMINAL_AGENT:
+        return prefill_only
+    guard_refused: dict[str, str] | None = None
     if target.agent_key == _TERMINAL_AGENT and send_kind != "ack":
-        refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        if submit:
+            refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send"
+            )
         if refused:
             return refused
     msg_key = await _dispatch_delivery(
@@ -2829,6 +2940,7 @@ async def _send(
         reply_to=reply_to,
         kind=send_kind,
         taint_detail=taint_detail,
+        prefill=not submit,
     )
     answer: dict[str, Any] = {
         "ok": True,
@@ -2836,6 +2948,10 @@ async def _send(
         "cross_workspace": result.cross_workspace,
         "msg_key": msg_key,
     }
+    if not submit:
+        answer["submit"] = False
+        if guard_refused:
+            answer["guard_refused"] = guard_refused
     if opened is not None:
         answer["opened"] = opened
     elif not target.realized:
@@ -6802,6 +6918,11 @@ async def ui_invoke(
     refusal = _human_only_refusal(action, args)
     if refusal is not None:
         return refusal
+    if action == "ui.pipeline.start":
+        # Who started the run is recorded with its plugin nodes; a caller of
+        # this tool is an agent, whatever its args say. Only the scheduler and
+        # webhook paths (_start_pipeline_run) name another origin.
+        args = {**(args or {}), "origin": "agent"}
     if action in _PANE_PRIVATE_UI_ACTIONS:
         # Refused here as well as in the window: the renderer check is the one
         # that holds for every path a request can take, this one gives the
@@ -8126,7 +8247,14 @@ def _token_stats_of(workspace_path: str) -> dict[str, Any]:
 
 
 @server.tool()
-async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, Any]:
+async def cli_token_stats(
+    ctx: Context,
+    workspace_path: str = "",
+    cost_by: str = "",
+    since: str = "",
+    until: str = "",
+    pane: str = "",
+) -> dict[str, Any]:
     """Read how many tokens this workspace has spent, as Navide counts them.
 
     The numbers behind the Token panel: what the current run has used, what the
@@ -8151,10 +8279,41 @@ async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, A
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
+
+    `cost_by` adds `cost`: dollars from Navide's per-call usage ledger, for the
+    calls made in this workspace's folder or below it, grouped by "cwd",
+    "pane", "day", "session", "model", "account" (the account slot's
+    profile id, "" when unknown) or "model_account" (key "<model>::<profile
+    id>", with `model` and `account` on each group) or "day_model" (key
+    "<day>::<model>", with `day` and `model`). Each group is {key,
+    calls, input, cache_read, cache_write_5m, cache_write_1h, output, usd,
+    unpriced_calls}:
+    input is the uncached part, and a model the price table does not know adds
+    to unpriced_calls, not to usd. `pricing` names the price table's version
+    and effective date. `since` and `until` (YYYY-MM-DD, UTC, inclusive) limit
+    the days and `pane` one pane. Grouped by pane, `differences` lists the
+    panes whose own calls and whose sessions' calls add up to different token
+    counts. The ledger keeps calls Navide has read since it started keeping
+    one, so earlier usage is missing from `cost` though the token counts above
+    include it.
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _plan_workspace(caller, workspace_path)
-    return await asyncio.to_thread(_token_stats_of, workspace_path)
+    stats = await asyncio.to_thread(_token_stats_of, workspace_path)
+    if cost_by:
+        from agent_team_backend import app as _app
+        from agent_team_backend.cost_ledger import COST_REPORT_GROUPS
+
+        if cost_by not in COST_REPORT_GROUPS:
+            return {"ok": False, "error": f"cost_by must be one of {', '.join(COST_REPORT_GROUPS)}"}
+        if not _app.cost_ledger.enabled:
+            stats["cost_ledger_disabled"] = _app.cost_ledger.disabled_reason
+            return stats
+        stats["cost"] = await asyncio.to_thread(
+            _app.cost_ledger.report, cost_by,
+            cwd=workspace_path, pane=pane, since=since, until=until,
+        )
+    return stats
 
 
 def _memory_workspace_root(workspace_path: str) -> Path | None:
@@ -8774,7 +8933,8 @@ async def pipeline_start(
 
 
 async def _start_pipeline_run(
-    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = ""
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = "",
+    origin: str = "agent",
 ) -> dict[str, Any]:
     """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
     ui.pipeline.start in the window holding the workspace, with the caller's
@@ -8786,7 +8946,9 @@ async def _start_pipeline_run(
     if await asyncio.to_thread(_run_is_active, workspace_path):
         refused = PipelineAlreadyRunning("start a pipeline run")
         return {"ok": False, "error": str(refused), "error_code": refused.error_code}
-    args: dict[str, Any] = {"task": str(task or "")}
+    # Who started the run (agent, schedule or webhook): the window records it
+    # with every plugin node the run reaches (plugin Activity).
+    args: dict[str, Any] = {"task": str(task or ""), "origin": origin}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
         args["pipelineId"] = pipeline_id
@@ -9623,6 +9785,7 @@ async def pipeline_import_n8n(
         workspace_path = await _definition_workspace(caller, workspace_path)
         if await asyncio.to_thread(_run_is_active, workspace_path):
             return _run_in_progress("import a pipeline")
+    plugin_nodes = await host_plugin_pipeline_nodes()
     try:
         out = await asyncio.to_thread(
             import_into_store,
@@ -9631,6 +9794,7 @@ async def pipeline_import_n8n(
             dry_run=bool(dry_run),
             default_agent=str(default_agent or "claude"),
             name=str(name or ""),
+            plugin_nodes=plugin_nodes,
         )
     except N8nImportError as exc:
         code = {"too-large": "too_large", "store-refused": "refused"}.get(exc.reason, "invalid")
@@ -10595,6 +10759,59 @@ async def share_revoke(link_id: str, ctx: Context) -> dict:
     return await _share_run(call)
 
 
+# ── Plugin pipeline nodes (E2) ───────────────────────────────────────────────
+# An n8n import asks the authenticated Host which installed plugins contribute
+# pipeline nodes for which n8n types (contributes.pipelineNodes[].n8nTypes):
+# the backend unicasts `plugins.pipelineNodes.request`, the Host answers with
+# `plugins.pipelineNodes.result`. No answer means no plugin nodes, and every
+# step keeps its agent slot, exactly as before.
+PIPELINE_NODES_REQUEST_EVENT = "plugins.pipelineNodes.request"
+_PIPELINE_NODES_TIMEOUT_S = 5.0
+_pipeline_nodes_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
+_PIPELINE_NODE_ID = re.compile(r"[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+")
+
+
+def resolve_pipeline_nodes(request_id: str, response: dict[str, Any]) -> bool:
+    """Resolve one ``plugins.pipelineNodes.request`` with the Host's answer."""
+    return _pipeline_nodes_pending.resolve(request_id, response)
+
+
+def _pipeline_nodes_by_type(answer: Any) -> dict[str, dict[str, str]]:
+    """n8n type -> {pluginId, node, title}; the first plugin (by id) wins a type."""
+    nodes = answer.get("nodes") if isinstance(answer, dict) and answer.get("ok") is True else None
+    out: dict[str, dict[str, str]] = {}
+    if not isinstance(nodes, list):
+        return out
+    entries = [n for n in nodes if isinstance(n, dict)]
+    for n in sorted(entries, key=lambda e: (str(e.get("pluginId")), str(e.get("node")))):
+        pid, node, title, types = n.get("pluginId"), n.get("node"), n.get("title"), n.get("n8nTypes")
+        if not (isinstance(pid, str) and _PIPELINE_NODE_ID.fullmatch(pid) and isinstance(node, str) and node
+                and isinstance(title, str) and isinstance(types, list)):
+            continue
+        for t in types:
+            if isinstance(t, str) and t and t not in out:
+                out[t] = {"pluginId": pid, "node": node, "title": title}
+    return out
+
+
+async def host_plugin_pipeline_nodes() -> dict[str, dict[str, str]]:
+    """Installed plugins' pipeline nodes by n8n type, from the Host; {} when
+    the Host is not connected or does not answer in time."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = f"pn:{secrets.token_hex(16)}"
+    future = _pipeline_nodes_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(PIPELINE_NODES_REQUEST_EVENT, {"request_id": request_id}))
+        if not sent:
+            return {}
+        result = await _pipeline_nodes_pending.wait(request_id, future, timeout=_PIPELINE_NODES_TIMEOUT_S)
+        return {} if result is TIMEOUT else _pipeline_nodes_by_type(result)
+    finally:
+        _pipeline_nodes_pending.discard(request_id)
+
+
 # ── Marketplace, read-only (plan B, B2-a) ───────────────────────────────────
 # marketplace_search / marketplace_detail / plugins_list_installed ask the
 # Electron Host over its authenticated session (contract section 4.3): the
@@ -10673,8 +10890,8 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "secrets", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "system.secrets", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
@@ -10682,12 +10899,15 @@ _MQ_ENUMS = frozenset({
     # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
     "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
     "factory-bundled",
+    # 0.2.39 disclosure: summary clause keys and command slot surfaces.
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "statusBar", "paneActions", "explorerMenu",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
     # An installed package's source (W1); a scan's `source` stays fenced.
     "source",
+    "slot",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -10706,6 +10926,8 @@ _MQ_KNOWN_KEYS = frozenset({
     "capabilities", "address", "code", "frontend", "backend", "eval", "newFunction", "dynamicImport",
     "stringTimers", "obfuscationSignals", "native", "path", "format", "arch", "libraries", "notableImports",
     "importCount", "packer", "embeddedRuntime",
+    # 0.2.39 disclosure fields (agentEvents, pluginCalls, api, pipelineNodes, commandSlots).
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "commandSlots", "plugins", "slot", "command",
 })
 
 
@@ -11400,7 +11622,9 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     return answer
 
 
-async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: Any) -> dict[str, Any]:
+async def _plugin_agent_action(
+    ctx: Context, action: str, namespace: Any, name: Any, *, clear_secrets: bool = False,
+) -> dict[str, Any]:
     """Ask the Host to disable or enable one installed Marketplace package."""
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -11444,8 +11668,15 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
         return finish(_marketplace_error("HOST_UNAVAILABLE", f"Navide Host did not answer the {action} request"))
     if result.get("ok") is True and isinstance(result.get("pluginVersion"), str):
         version = result["pluginVersion"]
-        return finish({"ok": True, "pluginId": plugin_id, "pluginVersion": version,
-                       "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
+        answer = {"ok": True, "pluginId": plugin_id, "pluginVersion": version,
+                  "disabled": action == "disable", "changed": result.get("changed") is True}
+        if action == "disable" and clear_secrets:
+            # Deleting the package's secrets is never an agent's to do: it is
+            # filed for the user's decision, whatever the switch did.
+            answer["secretsClear"] = await _file_clear_secrets_request(
+                caller, requester, plugin_id, str(namespace), str(name), version,
+            )
+        return finish(answer, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
     if code == "APPROVAL_REQUIRED" and action == "enable" and isinstance(result.get("pluginVersion"), str):
@@ -11461,6 +11692,43 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     else:
         error = _fenced_request_error(caller, host_error, tool=f"plugins_{action}")
     return finish(_marketplace_error(code, error))
+
+
+async def _file_clear_secrets_request(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, namespace: str, name: str, version: str,
+) -> dict[str, Any]:
+    """plugins_disable with clear_secrets: file a plugin-clear-secrets request
+    for the user's decision. Nothing is deleted until the user approves it in a
+    main window; the user is told when the secrets are deleted."""
+    from agent_team_backend import app, skills_approvals
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    if not _MQ_SEMVER.fullmatch(version):
+        return {"ok": False, "error_code": "ACTION_FAILED", "error": f"Navide could not file a request for {plugin_id}"}
+    target = {"id": plugin_id, "namespace": namespace, "name": name, "version": version, "fromVersion": None}
+    try:
+        record = skills_approvals.registry.request_plugin(
+            kind="plugin-clear-secrets", requester=requester, reason="", target=target, card=None, diff=None,
+        )
+    except skills_approvals.SkillApprovalError as err:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                            action="request-clear-secrets", outcome="denied", error_code=err.code)
+        return {"ok": False, "error_code": err.code, "error": str(err)}
+    _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                        action="request-clear-secrets", outcome="allowed", approval_id=record["approval_id"])
+    await app.broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    return {
+        "ok": False,
+        "error_code": "APPROVAL_REQUIRED",
+        "error": (
+            f"Deleting the secrets of {plugin_id} needs the user's approval. A request was filed "
+            "for their decision in Navide; poll marketplace_request_status."
+        ),
+        "approval_id": record["approval_id"],
+        "status": record["status"],
+        "expires_at": record["expires_at"],
+    }
 
 
 async def _file_enable_request(
@@ -11512,7 +11780,7 @@ async def _file_enable_request(
 
 
 @server.tool()
-async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
+async def plugins_disable(ctx: Context, namespace: str, name: str, clear_secrets: bool = False) -> dict[str, Any]:
     """Disable an installed Navide plugin from the Navide Marketplace.
 
     Takes effect at once: the plugin stops and its views, backend and agent
@@ -11520,12 +11788,23 @@ async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, 
     agent did it, with a one-click undo, and the change is recorded. The
     bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
 
+    The plugin's own encrypted secrets (`secrets`: its API keys and tokens)
+    stay, so enabling it again finds them. `clear_secrets=true` asks to delete
+    them too: the plugin is disabled at once, and the deletion is filed as a
+    request for the user's decision in Navide (it cannot be undone, so only
+    the user approves it; the user is told when they are deleted). No secret
+    value is ever returned.
+
     Returns {ok, pluginId, pluginVersion, disabled: true, changed} or {ok:
     false, error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
-    ACTION_FAILED, HOST_UNAVAILABLE). `changed` is false when it was already
-    disabled: nothing happens then and the user is not notified.
+    ACTION_FAILED, HOST_UNAVAILABLE). With clear_secrets the answer also has
+    `secretsClear`: {ok: false, error_code: "APPROVAL_REQUIRED", error,
+    approval_id, status: "pending", expires_at}; follow it with
+    marketplace_request_status. `changed` is false when it was already
+    disabled: the switch is then left alone and the user is not notified of
+    it.
     """
-    return await _plugin_agent_action(ctx, "disable", namespace, name)
+    return await _plugin_agent_action(ctx, "disable", namespace, name, clear_secrets=clear_secrets is True)
 
 
 @server.tool()
@@ -12298,5 +12577,7 @@ from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  #
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
 # DESIGN-C S3: window_list / window_focus.
 from . import window_tools as _window_tools  # noqa: E402,F401
-# Self-evolution S5b: evolve_retro, the last core tool.
+# Self-evolution S5b: evolve_retro.
 from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
+# Plan mcp-bot_507912: chat-channel tools (channels_*).
+from . import channel_tools as _channel_tools  # noqa: E402,F401

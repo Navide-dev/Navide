@@ -23,11 +23,22 @@ export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 
 export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
 const AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...AGENT_TOOL_REQUIRED_FIELDS, 'timeoutMs'])
+/** A `contributes.agentTools` entry names the view that serves it instead of a backend method. */
+export const VIEW_AGENT_TOOL_REQUIRED_FIELDS = ['name', 'view', 'risk', 'title', 'description', 'inputSchema'] as const
+const VIEW_AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...VIEW_AGENT_TOOL_REQUIRED_FIELDS, 'timeoutMs'])
+/** How a view-served tool is spelled in the disclosure and the catalog: `method` is `view:<view id>`. */
+export const AGENT_TOOL_VIEW_METHOD_PREFIX = 'view:'
+/** The view id a disclosed or synced tool's `method` names, or null for a backend method. */
+export function agentToolViewId(method: unknown): string | null {
+  return typeof method === 'string' && method.startsWith(AGENT_TOOL_VIEW_METHOD_PREFIX)
+    ? method.slice(AGENT_TOOL_VIEW_METHOD_PREFIX.length)
+    : null
+}
 
 /** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation), and so
  *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
-  'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
+  'channels_', 'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
   'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
   'workspace_',
 ] as const
@@ -41,7 +52,12 @@ export const CORE_TOOL_NAMES = [
   'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
-  'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
+  'cli_usage', 'cli_wait_idle', 'cli_whoami',
+  'channels_bind', 'channels_bindings', 'channels_bot_add_fill', 'channels_bot_add_open', 'channels_bot_remove_request',
+  'channels_bot_rename', 'channels_bot_set_enabled', 'channels_chats', 'channels_link_code', 'channels_managed_bot_create',
+  'channels_pairing_approve_request', 'channels_pairing_reject', 'channels_pairing_requests', 'channels_request_status', 'channels_set_verbosity',
+  'channels_status', 'channels_unbind',
+  'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
   'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
   'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
@@ -72,6 +88,7 @@ export type AgentToolErrorCode =
   | 'AGENT_TOOL_FIELD_MISSING'
   | 'AGENT_TOOL_NAME_DUPLICATE'
   | 'AGENT_TOOL_METHOD_UNDECLARED'
+  | 'AGENT_TOOL_VIEW_UNDECLARED'
   | 'AGENT_TOOL_RISK_INVALID'
   | 'AGENT_TOOL_TEXT_INVALID'
   | 'AGENT_TOOL_SCHEMA_INVALID'
@@ -83,6 +100,8 @@ export interface AgentToolValidationError {
   index: number | null
   field: string | null
   code: AgentToolErrorCode
+  /** Present for a `contributes.agentTools` entry; absent for `backend.agentTools`. */
+  list?: 'contributes'
 }
 
 /**
@@ -193,32 +212,63 @@ function isValidTimeout(value: unknown): boolean {
  * rules it can, so B1-a has one function to call. Reads only `id` and
  * `backend`; returns all errors ordered by entry index, then check order.
  */
-export function validateAgentTools(manifest: { id?: unknown; backend?: unknown }): AgentToolValidationError[] {
-  const backend = manifest.backend
-  if (!isPlainObject(backend) || !('agentTools' in backend)) return []
-  const declared = backend.agentTools
-  if (!Array.isArray(declared)) return [{ index: null, field: 'agentTools', code: 'AGENT_TOOLS_NOT_ARRAY' }]
-  const methods = Array.isArray(backend.methods) ? backend.methods : []
+export function validateAgentTools(
+  manifest: { id?: unknown; backend?: unknown; contributes?: unknown },
+): AgentToolValidationError[] {
   const errors: AgentToolValidationError[] = []
   const seen = new Set<string>()
+  const backend = manifest.backend
+  if (isPlainObject(backend) && 'agentTools' in backend) {
+    const methods = Array.isArray(backend.methods) ? backend.methods : []
+    validateAgentToolList(backend.agentTools, manifest.id, { binding: 'method', targets: methods, list: null }, seen, errors)
+  }
+  const contributes = manifest.contributes
+  if (isPlainObject(contributes) && 'agentTools' in contributes) {
+    const views = Array.isArray(contributes.views)
+      ? contributes.views.flatMap((view) => (isPlainObject(view) && typeof view.id === 'string' ? [view.id] : []))
+      : []
+    validateAgentToolList(contributes.agentTools, manifest.id, { binding: 'view', targets: views, list: 'contributes' }, seen, errors)
+  }
+  return errors
+}
+
+/** One list of tool declarations: `backend.agentTools` (bound to a method)
+ *  or `contributes.agentTools` (bound to a view). Names are unique across
+ *  both lists, so `seen` is shared. */
+function validateAgentToolList(
+  declared: unknown,
+  pluginId: unknown,
+  rule: { binding: 'method' | 'view'; targets: unknown[]; list: 'contributes' | null },
+  seen: Set<string>,
+  errors: AgentToolValidationError[],
+): void {
+  const tag = rule.list === null ? {} : { list: rule.list }
+  if (!Array.isArray(declared)) {
+    errors.push({ index: null, field: 'agentTools', code: 'AGENT_TOOLS_NOT_ARRAY', ...tag })
+    return
+  }
+  const fields = rule.binding === 'method' ? AGENT_TOOL_FIELDS : VIEW_AGENT_TOOL_FIELDS
+  const requiredFields = rule.binding === 'method' ? AGENT_TOOL_REQUIRED_FIELDS : VIEW_AGENT_TOOL_REQUIRED_FIELDS
   declared.forEach((tool, index) => {
     const fail = (field: string | null, code: AgentToolErrorCode): void => {
-      errors.push({ index, field, code })
+      errors.push({ index, field, code, ...tag })
     }
     if (!isPlainObject(tool)) return fail(null, 'AGENT_TOOL_NOT_OBJECT')
     for (const field of Object.keys(tool).sort()) {
-      if (!AGENT_TOOL_FIELDS.has(field)) fail(field, 'AGENT_TOOL_FIELD_UNKNOWN')
+      if (!fields.has(field)) fail(field, 'AGENT_TOOL_FIELD_UNKNOWN')
     }
-    for (const field of AGENT_TOOL_REQUIRED_FIELDS) {
+    for (const field of requiredFields) {
       if (!(field in tool)) fail(field, 'AGENT_TOOL_FIELD_MISSING')
     }
     if ('name' in tool) {
-      const nameError = validateAgentToolName(tool.name, manifest.id)
+      const nameError = validateAgentToolName(tool.name, pluginId)
       if (nameError) fail('name', nameError)
       else if (seen.has(tool.name as string)) fail('name', 'AGENT_TOOL_NAME_DUPLICATE')
       else seen.add(tool.name as string)
     }
-    if ('method' in tool && !methods.includes(tool.method)) fail('method', 'AGENT_TOOL_METHOD_UNDECLARED')
+    if (rule.binding === 'method') {
+      if ('method' in tool && !rule.targets.includes(tool.method)) fail('method', 'AGENT_TOOL_METHOD_UNDECLARED')
+    } else if ('view' in tool && !rule.targets.includes(tool.view)) fail('view', 'AGENT_TOOL_VIEW_UNDECLARED')
     if ('risk' in tool && tool.risk !== 'read' && tool.risk !== 'write') fail('risk', 'AGENT_TOOL_RISK_INVALID')
     if ('title' in tool && !isValidAgentToolText(tool.title)) fail('title', 'AGENT_TOOL_TEXT_INVALID')
     if ('description' in tool) {
@@ -238,7 +288,6 @@ export function validateAgentTools(manifest: { id?: unknown; backend?: unknown }
     }
     if ('timeoutMs' in tool && !isValidTimeout(tool.timeoutMs)) fail('timeoutMs', 'AGENT_TOOL_TIMEOUT_INVALID')
   })
-  return errors
 }
 
 // ── Host → backend: plugins.agentTools.sync ─────────────────────────────────

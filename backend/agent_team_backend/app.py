@@ -38,6 +38,7 @@ from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
+from . import plugin_host_events
 from . import portable_credentials_cleanup
 from . import push_delivery
 from . import resource_limits
@@ -61,6 +62,7 @@ from .analyzer_ollama import (
     delete_model as _ollama_delete_model,
 )
 from .analyzer_settings import AnalyzerSettingsStore
+from . import session_archive
 from .ai_chat_settings import AIChatSettingsStore
 from .applog import app_data_dir, backend_log_path, backend_port_file, in_data_dir
 from .cli_vendors.registry import VENDORS as _CLI_VENDORS
@@ -103,6 +105,7 @@ from .dev_time_store import DevTimeStore
 from .store_migrations import run_startup_migrations, version_change
 from .terminals import TerminalService, output_frame_session_id
 from .tokens_store import TokensStore
+from .cost_ledger import CostLedger
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
@@ -213,6 +216,7 @@ recent_workspaces_store = RecentWorkspacesStore(db=database)
 roles_store = RolesStore(db=database)
 stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
+cost_ledger = CostLedger(database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
 # Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
@@ -247,6 +251,7 @@ plugin_host = PluginHost()
 mcp_settings_store = MCPSettingsStore()
 skills_store = SkillsStore()
 analyzer_settings_store = AnalyzerSettingsStore(db=database)
+archive_settings_store = session_archive.ArchiveSettingsStore(db=database)
 ai_chat_settings_store = AIChatSettingsStore(db=database)
 ui_settings_store = UiSettingsStore(db=database)
 cli_risk_service = CliRiskService(CliRiskStore(database))
@@ -909,6 +914,7 @@ async def _broadcast_plans_changed(ws_path: str) -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("plan snapshot scan failed for %s: %s", ws_path, err)
     await broadcast(make_event("plans.changed", {"workspace_path": ws_path}))
+    await plugin_host_events.on_plans_changed(ws_path)
 
 
 _PLAN_DOC_PREFIXES = (
@@ -1161,6 +1167,32 @@ _ownerless_sweeper_task: "asyncio.Task[None] | None" = None
 _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
+_session_archive_task: "asyncio.Task[None] | None" = None
+_frozen_keepalive_task: "asyncio.Task[None] | None" = None
+
+_SESSION_ARCHIVE_FIRST_S = 600
+_SESSION_ARCHIVE_EVERY_S = 86_400
+
+
+async def _session_archive_loop() -> None:
+    """The opt-in session-log archive, once a day (first ten minutes after
+    startup). Both switches start off, so by default this only reads the
+    settings; Claude Code's project folders are the logs it covers."""
+    await asyncio.sleep(_SESSION_ARCHIVE_FIRST_S)
+    while True:
+        settings = archive_settings_store.get()
+        if settings["compress_enabled"] or settings["upload_enabled"]:
+            claude = next((r for r in _readers if r.vendor == "claude"), None)
+            roots = claude.project_dirs() if claude is not None else []
+            try:
+                counts = await asyncio.to_thread(
+                    session_archive.run_once, settings, roots, database,
+                    open_sessions=attribution.bound_session_ids(),
+                )
+                log.info("session archive: %s", counts)
+            except Exception as err:  # noqa: BLE001 — the loop must survive
+                log.warning("session archive pass failed: %s", err)
+        await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -2267,7 +2299,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             workspace_path = usage.replay_workspace
         else:
             workspace_path = attributed.workspace_path
-        if workspace_path is None:
+        if workspace_path is None and not attributed.global_only:
             # External session — outside any registered workspace. Skip silently.
             return TokenSinkResult(False)
         # Namespace the dedup key by vendor + file_path so collisions across
@@ -2304,6 +2336,12 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             cache_creation_tokens=usage.cache_creation_tokens,
             timestamp=usage.timestamp,
         )
+        # Never raises and does not feed `handled`: the ledger must not change
+        # what tokens_store records or how its checkpoint advances.
+        cost_ledger.record(
+            usage, workspace_path, attributed.slot_key or attributed.pane_id or "",
+            usage.profile_id,
+        )
         # The watcher just told us this session's log grew — the cheapest and
         # most timely rescan trigger there is, since it already carries the
         # vendor, the session id and the attributed workspace/pane. Skipped for
@@ -2317,7 +2355,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
                 session_file=usage.file_path,
             )
         _schedule_tokens_broadcast(workspace_path)
-        return TokenSinkResult(handled, workspace_path)
+        return TokenSinkResult(handled, workspace_path or "")
     except Exception as err:  # noqa: BLE001
         log.warning("log token sink failed: %s", err)
         return TokenSinkResult(False)
@@ -2592,6 +2630,17 @@ async def _start_log_watcher() -> None:
     global _plugin_audit_task
     _plugin_audit_task = asyncio.create_task(plugin_audit_log.run())
 
+    # Opt-in session-log archive (off by default; see session_archive.py).
+    global _session_archive_task
+    _session_archive_task = asyncio.create_task(_session_archive_loop())
+
+    # Frozen build only: keep the onefile extraction directory from being
+    # purged as idle temp while the backend stays up (see frozen_env).
+    from . import frozen_env
+
+    global _frozen_keepalive_task
+    _frozen_keepalive_task = asyncio.create_task(frozen_env.keep_extraction_warm())
+
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
     from . import scheduler
@@ -2676,6 +2725,8 @@ async def _start_log_watcher() -> None:
     await server_link.start()
     # Chat channels (Telegram, Discord, ...): adapters start in the background.
     await channels.start()
+    # Plugin `agents.*` events (metadata only); the Host routes them by grant.
+    plugin_host_events.start(asyncio.get_running_loop())
 
     # Start MCP servers in the background so they're ready for the first pipeline run.
     asyncio.create_task(mcp_manager.startup())
@@ -2767,6 +2818,10 @@ async def _stop_log_watcher() -> None:
             _mem_probe_task.cancel()
         if _dev_time_sweeper_task is not None:
             _dev_time_sweeper_task.cancel()
+        if _session_archive_task is not None:
+            _session_archive_task.cancel()
+        if _frozen_keepalive_task is not None:
+            _frozen_keepalive_task.cancel()
         if _plugin_audit_task is not None:
             # Cancelling runs its final flush; wait for it so queued rows land.
             _plugin_audit_task.cancel()

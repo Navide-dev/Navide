@@ -143,7 +143,7 @@
       "execute-pick-agent": "選擇執行此計畫的 agent",
       "execute-duplicate-confirm": "「{name}」已有進行中的派工，仍要再次派工嗎？",
       "execute-dispatched": "已派工給 CLI agent",
-      "execute-no-window": "此 workspace 沒有開啟中的主視窗，請開啟後再試",
+      "execute-no-window": "此工作區沒有開啟中的主視窗，請開啟後再試",
       "execute-failed": "派工失敗，計畫已回復為已核准，請再試一次",
       "edit": "編輯",
       "delete": "刪除",

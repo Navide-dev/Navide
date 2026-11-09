@@ -1,0 +1,25 @@
+{
+  "vendor": "hermes",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "backend/tests/vendors/test_hermes.py",
+    "revision": "f0b7a2ecf877361e20543ee5b565b55209ae06ca",
+    "notes": "Hand-authored minimal records from the existing regression schema. No account data, provider calls, or claimed live recording; the CLI was not installed when this was written."
+  },
+  "sessionId": null,
+  "expected": {
+    "tokens": [
+      0,
+      0
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "phases": {
+    "initial": [],
+    "response": [],
+    "complete": []
+  },
+  "binary": "hermes",
+  "resumeCommand": null,
+  "guardedEnvironment": []
+}

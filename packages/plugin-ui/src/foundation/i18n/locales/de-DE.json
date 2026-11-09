@@ -1,5 +1,16 @@
 {
   "actionBar": {
+    "action": {
+      "ui_plugins_openDeveloperMode": "Bereich „Entwicklermodus“ in den Einstellungen öffnen",
+      "ui_plugins_openInstallFromFile": "Bereich „Aus Datei installieren“ in den Einstellungen öffnen",
+      "ui_plugins_openMarketplace": "Navide Marketplace oder die Seite eines Navide-Plugins öffnen",
+      "ui_settings_open": "Einstellungen öffnen, optional auf einem bestimmten Tab",
+      "ui_window_openGit": "Git-Fenster des aktuellen Arbeitsbereichs öffnen",
+      "ui_window_openPipeline": "Fenster „Pipeline Manager“ öffnen",
+      "ui_window_openPlans": "Plan-Fenster öffnen, optional mit einem Dokument",
+      "ui_window_openResourceManager": "Ressourcenverwaltung öffnen",
+      "ui_window_openTurnStats": "Turn Stats öffnen"
+    },
     "add-step": "Schritt hinzufügen",
     "confirm-title": "Diese Schaltfläche ausführen?",
     "confirm-message": "Ausgeführt wird: {actions}. Das schließt oder setzt etwas zurück und lässt sich nicht rückgängig machen.",
@@ -544,6 +555,17 @@
     "agent-closed-workspace-kept": "„{caller}“ hat {name} geschlossen; seine CLIs laufen weiter",
     "agent-closed-workspace-ended": "„{caller}“ hat {name} geschlossen und seine CLIs beendet",
     "agent-closed-window": "„{caller}“ hat das Fenster mit {names} geschlossen; {count} CLI(s) laufen weiter",
+    "agent-channels-bind": "„{caller}“ hat Chat {chat} von {bot} an den Bereich „{pane}“ gebunden",
+    "agent-channels-unbind": "„{caller}“ hat die Chat-Bindung des Bereichs „{pane}“ gelöst",
+    "agent-channels-verbosity": "„{caller}“ hat festgelegt, dass der Chat des Bereichs „{pane}“ {verbosity} erhält",
+    "agent-channels-rename": "„{caller}“ hat Bot {bot} in „{name}“ umbenannt",
+    "agent-channels-enabled": "„{caller}“ hat Bot {bot} verbunden",
+    "agent-channels-disabled": "„{caller}“ hat Bot {bot} getrennt",
+    "agent-channels-link": "„{caller}“ hat einen Verknüpfungscode für Bot {bot} erstellt",
+    "agent-channels-reject": "„{caller}“ hat die Kopplungsanfrage {code} für {bot} abgelehnt",
+    "agent-channels-managed": "„{caller}“ hat Telegram-Bot {bot} gebeten, einen neuen Bot zu erstellen",
+    "agent-channels-request": "„{caller}“ bittet dich, über eine Chat-Kanal-Anfrage zu entscheiden",
+    "agent-channels-request-open": "Öffnen",
     "undo": "Rückgängig",
     "cross-workspace-toast": "Anweisung aus einem anderen Arbeitsbereich: „{from}“ → „{target}“",
     "cross-workspace-badge": "arbeitsbereichsübergreifend",
@@ -617,6 +639,11 @@
       "open-accounts": "Git-Konten öffnen"
     },
     "left-view-unavailable": "Die eingebettete Git-Ansicht ist vorübergehend nicht verfügbar.",
+    "recovery-title": "Integriertes Git konnte nicht starten",
+    "recovery-reason": "Grund: {reason}",
+    "recovery-reinstall": "Integriertes Git neu installieren",
+    "recovery-reinstalling": "Neuinstallation …",
+    "recovery-reinstall-failed": "Neuinstallation fehlgeschlagen: {reason}",
     "detail-open-failed": "Die Detailansicht konnte nicht geöffnet werden. Der Git-Bereich behält das aktuelle Ziel.",
     "open-workspace": "Öffnen Sie einen Arbeitsbereich, um Git zu verwenden.",
     "settings-unavailable": "Die Git-Einstellungen konnten nicht geladen werden.",
@@ -1615,6 +1642,22 @@
       "cannot-rebuild": "Keine gespeicherte Unterhaltung zum Fortsetzen",
       "rebuild": "Neu aufbauen"
     },
+    "archive": {
+      "hint": "Komprimiert Claude-Code-Sitzungsprotokolle, in die eine Weile nichts geschrieben wurde, und lädt sie auf Wunsch in Ihren eigenen S3-Bucket hoch. Alles hier ist aus, bis Sie es einschalten.",
+      "compress": "Ruhende Sitzungsprotokolle komprimieren",
+      "compress-hint": "Einmal am Tag erhält jedes Claude-Code-Sitzungsprotokoll, das die eingestellte Anzahl Tage ruht, eine .zst-Kopie daneben, und Navide prüft, dass sie zu denselben Bytes entpackt. Sitzungen, die ein offener Bereich nutzt, bleiben unberührt.",
+      "idle-days": "Tage ohne Schreibzugriff bis zur Komprimierung",
+      "remove-originals": "Original löschen, sobald die .zst geprüft ist",
+      "remove-originals-hint": "Gibt Speicherplatz frei. Ein gelöschtes Protokoll lässt sich in Claude Code nicht mehr fortsetzen und nicht mehr im Token-Bereich lesen, die .zst behält aber jedes Byte. Aus behält beide Dateien.",
+      "upload": "Archive in Ihren eigenen S3-Bucket hochladen",
+      "upload-hint": "Sendet jede .zst unter dem Präfix unten in Ihren eigenen Bucket, von S3 verschlüsselt. Die Zugangsdaten kommen aus der Standardkette von AWS (Umgebungsvariablen, ein ~/.aws-Profil oder SSO). Navide speichert nie einen AWS-Schlüssel.",
+      "upload-after-days": "Tage bis zum Hochladen eines Archivs",
+      "bucket": "S3-Bucket",
+      "prefix": "Schlüsselpräfix",
+      "region": "Region (AWS)",
+      "region-placeholder": "aus Ihrem AWS-Profil",
+      "save-failed": "Die Archiveinstellungen konnten nicht gespeichert werden"
+    },
     "limits": {
       "hint": "Optionale Grenzen, die verhindern, dass Navide und die von Navide gestarteten Agents diesen Rechner überlasten. Jede ist ausgeschaltet bzw. entspricht dem bisherigen Verhalten von Navide, bis Sie sie ändern.",
       "test-workers": "Test-Worker in neuen Bereichen begrenzen",
@@ -1934,7 +1977,8 @@
         "aiCli": "AI-CLI-Sitzungen",
         "web": "Surfen im Web",
         "agents": "Agent-Bereiche",
-        "agentMessages": "Agent-Nachrichten"
+        "agentMessages": "Agent-Nachrichten",
+        "secrets": "Geheimnisse des Navide-Plug-ins"
       },
       "shellLabel": "Ausführbare Shell-Dateien",
       "shellHint": "Nur Namen ausführbarer Dateien der obersten Ebene erlauben. Pfade und Shell-Ausdrücke werden nicht akzeptiert.",
@@ -1995,6 +2039,11 @@
       "cancel": "Abbrechen"
     },
     "extensions": {
+      "pluginSettings": {
+        "heading": "Einstellungen",
+        "reset": "Auf Standard zurücksetzen",
+        "saveFailed": "{title} konnte nicht gespeichert werden. Versuchen Sie es erneut; schlägt es weiter fehl, installieren Sie dieses Navide-Plugin neu."
+      },
       "devUnpacked": "Unsignierter lokaler Ordner – nur im Entwicklermodus",
       "agentTools": {
         "heading": "Tools, die Agents aufrufen können ({count})",
@@ -2019,7 +2068,7 @@
           "firstParty": "Agents erlauben, Tools aus offiziellen Navide-Plug-ins aufzurufen",
           "firstPartyDescription": "Standardmäßig an. Lässt Agents in Ihren Bereichen die Tools offizieller Navide-Plug-ins aufrufen, also der von Navide selbst wie Navide Browser, ohne für jede Version zu fragen. Ihre Ergebnisse gelten weiterhin als externe Inhalte, und ein Tool, das etwas ändert, fragt weiterhin einmal pro Arbeitsbereich.",
           "enable": "Agents erlauben, Tools aus Navide-Plug-ins von Drittanbietern aufzurufen",
-          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich.",
+          "description": "Lässt Agents in Ihren Bereichen Tools aufrufen, die von Ihnen erlaubte Navide-Plug-ins deklarieren; ein Tool, das Dateien ändert, fragt einmal pro Arbeitsbereich. Solange Sie ihn hier nie gesetzt haben, schaltet er sich selbst ein, wenn Sie ein Navide-Plug-in erlauben, dessen Zustimmungskarte Tools aufführt; eine Wahl, die Sie hier treffen, bleibt bestehen. Schalten Sie ihn hier aus, um alle Drittanbieter-Tools auf einmal zu stoppen.",
           "externalCallers": "Auch externen MCP-Clients den Aufruf erlauben",
           "externalCallersDisclosure": "Externe Programme teilen sich ein einziges Token, daher kann der Eintrag eines Aufrufs nur „ein externer Client“ angeben, nicht welches Programm es war. Die Host-Anmeldeinformation wird genauso behandelt."
         },
@@ -2088,6 +2137,8 @@
       "builtinSwitchBusy": "Wird angewendet … Navide lässt zuerst laufende Arbeit abschließen, was bei Plans etwa eine halbe Minute dauern kann.",
       "disabledBadge": "Deaktiviert",
       "disabledNote": "Deaktiviert: Seine Ansichten und sein Backend laufen nicht. Seine Dateien, Berechtigungen und gespeicherten Daten bleiben erhalten.",
+      "networkStrict": "Nur deklarierte Netzwerkhosts zulassen",
+      "networkStrictNote": "Aus (Standard): Eine Ansicht darf jeden Host erreichen; jede Anfrage wird aufgezeichnet, und eine an einen im Manifest nicht deklarierten Host wird in der Aktivität als solche markiert. An: nur die deklarierten Hosts, in der Frame-Richtlinie und im Anfrage-Hook; alles andere wird abgelehnt und aufgezeichnet.",
       "digestBlock": {
         "blocked": "Von Navide blockiert",
         "security": "Von Navide entfernt (Sicherheit)",
@@ -2114,7 +2165,6 @@
           "previousChanged": "Das Paket der vorherigen Version hat sich auf dem Datenträger geändert, daher wurde nicht darauf zurückgesetzt.",
           "grantUnavailable": "Die {id} gewährten Berechtigungen wurden nicht gefunden, daher wurde es nicht zurückgesetzt.",
           "factoryUnavailable": "Das Zurücksetzen auf die mitgelieferte Version ist nicht verfügbar.",
-          "gitLegacyRecovery": "Das mitgelieferte Git kann nicht wiederhergestellt werden, solange NAVIDE_GIT_RECOVERY=legacy die Legacy-Wiederherstellung erzwingt.",
           "factoryRestoreFailed": "Die mitgelieferte Version konnte nicht geladen werden."
         }
       },
@@ -2174,6 +2224,10 @@
         "uninstallConfirmBody": "{name} wird von diesem Gerät entfernt. Sie können es aus dem Navide Marketplace erneut installieren.",
         "uninstallConfirmBodyWithData": "{name} wird von diesem Gerät entfernt. Sein natives Backend hat außerdem {size} private Daten auf diesem Gerät am unten genannten Ort gespeichert. Navide löscht auch diese Daten, sofern Sie sie nicht behalten möchten.",
         "uninstallKeepNativeData": "Diese Daten behalten, damit eine Neuinstallation sie wieder verwenden kann",
+        "uninstallSecretsTitle": "Auch die gespeicherten Geheimnisse dieses Navide-Plug-ins löschen?",
+        "uninstallSecretsBody": "{name} speichert API-Schlüssel oder Tokens verschlüsselt auf diesem Gerät (insgesamt {count}). Behalte sie, damit eine Neuinstallation sie wieder nutzen kann, oder lösche sie jetzt.",
+        "uninstallSecretsDelete": "Geheimnisse löschen",
+        "uninstallSecretsKeep": "Geheimnisse behalten",
         "uninstallClearsWebData": "Beim Entfernen von {name} werden auch seine Website-Anmeldungen, Cookies und sein Cache auf diesem Computer gelöscht.",
         "updatesCount": "Verfügbare Updates: {count}",
         "retry": "Erneut versuchen",
@@ -2233,7 +2287,9 @@
           "downloads": "Downloads",
           "status": "Status"
         },
-        "prereleaseAvailable": "Vorabversion {version} verfügbar"
+        "prereleaseAvailable": "Vorabversion {version} verfügbar",
+        "buildOwnHint": "Selbst etwas bauen?",
+        "buildOwn": "Navide-Plug-in entwickeln"
       },
       "developerMode": {
         "errors": {
@@ -2249,6 +2305,9 @@
         "title": "Entwicklermodus",
         "switch": "Entwicklermodus einschalten",
         "hint": "Ermöglicht, ein Navide-Plug-in zum Entwickeln und Testen aus einem Ordner zu laden und Navide-Plug-ins statt aus dem Navide Marketplace von Ihrem eigenen Server zu installieren; beim Ausschalten werden diese Navide-Plug-ins entladen.",
+        "firstTime": "Ihr erstes Navide-Plug-in? Build for Navide führt Sie von der Vorlage bis in den Navide Marketplace.",
+        "openGuide": "Anleitung öffnen",
+        "agentSkill": "Oder lassen Sie sich von einem Agent führen: Bitten Sie ihn, diesen Skill zu installieren:",
         "banner": "Der Entwicklermodus ist aktiv. Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft.",
         "reminder": "Der Entwicklermodus ist aktiv: Aus einem Ordner geladene Navide-Plug-ins wurden nicht geprüft. Schalten Sie ihn unter „Einstellungen → Navide-Plug-ins“ aus, wenn Sie ihn nicht mehr benötigen.",
         "reminderClose": "Verstanden",
@@ -2372,9 +2431,10 @@
         "capability": {
           "fs": "Dateien in Ihrem Arbeitsbereich lesen und schreiben.",
           "aiCli": "Die in Navide eingerichteten AI-CLI-Agents starten, ihnen Eingaben senden und alles lesen, was sie ausgeben; eine AI CLI kann auch nach dem Schließen ihres Fensters im Hintergrund weiterlaufen.",
-          "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
+          "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-Bereiche, welcher Bereich welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
+          "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an.",
           "shell": "Befehle auf Ihrem Computer ausführen.",
           "terminal": "Navide-Terminals öffnen und steuern."
         }
@@ -7654,6 +7714,7 @@
     "section": {
       "general-behavior": "Allgemeines Verhalten",
       "resource-limits": "Ressourcengrenzen",
+      "session-archive": "Archiv der Sitzungsprotokolle",
       "settings-management": "Einstellungsverwaltung",
       "theme": "Design",
       "other": "Sonstiges"
@@ -8697,6 +8758,9 @@
     "run-group-active": "Läuft – ein Agent in dieser Gruppe ist aktiv",
     "run-group-awaiting": "Benötigt Sie – ein Agent in dieser Gruppe wartet auf eine Berechtigung oder eine Antwort",
     "agent-not-installed": "{label} – nicht installiert",
+    "cloud-agents-plugin-hint": "Cloud-Agents (Grok Bot, dots und weitere) gibt es als Navide-Plug-in im Navide Marketplace.",
+    "add-menu-cli": "CLI",
+    "add-menu-agents": "Agents",
     "select-role": "Rolle auswählen …",
     "waiting-backend": "Warten auf Backend …",
     "set-workspace-first": "Zuerst Arbeitsbereichspfad festlegen",
@@ -9114,6 +9178,8 @@
     "stall-auto-advance": "Vollautomatisch: erzwungenes Weiterschalten in 5 s …",
     "pipeline-starting": "Pipeline wird gestartet …",
     "pipeline-log-session-bound": "Session gebunden",
+    "pipeline-log-restoring-panes": "{n} Bereich(e) werden wiederhergestellt",
+    "terminal": "Terminal",
     "pipeline-log-answer-manually": "manuell beantworten",
     "pipeline-log-manager-ready": "übernimmt ({count} Nachricht wird abgearbeitet) | übernimmt ({count} Nachrichten werden abgearbeitet)",
     "pipeline-log-slot-not-found": "kein Platz „{slot}“",
@@ -9952,7 +10018,8 @@
       "update": "Navide-Plug-in {plugin} von {from} auf {version} aktualisieren?",
       "rollback": "Navide-Plug-in {plugin} von {from} auf {version} zurücksetzen?",
       "remove": "Navide-Plug-in {plugin} entfernen?",
-      "enable": "Navide-Plug-in {plugin} wieder aktivieren?"
+      "enable": "Navide-Plug-in {plugin} wieder aktivieren?",
+      "clear-secrets": "Die Geheimnisse löschen, die das Navide-Plug-in {plugin} gespeichert hat?"
     },
     "desc": "Ein Agent hat um diese Änderung gebeten. Nichts ändert sich, bis Sie sie hier genehmigen; der Agent kann sie nicht für Sie genehmigen.",
     "queue": "{count} ausstehend",
@@ -9979,6 +10046,7 @@
     "finished-late": "Ein anderes Fenster hatte diese Anfrage als unterbrochen markiert, während dieses Fenster sich neu verbunden hat; der Eintrag zeigt jetzt stattdessen dieses Ergebnis.",
     "failed": "Nicht erledigt: {error}",
     "not-appliable": "Diese Version von Navide kann diese Art von Anfrage noch nicht ausführen; Sie können sie ablehnen.",
+    "clear-secrets-note": "Damit werden die API-Schlüssel und Tokens gelöscht, die das Navide-Plug-in {plugin} verschlüsselt auf diesem Gerät speichert. Das lässt sich nicht rückgängig machen, und {plugin} fragt erneut danach.",
     "unavailable": "Navide-Plug-in-Aktionen sind in diesem Fenster nicht verfügbar."
   },
   "skill-approval": {
@@ -10181,6 +10249,7 @@
     "settings-title": "CLI-Kontingent-Badge",
     "settings-enabled": "Verbleibendes Kontingent in den Kopfzeilen der CLI-Bereiche anzeigen",
     "settings-refresh": "Aktualisierungsintervall",
+    "settings-refresh-minutes": "{n} Min.",
     "settings-hint": "Zeigt das Kontingent von 11 CLI-Anbietern, nur lesend, aus der Nutzungs-API jedes Anbieters (bei Claude aus dem integrierten /usage-Panel).",
     "failover-title": "Kontowechsel, wenn das Kontingent aufgebraucht ist",
     "failover-hint": "Was Navide tut, wenn einem CLI-Konto das Kontingent ausgeht: nichts, wechselbare Konten auflisten (Standard) oder automatisch wechseln, höchstens 3-mal pro 5 Stunden pro CLI.",
@@ -10919,6 +10988,19 @@
     "token-linked": "Mit einem Token verknüpft"
   },
   "channels": {
+    "agent": {
+      "title": "Anfragen von Agents",
+      "from": "Angefragt von {requester}",
+      "kind-bot-add": "Einen {platform}-Bot hinzufügen",
+      "kind-bot-remove": "Bot {bot} entfernen",
+      "kind-bind": "Chat {chat} von {bot} an den Bereich „{pane}“ binden",
+      "kind-pairing": "{sender} mit {bot} sprechen lassen",
+      "kind-pairing-bind": "{sender} mit {bot} sprechen lassen und den Chat an den Bereich „{pane}“ binden",
+      "approve": "Genehmigen",
+      "decline": "Ablehnen",
+      "fill": "Formular öffnen",
+      "add-note": "{requester} hat diesen Bot angefragt; den Namen hat ein Agent eingetragen. Füge die Zugangsdaten selbst hier ein – sie erreichen den Agent nie."
+    },
     "shareOpenNotify": {
       "title": "Hinweise beim Öffnen von Freigabelinks",
       "desc": "Wenn ein neues Gerät einen auf diesem Computer erstellten Freigabelink öffnet, die verbundenen Chats informieren (die URL des Links wird nie gesendet). Erfordert Navide Cloud."
@@ -10971,6 +11053,19 @@
     },
     "enable-platform": "{platform} aktivieren",
     "bot": {
+      "sort-recent": "Zuletzt aktiv",
+      "sort-name": "Alphabetisch",
+      "group-workspace": "Nach Arbeitsbereich",
+      "search-placeholder": "Name, {'@'}Handle, ID, Bereich oder Arbeitsbereich suchen",
+      "search-empty": "Kein Bot gefunden",
+      "search-clear": "Leeren",
+      "bound-none": "Mit keinem Bereich verbunden",
+      "bound-many": "{n} Bereiche ({workspaces})",
+      "flag-running": "Aktiv",
+      "flag-unbound": "Nicht verbunden",
+      "flag-pane-closed": "Bereich geschlossen",
+      "flag-token": "Token ungültig",
+      "flag-failed": "Verbindung fehlgeschlagen",
       "default": "Haupt-Bot",
       "add": "Bot hinzufügen",
       "new": "Neuer Bot",
@@ -12117,13 +12212,15 @@
     "source": {
       "broker": "Navide-Fähigkeit",
       "shell": "Shell-Befehl",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "network": "Ansichtsnetzwerk"
     },
     "kind": {
       "system": "Berechtigung",
       "shell": "Shell-Zugriff",
       "backendMethod": "Native Backend-Methode",
-      "agentTool": "Agent-Tool"
+      "agentTool": "Agent-Tool",
+      "networkHost": "Netzwerk-Host"
     },
     "reason": {
       "undeclared": "nicht deklariert"
@@ -12178,6 +12275,16 @@
       "crossWorkspace": "Arbeitsbereichsübergreifend: {from} → {to}",
       "totalSize": "Argumente {args} und Ergebnisse {result} insgesamt; {unknown} Größen sind unbekannt und nicht mitgezählt"
     },
+    "pipelineNodes": {
+      "heading": "Pipeline-Läufe, die seine Knoten erreicht haben",
+      "row": "{date} Lauf gestartet von {origin} → Knoten {node} ({workspace}): {outcome}, {duration} ms",
+      "origin": {
+        "user": "Ihnen",
+        "agent": "einem Agenten",
+        "schedule": "einem Zeitplan",
+        "webhook": "einem Webhook"
+      }
+    },
     "caller": {
       "pane": "Bereich „{name}“",
       "external": "ein externer Client",
@@ -12199,6 +12306,10 @@
     "commands": {
       "heading": "Ausgeführte Befehle",
       "item": "{command} · {count}-mal · {outcome} · {date}"
+    },
+    "network": {
+      "heading": "Von seinen Ansichten erreichte Hosts",
+      "item": "{host} · {count}-mal · {outcome} · {date}"
     },
     "trend": {
       "heading": "Aufrufe pro Tag"
@@ -12287,7 +12398,13 @@
         "backendMethod": "Methode des nativen Codes: {key}",
         "backendEvent": "Ereignis des nativen Codes: {key}",
         "network": "Kann über Befehle entfernte Hosts erreichen",
-        "agentTool": "Agent-Tool: {key}"
+        "networkHost": "Ansichten können sich verbinden mit: {key}",
+        "agentTool": "Agent-Tool: {key}",
+        "agentEvent": "Empfängt Host-Ereignis: {key}",
+        "pluginCall": "Ruft Navide-Plugin auf: {key}",
+        "apiMethod": "Andere Navide-Plugins können aufrufen: {key}",
+        "pipelineNode": "Pipeline-Schritt (auch in von Agenten oder Zeitplänen gestarteten Pipelines): {key}",
+        "commandSlot": "Befehl auf einer Host-Oberfläche: {key}"
       }
     },
     "title": "Offenlegung",
@@ -12306,7 +12423,8 @@
     "undeclared": {
       "shell": "Führt {key} aus, deklariert aber keine Shell-Berechtigung",
       "shellDynamic": "Erstellt Befehle zur Laufzeit, deklariert aber keine Shell-Berechtigung",
-      "shellExecutable": "Führt {key} aus, aber sein deklarierter Shell-Bereich umfasst nur git, gh und glab",
+      "shellExecutable": "Führt {key} aus, das sein deklarierter Shell-Bereich nicht umfasst",
+      "networkHost": "Verbindet sich mit {key}, ohne es zu deklarieren",
       "system": "Verwendet {key}, deklariert diese Berechtigung aber nicht",
       "fsScopeWrite": "Schreibt {key}, außerhalb seines deklarierten Schreibbereichs",
       "fsScopeRead": "Liest {key}, außerhalb seines deklarierten Lesebereichs"
@@ -12314,7 +12432,8 @@
     "notSeenHeading": "Deklariert, vom statischen Scan nicht gefunden",
     "notSeen": {
       "shell": "Shell ({key})",
-      "system": "{key}"
+      "system": "{key}",
+      "networkHost": "{key} (deklarierter Host)"
     },
     "scanHeading": "Was der Scan bei der Veröffentlichung gefunden hat",
     "scanHeadingLocal": "Was der Scan dieser Datei durch Navide gefunden hat",
@@ -12332,8 +12451,8 @@
     "scannedLocally": "Der Scan fließt in diese Karte ein; über die Installation entscheidet er nie.",
     "limitsWithoutScan": "Für diese Version gibt es keinen Systemscan; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
     "limitsWithoutScanLocal": "Navide hat diese Datei nicht gescannt; das Obige ist nur die eigene Deklaration dieses Navide-Plug-ins.",
-    "viewNetwork": "Die Ansichten eines Navide-Plug-ins können auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
-    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können diese auf das Netzwerk zugreifen und externe Websites in Navide anzeigen; Navide filtert oder protokolliert diesen Datenverkehr nicht. Die Netzwerkeinträge oben betreffen nur seine Befehle und sein natives Backend.",
+    "viewNetwork": "Die Ansichten dieses Navide-Plug-ins können sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
+    "viewNetworkIfViews": "Falls dieses Navide-Plug-in Ansichten hat, können sie sich nur mit den deklarierten Hosts verbinden (oben aufgeführt; mit keinem, wenn keiner aufgeführt ist) und zeigen keine externen Websites. Navide protokolliert unter „Aktivität“, welche Hosts sie erreicht haben und welche abgelehnt wurden. Die Netzwerkeinträge oben betreffen seine Befehle und sein natives Backend.",
     "summary": {
       "nativeBackend": "Liefert nativen Code mit (läuft in einer Sandbox)",
       "files": {
@@ -12345,13 +12464,18 @@
         "full": "Führt beliebige Befehle aus"
       },
       "networkViaShell": "Kann über diese Befehle entfernte Hosts erreichen",
+      "agentEvents": "Empfängt Host-Ereignisse zu Ihren Bereichen, Plänen, Pipelines und Zeitplänen (nur Namen und Zustände): {events}",
+      "pluginCalls": "Ruft diese Navide-Plugins auf: {plugins}",
+      "api": "Andere Navide-Plugins können {count} seiner Methoden aufrufen",
+      "pipelineNodes": "Fügt {count} Pipeline-Schritt(e) hinzu; auch Pipelines, die ein Agent, ein Zeitplan oder ein Webhook startet, führen sie aus",
       "aiCli": "Startet AI-CLI-Sessions und liest ihre Ausgabe",
-      "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
+      "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-Bereiche in diesem Projekt, welcher Bereich welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
+      "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
-      "network": "Kann das Netzwerk verwenden",
+      "network": "Seine Ansichten können sich verbinden mit: {hosts}",
       "noPermissions": "Deklariert keine Berechtigungen"
     },
     "scan": {
@@ -12468,6 +12592,12 @@
       "apply": "Jetzt anwenden"
     }
   },
+  "plugin-secrets": {
+    "notice": {
+      "identityMismatch": "Das Navide-Plug-in {plugin} stammt jetzt aus einer anderen Quelle oder von einem anderen Herausgeber. Die Geheimnisse der früheren Kopie sind deshalb isoliert und für es nicht lesbar. Um sie zu löschen, entferne {plugin} und wähle Geheimnisse löschen.",
+      "cleared": "Die Geheimnisse des Navide-Plug-ins {plugin} wurden gelöscht ({count})."
+    }
+  },
   "plugin-switch": {
     "notice": {
       "title": "{plugin} wurde von {from} auf {to} umgestellt",
@@ -12548,6 +12678,20 @@
       "browse": "Durchsuchen",
       "developer": "Entwickler"
     },
+    "entry": {
+      "title": "Build for Navide: Ihr eigenes Navide-Plug-in",
+      "step-init": "Ein Navide-Plug-in aus der Vorlage erstellen (ab Navide 0.2.39):",
+      "step-load": "Mit „Einstellungen → Navide-Plug-ins → Entwicklermodus → Aus Ordner laden …“ laden und ausprobieren",
+      "step-apply": "Unten anmelden und die Entwickler-Bewerbung einmal mit Ihrem echten Namen ausfüllen; ein Mensch prüft sie.",
+      "next": {
+        "apply": "Als Nächstes: Füllen Sie unten die Entwickler-Bewerbung aus.",
+        "pending": "Als Nächstes: Warten Sie auf die Prüfung. Bis dahin können Sie Ihr Navide-Plug-in bauen und im Entwicklermodus laden.",
+        "key": "Als Nächstes: Melden Sie sich als Herausgeber an, damit diese Navide ihren Signaturschlüssel registriert.",
+        "publish": "Als Nächstes: Veröffentlichen Sie eine Version; nach der Prüfung erscheint sie im Navide Marketplace."
+      },
+      "guide": "Build for Navide öffnen",
+      "console": "developers.navide.dev öffnen"
+    },
     "account": {
       "title": "Entwicklerkonto",
       "desc": "Melden Sie sich mit Ihrem Navide Cloud-Konto an, um sich zu bewerben, Navide-Plug-ins zu veröffentlichen und deren Prüfung zu verfolgen. Navide bewahrt die Anmeldung und den Signaturschlüssel im sicheren Speicher dieses Computers auf; Agents sehen sie nie.",
@@ -12557,6 +12701,8 @@
       "no-key": "Wird bei Ihrer ersten Anmeldung als Herausgeber erstellt",
       "key-registered": "Registriert",
       "key-unregistered": "Noch nicht registriert",
+      "key-conflict": "Die Registry hat für diesen Publisher bereits einen anderen Signaturschlüssel (Fingerabdruck {fingerprint}), meist den für das Kommandozeilen-Veröffentlichungswerkzeug registrierten. Zum Veröffentlichen aus diesem Navide muss er ersetzt werden; bis dahin veröffentlicht das Kommandozeilenwerkzeug weiter.",
+      "replace-key": "Stattdessen den Schlüssel dieses Navide verwenden",
       "expires": "Anmeldung läuft ab",
       "sign-in": "Mit Navide Cloud anmelden",
       "sign-in-publish": "Als Herausgeber anmelden",
@@ -12961,5 +13107,25 @@
       "select": "Liste",
       "checkbox": "Kontrollkästchen"
     }
+  },
+  "token-views": {
+    "by-model": "Nach Modell",
+    "by-account-quota": "Kontingent nach Konto",
+    "range": "Zeitraum",
+    "range-day": "Tag",
+    "range-week": "Woche",
+    "cache": "Zwischenspeicher",
+    "cache-read": "Zwischenspeicher gelesen",
+    "cache-write": "Zwischenspeicher geschrieben",
+    "usd": "US-Dollar",
+    "other-models": "Sonstige",
+    "no-ledger-data": "In diesem Zeitraum noch keine Aufrufe erfasst",
+    "no-quota-history": "Noch keine Kontingentwerte erfasst",
+    "window-session": "Sitzung",
+    "window-weekly": "Wöchentlich",
+    "resets": "Zurücksetzung {time}",
+    "trend-7d": "Tageshöchstwert, letzte 7 Tage",
+    "week-tokens": "Tokens diese Woche",
+    "day-tokens": "Tokens heute"
   }
 }

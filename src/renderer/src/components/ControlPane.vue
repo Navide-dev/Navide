@@ -41,7 +41,7 @@ import PaneChannelIcon from './PaneChannelIcon.vue'
 import PaneGuardIcon from './PaneGuardIcon.vue'
 import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
-import GitPluginHostSlot from './GitPluginHostSlot.vue'
+import GitRecoveryPanel from './GitRecoveryPanel.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
 import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
@@ -50,7 +50,6 @@ import type { BackendStatus, useBackend } from '../composables/useBackend'
 import type { DisplayStatus } from '@navide/terminal'
 import type { Role, RoleKey } from '../data/roles'
 import type { Stage, StageId } from '../data/stages'
-import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
 import { formatKeySpec, onSettingsChanged, registerCommand, settingsGet, settingsKeySpec, settingsSet, sidebarTabKeySpec } from '@navide/plugin-ui/shared'
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -420,8 +419,8 @@ interface Props {
   issueHandoffs?: Record<string, { paneId: string; mode: string; state: string }>
   /** Manifest-driven contributions available to this Host window. */
   pluginContributions?: PluginRegionContribution[]
-  /** Main-process-only legacy Git recovery mode. */
-  legacyGitRecovery?: boolean
+  /** Why the Git plugin could not start; null/absent while it runs. */
+  gitActivationFailure?: string | null
   /** Main-process-only legacy Plans recovery mode. */
   legacyPlansRecovery?: boolean
   /** Host-side reason for that downgrade, '' when it is not known. */
@@ -1199,10 +1198,6 @@ const emit = defineEmits<{
   (e: 'open-history', workspacePath?: string): void
   (e: 'switch-workspace'): void
   (e: 'workspace-browse', path: string): void
-  (e: 'dispatch-issue', payload: { paneId: string; issue: IssueDetail }): void
-  (e: 'spawn-for-issue', payload: { agentKey: string; mode: IssueHandlerMode; issue: Issue; provider: IssueProvider }): void
-  (e: 'open-git-accounts'): void
-  (e: 'changes-count', count: number): void
   (e: 'rename-pane', paneId: string, name: string): void
   /** A workspace's display name was edited. An empty `name` clears the alias
    *  and restores the folder name. */
@@ -1478,6 +1473,18 @@ const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
 
+/** The ＋ menu lists vendors of `kind: 'agent'` (long-lived agents such as
+ *  OpenClaw and Hermes Agent) under their own "Agents" heading below the CLI
+ *  block; everywhere else they stay ordinary entries of manualAgentSpecs.
+ *  Both blocks keep the order and enabled set of Settings → CLI Agents, since
+ *  they filter agentSpecs. */
+const addMenuCliSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind !== 'agent')
+)
+const addMenuAgentSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind === 'agent')
+)
+
 // Available agent types for "Handle Issue As…" pane spawn.
 const availableAgents = computed(() =>
   manualAgentSpecs.value.map((spec) => ({ key: spec.agentKey, label: spec.label }))
@@ -1538,7 +1545,7 @@ const _TAB_KEY = 'agentTeam.sidebarTab'
 type SidebarTab = 'agents' | 'pipeline' | 'explorer' | 'git' | 'plans' | `plugin:${string}`
 const CORE_SIDEBAR_TABS = ['agents', 'pipeline', 'explorer'] as const
 type CoreSidebarTab = (typeof CORE_SIDEBAR_TABS)[number]
-const legacyGitRecovery = computed(() => props.legacyGitRecovery === true)
+const gitPluginFailed = computed(() => props.gitActivationFailure != null)
 const legacyPlansRecovery = computed(() => props.legacyPlansRecovery === true)
 /** The storage repair rebuilds an unreadable lifecycle record — it is the
  *  answer to exactly one downgrade. Offering it for a failed backend child
@@ -1606,7 +1613,7 @@ const sidebarTab = ref<SidebarTab>(
       // Backward-compat: unknown / legacy values fall back to the first tab.
       const isKnown = v !== null && (
         v === 'agents' || v === 'pipeline' || v === 'explorer' ||
-        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && legacyGitRecovery.value)
+        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && gitPluginFailed.value)
       )
       return isKnown ? v : 'agents'
     } catch { return 'agents' }
@@ -1614,9 +1621,9 @@ const sidebarTab = ref<SidebarTab>(
 )
 watch(sidebarTab, (v) => { try { sessionStorage.setItem(_TAB_KEY, v) } catch { /* ignore */ } })
 
-// Opening Git while the session sits in legacy recovery is the user's natural
-// retry: the downgrade is usually a transient activation failure, and the Host
-// answers with a bounded budget of v2 attempts.
+// Opening Git after the plugin failed to start is the user's natural retry:
+// the failure is usually transient, and the Host answers with a bounded budget
+// of v2 attempts.
 let awaitingGitV2Tab = false
 let gitV2RetryInFlight = false
 function requestGitV2Retry(): void {
@@ -1686,7 +1693,7 @@ async function requestPlansV2Retry(explicit = false): Promise<void> {
   }
 }
 
-watch(legacyGitRecovery, (enabled) => {
+watch(gitPluginFailed, (enabled) => {
   if (enabled || sidebarTab.value !== 'git') return
   const restored = gitPluginTab.value?.tabId
   if (restored) {
@@ -1756,7 +1763,7 @@ registerCommand('workbench.action.focusExplorer', () => selectSidebarTab('explor
 registerCommand('workbench.action.focusPipeline', () => selectSidebarTab('pipeline'))
 registerCommand('workbench.action.focusSourceControl', () => {
   if (disabledBuiltins.isDisabled('navide.git')) return false
-  if (legacyGitRecovery.value) {
+  if (gitPluginFailed.value) {
     selectSidebarTab('git')
     return
   }
@@ -1818,12 +1825,12 @@ function showSidebarTab(tab: SidebarTab): void {
 const gitChangesCount = computed(() => props.gitChangesCount ?? 0)
 
 function selectSidebarTab(tab: SidebarTab): void {
-  const target = tab === 'git' && !legacyGitRecovery.value
+  const target = tab === 'git' && !gitPluginFailed.value
     ? gitPluginTab.value?.tabId
     : tab
   if (!target) return
   showSidebarTab(target)
-  if (tab === 'git' && legacyGitRecovery.value) requestGitV2Retry()
+  if (tab === 'git' && gitPluginFailed.value) requestGitV2Retry()
   if (tab === 'plans' && legacyPlansRecovery.value) void requestPlansV2Retry()
   // Surfacing a tab while the slot is collapsed has to reopen it, or Cmd+1..5
   // and the programmatic entry points would only move a highlight on the rail.
@@ -2682,23 +2689,45 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 }
 // Fixed, not absolute: the pane list scrolls under `overflow-y: auto`, which
 // would clip a menu positioned inside it.
-const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
+const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  384px) plus the fixed furniture around it — role picker, two dividers,
- *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
+ *  510px: the rows plus the CLI and Agents headings) plus the fixed
+ *  furniture around it — role picker, two dividers,
+ *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 474
+const ADD_MENU_MAX_H = 672
+/** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
+ *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
+ *  ~276px of bold system-font text plus 36px of check mark and padding); at
+ *  200px eight English rows lost their suffix. Used to keep the menu's left
+ *  edge inside the window: the menu hangs leftwards from the button, and the
+ *  narrowest sidebar (200px) is narrower than the menu. */
+const ADD_MENU_W = 320
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
   if (!a) return {}
-  // Flip upwards when there is not enough room below the button.
-  const below = window.innerHeight - a.bottom
-  return below < ADD_MENU_MAX_H && a.top > below
-    ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px` }
-    : { top: `${a.bottom + 4}px`, right: `${a.right}px` }
+  // Right-aligned with the button, unless that would push the left edge past
+  // an 8px margin; then it slides right just enough. A window narrower than
+  // the menu is handled by the CSS max-width (and v-truncate on the rows).
+  const right = `${Math.max(8, Math.min(a.right, window.innerWidth - ADD_MENU_W - 8))}px`
+  // Flip upwards when there is not enough room below the button. "Below"
+  // ends at the sidebar's bottom edge, not the window's: the status bar under
+  // it sits on top of the menu.
+  const below = a.floor - a.bottom
+  const up = below < ADD_MENU_MAX_H && a.top > below
+  // The menu is a flex column capped at the room on its side (less the 4px
+  // gap and an 8px edge margin, and its own 5px padding and 1px border either
+  // side, which max-height does not include), and only the roster scroller
+  // shrinks to fit. A fixed `45vh` cap cut the last entry off in a 900px
+  // window that had room for the whole list.
+  const maxHeight = `${Math.max(0, (up ? a.top : below) - 24)}px`
+  return up
+    ? { bottom: `${window.innerHeight - a.top + 4}px`, right, maxHeight }
+    : { top: `${a.bottom + 4}px`, right, maxHeight }
 })
 
 function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
@@ -2708,7 +2737,8 @@ function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
     return
   }
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
-  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right }
+  const floor = (ev.currentTarget as HTMLElement).closest('.sidebar')?.getBoundingClientRect().bottom || window.innerHeight
+  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right, floor }
   addMenuWorkspace.value = wsPath
   addMenuGroup.value = groupId
   addMenuOpen.value = true
@@ -3282,19 +3312,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :key="t.id"
         :class="[
           'tab-btn',
-          { 'plugin-tab-btn': t.id === 'git' && !legacyGitRecovery && gitPluginTab },
+          { 'plugin-tab-btn': t.id === 'git' && !gitPluginFailed && gitPluginTab },
           { active: sidebarTab === t.id || (t.id === 'git' && gitPluginTab?.tabId === sidebarTab) }
         ]"
         :data-tab="t.id"
-        :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
-        :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
+        :data-git-activation-failed="t.id === 'git' && gitPluginFailed ? '' : undefined"
+        :data-plugin-contribution="t.id === 'git' && !gitPluginFailed ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
           ? `${pluginTabLabel(gitPluginTab)} (${formatKeySpec(sidebarTabKeySpec(4))})`
           : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
         :aria-label="t.id === 'git' && gitPluginTab ? pluginTabLabel(gitPluginTab) : undefined"
         @click="selectSidebarTab(t.id)"
       >
-        <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
+        <template v-if="t.id === 'git' && !gitPluginFailed && gitPluginTab">
           <span
             v-if="isMonoPluginIcon(gitPluginTab)"
             class="plugin-tab-icon plugin-tab-icon--mono"
@@ -3380,7 +3410,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === pluginTab.tabId"
         />
         <PluginRegionHost
-          v-if="gitPluginTab && !legacyGitRecovery"
+          v-if="gitPluginTab && !gitPluginFailed"
           :key="gitPluginTab.contributionKey"
           :contribution="gitPluginTab"
           :workspace-path="workspace ?? ''"
@@ -3394,24 +3424,10 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === 'plans'"
           :before-prepare="projectPlansPreferencesBeforePrepare"
         />
-        <template v-if="legacyGitRecovery && backend && sidebarTab === 'git'">
-          <div class="legacy-recovery-label" data-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
-          <GitPluginHostSlot
-            :workspace-path="workspace ?? ''"
-            :visible="true"
-            :backend="backend"
-            :analyzer-model="analyzerModel"
-            :dispatch-targets="dispatchTargets"
-            :available-agents="availableAgents"
-            :issue-handoffs="issueHandoffs"
-            @changes-count="$emit('changes-count', $event)"
-            @open-workspace="$emit('workspace-browse', $event)"
-            @dispatch-issue="$emit('dispatch-issue', $event)"
-            @spawn-for-issue="$emit('spawn-for-issue', $event)"
-            @focus-pane="$emit('focus-pane', $event)"
-            @open-git-accounts="$emit('open-git-accounts')"
-          />
-        </template>
+        <GitRecoveryPanel
+          v-if="gitPluginFailed && sidebarTab === 'git'"
+          :reason="gitActivationFailure ?? ''"
+        />
         <template v-if="legacyPlansRecovery && backend && sidebarTab === 'plans'">
           <div class="legacy-recovery-label" data-plans-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
           <div class="plans-repair-row">
@@ -4415,19 +4431,35 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         </select>
         <div class="ws-add-div"></div>
         <div class="ws-add-scroll">
-          <button
-            v-for="spec in manualAgentSpecs"
-            :key="spec.agentKey"
-            class="ws-add-opt"
-            :class="{ on: spec.agentKey === pickedAgent }"
-            @click="spawnAs(spec.agentKey)"
+          <!-- Two blocks, each under its own heading: coding CLIs, then general
+               agents (OpenClaw, Hermes Agent). A block with no enabled entry
+               drops out with its heading. -->
+          <template
+            v-for="sec in [
+              { id: 'cli', label: $t('label.add-menu-cli'), specs: addMenuCliSpecs },
+              { id: 'agents', label: $t('label.add-menu-agents'), specs: addMenuAgentSpecs }
+            ]"
+            :key="sec.id"
           >
-            <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
-            <span class="ws-add-lb" v-truncate>
-              {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
-            </span>
-          </button>
+            <div v-if="sec.specs.length" class="ws-add-sec" :data-section="sec.id">{{ sec.label }}</div>
+            <button
+              v-for="spec in sec.specs"
+              :key="spec.agentKey"
+              class="ws-add-opt"
+              :class="{ on: spec.agentKey === pickedAgent }"
+              :data-section="sec.id"
+              @click="spawnAs(spec.agentKey)"
+            >
+              <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
+              <span class="ws-add-lb" v-truncate>
+                {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
+              </span>
+            </button>
+          </template>
         </div>
+        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
+             ship as Navide plugins, so the menu points there. -->
+        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -4440,7 +4472,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           v-if="terminalSpec"
           class="ws-add-opt ws-add-more ws-add-term"
           @click="openTerminalFromMenu"
-        >{{ terminalSpec.label }}</button>
+        >{{ $t('label.terminal') }}</button>
         <button class="ws-add-opt ws-add-more ws-add-card" @click="openSpawnCardFromMenu">
           {{ $t('label.manual-spawn') }}…
         </button>
@@ -4456,7 +4488,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <button class="spawn-modal-close" :aria-label="$t('action.close')" @click="manualSpawnOpen = false">✕</button>
         </div>
         <div class="spawn-card-body">
-          <div class="row two-col">
+          <!-- One control per line: side by side, each select got ~145px and
+               "Claude Code (Anthropic)" was cut to "Claude Code (Anth". -->
+          <div class="row spawn-pick-row">
             <select v-model="modalAgent" @focus="refreshCliStatus">
               <option v-for="spec in manualAgentSpecs" :key="spec.agentKey" :value="spec.agentKey">
                 {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
@@ -5077,6 +5111,11 @@ textarea.drag-over {
 .row.two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.row.spawn-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .row.between {
@@ -6529,15 +6568,22 @@ button.icon-btn.muted:hover {
 .ws-add-menu {
   position: fixed;
   z-index: 60;
-  width: 200px;
-  max-width: calc(100vw - 24px);
+  /* ADD_MENU_W in the script tracks this. */
+  width: 320px;
+  max-width: calc(100vw - 16px);
   padding: 5px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated, var(--bg-secondary));
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   font-size: var(--font-xs);
+  /* A column whose max-height (set inline by addMenuStyle) is the room on its
+   * side of the button: everything but the roster scroller keeps its size,
+   * and the scroller gives way. */
+  display: flex;
+  flex-direction: column;
 }
+.ws-add-menu > * { flex-shrink: 0; }
 .ws-add-role {
   width: calc(100% - 12px);
   margin: 2px 6px 4px;
@@ -6548,9 +6594,14 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 384px carries sixteen. */
+ * 3px padding either side), so 456px carries nineteen, and 510px adds the
+ * two ~22px section headings. The viewport cap is no longer a guessed 45vh:
+ * the menu's own max-height is the room it has, and this box shrinks into it
+ * (never below three rows). */
 .ws-add-scroll {
-  max-height: min(384px, 45vh);
+  max-height: min(510px, 100vh);
+  flex-shrink: 1;
+  min-height: 72px;
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
@@ -6558,12 +6609,15 @@ button.icon-btn.muted:hover {
    * (`scroll`) and are covered by a fade once that end is reached. Pure CSS —
    * no scroll listener. The list must never again look complete when it is
    * not: that mistake has now been made twice here (see the Terminal entry's
-   * comment in the template). */
+   * comment in the template).
+   * The shadows are drawn in the text colour, not black: a black shadow on the
+   * dark theme's menu was all but invisible, so a cut-off list still read as
+   * complete there. */
   background:
-    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 30%, transparent) top / 100% 14px no-repeat local,
-    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 70%) bottom / 100% 14px no-repeat local,
-    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 22%), transparent) top / 100% 5px no-repeat scroll,
-    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 22%), transparent) bottom / 100% 5px no-repeat scroll;
+    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 50%, transparent) top / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 50%) bottom / 100% 20px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
 }
 .ws-add-opt {
   display: flex;
@@ -6583,6 +6637,10 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
+/* Section heading in the roster ("CLI", "Agents"): small and muted, aligned
+ * with the entry labels, so it reads as a label rather than an option. */
+.ws-add-sec { padding: 6px 10px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); font-weight: 600; line-height: 1.35; }
+.ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */
@@ -7427,8 +7485,10 @@ button.icon-btn.muted:hover {
   -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
 }
 .spawn-card--modal {
-  /* Keeps its own 320px: it is a compact spawn card, not a dialog tier. */
-  width: min(320px, 92vw);
+  /* Keeps its own compact width: it is a spawn card, not a dialog tier.
+   * 360px leaves the agent select room for the longest
+   * "<label> — not installed" entry. */
+  width: min(360px, 92vw);
   max-width: 100%;
   max-height: calc(100vh - 48px);
   overflow-y: auto;

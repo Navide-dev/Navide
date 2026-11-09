@@ -269,3 +269,36 @@ describe('Registry calls that carry the kept credential', () => {
     expect(pulled).toBeLessThan(300)
   })
 })
+
+describe('L1d: a key the Registry already holds is never replaced by itself', () => {
+  it('records the conflict instead of failing, keeps the CLI key publishing, and replaces only on request', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    let registered: string | null = 'sha256:cli-key'
+    const { account: dev, calls } = account((call) => {
+      if (call.url.endsWith('/api/publisher/me/key')) {
+        const body = JSON.parse(String(call.body)) as { public_key: string; replace?: boolean }
+        if (registered && !body.replace) {
+          return { status: 409, body: { detail: { code: 'KEY_EXISTS', message: 'another key', public_key_fingerprint: registered } } }
+        }
+        registered = null
+        return { status: 200, body: { public_key_fingerprint: 'sha256:navide-key' } }
+      }
+      if (new URL(call.url).pathname.endsWith('/api/publish')) return { status: 201, body: { ok: true } }
+      return { status: 404, body: {} }
+    })
+    // Sign-in's automatic registration meets the dashboard key: no throw, the conflict is state.
+    const state = await dev.registerKey()
+    expect(state).toMatchObject({ keyRegistered: false, keyConflictFingerprint: 'sha256:cli-key' })
+    expect(JSON.parse(String(calls.at(-1)!.body))).not.toHaveProperty('replace')
+    // Publishing from here says what is going on instead of letting the Registry answer 403.
+    const refused = await dev.publish(new TextEncoder().encode('PK'), 'x.vsix', 'universal')
+    expect(refused.status).toBe(409)
+    expect(JSON.stringify(refused.body)).toContain('sha256:cli-key')
+    expect(calls.some((call) => new URL(call.url).pathname.endsWith('/api/publish'))).toBe(false)
+    // The user's explicit replacement is the only thing that changes the key.
+    const replaced = await dev.registerKey({ replace: true })
+    expect(JSON.parse(String(calls.at(-1)!.body)).replace).toBe(true)
+    expect(replaced).toMatchObject({ keyRegistered: true, keyConflictFingerprint: null })
+    expect((await dev.publish(new TextEncoder().encode('PK'), 'x.vsix', 'universal')).status).toBe(201)
+  })
+})

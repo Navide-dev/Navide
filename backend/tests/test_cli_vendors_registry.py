@@ -31,9 +31,9 @@ CLI_AGENTS_HELP = (
 )
 
 EXPECTED_KEYS = {
-    "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
-    "qwen",
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin",
+    "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
+    "opencode", "openclaw", "pi", "qwen",
 }
 
 # DEPS entries that are infrastructure, not CLI vendors.
@@ -656,7 +656,11 @@ def test_vendors_without_session_ids() -> None:
     others = {
         k for k, s in registry.VENDORS.items() if not s.supports_session_resume
     }
-    assert others == {"aider", "mcode"}, (
+    # openclaw and hermes: general agents whose sessions live in their own
+    # runtime (OpenClaw's Gateway, Hermes's home), with no reader written yet.
+    # devin: sessions exist (-c / -r <id>) but their store is undocumented
+    # and no reader is written yet.
+    assert others == {"aider", "mcode", "openclaw", "hermes", "devin"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

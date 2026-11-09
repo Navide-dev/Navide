@@ -89,6 +89,10 @@ export interface AgentToolSwitches {
   /** Agents may call the tools of Navide's own first-party plugins. On by
    * default: absent or anything but false reads as on. */
   firstParty?: boolean
+  /** C3: the user set `enabled` in Settings at least once. A consent card
+   * turns the switch on only while this is absent, so a choice the user made
+   * is never overridden by allowing one more package. */
+  enabledSetByUser?: boolean
 }
 
 export interface NativeBackendState {
@@ -185,6 +189,7 @@ function parseState(value: unknown): NativeBackendState {
         enabled: value.agentTools.enabled === true,
         externalCallers: value.agentTools.externalCallers === true,
         ...(value.agentTools.firstParty === false ? { firstParty: false } : {}),
+        ...(value.agentTools.enabledSetByUser === true ? { enabledSetByUser: true } : {}),
       }
     : undefined
   const migratedAt = typeof value.preInstallConsentMigratedAt === 'string' ? value.preInstallConsentMigratedAt : undefined
@@ -286,6 +291,7 @@ export class NativeBackendStore {
       enabled: this.state.agentTools?.enabled === true,
       externalCallers: this.state.agentTools?.externalCallers === true,
       firstParty: this.state.agentTools?.firstParty !== false,
+      ...(this.state.agentTools?.enabledSetByUser === true ? { enabledSetByUser: true } : {}),
     }
   }
 

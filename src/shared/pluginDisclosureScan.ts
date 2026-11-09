@@ -353,6 +353,14 @@ const listed = (items: Set<string>): ScanItem[] =>
     })
     .sort((a, b) => compareCodeUnits(a.kind, b.kind) || compareCodeUnits(a.key, b.key))
 
+/** Whether a declared host covers a host the scan found: an exact name, or
+ * for `*.example.com` any name below `example.com` (CSP reads the wildcard the
+ * same way), never `example.com` itself. */
+export function networkHostMatches(declared: string, host: string): boolean {
+  if (declared.startsWith('*.')) return host.endsWith(declared.slice(1)) && host.length > declared.length - 1
+  return host === declared
+}
+
 /** Section 3.9: what the scan found that the manifest does not declare
  * (`undeclared`, shown first and in red) and what the manifest declares that
  * the scan did not find (`declaredNotSeen`, shown in grey). */
@@ -376,7 +384,7 @@ export function declaredVsScanned(
   if (shell === null && scan.shell.dynamic.count) add(undeclared, 'shellDynamic', 'dynamic')
   const namespaces = new Set(scan.capabilities.map((entry) => entry.address.split('.')[0]))
   if (shell === null && namespaces.has('shell')) add(undeclared, 'shell', 'shell.run')
-  for (const namespace of ['aiCli', 'fs', 'ui', 'web', 'agents', 'agentMessages']) {
+  for (const namespace of ['aiCli', 'fs', 'ui', 'web', 'agents', 'agentMessages', 'secrets']) {
     if (namespaces.has(namespace) && !declared.has(namespace)) add(undeclared, 'system', namespace)
   }
   const files = scan.files
@@ -391,7 +399,22 @@ export function declaredVsScanned(
       if (!readPatterns.some((pattern) => scopePatternMatches(pattern, path))) add(undeclared, 'fsScopeRead', path)
     }
   }
+  // Hosts are compared only for a package that declares some: a package
+  // without the declaration has no view network at all, and the hosts its
+  // code names stay a scan sentence, as before.
+  const declaredHosts = disclosure.networkHosts
+  const scannedHosts = scan.network.hosts.map((entry) => entry.host)
+  if (declaredHosts !== undefined) {
+    for (const host of scannedHosts) {
+      if (!declaredHosts.some((declared) => networkHostMatches(declared, host))) add(undeclared, 'networkHost', host)
+    }
+  }
   const notSeen = new Set<string>()
+  if (declaredHosts !== undefined) {
+    for (const declared of declaredHosts) {
+      if (!scannedHosts.some((host) => networkHostMatches(declared, host))) add(notSeen, 'networkHost', declared)
+    }
+  }
   if (shell !== null && !calls.length && !scan.shell.dynamic.count && !namespaces.has('shell')) {
     add(notSeen, 'shell', shell.mode)
   }

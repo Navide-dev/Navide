@@ -163,7 +163,7 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
     system_namespaces: set[str] = set()
     shell_entries = 0
     shell_addresses: set[str] = set()
-    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages"}
+    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"}
     for item in [*catalog["methods"], *catalog["events"]]:
         if item["visibility"] != "public":
             continue
@@ -202,6 +202,12 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
                 raise AssertionError(f"shell catalog entry is malformed: {item['address']}")
             shell_addresses.add(item["address"])
             shell_entries += 1
+        elif permission_id == "plugins":
+            # plugins.call carries one coarse permission object; the manifest's
+            # permissions.plugins list names which installed plugins may be
+            # called, so no per-address rule is defined here either.
+            if set(permission) != {"id", "scope"} or scope != "workspace":
+                raise AssertionError(f"plugins catalog entry is malformed: {item['address']}")
         else:
             raise AssertionError(f"catalog has unsupported permission id: {permission_id!r}")
     if "shell.run" not in shell_addresses:
@@ -287,7 +293,11 @@ def main() -> None:
     catalog_system_namespaces, shell_entries = _catalog_permissions(catalog)
     permission_properties = schema["properties"]["permissions"]["properties"]
     schema_system_namespaces = set(permission_properties["system"]["items"]["enum"])
-    schema_shell_modes = set(permission_properties["shell"]["enum"])
+    shell_schema = permission_properties["shell"]
+    # C2: `shell` is an enum string or (oneOf) the object form with executables.
+    schema_shell_modes = set(
+        shell_schema["enum"] if "enum" in shell_schema else next(alt["enum"] for alt in shell_schema["oneOf"] if "enum" in alt)
+    )
     if schema_system_namespaces != catalog_system_namespaces:
         raise AssertionError(
             "manifest system namespaces and public capability catalog differ: "

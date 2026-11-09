@@ -482,11 +482,20 @@ class CodexLogReader(LogReader):
         # replays its ancestors' records after it, and taking the last one
         # filed the sub-agent's tokens under its parent's session.
         meta_seen = False if replaced else bool(checkpoint.get("meta_seen"))
+        # The model a turn ran on (turn_context), for the cost ledger; `model`
+        # above is the provider name.
+        ledger_model = "" if replaced else str(checkpoint.get("ledger_model") or "")
+        latest_totals: dict = {}
         latest_event: dict | None = None
         latest_end = int(next_checkpoint.get("offset") or 0)
 
         for end, rec in records:
             if rec is None:
+                continue
+            if rec.get("type") == "turn_context":
+                payload = rec.get("payload") or {}
+                if isinstance(payload, dict) and payload.get("model"):
+                    ledger_model = str(payload["model"])
                 continue
             if rec.get("type") == "session_meta":
                 payload = rec.get("payload") or {}
@@ -507,6 +516,7 @@ class CodexLogReader(LogReader):
             if not isinstance(totals, dict):
                 continue
             latest_in, latest_out = _session_totals(totals)
+            latest_totals = totals
             latest_event = rec
             latest_end = end
 
@@ -518,6 +528,7 @@ class CodexLogReader(LogReader):
             "session_id": session_id,
             "cli_version": cli_version,
             "meta_seen": meta_seen,
+            "ledger_model": ledger_model,
             "basis": _TOTALS_BASIS,
         })
         if latest_event is None:
@@ -542,6 +553,21 @@ class CodexLogReader(LogReader):
             model=model,
             checkpoint=event_checkpoint,
             cli_version=cli_version,
+            # The session's running totals as the CLI reports them, for the cost
+            # ledger: input_tokens already contains cached_input_tokens and
+            # output_tokens already contains reasoning (total_tokens is their
+            # sum), so the uncached input is what is left after the cache reads
+            # and writes. Totals rather than this read's delta, so a backfill
+            # and live reads land on the same numbers wherever each one started.
+            raw={"ledger_session_totals": {
+                "input": max(0, _int(latest_totals.get("input_tokens"))
+                             - _int(latest_totals.get("cached_input_tokens"))
+                             - _int(latest_totals.get("cache_write_input_tokens"))),
+                "cache_read": _int(latest_totals.get("cached_input_tokens")),
+                "cache_write": _int(latest_totals.get("cache_write_input_tokens")),
+                "output": _int(latest_totals.get("output_tokens")),
+                "model": ledger_model,
+            }},
         )
         return IncrementalParseResult([event], next_checkpoint)
 

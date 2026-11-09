@@ -13,11 +13,10 @@ function handlerBody(channel: string): string {
   return source.slice(start, next === -1 ? undefined : next)
 }
 
-describe('git, log-search and window-opening IPC is only reachable from an app window', () => {
+describe('log-search and window-opening IPC is only reachable from an app window', () => {
   // Each one runs git, reads arbitrary log paths, or opens a window: a plugin
   // view, a webview guest or an embedded frame must not be able to.
   for (const channel of [
-    'git:diff-head',
     'logs:searchContent',
     'window:openEditor',
     'editor:openFolder',

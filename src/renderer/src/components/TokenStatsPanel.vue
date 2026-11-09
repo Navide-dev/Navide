@@ -4,6 +4,7 @@ import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { executeCommand, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { useTokens, type TokenBucket, type ResetScope } from '../composables/useTokens'
 import { buildTokenGroupRows } from '../lib/tokenGroups'
+import { TOKEN_RANGE_KEY, fmtTokens as fmt, type TokenRange } from '../lib/tokenViews'
 import { accountUsageFor, formatRemaining, isExhausted, remainingPercent } from '../composables/useUsage'
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import { DEFAULT_PROFILE_ID, UNKNOWN_PROFILE_ID, accountLabel } from '../lib/accountLabel'
@@ -13,6 +14,8 @@ import HistoryPanel from './HistoryPanel.vue'
 import TaskerPanel from './TaskerPanel.vue'
 import AgentMessagesPanel from './AgentMessagesPanel.vue'
 import DevTimePanel from './DevTimePanel.vue'
+import TokenByModel from './TokenByModel.vue'
+import TokenByAccountQuota from './TokenByAccountQuota.vue'
 import PreviewPanel from '../preview/PreviewPanel.vue'
 import { usePreview } from '../preview/usePreview'
 import type { PipelineStatusView } from './ControlPane.vue'
@@ -157,6 +160,15 @@ watch(tab, (v) => {
   settingsSet('agentTeam.rightPanel.tab', v)
 })
 
+// The by-model and by-account-quota views read today or this week (Monday
+// first, local time); week is the default.
+const tokenRange = ref<TokenRange>(
+  settingsGet<string | null>(TOKEN_RANGE_KEY, null) === 'day' ? 'day' : 'week'
+)
+watch(tokenRange, (v) => {
+  settingsSet(TOKEN_RANGE_KEY, v)
+})
+
 // The active tab can be moved out from under us — by this window's own
 // Settings, or by another window, since the layout is shared. Falling back to
 // the first remaining tab keeps the panel showing something; without this the
@@ -275,6 +287,7 @@ const groupRows = computed(() =>
   buildTokenGroupRows(props.runGroups ?? [], cumulativeByGroup.value, {
     manual: i18n.global.t('label.manual'),
     orphan: i18n.global.t('label.orphan-group'),
+    default: i18n.global.t('label.default'),
   })
 )
 
@@ -344,17 +357,7 @@ const collapsedTotal = computed(() => fmt(runTotals.value.input + runTotals.valu
 
 // ─────────────────────── Formatting helpers ───────────────────────────────
 
-// Every tier caps at six characters ("999.9M"), which is what the fixed-width
-// cells fit. Stopping at M was the bug: a workspace past a billion tokens
-// rendered "77059.4M" and the cell clipped it to "77059...." — the IN and
-// TOTAL figures became unreadable exactly once they got interesting.
-function fmt(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0) + 'k'
-  if (n < 1_000_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n < 1_000_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B'
-  return (n / 1_000_000_000_000).toFixed(1) + 'T'
-}
+// fmt (lib/tokenViews fmtTokens) caps every figure at six characters.
 
 // ─────────────────────── Reset confirmations ──────────────────────────────
 
@@ -507,6 +510,29 @@ function openTurnStats(): void {
             <div class="cell"><div class="big" v-truncate>{{ fmt(allTime.input + allTime.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
             <div class="cell"><div class="big" v-truncate>{{ allTime.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
           </div>
+        </section>
+
+        <!-- By Model / By Account Quota, over today or this week -->
+        <section class="block" data-block="by-model">
+          <div class="block-hdr">
+            <span class="block-title">{{ $t('token-views.by-model') }}</span>
+            <div class="range-toggle" role="group" :aria-label="$t('token-views.range')">
+              <button
+                v-for="r in (['day', 'week'] as const)"
+                :key="r"
+                class="range-btn"
+                :class="{ active: tokenRange === r }"
+                :data-range="r"
+                :aria-pressed="tokenRange === r"
+                @click="tokenRange = r"
+              >{{ $t(r === 'day' ? 'token-views.range-day' : 'token-views.range-week') }}</button>
+            </div>
+          </div>
+          <TokenByModel :backend="backend" :workspace-path="workspacePath" :range="tokenRange" />
+        </section>
+        <section class="block" data-block="by-account-quota">
+          <div class="block-hdr"><span class="block-title">{{ $t('token-views.by-account-quota') }}</span></div>
+          <TokenByAccountQuota :backend="backend" :range="tokenRange" :cli-profiles="cliProfiles" />
         </section>
 
         <!-- By Vendor -->
@@ -779,6 +805,19 @@ function openTurnStats(): void {
 }
 .reset-btn:hover { color: var(--danger-fg); border-color: var(--danger-fg); }
 .open-turns-btn:hover { color: var(--text-bright); border-color: var(--border-strong); }
+.range-toggle { display: inline-flex; border: 1px solid var(--border-default); border-radius: 3px; overflow: hidden; }
+.range-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-2xs);
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1.7;
+}
+.range-btn + .range-btn { border-left: 1px solid var(--border-default); }
+.range-btn.active { background: var(--bg-subtle); color: var(--text-bright); }
 .run-meta {
   font-size: var(--font-3xs);
   color: var(--text-secondary);

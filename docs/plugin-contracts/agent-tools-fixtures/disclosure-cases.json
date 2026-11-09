@@ -2599,6 +2599,635 @@
           "projectWrites": "none"
         }
       }
+    },
+    {
+      "name": "network-hosts-ui",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.status",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "network": {
+            "hosts": [
+              "api.github.com",
+              "*.example.com"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "right",
+              "title": "Status",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.status",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "network",
+              "params": {
+                "hosts": [
+                  "*.example.com",
+                  "api.github.com"
+                ]
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "network",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null,
+          "network": {
+            "hosts": [
+              "*.example.com",
+              "api.github.com"
+            ]
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "networkHosts": [
+          "*.example.com",
+          "api.github.com"
+        ],
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "shell-executables-npm",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.builder",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "npm",
+              "terraform"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.builder",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "npm",
+                  "terraform"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            },
+            {
+              "key": "shell.interpreter",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "npm",
+              "terraform"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "shell-executables-terraform",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.planner",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "terraform"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.planner",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "terraform"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "terraform"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "shell-executables-versioned-interpreter",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.pyrunner",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "python3.12"
+            ]
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "bottom",
+              "title": "Builder",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.pyrunner",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab",
+                  "python3.12"
+                ]
+              }
+            },
+            {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "shell.executables",
+              "level": "high"
+            },
+            {
+              "key": "shell.interpreter",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab",
+              "python3.12"
+            ]
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "via-shell",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "view-agent-tools",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^1.0.0",
+        "id": "acme.hello",
+        "name": "Hello",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "A view that serves two agent tools.",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "right",
+              "title": "Hello",
+              "entry": "frontend/main/index.html"
+            }
+          ],
+          "agentTools": [
+            {
+              "name": "hello_note",
+              "view": "main",
+              "risk": "write",
+              "title": "hello_note title",
+              "description": "hello_note description.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "who": {
+                    "type": "string"
+                  }
+                }
+              },
+              "timeoutMs": 5000
+            },
+            {
+              "name": "hello_greet",
+              "view": "main",
+              "risk": "read",
+              "title": "hello_greet title",
+              "description": "hello_greet description.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "who": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.hello",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "agentTools",
+              "params": {
+                "read": 1,
+                "write": 1
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "agentTools.write",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [
+          {
+            "name": "hello_greet",
+            "method": "view:main",
+            "risk": "read",
+            "title": "hello_greet title",
+            "description": "hello_greet description.",
+            "timeoutMs": 30000,
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "who": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "hello_note",
+            "method": "view:main",
+            "risk": "write",
+            "title": "hello_note title",
+            "description": "hello_note description.",
+            "timeoutMs": 5000,
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "who": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
     }
   ]
 }

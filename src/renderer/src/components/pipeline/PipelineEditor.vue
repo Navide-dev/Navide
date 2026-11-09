@@ -415,7 +415,7 @@ async function focusRunTask(): Promise<void> {
 }
 async function startRun(): Promise<void> {
   if (!canStart.value) return
-  const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim() })
+  const result = await invokeCommand('ui.pipeline.start', { pipelineId: props.pipelineId, task: runTask.value.trim(), origin: 'user' })
   if (!result.ok) toastRefusal(result)
   else runTask.value = ''
 }

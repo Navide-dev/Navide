@@ -45,6 +45,7 @@
     "label.pipelines",
     "label.review-general-finding",
     "label.stashes",
+    "label.terminal",
     "label.total",
     "label.worktrees",
     "pane.plans.format-html",
@@ -174,6 +175,7 @@
     "turn-stats.row-total",
     "turn-stats.session",
     "turn-stats.title",
+    "usage.settings-refresh-minutes",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
@@ -420,6 +422,7 @@
     "turn-stats.title",
     "updater.channel-stable",
     "usage.failover-col-resume",
+    "usage.settings-refresh-minutes",
     "webhooks.form.pipeline",
     "webhooks.form.source",
     "webhooks.host.placeholder",
@@ -430,7 +433,8 @@
     "webhooks.nav",
     "webhooks.reveal.secret",
     "webhooks.form.fieldType",
-    "webhooks.fieldType.date"
+    "webhooks.fieldType.date",
+    "label.terminal"
   ],
   "de-DE": [
     "account.title",
@@ -611,7 +615,8 @@
     "webhooks.kind.webhook",
     "webhooks.nav",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.text"
+    "webhooks.fieldType.text",
+    "label.terminal"
   ],
   "pt-BR": [
     "account.title",
@@ -661,6 +666,7 @@
     "label.stashes",
     "label.status",
     "label.tags",
+    "label.terminal",
     "label.total",
     "label.workspace",
     "label.worktrees",
@@ -802,6 +808,7 @@
     "turn-stats.session",
     "turn-stats.title",
     "updater.stage.download",
+    "usage.settings-refresh-minutes",
     "webhooks.form.pipeline",
     "webhooks.form.workspace",
     "webhooks.host.placeholder",
@@ -1060,7 +1067,8 @@
     "webhooks.kind.webhook",
     "webhooks.outcome.ping",
     "webhooks.reveal.secret",
-    "webhooks.fieldType.email"
+    "webhooks.fieldType.email",
+    "label.terminal"
   ],
   "ja-JP": [
     "webhooks.form.pipeline",

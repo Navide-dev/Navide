@@ -14,7 +14,7 @@ import { shallowMount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import TokenStatsPanel from '../TokenStatsPanel.vue'
 import { usePreview } from '../../preview/usePreview'
-import { registerCommand, settingsSet } from '@navide/plugin-ui/shared'
+import { registerCommand, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { __resetSettingsForTest } from '@navide/plugin-ui/shared/testing'
 import type { TokensSnapshot } from '../../composables/useTokens'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -82,6 +82,22 @@ describe('TokenStatsPanel', () => {
   })
   afterEach(() => {
     __resetSettingsForTest()
+  })
+
+  it('the by-model and by-account-quota views follow one day / week switch, week by default, remembered', async () => {
+    const { w } = mountPanel()
+    await w.findAll('.hdr .tab')[1].trigger('click')
+    const ranges = () => [w.findComponent({ name: 'TokenByModel' }), w.findComponent({ name: 'TokenByAccountQuota' })]
+      .map((c) => c.props('range'))
+    expect(ranges()).toEqual(['week', 'week'])
+    await w.find('[data-range="day"]').trigger('click')
+    expect(ranges()).toEqual(['day', 'day'])
+    expect(settingsGet('agentTeam.tokenPanel.range', null)).toBe('day')
+    w.unmount()
+    const again = mountPanel().w
+    await again.findAll('.hdr .tab')[1].trigger('click')
+    expect(again.findComponent({ name: 'TokenByModel' }).props('range')).toBe('day')
+    again.unmount()
   })
 
   it('renders the rail instead of the panel when the parent says collapsed', () => {

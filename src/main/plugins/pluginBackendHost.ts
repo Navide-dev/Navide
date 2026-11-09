@@ -27,6 +27,7 @@ import {
 } from './plansBridge'
 import { noteBackendFailure, type ThirdPartyAdmission } from './pluginThirdPartyBackends'
 import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
+import { prepareBackendTmpDir } from '../backend-tmpdir'
 import {
   canonicalExistingDirectory,
   isWorkspaceContainedPath,
@@ -85,9 +86,13 @@ export interface PluginBackendHostOptions {
   ) => ExecutionPolicySnapshot | undefined
   /** Observe a bound child becoming unavailable before the next call. */
   onBackendFailure?: (runtime: BackendRuntimeContext, error: BackendPluginError) => void
-  /** Observe a failed first-party child that an automatic restart brought
-   * back, while its view is still bound. */
+  /** Observe a failed child that an automatic restart brought back, while
+   * its view is still bound (first-party and third-party alike). */
   onBackendRestarted?: (runtime: BackendRuntimeContext) => void
+  /** C4: observe the Host giving up on a child that failed more often than
+   * the restart delays allow within the crash window; it stays stopped until
+   * the user allows it again (or, for a first-party child, reopens the view). */
+  onBackendGaveUp?: (runtime: BackendRuntimeContext) => void
   /** Observe a bound view being unbound; its child is never reported again. */
   onBackendUnbound?: (runtime: BackendRuntimeContext) => void
   /** Observe child diagnostic output (stderr / startup failure diagnostics). */
@@ -97,6 +102,9 @@ export interface PluginBackendHostOptions {
   /** Admit a third-party backend (sandbox, consent, kill switches). Without
    * it every third-party activation is refused. */
   admitThirdParty?: ThirdPartyAdmitter
+  /** Where a first-party plugin's children keep their temporary files, or
+   * `null` to leave the inherited TMPDIR/TMP/TEMP as they are (dev runs). */
+  pluginTmpDir?: (pluginId: string) => string | null
   /** Idle stop delay for third-party children (default THIRD_PARTY_BACKEND_IDLE_MS). */
   thirdPartyIdleMs?: number
   /** Observe every settled call, whichever path made it (a plugin's own
@@ -297,10 +305,12 @@ export class PluginBackendHost {
   private readonly resolveExecutionPolicy?: PluginBackendHostOptions['resolveExecutionPolicy']
   private readonly onBackendFailure?: PluginBackendHostOptions['onBackendFailure']
   private readonly onBackendRestarted?: PluginBackendHostOptions['onBackendRestarted']
+  private readonly onBackendGaveUp?: PluginBackendHostOptions['onBackendGaveUp']
   private readonly onBackendUnbound?: PluginBackendHostOptions['onBackendUnbound']
   private readonly onStderr?: PluginBackendHostOptions['onStderr']
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
   private admitThirdParty?: ThirdPartyAdmitter
+  private pluginTmpDir?: PluginBackendHostOptions['pluginTmpDir']
   private readonly onCallSettled?: (call: BackendCallSettled) => void
   private readonly observesCallsOf?: (pluginId: string) => boolean
   private readonly thirdPartyIdleMs: number
@@ -333,10 +343,12 @@ export class PluginBackendHost {
     this.resolveExecutionPolicy = options.resolveExecutionPolicy
     this.onBackendFailure = options.onBackendFailure
     this.onBackendRestarted = options.onBackendRestarted
+    this.onBackendGaveUp = options.onBackendGaveUp
     this.onBackendUnbound = options.onBackendUnbound
     this.onStderr = options.onStderr
     this.reverifyBeforeSpawn = options.reverifyBeforeSpawn
     this.admitThirdParty = options.admitThirdParty
+    this.pluginTmpDir = options.pluginTmpDir
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
     this.onCallSettled = options.onCallSettled
     this.observesCallsOf = options.observesCallsOf
@@ -421,6 +433,35 @@ export class PluginBackendHost {
       )
     }
     this.reverifyBeforeSpawn = verifier
+  }
+
+  /** Install the per-plugin temp directory resolver before views are bound. */
+  setPluginTmpDir(resolver: PluginBackendHostOptions['pluginTmpDir'] | undefined): void {
+    if (this.views.size > 0) {
+      throw new BackendPluginError(
+        'INVALID_RUNTIME',
+        'Backend temp directory cannot change while a view is bound.',
+      )
+    }
+    this.pluginTmpDir = resolver
+  }
+
+  /** The child environment for one first-party view: the Host map, with its
+   * temp directory moved under the data dir when a resolver is installed.
+   * Leftover `_MEI*` are swept only when no other child of this plugin can be
+   * running -- no other bound view, no unbind still closing one, and no
+   * failed close anywhere whose child may live on. */
+  private firstPartyEnvironment(view: BoundView): Readonly<Record<string, string>> {
+    const pluginId = view.activation.pluginId
+    const dir = this.pluginTmpDir?.(pluginId)
+    if (!dir) return this.environment
+    const othersMayRun =
+      this.retainedChildSlots > 0 ||
+      [...this.views.values()].some((other) => other !== view && other.activation.pluginId === pluginId) ||
+      [...this.unbindTasks.values()].some(({ packageKey }) => packageKey.startsWith(`${pluginId}\u0000`))
+    const prepared = prepareBackendTmpDir(dir, !othersMayRun)
+    if (!prepared) return this.environment
+    return Object.freeze({ ...this.environment, TMPDIR: prepared, TMP: prepared, TEMP: prepared })
   }
 
   register(activation: BackendPluginLaunchSpec): void {
@@ -644,7 +685,7 @@ export class PluginBackendHost {
         throw new BackendPluginError('USER_CANCELLED')
       }
       const supervisorOptions: PluginBackendSupervisorOptions = {
-        environment: this.environment,
+        environment: this.firstPartyEnvironment(view),
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
         bridgeDispatcher: this.bridgeDispatcher,
         onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
@@ -683,6 +724,7 @@ export class PluginBackendHost {
           }
           if (delay === null) {
             console.warn(`[plugin-backend] ${view.runtime.pluginId} failed too often; leaving it stopped`)
+            this.notifyGaveUp(view.runtime)
             return
           }
           const stillBound = (): boolean =>
@@ -760,10 +802,23 @@ export class PluginBackendHost {
             // A liveness observer must not change the child failure result.
           }
           const delay = admission.noteFailure()
-          if (delay === null) return
+          if (delay === null) {
+            console.warn(`[plugin-backend] ${view.runtime.pluginId} failed too often; leaving it stopped`)
+            this.notifyGaveUp(view.runtime)
+            return
+          }
+          const stillBound = (): boolean =>
+            this.views.get(instanceId) === view && !view.closing && view.supervisor === supervisor
           const timer = setTimeout(() => {
-            if (this.views.get(instanceId) !== view || view.closing || view.supervisor !== supervisor) return
-            supervisor.restart().catch(() => {
+            if (!stillBound()) return
+            supervisor.restart().then(() => {
+              if (!stillBound()) return
+              try {
+                this.onBackendRestarted?.(view.runtime)
+              } catch {
+                // A liveness observer must not change the restart result.
+              }
+            }, () => {
               // The next failure is reported through onFailure again.
             })
           }, delay)
@@ -775,6 +830,14 @@ export class PluginBackendHost {
     } catch (error) {
       if (error instanceof BackendPluginError) throw error
       throw new BackendPluginError('BACKEND_UNAVAILABLE')
+    }
+  }
+
+  private notifyGaveUp(runtime: BackendRuntimeContext): void {
+    try {
+      this.onBackendGaveUp?.(runtime)
+    } catch {
+      // A liveness observer must not change the child failure result.
     }
   }
 

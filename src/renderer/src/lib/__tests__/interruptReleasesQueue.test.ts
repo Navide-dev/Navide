@@ -102,6 +102,17 @@ describe('App.vue wiring', () => {
     expect(branch).not.toContain("ev.detail !== 'user'")
   })
 
+  it('the Stop-hook drain is given the same STOP hold (stopHeld)', () => {
+    // 0.2.39 Linux VM stopuser: a turn Claude started on its own after a
+    // person's STOP drained a queued cli_send through its Stop hook.
+    const at = appSource.indexOf('stopHeld: (paneId) => messagingGateStatus(')
+    expect(at).toBeGreaterThan(-1)
+    const dep = appSource.slice(at, appSource.indexOf("=== 'stopped'", at))
+    expect(dep).toContain('stopHeldForUser')
+    expect(dep).toContain('stoppedBy')
+    expect(dep).toContain('liveStatus')
+  })
+
   it('TerminalPane exposes liveStatus', () => {
     const pane = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/TerminalPane.vue'), 'utf8')
     expect(pane).toContain('liveStatus: terminal.liveStatus')

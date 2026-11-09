@@ -11,7 +11,7 @@ The rule behind every term: **name a thing by who owns its files.**
 | Concept | zh-TW | en | ja | Covers |
 |---|---|---|---|---|
 | A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
-| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `server.navide.dev/registry` |
+| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `marketplace.navide.dev` |
 | A Host-drawn button the user adds to run actions | 動作按鈕 | Action button | アクションボタン | The bar at the right end of the stage tabs, Settings → Layout |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
 | The Settings group for what the AI CLIs work with | Agent 資產 | Agent Assets | エージェント資産 | The pages listed under it in the Settings sidebar, in its order: MCP, Skills, Prompts, Memory, Credentials & Keys, Extensions. Being an Agent Asset says nothing about sync: credentials and keys never leave the machine, and Memory and Extensions do not sync |
@@ -118,11 +118,22 @@ term kept in English here stays English in zh-CN too.
 **Kept in English in zh-TW and zh-CN:** AI, agent, CLI, MCP, MCP server, Git,
 PR, API, JSON, SSH, OAuth, LLM, token, session, hook, bot, stash, Loop, Guard,
 App Lock,
-pane, pipeline, worktree, repo, URL, plus product and vendor names. Common
+pipeline, worktree, repo, URL, plus product and vendor names. Common
 nouns are lowercase even at the start of a string (agent, token, session,
-hook, bot, pane, pipeline, worktree, repo); acronyms and feature names keep
+hook, bot, pipeline, worktree, repo); acronyms and feature names keep
 their form. Put a half-width space between the English word and Chinese
-text. 面板 is reserved for "panel" and never means a pane.
+text.
+
+**Layout terms in zh-TW and zh-CN (the user's call, 2026-11-05):** pane 分格,
+window 視窗 (zh-CN 窗口), panel 面板, dialog 對話框 (zh-CN 对话框),
+workspace 工作區 (zh-CN 工作区), group 群組 (zh-CN 群组), tab 分頁
+(zh-CN keeps its existing 标签页). 視窗／窗口 means a real Navide or
+operating-system window only, never a pane; 面板 means a panel only, never a
+pane. A named tool surface that en-US calls a pane but that is not a cell of
+the stage grid (the Git pane, the plan pane) stays 面板. Do not write
+"分割分格" for "split pane": use a verb ("再切一格", "左右切分"). The first
+mention on a help page or in onboarding carries the gloss
+"分格＝視窗裡的一格，通常跑一個 agent" (zh-CN "分格＝窗口里的一格，通常跑一个 agent").
 
 **zh-TW renderings:** workspace 工作區, plan 計畫, commit 提交, branch 分支,
 diff 差異, skill 技能, terminal 終端機, tab 分頁, quota 額度, Settings 設定,

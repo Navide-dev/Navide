@@ -778,12 +778,6 @@ html { scroll-behavior: smooth; }
 .audit-list { list-style: none; padding: 0; margin: var(--space-2) 0 0; font-size: var(--fs-sm); color: var(--text-secondary); }
 .audit-list li { padding: 2px 0; overflow-wrap: anywhere; }
 
-/* Publish landing steps */
-.steps { list-style: none; counter-reset: step; padding: 0; margin: var(--space-5) 0; display: grid; gap: var(--space-3); }
-.steps li { counter-increment: step; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--space-3); align-items: start; font-size: var(--fs-md); }
-.steps li::before { content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: var(--fs-sm); }
-.steps b { display: block; color: var(--text-bright); }
-.steps span { color: var(--text-secondary); font-size: var(--fs-sm); }
 .ns-preview { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--text-secondary); }
 .ns-preview b { color: var(--accent); font-weight: 600; }
 
@@ -988,3 +982,32 @@ details[open] > :not(summary) { animation: disclose-in var(--motion-base) var(--
   .review-approve > *, .review-reject fieldset > * { flex: 1 1 100%; }
   .review-actions .install-button { width: 100%; }
 }
+
+/* ── Developer entry (Build for Navide) ───────────────────── */
+/* Seven-step bar shared by /developer, /publish and the dashboard home. */
+.journey { list-style: none; padding: 0; margin: var(--space-5) 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.journey-step { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: var(--fs-sm); color: var(--text-secondary); }
+.journey-num { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: var(--fs-xs); }
+.journey-step.is-done .journey-num { background: var(--success-bg); color: var(--success-fg); }
+.journey-step.is-current { border-color: var(--accent); color: var(--text-bright); font-weight: 600; }
+.journey-step.is-current .journey-num { background: var(--accent-strong); color: var(--on-accent); }
+.journey--muted .journey-step { opacity: .6; }
+.journey--muted .journey-num { background: var(--chip-bg); color: var(--text-secondary); }
+/* "You are on step N" / dashboard next-step card: one at a time. */
+.next-card { margin: var(--space-4) 0; padding: var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-lg); background: var(--accent-soft); }
+.next-card p { margin: 0 0 var(--space-3); }
+.next-card-title { font-weight: 700; color: var(--text-bright); }
+.next-card--danger { border-color: var(--danger-fg); background: var(--danger-bg); }
+.checklist { margin: var(--space-3) 0; padding-left: 1.2em; display: grid; gap: var(--space-2); font-size: var(--fs-md); }
+.checklist code { overflow-wrap: anywhere; }
+.landing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); margin: var(--space-4) 0; }
+.landing-box .section-title, .panel .landing-box .section-title { margin-top: 0; padding-top: 0; border-top: 0; }
+.secondary-button { display: inline-flex; align-items: center; min-height: 38px; padding: 8px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-weight: 600; text-decoration: none; }
+.secondary-button:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+/* Storefront home: Build for Navide entry card under the hero. */
+.build-card { margin: var(--space-6) 0; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-raised); }
+.build-card h2 { margin: 0 0 var(--space-4); font-size: var(--fs-xl); }
+.build-steps { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); }
+.build-steps li { padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg); font-size: var(--fs-sm); color: var(--text-secondary); }
+.build-steps b { display: block; margin-bottom: 4px; color: var(--text-bright); font-size: var(--fs-md); }
+.build-steps code { display: block; margin-bottom: 4px; overflow-wrap: anywhere; }
