@@ -14,6 +14,10 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 - Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
 
+### Fixed
+
+- Pipelines (0.2.40): starting a pipeline and opening its stage panes no longer freezes Navide while the disk is slow: the run records are now saved on a background thread, in order, so every window keeps responding even when a save takes seconds (a VM measured one at 21.7s).
+
 ## [0.2.39] — 2026-11-09
 
 ### Added
