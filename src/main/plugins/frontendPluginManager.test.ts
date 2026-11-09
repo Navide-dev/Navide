@@ -12775,6 +12775,29 @@ describe('first-party Git private bridge', () => {
     ])
   })
 
+  it('answers ui.getLocale with the Host locale and pushes ui.localeChanged to v2 views', async () => {
+    const { mgr, view } = await openGitView()
+    let locale: 'ja-JP' | 'zh-TW' = 'ja-JP'
+    mgr.setUiLocaleResolver(() => locale)
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    const handler = ipcHandlers.get(CAPABILITY_CALL)
+    expect(handler).toBeDefined()
+
+    await expect(handler!({ sender: { id: view.webContents.id } }, {
+      reqId: 'locale-1', ns: 'ui', method: 'getLocale', args: {},
+    })).resolves.toEqual({ reqId: 'locale-1', ok: true, result: { locale: 'ja-JP' } })
+
+    locale = 'zh-TW'
+    mgr.notifyHostLocaleChanged('zh-TW')
+    expect(view.webContents.sent).toEqual([{
+      channel: 'plugin:cap:event',
+      args: [{ type: 'ui.localeChanged', data: { locale: 'zh-TW' } }],
+    }])
+    await expect(handler!({ sender: { id: view.webContents.id } }, {
+      reqId: 'locale-2', ns: 'ui', method: 'getLocale', args: {},
+    })).resolves.toEqual({ reqId: 'locale-2', ok: true, result: { locale: 'zh-TW' } })
+  })
+
   it('routes Host-owned language settings changes to active Plans v2 views', async () => {
     const { mgr, view } = await openPlansView()
 

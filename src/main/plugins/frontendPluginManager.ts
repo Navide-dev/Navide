@@ -6718,6 +6718,17 @@ export class FrontendPluginManager {
     }
   }
 
+  /** Tell every v2 view that declared `system: ["ui"]` the interface language
+   * changed; `locale` is the value `ui.getLocale` answers from now on. */
+  notifyHostLocaleChanged(locale: string): void {
+    for (const plugin of this.running.values()) {
+      const binding = plugin.capabilityContext?.runtimeBinding
+      if (binding && this.isPublicEventAllowedForInstance(plugin, 'ui.localeChanged', { locale }, binding)) {
+        this.emitToInstance(plugin.instanceId, 'ui.localeChanged', { locale })
+      }
+    }
+  }
+
   /** Connect the production Plans child to the existing Host filesystem
    * service. The default Backend Host bridge remains fail-closed for tests and
    * for callers that have not completed application wiring. */
@@ -7270,6 +7281,10 @@ export class FrontendPluginManager {
         ...(typeof plan.args.column === 'number' ? { column: String(plan.args.column) } : {}),
       })
       return { opened }
+    }
+
+    if (plan.address === 'ui.getLocale') {
+      return { locale: this.uiLocaleResolver?.() ?? 'en-US' }
     }
 
     if (plan.address === 'ui.openExternal') {
