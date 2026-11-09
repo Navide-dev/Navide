@@ -26,6 +26,10 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 - Navide plugins (0.2.40): Settings → Navide Plugins → Installed opens with an Activity monitor, every installed Navide plugin on one table, refreshed every few seconds: its status, agent tool calls and capability calls in the last minute, the network hosts its views reached in the last 7 days (a host the manifest does not declare, or one that was refused, in red), how many tool calls in a row failed, and its backend's memory, marked when a resource is over its threshold. Opening a row shows that plugin's full Activity. Records only: the monitor changes nothing a plugin may do. Navide Browser 1.1.2, Navide Git 1.0.5, Mini-IDE 1.0.4 and Plans 1.1.4 carry the new interface strings.
 
+### Fixed
+
+- Panes (0.2.40): a STOP the CLI did not act on no longer looks like it worked. When Claude spends the Ctrl-C on clearing queued input and the turn keeps running, a Claude or Codex pane that shows no sign of the interrupt within 5 seconds (no "[Request interrupted by user]" record, no turn end) puts its live status back with a "STOP not applied" badge beside it, so Interrupt can be pressed again. A STOP a person pressed still holds queued messages until they type, and a late interrupt record brings the STOP badge back. Navide does not send a second Ctrl-C on its own, since two in a row quit Claude.
+
 ## [0.2.39] — 2026-11-09
 
 ### Added

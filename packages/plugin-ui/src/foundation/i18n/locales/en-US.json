@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "The process is still running, but the agent has finished its last turn and is waiting at the input prompt",
       "awaiting-status-tooltip": "The agent is parked on a permission prompt — nothing moves until you answer",
       "question-status-tooltip": "The agent asked you something and is waiting for the answer — nothing moves until you reply",
+      "stop-ineffective": "STOP not applied",
+      "stop-ineffective-tooltip": "The interrupt reached the CLI, but the turn kept running (Ctrl-C may only have cleared queued input). Press Interrupt again to stop it.",
       "rename-title-tooltip": "Double-click to rename this pane",
       "auto-named-tooltip": "Named automatically from this session's first instruction — rename it and it stays yours",
       "loop-tag-tooltip": "Loop is running on this pane",

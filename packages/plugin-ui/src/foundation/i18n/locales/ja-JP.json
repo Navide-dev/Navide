@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "プロセスは実行中ですが、エージェントは直前のターンを終え、入力プロンプトで待機しています",
       "awaiting-status-tooltip": "エージェントは権限確認で待機しています。回答するまで処理は進みません",
       "question-status-tooltip": "エージェントが質問への回答を待っています。返信するまで処理は進みません",
+      "stop-ineffective": "STOP 未反映",
+      "stop-ineffective-tooltip": "中断は CLI に届きましたが、ターンは実行中のままです（Ctrl-C は入力待ちのテキストを消しただけかもしれません）。止めるにはもう一度 Interrupt を押してください。",
       "rename-title-tooltip": "ダブルクリックでこのペインの名前を変更",
       "auto-named-tooltip": "このセッションの最初の指示から自動で名前を付けました。名前を変更すると、その名前が保持されます",
       "loop-tag-tooltip": "このペインでループが実行中です",

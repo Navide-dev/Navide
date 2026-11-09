@@ -16,6 +16,7 @@ import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { castablePromptSkills } from '../lib/promptSkills'
 import { paneStatusLabelText } from '../lib/paneStatusLabel'
+import { VENDORS_REPORTING_INTERRUPT } from '../lib/agentMessaging'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -260,6 +261,7 @@ const terminal = useTerminal(props.paneId, props.terminalPort, {
   workspacePath: props.workspacePath,
   onClear: () => emit('rebuild-clean'),
   onUserResume: () => emit('user-resume'),
+  reportsInterrupt: () => VENDORS_REPORTING_INTERRUPT.has(props.agentKey ?? ''),
   mentionCandidates: () => props.mentionCandidates?.(props.paneId) ?? [],
   onMentionPick: (addresses) => emit('mention-pick', addresses),
   onScreen: () => props.onScreen ?? true,
@@ -378,6 +380,8 @@ defineExpose({
   displayStatus,
   liveStatus: terminal.liveStatus,
   stoppedBy: terminal.stoppedBy,
+  stopIneffective: terminal.stopIneffective,
+  noteInterruptEvidence: terminal.noteInterruptEvidence,
   stopHeldForUser: terminal.stopHeldForUser,
   markAgentTurnStart: terminal.markAgentTurnStart,
   awaitingKind: terminal.awaitingKind,
@@ -805,6 +809,12 @@ onMounted(() => {
           :style="statusBadgeVars"
           :title="statusTooltipKey ? $t(statusTooltipKey) : ''"
         >{{ statusBadgeText }}</span>
+        <span
+          v-if="terminal.stopIneffective.value && displayStatus !== 'exited' && displayStatus !== 'error'"
+          class="stop-ineffective"
+          data-testid="stop-ineffective"
+          :title="$t('pane.terminal.stop-ineffective-tooltip')"
+        >{{ $t('pane.terminal.stop-ineffective') }}</span>
         <UsageBadge
           v-if="agentKey"
           data-tour="usage-badge"
@@ -1273,6 +1283,17 @@ onMounted(() => {
   background: var(--status-badge-bg, var(--bg-inset));
   color: var(--status-badge-fg, var(--text-bright));
   border: 1px solid var(--border-default);
+}
+/* A STOP the CLI did not act on: sits beside the live status badge, in the
+ * warning colours, so the pane reads as still working and the press as missed. */
+.stop-ineffective {
+  font-size: var(--font-3xs);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--warning-fg) 20%, transparent);
+  color: var(--warning-fg);
+  border: 1px dashed var(--warning-fg);
 }
 .xterm-host {
   flex: 1;
