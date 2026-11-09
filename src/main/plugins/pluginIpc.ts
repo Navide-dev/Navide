@@ -5296,11 +5296,13 @@ export function registerPluginIpc(
     id: string,
     via: PluginStopVia,
     who: Pick<DisableSource, 'by' | 'agent'>,
+    // P3: a global stop stamps each plugin's record with its own time, which
+    // is how Resume all tells its stops from any later disable.
+    at = Date.now(),
   ): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> => {
     if (BUILTIN_PLUGIN_NAMES.has(id) || isReservedPluginId(id)) {
       throw new Error(`the bundled Navide plugin ${id} is turned off with its own Disabled switch`)
     }
-    const at = Date.now()
     const inFlightCalls = options.backendCallConcurrency?.().find((row) => row.pluginId === id)?.current ?? 0
     const [summary, result] = await Promise.all([stopSummary(id, inFlightCalls), setInstalledPackageDisabled(id, true)])
     // A user's stop of a package an agent had disabled takes that disable over:
@@ -5352,7 +5354,7 @@ export function registerPluginIpc(
     const targets = stoppableRows()
       .filter((row) => row.disabled === false || (who.by === 'user' && pending.stopped.includes(row.id)))
       .map((row) => row.id)
-    const results = await Promise.allSettled(targets.map((id) => stopPlugin(id, via, who)))
+    const results = await Promise.allSettled(targets.map((id) => stopPlugin(id, pending.via, who, pending.at)))
     const stopped: string[] = []
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') stopped.push(targets[index]!)
@@ -5364,8 +5366,10 @@ export function registerPluginIpc(
   }
 
   // "Resume all": the user's own, in Settings only. The plugins the global
-  // stop disabled are enabled again (one that is gone or that the user
-  // enabled meanwhile is skipped), then the switches are put back as they were.
+  // stop disabled are enabled again, then the switches are put back as they
+  // were. Only a plugin whose disable is still this global stop's own record
+  // is enabled: one removed, enabled meanwhile, or disabled again since for
+  // any other reason (a block, the user's or an agent's own disable) is left.
   const resumeAllPlugins = async (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> => {
     const record = globalStops.get()
     if (!record) return { resumed: [], failed: [] }
@@ -5378,7 +5382,8 @@ export function registerPluginIpc(
     }
     const installed = new Set(stoppableRows().map((row) => row.id))
     for (const id of record.stopped) {
-      if (!installed.has(id) || !disabledPlugins.has(id)) continue
+      const stop = disableSources.get(id).stop
+      if (!installed.has(id) || !disabledPlugins.has(id) || stop?.at !== record.at || stop.via !== record.via) continue
       try {
         const result = await setInstalledPackageDisabled(id, false)
         if (result.changed) {
@@ -5549,8 +5554,11 @@ export function registerPluginIpc(
         if (choice === 'remove') {
           await uninstallPlugin(ask.pluginId)
         } else if (choice === 'disable') {
-          const result = await setInstalledPackageDisabled(ask.pluginId, true)
-          if (result.changed) recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
+          await setInstalledPackageDisabled(ask.pluginId, true)
+          // Recorded even when it was already disabled (a stop, a global stop):
+          // the disable is now the user's own answer to the block, so a later
+          // Resume all or an agent's enable leaves it alone.
+          recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
         }
       } catch (error) {
         console.warn(`[plugins] ${choice} of blocked ${ask.pluginId} failed: ${errorText(error)}`)
