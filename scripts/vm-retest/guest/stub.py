@@ -18,7 +18,9 @@ class H(BaseHTTPRequestHandler):
         if "count_tokens" in self.path:
             self.send_response(200); self.send_header("content-type","application/json"); self.end_headers(); self.wfile.write(b'{"input_tokens":10}'); return
         msgs = body.get("messages", [])
-        has_tools = any(t.get("name") == "Bash" for t in body.get("tools", []))
+        # The shell tool is Bash, or PowerShell on Windows without Git Bash; answer with the one the request offers.
+        shell = next((t.get("name") for t in body.get("tools", []) if t.get("name") in ("Bash", "PowerShell")), None)
+        has_tools = shell is not None
         os_ = __import__("os"); force = os_.path.exists(LOG + ".force") and has_tools
         if force: os_.remove(LOG + ".force")
         done = "tool_result" in json.dumps(msgs) and not force
@@ -73,7 +75,7 @@ class H(BaseHTTPRequestHandler):
         if rule_text is not None: tool = False; pre = ""
         if bg:
             sse(w,"message_start",{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":model,"stop_reason":None,"stop_sequence":None,"usage":{"input_tokens":1,"output_tokens":1}}})
-            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":"Bash","input":{}}})
+            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":shell,"input":{}}})
             sse(w,"content_block_delta",{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":json.dumps({"command":bg,"description":"t","run_in_background":True})}})
             sse(w,"content_block_stop",{"type":"content_block_stop","index":0})
             sse(w,"message_delta",{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":None},"usage":{"output_tokens":1}})
@@ -83,7 +85,7 @@ class H(BaseHTTPRequestHandler):
             sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})
             sse(w,"content_block_delta",{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":pre}})
             sse(w,"content_block_stop",{"type":"content_block_stop","index":0})
-            sse(w,"content_block_start",{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":"Bash","input":{}}})
+            sse(w,"content_block_start",{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":shell,"input":{}}})
             sse(w,"content_block_delta",{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":json.dumps({"command":CMD,"description":"t"})}})
             sse(w,"content_block_stop",{"type":"content_block_stop","index":1})
             sse(w,"message_delta",{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":None},"usage":{"output_tokens":1}})
@@ -95,7 +97,7 @@ class H(BaseHTTPRequestHandler):
             sse(w,"message_delta",{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":None},"usage":{"output_tokens":1}})
             sse(w,"message_stop",{"type":"message_stop"}); return
         if tool:
-            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":"Bash","input":{}}})
+            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":shell,"input":{}}})
             sse(w,"content_block_delta",{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":json.dumps({"command":CMD,"description":"t"})}})
         else:
             sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})
