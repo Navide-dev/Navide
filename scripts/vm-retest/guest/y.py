@@ -83,7 +83,8 @@ elif cmd == "go":
     via, mode, label = ARGS; b = B(); before = {p.name for p in run_dirs()}; n = "Y" + secrets.token_hex(6); seen = list(ys[name]["nonces"]); ys[name]["nonces"].append(n)
     if mode == "done": NOTOOL.touch()
     else: NOTOOL.unlink(missing_ok=True)
-    ans = start(b, via, n); reached = stub_has(n, 45)
+    # Y_REACH_S: how long to wait for the task to reach the stub (the load phase raises it to the app's own limit)
+    ans = start(b, via, n); reached = stub_has(n, int(os.environ.get("Y_REACH_S", "45")))
     new = [p for p in run_dirs() if p.name not in before]; L = new[-1] if new else None
     state_ = "no-run"
     if L:
