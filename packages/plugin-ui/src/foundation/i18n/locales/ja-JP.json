@@ -12384,11 +12384,26 @@
       "heading": "{id} を再び有効にしますか？",
       "confirm": "有効にする"
     },
+    "all": {
+      "stop": "すべて停止",
+      "confirm": "今すぐすべて停止",
+      "note": "実行中のサードパーティ Navide プラグインをすべてすぐに停止し、サードパーティのネイティブバックエンドとエージェントツールをオフにします。組み込みの Navide プラグインは動き続けます。",
+      "heading": "サードパーティの Navide プラグインはすべて停止しています。",
+      "banner": "{date} に{via}から停止：Navide プラグイン {count} 個。サードパーティのネイティブバックエンドとエージェントツールはオフです。",
+      "resume": "すべて再開",
+      "resumeConfirm": "今すぐすべて再開",
+      "resumeNote": "スイッチを停止前の状態に戻し、この停止で無効にした Navide プラグインを再び有効にします。",
+      "stopFailed": "停止できませんでした：{ids}",
+      "resumeFailed": "再び有効にできませんでした：{ids}"
+    },
     "statusBar": {
       "label": "Navide プラグイン {running}",
       "title": "Navide プラグイン：1 つをすぐに停止",
       "heading": "サードパーティの Navide プラグイン",
-      "openSettings": "Activity 一覧を開く"
+      "openSettings": "Activity 一覧を開く",
+      "allStopped": "Navide プラグイン停止中",
+      "allStoppedTitle": "サードパーティの Navide プラグインはすべて停止しています。設定で再開してください",
+      "resumeInSettings": "サードパーティの Navide プラグインはすべて停止しています。設定の「すべて再開」で再開します。"
     }
   },
   "backendResource": {

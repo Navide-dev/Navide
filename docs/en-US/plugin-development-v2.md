@@ -825,6 +825,19 @@ still enable a package an agent disabled, as before, never one the user
 stopped). Bundled Navide plugins keep their own Disabled switch and are not
 stopped this way.
 
+**Stopping every third-party plugin at once** (0.2.40). Stop all on the
+Activity monitor, Stop all in the status bar's popover, `/plugins stop all` in
+a bound chat, and, for an agent, `plugins_disable_all` first turn off
+third-party native backends and the third-party agent-tool switches (agents
+and external MCP clients), so nothing starts again while the plugins drain,
+then stop every running third-party plugin as above. Bundled Navide plugins,
+and the switch for agents calling their tools, are not touched. The status
+bar's Navide plugins item turns red, also after a restart, until the user
+chooses Resume all on the Activity monitor: that puts the switches back as
+they were and enables the plugins the global stop disabled (a plugin removed
+or enabled meanwhile is skipped). Resume all is the user's alone; an agent can
+stop, never resume, and a user's Stop all takes over what an agent's stopped.
+
 Publishing a package with a backend from a self-service namespace requires an
 administrator to allowlist the publisher and a verified publisher domain
 (DNS). The package must declare `engines.navide` of at least `>=0.2.14`

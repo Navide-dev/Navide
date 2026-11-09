@@ -35,6 +35,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginGlobalStopStore } from './pluginGlobalStopStore'
 import { PluginDisableSourceStore } from './pluginDisableSource'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
@@ -1885,6 +1886,85 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  describe('P3: stopping every third-party plugin at once', () => {
+    const previous = { nativeBackends: true, agentTools: true, externalCallers: false }
+
+    async function installedWithSwitches() {
+      const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+      const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-stop-all-'))
+      const manager = new FrontendPluginManager()
+      let stopRequest: ((request: unknown) => Promise<Record<string, unknown>>) | undefined
+      let agentAction: ((request: unknown) => Promise<unknown>) | undefined
+      vi.spyOn(manager, 'setPluginStopHandler').mockImplementation((handler) => { stopRequest = handler })
+      vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+      vi.spyOn(manager, 'requestPluginActivityOverview').mockRejectedValue(new Error('no backend in this test'))
+      manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const switches = { read: vi.fn(() => previous), turnOff: vi.fn(async () => {}), restore: vi.fn(async () => {}) }
+      const onPluginAgentAction = vi.fn()
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS, globalStopSwitches: switches, onPluginAgentAction,
+      })
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      return { root, manager, switches, onPluginAgentAction, stopRequest: () => stopRequest!, agentAction: () => agentAction! }
+    }
+
+    it('turns the third-party switches off, stops every running plugin, and remembers it across a restart', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await expect(handlers.get('plugins:stopAll')!(null, { via: 'settings' })).resolves.toEqual({ stopped: ['acme.demo'], failed: [] })
+        expect(switches.turnOff).toHaveBeenCalledTimes(1)
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+        const state = handlers.get('plugins:globalStopState')!(null)
+        expect(state).toEqual({ at: expect.any(Number), via: 'settings', by: 'user', stopped: ['acme.demo'], previous })
+        // A restart reads the same record from disk.
+        expect(new PluginGlobalStopStore(root).get()).toEqual(state)
+        expect((handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>)[0]).toMatchObject({ stopRecord: { via: 'settings' } })
+        await expect(Promise.resolve().then(() => handlers.get('plugins:stopAll')!(null, { via: 'mcp' }))).rejects.toThrow(/invalid plugin stop/)
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('"Resume all" puts the switches back and enables what the stop disabled, then forgets it', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await handlers.get('plugins:stopAll')!(null, { via: 'status-bar' })
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: ['acme.demo'], failed: [] })
+        expect(switches.restore).toHaveBeenCalledWith(previous)
+        expect(manager.isPluginDisabled('acme.demo')).toBe(false)
+        expect(handlers.get('plugins:globalStopState')!(null)).toBeNull()
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: [], failed: [] })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('plugins_disable_all stops them as the agent, told to the user; a chat stop-all after it makes them the user\'s', async () => {
+      const { root, manager, stopRequest, agentAction, onPluginAgentAction } = await installedWithSwitches()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await expect(stopRequest()({ action: 'stop-all', requester: { callerKind: 'robot' } })).resolves.toMatchObject({ ok: false, error_code: 'BAD_REQUEST' })
+        await expect(stopRequest()({ action: 'stop-all', requester })).resolves.toEqual({ ok: true, stopped: ['acme.demo'], failed: [] })
+        expect(handlers.get('plugins:globalStopState')!(null)).toMatchObject({ via: 'mcp', by: 'agent' })
+        expect(onPluginAgentAction).toHaveBeenCalledWith({ action: 'disable', pluginId: 'acme.demo', pluginVersion: '1.0.0', requester })
+        // The user's chat stop afterwards makes the global stop the user's.
+        await expect(stopRequest()({ action: 'stop-all' })).resolves.toMatchObject({ ok: true, failed: [] })
+        expect(handlers.get('plugins:globalStopState')!(null)).toMatchObject({ via: 'mcp', by: 'user', stopped: ['acme.demo'] })
+        // The user's stop took the agent's over: the agent cannot enable it now.
+        await expect(agentAction()({ request_id: 'pa:1', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
   })
 
   describe('P2: stopping one third-party plugin', () => {

@@ -22,8 +22,12 @@ HOST_TIMEOUT_S = 30.0
 _pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
 
-async def ask_host(action: str, plugin_id: str | None = None) -> dict[str, Any] | None:
-    """The Host's answer to ``status`` or ``stop``, or None when no Host answered in time."""
+async def ask_host(
+    action: str, plugin_id: str | None = None, *, requester: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """The Host's answer to ``status``, ``stop`` or ``stop-all``, or None when no
+    Host answered in time. ``requester`` (``stop-all`` from MCP only) names the
+    agent; without it the stop is the user's own."""
     from .. import app
     from ..ipc import make_event
 
@@ -31,6 +35,8 @@ async def ask_host(action: str, plugin_id: str | None = None) -> dict[str, Any] 
     payload: dict[str, Any] = {"request_id": request_id, "action": action}
     if plugin_id is not None:
         payload["plugin_id"] = plugin_id
+    if requester is not None:
+        payload["requester"] = requester
     future = _pending.register(request_id)
     try:
         sent = await app.unicast_host(make_event(contract.PLUGIN_STOP_REQUEST_EVENT, payload))

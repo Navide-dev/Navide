@@ -30,6 +30,8 @@ MARKETPLACE_TOOLS = ["marketplace_search", "marketplace_detail", "plugins_list_i
 MARKETPLACE_REQUEST_TOOLS = [
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
+    # Plan P3 (plugin-comms-security): stop every third-party plugin at once.
+    "plugins_disable_all",
 ]
 #: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
 #: and account sign-in (P2).

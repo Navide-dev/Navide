@@ -12384,11 +12384,26 @@
       "heading": "{id} wieder aktivieren?",
       "confirm": "Aktivieren"
     },
+    "all": {
+      "stop": "Alle stoppen",
+      "confirm": "Jetzt alle stoppen",
+      "note": "Stoppt sofort alle laufenden Navide-Plugins von Drittanbietern und schaltet native Backends und Agent-Tools von Drittanbietern aus. Integrierte Navide-Plugins laufen weiter.",
+      "heading": "Alle Navide-Plugins von Drittanbietern sind gestoppt.",
+      "banner": "Am {date} über {via} gestoppt: {count} Navide-Plugins; native Backends und Agent-Tools von Drittanbietern sind aus.",
+      "resume": "Alle fortsetzen",
+      "resumeConfirm": "Jetzt alle fortsetzen",
+      "resumeNote": "Stellt die Schalter wie zuvor wieder her und aktiviert die Navide-Plugins, die dieser Stopp deaktiviert hat.",
+      "stopFailed": "Nicht gestoppt: {ids}",
+      "resumeFailed": "Nicht wieder aktiviert: {ids}"
+    },
     "statusBar": {
       "label": "Navide-Plugins {running}",
       "title": "Navide-Plugins: eines sofort stoppen",
       "heading": "Navide-Plugins von Drittanbietern",
-      "openSettings": "Activity-Übersicht öffnen"
+      "openSettings": "Activity-Übersicht öffnen",
+      "allStopped": "Navide-Plugins gestoppt",
+      "allStoppedTitle": "Alle Navide-Plugins von Drittanbietern sind gestoppt; setzen Sie sie in den Einstellungen fort",
+      "resumeInSettings": "Alle Navide-Plugins von Drittanbietern sind gestoppt. Setzen Sie sie mit „Alle fortsetzen“ in den Einstellungen fort."
     }
   },
   "backendResource": {

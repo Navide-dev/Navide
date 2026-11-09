@@ -83,7 +83,7 @@ CORE_TOOL_NAMES = (
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
     "plan_list", "plan_read", "plan_update_stage", "plan_update_todo",
     "plugins_developer_mode_open",
-    "plugins_disable", "plugins_enable",
+    "plugins_disable", "plugins_disable_all", "plugins_enable",
     "plugins_install_file_fill", "plugins_install_file_open",
     "plugins_list_installed",
     "plugins_package",

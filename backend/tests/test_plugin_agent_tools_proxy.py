@@ -178,6 +178,8 @@ B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
 })
+#: Core tools added after that digest by plan plugin-comms-security P3 (stop every third-party plugin).
+P3_CORE_TOOLS = frozenset({"plugins_disable_all"})
 #: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
 ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"})
 #: Core tools added after that digest by plan mcp-navide-0-2-27 W3 (developer forms, marketplace_forms.py).
@@ -386,7 +388,7 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     builtin = await _builtin_package_tool_names()
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
     added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
-             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS)
+             | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS | P3_CORE_TOOLS)
     assert added <= {t["name"] for t in module_only}
     existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)

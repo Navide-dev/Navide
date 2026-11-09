@@ -11825,6 +11825,56 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     return await _plugin_agent_action(ctx, "enable", namespace, name)
 
 
+@server.tool()
+async def plugins_disable_all(ctx: Context) -> dict[str, Any]:
+    """Stop every running third-party Navide plugin at once (an emergency stop).
+
+    Navide first turns off third-party native backends and the third-party
+    agent-tool switches (agents and external MCP clients), then disables each
+    running third-party plugin as plugins_disable does: calls in flight end,
+    its views, events and backend stop; its files, grants and data stay. The
+    user is told which agent did it for each plugin, and the status bar shows
+    that every third-party plugin is stopped. The bundled Navide plugins are
+    not touched.
+
+    This can only stop. Turning the switches back on ("Resume all") is the
+    user's alone, in Navide's Settings; plugins_enable can enable again only a
+    plugin an agent stopped, and none the user stopped.
+
+    Returns {ok: true, stopped: [plugin ids], failed: [plugin ids]} or {ok:
+    false, error, error_code} (HOST_UNAVAILABLE, ACTION_FAILED).
+    """
+    from agent_team_backend.plugins import plugin_stop
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    requester = _approval_requester(caller)
+    answer = await plugin_stop.ask_host("stop-all", requester=requester)
+    if answer is None:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="HOST_UNAVAILABLE")
+        return _marketplace_error("HOST_UNAVAILABLE", "Navide Host did not answer the stop request")
+    if answer.get("ok") is not True:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+        return _marketplace_error("ACTION_FAILED", "Navide could not stop the third-party plugins")
+    def ids(key: str) -> list[str]:
+        """The Host's ids with the package-id grammar; anything else is dropped."""
+        values = answer.get(key)
+        return [value for value in values if isinstance(value, str) and "." in value
+                and _package_id(*value.split(".", 1)) == value] if isinstance(values, list) else []
+
+    stopped, failed = ids("stopped"), ids("failed")
+    for plugin_id in stopped:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="allowed")
+    for plugin_id in failed:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+    return {"ok": True, "stopped": stopped, "failed": failed}
+
+
 # ── Quota failover state (read-only) ────────────────────────────────────────
 #: The fields of the failover authority's state() this tool passes on. Named,
 #: not filtered: the live login's identity and fingerprint, raw error text

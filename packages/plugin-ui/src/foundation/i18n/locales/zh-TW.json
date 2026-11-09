@@ -12384,11 +12384,26 @@
       "heading": "要重新啟用 {id} 嗎？",
       "confirm": "啟用"
     },
+    "all": {
+      "stop": "全部停止",
+      "confirm": "立即全部停止",
+      "note": "立即停止所有運作中的第三方 Navide 外掛，並關閉第三方原生後端與 agent 工具。內建 Navide 外掛照常運作。",
+      "heading": "所有第三方 Navide 外掛都已停止。",
+      "banner": "{date} 從{via}停止：共 {count} 個 Navide 外掛，第三方原生後端與 agent 工具已關閉。",
+      "resume": "全部恢復",
+      "resumeConfirm": "立即全部恢復",
+      "resumeNote": "把各開關恢復成停止前的狀態，並重新啟用這次停止的 Navide 外掛。",
+      "stopFailed": "無法停止：{ids}",
+      "resumeFailed": "無法重新啟用：{ids}"
+    },
     "statusBar": {
       "label": "Navide 外掛 {running}",
       "title": "Navide 外掛：立即停止其中一個",
       "heading": "第三方 Navide 外掛",
-      "openSettings": "開啟 Activity 總覽"
+      "openSettings": "開啟 Activity 總覽",
+      "allStopped": "Navide 外掛已全部停止",
+      "allStoppedTitle": "所有第三方 Navide 外掛都已停止；請到設定恢復",
+      "resumeInSettings": "所有第三方 Navide 外掛都已停止。請到設定按「全部恢復」。"
     }
   },
   "backendResource": {
