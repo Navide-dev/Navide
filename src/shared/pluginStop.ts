@@ -13,9 +13,26 @@
 /** Where a stop came from: the Settings Activity monitor, the status bar's
  *  Navide plugins item, a chat command (`/plugins stop`), or an agent's
  *  `plugins_disable`. */
-export type PluginStopVia = 'settings' | 'status-bar' | 'telegram' | 'mcp'
+export type PluginStopVia = 'settings' | 'status-bar' | 'telegram' | 'mcp' | 'auto'
 
-export const PLUGIN_STOP_VIAS: readonly PluginStopVia[] = ['settings', 'status-bar', 'telegram', 'mcp']
+/** `auto` (plan P5): Navide paused the plugin on one of its anomaly rules. */
+export const PLUGIN_STOP_VIAS: readonly PluginStopVia[] = ['settings', 'status-bar', 'telegram', 'mcp', 'auto']
+
+/** Plan P5's anomaly rules (section 4.2): R1 frequency, R2 an undeclared or
+ *  refused network host, R3 failures in a row or restarts, R4 a resource over
+ *  its threshold, R5 too many notifications. */
+export type PluginAutoPauseRule = 'R1' | 'R2' | 'R3' | 'R4' | 'R5'
+export const PLUGIN_AUTO_PAUSE_RULES: readonly PluginAutoPauseRule[] = ['R1', 'R2', 'R3', 'R4', 'R5']
+
+/** The fixed thresholds of 0.2.40 (the user's decision of 11-08): disclosed
+ *  in Settings; one switch turns automatic pauses off. */
+export const PLUGIN_AUTO_PAUSE_THRESHOLDS = Object.freeze({
+  toolCallsPerMinute: 60,
+  capabilityCallsPerMinute: 600,
+  consecutiveFailures: 10,
+  restartsInTenMinutes: 3,
+  notificationsPerMinute: 6,
+})
 
 /** The plugin's activity when it was stopped. The activity counts are null
  *  when the backend could not be read in time (the stop never waits for it). */
@@ -34,6 +51,8 @@ export interface PluginStopRecord {
   at: number
   via: PluginStopVia
   summary: PluginStopSummary
+  /** `via: 'auto'` only: the rule that paused it. */
+  rule?: PluginAutoPauseRule
 }
 
 /** Backend → Host (Host session only): a chat command asks for the stoppable
@@ -51,6 +70,7 @@ export function parsePluginStopRecord(value: unknown): PluginStopRecord | null {
   const record = value as Record<string, unknown>
   const summary = record.summary as Record<string, unknown> | null
   if (!isCount(record.at) || !PLUGIN_STOP_VIAS.includes(record.via as PluginStopVia)) return null
+  if (record.rule !== undefined && !PLUGIN_AUTO_PAUSE_RULES.includes(record.rule as PluginAutoPauseRule)) return null
   if (typeof summary !== 'object' || summary === null || Array.isArray(summary)) return null
   const hosts = summary.undeclaredHosts
   if (
@@ -68,7 +88,20 @@ export function parsePluginStopRecord(value: unknown): PluginStopRecord | null {
       consecutiveFailures: summary.consecutiveFailures,
       undeclaredHosts: [...hosts],
     },
+    ...(record.rule !== undefined ? { rule: record.rule as PluginAutoPauseRule } : {}),
   }
+}
+
+/** Host → backend (plan P5): `{plugin_id, plugin_version, rule, value, threshold, detail}`. */
+export const PLUGIN_AUTO_PAUSED_MESSAGE = 'plugins.auto_paused'
+
+/** What the main window is told when a plugin was paused on its own. */
+export interface PluginAutoPauseNotice {
+  pluginId: string
+  rule: PluginAutoPauseRule
+  value: number
+  threshold: number
+  detail: string
 }
 
 // ── Plan P3: every third-party plugin at once ──

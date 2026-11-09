@@ -6,8 +6,11 @@
 // plugin was doing when it was stopped. Plugin ids are shown as plain text.
 // Plan P3: Stop all, and the item turns red while every third-party plugin
 // is stopped (kept across restarts); Resume all is in Settings only.
+// Plan P5: orange while a plugin is paused on an anomaly rule, and a toast for
+// each automatic pause.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNotify } from '@navide/plugin-ui/foundation'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import type { PluginGlobalStopRecord } from '../../../shared/pluginStop'
 
@@ -17,6 +20,8 @@ const { t } = useI18n()
 
 const rows = ref<InstalledPluginSummary[]>([])
 const globalStop = ref<PluginGlobalStopRecord | null>(null)
+const notify = useNotify()
+let offAutoPaused: (() => void) | null = null
 const confirming = ref<string | null>(null)
 const stopping = ref<string | null>(null)
 const error = ref('')
@@ -25,6 +30,8 @@ let timer: ReturnType<typeof setInterval> | null = null
 /** Third-party packages with the Disabled switch: the ones a stop applies to. */
 const stoppable = computed(() => rows.value.filter((row) => row.disabled !== undefined && row.provenance !== 'factory-bundled'))
 const running = computed(() => stoppable.value.filter((row) => row.disabled === false))
+/** Paused on an anomaly rule and not enabled again yet. */
+const autoPaused = computed(() => stoppable.value.filter((row) => row.disabled === true && row.stopRecord?.via === 'auto'))
 
 async function load(): Promise<void> {
   try {
@@ -76,8 +83,15 @@ onMounted(() => {
   void load()
   timer = setInterval(() => void load(), props.pollMs)
   window.addEventListener('keydown', onKeydown)
+  offAutoPaused = window.agentTeam?.plugins?.onAutoPaused?.((notice) => {
+    notify.toast(t('pluginStop.autoPause.toast', { id: reveal(notice.pluginId), reason: t(`pluginStop.rule.${notice.rule}`) }), {
+      type: 'error', duration: 12_000,
+    })
+    void load()
+  }) ?? null
 })
 onBeforeUnmount(() => {
+  offAutoPaused?.()
   if (timer) clearInterval(timer)
   window.removeEventListener('keydown', onKeydown)
 })
@@ -87,7 +101,7 @@ onBeforeUnmount(() => {
   <span
     v-if="stoppable.length > 0"
     class="sb-item sb-clickable nv-sb-plugins"
-    :class="{ 'nv-sb-plugins--stopped': globalStop }"
+    :class="{ 'nv-sb-plugins--stopped': globalStop, 'nv-sb-plugins--paused': !globalStop && autoPaused.length > 0 }"
     role="button"
     tabindex="0"
     :title="globalStop ? t('pluginStop.statusBar.allStoppedTitle') : t('pluginStop.statusBar.title')"
@@ -122,7 +136,9 @@ onBeforeUnmount(() => {
       <ul class="nv-sbp-rows">
         <li v-for="row in stoppable" :key="row.id" class="nv-sbp-row" :data-id="row.id">
           <span class="nv-sbp-id">{{ reveal(row.id) }}</span>
-          <span v-if="row.disabled" class="nv-sbp-muted">{{ t('pluginActivity.monitor.status.disabled') }}</span>
+          <span v-if="row.disabled" class="nv-sbp-muted" :class="{ 'nv-sbp-paused': row.stopRecord?.via === 'auto' }">
+            {{ row.stopRecord?.via === 'auto' && row.stopRecord.rule ? t('pluginStop.autoPause.badge', { rule: row.stopRecord.rule }) : t('pluginActivity.monitor.status.disabled') }}
+          </span>
           <template v-else>
             <button
               class="nv-sbp-stop nv-btn nv-btn--sm"
@@ -162,6 +178,14 @@ onBeforeUnmount(() => {
 .nv-sb-plugins:hover {
   background: var(--bg-hover);
   color: var(--text-bright);
+}
+.nv-sb-plugins--paused {
+  background: var(--attention-subtle);
+  color: var(--attention-fg);
+}
+.nv-sbp-paused {
+  color: var(--attention-fg);
+  font-weight: 600;
 }
 .nv-sb-plugins--stopped:hover {
   background: var(--danger-emphasis);

@@ -606,6 +606,11 @@ declare global {
         globalStopState?: () => Promise<PluginGlobalStopRecord | null>
         /** Plan P4: the user's "Notify agent panes" switch. */
         setNotifyAgents?: (id: string, allowed: boolean) => Promise<{ id: string; notifyAgents: boolean }>
+        /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+        autoPauseState?: () => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        setAutoPause?: (enabled: boolean) => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        /** Plan P5: Navide paused a plugin on an anomaly rule. */
+        onAutoPaused?: (handler: (notice: import('../../shared/pluginStop').PluginAutoPauseNotice) => void) => () => void
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>

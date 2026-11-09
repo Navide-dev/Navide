@@ -12356,6 +12356,10 @@
         "failures": "Échecs consécutifs",
         "resources": "Ressources"
       }
+    },
+    "autoPauses": {
+      "heading": "Pauses automatiques",
+      "item": "{date} {rule} ({reason}) : {value}, seuil {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "la vue d’ensemble de l’Activity des réglages",
       "status-bar": "la barre d’état",
       "telegram": "une commande de chat",
-      "mcp": "un agent (plugins_disable)"
+      "mcp": "un agent (plugins_disable)",
+      "auto": "les règles d’anomalie de Navide"
     },
     "summary": {
       "heading": "Arrêté le {date} depuis {via}. À ce moment :",
@@ -12397,6 +12402,20 @@
       "resumeNote": "Remet les interrupteurs comme avant et réactive les plugins Navide que cet arrêt a désactivés.",
       "stopFailed": "Impossible d’arrêter : {ids}",
       "resumeFailed": "Impossible de réactiver : {ids}"
+    },
+    "rule": {
+      "R1": "trop d’appels d’outils ou de capacités",
+      "R2": "un hôte réseau non déclaré ou refusé",
+      "R3": "des échecs consécutifs ou des redémarrages",
+      "R4": "une ressource au-dessus de son seuil",
+      "R5": "trop de notifications aux volets d’agent"
+    },
+    "autoPause": {
+      "label": "Mettre en pause de lui-même un plugin Navide au comportement inhabituel",
+      "thresholds": "R1 plus de {toolCallsPerMinute} appels d’outils ou {capabilityCallsPerMinute} appels de capacités par minute · R2 une vue joint un hôte non déclaré ou refusé · R3 {consecutiveFailures} appels d’outils échoués à la suite, ou {restartsInTenMinutes} redémarrages du backend en 10 minutes · R4 un backend au-dessus d’un seuil de ressources · R5 plus de {notificationsPerMinute} notifications par minute. Une pause est un arrêt ; réactivez le plugin Navide ici.",
+      "toast": "Navide a mis en pause le plugin Navide {id} : {reason}. Vérifiez-le dans Réglages → Plugins Navide.",
+      "badge": "En pause ({rule})",
+      "because": "En pause selon la règle {rule} : {reason}"
     },
     "statusBar": {
       "label": "Plugins Navide {running}",

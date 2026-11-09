@@ -12356,6 +12356,10 @@
         "failures": "Lỗi liên tiếp",
         "resources": "Tài nguyên"
       }
+    },
+    "autoPauses": {
+      "heading": "Các lần tự tạm dừng",
+      "item": "{date} {rule} ({reason}): {value}, ngưỡng {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "tổng quan Activity trong Cài đặt",
       "status-bar": "thanh trạng thái",
       "telegram": "một lệnh trong chat",
-      "mcp": "một agent (plugins_disable)"
+      "mcp": "một agent (plugins_disable)",
+      "auto": "quy tắc bất thường của Navide"
     },
     "summary": {
       "heading": "Đã dừng lúc {date} từ {via}. Khi đó:",
@@ -12397,6 +12402,20 @@
       "resumeNote": "Đưa các công tắc về như trước và bật lại các plugin Navide mà lần dừng này đã tắt.",
       "stopFailed": "Không thể dừng: {ids}",
       "resumeFailed": "Không thể bật lại: {ids}"
+    },
+    "rule": {
+      "R1": "gọi công cụ hoặc capability quá nhiều",
+      "R2": "máy chủ mạng chưa khai báo hoặc bị từ chối",
+      "R3": "lỗi liên tiếp hoặc khởi động lại",
+      "R4": "tài nguyên vượt ngưỡng",
+      "R5": "thông báo cho khung agent quá nhiều"
+    },
+    "autoPause": {
+      "label": "Tự tạm dừng plugin Navide khi nó hoạt động bất thường",
+      "thresholds": "R1 hơn {toolCallsPerMinute} lệnh gọi công cụ hoặc {capabilityCallsPerMinute} lệnh gọi capability mỗi phút · R2 một view kết nối tới máy chủ chưa khai báo hoặc bị từ chối · R3 {consecutiveFailures} lệnh gọi công cụ lỗi liên tiếp, hoặc backend khởi động lại {restartsInTenMinutes} lần trong 10 phút · R4 backend vượt ngưỡng tài nguyên · R5 hơn {notificationsPerMinute} thông báo mỗi phút. Tạm dừng cũng là dừng; bật lại plugin Navide tại đây.",
+      "toast": "Navide đã tạm dừng plugin Navide {id}: {reason}. Xem trong Cài đặt → Plugin Navide.",
+      "badge": "Đã tạm dừng ({rule})",
+      "because": "Tạm dừng theo quy tắc {rule}: {reason}"
     },
     "statusBar": {
       "label": "Plugin Navide {running}",

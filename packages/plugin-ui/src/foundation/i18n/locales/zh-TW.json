@@ -12356,6 +12356,10 @@
         "failures": "連續失敗",
         "resources": "資源"
       }
+    },
+    "autoPauses": {
+      "heading": "自動暫停紀錄",
+      "item": "{date} {rule}（{reason}）：{value}，門檻 {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "設定的 Activity 總覽",
       "status-bar": "狀態列",
       "telegram": "聊天室指令",
-      "mcp": "agent（plugins_disable）"
+      "mcp": "agent（plugins_disable）",
+      "auto": "Navide 異常規則"
     },
     "summary": {
       "heading": "{date} 從{via}停止。當時：",
@@ -12397,6 +12402,20 @@
       "resumeNote": "把各開關恢復成停止前的狀態，並重新啟用這次停止的 Navide 外掛。",
       "stopFailed": "無法停止：{ids}",
       "resumeFailed": "無法重新啟用：{ids}"
+    },
+    "rule": {
+      "R1": "工具或能力呼叫過於頻繁",
+      "R2": "未宣告或被拒絕的網路主機",
+      "R3": "連續失敗或反覆重啟",
+      "R4": "資源超過門檻",
+      "R5": "通知分格過於頻繁"
+    },
+    "autoPause": {
+      "label": "Navide 外掛行為異常時自動暫停",
+      "thresholds": "R1 每分鐘超過 {toolCallsPerMinute} 次工具呼叫或 {capabilityCallsPerMinute} 次能力呼叫 · R2 視圖連到未宣告或被拒絕的主機 · R3 連續 {consecutiveFailures} 次工具呼叫失敗，或 10 分鐘內後端重啟 {restartsInTenMinutes} 次 · R4 後端超過資源門檻 · R5 每分鐘超過 {notificationsPerMinute} 則通知。暫停就是停止；要恢復請在這裡重新啟用 Navide 外掛。",
+      "toast": "Navide 自動暫停了 Navide 外掛 {id}：{reason}。請到 設定 → Navide 外掛 查看。",
+      "badge": "已暫停（{rule}）",
+      "because": "因規則 {rule} 暫停：{reason}"
     },
     "statusBar": {
       "label": "Navide 外掛 {running}",

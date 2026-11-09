@@ -113,7 +113,7 @@ async def test_a_bare_plugins_command_stays_the_panes(env: Env, host: FakeHost) 
 
 def test_every_language_has_the_plugin_strings() -> None:
     keys = {key for key in qm.STRINGS["en-US"] if key.startswith("plugins_")}
-    assert len(keys) == 13
+    assert len(keys) == 19
     for lang, strings in qm.STRINGS.items():
         assert keys <= set(strings), lang
 

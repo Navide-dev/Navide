@@ -297,6 +297,18 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
 
+      <template v-if="report.autoPauses.length">
+        <h5>{{ $t('pluginActivity.autoPauses.heading') }}</h5>
+        <ul class="nv-activity-auto-pauses">
+          <li v-for="(entry, index) in report.autoPauses" :key="`auto-${index}`">
+            {{ $t('pluginActivity.autoPauses.item', {
+              date: date(entry.at), rule: entry.rule, reason: $t(`pluginStop.rule.${entry.rule}`),
+              value: entry.value, threshold: entry.threshold, detail: reveal(entry.detail), version: reveal(entry.pluginVersion),
+            }) }}
+          </li>
+        </ul>
+      </template>
+
       <h5>{{ $t('pluginActivity.agentActions.heading') }}</h5>
       <p v-if="report.agentActions === null" class="nv-activity-muted">{{ $t('pluginActivity.agentActions.notRecorded') }}</p>
       <ul v-else-if="report.agentActions.length" class="nv-activity-actions">

@@ -21,7 +21,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
-import type { PluginGlobalStopRecord, PluginStopSummary } from '../shared/pluginStop'
+import type { PluginAutoPauseNotice, PluginGlobalStopRecord, PluginStopSummary } from '../shared/pluginStop'
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1668,6 +1668,17 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** Plan P4: the user's "Notify agent panes" switch for a package that declares agentNotify. */
     setNotifyAgents: (id: string, allowed: boolean): Promise<{ id: string; notifyAgents: boolean }> =>
       ipcRenderer.invoke('plugins:setNotifyAgents', { id, allowed }),
+    /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+    autoPauseState: (): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:autoPauseState'),
+    setAutoPause: (enabled: boolean): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:setAutoPause', { enabled }),
+    /** Plan P5: Navide paused a plugin on an anomaly rule. */
+    onAutoPaused: (handler: (notice: PluginAutoPauseNotice) => void): (() => void) => {
+      const listener = (_event: unknown, notice: PluginAutoPauseNotice) => handler(notice)
+      ipcRenderer.on('plugins:autoPaused', listener)
+      return () => { ipcRenderer.removeListener('plugins:autoPaused', listener) }
+    },
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>

@@ -87,6 +87,8 @@ def test_one_row_per_plugin_asked_about(audit: PluginAuditLog) -> None:
         "toolCallsLastMinute": 3,
         "capabilityCallsLastMinute": 2,
         "consecutiveFailures": 2,
+        "lastToolCallAt": NOW - 5_000,
+        "backendRestartsLast10Minutes": 0,
         # Last 7 days, newest first; a refused host says so.
         "hosts": [
             {"host": "api.acme.dev", "refused": False, "lastAt": NOW - DAY_MS},
@@ -95,7 +97,7 @@ def test_one_row_per_plugin_asked_about(audit: PluginAuditLog) -> None:
     }
     assert c == {
         "pluginId": "acme.c", "toolCallsLastMinute": 0, "capabilityCallsLastMinute": 0,
-        "consecutiveFailures": 0, "hosts": [],
+        "consecutiveFailures": 0, "lastToolCallAt": None, "backendRestartsLast10Minutes": 0, "hosts": [],
     }
 
 
@@ -132,3 +134,12 @@ async def test_the_host_reads_the_overview(audit: PluginAuditLog) -> None:
     payload = host.websocket.sent[-1]["payload"]
     assert [row["toolCallsLastMinute"] for row in payload["plugins"]] == [1]
     assert contract.PLUGIN_ACTIVITY_OVERVIEW_MESSAGE == "plugins.activity.overview"
+
+
+def test_backend_restarts_of_the_last_ten_minutes_are_counted(audit: PluginAuditLog) -> None:
+    for at in (NOW - 11 * 60_000, NOW - 9 * 60_000, NOW - 60_000):
+        audit.record_backend_calls(
+            plugin_id="acme.a", plugin_version="1.0.0", workspace=WS, address="backend.<restarted>",
+            outcome="allowed", count=1, at_ms=at,
+        )
+    assert audit.activity_overview(["acme.a"])["plugins"][0]["backendRestartsLast10Minutes"] == 2

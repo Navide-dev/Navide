@@ -13,7 +13,7 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   prepareInstall,
@@ -116,6 +116,9 @@ import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBacke
 import {
   type PluginStopRecord,
   type PluginStopSummary,
+  PLUGIN_AUTO_PAUSE_THRESHOLDS,
+  type PluginAutoPauseNotice,
+  type PluginAutoPauseRule,
   type PluginGlobalStopRecord,
   type PluginGlobalStopSwitches,
   type PluginStopVia,
@@ -640,6 +643,13 @@ export interface PluginIpcOptions {
   listFactoryPackages?: () => FactoryPackageSummary[]
   /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
   backendCallConcurrency?: () => BackendCallConcurrency[]
+  /** Plan P5: how often the anomaly rules are checked; none (the default in
+   *  tests) checks only on demand. The Host passes 30 s. */
+  autoPauseIntervalMs?: number
+  /** Plan P5's R4: the watchdog's unanswered resource notices. */
+  resourceNotices?: () => Array<{ pluginId: string; item: string; usage: number; threshold: number }>
+  /** Plan P5: a plugin was paused on an anomaly rule (the main windows are told). */
+  onPluginAutoPaused?: (notice: PluginAutoPauseNotice) => void
   /** Plan P3: the third-party switches a global stop turns off (native
    *  backends, DB8, DB4) and "Resume all" puts back. */
   globalStopSwitches?: {
@@ -841,6 +851,9 @@ function requestingAgent(value: unknown): DisablingAgent | null {
   if (!text(record.paneId) || !text(record.paneName) || !text(record.workspace)) return null
   return { callerKind: record.callerKind, paneId: record.paneId, paneName: record.paneName }
 }
+
+/** Plan P5: present while the user has turned automatic pauses off. */
+export const AUTO_PAUSE_OFF_FILE = '.navide-plugins-auto-pause-off'
 
 export function registerPluginIpc(
   manager: FrontendPluginManager,
@@ -1146,6 +1159,9 @@ export function registerPluginIpc(
   const disableSources = new PluginDisableSourceStore(pluginsRoot)
   // Plan P3: the global stop in effect, kept across restarts.
   const globalStops = new PluginGlobalStopStore(pluginsRoot)
+  // Plan P5: automatic pauses are on unless the user turned them off.
+  const autoPauseOff = join(pluginsRoot, AUTO_PAUSE_OFF_FILE)
+  const autoPauseOn = (): boolean => !existsSync(autoPauseOff)
   // Plan P4: the user's per-plugin "Notify agent panes" switch, off by default.
   const notifySwitches = new PluginNotifySwitchStore(pluginsRoot)
   manager.setAgentNotifyAllowedResolver?.((pluginId) => notifySwitches.has(pluginId))
@@ -5334,6 +5350,8 @@ export function registerPluginIpc(
     // P3: a global stop stamps each plugin's record with its own time, which
     // is how Resume all tells its stops from any later disable.
     at = Date.now(),
+    // P5: the anomaly rule an automatic pause names.
+    rule?: PluginAutoPauseRule,
   ): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> => {
     if (BUILTIN_PLUGIN_NAMES.has(id) || isReservedPluginId(id)) {
       throw new Error(`the bundled Navide plugin ${id} is turned off with its own Disabled switch`)
@@ -5344,7 +5362,7 @@ export function registerPluginIpc(
     // otherwise the agent could enable what the user meant to stop. A package
     // the user already disabled keeps its first record.
     const takesOver = !result.changed && who.by === 'user' && disableSources.get(id).by !== 'user'
-    if (result.changed || takesOver) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary } })
+    if (result.changed || takesOver) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary, ...(rule ? { rule } : {}) } })
     return { id: result.id, disabled: true, changed: result.changed, summary }
   }
 
@@ -5451,6 +5469,95 @@ export function registerPluginIpc(
     return globalStops.get()
   })
 
+  // Plan P5: the anomaly rules (section 4.2), with the fixed thresholds of
+  // 0.2.40. An automatic pause is a P2 stop (`via: 'auto'`, the rule kept in
+  // its record, the user's own so an agent cannot enable it again), recorded
+  // in Activity with the number that tripped it, and told to the main windows
+  // and the bound chats. Nothing pauses while a global stop is in effect or
+  // while the user has turned automatic pauses off; R1 to R3 read only what
+  // happened since the previous check, so old records never pause a plugin.
+  const pausing = new Set<string>()
+  const autoPause = async (id: string, rule: PluginAutoPauseRule, value: number, threshold: number, detail: string): Promise<void> => {
+    if (!autoPauseOn() || globalStops.get() || pausing.has(id)) return
+    const row = stoppableRows().find((entry) => entry.id === id && entry.disabled === false)
+    if (!row) return
+    pausing.add(id)
+    try {
+      const result = await stopPlugin(id, 'auto', { by: 'user', agent: null }, Date.now(), rule)
+      if (!result.changed) return
+      manager.reportPluginAutoPause?.({ plugin_id: id, plugin_version: row.packageVersion ?? '', rule, value, threshold, detail })
+      options.onPluginAutoPaused?.({ pluginId: id, rule, value, threshold, detail })
+    } catch (error) {
+      console.warn(`[plugins] automatic pause of ${id} (${rule}) failed: ${errorText(error)}`)
+    } finally {
+      pausing.delete(id)
+    }
+  }
+  manager.setAgentNotifyLimitHandler?.((pluginId) => {
+    void autoPause(pluginId, 'R5', PLUGIN_AUTO_PAUSE_THRESHOLDS.notificationsPerMinute + 1,
+      PLUGIN_AUTO_PAUSE_THRESHOLDS.notificationsPerMinute, 'notifications')
+  })
+  let lastAutoPauseCheck = Date.now()
+  const checkAutoPause = async (): Promise<void> => {
+    const since = lastAutoPauseCheck
+    lastAutoPauseCheck = Date.now()
+    if (!autoPauseOn() || globalStops.get()) return
+    const running = stoppableRows().filter((row) => row.disabled === false)
+    if (running.length === 0) return
+    const ids = new Set(running.map((row) => row.id))
+    const T = PLUGIN_AUTO_PAUSE_THRESHOLDS
+    for (const notice of options.resourceNotices?.() ?? []) {
+      if (ids.has(notice.pluginId)) await autoPause(notice.pluginId, 'R4', notice.usage, notice.threshold, notice.item)
+    }
+    let overview: ReturnType<typeof parsePluginActivityOverview>
+    try {
+      overview = parsePluginActivityOverview(await manager.requestPluginActivityOverview([...ids]))
+    } catch {
+      return
+    }
+    for (const row of overview?.plugins ?? []) {
+      if (!ids.has(row.pluginId)) continue
+      const declared = activeDisclosure(row.pluginId)?.networkHosts ?? []
+      const host = row.hosts.find((entry) => entry.lastAt > since &&
+        (entry.refused || !declared.some((pattern) => networkHostMatches(pattern, entry.host))))
+      if (row.toolCallsLastMinute > T.toolCallsPerMinute) {
+        await autoPause(row.pluginId, 'R1', row.toolCallsLastMinute, T.toolCallsPerMinute, 'toolCalls')
+      } else if (row.capabilityCallsLastMinute > T.capabilityCallsPerMinute) {
+        await autoPause(row.pluginId, 'R1', row.capabilityCallsLastMinute, T.capabilityCallsPerMinute, 'capabilityCalls')
+      } else if (host) {
+        await autoPause(row.pluginId, 'R2', 1, 0, host.host)
+      } else if (row.consecutiveFailures >= T.consecutiveFailures && (row.lastToolCallAt ?? 0) > since) {
+        await autoPause(row.pluginId, 'R3', row.consecutiveFailures, T.consecutiveFailures, 'failures')
+      } else if (row.backendRestartsLast10Minutes >= T.restartsInTenMinutes) {
+        await autoPause(row.pluginId, 'R3', row.backendRestartsLast10Minutes, T.restartsInTenMinutes, 'restarts')
+      }
+    }
+  }
+  if (options.autoPauseIntervalMs && options.autoPauseIntervalMs > 0) {
+    let running = false
+    const timer = setInterval(() => {
+      if (running) return
+      running = true
+      void checkAutoPause().finally(() => { running = false })
+    }, options.autoPauseIntervalMs)
+    timer.unref?.()
+  }
+
+  // The Settings switch, and what the monitor discloses.
+  ipcMain.handle('plugins:autoPauseState', (event) => {
+    assertAuthorized(event)
+    return { enabled: autoPauseOn(), thresholds: { ...PLUGIN_AUTO_PAUSE_THRESHOLDS } }
+  })
+  ipcMain.handle('plugins:setAutoPause', (event, args: { enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid automatic pause setting')
+    if (args.enabled) rmSync(autoPauseOff, { force: true })
+    else {
+      mkdirSync(pluginsRoot, { recursive: true, mode: 0o700 })
+      writeFileSync(autoPauseOff, 'off\n', { mode: 0o600 })
+    }
+    return { enabled: autoPauseOn(), thresholds: { ...PLUGIN_AUTO_PAUSE_THRESHOLDS } }
+  })
   // A chat command (`/plugins status`, `/plugins stop <id>`), relayed by the
   // backend over the Host session. It can stop, never start: enabling stays
   // in this window.

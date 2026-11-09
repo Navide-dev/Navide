@@ -99,4 +99,21 @@ describe('PluginStopStatusItem (plan P2)', () => {
     expect(w.find('.nv-sbp-stop-all').exists()).toBe(false)
     expect(w.get('.nv-sbp-global').text()).toContain('Resume all in Settings')
   })
+
+  it('P5: turns orange while a plugin is paused on a rule, and says so when one is', async () => {
+    let told: ((notice: unknown) => void) | undefined
+    const paused = { ...THIRD_PARTY[1], stopRecord: { at: 1, via: 'auto', rule: 'R2', summary: { inFlightCalls: 0, toolCallsLastMinute: 0, capabilityCallsLastMinute: 0, consecutiveFailures: 0, undeclaredHosts: ['evil.io'] } } }
+    const api = mockPlugins([THIRD_PARTY[0], paused], { onAutoPaused: vi.fn((handler) => { told = handler; return () => {} }) })
+    const w = await render(true)
+    expect(w.get('.nv-sb-plugins').classes()).toContain('nv-sb-plugins--paused')
+    expect(w.get('.nv-sbp-row[data-id="acme.off"]').text()).toContain('Paused (R2)')
+    const { useNotify } = await import('@navide/plugin-ui/foundation')
+    const before = useNotify().toasts.value.length
+    told!({ pluginId: 'acme.grok', rule: 'R1', value: 61, threshold: 60, detail: 'toolCalls' })
+    await flushPromises()
+    const toasts = useNotify().toasts.value
+    expect(toasts.length).toBe(before + 1)
+    expect(toasts[toasts.length - 1]!.message).toBe('Navide paused the Navide plugin acme.grok: too many tool or capability calls. Check it in Settings → Navide Plugins.')
+    expect(api.listInstalled.mock.calls.length).toBeGreaterThan(1)
+  })
 })

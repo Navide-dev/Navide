@@ -12356,6 +12356,10 @@
         "failures": "連続失敗",
         "resources": "リソース"
       }
+    },
+    "autoPauses": {
+      "heading": "自動一時停止の記録",
+      "item": "{date} {rule}（{reason}）：{value}、しきい値 {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "設定の Activity 一覧",
       "status-bar": "ステータスバー",
       "telegram": "チャットのコマンド",
-      "mcp": "エージェント（plugins_disable）"
+      "mcp": "エージェント（plugins_disable）",
+      "auto": "Navide の異常ルール"
     },
     "summary": {
       "heading": "{date} に{via}から停止しました。その時点：",
@@ -12397,6 +12402,20 @@
       "resumeNote": "スイッチを停止前の状態に戻し、この停止で無効にした Navide プラグインを再び有効にします。",
       "stopFailed": "停止できませんでした：{ids}",
       "resumeFailed": "再び有効にできませんでした：{ids}"
+    },
+    "rule": {
+      "R1": "ツールや機能の呼び出しが多すぎる",
+      "R2": "未宣言または拒否されたネットワークホスト",
+      "R3": "連続した失敗や再起動",
+      "R4": "リソースがしきい値を超えた",
+      "R5": "エージェントへの通知が多すぎる"
+    },
+    "autoPause": {
+      "label": "Navide プラグインの動きがおかしいときに自動で一時停止する",
+      "thresholds": "R1 1 分間にツール呼び出し {toolCallsPerMinute} 回または機能呼び出し {capabilityCallsPerMinute} 回を超える · R2 ビューが未宣言または拒否されたホストに接続 · R3 ツール呼び出しが {consecutiveFailures} 回連続で失敗、または 10 分間にバックエンドが {restartsInTenMinutes} 回再起動 · R4 バックエンドがリソースのしきい値を超える · R5 1 分間に {notificationsPerMinute} 件を超える通知。一時停止は停止と同じです。ここで Navide プラグインを再び有効にします。",
+      "toast": "Navide が Navide プラグイン {id} を一時停止しました：{reason}。設定 → Navide プラグイン で確認してください。",
+      "badge": "一時停止（{rule}）",
+      "because": "ルール {rule} で一時停止：{reason}"
     },
     "statusBar": {
       "label": "Navide プラグイン {running}",

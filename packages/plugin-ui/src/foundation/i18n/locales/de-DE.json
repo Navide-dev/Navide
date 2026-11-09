@@ -12356,6 +12356,10 @@
         "failures": "Fehler in Folge",
         "resources": "Ressourcen"
       }
+    },
+    "autoPauses": {
+      "heading": "Automatische Pausen",
+      "item": "{date} {rule} ({reason}): {value}, Schwellenwert {threshold} · {detail} · {version}"
     }
   },
   "pluginStop": {
@@ -12370,7 +12374,8 @@
       "settings": "die Activity-Übersicht der Einstellungen",
       "status-bar": "die Statusleiste",
       "telegram": "ein Chat-Befehl",
-      "mcp": "ein Agent (plugins_disable)"
+      "mcp": "ein Agent (plugins_disable)",
+      "auto": "Navides Anomalie-Regeln"
     },
     "summary": {
       "heading": "Am {date} über {via} gestoppt. Zu diesem Zeitpunkt:",
@@ -12397,6 +12402,20 @@
       "resumeNote": "Stellt die Schalter wie zuvor wieder her und aktiviert die Navide-Plugins, die dieser Stopp deaktiviert hat.",
       "stopFailed": "Nicht gestoppt: {ids}",
       "resumeFailed": "Nicht wieder aktiviert: {ids}"
+    },
+    "rule": {
+      "R1": "zu viele Tool- oder Capability-Aufrufe",
+      "R2": "ein nicht deklarierter oder abgelehnter Netzwerk-Host",
+      "R3": "Fehler in Folge oder Neustarts",
+      "R4": "eine Ressource über dem Schwellenwert",
+      "R5": "zu viele Benachrichtigungen an Agent-Bereiche"
+    },
+    "autoPause": {
+      "label": "Ein Navide-Plugin bei ungewöhnlichem Verhalten selbst pausieren",
+      "thresholds": "R1 mehr als {toolCallsPerMinute} Tool-Aufrufe oder {capabilityCallsPerMinute} Capability-Aufrufe pro Minute · R2 eine Ansicht erreicht einen nicht deklarierten oder abgelehnten Host · R3 {consecutiveFailures} fehlgeschlagene Tool-Aufrufe in Folge oder {restartsInTenMinutes} Backend-Neustarts in 10 Minuten · R4 ein Backend über einem Ressourcen-Schwellenwert · R5 mehr als {notificationsPerMinute} Benachrichtigungen pro Minute. Eine Pause ist ein Stopp; aktivieren Sie das Navide-Plugin hier wieder.",
+      "toast": "Navide hat das Navide-Plugin {id} pausiert: {reason}. Prüfen Sie es unter Einstellungen → Navide-Plugins.",
+      "badge": "Pausiert ({rule})",
+      "because": "Pausiert nach Regel {rule}: {reason}"
     },
     "statusBar": {
       "label": "Navide-Plugins {running}",

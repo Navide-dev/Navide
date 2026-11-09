@@ -20,6 +20,9 @@ function count(value: number | null): string {
     <p class="nv-stop-summary-head">
       {{ t('pluginStop.summary.heading', { date: new Date(props.record.at).toLocaleString(locale), via: t(`pluginStop.via.${props.record.via}`) }) }}
     </p>
+    <p v-if="props.record.rule" class="nv-stop-summary-rule">
+      {{ t('pluginStop.autoPause.because', { rule: props.record.rule, reason: t(`pluginStop.rule.${props.record.rule}`) }) }}
+    </p>
     <ul>
       <li>{{ t('pluginStop.summary.inFlight', { count: props.record.summary.inFlightCalls }) }}</li>
       <li>{{ t('pluginStop.summary.toolCalls', { count: count(props.record.summary.toolCallsLastMinute) }) }}</li>
@@ -44,6 +47,10 @@ function count(value: number | null): string {
 .nv-stop-summary-head {
   font-weight: 600;
   color: var(--text-bright);
+}
+.nv-stop-summary-rule {
+  color: var(--attention-fg);
+  font-weight: 600;
 }
 .nv-stop-summary ul {
   margin: var(--space-1) 0 0;

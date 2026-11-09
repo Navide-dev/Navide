@@ -54,6 +54,8 @@ function mockPlugins(overrides: Record<string, unknown> = {}) {
     stopAll: vi.fn().mockResolvedValue({ stopped: ['acme.grok'], failed: [] }),
     resumeAll: vi.fn().mockResolvedValue({ resumed: ['acme.grok'], failed: [] }),
     globalStopState: vi.fn().mockResolvedValue(null),
+    autoPauseState: vi.fn().mockResolvedValue({ enabled: true, thresholds: { toolCallsPerMinute: 60, capabilityCallsPerMinute: 600, consecutiveFailures: 10, restartsInTenMinutes: 3, notificationsPerMinute: 6 } }),
+    setAutoPause: vi.fn().mockResolvedValue({ enabled: false, thresholds: { toolCallsPerMinute: 60, capabilityCallsPerMinute: 600, consecutiveFailures: 10, restartsInTenMinutes: 3, notificationsPerMinute: 6 } }),
     nativeBackends: {
       resourceStatus: vi.fn().mockResolvedValue([
         { pluginId: 'acme.grok', name: 'Grok', packageVersion: '1.2.0', usage: { ...values(1), memory: 210 * 1024 * 1024, processes: 9 }, thresholds: values(8), levels: values(0), waiting: [] },
@@ -172,6 +174,21 @@ describe('PluginActivityMonitor (plan P1)', () => {
     await w.get('.nv-monitor-resume-all').trigger('click')
     await flushPromises()
     expect(api.resumeAll).toHaveBeenCalledTimes(1)
+  })
+
+  it('P5: discloses the fixed thresholds and turns automatic pauses off', async () => {
+    const api = mockPlugins()
+    const w = await render()
+    const auto = w.get('.nv-monitor-auto')
+    expect(auto.text()).toContain('R1 more than 60 tool calls or 600 capability calls a minute')
+    expect(auto.text()).toContain('R5 more than 6 notifications a minute')
+    const box = auto.get('input[type="checkbox"]')
+    expect((box.element as HTMLInputElement).checked).toBe(true)
+    ;(box.element as HTMLInputElement).checked = false
+    await box.trigger('change')
+    await flushPromises()
+    expect(api.setAutoPause).toHaveBeenCalledWith(false)
+    expect((w.get('.nv-monitor-auto input').element as HTMLInputElement).checked).toBe(false)
   })
 
   it('polls while shown and stops while paused', async () => {

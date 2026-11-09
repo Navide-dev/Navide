@@ -12883,6 +12883,41 @@ async def agents_public(session: "Session", msg_id: str, msg_type: str, payload:
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.auto_paused")
+async def plugins_auto_paused(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The Host paused a plugin on an anomaly rule (plan P5): record it in
+    Activity and tell the bound direct chats. Host-authenticated."""
+    from . import app
+    from .channels import plugin_cmds
+    from .plugins import agent_tools_contract as contract
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    keys = {"plugin_id", "plugin_version", "rule", "value", "threshold", "detail"}
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0  # noqa: E731
+    if (
+        not isinstance(payload, dict) or set(payload) != keys
+        or not isinstance(payload["plugin_id"], str) or not payload["plugin_id"]
+        or not isinstance(payload["plugin_version"], str) or not isinstance(payload["detail"], str)
+        or payload["rule"] not in contract.PLUGIN_AUTO_PAUSE_RULES
+        or not number(payload["value"]) or not number(payload["threshold"])
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.auto_paused is malformed")
+        )
+        return
+    await asyncio.to_thread(
+        app.plugin_audit_log.record_auto_pause,
+        plugin_id=payload["plugin_id"], plugin_version=payload["plugin_version"], rule=payload["rule"],
+        value=payload["value"], threshold=payload["threshold"], detail=payload["detail"],
+    )
+    await plugin_cmds.notify_auto_paused(payload["plugin_id"], payload["rule"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("plugins.agent_notify")
 async def plugins_agent_notify(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """One plugin notification to an agent pane (plan P4), Host-authenticated.

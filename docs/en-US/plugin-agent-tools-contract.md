@@ -1786,10 +1786,38 @@ detail lists, so it can be polled every few seconds. Records only.
 | `toolCallsLastMinute` | `plugin_tool_calls` rows that ended in the last 60 s |
 | `capabilityCallsLastMinute` | broker and shell-broker calls (`plugin_activity` and `plugin_activity_counts`, `network` rows excluded) from the minute 60 s ago started in: counted rows are per minute, so this covers between one and two minutes |
 | `consecutiveFailures` | the newest run of `plugin_tool_calls` whose `outcome` is not `ok`, read from at most the newest 100 calls |
+| `lastToolCallAt` | when the newest `plugin_tool_calls` row ended, or `null` (0.2.40 P5; absent from an older backend, read as `null`) |
+| `backendRestartsLast10Minutes` | automatic restarts of its backend (`backend.<restarted>` in `plugin_backend_call_minutes`) from the minute 10 minutes ago started in (P5; absent reads as 0) |
 | `hosts[]` | the `network.<host>` rows of the 7 days of detail, newest first, at most 50: `host`, `refused` (some request was refused), `lastAt`. The Host adds `declared`: whether the installed manifest's `permissions.network.hosts` match it, or `null` without a Manifest v2 disclosure |
 
 The page adds the Host's live numbers itself: the status from the installed
 list and the backend's resources from the watchdog (section 5.2).
+
+#### Automatic pauses (plan P5)
+
+The Host checks every running third-party plugin every 30 s against fixed
+thresholds (0.2.40; one Settings switch, on by default, turns the checks off):
+
+| Rule | Trips when | Read from |
+|---|---|---|
+| `R1` | more than 60 tool calls, or 600 capability calls, in the last minute | `toolCallsLastMinute`, `capabilityCallsLastMinute` |
+| `R2` | a view reached a host the installed manifest does not declare, or was refused one, since the previous check | `hosts[]` (`lastAt`, `refused`, the Host's `declared`) |
+| `R3` | 10 failed tool calls in a row with the newest since the previous check, or 3 backend restarts in 10 minutes | `consecutiveFailures`, `lastToolCallAt`, `backendRestartsLast10Minutes` |
+| `R4` | the watchdog holds an unanswered resource notice for its backend (section 5.2) | the Host's notices |
+| `R5` | a notification refused for the per-minute limit of `agentNotify.send` | the Host's limit |
+
+A shell command's destination is not recorded (only the executable and the
+subcommand), so `R2` does not judge `git push` or `git clone`. A pause is a
+stop (section 4.3.2) with `via: "auto"` and the `rule` in its record, owned by
+the user, so an agent cannot enable it again. Nothing is paused during a
+global stop. The Host then sends `plugins.auto_paused` (`PLUGIN_AUTO_PAUSED_MESSAGE`,
+Host session only) `{plugin_id, plugin_version, rule, value, threshold, detail}`:
+`value` is the number that tripped the rule, `detail` a host (`R2`), a resource
+item (`R4`) or a fixed word. The backend writes it to `plugin_auto_pauses`
+(`PLUGIN_AUTO_PAUSES_DDL`, its own schema component; a removed plugin's rows
+are forgotten) and tells every bound direct chat. A report lists the last 30
+days of them as `autoPauses[]`, newest first: `at`, `rule`, `value`,
+`threshold`, `detail`, `pluginVersion` (`[]` from an older backend).
 
 ### 5.2 Resource thresholds: notice, then the user decides
 
