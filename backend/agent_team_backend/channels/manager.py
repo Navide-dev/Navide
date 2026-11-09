@@ -2367,6 +2367,14 @@ class ChannelManager:
 
     async def _send_held(self, msg: InboundMessage, binding: Binding, pane_id: str, since: float,
                          lang: str) -> None:
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            # Channels turned off, or this bot stopped or removed, while it was kept: nothing
+            # from the chat goes in now. Told where the bot still runs; otherwise only logged.
+            if (msg.platform, msg.account) in self._adapters:
+                await self._tell_held([(since, msg, binding)], lang, "revoked")
+            else:
+                log.info("channels: a kept message for %s was dropped: its bot is no longer running", pane_id)
+            return
         current = self._binding_for(msg)
         if current is None or current.pane_id != binding.pane_id \
                 or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
