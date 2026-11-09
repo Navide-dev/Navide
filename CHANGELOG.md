@@ -15,6 +15,10 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
 - Plugins (0.2.40): plugin views can follow the Navide interface language. `ui.getLocale` answers the language in effect (the one chosen in Settings, or the one picked from the system), and `ui.localeChanged` fires when the user switches; the SDK wraps them as `getHostLocale()` and `onHostLocaleChanged()`. Both need `permissions.system: ["ui"]`; plugin API 1.4.0.
 
+### Fixed
+
+- Plugins (0.2.40): the static scan (Registry and `navide-plugin scan`, scanner 1.1.0) no longer reports `vuejs.org` as an undeclared network host for a package bundling Vue's production build, whose error messages carry `https://vuejs.org/error-reference/#runtime-…`; the host reached any other way is still reported. A string that only looks like a capability address (an i18n key such as `'ui.title'`) no longer counts as using that namespace: only addresses in the public catalog do.
+
 ## [0.2.39] — 2026-11-09
 
 ### Added

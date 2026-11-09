@@ -31,7 +31,7 @@ from .js_scan import ScriptFacts, scan_script
 from .limits import Deadline, ScanTimeout, TooComplex
 from .native import NativeFacts, summarize_executable
 
-SCANNER_VERSION = "1.0.0"
+SCANNER_VERSION = "1.1.0"
 SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
 
 

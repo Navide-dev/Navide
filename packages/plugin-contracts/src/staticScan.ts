@@ -16,6 +16,8 @@
  * (superscripts, circled digits); here only Unicode decimal digits start a number.
  */
 
+import capabilitiesV1 from './schemas/capabilities-v1.json' with { type: 'json' }
+
 declare const TextDecoder: new (label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean }) => {
   decode(input: Uint8Array): string
 }
@@ -23,7 +25,7 @@ declare const performance: { now(): number }
 
 export const STATIC_SCAN_SCHEMA_VERSION = 1
 export const STATIC_SCANNER_ID = 'navide-static-scan'
-export const STATIC_SCANNER_VERSION = '1.0.0'
+export const STATIC_SCANNER_VERSION = '1.1.0'
 export const STATIC_SCAN_LIMITS = {
   maxItemsPerKind: 100,
   maxPaths: 50,
@@ -569,6 +571,14 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
 // ── script rules (static_scan/js_scan.py) ───────────────────────────────────
 
 const CAPABILITY_ADDRESS_RE = /^(agentMessages|agents|aiCli|fs|secrets|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
+// A literal counts only when it is a catalog address (registry/static_scan/
+// catalog_addresses.py): any other `namespace.word` string, such as the i18n
+// key 'ui.title', reaches nothing, because the Host answers METHOD_NOT_FOUND.
+const CATALOG_ADDRESSES: ReadonlySet<string> = new Set(
+  [...capabilitiesV1.methods, ...capabilitiesV1.events].map((entry) => entry.address),
+)
+const isCapabilityAddress = (value: string): boolean =>
+  CAPABILITY_ADDRESS_RE.test(value) && CATALOG_ADDRESSES.has(value)
 const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.queryFiles', 'fs.glob', 'fs.stat', 'fs.statPath'])
 const FS_WRITE_ADDRESSES = new Set(['fs.writeFile'])
 const COMMAND_EXECUTABLES = new Set([
@@ -586,6 +596,11 @@ const XML_NAMESPACE_URLS = [
   'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xhtml', 'http://www.w3.org/1999/xlink',
   'http://www.w3.org/XML/1998/namespace', 'http://www.w3.org/2000/xmlns/', 'http://www.w3.org/1998/Math/MathML',
 ]
+// Error-reference links frameworks print in production builds, never fetched:
+// Vue's runtime builds `https://vuejs.org/error-reference/#runtime-${code}`.
+// Only a bare fragment that ends the URL is dropped, so anything appended
+// after it (another URL, a path) is still scanned.
+const REFERENCE_URL_RE = new RegExp(`https://vuejs\\.org/error-reference/#[A-Za-z0-9_-]*(?=$|\\$\\{|[${PY_WS}'"\`])`, 'g')
 const PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._*/-]+$/
 const HEX_IDENTIFIER_RE = /^_0x[0-9a-f]{4,}$/
 const BASE64_RE = /^[A-Za-z0-9+/=_-]+$/
@@ -659,6 +674,7 @@ function commandLike(value: string): Command | null {
 function hostsIn(text: string): string[] {
   let value = text
   for (const namespace of XML_NAMESPACE_URLS) value = value.split(namespace).join('')
+  value = value.replace(REFERENCE_URL_RE, '')
   const found: string[] = []
   for (const match of [...value.matchAll(URL_RE), ...value.matchAll(SCP_RE)]) {
     const host = match[1].toLowerCase().replace(/^\.+|\.+$/g, '')
@@ -765,7 +781,7 @@ function scanScript(text: string, maxPathLength: number, deadline: Deadline): Sc
       ) facts.obfuscationSignals.add('longBase64')
     }
     if (value !== null) {
-      if (CAPABILITY_ADDRESS_RE.test(value)) {
+      if (isCapabilityAddress(value)) {
         facts.capabilities.add(value)
         if (FS_READ_ADDRESSES.has(value) || FS_WRITE_ADDRESSES.has(value)) {
           collectPath(at, index, FS_WRITE_ADDRESSES.has(value), facts, maxPathLength)
@@ -1144,7 +1160,7 @@ function* printableRuns(data: Uint8Array, step: 1 | 2, deadline: Deadline): Gene
 function classifyNativeString(text: string, facts: NativeFacts): void {
   for (const host of hostsIn(text)) count(facts.hosts, host)
   for (const item of pySplit(text)) {
-    if (CAPABILITY_ADDRESS_RE.test(item)) facts.capabilities.add(item)
+    if (isCapabilityAddress(item)) facts.capabilities.add(item)
   }
   const parsed = commandLike(pyStrip(text))
   if (parsed !== null) facts.commands.set(JSON.stringify(parsed), parsed)
