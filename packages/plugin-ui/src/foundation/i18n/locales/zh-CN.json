@@ -12328,6 +12328,30 @@
       "activity": "最近活动",
       "undeclaredCount": "{count} 次没声明的使用被拒绝",
       "anomalyCount": "{count} 项异常"
+    },
+    "monitor": {
+      "title": "Activity 总览",
+      "intro": "所有已安装的 Navide 插件列在同一张表中，每几秒刷新一次。仅为记录，这里不会改变 Navide 插件能做什么。展开任一行可查看完整 Activity。",
+      "empty": "尚未安装任何 Navide 插件。",
+      "open": "显示 {id} 的 Activity",
+      "builtin": "内置",
+      "noHosts": "无",
+      "noBackend": "没有后端",
+      "hostUndeclared": "{host}（未声明）",
+      "hostRefused": "{host}（已拒绝）",
+      "status": {
+        "running": "运行中",
+        "disabled": "已停用"
+      },
+      "column": {
+        "plugin": "Navide 插件",
+        "status": "状态",
+        "toolCalls": "工具调用／分",
+        "capabilityCalls": "能力调用／分",
+        "hosts": "网络主机（7 天）",
+        "failures": "连续失败",
+        "resources": "资源"
+      }
     }
   },
   "backendResource": {

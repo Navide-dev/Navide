@@ -19,6 +19,7 @@ type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDi
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
+type PluginActivityOverview = import('../../shared/pluginActivity').PluginActivityOverview
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -407,6 +408,8 @@ declare global {
         endBackgroundAiSession?: (id: string, sessionId: string) => Promise<{ ok: boolean }>
         /** D-f: one installed plugin's activity report (read only). */
         activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+        activityOverview?: () => Promise<{ ok: true; overview: PluginActivityOverview } | { ok: false; error: string }>
         /** D-f: installed Registry packages' disclosures and install-time scans. */
         installedDisclosures?: () => Promise<Array<{
           id: string

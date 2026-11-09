@@ -12328,6 +12328,30 @@
       "activity": "Letzte Aktivität",
       "undeclaredCount": "{count} nicht deklarierte Verwendungen abgelehnt",
       "anomalyCount": "{count} ungewöhnliche Einträge"
+    },
+    "monitor": {
+      "title": "Activity-Übersicht",
+      "intro": "Alle installierten Navide-Plugins in einer Tabelle, alle paar Sekunden aktualisiert. Nur Aufzeichnungen; hier ändert sich nichts daran, was ein Navide-Plugin darf. Öffnen Sie eine Zeile für die vollständige Activity.",
+      "empty": "Es sind keine Navide-Plugins installiert.",
+      "open": "Activity von {id} anzeigen",
+      "builtin": "integriert",
+      "noHosts": "Keine",
+      "noBackend": "Kein Backend",
+      "hostUndeclared": "{host} (nicht deklariert)",
+      "hostRefused": "{host} (abgelehnt)",
+      "status": {
+        "running": "Läuft",
+        "disabled": "Deaktiviert"
+      },
+      "column": {
+        "plugin": "Navide-Plugin",
+        "status": "Zustand",
+        "toolCalls": "Tool-Aufrufe / Min.",
+        "capabilityCalls": "Capability-Aufrufe / Min.",
+        "hosts": "Netzwerk-Hosts (7 Tage)",
+        "failures": "Fehler in Folge",
+        "resources": "Ressourcen"
+      }
     }
   },
   "backendResource": {

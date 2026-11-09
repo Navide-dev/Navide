@@ -108,6 +108,12 @@ SUMMARY_WINDOW_DAYS = 30
 SPIKE_FACTOR = 10
 #: ``PluginActivityReport.schemaVersion`` (``PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION``).
 ACTIVITY_REPORT_SCHEMA_VERSION = 1
+#: ``PluginActivityOverview.schemaVersion`` (``PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION``).
+ACTIVITY_OVERVIEW_SCHEMA_VERSION = 1
+#: The overview reads at most this many newest tool calls for the failure run
+#: (the run is shown as "N or more" at the cap), and lists at most this many hosts.
+OVERVIEW_FAILURE_RUN_MAX = 100
+OVERVIEW_MAX_HOSTS = 50
 
 OUTSIDE_WORKSPACE = "<outside-workspace>"
 #: A shell command that cannot be split the way a shell would split it.
@@ -1261,6 +1267,73 @@ class PluginAuditLog:
         params.append(max(1, min(int(limit), contract.PLUGIN_AGENT_ACTIONS_MAX_ROWS)))
         with self.db.transaction() as cur:
             return [dict(row) for row in cur.execute(query, params).fetchall()]
+
+    def activity_overview(self, plugin_ids: list[str], *, now_ms: int | None = None) -> dict[str, Any]:
+        """One ``PluginActivityOverviewRow`` per id, in order (plan P1, the Settings monitor).
+
+        - ``toolCallsLastMinute``: agent tool calls that ended in the last 60 s.
+        - ``capabilityCallsLastMinute``: broker and shell-broker calls from the
+          minute 60 s ago started in (counted rows are per minute, so this
+          reads up to two minutes, never less than one).
+        - ``consecutiveFailures``: the newest run of tool calls whose outcome
+          is not ok, read from at most ``OVERVIEW_FAILURE_RUN_MAX`` rows.
+        - ``hosts``: the hosts its views reached or were refused in the
+          7 days of detail, newest first, at most ``OVERVIEW_MAX_HOSTS``;
+          ``refused`` when any request to it was refused. Whether a host is
+          declared is the Host's to say (it has the manifest).
+
+        Records only: it decides nothing. Reads only; run it off the event loop.
+        """
+        now = self._now_ms() if now_ms is None else int(now_ms)
+        rows = [
+            {"pluginId": plugin_id, "toolCallsLastMinute": 0, "capabilityCallsLastMinute": 0,
+             "consecutiveFailures": 0, "hosts": []}
+            for plugin_id in plugin_ids
+        ]
+        overview: dict[str, Any] = {"schemaVersion": ACTIVITY_OVERVIEW_SCHEMA_VERSION, "generatedAt": now, "plugins": rows}
+        if not self.enabled or not rows:
+            return overview
+        self.flush()
+        since = now - _MINUTE_MS
+        since_minute = since - since % _MINUTE_MS
+        window_from = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
+        window_minute = window_from - window_from % _MINUTE_MS
+        with self.db.transaction() as cur:
+            for row in rows:
+                plugin_id = row["pluginId"]
+                (tools,) = cur.execute(
+                    "SELECT COUNT(*) FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ?", (plugin_id, since)
+                ).fetchone()
+                (calls,) = cur.execute(
+                    "SELECT (SELECT COUNT(*) FROM plugin_activity"
+                    "  WHERE plugin_id = ? AND at >= ? AND source IN ('broker', 'shell'))"
+                    " + (SELECT COALESCE(SUM(count), 0) FROM plugin_activity_counts"
+                    "  WHERE plugin_id = ? AND minute >= ? AND source IN ('broker', 'shell'))",
+                    (plugin_id, since, plugin_id, since_minute),
+                ).fetchone()
+                failures = 0
+                for (outcome,) in cur.execute(
+                    "SELECT outcome FROM plugin_tool_calls WHERE plugin_id = ? ORDER BY at DESC, id DESC LIMIT ?",
+                    (plugin_id, OVERVIEW_FAILURE_RUN_MAX),
+                ):
+                    if outcome == "ok":
+                        break
+                    failures += 1
+                hosts = cur.execute(
+                    "SELECT address, MAX(outcome = 'denied'), MAX(last_at) FROM plugin_activity_counts"
+                    " WHERE plugin_id = ? AND minute >= ? AND source = 'network' GROUP BY 1 ORDER BY 3 DESC, 1 LIMIT ?",
+                    (plugin_id, window_minute, OVERVIEW_MAX_HOSTS),
+                ).fetchall()
+                row.update({
+                    "toolCallsLastMinute": int(tools or 0),
+                    "capabilityCallsLastMinute": int(calls or 0),
+                    "consecutiveFailures": failures,
+                    "hosts": [
+                        {"host": address.removeprefix("network."), "refused": bool(refused), "lastAt": int(last_at)}
+                        for address, refused, last_at in hosts
+                    ],
+                })
+        return overview
 
     def activity_report(
         self,

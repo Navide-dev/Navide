@@ -12328,6 +12328,30 @@
       "activity": "Недавняя активность",
       "undeclaredCount": "Отклонено необъявленных использований: {count}",
       "anomalyCount": "Необычных элементов: {count}"
+    },
+    "monitor": {
+      "title": "Обзор Activity",
+      "intro": "Все установленные плагины Navide в одной таблице, обновляется каждые несколько секунд. Только записи: здесь ничего не меняет то, что может делать плагин Navide. Откройте строку, чтобы увидеть всю Activity.",
+      "empty": "Плагины Navide не установлены.",
+      "open": "Показать Activity для {id}",
+      "builtin": "встроенный",
+      "noHosts": "Нет",
+      "noBackend": "Нет бэкенда",
+      "hostUndeclared": "{host} (не объявлен)",
+      "hostRefused": "{host} (отклонён)",
+      "status": {
+        "running": "Работает",
+        "disabled": "Отключён"
+      },
+      "column": {
+        "plugin": "Плагин Navide",
+        "status": "Состояние",
+        "toolCalls": "Вызовы инструментов / мин",
+        "capabilityCalls": "Вызовы возможностей / мин",
+        "hosts": "Сетевые хосты (7 дней)",
+        "failures": "Ошибок подряд",
+        "resources": "Ресурсы"
+      }
     }
   },
   "backendResource": {
