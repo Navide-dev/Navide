@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { validateAgentNotifyOperation } from './agentNotify'
 import type { AgentToolPackage } from './pluginAgentToolsHost'
 import { createReadStream, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readdir, readlink } from 'node:fs/promises'
@@ -157,6 +158,7 @@ export function thirdPartyBackendLaunchSpec(
       ...(system.includes('agents') ? ['agents' as const] : []),
       ...(system.includes('agentMessages') ? ['agent-message-bodies' as const] : []),
       ...(system.includes('secrets') ? ['secrets' as const] : []),
+      ...(system.includes('agentNotify') ? ['agent-notify' as const] : []),
     ],
     thirdParty: {
       name: manifest.name,
@@ -743,6 +745,8 @@ export interface ThirdPartyBackendControllerOptions {
   agentsPort?: () => PackageAgentsPort | undefined
   /** The package's own secrets (`secrets` port); see PackageSecretsPort. */
   secretsPort?: () => PackageSecretsPort | undefined
+  /** Plan P4: the `agent-notify` port. */
+  agentNotifyPort?: () => PackageAgentNotifyPort | undefined
   /** Stop running children: one plugin, or every third-party plugin (null). */
   stopBackends?: (pluginId: string | null) => Promise<void>
   watchResources?: (
@@ -814,6 +818,11 @@ export interface PackageAgentsPort {
  * operation and arguments already validated; the plugin id is the binding's. */
 export interface PackageSecretsPort {
   run(operation: SecretsOperation, args: Record<string, unknown>, context: PlansBridgeContext): JsonValue
+}
+
+/** Plan P4: a package backend's notification to one agent pane (frontendPluginManager). */
+export interface PackageAgentNotifyPort {
+  run(operation: string, args: Record<string, unknown>, context: PlansBridgeContext): Promise<JsonValue>
 }
 
 /** Shell syntax the Host broker refuses (host_shell.py `_SHELL_SYNTAX`). */
@@ -1287,6 +1296,7 @@ export class ThirdPartyBackendController {
           return this.dispatchAgents(spec, request, context)
         }
         if (request.port === 'secrets') return this.dispatchSecrets(spec, request, context)
+        if (request.port === 'agent-notify') return this.dispatchAgentNotify(spec, request, context)
         if (request.port !== 'filesystem' || !spec.thirdParty.system.includes('fs')) {
           throw new PlansBridgeError('CAPABILITY_DENIED')
         }
@@ -1425,6 +1435,27 @@ export class ThirdPartyBackendController {
     const port = this.options.secretsPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
     return port.run(operation, request.arguments as Record<string, unknown>, context)
+  }
+
+  /** Plan P4: a notification to one agent pane. The supervisor has already
+   * applied the agent Execution Policy (the default leaves agentNotify out);
+   * an agent reaches it only inside an admitted agent-tool call of this package. */
+  private async dispatchAgentNotify(
+    spec: ThirdPartyLaunchSpec,
+    request: PlansBridgeRequest,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    if (!spec.thirdParty.system.includes('agentNotify')) throw new PlansBridgeError('CAPABILITY_DENIED')
+    if (!validateAgentNotifyOperation(request.operation, request.arguments)) throw new PlansBridgeError('INVALID_ARGUMENT')
+    if (context.runtime.initiator.kind === 'agent') {
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+    }
+    const port = this.options.agentNotifyPort?.()
+    if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
+    return port.run(request.operation, request.arguments as Record<string, unknown>, context)
   }
 
   private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {

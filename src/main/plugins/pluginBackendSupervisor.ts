@@ -810,6 +810,8 @@ function executionPolicyNamespaceForBridgePort(
       return 'agentMessages'
     case 'secrets':
       return 'secrets'
+    case 'agent-notify':
+      return 'agentNotify'
     case 'shell':
       // The agent shell policy is judged on the command itself, like shell.run.
       return 'shell'

@@ -12,7 +12,7 @@ import type { PluginAppearanceSnapshot, PluginContext, WorkspaceTarget } from '.
 
 /** The parts of a Manifest v2 `permissions` block the test Host enforces. */
 export interface TestHostPermissions {
-  /** `permissions.system` namespaces (fs, ui, aiCli, web, agents, agentMessages, secrets). */
+  /** `permissions.system` namespaces (fs, ui, aiCli, web, agents, agentMessages, secrets, agentNotify). */
   system?: readonly string[]
   /** `permissions.shell`: any value lets `shell.*` through. */
   shell?: 'allowlist' | 'full'

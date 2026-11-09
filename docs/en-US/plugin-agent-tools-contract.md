@@ -430,6 +430,7 @@ in this order, each only when it applies:
 | `agents` | `system` contains `agents` | `{}` |
 | `agentMessages` | `system` contains `agentMessages` | `{}` |
 | `secrets` | `system` contains `secrets` | `{}` |
+| `agentNotify` | `system` contains `agentNotify` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
 | `network` | `permissions.network.hosts` declared | `{hosts}` sorted, after `networkViaShell` |
@@ -449,6 +450,7 @@ none apply. Reasons are listed in this fixed order:
 | `system.agents` | `system` contains `agents` (agent panes, lineage, message delivery records, session list; no message text) | medium |
 | `system.agentMessages` | `system` contains `agentMessages` (the text of messages between agents) | high |
 | `system.secrets` | `system` contains `secrets` (the package's own API keys and tokens, encrypted on this device) | high |
+| `system.agentNotify` | `system` contains `agentNotify` (notifications into the agent panes of its workspace, 0.2.40) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
 | `shell.executables` | the package declares executables beyond the Host's three (C2) | high |
 | `nativeBackend` | the manifest has `backend` | high |

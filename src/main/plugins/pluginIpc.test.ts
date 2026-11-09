@@ -1888,6 +1888,33 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('P4: the "Notify agent panes" switch is off by default, only for a package that declares agentNotify', async () => {
+    const declares = buildPkg('acme.demo', 'acme', { system: ['agentNotify'] }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-notify-'))
+    const manager = new FrontendPluginManager()
+    let allowed: ((pluginId: string) => boolean) | null = null
+    vi.spyOn(manager, 'setAgentNotifyAllowedResolver').mockImplementation((resolver) => { allowed = resolver })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(declares.digest, 'acme.demo', 'acme', '1.0.0'), declares.bytes, declares.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const row = () => (handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>).find((entry) => entry.id === 'acme.demo')!
+      expect(row().notifyAgents).toBe(false)
+      expect(allowed!('acme.demo')).toBe(false)
+      expect(handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.demo', allowed: true })).toEqual({ id: 'acme.demo', notifyAgents: true })
+      expect(row().notifyAgents).toBe(true)
+      expect(allowed!('acme.demo')).toBe(true)
+      await handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.demo', allowed: false })
+      expect(allowed!('acme.demo')).toBe(false)
+      await expect(Promise.resolve().then(() => handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.other', allowed: true }))).rejects.toThrow()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   describe('P3: stopping every third-party plugin at once', () => {
     const previous = { nativeBackends: true, agentTools: true, externalCallers: false }
 

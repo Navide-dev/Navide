@@ -12883,6 +12883,70 @@ async def agents_public(session: "Session", msg_id: str, msg_type: str, payload:
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.agent_notify")
+async def plugins_agent_notify(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """One plugin notification to an agent pane (plan P4), Host-authenticated.
+
+    The Host has checked Manifest, Grant, Execution Policy, the user's
+    per-plugin switch and the per-minute limit, and binds the plugin id and the
+    workspace; plugins/agent_notify.py delivers it.
+    """
+    from .plugins import agent_notify
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    text_fields = ("plugin_id", "plugin_version", "workspace_path", "to", "text")
+    if (
+        not isinstance(payload, dict)
+        or not {*text_fields} <= set(payload) <= {*text_fields, "ref"}
+        or not all(isinstance(payload.get(key), str) for key in text_fields)
+        or not payload["plugin_id"] or not payload["workspace_path"].strip() or not payload["to"]
+        or not payload["text"].strip() or len(payload["text"].encode("utf-8")) > 2048 or len(payload["to"]) > 128
+        or ("ref" in payload and (not isinstance(payload["ref"], str) or not 0 < len(payload["ref"]) <= 200))
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_notify is malformed")
+        )
+        return
+    answer = await agent_notify.deliver(
+        payload["plugin_id"], payload["plugin_version"], payload["workspace_path"], payload["to"],
+        payload["text"], payload.get("ref"),
+    )
+    await session.send_json(make_response(msg_id, msg_type, answer))
+
+
+@handler("plugins.agent_notify.pane_refusals")
+async def plugins_agent_notify_pane_refusals(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The live panes that refuse plugin notifications (the pane menu's state)."""
+    from .plugins import agent_notify
+
+    panes = await asyncio.to_thread(agent_notify.refusing_live_panes)
+    await session.send_json(make_response(msg_id, msg_type, {"pane_ids": panes}))
+
+
+@handler("plugins.agent_notify.set_pane_refusal")
+async def plugins_agent_notify_set_pane_refusal(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's "Refuse plugin notifications" for one pane (the pane menu):
+    only a connection that proved it is a Navide window may change it."""
+    from .plugins import agent_notify
+
+    if not getattr(session, "navide_window", False):
+        await session.send_json(make_error(msg_id, msg_type, "UNAUTHORIZED", "only a Navide window may change this"))
+        return
+    pane_id = payload.get("pane_id") if isinstance(payload, dict) else None
+    refuse = payload.get("refuse") if isinstance(payload, dict) else None
+    if not isinstance(pane_id, str) or not pane_id or not isinstance(refuse, bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_notify.set_pane_refusal is malformed")
+        )
+        return
+    state = await asyncio.to_thread(agent_notify.set_refusal, pane_id, refuse)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "refuse": state}))
+
+
 @handler("agent_msg.route")
 async def agent_msg_route(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, message_routing

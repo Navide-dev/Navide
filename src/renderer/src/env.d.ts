@@ -604,6 +604,8 @@ declare global {
         resumeAll?: () => Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }>
         /** Plan P3: the global stop in effect, or null. */
         globalStopState?: () => Promise<PluginGlobalStopRecord | null>
+        /** Plan P4: the user's "Notify agent panes" switch. */
+        setNotifyAgents?: (id: string, allowed: boolean) => Promise<{ id: string; notifyAgents: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
@@ -689,6 +691,8 @@ declare global {
     networkStrict?: boolean
     /** P2: present while the package is disabled by a stop. */
     stopRecord?: PluginStopRecord
+    /** P4: present when the manifest declares agentNotify: the "Notify agent panes" switch (off by default). */
+    notifyAgents?: boolean
   }
 
   interface FactoryPluginSummary {

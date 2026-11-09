@@ -1980,6 +1980,7 @@
         "web": "Navegação na web",
         "agents": "Panes de agentes",
         "agentMessages": "Mensagens entre agentes",
+        "agentNotify": "Notificações a agentes",
         "secrets": "Segredos do plug-in do Navide"
       },
       "shellLabel": "Executáveis de shell",
@@ -2436,6 +2437,7 @@
           "web": "Pode abrir e navegar por qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (eles podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent que já estão em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
           "agents": "Vê seus panes de agent, qual pane abriu qual e quando trocaram mensagens, mas não o que disseram.",
           "agentMessages": "Lê o texto completo das mensagens entre seus agents; ele pode conter código, conteúdo de arquivos ou segredos.",
+          "agentNotify": "Envia notificações aos seus painéis de agente quando você permitir; chegam como dados, nunca como instruções.",
           "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra.",
           "shell": "Executar comandos no seu computador.",
           "terminal": "Abrir e controlar terminais do Navide."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Todos os plugins do Navide de terceiros estão parados. Retome-os com \"Retomar tudo\" nas Configurações."
     }
   },
+  "pluginNotify": {
+    "switch": "Notificar os painéis de agente",
+    "switchNote": "Permite que este plugin do Navide envie notificações aos painéis de agente do projeto, no máximo 6 por minuto. Chegam como dados, nunca como instruções. Desativado por padrão.",
+    "paneMenu": {
+      "refuse": "Recusar notificações de plugins do Navide",
+      "accept": "Aceitar notificações de plugins do Navide",
+      "title": "Enquanto recusar, os plugins do Navide que podem notificar os painéis de agente não podem enviar a este painel"
+    }
+  },
   "backendResource": {
     "title": "O back-end de um plug-in do Navide está acima de um limite de recursos",
     "body": "{name} ({id} {version}): {item} está em {usage}, acima do limite de {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
       "agents": "Vê os panes de agent deste projeto, qual pane abriu qual, os registros de entrega das mensagens (sem o conteúdo) e a lista de sessions (sem o conteúdo das conversas)",
       "agentMessages": "Lê o texto completo das mensagens entre seus agents neste projeto, que pode conter código, conteúdo de arquivos ou segredos",
+      "agentNotify": "Pode enviar notificações aos painéis de agente deste projeto quando você ativar nas Configurações; chegam como dados, nunca como instruções",
       "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra",
       "ui": "Mostra visualizações próprias",
       "agentTools": "Oferece ferramentas que os agents podem chamar ({read} somente leitura, {write} de escrita)",

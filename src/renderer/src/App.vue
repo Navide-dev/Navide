@@ -124,6 +124,7 @@ import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
 import { useAnalyzer, type ClassifyResult } from './composables/useAnalyzer'
 import { isPaneMuted, setPaneMuted, useSystemNotify } from './composables/useSystemNotify'
+import { usePluginNotifyRefusals } from './composables/usePluginNotifyRefusals'
 import { useUpdater } from './composables/useUpdater'
 import { usePaneReorderDrag } from './composables/usePaneReorderDrag'
 import { cliHealthGuideForLaunch, type CliHealthStatus, type OnboardStatus } from './composables/useOnboarding'
@@ -4366,6 +4367,13 @@ const msgLog = createMessageLogPersistence({
 watch(
   () => backend.status.value,
   (s) => { if (s === 'connected') msgLog.onConnected() }
+)
+// Plan P4: panes that refuse notifications from Navide plugins (pane menu).
+const pluginNotifyRefusals = usePluginNotifyRefusals(backend)
+watch(
+  () => backend.status.value,
+  (s) => { if (s === 'connected') void pluginNotifyRefusals.load() },
+  { immediate: true },
 )
 
 let _msgPumpTimer = 0
@@ -25969,6 +25977,11 @@ function paneIsCommander(p: ActivePane): boolean {
           @click="restorePane(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.restore') }}</div>
         <div class="pane-ctx-item" @click="startRenamePane(paneCtxMenu!.paneId)">{{ $t('action.rename') }}</div>
+        <div
+          class="pane-ctx-item"
+          :title="$t('pluginNotify.paneMenu.title')"
+          @click="void pluginNotifyRefusals.toggle(paneCtxMenu!.paneId); closePaneCtxMenu()"
+        >{{ pluginNotifyRefusals.refuses(paneCtxMenu!.paneId) ? $t('pluginNotify.paneMenu.accept') : $t('pluginNotify.paneMenu.refuse') }}</div>
         <div class="pane-ctx-item" @click="togglePaneMuted(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ paneCtxView?.isMuted ? $t('action.unmute') : $t('action.mute') }}</div>
         <div
           v-if="paneCtxColsCapped"

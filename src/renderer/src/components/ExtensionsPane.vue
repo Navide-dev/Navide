@@ -464,6 +464,21 @@ async function refreshDisabledStoreStatus(): Promise<void> {
     disabledStoreStatus.value = 'ok'
   }
 }
+// Plan P4: the per-package "Notify agent panes" switch (off by default).
+async function setNotifyAgents(id: string, allowed: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setNotifyAgents) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setNotifyAgents(id, allowed)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
 // C1: the per-package "Only allow declared network hosts" switch.
 async function setNetworkStrict(id: string, strict: boolean): Promise<void> {
   const api = pluginsApi()
@@ -1256,6 +1271,16 @@ watch(installed, () => {
                 >
                   {{ $t('settings.extensions.enable') }}
                 </button>
+                <!-- P4: notifications into agent panes; off until the user turns it on. -->
+                <label v-if="p.notifyAgents !== undefined" class="ext-network-strict ext-notify-agents" :title="$t('pluginNotify.switchNote')">
+                  <input
+                    type="checkbox"
+                    :checked="p.notifyAgents"
+                    :disabled="busy"
+                    @change="setNotifyAgents(p.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ $t('pluginNotify.switch') }}
+                </label>
                 <!-- C1: the per-package network switch (off by default: record, do not refuse). -->
                 <label v-if="p.networkStrict !== undefined" class="ext-network-strict" :title="$t('settings.extensions.networkStrictNote')">
                   <input

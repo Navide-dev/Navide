@@ -125,6 +125,7 @@ import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { PluginDisableSourceStore, type DisableSource, type DisablingAgent } from './pluginDisableSource'
 import { PluginGlobalStopStore } from './pluginGlobalStopStore'
+import { PluginNotifySwitchStore } from './agentNotify'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
@@ -307,6 +308,9 @@ interface InstalledSummary {
   /** P2: present while the package is disabled by a stop: where the stop came
    *  from and its activity then, shown before it is enabled again. */
   stopRecord?: PluginStopRecord
+  /** P4: present when the installed manifest declares `agentNotify`: the
+   *  user's "Notify agent panes" switch (off by default). */
+  notifyAgents?: boolean
 }
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
@@ -1142,6 +1146,9 @@ export function registerPluginIpc(
   const disableSources = new PluginDisableSourceStore(pluginsRoot)
   // Plan P3: the global stop in effect, kept across restarts.
   const globalStops = new PluginGlobalStopStore(pluginsRoot)
+  // Plan P4: the user's per-plugin "Notify agent panes" switch, off by default.
+  const notifySwitches = new PluginNotifySwitchStore(pluginsRoot)
+  manager.setAgentNotifyAllowedResolver?.((pluginId) => notifySwitches.has(pluginId))
   const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
     try {
       if (disabled && source) disableSources.set(id, source)
@@ -1345,6 +1352,9 @@ export function registerPluginIpc(
       })(),
       ...(summary.provenance === 'official-registry'
         ? { getsPrereleases: optedIn.has(summary.id) }
+        : {}),
+      ...(activeDisclosure(summary.id)?.permissions.system.includes('agentNotify')
+        ? { notifyAgents: notifySwitches.has(summary.id) }
         : {}),
       // d5: a blocked local install gets the switch too, so a user who chose
       // "Disable" in its warning can enable it again.
@@ -5005,6 +5015,12 @@ export function registerPluginIpc(
       disabledPlugins.remove(id)
       // A reinstalled package starts with no record of who disabled it.
       recordDisableSource(id, null)
+      // P4: and with "Notify agent panes" off again.
+      try {
+        notifySwitches.remove(id)
+      } catch (error) {
+        console.warn(`[plugins] notification switch of ${id} not cleared: ${errorText(error)}`)
+      }
       try {
         installScans.removePlugin(id)
       } catch (error) {
@@ -5127,6 +5143,25 @@ export function registerPluginIpc(
       if (strict) networkStrictPlugins.add(id)
       else networkStrictPlugins.remove(id)
       return { id, networkStrict: networkStrictPlugins.has(id) }
+    },
+  )
+
+  // Plan P4: the user's "Notify agent panes" switch for a package that
+  // declares `agentNotify`. Turning it on lets the plugin notify the agent
+  // panes of its workspace; off (the default), every notification is refused.
+  ipcMain.handle(
+    'plugins:setNotifyAgents',
+    (event, args: { id?: unknown; allowed?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const allowed = args?.allowed
+      if (typeof allowed !== 'boolean') throw new Error('invalid plugin notification setting')
+      if (allowed && !activeDisclosure(id)?.permissions.system.includes('agentNotify')) {
+        throw new Error(`${id} does not declare agentNotify`)
+      }
+      if (allowed) notifySwitches.add(id)
+      else notifySwitches.remove(id)
+      return { id, notifyAgents: notifySwitches.has(id) }
     },
   )
 

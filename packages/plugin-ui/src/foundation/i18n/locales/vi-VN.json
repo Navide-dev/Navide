@@ -1980,6 +1980,7 @@
         "web": "Duyệt web",
         "agents": "Pane của agent",
         "agentMessages": "Tin nhắn giữa các agent",
+        "agentNotify": "Thông báo cho agent",
         "secrets": "Bí mật của plugin Navide"
       },
       "shellLabel": "Tệp thực thi shell",
@@ -2436,6 +2437,7 @@
           "web": "Có thể mở và duyệt bất kỳ trang web nào; thông tin đăng nhập trang web được giữ trên máy tính này; agent dùng thông tin đăng nhập của bạn trong plugin Navide này (chúng có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn tiếp quản, các script agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc và mỗi trang đều dùng bộ nhớ.",
           "agents": "Xem các pane agent của bạn, pane nào đã mở pane nào và khi nào chúng nhắn tin cho nhau, nhưng không xem được nội dung tin nhắn.",
           "agentMessages": "Đọc toàn văn tin nhắn giữa các agent của bạn; nội dung có thể chứa mã, nội dung tệp hoặc bí mật.",
+          "agentNotify": "Gửi thông báo tới các khung agent khi bạn cho phép; thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn.",
           "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng.",
           "shell": "Chạy lệnh trên máy tính của bạn.",
           "terminal": "Mở và điều khiển terminal của Navide."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Mọi plugin Navide bên thứ ba đều đã dừng. Tiếp tục bằng \"Tiếp tục tất cả\" trong Cài đặt."
     }
   },
+  "pluginNotify": {
+    "switch": "Thông báo cho khung agent",
+    "switchNote": "Cho phép plugin Navide này gửi thông báo tới các khung agent của dự án, tối đa 6 lần mỗi phút. Thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn. Mặc định tắt.",
+    "paneMenu": {
+      "refuse": "Từ chối thông báo của plugin Navide",
+      "accept": "Nhận thông báo của plugin Navide",
+      "title": "Trong lúc từ chối, các plugin Navide được phép thông báo cho khung agent không gửi được tới khung này"
+    }
+  },
   "backendResource": {
     "title": "Backend của một plugin Navide đang vượt ngưỡng tài nguyên",
     "body": "{name} ({id} {version}): {item} là {usage}, vượt ngưỡng {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Có thể mở và duyệt bất kỳ trang web nào; đăng nhập trang web được lưu trên máy tính này; agent dùng các lần đăng nhập của bạn trong plugin Navide này (agent có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc, và mỗi trang đều tốn bộ nhớ.",
       "agents": "Xem các pane agent trong dự án này, pane nào đã mở pane nào, nhật ký gửi tin nhắn (không có nội dung) và danh sách phiên (không có nội dung hội thoại)",
       "agentMessages": "Đọc toàn văn tin nhắn giữa các agent trong dự án này; nội dung có thể chứa mã, nội dung tệp hoặc bí mật",
+      "agentNotify": "Có thể gửi thông báo tới các khung agent của dự án này khi bạn bật trong Cài đặt; thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn",
       "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng",
       "ui": "Hiển thị chế độ xem riêng",
       "agentTools": "Cung cấp công cụ cho agent gọi ({read} chỉ đọc, {write} có ghi)",

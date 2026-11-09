@@ -1980,6 +1980,7 @@
         "web": "浏览网页",
         "agents": "agent 分格",
         "agentMessages": "agent 消息",
+        "agentNotify": "Agent 通知",
         "secrets": "Navide 插件密钥"
       },
       "shellLabel": "Shell 可可执行文件",
@@ -2436,6 +2437,7 @@
           "web": "可打开并浏览任何网站；网站登录数据会保存在本机；agent 会使用你在此 Navide 插件中的登录身分（可代你在网页上发送请求），并可读取它打开的所有网页内容与登录状态；你接手后，页面内已经在跑的 agent 脚本要重新加载才会停止；交给 agent 操作的网页，此 Navide 插件本身也能在其中执行脚本并读取内容与登录状态；可同时打开多个网页，每个网页都会占用内存。",
           "agents": "查看你的 agent 分格、哪个分格打开了哪个，以及它们何时互发消息——但看不到消息内容。",
           "agentMessages": "读取 agent 之间消息的完整正文；正文可能包含代码、文件内容或机密信息。",
+          "agentNotify": "在你允许后通知你的 agent 分格；通知是数据，不会当成指令。",
           "secrets": "Navide 插件会在本机加密保存它自己的密钥与 token；Navide 不会上传、不会显示。",
           "shell": "在你的电脑上运行指令。",
           "terminal": "打开并操作 Navide 终端。"
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "所有第三方 Navide 插件都已停止。请到设置按“全部恢复”。"
     }
   },
+  "pluginNotify": {
+    "switch": "通知 agent 分格",
+    "switchNote": "允许这个 Navide 插件通知它所在项目的 agent 分格，每分钟最多 6 条。通知是数据，不会当成指令。默认关闭。",
+    "paneMenu": {
+      "refuse": "拒收 Navide 插件通知",
+      "accept": "接收 Navide 插件通知",
+      "title": "拒收期间，可通知 agent 分格的 Navide 插件无法通知这个分格"
+    }
+  },
   "backendResource": {
     "title": "Navide 插件的 backend 用量超过门槛",
     "body": "{name}（{id} {version}）：{item}目前是 {usage}，超过门槛 {threshold}。",
@@ -12548,6 +12559,7 @@
       "web": "可打开并浏览任何网站；网站登录数据会保存在本机；agent 会使用你在此 Navide 插件中的登录身分（可代你在网页上发送请求），并可读取它打开的所有网页内容与登录状态；你接手后，页面内已经在跑的 agent 脚本要重新加载才会停止；交给 agent 操作的网页，此 Navide 插件本身也能在其中执行脚本并读取内容与登录状态；可同时打开多个网页，每个网页都会占用内存。",
       "agents": "可查看此项目中的 agent 分格、哪个分格打开了哪个、消息的送达记录（不含内容）和 session 列表（不含对话内容）",
       "agentMessages": "可读取此项目中 agent 之间消息的完整正文，正文可能包含代码、文件内容或机密信息",
+      "agentNotify": "在你于设置打开后，可以通知这个项目的 agent 分格；通知是数据，不会当成指令",
       "secrets": "Navide 插件会在本机加密保存它自己的密钥，Navide 不会上传、不会显示",
       "ui": "显示自己的画面",
       "agentTools": "提供 agent 可调用的工具（唯读 {read} 个、写入 {write} 个）",

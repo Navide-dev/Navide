@@ -1980,6 +1980,7 @@
         "web": "Navegación web",
         "agents": "Panes de agentes",
         "agentMessages": "Mensajes entre agentes",
+        "agentNotify": "Notificaciones a agentes",
         "secrets": "Secretos del complemento de Navide"
       },
       "shellLabel": "Ejecutables de shell",
@@ -2436,6 +2437,7 @@
           "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este equipo; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar solicitudes a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; cuando tomas el control, los scripts de agent que ya se ejecutan en una página solo se detienen al recargarla; mientras dejas que los agents controlen una página, este complemento de Navide también puede ejecutar scripts en ella y leerla junto con su estado de inicio de sesión; puede abrir muchas páginas web a la vez y cada una consume memoria.",
           "agents": "Ve tus panes de agent, qué pane abrió cada uno y cuándo se enviaron mensajes, pero no lo que dijeron.",
           "agentMessages": "Lee el texto completo de los mensajes entre tus agents; puede contener código, contenido de archivos o secretos.",
+          "agentNotify": "Envía notificaciones a tus paneles de agente cuando lo permitas; llegan como datos, nunca como instrucciones.",
           "secrets": "Guarda sus propias claves de API y tokens cifrados en este equipo; Navide nunca los sube ni los muestra.",
           "shell": "Ejecutar comandos en tu equipo.",
           "terminal": "Abrir y controlar terminales de Navide."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Todos los plugins de Navide de terceros están detenidos. Reanúdalos con «Reanudar todo» en Ajustes."
     }
   },
+  "pluginNotify": {
+    "switch": "Notificar a los paneles de agente",
+    "switchNote": "Permite que este plugin de Navide envíe notificaciones a los paneles de agente de su proyecto, como máximo 6 por minuto. Llegan como datos, nunca como instrucciones. Desactivado de forma predeterminada.",
+    "paneMenu": {
+      "refuse": "Rechazar notificaciones de plugins de Navide",
+      "accept": "Aceptar notificaciones de plugins de Navide",
+      "title": "Mientras las rechace, los plugins de Navide que pueden notificar a los paneles de agente no pueden enviar a este panel"
+    }
+  },
   "backendResource": {
     "title": "El backend de un complemento de Navide supera un umbral de recursos",
     "body": "{name} ({id} {version}): {item} está en {usage}, por encima de su umbral de {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Puede abrir y navegar por cualquier sitio web; los inicios de sesión en sitios se guardan en este ordenador; los agents usan tus inicios de sesión en este complemento de Navide (pueden enviar peticiones a sitios web en tu nombre) y pueden leer todas las páginas que abre y su estado de inicio de sesión; después de tomar el control, los scripts del agent que ya se estén ejecutando en una página solo se detienen cuando la recargas; mientras dejas que los agents controlen una página, este complemento de Navide también puede ejecutar scripts en ella y leerla junto con su estado de inicio de sesión; puede abrir muchas páginas web a la vez, y cada una usa memoria.",
       "agents": "Ve los panes de agent de este proyecto, qué pane abrió cada uno, los registros de entrega de mensajes (sin su contenido) y la lista de sesiones (sin el contenido de las conversaciones)",
       "agentMessages": "Lee el texto completo de los mensajes entre tus agents en este proyecto, que puede contener código, contenido de archivos o secretos",
+      "agentNotify": "Puede enviar notificaciones a los paneles de agente de este proyecto cuando lo actives en Ajustes; llegan como datos, nunca como instrucciones",
       "secrets": "Guarda sus propias claves de API y tokens cifrados en este equipo; Navide nunca los sube ni los muestra",
       "ui": "Muestra sus propias vistas",
       "agentTools": "Ofrece herramientas que los agents pueden llamar ({read} de solo lectura, {write} de escritura)",

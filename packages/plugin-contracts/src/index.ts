@@ -13,6 +13,7 @@ import { AGENTS_EVENTS, type AgentsEventAddress, type AgentsEventPayloads, type 
 import type { PluginsParams, PluginsResults } from './plugins.js'
 import type { WebEventPayloads, WebParams, WebResults } from './web.js'
 import type { SecretsParams, SecretsResults } from './secrets.js'
+import type { AgentNotifyParams, AgentNotifyResults } from './agentNotify.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -29,6 +30,7 @@ export * from './agents.js'
 export * from './plugins.js'
 export * from './web.js'
 export * from './secrets.js'
+export * from './agentNotify.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
 export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
@@ -44,7 +46,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most executables one package may declare in `permissions.shell.executables`. */
 export const MAX_SHELL_EXECUTABLES = 32
@@ -1458,7 +1460,7 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams, AgentNotifyParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
   /** `encoding: 'base64'` (Navide 0.2.40+) writes binary: `content` is the base64 text of the bytes. */
@@ -1503,7 +1505,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults, SecretsResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults, SecretsResults, AgentNotifyResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string

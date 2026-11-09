@@ -33,9 +33,9 @@
         "system": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 7,
+          "maxItems": 8,
           "uniqueItems": true,
-          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"] },
+          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"] },
           "if": { "contains": { "const": "agentMessages" } },
           "then": { "contains": { "const": "agents" } }
         },

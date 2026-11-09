@@ -239,6 +239,7 @@ _CAPABILITY_HINTS = {
     "web": "browses websites with your sign-ins and keeps them",
     "agentMessages": "reads the text of messages between your agents",
     "secrets": "keeps its own API keys encrypted on your device",
+    "agentNotify": "sends notifications to your agent panes, once you allow it",
 }
 
 

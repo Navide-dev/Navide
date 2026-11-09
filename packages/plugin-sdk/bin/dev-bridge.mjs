@@ -30,7 +30,7 @@ export class DevBridgeError extends Error {
 
 const PORTS = new Set([
   'filesystem', 'workspace-storage', 'terminal', 'agent-messaging', 'routes', 'streams', 'spawn', 'shell', 'web',
-  'agents', 'agent-message-bodies', 'secrets',
+  'agents', 'agent-message-bodies', 'secrets', 'agent-notify',
 ])
 const FS_READ = new Set(['read_file', 'read_range', 'list_dir', 'stat_path'])
 const FS_WRITE = new Set(['write_file', 'write_part', 'write_commit', 'write_abort', 'delete', 'rename'])
@@ -445,7 +445,8 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
         : params.port === 'agents' ? declared.system.includes('agents')
           : params.port === 'agent-message-bodies' ? declared.system.includes('agentMessages')
             : params.port === 'secrets' ? declared.system.includes('secrets')
-              : false
+              : params.port === 'agent-notify' ? declared.system.includes('agentNotify')
+                : false
     if (!declaredPort) return deny('CAPABILITY_DENIED', 'undeclared', `the manifest does not declare what '${params.port}' needs`)
     if (root === null) return deny('CAPABILITY_DENIED', 'no-workspace', 'run dev-backend with --workspace <dir> to serve this request')
     if (params.port === 'agents' || params.port === 'agent-message-bodies') {
@@ -453,6 +454,9 @@ export function createDevBridge({ manifest, workspaceRoot = null, allowWrites = 
     }
     if (params.port === 'secrets') {
       return deny('BACKEND_UNAVAILABLE', 'dev-backend', 'dev-backend keeps no secrets; Navide serves this port')
+    }
+    if (params.port === 'agent-notify') {
+      return deny('BACKEND_UNAVAILABLE', 'dev-backend', 'there are no agent panes in dev-backend; Navide serves this port')
     }
     if (params.port === 'filesystem' && FS_WRITE.has(params.operation) && !allowWrites) {
       return deny('CAPABILITY_DENIED', 'write-not-granted', 'run dev-backend with --allow-writes to let the backend change the workspace')

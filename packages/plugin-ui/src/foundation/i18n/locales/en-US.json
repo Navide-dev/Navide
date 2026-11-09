@@ -1980,6 +1980,7 @@
         "web": "Web browsing",
         "agents": "Agent panes",
         "agentMessages": "Agent messages",
+        "agentNotify": "Agent notifications",
         "secrets": "Navide plugin secrets"
       },
       "shellLabel": "Shell executables",
@@ -2436,6 +2437,7 @@
           "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
           "agents": "See your agent panes, which pane opened which, and when they messaged each other — not what they said.",
           "agentMessages": "Read the full text of messages between your agents; it can contain code, file contents or secrets.",
+          "agentNotify": "Send notifications to your agent panes once you allow it; they arrive as data, never as instructions.",
           "secrets": "Keep its own API keys and tokens encrypted on this computer; Navide never uploads or shows them.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
@@ -12406,6 +12408,15 @@
       "resumeInSettings": "Every third-party Navide plugin is stopped. Resume them with Resume all in Settings."
     }
   },
+  "pluginNotify": {
+    "switch": "Notify agent panes",
+    "switchNote": "Lets this Navide plugin send notifications to the agent panes of its project, at most 6 a minute. They arrive as data, never as instructions. Off by default.",
+    "paneMenu": {
+      "refuse": "Refuse Navide plugin notifications",
+      "accept": "Accept Navide plugin notifications",
+      "title": "Navide plugins that may notify agent panes cannot send to this pane while it refuses them"
+    }
+  },
   "backendResource": {
     "title": "A Navide plugin's backend is over a resource threshold",
     "body": "{name} ({id} {version}): {item} is {usage}, over its threshold of {threshold}.",
@@ -12548,6 +12559,7 @@
       "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
       "agents": "Sees your agent panes in this project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content)",
       "agentMessages": "Reads the full text of messages between your agents in this project, which can contain code, file contents or secrets",
+      "agentNotify": "Can send notifications to the agent panes of this project once you turn it on in Settings; they arrive as data, never as instructions",
       "secrets": "Keeps its own API keys and tokens encrypted on this computer; Navide never uploads or shows them",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
