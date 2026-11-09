@@ -276,7 +276,7 @@
     "@navide/plugin-contracts": "link:packages/plugin-contracts",
     "@navide/plugin-sdk": "link:packages/plugin-sdk",
     "@navide/plugin-ui": "link:packages/plugin-ui",
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@types/html-to-text": "^9.0.4",
     "@types/node": "^22",
     "@types/ws": "^8.18.2",
