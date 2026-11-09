@@ -4388,6 +4388,15 @@ onMounted(() => {
       const refusal = paneMultilineRefusal(paneId, envelope)
       return refusal ? rawReason(refusal) : null
     },
+    // The same STOP reading messagingHoldKey applies, for the Stop-hook drain,
+    // which bypasses that gate: a turn Claude starts on its own after a person's
+    // STOP must not carry a queued message in with it.
+    stopHeld: (paneId) => messagingGateStatus(
+      paneRefs[paneId]?.displayStatus as string | undefined,
+      paneRefs[paneId]?.liveStatus as string | undefined,
+      paneRefs[paneId]?.stoppedBy as string | null | undefined,
+      !!paneRefs[paneId]?.stopHeldForUser,
+    ) === 'stopped',
     // A push skips refuseDelivery, so a sign-in pane is never offered one.
     pushTarget: (paneId) => (panes.value.find((p) => p.id === paneId)?.isLogin ? null : pushTargetForMessaging(paneId)),
     pushDeliver: pushDeliverAgentMessage,

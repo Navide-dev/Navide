@@ -204,6 +204,23 @@ describe('useAgentMessaging — Stop-hook drain', () => {
     expect(m.drainForHook('p2')).toContain('run the suite')
   })
 
+  it('keeps a message queued while a person\'s STOP still holds the pane', () => {
+    // 0.2.39 Linux VM (stopuser): after a person pressed STOP, a background job
+    // ending started a turn of Claude's own. Its Stop hook handed over a queued
+    // cli_send 47 s later, while the typed path was still holding it for the
+    // person to type. The hold is about waking an agent someone stopped on
+    // purpose, so it applies however the message would arrive.
+    let held = true
+    m.configureMessaging({ ...deps, stopHeld: () => held })
+    const msg = m.sendMessage('sender', 'target', 'PING')
+
+    expect(m.drainForHook('p2')).toBeNull()
+    expect(msg.status).toBe('queued')
+
+    held = false
+    expect(m.drainForHook('p2')).toContain('PING')
+  })
+
   it('cannot produce a message the pair rate limit already refused', () => {
     for (let i = 0; i < RATE_LIMIT_MAX; i += 1) m.sendMessage('sender', 'target', `m${i}`)
     const refused = m.sendMessage('sender', 'target', 'one too many')

@@ -250,6 +250,10 @@ export interface MessagingDeps {
    *  not change the answer. Today: a multi-line command for a plain terminal
    *  whose shell has no bracketed paste. */
   refuseDelivery?: (paneId: string, envelope: string) => MessageReason | null
+  /** True while a STOP a person pressed still holds this pane's queue until
+   *  they type (see messagingGateStatus). The typed and push paths see it
+   *  through isPaneIdle/pushTarget; drainForHook skips those, so it asks this. */
+  stopHeld?: (paneId: string) => boolean
   /** The push channel that could take a message for this pane right now, or
    *  null when there is none — the vendor has no channel, it is not armed, or
    *  the gates that channel still answers to are closed. Non-null is what lets
@@ -1577,7 +1581,9 @@ function withdrawable(m: AgentMessage): boolean {
  * instruction (see the backend's `hook_drain`).
  *
  * The gates that still apply are the ones about whether the message may go out
- * at all: the global pause, and the per-pane in-flight guard (a message being
+ * at all: the global pause, a person's STOP that still holds the pane until
+ * they type (a message handed over here wakes the agent just the same), and
+ * the per-pane in-flight guard (a message being
  * typed into the pane right now must finish before another one starts). The
  * per-pair rate limit needs no check here — it is spent when a message is sent,
  * so anything already queued has paid for itself.
@@ -1596,6 +1602,7 @@ function withdrawable(m: AgentMessage): boolean {
 function drainForHook(paneId: string): string | null {
   if (!deps || paused.value) return null
   if (delivering.has(paneId)) return null
+  if (deps.stopHeld?.(paneId)) return null
   const q = queues.get(paneId)
   if (!q || q.length === 0) return null
   // Already promised to a recipient that asked for it; see pumpPane().
