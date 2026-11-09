@@ -181,8 +181,10 @@ elif phase == "load":
     (ROOT / "load.pids").write_text(" ".join(map(str, pids))); say("busy pids", pids, "load", gload())
     time.sleep(90); say("warmed up, load", gload())
     try:
+        # Under full CPU the kickoff may take the app's whole budget (ready 30 s + echo 120 s) before the stub sees it.
         for i in range(1, 4):
-            o = subprocess.run([sys.executable, "y.py", ROOTP, "go", "sw", "webhook", "done", f"load{i}"], capture_output=True, text=True).stdout
+            o = subprocess.run([sys.executable, "y.py", ROOTP, "go", "sw", "webhook", "done", f"load{i}"], capture_output=True, text=True,
+                               env={**os.environ, "Y_REACH_S": "180"}).stdout
             say(f"load{i}", " | ".join(l for l in o.splitlines() if "ends" in l or "FAIL" in l or "PASS" in l)[:300], "load", gload())
     finally:
         for p in pids: os.kill(p, signal.SIGTERM)
