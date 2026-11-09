@@ -809,6 +809,22 @@ blocked package's running child and quarantines the package, and the pre-spawn
 trust check refuses it) and the Registry trust metadata expiry (an expired
 snapshot fails the pre-spawn trust check).
 
+**Stopping one plugin at once** (0.2.40). The user can stop a running
+third-party plugin from four places: Stop on its row of the Activity monitor
+(Settings → Navide Plugins → Installed), the status bar's Navide plugins item,
+the chat command `/plugins stop <id>` in a bound Channels chat (`/plugins
+status` lists them), and, for an agent, `plugins_disable`. A stop is the
+per-plugin disable switch: calls in flight are settled with `PLUGIN_STOPPING`,
+its event routes and subscriptions end, its views and web views close and its
+backend child stops; its files, grants, storage and secrets stay. Navide also
+records where the stop came from and what the plugin was doing then (calls in
+flight, tool and capability calls in the last minute, failed tool calls in a
+row, undeclared or refused hosts), and shows that before the plugin is enabled
+again. A stop never starts anything: enabling is done in Settings (an agent may
+still enable a package an agent disabled, as before, never one the user
+stopped). Bundled Navide plugins keep their own Disabled switch and are not
+stopped this way.
+
 Publishing a package with a backend from a self-service namespace requires an
 administrator to allowlist the publisher and a verified publisher domain
 (DNS). The package must declare `engines.navide` of at least `>=0.2.14`

@@ -21,6 +21,7 @@ import type {
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginStopSummary } from '../shared/pluginStop'
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1653,6 +1654,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     > => ipcRenderer.invoke('plugins:runPipelineNode', request),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
+    /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+    stop: (id: string, via: 'settings' | 'status-bar'): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> =>
+      ipcRenderer.invoke('plugins:stop', { id, via }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>

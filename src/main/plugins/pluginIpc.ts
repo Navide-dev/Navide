@@ -113,6 +113,11 @@ import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManage
 import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
+import {
+  type PluginStopRecord,
+  type PluginStopSummary,
+  type PluginStopVia,
+} from '../../shared/pluginStop'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
@@ -296,6 +301,9 @@ interface InstalledSummary {
   /** C1: the user's "Only allow declared network hosts" switch (default off:
    *  an undeclared host is allowed and recorded); present with `disabled`. */
   networkStrict?: boolean
+  /** P2: present while the package is disabled by a stop: where the stop came
+   *  from and its activity then, shown before it is enabled again. */
+  stopRecord?: PluginStopRecord
 }
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
@@ -1319,7 +1327,14 @@ export function registerPluginIpc(
       // "Disable" in its warning can enable it again.
       ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
         manager.canDisablePlugin(summary.id)
-        ? { disabled: disabledPlugins.has(summary.id), networkStrict: networkStrictPlugins.has(summary.id) }
+        ? {
+            disabled: disabledPlugins.has(summary.id),
+            networkStrict: networkStrictPlugins.has(summary.id),
+            ...(() => {
+              const stop = disabledPlugins.has(summary.id) ? disableSources.get(summary.id).stop : undefined
+              return stop ? { stopRecord: stop } : {}
+            })(),
+          }
         : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
@@ -5216,6 +5231,98 @@ export function registerPluginIpc(
       }
   }
 
+  // Plan P2: what a plugin was doing when it was stopped. Read beside the
+  // stop, never before it: the activity counts wait at most
+  // STOP_SUMMARY_WAIT_MS and are null when the backend did not answer in time.
+  const STOP_SUMMARY_WAIT_MS = 2_000
+  const stopSummary = async (id: string, inFlightCalls: number): Promise<PluginStopSummary> => {
+    const empty: PluginStopSummary = {
+      inFlightCalls, toolCallsLastMinute: null, capabilityCallsLastMinute: null, consecutiveFailures: null, undeclaredHosts: [],
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const answer = await Promise.race([
+        manager.requestPluginActivityOverview([id]),
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), STOP_SUMMARY_WAIT_MS) }),
+      ])
+      const row = answer === null ? undefined : parsePluginActivityOverview(answer)?.plugins.find((entry) => entry.pluginId === id)
+      if (!row) return empty
+      const declared = activeDisclosure(id)?.networkHosts ?? []
+      return {
+        inFlightCalls,
+        toolCallsLastMinute: row.toolCallsLastMinute,
+        capabilityCallsLastMinute: row.capabilityCallsLastMinute,
+        consecutiveFailures: row.consecutiveFailures,
+        undeclaredHosts: row.hosts
+          .filter((entry) => entry.refused || !declared.some((pattern) => networkHostMatches(pattern, entry.host)))
+          .map((entry) => entry.host),
+      }
+    } catch {
+      return empty
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  // Plan P2: stop one third-party plugin at once. The stop is the Disabled
+  // switch (the drain settles calls in flight with PLUGIN_STOPPING, stops its
+  // event routes, closes its views and stops its backend), recorded with where
+  // it came from and the activity summary taken as it happened. Bundled
+  // Navide plugins keep their own switch and are never stopped here.
+  const stopPlugin = async (
+    id: string,
+    via: PluginStopVia,
+    who: Pick<DisableSource, 'by' | 'agent'>,
+  ): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> => {
+    if (BUILTIN_PLUGIN_NAMES.has(id) || isReservedPluginId(id)) {
+      throw new Error(`the bundled Navide plugin ${id} is turned off with its own Disabled switch`)
+    }
+    const at = Date.now()
+    const inFlightCalls = options.backendCallConcurrency?.().find((row) => row.pluginId === id)?.current ?? 0
+    const [summary, result] = await Promise.all([stopSummary(id, inFlightCalls), setInstalledPackageDisabled(id, true)])
+    // A user's stop of a package an agent had disabled takes that disable over:
+    // otherwise the agent could enable what the user meant to stop. A package
+    // the user already disabled keeps its first record.
+    const takesOver = !result.changed && who.by === 'user' && disableSources.get(id).by !== 'user'
+    if (result.changed || takesOver) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary } })
+    return { id: result.id, disabled: true, changed: result.changed, summary }
+  }
+
+  // The Settings Activity monitor's and the status bar's Stop: the user's own.
+  ipcMain.handle('plugins:stop', async (event, args: { id?: unknown; via?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const via = args?.via
+    if (via !== 'settings' && via !== 'status-bar') throw new Error('invalid plugin stop request')
+    return stopPlugin(id, via, { by: 'user', agent: null })
+  })
+
+  // A chat command (`/plugins status`, `/plugins stop <id>`), relayed by the
+  // backend over the Host session. It can stop, never start: enabling stays
+  // in this window.
+  manager.setPluginStopHandler?.(async (request) => {
+    const record = typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {}
+    const stoppable = listInstalledSummaries().filter((row) => row.disabled !== undefined && !BUILTIN_PLUGIN_NAMES.has(row.id) && !isReservedPluginId(row.id))
+    if (record.action === 'status' && Object.keys(record).length === 1) {
+      return { ok: true, plugins: stoppable.map((row) => ({ id: row.id, version: row.packageVersion ?? '', disabled: row.disabled === true })) }
+    }
+    const id = record.plugin_id
+    if (record.action !== 'stop' || typeof id !== 'string' || Object.keys(record).length !== 2) {
+      return { ok: false, error: 'plugin stop request is malformed', error_code: 'BAD_REQUEST' }
+    }
+    if (!stoppable.some((row) => row.id === id)) {
+      return { ok: false, error: `${id} is not an installed third-party Navide plugin`, error_code: 'NOT_INSTALLED' }
+    }
+    try {
+      const result = await stopPlugin(id, 'telegram', { by: 'user', agent: null })
+      return { ok: true, pluginId: id, changed: result.changed }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+    }
+  })
+
   manager.setPluginAgentActionHandler?.((request) =>
     answerPluginAgentAction(request, {
       isBuiltin: (pluginId) => BUILTIN_PLUGIN_NAMES.has(pluginId) || isReservedPluginId(pluginId),
@@ -5224,10 +5331,10 @@ export function registerPluginIpc(
         return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
       },
       setDisabled: async (pluginId, disabled, source) => {
+        // P2: an agent's plugins_disable is a stop from MCP, recorded with its summary.
+        if (disabled) return stopPlugin(pluginId, 'mcp', source ?? { by: 'agent', agent: null })
         const result = await setInstalledPackageDisabled(pluginId, disabled)
-        if (result.changed) {
-          recordDisableSource(pluginId, disabled, source ?? { by: 'agent', at: Date.now(), agent: null })
-        }
+        if (result.changed) recordDisableSource(pluginId, disabled)
         return result
       },
       notify: (notice) => options.onPluginAgentAction?.(notice),

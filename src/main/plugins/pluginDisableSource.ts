@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { DISABLED_PLUGINS_FILE } from './pluginDisabledStore'
+import { parsePluginStopRecord, type PluginStopRecord } from '../../shared/pluginStop'
 
 export const DISABLE_SOURCES_FILE = '.navide-disabled-source.json'
 
@@ -19,6 +20,9 @@ export interface DisableSource {
   /** Unix time in milliseconds; null for a package disabled before this was recorded. */
   at: number | null
   agent: DisablingAgent | null
+  /** Plan P2: the disable was a stop (where it came from, and the plugin's
+   *  activity at that moment); absent for an ordinary disable. */
+  stop?: PluginStopRecord
 }
 
 /** What a disabled package with no entry counts as: the user, with no time
@@ -45,6 +49,7 @@ function isSource(value: unknown): value is DisableSource {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   const at = record.at === null || (typeof record.at === 'number' && Number.isFinite(record.at))
+  if (record.stop !== undefined && parsePluginStopRecord(record.stop) === null) return false
   if (record.by === 'user') return at && record.agent === null
   return record.by === 'agent' && at && isAgent(record.agent)
 }
@@ -74,12 +79,15 @@ export class PluginDisableSourceStore {
   get(pluginId: string): DisableSource {
     const source = this.read().sources[pluginId]
     if (!source || (source.by === 'agent' && source.list !== this.listState())) return UNKNOWN_DISABLE_SOURCE
-    return { by: source.by, at: source.at, agent: source.agent ? { ...source.agent } : null }
+    const stop = source.stop ? parsePluginStopRecord(source.stop) : null
+    return { by: source.by, at: source.at, agent: source.agent ? { ...source.agent } : null, ...(stop ? { stop } : {}) }
   }
 
   set(pluginId: string, source: DisableSource): void {
     const state = this.read()
-    const stored: StoredSource = { by: source.by, at: source.at, agent: source.agent, list: this.listState() }
+    const stored: StoredSource = {
+      by: source.by, at: source.at, agent: source.agent, ...(source.stop ? { stop: source.stop } : {}), list: this.listState(),
+    }
     this.write({ schemaVersion: 1, sources: { ...state.sources, [pluginId]: stored } })
   }
 

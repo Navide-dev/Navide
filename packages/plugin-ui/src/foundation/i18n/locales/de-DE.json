@@ -12356,6 +12356,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Stoppen",
+    "confirm": "Jetzt stoppen",
+    "cancel": "Abbrechen",
+    "stopping": "Wird gestoppt…",
+    "note": "Stoppt {id} sofort: laufende Aufrufe werden beendet, seine Ansichten geschlossen und sein Backend angehalten. Dateien, Berechtigungen und Daten bleiben; aktivieren Sie es in den Einstellungen wieder.",
+    "failed": "{id} konnte nicht gestoppt werden: {error}",
+    "column": "Stoppen",
+    "via": {
+      "settings": "die Activity-Übersicht der Einstellungen",
+      "status-bar": "die Statusleiste",
+      "telegram": "ein Chat-Befehl",
+      "mcp": "ein Agent (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Am {date} über {via} gestoppt. Zu diesem Zeitpunkt:",
+      "inFlight": "Laufende Aufrufe, beendet: {count}",
+      "toolCalls": "Tool-Aufrufe in der letzten Minute: {count}",
+      "capabilityCalls": "Capability-Aufrufe in der letzten Minute: {count}",
+      "failures": "Tool-Aufrufe in Folge fehlgeschlagen: {count}",
+      "notRead": "nicht rechtzeitig gelesen",
+      "hosts": "Nicht deklarierte oder abgelehnte Hosts: {hosts}",
+      "noHosts": "Nicht deklarierte oder abgelehnte Hosts: keine"
+    },
+    "enable": {
+      "heading": "{id} wieder aktivieren?",
+      "confirm": "Aktivieren"
+    },
+    "statusBar": {
+      "label": "Navide-Plugins {running}",
+      "title": "Navide-Plugins: eines sofort stoppen",
+      "heading": "Navide-Plugins von Drittanbietern",
+      "openSettings": "Activity-Übersicht öffnen"
+    }
+  },
   "backendResource": {
     "title": "Das Backend eines Navide-Plug-ins überschreitet einen Ressourcen-Schwellenwert",
     "body": "{name} ({id} {version}): {item} liegt bei {usage} und damit über dem Schwellenwert von {threshold}.",

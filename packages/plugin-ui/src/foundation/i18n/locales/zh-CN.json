@@ -12356,6 +12356,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "停止",
+    "confirm": "立即停止",
+    "cancel": "取消",
+    "stopping": "停止中…",
+    "note": "立即停止 {id}：进行中的调用会被结束、视图关闭、后端停止。文件、授权与数据都保留；要重新启用请到设置。",
+    "failed": "无法停止 {id}：{error}",
+    "column": "停止",
+    "via": {
+      "settings": "设置的 Activity 总览",
+      "status-bar": "状态栏",
+      "telegram": "聊天室指令",
+      "mcp": "agent（plugins_disable）"
+    },
+    "summary": {
+      "heading": "{date} 从{via}停止。当时：",
+      "inFlight": "进行中的调用（已结束）：{count}",
+      "toolCalls": "最近一分钟工具调用：{count}",
+      "capabilityCalls": "最近一分钟能力调用：{count}",
+      "failures": "连续失败的工具调用：{count}",
+      "notRead": "未及时读到",
+      "hosts": "未声明或被拒绝的主机：{hosts}",
+      "noHosts": "未声明或被拒绝的主机：无"
+    },
+    "enable": {
+      "heading": "要重新启用 {id} 吗？",
+      "confirm": "启用"
+    },
+    "statusBar": {
+      "label": "Navide 插件 {running}",
+      "title": "Navide 插件：立即停止其中一个",
+      "heading": "第三方 Navide 插件",
+      "openSettings": "打开 Activity 总览"
+    }
+  },
   "backendResource": {
     "title": "Navide 插件的 backend 用量超过门槛",
     "body": "{name}（{id} {version}）：{item}目前是 {usage}，超过门槛 {threshold}。",

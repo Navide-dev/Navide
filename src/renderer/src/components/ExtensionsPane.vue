@@ -20,6 +20,7 @@ import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow }
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
+import PluginStopSummary from './PluginStopSummary.vue'
 import PluginBackgroundAiSessions from './PluginBackgroundAiSessions.vue'
 import PluginSettingsForm from './PluginSettingsForm.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
@@ -431,7 +432,11 @@ function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' |
 // built-in waits for a store check in progress and then drains (Plans can
 // take about half a minute), so the row says it is working.
 const switching = ref<string | null>(null)
+// Plan P2: a package disabled by a stop shows what it was doing then before
+// it is enabled again; Enable on its row opens that summary first.
+const enableAsk = ref<string | null>(null)
 async function setDisabled(id: string, disabled: boolean): Promise<void> {
+  enableAsk.value = null
   const api = pluginsApi()
   if (!api?.setDisabled) return
   busy.value = true
@@ -1247,7 +1252,7 @@ watch(installed, () => {
                   v-else-if="p.disabled"
                   class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
                   :disabled="busy || updateFlow.busy.value"
-                  @click="setDisabled(p.id, false)"
+                  @click="p.stopRecord ? (enableAsk = p.id) : setDisabled(p.id, false)"
                 >
                   {{ $t('settings.extensions.enable') }}
                 </button>
@@ -1275,6 +1280,16 @@ watch(installed, () => {
                 </button>
               </div>
               <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+              <div v-if="p.disabled && p.stopRecord && enableAsk === p.id" class="ext-stop-enable" role="group" :aria-label="$t('pluginStop.enable.heading', { id: reveal(p.id) })">
+                <p class="ext-stop-enable-head">{{ $t('pluginStop.enable.heading', { id: reveal(p.id) }) }}</p>
+                <PluginStopSummary :record="p.stopRecord" />
+                <div class="ext-actions">
+                  <button class="ext-stop-enable-confirm nv-btn nv-btn--primary nv-btn--sm" :disabled="busy" @click="setDisabled(p.id, false)">
+                    {{ $t('pluginStop.enable.confirm') }}
+                  </button>
+                  <button class="ext-stop-enable-cancel nv-btn nv-btn--sm" @click="enableAsk = null">{{ $t('pluginStop.cancel') }}</button>
+                </div>
+              </div>
               <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
                 {{ folderLoadedByText(p.id) }}
               </p>
@@ -2323,6 +2338,22 @@ watch(installed, () => {
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+/* Plan P2: what a stopped package was doing, before it is enabled again. */
+.ext-stop-enable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-left: 3px solid var(--attention-fg);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.ext-stop-enable-head {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
 }
 .ext-pack-includes {
   color: var(--text-secondary);

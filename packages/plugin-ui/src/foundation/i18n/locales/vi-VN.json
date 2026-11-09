@@ -12356,6 +12356,41 @@
       }
     }
   },
+  "pluginStop": {
+    "stop": "Dừng",
+    "confirm": "Dừng ngay",
+    "cancel": "Hủy",
+    "stopping": "Đang dừng…",
+    "note": "Dừng {id} ngay: các lệnh gọi đang chạy sẽ kết thúc, các view đóng lại và backend dừng. Tệp, quyền và dữ liệu vẫn giữ; bật lại trong Cài đặt.",
+    "failed": "Không thể dừng {id}: {error}",
+    "column": "Dừng",
+    "via": {
+      "settings": "tổng quan Activity trong Cài đặt",
+      "status-bar": "thanh trạng thái",
+      "telegram": "một lệnh trong chat",
+      "mcp": "một agent (plugins_disable)"
+    },
+    "summary": {
+      "heading": "Đã dừng lúc {date} từ {via}. Khi đó:",
+      "inFlight": "Lệnh gọi đang chạy, đã kết thúc: {count}",
+      "toolCalls": "Lệnh gọi công cụ trong phút vừa qua: {count}",
+      "capabilityCalls": "Lệnh gọi capability trong phút vừa qua: {count}",
+      "failures": "Lệnh gọi công cụ lỗi liên tiếp: {count}",
+      "notRead": "không đọc kịp",
+      "hosts": "Máy chủ chưa khai báo hoặc bị từ chối: {hosts}",
+      "noHosts": "Máy chủ chưa khai báo hoặc bị từ chối: không có"
+    },
+    "enable": {
+      "heading": "Bật lại {id}?",
+      "confirm": "Bật"
+    },
+    "statusBar": {
+      "label": "Plugin Navide {running}",
+      "title": "Plugin Navide: dừng ngay một plugin Navide",
+      "heading": "Plugin Navide bên thứ ba",
+      "openSettings": "Mở tổng quan Activity"
+    }
+  },
   "backendResource": {
     "title": "Backend của một plugin Navide đang vượt ngưỡng tài nguyên",
     "body": "{name} ({id} {version}): {item} là {usage}, vượt ngưỡng {threshold}.",

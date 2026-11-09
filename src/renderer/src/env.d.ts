@@ -20,6 +20,8 @@ type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').Reg
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
 type PluginActivityOverview = import('../../shared/pluginActivity').PluginActivityOverview
+type PluginStopSummary = import('../../shared/pluginStop').PluginStopSummary
+type PluginStopRecord = import('../../shared/pluginStop').PluginStopRecord
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -593,6 +595,8 @@ declare global {
         >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
+        /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+        stop?: (id: string, via: 'settings' | 'status-bar') => Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
@@ -676,6 +680,8 @@ declare global {
     disabled?: boolean
     /** C1: the user's "Only allow declared network hosts" switch (present with `disabled`). */
     networkStrict?: boolean
+    /** P2: present while the package is disabled by a stop. */
+    stopRecord?: PluginStopRecord
   }
 
   interface FactoryPluginSummary {

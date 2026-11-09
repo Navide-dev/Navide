@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import held, media, pdf, quick_menu, redact, relay, report, share_cmds, wake
+from . import held, media, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -1981,6 +1981,9 @@ class ChannelManager:
         share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
         if share_cmd is not None and await self._share_command(msg, *share_cmd):
             return
+        plugin_cmd = plugin_cmds.parse_command(msg.text, self._identity(msg))
+        if plugin_cmd is not None and await self._plugin_command(msg, *plugin_cmd):
+            return
         binding = self._binding_for(msg)
         if binding is None:
             # One bot answers for its unbound chats and topics, as it always has; with
@@ -3207,6 +3210,36 @@ class ChannelManager:
             await self._reply(msg, quick_menu.text(lang, key, prefix=arg[:share_cmds.SHORT_LEN], count=len(matches)))
             return True
         return await self._share_revoke(msg, lang, matches[0])
+
+    async def _plugin_command(self, msg: InboundMessage, command: str, arg: str) -> bool:
+        """``/plugins status`` or ``/plugins stop <id>`` (plan P2); False leaves the
+        message to the usual pipeline. Only a bound chat, like ``/shares``: the
+        sender is already one the user approved. It can stop a plugin, never start one."""
+        from ..plugins import plugin_stop
+
+        if self._binding_for(msg) is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        if command == "stop" and not arg:
+            await self._reply(msg, quick_menu.text(lang, "plugins_stop_usage"))
+            return True
+        answer = await plugin_stop.ask_host(command, arg if command == "stop" else None)
+        if answer is None:
+            await self._reply(msg, quick_menu.text(lang, "plugins_unavailable"))
+        elif command == "status":
+            if answer.get("ok") is True and isinstance(answer.get("plugins"), list):
+                await self._reply(msg, redact.redact_text(plugin_cmds.render_status(lang, answer["plugins"])))
+            else:
+                await self._reply(msg, quick_menu.text(lang, "plugins_unavailable"))
+        elif answer.get("ok") is True:
+            key = "plugins_stopped" if answer.get("changed") is True else "plugins_already_stopped"
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, key, id=arg)))
+        elif answer.get("error_code") == "NOT_INSTALLED":
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_none", id=arg)))
+        else:
+            error = str(answer.get("error") or answer.get("error_code") or "")
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id=arg, error=error)))
+        return True
 
     async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
         if not links:
