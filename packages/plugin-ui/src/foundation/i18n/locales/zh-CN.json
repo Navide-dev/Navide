@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "进程仍在运行，但 Agent 已完成最后一个回合，正停在输入提示等待指令",
       "awaiting-status-tooltip": "Agent 停在权限确认上等你选，在你回应前不会有任何进展",
       "question-status-tooltip": "Agent 问了你一个问题，正在等你选，在你回应前不会有任何进展",
+      "stop-ineffective": "STOP 未生效",
+      "stop-ineffective-tooltip": "中断已发送到 CLI，但回合仍在运行（Ctrl-C 可能只清除了排队的输入）。再按一次 Interrupt 才能停止。",
       "rename-title-tooltip": "双击可重命名此分格",
       "auto-named-tooltip": "此名称由系统依这个 session 的第一句指令自动产生 — 只要你改过名，就不会再被自动命名",
       "loop-tag-tooltip": "此分格正在运行 Loop",

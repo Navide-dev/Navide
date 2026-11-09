@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "Tiến trình vẫn đang chạy, nhưng agent đã xong lượt cuối và đang chờ ở dấu nhắc nhập",
       "awaiting-status-tooltip": "Agent đang dừng ở lời nhắc cấp quyền — không có gì tiếp diễn cho đến khi bạn trả lời",
       "question-status-tooltip": "Agent đã hỏi bạn và đang chờ câu trả lời — không có gì tiếp diễn cho đến khi bạn trả lời",
+      "stop-ineffective": "STOP chưa có hiệu lực",
+      "stop-ineffective-tooltip": "Lệnh ngắt đã đến CLI nhưng lượt vẫn đang chạy (Ctrl-C có thể chỉ xóa phần nhập đang chờ). Nhấn Interrupt lần nữa để dừng.",
       "rename-title-tooltip": "Nhấp đúp để đổi tên pane này",
       "auto-named-tooltip": "Được tự động đặt tên theo chỉ thị đầu tiên của session này — hãy đổi tên và tên đó sẽ được giữ",
       "loop-tag-tooltip": "Loop đang chạy trên pane này",

@@ -755,6 +755,7 @@
     {
       "address": "fs.writeFile",
       "since": "1.0.0",
+      "description": "Create or overwrite a workspace file. content is text encoded with encoding (UTF-8 when omitted). encoding base64 writes binary files: content is then the base64 text of the exact bytes (Navide 0.2.40 or newer; older Hosts answer ok false). expectedMtime refuses the write with conflict true when the file changed on disk.",
       "visibility": "public",
       "permission": { "id": "system", "access": "fs", "scope": "workspace" },
       "params": { "type": "object", "additionalProperties": false, "required": ["path", "content"], "properties": { "selectionGrant": { "type": "string", "minLength": 1 }, "path": { "type": "string" }, "content": { "type": "string" }, "encoding": { "type": "string", "minLength": 1 }, "expectedMtime": { "type": "number" } } },
@@ -866,6 +867,16 @@
       "params": { "type": "object", "additionalProperties": false, "required": ["url"], "properties": { "url": { "type": "string", "format": "uri", "pattern": "^https?://" } } },
       "result": { "type": "object", "additionalProperties": false, "required": ["opened"], "properties": { "opened": { "type": "boolean" } } },
       "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "USER_CANCELLED", "INTERNAL_ERROR"]
+    },
+    {
+      "address": "ui.getLocale",
+      "since": "1.4.0",
+      "description": "The language the Navide interface is showing now, as a BCP 47 tag such as en-US or zh-TW: the language the user chose, or the one Navide picked from the system when they chose none. ui.localeChanged tells a view when it changes.",
+      "visibility": "public",
+      "permission": { "id": "system", "access": "ui", "scope": "plugin" },
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "type": "object", "additionalProperties": false, "required": ["locale"], "properties": { "locale": { "type": "string", "minLength": 1 } } },
+      "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "INTERNAL_ERROR"]
     },
     {
       "address": "aiCli.listProfiles",
@@ -1024,6 +1035,7 @@
     {"address":"shell.gitCredentialRequested","since":"1.0.0","visibility":"public","permission":{"id":"shell","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"required":["requestId","host","prompt"],"properties":{"requestId":{"type":"string","minLength":1},"host":{"type":"string"},"prompt":{"type":"string"}}}},
     {"address":"shell.gitCredentialCancelled","since":"1.0.0","visibility":"public","permission":{"id":"shell","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"required":["requestId"],"properties":{"requestId":{"type":"string","minLength":1}}}},
     {"address":"ui.editorPreferencesChanged","since":"1.0.0","visibility":"public","permission":{"id":"system","access":"ui","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"properties":{"preferences":{"type":"object","additionalProperties":false,"properties":{"agentTeam.yolo":{"$ref":"#/$defs/jsonValue"},"agentTeam.analyzerModel":{"$ref":"#/$defs/jsonValue"},"agent-team:theme":{"$ref":"#/$defs/jsonValue"},"agent-team:theme-custom":{"$ref":"#/$defs/jsonValue"},"agent-team:language":{"$ref":"#/$defs/jsonValue"},"agentTeam.uiScale":{"$ref":"#/$defs/jsonValue"},"agentTeam.git.logScope":{"$ref":"#/$defs/jsonValue"},"agentTeam.git.logOrder":{"$ref":"#/$defs/jsonValue"},"agentTeam.git.autoCommit":{"$ref":"#/$defs/jsonValue"},"agentTeam.gitTopRatio":{"$ref":"#/$defs/jsonValue"}},"required":[]}},"required":["preferences"]}},
+    {"address":"ui.localeChanged","since":"1.4.0","description":"The Navide interface switched to another language; locale is the new BCP 47 tag, the value ui.getLocale now returns.","visibility":"public","permission":{"id":"system","access":"ui","scope":"plugin"},"payload":{"type":"object","additionalProperties":false,"properties":{"locale":{"type":"string","minLength":1}},"required":["locale"]}},
     {"address":"ui.keybindingsChanged","since":"1.0.0","visibility":"public","permission":{"id":"system","access":"ui","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"required":["content"],"properties":{"content":{"type":"string"}}}},
     {"address":"aiCli.reviewResult","since":"1.0.0","visibility":"public","permission":{"id":"system","access":"aiCli","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"required":["reviewId","result"],"properties":{"reviewId":{"type":"string"},"result":{"type":"object","additionalProperties":false,"required":["summary","verdict","findings"],"properties":{"summary":{"type":"string"},"verdict":{"enum":["approve","approve_with_comments","request_changes"]},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["id","file","line","severity","title","body"],"properties":{"id":{"type":"string"},"file":{"type":"string"},"line":{"type":["integer","null"]},"severity":{"enum":["critical","warning","suggestion"]},"title":{"type":"string"},"body":{"type":"string"}}}}}}}}},
     {"address":"aiCli.reviewEnd","since":"1.0.0","visibility":"public","permission":{"id":"system","access":"aiCli","scope":"workspace"},"payload":{"type":"object","additionalProperties":false,"required":["reviewId"],"properties":{"reviewId":{"type":"string"}}}},

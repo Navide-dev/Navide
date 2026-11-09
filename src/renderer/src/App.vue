@@ -85,7 +85,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { INTERRUPT_ACTIVITY_DETAIL, VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -17277,6 +17277,8 @@ backend.on('agent.activity', (raw) => {
         paneTurnStartedAt.set(ev.pane_id, Date.now())
       }
       paneLastActiveAt.set(ev.pane_id, Date.now())
+      // Claude's "[Request interrupted by user]": the STOP took effect.
+      if (ev.detail === INTERRUPT_ACTIVITY_DETAIL) paneRefs[ev.pane_id]?.noteInterruptEvidence?.()
       // A turn the agent started on its own ends a STOP badge, user records
       // included: see agentTurnActivityAt.
       paneRefs[ev.pane_id]?.markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))

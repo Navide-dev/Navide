@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import held, media, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -102,6 +102,7 @@ VERDICT_POLL_S = 5.0
 STARTUP_GRACE_S = 60.0
 STARTUP_POLL_S = 1.0
 HELD_NOTICE_AFTER_S = 600.0
+STATUS_LAST_CHARS = 200  # of a pane's last turn text, on one line, in /status
 HOLD_FAILURE_KEYS = {"gone", "not-ready"}
 HOLD_FAILURE_AFTER_S = 60.0
 VERDICT_WATCH_MAX_S = 3600.0
@@ -488,6 +489,11 @@ class ChannelManager:
         self._wake_limits = wake.WakeLimits(clock=clock)
         # location -> (kept at, message): what reached a pane that was not online, for its wake
         self._wake_kept: dict[str, list[tuple[float, InboundMessage]]] = {}
+        # pane_id -> (kept at, message, binding): what a chat sent while the pane waited on a
+        # permission prompt, sent in once the prompt clears (channels.held)
+        self._prompt_held: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        self._held_watching: set[str] = set()  # panes whose kept messages are being watched
+        self._last_turn_text: dict[str, str] = {}  # pane_id -> its last turn's text, for /status
         self.mirror = Mirror(self)
 
     # --- lifecycle --------------------------------------------------------------
@@ -1320,6 +1326,7 @@ class ChannelManager:
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
         removed = self.store.unbind(pane_id)
         self._drop_pending(pane_id)
+        self._drop_held(pane_id)
         if removed:
             # What was kept for the chat's wake goes with the binding it was kept for.
             self._set_kept(removed.location().key(), [])
@@ -1343,6 +1350,7 @@ class ChannelManager:
         if from_pane_id == to_pane_id or not self.store.rename_pane(from_pane_id, to_pane_id):
             return {"ok": True}
         self.mirror.rename_pane(from_pane_id, to_pane_id)
+        self._drop_held(from_pane_id)
         pending = self._pending.pop(from_pane_id, None)
         if pending is not None:
             if pending.task:
@@ -1418,6 +1426,7 @@ class ChannelManager:
         for is left to the log, which mirrors it at the binding's verbosity, as before."""
         if log_ended or not text.strip():
             return
+        self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
         pending = self._pending.get(pane_id)
         if pending is None or pending.armed_at is None:
             return
@@ -1453,6 +1462,7 @@ class ChannelManager:
             self._known_panes.discard(pane_id)
             self._turn_source.pop(pane_id, None)
             self._hook_replied.pop(pane_id, None)
+            self._last_turn_text.pop(pane_id, None)
             return
         if pane_id not in self._known_panes:
             # First activity from this id (e.g. after a restart): rebind by alias.
@@ -1467,6 +1477,8 @@ class ChannelManager:
                 self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
         source = str(entry.get("source") or "")
+        if is_turn_end and text.strip():
+            self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
         if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
             # The log ended this turn before its hook came, and that log turn end has
             # already answered the run. The run armed now is the NEXT message's: a late
@@ -2260,23 +2272,173 @@ class ChannelManager:
             return None  # "2 more tests please" is a message, not an answer
         return relay.RelayAnswer(live[0].id, choice, text)
 
-    async def _held_by_prompt(self, msg: InboundMessage, pane_id: str) -> bool:
-        """A pane waiting on a permission-type prompt would queue the text until the
-        prompt clears and then run it as a new prompt: say how to answer instead."""
+    async def _held_by_prompt(self, msg: InboundMessage, pane_id: str, binding: Binding,
+                              since: float | None = None) -> bool:
+        """A pane waiting on a permission-type prompt would queue the text behind the prompt
+        with no end: the text is kept instead, said so, and sent in once the prompt clears
+        (``_watch_held``), for held.HELD_TTL_S at most. ``since``: when it was first kept."""
         if self._seams.pane_state(pane_id).get("display_status") != "awaiting":
             return False
         live = self.relay.for_pane(pane_id)
-        if live:
-            await self._held_with_buttons(msg, live[0])
+        if not live:
+            try:
+                info = await self._seams.awaiting_info(pane_id)
+            except Exception:  # noqa: BLE001
+                return False
+            if info.get("kind") != "permission":
+                return False  # a question is answered by typing
+        choice, rest = relay.parse_bare(msg.text)
+        if choice and not rest:
+            # A bare yes / 2 that answered nothing here is not kept: sent in later, it would
+            # answer whatever prompt is on the screen by then.
+            if live:
+                await self._held_with_buttons(msg, live[0])
+            else:
+                await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
             return True
-        try:
-            info = await self._seams.awaiting_info(pane_id)
-        except Exception:  # noqa: BLE001
-            return False
-        if info.get("kind") != "permission":
-            return False  # a question is answered by typing
-        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
+        await self._hold(msg, binding, pane_id, live[0] if live else None, since)
         return True
+
+    async def _hold(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                    request: relay.RelayRequest | None, since: float | None) -> None:
+        """Keep ``msg`` for ``pane_id`` until its prompt clears and tell the chat, quoting the
+        prompt with its own buttons as the old warning did, plus a withdraw button."""
+        lang = prompt_skills.language(await self._ui_settings())
+        kept = self._prompt_held.setdefault(pane_id, [])
+        if len(kept) >= held.HELD_MAX:
+            await self._reply(msg, held.text(lang, "held_full", max=held.HELD_MAX))
+            return
+        kept.append((self._clock() if since is None else since, msg, binding))
+        if pane_id not in self._held_watching:
+            self._held_watching.add(pane_id)
+            self._spawn(self._watch_held(pane_id))
+        notice = held.text(lang, "held", n=len(kept), minutes=int(held.HELD_TTL_S // 60))
+        withdraw = [BUSY_BUTTONS[0]]
+        adapter = self._adapters.get((msg.platform, msg.account))
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if request is None or adapter is None:
+            await self._reply(msg, f"{notice}\n{MSG_AWAITING_LOCAL}", buttons=withdraw)
+            return
+        if request.loc.key() != loc.key():
+            # Prompted in another chat: an answer from here is refused, and its message is not here.
+            await self._reply(msg, f"{notice}\n{relay.answer_hint(request)}", buttons=withdraw)
+            return
+        text = f"{notice}\n{relay.held_text(request)}"
+        buttons = (_relay_buttons(adapter, request) or []) + (withdraw if adapter.capabilities.buttons else [])
+        try:
+            ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reply on %s failed: %s", msg.platform, exc)
+            return
+        if ids:
+            # Settled with the prompt; a chunked notice keeps only its last chunk.
+            request.held.append((ids[-1], text if len(ids) == 1 else ""))
+
+    async def _watch_held(self, pane_id: str) -> None:
+        """Send in, in order and on each chat's own worker, what was kept while ``pane_id``
+        waited on a prompt, once the prompt clears; what outlives held.HELD_TTL_S, or a pane
+        that went away, is dropped and its chat told. Never answers the prompt."""
+        try:
+            while self._prompt_held.get(pane_id):
+                await asyncio.sleep(AWAITING_PROBE_EVERY_S)
+                kept = self._prompt_held.get(pane_id) or []
+                if not kept:
+                    break
+                lang = prompt_skills.language(await self._ui_settings())
+                now = self._clock()
+                expired = [k for k in kept if now - k[0] >= held.HELD_TTL_S]
+                if expired:
+                    kept = [k for k in kept if k not in expired]
+                    self._prompt_held[pane_id] = kept
+                    await self._tell_held(expired, lang, "expired", minutes=int(held.HELD_TTL_S // 60))
+                if not kept:
+                    break
+                if not self._seams.resolve_pane(pane_id):
+                    self._prompt_held.pop(pane_id, None)
+                    await self._tell_held(kept, lang, "gone")
+                    break
+                if self._seams.pane_state(pane_id).get("display_status") == "awaiting":
+                    continue
+                self._prompt_held.pop(pane_id, None)
+                for since, msg, binding in kept:
+                    self._enqueue(msg.location_key(),
+                                  lambda m=msg, b=binding, s=since: self._send_held(m, b, pane_id, s, lang))
+        finally:
+            if not self._prompt_held.get(pane_id):
+                self._prompt_held.pop(pane_id, None)
+            self._held_watching.discard(pane_id)
+
+    async def _send_held(self, msg: InboundMessage, binding: Binding, pane_id: str, since: float,
+                         lang: str) -> None:
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            # Channels turned off, or this bot stopped or removed, while it was kept: nothing
+            # from the chat goes in now. Told where the bot still runs; otherwise only logged.
+            if (msg.platform, msg.account) in self._adapters:
+                await self._tell_held([(since, msg, binding)], lang, "revoked")
+            else:
+                log.info("channels: a kept message for %s was dropped: its bot is no longer running", pane_id)
+            return
+        current = self._binding_for(msg)
+        if current is None or current.pane_id != binding.pane_id \
+                or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            # Unbound, rebound elsewhere, or its sender taken off the allowlist while it was
+            # kept: what the chat may no longer send is not sent for it now.
+            await self._tell_held([(since, msg, binding)], lang, "revoked")
+            return
+        if await self._deliver(msg, binding, pane_id, held_since=since):
+            await self._reply(msg, held.text(lang, "sent", items=wake.quoted([_preview(msg)])))
+
+    async def _tell_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str, key: str,
+                         **kw: Any) -> None:
+        """Tell each chat which of its kept messages were dropped (``key``: expired / gone /
+        revoked)."""
+        by_loc: dict[str, list[InboundMessage]] = {}
+        for _since, msg, _binding in dropped:
+            by_loc.setdefault(msg.location_key(), []).append(msg)
+        for msgs in by_loc.values():
+            items = wake.quoted([_preview(m) for m in msgs])
+            await self._reply(msgs[0], held.text(lang, key, count=len(msgs), items=items, **kw))
+
+    def _drop_held(self, pane_id: str) -> None:
+        """Unbind / rebind: forget what was kept for ``pane_id`` or through its binding (a
+        child's prompt), each chat told on its own worker; never sent in afterwards."""
+        dropped: list[tuple[float, InboundMessage, Binding]] = []
+        for held_pane, kept in list(self._prompt_held.items()):
+            gone = [k for k in kept if held_pane == pane_id or k[2].pane_id == pane_id]
+            if gone:
+                dropped += gone
+                self._prompt_held[held_pane] = [k for k in kept if k not in gone]
+        by_loc: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        for k in dropped:
+            by_loc.setdefault(k[1].location_key(), []).append(k)
+
+        async def tell(items: list[tuple[float, InboundMessage, Binding]]) -> None:
+            await self._tell_held(items, prompt_skills.language(await self._ui_settings()), "revoked")
+
+        for key, items in by_loc.items():
+            self._enqueue(key, lambda i=items: tell(i))
+
+    async def status_details(self, pane_id: str) -> list[str]:
+        """What /status adds under the pane tree: how long the pane has waited on a prompt,
+        how many kept messages follow it, and its last turn's text (redacted, one line)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        lines: list[str] = []
+        kept = self._prompt_held.get(pane_id) or []
+        if self._seams.pane_state(pane_id).get("display_status") == "awaiting":
+            starts = [r.created for r in self.relay.for_pane(pane_id)] or [k[0] for k in kept]
+            if starts:
+                minutes = int(max(self._clock() - min(starts), 0) // 60)
+                lines.append(held.text(lang, "status_awaiting", minutes=minutes))
+        if kept:
+            lines.append(held.text(lang, "status_held", count=len(kept)))
+        # Redacted whole (again: a secret registered since it was stored), then cut: a cut
+        # first could split a secret where redaction no longer recognises it.
+        last = " ".join(redact.redact_text(self._last_turn_text.get(pane_id, "")).split())
+        if last:
+            if len(last) > STATUS_LAST_CHARS:
+                last = last[:STATUS_LAST_CHARS - 1] + "…"
+            lines.append(held.text(lang, "status_last", text=last))
+        return lines
 
     async def _list_pending(self, msg: InboundMessage) -> None:
         """/pending: send this chat's waiting prompts again, each with its buttons. The new
@@ -2543,6 +2705,12 @@ class ChannelManager:
     async def _cancel_queued(self, msg: InboundMessage) -> None:
         """``/cancel``: withdraw what this chat sent that has not gone into a pane yet."""
         withdrawn = 0
+        here = msg.location_key()
+        for pane_id, kept in list(self._prompt_held.items()):
+            mine = [k for k in kept if k[1].location_key() == here]
+            if mine:
+                withdrawn += len(mine)
+                self._prompt_held[pane_id] = [k for k in kept if k not in mine]
         for key in self._joining(msg):
             buf = self._debounce.pop(key)
             if buf.task is not None:
@@ -2721,9 +2889,11 @@ class ChannelManager:
         return msg.reply_to_self or (bool(author) and (
             author == msg.sender_id or self.gate.is_allowed(msg.platform, author, msg.account)))
 
-    async def _deliver(self, msg: InboundMessage, binding: Binding, pane_id: str) -> bool:
-        """True when the text went to the pane; every refusal has already been replied to."""
-        if await self._held_by_prompt(msg, pane_id):
+    async def _deliver(self, msg: InboundMessage, binding: Binding, pane_id: str, *,
+                       held_since: float | None = None) -> bool:
+        """True when the text went to the pane; every refusal has already been replied to.
+        ``held_since``: a kept message sent in after a prompt, kept since then."""
+        if await self._held_by_prompt(msg, pane_id, binding, held_since):
             return False
         queued = self._queued.setdefault(pane_id, set())
         if len(queued) >= MAX_QUEUED_PER_PANE:

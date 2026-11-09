@@ -4,6 +4,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Chat channels: a message sent from a chat (Telegram and the others) to a pane that is waiting on a permission prompt is no longer refused. It is kept and the chat is told so, with the prompt and its buttons quoted and a withdraw button; once the prompt clears the kept messages go in, in order, and each is confirmed as sent. Up to 20 per pane are kept for 30 minutes; one still waiting after that, kept for a pane that goes away, or kept for a chat that is unbound (or rebound), a sender taken off the allowlist, or a bot stopped or removed (or channels turned off) meanwhile, is dropped and the chat told where its bot still runs. `/cancel` withdraws them, and a bare `yes` or option number that answered nothing is never kept. Nothing here can allow a prompt from the chat: Navide Guard's remote-approval rules are unchanged.
+- Chat channels: `/status`, answered by Navide without reaching the pane, now also says how long the pane has waited on a prompt, how many kept messages follow it, and its last turn text on one line (redacted in full before it is shortened, so a secret cut at the limit cannot show).
+
 ### New on Navide Marketplace
 
 <!-- Listings first published on Navide Marketplace in this release, and
@@ -12,8 +17,25 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Added
 
+- Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
+- Plugins (0.2.40): plugin views can follow the Navide interface language. `ui.getLocale` answers the language in effect (the one chosen in Settings, or the one picked from the system), and `ui.localeChanged` fires when the user switches; the SDK wraps them as `getHostLocale()` and `onHostLocaleChanged()`. Both need `permissions.system: ["ui"]`; plugin API 1.4.0.
+
+### Changed
+
+- Plugin docs (0.2.40): the developer spec says what a plugin view's `Origin` is (`navide-plugin-frame://` plus 64 random hex characters per mount, so a service allows `^navide-plugin-frame://[0-9a-f]{64}$` and identifies the caller another way), that a namespace and each id segment contain no `.`, and that `permissions.network` covers only the requests a plugin's own views make, not the sites a Host browser view loads; the agent tools contract and the spec's stale 0.2.38 passages describe 0.2.39.
+
+### Fixed
+
+- Pipelines (0.2.40): starting a pipeline and opening its stage panes no longer freezes Navide while the disk is slow: the run records are now saved on a background thread, in order, so every window keeps responding even when a save takes seconds (a VM measured one at 21.7s).
+
 - Navide plugins (0.2.40): Settings → Navide Plugins → Installed opens with an Activity monitor, every installed Navide plugin on one table, refreshed every few seconds: its status, agent tool calls and capability calls in the last minute, the network hosts its views reached in the last 7 days (a host the manifest does not declare, or one that was refused, in red), how many tool calls in a row failed, and its backend's memory, marked when a resource is over its threshold. Opening a row shows that plugin's full Activity. Records only: the monitor changes nothing a plugin may do. Navide Browser 1.1.2, Navide Git 1.0.5, Mini-IDE 1.0.4 and Plans 1.1.4 carry the new interface strings.
 - Navide plugins (0.2.40): stop a running third-party Navide plugin at once from four places: Stop on its row of the Activity monitor, the new Navide plugins item in the status bar (it lists them and stops one), `/plugins stop <id>` in a bound Channels chat (`/plugins status` lists them), and, for an agent, `plugins_disable`. Each asks once more before it stops. A stop is the plugin's Disabled switch: calls in flight are ended with `PLUGIN_STOPPING`, its events and views stop and its backend is closed, while its files, permissions and data stay. Navide records where the stop came from and what the plugin was doing then (calls in flight, tool and capability calls in the last minute, failed calls in a row, undeclared or refused hosts) and shows it before you enable the plugin again in Settings. Nothing outside the Navide window can start a plugin, and an agent cannot enable one you stopped. Bundled Navide plugins keep their own Disabled switch.
+
+### Fixed
+
+- Panes (0.2.40): a STOP the CLI did not act on no longer looks like it worked. When Claude spends the Ctrl-C on clearing queued input and the turn keeps running, a Claude or Codex pane that shows no sign of the interrupt within 5 seconds (no "[Request interrupted by user]" record, no turn end) puts its live status back with a "STOP not applied" badge beside it, so Interrupt can be pressed again. A STOP a person pressed still holds queued messages until they type, and a late interrupt record brings the STOP badge back. Navide does not send a second Ctrl-C on its own, since two in a row quit Claude.
+
+- Plugins (0.2.40): the static scan (Registry and `navide-plugin scan`, scanner 1.1.0) no longer reports `vuejs.org` as an undeclared network host for a package bundling Vue's production build, whose error messages carry `https://vuejs.org/error-reference/#runtime-…`; the host reached any other way is still reported. A string that only looks like a capability address (an i18n key such as `'ui.title'`) no longer counts as using that namespace: only addresses in the public catalog do.
 
 ## [0.2.39] — 2026-11-09
 

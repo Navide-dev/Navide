@@ -18,9 +18,11 @@
 > the environment-variable Developer Mode of a development build
 > (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a Manifest v2 view or run a
 > backend, while a folder loaded with Settings → Navide Plugins → Developer
-> Mode can (see [Backend trust](#backend-trust)); `contributes.commands` is the
-> one contribution point besides views (no menu or keybinding contribution
-> points); `custom` is the only view kind; and a package can be installed,
+> Mode can (see [Backend trust](#backend-trust)); besides views, the
+> contribution points are `commands` and their slots (`statusBar`,
+> `paneActions`, `explorerMenu`), `settings`, `agentTools`, `api` and
+> `pipelineNodes` (no menu bar or keybinding contribution points: a user binds
+> keys to a command in Settings → Shortcuts); `custom` is the only view kind; and a package can be installed,
 > disabled and enabled (Settings → Navide Plugins, or an agent's
 > `plugins_disable` / `plugins_enable` request the user approves) and removed.
 >
@@ -419,7 +421,9 @@ all of these hold, and they are checked again before every restart:
   allows it again, in the dialog shown before it starts.
 - The platform sandbox is available. There is no unsandboxed fallback.
 - The package does not declare `permissions.shell: "full"`. A backend package
-  may declare `shell: "allowlist"`; see "Shell commands from a backend" below.
+  may declare `shell: "allowlist"`, as the string or as the object that also
+  names its own executables (`{ "mode": "allowlist", "executables": [...] }`);
+  see "Shell commands from a backend" below.
 
 | Platform | Sandbox | Contains | Does not contain |
 |---|---|---|---|
@@ -476,10 +480,13 @@ the same as a view's `shell.run` (see "`shell.run` output size" below); a
 refused command is the bridge error `CAPABILITY_DENIED`. The Host checks on every call that the package declares
 `shell: "allowlist"`, that the user's capability grant for this package version
 has the same shell mode, that the call comes from a live binding of this
-version at its bound workspace root. Today only user-initiated calls are
-served: an agent-initiated shell call is refused (third-party methods are not
-agent-callable yet; B1-b of plan B opens that path, and the supervisor already
-applies the user's agent execution policy to the command for it). A backend
+version at its bound workspace root. Only user-initiated calls are served
+(0.2.39): an agent can call a backend method through the package's
+`backend.agentTools`, but a shell call made inside that agent-tool call is
+refused (`CAPABILITY_DENIED`). Opening shell to agent calls widens what agents
+can do and waits on its own decisions (whether agents get shell at all, what a
+read tool may run, how consent discloses it); the supervisor already applies
+the user's agent execution policy to the command for it. A backend
 that does not declare it is refused the port. A command the broker has already
 started is not cancelled when the plugin is disabled, its permission is
 revoked or the bridge request times out (30 s): it runs to completion, up to
@@ -596,12 +603,43 @@ loads from is always admitted. A Manifest v1 (legacy) descriptor has no
 declaration model and is not filtered (its frames keep `connect-src 'none'`
 as before).
 
-**What it does not govern.** The backend sandbox: a declaration gives the
-native backend no network (it still has none; see
-[TA-1](security/ta-1-backend-network.md) for the planned bridge). The shell
-broker's `git`, `gh` and `glab` still reach the hosts those commands name
-(the "Network reach" paragraph above). The browser plugin's `web` namespace,
-which is a Host-owned browser partition disclosed as high risk on its own.
+**What it does not govern.** `permissions.network` is about the requests the
+package's own views make, nothing else:
+
+- The sites a Host browser view loads. A page opened with `web.create` or
+  `web.navigate` (the `web` namespace, see
+  [Plugin browser views](#plugin-browser-views-web)) runs in a Host-owned
+  browser partition, not in the package's view: the hosts it loads, and every
+  request that page makes, are neither checked against the declaration nor
+  refused by the switch. That namespace is disclosed as high risk on its own,
+  so a package that only shows a web page needs no `network` entry for that
+  site, and a package that `fetch`es the same site from its view does.
+- The backend sandbox: a declaration gives the native backend no network (it
+  still has none; see [TA-1](security/ta-1-backend-network.md) for the planned
+  bridge).
+- The shell broker's `git`, `gh` and `glab`, which still reach the hosts those
+  commands name (the "Network reach" paragraph above).
+
+**The view's origin, for a service that checks CORS.** A composed frame is
+served from `navide-plugin-frame://<hostname>/`, where `<hostname>` is 64
+lowercase hex characters (32 random bytes) drawn again every time the frame is
+mounted (`src/main/plugins/pluginFrameAssetProtocol.ts`). The scheme is
+registered as standard and secure, so the view's `fetch` and XHR send that
+`Origin`. It is unguessable and changes on every mount by design: it does not
+name the package and cannot be used to tell one plugin, version or user from
+another. A third-party service that answers CORS for Navide plugin views
+allows the shape, not one value:
+
+```text
+^navide-plugin-frame://[0-9a-f]{64}$
+```
+
+and identifies the caller some other way, such as a per-user token the
+package keeps with `secrets.set` and sends as a header. A surface (a `left`,
+`detail` or `window` view) is loaded from the package's files, a `file:`
+origin that Chromium sends as `Origin: null` (a development build of Navide
+itself may load one from a dev server instead, with that server's origin). Do
+not build an allowlist on either.
 
 **Disclosure and record.** The consent card lists the declared hosts as a
 summary clause ("Its views can connect to: …"), the disclosure data carries
@@ -1170,10 +1208,10 @@ matches.
 |---|---|---|---|
 | `schemaVersion` | yes | `2` | |
 | `apiVersion` | yes | X.Y.Z, optionally prefixed with ^ or ~ | Public SDK and capability range |
-| `id` | yes | Lowercase dotted id such as acme.files | |
+| `id` | yes | Lowercase dotted id such as acme.files | `<namespace>.<name>`. Each segment is lowercase letters, digits and hyphens and can contain no `.`: the first dot ends the namespace, so `nt.neil.tools` is namespace `nt`, and a namespace written `nt.neil` cannot exist (use `nt-neil`) |
 | `name` | yes | 1–80 characters of plain text | |
 | `version` | yes | SemVer 2.0.0 | |
-| `publisher` | yes | Lowercase publisher id | |
+| `publisher` | yes | Lowercase publisher id | Must equal the id's namespace (its first segment): lowercase letters, digits and hyphens, no `.`; a namespace claimed on the Marketplace is 3–32 characters |
 | `engines` | no | Object with a required navide requirement | See `engines.navide` above |
 | `permissions` | yes | Object; may be empty | Must be empty in an Extension Pack |
 | `marketplace` | yes | Object with a required description and license | |
@@ -1628,6 +1666,8 @@ unchanged:
 | `onAgentToolCall(name, handler)` | `createPluginViewRuntimeClient().onAgentToolCall(name, handler)`: serve a `contributes.agentTools` entry from this view (0.2.39) |
 | `onBackendStatus(listener)` | `createPluginViewRuntimeClient().onBackendStatus(listener)` |
 | `openContributionWindow(params)` | `createPluginViewRuntimeClient().openContributionWindow(params)` |
+| `getHostLocale()` | `context.capabilities.invoke('ui.getLocale', {})`, resolved to the `locale` string (0.2.40) |
+| `onHostLocaleChanged(listener)` | `context.events.subscribe('ui.localeChanged', …)`, called with the new `locale` string (0.2.40) |
 
 The receiver, detail and close methods exist only on the client.
 
@@ -1687,6 +1727,31 @@ not call it directly. The one exception is the `navide-plugin init` scaffold:
 having no build step to bundle the SDK, its `main.js` calls `window.nav.ready()`,
 which is all `createPluginViewRuntimeClient().ready()` does.
 
+### Host language (`ui.getLocale`)
+
+A view that translates its own text reads the language the Navide interface
+shows instead of guessing from `navigator.language`. `ui.getLocale` answers
+`{ locale }`, a BCP 47 tag such as `en-US`, `zh-TW` or `ja-JP`: the language
+the user chose in Settings, or the one Navide picked from the operating system
+when they chose none. When the user switches language, every running view gets
+`ui.localeChanged` with the new tag; nothing reloads, so the view re-renders
+its own text. Both need `permissions.system: ["ui"]` and exist since plugin API
+1.4.0 (Navide 0.2.40); on an older Host the call fails with `METHOD_NOT_FOUND`,
+so keep a fallback:
+
+```ts
+import { getHostLocale, onHostLocaleChanged } from '@navide/plugin-sdk'
+
+declare function applyLocale(locale: string): void // your view's own i18n
+
+applyLocale(await getHostLocale().catch(() => 'en-US'))
+onHostLocaleChanged(applyLocale)
+```
+
+A tag your view has no translation for should fall back to your default
+language. Manifest text (`displayName`, `description`, contribution titles) is
+not translated by the Host.
+
 ### Testing without Navide (`@navide/plugin-sdk/testing`)
 
 `createTestHost(options)` builds an in-memory Host for a plugin's own unit
@@ -1727,6 +1792,7 @@ are not Manifest v2 permissions.
 |---|---|---|
 | `system:fs` | `fs.readFile`, `fs.listDirectory`, `fs.glob`, `fs.queryFiles`, `fs.stat`, `workspace.filesChanged` | `workspace` |
 | `system:ui` | `ui.openInEditor` | `workspace` |
+| `system:ui` | `ui.getLocale`, `ui.localeChanged` | `plugin` (the interface language, see [Host language](#host-language-uigetlocale)) |
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `system:web` | `web.list`, `create`, `attach`, `detach`, `navigate`, `setOwner`, `takeControl`, `returnControl`, `close`, `capture`, `clearData`, `changed` | `plugin` (see [Plugin browser views](#plugin-browser-views-web)) |
@@ -1765,6 +1831,23 @@ limit is unchanged. Since 0.2.25 the result says when that happened:
 that needs the whole output asks for less at a time (for example `git log -n`,
 a path filter). Whether the limit is lifted is the user's decision and not part
 of this change.
+
+**`fs.writeFile` binary content.** `content` is always a string. By default
+it is text, encoded with `encoding` (UTF-8 when omitted; the labels
+`fs.readFile` returns, such as `UTF-8 with BOM`, are accepted). Since 0.2.40
+`encoding: 'base64'` writes binary files: `content` is then the standard
+base64 text of the exact bytes to store, and text that is not valid base64 is
+refused with `ok: false`. The 50 MB limit counts the decoded bytes. Older
+Hosts answer `ok: false` for `base64`, because it is not a text codec there:
+
+```ts
+import { createPluginCapabilityClient } from '@navide/plugin-sdk'
+
+declare const pngBytes: Uint8Array
+const context = createPluginCapabilityClient()
+const content = btoa(Array.from(pngBytes, (byte) => String.fromCharCode(byte)).join(''))
+await context.capabilities.invoke('fs.writeFile', { path: 'out/cover.png', content, encoding: 'base64' })
+```
 
 The table shows representative entries; `capabilities-v1.json` lists all of
 them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and

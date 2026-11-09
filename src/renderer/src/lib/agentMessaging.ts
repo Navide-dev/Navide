@@ -673,6 +673,14 @@ export const VENDORS_WITHOUT_TURN_END: ReadonlySet<string> = new Set(
   AGENT_SPECS.filter((s) => s.turnEndInferredFromSilence).map((s) => s.agentKey)
 )
 
+/** Vendors whose log says when an interrupt took effect: Claude writes
+ *  "[Request interrupted by user]" (agent_active INTERRUPT_ACTIVITY_DETAIL),
+ *  Codex ends the turn with turn_aborted. Only these panes judge a STOP with
+ *  no such evidence as "STOP not applied" (useTerminal reportsInterrupt). */
+export const VENDORS_REPORTING_INTERRUPT: ReadonlySet<string> = new Set(['claude', 'codex'])
+/** Mirrors INTERRUPT_DETAIL in backend cli_vendors/claude.py. */
+export const INTERRUPT_ACTIVITY_DETAIL = 'user:interrupted'
+
 /** CLIs whose log reader never surfaces the user's own prompt text on its
  *  user-record events (agent_active with detail user / prompt / user_message).
  *

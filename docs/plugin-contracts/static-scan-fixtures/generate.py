@@ -138,7 +138,14 @@ CASES: list[dict] = [
         "frontend/a.js": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });"
                          "invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });"
                          "invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);"
-                         "invoke('ui.showMessage', {}); invoke('aiCli.start', {}); invoke('storage.get', {key: 'k'})",
+                         "invoke('ui.openExternal', {url}); invoke('aiCli.startSession', {}); invoke('storage.get', {key: 'k'});"
+                         "t('ui.title'); const w = 'ui.sidebarWidth'; invoke('aiCli.start', {})",
+    }},
+    {"name": "reference-urls", "files": {
+        "frontend/vue.js": "const errorInfo = `https://vuejs.org/error-reference/#runtime-${type}`;"
+                           "s=`https://vuejs.org/error-reference/#runtime-${n}`;",
+        "frontend/real.js": "fetch('https://vuejs.org/api/'); const r = 'https://vuejs.org/error-reference/#x/../../api';"
+                            "const e = 'https://vuejs.org/error-reference/#https://evil.example.com/x'",
     }},
     {"name": "code-signals", "files": {
         "frontend/a.js": "eval(x); new Function('a', b); Function(c)(); obj.eval(y); import(name); import('./a.js');"

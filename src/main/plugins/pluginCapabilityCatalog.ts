@@ -287,7 +287,7 @@ function systemMethod(
     address,
     kind: 'method',
     namespace,
-    scope: namespace === 'ui' && address === 'ui.openExternal' ? 'plugin' : 'workspace',
+    scope: address === 'ui.openExternal' || address === 'ui.getLocale' ? 'plugin' : 'workspace',
     eligibility,
     validateRequest,
   }
@@ -353,6 +353,9 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   'ui.editorPreferencesChanged': {
     address: 'ui.editorPreferencesChanged', namespace: 'ui', scope: 'workspace', kind: 'event', eligibility: 'public',
   },
+  'ui.localeChanged': {
+    address: 'ui.localeChanged', namespace: 'ui', scope: 'plugin', kind: 'event', eligibility: 'public',
+  },
   'ui.pluginStorageChanged': {
     address: 'ui.pluginStorageChanged', namespace: 'ui', scope: 'workspace', kind: 'event', eligibility: 'public',
   },
@@ -407,6 +410,7 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     ...systemMethod('ui.openExternal', 'ui', validateExternalRequest),
     requiresUserGesture: true,
   },
+  'ui.getLocale': systemMethod('ui.getLocale', 'ui', validateEmptyRequest),
   'storage.get': storageMethod('storage.get'),
   'storage.set': storageMethod('storage.set'),
   'storage.delete': storageMethod('storage.delete'),

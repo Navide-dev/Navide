@@ -5720,6 +5720,7 @@ ipcMain.on('settings:language-changed', (_event, locale: string) => {
     frontendPluginManager.dispatchHostSettingsChanged({
       settings: { 'agent-team:language': normalizedLocale },
     })
+    frontendPluginManager.notifyHostLocaleChanged(normalizedLocale)
     // The native menu is built once at startup; Electron has no API to
     // re-label it in place, so a language change has to install a new one.
     rebuildAppMenu()

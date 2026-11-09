@@ -17,7 +17,7 @@ import re
 import struct
 from dataclasses import dataclass, field
 
-from .js_scan import CAPABILITY_ADDRESS_RE, command_like, hosts_in
+from .js_scan import command_like, hosts_in, is_capability_address
 from .limits import NO_DEADLINE, Deadline
 
 #: Imports worth naming on the card: process creation, networking, dynamic loading.
@@ -308,7 +308,7 @@ def _classify(text: str, facts: NativeFacts) -> None:
     for host in hosts_in(text):
         facts.hosts[host] = facts.hosts.get(host, 0) + 1
     for word in text.split():
-        if CAPABILITY_ADDRESS_RE.fullmatch(word):
+        if is_capability_address(word):
             facts.capabilities.add(word)
     parsed = command_like(text.strip())
     if parsed is not None:

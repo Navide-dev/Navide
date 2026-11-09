@@ -56,6 +56,7 @@ from .ipc import make_error, make_event, make_response
 from .log_readers.claude import ClaudeLogReader, first_user_prompts
 from .applog import app_data_dir, in_data_dir
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
+from .db_executor import run_in_db_thread
 from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text, declared_executables
 from .mcp_settings import (
     MCPSettingsConflictError,
@@ -11542,25 +11543,32 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     from .projects import ParentRunSuspended
 
     child_of = str(payload.get("child_of") or "")
-    frame = None
-    # What the run this start overwrites had come to, for its webhook row.
-    peek = getattr(app.project_store, "peek", None)
-    ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
-    if child_of:
-        before = app.project_store.peek(payload["workspace_path"])
-        stack = getattr(before, "run_stack", None) or []
-        frame = stack[-1] if stack else None
-    try:
+    pipeline_id = payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id()
+
+    def _start() -> tuple[Any, Any, Any]:
+        # Runs on the db thread: the commit's fsync must not stall the loop.
+        frame = None
+        # What the run this start overwrites had come to, for its webhook row.
+        peek = getattr(app.project_store, "peek", None)
+        ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
+        if child_of:
+            before = app.project_store.peek(payload["workspace_path"])
+            stack = getattr(before, "run_stack", None) or []
+            frame = stack[-1] if stack else None
         project = app.project_store.start_pipeline(
             payload["workspace_path"],
             task_description=payload.get("task_description", ""),
             total_stages=int(payload.get("total_stages", len(payload.get("stage_blueprint") or []))),
             stage_blueprint=payload.get("stage_blueprint", []),
             backend_version=app.__version__,
-            pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
+            pipeline_id=pipeline_id,
             start_index=int(payload.get("start_index", 0) or 0),
             child_of=child_of,
         )
+        return project, frame, ended
+
+    try:
+        project, frame, ended = await run_in_db_thread(_start)
     except ParentRunSuspended as err:
         await session.send_json(make_error(msg_id, msg_type, "PIPELINE_SUSPENDED", str(err)))
         return
@@ -11606,7 +11614,8 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
     from .projects import StageOutOfRange
 
     try:
-        project = app.project_store.record_stage_spawn(
+        project = await run_in_db_thread(
+            app.project_store.record_stage_spawn,
             payload["workspace_path"],
             stage_index=int(payload["stage_index"]),
             pane_id=payload["pane_id"],
@@ -11618,7 +11627,7 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
         return
     from .guard.taint import pipeline_pane_spawned
 
-    pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    await run_in_db_thread(pipeline_pane_spawned, payload["workspace_path"], str(payload["pane_id"]))
     pipeline_liveness.claim_run(session, project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11633,7 +11642,8 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
     slot_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
     try:
-        project = app.project_store.record_slot_spawn(
+        project = await run_in_db_thread(
+            app.project_store.record_slot_spawn,
             payload["workspace_path"],
             stage_index=int(payload["stage_index"]),
             slot_label=payload["slot_label"],
@@ -11654,7 +11664,7 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
 
-    pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    await run_in_db_thread(pipeline_pane_spawned, payload["workspace_path"], str(payload["pane_id"]))
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )

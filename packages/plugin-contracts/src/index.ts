@@ -1461,6 +1461,7 @@ export class PluginError extends Error {
 export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
+  /** `encoding: 'base64'` (Navide 0.2.40+) writes binary: `content` is the base64 text of the bytes. */
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
   'fs.readImage': { path: string; selectionGrant?: string }
   'fs.listDirectory': { path: string; showHidden?: boolean }
@@ -1485,6 +1486,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'ui.shareCreate': { path: string; ttlSeconds?: number; requireLogin?: boolean; sendToChat?: boolean; chatId?: string }
   'ui.shareChatTargets': Record<string, never>
   'ui.openExternal': { url: string }
+  'ui.getLocale': Record<string, never>
   'aiCli.listProfiles': { terminalView?: boolean }
   'aiCli.startSession': { profileId: string; requestId?: string; cols: number; rows: number; yolo?: boolean; persistView?: boolean }
   'aiCli.resumeSession': { cols: number; rows: number; persistView?: boolean }
@@ -1546,6 +1548,8 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     | { ok: true; chats: Array<{ chatId: string; platform: string; name: string }> }
     | { ok: false; code: string; message: string }
   'ui.openExternal': { opened: boolean }
+  /** The interface language now in effect, a BCP 47 tag such as `en-US` (Navide 0.2.40+). */
+  'ui.getLocale': { locale: string }
   'aiCli.listProfiles': { profiles: Array<{ id: string; label: string; fullScreenTui?: boolean; bracketedPaste?: boolean; shiftEnterSequence?: string }> }
   'aiCli.startSession': { sessionId: string }
   'aiCli.resumeSession': { sessionId: string; profileId: string } | null
@@ -1574,6 +1578,8 @@ export type Result<M extends PublicMethod> = PublicMethodResults[M]
 export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads, WebEventPayloads {
   /** UI notification for a write to this receiver's own selected snapshot. */
   'ui.pluginStorageChanged': { scope: StoragePartitionScope; key: string; value: JsonValue; deleted: boolean }
+  /** The interface switched language; `locale` is what `ui.getLocale` now returns (Navide 0.2.40+). */
+  'ui.localeChanged': { locale: string }
   'workspace.filesChanged': {
     changes: Array<{ path: string; kind: 'created' | 'changed' | 'deleted' }>
   }
