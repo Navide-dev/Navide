@@ -1164,7 +1164,18 @@ computer: multi-select menus and free-text ("Type something") options, and
 prompts from vendors Navide has no answer keys for (only Claude Code, Codex and
 Aider have them), which post a notice without buttons. A turn that ends on a
 plain-text question posts no request; reply by typing. Other text sent to a
-pane waiting on a prompt is not queued: the chat is told how to answer instead.
+pane waiting on a permission prompt is kept, not refused (`channels/held.py`):
+the chat is told at once that it was kept (with the prompt and its buttons
+quoted, plus a withdraw button), and once the pane leaves the prompt the kept
+messages go in, in order, each one confirmed in the chat as sent. At most 20
+are kept per pane; a kept message still waiting after 30 minutes is dropped
+and the chat told, and so are those kept for a pane that goes away. `/cancel`
+withdraws them. A bare `yes`, `no` or option number that answered nothing is
+never kept: sent in later, it would answer whatever is on screen by then.
+Keeping a message never answers or allows the prompt. `/status` is answered
+by Navide itself, never sent to the pane, even while it waits on a prompt:
+the pane tree, how long the prompt has waited, how many kept messages follow
+it, and the pane's last turn text on one line (redacted).
 
 **Security note:** anyone on the allowlist can approve tool calls on your
 machine while the relay is on. Keep the allowlist short; Navide Guard refuses
