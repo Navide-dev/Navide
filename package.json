@@ -337,7 +337,7 @@
     "@xterm/xterm": "^6.0.0",
     "electron-updater": "^6.8.11",
     "html-to-text": "^10",
-    "koffi": "^3.3.3",
+    "koffi": "^3.3.7",
     "mermaid": "^12.2.0",
     "monaco-editor": "^0.55.1",
     "vue-i18n": "11",
