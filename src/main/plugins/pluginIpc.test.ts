@@ -1946,6 +1946,23 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       }
     })
 
+    it('"Resume all" leaves a plugin disabled again since for another reason', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await handlers.get('plugins:stopAll')!(null, { via: 'settings' })
+        // The user enables it, then disables it with the plain switch.
+        await handlers.get('plugins:setDisabled')!(null, { id: 'acme.demo', disabled: false })
+        await handlers.get('plugins:setDisabled')!(null, { id: 'acme.demo', disabled: true })
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: [], failed: [] })
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(switches.restore).toHaveBeenCalledWith(previous)
+        expect(handlers.get('plugins:globalStopState')!(null)).toBeNull()
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
     it('plugins_disable_all stops them as the agent, told to the user; a chat stop-all after it makes them the user\'s', async () => {
       const { root, manager, stopRequest, agentAction, onPluginAgentAction } = await installedWithSwitches()
       const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
