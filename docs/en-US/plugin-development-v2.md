@@ -1787,7 +1787,10 @@ refused with `ok: false`. The 50 MB limit counts the decoded bytes. Older
 Hosts answer `ok: false` for `base64`, because it is not a text codec there:
 
 ```ts
+import { createPluginCapabilityClient } from '@navide/plugin-sdk'
+
 declare const pngBytes: Uint8Array
+const context = createPluginCapabilityClient()
 const content = btoa(Array.from(pngBytes, (byte) => String.fromCharCode(byte)).join(''))
 await context.capabilities.invoke('fs.writeFile', { path: 'out/cover.png', content, encoding: 'base64' })
 ```
