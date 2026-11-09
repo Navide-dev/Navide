@@ -2,6 +2,7 @@
 import json, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT, CMD, LOG = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+BG_IDS = set()  # ids of the background tool calls this stub answered with (rule "bg")
 def sse(w, name, data):
     w.write(f"event: {name}\ndata: {json.dumps(data)}\n\n".encode()); w.flush()
 def branch(msgs):
@@ -29,18 +30,21 @@ class H(BaseHTTPRequestHandler):
         tool = has_tools and not done and not __import__("os").path.exists(LOG + ".notool")
         rule_text = None; bg = None
         # rule "bg": answer with a Bash call that runs in the background; when it finishes Claude starts a turn of its own
-        # stub.log.tailsleep (seconds): the next request whose LAST message carries a tool result waits that long (one
-        # shot). Not "done": that is true for any request of a session with an earlier tool call, so a new prompt to a
-        # pane that already ran Bash once would be held before its background Bash ever ran.
-        lm = msgs[-1].get("content") if msgs else None
-        last_tr = isinstance(lm, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in lm)
-        if has_tools and last_tr and os_.path.exists(LOG + ".tailsleep"):
+        # stub.log.tailsleep (seconds): the first request that carries the result of a background call this stub made
+        # waits that long (one shot). Not "done", nor "the last message is a tool result": Claude Code merges the
+        # conversation into one user message and appends a system block, so neither tells a new prompt from the
+        # background call's result, and a pane that ran Bash once would be held before its background Bash ever ran.
+        blocks = [b for m in msgs if isinstance(m.get("content"), list) for b in m["content"] if isinstance(b, dict)]
+        bg_tr = any(b.get("type") == "tool_result" and b.get("tool_use_id") in BG_IDS for b in blocks)
+        bg_asked = any(b.get("type") == "tool_use" and b.get("id") in BG_IDS for b in blocks)
+        if has_tools and bg_tr and os_.path.exists(LOG + ".tailsleep"):
             sl = int(open(LOG + ".tailsleep").read() or 0); os_.remove(LOG + ".tailsleep"); __import__("time").sleep(sl)
         if has_tools and msgs and os_.path.exists(LOG + ".rules.json"):
             lu = next((m for m in reversed(msgs) if m.get("role") == "user"), msgs[-1]); lc = lu.get("content")
             last = json.dumps([b for b in lc if isinstance(b, dict) and b.get("type") == "text"] if isinstance(lc, list) else lu, ensure_ascii=False)
             if "tool_result" not in last:
                 for r in json.load(open(LOG + ".rules.json", encoding="utf-8")):
+                    if r.get("bg") and bg_asked: continue  # one background call per conversation, not one per turn
                     if r["match"] in last:
                         __import__("time").sleep(r.get("sleep", 0)); rule_text = r["text"]; bg = r.get("bg"); break
         # Manager-mode pipeline (kickoffs carry ROLEMGR / ROLEWK): the Manager prints
@@ -75,7 +79,8 @@ class H(BaseHTTPRequestHandler):
         if rule_text is not None: tool = False; pre = ""
         if bg:
             sse(w,"message_start",{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":model,"stop_reason":None,"stop_sequence":None,"usage":{"input_tokens":1,"output_tokens":1}}})
-            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_"+__import__("secrets").token_hex(6),"name":shell,"input":{}}})
+            tid = "toolu_" + __import__("secrets").token_hex(6); BG_IDS.add(tid)
+            sse(w,"content_block_start",{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":tid,"name":shell,"input":{}}})
             sse(w,"content_block_delta",{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":json.dumps({"command":bg,"description":"t","run_in_background":True})}})
             sse(w,"content_block_stop",{"type":"content_block_stop","index":0})
             sse(w,"message_delta",{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":None},"usage":{"output_tokens":1}})
