@@ -541,6 +541,28 @@ session cannot be resumed are refused. The answer lists
 `{reclaimed, refused: [{paneId, reason, detail}]}`. Prefer this to
 `cli_close_agent`, which ends the conversation for good.
 
+### Renaming a pane
+
+A pane's name is its address, so renaming it moves where messages go:
+
+```
+cli_rename_pane(target="<pane>", new_name="<new name>")
+```
+
+It is the same rename as editing the pane's title — the same checks (one
+non-empty line; `/` stays in the title but becomes `-` in the address) and the
+same write path — so the title on screen, `cli_list_targets`, `cli_send`,
+`cli_get_status` and `cli_list_sessions`' `pane_name` switch together. A name
+another pane already answers to is refused with `name-taken` (nothing is
+suffixed for you). You can rename your own pane and the panes in your
+workspace you opened, directly or through your children (the `spawned_by`
+chain); anything else answers `rename-not-permitted`. CLI panes only, restore
+placeholders included; panes on another device answer `rename-local-only`.
+Scheduled jobs are the user's data and are not rewritten: one that still
+targets the old name comes back in `warnings`. Returns
+`{ok, old_name, new_name, pane_id, address, warnings?}`. Use it instead of
+reopening a session under a new name and reclaiming the old pane.
+
 ---
 
 ## How delivery actually works

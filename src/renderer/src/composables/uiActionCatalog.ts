@@ -48,6 +48,7 @@ export const UI_ACTION_SPECS: Readonly<Record<string, UiActionSpec>> = {
   'ui.pane.open': { args: '{paneId}', summary: 'Open a restore placeholder and wait for it' },
   'ui.pane.place': { args: '{paneId, runGroupId?, spawnedBy?}', summary: 'Move a pane to a tab group or under another pane' },
   'ui.pane.reclaim': { args: '{paneId} (one id or an array)', summary: "Free finished panes' resources, keeping each as a resumable card" },
+  'ui.pane.rename': { args: '{paneId, name}', summary: "Rename a CLI pane's title and messaging handle", dedicatedTool: 'cli_rename_pane' },
   'ui.pane.sendKeys': { args: '{paneId, answer, expected?}', summary: "Answer a pane's prompt", humanOnly: true },
   'ui.pipeline.abort': { summary: 'Abort the run in progress' },
   'ui.pipeline.gate_pass': { args: '{nodeId?}', summary: 'Pass the gate the run is waiting on' },
