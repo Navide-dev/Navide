@@ -275,6 +275,10 @@ def register_testplace_routes(
             raise exc.http() from exc
         if bearer.publisher is not None:
             publisher = bearer.publisher if bearer.publisher.name == namespace else None
+            # A publisher member's token publishes and yanks only (0.2.40):
+            # Testplace invites, codes, revocation and promotion are the owner's.
+            if publisher is not None and bearer.member_id != publisher.navide_member_id:
+                publisher = None
         elif bearer.member_id is not None:
             publisher = owned_publisher(session, bearer.member_id, namespace)
         else:
