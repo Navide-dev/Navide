@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import MarketplaceDeveloperPanel from '../MarketplaceDeveloperPanel.vue'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { closeMarketplaceForm, showMarketplaceForm } from '../../composables/useMarketplaceForms'
@@ -126,5 +126,71 @@ describe('MarketplaceDeveloperPanel', () => {
   it('shows no such line for a clean pane', async () => {
     wrapper = await open({ paneId: 'p', paneName: 'helper', workspace: null, callerKind: 'pane' })
     expect(wrapper.find('[data-testid="developer-form-tainted"]').exists()).toBe(false)
+  })
+
+  describe('namespace members (0.2.40)', () => {
+    const owner = { member_id: 'mem-owner', role: 'owner', added_at: null }
+    const publisher = { member_id: 'mem-pub', role: 'publisher', added_at: '2026-11-10T05:00:00+00:00' }
+
+    async function mountAs(role: 'owner' | 'publisher', api: Record<string, unknown> = {}): Promise<VueWrapper> {
+      ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+        developer: {
+          state: vi.fn(async () => ({
+            ...state, namespace: 'acme', signedIn: { account: false, publisher: true },
+            keyFingerprint: 'sha256:navide', keyConflictFingerprint: 'sha256:owner',
+          })),
+          application: vi.fn(async () => ({ ok: true, status: 200, body: { status: 'approved', reason: null, fields: {} } })),
+          versions: vi.fn(async () => ({ ok: true, status: 200, body: { namespace: 'acme', items: [] } })),
+          members: vi.fn(async () => ({ ok: true, status: 200, body: { your_role: role, items: [owner, publisher] } })),
+          ...api,
+        },
+      }
+      closeMarketplaceForm()
+      const w = mount(MarketplaceDeveloperPanel, { props: { backend: createMockBackend('connected').backend }, global: { plugins: [i18n] } })
+      await flushPromises()
+      return w
+    }
+
+    it('lists the owner and publishers with their roles', async () => {
+      wrapper = await mountAs('owner')
+      const rows = wrapper.findAll('[data-testid="developer-member-row"]')
+      expect(rows.map((row) => row.text())).toEqual([
+        expect.stringContaining(i18n.global.t('marketplace-developer.members.roles.owner')),
+        expect.stringContaining(i18n.global.t('marketplace-developer.members.roles.publisher')),
+      ])
+      expect(rows[0].find('[data-testid="developer-member-remove"]').exists()).toBe(false)
+      expect(rows[1].find('[data-testid="developer-member-remove"]').exists()).toBe(true)
+    })
+
+    it('adds a publisher only after the user confirms', async () => {
+      const addMember = vi.fn(async () => ({ ok: true, status: 201, body: { your_role: 'owner', items: [owner, publisher] } }))
+      wrapper = await mountAs('owner', { addMember })
+      await wrapper.get('[data-testid="developer-member-id"]').setValue(' mem-new ')
+      await wrapper.get('[data-testid="developer-member-add"]').trigger('click')
+      await flushPromises()
+      expect(addMember).not.toHaveBeenCalled()
+      useNotify().resolveDialog(true)
+      await flushPromises()
+      expect(addMember).toHaveBeenCalledWith({ memberId: 'mem-new' })
+    })
+
+    it('does nothing when the user cancels a removal', async () => {
+      const removeMember = vi.fn()
+      wrapper = await mountAs('owner', { removeMember })
+      await wrapper.get('[data-testid="developer-member-remove"]').trigger('click')
+      await flushPromises()
+      useNotify().resolveDialog(false)
+      await flushPromises()
+      expect(removeMember).not.toHaveBeenCalled()
+    })
+
+    it("shows a publisher the list without the owner's controls or the key replacement", async () => {
+      wrapper = await mountAs('publisher')
+      expect(wrapper.findAll('[data-testid="developer-member-row"]')).toHaveLength(2)
+      expect(wrapper.find('[data-testid="developer-member-remove"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="developer-member-add"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain(i18n.global.t('marketplace-developer.members.publisher-note'))
+      expect(wrapper.text()).not.toContain(i18n.global.t('marketplace-developer.account.replace-key'))
+    })
   })
 })

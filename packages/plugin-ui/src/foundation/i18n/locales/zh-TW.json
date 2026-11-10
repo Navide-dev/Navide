@@ -12885,6 +12885,30 @@
       "confirm": "要從 Navide 市集下架 {plugin} {version} 嗎？",
       "done": "{plugin} {version} 已下架"
     },
+    "members": {
+      "title": "命名空間成員",
+      "desc": "可以在這個命名空間發佈與撤回版本的帳號。只有擁有者能新增或移除發佈者；發佈者不能變更成員或簽章金鑰，並使用命名空間的金鑰簽章。",
+      "account": "帳號",
+      "role": "角色",
+      "added-at": "加入時間",
+      "roles": {
+        "owner": "擁有者",
+        "publisher": "發佈者"
+      },
+      "add-label": "新增發佈者（Navide Cloud 帳號 ID）",
+      "add": "新增發佈者",
+      "add-hint": "對方必須是已核准的開發者。加入後，對方在自己的 Navide 以發佈者身分登入並選擇這個命名空間。",
+      "add-confirm": "讓 {member} 在 {namespace} 發佈與撤回版本？",
+      "added": "{member} 現在可以在這個命名空間發佈",
+      "remove": "移除",
+      "remove-confirm": "把 {member} 從 {namespace} 移除？對方在這個命名空間的發佈者登入會立即失效。",
+      "removed": "已將 {member} 從這個命名空間移除",
+      "publisher-note": "你是這個命名空間的發佈者：可以發佈與撤回它的版本。成員由擁有者管理。",
+      "error": {
+        "not-developer": "這個帳號還不是已核准的開發者，需要先提出申請。",
+        "owner-only": "只有命名空間的擁有者能變更成員。"
+      }
+    },
     "versions": {
       "title": "你上架的版本",
       "refresh": "重新整理",

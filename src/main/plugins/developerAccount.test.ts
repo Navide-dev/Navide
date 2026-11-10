@@ -5,7 +5,7 @@ import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeveloperAccount, packageDigest, redactDeveloperSecrets } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
-import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl } from './developerIpc'
+import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl, membersView } from './developerIpc'
 
 // Built by concatenation so no scanner mistakes a fixture for a credential.
 const ACCOUNT_TOKEN = 'nva' + '_' + 'acc0unt' + 'Q'.repeat(24)
@@ -300,5 +300,62 @@ describe('L1d: a key the Registry already holds is never replaced by itself', ()
     expect(JSON.parse(String(calls.at(-1)!.body)).replace).toBe(true)
     expect(replaced).toMatchObject({ keyRegistered: true, keyConflictFingerprint: null })
     expect((await dev.publish(new TextEncoder().encode('PK'), 'x.vsix', 'universal')).status).toBe(201)
+  })
+})
+
+describe('namespace members (0.2.40)', () => {
+  const registryMembers = {
+    namespace: 'nerdtechnic',
+    your_role: 'owner',
+    members: [
+      { member_id: 'mem-owner', role: 'owner', added_by: null, added_at: null },
+      { member_id: 'mem-pub', role: 'publisher', added_by: 'member:mem-owner', added_at: '2026-11-10T05:00:00+00:00' },
+    ],
+  }
+  const view = {
+    your_role: 'owner',
+    items: [
+      { member_id: 'mem-owner', role: 'owner', added_at: null },
+      { member_id: 'mem-pub', role: 'publisher', added_at: '2026-11-10T05:00:00+00:00' },
+    ],
+  }
+
+  it('membersView keeps ids, roles and dates only', () => {
+    expect(membersView(registryMembers)).toEqual(view)
+    expect(membersView({ your_role: 'admin', members: [{ member_id: 'x', role: 'maintainer' }] }))
+      .toEqual({ your_role: null, items: [{ member_id: 'x', role: 'publisher', added_at: null }] })
+  })
+
+  it('adds and removes a member with the publisher token', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    const { account: dev, calls } = account(() => ({ status: 200, body: registryMembers }))
+    await dev.addMember('mem-new')
+    await dev.removeMember('mem/../x')
+    expect(calls.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
+      ['POST', '/registry/api/publisher/me/members'],
+      ['DELETE', '/registry/api/publisher/me/members/mem%2F..%2Fx'],
+    ])
+    expect(JSON.parse(String(calls[0].body))).toEqual({ member_id: 'mem-new', role: 'publisher' })
+    expect(calls[0].headers.Authorization).toBe(`Bearer ${PUBLISHER_TOKEN}`)
+  })
+
+  it('the agent reads members, read-only, in marketplace_developer_status', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    const { account: dev, calls } = account((call) =>
+      call.url.endsWith('/api/publisher/me/members')
+        ? { status: 200, body: registryMembers }
+        : { status: 200, body: { status: 'approved', fields: {}, field_sources: {} } })
+    const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
+    expect(answer).toMatchObject({ ok: true, result: { members: view } })
+    expect(calls.every((call) => call.method === 'GET')).toBe(true)
+    expect(JSON.stringify(answer)).not.toContain(PUBLISHER_TOKEN)
+  })
+
+  it('has no members without a publisher sign-in', async () => {
+    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    const { account: dev, calls } = account(() => ({ status: 200, body: { status: 'none' } }))
+    const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
+    expect(answer).toMatchObject({ ok: true, result: { members: null } })
+    expect(calls.some((call) => call.url.endsWith('/members'))).toBe(false)
   })
 })

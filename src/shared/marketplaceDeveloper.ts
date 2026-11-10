@@ -50,6 +50,13 @@ export interface DeveloperVersionRow {
   reviewed_at: string | null
 }
 
+/** Who may publish under the signed-in namespace (0.2.40: owner and publisher members). */
+export interface DeveloperMembers {
+  /** The signed-in account's role in the namespace. */
+  your_role: 'owner' | 'publisher' | null
+  items: Array<{ member_id: string; role: 'owner' | 'publisher'; added_at: string | null }>
+}
+
 export type DeveloperApplicationStatus = 'none' | 'pending' | 'approved' | 'rejected' | 'revoked'
 
 export interface DeveloperApi {
@@ -67,6 +74,11 @@ export interface DeveloperApi {
   stagePackage(path?: string): Promise<StagedPackage | null>
   publish(input: { stageId: string; target: string }): Promise<DeveloperCallResult & { digest?: string }>
   yank(input: { namespace: string; name: string; version: string }): Promise<DeveloperCallResult>
+  /** The namespace's members; `body` is DeveloperMembers. */
+  members(): Promise<DeveloperCallResult>
+  /** Owner only: add or remove a publisher member; `body` is the new DeveloperMembers. */
+  addMember(input: { memberId: string }): Promise<DeveloperCallResult>
+  removeMember(input: { memberId: string }): Promise<DeveloperCallResult>
 }
 
 /** The one entry page for Navide plugin authors (docs/en-US/build-for-navide.md). */

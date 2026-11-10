@@ -12885,6 +12885,30 @@
       "confirm": "Rút {plugin} {version} khỏi Navide Marketplace?",
       "done": "Đã rút lại {plugin} {version}"
     },
+    "members": {
+      "title": "Thành viên của không gian tên",
+      "desc": "Các tài khoản được phát hành và rút phiên bản trong không gian tên này. Chỉ chủ sở hữu mới thêm hoặc gỡ người phát hành; người phát hành không thể đổi thành viên hay khóa ký, và ký bằng khóa của không gian tên.",
+      "account": "Tài khoản",
+      "role": "Vai trò",
+      "added-at": "Ngày thêm",
+      "roles": {
+        "owner": "Chủ sở hữu",
+        "publisher": "Người phát hành"
+      },
+      "add-label": "Thêm người phát hành (ID tài khoản Navide Cloud)",
+      "add": "Thêm người phát hành",
+      "add-hint": "Tài khoản phải là nhà phát triển đã được duyệt. Sau đó họ đăng nhập với vai trò người phát hành trong Navide của mình và chọn không gian tên này.",
+      "add-confirm": "Cho phép {member} phát hành và rút phiên bản trong {namespace}?",
+      "added": "{member} giờ có thể phát hành trong không gian tên này",
+      "remove": "Gỡ",
+      "remove-confirm": "Gỡ {member} khỏi {namespace}? Các lần đăng nhập người phát hành của họ cho không gian tên này ngừng hoạt động ngay.",
+      "removed": "Đã gỡ {member} khỏi không gian tên này",
+      "publisher-note": "Bạn là người phát hành của không gian tên này: bạn có thể phát hành và rút các phiên bản của nó. Chủ sở hữu quản lý thành viên.",
+      "error": {
+        "not-developer": "Tài khoản này chưa phải nhà phát triển đã được duyệt; cần nộp đơn trước.",
+        "owner-only": "Chỉ chủ sở hữu không gian tên mới đổi được thành viên."
+      }
+    },
     "versions": {
       "title": "Các phiên bản bạn đã phát hành",
       "refresh": "Làm mới",

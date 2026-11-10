@@ -12885,6 +12885,30 @@
       "confirm": "Yank {plugin} {version} from the Navide Marketplace?",
       "done": "{plugin} {version} was yanked"
     },
+    "members": {
+      "title": "Namespace members",
+      "desc": "Accounts that may publish and yank versions under this namespace. Only the owner adds or removes publishers; a publisher cannot change the members or the signing key, and signs with the namespace's key.",
+      "account": "Account",
+      "role": "Role",
+      "added-at": "Added",
+      "roles": {
+        "owner": "Owner",
+        "publisher": "Publisher"
+      },
+      "add-label": "Add a publisher (Navide Cloud account id)",
+      "add": "Add Publisher",
+      "add-hint": "The account must be an approved developer. It then signs in as a publisher in its own Navide and chooses this namespace.",
+      "add-confirm": "Let {member} publish and yank versions under {namespace}?",
+      "added": "{member} can now publish under this namespace",
+      "remove": "Remove",
+      "remove-confirm": "Remove {member} from {namespace}? Its publisher sign-ins for this namespace stop working at once.",
+      "removed": "{member} was removed from this namespace",
+      "publisher-note": "You are a publisher of this namespace: you can publish and yank its versions. Its owner manages the members.",
+      "error": {
+        "not-developer": "That account is not an approved developer yet; it has to apply first.",
+        "owner-only": "Only the namespace owner can change its members."
+      }
+    },
     "versions": {
       "title": "Your published versions",
       "refresh": "Refresh",

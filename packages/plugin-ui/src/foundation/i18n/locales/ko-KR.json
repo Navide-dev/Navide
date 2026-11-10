@@ -12885,6 +12885,30 @@
       "confirm": "Navide 마켓플레이스에서 {plugin} {version}을(를) 회수할까요?",
       "done": "{plugin} {version}을(를) 회수했어요"
     },
+    "members": {
+      "title": "네임스페이스 멤버",
+      "desc": "이 네임스페이스에서 버전을 게시하고 철회할 수 있는 계정입니다. 게시자를 추가하거나 제거할 수 있는 사람은 소유자뿐이며, 게시자는 멤버나 서명 키를 변경할 수 없고 네임스페이스의 키로 서명합니다.",
+      "account": "계정",
+      "role": "역할",
+      "added-at": "추가일",
+      "roles": {
+        "owner": "소유자",
+        "publisher": "게시자"
+      },
+      "add-label": "게시자 추가(Navide Cloud 계정 ID)",
+      "add": "게시자 추가",
+      "add-hint": "승인된 개발자여야 합니다. 추가된 계정은 자신의 Navide에서 게시자로 로그인하고 이 네임스페이스를 선택합니다.",
+      "add-confirm": "{member}에게 {namespace}에서 버전을 게시하고 철회하도록 허용할까요?",
+      "added": "이제 {member}이(가) 이 네임스페이스에서 게시할 수 있습니다",
+      "remove": "제거",
+      "remove-confirm": "{namespace}에서 {member}을(를) 제거할까요? 이 네임스페이스의 게시자 로그인은 즉시 작동을 멈춥니다.",
+      "removed": "{member}을(를) 이 네임스페이스에서 제거했습니다",
+      "publisher-note": "이 네임스페이스의 게시자입니다. 버전을 게시하고 철회할 수 있으며, 멤버는 소유자가 관리합니다.",
+      "error": {
+        "not-developer": "이 계정은 아직 승인된 개발자가 아닙니다. 먼저 신청해야 합니다.",
+        "owner-only": "멤버는 네임스페이스 소유자만 변경할 수 있습니다."
+      }
+    },
     "versions": {
       "title": "게시한 버전",
       "refresh": "새로 고침",

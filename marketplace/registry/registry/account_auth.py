@@ -26,7 +26,7 @@ from sqlmodel import Session, select
 from . import audit
 from .models import AccountAuthCode, AccountToken, Publisher, PublisherToken
 from .repository import hash_token
-from .self_service import CLI_CODE_TTL, SelfServiceError, _label, pkce_challenge
+from .self_service import CLI_CODE_TTL, SelfServiceError, _label, member_may_publish, pkce_challenge
 
 ACCOUNT_TOKEN_PREFIX = "nva_"
 ACCOUNT_TOKEN_DAYS = 30
@@ -100,13 +100,18 @@ def resolve(session: Session, token: str) -> Bearer:
         error = _state_error(row.revoked_at, row.expires_at)
         if error is not None:
             raise error
+        publisher = session.get(Publisher, row.publisher_id)
+        # A token issued to a publisher member works only while the account
+        # is still a member (removal also revokes it) and still approved.
+        if not member_may_publish(session, publisher, row.navide_member_id):
+            raise BearerError("TOKEN_REVOKED", "this account is no longer a publisher of the namespace")
         row.last_used_at = _now()
         session.add(row)
         session.commit()
         publisher = session.get(Publisher, row.publisher_id)
-        return Bearer(
-            SCOPE_PUBLISHER, publisher.navide_member_id, publisher, _publisher_actor(publisher), _aware(row.expires_at)
-        )
+        member_id = row.navide_member_id or publisher.navide_member_id
+        actor = audit.member_actor(member_id) if member_id is not None else _publisher_actor(publisher)
+        return Bearer(SCOPE_PUBLISHER, member_id, publisher, actor, _aware(row.expires_at))
     account = session.exec(select(AccountToken).where(AccountToken.token_hash == digest)).first()
     if account is not None:
         error = _state_error(account.revoked_at, account.expires_at)

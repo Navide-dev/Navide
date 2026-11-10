@@ -43,6 +43,8 @@ from .self_service import (
     exchange_cli_code,
     issue_cli_code,
     list_tokens,
+    member_publisher,
+    member_publishers,
     owned_publisher,
     owned_publishers,
     revoke_token,
@@ -710,7 +712,7 @@ def create_publisher_router() -> APIRouter:
         with _session(request) as session:
             # Only a namespace that may publish is offered (qualification.py).
             namespaces = [
-                p.name for p in owned_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
+                p.name for p in member_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
             ]
             qualification_status = qualification.status_of(session, viewer.member_id)
         return page(
@@ -750,8 +752,13 @@ def create_publisher_router() -> APIRouter:
                         session, viewer.member_id, code_challenge=code_challenge, label=label
                     )
                 else:
-                    publisher = _owned_or_404(session, viewer, namespace)
-                    code = issue_cli_code(session, publisher, code_challenge=code_challenge, label=label)
+                    # The owner or a publisher member (namespace members).
+                    publisher = member_publisher(session, viewer.member_id, namespace)
+                    if publisher is None:
+                        raise HTTPException(status_code=404, detail="namespace not found")
+                    code = issue_cli_code(
+                        session, publisher, code_challenge=code_challenge, label=label, member_id=viewer.member_id
+                    )
             except QualificationRequired as exc:
                 raise HTTPException(status_code=403, detail={"code": exc.code, "message": str(exc)}) from exc
             except SelfServiceError as exc:
