@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Ausnahmen – Anmeldeinformationen lesen und hochladen",
         "warning": "Eine ganze Zeile, die zu einem dieser Muster passt, wird nicht mehr abgelehnt, weil sie eine Datei aus ~/.ssh in ein Netzwerkwerkzeug leitet – fügen Sie nur Befehle hinzu, denen Sie voll vertrauen. Alle anderen Prüfungen und Ihre Sperrmuster gelten weiterhin, und jede ausgenommene Zeile wird im Guard-Protokoll festgehalten. Das Hinzufügen erfordert eine Bestätigung.",
-        "placeholder": "Befehlsmuster oder Pfad, z. B. *~/.ssh/deploy.pub*"
+        "placeholder": "Befehlsmuster oder Pfad, z. B. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Geben Sie ein Muster ein.",

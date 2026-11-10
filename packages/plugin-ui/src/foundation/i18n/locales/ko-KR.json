@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "예외: 자격 증명을 읽어 업로드",
         "warning": "줄 전체가 이 패턴 중 하나와 일치하면 '~/.ssh 파일을 네트워크 도구로 파이프'가 더 이상 거부되지 않습니다. 완전히 신뢰하는 명령만 추가하세요. 다른 검사와 차단 패턴은 계속 적용되며, 예외로 허용된 줄은 모두 Guard 기록에 남습니다. 추가하려면 확인이 필요합니다.",
-        "placeholder": "명령 패턴 또는 경로, 예: *~/.ssh/deploy.pub*"
+        "placeholder": "명령 패턴 또는 경로, 예: cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "패턴을 입력하세요.",

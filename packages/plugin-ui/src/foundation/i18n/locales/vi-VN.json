@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Miễn trừ: đọc thông tin xác thực rồi tải lên",
         "warning": "Cả dòng khớp với một trong các mẫu này sẽ không còn bị từ chối vì pipe một tệp trong ~/.ssh vào công cụ mạng — chỉ thêm những lệnh bạn hoàn toàn tin tưởng. Các kiểm tra khác và mẫu chặn của bạn vẫn áp dụng, và mỗi dòng được miễn đều được ghi vào nhật ký Guard. Việc thêm cần xác nhận.",
-        "placeholder": "Mẫu lệnh hoặc đường dẫn, ví dụ *~/.ssh/deploy.pub*"
+        "placeholder": "Mẫu lệnh hoặc đường dẫn, ví dụ cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Hãy nhập một mẫu.",

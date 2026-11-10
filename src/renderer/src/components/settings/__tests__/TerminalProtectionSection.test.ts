@@ -129,17 +129,17 @@ describe('TerminalProtectionSection', () => {
     const withRule = { ...state(), exemptable_rules: ['credential-pipe-upload'], exemptions: [] }
     mock.setResponse('guard.terminal.get', withRule)
     mock.setResponse('guard.terminal.add_exemption', {
-      ...withRule, exemptions: [{ id: 3, rule: 'credential-pipe-upload', pattern: '*deploy.pub*' }],
+      ...withRule, exemptions: [{ id: 3, rule: 'credential-pipe-upload', pattern: 'cat ~/.ssh/deploy.pub | curl *' }],
     })
     mock.setResponse('guard.terminal.remove_exemption', withRule)
     const w = await render()
     expect(w.get('[data-testid="terminal-exempt-warning"]').text()).toContain('~/.ssh')
-    await w.get('[data-testid="terminal-exempt-input"]').setValue('*deploy.pub*')
+    await w.get('[data-testid="terminal-exempt-input"]').setValue('cat ~/.ssh/deploy.pub | curl *')
     await w.get('[data-testid="terminal-exempt-add"]').trigger('submit')
     await flushPromises()
-    expect(trustConfirm).toHaveBeenCalledWith('guard.terminal.add_exemption', '', 'credential-pipe-upload:*deploy.pub*')
+    expect(trustConfirm).toHaveBeenCalledWith('guard.terminal.add_exemption', '', 'credential-pipe-upload:cat ~/.ssh/deploy.pub | curl *')
     expect(sentOf('guard.terminal.add_exemption')).toEqual([
-      { rule: 'credential-pipe-upload', pattern: '*deploy.pub*', confirm: TOKEN },
+      { rule: 'credential-pipe-upload', pattern: 'cat ~/.ssh/deploy.pub | curl *', confirm: TOKEN },
     ])
     expect(w.get('[data-testid="terminal-exempt-row"]').text()).toContain('Pipes a file from ~/.ssh')
     trustConfirm.mockClear()

@@ -459,12 +459,32 @@ def _classifier_hits(text: str, workspace: str, protected: frozenset[str]) -> li
     return hits
 
 
+#: A line carrying any of these is never exempted: each could hide a second
+#: command (or a comment holding the pattern's text) next to the one the
+#: user meant, so the exemption would cover more than it names. Quotes are
+#: not parsed for this — a quoted one also keeps the line refused.
+_EXEMPT_UNSAFE = (";", "&", "||", "\n", "\r", "#", "`", "$(", "<(", ">(")
+
+
+def _exemption_matches(pattern: str, text: str) -> bool:
+    """An anchored, whole-line match: a glob must match the entire line and a
+    plain pattern must equal it (whitespace runs collapsed), unlike block
+    patterns, which match anywhere."""
+    if any(tok in text for tok in _EXEMPT_UNSAFE):
+        return False
+    p = " ".join(pattern.split())
+    s = " ".join(text.split())
+    if any(ch in p for ch in "*?["):
+        return fnmatch.fnmatchcase(s, p)
+    return s == p
+
+
 def _exemption_for(rule: str, text: str, settings: Settings) -> str | None:
     """The user exemption pattern that lifts ``rule`` for this whole line, or None."""
     if rule not in EXEMPTABLE_RULES:
         return None
     for exempt_rule, pattern in settings.exemptions:
-        if exempt_rule == rule and _pattern_matches(pattern, text):
+        if exempt_rule == rule and _exemption_matches(pattern, text):
             return pattern
     return None
 

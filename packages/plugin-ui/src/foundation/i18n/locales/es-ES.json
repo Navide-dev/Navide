@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Exenciones: leer una credencial y subirla",
         "warning": "Una línea completa que coincida con uno de estos patrones ya no se rechaza por canalizar un archivo de ~/.ssh a una herramienta de red; añade solo comandos en los que confíes por completo. El resto de comprobaciones y tus patrones de bloqueo siguen aplicándose, y cada línea exenta queda registrada en el registro de Guard. Añadir una pide confirmación.",
-        "placeholder": "Patrón de comando o ruta, p. ej. *~/.ssh/deploy.pub*"
+        "placeholder": "Patrón de comando o ruta, p. ej. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Escribe un patrón.",
