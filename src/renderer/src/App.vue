@@ -49,7 +49,7 @@ import { agentConsoleKey, createAgentConsole } from './composables/useAgentConso
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
-import { awaitingPromptText, modelPickerKeys, modelSwitchResult, onModelPicker, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, modelConfirmKeys, modelPickerKeys, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
@@ -4555,8 +4555,13 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
     }
     return null
   }
-  const cancel = async (reason: string) => {
-    await write('\x1b')
+  // Esc on the "Switch model?" box goes back to the picker, so a fallback
+  // from there takes a second Esc to close it.
+  const cancel = async (reason: string, escapes = 1) => {
+    for (let i = 0; i < escapes; i++) {
+      if (i) await sleep(ANSWER_STEP_GAP_MS)
+      await write('\x1b')
+    }
     return reason
   }
   if (!(await injectPane(paneId, '/model', 'set-model', true))) return cancel('inject-failed')
@@ -4574,8 +4579,25 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
   })
   if (resp === 'prompt-changed') return cancel('picker-changed')
   if (!resp.ok) return cancel('keys-failed')
-  const done = await waitFor((text) => modelSwitchResult(text) !== null)
+  let done = await waitFor((text) => onModelSwitchConfirm(text) || modelSwitchResult(text) !== null)
   if (!done) return cancel('switch-not-confirmed')
+  if (onModelSwitchConfirm(done)) {
+    const confirm = done
+    const yes = modelConfirmKeys(confirm, label)
+    if (!yes) return cancel('confirm-not-matched', 2)
+    const sent = await writeAnswerSteps({
+      steps: yes,
+      menu: confirm,
+      read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screen() }),
+      write,
+      gapMs: ANSWER_STEP_GAP_MS,
+      stillOn: stillOnModelSwitchConfirm,
+    })
+    if (sent === 'prompt-changed') return cancel('confirm-changed', 2)
+    if (!sent.ok) return cancel('confirm-keys-failed', 2)
+    done = await waitFor((text) => modelSwitchResult(text) !== null)
+    if (!done) return cancel('confirm-not-confirmed', 2)
+  }
   return modelSwitchResult(done) === 'default' ? 'saved-as-default' : null
 }
 
