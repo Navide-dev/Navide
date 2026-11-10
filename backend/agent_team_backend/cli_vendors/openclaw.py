@@ -24,12 +24,16 @@ openclaw-hermes-0-2-40_a50148):
   ``message`` carries ``role`` and, for the assistant, ``stopReason``. Some rows
   are zstd-compressed instead (``event_json`` empty); Python 3.12 cannot read
   them, so they are skipped.
-* **Unmeasured.** Neither the table's DDL nor the link between a session key
-  and the ``sessionId`` was captured. The reader takes a row's session as a
-  key only from what it can read: the ``session_id`` column itself when it
-  holds an ``agent:…`` key, else a key string in the session's header event.
-  Without either, events keep the raw id (no pane can claim them) and the
-  first such session is logged — no guessing at other tables.
+* **Key ↔ sessionId.** ``transcript_events.session_id`` holds the UUID and
+  the header event (seq 0) carries no key (VM run 2026-11-10: ``{type,
+  version, id, timestamp, cwd}`` only). The link lives in the same store:
+  ``session_windows`` (``session_id`` → ``session_key``, one row per
+  transcript window, earlier windows included) and ``session_nodes``
+  (``session_key``, ``current_session_id``). The reader asks those two, in
+  that order, after the column itself and the header; a build without them
+  reads as before. A session none of them names keeps the raw id (no pane can
+  claim it), is logged once, and is asked again on the next pass — the
+  mapping row may land after the first transcript rows.
 * **Turn end.** An assistant ``message`` whose ``stopReason`` is set and is
   not ``toolUse``. Measured on the stub only (``stop``).
 * **Tokens.** An assistant message's ``usage`` (input / output / cacheRead /
@@ -205,7 +209,7 @@ class OpenclawLogReader(LogReader):
         cached = self._keys.get(sid)
         if cached is not None:
             return cached
-        key = _resume_key(sid)
+        key = _resume_key(sid) or self._mapped_key(con, sid)
         if not key:
             row = con.execute(
                 "SELECT event_json FROM transcript_events WHERE session_id = ? "
@@ -217,14 +221,32 @@ class OpenclawLogReader(LogReader):
                 header = None
             if isinstance(header, dict) and header.get("type") == "session":
                 key = next((k for k in (_resume_key(header.get(n)) for n in _HEADER_KEYS) if k), "")
-        if not key and not self._unkeyed_warned:
-            self._unkeyed_warned = True
-            log.warning(
-                "openclaw store %s: session %s names no session key in transcript_events — "
-                "its turns reach no pane", path, sid,
-            )
-        self._keys[sid] = key or sid
-        return self._keys[sid]
+        if not key:
+            if not self._unkeyed_warned:
+                self._unkeyed_warned = True
+                log.warning(
+                    "openclaw store %s: session %s names no session key in transcript_events, "
+                    "session_windows or session_nodes — its turns reach no pane", path, sid,
+                )
+            return sid  # not cached: the mapping row may be written later
+        self._keys[sid] = key
+        return key
+
+    def _mapped_key(self, con: sqlite3.Connection, sid: str) -> str:
+        """The key OpenClaw's session tables give a transcript UUID; "" when
+        neither table exists or names it."""
+        for sql in (
+            "SELECT session_key FROM session_windows WHERE session_id = ? LIMIT 1",
+            "SELECT session_key FROM session_nodes WHERE current_session_id = ? LIMIT 1",
+        ):
+            try:
+                row = con.execute(sql, (sid,)).fetchone()
+            except sqlite3.Error:
+                continue  # table or column absent in this build
+            key = _resume_key(row[0]) if row else ""
+            if key:
+                return key
+        return ""
 
     def _tops(self, con: sqlite3.Connection) -> dict[str, int]:
         return {str(sid): int(top) for sid, top in con.execute(

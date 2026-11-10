@@ -153,6 +153,70 @@ def test_uuid_session_takes_its_key_from_the_header(store) -> None:
     assert [e.session_id for e in reader.parse_activity(db, seen)] == [KEY]
 
 
+# Session tables as OpenClaw 2026.11.2 created them on the VM (2026-11-10,
+# b9-oc-probe.txt), cut to the columns the reader reads plus a few neighbours.
+_SESSION_TABLES = (
+    "CREATE TABLE session_windows(session_id TEXT, session_key TEXT, previous_session_id TEXT, "
+    "reason TEXT, session_scope TEXT, created_at INTEGER, updated_at INTEGER);"
+    "CREATE TABLE session_nodes(session_key TEXT, current_session_id TEXT, entry_json TEXT, "
+    "session_started_at INTEGER, updated_at INTEGER);"
+)
+# The header the VM run wrote at seq 0: no key in it.
+_VM_HEADER = {"type": "session", "version": 4, "id": "88d19e04-3436-49a2-a26c-a5f7ff6198c7",
+              "timestamp": "2026-11-10T13:38:22.928Z", "cwd": "/home/navide/.openclaw/workspace"}
+
+
+def _uuid_session(con, sid):
+    _row(con, sid, 0, dict(_VM_HEADER, id=sid))
+    _row(con, sid, 1, _msg("user", "hello"), "user")
+    _row(con, sid, 2, _msg("assistant", "STUB-REPLY-OK", stopReason="stop"), "assistant")
+
+
+def test_uuid_session_takes_its_key_from_session_windows(store) -> None:
+    db, con = store
+    con.executescript(_SESSION_TABLES)
+    sid = "88d19e04-3436-49a2-a26c-a5f7ff6198c7"
+    con.execute("INSERT INTO session_windows(session_id, session_key, session_scope) VALUES (?, ?, 'conversation')",
+                (sid, KEY))
+    con.commit()
+    reader = openclaw.OpenclawLogReader()
+    seen: set[str] = set()
+    reader.parse_activity(db, seen)
+    _uuid_session(con, sid)
+    events = reader.parse_activity(db, seen)
+    assert [(e.event_type, e.session_id) for e in events] == [("agent_active", KEY), ("turn_complete", KEY)]
+    assert openclaw._session_exists("/work", KEY) is True
+    assert openclaw._session_exists("/work", "agent:main:missing") is False
+
+
+def test_uuid_session_falls_back_to_session_nodes(store) -> None:
+    db, con = store
+    con.executescript(_SESSION_TABLES)
+    sid = "41d6cfa7-517d-44d9-834d-df977d99e3b9"
+    con.execute("INSERT INTO session_nodes(session_key, current_session_id) VALUES (?, ?)", (KEY, sid))
+    con.commit()
+    _uuid_session(con, sid)
+    [done] = [e for e in openclaw.OpenclawLogReader().parse_activity(db, {openclaw._ANCHOR})
+                    if e.event_type == "turn_complete"]
+    assert done.session_id == KEY
+
+
+def test_mapping_written_after_the_first_rows_is_picked_up(store) -> None:
+    db, con = store
+    con.executescript(_SESSION_TABLES)
+    sid = "5c1d2e3f-4a5b-4c6d-8e7f-90a1b2c3d4e5"
+    reader = openclaw.OpenclawLogReader()
+    seen: set[str] = set()
+    reader.parse_activity(db, seen)
+    _row(con, sid, 0, dict(_VM_HEADER, id=sid))
+    _row(con, sid, 1, _msg("user", "first"), "user")
+    assert [e.session_id for e in reader.parse_activity(db, seen)] == [sid]
+    con.execute("INSERT INTO session_windows(session_id, session_key) VALUES (?, ?)", (sid, KEY))
+    con.commit()
+    _row(con, sid, 2, _msg("assistant", "a", stopReason="stop"), "assistant")
+    assert [e.session_id for e in reader.parse_activity(db, seen)] == [KEY]
+
+
 def test_session_with_no_readable_key_is_logged_and_unrouted(store, caplog) -> None:
     db, con = store
     reader = openclaw.OpenclawLogReader()

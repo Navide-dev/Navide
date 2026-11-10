@@ -111,8 +111,9 @@ both official installers pipe a script into a shell), its data directories,
 and the YOLO flag where one exists (`hermes chat --yolo`). Since 0.2.40 both
 also have session resume (Navide names the session), a turn-end signal and
 token counts read from their own SQLite stores (Hermes `state.db`, OpenClaw
-`openclaw-agent.sqlite`), and Hermes has model / reasoning flags. Still not
-wired: an OpenClaw model flag (its TUI has none) and a kickoff flag for either
+`openclaw-agent.sqlite`). Still not wired: a model or effort choice for
+either (OpenClaw's TUI has none; Hermes refuses `-m` / `--reasoning` on the
+`--continue` launch Navide uses) and a kickoff flag for either
 (the role text is typed into the composer like every vendor's). Keys and account switching are left alone on purpose: an Agent's
 providers and keys live in its own home (`~/.openclaw`, `~/.hermes`), and
 Navide reads none of it, offers no account switching and fetches no usage.
@@ -181,9 +182,9 @@ menu's Agents block, Manual spawn and "Handle Issue As…".
 Read from the official docs on 2026-11-07. The Hermes column was measured on
 2026-11-10 against Hermes Agent v0.23.0 on Ubuntu 24.04 arm64 with a local
 stub provider, and the OpenClaw column against OpenClaw 2026.11.2 the same
-way (plan openclaw-hermes-0-2-40_a50148). OpenClaw's `transcript_events` DDL
-and the link between a session key and its UUID `sessionId` were not
-captured; see the Log row.
+way (plan openclaw-hermes-0-2-40_a50148). The VM re-run the same day (Hermes
+v0.23.1, OpenClaw 2026.11.2) captured OpenClaw's session tables and Hermes's
+refusal of model flags on `--continue`; see the Log and Not wired rows.
 
 | Question | OpenClaw | Hermes Agent |
 |---|---|---|
@@ -193,9 +194,9 @@ captured; see the Log row.
 | Install | `curl \| bash`; the install entry has no command, so the guided install shows the docs link. | `curl \| bash`, or `iex (irm …/install.ps1)` on native Windows (supported; data in `%LOCALAPPDATA%\hermes`). Same: docs link only. |
 | Keys | OpenClaw's own config (`~/.openclaw/openclaw.json`). Navide reads none. | `~/.hermes/.env` / `config.yaml` (`$HERMES_HOME`). Navide reads none. |
 | Instruction files | Agent workspace `~/.openclaw/workspace/AGENTS.md`, `SOUL.md` — not the TUI's cwd. | Project: `.hermes.md`/`HERMES.md`, `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; home: `SOUL.md`. |
-| Not wired | Model / effort flags (the TUI has none; `agent --model` is non-interactive, `models set` is global), MCP, skills, extensions inventory, usage, account switching, the `agent_end` plugin hook. | MCP, skills, extensions inventory, usage, account switching, the `on_session_end` shell hook (it needs the user's `config.yaml`). |
+| Not wired | Model / effort flags (the TUI has none; `agent --model` is non-interactive, `models set` is global), MCP, skills, extensions inventory, usage, account switching, the `agent_end` plugin hook. | Model / effort: `chat` lists `-m` / `--reasoning`, but v0.23.1 refuses both on any `--continue` launch, creation included (exit 2, "creation overrides are unsupported on resume"); `/model` and `/reasoning` switch the session only when typed raw into the PTY, which no launch path does. Also MCP, skills, extensions inventory, usage, account switching, the `on_session_end` shell hook (it needs the user's `config.yaml`). |
 | Session | Navide names it: `--session agent:main:navide-<uuid>` on every launch, fresh or resumed (the same key reattaches; measured). | Navide names it: a fresh pane runs `--create-if-missing --continue navide-<uuid>`, a resume `--continue navide-<uuid>` (the latest session in that title's lineage; Hermes titles a continuation `<name> #2`). The CLI's own `local-<64hex>` id is never needed. |
-| Log | `<state>/agents/<agentId>/agent/openclaw-agent.sqlite`, table `transcript_events`, read-only through `session_id`, `seq`, `event_json`, `message_role` only. zstd-compressed rows are skipped (Python 3.12). A row's session is a key only when the column holds an `agent:` key or the session's header event names one; otherwise its events reach no pane and the first such session is logged. A store missing a column is logged once and gives no signal. | One SQLite store, `<home>/state.db`, read-only. Used columns: `sessions` id/title/parent_session_id/cwd/token counters/last_activity_at, `messages` id/session_id/role/content/tool_calls/timestamp/finish_reason. A store missing any of them is logged once and gives no signal. |
+| Log | `<state>/agents/<agentId>/agent/openclaw-agent.sqlite`, table `transcript_events`, read-only through `session_id`, `seq`, `event_json`, `message_role` only. zstd-compressed rows are skipped (Python 3.12). The column holds the UUID `sessionId` and the header event names no key, so the key comes from the same store's `session_windows` (`session_id` → `session_key`, earlier windows included), else `session_nodes` (`current_session_id`); a build without them falls back to the column or header. A session none of them names reaches no pane, is logged once and is looked up again on the next pass. A store missing a column is logged once and gives no signal. | One SQLite store, `<home>/state.db`, read-only. Used columns: `sessions` id/title/parent_session_id/cwd/token counters/last_activity_at, `messages` id/session_id/role/content/tool_calls/timestamp/finish_reason. A store missing any of them is logged once and gives no signal. |
 | Turn end | An assistant `message` whose `stopReason` is set and is not `toolUse`. Measured only on the stub. | An assistant row whose `finish_reason` is set and is not `tool_calls`. Measured only on a local OpenAI-compatible stub; real providers with tools or an interrupt are unverified. |
 | Tokens | An assistant message's `usage` (input / output / cacheRead / cacheWrite) when the row carries it. | Growth of the per-session counters in `sessions` (no per-call rows); cache folded into input. Whether Hermes's `input_tokens` already contains the cache part is unverified. |
 | Background process | None with `--local`. The agent works in `~/.openclaw/workspace`, not the pane's cwd. | The first chat starts `hermes gateway run --idle-exit` (ppid 1); it outlived 12.5 idle minutes. Hermes's own; Navide neither starts nor stops it. |
