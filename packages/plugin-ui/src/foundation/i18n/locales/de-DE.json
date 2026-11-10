@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Konten",
       "cliAgents": "CLI-Agents",
+      "agents": "Agenten",
       "cliExtensions": "Erweiterungen",
       "roles": "Rollen",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>26 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>27 Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
-          "h2": "Die sechsundzwanzig Tabs",
+          "h2": "Die siebenundzwanzig Tabs",
           "tabTable": {
             "group": "Gruppe",
             "tab": "Tab",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Chat-App-Bots wie Telegram oder Slack mit CLI-Bereichen verbinden: Bots, Kopplung, Zulassungsliste, Kontoverknüpfung",
               "more": "Das Thema „{messaging}“"
+            },
+            "agents": {
+              "what": "Dauerhaft laufende Agenten wie Hermes Agent und OpenClaw, nach Identität: Kanal, Zeitpläne, Speicherort, Startflags",
+              "more": "Auch über „Agent-Einstellungen…“ eines Agentenbereichs erreichbar"
             },
             "mcp": {
               "what": "MCP-Server hinzufügen, aktivieren und prüfen",
@@ -13236,5 +13241,91 @@
     "trend-7d": "Tageshöchstwert, letzte 7 Tage",
     "week-tokens": "Tokens diese Woche",
     "day-tokens": "Tokens heute"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Zeitpläne pausieren",
+      "resume-schedules": "Zeitpläne fortsetzen",
+      "settings": "Agent-Einstellungen…",
+      "wake": "Jetzt wecken",
+      "wake-none": "Kein aktiver Zeitplan vorhanden",
+      "wake-title": "Nächsten Zeitplan jetzt ausführen ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · geschlossen, öffnen und fortsetzen",
+      "create": "Anlegen",
+      "name-placeholder": "Name des Agenten",
+      "new": "Neuer Agent ({vendor})…",
+      "open": "{vendor} · offen, dorthin wechseln"
+    },
+    "header": {
+      "last-done": "zuletzt fertig {time}",
+      "model": "Modell {model}",
+      "model-default": "Standardmodell",
+      "never-done": "noch keine fertige Runde",
+      "turn": "diese Runde {minutes} Min.",
+      "vendor-since": "{vendor} · seit {date}",
+      "vendor-today": "{vendor} · seit heute"
+    },
+    "menu": {
+      "channels": "Kanaleinstellungen…",
+      "close-keep": "Bereich schließen (Identität bleibt)",
+      "memory-folder": "Speicherordner öffnen",
+      "stop-remove": "Agent stoppen und entfernen…",
+      "toggle-panel": "Steuerleiste ein- oder ausblenden",
+      "wake": "Jetzt für eine Runde wecken"
+    },
+    "panel": {
+      "channel-unbound": "Kein Kanal verbunden",
+      "channel-unbound-hint": "Über die Kanal-Schaltfläche im Kopf verbinden",
+      "channels": "Kanal",
+      "collapse": "Steuerleiste einklappen",
+      "expand": "Steuerleiste ausklappen",
+      "memory": "Gedächtnis",
+      "memory-empty": "In dieser Version nicht gelesen",
+      "schedule-paused": "pausiert",
+      "schedules": "Zeitpläne",
+      "schedules-empty": "Kein Zeitplan zielt auf diesen Agenten",
+      "status": "Zustand",
+      "status-source": "Quelle: Terminalausgabe",
+      "title": "Steuerleiste",
+      "todos": "Aufgaben",
+      "todos-empty": "In dieser Version nicht gelesen"
+    },
+    "settings": {
+      "channel": "Kanal",
+      "channel-closed": "Nur verbunden, solange der Bereich offen ist",
+      "channel-note": "Bots stammen aus Einstellungen → Kanäle. Eine Verbindung gehört zum offenen Bereich.",
+      "closed": "geschlossen",
+      "color": "Farbe",
+      "command": "Startbefehl",
+      "empty": "Noch keine Agenten. Über den Agenten-Block im ＋-Menü hinzufügen.",
+      "flags": "Modell und Flags",
+      "flags-note": "Umgebungsvariablen und der Berechtigungsschalter werden mit der Seite CLI-Agents geteilt. Der Agent verwaltet seine Schlüssel selbst.",
+      "go-channels": "Einstellungen → Kanäle öffnen",
+      "go-cli-agents": "Einstellungen → CLI-Agents öffnen",
+      "identity": "Identität",
+      "identity-note": "Navide bewahrt Identitäten auf. Schließen behält die Identität, erneutes Öffnen setzt die Sitzung fort.",
+      "intro": "Dauerhaft laufende Agenten wie Hermes Agent und OpenClaw, nach Identität.",
+      "job-on": "an",
+      "list": "Meine Agenten",
+      "memory": "Speicherort des Gedächtnisses",
+      "memory-note": "Der Agent bestimmt den Ort. Navide verschiebt oder ändert nichts.",
+      "name": "Name (Name des Bereichs)",
+      "open-pane": "Bereich öffnen",
+      "pane-closed": "Bereich geschlossen",
+      "pane-open": "Bereich offen",
+      "resume": "Beim erneuten Öffnen fortsetzen",
+      "resume-on": "Unterstützt",
+      "schedules": "Zeitpläne",
+      "schedules-note": "Zeitpläne im Tasker anlegen und auf den Bereich dieses Agenten richten.",
+      "session": "Letzte Sitzung",
+      "session-none": "Noch keine",
+      "stop-remove": "Stoppen und entfernen",
+      "switch-to": "Zum Bereich wechseln",
+      "unsupported": "Nicht unterstützt",
+      "yolo": "Bestätigung gefährlicher Befehle überspringen",
+      "yolo-flag": "Unterstützt ({flag}), folgt dem YOLO-Schalter"
+    }
   }
 }

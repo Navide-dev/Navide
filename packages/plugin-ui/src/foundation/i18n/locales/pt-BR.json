@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Contas",
       "cliAgents": "Agents de CLI",
+      "agents": "Agentes",
       "cliExtensions": "Extensões",
       "roles": "Papéis",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "O que cada uma das dezenove guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as partes do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visualizações de uso e a manutenção de recursos.",
         "s1": {
           "title": "Visão geral das configurações",
-          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>26 guias</strong> no total.",
+          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>27 guias</strong> no total.",
           "h1": "O campo de pesquisa",
           "p2": "Abaixo do título da barra lateral há um campo de pesquisa com o texto de exemplo <code>Pesquisar configurações…</code>. Ele procura nos títulos das configurações, na seção e nas palavras-chave <strong>em todas as guias</strong> (no idioma atual da interface e com as palavras-chave indexadas) e mostra no máximo 8 resultados; clicar em um deles abre a guia correspondente e rola até a seção (com uma exceção: “Armazenamento” fecha as configurações e abre diretamente o Resource Manager). Sem resultados, aparece <code>Nenhuma configuração correspondente</code>. <kbd class=\"syh-kbd\">Esc</kbd> limpa o campo.",
           "callout": {
             "title": "O índice de pesquisa não é completo",
             "text": "O índice é uma lista mantida à mão, e <strong>as guias {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
           },
-          "h2": "As vinte e seis guias",
+          "h2": "As vinte e sete guias",
           "tabTable": {
             "group": "Grupo",
             "tab": "Guia",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Conecte bots de aplicativos de chat, como Telegram ou Slack, a panes de CLI: bots, pareamento, lista de permissões, vinculação de contas",
               "more": "O tópico “{messaging}”"
+            },
+            "agents": {
+              "what": "Agentes de longa duração como Hermes Agent e OpenClaw, por identidade: canal, agendamentos, memória, opções de início",
+              "more": "Também abre pelo “Configurações do agente…” de um pane de agente"
             },
             "mcp": {
               "what": "Adicionar, ativar e inspecionar servidores MCP",
@@ -13236,5 +13241,91 @@
     "trend-7d": "Pico diário, últimos 7 dias",
     "week-tokens": "Tokens nesta semana",
     "day-tokens": "Tokens hoje"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Pausar agendamentos",
+      "resume-schedules": "Retomar agendamentos",
+      "settings": "Configurações do agente…",
+      "wake": "Acordar agora",
+      "wake-none": "Nenhum agendamento ativo para executar",
+      "wake-title": "Executar agora o próximo agendamento ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · fechado, abrir e retomar",
+      "create": "Criar",
+      "name-placeholder": "Nome do agente",
+      "new": "Novo agente ({vendor})…",
+      "open": "{vendor} · aberto, ir para ele"
+    },
+    "header": {
+      "last-done": "último concluído {time}",
+      "model": "modelo {model}",
+      "model-default": "modelo padrão",
+      "never-done": "nenhum turno concluído ainda",
+      "turn": "este turno {minutes} min",
+      "vendor-since": "{vendor} · desde {date}",
+      "vendor-today": "{vendor} · desde hoje"
+    },
+    "menu": {
+      "channels": "Configurações de canais…",
+      "close-keep": "Fechar pane (manter identidade)",
+      "memory-folder": "Abrir pasta de memória",
+      "stop-remove": "Parar e remover agente…",
+      "toggle-panel": "Mostrar ou ocultar painel de controle",
+      "wake": "Acordar por um turno agora"
+    },
+    "panel": {
+      "channel-unbound": "Nenhum canal vinculado",
+      "channel-unbound-hint": "Vincule pelo botão de canal no cabeçalho",
+      "channels": "Canal",
+      "collapse": "Recolher painel de controle",
+      "expand": "Expandir painel de controle",
+      "memory": "Memória",
+      "memory-empty": "Não lida nesta versão",
+      "schedule-paused": "pausado",
+      "schedules": "Agendamentos",
+      "schedules-empty": "Nenhum agendamento aponta para este agente",
+      "status": "Estado",
+      "status-source": "Fonte: saída do terminal",
+      "title": "Painel de controle",
+      "todos": "Tarefas",
+      "todos-empty": "Não lidas nesta versão"
+    },
+    "settings": {
+      "channel": "Canal",
+      "channel-closed": "Vinculado só enquanto o pane está aberto",
+      "channel-note": "Os bots vêm de Configurações → Canais. Um vínculo pertence ao pane aberto.",
+      "closed": "fechado",
+      "color": "Cor",
+      "command": "Comando de início",
+      "empty": "Ainda não há agentes. Adicione um no bloco de agentes do menu ＋.",
+      "flags": "Modelo e opções",
+      "flags-note": "Variáveis de ambiente e a chave de permissões são compartilhadas com a página Agents de CLI. O agente guarda as próprias chaves.",
+      "go-channels": "Abrir Configurações → Canais",
+      "go-cli-agents": "Abrir Configurações → Agents de CLI",
+      "identity": "Identidade",
+      "identity-note": "O Navide guarda as identidades. Fechar um pane mantém a identidade, e reabrir retoma a sessão.",
+      "intro": "Agentes de longa duração como Hermes Agent e OpenClaw, por identidade.",
+      "job-on": "ligado",
+      "list": "Meus agentes",
+      "memory": "Local da memória",
+      "memory-note": "O agente decide onde fica a memória. O Navide não move nem altera.",
+      "name": "Nome (o do pane)",
+      "open-pane": "Abrir pane",
+      "pane-closed": "pane fechado",
+      "pane-open": "pane aberto",
+      "resume": "Retomar ao reabrir",
+      "resume-on": "Compatível",
+      "schedules": "Agendamentos",
+      "schedules-note": "Adicione agendamentos no Tasker e aponte para o pane deste agente.",
+      "session": "Última sessão",
+      "session-none": "Nenhuma ainda",
+      "stop-remove": "Parar e remover",
+      "switch-to": "Ir para o pane",
+      "unsupported": "Não compatível",
+      "yolo": "Pular confirmação de comandos perigosos",
+      "yolo-flag": "Compatível ({flag}), segue a chave YOLO"
+    }
   }
 }

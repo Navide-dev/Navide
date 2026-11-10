@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "계정",
       "cliAgents": "CLI Agent",
+      "agents": "Agents",
       "cliExtensions": "확장",
       "roles": "역할",
       "pipelines": "pipeline",
@@ -2885,14 +2886,14 @@
         "intro": "열아홉 개 설정 탭이 각각 무엇을 제어하는지, Navide Cloud가 여러 컴퓨터를 하나의 비공개 네트워크로 연결하는 방법, 그리고 메인 화면 밖에 있는 시스템 화면(메뉴, 독립 창, 사용량 보기, 리소스 관리)을 설명해요.",
         "s1": {
           "title": "설정 개요",
-          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>26개 탭</strong>으로 나뉘어 있어요.",
+          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>27개 탭</strong>으로 나뉘어 있어요.",
           "h1": "검색 필드",
           "p2": "사이드바 제목 아래에 자리 표시자가 <code>Search settings…</code>인 검색 필드가 있어요. 설정 제목, 섹션, 키워드를 <strong>모든 탭에서</strong> 찾으며(현재 인터페이스 언어와 색인된 키워드 사용) 최대 8개 결과를 보여 줘요. 결과를 클릭하면 해당 탭으로 전환하고 그 섹션으로 스크롤해요(예외 하나: \"저장 공간\"은 설정을 닫고 Resource Manager를 바로 열어요). 일치하는 항목이 없으면 <code>No matching settings</code>를 표시해요. <kbd class=\"syh-kbd\">Esc</kbd> 키로 지워요.",
           "callout": {
             "title": "검색 색인이 모든 항목을 다루지는 않아요",
             "text": "색인은 직접 관리하는 목록이라 <strong>{layout}, {notifications}, {security}, {channels} 탭에는 항목이 전혀 없어서</strong> 그 안의 내용은 검색되지 않아요 — 직접 열어야 해요. CLI Agent 항목은 한 CLI의 설정 서랍을 바로 열어요(\"CLI Agent 및 계정\" 주제 참고)."
           },
-          "h2": "스물여섯 개 탭",
+          "h2": "스물일곱 개 탭",
           "tabTable": {
             "group": "그룹",
             "tab": "탭",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Telegram이나 Slack 같은 채팅 앱 bot을 CLI pane에 연결: bot, 페어링, 허용 목록, 계정 연결",
               "more": "\"{messaging}\" 주제"
+            },
+            "agents": {
+              "what": "Hermes Agent, OpenClaw 같은 상주형 Agent를 신원별로 표시: 채널, 일정, 메모리 위치, 실행 플래그",
+              "more": "Agent pane의 Agent 설정…에서도 열 수 있어요"
             },
             "mcp": {
               "what": "MCP 서버 추가, 사용, 확인",
@@ -13236,5 +13241,91 @@
     "trend-7d": "최근 7일 일별 최고치",
     "week-tokens": "이번 주 토큰",
     "day-tokens": "오늘 토큰"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "일정 일시 중지",
+      "resume-schedules": "일정 재개",
+      "settings": "Agent 설정…",
+      "wake": "지금 깨우기",
+      "wake-none": "활성화된 일정이 없습니다",
+      "wake-title": "다음 일정을 지금 실행 ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 닫힘, 열고 이어서 실행",
+      "create": "만들기",
+      "name-placeholder": "Agent 이름",
+      "new": "새 Agent ({vendor})…",
+      "open": "{vendor} · 열림, 전환"
+    },
+    "header": {
+      "last-done": "마지막 완료 {time}",
+      "model": "모델 {model}",
+      "model-default": "기본 모델",
+      "never-done": "완료된 턴 없음",
+      "turn": "이번 턴 {minutes}분",
+      "vendor-since": "{vendor} · {date}부터",
+      "vendor-today": "{vendor} · 오늘 생성"
+    },
+    "menu": {
+      "channels": "채널 설정…",
+      "close-keep": "pane 닫기 (신원 유지)",
+      "memory-folder": "메모리 폴더 열기",
+      "stop-remove": "Agent 중지 및 삭제…",
+      "toggle-panel": "제어판 표시/숨기기",
+      "wake": "지금 한 턴 깨우기"
+    },
+    "panel": {
+      "channel-unbound": "연결된 채널 없음",
+      "channel-unbound-hint": "헤더의 채널 버튼으로 연결하세요",
+      "channels": "채널",
+      "collapse": "제어판 접기",
+      "expand": "제어판 펼치기",
+      "memory": "메모리",
+      "memory-empty": "이 버전에서는 읽지 않음",
+      "schedule-paused": "일시 중지됨",
+      "schedules": "일정",
+      "schedules-empty": "이 Agent를 대상으로 한 일정이 없습니다",
+      "status": "상태",
+      "status-source": "출처: 터미널 출력",
+      "title": "제어판",
+      "todos": "할 일",
+      "todos-empty": "이 버전에서는 읽지 않음"
+    },
+    "settings": {
+      "channel": "채널",
+      "channel-closed": "pane이 열려 있을 때만 연결됩니다",
+      "channel-note": "봇은 설정 → 채널의 것을 사용합니다. 연결은 열린 pane에 속합니다.",
+      "closed": "닫힘",
+      "color": "색상",
+      "command": "실행 명령",
+      "empty": "아직 Agent가 없습니다. ＋ 메뉴의 Agent 영역에서 추가하세요.",
+      "flags": "모델과 플래그",
+      "flags-note": "환경 변수와 권한 스위치는 CLI Agent 페이지와 공유합니다. Agent의 키는 Agent가 직접 관리합니다.",
+      "go-channels": "설정 → 채널 열기",
+      "go-cli-agents": "설정 → CLI Agent 열기",
+      "identity": "신원",
+      "identity-note": "신원은 Navide가 보관합니다. pane을 닫아도 신원은 남고, 다시 열면 세션을 이어갑니다.",
+      "intro": "Hermes Agent, OpenClaw 같은 상주형 Agent를 신원별로 보여 줍니다.",
+      "job-on": "켜짐",
+      "list": "내 Agent",
+      "memory": "메모리 위치",
+      "memory-note": "메모리 위치는 Agent가 정합니다. Navide는 옮기거나 바꾸지 않습니다.",
+      "name": "이름 (pane 이름)",
+      "open-pane": "pane 열기",
+      "pane-closed": "pane 닫힘",
+      "pane-open": "pane 열림",
+      "resume": "다시 열 때 세션 이어가기",
+      "resume-on": "지원",
+      "schedules": "일정",
+      "schedules-note": "Tasker에서 일정을 추가하고 이 Agent의 pane을 대상으로 지정하세요.",
+      "session": "마지막 세션",
+      "session-none": "아직 없음",
+      "stop-remove": "중지 및 삭제",
+      "switch-to": "pane으로 전환",
+      "unsupported": "지원 안 함",
+      "yolo": "위험한 명령 확인 건너뛰기",
+      "yolo-flag": "지원 ({flag}), YOLO 스위치를 따름"
+    }
   }
 }

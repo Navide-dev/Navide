@@ -149,6 +149,8 @@ import { forgetSyncInventory } from '../composables/useSyncInventory'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
+import AgentsSettingsPane from './settings/AgentsSettingsPane.vue'
+import type { AgentIdentitySummary } from '../lib/agentIdentity'
 import SecurityPane from './settings/SecurityPane.vue'
 import AppLockPane from './settings/AppLockPane.vue'
 import WebhooksPane from './settings/WebhooksPane.vue'
@@ -203,8 +205,15 @@ const props = defineProps<{
   reclaimableNowCount?: number
   /** Rough bytes those panes are holding. Estimated, not measured. */
   reclaimableNowBytes?: number
+  /** Settings → Agents: every agent identity with its pane state, and the one
+   *  to select when the page opens. */
+  agentPanes?: AgentIdentitySummary[]
+  agentFocusId?: string
 }>()
 const emit = defineEmits<{
+  (e: 'agent-open', identityId: string): void
+  (e: 'agent-stop', identityId: string): void
+  (e: 'agent-rename', identityId: string, name: string): void
   (e: 'close'): void
   (e: 'reopen-onboarding'): void
   (e: 'cli-login', agentKey: string, loginProfileId?: string): void
@@ -256,7 +265,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'webhooks' | 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'webhooks' | 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help' | 'agents'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -1804,6 +1813,8 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   // Order and the disabled list are persisted per workspace (project.json),
   // with the global KV as the fallback default — so this page is both.
   cliAgents: { scope: 'userWorkspace', storage: 'localStorage' },
+  // Agent identities (name, colour, last session) in the ui settings store.
+  agents: { scope: 'user', storage: 'localStorage' },
   // Each CLI's own files, read in place; the cards show their paths.
   cliExtensions: { scope: 'user', storage: 'cliFiles' },
   general: { scope: 'user', storage: 'localStorage' },
@@ -2893,6 +2904,11 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('settings.nav.cliAgents')" :active="activeTab === 'cliAgents'" @select="activeTab = 'cliAgents'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.3" y="5" width="9.4" height="7" rx="1.6"/><path d="M8 2.3V5"/><circle cx="8" cy="2.1" r="0.6"/><path d="M6 8.3v0.01M10 8.3v0.01"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.agents')" :active="activeTab === 'agents'" data-testid="settings-nav-agents" @select="activeTab = 'agents'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="6" r="3"/><path d="M3 13.5c.8-2.2 2.7-3.3 5-3.3s4.2 1.1 5 3.3"/><path d="M12.2 2.2l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5Z"/></svg>
                 </template>
               </SettingsNavItem>
               <SettingsNavItem :label="$t('settings.nav.analyzer')" :active="activeTab === 'analyzer'" @select="activeTab = 'analyzer'">
@@ -4984,6 +5000,19 @@ watch(activeTab, (tab) => {
           <LayoutSettingsPane />
         </div>
 
+        <div v-show="activeTab === 'agents'" class="s-body s-body--wide agents-body" data-settings-section="agents">
+          <h1 class="s-page-title">{{ $t('settings.nav.agents') }}</h1>
+          <AgentsSettingsPane
+            v-if="activeTab === 'agents'"
+            :agents="props.agentPanes ?? []"
+            :focus-id="props.agentFocusId"
+            @open="(id) => { emit('agent-open', id); emit('close') }"
+            @stop="(id) => emit('agent-stop', id)"
+            @rename="(id, name) => emit('agent-rename', id, name)"
+            @go-tab="(tab) => (activeTab = tab)"
+          />
+        </div>
+
         <div v-show="activeTab === 'channels'" class="s-body channels-body" data-settings-section="channels">
           <h1 class="s-page-title">{{ $t('channels.nav') }}</h1>
           <ChannelsPane v-if="activeTab === 'channels'" :backend="props.backend" />
@@ -5722,6 +5751,7 @@ watch(activeTab, (tab) => {
 .notifications-body { overflow-y: auto; padding: 18px 22px; }
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
+.agents-body { overflow-y: auto; padding: 18px 22px; }
 .security-body { overflow-y: auto; padding: 18px 22px; }
 .webhooks-body { overflow-y: auto; padding: 18px 22px; }
 /* Same reason: a scrolling list of status rows needs the gutter and its own

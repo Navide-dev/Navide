@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Accounts",
       "cliAgents": "CLI Agents",
+      "agents": "Agents",
       "cliExtensions": "Extensions",
       "roles": "Roles",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>26 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>27 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-six tabs",
+          "h2": "The twenty-seven tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Connect chat-app bots such as Telegram or Slack to CLI panes: bots, pairing, allowlist, account linking",
               "more": "The \"{messaging}\" topic"
+            },
+            "agents": {
+              "what": "Long-lived agents such as Hermes Agent and OpenClaw, by identity: channel, schedules, memory location, launch flags",
+              "more": "Opened from an agent pane’s “Agent settings…” too"
             },
             "mcp": {
               "what": "Adding, enabling and inspecting MCP servers",
@@ -13236,5 +13241,91 @@
     "trend-7d": "Daily peak, last 7 days",
     "week-tokens": "Tokens this week",
     "day-tokens": "Tokens today"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Pause schedules",
+      "resume-schedules": "Resume schedules",
+      "settings": "Agent settings…",
+      "wake": "Wake now",
+      "wake-none": "No enabled schedule to run",
+      "wake-title": "Run the next schedule now ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · closed, opens and resumes",
+      "create": "Create",
+      "name-placeholder": "Agent name",
+      "new": "New agent ({vendor})…",
+      "open": "{vendor} · open, switch to it"
+    },
+    "header": {
+      "last-done": "last done {time}",
+      "model": "model {model}",
+      "model-default": "default model",
+      "never-done": "no finished turn yet",
+      "turn": "this turn {minutes} min",
+      "vendor-since": "{vendor} · since {date}",
+      "vendor-today": "{vendor} · since today"
+    },
+    "menu": {
+      "channels": "Channels settings…",
+      "close-keep": "Close pane (keep identity)",
+      "memory-folder": "Open memory folder",
+      "stop-remove": "Stop and remove agent…",
+      "toggle-panel": "Show or hide control panel",
+      "wake": "Wake for one turn now"
+    },
+    "panel": {
+      "channel-unbound": "No channel bound",
+      "channel-unbound-hint": "Bind one with the channel button in the header",
+      "channels": "Channel",
+      "collapse": "Collapse control panel",
+      "expand": "Expand control panel",
+      "memory": "Memory",
+      "memory-empty": "Not read in this version",
+      "schedule-paused": "paused",
+      "schedules": "Schedules",
+      "schedules-empty": "No schedule targets this agent",
+      "status": "Status",
+      "status-source": "Source: terminal output",
+      "title": "Control panel",
+      "todos": "Todos",
+      "todos-empty": "Not read in this version"
+    },
+    "settings": {
+      "channel": "Channel",
+      "channel-closed": "Bound while its pane is open",
+      "channel-note": "Bots come from Settings → Channels. A binding belongs to the open pane.",
+      "closed": "closed",
+      "color": "Colour",
+      "command": "Launch command",
+      "empty": "No agents yet. Add one from the Agents block of the ＋ menu.",
+      "flags": "Model and flags",
+      "flags-note": "Environment variables and the permission switch are shared with the CLI Agents page. The agent keeps its own keys.",
+      "go-channels": "Open Settings → Channels",
+      "go-cli-agents": "Open Settings → CLI Agents",
+      "identity": "Identity",
+      "identity-note": "Identities are kept by Navide. Closing a pane keeps the identity, and reopening resumes its session.",
+      "intro": "Long-lived agents such as Hermes Agent and OpenClaw, listed by identity.",
+      "job-on": "on",
+      "list": "My agents",
+      "memory": "Memory location",
+      "memory-note": "The agent decides where its memory lives. Navide does not move or change it.",
+      "name": "Name (the pane name)",
+      "open-pane": "Open pane",
+      "pane-closed": "pane closed",
+      "pane-open": "pane open",
+      "resume": "Resume on reopen",
+      "resume-on": "Supported",
+      "schedules": "Schedules",
+      "schedules-note": "Add schedules in Tasker and point them at this agent’s pane.",
+      "session": "Last session",
+      "session-none": "None seen yet",
+      "stop-remove": "Stop and remove",
+      "switch-to": "Switch to pane",
+      "unsupported": "Not supported",
+      "yolo": "Skip dangerous-command confirmation",
+      "yolo-flag": "Supported ({flag}), follows the YOLO switch"
+    }
   }
 }

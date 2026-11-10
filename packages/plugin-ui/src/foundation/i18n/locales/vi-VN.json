@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Tài khoản",
       "cliAgents": "CLI agent",
+      "agents": "Agent",
       "cliExtensions": "Tiện ích mở rộng",
       "roles": "Vai trò",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>26 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>27 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi sáu tab",
+          "h2": "Hai mươi bảy tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Kết nối bot của ứng dụng trò chuyện như Telegram hoặc Slack với pane CLI: bot, ghép đôi, danh sách cho phép, liên kết tài khoản",
               "more": "Chủ đề “{messaging}”"
+            },
+            "agents": {
+              "what": "Agent chạy lâu dài như Hermes Agent và OpenClaw, theo danh tính: kênh, lịch, vị trí bộ nhớ, cờ khởi chạy",
+              "more": "Cũng mở được từ “Cài đặt agent…” của pane agent"
             },
             "mcp": {
               "what": "Thêm, bật và kiểm tra máy chủ MCP",
@@ -13236,5 +13241,91 @@
     "trend-7d": "Mức cao nhất mỗi ngày, 7 ngày qua",
     "week-tokens": "Token tuần này",
     "day-tokens": "Token hôm nay"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Tạm dừng lịch",
+      "resume-schedules": "Tiếp tục lịch",
+      "settings": "Cài đặt agent…",
+      "wake": "Đánh thức ngay",
+      "wake-none": "Không có lịch nào đang bật",
+      "wake-title": "Chạy lịch kế tiếp ngay ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · đã đóng, mở và tiếp tục",
+      "create": "Tạo",
+      "name-placeholder": "Tên agent",
+      "new": "Agent mới ({vendor})…",
+      "open": "{vendor} · đang mở, chuyển sang"
+    },
+    "header": {
+      "last-done": "xong lần cuối {time}",
+      "model": "mô hình {model}",
+      "model-default": "mô hình mặc định",
+      "never-done": "chưa có lượt nào xong",
+      "turn": "lượt này {minutes} phút",
+      "vendor-since": "{vendor} · từ {date}",
+      "vendor-today": "{vendor} · từ hôm nay"
+    },
+    "menu": {
+      "channels": "Cài đặt kênh…",
+      "close-keep": "Đóng pane (giữ danh tính)",
+      "memory-folder": "Mở thư mục bộ nhớ",
+      "stop-remove": "Dừng và xóa agent…",
+      "toggle-panel": "Hiện hoặc ẩn bảng điều khiển",
+      "wake": "Đánh thức một lượt ngay"
+    },
+    "panel": {
+      "channel-unbound": "Chưa gắn kênh",
+      "channel-unbound-hint": "Gắn bằng nút kênh trên thanh tiêu đề",
+      "channels": "Kênh",
+      "collapse": "Thu gọn bảng điều khiển",
+      "expand": "Mở rộng bảng điều khiển",
+      "memory": "Bộ nhớ",
+      "memory-empty": "Phiên bản này chưa đọc",
+      "schedule-paused": "đã tạm dừng",
+      "schedules": "Lịch",
+      "schedules-empty": "Không có lịch nào nhắm tới agent này",
+      "status": "Trạng thái",
+      "status-source": "Nguồn: đầu ra terminal",
+      "title": "Bảng điều khiển",
+      "todos": "Việc cần làm",
+      "todos-empty": "Phiên bản này chưa đọc"
+    },
+    "settings": {
+      "channel": "Kênh",
+      "channel-closed": "Chỉ gắn khi pane đang mở",
+      "channel-note": "Bot lấy từ Cài đặt → Kênh. Liên kết thuộc về pane đang mở.",
+      "closed": "đã đóng",
+      "color": "Màu",
+      "command": "Lệnh khởi chạy",
+      "empty": "Chưa có agent. Thêm từ khối Agent trong menu ＋.",
+      "flags": "Mô hình và cờ",
+      "flags-note": "Biến môi trường và công tắc quyền dùng chung với trang CLI agent. Agent tự giữ khóa của mình.",
+      "go-channels": "Mở Cài đặt → Kênh",
+      "go-cli-agents": "Mở Cài đặt → CLI agent",
+      "identity": "Danh tính",
+      "identity-note": "Navide lưu danh tính. Đóng pane vẫn giữ danh tính, mở lại sẽ tiếp tục phiên.",
+      "intro": "Agent chạy lâu dài như Hermes Agent và OpenClaw, liệt kê theo danh tính.",
+      "job-on": "bật",
+      "list": "Agent của tôi",
+      "memory": "Vị trí bộ nhớ",
+      "memory-note": "Agent tự chọn nơi đặt bộ nhớ. Navide không di chuyển hay sửa.",
+      "name": "Tên (tên pane)",
+      "open-pane": "Mở pane",
+      "pane-closed": "pane đã đóng",
+      "pane-open": "pane đang mở",
+      "resume": "Tiếp tục khi mở lại",
+      "resume-on": "Hỗ trợ",
+      "schedules": "Lịch",
+      "schedules-note": "Thêm lịch trong Tasker và nhắm tới pane của agent này.",
+      "session": "Phiên gần nhất",
+      "session-none": "Chưa có",
+      "stop-remove": "Dừng và xóa",
+      "switch-to": "Chuyển tới pane",
+      "unsupported": "Không hỗ trợ",
+      "yolo": "Bỏ qua xác nhận lệnh nguy hiểm",
+      "yolo-flag": "Hỗ trợ ({flag}), theo công tắc YOLO"
+    }
   }
 }

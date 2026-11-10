@@ -66,6 +66,7 @@ const PlanPane = defineAsyncComponent(() => import('../editor/PlanPane.vue'))
 import type { AgentSpec } from '@navide/plugin-shell'
 export type { AgentSpec } from '@navide/plugin-shell'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
+import { AGENT_COLOR_HEX, agentInitial, agentVendorLabel, type AgentIdentitySummary } from '../lib/agentIdentity'
 import {
   chooseLaunchCommand,
   cliCommandKey,
@@ -455,6 +456,9 @@ interface Props {
    *  them" — the layout store supplies the real list. A view moved to another
    *  slot disappears from here, which is what keeps it a singleton. */
   views?: string[]
+  /** Agent identities with their pane state (App's agentPaneSummaries); the ＋
+   *  menu's Agents block lists them. Absent = none. */
+  agentIdentities?: AgentIdentitySummary[]
 }
 
 const props = defineProps<Props>()
@@ -1124,6 +1128,8 @@ watch(
 )
 
 const emit = defineEmits<{
+  /** Focus an agent identity's pane, or open one that resumes it. */
+  (e: 'agent-open', identityId: string): void
   (e: 'spawn', payload: SpawnPayload): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
@@ -2141,7 +2147,7 @@ const spawnWorkspaceOverride = ref<string>('')
  *  active tab points". */
 const spawnGroupOverride = ref<string>('')
 
-function emitSpawn(agentKey: string): void {
+function emitSpawn(agentKey: string, customName?: string): void {
   // The dialog's fields are the pick only while the dialog is open and is
   // showing THIS agent. Every other entry point (the ＋ menu, the heading
   // button) spawns without the dialog ever rendering, so it takes the vendor's
@@ -2161,7 +2167,8 @@ function emitSpawn(agentKey: string): void {
     workspacePath: spawnWorkspaceOverride.value || workspacePath.value,
     runGroupId: spawnGroupOverride.value || undefined,
     model: pick.model || undefined,
-    effort: pick.effort || undefined
+    effort: pick.effort || undefined,
+    ...(customName ? { customName } : {})
   })
   spawnWorkspaceOverride.value = ''
   spawnGroupOverride.value = ''
@@ -2753,6 +2760,45 @@ function spawnAs(agentKey: string): void {
   spawnGroupOverride.value = addMenuGroup.value
   addMenuOpen.value = false
   spawn(agentKey)
+}
+
+// ── ＋ menu, Agents block (plan agent-0-2-40_78e071, figure 3) ───────────────
+/** The identities of the workspace the menu was opened for. */
+const addMenuAgentIdentities = computed(() => {
+  const ws = addMenuWorkspace.value || workspacePath.value
+  return (props.agentIdentities ?? []).filter((row) => !ws || row.identity.workspacePath === ws)
+})
+/** The vendor whose "new agent" row is asking for a name; '' when none. */
+const newAgentKey = ref('')
+const newAgentName = ref('')
+const newAgentInput = ref<HTMLInputElement[] | null>(null)
+watch(addMenuOpen, (open) => {
+  if (!open) newAgentKey.value = ''
+})
+
+function openAgentFromMenu(identityId: string): void {
+  addMenuOpen.value = false
+  emit('agent-open', identityId)
+}
+
+/** A new agent is named first: the name is its identity (decision 5). */
+function startNewAgent(agentKey: string): void {
+  if (missingClis.value.has(agentKey)) {
+    spawnAs(agentKey)
+    return
+  }
+  newAgentKey.value = agentKey
+  newAgentName.value = ''
+  void nextTick(() => newAgentInput.value?.[0]?.focus())
+}
+
+function spawnNewAgent(agentKey: string): void {
+  const name = newAgentName.value.trim()
+  if (!name) return
+  spawnWorkspaceOverride.value = addMenuWorkspace.value
+  spawnGroupOverride.value = addMenuGroup.value
+  addMenuOpen.value = false
+  emitSpawn(agentKey, name)
 }
 
 /** The plain-shell spec, kept out of manualAgentSpecs because the agent
@@ -4442,6 +4488,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             :key="sec.id"
           >
             <div v-if="sec.specs.length" class="ws-add-sec" :data-section="sec.id">{{ sec.label }}</div>
+            <template v-if="sec.id === 'cli'">
             <button
               v-for="spec in sec.specs"
               :key="spec.agentKey"
@@ -4455,6 +4502,53 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
               </span>
             </button>
+            </template>
+            <template v-else-if="sec.specs.length">
+              <!-- Agents are listed by identity, not vendor: open → switch to
+                   it, closed → open a pane and resume it. -->
+              <button
+                v-for="row in addMenuAgentIdentities"
+                :key="row.identity.id"
+                class="ws-add-opt ws-add-agent"
+                :data-section="sec.id"
+                data-testid="add-menu-agent-identity"
+                @click="openAgentFromMenu(row.identity.id)"
+              >
+                <span class="ws-add-avatar" :style="{ background: AGENT_COLOR_HEX[row.identity.color] }" aria-hidden="true">{{ agentInitial(row.identity.name, row.identity.agentKey) }}</span>
+                <span class="ws-add-agent-txt">
+                  <span class="ws-add-lb" v-truncate>{{ row.identity.name }}</span>
+                  <span class="ws-add-agent-sub" v-truncate>{{ $t(row.open ? 'agentPane.addMenu.open' : 'agentPane.addMenu.closed', { vendor: agentVendorLabel(row.identity.agentKey) }) }}</span>
+                </span>
+              </button>
+              <template v-for="spec in sec.specs" :key="spec.agentKey">
+                <form
+                  v-if="newAgentKey === spec.agentKey"
+                  class="ws-add-newagent"
+                  data-testid="add-menu-new-agent-form"
+                  @submit.prevent="spawnNewAgent(spec.agentKey)"
+                >
+                  <input
+                    ref="newAgentInput"
+                    v-model="newAgentName"
+                    class="ws-add-newagent-input"
+                    :placeholder="$t('agentPane.addMenu.name-placeholder')"
+                    :aria-label="$t('agentPane.addMenu.name-placeholder')"
+                    @keydown.esc.stop.prevent="newAgentKey = ''"
+                  />
+                  <button type="submit" class="ws-add-newagent-go" :disabled="!newAgentName.trim()">{{ $t('agentPane.addMenu.create') }}</button>
+                </form>
+                <button
+                  v-else
+                  class="ws-add-opt ws-add-more"
+                  :data-section="sec.id"
+                  @click="startNewAgent(spec.agentKey)"
+                >
+                  <span class="ws-add-lb" v-truncate>
+                    {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : $t('agentPane.addMenu.new', { vendor: spec.label }) }}
+                  </span>
+                </button>
+              </template>
+            </template>
           </template>
         </div>
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
@@ -6640,6 +6734,17 @@ button.icon-btn.muted:hover {
 /* Section heading in the roster ("CLI", "Agents"): small and muted, aligned
  * with the entry labels, so it reads as a label rather than an option. */
 .ws-add-sec { padding: 6px 10px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); font-weight: 600; line-height: 1.35; }
+.ws-add-agent { gap: 8px; padding-left: 8px; }
+.ws-add-avatar {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; color: #fff; font-size: var(--font-3xs); font-weight: 700;
+}
+.ws-add-agent-txt { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+.ws-add-agent-sub { color: var(--text-secondary); font-size: var(--font-3xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-add-newagent { display: flex; gap: 4px; padding: 3px 8px 3px 26px; }
+.ws-add-newagent-input { flex: 1; min-width: 0; font: inherit; font-size: var(--font-xs); padding: 2px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-base); color: var(--text-primary); }
+.ws-add-newagent-go { font: inherit; font-size: var(--font-xs); padding: 2px 8px; border: none; border-radius: var(--radius-xs); background: var(--accent-emphasis); color: var(--text-on-emphasis); cursor: pointer; }
+.ws-add-newagent-go:disabled { opacity: 0.5; cursor: default; }
 .ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason

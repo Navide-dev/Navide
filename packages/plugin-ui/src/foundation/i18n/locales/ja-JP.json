@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "アカウント",
       "cliAgents": "CLI エージェント",
+      "agents": "Agents",
       "cliExtensions": "拡張機能",
       "roles": "ロール",
       "pipelines": "パイプライン",
@@ -2885,14 +2886,14 @@
         "intro": "19 個の設定タブで変更できる内容、Navide Cloud で複数のマシンを 1 つのプライベートネットワークに接続する方法、そしてメニュー、独立ウィンドウ、使用量の表示、リソースの管理など、メイン画面の外にあるシステム機能を紹介します。",
         "s1": {
           "title": "設定の概要",
-          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>26 個のタブ</strong>があります。",
+          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>27 個のタブ</strong>があります。",
           "h1": "検索欄",
           "p2": "サイドバーの見出しの下に、<code>設定を検索…</code> と表示された検索欄があります。設定項目のタイトル、所属セクション、キーワードを<strong>タブをまたいで</strong>現在の表示言語と登録済みのキーワードを使って検索し、最大 8 件を表示します。結果をクリックすると該当タブに切り替わり、そのセクションまでスクロールします。ただし「ストレージ」は例外で、設定を閉じてリソースマネージャーを直接開きます。一致する項目がなければ <code>一致する設定がありません</code> と表示されます。<kbd class=\"syh-kbd\">Esc</kbd> で検索欄をクリアします。",
           "callout": {
             "title": "すべての設定を検索できるわけではありません",
             "text": "検索インデックスは手作業で管理する一覧です。<strong>「{layout}」「{notifications}」「{security}」「{channels}」の各タブには登録項目がありません</strong>。そのため、これらのタブ内の設定は検索できず、タブを直接開く必要があります。CLI エージェントの項目をクリックすると、いずれかの CLI の設定ドロワーが直接開きます（「CLI エージェントとアカウント」を参照）。"
           },
-          "h2": "26 個のタブ",
+          "h2": "27 個のタブ",
           "tabTable": {
             "group": "グループ",
             "tab": "タブ",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Telegram や Slack などのチャットアプリの bot を CLI ペインにつなぐ：bot、ペアリング、許可リスト、アカウントのリンク",
               "more": "このパネルの「{messaging}」"
+            },
+            "agents": {
+              "what": "Hermes Agent や OpenClaw などの常駐型 Agent を ID ごとに表示。チャンネル、スケジュール、メモリの場所、起動フラグ",
+              "more": "Agent ペインの「Agent 設定…」からも開けます"
             },
             "mcp": {
               "what": "MCP サーバーの追加、有効化、確認",
@@ -13236,5 +13241,91 @@
     "trend-7d": "直近 7 日の日別最大",
     "week-tokens": "今週のトークン",
     "day-tokens": "今日のトークン"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "スケジュールを一時停止",
+      "resume-schedules": "スケジュールを再開",
+      "settings": "Agent 設定…",
+      "wake": "今すぐ起こす",
+      "wake-none": "有効なスケジュールがありません",
+      "wake-title": "次のスケジュールを今すぐ実行（{name}）"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 閉じています。開いて再開",
+      "create": "作成",
+      "name-placeholder": "Agent 名",
+      "new": "新しい Agent（{vendor}）…",
+      "open": "{vendor} · 開いています。切り替え"
+    },
+    "header": {
+      "last-done": "前回完了 {time}",
+      "model": "モデル {model}",
+      "model-default": "既定のモデル",
+      "never-done": "完了したターンはまだありません",
+      "turn": "このターン {minutes} 分",
+      "vendor-since": "{vendor} · {date} から",
+      "vendor-today": "{vendor} · 今日作成"
+    },
+    "menu": {
+      "channels": "チャンネル設定…",
+      "close-keep": "ペインを閉じる（ID は保持）",
+      "memory-folder": "メモリフォルダを開く",
+      "stop-remove": "Agent を停止して削除…",
+      "toggle-panel": "コントロールパネルの表示切替",
+      "wake": "今すぐ 1 ターン起こす"
+    },
+    "panel": {
+      "channel-unbound": "チャンネル未接続",
+      "channel-unbound-hint": "ヘッダーのチャンネルボタンで接続",
+      "channels": "チャンネル",
+      "collapse": "コントロールパネルを畳む",
+      "expand": "コントロールパネルを開く",
+      "memory": "メモリ",
+      "memory-empty": "このバージョンでは未取得",
+      "schedule-paused": "一時停止中",
+      "schedules": "スケジュール",
+      "schedules-empty": "この Agent 宛てのスケジュールはありません",
+      "status": "状態",
+      "status-source": "情報源：ターミナル出力",
+      "title": "コントロールパネル",
+      "todos": "ToDo",
+      "todos-empty": "このバージョンでは未取得"
+    },
+    "settings": {
+      "channel": "チャンネル",
+      "channel-closed": "ペインが開いている間だけ接続されます",
+      "channel-note": "ボットは「設定 → チャット連携」のものを使います。接続は開いているペインに属します。",
+      "closed": "閉じています",
+      "color": "色",
+      "command": "起動コマンド",
+      "empty": "Agent はまだありません。＋メニューの Agent 欄から追加します。",
+      "flags": "モデルとフラグ",
+      "flags-note": "環境変数と権限スイッチは「CLI エージェント」ページと共通です。Agent の鍵は Agent 自身が管理します。",
+      "go-channels": "「設定 → チャット連携」を開く",
+      "go-cli-agents": "「設定 → CLI エージェント」を開く",
+      "identity": "ID",
+      "identity-note": "ID は Navide が保持します。ペインを閉じても ID は残り、開き直すとセッションを再開します。",
+      "intro": "Hermes Agent や OpenClaw などの常駐型 Agent を ID ごとに表示します。",
+      "job-on": "オン",
+      "list": "自分の Agent",
+      "memory": "メモリの場所",
+      "memory-note": "メモリの場所は Agent が決めます。Navide は移動も変更もしません。",
+      "name": "名前（ペイン名）",
+      "open-pane": "ペインを開く",
+      "pane-closed": "ペインは閉じています",
+      "pane-open": "ペインは開いています",
+      "resume": "開き直すとセッションを再開",
+      "resume-on": "対応",
+      "schedules": "スケジュール",
+      "schedules-note": "Tasker でスケジュールを追加し、この Agent のペインを宛先にします。",
+      "session": "前回のセッション",
+      "session-none": "まだありません",
+      "stop-remove": "停止して削除",
+      "switch-to": "ペインに切り替え",
+      "unsupported": "非対応",
+      "yolo": "危険なコマンドの確認を省略",
+      "yolo-flag": "対応（{flag}）、YOLO スイッチに従う"
+    }
   }
 }

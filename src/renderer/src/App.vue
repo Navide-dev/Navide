@@ -45,6 +45,9 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
+import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
+import { useSchedulerJobs } from './composables/useSchedulerJobs'
+import { isAgentVendor } from './lib/agentIdentity'
 import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
@@ -511,6 +514,17 @@ const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.
 const PluginStopStatusItem = defineAsyncComponent(() => import('./components/PluginStopStatusItem.vue'))
 
 const backend = useBackend()
+// Agent panes (spec kind 'agent'): identities, turn clock, schedules — read by
+// TerminalPane's agent header and control panel, Settings → Agents and the
+// pane context menu (plan agent-0-2-40_78e071).
+const agentConsole = createAgentConsole(backend, useSchedulerJobs(backend), {
+  openSettings: (identityId) => openSettingsAgents(identityId),
+  setJobEnabled: async (id, enabled) => {
+    const resp = await backend.send<{ ok?: boolean }>('scheduler.set_enabled', { id, enabled })
+    return resp.ok && resp.payload?.ok !== false
+  },
+})
+provide(agentConsoleKey, agentConsole)
 // Warn and error diagnostics also go to the backend's on-disk error ledger,
 // which outlives a reload and is what ui_diagnostics returns as `persisted`.
 setDiagnosticSink((entry) => {
@@ -10672,7 +10686,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions' | 'agents'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -10683,6 +10697,12 @@ function openSettingsAt(tab: typeof settingsInitialTab.value): void {
   settingsInitialTab.value = tab
   if (showSettings.value) settingsModalRef.value?.setTab(tab)
   else showSettings.value = true
+}
+/** Settings → Agents, on one identity (the agent pane's "Agent settings…"). */
+const settingsAgentFocusId = ref('')
+function openSettingsAgents(identityId: string): void {
+  settingsAgentFocusId.value = identityId
+  openSettingsAt('agents')
 }
 // navide://extension/<id> (src/main/deep-link.ts): show that extension's
 // Marketplace detail page. Only opens the page — installing still takes the
@@ -23330,6 +23350,67 @@ provide(cliRiskKey, resourceUsage)
 provide(channelsKey, useChannels(backend))
 provide(guardKey, useGuard(backend))
 
+// ── Agent panes (plan agent-0-2-40_78e071) ───────────────────────────────────
+function agentPaneName(p: ActivePane): string {
+  return p.messagingName || p.customName || p.autoName || p.agentLabel
+}
+// Every agent pane this window holds, matched to its identity on each change.
+watch(
+  () => panes.value
+    .filter((p) => isAgentVendor(p.agentKey))
+    .map((p) => ({ paneId: p.id, name: agentPaneName(p), agentKey: p.agentKey, workspacePath: p.workspacePath, sessionId: p.pinnedSessionId ?? null, model: p.model })),
+  (list) => agentConsole.reconcile(list),
+  { immediate: true },
+)
+
+/** Settings → Agents and the ＋ menu: each identity with its pane's status. */
+const agentPaneSummaries = computed(() => {
+  const statusById = new Map(paneViews.value.map((v) => [v.id, v.status]))
+  return agentConsole.identities.value.map((identity) => ({
+    identity,
+    open: !!identity.paneId && statusById.has(identity.paneId),
+    status: identity.paneId ? statusById.get(identity.paneId) ?? '' : '',
+  }))
+})
+
+/** Focus an identity's open pane, else open one for it — resuming its last
+ *  session when the vendor can (reconcile attaches the new pane by name). */
+function openAgentIdentity(identityId: string): void {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) {
+    onSetFocus(a.paneId)
+    return
+  }
+  const spec = AGENT_SPECS.find((s) => s.agentKey === a.agentKey)
+  if (a.sessionId && spec?.resumeArgs) {
+    void onManualResume({ agentKey: a.agentKey, workspacePath: a.workspacePath, sessionId: a.sessionId, customName: a.name, autoName: '' })
+  } else {
+    void onManualSpawn({ agentKey: a.agentKey, roleKey: '', stageId: '', workspacePath: a.workspacePath, customName: a.name })
+  }
+}
+
+/** The identity's name is its pane's name: an open pane is renamed (and the
+ *  identity follows it); a closed one is renamed in place. */
+function renameAgentIdentity(identityId: string, name: string): void {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) void setPaneCustomName(a.paneId, name)
+  else agentConsole.patch(identityId, { name })
+}
+
+/** "Stop and remove agent": closes its pane, then forgets the identity. */
+async function onStopAgentIdentity(identityId: string): Promise<void> {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) {
+    await onKill(a.paneId)
+    // The close was cancelled (confirm dialog): keep the identity.
+    if (panes.value.some((p) => p.id === a.paneId)) return
+  }
+  agentConsole.remove(identityId)
+}
+
 const resourceRows = computed<ResourceSummaryRow[]>(() => {
   const statusById = new Map(paneViews.value.map((v) => [v.id, v.status]))
   const reclaimable = new Set(reclaimableNowIds.value)
@@ -23482,6 +23563,23 @@ const paneCtxColsCapped = ref(false)
 const paneCtxView = computed<ActivePaneView | null>(() =>
   paneCtxMenu.value ? paneViews.value.find((v) => v.id === paneCtxMenu.value!.paneId) ?? null : null
 )
+/** The right-clicked pane is an agent pane: its menu takes the Agent branch
+ *  (plan agent-0-2-40_78e071, figure 3). Null for a CLI pane. */
+const ctxAgent = computed(() => {
+  const id = paneCtxMenu.value?.paneId
+  const p = id ? panes.value.find((x) => x.id === id) : undefined
+  if (!p || !isAgentVendor(p.agentKey)) return null
+  const name = agentPaneName(p)
+  const jobs = agentConsole.jobsFor(p.id, name)
+  return {
+    paneId: p.id,
+    name,
+    identity: agentConsole.identityForPane(p.id),
+    canWake: !!agentConsole.nextJob(p.id, name),
+    hasJobs: jobs.length > 0,
+    anyEnabled: jobs.some((j) => j.enabled),
+  }
+})
 
 // When the right-clicked pane is part of a multi-select of >1, the menu targets
 // the whole (still-live) selection; otherwise it targets just that one pane.
@@ -25048,6 +25146,8 @@ function paneIsCommander(p: ActivePane): boolean {
       :rebuilding-all="rebuildingTabPanes"
       :detached-window="isDetachedWindow"
       v-model:sidebar-mode="sidebarMode"
+      :agent-identities="agentPaneSummaries"
+      @agent-open="openAgentIdentity"
       @spawn="onManualSpawn"
       @spawn-resume="onManualResume"
       @kill="onKill"
@@ -25185,6 +25285,11 @@ function paneIsCommander(p: ActivePane): boolean {
       :workspace-path="currentWorkspace"
       :initial-tab="settingsInitialTab"
       :tab-request="settingsTabRequest"
+      :agent-focus-id="settingsAgentFocusId"
+      :agent-panes="agentPaneSummaries"
+      @agent-open="openAgentIdentity"
+      @agent-stop="onStopAgentIdentity"
+      @agent-rename="renameAgentIdentity"
       v-model:confirm-before-close="confirmBeforeClose"
       v-model:confirm-before-close-pane="confirmBeforeClosePane"
       v-model:confirm-before-close-workspace="confirmBeforeCloseWorkspace"
@@ -26066,6 +26171,36 @@ function paneIsCommander(p: ActivePane): boolean {
           :class="{ disabled: paneCtxView?.status !== 'running' }"
           @click="onInterrupt(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.interrupt') }}</div>
+        <template v-if="ctxAgent">
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-wake"
+            :class="{ disabled: !ctxAgent.canWake }"
+            :title="ctxAgent.canWake ? '' : $t('agentPane.action.wake-none')"
+            @click="ctxAgent.canWake && agentConsole.wakeNow(ctxAgent.paneId, ctxAgent.name); closePaneCtxMenu()"
+          >{{ $t('agentPane.menu.wake') }}</div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-pause"
+            :class="{ disabled: !ctxAgent.hasJobs }"
+            @click="ctxAgent.hasJobs && agentConsole.setSchedulesPaused(ctxAgent.paneId, ctxAgent.name, ctxAgent.anyEnabled); closePaneCtxMenu()"
+          >{{ ctxAgent.anyEnabled || !ctxAgent.hasJobs ? $t('agentPane.action.pause-schedules') : $t('agentPane.action.resume-schedules') }}</div>
+          <div class="pane-ctx-sep"></div>
+          <div class="pane-ctx-item" data-testid="ctx-agent-channels" @click="openSettingsAt('channels'); closePaneCtxMenu()">{{ $t('agentPane.menu.channels') }}</div>
+          <div
+            class="pane-ctx-item disabled"
+            data-testid="ctx-agent-memory"
+            :title="$t('agentPane.panel.memory-empty')"
+          >{{ $t('agentPane.menu.memory-folder') }}</div>
+          <div class="pane-ctx-item" data-testid="ctx-agent-panel" @click="paneRefs[ctxAgent.paneId]?.toggleAgentPanel?.(); closePaneCtxMenu()">{{ $t('agentPane.menu.toggle-panel') }}</div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-settings"
+            :class="{ disabled: !ctxAgent.identity }"
+            @click="ctxAgent.identity && openSettingsAgents(ctxAgent.identity.id); closePaneCtxMenu()"
+          >{{ $t('agentPane.action.settings') }}</div>
+        </template>
+        <template v-else>
         <div
           class="pane-ctx-item"
           :class="{ disabled: paneCtxView?.status !== 'running' || !paneCtxView?.roleKey }"
@@ -26078,6 +26213,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="$t('action.reclaim-title')"
           @click="reclaimPaneFromMenu(paneCtxMenu!.paneId)"
         >{{ $t('action.reclaim') }}</div>
+        </template>
         <div
           v-if="ctxDescendantIds.length"
           class="pane-ctx-item danger"
@@ -26095,7 +26231,13 @@ function paneIsCommander(p: ActivePane): boolean {
           >{{ pluginSlotLabel(item) }} <span class="pane-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></div>
           <div class="pane-ctx-sep"></div>
         </template>
-        <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ $t('action.remove') }}</div>
+        <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ ctxAgent ? $t('agentPane.menu.close-keep') : $t('action.remove') }}</div>
+        <div
+          v-if="ctxAgent?.identity"
+          class="pane-ctx-item danger"
+          data-testid="ctx-agent-stop"
+          @click="void onStopAgentIdentity(ctxAgent.identity.id); closePaneCtxMenu()"
+        >{{ $t('agentPane.menu.stop-remove') }}</div>
         <div
           v-if="ctxDescendantIds.length"
           class="pane-ctx-item danger"
