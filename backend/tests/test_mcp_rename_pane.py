@@ -48,8 +48,8 @@ def _ctx(pane_id: str = "pa") -> Any:
 
 def _seed() -> None:
     agent_messaging.register("pa", "commander", "/ws/alpha", agent_key="claude")
-    agent_messaging.register("pc", "child", "/ws/alpha", agent_key="claude", spawned_by="pa")
-    agent_messaging.register("pg", "grandchild", "/ws/alpha", agent_key="codex", spawned_by="pc")
+    agent_messaging.register("pc", "child", "/ws/alpha", agent_key="claude", spawned_by="pa", opened_by="pa")
+    agent_messaging.register("pg", "grandchild", "/ws/alpha", agent_key="codex", spawned_by="pc", opened_by="pc")
     agent_messaging.register("pu", "users-pane", "/ws/alpha", agent_key="claude")
 
 
@@ -67,6 +67,7 @@ def _window(monkeypatch: pytest.MonkeyPatch, reply: dict[str, Any] | None = None
         agent_messaging.register(
             entry.pane_id, args["name"], entry.workspace_path,
             agent_key=entry.agent_key, realized=entry.realized, spawned_by=entry.spawned_by,
+            opened_by=entry.opened_by,
         )
         return {"ok": True, "result": {"paneId": entry.pane_id, "oldName": entry.name, "name": args["name"]}}
 
@@ -138,7 +139,7 @@ async def test_a_pane_in_another_workspace_is_refused_even_when_the_caller_opene
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _seed()
-    agent_messaging.register("px", "far-child", "/ws/beta", agent_key="claude", spawned_by="pa")
+    agent_messaging.register("px", "far-child", "/ws/beta", agent_key="claude", spawned_by="pa", opened_by="pa")
     calls = _window(monkeypatch)
 
     result = await pane_rename_tool.cli_rename_pane("beta/far-child", "renamed", _ctx())
@@ -151,7 +152,9 @@ async def test_a_pane_in_another_workspace_is_refused_even_when_the_caller_opene
 @pytest.mark.asyncio
 async def test_a_restore_placeholder_can_be_renamed(monkeypatch: pytest.MonkeyPatch) -> None:
     _seed()
-    agent_messaging.register("pp", "parked", "/ws/alpha", agent_key="claude", realized=False, spawned_by="pa")
+    agent_messaging.register(
+        "pp", "parked", "/ws/alpha", agent_key="claude", realized=False, spawned_by="pa", opened_by="pa"
+    )
     _window(monkeypatch)
 
     result = await pane_rename_tool.cli_rename_pane("", "awake", _ctx(), pane_id="pp")
@@ -175,6 +178,35 @@ async def test_a_scheduled_job_on_the_old_name_is_reported_not_rewritten(
 
     assert result["warnings"] == ["scheduler job job-1 still targets old name"]
     assert aimed["action"]["pane_name"] == "child"
+
+
+@pytest.mark.asyncio
+async def test_adopting_a_pane_with_place_does_not_make_it_renamable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cli_place_pane may hang any pane of the workspace under the caller; that
+    moves spawned_by, not who opened it, so the rename is still refused."""
+    _seed()
+    calls = _window(monkeypatch)
+    # What cli_place_pane(target="users-pane", spawned_by="pa") leaves behind.
+    agent_messaging.register("pu", "users-pane", "/ws/alpha", agent_key="claude", spawned_by="pa")
+
+    result = await pane_rename_tool.cli_rename_pane("users-pane", "mine-now", _ctx())
+
+    assert result["error_code"] == "rename-not-permitted"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_pane_recorded_before_opened_by_can_rename_only_itself(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No opened_by means nobody opened it: no fallback to spawned_by."""
+    _seed()
+    agent_messaging.register("po", "old-child", "/ws/alpha", agent_key="claude", spawned_by="pa")
+    _window(monkeypatch)
+
+    refused = await pane_rename_tool.cli_rename_pane("old-child", "renamed", _ctx())
+    itself = await pane_rename_tool.cli_rename_pane("old-child", "renamed", _ctx("po"))
+
+    assert refused["error_code"] == "rename-not-permitted"
+    assert itself["ok"] is True
 
 
 def test_ui_invoke_cannot_reach_the_rename_action_around_the_tool() -> None:

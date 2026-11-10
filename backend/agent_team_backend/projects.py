@@ -120,6 +120,7 @@ class PaneRecord:
     run_group_id: str = ""
     origin: str = "manual"          # "pipeline" | "manual" | "mcp"  (non-pipeline records are matched with != "pipeline")
     spawned_by: str = ""            # pane_id of the parent that spawned this pane; "" = root. Re-keyed on restore alongside pane_id — a stale value is worse than none (see _rekey_spawned_by).
+    opened_by: str = ""             # pane_id of the pane that opened this one (cli_open_agent / SPAWN block); set once, never moved by a re-parent. "" = opened by the user or written before this field existed. Re-keyed with spawned_by.
     stage_id: str = ""
     stage_index: int = -1
     slot_label: str = ""
@@ -891,13 +892,16 @@ class ProjectStore:
 
         Called whenever a record's pane_id is rewritten (restore / rebuild).
         Self-references are dropped rather than kept: a record that ends up its
-        own parent would make the lineage walk loop forever.
+        own parent would make the lineage walk loop forever. `opened_by` names
+        the same kind of id and follows it the same way.
         """
         if not old_id or old_id == new_id:
             return
         for child in project.panes:
             if child.spawned_by == old_id:
                 child.spawned_by = "" if child.pane_id == new_id else new_id
+            if child.opened_by == old_id:
+                child.opened_by = "" if child.pane_id == new_id else new_id
 
     @staticmethod
     def _names_only_retired(project: "Project", pane_id: str) -> bool:
@@ -999,6 +1003,7 @@ class ProjectStore:
         surface: str = "",
         window_kind: str = "",
         launch_id: str = "",
+        opened_by: str = "",
     ) -> Project:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
@@ -1055,6 +1060,10 @@ class ProjectStore:
             # children here); writing it back would undo that.
             if spawned_by and not self._names_only_retired(project, spawned_by):
                 pane.spawned_by = spawned_by
+            # Set once, by the spawn that opened the pane: a later re-spawn
+            # (restore, rebuild) or re-parent never changes who opened it.
+            if opened_by and not pane.opened_by:
+                pane.opened_by = opened_by
             # Only a dock's spawn passes these; a main-window spawn leaves them
             # empty and the record exactly as before.
             if surface: pane.surface = surface

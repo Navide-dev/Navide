@@ -54,6 +54,8 @@ export interface SpawnHistoryEntry extends HistoryTitleEntry {
    *  the live panes and falls back to root — but it is why the pane record,
    *  not this, is read first. */
   spawnedBy?: string
+  /** Who opened the pane (PaneRecord.opened_by); never moved by a re-parent. */
+  openedById?: string
   outputLogFile?: string
   /** User favorite. Persisted across restarts; bulk cleanup skips starred
    *  entries (explicit single delete still removes them). */

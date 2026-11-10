@@ -555,8 +555,12 @@ same write path — so the title on screen, `cli_list_targets`, `cli_send`,
 `cli_get_status` and `cli_list_sessions`' `pane_name` switch together. A name
 another pane already answers to is refused with `name-taken` (nothing is
 suffixed for you). You can rename your own pane and the panes in your
-workspace you opened, directly or through your children (the `spawned_by`
-chain); anything else answers `rename-not-permitted`. CLI panes only, restore
+workspace you opened, directly or through panes you opened; anything else
+answers `rename-not-permitted`. Who opened a pane (`opened_by`) is fixed when
+it is spawned by `cli_open_agent` or a SPAWN block — moving a pane under you
+with `cli_place_pane` changes its parent, not its opener, so it does not make
+the pane yours to rename. A pane the user opened, or one recorded before
+0.2.40, can be renamed only by itself. CLI panes only, restore
 placeholders included; panes on another device answer `rename-local-only`.
 Scheduled jobs are the user's data and are not rewritten: one that still
 targets the old name comes back in `warnings`. Returns

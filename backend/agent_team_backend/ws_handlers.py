@@ -12010,6 +12010,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         origin=payload.get("origin", ""),
         spawned_by=payload.get("spawned_by", ""),
         launch_id=launch_id.current(),
+        opened_by=str(payload.get("opened_by") or ""),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(
@@ -12533,6 +12534,9 @@ async def agent_msg_register(session: "Session", msg_id: str, msg_type: str, pay
         # that knows it (lineage is renderer state), and cli_whoami is the only
         # reader — a child asking who it owes its report to.
         spawned_by=str(payload.get("spawned_by") or ""),
+        # Who opened this pane, set once at its spawn and never moved by a
+        # re-parent; cli_rename_pane decides permission from it.
+        opened_by=str(payload.get("opened_by") or ""),
         # Only an embedded AI panel (AiCliDock) sends these; a window pane
         # leaves them out and is registered exactly as before.
         surface=str(payload.get("surface") or ""),
