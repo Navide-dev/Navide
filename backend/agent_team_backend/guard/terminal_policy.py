@@ -463,20 +463,30 @@ def _classifier_hits(text: str, workspace: str, protected: frozenset[str]) -> li
 #: command (or a comment holding the pattern's text) next to the one the
 #: user meant, so the exemption would cover more than it names. Quotes are
 #: not parsed for this — a quoted one also keeps the line refused.
-_EXEMPT_UNSAFE = (";", "&", "||", "\n", "\r", "#", "`", "$(", "<(", ">(")
+_EXEMPT_UNSAFE = (";", "&", "||", "\n", "\r", "#", "`", "$(", "<", ">")
 
 
 def _exemption_matches(pattern: str, text: str) -> bool:
-    """An anchored, whole-line match: a glob must match the entire line and a
-    plain pattern must equal it (whitespace runs collapsed), unlike block
-    patterns, which match anywhere."""
+    """An anchored, whole-line match, stage by stage: the line and the
+    pattern must have the same number of ``|`` stages, and each glob stage
+    must match its whole stage (a plain one must equal it), so a wildcard
+    never spans into another stage. Every word on the line that names a
+    ``.ssh`` path must also appear verbatim in the pattern, so a wildcard
+    cannot carry a second credential file along. Whitespace runs collapse."""
     if any(tok in text for tok in _EXEMPT_UNSAFE):
         return False
-    p = " ".join(pattern.split())
-    s = " ".join(text.split())
-    if any(ch in p for ch in "*?["):
-        return fnmatch.fnmatchcase(s, p)
-    return s == p
+    p_stages = [" ".join(st.split()) for st in pattern.split("|")]
+    s_stages = [" ".join(st.split()) for st in text.split("|")]
+    if len(p_stages) != len(s_stages):
+        return False
+    for p, s in zip(p_stages, s_stages):
+        if any(ch in p for ch in "*?["):
+            if not fnmatch.fnmatchcase(s, p):
+                return False
+        elif s != p:
+            return False
+    named = set(pattern.split())
+    return all(w in named for w in text.split() if ".ssh" in w)
 
 
 def _exemption_for(rule: str, text: str, settings: Settings) -> str | None:
