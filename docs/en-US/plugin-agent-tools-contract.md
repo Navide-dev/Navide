@@ -203,7 +203,9 @@ tool means adding it there (or giving it a reserved prefix).
   (2.7).
 - The core server prefixes every description with the source label
   `[third-party Navide plugin <id> v<version> | permissions: ...]` (D4, built by
-  B1-c from the sync entry's `permissions`).
+  B1-c from the sync entry's `permissions`). The plugins Navide ships
+  (`navide.browser`, `navide.git`, `navide.mini-ide`, `navide.plans`) get
+  `[bundled Navide plugin ...` instead; nothing else about them differs.
 - Tool **results**: every Cc character except TAB and LF is removed
   (`sanitizeAgentToolResultText`; CR is removed too), then the result is wrapped
   as external content with the plugin id, version and permissions (D4).

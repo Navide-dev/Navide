@@ -9811,7 +9811,9 @@ def _guarded_terminal_write_refusal(
     submit = "\r" in text
     line = _GUARDED_LINES.get(session_id, "") + text.replace("\r", "")
     workspace = str(term.metadata.get("workspace_path") or term.cwd)
-    refusal = terminal_policy.enforce(line, workspace=workspace, pane_id=term.pane_id, via="terminal.input")
+    refusal = terminal_policy.enforce(
+        line, workspace=workspace, pane_id=term.pane_id, via="terminal.input", audit_exempt=submit
+    )
     if refusal is not None:
         _GUARDED_LINES.pop(session_id, None)
         return refusal
