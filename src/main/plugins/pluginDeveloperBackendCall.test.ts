@@ -11,6 +11,7 @@ import {
   parseDeveloperBackendRequest,
   type DeveloperBackendGate,
 } from './frontendPluginManager'
+import { PluginAgentToolsHost } from './pluginAgentToolsHost'
 import { manifestV2CapabilityPolicy } from './pluginPermissions'
 import { readInstalledManifestV2, thirdPartyBackendLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -51,6 +52,8 @@ interface Live {
   workspace: string
   pids: number[]
   gate: { state: DeveloperBackendGate }
+  switches: { enabled: boolean; externalCallers: boolean }
+  confirmWrite: ReturnType<typeof vi.fn>
   call: (method: string, args?: Record<string, unknown>, extra?: Record<string, unknown>) => Promise<Record<string, unknown>>
 }
 
@@ -109,6 +112,21 @@ async function live(options: { installGate?: boolean } = {}): Promise<Live> {
     workspaceRoot: workspace,
   }))
   mgr.setAgentToolWorkspaceResolver((candidate) => candidate === workspace)
+  // The agent tool catalog as the main process wires it; the folder plugin
+  // has no agent tools and no consent, which a developer call does not need.
+  const switches = { enabled: true, externalCallers: false }
+  const confirmWrite = vi.fn(async () => true)
+  mgr.setAgentToolsHost(new PluginAgentToolsHost({
+    switches: () => ({ ...switches }),
+    setSwitches: (change) => Object.assign(switches, change),
+    listPackages: () => [spec],
+    isDisabled: () => false,
+    hasConsent: async () => false,
+    agentToolSince: () => null,
+    setAgentMethods: (pluginId, version, methods) => mgr.setThirdPartyAgentMethods(pluginId, version, methods),
+    confirmWrite,
+    send: async () => 'delivered',
+  }))
   const gate = { state: 'ok' as DeveloperBackendGate }
   if (options.installGate !== false) mgr.setDeveloperBackendGate(() => gate.state)
   let next = 0
@@ -123,7 +141,7 @@ async function live(options: { installGate?: boolean } = {}): Promise<Live> {
       ...extra,
     }) as unknown as Record<string, unknown>
   }
-  return { mgr, workspace, pids, gate, call }
+  return { mgr, workspace, pids, gate, switches, confirmWrite, call }
 }
 
 describe('plugins_developer_backend_call on the Host', () => {
@@ -158,6 +176,28 @@ describe('plugins_developer_backend_call on the Host', () => {
     expect(f.pids).toEqual([])
   })
 
+  it('asks the first-write question with the developer call, and stops when it is declined', async () => {
+    const f = await live()
+    f.confirmWrite.mockImplementation(async () => false)
+    expect(await f.call('fixture.echo')).toMatchObject({ ok: false, error: { code: 'WORKSPACE_WRITE_DECLINED' } })
+    expect(f.confirmWrite).toHaveBeenCalledWith(
+      expect.objectContaining({ pluginId: 'acme.devtool' }),
+      expect.objectContaining({ name: 'plugins_developer_backend_call', method: 'fixture.echo', risk: 'write' }),
+      f.workspace,
+    )
+    expect(f.pids).toEqual([])
+  })
+
+  it('follows the agent tool master switch and the external caller switch', async () => {
+    const f = await live()
+    f.switches.enabled = false
+    expect(await f.call('fixture.echo')).toMatchObject({ ok: false, error: { code: 'PLUGIN_TOOL_UNAVAILABLE' } })
+    f.switches.enabled = true
+    const external = await f.call('fixture.echo', {}, { caller: { kind: 'external', paneId: null, workspace: null, verifiedTo: 'caller-kind' } })
+    expect(external).toMatchObject({ ok: false, error: { code: 'PLUGIN_TOOL_UNAVAILABLE' } })
+    expect(f.pids).toEqual([])
+  })
+
   it('refuses a method the manifest does not declare', async () => {
     const f = await live()
     const response = await f.call('fixture.undeclared')
@@ -175,11 +215,18 @@ describe('plugins_developer_backend_call on the Host', () => {
   it('a gate that closes during the call stops the bridge serving it', async () => {
     const f = await live()
     await f.call('fixture.echo')
-    f.gate.state = 'plugin-stopped'
     const served = (f.mgr as unknown as {
       agentCallStillServed: (call: unknown) => boolean
-    }).agentCallStillServed({ pluginId: 'acme.devtool', caller: { kind: 'host', paneId: null, workspace: null }, spec: { packageVersion: '0.1.0' }, developer: true })
-    expect(served).toBe(false)
+    }).agentCallStillServed
+    const spec = f.mgr.getBackendActivation('acme.devtool', '0.1.0')
+    const call = { pluginId: 'acme.devtool', caller: { kind: 'pane', paneId: 'p-7', workspace: f.workspace }, spec, developer: true }
+    f.gate.state = 'ok'
+    expect(served.call(f.mgr, call)).toBe(true)
+    f.switches.enabled = false
+    expect(served.call(f.mgr, call)).toBe(false)
+    f.switches.enabled = true
+    f.gate.state = 'plugin-stopped'
+    expect(served.call(f.mgr, call)).toBe(false)
   }, 30_000)
 })
 

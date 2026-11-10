@@ -1306,6 +1306,7 @@ matches.
 | `contributes.views[].detailView` | no | Id of a detail view in the same package | Only on a `left` view |
 | `contributes.views[].targetSchema` | no | Package-relative .json path | Only on a `detail` view |
 | `contributes.views[].receives` | no | Object | Only on a `window` view, see [Composed View Contracts](#composed-view-contracts) |
+| `contributes.views[].headless` | no | Boolean | Not on a `window` or `detail` view; `true` lets the Host open the view hidden to answer its agent tools (0.2.40, see Headless views) |
 | `backend.entry` | yes | Package-relative executable path; script and source filenames are rejected | |
 | `backend.protocolVersion` | yes | `1` | Navide Backend Wire v1 |
 | `backend.activation` | yes | `startup` | |

@@ -5637,7 +5637,7 @@
             "scheduler_run_now": "Ejecutar ahora una vez, fuera de su calendario, una tarea que creaste; responde en cuanto empieza la ejecución, borra la espera por fallos, deja la siguiente franja programada donde estaba y cuenta para las 300 ejecuciones diarias de los agents",
             "scheduler_runs": "El historial de ejecuciones de una tarea, de la más reciente a la más antigua: ok, error u omitida con su motivo; una omisión (sin ventana, ocupado, límite diario o cuota, total diario de los agents, una tarea de agent caducada, un destino desaparecido) no es un error. Se puede leer el historial de cualquier tarea",
             "cli_permission_settings": "Leer y escribir la opción de omisión de permisos de las CLI (yolo). Es un ajuste global, no específico de la pipeline, y solo afecta a los panes abiertos después; si una CLI concreta lleva realmente la opción lo indica agents[].skipFlag en la respuesta, no solo el valor global",
-            "plugins_developer_backend_call": "Solo en el modo de desarrollador: llama a un método del backend de un plugin de Navide cargado desde una carpeta, sin declarar una herramienta de agente. Cualquier otro plugin se rechaza; cada llamada aparece en la actividad del plugin y cuenta para la pausa automática",
+            "plugins_developer_backend_call": "Solo en el modo de desarrollador: llama a un método del backend de un complemento de Navide cargado desde una carpeta, sin declarar una herramienta de agente. Todo lo demás se rechaza; cada llamada aparece en su actividad y cuenta para la pausa automática",
             "workspace_open": "Abrir un proyecto como área de trabajo en Navide; si lo hace en una ventana nueva o en una que ya tiene el proyecto abierto lo decide Navide",
             "workspace_switch": "Cambiar mi propia ventana a otro proyecto que ya contiene; los panes del proyecto que se deja siguen en marcha. Se rechaza mientras hay una pipeline en ejecución en esa ventana, porque el cambio la cancelaría",
             "prompt_list": "Las skills de prompt que la persona usuaria guarda en Ajustes → Prompts; de solo lectura, porque crearlas y editarlas le corresponde a ella",
@@ -12654,7 +12654,7 @@
       "heading": "Dónde vio esto el análisis estático ({count})",
       "kind": {
         "command": "Comando {key}",
-        "host": "Host {key}",
+        "host": "Servidor {key}",
         "capability": "Capacidad {key}"
       },
       "hidden": "Fragmento oculto porque parece un secreto"

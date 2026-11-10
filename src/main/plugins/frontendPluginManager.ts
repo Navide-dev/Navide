@@ -259,6 +259,7 @@ import {
   type AgentToolsSyncPayload,
 } from '../../shared/pluginAgentTools'
 import { agentToolUnavailableMessage, isBackendAgentToolPackage, type AgentToolPackage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
 import { IPC_AGENT_TOOL_CALL, IPC_AGENT_TOOL_RESULT, ViewAgentToolCalls } from './pluginViewAgentToolCalls'
 
 /** An agent tool answer as the Host sends it: a result longer than one piece
@@ -8073,8 +8074,16 @@ export class FrontendPluginManager {
    *  gate holds. The bridge asks before each capability the child uses. */
   private agentCallStillServed(call: { pluginId: string; caller: AgentToolCaller; spec: AgentToolPackage; developer?: true }): boolean {
     if (call.developer) {
+      // The developer gate, and the catalog's checks short of the tool lookup:
+      // master switch, caller kind, marks, disabled, stopping, same version.
       return this.developerBackendGate?.(call.pluginId) === 'ok' &&
-        !this.isPackageVersionStopping(call.pluginId, call.spec.packageVersion)
+        !this.isPackageVersionStopping(call.pluginId, call.spec.packageVersion) &&
+        this.agentToolsHost !== null && this.agentToolsHost.recheck(
+          call.pluginId,
+          call.caller,
+          (pluginId, packageVersion) => this.isPackageVersionStopping(pluginId, packageVersion),
+          call.spec,
+        ).ok
     }
     return this.agentToolsHost !== null && this.agentToolsHost.recheck(
       call.pluginId,
@@ -8125,14 +8134,27 @@ export class FrontendPluginManager {
       return refused('BACKEND_UNAVAILABLE', 'The Navide plugin has no backend.', packageVersion)
     }
     const spec = activation
+    // The same catalog checks an agent tool passes, short of the tool lookup
+    // and its consent: master switch, external callers, marks, disabled,
+    // stopping. No catalog (the agent tool host is not installed) refuses.
+    const host = this.agentToolsHost
+    const isStopping = (pluginId: string, version: string): boolean => this.isPackageVersionStopping(pluginId, version)
+    const catalogRefusal = (): DeveloperBackendResponse | null => {
+      if (!host) return refused('PLUGIN_TOOL_UNAVAILABLE', agentToolUnavailableMessage('master-switch-off'), packageVersion)
+      const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
+      return current.ok ? null : refused('PLUGIN_TOOL_UNAVAILABLE', agentToolUnavailableMessage(current.reason), packageVersion)
+    }
+    const catalog = catalogRefusal()
+    if (catalog) return catalog
     const root = canonicalExistingDirectory(parsed.workspacePath)
     const workspaceId = root ? this.workspaceIdForPath(root) : null
-    const grant = this.capabilityGrantResolver?.(spec.pluginId, spec.packageVersion) ?? null
-    if (
-      !root || !workspaceId || !this.isAgentToolWorkspace(root) ||
-      !grant || grant.packageVersion !== spec.packageVersion ||
-      (spec.thirdParty.system.includes('fs') && !grant.system.includes('fs'))
-    ) {
+    const workspaceRefusal = (): DeveloperBackendResponse | null => {
+      const grant = this.capabilityGrantResolver?.(spec.pluginId, spec.packageVersion) ?? null
+      if (
+        root && workspaceId && this.isAgentToolWorkspace(root) &&
+        grant && grant.packageVersion === spec.packageVersion &&
+        (!spec.thirdParty.system.includes('fs') || grant.system.includes('fs'))
+      ) return null
       return refused(
         'WORKSPACE_NOT_AUTHORIZED',
         parsed.caller.kind === 'pane'
@@ -8141,6 +8163,37 @@ export class FrontendPluginManager {
         packageVersion,
       )
     }
+    const workspace = workspaceRefusal()
+    if (workspace || !root || !workspaceId) return workspace!
+    // A developer call is counted as a write: the first one in a workspace
+    // asks the user, once per package version and workspace, as a write
+    // agent tool does (DB3). The dialog waits for a person; the call answers
+    // by its own deadline and the dialog stays open for a retry.
+    const developerTool: DisclosureAgentTool = {
+      name: 'plugins_developer_backend_call',
+      method: parsed.method,
+      risk: 'write',
+      title: parsed.method,
+      description: 'A Developer Mode call of a backend method.',
+      timeoutMs: parsed.timeoutMs,
+      inputSchema: { type: 'object' },
+    }
+    let dialogTimer: ReturnType<typeof setTimeout> | undefined
+    const unanswered = new Promise<'unanswered'>((resolve) => {
+      dialogTimer = setTimeout(() => resolve('unanswered'), parsed.timeoutMs)
+    })
+    const allowed = await Promise.race([host!.confirmWrite(spec, developerTool, root), unanswered])
+    clearTimeout(dialogTimer)
+    if (allowed === 'unanswered') {
+      return refused(
+        'PLUGIN_TOOL_TIMEOUT',
+        'Waiting for the user to answer the Navide approval dialog for this workspace; call again after they allow it.',
+        packageVersion,
+      )
+    }
+    if (!allowed) return refused('WORKSPACE_WRITE_DECLINED', 'The user did not allow changes in this workspace.', packageVersion)
+    const afterConfirm = gateRefusal(gate(), packageVersion) ?? catalogRefusal() ?? workspaceRefusal()
+    if (afterConfirm) return afterConfirm
     const initiator: AuthenticatedInitiator = Object.freeze({
       kind: 'agent',
       source: 'mcp',
@@ -8161,7 +8214,7 @@ export class FrontendPluginManager {
     } catch (error) {
       return { ...this.backendError(reqId, error), packageVersion }
     }
-    const again = gateRefusal(gate(), packageVersion)
+    const again = gateRefusal(gate(), packageVersion) ?? catalogRefusal() ?? workspaceRefusal()
     if (again) return again
     this.agentToolCalls.set(initiator.id, {
       pluginId: spec.pluginId, risk: 'write', workspaceRoot: root, caller: parsed.caller, spec, developer: true,
