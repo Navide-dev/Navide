@@ -583,7 +583,10 @@ approved by default.
   like the owner; the token is tied to it (`publisher_token.navide_member_id`),
   stops working (401 `TOKEN_REVOKED`) once the account is removed (removal also
   revokes it) or its qualification is no longer approved, and audits as
-  `member:<its id>`. A publisher's `PUT /api/publisher/me/key` may only confirm
+  `member:<its id>`. Testplace's developer endpoints (invites, codes, revoke,
+  promote) take the owner's token only; a publisher may still publish with
+  `?channel=testplace`. Revoking a member's qualification also revokes its
+  tokens and login codes in every namespace. A publisher's `PUT /api/publisher/me/key` may only confirm
   the namespace's current key: a different key is 409 `KEY_EXISTS`, a first key
   or `replace` is 403 `OWNER_ONLY`. Audited as `namespace-member.add` and
   `namespace-member.remove` (with the number of tokens revoked).

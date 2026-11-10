@@ -1328,8 +1328,9 @@ authenticated namespace, never from a marketplace field.
 
 **Namespace members (0.2.40).** A namespace has one owner, the account that
 claimed it, and may have publisher members. 0.2.40 has one member role,
-`publisher`: it may publish and yank versions under the namespace, and nothing
-else. Only the owner adds or removes publishers, sets or replaces the
+`publisher`: it may publish and yank versions under the namespace (a Testplace
+build included), and nothing else: Testplace invites, codes, revocation and
+promotion stay with the owner. Only the owner adds or removes publishers, sets or replaces the
 namespace's signing key or transfers anything; a publisher can do none of
 these. An account must be an approved developer to be added, and its publish
 tokens for the namespace stop working when it is removed or its own

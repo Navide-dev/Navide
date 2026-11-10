@@ -259,3 +259,27 @@ def test_migration_14_adds_members_and_token_owner_columns(tmp_path):
     assert "namespace_member" in tables
     assert "navide_member_id" in token_columns and "navide_member_id" in code_columns
     assert run_migrations(engine) == []
+
+
+def test_testplace_developer_endpoints_are_the_owners(client, tokens):
+    assert publish(client, tokens["owner"], package_for(NAMESPACE, "hello", version="1.0.0")).status_code == 201
+    path = f"/api/testplace/{NAMESPACE}/hello/invites"
+    assert client.get(path, headers=bearer(tokens["owner"])).status_code == 200
+    resp = client.get(path, headers=bearer(tokens["publisher"]))
+    assert resp.status_code == 403 and resp.json()["detail"]["code"] == "FORBIDDEN"
+    resp = client.post(path, json={"labels": ["x"]}, headers=bearer(tokens["publisher"]))
+    assert resp.status_code == 403
+
+
+def test_revoking_a_members_qualification_revokes_its_member_tokens(client, tokens):
+    resp = client.post(f"/api/admin/developers/{PUBLISHER}/revoke", json={"reason": "abuse"}, headers=ADMIN_HEADERS)
+    assert resp.status_code == 200, resp.text
+    with Session(client.app.state.registry.engine) as session:
+        from sqlmodel import select
+
+        from registry.models import PublisherToken
+
+        rows = session.exec(select(PublisherToken).where(PublisherToken.navide_member_id == PUBLISHER)).all()
+        assert rows and all(row.revoked_at is not None for row in rows)
+    # The owner's namespace is not frozen by a member's revocation.
+    assert publish(client, tokens["owner"], package_for(NAMESPACE, "hello", version="1.0.0")).status_code == 201
