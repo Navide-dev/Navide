@@ -12648,6 +12648,15 @@
       "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。",
       "noScanLocal": "Navide はこのファイルをスキャンしていません。以下はこの Navide プラグイン自身の宣言だけです。"
     },
+    "sites": {
+      "heading": "静的スキャンが検出した場所（{count}）",
+      "kind": {
+        "command": "コマンド {key}",
+        "host": "ホスト {key}",
+        "capability": "機能 {key}"
+      },
+      "hidden": "シークレットのように見えるため抜粋を非表示にしました"
+    },
     "incompleteReason": {
       "timedOut": "スキャン時間を超えた",
       "truncated": "内容がスキャン上限を超えた",

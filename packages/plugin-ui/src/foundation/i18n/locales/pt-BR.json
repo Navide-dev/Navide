@@ -12648,6 +12648,15 @@
       "noScan": "Esta versão foi publicada antes das verificações do sistema; o que está abaixo é apenas a declaração do próprio plug-in do Navide.",
       "noScanLocal": "O Navide não verificou este arquivo; o que está abaixo é apenas a declaração do próprio plug-in do Navide."
     },
+    "sites": {
+      "heading": "Onde a verificação estática encontrou isto ({count})",
+      "kind": {
+        "command": "Comando {key}",
+        "host": "Host {key}",
+        "capability": "Capacidade {key}"
+      },
+      "hidden": "Trecho oculto porque parece um segredo"
+    },
     "incompleteReason": {
       "timedOut": "o tempo da verificação se esgotou",
       "truncated": "o conteúdo excedeu os limites da verificação",

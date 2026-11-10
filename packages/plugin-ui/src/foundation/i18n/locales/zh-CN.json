@@ -12648,6 +12648,15 @@
       "noScan": "这个版本上架时尚未有系统扫描，以下只有这个 Navide 插件自己的声明。",
       "noScanLocal": "Navide 没有扫描这个文件，以下只有这个 Navide 插件自己的声明。"
     },
+    "sites": {
+      "heading": "静态扫描看到这些项目的位置（{count}）",
+      "kind": {
+        "command": "命令 {key}",
+        "host": "主机 {key}",
+        "capability": "能力 {key}"
+      },
+      "hidden": "摘录看起来像密钥，已隐藏"
+    },
     "incompleteReason": {
       "timedOut": "超过扫描时间",
       "truncated": "内容超过扫描上限",

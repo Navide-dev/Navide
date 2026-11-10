@@ -59,6 +59,20 @@ _HEX_IDENTIFIER_RE = re.compile(r"^_0x[0-9a-f]{4,}$")
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/=_-]+$")
 _PATH_LOOKAHEAD = 12
 OBFUSCATION_THRESHOLDS = {"hexIdentifiers": 20, "hexEscapes": 200, "longBase64": 2000, "charCodeStrings": 20}
+#: Scanner 1.2.0: the call sites kept per finding, per file and per report.
+MAX_SITES_PER_FINDING = 3
+#: An excerpt starts this many characters before its finding on the line...
+EXCERPT_BEFORE = 40
+#: ...is read from at most this many characters after it...
+EXCERPT_AFTER = 400
+#: ...and keeps this many characters once whitespace runs are collapsed.
+EXCERPT_LENGTH = 120
+#: Characters around the excerpt a secret rule is also run over, so a secret
+#: the excerpt only cuts into is not shown either.
+EXCERPT_REDACTION_MARGIN = 200
+
+Site = tuple[int, int, "str | None"]
+"""(line, column, excerpt): 1-based, in code points; excerpt None when redacted."""
 
 
 @dataclass
@@ -80,6 +94,43 @@ class ScriptFacts:
     dynamic_import: int = 0
     string_timers: int = 0
     obfuscation_signals: set[str] = field(default_factory=set)
+    sites: dict[tuple, list] = field(default_factory=dict)
+    """Finding key -> the first ``MAX_SITES_PER_FINDING`` offsets while
+    scanning, then their ``Site``s. Keys: ``("call", *call)``,
+    ``("host", host)`` and ``("capability", address)``."""
+
+
+def _add_site(facts: ScriptFacts, key: tuple, offset: int) -> None:
+    offsets = facts.sites.setdefault(key, [])
+    if len(offsets) < MAX_SITES_PER_FINDING and offset not in offsets:
+        offsets.append(offset)
+
+
+def locate(text: str, offsets: list[int], redacted: Callable[[str], bool]) -> dict[int, Site]:
+    """The ``Site`` of every offset in ``text``, counting lines in one pass
+    over the sorted offsets (a bundle is often one 20 MiB line)."""
+    located: dict[int, Site] = {}
+    line = 1
+    line_start = 0
+    counted = 0
+    reach = EXCERPT_AFTER + EXCERPT_REDACTION_MARGIN
+    for offset in sorted(set(offsets)):
+        newlines = text.count("\n", counted, offset)
+        if newlines:
+            line += newlines
+            line_start = text.rfind("\n", counted, offset) + 1
+        counted = offset
+        # Bounded look-ahead: the end of a 20 MiB line is never searched for.
+        line_end = text.find("\n", offset, offset + reach)
+        if line_end == -1:
+            line_end = min(len(text), offset + reach)
+        begin = max(line_start, offset - EXCERPT_BEFORE)
+        end = min(line_end, offset + EXCERPT_AFTER)
+        excerpt: str | None = " ".join(text[begin:end].split())[:EXCERPT_LENGTH]
+        if redacted(text[max(line_start, begin - EXCERPT_REDACTION_MARGIN):line_end]):
+            excerpt = None
+        located[offset] = (line, offset - line_start + 1, excerpt)
+    return located
 
 
 def _static_value(token: Token) -> str | None:
@@ -179,7 +230,13 @@ class _Window:
 _SHELL_RUN_LITERAL = re.compile(r"""['"`]shell\.run['"`]""")
 
 
-def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEADLINE) -> ScriptFacts:
+def scan_script(
+    text: str,
+    *,
+    max_path_length: int,
+    deadline: Deadline = NO_DEADLINE,
+    redacted: Callable[[str], bool] = lambda _value: False,
+) -> ScriptFacts:
     """Facts of one script. Raises ``ScanTimeout`` or ``TooComplex`` (from
     the tokenizer) when the file cannot be scanned within the bounds."""
     window = _Window(iter_tokens(text, deadline))
@@ -198,6 +255,7 @@ def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEAD
             escapes += token.escapes
             for host in _hosts(token.value):
                 facts.hosts[host] = facts.hosts.get(host, 0) + 1
+                _add_site(facts, ("host", host), token.start)
             if (
                 token.kind == "str" and len(token.value) >= OBFUSCATION_THRESHOLDS["longBase64"]
                 and not token.value.startswith("data:") and _BASE64_RE.fullmatch(token.value)
@@ -206,6 +264,7 @@ def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEAD
         if value is not None:
             if is_capability_address(value):
                 facts.capabilities.add(value)
+                _add_site(facts, ("capability", value), token.start)
                 if value in FS_READ_ADDRESSES or value in FS_WRITE_ADDRESSES:
                     _collect_path(at, index, value in FS_WRITE_ADDRESSES, facts, max_path_length)
                 if value == "shell.run" and nxt is not None and nxt.value == ",":
@@ -215,6 +274,7 @@ def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEAD
             parsed = _command_like(value)
             if parsed is not None:
                 facts.calls.add((*parsed, "commandLikeString"))
+                _add_site(facts, ("call", *parsed, "commandLikeString"), token.start)
         elif token.kind == "tmpl" and token.dynamic and has_shell_run:
             head = token.value.split(None, 1)
             if head and head[0] in COMMAND_EXECUTABLES:
@@ -252,6 +312,8 @@ def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEAD
         facts.obfuscation_signals.add("hexEscapes")
     if char_codes >= OBFUSCATION_THRESHOLDS["charCodeStrings"]:
         facts.obfuscation_signals.add("charCodeStrings")
+    located = locate(text, [offset for offsets in facts.sites.values() for offset in offsets], redacted)
+    facts.sites = {key: [located[offset] for offset in offsets] for key, offsets in facts.sites.items()}
     return facts
 
 
@@ -286,6 +348,7 @@ def _collect_command(at: _At, index: int, facts: ScriptFacts) -> None:
         facts.dynamic += 1
         return
     facts.calls.add((*parsed, "callSite"))
+    _add_site(facts, ("call", *parsed, "callSite"), value_token.start)  # type: ignore[union-attr]
 
 
 def _collect_path(at: _At, index: int, write: bool, facts: ScriptFacts, maximum: int) -> None:

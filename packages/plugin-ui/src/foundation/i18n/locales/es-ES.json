@@ -12648,6 +12648,15 @@
       "noScan": "Esta versión se publicó antes de los análisis del sistema; lo de abajo es solo la propia declaración de este complemento de Navide.",
       "noScanLocal": "Navide no ha analizado este archivo; lo de abajo es solo la propia declaración de este complemento de Navide."
     },
+    "sites": {
+      "heading": "Dónde vio esto el análisis estático ({count})",
+      "kind": {
+        "command": "Comando {key}",
+        "host": "Host {key}",
+        "capability": "Capacidad {key}"
+      },
+      "hidden": "Fragmento oculto porque parece un secreto"
+    },
     "incompleteReason": {
       "timedOut": "el análisis se quedó sin tiempo",
       "truncated": "el contenido superó los límites del análisis",

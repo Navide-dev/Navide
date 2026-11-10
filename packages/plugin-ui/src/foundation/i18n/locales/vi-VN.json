@@ -12648,6 +12648,15 @@
       "noScan": "Phiên bản này được phát hành trước khi có quét hệ thống; bên dưới chỉ là lời tự khai báo của plugin Navide này.",
       "noScanLocal": "Navide chưa quét tệp này; bên dưới chỉ là lời tự khai báo của plugin Navide này."
     },
+    "sites": {
+      "heading": "Nơi quét tĩnh tìm thấy các mục này ({count})",
+      "kind": {
+        "command": "Lệnh {key}",
+        "host": "Máy chủ {key}",
+        "capability": "Khả năng {key}"
+      },
+      "hidden": "Đã ẩn đoạn trích vì trông giống bí mật"
+    },
     "incompleteReason": {
       "timedOut": "lần quét đã hết thời gian",
       "truncated": "nội dung vượt giới hạn quét",

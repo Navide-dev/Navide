@@ -186,6 +186,14 @@ CASES: list[dict] = [
     {"name": "native-unknown-format", "target": "darwin-arm64", "manifest": backend_manifest("backend/run.sh"), "files": {
         "backend/run.sh": b"#!/bin/sh\nexec node https://cdn.example.org/x.js shell.run\n",
     }},
+    {"name": "finding-sites", "files": {
+        "frontend/a.js": "// line 1\r\n  const a = 'https://many.example.com/1';\n\n\tfetch(\"https://many.example.com/2\")\n"
+                         "x('https://many.example.com/3'); y('https://many.example.com/4')\n"
+                         "invoke('shell.run', {\n  command:\n    'git push'\n})\n"
+                         + "z = 1;" * 60 + "const far = 'https://far.example.com/' + '" + "w" * 500 + "'",
+        "frontend/b.js": "'https://many.example.com/0'; 😀😀 invoke('storage.get', {key: 'k'})",
+        "frontend/c.js": {"textParts": ["const k = '", TOKEN, "'", " " * 150, "; fetch('https://near-secret.example.com/')"]},
+    }},
     {"name": "manifest-v1", "manifest": {"id": "acme.v1"}, "files": {"frontend/a.js": "1"}},
 ]
 

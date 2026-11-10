@@ -12648,6 +12648,15 @@
       "noScan": "이 버전은 시스템 검사 도입 전에 게시되었어요. 아래 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
       "noScanLocal": "Navide가 이 파일을 검사하지 않았어요. 아래 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요."
     },
+    "sites": {
+      "heading": "정적 스캔이 발견한 위치 ({count})",
+      "kind": {
+        "command": "명령 {key}",
+        "host": "호스트 {key}",
+        "capability": "기능 {key}"
+      },
+      "hidden": "비밀 값처럼 보여 발췌를 숨겼습니다"
+    },
     "incompleteReason": {
       "timedOut": "검사 시간이 초과됨",
       "truncated": "내용이 검사 한도를 넘음",

@@ -12648,6 +12648,15 @@
       "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。",
       "noScanLocal": "Navide 沒有掃描這個檔案，以下只有這個 Navide 外掛自己的宣告。"
     },
+    "sites": {
+      "heading": "靜態掃描看到這些項目的位置（{count}）",
+      "kind": {
+        "command": "指令 {key}",
+        "host": "主機 {key}",
+        "capability": "能力 {key}"
+      },
+      "hidden": "節錄看起來像金鑰，已隱藏"
+    },
     "incompleteReason": {
       "timedOut": "超過掃描時間",
       "truncated": "內容超過掃描上限",

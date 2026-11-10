@@ -94,6 +94,16 @@ function positionals(args: readonly string[], valueOptions: ReadonlySet<string>)
 const word = (value: string | undefined): string | null =>
   value !== undefined && SUBCOMMAND_RE.test(value) ? value : null
 
+/** Scanner 1.2.0: where a frontend finding was seen (1-based line and column,
+ *  in code points; excerpt null when it looked like a secret). Reports of
+ *  older scanners have no sites. */
+export interface ScanSite {
+  file: string
+  line: number
+  col: number
+  excerpt: string | null
+}
+
 export interface ShellCall {
   executable: string
   subcommand: string | null
@@ -101,6 +111,7 @@ export interface ShellCall {
   source: ScanSource
   evidence: 'callSite' | 'commandLikeString'
   files: number
+  sites?: ScanSite[]
 }
 
 export interface CodeSignals {
@@ -138,9 +149,9 @@ export interface ScanReport {
     timedOut: boolean
   }
   shell: { calls: ShellCall[]; dynamic: { count: number; files: number } }
-  network: { hosts: Array<{ host: string; source: ScanSource; count: number }> }
+  network: { hosts: Array<{ host: string; source: ScanSource; count: number; sites?: ScanSite[] }> }
   files: { readPaths: string[]; writePaths: string[]; dynamicPaths: number }
-  capabilities: Array<{ address: string; source: ScanSource }>
+  capabilities: Array<{ address: string; source: ScanSource; sites?: ScanSite[] }>
   code: { frontend: CodeSignals | null; backend: CodeSignals | null }
   native: NativeSummary[]
 }

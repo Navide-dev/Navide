@@ -112,6 +112,11 @@ navide-plugin publish ./{{ publisher.name }}.my-extension-1.0.0.vsix --registry 
           {% if r.secret_findings %}
             <div class="muted">Secret scan: {% for f in r.secret_findings %}{{ f.rule }} in {{ f.path }}:{{ f.line }}{% if not loop.last %}; {% endif %}{% endfor %} (value hidden)</div>
           {% endif %}
+          {% if r.scan_sites %}
+            <details class="muted scan-sites"><summary>Where the static scan saw {{ r.scan_sites|length }} finding{{ 's' if r.scan_sites|length != 1 }}</summary>
+              <ul>{% for f in r.scan_sites %}<li>{{ f.kind }} <code>{{ f.key }}</code> in <code>{{ f.file }}:{{ f.line }}:{{ f.col }}</code>{% if r.targets|length > 1 %} ({{ f.target }}){% endif %}: {% if f.excerpt is none %}<span>excerpt hidden (looks like a secret)</span>{% else %}<code>{{ f.excerpt }}</code>{% endif %}</li>{% endfor %}</ul>
+            </details>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
