@@ -443,3 +443,26 @@ describe('vendor capability lookups', () => {
     expect(explicitSessionId).toBe('fixed-uuid')
   })
 })
+
+describe('pinFreshSessionAtLaunch: Hermes names its own session', () => {
+  const name = 'navide-11111111-2222-4333-8444-555555555555'
+
+  it('creates the named session on a fresh launch', () => {
+    const res = pinFreshSessionAtLaunch('hermes', false, 'hermes chat --yolo', undefined, () => 'unused')
+    expect(res.explicitSessionId).toMatch(/^navide-[0-9a-f-]{36}$/)
+    expect(res.command).toBe(`hermes chat --yolo --create-if-missing --continue ${res.explicitSessionId}`)
+  })
+
+  it('reuses a saved name and leaves resumes alone', () => {
+    expect(pinFreshSessionAtLaunch('hermes', false, 'hermes chat', name, () => 'unused'))
+      .toEqual({ command: `hermes chat --create-if-missing --continue ${name}`, explicitSessionId: name })
+    expect(pinFreshSessionAtLaunch('hermes', true, `hermes chat --continue ${name}`, name, () => 'unused'))
+      .toEqual({ command: `hermes chat --continue ${name}`, explicitSessionId: '' })
+  })
+
+  it('surfaces a hand-written Navide name as the pin', () => {
+    const cmd = `hermes chat --create-if-missing --continue ${name} --yolo`
+    expect(pinFreshSessionAtLaunch('hermes', false, cmd, undefined, () => 'unused'))
+      .toEqual({ command: cmd, explicitSessionId: name })
+  })
+})
