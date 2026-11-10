@@ -23,7 +23,7 @@ import {
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
 import { requestChannelsBot } from './channelsBotRequest'
 import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
-import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
+import { installMarketplaceFormListeners, restorePendingForms, showDeveloperPage, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
@@ -11027,6 +11027,12 @@ async function onMenuAction(action: string): Promise<void> {
     // Same destination as Cmd+K Cmd+S: two entry points labelled "Keyboard
     // Shortcuts" must not show two different lists.
     openSettingsAt('keybindings')
+    return
+  }
+  if (action === 'open-developer:developer-settings' || action === 'open-developer:testplace') {
+    // Help → Developers: Settings → Navide Marketplace → Developer, at the top or its Testplace section.
+    showDeveloperPage(action === 'open-developer:testplace' ? 'testplace' : 'top')
+    openSettingsAt('marketplace')
     return
   }
   if (action === 'check-updates') {

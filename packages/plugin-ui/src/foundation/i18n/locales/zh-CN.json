@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "用了但没声明（被 Navide 拒绝）",
       "item": "{address}（{source}）在 {workspace}：{count} 次，最近一次 {date}",
+      "code": "这些调用会被 Navide 以 CAPABILITY_DENIED 拒绝，直到 manifest 声明为止。",
+      "doc": "查看文档",
       "reasons": "原因：{reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "已下架"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "在 Navide 市场审核之前，先把测试版交给你挑选的测试者。只有受邀的人看得到、装得到；只经过自动扫描，发布后 90 天到期。",
+      "channel": "用 testplace 频道发布测试版（?channel=testplace）：",
+      "invites": "邀请是一次性的加入代码，一位测试者一组；撤销后该测试者就失去访问权限。",
+      "codes": "公开测试代码让你设定人数内的测试者用同一组代码加入；每个包的第一组代码要先经过简易审核：",
+      "promote": "测试完成后，把同一个版本送进 Navide 市场审核：",
+      "owner-only": "邀请、测试代码、撤销与升级测试版只限命名空间所有者；发布成员可以发布版本，但不能管理 Testplace。",
+      "owner-only-member": "你是这个命名空间的发布成员，Testplace 的邀请、测试代码、撤销与升级由所有者操作。",
+      "joined": "我加入的测试",
+      "doc": "Testplace 文档"
+    },
     "error": {
       "not-signed-in": "请先在“开发者账号”登录。",
       "qualification": "开发者申请需要先通过审核。",
+      "doc": "查看文档",
       "registry": "Navide 市场拒绝了这个动作（{status} {code}）：{message}"
     }
   },

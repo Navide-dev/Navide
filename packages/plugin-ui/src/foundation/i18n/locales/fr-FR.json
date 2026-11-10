@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Utilisé mais non déclaré (refusé par Navide)",
       "item": "{address} ({source}) dans {workspace} : {count} fois, dernière fois le {date}",
+      "code": "Navide refuse ces appels avec CAPABILITY_DENIED tant que le manifeste ne les déclare pas.",
+      "doc": "Voir la documentation",
       "reasons": "Motifs : {reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "Retirée"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Confiez une version de test aux testeurs de votre choix avant l’examen par la Navide Marketplace. Seules les personnes invitées la voient et l’installent ; elle ne passe que l’analyse automatique et expire 90 jours après sa publication.",
+      "channel": "Publier une version de test sur le canal testplace (?channel=testplace) :",
+      "invites": "Les invitations sont des jetons d’accès à usage unique, un par testeur. En révoquer une retire l’accès à ce testeur.",
+      "codes": "Un code de test public permet à autant de testeurs que vous le fixez de rejoindre avec un seul code. Le premier code de chaque paquet attend un examen rapide :",
+      "promote": "Une fois les tests terminés, envoyez la même version à l’examen de la Navide Marketplace :",
+      "owner-only": "Les invitations, les codes de test, la révocation et la promotion des versions de test sont réservés au propriétaire de l’espace de noms ; les membres éditeurs peuvent publier des versions mais pas gérer Testplace.",
+      "owner-only-member": "Vous êtes membre éditeur de cet espace de noms : les invitations Testplace, les codes de test, la révocation et la promotion sont faits par son propriétaire.",
+      "joined": "Mes tests",
+      "doc": "Documentation Testplace"
+    },
     "error": {
       "not-signed-in": "Connectez-vous d’abord dans Compte développeur.",
       "qualification": "Votre demande de compte développeur doit d’abord être approuvée.",
+      "doc": "Voir la documentation",
       "registry": "La Navide Marketplace l’a refusé ({status} {code}) : {message}"
     }
   },

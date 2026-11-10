@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "用了但沒宣告（被 Navide 拒絕）",
       "item": "{address}（{source}）在 {workspace}：{count} 次，最近一次 {date}",
+      "code": "這些呼叫會被 Navide 以 CAPABILITY_DENIED 拒絕，直到 manifest 宣告為止。",
+      "doc": "查看文件",
       "reasons": "原因：{reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "已下架"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "在 Navide 市集審核之前，先把測試版交給你挑選的測試者。只有受邀的人看得到、裝得到；只經過自動掃描，發佈後 90 天到期。",
+      "channel": "用 testplace 頻道發佈測試版（?channel=testplace）：",
+      "invites": "邀請是一次性的加入代碼，一位測試者一組；撤銷後該測試者就失去存取權。",
+      "codes": "公開測試代碼讓你設定人數內的測試者用同一組代碼加入；每個套件的第一組代碼要先經過簡易審核：",
+      "promote": "測試完成後，把同一個版本送進 Navide 市集審核：",
+      "owner-only": "邀請、測試代碼、撤銷與升級測試版只限命名空間擁有者；發佈成員可以發佈版本，但不能管理 Testplace。",
+      "owner-only-member": "你是這個命名空間的發佈成員，Testplace 的邀請、測試代碼、撤銷與升級由擁有者操作。",
+      "joined": "我加入的測試",
+      "doc": "Testplace 文件"
+    },
     "error": {
       "not-signed-in": "請先在「開發者帳號」登入。",
       "qualification": "開發者申請需要先通過審核。",
+      "doc": "查看文件",
       "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
     }
   },

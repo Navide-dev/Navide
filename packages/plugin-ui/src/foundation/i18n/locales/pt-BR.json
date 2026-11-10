@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Usado, mas não declarado (recusado pelo Navide)",
       "item": "{address} ({source}) em {workspace}: {count} vezes, última em {date}",
+      "code": "O Navide recusa essas chamadas com CAPABILITY_DENIED até que o manifesto as declare.",
+      "doc": "Ver documentação",
       "reasons": "Motivos: {reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "Retirada"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Entregue um build de teste aos testadores que você escolher antes da revisão do Navide Marketplace. Só as pessoas convidadas podem vê-lo e instalá-lo; ele passa só pela verificação automática e expira 90 dias após a publicação.",
+      "channel": "Publique um build de teste no canal testplace (?channel=testplace):",
+      "invites": "Convites são tokens de entrada de uso único, um por testador. Revogar um remove o acesso desse testador.",
+      "codes": "Um código de teste público deixa entrar com um só código quantos testadores você definir. O primeiro código de cada pacote aguarda uma revisão rápida:",
+      "promote": "Quando os testes terminarem, envie o mesmo build para a revisão do Navide Marketplace:",
+      "owner-only": "Convites, códigos de teste e revogar ou promover builds de teste são só para o proprietário do namespace; membros publicadores podem publicar versões, mas não gerenciar o Testplace.",
+      "owner-only-member": "Você é membro publicador deste namespace, então o proprietário cuida dos convites, códigos de teste, revogação e promoção no Testplace.",
+      "joined": "Testes de que participo",
+      "doc": "Documentação do Testplace"
+    },
     "error": {
       "not-signed-in": "Entre primeiro em Conta de desenvolvedor.",
       "qualification": "Sua candidatura de desenvolvedor precisa ser aprovada primeiro.",
+      "doc": "Ver documentação",
       "registry": "O Navide Marketplace recusou ({status} {code}): {message}"
     }
   },

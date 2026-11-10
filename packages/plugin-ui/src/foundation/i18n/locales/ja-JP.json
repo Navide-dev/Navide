@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "宣言せずに使用（Navide が拒否）",
       "item": "{workspace} での {address}（{source}）：{count} 回、最後は {date}",
+      "code": "マニフェストで宣言するまで、これらの呼び出しは Navide に CAPABILITY_DENIED で拒否されます。",
+      "doc": "ドキュメントを見る",
       "reasons": "理由：{reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "取り下げ済み"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Navide マーケットプレイスの審査の前に、選んだテスターへテスト版を渡します。招待された人だけが表示・インストールでき、自動スキャンのみで、公開から 90 日で期限切れになります。",
+      "channel": "testplace チャンネルでテスト版を公開（?channel=testplace）：",
+      "invites": "招待はテスターごとに 1 回だけ使える参加トークンです。取り消すとそのテスターはアクセスできなくなります。",
+      "codes": "公開テストコードでは、設定した人数までのテスターが 1 つのコードで参加できます。各パッケージの最初のコードは簡単な審査を待ちます：",
+      "promote": "テストが終わったら、同じビルドを Navide マーケットプレイスの審査に送ります：",
+      "owner-only": "招待、テストコード、テスト版の取り消しと昇格はネームスペースのオーナーだけが行えます。公開メンバーはバージョンを公開できますが、Testplace は管理できません。",
+      "owner-only-member": "あなたはこのネームスペースの公開メンバーです。Testplace の招待、テストコード、取り消しと昇格はオーナーが行います。",
+      "joined": "参加中のテスト",
+      "doc": "Testplace のドキュメント"
+    },
     "error": {
       "not-signed-in": "先に「開発者アカウント」でサインインしてください。",
       "qualification": "開発者の申請が承認されている必要があります。",
+      "doc": "ドキュメントを見る",
       "registry": "Navide マーケットプレイスが拒否しました（{status} {code}）：{message}"
     }
   },

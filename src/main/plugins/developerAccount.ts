@@ -14,6 +14,7 @@ import { createServer } from 'http'
 import type { DeveloperPublicState, DeveloperTokenScope, DeveloperVault } from './developerVault'
 import { publicKeyFingerprint } from './developerVault'
 import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
+import { CAPABILITY_DENIED_DOC_URL, trustedDocUrl } from '../../shared/marketplaceDeveloper'
 
 export const DEVELOPER_LOGIN_TIMEOUT_MS = 5 * 60_000
 export const DEVELOPER_LOGIN_LABEL = 'Navide app'
@@ -61,17 +62,22 @@ export function packageDigest(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-/** The Registry's error code and message from a response body, if it has one. */
-export function registryError(body: unknown): { code: string | null; message: string } {
-  const detail = (body as { detail?: unknown } | null)?.detail
+/** The Registry's error code, message and documentation page (c3: the body's
+ *  `doc`, kept only when it is Navide's own) from a response body, if it has them. */
+export function registryError(body: unknown): { code: string | null; message: string; doc: string | null } {
+  const record = body as { detail?: unknown; code?: unknown; doc?: unknown } | null
+  const detail = record?.detail
+  let code: string | null = typeof record?.code === 'string' ? record.code : null
+  let message: string
   if (detail && typeof detail === 'object') {
-    const { code, message } = detail as { code?: unknown; message?: unknown }
-    return {
-      code: typeof code === 'string' ? code : null,
-      message: redactDeveloperSecrets(typeof message === 'string' ? message : JSON.stringify(detail)),
-    }
+    const inner = detail as { code?: unknown; message?: unknown }
+    if (typeof inner.code === 'string') code = inner.code
+    message = redactDeveloperSecrets(typeof inner.message === 'string' ? inner.message : JSON.stringify(detail))
+  } else {
+    message = redactDeveloperSecrets(typeof detail === 'string' ? detail : '')
   }
-  return { code: null, message: redactDeveloperSecrets(typeof detail === 'string' ? detail : '') }
+  const doc = trustedDocUrl(record?.doc) ?? (code === 'CAPABILITY_DENIED' ? CAPABILITY_DENIED_DOC_URL : null)
+  return { code, message, doc }
 }
 
 interface CallbackServer {

@@ -193,4 +193,72 @@ describe('MarketplaceDeveloperPanel', () => {
       expect(wrapper.text()).not.toContain(i18n.global.t('marketplace-developer.account.replace-key'))
     })
   })
+
+  describe('Testplace section and documentation links (0.2.40 a4, c3)', () => {
+    const owner = { member_id: 'mem-owner', role: 'owner', added_at: null }
+
+    async function mountWith(role: 'owner' | 'publisher' | null, api: Record<string, unknown> = {}): Promise<VueWrapper> {
+      const openExternal = vi.fn().mockResolvedValue({ ok: true })
+      ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+        openExternal,
+        developer: {
+          state: vi.fn(async () => ({ ...state, namespace: 'acme', signedIn: { account: true, publisher: role !== null } })),
+          application: vi.fn(async () => ({ ok: true, status: 200, body: { status: 'approved', reason: null, fields: {} } })),
+          versions: vi.fn(async () => ({ ok: true, status: 200, body: { namespace: 'acme', items: [] } })),
+          members: vi.fn(async () => ({ ok: true, status: 200, body: { your_role: role, items: [owner] } })),
+          ...api,
+        },
+      }
+      closeMarketplaceForm()
+      const w = mount(MarketplaceDeveloperPanel, { props: { backend: createMockBackend('connected').backend }, global: { plugins: [i18n] } })
+      await flushPromises()
+      return w
+    }
+
+    function openExternalMock(): ReturnType<typeof vi.fn> {
+      return (window as unknown as { agentTeam: { openExternal: ReturnType<typeof vi.fn> } }).agentTeam.openExternal
+    }
+
+    it('explains the channel, invites, codes and owner-only rule, and gathers the Testplace actions', async () => {
+      wrapper = await mountWith('owner')
+      const section = wrapper.get('[data-testid="developer-testplace"]')
+      expect(section.text()).toContain('--channel testplace')
+      expect(section.text()).toContain('?channel=testplace')
+      expect(section.text()).toContain('testplace code create')
+      expect(section.get('[data-testid="developer-testplace-owner"]').text()).toBe(i18n.global.t('marketplace-developer.testplace.owner-only'))
+      await section.get('[data-testid="developer-testplace-invite"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="developer-testplace"]').exists()).toBe(true)
+      await section.get('[data-testid="developer-testplace-doc"]').trigger('click')
+      expect(openExternalMock()).toHaveBeenCalledWith(
+        'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md#testplace')
+    })
+
+    it('tells a publisher member that Testplace is the owner\'s', async () => {
+      wrapper = await mountWith('publisher')
+      expect(wrapper.get('[data-testid="developer-testplace-owner"]').text())
+        .toBe(i18n.global.t('marketplace-developer.testplace.owner-only-member'))
+    })
+
+    it('shows View Documentation for a Registry error that names its doc, and clears it with the error', async () => {
+      const doc = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md#4-publish-to-the-marketplace'
+      const addMember = vi.fn(async () => ({ ok: false, status: 400, code: 'BAD_MEMBER', message: 'no such account', doc }))
+      wrapper = await mountWith('owner', { addMember })
+      await wrapper.get('[data-testid="developer-member-id"]').setValue('mem-x')
+      await wrapper.get('[data-testid="developer-member-add"]').trigger('click')
+      await flushPromises()
+      useNotify().resolveDialog(true)
+      await flushPromises()
+      const link = wrapper.get('[data-testid="developer-error-doc"]')
+      expect(link.text()).toBe(i18n.global.t('marketplace-developer.error.doc'))
+      await link.trigger('click')
+      expect(openExternalMock()).toHaveBeenCalledWith(doc)
+      addMember.mockResolvedValueOnce({ ok: false, status: 400, code: 'BAD_MEMBER', message: 'again', doc: null } as never)
+      await wrapper.get('[data-testid="developer-member-add"]').trigger('click')
+      await flushPromises()
+      useNotify().resolveDialog(true)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="developer-error-doc"]').exists()).toBe(false)
+    })
+  })
 })

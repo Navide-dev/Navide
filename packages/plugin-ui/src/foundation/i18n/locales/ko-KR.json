@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "선언 없이 사용함(Navide가 거부)",
       "item": "{workspace}에서 {address}({source}): {count}회, 마지막 {date}",
+      "code": "매니페스트에 선언하기 전까지 이 호출들은 Navide가 CAPABILITY_DENIED로 거부해요.",
+      "doc": "문서 보기",
       "reasons": "이유: {reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "회수됨"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Navide 마켓플레이스 검토 전에 직접 고른 테스터에게 테스트 빌드를 전달해요. 초대받은 사람만 보고 설치할 수 있고, 자동 검사만 거치며, 게시 후 90일이 지나면 만료돼요.",
+      "channel": "testplace 채널로 테스트 빌드 게시(?channel=testplace):",
+      "invites": "초대는 테스터마다 한 번만 쓸 수 있는 참여 토큰이에요. 취소하면 그 테스터는 접근할 수 없어요.",
+      "codes": "공개 테스트 코드는 설정한 인원까지 하나의 코드로 참여할 수 있어요. 패키지마다 첫 코드는 간단한 검토를 기다려요:",
+      "promote": "테스트가 끝나면 같은 빌드를 Navide 마켓플레이스 검토로 보내요:",
+      "owner-only": "초대, 테스트 코드, 테스트 빌드 취소와 승격은 네임스페이스 소유자만 할 수 있어요. 게시 멤버는 버전을 게시할 수 있지만 Testplace는 관리할 수 없어요.",
+      "owner-only-member": "이 네임스페이스의 게시 멤버라서 Testplace 초대, 테스트 코드, 취소와 승격은 소유자가 해요.",
+      "joined": "참여한 테스트",
+      "doc": "Testplace 문서"
+    },
     "error": {
       "not-signed-in": "먼저 개발자 계정에서 로그인하세요.",
       "qualification": "먼저 개발자 신청이 승인되어야 해요.",
+      "doc": "문서 보기",
       "registry": "Navide 마켓플레이스에서 거부했어요({status} {code}): {message}"
     }
   },

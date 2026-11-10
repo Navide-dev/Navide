@@ -1,5 +1,6 @@
 import { LEGAL_LABELS } from '../shared/legalLinks'
 import type { LegalRoute } from '../shared/legalLinks'
+import type { DeveloperMenuItem } from '../shared/marketplaceDeveloper'
 import { hostStrings, type HostStringTable } from './hostLocale'
 
 /**
@@ -55,6 +56,7 @@ export interface MenuStrings {
   shortcuts: string
   whatsNew: string
   welcomeTour: string
+  developers: Record<DeveloperMenuItem, string>
   legal: Record<LegalRoute, string>
 }
 
@@ -87,6 +89,15 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     shortcuts: 'Keyboard Shortcuts',
     whatsNew: 'What’s New…',
     welcomeTour: 'First-Run Tour…',
+    developers: {
+      title: 'Developers',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': 'Plugin Development Guide',
+      'plugin-development-v2': 'Plugin API v2 Reference',
+      'marketplace-publishing': 'Publishing to the Navide Marketplace',
+      'developer-settings': 'Developer Settings…',
+      testplace: 'Testplace…'
+    },
     // The legal table is the one place those titles are written; English reads
     // them straight from it rather than keeping a second copy in step.
     legal: LEGAL_LABELS
@@ -119,6 +130,15 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     shortcuts: 'キーボードショートカット',
     whatsNew: '新機能…',
     welcomeTour: 'はじめてのツアー…',
+    developers: {
+      title: '開発者',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': 'プラグイン開発ガイド',
+      'plugin-development-v2': 'プラグイン API v2 リファレンス',
+      'marketplace-publishing': 'Navide マーケットプレイスへの公開',
+      'developer-settings': '開発者設定…',
+      testplace: 'Testplace…'
+    },
     legal: {
       privacy: 'プライバシー',
       security: 'セキュリティポリシー',
@@ -156,6 +176,15 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     shortcuts: '鍵盤快捷鍵',
     whatsNew: '新版更新…',
     welcomeTour: '首次使用導覽…',
+    developers: {
+      title: '開發者',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': '外掛開發指南',
+      'plugin-development-v2': '外掛 API v2 參考',
+      'marketplace-publishing': '發佈到 Navide 市集',
+      'developer-settings': '開發者設定…',
+      testplace: 'Testplace…'
+    },
     // The pages themselves are served in English; these label the entrance,
     // not the destination's language, and Settings already says 隱私權 for the
     // same link — a menu reading "Privacy" next to it is the real mismatch.

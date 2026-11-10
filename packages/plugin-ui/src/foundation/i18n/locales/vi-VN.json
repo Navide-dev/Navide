@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Có dùng nhưng chưa khai báo (Navide đã từ chối)",
       "item": "{address} ({source}) trong {workspace}: {count} lần, gần nhất {date}",
+      "code": "Navide từ chối các lệnh gọi này với CAPABILITY_DENIED cho đến khi manifest khai báo chúng.",
+      "doc": "Xem tài liệu",
       "reasons": "Lý do: {reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "Đã rút lại"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Giao bản thử nghiệm cho những người thử nghiệm bạn chọn trước khi Navide Marketplace xem xét. Chỉ người được mời mới thấy và cài được; bản này chỉ qua quét tự động và hết hạn 90 ngày sau khi phát hành.",
+      "channel": "Phát hành bản thử nghiệm trên kênh testplace (?channel=testplace):",
+      "invites": "Lời mời là mã tham gia dùng một lần, mỗi người thử nghiệm một mã. Thu hồi một lời mời sẽ lấy lại quyền truy cập của người đó.",
+      "codes": "Mã thử nghiệm công khai cho phép số người thử nghiệm bạn đặt tham gia bằng một mã. Mã đầu tiên của mỗi gói phải chờ xem xét nhanh:",
+      "promote": "Khi thử nghiệm xong, gửi cùng bản đó để Navide Marketplace xem xét:",
+      "owner-only": "Lời mời, mã thử nghiệm, thu hồi và nâng cấp bản thử nghiệm chỉ dành cho chủ sở hữu namespace; thành viên phát hành có thể phát hành phiên bản nhưng không quản lý được Testplace.",
+      "owner-only-member": "Bạn là thành viên phát hành của namespace này, nên lời mời, mã thử nghiệm, thu hồi và nâng cấp trong Testplace do chủ sở hữu thực hiện.",
+      "joined": "Bài thử tôi đã tham gia",
+      "doc": "Tài liệu Testplace"
+    },
     "error": {
       "not-signed-in": "Hãy đăng nhập trong mục Tài khoản nhà phát triển trước.",
       "qualification": "Đơn đăng ký nhà phát triển của bạn phải được duyệt trước.",
+      "doc": "Xem tài liệu",
       "registry": "Navide Marketplace đã từ chối ({status} {code}): {message}"
     }
   },

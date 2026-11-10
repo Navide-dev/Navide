@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Used but not declared (refused by Navide)",
       "item": "{address} ({source}) in {workspace}: {count} times, last {date}",
+      "code": "Navide refuses each of these calls with CAPABILITY_DENIED until the manifest declares it.",
+      "doc": "View Documentation",
       "reasons": "Reasons: {reasons}"
     },
     "unused": {
@@ -12940,9 +12942,22 @@
         "yanked": "Yanked"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Hand a test build to the testers you pick before the Navide Marketplace reviews it. Only invited people can see or install it; it gets the automated scan only and expires 90 days after it is published.",
+      "channel": "Publish a test build on the testplace channel (?channel=testplace):",
+      "invites": "Invites are single-use join tokens, one per tester. Revoking one removes that tester’s access.",
+      "codes": "A public test code lets as many testers as you set join with one code. Each package’s first code waits for a light review:",
+      "promote": "When testing is done, send the same build to Navide Marketplace review:",
+      "owner-only": "Invites, test codes, revoking and promoting test builds are for the namespace owner only; publisher members can publish versions but cannot manage Testplace.",
+      "owner-only-member": "You are a publisher member of this namespace, so Testplace invites, test codes, revoking and promoting are done by its owner.",
+      "joined": "Tests I Joined",
+      "doc": "Testplace Documentation"
+    },
     "error": {
       "not-signed-in": "Sign in under Developer account first.",
       "qualification": "Your developer application must be approved first.",
+      "doc": "View Documentation",
       "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
     }
   },

@@ -2376,8 +2376,8 @@ export function registerPluginIpc(
         'account',
       )
       if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
-      const { code, message } = registryError(res.body)
-      return { ok: false, status: res.status, code, message }
+      const { code, message, doc } = registryError(res.body)
+      return { ok: false, status: res.status, code, message, doc }
     }
   )
 
