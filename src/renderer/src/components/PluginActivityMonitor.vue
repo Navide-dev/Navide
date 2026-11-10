@@ -252,6 +252,9 @@ onBeforeUnmount(stopPolling)
                   <span class="nv-monitor-chip" :class="row.disabled ? 'nv-monitor-chip--off' : 'nv-monitor-chip--on'">
                     {{ row.disabled ? $t('pluginActivity.monitor.status.disabled') : $t('pluginActivity.monitor.status.running') }}
                   </span>
+                  <span v-if="row.activity?.headlessViews" class="nv-monitor-chip nv-monitor-headless">
+                    {{ $t('pluginActivity.monitor.headless', { count: row.activity.headlessViews }) }}
+                  </span>
                 </td>
                 <td class="nv-monitor-num">{{ row.activity ? row.activity.toolCallsLastMinute : '—' }}</td>
                 <td class="nv-monitor-num">{{ row.activity ? row.activity.capabilityCallsLastMinute : '—' }}</td>

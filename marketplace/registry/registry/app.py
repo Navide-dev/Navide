@@ -47,6 +47,7 @@ from .discovery import (
     pack_members,
 )
 from .models import Extension, ExtensionVersion, Publisher
+from .headless_views import headless_view_notices
 from .native_backend import local_native_backend_notices, native_backend_publish_problem
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
 from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
@@ -910,7 +911,7 @@ def _register_routes(app: FastAPI) -> None:
             yanked=row.yanked,
             review_status=row.review_status,
             notices=(
-                local_native_backend_notices(publisher, manifest, local=local)
+                local_native_backend_notices(publisher, manifest, local=local) + headless_view_notices(manifest)
                 if isinstance(manifest, ManifestV2)
                 else []
             ),

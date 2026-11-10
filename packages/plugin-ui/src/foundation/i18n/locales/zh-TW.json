@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "不照時間表、立刻跑一次自己建的 job；執行一開始就回覆，會清除失敗退避，不會移動下次排定的時段，並計入 agent 每天合計 300 次",
             "scheduler_runs": "某個 job 的執行紀錄，新的在前：ok、error 或 skipped 加原因——略過（無視窗、忙碌、每日上限或額度、agent 每日總量、agent job 到期、目標不存在）不算錯誤。任何 job 的紀錄都能讀",
             "cli_permission_settings": "讀寫 CLI 權限略過旗標（yolo）。這是全域設定，不是 pipeline 專屬，只影響之後開的分格；某家 CLI 實際會不會帶旗標要看回傳的 agents[].skipFlag，不是只看全域值",
+            "plugins_developer_backend_call": "僅限開發者模式：呼叫「從資料夾載入」的 Navide 外掛的後端方法，不必先宣告 agent 工具。其餘一律拒絕；每次呼叫都列在它的活動紀錄，也計入自動暫停規則",
             "workspace_open": "在 Navide 裡開啟一個專案；要開成新視窗還是併進已經開著它的視窗，由 Navide 決定",
             "workspace_switch": "把自己所在的視窗切到它本來就持有的另一個專案；被切走的專案，它的分格會繼續跑。視窗裡有 pipeline 正在跑時會拒絕，因為切換會中止它",
             "prompt_list": "使用者在「設定 → Prompt 技能」存的提示技能有哪些；唯讀，新增與編輯是使用者的事",
@@ -12361,6 +12362,7 @@
       "anomalyCount": "{count} 項異常"
     },
     "monitor": {
+      "headless": "隱藏 view 背景執行中（{count}）",
       "title": "Activity 總覽",
       "intro": "所有已安裝的 Navide 外掛列在同一張表，每幾秒更新一次。只是紀錄，這裡不會改變 Navide 外掛能做什麼。點開任一列可看完整 Activity。",
       "empty": "尚未安裝任何 Navide 外掛。",

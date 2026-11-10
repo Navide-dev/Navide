@@ -98,6 +98,7 @@ MCP_TOOLS = [
     "plan_read",
     "plan_update_stage",
     "plan_update_todo",
+    "plugins_developer_backend_call",
     "plugins_developer_mode_open",
     "plugins_disable",
     "plugins_disable_all",

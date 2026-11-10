@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "Einen selbst erstellten Job jetzt einmal außerhalb seines Zeitplans ausführen; antwortet, sobald die Ausführung startet, setzt eine Fehler-Wartezeit zurück, lässt den nächsten geplanten Termin unverändert und zählt zu den 300 täglichen Ausführungen der Agents",
             "scheduler_runs": "Der Ausführungsverlauf eines Jobs, neueste zuerst: ok, error oder skipped mit Grund – ein Überspringen (kein Fenster, beschäftigt, Tageslimit oder Kontingent, Tagessumme der Agents, abgelaufener Agent-Job, verschwundenes Ziel) ist kein Fehler. Der Verlauf jedes Jobs kann gelesen werden",
             "cli_permission_settings": "Das Flag zum Umgehen von CLI-Berechtigungen (yolo) lesen und schreiben. Es ist eine globale Einstellung, nicht Pipeline-spezifisch, und wirkt nur auf danach geöffnete Bereiche; ob eine bestimmte CLI das Flag tatsächlich trägt, steht im zurückgegebenen agents[].skipFlag, nicht allein im globalen Wert",
+            "plugins_developer_backend_call": "Nur im Entwicklermodus: ruft eine Backend-Methode eines aus einem Ordner geladenen Navide-Plug-ins auf, ohne ein Agent-Tool zu deklarieren. Alles andere wird abgelehnt; jeder Aufruf erscheint in seiner Aktivität und zählt für die automatische Pause",
             "workspace_open": "Ein Projekt als Arbeitsbereich in Navide öffnen; ob das in einem neuen Fenster geschieht oder in einem, das das Projekt bereits geöffnet hat, entscheidet Navide",
             "workspace_switch": "Das eigene Fenster zu einem anderen Projekt wechseln, das es bereits enthält; Bereiche des verlassenen Projekts laufen weiter. Abgelehnt, solange in diesem Fenster eine Pipeline läuft, weil der Wechsel sie abbrechen würde",
             "prompt_list": "Die Prompt-Skills, die unter Einstellungen → Prompts gepflegt werden; schreibgeschützt, da Erstellen und Bearbeiten Sache der Person am Rechner ist",
@@ -12361,6 +12362,7 @@
       "anomalyCount": "{count} ungewöhnliche Einträge"
     },
     "monitor": {
+      "headless": "Versteckte Ansicht läuft im Hintergrund ({count})",
       "title": "Activity-Übersicht",
       "intro": "Alle installierten Navide-Plugins in einer Tabelle, alle paar Sekunden aktualisiert. Nur Aufzeichnungen; hier ändert sich nichts daran, was ein Navide-Plugin darf. Öffnen Sie eine Zeile für die vollständige Activity.",
       "empty": "Es sind keine Navide-Plugins installiert.",
@@ -12658,7 +12660,7 @@
       "heading": "Wo der statische Scan dies gefunden hat ({count})",
       "kind": {
         "command": "Befehl {key}",
-        "host": "Host {key}",
+        "host": "Hostname {key}",
         "capability": "Fähigkeit {key}"
       },
       "hidden": "Auszug ausgeblendet, da er wie ein Geheimnis aussieht"

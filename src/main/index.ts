@@ -2138,6 +2138,19 @@ frontendPluginManager.setAgentToolWorkspaceResolver((root) => {
   ]
   return open.some((path) => canonicalExistingDirectory(path) === root)
 })
+// 0.2.40: a view that declares `headless: true` mounts hidden on a Navide
+// window of the target workspace, with the query a user's open there gets.
+frontendPluginManager.setHeadlessViewHost((root) => {
+  const windows: Array<[BrowserWindow, string]> = [
+    ...[...mainWindowWorkspaces].filter(([win]) => !win.isDestroyed()),
+    ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed())
+      .flatMap(([win, paths]) => paths.map((path): [BrowserWindow, string] => [win, path])),
+  ]
+  const match = windows.find(([, path]) => canonicalExistingDirectory(path) === root)
+  if (!match) return null
+  const [hostWindow, workspacePath] = match
+  return { hostWindow, query: (contributionKey) => catalogContributionQuery(contributionKey, workspacePath) }
+})
 const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
   (channel, listener) => ipcMain.handle(channel, listener),

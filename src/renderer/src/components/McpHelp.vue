@@ -90,6 +90,7 @@ const workspaceTools = [
   'scheduler_run_now',
   'scheduler_runs',
   'cli_permission_settings',
+  'plugins_developer_backend_call',
 ] as const
 
 // The Preview panel's four verbs: record adds to the feed, show pushes to it,

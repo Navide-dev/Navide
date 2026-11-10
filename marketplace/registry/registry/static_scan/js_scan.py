@@ -67,9 +67,16 @@ EXCERPT_BEFORE = 40
 EXCERPT_AFTER = 400
 #: ...and keeps this many characters once whitespace runs are collapsed.
 EXCERPT_LENGTH = 120
-#: Characters around the excerpt a secret rule is also run over, so a secret
-#: the excerpt only cuts into is not shown either.
-EXCERPT_REDACTION_MARGIN = 200
+#: Characters around the excerpt a secret rule is also run over, across line
+#: breaks, so a secret the excerpt only cuts into (or one spread over lines,
+#: such as a PEM block) is not shown either.
+EXCERPT_REDACTION_MARGIN = 1000
+#: Sites recorded per file, all findings together, which bounds the locate pass.
+MAX_SITE_OFFSETS_PER_FILE = 600
+#: In an excerpt, a URL's user information and every query value are masked
+#: (DS5: a report never carries a credential, path query or value).
+_EXCERPT_USERINFO_RE = re.compile(r"(://)[^/ '\"`@]*@")
+_EXCERPT_QUERY_RE = re.compile(r"([?&][^=?&#/ '\"`]*=)[^&# '\"`]*")
 
 Site = tuple[int, int, "str | None"]
 """(line, column, excerpt): 1-based, in code points; excerpt None when redacted."""
@@ -94,6 +101,8 @@ class ScriptFacts:
     dynamic_import: int = 0
     string_timers: int = 0
     obfuscation_signals: set[str] = field(default_factory=set)
+    site_offsets: int = 0
+    """Offsets recorded so far, at most ``MAX_SITE_OFFSETS_PER_FILE``."""
     sites: dict[tuple, list] = field(default_factory=dict)
     """Finding key -> the first ``MAX_SITES_PER_FINDING`` offsets while
     scanning, then their ``Site``s. Keys: ``("call", *call)``,
@@ -101,20 +110,30 @@ class ScriptFacts:
 
 
 def _add_site(facts: ScriptFacts, key: tuple, offset: int) -> None:
+    if facts.site_offsets >= MAX_SITE_OFFSETS_PER_FILE:
+        return
     offsets = facts.sites.setdefault(key, [])
     if len(offsets) < MAX_SITES_PER_FINDING and offset not in offsets:
         offsets.append(offset)
+        facts.site_offsets += 1
 
 
-def locate(text: str, offsets: list[int], redacted: Callable[[str], bool]) -> dict[int, Site]:
+def _mask_excerpt(excerpt: str) -> str:
+    return _EXCERPT_QUERY_RE.sub("\\1\u2026", _EXCERPT_USERINFO_RE.sub("\\1\u2026@", excerpt))
+
+
+def locate(
+    text: str, offsets: list[int], redacted: Callable[[str], bool], deadline: Deadline = NO_DEADLINE,
+) -> dict[int, Site]:
     """The ``Site`` of every offset in ``text``, counting lines in one pass
     over the sorted offsets (a bundle is often one 20 MiB line)."""
     located: dict[int, Site] = {}
     line = 1
     line_start = 0
     counted = 0
-    reach = EXCERPT_AFTER + EXCERPT_REDACTION_MARGIN
+    reach = EXCERPT_AFTER
     for offset in sorted(set(offsets)):
+        deadline.check()
         newlines = text.count("\n", counted, offset)
         if newlines:
             line += newlines
@@ -126,8 +145,8 @@ def locate(text: str, offsets: list[int], redacted: Callable[[str], bool]) -> di
             line_end = min(len(text), offset + reach)
         begin = max(line_start, offset - EXCERPT_BEFORE)
         end = min(line_end, offset + EXCERPT_AFTER)
-        excerpt: str | None = " ".join(text[begin:end].split())[:EXCERPT_LENGTH]
-        if redacted(text[max(line_start, begin - EXCERPT_REDACTION_MARGIN):line_end]):
+        excerpt: str | None = _mask_excerpt(" ".join(text[begin:end].split()))[:EXCERPT_LENGTH]
+        if redacted(text[max(0, begin - EXCERPT_REDACTION_MARGIN):end + EXCERPT_REDACTION_MARGIN]):
             excerpt = None
         located[offset] = (line, offset - line_start + 1, excerpt)
     return located
@@ -312,7 +331,7 @@ def scan_script(
         facts.obfuscation_signals.add("hexEscapes")
     if char_codes >= OBFUSCATION_THRESHOLDS["charCodeStrings"]:
         facts.obfuscation_signals.add("charCodeStrings")
-    located = locate(text, [offset for offsets in facts.sites.values() for offset in offsets], redacted)
+    located = locate(text, [offset for offsets in facts.sites.values() for offset in offsets], redacted, deadline)
     facts.sites = {key: [located[offset] for offset in offsets] for key, offsets in facts.sites.items()}
     return facts
 

@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "不照时间表、立刻跑一次自己建的 job；运行一开始就回复，会清除失败退避，不会移动下次排定的时段，并计入 agent 每天合计 300 次",
             "scheduler_runs": "某个 job 的运行记录，新的在前：ok、error 或 skipped 加原因——略过（无窗口、忙碌、每日上限或额度、agent 每日总量、agent job 到期、目标不存在）不算错误。任何 job 的记录都能读",
             "cli_permission_settings": "读写 CLI 权限略过旗标（yolo）。这是全域设置，不是 pipeline 专属，只影响之后开的分格；某家 CLI 实际会不会带旗标要看回传的 agents[].skipFlag，不是只看全域值",
+            "plugins_developer_backend_call": "仅限开发者模式：调用“从文件夹加载”的 Navide 插件的后端方法，无需先声明 agent 工具。其余一律拒绝；每次调用都会列在它的活动记录中，并计入自动暂停规则",
             "workspace_open": "在 Navide 里打开一个项目；要开成新窗口还是并进已经开着它的窗口，由 Navide 决定",
             "workspace_switch": "把自己所在的窗口切到它本来就持有的另一个项目；被切走的项目，它的分格会继续跑。窗口里有 pipeline 正在跑时会拒绝，因为切换会中止它",
             "prompt_list": "用户在“设置 → Prompt 技能”存的提示技能有哪些；唯读，添加与编辑是用户的事",
@@ -12361,6 +12362,7 @@
       "anomalyCount": "{count} 项异常"
     },
     "monitor": {
+      "headless": "隐藏 view 后台运行中（{count}）",
       "title": "Activity 总览",
       "intro": "所有已安装的 Navide 插件列在同一张表中，每几秒刷新一次。仅为记录，这里不会改变 Navide 插件能做什么。展开任一行可查看完整 Activity。",
       "empty": "尚未安装任何 Navide 插件。",

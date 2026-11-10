@@ -149,3 +149,33 @@ def test_scan_digest_of_non_ascii_excerpts_is_pinned() -> None:
     expected = next(c for c in cases["cases"] if c["name"] == "finding-sites")["expected"]
     assert any("😀" in (s["excerpt"] or "") for c in expected["capabilities"] for s in c["sites"])
     assert scan_digest({**expected, "scannedAt": "2026-11-10T00:00:00Z"}) == FINDING_SITES_DIGEST
+
+
+def test_excerpt_masks_url_credentials_and_query_values() -> None:
+    report = _scan({"a.js": "fetch('https://user:pw@q.example.com/v1?token=abc&x=1#f')"})
+    excerpt = _host(report, "q.example.com")["sites"][0]["excerpt"]
+    assert excerpt == "fetch('https://…@q.example.com/v1?token=…&x=…#f')"
+
+
+def test_a_secret_on_another_line_hides_the_excerpt() -> None:
+    report = _scan({"a.js": f"const k = '{TOKEN}';\n\nfetch('https://next.example.com/')"})
+    assert _host(report, "next.example.com")["sites"][0]["excerpt"] is None
+
+
+def test_sites_per_file_are_bounded() -> None:
+    from registry.static_scan.js_scan import MAX_SITE_OFFSETS_PER_FILE
+
+    text = "".join(f"'https://h{n}.example.com';" for n in range(MAX_SITE_OFFSETS_PER_FILE + 50))
+    report = _scan({"a.js": text})
+    total = sum(len(entry["sites"]) for entry in report["network"]["hosts"])
+    assert total == min(MAX_SITE_OFFSETS_PER_FILE, len(report["network"]["hosts"]))
+
+
+def test_locate_polls_the_scan_deadline() -> None:
+    import pytest
+
+    from registry.static_scan.limits import Deadline, ScanTimeout
+
+    expired = Deadline(0.0, lambda: 1.0)
+    with pytest.raises(ScanTimeout):
+        locate("'x'", [0], lambda _value: False, expired)

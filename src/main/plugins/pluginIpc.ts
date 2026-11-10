@@ -1522,8 +1522,10 @@ export function registerPluginIpc(
           plugins: parsed.plugins.map((row) => {
             const disclosure = activeDisclosure(row.pluginId)
             const declared = disclosure?.networkHosts ?? []
+            const headlessViews = manager.headlessViewCount?.(row.pluginId) ?? 0
             return {
               ...row,
+              ...(headlessViews > 0 ? { headlessViews } : {}),
               hosts: row.hosts.map((entry) => ({
                 ...entry,
                 declared: disclosure ? declared.some((pattern) => networkHostMatches(pattern, entry.host)) : null,
@@ -5557,6 +5559,16 @@ export function registerPluginIpc(
       writeFileSync(autoPauseOff, 'off\n', { mode: 0o600 })
     }
     return { enabled: autoPauseOn(), thresholds: { ...PLUGIN_AUTO_PAUSE_THRESHOLDS } }
+  })
+  // plugins_developer_backend_call (0.2.40): only a plugin the user loaded
+  // from a folder, only while Developer Mode is on and nothing stopped it. An
+  // installed plugin (any other source) is refused, so its behaviour is unchanged.
+  manager.setDeveloperBackendGate?.((pluginId) => {
+    if (!developerModeOn()) return 'developer-mode-off'
+    const row = listInstalledSummaries().find((summary) => summary.id === pluginId)
+    if (!row || installedSource(row) !== 'developer-unpacked') return 'not-developer-plugin'
+    if (globalStops.get() || row.disabled === true) return 'plugin-stopped'
+    return 'ok'
   })
   // A chat command (`/plugins status`, `/plugins stop <id>`), relayed by the
   // backend over the Host session. It can stop, never start: enabling stays

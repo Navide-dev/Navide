@@ -145,6 +145,8 @@ class ManifestV2View(ManifestV2Model):
     detailView: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]*$")
     targetSchema: str | None = Field(default=None, min_length=1)
     receives: ManifestV2Receives | None = None
+    #: 0.2.40: the Host may open the view hidden to answer its agent tools.
+    headless: bool | None = None
 
     @field_validator("icon")
     @classmethod
@@ -175,6 +177,8 @@ class ManifestV2View(ManifestV2Model):
             raise ValueError("targetSchema is only valid for a detail view")
         if self.receives is not None and self.location != "window":
             raise ValueError("receives is only valid for a window view")
+        if self.headless and self.location in ("window", "detail"):
+            raise ValueError(f"headless is not valid for a {self.location} view")
         return self
 
 

@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "Run a job you created once right now, outside its timetable; answers as soon as the run starts, clears a failure backoff, leaves the next scheduled slot where it was and counts toward the agents' 300 runs a day",
             "scheduler_runs": "A job's run history, newest first: ok, error or skipped with its reason — a skip (no window, busy, daily cap or quota, agents' daily total, an expired agent job, a vanished target) is not an error. Any job's history can be read",
             "cli_permission_settings": "Read and write the CLI permission-bypass flag (yolo). It is a global setting, not pipeline-specific, and only affects panes opened afterwards; whether a given CLI actually carries the flag is in the returned agents[].skipFlag, not the global value alone",
+            "plugins_developer_backend_call": "Developer Mode only: call a backend method of a Navide plugin loaded from a folder, without declaring an agent tool. Anything else is refused; each call is listed in its Activity and counts toward the automatic pause",
             "workspace_open": "Open a project as a workspace in Navide; whether that is a new window or one that already has the project open is Navide's decision",
             "workspace_switch": "Switch my own window to another project it already holds; panes of the project being left keep running. Refused while a pipeline is running in that window, because switching would abort it",
             "prompt_list": "The prompt skills the user keeps in Settings → Prompts; read-only, since creating and editing them is the user's job",
@@ -12361,6 +12362,7 @@
       "anomalyCount": "{count} unusual items"
     },
     "monitor": {
+      "headless": "Hidden view running ({count})",
       "title": "Activity monitor",
       "intro": "Every installed Navide plugin on one table, refreshed every few seconds. Records only; nothing here changes what a Navide plugin may do. Open a row for its full activity.",
       "empty": "No Navide plugins are installed.",

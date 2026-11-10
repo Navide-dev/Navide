@@ -626,7 +626,12 @@ const MAX_SITES_PER_FINDING = 3
 const EXCERPT_BEFORE = 40
 const EXCERPT_AFTER = 400
 const EXCERPT_LENGTH = 120
-const EXCERPT_REDACTION_MARGIN = 200
+const EXCERPT_REDACTION_MARGIN = 1000
+const MAX_SITE_OFFSETS_PER_FILE = 600
+const EXCERPT_USERINFO_RE = /(:\/\/)[^/ '"`@]*@/g
+const EXCERPT_QUERY_RE = /([?&][^=?&#/ '"`]*=)[^&# '"`]*/g
+const maskExcerpt = (excerpt: string): string =>
+  excerpt.replace(EXCERPT_USERINFO_RE, '$1\u2026@').replace(EXCERPT_QUERY_RE, '$1\u2026')
 
 /** [line, column, excerpt]: code points, as Python counts them. */
 type Site = [number, number, string | null]
@@ -650,6 +655,8 @@ interface ScriptFacts {
   /** Finding key (JSON of `['call', ...call]`, `['host', host]` or
    *  `['capability', address]`) → UTF-16 offsets while scanning. */
   siteOffsets: Map<string, number[]>
+  /** Offsets recorded so far, at most MAX_SITE_OFFSETS_PER_FILE. */
+  siteOffsetCount: number
   sites: Map<string, Site[]>
 }
 
@@ -668,13 +675,18 @@ const emptyFacts = (): ScriptFacts => ({
   stringTimers: 0,
   obfuscationSignals: new Set(),
   siteOffsets: new Map(),
+  siteOffsetCount: 0,
   sites: new Map(),
 })
 
 const addSite = (facts: ScriptFacts, key: unknown[], offset: number): void => {
+  if (facts.siteOffsetCount >= MAX_SITE_OFFSETS_PER_FILE) return
   const id = JSON.stringify(key)
   const offsets = facts.siteOffsets.get(id) ?? []
-  if (offsets.length < MAX_SITES_PER_FINDING && !offsets.includes(offset)) offsets.push(offset)
+  if (offsets.length < MAX_SITES_PER_FINDING && !offsets.includes(offset)) {
+    offsets.push(offset)
+    facts.siteOffsetCount += 1
+  }
   facts.siteOffsets.set(id, offsets)
 }
 
@@ -704,15 +716,16 @@ function codePoints(text: string, from: number, to: number): number {
 }
 
 /** js_scan.locate: the site of every offset, lines counted in one pass. */
-function locate(text: string, offsets: number[], redact: (value: string) => boolean): Map<number, Site> {
+function locate(text: string, offsets: number[], redact: (value: string) => boolean, deadline: Deadline): Map<number, Site> {
   const located = new Map<number, Site>()
   let line = 1
   let lineStart = 0
   let nextNewline = text.indexOf('\n')
   let column = 1
   let columnAt = 0
-  const reach = EXCERPT_AFTER + EXCERPT_REDACTION_MARGIN
+  const reach = EXCERPT_AFTER
   for (const offset of [...new Set(offsets)].sort((a, b) => a - b)) {
+    deadline.check()
     while (nextNewline !== -1 && nextNewline < offset) {
       line += 1
       lineStart = nextNewline + 1
@@ -729,8 +742,9 @@ function locate(text: string, offsets: number[], redact: (value: string) => bool
     const lineEnd = nextNewline !== -1 && nextNewline < bound ? nextNewline : bound
     const begin = backward(text, offset, EXCERPT_BEFORE, lineStart)
     const end = Math.min(lineEnd, forward(text, offset, EXCERPT_AFTER, text.length))
-    let excerpt: string | null = [...pySplit(text.slice(begin, end)).join(' ')].slice(0, EXCERPT_LENGTH).join('')
-    if (redact(text.slice(backward(text, begin, EXCERPT_REDACTION_MARGIN, lineStart), lineEnd))) excerpt = null
+    let excerpt: string | null = [...maskExcerpt(pySplit(text.slice(begin, end)).join(' '))].slice(0, EXCERPT_LENGTH).join('')
+    const around = text.slice(backward(text, begin, EXCERPT_REDACTION_MARGIN, 0), forward(text, end, EXCERPT_REDACTION_MARGIN, text.length))
+    if (redact(around)) excerpt = null
     located.set(offset, [line, column, excerpt])
   }
   return located
@@ -926,7 +940,7 @@ function scanScript(text: string, maxPathLength: number, deadline: Deadline, red
   if (hexIdentifiers >= OBFUSCATION_THRESHOLDS.hexIdentifiers) facts.obfuscationSignals.add('hexIdentifiers')
   if (escapes >= OBFUSCATION_THRESHOLDS.hexEscapes) facts.obfuscationSignals.add('hexEscapes')
   if (charCodes >= OBFUSCATION_THRESHOLDS.charCodeStrings) facts.obfuscationSignals.add('charCodeStrings')
-  const located = locate(text, [...facts.siteOffsets.values()].flat(), redact)
+  const located = locate(text, [...facts.siteOffsets.values()].flat(), redact, deadline)
   for (const [key, offsets] of facts.siteOffsets) facts.sites.set(key, offsets.map((offset) => located.get(offset)!))
   return facts
 }
