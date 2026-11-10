@@ -36,6 +36,15 @@ describe('cli_set_model: claude through the /model picker', () => {
     expect(picker).toContain("await write('\\x1b')")
   })
 
+  it('answers the "Switch model?" box with Yes only for the target, else Esc twice', () => {
+    expect(picker).toContain('onModelSwitchConfirm(text) || modelSwitchResult(text) !== null')
+    expect(picker).toContain('modelConfirmKeys(confirm, label)')
+    expect(picker).toContain('stillOn: stillOnModelSwitchConfirm,')
+    for (const reason of ['confirm-not-matched', 'confirm-changed', 'confirm-keys-failed', 'confirm-not-confirmed']) {
+      expect(picker).toContain(`return cancel('${reason}', 2)`)
+    }
+  })
+
   it('answers picker, slash or restart, and falls back to the restart with its reason', () => {
     expect(action).toContain("if (pane.agentKey === 'claude' && !effort) {")
     expect(action).toContain("return { ok: true, method: 'picker', paneId: pane.id }")

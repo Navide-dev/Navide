@@ -231,15 +231,54 @@ export function modelPickerKeys(screen: string, label: string): string[] | null 
   if (!MODEL_PICKER_TITLE.test(screen) || !MODEL_PICKER_SESSION_ONLY.test(screen)) return null
   const { options, cursor } = parseMenu(screen)
   if (cursor < 0) return null
-  const want = squash(label).toLowerCase()
   const names = options.map(pickerName)
-  const hits = names.flatMap((n, i) =>
-    n === want || (!/\d/.test(want) && n.startsWith(`${want} `) && /^\d+(?:\.\d+)*$/.test(n.slice(want.length + 1)))
-      ? [i]
-      : []
-  )
+  const hits = names.flatMap((n, i) => (namesModel(n, label) ? [i] : []))
   if (hits.length !== 1) return null
   return [...moves(cursor, hits[0]), 's']
+}
+
+/** A lowercased model name ("sonnet 5.5") is `label`, or the one version of
+ *  a bare family label ("Sonnet"). */
+function namesModel(name: string, label: string): boolean {
+  const want = squash(label).toLowerCase()
+  return name === want || (!/\d/.test(want) && name.startsWith(`${want} `) && /^\d+(?:\.\d+)*$/.test(name.slice(want.length + 1)))
+}
+
+// After `s`, a pane that already has a conversation asks once more (Claude
+// Code 2.1.286 and 2.1.322): "Switch model? … This conversation is cached for
+// the current model …" with "1. Yes, switch to <name>" and "2. No, go back".
+// Enter on Yes confirms the session-only switch `s` asked for (checked live
+// on 2.1.322: settings.json unchanged, "for this session only"). Esc is "No,
+// go back", which reopens the picker.
+const MODEL_CONFIRM_TITLE = /\bSwitch model\?/
+const MODEL_CONFIRM_YES = /^Yes, switch to (.+)$/
+
+/** True while claude's "Switch model?" confirmation is on screen. */
+export function onModelSwitchConfirm(screen: string): boolean {
+  return MODEL_CONFIRM_TITLE.test(screen) && parseMenu(screen).options.some((o) => MODEL_CONFIRM_YES.test(squash(o)))
+}
+
+/** Between the confirmation's keys: still the same box, with the same rows. */
+export function stillOnModelSwitchConfirm(before: string, _displayStatus: string | undefined, screen: string): boolean {
+  if (!MODEL_CONFIRM_TITLE.test(screen)) return false
+  const was = parseMenu(before).options.map(squash)
+  const now = parseMenu(screen).options.map(squash)
+  return now.length === was.length && was.every((o, i) => o === now[i])
+}
+
+/** The keys that move the confirmation's cursor to "Yes, switch to <name>"
+ *  and press Enter, only when <name> is the model `label` names. Null when
+ *  the box, its cursor or a matching Yes row is not on screen. */
+export function modelConfirmKeys(screen: string, label: string): string[] | null {
+  if (!MODEL_CONFIRM_TITLE.test(screen)) return null
+  const { options, cursor } = parseMenu(screen)
+  if (cursor < 0) return null
+  const hits = options.flatMap((o, i) => {
+    const m = MODEL_CONFIRM_YES.exec(squash(o))
+    return m && namesModel(m[1].toLowerCase(), label) ? [i] : []
+  })
+  if (hits.length !== 1) return null
+  return [...moves(cursor, hits[0]), '\r']
 }
 
 // How far up from the bottom the picker's result line may be: just above the
@@ -248,9 +287,10 @@ const MODEL_SWITCH_RESULT_LINES = 10
 
 /** What the screen says after the picker's keys: 'session' for claude's "Set
  *  model to …" line, 'default' when that line says it was saved as the
- *  default, null while the picker is still up or no fresh line is there. */
+ *  default, null while the picker or its confirmation is still up or no fresh
+ *  line is there. */
 export function modelSwitchResult(screen: string): 'session' | 'default' | null {
-  if (MODEL_PICKER_TITLE.test(screen)) return null
+  if (MODEL_PICKER_TITLE.test(screen) || MODEL_CONFIRM_TITLE.test(screen)) return null
   const tail = screen
     .split('\n')
     .filter((l) => l.trim())

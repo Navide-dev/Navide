@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modelPickerKeys, modelSwitchResult, onModelPicker, stillOnModelPicker, writeAnswerSteps } from '../paneAnswerKeys'
+import { modelConfirmKeys, modelPickerKeys, modelSwitchResult, onModelPicker, onModelSwitchConfirm, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps } from '../paneAnswerKeys'
 
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
@@ -146,5 +146,71 @@ describe('modelSwitchResult', () => {
     expect(modelSwitchResult(picker(1))).toBeNull()
     const old = ['  ⎿  Set model to Opus 5.5', ...Array(12).fill('some answer text'), composer].join('\n')
     expect(modelSwitchResult(old)).toBeNull()
+  })
+})
+
+// The box `s` raises once a pane has a conversation. WINDOWS_CONFIRM is the
+// frame in the VM pane log claude-903435d6.log (Claude Code 2.1.286, 11-10),
+// spacing restored; LIVE_CONFIRM was captured on 2.1.322 at 120 columns.
+const WINDOWS_CONFIRM = [
+  '❯ Reply with just the word ok.',
+  '⏺ ok',
+  '',
+  ' Switch model?',
+  ' Your next response will be slower and use more tokens',
+  ' This conversation is cached for the current model. Switching to Sonnet 5.5',
+  ' means the full history gets re-read on your next message.',
+  '',
+  ' ❯ 1. Yes, switch to Sonnet 5.5',
+  '   2. No, go back',
+].join('\n')
+const LIVE_CONFIRM = [
+  '❯ Reply with just the word ok.',
+  '⏺ ok',
+  '✻ Sautéed for 4s · done 7:23 AM',
+  '▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔',
+  '   Switch model?',
+  '',
+  '   Your next response will be slower and use more tokens',
+  '',
+  '   This conversation is cached for the current model. Switching to Sonnet 5.5 means the full history gets re-read.',
+  '',
+  '   ❯ 1. Yes, switch to Sonnet 5.5',
+  '     2. No, go back',
+].join('\n')
+
+describe('the "Switch model?" confirmation', () => {
+  it('is seen on the Windows and the live box, never on the picker', () => {
+    expect(onModelSwitchConfirm(WINDOWS_CONFIRM)).toBe(true)
+    expect(onModelSwitchConfirm(LIVE_CONFIRM)).toBe(true)
+    expect(onModelSwitchConfirm(LIVE_PICKER)).toBe(false)
+    expect(onModelSwitchConfirm(picker(1))).toBe(false)
+  })
+
+  it('picks Yes with Enter when it names the target', () => {
+    expect(modelConfirmKeys(WINDOWS_CONFIRM, 'Sonnet 5.5')).toEqual(['\r'])
+    expect(modelConfirmKeys(LIVE_CONFIRM, 'Sonnet 5.5')).toEqual(['\r'])
+    expect(modelConfirmKeys(LIVE_CONFIRM, 'Sonnet')).toEqual(['\r'])
+    const onNo = WINDOWS_CONFIRM.replace(' ❯ 1. Yes', '   1. Yes').replace('   2. No', ' ❯ 2. No')
+    expect(modelConfirmKeys(onNo, 'Sonnet 5.5')).toEqual([UP, '\r'])
+  })
+
+  it('is null when Yes names another model, or off the box, or without a cursor', () => {
+    expect(modelConfirmKeys(WINDOWS_CONFIRM, 'Haiku 5.5')).toBeNull()
+    expect(modelConfirmKeys(WINDOWS_CONFIRM, 'Sonnet 5.6')).toBeNull()
+    expect(modelConfirmKeys(LIVE_PICKER, 'Sonnet 5.5')).toBeNull()
+    expect(modelConfirmKeys(WINDOWS_CONFIRM.replace(' ❯ 1.', '   1.'), 'Sonnet 5.5')).toBeNull()
+  })
+
+  it('holds the keys only on the same box', () => {
+    expect(stillOnModelSwitchConfirm(WINDOWS_CONFIRM, undefined, WINDOWS_CONFIRM)).toBe(true)
+    expect(stillOnModelSwitchConfirm(WINDOWS_CONFIRM, undefined, LIVE_PICKER)).toBe(false)
+    expect(stillOnModelSwitchConfirm(WINDOWS_CONFIRM, undefined, WINDOWS_CONFIRM.replace('Sonnet 5.5', 'Haiku 5.5').replace('to Sonnet', 'to Haiku'))).toBe(false)
+  })
+
+  it('is no switch result while it is up, and the live result after Yes reads as session-only', () => {
+    expect(modelSwitchResult(WINDOWS_CONFIRM)).toBeNull()
+    expect(modelSwitchResult(`  ⎿  Set model to Opus 5.5\n${LIVE_CONFIRM}`)).toBeNull()
+    expect(modelSwitchResult('❯ /model\n  ⎿  Set model to Sonnet 5.5 for this session only\n❯')).toBe('session')
   })
 })
