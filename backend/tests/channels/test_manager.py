@@ -1086,17 +1086,23 @@ async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: 
     assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
 
 
-async def test_an_unbound_chat_gets_nothing_from_a_held_textless_turn(env: Env) -> None:
+async def test_an_unbound_chat_gets_nothing_from_a_held_textless_turn(env: Env, monkeypatch) -> None:
     # A textless turn end holds the run for its text. Unbinding inside that grace must drop
     # the hold: the next turn (typed at the keyboard) is not the disconnected chat's to read.
+    # The grace is long so unbind (a db-thread hop first) is surely inside it on a loaded
+    # runner; the dropped hold is checked by its cancelled timer, not by waiting it out.
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 60.0)
     await env.inbound("go")
     env.fake.verdicts["k1"] = {"status": "delivered"}
     await _until(lambda: MSG_WORKING in env.tg.texts())
     env.turn_complete("pane-1", "")
-    await asyncio.sleep(0.05)
+    await _until(lambda: "pane-1" in env.m._textless)
+    timer = env.m._textless["pane-1"][1]
     await env.m.unbind("pane-1")
+    await asyncio.sleep(0)
+    assert timer.cancelled() and "pane-1" not in env.m._textless
     env.turn_complete("pane-1", "local-only output")
-    await asyncio.sleep(0.3)  # past the grace
+    await asyncio.sleep(0.1)
     assert not _said(env, "local-only output") and not _said(env, mgr_mod.MSG_EMPTY_REPLY)
 
 
