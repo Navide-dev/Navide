@@ -15,6 +15,7 @@ The rule behind every term: **name a thing by who owns its files.**
 | A Host-drawn button the user adds to run actions | 動作按鈕 | Action button | アクションボタン | The bar at the right end of the stage tabs, Settings → Layout |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
 | The Settings group for what the AI CLIs work with | Agent 資產 | Agent Assets | エージェント資産 | The pages listed under it in the Settings sidebar, in its order: MCP, Skills, Prompts, Memory, Credentials & Keys, Extensions. Being an Agent Asset says nothing about sync: credentials and keys never leave the machine, and Memory and Extensions do not sync |
+| The stage pane that runs one resident agent (a feature name) | Agent 分格 (zh-CN Agent 分格) | Agent pane | エージェントペイン | Capitalized as a feature name in zh and ko ("Agent 分格"); the common noun agent stays lowercase in zh. Labels such as 新 Agent, 我的 Agent, Agent 名稱, Agent 設定 keep "Agent" |
 | An add-on that belongs to one AI CLI | CLI 擴充 | CLI extension | CLI 拡張 | That CLI's plugins, mods, extensions, hooks, agents, commands, themes |
 | The kind of a CLI extension | vendor's own name, untranslated | vendor's own name | vendor's own name | Shown as a badge: "Claude plugin", "Claude mod", "Codex hook", "Pi extension", … |
 | A CLI's marketplace | CLI 擴充來源 | CLI extension source | CLI 拡張のソース | Claude, Codex, Droid … marketplaces; only Navide's is called a marketplace in prose |
