@@ -6391,6 +6391,9 @@ _DEDICATED_CLOSE_ACTIONS = {
     # Renaming moves a messaging address; cli_rename_pane checks the caller
     # may rename that pane, which a raw invoke would skip.
     "ui.pane.rename": "cli_rename_pane",
+    # Typing /model or rebuilding a pane; cli_set_model checks the pane is
+    # idle and records the switch, which a raw invoke would skip.
+    "ui.pane.setModel": "cli_set_model",
 }
 
 
@@ -6432,6 +6435,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # Restores a placeholder around a spawned (often resumed) CLI: the same
     # startup wait as ui.pane.create, plus a session probe before it.
     "ui.pane.open",
+    # cli_set_model's restart fallback resumes the pane around a new CLI.
+    "ui.pane.setModel",
     "ui.pipeline.start",
     "ui.pipeline.next",
     "ui.pipeline.resume",
@@ -12641,3 +12646,5 @@ from . import channel_tools as _channel_tools  # noqa: E402,F401
 from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401
 # Registered after it (0.2.40): the Developer Mode backend call.
 from . import developer_backend_tool as _developer_backend_tool  # noqa: E402,F401
+# Registered after it (0.2.40): switching a running pane's model.
+from . import pane_model_tool as _pane_model_tool  # noqa: E402,F401

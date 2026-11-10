@@ -1538,6 +1538,27 @@ class ProjectStore:
             self.save(project)
         return project
 
+    def set_pane_model(
+        self,
+        workspace_path: str,
+        *,
+        pane_id: str,
+        model: str,
+        effort: str = "",
+    ) -> Project:
+        """Persist a model switched after spawn (cli_set_model), so a restore
+        relaunches on it. "" effort keeps the recorded one. No-op if pane not found."""
+        with self._save_lock:
+            project = self.load_or_create(workspace_path)
+            pane = next((p for p in project.panes if p.pane_id == pane_id), None)
+            if pane is None:
+                return project
+            pane.model = model
+            if effort:
+                pane.effort = effort
+            self.save(project)
+        return project
+
     PANE_TURN_STATES = ("working", "idle")
 
     def set_pane_resume_state(

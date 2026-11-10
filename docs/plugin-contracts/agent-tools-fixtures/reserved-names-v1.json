@@ -52,6 +52,7 @@
     "cli_rename_pane",
     "cli_send",
     "cli_send_and_wait",
+    "cli_set_model",
     "cli_token_stats",
     "cli_usage",
     "cli_wait_idle",
