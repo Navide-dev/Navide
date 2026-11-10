@@ -1334,7 +1334,9 @@ promotion stay with the owner. Only the owner adds or removes publishers, sets o
 namespace's signing key or transfers anything; a publisher can do none of
 these. An account must be an approved developer to be added, and its publish
 tokens for the namespace stop working when it is removed or its own
-qualification lapses. The namespace still has one signing key, the owner's:
+qualification lapses. Versions a member published before it was removed (or
+lost its qualification) stay in the namespace, and the owner decides whether
+to yank them. The namespace still has one signing key, the owner's:
 a publisher signs with it (one key per member is not in 0.2.40). In Navide the
 owner manages members in Settings → Navide Marketplace → Developer; that is the
 only place, by the user's own action. An agent reads the members through
