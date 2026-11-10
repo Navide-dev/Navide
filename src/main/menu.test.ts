@@ -287,7 +287,7 @@ describe('installApplicationMenu', () => {
     expect(labels.indexOf('Developers')).toBeLessThan(labels.indexOf('Privacy'))
     const sub = itemIn(menu, 'Developers').submenu as MenuItemConstructorOptions[]
     expect(sub.map((i) => i.label ?? '—')).toEqual([
-      'Build for Navide', 'Plugin Development Guide', 'Plugin API v2 Reference', 'Publishing to the Navide Marketplace',
+      'Build for Navide', 'Navide Plugin Development Guide', 'Navide Plugin API v2 Reference', 'Publishing to the Navide Marketplace',
       '—', 'Developer Settings…', 'Testplace…',
     ])
     for (const item of sub) if (item.label) fire(item)
