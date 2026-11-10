@@ -122,6 +122,11 @@ class _Handler(FileSystemEventHandler):
         if s.endswith(".db-wal"):
             self._on_path(Path(s[: -len("-wal")]))
             return
+        # The same for a store a reader claims under another name (OpenClaw's
+        # .sqlite): its -wal journal stands for the canonical file.
+        if s.endswith("-wal") and self._accepts_path(s[: -len("-wal")]):
+            self._on_path(Path(s[: -len("-wal")]))
+            return
         if self._accepts_path(s):
             self._on_path(Path(s))
             return

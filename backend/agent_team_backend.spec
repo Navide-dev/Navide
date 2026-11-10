@@ -111,6 +111,7 @@ a = Analysis(
         'agent_team_backend.cli_vendors.kimi',
         'agent_team_backend.cli_vendors.muse',
         'agent_team_backend.cli_vendors.opencode',
+        'agent_team_backend.cli_vendors.openclaw',
         'agent_team_backend.cli_vendors.pi',
         'agent_team_backend.cli_vendors.qwen',
         # uvicorn internals that are resolved at runtime, not import-time.
