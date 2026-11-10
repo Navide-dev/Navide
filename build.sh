@@ -53,7 +53,7 @@ CSC_IDENTITY_AUTO_DISCOVERY=false \
   echo "ERROR: packaged app not found: $APP_PATH" >&2
   exit 1
 }
-[[ -x "$APP_PATH/Contents/Resources/bin/agent_team_backend" ]] || {
+[[ -x "$APP_PATH/Contents/Resources/bin/agent_team_backend/agent_team_backend" ]] || {
   echo "ERROR: packaged backend executable not found" >&2
   exit 1
 }

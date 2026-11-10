@@ -368,8 +368,10 @@ jobs:
           chmod +x "${appimage}"
           work="$(mktemp -d)"
           (cd "${work}" && "${appimage}" --appimage-extract >/dev/null)
-          backend="$(find "${work}/squashfs-root/resources/bin" -maxdepth 1 -name 'agent_team_backend' -print -quit)"
-          test -n "${backend}"
+          # Onedir build: the executable sits inside bin/agent_team_backend/.
+          backend="${work}/squashfs-root/resources/bin/agent_team_backend/agent_team_backend"
+          test -x "${backend}"
+          test -d "${work}/squashfs-root/resources/bin/agent_team_backend/_internal"
           file "${backend}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
@@ -576,8 +578,10 @@ jobs:
           chmod +x "${appimage}"
           work="$(mktemp -d)"
           (cd "${work}" && "${appimage}" --appimage-extract >/dev/null)
-          backend="$(find "${work}/squashfs-root/resources/bin" -maxdepth 1 -name 'agent_team_backend' -print -quit)"
-          test -n "${backend}"
+          # Onedir build: the executable sits inside bin/agent_team_backend/.
+          backend="${work}/squashfs-root/resources/bin/agent_team_backend/agent_team_backend"
+          test -x "${backend}"
+          test -d "${work}/squashfs-root/resources/bin/agent_team_backend/_internal"
           file "${backend}" | grep -q 'ELF 64-bit.*aarch64'
           # …and the selected v2 Plans package carries its Linux backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
@@ -739,7 +743,7 @@ jobs:
         # finds it at runtime. This spawns a real ConPTY inside the FROZEN exe:
         # a build that dropped OpenConsole.exe exits every pane at once with
         # STATUS_CONTROL_C_EXIT, so this step goes red before that ever ships.
-        run: backend/dist/agent_team_backend.exe --self-check conpty
+        run: backend/dist/agent_team_backend/agent_team_backend.exe --self-check conpty
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -792,7 +796,15 @@ jobs:
           # The packaged backend must be the Windows exe this job just built,
           # and the v2 Plans package must carry its Windows backend. `test -f`
           # rather than `-x`: the executable bit means nothing on NTFS.
-          test -f dist-release/win-unpacked/resources/bin/agent_team_backend.exe
+          test -f dist-release/win-unpacked/resources/bin/agent_team_backend/agent_team_backend.exe
+          # Onedir build: every file of the backend is installed, so the
+          # deepest one has to fit MAX_PATH (260) under the default per-user
+          # install root, C:\Users\<name>\AppData\Local\Programs\Navide\,
+          # counted as 64 characters (a 20-character user name). Fail at 230
+          # to leave room for a longer name.
+          longest="$(cd dist-release/win-unpacked && find . -type f | sed 's#^\./##' | awk '{ if (length > m) m = length } END { print m }')"
+          echo "longest installed path: ${longest} + 64"
+          test "$(( longest + 64 ))" -lt 230
           test -f dist-release/win-unpacked/resources/bin/navide-hello.exe
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
@@ -906,7 +918,7 @@ jobs:
         # failed to collect winpty's OpenConsole.exe kills every pane the
         # moment it opens, and nothing but a real ConPTY inside the frozen exe
         # can see it. Native arm64 is a fresh chance to get that wrong.
-        run: backend/dist/agent_team_backend.exe --self-check conpty
+        run: backend/dist/agent_team_backend/agent_team_backend.exe --self-check conpty
 
       - name: Set up Rust
         # Best-effort on this runner: never block the release on the sidecar.
@@ -962,7 +974,15 @@ jobs:
           # too, and the publish step below merges it into the x64 one.
           test -f dist-release/latest.yml
           test "$(find dist-release -maxdepth 1 -name 'Navide-*-win-arm64.exe' | wc -l | tr -d ' ')" -eq 1
-          test -f dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe
+          test -f dist-release/win-arm64-unpacked/resources/bin/agent_team_backend/agent_team_backend.exe
+          # Onedir build: every file of the backend is installed, so the
+          # deepest one has to fit MAX_PATH (260) under the default per-user
+          # install root, C:\Users\<name>\AppData\Local\Programs\Navide\,
+          # counted as 64 characters (a 20-character user name). Fail at 230
+          # to leave room for a longer name.
+          longest="$(cd dist-release/win-arm64-unpacked && find . -type f | sed 's#^\./##' | awk '{ if (length > m) m = length } END { print m }')"
+          echo "longest installed path: ${longest} + 64"
+          test "$(( longest + 64 ))" -lt 230
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
@@ -974,7 +994,7 @@ jobs:
           # we are trying to stop. The COFF headers are the only witness.
           node scripts/check-pe-machine.mjs arm64 \
             dist-release/win-arm64-unpacked/Navide.exe \
-            dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe \
+            dist-release/win-arm64-unpacked/resources/bin/agent_team_backend/agent_team_backend.exe \
             "${plans_backend}" \
             "${browser_backend}"
 

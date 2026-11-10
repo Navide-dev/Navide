@@ -193,6 +193,10 @@ def test_sidecar_lookup_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(frozen_dir / "agent_team_backend"))
     assert stt_service.sidecar_path() == packaged
+    # A onedir backend runs from bin/agent_team_backend/; the sidecar is still in bin.
+    (frozen_dir / "agent_team_backend" / "_internal").mkdir(parents=True)
+    monkeypatch.setattr(sys, "executable", str(frozen_dir / "agent_team_backend" / "agent_team_backend"))
+    assert stt_service.sidecar_path() == packaged
 
 
 # ── Model download ─────────────────────────────────────────────────────────
