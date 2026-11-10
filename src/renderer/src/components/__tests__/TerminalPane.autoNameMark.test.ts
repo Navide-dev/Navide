@@ -20,6 +20,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
     ...actual,
     useTerminal: () => ({
       mount: vi.fn(),
+      stopIneffective: { value: false },
       pasteText: vi.fn(),
       updateXtermTheme: vi.fn(),
       setDisableStdin: vi.fn(),
