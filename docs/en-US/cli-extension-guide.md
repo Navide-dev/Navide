@@ -129,6 +129,28 @@ What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
 
+### ACP panes: Claude Code over `claude-acp` — added 2026-11-10 (experimental)
+
+An ACP pane runs a CLI over the [Agent Client Protocol](https://agentclientprotocol.com)
+(JSON-RPC on stdio) instead of in a terminal: Navide draws the conversation,
+sends prompts as `session/prompt` and reads the turn end from the protocol's
+`stopReason`. It is added beside a CLI's terminal integration, never in place
+of it: `cli_vendors/<key>.py` is not touched, and a CLI absent from
+`acp_vendors.py` has no ACP pane.
+
+| Question | Claude Code (`claude`) |
+|---|---|
+| Switch | Settings → CLI Agents → ACP (experimental), ui setting `acpExperimental`, **off by default**. Off, `ACP_LAUNCHES` is empty, the ＋ menu has no ACP row, no adapter is listed for install and `tools/list` is byte-identical to main (`MAIN_TOOLS_LIST_SHA256`). `acp_switch.py` applies it at startup and on every `ui.settings.set` that changes the key. |
+| Launch | `claude-agent-acp` from npm `@agentclientprotocol/claude-agent-acp`, the ACP registry's `claude-acp` entry (0.102.0 on 2026-11-10; ACP protocol version 1, schema v1.30.0). The adapter runs Claude Code through the Claude Agent SDK with the user's own login. |
+| Install | The adapter is an install-wizard dependency (`claude-acp`, optional) only while the switch is on: `npm install -g @agentclientprotocol/claude-agent-acp@0.102.0`. The ＋ menu opens the guided install while it is missing; `acp.create` refuses with `ACP_ADAPTER_MISSING` (details `dep_id`) if it is still missing. |
+| Verified version | `verified_version = "0.102.0"` (`claude-agent-acp --version` prints the bare version). The install pins it; another installed version is not refused. |
+| Entry point | The ＋ menu's Agents block, "Claude Code (ACP)", the only caller of `spawnPane({display: 'acp'})` (App.vue `onAcpSpawn`, pinned by `acpEntryPoints.test.ts`). The pane's agent key stays `claude`. |
+| Messaging | A pane like any other: `cli_list_targets` lists it, `cli_send` is queued and enveloped by the window and handed over as a prompt (`acp.deliver` → `acp.prompt`), never typed. `cli_get_status`, `cli_wait_idle`, `cli_read_log` and `cli_interrupt` answer from the backend's own session (`acp_mcp.py`); their descriptions gain `acp_mcp.TOOL_NOTES` only while the switch is on (`ACP_ON_TOOLS_LIST_SHA256`). |
+| Turn end | `stopReason` → `turn_complete` with the reply text, recorded and broadcast as `agent.activity` like a log reader's (source `""`, so no hook/log pairing applies). |
+| Permissions | Every `session/request_permission` is asked in the pane (the main window); Guard is not consulted. |
+| Not wired (0.2.42 or later) | MCP back to Navide (`session/new` sends `mcpServers: []`), Guard on permission requests, roles (none is injected), restore after a restart (no manual-pane record is written), account switching, Agent History tokens. |
+| Unverified | Whether Claude Code under the adapter runs the user's hooks (Navide Guard's included): 0.102.0 passes `settingSources: ["user", "project", "local"]` to the SDK, which suggests it does. Windows (npm `.cmd` shim, non-ASCII user paths) has never run a real adapter. |
+
 ### Devin CLI (`devin`, Cognition) — added 2026-11-07
 
 A coding CLI (the ＋ menu's CLI list). Read from the

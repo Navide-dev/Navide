@@ -81,11 +81,21 @@ ACP_MESSAGE_TYPES = frozenset({
 })
 
 
-def test_acp_launches_is_empty_until_p5() -> None:
-    # No CLI can be started over ACP until its ACP mode is verified (P5). Opening
-    # one up is a deliberate change: edit this test with it.
-    from agent_team_backend.acp_vendors import ACP_LAUNCHES
+def test_acp_launches_is_empty_while_the_switch_is_off() -> None:
+    # No CLI can be started over ACP unless Settings → CLI Agents → ACP
+    # (experimental) is on (off by default; acp_switch). Opening another CLI
+    # up, or serving one with the switch off, is a deliberate change: edit
+    # this test with it.
+    from agent_team_backend import acp_switch
+    from agent_team_backend.acp_vendors import ACP_LAUNCHES, VERIFIED_LAUNCHES
 
+    assert ACP_LAUNCHES == {}
+    assert set(VERIFIED_LAUNCHES) == {"claude"}
+    try:
+        acp_switch.apply(True)
+        assert ACP_LAUNCHES == VERIFIED_LAUNCHES
+    finally:
+        acp_switch.apply(False)
     assert ACP_LAUNCHES == {}
 
 

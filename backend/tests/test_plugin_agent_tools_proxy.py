@@ -412,6 +412,34 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     assert await _tools_list_text() == pristine
 
 
+#: The same digest (main's tools, as above) while Settings → CLI Agents → ACP
+#: (experimental) is on: cli_read_log, cli_get_status, cli_wait_idle and
+#: cli_interrupt end with acp_mcp.TOOL_NOTES. With the switch off (the default)
+#: the list hashes to MAIN_TOOLS_LIST_SHA256, which is not re-pinned for it.
+ACP_ON_TOOLS_LIST_SHA256 = "8e682fa51e5e84b56d726771305c07b1cddc3e46344a6dd4dd86d34e689a963c"
+
+
+async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
+    from agent_team_backend import acp_switch
+
+    async def module_digest() -> str:
+        builtin = await _builtin_package_tool_names()
+        added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
+                 | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS | P3_CORE_TOOLS
+                 | RENAME_CORE_TOOLS)
+        existing = [t for t in json.loads(await _tools_list_text()) if t["name"] not in builtin | added]
+        text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    assert await module_digest() == MAIN_TOOLS_LIST_SHA256
+    try:
+        acp_switch.apply(True)
+        assert await module_digest() == ACP_ON_TOOLS_LIST_SHA256
+    finally:
+        acp_switch.apply(False)
+    assert await module_digest() == MAIN_TOOLS_LIST_SHA256
+
+
 async def test_core_tool_calls_are_untouched_without_a_snapshot() -> None:
     assert proxy.handles("cli_whoami") is False
     assert proxy.handles("devmap_read") is False

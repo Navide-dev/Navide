@@ -5004,6 +5004,10 @@ async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payloa
             }))
         if ("claude" in push_delivery.disabled_agents()) != claude_was_off:
             await _reinstall_claude_hooks()
+    from . import acp_switch
+
+    if acp_switch.SETTING_KEY in delta:
+        acp_switch.apply_settings(delta)
     if delta:
         # Other windows (EditorWindow, roles/stages) hold their own ws
         # connections — broadcast the merged delta so their caches

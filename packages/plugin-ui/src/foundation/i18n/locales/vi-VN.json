@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "CLI agent",
       "hint": "Bật và sắp xếp lại các CLI agent trong menu pane mới. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
+      "acp-title": "ACP (thử nghiệm)",
+      "acp-hint": "Chạy agent qua Agent Client Protocol, để Navide vẽ cuộc trò chuyện thay cho màn hình riêng của CLI. Thêm “Claude Code (ACP)” vào menu ＋, mục này cần adapter Claude Code ACP (cài khi dùng lần đầu). Thử nghiệm. Agent hỏi quyền ngay trong ô của nó, chưa có công cụ MCP của Navide, và ô ACP không được khôi phục sau khi khởi động lại.",
+      "acp-toggle": "Hiển thị agent ACP trong menu ＋",
       "drag-hint": "Kéo để sắp xếp lại",
       "search": "Tìm agent…",
       "filter-label": "Lọc CLI agent",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "Tác tử đám mây (Grok Bot, dots và các tác tử khác) được cài dưới dạng plugin Navide từ Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Chọn vai trò…",
     "waiting-backend": "Đang chờ backend…",
     "set-workspace-first": "Hãy đặt đường dẫn workspace trước",

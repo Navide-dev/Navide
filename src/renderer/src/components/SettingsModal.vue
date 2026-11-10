@@ -67,6 +67,7 @@ import {
   togglePushChannel,
   usePushChannelPrefs,
 } from '../composables/usePushChannelPrefs'
+import { setAcpEnabled, useAcpPrefs } from '../composables/useAcpPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
@@ -739,6 +740,7 @@ function toggleCliAgent(k: string): void {
 // second window editing this page repaints this one instead of leaving it on a
 // stale copy until reload.
 const { pushDisabled } = usePushChannelPrefs()
+const { acpEnabled } = useAcpPrefs()
 const pushChannelRows = computed(() =>
   CLI_AGENT_SPECS.filter((s) => s.pushChannel)
 )
@@ -3647,6 +3649,16 @@ watch(activeTab, (tab) => {
               </li>
             </ul>
             <SettingsEmptyState v-if="!filteredCliRows.length" class="cli-agent-empty" :message="$t('settings.cliAgents.no-results')" />
+          </section>
+          <!-- Off by default; on, the ＋ menu also offers agents run over the
+               Agent Client Protocol (composables/useAcpPrefs.ts). -->
+          <section class="ap-section" data-settings-section="cli-agents-acp">
+            <h3 class="ap-title">{{ $t('settings.cliAgents.acp-title') }}</h3>
+            <p class="ap-hint">{{ $t('settings.cliAgents.acp-hint') }}</p>
+            <label class="cli-agent-toggle">
+              <input type="checkbox" data-testid="acp-experimental" :checked="acpEnabled" @change="setAcpEnabled(($event.target as HTMLInputElement).checked)" />
+              <span>{{ $t('settings.cliAgents.acp-toggle') }}</span>
+            </label>
           </section>
           <CliRiskRangesPane v-if="activeTab === 'cliAgents'" :backend="props.backend" />
           </div>

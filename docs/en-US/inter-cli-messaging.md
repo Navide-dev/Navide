@@ -657,6 +657,22 @@ target pane queues, injects and reports the outcome. Until that report arrives
 the message stays queued. If the report never comes — the other window was
 killed, the machine slept — the message is failed after about 30 minutes.
 
+**ACP panes are delivered to as prompts, not typed** (experimental, only while
+Settings → CLI Agents → ACP (experimental) is on). An ACP pane runs its agent
+over the Agent Client Protocol with no terminal, and is otherwise an ordinary
+pane: it has a handle, `cli_list_targets` lists it and `cli_send` reaches it.
+The window queues, rate-limits, logs acks, renders the envelope and holds the
+message mid-turn as for any pane, then hands it to the backend (`acp.prompt`)
+as `session/prompt`. Delivered means the backend accepted the prompt — sent,
+or queued behind a running turn — not that the agent read or answered it; with
+no window it waits in the queue as for any pane. Its turn end comes from the
+protocol itself (the prompt's `stopReason`) and is reported as `turn_complete`
+with the reply text on `agent.activity`, the same event a log reader sends, so
+`cli_wait_idle`, `cli_send_and_wait`, chat channels and bare-line replies in
+that text work unchanged; there is no Stop hook or log reader behind it, and
+none of the hook/log pairing applies. The agent itself is given no Navide MCP
+tools yet, so its replies reach other panes only as bare-line blocks.
+
 ---
 
 ## Stop-hook delivery (claude)

@@ -24,6 +24,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - MCP (0.2.40): `cli_rename_pane` renames a CLI pane — its title and the name other panes address it by — through the same checks and write path as editing the title, so `cli_list_targets`, `cli_send`, `cli_get_status` and `cli_list_sessions` use the new name at once. A taken name is refused; an agent can rename its own pane and the panes it opened in its workspace; scheduled jobs that still use the old name are reported, not rewritten.
 - Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
 - Plugins (0.2.40): plugin views can follow the Navide interface language. `ui.getLocale` answers the language in effect (the one chosen in Settings, or the one picked from the system), and `ui.localeChanged` fires when the user switches; the SDK wraps them as `getHostLocale()` and `onHostLocaleChanged()`. Both need `permissions.system: ["ui"]`; plugin API 1.4.0.
+- ACP panes (0.2.40, experimental, off by default): Settings → CLI Agents → ACP (experimental) adds "Claude Code (ACP)" to the ＋ menu. It runs Claude Code over the Agent Client Protocol through the `claude-agent-acp` adapter (0.102.0, installed on first use through the guided install), and Navide draws the conversation instead of the terminal: other panes reach it with `cli_send`, `cli_get_status`, `cli_wait_idle`, `cli_read_log` and `cli_interrupt` as usual, a turn end is reported like any pane's, and every permission request is asked in the pane. Experimental and off by default; an ACP pane does not come back after a restart (see Known limitations). With the switch off nothing changes: no ACP entry, no adapter in the install list, and the MCP tool descriptions are the same as before.
 
 ### Changed
 
@@ -50,6 +51,12 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - Panes (0.2.40): a STOP the CLI did not act on no longer looks like it worked. When Claude spends the Ctrl-C on clearing queued input and the turn keeps running, a Claude or Codex pane that shows no sign of the interrupt within 5 seconds (no "[Request interrupted by user]" record, no turn end) puts its live status back with a "STOP not applied" badge beside it, so Interrupt can be pressed again. A STOP a person pressed still holds queued messages until they type, and a late interrupt record brings the STOP badge back. Navide does not send a second Ctrl-C on its own, since two in a row quit Claude.
 
 - Plugins (0.2.40): the static scan (Registry and `navide-plugin scan`, scanner 1.1.0) no longer reports `vuejs.org` as an undeclared network host for a package bundling Vue's production build, whose error messages carry `https://vuejs.org/error-reference/#runtime-…`; the host reached any other way is still reported. A string that only looks like a capability address (an i18n key such as `'ui.title'`) no longer counts as using that namespace: only addresses in the public catalog do.
+
+### Known limitations
+
+- ACP panes (0.2.40, experimental): Navide Guard does not see an ACP pane's permission requests (each is asked in the pane), and the agent is given none of Navide's MCP tools, so it cannot use `cli_send` or the plan tools itself; both are planned for 0.2.42.
+- ACP panes (0.2.40, experimental): whether Claude Code under the `claude-agent-acp` adapter runs your Claude Code hooks, Navide Guard's included, has not been verified.
+- ACP panes (0.2.40, experimental, off by default): an ACP pane does not come back on its own after Navide restarts — this is by design in this first version, not a bug; open it again from the ＋ menu. It also gets no role and is not moved by an account switch, and Windows has not been tested with a real adapter.
 
 ## [0.2.39] — 2026-11-09
 

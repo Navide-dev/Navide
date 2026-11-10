@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "CLI Agent",
       "hint": "새 pane 메뉴에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
+      "acp-title": "ACP (실험적)",
+      "acp-hint": "Agent Client Protocol로 에이전트를 실행하여 CLI 자체 화면 대신 Navide가 대화를 그립니다. ＋ 메뉴에 “Claude Code (ACP)”가 추가되며, Claude Code ACP 어댑터(처음 사용할 때 설치)가 필요합니다. 실험적 기능입니다. 권한 요청은 창 안에서 묻고, 에이전트는 아직 Navide MCP 도구를 쓸 수 없으며, ACP 창은 재시작 후 복원되지 않습니다.",
+      "acp-toggle": "＋ 메뉴에 ACP 에이전트 표시",
       "drag-hint": "드래그해서 순서 변경",
       "search": "agent 찾기…",
       "filter-label": "CLI agent 필터",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "클라우드 에이전트(Grok Bot, dots 등)는 Navide 마켓플레이스에서 해당 Navide 플러그인을 설치하세요.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "역할 선택…",
     "waiting-backend": "백엔드를 기다리는 중…",
     "set-workspace-first": "먼저 작업 영역 경로를 설정하세요",
