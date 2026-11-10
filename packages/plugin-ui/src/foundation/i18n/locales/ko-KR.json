@@ -1978,7 +1978,7 @@
         "ui": "자체 보기",
         "aiCli": "AI CLI 세션",
         "web": "웹 탐색",
-        "agents": "Agent pane",
+        "agents": "agent pane",
         "agentMessages": "에이전트 메시지",
         "agentNotify": "에이전트 알림",
         "secrets": "Navide 플러그인 시크릿"
