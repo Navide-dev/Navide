@@ -56,6 +56,7 @@ from typing import Any, Callable
 import certifi
 import websockets
 
+from .db_executor import run_in_db_thread
 from .credential_vault import vault_to_thread
 from . import (
     __version__,
@@ -4250,7 +4251,7 @@ class ServerLink:
         )
         from .guard.taint import safe_mark_tainted
 
-        safe_mark_tainted(pane.pane_id, "remote", f"message from device {from_display}", msg_key)
+        await run_in_db_thread(safe_mark_tainted, pane.pane_id, "remote", f"message from device {from_display}", msg_key)
         await app.broadcast(
             make_event(
                 "agent_msg.deliver",

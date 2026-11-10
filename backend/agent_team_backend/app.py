@@ -78,6 +78,7 @@ from .log_readers import (
 from .log_readers.attribution import Attribution
 from .log_readers.claude import encode_claude_cwd
 from .credential_vault import CredentialVault
+from .db_executor import run_in_db_thread
 from .credential_watcher import CredentialWatcher, reconcile_live_account
 from .doc_injector import fetch_stage_docs
 from .mcp_manager import MCPManager
@@ -1730,7 +1731,7 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # generous — see _ACTIVITY_TEXT_MAX_CHARS.
             "text": _cap_activity_text(event.text),
         }))
-        if dev_time_store.agent_event(
+        if await run_in_db_thread(dev_time_store.agent_event,
             attributed.workspace_path, pane_id,
             "agent_active" if superseded else event.event_type, event.timestamp,
         ):
@@ -2338,7 +2339,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
         )
         # Never raises and does not feed `handled`: the ledger must not change
         # what tokens_store records or how its checkpoint advances.
-        cost_ledger.record(
+        await run_in_db_thread(cost_ledger.record,
             usage, workspace_path, attributed.slot_key or attributed.pane_id or "",
             usage.profile_id,
         )
@@ -3333,7 +3334,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         # gated on subagent counting, and a failure here must never disturb the
         # response this endpoint owes the busy-state path.
         try:
-            recorded = _record_hook_file_write(
+            recorded = await run_in_db_thread(_record_hook_file_write,
                 vendor, pane_id or "", ws_path or "", str(payload.get("tool_name") or ""), payload
             )
             # Inside the same guard as the write: the panels seeing this row
@@ -3418,7 +3419,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # A late tool result is no work signal either: it can follow Stop.
     if event_kind not in ("notification", "permission_request", *_TOOL_RESULT_EVENTS):
         try:
-            if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
+            if await run_in_db_thread(dev_time_store.agent_event, ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(
                     make_event("devtime.changed", {"workspace_path": ws_path or cwd})
                 )

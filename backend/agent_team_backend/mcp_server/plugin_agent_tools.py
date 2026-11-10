@@ -63,6 +63,7 @@ from typing import Any
 from jsonschema import exceptions as jsonschema_exceptions
 from jsonschema import validators as jsonschema_validators
 from mcp.types import CallToolResult, TextContent
+from agent_team_backend.db_executor import run_in_db_thread
 
 from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_CALL_ERROR_CODES,
@@ -947,7 +948,7 @@ async def _answer(
     if not isinstance(response, dict):
         return refuse("Navide Host answered with a malformed response", "BAD_REQUEST")
     if response.get("ok") is True:
-        _taint(caller, entry)
+        await run_in_db_thread(_taint, caller, entry)
         result = response.get("result")
         # The Host measures the size once (contract 2.7, agentToolResultBytes)
         # and the backend never measures again: without a valid one the size
@@ -994,7 +995,7 @@ async def _answer(
     error = str(response.get("error") or "the call failed")
     if error_code == "PLUGIN_TOOL_FAILED":
         # The message is the plugin's own text: fenced like a result.
-        _taint(caller, entry)
+        await run_in_db_thread(_taint, caller, entry)
         return refuse(_fence(entry, "error", error), error_code, reason_value)
     return refuse(_neutralize(_clean(error)), error_code, reason_value)
 

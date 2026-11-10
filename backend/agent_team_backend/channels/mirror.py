@@ -26,6 +26,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+from ..db_executor import run_in_db_thread
 from . import redact
 from .base import Location
 from .registry import PLATFORMS
@@ -677,7 +678,7 @@ class Mirror:
                     continue
                 parent_id = str(child.get("spawned_by") or b.pane_id)
                 try:
-                    self.m._seams.inherit_taint(cid, parent_id)
+                    await run_in_db_thread(self.m._seams.inherit_taint, cid, parent_id)
                 except Exception:  # noqa: BLE001
                     log.warning("channels: could not inherit taint for %s", cid)
                 if not shows(b.verbosity, "minimal"):
@@ -705,7 +706,7 @@ class Mirror:
                 and not any(b.pane_id == cid for b in self.m.store.bindings()):
             try:
                 loc = await adapter.create_location(root.chat_id, f"↳ {cname}")
-                self.m.store.bind(cid, loc, verbosity=root.verbosity,
+                await run_in_db_thread(self.m.store.bind, cid, loc, verbosity=root.verbosity,
                                   parent_pane_id=str(parent.get("pane_id") or root.pane_id), auto=True)
             except Exception as exc:  # noqa: BLE001 — falls back to prefixed messages in the parent chat
                 self._topic_failed.add(cid)

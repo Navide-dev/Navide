@@ -38,6 +38,7 @@ from urllib.parse import quote
 
 from . import held, media, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
+from ..db_executor import run_in_db_thread
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
 )
@@ -648,7 +649,7 @@ class ChannelManager:
         self._errors.pop(bot, None)
         self._adapters[bot] = adapter
         try:
-            self.store.adopt_chats(platform, _bot_key(adapter))
+            await run_in_db_thread(self.store.adopt_chats, platform, _bot_key(adapter))
         except Exception as exc:  # noqa: BLE001 — only the picker's list depends on it
             log.warning("channels: adopting seen chats for %s failed: %s", platform, exc)
 
@@ -831,7 +832,7 @@ class ChannelManager:
                     if self._secret_writes.get(bot) is done else None
                 )
                 await asyncio.shield(write)
-            self.store.upsert_account(platform, config, account=account)
+            await run_in_db_thread(self.store.upsert_account, platform, config, account=account)
             err = None
             acct = self.store.accounts()[bot]
             if self.store.global_enabled() and acct["enabled"]:
@@ -961,7 +962,7 @@ class ChannelManager:
                 log.exception("channels: deleting the credential of %s failed", _bot_label(bot))
             self._errors.pop(bot, None)
             self._secret_hints.pop(bot, None)
-            self.store.remove_account(platform, account)
+            await run_in_db_thread(self.store.remove_account, platform, account)
         await self._changed()
         await self.broadcast_status_changes()
 
@@ -1078,7 +1079,7 @@ class ChannelManager:
             config = {**acct["config"], "name": name.strip()}
             if not config["name"]:
                 del config["name"]
-            self.store.upsert_account(platform, config, account=account)
+            await run_in_db_thread(self.store.upsert_account, platform, config, account=account)
         await self._changed()
         return {"ok": True}
 
@@ -1086,7 +1087,7 @@ class ChannelManager:
         _check_platform(platform)
         _check_account(account)
         async with self._lock:
-            if not self.store.set_account_enabled(platform, enabled, account):
+            if not await run_in_db_thread(self.store.set_account_enabled, platform, enabled, account):
                 return {"ok": False, "error": "not configured"}
             err = None
             if not enabled:
@@ -1100,7 +1101,7 @@ class ChannelManager:
 
     async def set_global_enabled(self, enabled: bool) -> dict[str, Any]:
         async with self._lock:
-            self.store.set_global_enabled(enabled)
+            await run_in_db_thread(self.store.set_global_enabled, enabled)
             if not enabled:
                 self._cancel_workers()
                 for platform, account in list(self._adapters):
@@ -1135,9 +1136,9 @@ class ChannelManager:
                 self._errors.pop((platform, acc), None)
                 self._secret_hints.pop((platform, acc), None)
             if account is None:
-                self.store.remove_platform(platform)
+                await run_in_db_thread(self.store.remove_platform, platform)
             else:
-                self.store.remove_account(platform, account)
+                await run_in_db_thread(self.store.remove_account, platform, account)
             self._forget_lost(f"{platform}:" if account is None else f"{platform}:{account}:", prefix=True)
             for pane_id, p in list(self._pending.items()):
                 if p.loc.platform == platform and (account is None or p.loc.account == account):
@@ -1178,7 +1179,7 @@ class ChannelManager:
                         req.sender_id, _bot_label((platform, req.account)))
         else:
             try:
-                self.store.remember_chat(platform, _bot_key(adapter), req.chat_id, req.sender_name,
+                await run_in_db_thread(self.store.remember_chat, platform, _bot_key(adapter), req.chat_id, req.sender_name,
                                          "direct", False, int(time.time()))
             except Exception as exc:  # noqa: BLE001
                 log.warning("channels: remembering approved DM on %s failed: %s", platform, exc)
@@ -1223,7 +1224,7 @@ class ChannelManager:
 
     async def allow_remove(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
         _check_account(account)
-        removed = self.store.remove_allow(platform, sender_id, account)
+        removed = await run_in_db_thread(self.store.remove_allow, platform, sender_id, account)
         await self._changed()
         return {"ok": removed, **({} if removed else {"error": "not found"})}
 
@@ -1305,7 +1306,7 @@ class ChannelManager:
             return {"ok": False, "error": f"unknown mode {mode!r}"}
         previous = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
         level = level or (previous.verbosity if previous else DEFAULT_VERBOSITY)
-        binding = self.store.bind(pane_id, loc, verbosity=level)
+        binding = await run_in_db_thread(self.store.bind, pane_id, loc, verbosity=level)
         await self._remember_wake_target(binding, pane_id)
         if previous is not None and previous.location().key() != loc.key():
             # Moved to another chat: child topics left in the old one would keep
@@ -1324,7 +1325,7 @@ class ChannelManager:
         return {"ok": True, "binding": binding.public(), **({} if usable else {"needs_approval": True})}
 
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
-        removed = self.store.unbind(pane_id)
+        removed = await run_in_db_thread(self.store.unbind, pane_id)
         self._drop_pending(pane_id)
         self._drop_held(pane_id)
         if removed:
@@ -1347,7 +1348,7 @@ class ChannelManager:
         """Move a binding to the pane that replaced ``from_pane_id`` (rebuild)."""
         if not from_pane_id or not to_pane_id:
             return {"ok": False, "error": "from_pane_id and to_pane_id are required"}
-        if from_pane_id == to_pane_id or not self.store.rename_pane(from_pane_id, to_pane_id):
+        if from_pane_id == to_pane_id or not await run_in_db_thread(self.store.rename_pane, from_pane_id, to_pane_id):
             return {"ok": True}
         self.mirror.rename_pane(from_pane_id, to_pane_id)
         self._drop_held(from_pane_id)
@@ -1369,7 +1370,7 @@ class ChannelManager:
         if level is None:
             return {"ok": False, "error": f"verbosity must be one of {', '.join(VERBOSITIES)} (got {verbosity!r})"}
         pane_id = self._seams.resolve_pane(pane_id) or pane_id
-        binding = self.store.set_verbosity(pane_id, level)
+        binding = await run_in_db_thread(self.store.set_verbosity, pane_id, level)
         if binding is None:
             return {"ok": False, "error": "this pane is not connected to a chat"}
         stack = [pane_id]
@@ -1377,7 +1378,7 @@ class ChannelManager:
             parent = stack.pop()
             for b in self.store.bindings():
                 if b.auto and b.parent_pane_id == parent and b.verbosity != level:
-                    self.store.set_verbosity(b.pane_id, level)
+                    await run_in_db_thread(self.store.set_verbosity, b.pane_id, level)
                     stack.append(b.pane_id)
         await self._changed()
         return {"ok": True, "binding": binding.public()}
@@ -1656,7 +1657,7 @@ class ChannelManager:
                     try:
                         rest = self.store.lost_replies()
                         rest.pop(loc.key(), None)
-                        self.store.set_lost_replies(rest)
+                        await run_in_db_thread(self.store.set_lost_replies, rest)
                     except Exception as exc:  # noqa: BLE001
                         log.warning("channels: forgetting the lost replies of %s failed: %s", loc.key(), exc)
 
@@ -2007,7 +2008,7 @@ class ChannelManager:
             await self._offline(msg, binding)  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
-            self.store.rename_pane(binding.pane_id, pane_id)
+            await run_in_db_thread(self.store.rename_pane, binding.pane_id, pane_id)
         self._spawn(self._remember_wake_target(binding, pane_id))
         key = binding.location().key()
         if wake_asked or key in self._wake_kept:
@@ -2047,7 +2048,7 @@ class ChannelManager:
         if not workspace_path or not session_id:
             return  # nothing known yet (a pane before its first turn): keep what is stored
         if (workspace_path, session_id) != (binding.workspace_path, binding.session_id):
-            self.store.set_wake_target(pane_id, workspace_path, session_id)
+            await run_in_db_thread(self.store.set_wake_target, pane_id, workspace_path, session_id)
 
     async def _offline(self, msg: InboundMessage, binding: Binding) -> None:
         """A message for a bound pane that is not online.
@@ -2106,7 +2107,7 @@ class ChannelManager:
             return
         pane_id = str(result.get("pane_id") or binding.pane_id)
         if pane_id != binding.pane_id:
-            self.store.rename_pane(binding.pane_id, pane_id)
+            await run_in_db_thread(self.store.rename_pane, binding.pane_id, pane_id)
             await self._changed()
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
@@ -2640,7 +2641,7 @@ class ChannelManager:
             titles = {str(c.get("chat_id")): c.get("title") for c in known()} if callable(known) else {}
             title = str(titles.get(msg.chat_id) or msg.chat_id)
         try:
-            self.store.remember_chat(msg.platform, _bot_key(adapter), msg.chat_id, title, kind,
+            await run_in_db_thread(self.store.remember_chat, msg.platform, _bot_key(adapter), msg.chat_id, title, kind,
                                      bool(msg.thread_id), int(time.time()))
         except Exception as exc:  # noqa: BLE001 — the sender is linked; only the picker list misses it
             log.warning("channels: remembering linked chat %s failed: %s", msg.chat_id, exc)
