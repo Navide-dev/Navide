@@ -594,7 +594,18 @@ def prefill_line_error(text: str) -> str | None:
     return None
 
 
-def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool = False) -> Refusal | None:
+#: Exempt audit rows already written, keyed (pane_id, line, rule, pattern) →
+#: time written. One send is checked twice — once by the tool that sends it
+#: (cli_send, agent_msg.route) and once when the renderer types it
+#: (terminal.input) — and the second check consumes the first's row instead
+#: of writing its own.
+_EXEMPT_AUDITED: dict[tuple[str, str, str, str], float] = {}
+_EXEMPT_PAIR_WINDOW_S = 30.0
+
+
+def enforce(
+    text: str, *, workspace: str, pane_id: str, via: str, prefill: bool = False, audit_exempt: bool = True
+) -> Refusal | None:
     """check_with_store(), and when it refuses: an audit row and a
     guard.decision event (the window shows it as a notice on that pane).
     ``via`` names the path that tried to type it (cli_send, cli_open_agent,
@@ -606,7 +617,10 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool 
     "prefill", and no deny notice is shown — nothing was denied.
 
     A line let through only by a user exemption is audited too, as action
-    "exempt", with the exemption's pattern in the excerpt."""
+    "exempt", with the exemption's pattern in the excerpt — once per send:
+    ``audit_exempt`` False skips it (a line still being typed, checked again
+    at its Enter), and the typing of a line a sending tool already audited
+    writes no second row."""
     import logging
     import time
 
@@ -619,11 +633,22 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool 
         log.warning("guard: terminal check failed; refusing: %s", err, exc_info=True)
         refusal = Refusal("guard-error", text[:200], f"the terminal command check failed ({err})")
     if refusal is None:
+        if not audit_exempt:
+            return None
         try:
             store = runtime.store()
+            now = time.time()
+            for key, at in list(_EXEMPT_AUDITED.items()):
+                if now - at > _EXEMPT_PAIR_WINDOW_S:
+                    del _EXEMPT_AUDITED[key]
             for rule, pattern in exemptions_applied(text, workspace=workspace, settings=store.terminal_settings()):
+                key = (pane_id or "", text, rule, pattern)
+                if key in _EXEMPT_AUDITED:
+                    del _EXEMPT_AUDITED[key]
+                    continue
+                _EXEMPT_AUDITED[key] = now
                 store.audit_add({
-                    "ts": time.time(), "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
+                    "ts": now, "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
                     "tool": f"terminal:{via}", "excerpt": f"{_clip(text, 200)} — exempted by `{pattern}`",
                     "level": "critical", "action": "exempt", "rule_ids": (f"terminal-{rule}",),
                     "tainted": False,
