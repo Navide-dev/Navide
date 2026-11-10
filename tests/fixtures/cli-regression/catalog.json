@@ -340,15 +340,19 @@
     "openclaw": {
       "capabilities": [
         "launch",
-        "unsupported_session"
+        "reader",
+        "resume"
       ],
       "fixture": "openclaw.json",
       "cases": {
         "launch": {
           "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[openclaw]"
         },
-        "unsupported_session": {
-          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[openclaw]"
+        "reader": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_reader[openclaw]"
+        },
+        "resume": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_resume[openclaw]"
         }
       }
     },

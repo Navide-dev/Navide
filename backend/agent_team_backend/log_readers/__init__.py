@@ -34,6 +34,7 @@ _MIGRATED_READERS = {
     "KimiLogReader": "kimi",
     "MuseLogReader": "muse",
     "OpencodeLogReader": "opencode",
+    "OpenclawLogReader": "openclaw",
     "PiLogReader": "pi",
     "QwenLogReader": "qwen",
 }
@@ -71,6 +72,7 @@ __all__ = [
     "KimiLogReader",
     "MuseLogReader",
     "OpencodeLogReader",
+    "OpenclawLogReader",
     "PiLogReader",
     "QwenLogReader",
     "LogWatcher",

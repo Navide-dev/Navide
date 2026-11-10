@@ -12,8 +12,9 @@ rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
 Hermes Agent (`hermes`) were added on 2026-11-07 as CLI vendors (the ＋
 menu's CLI list), making 18; they appear in the roster only — no
 reader, resume, model flag, usage or account switching to tabulate. (Since
-0.2.40 Hermes Agent has a state.db reader, resume and model / reasoning flags;
-its record in `cli-extension-guide.md` has them, the matrices below do not.) Devin CLI
+0.2.40 both have a SQLite reader and resume, and Hermes Agent model /
+reasoning flags; their record in `cli-extension-guide.md` has them, the
+matrices below do not.) Devin CLI
 (`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
 CLI list), making 19; it too appears in the roster only, for the same reason —
 it was wired from the docs with no binary installed (see the
@@ -110,7 +111,7 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
 | `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
 | `devin` | Devin CLI (Cognition) | `devin` (`--permission-mode dangerous`) | install script (docs.devin.ai/cli) — user runs it |
-| `openclaw` | OpenClaw | `openclaw` | install script (docs.openclaw.ai) — user runs it |
+| `openclaw` | OpenClaw | `openclaw tui --local` | install script (docs.openclaw.ai) — user runs it |
 | `hermes` | Hermes Agent | `hermes chat` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
 
 Two keys do not match their binary: `antigravity` runs `agy`, and `cursor` runs

@@ -658,11 +658,9 @@ def test_vendors_without_session_ids() -> None:
     others = {
         k for k, s in registry.VENDORS.items() if not s.supports_session_resume
     }
-    # openclaw: a general agent whose sessions live in its own runtime, with
-    # no reader written yet.
     # devin: sessions exist (-c / -r <id>) but their store is undocumented
     # and no reader is written yet.
-    assert others == {"aider", "mcode", "openclaw", "devin"}, (
+    assert others == {"aider", "mcode", "devin"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

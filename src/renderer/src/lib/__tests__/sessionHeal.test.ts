@@ -466,3 +466,14 @@ describe('pinFreshSessionAtLaunch: Hermes names its own session', () => {
       .toEqual({ command: cmd, explicitSessionId: name })
   })
 })
+
+describe('pinFreshSessionAtLaunch: OpenClaw names its own session key', () => {
+  it('pins a Navide key on a fresh launch and keeps a hand-written one', () => {
+    const res = pinFreshSessionAtLaunch('openclaw', false, 'openclaw tui --local', undefined, () => 'unused')
+    expect(res.explicitSessionId).toMatch(/^agent:main:navide-[0-9a-f-]{36}$/)
+    expect(res.command).toBe(`openclaw tui --local --session ${res.explicitSessionId}`)
+    const cmd = 'openclaw tui --local --session agent:main:mine'
+    expect(pinFreshSessionAtLaunch('openclaw', false, cmd, undefined, () => 'unused'))
+      .toEqual({ command: cmd, explicitSessionId: 'agent:main:mine' })
+  })
+})
