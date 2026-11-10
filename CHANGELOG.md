@@ -27,6 +27,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Fixed
 
+- Backend (0.2.40): the packaged backend's own temp directory under the data directory (`backend-tmp`, and each bundled plugin's below it) is now owner-only (0700) on macOS and Linux, including one an earlier version created.
 - Pipelines (0.2.40): starting a pipeline and opening its stage panes no longer freezes Navide while the disk is slow: the run records are now saved on a background thread, in order, so every window keeps responding even when a save takes seconds (a VM measured one at 21.7s).
 - Languages (0.2.40): the "no account-switch adapter" note in Settings → General is translated in every language, and short labels left in English are translated: in Korean the Execution Policy page, Auto Commit, the token kinds of plan sharing, chat bot token fields, CLI Stage and the help examples; in Chinese the email field, API key, the Fetch shortcut and the Loop time estimate; in Chinese and Japanese the DingTalk robot code, Matrix homeserver and chat id fields. In Japanese, 「Navide マーケットプレイス」 in the Settings sidebar fits on one line. Feature names kept in English (Turn Stats, Pipeline Manager, Developer Mode, Loop, App Lock) and Guard rule descriptions are unchanged.
 

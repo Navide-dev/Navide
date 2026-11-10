@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -49,7 +49,11 @@ export function pluginBackendTmpDir(dataDir: string, pluginId: string): string |
  */
 export function prepareBackendTmpDir(dir: string, sweep = true): string | null {
   try {
-    mkdirSync(dir, { recursive: true })
+    // Owner-only, like any temp directory: what a backend unpacks and writes
+    // here is its own. The chmod covers a directory an earlier build created
+    // with the default mode; Windows has no mode bits to set.
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    if (process.platform !== 'win32') chmodSync(dir, 0o700)
   } catch {
     return null
   }
