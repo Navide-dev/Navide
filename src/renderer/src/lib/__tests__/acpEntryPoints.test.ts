@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 // ACP is reachable from one entry point only: the ＋ menu's ACP row, shown
@@ -25,7 +25,7 @@ describe('ACP entry points', () => {
       const text = readFileSync(file, 'utf8')
       return ASKS_FOR_ACP.some((pattern) => pattern.test(text))
     })
-    expect(askers.map((file) => relative(process.cwd(), file))).toEqual(['src/renderer/src/App.vue'])
+    expect(askers.map((file) => relative(process.cwd(), file).split(sep).join('/'))).toEqual(['src/renderer/src/App.vue'])
     const app = readFileSync(join(SRC, 'renderer/src/App.vue'), 'utf8')
     const hits = app.split('\n').filter((line) => ASKS_FOR_ACP.some((pattern) => pattern.test(line)))
     expect(hits).toEqual(["    display: 'acp',"])

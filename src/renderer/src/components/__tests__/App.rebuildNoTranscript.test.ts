@@ -28,6 +28,7 @@ function harness(sessionOnDisk: boolean | undefined) {
   const scope = {
     panes,
     paneRefs: {},
+    acp: { owns: () => false },
     paneBusyForRebuild: () => false,
     notifyRestore: { toast: vi.fn(), confirm: vi.fn() },
     i18n: { global: { t: (key: string) => key } },

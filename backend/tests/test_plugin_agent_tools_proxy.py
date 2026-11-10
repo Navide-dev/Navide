@@ -428,7 +428,7 @@ async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main
         builtin = await _builtin_package_tool_names()
         added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
                  | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS | P3_CORE_TOOLS
-                 | RENAME_CORE_TOOLS)
+                 | RENAME_CORE_TOOLS | DEVELOPER_BACKEND_CORE_TOOLS)
         existing = [t for t in json.loads(await _tools_list_text()) if t["name"] not in builtin | added]
         text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return hashlib.sha256(text.encode()).hexdigest()

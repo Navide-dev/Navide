@@ -129,6 +129,7 @@ Extension Pack and declares neither.
 | `detailView` | string | no | `left` views only: the id of a `detail` view in the same package. |
 | `targetSchema` | string | no | `detail` views only: archive path of a `.json` schema. |
 | `receives` | object | no | `window` views only: `{ "protocolVersion": 1, "locations": ["left" and/or "detail"], "editorTargets"?: { "protocolVersion": 1 }, "closeGuard"?: { "protocolVersion": 1 } }`. |
+| `headless` | boolean | no | Not for `window` or `detail` views. `true` lets the Host open the view hidden to answer its agent tools (Navide 0.2.40+). |
 
 ### `backend`
 

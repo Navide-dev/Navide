@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -84,7 +85,8 @@ async def test_a_missing_pane_a_terminal_and_a_refusing_pane_get_nothing(deliver
 
 def test_a_refusal_follows_the_pane_to_its_new_id(tmp_path: Path) -> None:
     agent_notify.set_refusal("p-dev", True)
-    assert (tmp_path / agent_notify.REFUSALS_FILE).stat().st_mode & 0o777 == 0o600
+    if sys.platform != "win32":  # Windows has no POSIX mode bits
+        assert (tmp_path / agent_notify.REFUSALS_FILE).stat().st_mode & 0o777 == 0o600
     agent_messaging.register(pane_id="p-dev-2", name="dev", agent_key="claude", workspace_path=WS, owner=object())
     agent_messaging.add_aliases("p-dev-2", ["p-dev"], WS)
     assert agent_notify.refuses("p-dev-2")

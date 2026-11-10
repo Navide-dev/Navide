@@ -37,6 +37,9 @@ class VendorData:
         # Goose's data dir follows %APPDATA% on Windows; its own root variable
         # keeps that store inside the scratch home on every runner.
         monkeypatch.setenv("GOOSE_PATH_ROOT", str(self.home / "goose-root"))
+        # Hermes's home follows %LOCALAPPDATA% on Windows; $HERMES_HOME pins it
+        # to the fixture's ~/.hermes on every runner.
+        monkeypatch.setenv("HERMES_HOME", str(self.home / ".hermes"))
         self.values = {
             "HOME": str(self.home), "WORKSPACE": str(self.workspace),
             "PANE": PANE, "MARKER": MARKER,
