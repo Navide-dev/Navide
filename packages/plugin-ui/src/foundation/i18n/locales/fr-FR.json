@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Comptes",
       "cliAgents": "Agents CLI",
+      "agents": "Agents IA",
       "cliExtensions": "Extensions",
       "roles": "Rôles",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "Ce que contrôle chacun des dix-neuf onglets des paramètres, comment Navide Cloud relie plusieurs machines en un réseau privé, et les éléments du système situés hors de l’écran principal : les menus, les fenêtres autonomes, les vues d’utilisation et l’entretien des ressources.",
         "s1": {
           "title": "Vue d’ensemble des paramètres",
-          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>26 onglets</strong> au total.",
+          "p1": "La fenêtre des paramètres s’ouvre avec <kbd class=\"syh-kbd\">⌘,</kbd> ; le bouton en forme d’engrenage de la barre de titre y mène aussi. La barre latérale gauche est divisée en cinq groupes, soit <strong>27 onglets</strong> au total.",
           "h1": "Le champ de recherche",
           "p2": "Sous l’en-tête de la barre latérale se trouve un champ de recherche dont le texte indicatif est <code>Rechercher dans les paramètres…</code>. Il recherche dans les titres des paramètres, leur section et leurs mots-clés <strong>dans tous les onglets</strong> (dans la langue actuelle de l’interface et avec les mots-clés indexés), et affiche au plus 8 résultats ; cliquer sur l’un d’eux ouvre l’onglet correspondant et fait défiler jusqu’à la section (à une exception près : « Stockage » ferme les paramètres et ouvre directement le Resource Manager). Sans résultat, il affiche <code>Aucun paramètre correspondant</code>. <kbd class=\"syh-kbd\">Esc</kbd> le vide.",
           "callout": {
             "title": "L’index de recherche n’est pas exhaustif",
             "text": "L’index est une liste tenue à la main, et <strong>les onglets {layout}, {notifications}, {security} et {channels} n’y ont aucune entrée</strong> : rien de ce qu’ils contiennent n’est donc trouvable, il faut les ouvrir vous-même. Une entrée CLI Agents ouvre directement le panneau de réglages d’une CLI (voir la rubrique « Agents CLI et comptes »)."
           },
-          "h2": "Les vingt-six onglets",
+          "h2": "Les vingt-sept onglets",
           "tabTable": {
             "group": "Groupe",
             "tab": "Onglet",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Connecter des bots d’applications de messagerie comme Telegram ou Slack à des panes CLI : bots, appairage, liste d’autorisation, liaison de comptes",
               "more": "La rubrique « {messaging} »"
+            },
+            "agents": {
+              "what": "Agents permanents comme Hermes Agent et OpenClaw, par identité, avec canal, planifications, mémoire et options de lancement",
+              "more": "S’ouvre aussi depuis “Réglages de l’agent…” d’un pane d’agent"
             },
             "mcp": {
               "what": "Ajouter, activer et inspecter des serveurs MCP",
@@ -13274,5 +13279,91 @@
     "trend-7d": "Pic quotidien, 7 derniers jours",
     "week-tokens": "Tokens cette semaine",
     "day-tokens": "Tokens aujourd’hui"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Suspendre les planifications",
+      "resume-schedules": "Reprendre les planifications",
+      "settings": "Paramètres de l’agent…",
+      "wake": "Réveiller maintenant",
+      "wake-none": "Aucune planification active à lancer",
+      "wake-title": "Lancer maintenant la prochaine planification ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · fermé, ouvrir et reprendre",
+      "create": "Créer",
+      "name-placeholder": "Nom de l’agent",
+      "new": "Nouvel agent ({vendor})…",
+      "open": "{vendor} · ouvert, y basculer"
+    },
+    "header": {
+      "last-done": "dernier terminé à {time}",
+      "model": "modèle {model}",
+      "model-default": "modèle par défaut",
+      "never-done": "aucun tour terminé",
+      "turn": "ce tour {minutes} min",
+      "vendor-since": "{vendor} · depuis le {date}",
+      "vendor-today": "{vendor} · depuis aujourd’hui"
+    },
+    "menu": {
+      "channels": "Paramètres des canaux…",
+      "close-keep": "Fermer le pane (identité conservée)",
+      "memory-folder": "Ouvrir le dossier de mémoire",
+      "stop-remove": "Arrêter et retirer l’agent…",
+      "toggle-panel": "Afficher ou masquer le panneau de contrôle",
+      "wake": "Réveiller pour un tour maintenant"
+    },
+    "panel": {
+      "channel-unbound": "Aucun canal lié",
+      "channel-unbound-hint": "Liez-en un avec le bouton de canal de l’en-tête",
+      "channels": "Canal",
+      "collapse": "Replier le panneau de contrôle",
+      "expand": "Déplier le panneau de contrôle",
+      "memory": "Mémoire",
+      "memory-empty": "Non lue dans cette version",
+      "schedule-paused": "suspendue",
+      "schedules": "Planifications",
+      "schedules-empty": "Aucune planification ne vise cet agent",
+      "status": "État",
+      "status-source": "Source, sortie du terminal",
+      "title": "Panneau de contrôle",
+      "todos": "Tâches",
+      "todos-empty": "Non lues dans cette version"
+    },
+    "settings": {
+      "channel": "Canal",
+      "channel-closed": "Lié seulement tant que son pane est ouvert",
+      "channel-note": "Les bots viennent de Paramètres → Canaux. Un lien appartient au pane ouvert.",
+      "closed": "fermé",
+      "color": "Couleur",
+      "command": "Commande de lancement",
+      "empty": "Aucun agent pour l’instant. Ajoutez-en un depuis le bloc Agents du menu ＋.",
+      "flags": "Modèle et options",
+      "flags-note": "Les variables d’environnement et l’interrupteur de permissions sont partagés avec la page Agents CLI. L’agent garde ses propres clés.",
+      "go-channels": "Ouvrir Paramètres → Canaux",
+      "go-cli-agents": "Ouvrir Paramètres → Agents CLI",
+      "identity": "Identité",
+      "identity-note": "Navide conserve les identités. Fermer un pane garde l’identité, le rouvrir reprend sa session.",
+      "intro": "Agents permanents comme Hermes Agent et OpenClaw, listés par identité.",
+      "job-on": "activée",
+      "list": "Mes agents",
+      "memory": "Emplacement de la mémoire",
+      "memory-note": "L’agent choisit où vit sa mémoire. Navide ne la déplace ni ne la modifie.",
+      "name": "Nom (celui du pane)",
+      "open-pane": "Ouvrir le pane",
+      "pane-closed": "pane fermé",
+      "pane-open": "pane ouvert",
+      "resume": "Reprendre à la réouverture",
+      "resume-on": "Pris en charge",
+      "schedules": "Planifications",
+      "schedules-note": "Ajoutez des planifications dans Tasker et visez le pane de cet agent.",
+      "session": "Dernière session",
+      "session-none": "Aucune pour l’instant",
+      "stop-remove": "Arrêter et retirer",
+      "switch-to": "Aller au pane",
+      "unsupported": "Non pris en charge",
+      "yolo": "Ignorer la confirmation des commandes dangereuses",
+      "yolo-flag": "Pris en charge ({flag}), suit l’interrupteur YOLO"
+    }
   }
 }

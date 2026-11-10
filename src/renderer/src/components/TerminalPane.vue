@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTerminal, type ClipboardFailureReason } from '@navide/terminal'
 import { agentProfileFor } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -30,6 +30,9 @@ import CliRiskPill from './CliRiskPill.vue'
 import { cliRiskKey } from '../composables/useResourceUsage'
 import type { CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
 import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
+import AgentControlPanel from './agent/AgentControlPanel.vue'
+import { agentConsoleKey } from '../composables/useAgentConsole'
+import type { AgentPaneInfo } from '../lib/agentIdentity'
 
 interface Props {
   paneId: string
@@ -135,6 +138,11 @@ interface Props {
    *  (their terminals must survive), so the terminal uses this to skip
    *  display-only upkeep instead of running it for an invisible pane. */
   onScreen?: boolean
+  /** Set for an agent pane (spec kind 'agent'; plan agent-0-2-40_78e071): the
+   *  header shows the identity, the control panel sits on the right, and the
+   *  CLI-only chips (loop, login, quota, account) are left out. Undefined for
+   *  every CLI pane, which renders exactly as before. */
+  agent?: AgentPaneInfo
 }
 
 const props = defineProps<Props>()
@@ -371,7 +379,85 @@ const showContinueButton = computed<boolean>(
     (terminal.lastUserKeyAt?.value ?? 0) === 0
 )
 
+// ── Agent pane ───────────────────────────────────────────────────────────────
+const agentConsole = inject(agentConsoleKey, null)
+/** The agent prop when given, else what the app's agent console knows of
+ *  this pane; undefined for a CLI pane. */
+const agentView = computed<AgentPaneInfo | undefined>(
+  () => props.agent ?? agentConsole?.paneInfo(props.paneId, props.agentKey, props.title)
+)
+/** Panes narrower than this start with the control panel folded (decision 1). */
+const AGENT_PANEL_FOLD_BELOW_PX = 720
+const agentPanelCollapsed = ref(false)
+const headerRef = ref<HTMLElement | null>(null)
+/** The panel sits under the header, beside the terminal; the header's height
+ *  varies with its sub line, so it is measured rather than assumed. */
+const agentPanelTop = ref(0)
+let headerObserver: ResizeObserver | null = null
+const agentNow = ref(Date.now())
+let agentTick: ReturnType<typeof setInterval> | null = null
+
+function toggleAgentPanel(): void {
+  agentPanelCollapsed.value = !agentPanelCollapsed.value
+}
+
+watch(
+  () => !!agentView.value,
+  (isAgent) => {
+    headerObserver?.disconnect()
+    headerObserver = null
+    if (agentTick !== null) clearInterval(agentTick)
+    agentTick = null
+    if (!isAgent) return
+    void nextTick(() => {
+      const width = containerRef.value?.parentElement?.clientWidth ?? 0
+      if (width > 0 && width < AGENT_PANEL_FOLD_BELOW_PX) agentPanelCollapsed.value = true
+      const header = headerRef.value
+      if (!header) return
+      agentPanelTop.value = header.offsetHeight
+      if (typeof ResizeObserver !== 'undefined') {
+        headerObserver = new ResizeObserver(() => (agentPanelTop.value = header.offsetHeight))
+        headerObserver.observe(header)
+      }
+    })
+    agentTick = setInterval(() => (agentNow.value = Date.now()), 30_000)
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => {
+  headerObserver?.disconnect()
+  if (agentTick !== null) clearInterval(agentTick)
+})
+
+/** "Hermes Agent · resident since 11/7" under the identity name. */
+const agentVendorLine = computed(() => {
+  const a = agentView.value
+  if (!a) return ''
+  if (a.createdAt <= 0) return a.vendor
+  const at = new Date(a.createdAt)
+  const now = new Date(agentNow.value)
+  if (at.toDateString() === now.toDateString()) return i18n.global.t('agentPane.header.vendor-today', { vendor: a.vendor })
+  return i18n.global.t('agentPane.header.vendor-since', { vendor: a.vendor, date: at.toLocaleDateString([], { month: 'numeric', day: 'numeric' }) })
+})
+
+/** Model · this turn N min · last done HH:MM — replaces the CLI sub line. */
+const agentSubLine = computed(() => {
+  const a = agentView.value
+  if (!a) return ''
+  const t = i18n.global.t
+  const parts = [a.model ? t('agentPane.header.model', { model: a.model }) : t('agentPane.header.model-default')]
+  const clock = agentConsole?.turnFor(props.paneId)
+  if (clock?.startedAt != null && displayStatus.value === 'running') {
+    parts.push(t('agentPane.header.turn', { minutes: Math.max(0, Math.round((agentNow.value - clock.startedAt) / 60_000)) }))
+  }
+  parts.push(clock?.endedAt != null
+    ? t('agentPane.header.last-done', { time: formatLoopTime(clock.endedAt) })
+    : t('agentPane.header.never-done'))
+  return parts.join(' · ')
+})
+
 defineExpose({
+  toggleAgentPanel,
   spawn: terminal.spawn,
   interrupt: terminal.interrupt,
   kill: terminal.kill,
@@ -660,7 +746,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected }]">
+  <div
+    :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected, 'pane-agent': agentView, 'pane-agent-awaiting': agentView && displayStatus === 'awaiting' }]"
+    :style="agentView ? { '--agent-color': agentView.color } : undefined"
+  >
     <button
       v-if="rebuildVisible"
       class="rebuild-btn"
@@ -671,6 +760,7 @@ onMounted(() => {
     ><RebuildIcon /></button>
     <button class="minimize-btn" @click.stop="emit('minimize')" :title="$t('pane.terminal.minimize-tooltip')">⊟</button>
     <header
+      ref="headerRef"
       :class="['pane-header', { 'drag-over': isReorderDragOver }]"
       data-tour="pane-header"
       :draggable="!editingTitle"
@@ -686,6 +776,7 @@ onMounted(() => {
     >
       <div class="header-main">
         <span v-if="pipeTag" class="pipe-tag">{{ pipeTag }}</span>
+        <span v-if="agentView" class="agent-avatar" aria-hidden="true" data-testid="agent-avatar">{{ agentView.initial }}</span>
         <input
           v-if="editingTitle"
           ref="titleInput"
@@ -707,7 +798,9 @@ onMounted(() => {
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
+        <span v-if="agentView" class="agent-vendor" data-testid="agent-vendor" v-truncate>{{ agentVendorLine }}</span>
         <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
+        <template v-if="!agentView">
         <span
           v-if="loopActive"
           class="loop-inline"
@@ -728,6 +821,7 @@ onMounted(() => {
             :aria-label="$t('pane.terminal.loop-tooltip')"
           >∞</button>
         </PromptSkillPicker>
+        </template>
         <span
           v-if="muted"
           class="muted-inline"
@@ -743,6 +837,7 @@ onMounted(() => {
           :title="$t(readback ? 'pane.terminal.readback-on-tooltip' : 'pane.terminal.readback-off-tooltip')"
           @click.stop="emit('toggle-readback')"
         >🔊<span v-if="readbackSpeaking" class="readback-speaking">{{ $t('pane.terminal.readback-speaking') }}</span></button>
+        <template v-if="!agentView">
         <span
           v-if="loginExpired"
           class="login-expired-inline"
@@ -750,6 +845,7 @@ onMounted(() => {
           :title="$t('pane.terminal.login-expired-tooltip')"
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
+        </template>
         <span
           v-if="exitCode != null && (displayStatus === 'exited' || displayStatus === 'error')"
           class="exit-fault-inline"
@@ -772,6 +868,7 @@ onMounted(() => {
               : 'pane.terminal.stale-config-tooltip-skills')"
           @click.stop="emit('rebuild')"
         >{{ $t('pane.terminal.stale-config-badge') }}</span>
+        <template v-if="!agentView">
         <span
           v-if="usageLimitHit"
           class="usage-limit-inline"
@@ -791,6 +888,7 @@ onMounted(() => {
           :title="$t('account-follow.quota-button-tooltip')"
           @click.stop="emit('quota-switch-account')"
         >{{ $t('account-follow.quota-button') }}</span>
+        </template>
         <CliRiskPill
           v-if="cliRisk && cliRiskState?.signals.length && !restoring && onScreen !== false"
           :pane-id="cliRiskPaneId"
@@ -815,6 +913,7 @@ onMounted(() => {
           data-testid="stop-ineffective"
           :title="$t('pane.terminal.stop-ineffective-tooltip')"
         >{{ $t('pane.terminal.stop-ineffective') }}</span>
+        <template v-if="!agentView">
         <UsageBadge
           v-if="agentKey"
           data-tour="usage-badge"
@@ -833,14 +932,16 @@ onMounted(() => {
           :title="$t('account-follow.pinned-indicator-tooltip')"
           :aria-label="$t('account-follow.pinned-indicator-label')"
         >📌</span>
+        </template>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
       </div>
-      <div v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
+      <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
+      <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
     <div
       ref="containerRef"
       class="xterm-host"
-      :class="{ 'drag-over': isDragOver, 'cli-drag-over': isCliDragOver, 'plan-drag-over': isPlanDragOver, 'alt-buffer': terminal.isAltBuffer.value }"
+      :class="{ 'drag-over': isDragOver, 'cli-drag-over': isCliDragOver, 'plan-drag-over': isPlanDragOver, 'alt-buffer': terminal.isAltBuffer.value, 'agent-with-panel': agentView && !agentPanelCollapsed, 'agent-panel-folded': agentView && agentPanelCollapsed }"
       :data-pane-id="paneId"
       @mousedown.left="emit('set-focus')"
       @contextmenu.prevent="onTerminalContextMenu"
@@ -849,6 +950,16 @@ onMounted(() => {
       @dragleave="onTerminalDragLeave"
       @drop.prevent="onTerminalDrop"
     ></div>
+    <!-- Sibling of .xterm-host, never inside it (xterm owns that subtree). -->
+    <AgentControlPanel
+      v-if="agentView"
+      :style="{ top: agentPanelTop + 'px' }"
+      :pane-id="paneId"
+      :pane-name="title"
+      :display-status="displayStatus"
+      :collapsed="agentPanelCollapsed"
+      @toggle="toggleAgentPanel"
+    />
     <!-- Backend down: a frozen pane is indistinguishable from a thinking CLI,
          and keystrokes are refused while it shows (see inputTransportReady).
          Deliberately a banner, not a cover: the history stays readable and
@@ -1302,6 +1413,49 @@ onMounted(() => {
   position: relative;
   transition: box-shadow 0.1s;
 }
+/* Agent pane: identity bar on the left, control panel on the right. */
+.pane.pane-agent::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--agent-color);
+  z-index: 3;
+  pointer-events: none;
+}
+.pane.pane-agent .pane-header {
+  padding-left: 14px;
+  background: color-mix(in srgb, var(--agent-color) 10%, var(--bg-subtle));
+}
+.pane.pane-agent.pane-agent-awaiting {
+  border-color: var(--warning-fg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning-fg) 45%, transparent);
+}
+.agent-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--agent-color);
+  color: #fff;
+  font-size: var(--font-3xs);
+  font-weight: 700;
+}
+.agent-vendor {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-3xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xterm-host.agent-with-panel { margin-right: 200px; }
+.xterm-host.agent-panel-folded { margin-right: 18px; }
 .xterm-host.drag-over,
 .xterm-host.cli-drag-over,
 .xterm-host.plan-drag-over {

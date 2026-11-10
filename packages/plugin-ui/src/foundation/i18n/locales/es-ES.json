@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Cuentas",
       "cliAgents": "Agents de CLI",
+      "agents": "Agentes",
       "cliExtensions": "Extensiones",
       "roles": "Roles",
       "pipelines": "Pipelines",
@@ -2885,14 +2886,14 @@
         "intro": "Qué controla cada una de las diecinueve pestañas de ajustes, cómo Navide Cloud une varias máquinas en una red privada y las superficies del sistema que viven fuera de la pantalla principal: los menús, las ventanas independientes, las vistas de uso y el mantenimiento de recursos.",
         "s1": {
           "title": "Resumen de los ajustes",
-          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>26 pestañas</strong> en total.",
+          "p1": "La ventana de ajustes se abre con <kbd class=\"syh-kbd\">⌘,</kbd>; el botón del engranaje de la barra de título es el mismo punto de entrada. La barra lateral izquierda se divide en cinco grupos, con <strong>27 pestañas</strong> en total.",
           "h1": "El campo de búsqueda",
           "p2": "Debajo del encabezado de la barra lateral hay un campo de búsqueda con el texto de ejemplo <code>Buscar en los ajustes…</code>. Busca en los títulos de los ajustes, su sección y sus palabras clave <strong>en todas las pestañas</strong> (con el idioma actual de la interfaz y las palabras clave indexadas) y muestra como máximo 8 resultados; al hacer clic en uno se cambia a esa pestaña y se desplaza hasta la sección (con una excepción: «Almacenamiento» cierra los ajustes y abre directamente el Administrador de recursos). Si no hay coincidencias, muestra <code>No hay ajustes que coincidan</code>. <kbd class=\"syh-kbd\">Esc</kbd> lo vacía.",
           "callout": {
             "title": "El índice de búsqueda no es exhaustivo",
             "text": "El índice es una lista mantenida a mano, y <strong>las pestañas {layout}, {notifications}, {security} y {channels} no tienen ninguna entrada</strong>, así que nada de su contenido se puede buscar: tienes que abrirlas tú. Una entrada de CLI Agents abre directamente el panel lateral de ajustes de una CLI (consulta el tema «Agents de CLI y cuentas»)."
           },
-          "h2": "Las veintiséis pestañas",
+          "h2": "Las veintisiete pestañas",
           "tabTable": {
             "group": "Grupo",
             "tab": "Pestaña",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "Conecta bots de aplicaciones de chat como Telegram o Slack a panes de CLI: bots, emparejamiento, lista de permitidos, vinculación de cuentas",
               "more": "El tema «{messaging}»"
+            },
+            "agents": {
+              "what": "Agentes de larga duración como Hermes Agent y OpenClaw, por identidad: canal, programaciones, memoria, opciones de inicio",
+              "more": "También se abre desde “Ajustes del agente…” de un pane de agente"
             },
             "mcp": {
               "what": "Añadir, activar e inspeccionar servidores MCP",
@@ -13274,5 +13279,91 @@
     "trend-7d": "Máximo diario, últimos 7 días",
     "week-tokens": "Tokens esta semana",
     "day-tokens": "Tokens hoy"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Pausar programaciones",
+      "resume-schedules": "Reanudar programaciones",
+      "settings": "Ajustes del agente…",
+      "wake": "Despertar ahora",
+      "wake-none": "No hay ninguna programación activa",
+      "wake-title": "Ejecutar ahora la siguiente programación ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · cerrado, abrir y reanudar",
+      "create": "Crear",
+      "name-placeholder": "Nombre del agente",
+      "new": "Nuevo agente ({vendor})…",
+      "open": "{vendor} · abierto, cambiar a él"
+    },
+    "header": {
+      "last-done": "última completada {time}",
+      "model": "modelo {model}",
+      "model-default": "modelo predeterminado",
+      "never-done": "aún sin turnos completados",
+      "turn": "este turno {minutes} min",
+      "vendor-since": "{vendor} · desde {date}",
+      "vendor-today": "{vendor} · desde hoy"
+    },
+    "menu": {
+      "channels": "Ajustes de canales…",
+      "close-keep": "Cerrar pane (conservar identidad)",
+      "memory-folder": "Abrir carpeta de memoria",
+      "stop-remove": "Detener y quitar agente…",
+      "toggle-panel": "Mostrar u ocultar el panel de control",
+      "wake": "Despertar un turno ahora"
+    },
+    "panel": {
+      "channel-unbound": "Sin canal vinculado",
+      "channel-unbound-hint": "Vincúlalo con el botón de canal del encabezado",
+      "channels": "Canal",
+      "collapse": "Contraer panel de control",
+      "expand": "Expandir panel de control",
+      "memory": "Memoria",
+      "memory-empty": "No se lee en esta versión",
+      "schedule-paused": "en pausa",
+      "schedules": "Programaciones",
+      "schedules-empty": "Ninguna programación apunta a este agente",
+      "status": "Estado",
+      "status-source": "Origen: salida del terminal",
+      "title": "Panel de control",
+      "todos": "Tareas",
+      "todos-empty": "No se lee en esta versión"
+    },
+    "settings": {
+      "channel": "Canal",
+      "channel-closed": "Vinculado solo mientras su pane está abierto",
+      "channel-note": "Los bots vienen de Ajustes → Channels. Un vínculo pertenece al pane abierto.",
+      "closed": "cerrado",
+      "color": "Color",
+      "command": "Comando de inicio",
+      "empty": "Aún no hay agentes. Añade uno desde el bloque de agentes del menú ＋.",
+      "flags": "Modelo y opciones",
+      "flags-note": "Las variables de entorno y el interruptor de permisos se comparten con la página Agents de CLI. El agente guarda sus propias claves.",
+      "go-channels": "Abrir Ajustes → Channels",
+      "go-cli-agents": "Abrir Ajustes → Agents de CLI",
+      "identity": "Identidad",
+      "identity-note": "Navide guarda las identidades. Cerrar un pane conserva la identidad y al reabrirlo se reanuda su sesión.",
+      "intro": "Agentes de larga duración como Hermes Agent y OpenClaw, por identidad.",
+      "job-on": "activa",
+      "list": "Mis agentes",
+      "memory": "Ubicación de la memoria",
+      "memory-note": "El agente decide dónde vive su memoria. Navide no la mueve ni la cambia.",
+      "name": "Nombre (el del pane)",
+      "open-pane": "Abrir pane",
+      "pane-closed": "pane cerrado",
+      "pane-open": "pane abierto",
+      "resume": "Reanudar al reabrir",
+      "resume-on": "Compatible",
+      "schedules": "Programaciones",
+      "schedules-note": "Añade programaciones en Tasker y dirígelas al pane de este agente.",
+      "session": "Última sesión",
+      "session-none": "Ninguna todavía",
+      "stop-remove": "Detener y quitar",
+      "switch-to": "Ir al pane",
+      "unsupported": "No compatible",
+      "yolo": "Omitir la confirmación de comandos peligrosos",
+      "yolo-flag": "Compatible ({flag}), sigue el interruptor YOLO"
+    }
   }
 }

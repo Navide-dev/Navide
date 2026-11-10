@@ -2802,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "帳號",
       "cliAgents": "CLI 代理",
+      "agents": "Agents",
       "cliExtensions": "擴充",
       "roles": "角色",
       "pipelines": "流程",
@@ -2885,14 +2886,14 @@
         "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>26 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>27 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
             "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十六個分頁",
+          "h2": "二十七個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2967,6 +2968,10 @@
             "channels": {
               "what": "把 Telegram、Slack 等聊天軟體的 bot 接到 CLI 分格：bot、配對、允許名單、帳號連結",
               "more": "本面板的「{messaging}」分頁"
+            },
+            "agents": {
+              "what": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出：頻道、排程、記憶位置、啟動旗標",
+              "more": "也可從 Agent 分格的「Agent 設定…」打開"
             },
             "mcp": {
               "what": "MCP server 的新增、啟用與檢視",
@@ -13274,5 +13279,91 @@
     "trend-7d": "近 7 天每日最高",
     "week-tokens": "本週 Token",
     "day-tokens": "今日 Token"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "暫停排程",
+      "resume-schedules": "恢復排程",
+      "settings": "Agent 設定…",
+      "wake": "立即喚醒",
+      "wake-none": "沒有啟用中的排程可以喚醒",
+      "wake-title": "立即執行下一個排程（{name}）"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 已關，開分格並接回",
+      "create": "建立",
+      "name-placeholder": "Agent 名稱",
+      "new": "新 Agent（{vendor}）…",
+      "open": "{vendor} · 分格開著，切過去"
+    },
+    "header": {
+      "last-done": "上次完成 {time}",
+      "model": "模型 {model}",
+      "model-default": "預設模型",
+      "never-done": "尚未完成回合",
+      "turn": "本回合 {minutes} 分",
+      "vendor-since": "{vendor} · 自 {date} 起",
+      "vendor-today": "{vendor} · 今天建立"
+    },
+    "menu": {
+      "channels": "頻道設定…",
+      "close-keep": "關閉分格（身分保留）",
+      "memory-folder": "開啟記憶資料夾",
+      "stop-remove": "停止並移除 Agent…",
+      "toggle-panel": "展開／收合控制面",
+      "wake": "立即喚醒一回合"
+    },
+    "panel": {
+      "channel-unbound": "尚未綁定頻道",
+      "channel-unbound-hint": "用標題列的頻道按鈕綁定",
+      "channels": "頻道",
+      "collapse": "收合控制面",
+      "expand": "展開控制面",
+      "memory": "記憶",
+      "memory-empty": "這一版還讀不到",
+      "schedule-paused": "暫停",
+      "schedules": "排程",
+      "schedules-empty": "沒有排程指向這個 Agent",
+      "status": "狀態",
+      "status-source": "來源：終端機輸出",
+      "title": "控制面",
+      "todos": "待辦",
+      "todos-empty": "這一版還讀不到"
+    },
+    "settings": {
+      "channel": "頻道",
+      "channel-closed": "分格開著時才有綁定",
+      "channel-note": "bot 沿用「設定 → 聊天室」；綁定屬於開著的分格。",
+      "closed": "已關",
+      "color": "代表色",
+      "command": "啟動指令",
+      "empty": "還沒有 Agent。從＋選單的 Agent 區新增。",
+      "flags": "模型與旗標",
+      "flags-note": "環境變數與權限開關和「CLI 代理」頁共用；Agent 的金鑰由它自己保管。",
+      "go-channels": "前往「設定 → 聊天室」",
+      "go-cli-agents": "前往「設定 → CLI 代理」",
+      "identity": "身分",
+      "identity-note": "身分存在 Navide；關分格不會刪身分，重開時接回原 session。",
+      "intro": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出。",
+      "job-on": "開",
+      "list": "我的 Agent",
+      "memory": "記憶位置",
+      "memory-note": "記憶位置由 Agent 自己決定，Navide 不搬不改。",
+      "name": "名稱（＝分格名稱）",
+      "open-pane": "開分格",
+      "pane-closed": "分格已關",
+      "pane-open": "分格開著",
+      "resume": "重開時接回 session",
+      "resume-on": "支援",
+      "schedules": "排程",
+      "schedules-note": "在 Tasker 新增排程，對象選這個 Agent 的分格。",
+      "session": "上次 session",
+      "session-none": "尚未取得",
+      "stop-remove": "停止並移除",
+      "switch-to": "切到分格",
+      "unsupported": "不支援",
+      "yolo": "跳過危險指令確認",
+      "yolo-flag": "支援（{flag}），跟隨 YOLO 開關"
+    }
   }
 }
