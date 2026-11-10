@@ -23,6 +23,12 @@
 // this is, and the card never calls unverified data signed. The `registry`
 // facts are unsigned everywhere: they are stated as the Registry's records
 // and never feed a "verified" sentence (review F2 on #360).
+//
+// Sites (scanner 1.2.0): where the scan saw each finding, as file:line:col
+// and a short excerpt of the package's own code. The excerpt is the one
+// piece of package text on the card: it is shown as code, every invisible
+// character spelled out, and only in a collapsed list. Older reports have no
+// sites and the list is not shown.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ManifestDisclosure, RegistryDisclosureFacts } from '../../../shared/pluginDisclosure'
@@ -31,6 +37,7 @@ import {
   scanSentences,
   type ScanReport,
   type ScanSentence,
+  type ScanSite,
 } from '../../../shared/pluginDisclosureScan'
 import { disclosureClauses, disclosureList } from '../lib/disclosureText'
 import { revealInvisibleText } from '../../../shared/pluginAgentTools'
@@ -106,6 +113,30 @@ function scanText(sentence: ScanSentence): string {
   const key = scanKey(sentence.key)
   return te(key) ? t(key, params) : sentence.key
 }
+
+interface SiteRow {
+  kind: 'command' | 'host' | 'capability'
+  key: string
+  where: string
+  excerpt: string | null
+}
+
+const siteRows = computed<SiteRow[]>(() => {
+  const report = scan.value
+  if (!report) return []
+  const found: Array<[SiteRow['kind'], string, ScanSite[] | undefined]> = [
+    ...report.shell.calls.map((c): [SiteRow['kind'], string, ScanSite[] | undefined] =>
+      ['command', c.subcommand === null ? c.executable : `${c.executable} ${c.subcommand}`, c.sites]),
+    ...report.network.hosts.map((h): [SiteRow['kind'], string, ScanSite[] | undefined] => ['host', h.host, h.sites]),
+    ...report.capabilities.map((c): [SiteRow['kind'], string, ScanSite[] | undefined] => ['capability', c.address, c.sites]),
+  ]
+  return found.flatMap(([kind, key, sites]) => (sites ?? []).map((site) => ({
+    kind,
+    key: revealInvisibleText(key),
+    where: revealInvisibleText(`${site.file}:${site.line}:${site.col}`),
+    excerpt: site.excerpt === null ? null : revealInvisibleText(site.excerpt),
+  })))
+})
 
 const clauses = computed(() => (props.disclosure ? disclosureClauses(t, locale.value, props.disclosure) : []))
 
@@ -197,6 +228,18 @@ const facts = computed(() => {
       </ul>
       <p v-else class="nv-disclosure-noscan">{{ $t(localSource ? 'pluginDisclosure.scan.noScanLocal' : 'pluginDisclosure.scan.noScan') }}</p>
 
+      <details v-if="siteRows.length" class="nv-disclosure-sites">
+        <summary>{{ $t('pluginDisclosure.sites.heading', { count: siteRows.length }) }}</summary>
+        <ul>
+          <li v-for="(row, index) in siteRows" :key="index">
+            {{ $t(`pluginDisclosure.sites.kind.${row.kind}`, { key: row.key }) }}
+            <code class="nv-disclosure-site-where">{{ row.where }}</code>
+            <code v-if="row.excerpt !== null" class="nv-disclosure-site-excerpt">{{ row.excerpt }}</code>
+            <span v-else class="nv-disclosure-site-hidden">{{ $t('pluginDisclosure.sites.hidden') }}</span>
+          </li>
+        </ul>
+      </details>
+
       <details class="nv-disclosure-declared">
         <summary>{{ $t('pluginDisclosure.declaredHeading') }}</summary>
         <ul>
@@ -279,6 +322,19 @@ const facts = computed(() => {
 }
 .nv-disclosure-incomplete {
   font-weight: 600;
+}
+.nv-disclosure-sites li {
+  margin-top: 2px;
+}
+.nv-disclosure-site-where,
+.nv-disclosure-site-excerpt {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: var(--font-2xs);
+}
+.nv-disclosure-site-where,
+.nv-disclosure-site-hidden {
+  color: var(--text-secondary);
 }
 .nv-disclosure-limits {
   margin: var(--space-2) 0 0;

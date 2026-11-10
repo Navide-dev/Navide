@@ -168,6 +168,24 @@ def _owned_or_404(session: Session, viewer: cloud_auth.Viewer, namespace: str) -
     return publisher
 
 
+def scan_sites(scan: dict | None, target: str) -> list[dict]:
+    """Scanner 1.2.0 call sites of one artifact's scan, one line each: what
+    was found, and the file, line, column and excerpt where. Reports of
+    older scanners have none."""
+    if not scan:
+        return []
+    found = [("command", " ".join(filter(None, (c.get("executable"), c.get("subcommand")))), c.get("sites"))
+             for c in scan.get("shell", {}).get("calls", [])]
+    found += [("host", h.get("host"), h.get("sites")) for h in scan.get("network", {}).get("hosts", [])]
+    found += [("capability", c.get("address"), c.get("sites")) for c in scan.get("capabilities", [])]
+    return [
+        {"kind": kind, "key": key, "target": target, "file": site.get("file"), "line": site.get("line"),
+         "col": site.get("col"), "excerpt": site.get("excerpt")}
+        for kind, key, sites in found if isinstance(sites, list)
+        for site in sites if isinstance(site, dict)
+    ]
+
+
 def _version_rows(session: Session, publisher: Publisher) -> list[dict]:
     rows = []
     extensions = session.exec(
@@ -191,11 +209,13 @@ def _version_rows(session: Session, publisher: Publisher) -> list[dict]:
                     "downloads": 0,
                     "yanked": row.yanked,
                     "secret_findings": [],
+                    "scan_sites": [],
                 },
             )
             item["targets"].append(row.target)
             item["downloads"] += row.download_count
             item["secret_findings"].extend(review.secret_findings(row.review_report))
+            item["scan_sites"].extend(scan_sites(row.scan, row.target))
         rows.extend(grouped.values())
     rows.sort(key=lambda r: r["submitted_at"], reverse=True)
     return rows

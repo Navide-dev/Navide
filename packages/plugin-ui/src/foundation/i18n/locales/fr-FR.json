@@ -12648,6 +12648,15 @@
       "noScan": "Cette version a été publiée avant les analyses système ; ce qui suit n’est que la déclaration propre à ce plugin Navide.",
       "noScanLocal": "Navide n’a pas analysé ce fichier ; ce qui suit n’est que la déclaration propre à ce plugin Navide."
     },
+    "sites": {
+      "heading": "Où l’analyse statique a trouvé ces éléments ({count})",
+      "kind": {
+        "command": "Commande {key}",
+        "host": "Hôte {key}",
+        "capability": "Capacité {key}"
+      },
+      "hidden": "Extrait masqué, car il ressemble à un secret"
+    },
     "incompleteReason": {
       "timedOut": "l’analyse a manqué de temps",
       "truncated": "le contenu a dépassé les limites de l’analyse",

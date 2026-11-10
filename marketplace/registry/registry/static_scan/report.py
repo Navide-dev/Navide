@@ -27,11 +27,11 @@ from ..plugin_contract.disclosure_scan_contract import (
 )
 from ..secret_scan import RULES as SECRET_RULES
 from ..package import backend_entry_for_target
-from .js_scan import ScriptFacts, scan_script
+from .js_scan import MAX_SITES_PER_FINDING, ScriptFacts, scan_script
 from .limits import Deadline, ScanTimeout, TooComplex
 from .native import NativeFacts, summarize_executable
 
-SCANNER_VERSION = "1.1.0"
+SCANNER_VERSION = "1.2.0"
 SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
 
 
@@ -61,6 +61,14 @@ def failed_report(*, artifact_digest: str, target: str, now: datetime | None = N
         "code": {"frontend": None, "backend": None},
         "native": [],
     }
+
+
+def _sites(found: list) -> list[dict[str, Any]]:
+    """Scanner 1.2.0: where a frontend finding was seen, first sites first."""
+    return [
+        {"file": file, "line": line, "col": col, "excerpt": excerpt}
+        for file, line, col, excerpt in sorted(found, key=lambda site: site[:3])[:MAX_SITES_PER_FINDING]
+    ]
 
 
 def _redacted(value: str) -> bool:
@@ -96,6 +104,8 @@ def scan_package(
     call_files: dict[tuple[str, str | None, str, str, str], int] = {}
     """(executable, subcommand, category, evidence, source) -> files"""
     backend_hosts: dict[str, int] = {}
+    finding_sites: dict[tuple, list[tuple[str, int, int, str | None]]] = {}
+    """Finding key of ``ScriptFacts.sites`` -> (file, line, column, excerpt)."""
     backend_capabilities: set[str] = set()
     natives: list[NativeFacts] = []
     any_script = False
@@ -157,6 +167,7 @@ def scan_package(
                     content.decode("utf-8", "replace"),
                     max_path_length=SCAN_LIMITS["maxPathLength"],
                     deadline=deadline,
+                    redacted=_redacted,
                 )
             except ScanTimeout:
                 timed_out = True
@@ -174,6 +185,8 @@ def scan_package(
             for call in facts.calls:
                 key = (*call, "frontend")
                 call_files[key] = call_files.get(key, 0) + 1
+            for finding, located in facts.sites.items():
+                finding_sites.setdefault(finding, []).extend((info.filename, *site) for site in located)
             merged.dynamic += facts.dynamic
             for host, count in facts.hosts.items():
                 merged.hosts[host] = merged.hosts.get(host, 0) + count
@@ -217,6 +230,8 @@ def scan_package(
         calls.append({
             "executable": executable, "subcommand": subcommand, "category": category,
             "source": source, "evidence": evidence, "files": files,
+            "sites": _sites(finding_sites.get(("call", executable, subcommand, category, evidence), []))
+            if source == "frontend" else [],
         })
     # A command seen as a call site is not repeated as a mere string.
     sites = {(c["executable"], c["subcommand"], c["source"]) for c in calls if c["evidence"] == "callSite"}
@@ -262,11 +277,19 @@ def scan_package(
             "dynamic": {"count": merged.dynamic, "files": merged.dynamic_files},
         },
         "network": {"hosts": [
-            {"host": host, "source": source, "count": count} for host, source, count in host_entries
+            {
+                "host": host, "source": source, "count": count,
+                "sites": _sites(finding_sites.get(("host", host), [])) if source == "frontend" else [],
+            }
+            for host, source, count in host_entries
         ][:limit]},
         "files": {"readPaths": read_paths, "writePaths": write_paths, "dynamicPaths": merged.dynamic_paths},
         "capabilities": [
-            {"address": address, "source": source} for address, source in capability_entries
+            {
+                "address": address, "source": source,
+                "sites": _sites(finding_sites.get(("capability", address), [])) if source == "frontend" else [],
+            }
+            for address, source in capability_entries
         ][:limit],
         "code": {
             "frontend": {

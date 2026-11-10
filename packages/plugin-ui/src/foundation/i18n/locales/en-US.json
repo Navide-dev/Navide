@@ -12648,6 +12648,15 @@
       "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
       "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
     },
+    "sites": {
+      "heading": "Where the static scan saw these ({count})",
+      "kind": {
+        "command": "Command {key}",
+        "host": "Host {key}",
+        "capability": "Capability {key}"
+      },
+      "hidden": "Excerpt hidden because it looks like a secret"
+    },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
       "truncated": "content exceeded the scan limits",

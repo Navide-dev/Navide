@@ -44,6 +44,7 @@ import {
   type CodeSignals,
   type NativeSummary,
   type ScanReport,
+  type ScanSite,
   type ScanSource,
   type ShellCall,
   type ShellCategory,
@@ -423,6 +424,21 @@ function codeSignals(value: unknown): CodeSignals | null | undefined {
   }
 }
 
+/** Scanner 1.2.0 sites, rebuilt: absent (older scanners) or malformed sites
+ *  leave the finding without them; they never reject the report. */
+function scanSites(value: unknown): { sites?: ScanSite[] } {
+  if (!Array.isArray(value)) return {}
+  const sites: ScanSite[] = []
+  for (const site of value) {
+    if (
+      !isRecord(site) || typeof site.file !== 'string' || !isSafeCount(site.line) || !isSafeCount(site.col) ||
+      !(typeof site.excerpt === 'string' || site.excerpt === null)
+    ) return {}
+    sites.push({ file: site.file, line: site.line, col: site.col, excerpt: site.excerpt })
+  }
+  return { sites }
+}
+
 /** The Registry's scan report (contract 3.8) rebuilt from validated fields, or null when malformed. */
 export function scanReport(value: unknown): ScanReport | null {
   if (!isRecord(value) || value.schemaVersion !== SCAN_SCHEMA_VERSION) return null
@@ -446,15 +462,16 @@ export function scanReport(value: unknown): ScanReport | null {
           source: entry.source,
           evidence: entry.evidence,
           files: entry.files,
+          ...scanSites(entry.sites),
         }
       : null)
   const hosts = entries(network.hosts, (entry) =>
     typeof entry.host === 'string' && isOneOf(SCAN_SOURCES, entry.source) && isSafeCount(entry.count)
-      ? { host: entry.host, source: entry.source, count: entry.count }
+      ? { host: entry.host, source: entry.source, count: entry.count, ...scanSites(entry.sites) }
       : null)
   const capabilities = entries(value.capabilities, (entry) =>
     typeof entry.address === 'string' && isOneOf(SCAN_SOURCES, entry.source)
-      ? { address: entry.address, source: entry.source }
+      ? { address: entry.address, source: entry.source, ...scanSites(entry.sites) }
       : null)
   const native = entries(value.native, (entry): NativeSummary | null => {
     const libraries = strings(entry.libraries)

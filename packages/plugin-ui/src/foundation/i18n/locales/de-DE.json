@@ -12648,6 +12648,15 @@
       "noScan": "Diese Version wurde vor der Einführung von Systemscans veröffentlicht; unten steht nur die eigene Deklaration dieses Navide-Plug-ins.",
       "noScanLocal": "Navide hat diese Datei nicht gescannt; unten steht nur die eigene Deklaration dieses Navide-Plug-ins."
     },
+    "sites": {
+      "heading": "Wo der statische Scan dies gefunden hat ({count})",
+      "kind": {
+        "command": "Befehl {key}",
+        "host": "Host {key}",
+        "capability": "Fähigkeit {key}"
+      },
+      "hidden": "Auszug ausgeblendet, da er wie ein Geheimnis aussieht"
+    },
     "incompleteReason": {
       "timedOut": "der Scan hat das Zeitlimit überschritten",
       "truncated": "der Inhalt hat die Scangrenzen überschritten",
