@@ -203,6 +203,10 @@ export interface BackendPluginCallOptions {
    *  value. A result longer than one piece is then never joined or parsed on
    *  this thread (agent tools, contract 4.4, R1 to R2). */
   resultText?: boolean
+  /** Host-only: a plugins_developer_backend_call call (0.2.40). An agent
+   *  initiator may then reach any declared method, not only the consented
+   *  agent methods; only the Host's developer gate sets it. */
+  developerCall?: boolean
 }
 
 /** A call's result as its compact JSON spelling in pieces, never parsed by the Host. */

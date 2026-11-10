@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "Exécuter une fois immédiatement une tâche que vous avez créée, hors de son calendrier ; répond dès le début de l’exécution, efface un délai d’attente après échec, laisse le prochain créneau planifié inchangé et compte dans les 300 exécutions quotidiennes des agents",
             "scheduler_runs": "L’historique d’exécution d’une tâche, du plus récent au plus ancien : ok, erreur ou ignoré avec sa raison – un saut (pas de fenêtre, occupé, plafond quotidien ou quota, total quotidien des agents, tâche d’agent expirée, cible disparue) n’est pas une erreur. L’historique de n’importe quelle tâche peut être lu",
             "cli_permission_settings": "Lire et écrire l’option de contournement des autorisations des CLI (yolo). C’est un paramètre global, non propre aux pipelines, qui ne concerne que les panes ouverts ensuite ; savoir si une CLI donnée porte réellement l’option se lit dans agents[].skipFlag renvoyé, pas dans la seule valeur globale",
+            "plugins_developer_backend_call": "Mode développeur uniquement : appelle une méthode du backend d’un plugin Navide chargé depuis un dossier, sans déclarer d’outil d’agent. Tout autre plugin est refusé ; chaque appel figure dans l’activité du plugin et compte pour la pause automatique",
             "workspace_open": "Ouvrir un projet comme espace de travail dans Navide ; c’est Navide qui décide s’il s’agit d’une nouvelle fenêtre ou d’une fenêtre où le projet est déjà ouvert",
             "workspace_switch": "Faire passer ma propre fenêtre à un autre projet qu’elle contient déjà ; les panes du projet quitté continuent de tourner. Refusé pendant qu’un pipeline tourne dans cette fenêtre, car le changement l’interromprait",
             "prompt_list": "Les skills de prompt que l’utilisateur conserve dans Paramètres → Prompts ; en lecture seule, car les créer et les modifier est le travail de l’utilisateur",
@@ -12355,6 +12356,7 @@
       "anomalyCount": "{count} éléments inhabituels"
     },
     "monitor": {
+      "headless": "Vue masquée en arrière-plan ({count})",
       "title": "Vue d’ensemble de l’Activity",
       "intro": "Tous les plugins Navide installés dans un seul tableau, actualisé toutes les quelques secondes. Ce sont des enregistrements uniquement ; rien ici ne change ce qu’un plugin Navide peut faire. Ouvrez une ligne pour voir toute son Activity.",
       "empty": "Aucun plugin Navide n’est installé.",

@@ -5637,6 +5637,7 @@
             "scheduler_run_now": "Executar agora, uma vez, fora do horário, um trabalho que você criou; responde assim que a execução começa, limpa a espera por falha, deixa o próximo horário agendado onde estava e conta para as 300 execuções diárias dos agents",
             "scheduler_runs": "O histórico de execuções de um trabalho, do mais recente para o mais antigo: ok, error ou skipped com o motivo — um pulo (sem janela, ocupado, limite diário ou cota, total diário dos agents, trabalho de agent expirado, destino desaparecido) não é um erro. O histórico de qualquer trabalho pode ser lido",
             "cli_permission_settings": "Ler e escrever a flag de ignorar permissões das CLIs (yolo). É uma configuração global, não específica do pipeline, e só afeta panes abertos depois; se uma CLI realmente leva a flag está em agents[].skipFlag na resposta, não apenas no valor global",
+            "plugins_developer_backend_call": "Somente no modo de desenvolvedor: chama um método do backend de um plugin do Navide carregado de uma pasta, sem declarar uma ferramenta de agente. Qualquer outro plugin é recusado; cada chamada aparece na atividade do plugin e conta para a pausa automática",
             "workspace_open": "Abrir um projeto como workspace no Navide; se isso acontece em uma nova janela ou em uma que já tem o projeto aberto é decisão do Navide",
             "workspace_switch": "Trocar a minha janela para outro projeto que ela já contém; os panes do projeto deixado continuam em execução. Recusado enquanto um pipeline está em execução nessa janela, porque a troca o cancelaria",
             "prompt_list": "As skills de prompt que a pessoa usuária mantém em Configurações → Prompts; somente leitura, porque criá-las e editá-las é tarefa dela",
@@ -12355,6 +12356,7 @@
       "anomalyCount": "{count} itens incomuns"
     },
     "monitor": {
+      "headless": "Visualização oculta em segundo plano ({count})",
       "title": "Visão geral da Activity",
       "intro": "Todos os plugins do Navide instalados em uma única tabela, atualizada a cada poucos segundos. Apenas registros; nada aqui muda o que um plugin do Navide pode fazer. Abra uma linha para ver toda a Activity.",
       "empty": "Nenhum plugin do Navide está instalado.",

@@ -12639,3 +12639,5 @@ from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
 from . import channel_tools as _channel_tools  # noqa: E402,F401
 # Registered last so the tools/list order before it stays main's (0.2.40).
 from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401
+# Registered after it (0.2.40): the Developer Mode backend call.
+from . import developer_backend_tool as _developer_backend_tool  # noqa: E402,F401

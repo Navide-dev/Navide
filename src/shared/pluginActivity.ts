@@ -441,6 +441,9 @@ export interface PluginActivityOverviewRow {
   /** Automatic restarts of its backend in the last 10 minutes (P5's R3). */
   backendRestartsLast10Minutes: number
   hosts: PluginActivityOverviewHost[]
+  /** 0.2.40, added by the Host: views running mounted hidden to answer
+   *  agent tools (`headless: true`). Absent from an older Host. */
+  headlessViews?: number
 }
 
 export interface PluginActivityOverview {

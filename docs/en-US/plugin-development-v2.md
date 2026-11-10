@@ -324,6 +324,21 @@ protocol.
 | `navide-plugin package` | Python, its required modules, and the plugin code are bundled into a target-specific executable by an author-selected tool such as PyInstaller or Nuitka. | `backend.entry` names the resulting executable inside the archive. |
 | Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process supervises the executable over Backend Wire v1 without a shell. The first-party Plans backend runs directly; a third-party backend runs only under the conditions in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing). |
 
+**Calling the backend from an agent while developing (0.2.40).** With a
+folder loaded in Developer Mode, an agent can call any method the manifest's
+`backend.methods` declares with the core MCP tool
+`plugins_developer_backend_call` (`plugin_id`, `method`, `arguments`,
+optional `workspace_path` and `timeout_ms`), before the plugin declares any
+agent tool. The call is an agent call of the plugin like an agent tool's:
+the same workspace Grant, the same agent execution policy, the same headless
+backend, and the plugin's capabilities served from inside it only while the
+call is allowed. It is allowed only for a plugin loaded from a folder, only
+while Developer Mode is on, and never while the plugin, or every third-party
+plugin, is stopped; an installed plugin is refused (`NOT_DEVELOPER_PLUGIN`),
+so its behaviour is unchanged. Every call is a tool-call row in the plugin's
+Activity (tool `plugins_developer_backend_call`, counted as a write) and
+counts toward the automatic-pause rules.
+
 Manifest validation rejects recognizable source or script suffixes. Package
 validation also rejects empty backend entries, POSIX entries without executable
 metadata, and extensionless executable files whose contents begin with a
@@ -722,9 +737,43 @@ lists the tools with their read/write claim, Settings → Navide Plugins shows
 them, a `write` tool asks once per workspace), the consent is the install
 grant of the version, and the tool is served only while that view is **open
 on the target workspace**: with the view closed, a call answers
-`PLUGIN_TOOL_UNAVAILABLE` with reason `view-not-open`; the Host never opens a
-view for a call. The disclosure spells such a tool with `method:
-"view:<view id>"`.
+`PLUGIN_TOOL_UNAVAILABLE` with reason `view-not-open`, and the Host does not
+open a view for the call unless the view declares `headless: true` (below).
+The disclosure spells such a tool with `method: "view:<view id>"`.
+
+**Headless views (`headless: true`, 0.2.40).** A view that serves agent
+tools can opt in to answering them while it is closed: with `"headless":
+true` on the view in `contributes.views[]` (any location but `window` and
+`detail`), a call that finds the view not open on the target workspace makes
+the Host open it **hidden** on a Navide window of that workspace and answer
+from it. It is the same open as the user's: the same entry, network rules,
+Grant, capability checks and execution policy; nothing is shown, and the
+call waits for the view's `viewReady()` (at most 10 seconds). Without the
+key, or with `false`, nothing changes: the call answers `view-not-open`, so
+every existing plugin behaves as before. With no Navide window open on that
+workspace the call answers `view-not-open` too; the Host never opens a
+window for it.
+
+A headless view stays mounted while calls come and is unmounted after 5
+minutes without one (an active call holds it). If the user opens the same
+panel meanwhile, the user's open replaces the hidden view with a visible one
+(a call still running in the hidden view ends with `view-not-open`; the
+next call uses the visible view), and the Host never unmounts a view the user
+has on screen. Stopping the plugin (Settings → Navide Plugins, `plugins_disable`,
+a chat `/plugins stop`) or every third-party plugin (Stop all,
+`plugins_disable_all`) ends its headless views with its other instances.
+While a view of a plugin runs headless, its row in Settings → Navide Plugins →
+Activity says so ("Hidden view running"), so the user can see the plugin
+working in the background.
+
+Navide before 0.2.40 does not know `headless` and refuses a manifest that
+declares it, so a package that does should require `"navide": ">=0.2.40"` in
+`engines`. The Registry accepts such a package either way and, when
+`engines.navide` allows an older Navide, says so in the publish answer's
+`notices`. (Plan plugin-comms-security 057921 first proposed headless views
+on by default with `headless: false` to opt out; the user's protection rule of
+2026-11-10, that no existing plugin gains background execution, made it
+opt-in.)
 
 ```ts
 import { onAgentToolCall, viewReady } from '@navide/plugin-sdk'
@@ -1398,6 +1447,7 @@ composition, and each is valid for exactly one location:
 | `detailView` | `left` | Id of the `detail` view in the same package that presents this surface's detail pages |
 | `targetSchema` | `detail` | Package-relative `.json` path describing the payload this detail view accepts |
 | `receives` | `window` | Declares this window as a composition receiver |
+| `headless` | any but `window`, `detail` | `true` lets the Host open this view hidden to answer its agent tools while it is closed (0.2.40; see Headless views) |
 
 ```json
 {

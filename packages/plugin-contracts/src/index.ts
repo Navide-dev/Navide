@@ -224,6 +224,9 @@ export type PluginManifestV2View = {
   detailView?: string
   targetSchema?: string
   receives?: PluginManifestV2Receiver
+  /** 0.2.40: the Host may open this view hidden to answer its agent tools
+   *  while it is not open (opt-in; a window or detail view cannot). */
+  headless?: boolean
 }
 
 export type PluginManifestV2 = {
@@ -773,7 +776,7 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
   }
   const views = contributes.views.map((raw, index) => {
     const view = assertObject(raw, `manifest contributes.views[${index}]`)
-    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives'], `manifest contributes.views[${index}]`)
+    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives', 'headless'], `manifest contributes.views[${index}]`)
     const id = stringValue(required(view, 'id', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].id`)
     if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id ${JSON.stringify(id)} is invalid; ${VIEW_ID_RULE}`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
@@ -830,6 +833,13 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (parsed.detailView !== undefined && parsed.location !== 'left') fail(`manifest contributes.views[${index}].detailView is only valid for a left view`)
     if (parsed.targetSchema !== undefined && parsed.location !== 'detail') fail(`manifest contributes.views[${index}].targetSchema is only valid for a detail view`)
     if (parsed.receives !== undefined && parsed.location !== 'window') fail(`manifest contributes.views[${index}].receives is only valid for a window view`)
+    if (view.headless !== undefined) {
+      if (typeof view.headless !== 'boolean') fail(`manifest contributes.views[${index}].headless must be a boolean`)
+      parsed.headless = view.headless
+      if (view.headless && (parsed.location === 'window' || parsed.location === 'detail')) {
+        fail(`manifest contributes.views[${index}].headless is not valid for a ${parsed.location} view`)
+      }
+    }
     return parsed
   })
   const ids = new Set<string>()

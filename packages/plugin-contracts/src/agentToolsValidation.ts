@@ -63,7 +63,7 @@ export const CORE_TOOL_NAMES = [
   'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_disable', 'plugins_disable_all', 'plugins_enable',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_developer_backend_call', 'plugins_disable', 'plugins_disable_all', 'plugins_enable',
   'plugins_list_installed', 'plugins_request_remove',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',

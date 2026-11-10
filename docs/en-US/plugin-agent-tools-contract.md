@@ -329,8 +329,11 @@ handler at once with `PLUGIN_TOOL_UNHANDLED`. The Host accepts the answer
 only from the instance it sent the call to, and settles the call at the
 tool's deadline (`PLUGIN_TOOL_TIMEOUT`, `reason: "execution"`) or when the
 view goes away. No view open on that workspace answers
-`PLUGIN_TOOL_UNAVAILABLE` with `reason: "view-not-open"`; the Host never
-loads a view behind the user's back for a call. Every other check of 4.2
+`PLUGIN_TOOL_UNAVAILABLE` with `reason: "view-not-open"`; the Host does not
+load a view behind the user's back for a call, except a view whose manifest
+declares `headless: true` (0.2.40), which it opens hidden on a Navide window
+of that workspace through the same open as the user's and unmounts after 5
+idle minutes (plugin-development-v2.md, Headless views). Every other check of 4.2
 (master switch, caller kind, package state, consent, workspace grant, DB3
 first write, execution policy) runs before the dispatch, the same as for a
 backend tool; the headless backend binding is skipped.
@@ -724,7 +727,7 @@ The report holds facts only:
 | `files` | string-literal `path` values of `fs.*` calls; a path that is not ASCII, not relative or longer than `maxPathLength` counts in `dynamicPaths` instead |
 | `capabilities` | capability addresses (`namespace.method`) of the public catalog that occur as literals. Since scanner 1.1.0 a literal only shaped like one (an i18n key such as `'ui.title'`, a storage or CSS key) is not counted: the Host answers an address outside the catalog with `METHOD_NOT_FOUND`, so it reaches nothing |
 | `code` | per source, `null` when that source has no code: counts of `eval(`, `new Function(`, non-literal `import(`, string `setTimeout`/`setInterval`; `obfuscationSignals` names (for example `hexEscapes`, `hexIdentifiers`, `longBase64`, `charCodeStrings`) |
-| `sites` (scanner 1.2.0) | on every `shell.calls`, `network.hosts` and `capabilities` entry: where the scan saw it, at most 3 sites (`MAX_SITES_PER_FINDING`), ordered by file, line and column, the first ones in each file. `file` is the archive path, `line` and `col` are 1-based and count code points, `excerpt` is the line around the finding (from 40 code points before it, whitespace runs collapsed to one space, at most 120 code points) or `null` when a secret-scan rule matches it or the 200 code points around it. The literal a site points at is the string or identifier the finding came from (for a `callSite`, the `command` value). Backend findings have `sites: []`. Sites are additive: no other field, rule or verdict changed in 1.2.0, a diff (3.6) and a rescan notice never treat a site as a new item, and a Host or a reader of an older scanner's report reads it as before (no `sites`) |
+| `sites` (scanner 1.2.0) | on every `shell.calls`, `network.hosts` and `capabilities` entry: where the scan saw it, at most 3 sites (`MAX_SITES_PER_FINDING`), ordered by file, line and column, the first ones in each file. `file` is the archive path, `line` and `col` are 1-based and count code points, `excerpt` is the line around the finding (from 40 code points before it, whitespace runs collapsed to one space, a URL's user information and every query value replaced by `…`, at most 120 code points) or `null` when a secret-scan rule matches it or the 1000 code points on either side of it, across line breaks. A file records at most 600 sites (`MAX_SITE_OFFSETS_PER_FILE`), and locating them counts against the scan's time budget (`timedOut`). The literal a site points at is the string or identifier the finding came from (for a `callSite`, the `command` value). Backend findings have `sites: []`. Sites are additive: no other field, rule or verdict changed in 1.2.0, a diff (3.6) and a rescan notice never treat a site as a new item, and a Host or a reader of an older scanner's report reads it as before (no `sites`) |
 | `native` | one entry per native executable: format, architecture, linked libraries, notable imports, import count; `packer` (`upx`, ...) or `embeddedRuntime` (`pyinstaller`, `node-sea`, `bun`, `deno`) when the code inside cannot be scanned (DS6). Commands, hosts and capability addresses found in its strings go into `shell`, `network` and `capabilities` with `source: "backend"` |
 
 Every string in a report is ASCII (hosts in their IDNA form, commands and
