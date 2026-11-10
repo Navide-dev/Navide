@@ -128,11 +128,11 @@ describe('a spawn cannot stamp another workspace\'s group id', () => {
   })
 
   it('routes every spawn site through the gated resolver', () => {
-    // Six sites stamp a group onto a new pane: the MCP standalone spawn (twice,
+    // Seven sites stamp a group onto a new pane: the MCP standalone spawn (twice,
     // resumed and fresh), the issue handler, the requested spawn, the plan
-    // kickoff, the resume, and the messaging-named spawn. A seventh added later
-    // must not reach for the ungated helpers again.
-    expect(occurrences(appSource, 'resolveReadySpawnGroupId(')).toBe(7)
+    // kickoff, the resume, the messaging-named spawn, and the ACP spawn. An
+    // eighth added later must not reach for the ungated helpers again.
+    expect(occurrences(appSource, 'resolveReadySpawnGroupId(')).toBe(8)
     expect(appSource).not.toContain('resolveManualSpawnGroupId(runGroups.value, activeTab.value)')
     expect(appSource).not.toContain(
       'resolveSpawnGroupId(runGroups.value, activeTab.value, payload.runGroupId',
