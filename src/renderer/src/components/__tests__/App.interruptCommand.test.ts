@@ -54,7 +54,9 @@ describe('onInterrupt', () => {
 describe('ui.pane.interrupt wiring', () => {
   const cmd = block(
     "registerCommand('ui.pane.interrupt', async (args) => {",
-    "\nregisterCommand('ui.messaging.readIncoming'",
+    // End at the next command, whatever it is, so the slice never grows to
+    // cover a command registered after this one.
+    '\nregisterCommand(',
   )
 
   it('demands a pane id and says where one comes from', () => {
