@@ -229,15 +229,19 @@
     "hermes": {
       "capabilities": [
         "launch",
-        "unsupported_session"
+        "reader",
+        "resume"
       ],
       "fixture": "hermes.json",
       "cases": {
         "launch": {
           "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[hermes]"
         },
-        "unsupported_session": {
-          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[hermes]"
+        "reader": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_reader[hermes]"
+        },
+        "resume": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_resume[hermes]"
         }
       }
     },
