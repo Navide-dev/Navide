@@ -56,6 +56,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Fixed
 
+- ACP panes (0.2.40, experimental): an ACP pane keeps its name after its first reply. It was renamed to the reply text (for example "finished"), so a pane that had been addressed by its name could no longer be found.
 - Panes (0.2.40): a STOP the CLI did not act on no longer looks like it worked. When Claude spends the Ctrl-C on clearing queued input and the turn keeps running, a Claude or Codex pane that shows no sign of the interrupt within 5 seconds (no "[Request interrupted by user]" record, no turn end) puts its live status back with a "STOP not applied" badge beside it, so Interrupt can be pressed again. A STOP a person pressed still holds queued messages until they type, and a late interrupt record brings the STOP badge back. Navide does not send a second Ctrl-C on its own, since two in a row quit Claude.
 
 - Plugins (0.2.40): the static scan (Registry and `navide-plugin scan`, scanner 1.1.0) no longer reports `vuejs.org` as an undeclared network host for a package bundling Vue's production build, whose error messages carry `https://vuejs.org/error-reference/#runtime-…`; the host reached any other way is still reported. A string that only looks like a capability address (an i18n key such as `'ui.title'`) no longer counts as using that namespace: only addresses in the public catalog do.
@@ -64,7 +65,8 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 - Agents (0.2.40): a Hermes Agent pane cannot be opened with a model or reasoning level. Hermes v0.23.1 refuses `--model` and `--reasoning` together with the `--continue` Navide uses to name the session, so Navide no longer offers them for Hermes (an open request with a model is refused with a message instead of a pane that exits at once). Type `/model` or `/reasoning` in the pane to switch the current session.
 - ACP panes (0.2.40, experimental): Navide Guard does not see an ACP pane's permission requests (each is asked in the pane), and the agent is given none of Navide's MCP tools, so it cannot use `cli_send` or the plan tools itself; both are planned for 0.2.42.
-- ACP panes (0.2.40, experimental): whether Claude Code under the `claude-agent-acp` adapter runs your Claude Code hooks, Navide Guard's included, has not been verified.
+- ACP panes (0.2.40, experimental): Claude Code under the `claude-agent-acp` adapter runs your own Claude Code hooks, but not Navide's: Navide Guard's command check does not apply to an ACP pane's tool calls. Planned for 0.2.42.
+- ACP panes (0.2.40, experimental): an ACP pane starts in the permission mode your Claude Code settings give it, and with no `permissions.defaultMode` set the adapter starts in Auto mode, where most tool calls run without asking, so the pane shows no permission request. Set `"permissions": {"defaultMode": "default"}` in your Claude Code settings to be asked for each one. Navide does not start the adapter with a bypass option.
 - ACP panes (0.2.40, experimental, off by default): an ACP pane does not come back on its own after Navide restarts — this is by design in this first version, not a bug; open it again from the ＋ menu. It also gets no role and is not moved by an account switch, and Windows has not been tested with a real adapter.
 
 ## [0.2.39] — 2026-11-09

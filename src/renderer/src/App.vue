@@ -17382,7 +17382,9 @@ backend.on('agent.activity', (raw) => {
     // judgeTurnText and the sentinel paths — it only reads ev.text.
     // Envelope guard mirrors the agent_active path: a reader that echoes the
     // injected inter-CLI message back as turn text must not title the pane.
-    if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
+    // An ACP pane is never titled from its reply: its name is the handle
+    // callers address it by, and a reply ("finished") is no title.
+    if (ev.text && !markerReply && !isInjectedMessageText(ev.text) && !acp.owns(ev.pane_id)) {
       const pane = panes.value.find((p) => p.id === ev.pane_id)
       if (pane && !pane.customName && !pane.nameLocked && !pane.autoName) {
         setPaneAutoName(ev.pane_id, deriveAutoName(ev.text))
