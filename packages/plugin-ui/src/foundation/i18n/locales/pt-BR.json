@@ -12899,6 +12899,30 @@
       "confirm": "Retirar {plugin} {version} do Navide Marketplace?",
       "done": "{plugin} {version} foi retirado"
     },
+    "members": {
+      "title": "Membros do namespace",
+      "desc": "Contas que podem publicar e retirar versões neste namespace. Só o proprietário adiciona ou remove publicadores; um publicador não pode alterar os membros nem a chave de assinatura, e assina com a chave do namespace.",
+      "account": "Conta",
+      "role": "Função",
+      "added-at": "Adicionado em",
+      "roles": {
+        "owner": "Proprietário",
+        "publisher": "Publicador"
+      },
+      "add-label": "Adicionar um publicador (ID da conta Navide Cloud)",
+      "add": "Adicionar publicador",
+      "add-hint": "A conta precisa ser de um desenvolvedor aprovado. Depois ela entra como publicador no próprio Navide e escolhe este namespace.",
+      "add-confirm": "Permitir que {member} publique e retire versões em {namespace}?",
+      "added": "{member} agora pode publicar neste namespace",
+      "remove": "Remover",
+      "remove-confirm": "Remover {member} de {namespace}? Os logins de publicador dessa conta para este namespace param de funcionar na hora.",
+      "removed": "{member} foi removido deste namespace",
+      "publisher-note": "Você é publicador deste namespace: pode publicar e retirar as versões dele. O proprietário gerencia os membros.",
+      "error": {
+        "not-developer": "Essa conta ainda não é de um desenvolvedor aprovado; ela precisa se candidatar primeiro.",
+        "owner-only": "Só o proprietário do namespace pode alterar os membros."
+      }
+    },
     "versions": {
       "title": "Suas versões publicadas",
       "refresh": "Atualizar",

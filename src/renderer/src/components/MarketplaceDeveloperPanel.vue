@@ -28,6 +28,7 @@ import { diffDisclosure, type DisclosureDiff, type ManifestDisclosure } from '..
 import type {
   DeveloperApplicationStatus,
   DeveloperCallResult,
+  DeveloperMembers,
   DeveloperPublicState,
   DeveloperVersionRow,
   StagedPackage,
@@ -63,6 +64,9 @@ const application = ref<{
   namespaces?: Array<{ namespace: string; frozen_at: string | null; frozen_reason: string | null }>
 } | null>(null)
 const versions = ref<DeveloperVersionRow[]>([])
+/** Who may publish under the signed-in namespace; null until a publisher sign-in. */
+const members = ref<DeveloperMembers | null>(null)
+const newMemberId = ref('')
 
 /** The entry card's one next step (plan v2_8714c5 b1): signed out it lists
  *  three steps instead; revoked has none. */
@@ -115,14 +119,63 @@ async function refresh(): Promise<void> {
   if (!next) return
   state.value = next
   if (next.signedIn.account || next.signedIn.publisher) {
-    const [app, list] = await Promise.all([api().application(), api().versions()])
+    const [app, list, team] = await Promise.all([
+      api().application(),
+      api().versions(),
+      next.signedIn.publisher ? api().members() : Promise.resolve(null),
+    ])
     application.value = app.ok ? (app.body as typeof application.value) : null
     const body = list.ok ? (list.body as { items?: DeveloperVersionRow[] }) : null
     versions.value = body?.items ?? []
+    members.value = team?.ok ? (team.body as DeveloperMembers) : null
   } else {
     application.value = null
     versions.value = []
+    members.value = null
   }
+}
+
+/** Owner only, and only by the user here: no agent tool adds or removes a member. */
+async function addMember(): Promise<void> {
+  const memberId = newMemberId.value.trim()
+  if (!memberId) return
+  const confirmed = await notify.confirm(
+    t('marketplace-developer.members.add-confirm', { member: memberId, namespace: state.value?.namespace ?? '' }),
+    { title: t('marketplace-developer.members.title'), confirmText: t('marketplace-developer.members.add') },
+  )
+  if (!confirmed) return
+  const result = await run('add-member', () => api().addMember({ memberId }))
+  if (!result) return
+  if (!result.ok) {
+    error.value = memberMessage(result)
+    return
+  }
+  members.value = result.body as DeveloperMembers
+  newMemberId.value = ''
+  notify.toast(t('marketplace-developer.members.added', { member: memberId }), { type: 'success' })
+}
+
+async function removeMember(memberId: string): Promise<void> {
+  const confirmed = await notify.confirm(
+    t('marketplace-developer.members.remove-confirm', { member: memberId, namespace: state.value?.namespace ?? '' }),
+    { title: t('marketplace-developer.members.title'), confirmText: t('marketplace-developer.members.remove'), danger: true },
+  )
+  if (!confirmed) return
+  const result = await run('remove-member', () => api().removeMember({ memberId }))
+  if (!result) return
+  if (!result.ok) {
+    error.value = memberMessage(result)
+    return
+  }
+  members.value = result.body as DeveloperMembers
+  notify.toast(t('marketplace-developer.members.removed', { member: memberId }), { type: 'success' })
+}
+
+function memberMessage(result: DeveloperCallResult): string {
+  if (result.ok) return ''
+  if (result.code === 'QUALIFICATION_REQUIRED') return t('marketplace-developer.members.error.not-developer')
+  if (result.code === 'OWNER_ONLY') return t('marketplace-developer.members.error.owner-only')
+  return message(result)
 }
 
 async function signIn(scope: 'account' | 'publish'): Promise<void> {
@@ -341,7 +394,8 @@ onMounted(() => {
             <code v-if="state.keyFingerprint">{{ state.keyFingerprint }}</code>
             <span v-else>{{ $t('marketplace-developer.account.no-key') }}</span>
             <span v-if="state.keyFingerprint" class="dev-chip">{{ state.keyRegistered ? $t('marketplace-developer.account.key-registered') : $t('marketplace-developer.account.key-unregistered') }}</span>
-            <template v-if="!state.keyRegistered && state.keyConflictFingerprint">
+            <!-- A publisher member signs with the namespace's key; only its owner can replace it. -->
+            <template v-if="!state.keyRegistered && state.keyConflictFingerprint && members?.your_role !== 'publisher'">
               <p class="dev-muted dev-key-conflict">{{ $t('marketplace-developer.account.key-conflict', { fingerprint: state.keyConflictFingerprint }) }}</p>
               <button class="nv-btn nv-btn--sm" :disabled="busy !== null" @click="replaceKey()">
                 {{ $t('marketplace-developer.account.replace-key') }}
@@ -366,6 +420,48 @@ onMounted(() => {
           {{ $t('marketplace-developer.account.sign-in-publish') }}
         </button>
       </div>
+    </section>
+
+    <section v-if="members" class="dev-section" data-testid="developer-members" :aria-label="$t('marketplace-developer.members.title')">
+      <h2 class="dev-title">{{ $t('marketplace-developer.members.title') }}</h2>
+      <p class="dev-muted">{{ $t('marketplace-developer.members.desc') }}</p>
+      <table class="dev-table">
+        <thead>
+          <tr>
+            <th>{{ $t('marketplace-developer.members.account') }}</th>
+            <th>{{ $t('marketplace-developer.members.role') }}</th>
+            <th>{{ $t('marketplace-developer.members.added-at') }}</th>
+            <th v-if="members.your_role === 'owner'" />
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in members.items" :key="row.member_id" data-testid="developer-member-row">
+            <td><code>{{ row.member_id }}</code></td>
+            <td><span class="dev-chip">{{ $t(`marketplace-developer.members.roles.${row.role}`) }}</span></td>
+            <td>{{ row.added_at ?? '—' }}</td>
+            <td v-if="members.your_role === 'owner'">
+              <button
+                v-if="row.role === 'publisher'"
+                class="nv-btn nv-btn--ghost nv-btn--sm"
+                data-testid="developer-member-remove"
+                :disabled="busy !== null"
+                @click="removeMember(row.member_id)"
+              >{{ $t('marketplace-developer.members.remove') }}</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="members.your_role === 'owner'" class="dev-field">
+        <label for="dev-member-id">{{ $t('marketplace-developer.members.add-label') }}</label>
+        <div class="dev-actions">
+          <input id="dev-member-id" v-model="newMemberId" class="nv-input" type="text" maxlength="128" data-testid="developer-member-id" />
+          <button class="nv-btn nv-btn--sm" data-testid="developer-member-add" :disabled="busy !== null || !newMemberId.trim()" @click="addMember">
+            {{ $t('marketplace-developer.members.add') }}
+          </button>
+        </div>
+        <p class="dev-muted">{{ $t('marketplace-developer.members.add-hint') }}</p>
+      </div>
+      <p v-else class="dev-muted">{{ $t('marketplace-developer.members.publisher-note') }}</p>
     </section>
 
     <section class="dev-section">

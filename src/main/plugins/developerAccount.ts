@@ -325,6 +325,21 @@ export class DeveloperAccount {
     return { ...res, digest }
   }
 
+  /** The signed-in namespace's owner and publisher members (0.2.40), with the caller's role. */
+  members(): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch('/api/publisher/me/members', {}, 'publisher')
+  }
+
+  /** Owner only (the Registry refuses anyone else): add a publisher member. */
+  addMember(memberId: string): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch('/api/publisher/me/members', { method: 'POST', json: { member_id: memberId, role: 'publisher' } }, 'publisher')
+  }
+
+  /** Owner only: remove a publisher member; the Registry revokes its tokens for the namespace. */
+  removeMember(memberId: string): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch(`/api/publisher/me/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' }, 'publisher')
+  }
+
   yank(namespace: string, name: string, version: string): Promise<DeveloperRegistryResponse> {
     const path = `/api/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/${encodeURIComponent(version)}/yank`
     return this.registryFetch(path, { method: 'POST' }, 'publisher')

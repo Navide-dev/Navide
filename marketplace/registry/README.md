@@ -572,6 +572,21 @@ approved by default.
   Audited as `namespace.unfreeze` with the reason and what was restored.
 - **Own data**: `GET /api/publisher/me`, `PUT /api/publisher/me/key`,
   `GET /api/publisher/me/versions` (`?extension=&version=`).
+- **Namespace members** (0.2.40, publisher token): `GET /api/publisher/me/members`
+  returns `{namespace, your_role, members: [{member_id, role, added_by,
+  added_at}]}`, the owner first; `POST /api/publisher/me/members`
+  `{member_id, role: "publisher"}` and `DELETE /api/publisher/me/members/{member_id}`
+  are the owner's only (403 `OWNER_ONLY`). The added account must be an approved
+  developer (409 `QUALIFICATION_REQUIRED`); 422 `ROLE_INVALID` for any role but
+  `publisher`, 409 `MEMBER_INVALID` for the owner or an existing member.
+  A publisher gets a publish token for the namespace through `/cli/authorize`
+  like the owner; the token is tied to it (`publisher_token.navide_member_id`),
+  stops working (401 `TOKEN_REVOKED`) once the account is removed (removal also
+  revokes it) or its qualification is no longer approved, and audits as
+  `member:<its id>`. A publisher's `PUT /api/publisher/me/key` may only confirm
+  the namespace's current key: a different key is 409 `KEY_EXISTS`, a first key
+  or `replace` is 403 `OWNER_ONLY`. Audited as `namespace-member.add` and
+  `namespace-member.remove` (with the number of tokens revoked).
 - **Local-install trust**: `GET /api/trust/local-install` returns a separate
   root-signed document (`kind: local-install-trust`) with the keys of approved
   and first-party publishers (replaced or revoked ones as `revoked`) and the

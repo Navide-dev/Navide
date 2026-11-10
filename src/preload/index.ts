@@ -1396,6 +1396,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
     publish: (input) => ipcRenderer.invoke('developer:publish', input),
     yank: (input) => ipcRenderer.invoke('developer:yank', input),
+    members: () => ipcRenderer.invoke('developer:members'),
+    addMember: (input) => ipcRenderer.invoke('developer:addMember', input),
+    removeMember: (input) => ipcRenderer.invoke('developer:removeMember', input),
   } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>

@@ -12899,6 +12899,30 @@
       "confirm": "{plugin} {version} aus dem Navide Marketplace zurückziehen?",
       "done": "{plugin} {version} wurde zurückgezogen"
     },
+    "members": {
+      "title": "Mitglieder des Namespace",
+      "desc": "Konten, die in diesem Namespace Versionen veröffentlichen und zurückziehen dürfen. Nur der Inhaber fügt Herausgeber hinzu oder entfernt sie; ein Herausgeber kann weder die Mitglieder noch den Signaturschlüssel ändern und signiert mit dem Schlüssel des Namespace.",
+      "account": "Konto",
+      "role": "Rolle",
+      "added-at": "Hinzugefügt",
+      "roles": {
+        "owner": "Inhaber",
+        "publisher": "Herausgeber"
+      },
+      "add-label": "Herausgeber hinzufügen (Navide-Cloud-Konto-ID)",
+      "add": "Herausgeber hinzufügen",
+      "add-hint": "Das Konto muss ein zugelassener Entwickler sein. Danach meldet es sich im eigenen Navide als Herausgeber an und wählt diesen Namespace.",
+      "add-confirm": "{member} erlauben, in {namespace} Versionen zu veröffentlichen und zurückzuziehen?",
+      "added": "{member} kann jetzt in diesem Namespace veröffentlichen",
+      "remove": "Entfernen",
+      "remove-confirm": "{member} aus {namespace} entfernen? Seine Herausgeber-Anmeldungen für diesen Namespace funktionieren sofort nicht mehr.",
+      "removed": "{member} wurde aus diesem Namespace entfernt",
+      "publisher-note": "Sie sind Herausgeber dieses Namespace: Sie können seine Versionen veröffentlichen und zurückziehen. Die Mitglieder verwaltet der Inhaber.",
+      "error": {
+        "not-developer": "Dieses Konto ist noch kein zugelassener Entwickler; es muss sich zuerst bewerben.",
+        "owner-only": "Nur der Inhaber des Namespace kann seine Mitglieder ändern."
+      }
+    },
     "versions": {
       "title": "Ihre veröffentlichten Versionen",
       "refresh": "Aktualisieren",

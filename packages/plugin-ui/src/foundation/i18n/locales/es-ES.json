@@ -12899,6 +12899,30 @@
       "confirm": "¿Retirar {plugin} {version} del Navide Marketplace?",
       "done": "Se ha retirado {plugin} {version}"
     },
+    "members": {
+      "title": "Miembros del espacio de nombres",
+      "desc": "Cuentas que pueden publicar y retirar versiones en este espacio de nombres. Solo el propietario añade o quita editores; un editor no puede cambiar los miembros ni la clave de firma, y firma con la clave del espacio de nombres.",
+      "account": "Cuenta",
+      "role": "Rol",
+      "added-at": "Añadido",
+      "roles": {
+        "owner": "Propietario",
+        "publisher": "Editor"
+      },
+      "add-label": "Añadir un editor (ID de cuenta de Navide Cloud)",
+      "add": "Añadir editor",
+      "add-hint": "La cuenta debe ser un desarrollador aprobado. Después inicia sesión como editor en su propio Navide y elige este espacio de nombres.",
+      "add-confirm": "¿Permitir que {member} publique y retire versiones en {namespace}?",
+      "added": "{member} ya puede publicar en este espacio de nombres",
+      "remove": "Quitar",
+      "remove-confirm": "¿Quitar a {member} de {namespace}? Sus inicios de sesión como editor de este espacio de nombres dejan de funcionar al instante.",
+      "removed": "{member} se quitó de este espacio de nombres",
+      "publisher-note": "Eres editor de este espacio de nombres: puedes publicar y retirar sus versiones. Su propietario gestiona los miembros.",
+      "error": {
+        "not-developer": "Esa cuenta aún no es un desarrollador aprobado; primero tiene que solicitarlo.",
+        "owner-only": "Solo el propietario del espacio de nombres puede cambiar sus miembros."
+      }
+    },
     "versions": {
       "title": "Tus versiones publicadas",
       "refresh": "Actualizar",
