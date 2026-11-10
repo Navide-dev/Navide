@@ -9,8 +9,15 @@ openclaw-hermes-0-2-40_a50148):
   ``display.interface`` exactly as a bare ``hermes`` does. It is the
   subcommand rather than the bare command because ``--create-if-missing`` —
   what lets Navide name the session — exists only there (``hermes chat
-  --help``). ``--yolo`` (skip the dangerous-command approval prompt) and
-  ``-m`` / ``--reasoning`` are accepted by ``chat`` too.
+  --help``). ``--yolo`` (skip the dangerous-command approval prompt) is
+  accepted by ``chat`` too.
+* **Model / effort.** Not wired. ``chat`` lists ``-m`` / ``--reasoning``, but
+  v0.23.1 refuses both on every ``--continue`` launch — creation through
+  ``--create-if-missing`` included — with exit 2 ("creation overrides are
+  unsupported on resume"; VM run 2026-11-10, b9-hermes-repro.txt). The
+  ``/model`` and ``/reasoning`` slash commands switch the session only when
+  typed raw into the PTY; a cli_send or kickoff arrives wrapped and is sent to
+  the model as text.
 * **Session.** Navide names the session: a fresh pane is launched with
   ``--create-if-missing --continue navide-<uuid>``, which creates a session
   titled with that name; a resume is ``--continue navide-<uuid>``, which
@@ -469,10 +476,8 @@ SPEC = VendorSpec(
     supports_session_resume=True,
     resume_id_from_command=_resume_id_from_command,
     session_exists=_session_exists,
-    # `hermes chat -m <model>` and `--reasoning <level>` (chat --help, v0.23.0).
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"),
+    # No model / effort: `-m` and `--reasoning` are refused on a `--continue`
+    # launch (see the module docstring).
     make_log_reader=HermesLogReader,
     install_dep=Dep("hermes", "Hermes Agent", "Nous Research general AI agent", "agent_cli",
         ["hermes", "--version"], r"(\d+\.\d+\.\d+)",

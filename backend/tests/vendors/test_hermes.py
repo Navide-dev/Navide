@@ -86,9 +86,10 @@ def test_navide_holds_no_key() -> None:
 def test_resume_model_effort_and_reader_are_declared() -> None:
     assert SPEC.supports_session_resume is True
     assert SPEC.make_log_reader is hermes.HermesLogReader
-    assert SPEC.supports_model is True
-    assert SPEC.supports_effort is True
-    assert SPEC.known_efforts == ("none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra")
+    # v0.23.1 refuses -m / --reasoning on the --continue launch every pane uses.
+    assert SPEC.supports_model is False
+    assert SPEC.supports_effort is False
+    assert SPEC.known_efforts == ()
 
 
 def test_windows_home_is_local_appdata(tmp_path: Path) -> None:

@@ -12,8 +12,8 @@ rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
 Hermes Agent (`hermes`) were added on 2026-11-07 as CLI vendors (the ＋
 menu's CLI list), making 18; they appear in the roster only — no
 reader, resume, model flag, usage or account switching to tabulate. (Since
-0.2.40 both have a SQLite reader and resume, and Hermes Agent model /
-reasoning flags; their record in `cli-extension-guide.md` has them, the
+0.2.40 both have a SQLite reader and resume, still no model flag; their
+record in `cli-extension-guide.md` has them, the
 matrices below do not.) Devin CLI
 (`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
 CLI list), making 19; it too appears in the roster only, for the same reason —

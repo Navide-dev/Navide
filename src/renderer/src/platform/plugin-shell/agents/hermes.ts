@@ -18,11 +18,11 @@ export const SPEC = {
   defaultCommand: 'hermes chat',
   // `chat --yolo` skips the dangerous-command approval prompt.
   skipPermissionFlag: '--yolo',
-  // `chat -m, --model MODEL`.
-  modelArgs: (m) => `--model ${m}`,
-  // `chat --reasoning LEVEL`: a closed list in `hermes chat --help`.
-  effortArgs: (e) => `--reasoning ${e}`,
-  knownEfforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  // No modelArgs / effortArgs: every pane launches through `--continue`, and
+  // Hermes v0.23.1 refuses `-m` / `--reasoning` on any `--continue` launch,
+  // creation included (exit 2, "creation overrides are unsupported on
+  // resume"). Its `/model` and `/reasoning` slash commands work only when
+  // typed raw into the PTY, which no launch path does yet.
   // `--continue <name>` resumes the latest session in that name's lineage
   // (Hermes titles a continuation `<name> #2`).
   resumeArgs: (id) => `--continue ${id}`,
