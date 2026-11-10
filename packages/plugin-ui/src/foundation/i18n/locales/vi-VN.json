@@ -5674,7 +5674,7 @@
             "cli_list_sessions": "Các cuộc trò chuyện CLI trong workspace này có thể dùng để mở pane mới — cuộc trò chuyện sống lâu hơn pane đã chạy nó: đóng pane, khởi động lại ứng dụng, dựng lại pane, bản ghi vẫn còn trên đĩa. Mỗi hàng cho biết nó còn tiếp tục được không và pane sở hữu nó còn mở không: đừng tiếp tục một cuộc đang chạy, vì sẽ làm nó rẽ nhánh hoặc hỏng — hãy nhắn cho pane đó",
             "cli_place_pane": "Di chuyển pane: đổi nhóm tab chứa nó, hoặc biến nó thành con của pane khác (giống như kéo nó trên thanh bên, qua cùng đường ghi, nên vị trí vẫn còn sau khi khởi động lại). Hai phần này độc lập và câu trả lời cho biết phần nào đã áp dụng. Nó không đụng tới CLI của pane đó — không gửi, ngắt hay khởi động lại gì cả. Chỉ pane cục bộ",
             "cli_rename_pane": "Đổi tên một pane CLI: cả tiêu đề lẫn tên mà các pane khác dùng để gửi tới nó, qua cùng bước kiểm tra và đường ghi như khi sửa tiêu đề. Tên mà pane khác đang dùng sẽ bị từ chối. Bạn chỉ đổi được pane của mình và các pane trong không gian làm việc mà bạn đã mở. Lịch hẹn vẫn trỏ tới tên cũ không bị sửa, chỉ được liệt kê trong cảnh báo. Chỉ pane cục bộ",
-            "cli_set_model": "Đổi mô hình của một pane CLI đang chạy. Với Claude và Codex, lệnh /model của chính chúng được gõ vào và cuộc trò chuyện vẫn tiếp tục (mô hình đó cũng trở thành mặc định của CLI cho phiên mới); các CLI khác khởi động lại với mô hình mới và tiếp tục cuộc trò chuyện. Chỉ pane đang rảnh; pane của chính bạn bị từ chối. Chỉ pane cục bộ",
+            "cli_set_model": "Đổi mô hình của một pane CLI đang chạy. Với Claude, bộ chọn /model của chính nó được mở, dòng của mô hình được chọn rồi nhấn s (chỉ phiên này); với Codex, lệnh /model kèm ID mô hình được gõ vào. Cả hai chỉ đổi phiên đang chạy: cuộc trò chuyện vẫn tiếp tục và mô hình mặc định cho phiên mới giữ nguyên. Các CLI khác, khi chỉ định effort, hoặc mô hình mà bộ chọn của Claude không có sẽ khởi động lại pane với mô hình mới và tiếp tục cuộc trò chuyện. Chỉ pane đang rảnh; pane của chính bạn bị từ chối. Chỉ pane cục bộ",
             "cli_inbox_summary": "Những tin tôi đã gửi đang bị kẹt (chờ quá hai phút) hoặc đã lỗi. Thông báo lỗi chỉ gõ được vào pane gửi khi nó rảnh, nên agent làm liên tục cả giờ sẽ không nhận được cái nào — đây là cách nó tự đi hỏi",
             "cli_pending_incoming": "Những tin đang chờ gửi cho tôi và chưa được đưa vào. Tin chỉ được gõ vào pane giữa các lượt, nên agent luôn bận chính là agent không thể được báo tin; câu trả lời không trống là lý do để kết thúc lượt cho tin đi vào"
           },
@@ -13344,6 +13344,9 @@
       "close-keep": "Đóng pane (giữ danh tính)",
       "memory-folder": "Mở thư mục bộ nhớ",
       "stop-remove": "Dừng và xóa agent…",
+      "stop-remove-body": "Agent sẽ bị xóa khỏi danh sách agent của Navide và pane của nó sẽ đóng nếu đang mở. Cuộc trò chuyện và tệp bộ nhớ vẫn còn trên đĩa, nhưng tên, màu và liên kết để tiếp tục phiên sẽ không được giữ.",
+      "stop-remove-confirm": "Dừng và xóa",
+      "stop-remove-title": "Dừng và xóa “{name}”?",
       "toggle-panel": "Hiện hoặc ẩn bảng điều khiển",
       "wake": "Đánh thức một lượt ngay"
     },

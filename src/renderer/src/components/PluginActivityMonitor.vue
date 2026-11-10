@@ -244,7 +244,7 @@ onBeforeUnmount(stopPolling)
                     :aria-expanded="open === row.id"
                     :aria-label="$t('pluginActivity.monitor.open', { id: reveal(row.id) })"
                     @click="toggle(row.id)"
-                  >{{ reveal(row.id) }}</button>
+                  ><span class="nv-monitor-id" v-truncate>{{ reveal(row.id) }}</span></button>
                   <span class="nv-monitor-muted nv-monitor-meta">{{ reveal(row.version) }}</span>
                   <span v-if="row.builtin" class="nv-monitor-muted nv-monitor-meta">· {{ $t('pluginActivity.monitor.builtin') }}</span>
                 </th>
@@ -350,13 +350,12 @@ onBeforeUnmount(stopPolling)
   border-bottom: 1px solid var(--border-muted);
   text-align: left;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .nv-monitor-table thead th {
   background: var(--bg-subtle);
   color: var(--text-secondary);
   font-weight: 600;
-  white-space: nowrap;
 }
 .nv-monitor-table tbody tr:last-child > * {
   border-bottom: 0;
@@ -377,7 +376,19 @@ onBeforeUnmount(stopPolling)
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  overflow-wrap: anywhere;
+  display: block;
+  max-width: 100%;
+}
+/* A plugin id never breaks mid-word: it is cut with an ellipsis and the
+   whole id shows on hover. */
+.nv-monitor-table tbody th {
+  max-width: 14em;
+}
+.nv-monitor-id {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .nv-monitor-meta {
   margin-left: var(--space-1);
@@ -408,6 +419,9 @@ onBeforeUnmount(stopPolling)
   display: flex;
   flex-wrap: wrap;
   gap: 2px var(--space-2);
+}
+.nv-monitor-host {
+  overflow-wrap: anywhere;
 }
 .nv-monitor-host--flagged {
   color: var(--danger-fg);

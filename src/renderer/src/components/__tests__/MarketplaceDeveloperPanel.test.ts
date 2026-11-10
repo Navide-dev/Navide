@@ -162,6 +162,13 @@ describe('MarketplaceDeveloperPanel', () => {
       expect(rows[1].find('[data-testid="developer-member-remove"]').exists()).toBe(true)
     })
 
+    it('shows the added date localized, not the raw ISO string', async () => {
+      wrapper = await mountAs('owner')
+      const cells = wrapper.findAll('[data-testid="developer-member-row"]')[1].findAll('td')
+      expect(cells[2].text()).toBe(new Date(publisher.added_at).toLocaleDateString())
+      expect(cells[2].text()).not.toContain('T05:00')
+    })
+
     it('adds a publisher only after the user confirms', async () => {
       const addMember = vi.fn(async () => ({ ok: true, status: 201, body: { your_role: 'owner', items: [owner, publisher] } }))
       wrapper = await mountAs('owner', { addMember })

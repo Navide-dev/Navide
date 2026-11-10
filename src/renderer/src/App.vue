@@ -23542,10 +23542,21 @@ function renameAgentIdentity(identityId: string, name: string): void {
   else agentConsole.patch(identityId, { name })
 }
 
-/** "Stop and remove agent": closes its pane, then forgets the identity. */
+/** "Stop and remove agent": asks first (the identity cannot be restored),
+ *  closes its pane, then forgets the identity. */
 async function onStopAgentIdentity(identityId: string): Promise<void> {
   const a = agentConsole.identities.value.find((x) => x.id === identityId)
   if (!a) return
+  const ok = await notifyRestore.confirm(
+    i18n.global.t('agentPane.menu.stop-remove-body'),
+    {
+      title: i18n.global.t('agentPane.menu.stop-remove-title', { name: a.name }),
+      confirmText: i18n.global.t('agentPane.menu.stop-remove-confirm'),
+      cancelText: i18n.global.t('pane.terminal.rebuild-running-confirm-cancel'),
+      danger: true,
+    }
+  )
+  if (!ok) return
   if (a.paneId && panes.value.some((p) => p.id === a.paneId)) {
     await onKill(a.paneId)
     // The close was cancelled (confirm dialog): keep the identity.
