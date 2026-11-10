@@ -2635,7 +2635,7 @@ async def _start_log_watcher() -> None:
     global _session_archive_task
     _session_archive_task = asyncio.create_task(_session_archive_loop())
 
-    # Frozen build only: keep the onefile extraction directory from being
+    # Frozen onefile build only: keep the extraction directory from being
     # purged as idle temp while the backend stays up (see frozen_env).
     from . import frozen_env
 

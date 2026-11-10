@@ -3,9 +3,16 @@
 # Build from the backend/ directory:
 #   cd backend && uv run pyinstaller agent_team_backend.spec
 #
-# Output: backend/dist/agent_team_backend  (single executable, plus the
-# platform's executable suffix -- .exe on Windows)
-# Electron copies it to resources/bin/ via package.json extraResources.
+# Output: backend/dist/agent_team_backend/  (a onedir build: the executable
+# agent_team_backend -- .exe on Windows -- next to its _internal/ libraries)
+# Electron copies the directory to resources/bin/agent_team_backend/ via
+# package.json extraResources.
+#
+# Onedir, not onefile: a onefile build unpacks itself into the temp directory
+# on every start and keeps reading from there, and the OS temp cleaners
+# removed parts of it under a running backend (2026-11-08: every MCP session
+# failed to initialize). A onedir build runs from the installed files and
+# unpacks nothing.
 #
 # PyInstaller cannot cross-compile, so this spec runs once per target platform
 # on that platform's own CI runner.
@@ -30,13 +37,13 @@ a = Analysis(
     binaries=_winpty_binaries,
     datas=_winpty_datas + [
         # git execs GIT_ASKPASS by path (no shell), so this must exist as a
-        # real file on disk in the onefile extraction dir -- PyInstaller only
+        # real file on disk in the packaged build's _internal dir -- PyInstaller only
         # extracts modules bundled in the PYZ archive on demand as .pyc, never
         # as the loose .py file git_service.py's GIT_ASKPASS path points to.
         ('agent_team_backend/git_askpass_helper.py', 'agent_team_backend'),
         # Plan-document infrastructure provisioned into every opened workspace
         # (<ws>/.agent-team/plans/). Read at runtime via Path(__file__).parent,
-        # so onefile builds must ship the real files.
+        # so packaged builds must ship the real files.
         ('agent_team_backend/plan_assets/_spec.md', 'agent_team_backend/plan_assets'),
         ('agent_team_backend/plan_assets/_template.html', 'agent_team_backend/plan_assets'),
         # The builtin prompt skill, read via Path(__file__) by prompt_skills.py
@@ -191,17 +198,14 @@ pyz = PYZ(a.pure, a.zipped_data)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='agent_team_backend',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     # argv_emulation=True causes PTY issues on macOS; keep it off.
@@ -209,4 +213,14 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='agent_team_backend',
 )

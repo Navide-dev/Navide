@@ -35,7 +35,7 @@ from typing import Any
 
 import httpx
 
-from . import osplat
+from . import frozen_env, osplat
 from .applog import app_data_dir
 from .http_ssl import default_ssl_context
 
@@ -103,8 +103,8 @@ def sidecar_path() -> Path | None:
         candidates.append(Path(override).expanduser())
     dirs: list[Path] = []
     if getattr(sys, "frozen", False):
-        # The frozen backend itself lives in <resources>/bin.
-        dirs.append(Path(sys.executable).resolve().parent)
+        # Next to the frozen backend, in <resources>/bin.
+        dirs.append(Path(frozen_env.packaged_bin_dir()))
     dirs.append(Path(__file__).resolve().parents[2] / "native" / "navide-stt" / "target" / "release")
     names = osplat.paths.executable_candidates(_BIN_NAME)
     candidates += [folder / name for folder in dirs for name in names]
