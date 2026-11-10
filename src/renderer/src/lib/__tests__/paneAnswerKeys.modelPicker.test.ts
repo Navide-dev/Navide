@@ -1,0 +1,150 @@
+import { describe, expect, it } from 'vitest'
+import { modelPickerKeys, modelSwitchResult, onModelPicker, stillOnModelPicker, writeAnswerSteps } from '../paneAnswerKeys'
+
+const UP = '\x1b[A'
+const DOWN = '\x1b[B'
+
+// Claude Code 2.1.322's /model picker, as it reads on screen.
+function picker(cursor: number, footer = 'Enter to set as default · s to use this session only · Esc to cancel'): string {
+  const rows = [
+    '1.  Default (recommended)  Sonnet 5.5 · Efficient for routine tasks',
+    '2.  Opus 5.5 ✔             For complex work and everyday tasks',
+    '3.  Fable 5.2              Most capable for the hardest work',
+    '4.  Sonnet 5.5             Efficient for routine tasks',
+    '5.  Haiku 5.5              Fastest for quick answers',
+  ]
+  return [
+    ' Select model',
+    ' Switch between Claude models. Your pick becomes the default for new sessions.',
+    '',
+    ...rows.map((r, i) => `${i === cursor ? ' ❯ ' : '   '}${r}`),
+    '   ▸ More models',
+    '',
+    ' ◐ Medium effort (default) ←/→ to adjust',
+    '',
+    ` ${footer}`,
+  ].join('\n')
+}
+
+describe('modelPickerKeys', () => {
+  it('moves to the named row and presses s', () => {
+    expect(modelPickerKeys(picker(1), 'Haiku 5.5')).toEqual([DOWN, DOWN, DOWN, 's'])
+    expect(modelPickerKeys(picker(1), 'Opus 5.5')).toEqual(['s'])
+    expect(modelPickerKeys(picker(4), 'Fable 5.2')).toEqual([UP, UP, 's'])
+  })
+
+  it('reads only the name column, so the Default row never stands in for Sonnet', () => {
+    expect(modelPickerKeys(picker(1), 'Sonnet 5.5')).toEqual([DOWN, DOWN, 's'])
+    expect(modelPickerKeys(picker(0), 'Sonnet')).toEqual([DOWN, DOWN, DOWN, 's'])
+  })
+
+  it('takes a bare family only when one row of it is listed', () => {
+    expect(modelPickerKeys(picker(1), 'Opus')).toEqual(['s'])
+    const twoOpus = picker(1).replace('3.  Fable 5.2  ', '3.  Opus 5.1   ')
+    expect(modelPickerKeys(twoOpus, 'Opus')).toBeNull()
+  })
+
+  it('never presses a digit or Enter', () => {
+    for (const label of ['Opus 5.5', 'Fable 5.2', 'Sonnet 5.5', 'Haiku 5.5']) {
+      const keys = modelPickerKeys(picker(0), label) ?? []
+      expect(keys.length).toBeGreaterThan(0)
+      expect(keys.some((k) => /\d|\r|\n/.test(k))).toBe(false)
+    }
+  })
+
+  it('is null without the session-only key', () => {
+    expect(modelPickerKeys(picker(1, 'Enter to confirm · Esc to cancel'), 'Haiku 5.5')).toBeNull()
+  })
+
+  it('is null for a model under More models or not listed', () => {
+    expect(modelPickerKeys(picker(1), 'Opus 4.1')).toBeNull()
+    expect(modelPickerKeys(picker(1), 'Sonnet 4.5')).toBeNull()
+  })
+
+  it('is null off the picker or without a cursor', () => {
+    expect(modelPickerKeys('  1. Yes\n  2. No\n s to use this session only', 'Yes')).toBeNull()
+    expect(modelPickerKeys(picker(-1), 'Haiku 5.5')).toBeNull()
+  })
+})
+
+// Captured from a live Claude Code 2.1.322 pane at 120 columns (11-11).
+const LIVE_PICKER = [
+  '   Select model',
+  '   Switch between Claude models. Your pick becomes the default for new sessions. For other/previous model names,',
+  '   specify with --model.',
+  '',
+  '     1.  Default (recommended)  Sonnet 5.5 · Efficient for routine tasks',
+  '   ❯ 2.  Opus 5.5 ✔             For complex work and everyday tasks',
+  '     3.  Fable 5.2              For your toughest challenges',
+  '     4.  Sonnet 5.5             Most efficient for simpler tasks',
+  '     5.  Haiku 5.5              Fastest for quick answers',
+  '     ▸   More models',
+  '',
+  '   ◐ Medium effort (default) ←/→ to adjust',
+  '',
+  '   Enter to set as default · s to use this session only · Esc to cancel',
+].join('\n')
+
+describe('the live picker', () => {
+  it('gives the keys that switched a live pane to Sonnet 5.5 for this session only', () => {
+    expect(onModelPicker(LIVE_PICKER)).toBe(true)
+    expect(modelPickerKeys(LIVE_PICKER, 'Sonnet 5.5')).toEqual([DOWN, DOWN, 's'])
+    expect(modelSwitchResult('❯ /model\n  ⎿  Set model to Sonnet 5.5 for this session only\n❯')).toBe('session')
+  })
+})
+
+describe('onModelPicker / stillOnModelPicker', () => {
+  it('sees the picker by its title and rows', () => {
+    expect(onModelPicker(picker(1))).toBe(true)
+    expect(onModelPicker('> /model')).toBe(false)
+  })
+
+  it('holds while only the cursor moves, whatever the awaiting state', () => {
+    expect(stillOnModelPicker(picker(1), undefined, picker(3))).toBe(true)
+    expect(stillOnModelPicker(picker(1), 'idle', picker(1))).toBe(true)
+  })
+
+  it('stops when the title goes or the rows change', () => {
+    expect(stillOnModelPicker(picker(1), undefined, '> ')).toBe(false)
+    const fewer = picker(1).replace(/ {3}5\. {2}Haiku.*\n/, '')
+    expect(stillOnModelPicker(picker(1), undefined, fewer)).toBe(false)
+    const renamed = picker(1).replace('Fable 5.2', 'Fable 5.3')
+    expect(stillOnModelPicker(picker(1), undefined, renamed)).toBe(false)
+  })
+
+  it('stops writeAnswerSteps through the injected check', async () => {
+    const written: string[] = []
+    const screens = [picker(2), '> ']
+    const result = await writeAnswerSteps({
+      steps: [DOWN, DOWN, 's'],
+      menu: picker(1),
+      read: () => ({ displayStatus: 'idle', screen: screens.shift() ?? '> ' }),
+      write: async (data) => {
+        written.push(data)
+        return { ok: true }
+      },
+      gapMs: 0,
+      stillOn: stillOnModelPicker,
+    })
+    expect(result).toBe('prompt-changed')
+    expect(written).toEqual([DOWN, DOWN])
+  })
+})
+
+describe('modelSwitchResult', () => {
+  const composer = ['╭────╮', '│ >  │', '╰────╯', '  ? for shortcuts'].join('\n')
+
+  it('reads a fresh session-only switch', () => {
+    expect(modelSwitchResult(`> /model\n  ⎿  Set model to Sonnet 5.5\n${composer}`)).toBe('session')
+  })
+
+  it('reads a switch saved as the default', () => {
+    expect(modelSwitchResult(`  ⎿  Set model to Sonnet 5.5 (saved as your default)\n${composer}`)).toBe('default')
+  })
+
+  it('ignores the picker still up and an old line far above', () => {
+    expect(modelSwitchResult(picker(1))).toBeNull()
+    const old = ['  ⎿  Set model to Opus 5.5', ...Array(12).fill('some answer text'), composer].join('\n')
+    expect(modelSwitchResult(old)).toBeNull()
+  })
+})

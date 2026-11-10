@@ -93,6 +93,30 @@ async def test_restart_persists_onto_the_replacement_pane_id(
 
 
 @pytest.mark.asyncio
+async def test_a_claude_picker_fallback_carries_its_reason(
+    monkeypatch: pytest.MonkeyPatch, recorded: dict[str, list[Any]],
+) -> None:
+    _window(monkeypatch, {"ok": True, "method": "restart", "paneId": "pc-new", "fallback": "model-not-in-picker"})
+
+    result = await pane_model_tool.cli_set_model("child", "claude-opus-4-1", _ctx())
+
+    assert result["method"] == "restart"
+    assert result["fallback"] == "model-not-in-picker"
+    assert recorded["audited"][0][2:] == ("claude-opus-4-1", "", "restart")
+
+
+@pytest.mark.asyncio
+async def test_a_picker_switch_reports_its_method(
+    monkeypatch: pytest.MonkeyPatch, recorded: dict[str, list[Any]],
+) -> None:
+    _window(monkeypatch, {"ok": True, "method": "picker", "paneId": "pc"})
+
+    result = await pane_model_tool.cli_set_model("child", "sonnet", _ctx())
+
+    assert result == {"ok": True, "target": "alpha/child", "pane_id": "pc", "model": "sonnet", "method": "picker"}
+
+
+@pytest.mark.asyncio
 async def test_a_busy_pane_is_refused_with_the_windows_code_and_hold(
     monkeypatch: pytest.MonkeyPatch, recorded: dict[str, list[Any]],
 ) -> None:

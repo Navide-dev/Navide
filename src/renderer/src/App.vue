@@ -49,8 +49,8 @@ import { agentConsoleKey, createAgentConsole } from './composables/useAgentConso
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
-import { liveModelCommand } from './lib/liveModelSwitch'
+import { awaitingPromptText, modelPickerKeys, modelSwitchResult, onModelPicker, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -4531,6 +4531,53 @@ onUnmounted(() => {
 const AWAITING_SCREEN_LINES = 25
 // Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
 const ANSWER_STEP_GAP_MS = 60
+// How long cli_set_model waits for claude's /model picker to show, and then
+// for its "Set model to" line after the keys.
+const MODEL_PICKER_WAIT_MS = 3000
+const MODEL_PICKER_POLL_MS = 100
+// claude: open the bare /model picker and pick the row with `s`, which switches
+// this session only (Enter would save the default for every new session).
+// Returns null once the screen confirms the switch, else why it fell back; the
+// picker is closed with Esc before every fallback that may have opened it.
+async function setModelViaPicker(paneId: string, model: string): Promise<string | null> {
+  const label = claudePickerLabel(model)
+  if (!label) return 'model-not-in-picker'
+  const ref = paneRefs[paneId]
+  const sid = ref?.sessionId as string | undefined
+  if (!ref || !sid) return 'pane-not-ready'
+  const screen = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+  const write = (data: string) => backend.send('terminal.input', { terminal_session_id: sid, data })
+  const waitFor = async (seen: (text: string) => boolean): Promise<string | null> => {
+    for (const end = Date.now() + MODEL_PICKER_WAIT_MS; Date.now() < end; ) {
+      await sleep(MODEL_PICKER_POLL_MS)
+      const text = screen()
+      if (seen(text)) return text
+    }
+    return null
+  }
+  const cancel = async (reason: string) => {
+    await write('\x1b')
+    return reason
+  }
+  if (!(await injectPane(paneId, '/model', 'set-model', true))) return cancel('inject-failed')
+  const menu = await waitFor(onModelPicker)
+  if (!menu) return cancel('picker-not-shown')
+  const keys = modelPickerKeys(menu, label)
+  if (!keys) return cancel('model-not-in-picker')
+  const resp = await writeAnswerSteps({
+    steps: keys,
+    menu,
+    read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screen() }),
+    write,
+    gapMs: ANSWER_STEP_GAP_MS,
+    stillOn: stillOnModelPicker,
+  })
+  if (resp === 'prompt-changed') return cancel('picker-changed')
+  if (!resp.ok) return cancel('keys-failed')
+  const done = await waitFor((text) => modelSwitchResult(text) !== null)
+  if (!done) return cancel('switch-not-confirmed')
+  return modelSwitchResult(done) === 'default' ? 'saved-as-default' : null
+}
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -11759,8 +11806,9 @@ registerCommand('ui.pane.interrupt', async (args) => {
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
 })
-// cli_set_model: switch a running pane's model. Typed as the CLI's own
-// `/model <id>` where it takes one (lib/liveModelSwitch), else a resume
+// cli_set_model: switch a running pane's model. claude through its /model
+// picker's `s` (setModelViaPicker), codex by typing `/model <id>`
+// (lib/liveModelSwitch), else — and whenever the picker falls back — a resume
 // rebuild onto `--model`. Only an idle pane: the same gate a message waits on,
 // plus no prompt box, since the command would be typed into it. Refusals are
 // results, so the backend can relay the reason.
@@ -11780,7 +11828,16 @@ registerCommand('ui.pane.setModel', async (args) => {
   if (acp.owns(pane.id)) return refuse('acp-unsupported', 'an ACP pane cannot switch its model in place')
   const hold = paneRefs[pane.id]?.displayStatus === 'awaiting' ? 'awaiting' : messagingHoldKey(pane.id)
   if (hold !== null) return refuse('pane-busy', `the pane is not idle (${hold}); wait and retry`, { hold })
-  const command = liveModelCommand(pane.agentKey, model, effort)
+  let fallback: string | undefined
+  if (pane.agentKey === 'claude' && !effort) {
+    const why = await setModelViaPicker(pane.id, model)
+    if (why === null) {
+      pane.model = model
+      return { ok: true, method: 'picker', paneId: pane.id }
+    }
+    fallback = why
+  }
+  const command = fallback ? null : liveModelCommand(pane.agentKey, model, effort)
   if (command) {
     const ok = await injectPane(pane.id, command, 'set-model', true)
     if (!ok) return refuse('inject-failed', 'the /model command did not go in')
@@ -11799,9 +11856,9 @@ registerCommand('ui.pane.setModel', async (args) => {
   if (failure) {
     pane.model = before.model
     pane.effort = before.effort
-    return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`)
+    return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`, fallback ? { fallback } : {})
   }
-  return { ok: true, method: 'restart', paneId }
+  return fallback ? { ok: true, method: 'restart', paneId, fallback } : { ok: true, method: 'restart', paneId }
 })
 registerCommand('ui.messaging.readIncoming', (args) => {
   const a = (args ?? {}) as {

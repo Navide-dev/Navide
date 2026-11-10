@@ -50,17 +50,23 @@ async def cli_set_model(
 
     How the switch happens depends on the CLI, and the answer says which in
     `method`:
-      - "slash" (claude, codex, with no `effort`): `/model <model>` is typed
-        into the pane bare — no message envelope — and submitted, exactly as
-        if the user typed it. The CLI keeps its conversation and process.
-        SIDE EFFECT: claude's /model also saves the model as the default for
-        NEW sessions on that account (its settings.json, which may be the
-        user's global ~/.claude/settings.json), and codex's may do the same —
-        so later panes of that CLI start on it too. Say so to the user.
+      - "picker" (claude, with no `effort`): claude's bare `/model` picker
+        is opened, the cursor moved to the model's row and `s` ("use this
+        session only") pressed. Only this session switches; the default for
+        new sessions (settings.json) is left alone. The conversation and
+        process stay. Takes an alias (opus, sonnet, haiku, fable) or a full
+        id such as claude-sonnet-5-5 that names a row on the picker's list.
+      - "slash" (codex, with no `effort`): `/model <model>` is typed into the
+        pane bare — no message envelope — and submitted, exactly as if the
+        user typed it. With an argument it switches this session only.
       - "restart" (every other CLI that takes `--model`, or any `effort`):
         the pane is rebuilt around a new CLI launched with the new model,
         resuming the same conversation. Its pane id changes; the answer's
         `pane_id` is the new one. A pane with no transcript yet reopens fresh.
+        A claude switch also lands here when the picker cannot do it (an id
+        with no row on its list, one under "More models", no picker, no `s`
+        key, or a screen that changed mid-way); the picker is closed first
+        and `fallback` names the reason.
 
     Only an idle pane is switched: one that is mid-turn, starting, awaiting a
     prompt answer, being typed in, or holding a draft is refused with
@@ -70,8 +76,8 @@ async def cli_set_model(
 
     Afterwards cli_get_status reports the new model under `ui.model`, and a
     restore relaunches on it. The switch is written to the pane's Guard audit
-    trail. Returns {ok, target, pane_id, model, effort?, method} or
-    {ok: false, error, error_code}.
+    trail. Returns {ok, target, pane_id, model, effort?, method, fallback?}
+    or {ok: false, error, error_code}.
     """
     from agent_team_backend import app, message_routing
 
@@ -147,4 +153,6 @@ async def cli_set_model(
     }
     if effort:
         answer["effort"] = effort
+    if payload.get("fallback"):
+        answer["fallback"] = str(payload["fallback"])
     return answer
