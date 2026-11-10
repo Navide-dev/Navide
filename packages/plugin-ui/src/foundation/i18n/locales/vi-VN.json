@@ -11311,7 +11311,8 @@
       "allow": "Cho phép",
       "allow-audit": "Cho phép + ghi lại",
       "ask": "Hỏi trên máy tính này",
-      "deny": "Từ chối"
+      "deny": "Từ chối",
+      "exempt": "Được miễn"
     },
     "source": {
       "local": "Cục bộ",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "Trình thông dịch chạy mã nội tuyến",
         "stdin-script": "Trình thông dịch đọc script từ stdin",
         "unknown-script": "Chạy một script mà Guard không xem được",
-        "dynamic-path": "Đường dẫn tệp không tĩnh"
+        "dynamic-path": "Đường dẫn tệp không tĩnh",
+        "credential-pipe-upload": "Pipe một tệp trong ~/.ssh vào công cụ mạng",
+        "plugin-store-write": "Ghi, xóa, di chuyển, liên kết hoặc chmod thư mục cài đặt hay kho tin cậy của plugin Navide",
+        "dynamic-stdin-script": "Shell chạy một here-string được tính lúc chạy",
+        "mcp-registry-write": "Một công cụ MCP thay đổi hoặc xóa mục registry của Windows",
+        "mcp-process-kill": "Một công cụ MCP kết thúc một tiến trình",
+        "heredoc-unparsed": "Không xác định được dấu phân cách hoặc điểm kết thúc của heredoc",
+        "untokenizable-shape": "Dùng cú pháp shell mà trình phân tích không mô hình hóa được",
+        "mcp-unknown-mode": "Một công cụ MCP được gọi với chế độ Guard không biết"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "Ngoại lệ cho phép",
         "warning": "Một phần của dòng bắt đầu bằng một trong các tiền tố này sẽ bỏ qua mọi kiểm tra tích hợp ở trên — chỉ thêm những lệnh bạn hoàn toàn tin tưởng. Mẫu chặn vẫn áp dụng, và nội dung tải về được đưa vào shell không bao giờ được cho phép. Thêm một ngoại lệ cần xác nhận.",
         "placeholder": "Tiền tố lệnh chính xác, ví dụ git push origin"
+      },
+      "exempt": {
+        "title": "Miễn trừ: đọc thông tin xác thực rồi tải lên",
+        "warning": "Cả dòng khớp với một trong các mẫu này sẽ không còn bị từ chối vì pipe một tệp trong ~/.ssh vào công cụ mạng — chỉ thêm những lệnh bạn hoàn toàn tin tưởng. Các kiểm tra khác và mẫu chặn của bạn vẫn áp dụng, và mỗi dòng được miễn đều được ghi vào nhật ký Guard. Việc thêm cần xác nhận.",
+        "placeholder": "Mẫu lệnh hoặc đường dẫn, ví dụ *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "Hãy nhập một mẫu.",

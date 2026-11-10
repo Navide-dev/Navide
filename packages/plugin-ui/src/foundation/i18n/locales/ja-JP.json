@@ -11311,7 +11311,8 @@
       "allow": "許可",
       "allow-audit": "許可して記録",
       "ask": "このコンピューターで確認",
-      "deny": "拒否"
+      "deny": "拒否",
+      "exempt": "除外"
     },
     "source": {
       "local": "ローカル",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "インタプリタがインラインコードを実行",
         "stdin-script": "インタプリタが stdin からスクリプトを読む",
         "unknown-script": "Guard が中身を見られないスクリプトを実行",
-        "dynamic-path": "ファイルパスが静的でない"
+        "dynamic-path": "ファイルパスが静的でない",
+        "credential-pipe-upload": "~/.ssh のファイルをネットワークツールにパイプ",
+        "plugin-store-write": "Navide プラグインのインストール先や信頼ストアへの書き込み・削除・移動・リンク・chmod",
+        "dynamic-stdin-script": "実行時に計算される here-string をシェルが実行",
+        "mcp-registry-write": "MCP ツールが Windows レジストリのエントリを変更または削除",
+        "mcp-process-kill": "MCP ツールがプロセスを終了",
+        "heredoc-unparsed": "heredoc の区切り文字や終わりを判定できない",
+        "untokenizable-shape": "解析器が扱えないシェル構文を使用",
+        "mcp-unknown-mode": "MCP ツールが Guard の知らないモードで呼び出された"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "許可の例外",
         "warning": "これらのプレフィックスで始まるセグメントは上の組み込み検査をすべて飛ばします。完全に信頼できるコマンドだけを追加してください。ブロックパターンは引き続き適用され、ダウンロードをシェルにパイプすることは決して許可されません。追加には確認が必要です。",
         "placeholder": "コマンドの正確なプレフィックス（例: git push origin）"
+      },
+      "exempt": {
+        "title": "除外：認証情報を読み取ってアップロード",
+        "warning": "行全体がこれらのパターンに一致すると、「~/.ssh のファイルをネットワークツールにパイプする」操作は拒否されなくなります。完全に信頼できるコマンドだけを追加してください。他の検査とブロックパターンは引き続き適用され、除外された行はすべて Guard のログに記録されます。追加には確認が必要です。",
+        "placeholder": "コマンドパターンまたはパス（例 *~/.ssh/deploy.pub*）"
       },
       "problem": {
         "empty": "パターンを入力してください。",

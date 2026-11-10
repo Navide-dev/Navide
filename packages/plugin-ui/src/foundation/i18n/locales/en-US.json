@@ -11311,7 +11311,8 @@
       "allow": "Allow",
       "allow-audit": "Allow + record",
       "ask": "Ask on this computer",
-      "deny": "Deny"
+      "deny": "Deny",
+      "exempt": "Exempted"
     },
     "source": {
       "local": "Local",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "Interpreter runs inline code",
         "stdin-script": "Interpreter reads its script from stdin",
         "unknown-script": "Runs a script Guard cannot see",
-        "dynamic-path": "File path is not static"
+        "dynamic-path": "File path is not static",
+        "credential-pipe-upload": "Pipes a file from ~/.ssh into a network tool",
+        "plugin-store-write": "Writes, deletes, moves, links or chmods the Navide plugin install root or trust stores",
+        "dynamic-stdin-script": "Shell runs a here-string computed at run time",
+        "mcp-registry-write": "An MCP tool changes or deletes a Windows registry entry",
+        "mcp-process-kill": "An MCP tool kills a process",
+        "heredoc-unparsed": "Heredoc delimiter or end cannot be determined",
+        "untokenizable-shape": "Uses shell syntax the analyser cannot model",
+        "mcp-unknown-mode": "An MCP tool is called with a mode Guard does not know"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "Allow exceptions",
         "warning": "A part of a line that starts with one of these prefixes skips every built-in check above — only add commands you fully trust. Block patterns still apply, and a download piped into a shell is never allowed. Adding one asks for confirmation.",
         "placeholder": "Exact command prefix, e.g. git push origin"
+      },
+      "exempt": {
+        "title": "Exemptions: reading a credential and uploading it",
+        "warning": "A whole line that matches one of these patterns is no longer refused for piping a file from ~/.ssh into a network tool — only add commands you fully trust. Every other check and your block patterns still apply, and each exempted line is recorded in the Guard log. Adding one asks for confirmation.",
+        "placeholder": "Command pattern or path, e.g. *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "Type a pattern.",
