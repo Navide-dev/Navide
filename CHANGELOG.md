@@ -17,6 +17,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Added
 
+- MCP (0.2.40): `cli_rename_pane` renames a CLI pane — its title and the name other panes address it by — through the same checks and write path as editing the title, so `cli_list_targets`, `cli_send`, `cli_get_status` and `cli_list_sessions` use the new name at once. A taken name is refused; an agent can rename its own pane and the panes it opened in its workspace; scheduled jobs that still use the old name are reported, not rewritten.
 - Plugins (0.2.40): `fs.writeFile` writes binary files with `encoding: "base64"`: `content` is the base64 text of the exact bytes, and text that is not valid base64 is refused. Text writes are unchanged. Navide Browser 1.1.2, Git 1.0.5, Mini-IDE 1.0.4, Plans 1.1.4.
 - Plugins (0.2.40): plugin views can follow the Navide interface language. `ui.getLocale` answers the language in effect (the one chosen in Settings, or the one picked from the system), and `ui.localeChanged` fires when the user switches; the SDK wraps them as `getHostLocale()` and `onHostLocaleChanged()`. Both need `permissions.system: ["ui"]`; plugin API 1.4.0.
 

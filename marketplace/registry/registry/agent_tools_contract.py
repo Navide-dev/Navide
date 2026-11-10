@@ -64,7 +64,7 @@ CORE_TOOL_NAMES = (
     "cli_failover_state",
     "cli_get_status", "cli_inbox_summary", "cli_interrupt", "cli_list_sessions", "cli_list_targets",
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
-    "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
+    "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_rename_pane", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami",
     "channels_bind", "channels_bindings", "channels_bot_add_fill", "channels_bot_add_open", "channels_bot_remove_request",
     "channels_bot_rename", "channels_bot_set_enabled", "channels_chats", "channels_link_code", "channels_managed_bot_create",

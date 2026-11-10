@@ -154,7 +154,9 @@ server = NavideMCP(
         "a send refused outright returns ok: false and no msg_key at all. "
         "That table is backend memory, not a log: only the last hour and the "
         "last 500 sends, gone on restart, so an unknown key means "
-        "\"no longer tracked\", not \"never sent\".\n"
+        "\"no longer tracked\", not \"never sent\". To rename a pane "
+        "(yours, or one you opened), use cli_rename_pane — do not reopen its "
+        "session under a new name and reclaim the old pane.\n"
         "\n"
         "Other machines: when this machine is linked to a Navide-Server, the "
         "user's other machines are in reach too. cli_list_targets returns "
@@ -6385,6 +6387,9 @@ _DEDICATED_CLOSE_ACTIONS = {
     # Takes a project into a window's sidebar; only cli_open_agent's cross-
     # workspace spawn asks for it, and that path records the action (review #546).
     "ui.workspace.adopt": "cli_open_agent with workspace_path",
+    # Renaming moves a messaging address; cli_rename_pane checks the caller
+    # may rename that pane, which a raw invoke would skip.
+    "ui.pane.rename": "cli_rename_pane",
 }
 
 
@@ -12631,3 +12636,5 @@ from . import window_tools as _window_tools  # noqa: E402,F401
 from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
 # Plan mcp-bot_507912: chat-channel tools (channels_*).
 from . import channel_tools as _channel_tools  # noqa: E402,F401
+# Registered last so the tools/list order before it stays main's (0.2.40).
+from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401

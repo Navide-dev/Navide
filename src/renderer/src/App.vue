@@ -11602,6 +11602,34 @@ registerCommand('ui.pane.place', async (args) => {
     spawnedBy: pane.spawnedBy ?? '',
   }
 })
+// cli_rename_pane's window half: the same rename as editing the title
+// (setPaneCustomName), except that a name another pane holds is refused with a
+// code instead of opening the collision prompt — nobody is at the keyboard to
+// answer it. CLI panes only (they hold a messaging handle), placeholders
+// included. The answer carries the handle actually applied.
+registerCommand('ui.pane.rename', async (args) => {
+  const a = (args as { paneId?: string; name?: string } | undefined) ?? {}
+  if (!a.paneId) throw new Error(`ui.pane.rename requires ${PANE_ID_HINT}`)
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`ui.pane.rename: pane "${a.paneId}" not found`)
+  const oldName = messaging.nameOf(pane.id)
+  if (oldName === null) {
+    throw Object.assign(new Error('ui.pane.rename: only CLI panes can be renamed'), { code: 'not-cli-pane' })
+  }
+  const title = (a.name ?? '').trim()
+  if (!title || title.includes('\n')) {
+    throw Object.assign(new Error('ui.pane.rename: the name must be one non-empty line'), { code: 'invalid-name' })
+  }
+  const owner = messaging.paneIdOf(title.replaceAll('/', '-'))
+  if (owner !== null && owner !== pane.id) {
+    throw Object.assign(
+      new Error(`ui.pane.rename: "${title}" is already another pane's name — pick another`),
+      { code: 'name-taken', params: { name: title } },
+    )
+  }
+  await setPaneCustomName(pane.id, title)
+  return { paneId: pane.id, oldName, name: messaging.nameOf(pane.id) ?? oldName, title: pane.customName ?? '' }
+})
 // The official form of what ui.pane.focus does as a side effect: open a
 // cold-restore placeholder. Unlike focus it waits for the restore to finish,
 // reports why it did or did not open, and — because the caller named ONE pane

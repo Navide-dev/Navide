@@ -48,6 +48,7 @@ MCP_TOOLS = [
     "cli_read_incoming",
     "cli_read_log",
     "cli_reclaim_agent",
+    "cli_rename_pane",
     "cli_send",
     "cli_send_and_wait",
     "cli_token_stats",

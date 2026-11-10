@@ -48,6 +48,7 @@ const cliTools = [
   'cli_close_agent',
   'cli_reclaim_agent',
   'cli_place_pane',
+  'cli_rename_pane',
   'cli_message_log',
   'cli_usage',
   'cli_failover_state',
