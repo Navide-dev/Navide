@@ -101,7 +101,7 @@ Tool 都回傳單一物件，因此這個問題只會在 `plan_list` 上出現�
 | `cli_close_agent` | `target`、`pane_id?` | 關掉一個分格 —— `cli_open_agent` 的另一半。**這會直接終結對方的工作**：分格與它的 PTY 一併消失，正在跑的回合跟著死掉，排給它的訊息永遠不會送達，而且無法復原 —— 關掉的分格是 Session 沒了，不是暫存起來。動手前先用 `cli_get_status` 看它是不是正在做事；`cli_interrupt` 是比較軟的一階，`cli_send` 更軟（它會等回合做完）。回傳 `{ok, target, name, closed, advisories?}`，`advisories` 說明這次關閉的代價，而且是別人不會回報的那些：分格正在回合中、有訊息排在它的佇列裡、它底下有子分格現在變成孤兒。這些都在 Kill 之前先蒐集，因為事後就再也問不到了。僅限本機分格：`<device>/<workspace>/<pane>` 這種位址會以 `close-local-only` 失敗，那是這個 Tool 的限制，不是位址寫錯 |
 | `cli_reclaim_agent` | `target`、`pane_id?` | 回收一個做完的分格 —— `cli_close_agent` 可復原的那一版。CLI 行程結束，分格留成可點擊接續的卡片、對話完整保留；等同狀態列的「立即回收」（`ui.pane.reclaim`），但用 `cli_send` 的位址指定單一分格，送到持有它的那個視窗。狀態列的守衛照樣適用：忙碌、被聚焦、無法接續，或有未送出輸入、排隊訊息的分格會被拒絕。回傳 `{ok, target, name, reclaimed}`；被拒時是 `ok: false`、`reclaimed: false`、守衛的 `reason`，`error_code` 為 `reclaim-refused`。僅限本機分格（`reclaim-local-only`），不能回收自己（`self-reclaim`）；早於 v0.2.16 的視窗回 `reclaim-unsupported` —— 請更新 App，不要改用 `cli_close_agent` 代替 |
 | `cli_rename_pane` | `target`、`new_name`、`pane_id?` | 幫 CLI 分格改名（0.2.40）：同時改標題與訊息位址，走與手動改標題相同的檢查與寫入路徑，`cli_list_targets`、`cli_send`、`cli_get_status` 與 `cli_list_sessions` 的 `pane_name` 立刻改用新名。名稱已被其他分格使用會被拒絕（`name-taken`），空白或多行也會被拒（`invalid-name`）。只有分格呼叫者能用，且只能改自己，以及同工作區裡由自己（直接或經自己開的分格）開出來的分格；判斷依據是開分格當下寫入、之後不變的 `opened_by`，用 `cli_place_pane` 把分格掛到自己底下不會取得改名權（`rename-not-permitted`）；限 CLI 分格與還原佔位（否則 `not-cli-pane`）；僅限本機分格（`rename-local-only`）。仍指向舊名的排程不會被改寫，而是列在 `warnings`。回傳 `{ok, old_name, new_name, pane_id, address, warnings?}`。`ui_invoke` 以 `ui_dedicated_tool` 拒絕 `ui.pane.rename` |
-| `cli_set_model` | `target`、`model`、`effort?`、`pane_id?` | 切換執行中 CLI 分格的模型（0.2.40）。Claude 和 Codex 直接輸入 `/model <id>`（`method: "slash"`；同時會變成該 CLI 新 session 的預設模型）；其他接受 `--model` 的 CLI，以及有指定 `effort` 時，會帶新模型重開並接回原對話（`method: "restart"`，`pane_id` 會換新）。只切換閒置的分格（否則回 `pane-busy` 並附 `hold`）；自己的分格（`self-set-model`）、terminal、ACP、登入分格會被拒絕，只能切換本機分格 |
+| `cli_set_model` | `target`、`model`、`effort?`、`pane_id?` | 切換執行中 CLI 分格的模型（0.2.40）。Claude 打開 `/model` 選單、移到該模型那一列後按 `s`，只切換這次 session（`method: "picker"`）；Codex 直接輸入 `/model <id>`，同樣只影響這次 session（`method: "slash"`）；其他接受 `--model` 的 CLI，以及有指定 `effort` 時，會帶新模型重開並接回原對話（`method: "restart"`，`pane_id` 會換新）；Claude 選單做不到的切換也改走重開，`fallback` 會寫明原因。只切換閒置的分格（否則回 `pane-busy` 並附 `hold`）；自己的分格（`self-set-model`）、terminal、ACP、登入分格會被拒絕，只能切換本機分格 |
 
 **Choosing a tab group when opening a 分格.** `cli_open_agent` accepts optional
 `run_group_id` for a fresh 分格 or a new 分格 opened with `session_id`:
@@ -359,7 +359,7 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 | `ui.pane.interrupt` | `{paneId}` | 對該分格按下它的中斷鍵。回傳 `{sent, status, advisories?}` —— `status` 是在按下**之前**讀的，因為這一按會改變它自己要回報的那個狀態 |
 | `ui.pane.reclaim` | `{paneId}`（單一 id 或陣列） | 回收做完的分格的資源：CLI 行程結束、分格留成可點擊接續的卡片，等同狀態列的「立即回收」。忙碌或等待回答、被聚焦、有未送出輸入、有排隊訊息、無法接續的分格會被拒絕。回傳 `{reclaimed, refused: [{paneId, reason, detail}]}` |
 | `ui.pane.rename` | `{paneId, name}` | 幫 CLI 分格改標題與訊息位址，撞名時不跳對話框。`cli_rename_pane` 背後的動作，agent 只能經由該工具使用 |
-| `ui.pane.setModel` | `{paneId, model, effort?}` | 輸入 `/model` 或重建分格來切換模型。`cli_set_model` 背後的動作，agent 只能經由該工具使用 |
+| `ui.pane.setModel` | `{paneId, model, effort?}` | 透過 `/model` 選單或指令，或重建分格來切換模型。`cli_set_model` 背後的動作，agent 只能經由該工具使用 |
 | `ui.tab.switch` | `{tabId}` | 切換作用中的 Stage／Run-group 分頁 |
 | `ui.preview.show` | `{kind, …}` | 在右側 rail 的預覽面板顯示檔案、diff 或內嵌片段 |
 | `ui.window.openPlans` | `{rel_path?}` | 開啟 Plan 視窗；帶 `rel_path`（`.agent-team/plans/<name>.html`，相對路徑、不含 `..`）則聚焦開啟該份 plan |

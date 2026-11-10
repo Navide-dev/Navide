@@ -180,17 +180,84 @@ export async function writeAnswerSteps<R extends { ok: boolean }>(opts: {
   read: () => { displayStatus: string | undefined; screen: string }
   write: (data: string) => Promise<R>
   gapMs: number
+  /** The check between steps; `stillOnMenu` unless given. */
+  stillOn?: (before: string, displayStatus: string | undefined, screen: string) => boolean
 }): Promise<R | 'prompt-changed'> {
+  const stillOn = opts.stillOn ?? stillOnMenu
   const [first, ...rest] = opts.steps
   let resp = await opts.write(first)
   for (const data of rest) {
     if (!resp.ok) break
     await new Promise((resolve) => setTimeout(resolve, opts.gapMs))
     const { displayStatus, screen } = opts.read()
-    if (!stillOnMenu(opts.menu, displayStatus, screen)) return 'prompt-changed'
+    if (!stillOn(opts.menu, displayStatus, screen)) return 'prompt-changed'
     resp = await opts.write(data)
   }
   return resp
+}
+
+// claude's /model picker (Claude Code 2.1.322). Its footer reads "Enter to
+// set as default · s to use this session only · Esc to cancel": Enter (and a
+// digit, which acts as Enter) saves the pick as the default for new sessions,
+// while `s` switches only the running session. Only `s` is ever pressed.
+const MODEL_PICKER_TITLE = /\bSelect model\b/
+const MODEL_PICKER_SESSION_ONLY = /\bs to use this session only\b/
+
+/** A picker row's name column: the text before its first double space (the
+ *  Default row's description names a model too), without the current tick. */
+function pickerName(option: string): string {
+  return squash(option.split(/\s{2,}/)[0].replace(/[✔✓]/g, '')).toLowerCase()
+}
+
+/** True while claude's /model picker is on screen. */
+export function onModelPicker(screen: string): boolean {
+  return MODEL_PICKER_TITLE.test(screen) && parseMenu(screen).options.length > 0
+}
+
+/** Between the picker's keys: still the same picker, with the same rows.
+ *  Reads the screen alone, since the picker is not an awaiting prompt. */
+export function stillOnModelPicker(before: string, _displayStatus: string | undefined, screen: string): boolean {
+  if (!MODEL_PICKER_TITLE.test(screen)) return false
+  const was = parseMenu(before).options.map(pickerName)
+  const now = parseMenu(screen).options.map(pickerName)
+  return now.length === was.length && was.every((n, i) => n === now[i])
+}
+
+/** The keys that move the picker's cursor to the row named `label` and press
+ *  `s`. A bare family ("Opus") takes the one row of that family on the list.
+ *  Null when the picker, its `s` key, its cursor or the row (one under "More
+ *  models" included) is not on screen. Never a digit and never Enter. */
+export function modelPickerKeys(screen: string, label: string): string[] | null {
+  if (!MODEL_PICKER_TITLE.test(screen) || !MODEL_PICKER_SESSION_ONLY.test(screen)) return null
+  const { options, cursor } = parseMenu(screen)
+  if (cursor < 0) return null
+  const want = squash(label).toLowerCase()
+  const names = options.map(pickerName)
+  const hits = names.flatMap((n, i) =>
+    n === want || (!/\d/.test(want) && n.startsWith(`${want} `) && /^\d+(?:\.\d+)*$/.test(n.slice(want.length + 1)))
+      ? [i]
+      : []
+  )
+  if (hits.length !== 1) return null
+  return [...moves(cursor, hits[0]), 's']
+}
+
+// How far up from the bottom the picker's result line may be: just above the
+// composer and status lines, never an older switch further up the screen.
+const MODEL_SWITCH_RESULT_LINES = 10
+
+/** What the screen says after the picker's keys: 'session' for claude's "Set
+ *  model to …" line, 'default' when that line says it was saved as the
+ *  default, null while the picker is still up or no fresh line is there. */
+export function modelSwitchResult(screen: string): 'session' | 'default' | null {
+  if (MODEL_PICKER_TITLE.test(screen)) return null
+  const tail = screen
+    .split('\n')
+    .filter((l) => l.trim())
+    .slice(-MODEL_SWITCH_RESULT_LINES)
+    .join('\n')
+  if (!/\bSet model to\b/.test(tail)) return null
+  return /saved as your default/i.test(tail) ? 'default' : 'session'
 }
 
 function steps(keys: string[]): AnswerKeys {
