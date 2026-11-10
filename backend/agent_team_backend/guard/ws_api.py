@@ -13,6 +13,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from .. import confirm_token
+from ..db_executor import run_in_db_thread
 from ..ipc import make_error, make_response
 from . import policy, runtime, taint, terminal_policy
 from .builtin_rules import BUILTIN_RULES, FLOOR_RULES, LEVELS, RULES_BY_ID
@@ -157,6 +158,14 @@ def _builtin(msg_type: str, payload: dict) -> dict[str, Any]:
     return {"ok": False, "error": f"unknown request {msg_type}"}
 
 
+# Requests that write the guard store; handle() runs these on the db thread.
+_WRITES = frozenset({
+    "guard.set_enabled", "guard.rules.add", "guard.rules.remove", "guard.taint.clear",
+    "guard.terminal.set_category", "guard.terminal.add_pattern", "guard.terminal.remove_pattern",
+    "guard.builtin.set_level", "guard.branches.add", "guard.branches.remove",
+})
+
+
 def _dispatch(msg_type: str, payload: dict) -> dict[str, Any]:
     store = runtime.store()
     if msg_type == "guard.status":
@@ -269,7 +278,11 @@ def _test(payload: dict) -> dict[str, Any]:
 
 async def handle(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     try:
-        result = _dispatch(msg_type, payload or {})
+        if msg_type in _WRITES:
+            # Commits on the db thread: a slow fsync must not stall the loop.
+            result = await run_in_db_thread(_dispatch, msg_type, payload or {})
+        else:
+            result = _dispatch(msg_type, payload or {})
     except ConfirmationRequired as exc:
         log.warning("refusing %s: %s", msg_type, exc)
         await session.send_json(make_error(msg_id, msg_type, "CONFIRMATION_REQUIRED", str(exc)))

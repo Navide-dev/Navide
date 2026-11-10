@@ -47,6 +47,7 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from . import device_signing, sync_keyring, sync_objects
 from .db import Database
+from .db_executor import run_in_db_thread
 
 log = logging.getLogger("agent_team_backend.sync_engine")
 
@@ -1387,13 +1388,13 @@ class SyncEngine:
                 # bring the item back. Remembered across the reset instead.
                 pending = await asyncio.to_thread(self._pending_deletes, adapter)
                 self._reset_deletes[scope] = pending
-                self._store.forget(scope)
+                await run_in_db_thread(self._store.forget, scope)
                 for item_id in pending:
                     # Written down at once, so a restart before the re-read
                     # reaches the item still carries the delete up (from rev
                     # 0, which the server answers as a conflict to ask about
                     # rather than as nothing).
-                    self._store.set_state(scope, item_id, rev=0, synced_hash="", deleted=False)
+                    await run_in_db_thread(self._store.set_state, scope, item_id, rev=0, synced_hash="", deleted=False)
                 try:
                     await asyncio.to_thread(self._on_forget, scope)
                 except Exception as err:  # noqa: BLE001 - the reset itself happened
@@ -1425,7 +1426,7 @@ class SyncEngine:
             stored = self._store.cursor(scope)
             durable = cursor if barrier is None else min(cursor, barrier)
             if durable > stored:
-                self._store.set_cursor(scope, durable)
+                await run_in_db_thread(self._store.set_cursor, scope, durable)
             if not reply.get("more"):
                 finished = True
                 break

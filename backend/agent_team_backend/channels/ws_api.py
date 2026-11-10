@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ..db_executor import run_in_db_thread
 from ..ipc import make_response
 from . import agent_requests, get_manager
 from .manager import ChannelManager
@@ -114,7 +115,7 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
     if msg_type == "channels.share_targets":
         return m.share_targets()
     if msg_type == "channels.set_share_open_notify":
-        m.store.set_share_open_notify(bool(p.get("enabled")))
+        await run_in_db_thread(m.store.set_share_open_notify, bool(p.get("enabled")))
         return await _share_open_notify(m)
     return {"ok": False, "error": f"unknown request {msg_type}"}
 

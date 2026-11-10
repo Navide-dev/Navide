@@ -55,6 +55,7 @@ from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
 from agent_team_backend import pipeline_liveness
 from agent_team_backend.fs_service import FsError
+from agent_team_backend.db_executor import run_in_db_thread
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
 # workspace the same way plans do, and both must agree on what one root means.
@@ -1607,7 +1608,7 @@ async def cli_open_agent(
         if cross_workspace:
             _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
         return refused_spawn
-    _taint_spawned(caller, str(verdict.get("pane_id") or ""))
+    await run_in_db_thread(_taint_spawned, caller, str(verdict.get("pane_id") or ""))
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
     # "delivered" by every caller that got it.
@@ -2504,7 +2505,7 @@ async def _dispatch_delivery(
         from agent_team_backend.guard.taint import safe_mark_tainted
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
-        safe_mark_tainted(entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+        await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -11126,7 +11127,7 @@ async def marketplace_search(
         "nextCursor": next_cursor if isinstance(next_cursor, str) and _MQ_CURSOR.fullmatch(next_cursor) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_search")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_search")
     return out
 
 
@@ -11165,7 +11166,7 @@ async def marketplace_detail(ctx: Context, id: str, version: str | None = None) 
         "card": _fence_untrusted(card, label, fenced) if isinstance(card, dict) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_detail")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_detail")
     return out
 
 
@@ -11200,7 +11201,7 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
         ],
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "plugins_list_installed")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "plugins_list_installed")
     return out
 
 
