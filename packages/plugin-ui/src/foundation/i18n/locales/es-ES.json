@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Usado pero no declarado (rechazado por Navide)",
       "item": "{address} ({source}) en {workspace}: {count} veces, la última el {date}",
+      "code": "Navide rechaza estas llamadas con CAPABILITY_DENIED hasta que el manifiesto las declare.",
+      "doc": "Ver documentación",
       "reasons": "Motivos: {reasons}"
     },
     "unused": {
@@ -12949,9 +12951,22 @@
         "yanked": "Retirada"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Entrega una compilación de prueba a los testers que elijas antes de que el Navide Marketplace la revise. Solo las personas invitadas pueden verla e instalarla; solo pasa el análisis automático y caduca 90 días después de publicarse.",
+      "channel": "Publica una compilación de prueba en el canal testplace (?channel=testplace):",
+      "invites": "Las invitaciones son tokens de acceso de un solo uso, uno por tester. Al revocar una, ese tester pierde el acceso.",
+      "codes": "Un código de prueba público permite que se unan con un solo código tantos testers como fijes. El primer código de cada paquete espera una revisión rápida:",
+      "promote": "Cuando termines de probar, envía la misma compilación a la revisión del Navide Marketplace:",
+      "owner-only": "Las invitaciones, los códigos de prueba y revocar o promover compilaciones de prueba son solo para el propietario del espacio de nombres; los miembros publicadores pueden publicar versiones, pero no gestionar Testplace.",
+      "owner-only-member": "Eres miembro publicador de este espacio de nombres, así que su propietario se encarga de las invitaciones, los códigos de prueba, la revocación y la promoción en Testplace.",
+      "joined": "Pruebas a las que me uní",
+      "doc": "Documentación de Testplace"
+    },
     "error": {
       "not-signed-in": "Inicia sesión primero en Cuenta de desarrollador.",
       "qualification": "Primero se tiene que aprobar tu solicitud de desarrollador.",
+      "doc": "Ver documentación",
       "registry": "El Navide Marketplace lo ha rechazado ({status} {code}): {message}"
     }
   },

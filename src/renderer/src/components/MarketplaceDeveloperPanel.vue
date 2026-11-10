@@ -11,14 +11,16 @@
  * The Host keeps the Registry tokens and the signing key; this page sees
  * states and Registry answers only.
  */
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import {
   closeMarketplaceForm,
+  developerTestplaceFocus,
   decideFormRequest,
   openMarketplaceForm,
+  setMarketplaceView,
   showMarketplaceForm,
   submitMarketplaceForm,
 } from '../composables/useMarketplaceForms'
@@ -33,7 +35,7 @@ import type {
   DeveloperVersionRow,
   StagedPackage,
 } from '../../../shared/marketplaceDeveloper'
-import { BUILD_FOR_NAVIDE_URL, DEVELOPERS_URL } from '../../../shared/marketplaceDeveloper'
+import { BUILD_FOR_NAVIDE_URL, DEVELOPER_DOC_URLS, DEVELOPERS_URL } from '../../../shared/marketplaceDeveloper'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
@@ -56,6 +58,16 @@ const api = () => {
 const state = ref<DeveloperPublicState | null>(null)
 const busy = ref<string | null>(null)
 const error = ref('')
+/** The documentation page the Registry named for the error shown (c3); cleared with the error. */
+const errorDoc = ref<string | null>(null)
+watch(error, (text) => {
+  if (!text) errorDoc.value = null
+}, { flush: 'sync' })
+const TESTPLACE_DOC_URL = `${DEVELOPER_DOC_URLS['marketplace-publishing']}#testplace`
+const testplaceSection = ref<HTMLElement | null>(null)
+watch(developerTestplaceFocus, () => {
+  void nextTick(() => testplaceSection.value?.scrollIntoView?.({ block: 'start' }))
+})
 const application = ref<{
   status: DeveloperApplicationStatus
   reason: string | null
@@ -96,6 +108,7 @@ const reasonText = computed(() => (request.value?.reason ? revealInvisibleText(r
 
 function message(result: DeveloperCallResult): string {
   if (result.ok) return ''
+  errorDoc.value = result.doc ?? null
   if (result.code === 'NOT_SIGNED_IN' || result.status === 401) return t('marketplace-developer.error.not-signed-in')
   if (result.code === 'QUALIFICATION_REQUIRED') return t('marketplace-developer.error.qualification')
   return t('marketplace-developer.error.registry', { status: result.status, code: result.code ?? '', message: result.message })
@@ -173,6 +186,7 @@ async function removeMember(memberId: string): Promise<void> {
 
 function memberMessage(result: DeveloperCallResult): string {
   if (result.ok) return ''
+  errorDoc.value = result.doc ?? null
   if (result.code === 'QUALIFICATION_REQUIRED') return t('marketplace-developer.members.error.not-developer')
   if (result.code === 'OWNER_ONLY') return t('marketplace-developer.members.error.owner-only')
   return message(result)
@@ -363,6 +377,7 @@ function versionStatus(row: DeveloperVersionRow): string {
 
 onMounted(() => {
   void refresh()
+  if (developerTestplaceFocus.value) void nextTick(() => testplaceSection.value?.scrollIntoView?.({ block: 'start' }))
 })
 </script>
 
@@ -483,7 +498,25 @@ onMounted(() => {
       <div class="dev-actions">
         <button class="nv-btn nv-btn--sm" @click="openForm('developer-application')">{{ $t('marketplace-developer.application.open') }}</button>
         <button class="nv-btn nv-btn--sm" @click="openForm('publish')">{{ $t('marketplace-developer.publish.open') }}</button>
-        <button class="nv-btn nv-btn--sm" @click="openForm('testplace-invite')">{{ $t('testplace.invite.open') }}</button>
+      </div>
+    </section>
+
+    <section ref="testplaceSection" class="dev-section" data-testid="developer-testplace" :aria-label="$t('marketplace-developer.testplace.title')">
+      <h2 class="dev-title">{{ $t('marketplace-developer.testplace.title') }}</h2>
+      <p class="dev-muted">{{ $t('marketplace-developer.testplace.desc') }}</p>
+      <ul class="dev-testplace-list">
+        <li>{{ $t('marketplace-developer.testplace.channel') }} <code>navide-plugin publish &lt;package.vsix&gt; --channel testplace</code></li>
+        <li>{{ $t('marketplace-developer.testplace.invites') }}</li>
+        <li>{{ $t('marketplace-developer.testplace.codes') }} <code>navide-plugin testplace code create &lt;namespace.name&gt; --max-testers &lt;n&gt;</code></li>
+        <li>{{ $t('marketplace-developer.testplace.promote') }} <code>navide-plugin testplace promote &lt;namespace.name&gt; &lt;version&gt;</code></li>
+      </ul>
+      <p class="dev-notice" data-testid="developer-testplace-owner">
+        {{ members?.your_role === 'publisher' ? $t('marketplace-developer.testplace.owner-only-member') : $t('marketplace-developer.testplace.owner-only') }}
+      </p>
+      <div class="dev-actions">
+        <button class="nv-btn nv-btn--sm" data-testid="developer-testplace-invite" @click="openForm('testplace-invite')">{{ $t('testplace.invite.open') }}</button>
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-testplace-joined" @click="setMarketplaceView('testplace')">{{ $t('marketplace-developer.testplace.joined') }}</button>
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-testplace-doc" @click="openLink(TESTPLACE_DOC_URL)">{{ $t('marketplace-developer.testplace.doc') }}</button>
       </div>
     </section>
 
@@ -571,7 +604,10 @@ onMounted(() => {
 
     <TestplaceInviteForm v-if="form?.form === 'testplace-invite'" :backend="backend" :form="form" />
 
-    <p v-if="error" class="dev-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="dev-error" role="alert">
+      {{ error }}
+      <button v-if="errorDoc" class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-error-doc" @click="openLink(errorDoc)">{{ $t('marketplace-developer.error.doc') }}</button>
+    </p>
 
     <section class="dev-section">
       <div class="dev-row">
@@ -627,6 +663,8 @@ onMounted(() => {
 .dev-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .dev-entry-steps { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-1); font-size: var(--font-xs); color: var(--text-secondary); }
 .dev-entry-steps code { overflow-wrap: anywhere; }
+.dev-testplace-list { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-1); font-size: var(--font-xs); color: var(--text-secondary); }
+.dev-testplace-list code { overflow-wrap: anywhere; }
 .dev-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .dev-field { display: flex; flex-direction: column; gap: var(--space-1, 4px); font-size: var(--font-xs); }
 .dev-field label { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }

@@ -1,5 +1,6 @@
 import { app, clipboard, Menu, webContents, type BrowserWindow, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { LEGAL_LABELS, LEGAL_ROUTES, type LegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS, type DeveloperDoc, type DeveloperPage } from '../shared/marketplaceDeveloper'
 import { menuStringsFor } from './menuStrings'
 import type { SupportedLocale } from './hostLocale'
 import { isMac } from '../shared/osplat'
@@ -54,6 +55,9 @@ import { getTerminalSelection } from './terminal-selection-cache'
  * Installing a menu without them is the only way to drop them: Electron has no
  * API to edit the default menu in place.
  */
+const DEVELOPER_DOCS = Object.keys(DEVELOPER_DOC_URLS) as DeveloperDoc[]
+const DEVELOPER_PAGES: readonly DeveloperPage[] = ['developer-settings', 'testplace']
+
 /** One entry in the File > Open Recent submenu. */
 export interface RecentMenuEntry {
   path: string
@@ -98,6 +102,10 @@ export interface AppMenuHooks {
   onShowWhatsNew?: () => void
   /** Help menu: replay the first-run welcome tour. */
   onShowWelcomeTour?: () => void
+  /** Help → Developers: open one developer document in the browser. */
+  onOpenDeveloperDoc?: (doc: DeveloperDoc) => void
+  /** Help → Developers: open a Navide page (the Developer settings page or its Testplace section). */
+  onOpenDeveloperPage?: (page: DeveloperPage) => void
   /** Help menu: open one of the legal pages on navide.dev (see shared/legalLinks). */
   onOpenLegal?: (route: LegalRoute) => void
   /** View menu: route Reload Window through the native close preparation. */
@@ -382,6 +390,25 @@ export function installApplicationMenu(
         { label: s.shortcuts, click: () => hooks.onShowShortcuts?.() },
         { label: s.whatsNew, click: () => hooks.onShowWhatsNew?.() },
         { label: s.welcomeTour, click: () => hooks.onShowWelcomeTour?.() },
+        { type: 'separator' },
+        {
+          label: s.developers.title,
+          submenu: [
+            ...DEVELOPER_DOCS.map(
+              (doc): MenuItemConstructorOptions => ({
+                label: s.developers[doc],
+                click: () => hooks.onOpenDeveloperDoc?.(doc)
+              })
+            ),
+            { type: 'separator' },
+            ...DEVELOPER_PAGES.map(
+              (page): MenuItemConstructorOptions => ({
+                label: s.developers[page],
+                click: () => hooks.onOpenDeveloperPage?.(page)
+              })
+            )
+          ]
+        },
         { type: 'separator' },
         // One entry per page, in the table's order, so the menu and the site
         // can only disagree by editing the table.

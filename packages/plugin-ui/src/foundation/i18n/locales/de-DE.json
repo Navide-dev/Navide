@@ -12277,6 +12277,8 @@
     "undeclared": {
       "heading": "Verwendet, aber nicht deklariert (von Navide abgelehnt)",
       "item": "{address} ({source}) in {workspace}: {count}-mal, zuletzt {date}",
+      "code": "Navide lehnt diese Aufrufe mit CAPABILITY_DENIED ab, bis das Manifest sie deklariert.",
+      "doc": "Dokumentation öffnen",
       "reasons": "Gründe: {reasons}"
     },
     "unused": {
@@ -12949,9 +12951,22 @@
         "yanked": "Zurückgezogen"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Gib einen Test-Build an ausgewählte Testpersonen, bevor der Navide Marketplace ihn prüft. Nur Eingeladene sehen und installieren ihn; er erhält nur den automatischen Scan und läuft 90 Tage nach der Veröffentlichung ab.",
+      "channel": "Test-Build im Testplace-Kanal veröffentlichen (?channel=testplace):",
+      "invites": "Einladungen sind einmalig nutzbare Beitritts-Tokens, eines pro Testperson. Ein Widerruf entzieht dieser Testperson den Zugriff.",
+      "codes": "Mit einem öffentlichen Testcode treten so viele Testpersonen bei, wie du festlegst. Der erste Code jedes Pakets wartet auf eine kurze Prüfung:",
+      "promote": "Nach dem Test denselben Build zur Prüfung an den Navide Marketplace senden:",
+      "owner-only": "Einladungen, Testcodes sowie Widerruf und Freigabe von Test-Builds sind dem Namespace-Inhaber vorbehalten; Publisher-Mitglieder können Versionen veröffentlichen, Testplace aber nicht verwalten.",
+      "owner-only-member": "Du bist Publisher-Mitglied dieses Namespace, daher erledigt der Inhaber Testplace-Einladungen, Testcodes, Widerruf und Freigabe.",
+      "joined": "Meine Tests",
+      "doc": "Testplace-Dokumentation"
+    },
     "error": {
       "not-signed-in": "Melden Sie sich zuerst unter „Entwicklerkonto“ an.",
       "qualification": "Ihre Entwicklerbewerbung muss zuerst genehmigt werden.",
+      "doc": "Dokumentation öffnen",
       "registry": "Der Navide Marketplace hat es abgelehnt ({status} {code}): {message}"
     }
   },

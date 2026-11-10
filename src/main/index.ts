@@ -23,6 +23,7 @@ import { abandonPendingBackends } from './backend-pending'
 import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS } from '../shared/marketplaceDeveloper'
 import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -6264,6 +6265,8 @@ app.whenReady().then(async () => {
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
     onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
+    onOpenDeveloperDoc: (doc) => void shell.openExternal(DEVELOPER_DOC_URLS[doc]),
+    onOpenDeveloperPage: (page) => sendMenuAction(`open-developer:${page}`),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onLockNow: () => void appLock.lock(),
     lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),

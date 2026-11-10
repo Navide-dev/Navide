@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DeveloperAccount, packageDigest, redactDeveloperSecrets } from './developerAccount'
+import { DeveloperAccount, packageDigest, redactDeveloperSecrets, registryError } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
 import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl, membersView } from './developerIpc'
 
@@ -357,5 +357,32 @@ describe('namespace members (0.2.40)', () => {
     const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
     expect(answer).toMatchObject({ ok: true, result: { members: null } })
     expect(calls.some((call) => call.url.endsWith('/members'))).toBe(false)
+  })
+})
+
+describe('registryError (0.2.40 c3)', () => {
+  const doc = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md#testplace'
+
+  it('reads the code and message as before and keeps a Navide doc link', () => {
+    expect(registryError({ detail: { code: 'OWNER_ONLY', message: 'owner only' }, doc }))
+      .toEqual({ code: 'OWNER_ONLY', message: 'owner only', doc })
+    expect(registryError({ detail: 'extension not found' })).toEqual({ code: null, message: 'extension not found', doc: null })
+  })
+
+  it('takes a top-level CAPABILITY_DENIED and links its section when the body has no doc', () => {
+    expect(registryError({ detail: 'static scan found network hosts the manifest does not declare: x.net', code: 'CAPABILITY_DENIED' }))
+      .toEqual({
+        code: 'CAPABILITY_DENIED',
+        message: 'static scan found network hosts the manifest does not declare: x.net',
+        doc: 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/plugin-development-v2.md#capability_denied',
+      })
+  })
+
+  it('drops a doc that is not Navide documentation', () => {
+    for (const bad of ['http://github.com/Navide-dev/Navide/x', 'https://evil.example/doc', 'https://github.com/other/repo', 'javascript:alert(1)', 42]) {
+      expect(registryError({ detail: 'x', doc: bad }).doc).toBeNull()
+    }
+    expect(registryError({ detail: 'x', doc: 'https://developers.navide.dev/developer' }).doc).toBe('https://developers.navide.dev/developer')
+    expect(registryError({ detail: 'x', doc: 'https://navide.dev.evil.example/' }).doc).toBeNull()
   })
 })

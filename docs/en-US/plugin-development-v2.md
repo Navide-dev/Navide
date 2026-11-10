@@ -3156,6 +3156,66 @@ message, and optional structured details:
 The v1 broker's `CAP_DENIED`, `UNKNOWN`, `BAD_REQUEST`, and `BACKEND_ERROR`
 strings are internal legacy values and are mapped by the compatibility adapter.
 
+### CAPABILITY_DENIED
+
+`CAPABILITY_DENIED` is the one code for "this Navide plugin used something its
+manifest does not declare, or the user did not grant". Every place that judges
+a declaration uses it:
+
+- **The Host broker** (views and backends): an undeclared or ungranted
+  capability call rejects with `CAPABILITY_DENIED`; Activity records it as
+  denied, with the reason `undeclared` when the manifest never declared it.
+- **`navide-plugin dev-backend`**: a bridge request outside the declared
+  permissions is answered `CAPABILITY_DENIED`, reason `undeclared`, exactly as
+  the Host would.
+- **The Registry**: a public publish whose static scan finds network hosts the
+  manifest does not declare is refused with 422, `code: "CAPABILITY_DENIED"`,
+  and the hosts in `detail`.
+
+The fix is the same everywhere: declare the use under `permissions` (and the
+matching `contributes` entry, where one applies) and ask the user again on the
+next install or update, or remove the call. Navide's Activity panel and the
+Developer page link to this section when they show the refusal.
+
+### Registry error bodies and readiness
+
+Every 4xx response from the Navide Marketplace Registry keeps FastAPI's body —
+`detail` (a string, an object with its own `code`, or the validation error
+list) and the status code — and adds `doc`: the URL of the documentation section
+that explains the refusal (this document, `marketplace-publishing.md` or, when
+no section is more specific, `build-for-navide.md`). A refusal about an
+undeclared capability also carries `code: "CAPABILITY_DENIED"`:
+
+```json
+{
+  "detail": "static scan found network hosts the manifest does not declare: tracker.example.net; declare them under permissions.network.hosts",
+  "code": "CAPABILITY_DENIED",
+  "doc": "https://github.com/Navide-dev/Navide/blob/main/docs/en-US/plugin-development-v2.md#capability_denied"
+}
+```
+
+Navide shows **View Documentation** next to such an error; it opens `doc` only
+when it points at Navide's own documentation or site. 5xx bodies are
+unchanged.
+
+`GET /api/readiness` says whether a Registry can serve. It needs no token and
+contains nothing secret: the applied schema version, the latest one the
+Registry knows, whether every migration is applied (and which are pending), the
+key id, status and public fingerprints of the Registry signing key and the
+pinned root, how publisher signatures are verified, and the static scanner's id
+and version. It answers 200 with `status: "ready"`, or 503 with
+`status: "not-ready"` while a migration is pending:
+
+```json
+{
+  "status": "ready",
+  "schema": { "version": 14, "latest": 14, "migrations_complete": true, "pending": [] },
+  "signing": { "registry_profile": "official", "key_id": "registry-2026-01", "key_status": "active",
+               "key_fingerprint": "sha256:…", "root_fingerprint": "sha256:…", "publisher_signatures": "ed25519" },
+  "scanner": { "id": "navide-static-scan", "version": "1.1.0" }
+}
+```
+
 ### Where to look when something fails
 
 - **A view's console.** Each view runs in its own web contents (a `<webview>`
