@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import type { Ref } from 'vue'
 import TerminalPane from '../TerminalPane.vue'
+import { agentConsoleKey } from '../../composables/useAgentConsole'
 import { createTerminalDockStub } from '../../ports/__tests__/terminalDock.stub'
 
 // An agent pane (spec kind 'agent', plan agent-0-2-40_78e071) is a TerminalPane
@@ -52,12 +53,21 @@ vi.mock('../agent/AgentControlPanel.vue', async () => {
 
 const agent = { name: 'Secretary', color: '#0b8a9c', initial: 'S', vendor: 'Hermes Agent', createdAt: 0 }
 
-function mountPane(props: Record<string, unknown>): VueWrapper {
+function mountPane(props: Record<string, unknown>, provide: Record<symbol, unknown> = {}): VueWrapper {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return mount(TerminalPane as any, {
     props: { paneId: 'pane-1', title: 'Secretary', agentKey: 'hermes', terminalPort: createTerminalDockStub(), cliProfiles: {}, ...props },
-    global: { mocks: { $t: (key: string) => key } }
+    global: { mocks: { $t: (key: string) => key }, provide }
   })
+}
+
+/** Makes every element report `width` as its clientWidth (happy-dom lays nothing out). */
+function withPaneWidth(width: number): () => void {
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => width })
+  return () => {
+    if (original) Object.defineProperty(HTMLElement.prototype, 'clientWidth', original)
+  }
 }
 
 describe('TerminalPane – agent pane', () => {
@@ -109,5 +119,44 @@ describe('TerminalPane – agent pane', () => {
     expect(wrapper.find('[data-testid="agent-avatar"]').exists()).toBe(false)
     expect(wrapper.find('.login-expired-inline').exists()).toBe(true)
     expect(wrapper.text()).toContain('cli sub')
+  })
+
+  it('ranks badges in a narrow agent pane and folds the others behind …', async () => {
+    const restore = withPaneWidth(500)
+    try {
+      wrapper = mountPane({ agent, isCommander: true, muted: true })
+      await new Promise((r) => setTimeout(r, 0))
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('.pane').classes()).toContain('pane-agent-narrow')
+      const more = wrapper.find('[data-testid="agent-more-badges"]')
+      expect(more.exists()).toBe(true)
+      expect(more.attributes('aria-expanded')).toBe('false')
+      await more.trigger('click')
+      expect(wrapper.find('.pane').classes()).toContain('agent-badges-open')
+    } finally {
+      restore()
+    }
+  })
+
+  it('keeps a narrow CLI pane as it was', async () => {
+    const restore = withPaneWidth(500)
+    try {
+      wrapper = mountPane({ agentKey: 'claude', isCommander: true, muted: true })
+      await new Promise((r) => setTimeout(r, 0))
+      expect(wrapper.find('.pane').classes()).not.toContain('pane-agent-narrow')
+      expect(wrapper.find('[data-testid="agent-more-badges"]').exists()).toBe(false)
+    } finally {
+      restore()
+    }
+  })
+
+  it('shows the next schedule that wakes the agent', () => {
+    const fakeConsole = {
+      paneInfo: () => agent,
+      turnFor: () => ({ startedAt: null, endedAt: null }),
+      nextJob: () => ({ id: 'j1', name: 'Morning brief', state: { next_run_at: Date.parse('2026-11-11T00:30:00Z') } }),
+    }
+    wrapper = mountPane({}, { [agentConsoleKey as symbol]: fakeConsole })
+    expect(wrapper.find('[data-testid="agent-next-schedule"]').exists()).toBe(true)
   })
 })

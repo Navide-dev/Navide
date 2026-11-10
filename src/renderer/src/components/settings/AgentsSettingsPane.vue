@@ -5,8 +5,9 @@ import { AGENT_SPECS } from '@navide/plugin-shell'
 import { agentConsoleKey, type AgentConsole } from '../../composables/useAgentConsole'
 import { channelsKey, DEFAULT_ACCOUNT, type ChannelsStore } from '../../composables/useChannels'
 import { formatChannelIdentity } from '../../lib/channelIdentity'
-import { describeSchedule } from '../../lib/schedulerJobs'
+import { describeSchedule, type SchedulerJob } from '../../lib/schedulerJobs'
 import { paneStatusLabelText } from '../../lib/paneStatusLabel'
+import { revealPath } from '../../composables/hostShell'
 import {
   AGENT_COLORS,
   AGENT_COLOR_HEX,
@@ -55,14 +56,53 @@ function statusText(row: AgentIdentitySummary): string {
 // ── Identity ─────────────────────────────────────────────────────────────────
 const nameDraft = ref('')
 watch(selected, (row) => { nameDraft.value = row?.identity.name ?? '' }, { immediate: true })
+/** A rename waiting for the user's confirmation: the schedules that address
+ *  the old name and the pane's channel bindings are listed first. */
+interface PendingRename {
+  identityId: string
+  oldName: string
+  name: string
+  jobs: SchedulerJob[]
+  channels: number
+}
+const pendingRename = ref<PendingRename | null>(null)
+const retargetJobs = ref(true)
+const renameFailed = ref<string[]>([])
+
 function commitName(): void {
   const row = selected.value
   const name = nameDraft.value.trim()
+  if (pendingRename.value) return
   if (!row || !name || name === row.identity.name) {
     nameDraft.value = row?.identity.name ?? ''
     return
   }
-  emit('rename', row.identity.id, name)
+  const paneId = row.identity.paneId
+  const own = paneId ? channels?.bindingFor(paneId) : null
+  pendingRename.value = {
+    identityId: row.identity.id,
+    oldName: row.identity.name,
+    name,
+    jobs: agentConsole?.jobsNamed(row.identity.name) ?? [],
+    channels: paneId ? (own ? 1 : 0) + (channels?.childrenOf(paneId).length ?? 0) : 0,
+  }
+  retargetJobs.value = true
+  renameFailed.value = []
+}
+
+function cancelRename(): void {
+  pendingRename.value = null
+  nameDraft.value = selected.value?.identity.name ?? ''
+}
+
+async function confirmRename(): Promise<void> {
+  const r = pendingRename.value
+  if (!r) return
+  pendingRename.value = null
+  emit('rename', r.identityId, r.name)
+  if (retargetJobs.value && r.jobs.length && agentConsole) {
+    renameFailed.value = await agentConsole.retargetJobs(r.jobs, r.name)
+  }
 }
 function setColor(color: AgentColor): void {
   if (selected.value) agentConsole?.patch(selected.value.identity.id, { color })
@@ -84,6 +124,13 @@ const jobs = computed(() => {
   const a = selected.value?.identity
   return a ? agentConsole?.jobsFor(a.paneId ?? '', a.name) ?? [] : []
 })
+
+// ── Memory ───────────────────────────────────────────────────────────────────
+const memory = computed(() => {
+  const key = selected.value?.identity.agentKey
+  return key ? agentConsole?.notesFor(key)?.memory ?? null : null
+})
+watch(() => selected.value?.identity.agentKey, (key) => { if (key) void agentConsole?.refreshNotes(key) }, { immediate: true })
 
 // ── Model & flags ────────────────────────────────────────────────────────────
 const spec = computed(() => AGENT_SPECS.find((s) => s.agentKey === selected.value?.identity.agentKey))
@@ -133,6 +180,7 @@ const spec = computed(() => AGENT_SPECS.find((s) => s.agentKey === selected.valu
               <span>{{ t('agentPane.settings.name') }}</span>
               <input v-model="nameDraft" data-testid="agents-name" @keydown.enter.prevent="commitName" @blur="commitName" />
             </label>
+            <p v-if="renameFailed.length" class="ag-note ag-warn" data-testid="agents-rename-failed">{{ t('agentPane.settings.rename-failed', { names: renameFailed.join(', ') }) }}</p>
             <div class="ag-field">
               <span>{{ t('agentPane.settings.color') }}</span>
               <div class="ag-swatches" role="radiogroup" :aria-label="t('agentPane.settings.color')">
@@ -172,7 +220,12 @@ const spec = computed(() => AGENT_SPECS.find((s) => s.agentKey === selected.valu
 
           <section class="ag-card">
             <h3>{{ t('agentPane.settings.memory') }}</h3>
-            <div class="ag-muted" data-testid="agents-memory-empty">{{ t('agentPane.panel.memory-empty') }}</div>
+            <template v-if="memory && memory.root">
+              <div class="ag-line ag-ellip" data-testid="agents-memory-root" :title="memory.root" v-truncate><code>{{ memory.root }}</code></div>
+              <div v-if="memory.status === 'missing'" class="ag-muted">{{ t('agentPane.panel.memory-missing') }}</div>
+              <button v-else type="button" class="ag-link" data-testid="agents-memory-open" @click="revealPath(memory.root)">{{ t('agentPane.panel.open-folder') }}</button>
+            </template>
+            <div v-else class="ag-muted" data-testid="agents-memory-empty">{{ memory ? t('agentPane.panel.memory-empty') : t('agentPane.panel.memory-loading') }}</div>
             <p class="ag-note">{{ t('agentPane.settings.memory-note') }}</p>
           </section>
 
@@ -191,6 +244,28 @@ const spec = computed(() => AGENT_SPECS.find((s) => s.agentKey === selected.valu
             <p class="ag-note">{{ t('agentPane.settings.flags-note') }}</p>
             <button type="button" class="ag-link" @click="emit('go-tab', 'cliAgents')">{{ t('agentPane.settings.go-cli-agents') }}</button>
           </section>
+        </div>
+      </div>
+    </div>
+    <div v-if="pendingRename" class="ag-confirm-backdrop" @click.self="cancelRename">
+      <div class="ag-confirm" role="dialog" aria-modal="true" :aria-label="t('agentPane.settings.rename-title', { old: pendingRename.oldName, name: pendingRename.name })" data-testid="agents-rename-confirm">
+        <h3 class="ag-confirm-title">{{ t('agentPane.settings.rename-title', { old: pendingRename.oldName, name: pendingRename.name }) }}</h3>
+        <template v-if="pendingRename.jobs.length">
+          <div class="ag-line">{{ t('agentPane.settings.rename-schedules', { old: pendingRename.oldName, n: pendingRename.jobs.length }) }}</div>
+          <ul class="ag-confirm-jobs">
+            <li v-for="job in pendingRename.jobs" :key="job.id" data-testid="agents-rename-job" v-truncate>{{ job.name }}</li>
+          </ul>
+          <label class="ag-confirm-check">
+            <input v-model="retargetJobs" type="checkbox" data-testid="agents-rename-retarget" />
+            <span>{{ t('agentPane.settings.rename-update') }}</span>
+          </label>
+        </template>
+        <div v-else class="ag-muted" data-testid="agents-rename-no-jobs">{{ t('agentPane.settings.rename-no-schedules') }}</div>
+        <div class="ag-line" data-testid="agents-rename-channels">{{ t('agentPane.settings.rename-channels', { n: pendingRename.channels }) }}</div>
+        <p class="ag-note">{{ t('agentPane.settings.rename-channels-note') }}</p>
+        <div class="ag-confirm-actions">
+          <button type="button" class="ag-btn" data-testid="agents-rename-cancel" @click="cancelRename">{{ t('agentPane.settings.rename-cancel') }}</button>
+          <button type="button" class="ag-btn primary" data-testid="agents-rename-ok" @click="confirmRename">{{ t('agentPane.settings.rename-confirm') }}</button>
         </div>
       </div>
     </div>
@@ -244,5 +319,14 @@ const spec = computed(() => AGENT_SPECS.find((s) => s.agentKey === selected.valu
 .ag-btn { font: inherit; font-size: var(--font-xs); padding: 3px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-base); color: var(--text-primary); cursor: pointer; }
 .ag-btn.danger { color: var(--danger-fg); }
 .ag-link { font: inherit; font-size: var(--font-xs); background: none; border: none; padding: 0; margin-top: 6px; color: var(--accent-fg); cursor: pointer; }
+.ag-warn { color: var(--danger-fg); }
+.ag-btn.primary { background: var(--accent-emphasis); border-color: transparent; color: #fff; }
+.ag-confirm-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg-base) 55%, transparent); }
+.ag-confirm { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 64px); overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-elevated); box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.3)); }
+.ag-confirm-title { margin: 0 0 4px; font-size: var(--font-sm); overflow-wrap: anywhere; }
+.ag-confirm-jobs { margin: 0; padding-left: 18px; font-size: var(--font-xs); }
+.ag-confirm-jobs li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-confirm-check { display: flex; align-items: center; gap: 6px; font-size: var(--font-xs); }
+.ag-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 @media (max-width: 720px) { .ag-layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

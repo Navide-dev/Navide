@@ -10,7 +10,8 @@
  *              turn end = turn_complete; ISO timestamps)
  *   schedules  `scheduler.list`, jobs whose message action targets the pane
  *   channels   the channels store (read by the panel itself)
- * Memory and todos have no source in 0.2.40; the panel says so.
+ *   notes      `agent.notes` (memory / todos read from the vendor's own files;
+ *              a source that was not measured comes back "unsupported")
  */
 import { computed, reactive, ref, type InjectionKey } from 'vue'
 import { onSettingsChanged, settingsGet, settingsReady, settingsSet } from '@navide/plugin-ui/shared'
@@ -47,6 +48,31 @@ export interface AgentPaneRef {
   model?: string
 }
 
+export interface AgentNoteEntry {
+  /** Path relative to `root`. */
+  name: string
+  path: string
+  /** Epoch ms of the file's last change. */
+  modified_at: number
+  preview: string
+}
+
+export interface AgentNotesSection {
+  /** ok = entries found, empty = folder exists with nothing in it,
+   *  missing = no folder, unsupported = no source Navide can read. */
+  status: 'ok' | 'empty' | 'missing' | 'unsupported'
+  root: string
+  entries: AgentNoteEntry[]
+}
+
+export interface AgentNotes {
+  memory: AgentNotesSection
+  todos: AgentNotesSection
+}
+
+/** How many memory files the panel lists. */
+export const AGENT_NOTES_LIMIT = 5
+
 type Scheduler = Pick<ReturnType<typeof useSchedulerJobs>, 'jobs' | 'runNow' | 'refresh'>
 
 interface Options {
@@ -54,6 +80,8 @@ interface Options {
   openSettings: (identityId: string) => void
   /** Sends `scheduler.set_enabled`; resolves true on success. */
   setJobEnabled?: (id: string, enabled: boolean) => Promise<boolean>
+  /** Sends a partial `scheduler.upsert` (id + action); resolves true on success. */
+  upsertJob?: (job: { id: string; action: SchedulerJob['action'] }) => Promise<boolean>
 }
 
 function isoMs(v: unknown): number | null {
@@ -172,12 +200,38 @@ export function createAgentConsole(backend: ReturnType<typeof useBackend>, sched
     if (!paneId || !byPane.value.has(paneId)) return
     const at = isoMs(ev.timestamp) ?? Date.now()
     const clock = turns[paneId] ?? { startedAt: null, endedAt: null }
-    if (ev.event_type === 'turn_complete') turns[paneId] = { startedAt: null, endedAt: at }
-    else if (ev.event_type === 'agent_active' && ev.detail === 'user') turns[paneId] = { ...clock, startedAt: at }
+    if (ev.event_type === 'turn_complete') {
+      turns[paneId] = { startedAt: null, endedAt: at }
+      // A turn may have written memory; re-read only what someone has loaded.
+      const key = byPane.value.get(paneId)?.agentKey
+      if (key && key in notes) void refreshNotes(key)
+    } else if (ev.event_type === 'agent_active' && ev.detail === 'user') turns[paneId] = { ...clock, startedAt: at }
   })
 
   function turnFor(paneId: string): AgentTurnClock {
     return turns[paneId] ?? { startedAt: null, endedAt: null }
+  }
+
+  // ── Memory and todos ───────────────────────────────────────────────────────
+  /** Per vendor (one home per vendor, shared by its panes); absent until read. */
+  const notes = reactive<Record<string, AgentNotes | null>>({})
+
+  async function refreshNotes(agentKey: string): Promise<void> {
+    if (!isAgentVendor(agentKey)) return
+    if (!(agentKey in notes)) notes[agentKey] = null
+    try {
+      const resp = await backend.send<AgentNotes>('agent.notes', { agent_key: agentKey, limit: AGENT_NOTES_LIMIT })
+      if (resp.ok && resp.payload?.memory && resp.payload.todos) {
+        notes[agentKey] = { memory: resp.payload.memory, todos: resp.payload.todos }
+      }
+    } catch {
+      // Keeps the last answer (or "reading…"); the next turn end retries.
+    }
+  }
+
+  /** The last `agent.notes` answer for a vendor; null while it is being read. */
+  function notesFor(agentKey: string): AgentNotes | null {
+    return notes[agentKey] ?? null
   }
 
   // ── Schedules ──────────────────────────────────────────────────────────────
@@ -215,6 +269,24 @@ export function createAgentConsole(backend: ReturnType<typeof useBackend>, sched
     await scheduler.refresh()
   }
 
+  /** Message jobs that address a pane by this name (`action.pane_name`). */
+  function jobsNamed(name: string): SchedulerJob[] {
+    if (!name) return []
+    return scheduler.jobs.value.filter((j) => j.action?.kind === 'message' && j.action.pane_name === name)
+  }
+
+  /** Points each job's `action.pane_name` at `name` (the rest of the action is
+   *  sent unchanged); answers the names of the jobs that were not updated. */
+  async function retargetJobs(jobs: readonly SchedulerJob[], name: string): Promise<string[]> {
+    const failed: string[] = []
+    if (!opts.upsertJob) return jobs.map((j) => j.name)
+    for (const job of jobs) {
+      if (!(await opts.upsertJob({ id: job.id, action: { ...job.action, pane_name: name } }))) failed.push(job.name)
+    }
+    await scheduler.refresh()
+    return failed
+  }
+
   return {
     identities,
     identityForPane: (paneId: string): AgentIdentity | null => byPane.value.get(paneId) ?? null,
@@ -227,6 +299,10 @@ export function createAgentConsole(backend: ReturnType<typeof useBackend>, sched
     nextJob,
     wakeNow,
     setSchedulesPaused,
+    jobsNamed,
+    retargetJobs,
+    refreshNotes,
+    notesFor,
     openSettings: opts.openSettings,
   }
 }

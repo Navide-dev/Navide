@@ -33,6 +33,7 @@ import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
 import AgentControlPanel from './agent/AgentControlPanel.vue'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
+import { formatClock } from '../lib/schedulerJobs'
 
 interface Props {
   paneId: string
@@ -401,19 +402,51 @@ function toggleAgentPanel(): void {
   agentPanelCollapsed.value = !agentPanelCollapsed.value
 }
 
+/** Below the fold width the header ranks its badges status > channel >
+ *  schedule > other, and folds the others behind "…" (CLI panes unchanged). */
+const agentNarrow = ref(false)
+const agentBadgesOpen = ref(false)
+/** How many "other" badges the narrow header is folding right now. */
+const agentFoldedBadges = ref(0)
+const AGENT_OTHER_BADGES = '.commander-inline, .muted-inline, .readback-toggle, .stale-config-inline, .cli-risk-inline, .pane-guard'
+let paneObserver: ResizeObserver | null = null
+let badgeObserver: MutationObserver | null = null
+
+function countAgentBadges(): void {
+  agentFoldedBadges.value = headerRef.value?.querySelectorAll(AGENT_OTHER_BADGES).length ?? 0
+}
+
 watch(
   () => !!agentView.value,
   (isAgent) => {
     headerObserver?.disconnect()
     headerObserver = null
+    paneObserver?.disconnect()
+    paneObserver = null
+    badgeObserver?.disconnect()
+    badgeObserver = null
     if (agentTick !== null) clearInterval(agentTick)
     agentTick = null
     if (!isAgent) return
     void nextTick(() => {
-      const width = containerRef.value?.parentElement?.clientWidth ?? 0
+      const root = containerRef.value?.parentElement
+      const width = root?.clientWidth ?? 0
       if (width > 0 && width < AGENT_PANEL_FOLD_BELOW_PX) agentPanelCollapsed.value = true
+      agentNarrow.value = width > 0 && width < AGENT_PANEL_FOLD_BELOW_PX
+      if (root && typeof ResizeObserver !== 'undefined') {
+        paneObserver = new ResizeObserver(() => {
+          const w = root.clientWidth
+          agentNarrow.value = w > 0 && w < AGENT_PANEL_FOLD_BELOW_PX
+        })
+        paneObserver.observe(root)
+      }
       const header = headerRef.value
       if (!header) return
+      countAgentBadges()
+      if (typeof MutationObserver !== 'undefined') {
+        badgeObserver = new MutationObserver(countAgentBadges)
+        badgeObserver.observe(header, { childList: true, subtree: true })
+      }
       agentPanelTop.value = header.offsetHeight
       if (typeof ResizeObserver !== 'undefined') {
         headerObserver = new ResizeObserver(() => (agentPanelTop.value = header.offsetHeight))
@@ -426,7 +459,17 @@ watch(
 )
 onBeforeUnmount(() => {
   headerObserver?.disconnect()
+  paneObserver?.disconnect()
+  badgeObserver?.disconnect()
   if (agentTick !== null) clearInterval(agentTick)
+})
+
+/** The enabled schedule that wakes this agent next, for the header chip. */
+const agentNextRun = computed(() => {
+  if (!agentView.value) return null
+  const job = agentConsole?.nextJob(props.paneId, props.title)
+  const at = job?.state?.next_run_at
+  return job && typeof at === 'number' ? { name: job.name, time: formatClock(at) } : null
 })
 
 /** "Hermes Agent · resident since 11/7" under the identity name. */
@@ -747,7 +790,7 @@ onMounted(() => {
 
 <template>
   <div
-    :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected, 'pane-agent': agentView, 'pane-agent-awaiting': agentView && displayStatus === 'awaiting' }]"
+    :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected, 'pane-agent': agentView, 'pane-agent-awaiting': agentView && displayStatus === 'awaiting', 'pane-agent-narrow': agentView && agentNarrow, 'agent-badges-open': agentView && agentNarrow && agentBadgesOpen }]"
     :style="agentView ? { '--agent-color': agentView.color } : undefined"
   >
     <button
@@ -934,6 +977,24 @@ onMounted(() => {
         >📌</span>
         </template>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
+        <template v-if="agentView">
+        <span
+          v-if="agentNextRun"
+          class="agent-sched-inline"
+          data-testid="agent-next-schedule"
+          :title="$t('agentPane.header.next-schedule-title', agentNextRun)"
+        >{{ $t('agentPane.header.next-schedule', { time: agentNextRun.time }) }}</span>
+        <button
+          v-if="agentNarrow && agentFoldedBadges > 0"
+          type="button"
+          class="agent-more-badges"
+          data-testid="agent-more-badges"
+          :aria-expanded="agentBadgesOpen ? 'true' : 'false'"
+          :title="$t('agentPane.header.more-badges', { n: agentFoldedBadges })"
+          :aria-label="$t('agentPane.header.more-badges', { n: agentFoldedBadges })"
+          @click.stop="agentBadgesOpen = !agentBadgesOpen"
+        >…</button>
+        </template>
       </div>
       <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
       <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
@@ -956,6 +1017,7 @@ onMounted(() => {
       :style="{ top: agentPanelTop + 'px' }"
       :pane-id="paneId"
       :pane-name="title"
+      :agent-key="agentKey"
       :display-status="displayStatus"
       :collapsed="agentPanelCollapsed"
       @toggle="toggleAgentPanel"
@@ -1454,6 +1516,50 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.agent-sched-inline {
+  flex: none;
+  font-size: var(--font-3xs);
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.agent-more-badges {
+  flex: none;
+  font: inherit;
+  font-size: var(--font-3xs);
+  line-height: 1;
+  padding: 2px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+/* Narrow agent pane: status > channel > schedule > other; the others fold
+   behind "…" until it is opened. */
+.pane.pane-agent-narrow .header-main { min-width: 0; }
+.pane.pane-agent-narrow .header-main > .status,
+.pane.pane-agent-narrow .header-main > .exit-fault-inline,
+.pane.pane-agent-narrow .header-main > .stuck-inline,
+.pane.pane-agent-narrow .header-main > .stop-ineffective { order: 1; flex: none; }
+.pane.pane-agent-narrow .header-main :deep(.pane-channel) { order: 2; flex: none; }
+.pane.pane-agent-narrow .header-main > .agent-sched-inline { order: 3; }
+.pane.pane-agent-narrow .header-main > .commander-inline,
+.pane.pane-agent-narrow .header-main > .muted-inline,
+.pane.pane-agent-narrow .header-main > .readback-toggle,
+.pane.pane-agent-narrow .header-main > .stale-config-inline,
+.pane.pane-agent-narrow .header-main :deep(.cli-risk-inline),
+.pane.pane-agent-narrow .header-main :deep(.pane-guard) { order: 4; }
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .commander-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .muted-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .readback-toggle,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .stale-config-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main :deep(.cli-risk-inline),
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main :deep(.pane-guard) { display: none; }
+.pane.pane-agent-narrow .header-main > .agent-more-badges { order: 5; }
+.pane.pane-agent-narrow.agent-badges-open .header-main { flex-wrap: wrap; }
 .xterm-host.agent-with-panel { margin-right: 200px; }
 .xterm-host.agent-panel-folded { margin-right: 18px; }
 .xterm-host.drag-over,

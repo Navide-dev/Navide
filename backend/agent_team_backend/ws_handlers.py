@@ -3702,6 +3702,20 @@ async def agent_session_exists(session: "Session", msg_id: str, msg_type: str, p
     )
 
 
+@handler("agent.notes")
+async def agent_notes(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Read-only memory / todo summary of an agent vendor's own files."""
+    from .agent_notes import DEFAULT_LIMIT, read_agent_notes
+
+    agent_key = str(payload.get("agent_key", ""))
+    try:
+        limit = int(payload.get("limit") or DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        limit = DEFAULT_LIMIT
+    result = await asyncio.to_thread(read_agent_notes, agent_key, limit)
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("agent.orphan_scan")
 async def agent_orphan_scan(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
