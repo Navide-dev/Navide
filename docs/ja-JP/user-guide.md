@@ -50,7 +50,7 @@ Select multiple pane headers with Cmd/Ctrl-click or Shift-click, then right-clic
 
 **Reclaim selected (N)** shows how many selected panes are eligible, releases their CLI processes, and keeps click-to-resume placeholders. It skips protected panes, including running panes, the focused pane, panes awaiting an answer or holding unsent text, and panes without a resumable session. The action stays visible but is disabled when none of the selected panes can be reclaimed. **Mute selected notifications** mutes the entire selection, including a mix of muted and unmuted panes; when every selected pane is muted, **Unmute selected notifications** restores notifications for all of them. These batch actions affect only the selected panes.
 
-組み込みで対応する Agent Key は 14 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）です。正確な CLI Behavior と Provider Billing は各 External Tool が引き続き管理します。
+組み込みで対応する Agent Key は次のコーディング CLI です：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code。正確な CLI Behavior と Provider Billing は各 External Tool が引き続き管理します。
 
 ### CLI risk observations
 
@@ -144,17 +144,63 @@ Token Stats は対応 Local CLI Log を Parse し、Usage を Workspace、Pane�
 
 ### Token Monitor
 
-Open **Window → Token Monitor** for a separate window showing local Claude turn history over 14, 30, or 90 days. Reopening the command focuses the existing monitor. The existing **Turn Stats** modal remains available for inspecting one pane. Model filters, per-turn trends, and per-turn averages and medians summarize the selected local records.
+**Window → Token Monitor** を開くと、過去 14、30、90 日のローカルの Claude ターン履歴を表示する独立したウィンドウが開きます。コマンドをもう一度実行すると、開いているモニターにフォーカスします。既存の **Turn Stats** モーダルは、単一の Pane を調べるために引き続き使えます。モデルフィルター、ターンごとの傾向、ターンごとの平均値と中央値は、選択したローカル記録をまとめたものです。
 
-Transcript records have **unknown account attribution**: a shared local Claude history cannot establish which signed-in account produced a turn. Other devices, web conversations, and subagent logs are outside this view. Missing history is not zero usage; partial scan coverage and errors are shown. Large histories are bounded, and refresh can reuse a scan for 60 seconds.
+Transcript の記録は**アカウントの帰属が不明**です。共有されたローカルの Claude 履歴からは、どのサインイン済みアカウントがそのターンを生成したか特定できません。他のデバイス、Web 上の会話、subagent の Log はこのビューの対象外です。履歴がないことは使用量ゼロを意味しません。部分的なスキャン範囲とエラーは表示されます。大きな履歴には上限があり、更新はスキャン結果を最大 60 秒再利用できます。
 
-Quota history records successful observations for the active Claude account slot through the existing usage polling service. It starts accumulating when those observations are available; it cannot reconstruct earlier quota windows. Disabled polling and an empty history are displayed explicitly. Opening the monitor does not make extra provider requests. Observed tokens and quota percentages do not establish an official token allowance, throttling, effort level, or separate thinking-token usage.
+Quota 履歴は、既存の使用量ポーリングサービスを通じて、アクティブな Claude アカウントスロットの成功した観測を記録します。これらの観測が得られる時点から蓄積を始め、それ以前の Quota ウィンドウを再構築することはできません。ポーリングの無効化と空の履歴は明示的に表示されます。モニターを開いても、プロバイダーへの追加リクエストは発生しません。観測されたトークンと Quota の割合から、公式のトークン上限、スロットリング、effort レベル、独立した thinking-token 使用量を判断することはできません。
+
+### Turn Stats のアカウント Quota
+
+**Window → Turn Stats** から、または TOKENS パネルのエントリから開きます。
+**Pane usage** は単一の Session を表示し、**Account quota** は Pane とモデルをまたいで
+ローカルでアカウントに帰属させた活動を表示します。保存済みアカウントと履歴上の
+アカウントは、削除済みプロファイルや別枠の Unknown を含め、開いている Pane
+がなくても参照できます。履歴を開く操作と **Refresh history** はローカルの記録だけを
+読みます。プロバイダーへの再試行は既存のポーリングポリシーに従い、無効化された
+ポーリングは無効のままです。
+
+現在のプロバイダー値は、選択したアカウントとウィンドウに属します。そのキャッシュ済み、
+古い、失敗、無効といった状態と観測時刻は、履歴を読み込んだ時刻とは別です。
+**All accounts** は集計したローカル活動を表示し、単一アカウントの現在の割合は
+表示しません。モデルウィンドウごとの Quota 割合と、全モデルのローカルトークンは、
+対象とする母集団が異なります。
+
+サイクルの既定は直近 30 日で、90 日とカスタムの UTC 日付範囲も選べます。
+所属は、半開区間に入るリセット時刻で決まり、範囲が現在に達する場合は進行中の
+サイクルも含みます。表とグラフは 1 ページあたり最大 50 件を表示し、サマリーと
+対象／除外の平均件数は範囲全体を対象にします。ボタンまたはグラフでサイクルを選ぶと、
+ソースの根拠、ローカルおよび UTC の完全なタイムスタンプ、内訳、変更された読み取り値、
+最後の再照合を確認できます。1 パーセントポイントあたりのローカルトークンの比率は、
+合計を 0 でない観測ピークで割ったもので、プロバイダーの上限や価格の見積もりでは
+ありません。
+
+終了済みで信頼できる上限の根拠があり、ローカルの詳細が利用できるサイクルだけが、
+完了サイクルの平均に入ります。CLI の上限は、それより前に観測された 100% 未満の
+プロバイダーピークと共存することがあります。旧形式のタイムスタンプは確認できますが、
+未検証のままです。詳細が欠けている、または部分的な場合は欠落として表示され、
+観測されたゼロはゼロのままです。ローカルの合計は 5 分単位のスライスを使い、
+境界での按分は行いません。遅れて届いたデータは、保持中の終了済みサイクルを再照合でき、
+保存済みの確定合計はスライスの期限切れ後も残ります。
+
+Month と Year は **UTC カレンダー** のバケットを維持します。日付範囲は交差する
+バケット全体を選択し、拡張された境界が表示されます。トークンはイベント時刻、
+サイクル数は開始時刻（開始が不明な場合はリセット時刻）で集計されます。
+ウィンドウフィルターが影響するのはサイクル統計だけで、重なり合う Quota ウィンドウが
+アカウントの消費として合算されることはありません。アカウントの割合は同じ期間の
+観測されたローカル活動を基にし、カバレッジが不完全な場合は利用できません。
+
+**Export selected range** は、選択したすべての記録を一貫した 1 回のレスポンスで
+最大 10,000 行までエクスポートします。上限を超える場合は範囲を絞ってください。
+CSV には ID、根拠、カバレッジ、適格性、UTC タイムスタンプ、タイムゾーンの
+メタデータが含まれます。部分的／利用不可の数値トークンのセルは空で、
+既知のゼロは `0` です。
 
 ## Git と Review
 
 Navide には Official Git Package の Factory Installation が含まれています。Active Package Version は Embedded Left View と Dedicated Git Window の両方を提供します。Bundled Git は削除できません。代わりに Extensions で無効化してください。Verified Marketplace Version が存在する場合はそちらが優先されます。Git View は Repository Discovery、Working Tree Inspection、Staging、Commit、Branch、Remote、Issue、関連 Workflow をサポートし、Multi-repository Workspace では検出された Repository を切り替えられます。Discovery Scan は Backend をブロックせずに実行され、低速な Filesystem では制限付きの Scan 時間が過ぎると部分的な結果を返します。Repository Operation は Navide の Host／Backend Boundary 内に留まり、GitHub／GitLab Issue Detection は利用可能な場合に設定済みの `gh` または `glab` CLI を使用します。選択された Git Package が Load、Mount、または Ready Report に失敗した場合、Git タブはその旨と理由を表示し、**Reinstall built-in Git** を提示します。タブを開き直しても再試行されます。Security／Trust／Permission Denial は Fallback を Trigger しません。
 
-Extensions の **.vsix ファイルからインストール…** で、自分で選んだ Navide プラグインのパッケージファイルをインストールできます。このパッケージは Navide の審査を受けておらず署名もないため、作成者を確認できません。ダイアログはそのことを明記し、公開元を「自称」、スキャンを「未スキャン」と表示し、リスクを理解したことを確認するまで同意できません。ファイルからインストールした Navide プラグインは自動更新されません。承認した内容はすぐに有効になり、**再起動**も Navide の再起動も不要です。初回インストールは承認した時点で有効になり、承認した更新（および agent が開始した、現在のバージョンと開示内容がまったく同じ自動更新）はすぐに切り替わります。承認の前にダイアログで、そのプラグインの開いている画面が再読み込みされること、Navide SDK で状態を保存している画面は元の状態に戻り、それ以外の保存していない内容は失われることを説明します。切り替える直前に、Navide は新しいバージョンの画面が起動できるかをもう一度確認し、できなければ実行中のバージョンをそのまま動かします。切り替え中、プラグインのパネルは空白にならず、切り替え中であることを表示します。切り替えはすべてお知らせに記録され、前のバージョンに**戻す**ボタンが付きます。ファイルから更新した場合は置き換えたファイルのバージョンを保持し、そこへ戻すには改めて同意が必要です。切り替えに失敗した場合は元のバージョンのまま動作し、更新は保留されたままになります。あなたが承認した更新の場合は「設定 → Navide プラグイン」にすぐ理由が表示され、**再起動**と**破棄**が残り、次回 Navide を起動したときにお知らせに**今すぐ適用**付きで表示されます。agent が開始した自動更新の場合は、理由と**今すぐ適用**を示す行がすぐにお知らせに表示されます。同じ id のインストール済み Navide プラグインを置き換えるときは（どちらの方向でも）先に確認され、置き換え後は以前の権限、ネイティブバックエンドの同意、ファイル変更を許可したワークスペース、agent ツールの許可を引き継ぎません。提供元が変わるときは、保存データ（ネイティブバックエンドのデータとビューのストレージ）は新しい版に渡さず別に保管され、Navide マーケットプレイス版に戻すときに戻すかどうかを確認します（既定では戻しません）。行の **Navide マーケットプレイス版に戻す** で元に戻せます。**開発者モード**は既定でオフです。オンにすると、開発中の Navide プラグインをフォルダーから読み込めます。Navide の中ではこの画面でのみ切り替えられ、ここでの変更はすべて記録されます。この設定ファイルはあなたの権限で動くほかのプログラム（agent CLI を含む）も変更できます（Navide Guard は agent によるこのファイルへの書き込みを critical と判定します）が、Navide は自分で書き込んだ項目ごとに署名を保存します。Navide が書き込んでいない項目は適用されません。スイッチはオフのまま、フォルダーは読み込まれず、一覧上の注意と起動時の通知でそのことが示され、アクティビティログにも記録されます。この画面でスイッチをもう一度オンにするか、そのフォルダーにもう一度同意するまで有効になりません。0.2.28 より前からアップグレードした場合や署名ファイルがない場合も同じで、スイッチをもう一度オンにし、フォルダーごとにもう一度同意します。制限は plugin-development-v2.md を参照してください。オンの間は一覧の上に常に注意が表示され、起動のたびにも通知されます。フォルダーは権限またはバックエンドの宣言が変わったときだけ再確認され、ファイル（ネイティブバックエンドのプログラム自体を含む）を編集しただけでは確認されません。製品版では、自前の Registry（`AGENT_TEAM_MARKETPLACE_URL`）が使われるのも開発者モードがオンのときだけで、オフのときはそこからインストールした Navide プラグインは読み込まれず、画面に理由が表示されます。
+Extensions の **ファイルからインストール…** で、自分で選んだ Navide プラグインのパッケージファイルをインストールできます。このパッケージは Navide の審査を受けておらず署名もないため、作成者を確認できません。ダイアログはそのことを明記し、公開元を「自称」、スキャンを「未スキャン」と表示し、リスクを理解したことを確認するまで同意できません。ファイルからインストールした Navide プラグインは自動更新されません。承認した内容はすぐに有効になり、**再起動**も Navide の再起動も不要です。初回インストールは承認した時点で有効になり、承認した更新（および agent が開始した、現在のバージョンと開示内容がまったく同じ自動更新）はすぐに切り替わります。承認の前にダイアログで、そのプラグインの開いている画面が再読み込みされること、Navide SDK で状態を保存している画面は元の状態に戻り、それ以外の保存していない内容は失われることを説明します。切り替える直前に、Navide は新しいバージョンの画面が起動できるかをもう一度確認し、できなければ実行中のバージョンをそのまま動かします。切り替え中、プラグインのパネルは空白にならず、切り替え中であることを表示します。切り替えはすべてお知らせに記録され、前のバージョンに**戻す**ボタンが付きます。ファイルから更新した場合は置き換えたファイルのバージョンを保持し、そこへ戻すには改めて同意が必要です。切り替えに失敗した場合は元のバージョンのまま動作し、更新は保留されたままになります。あなたが承認した更新の場合は「設定 → Navide プラグイン」にすぐ理由が表示され、**再起動**と**破棄**が残り、次回 Navide を起動したときにお知らせに**今すぐ適用**付きで表示されます。agent が開始した自動更新の場合は、理由と**今すぐ適用**を示す行がすぐにお知らせに表示されます。同じ id のインストール済み Navide プラグインを置き換えるときは（どちらの方向でも）先に確認され、置き換え後は以前の権限、ネイティブバックエンドの同意、ファイル変更を許可したワークスペース、agent ツールの許可を引き継ぎません。提供元が変わるときは、保存データ（ネイティブバックエンドのデータとビューのストレージ）は新しい版に渡さず別に保管され、Navide マーケットプレイス版に戻すときに戻すかどうかを確認します（既定では戻しません）。行の **Navide マーケットプレイス版に戻す** で元に戻せます。**開発者モード**は既定でオフです。オンにすると、開発中の Navide プラグインをフォルダーから読み込めます。Navide の中ではこの画面でのみ切り替えられ、ここでの変更はすべて記録されます。この設定ファイルはあなたの権限で動くほかのプログラム（agent CLI を含む）も変更できます（Navide Guard は agent によるこのファイルへの書き込みを critical と判定します）が、Navide は自分で書き込んだ項目ごとに署名を保存します。Navide が書き込んでいない項目は適用されません。スイッチはオフのまま、フォルダーは読み込まれず、一覧上の注意と起動時の通知でそのことが示され、アクティビティログにも記録されます。この画面でスイッチをもう一度オンにするか、そのフォルダーにもう一度同意するまで有効になりません。0.2.28 より前からアップグレードした場合や署名ファイルがない場合も同じで、スイッチをもう一度オンにし、フォルダーごとにもう一度同意します。制限は plugin-development-v2.md を参照してください。オンの間は一覧の上に常に注意が表示され、起動のたびにも通知されます。フォルダーは権限またはバックエンドの宣言が変わったときだけ再確認され、ファイル（ネイティブバックエンドのプログラム自体を含む）を編集しただけでは確認されません。製品版では、自前の Registry（`AGENT_TEAM_MARKETPLACE_URL`）が使われるのも開発者モードがオンのときだけで、オフのときはそこからインストールした Navide プラグインは読み込まれず、画面に理由が表示されます。
 
 特に Automatic または Parallel Run の後は、Commit 前に変更を確認してください。Agent-generated Change が Git Panel に表示されたというだけで、安全になるわけではありません。
 

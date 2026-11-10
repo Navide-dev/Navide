@@ -1,21 +1,18 @@
 # Navide Plugin Agent Tools and Disclosure: Interface Contract (v1)
 
-Status: **contract only**. This is step 0 ("介面約定") of plan B in
-`.agent-team/plans/navide_b5ecff.html` (section `plan-b`). It fixes the shapes
-that the parallel work lines B1 (agent tools), B2 (Navide Marketplace MCP
-tools) and D (disclosure) build against. Nothing described here is wired into
-the app yet:
+Status: implemented. This document is the interface contract for agent tools
+and disclosure. It fixes the shapes that the agent tools, the Navide Marketplace
+MCP tools and the disclosure work build against.
 
-- B1-a turned on `backend.agentTools` in `plugin-manifest-v2.schema.json`
-  ([section 2.6](#26-schema-fragment)): the Host and the
-  Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
-  the consent key carries the tools digest (section 2.8), and the consent
-  surfaces list the tools. The Registry image is built from
-  `marketplace/registry` alone, so it ships a byte-identical copy of
-  `agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
-- No MCP tool, Host route, WebSocket handler, Registry endpoint or database
-  table exists for anything else below. The reference code is types, constants and
-  pure functions:
+`backend.agentTools` is part of `plugin-manifest-v2.schema.json`
+([section 2.6](#26-schema-fragment)): the Host and the
+Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
+the consent key carries the tools digest (section 2.8), and the consent
+surfaces list the tools. The Registry image is built from
+`marketplace/registry` alone, so it ships a byte-identical copy of
+`agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
+
+The reference code is types, constants and pure functions:
 
 | Language | Module | Contents |
 |---|---|---|
@@ -34,10 +31,10 @@ Both languages are held to the fixtures in
 `backend/tests/test_plugin_disclosure_scan_contract.py`. A change to this
 contract changes the fixture first; both test suites must then go green.
 
-The governing rule of plan B is **disclose, don't restrict**: everything a
+The governing rule is **disclose, don't restrict**: everything a
 package can do is declared, shown and consented to. The only hard rules are the
 ones that stop impersonation or deception (tool-name prefixes, reserved names,
-text that could fake another tool or a system message) and the DB9 stability
+text that could fake another tool or a system message) and the stability
 cap on declarations. Tool arguments and results have no size cap: their size
 is disclosed and they travel in pieces
 ([section 4.4](#44-chunked-transfer-of-results-and-arguments)).
@@ -94,9 +91,9 @@ is disclosed and they travel in pieces
 | `name` | yes | string | [2.2](#22-names-and-the-prefix); unique within the package |
 | `method` | yes | string | must be listed in `backend.methods`; the Host forwards the call to it |
 | `risk` | yes | `"read"` \| `"write"` | shown on every disclosure surface; `write` raises the risk level to high |
-| `title` | yes | string | [2.4](#24-text-rules); no length limit (DB9 only) |
-| `description` | yes | string | [2.4](#24-text-rules); no length limit (DB9 only); consent shows it in full |
-| `inputSchema` | yes | object | JSON Schema with `"type": "object"`; every number in it must be a safe integer ([3.7](#37-canonical-serialization)); no depth or size limit (DB9 only) |
+| `title` | yes | string | [2.4](#24-text-rules); no length limit |
+| `description` | yes | string | [2.4](#24-text-rules); no length limit beyond the [stability cap](#27-stability-cap); consent shows it in full |
+| `inputSchema` | yes | object | JSON Schema with `"type": "object"`; every number in it must be a safe integer ([3.7](#37-canonical-serialization)); no depth or size limit beyond the [stability cap](#27-stability-cap) |
 | `timeoutMs` | no | integer | 1 to 120000 (the Host's existing backend-call bound, `MAX_BACKEND_TIMEOUT_MS`); default 30000 |
 
 Backend method and event names must be lowercase dotted names,
@@ -115,8 +112,7 @@ change.
 No other field is allowed. `backend.agentTools` requires a native backend, so
 a package that declares it is at least risk **high**. Since 0.2.39 a package
 without a backend declares its tools under `contributes.agentTools` instead,
-served by one of its views ([2.9](#29-view-served-tools-contributesagenttools));
-DB13 is closed by that section.
+served by one of its views ([2.9](#29-view-served-tools-contributesagenttools)).
 
 ### 2.2 Names and the prefix
 
@@ -132,7 +128,7 @@ DB13 is closed by that section.
 - Two packages that derive the same prefix may both install; when two
   available tools have the same name, the one the user allowed later is not
   served (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)),
-  and the Navide Plugins page says why in both rows (DB1). The order is per
+  and the Navide Plugins page says why in both rows. The order is per
   name: the consent record's `agentToolNamesSince[name]`, the time the user
   first allowed a version of the package that declares that name, made unique
   across packages so there is never a tie. A name an update adds ranks from
@@ -187,14 +183,14 @@ tool means adding it there (or giving it a reserved prefix).
   show such characters in schema strings spelled out (`\u{202e}`).
 - Consent surfaces show each tool's `method` and its whole `inputSchema`
   (collapsible), the number of tools and their total size. Nothing limits the
-  number of tools or the size of the whole declaration; DB9 applies per field
-  (2.7).
+  number of tools or the size of the whole declaration; the stability cap applies
+  per field (2.7).
 - The core server prefixes every description with the source label
-  `[third-party Navide plugin <id> v<version> | permissions: ...]` (D4, built by
-  B1-c from the sync entry's `permissions`).
+  `[third-party Navide plugin <id> v<version> | permissions: ...]`, built from
+  the sync entry's `permissions`.
 - Tool **results**: every Cc character except TAB and LF is removed
   (`sanitizeAgentToolResultText`; CR is removed too), then the result is wrapped
-  as external content with the plugin id, version and permissions (D4).
+  as external content with the plugin id, version and permissions.
 
 ### 2.5 Validation order and error codes
 
@@ -221,22 +217,20 @@ schema error.
 ### 2.6 Schema fragment
 
 `agent-tools-fixtures/manifest-agent-tools.fragment.schema.json` holds the
-JSON Schema that B1-a adds to `$defs.backend.properties` of
-`plugin-manifest-v2.schema.json` (both copies) together with the
-`agentTool` and `agentToolText` definitions; B1-a added it, and both test
+JSON Schema that `plugin-manifest-v2.schema.json` (both copies) carries in
+`$defs.backend.properties`, together with the
+`agentTool` and `agentToolText` definitions; both test
 suites assert that both schema copies carry it verbatim. Rules the
 schema cannot express (prefix, reserved names, declared method, uniqueness,
-integers, DB9) stay in `validateAgentTools`.
+integers, the stability cap) stay in `validateAgentTools`.
 
-### 2.7 DB9 stability cap
+### 2.7 Stability cap
 
 1 MiB (1,048,576 bytes, UTF-8) each for one `description` and one
 `inputSchema` in its canonical spelling (`AGENT_TOOL_STABILITY_CAP_BYTES`,
 checked by `validateAgentTools`).
 
-**Tool results and tool arguments have no size cap** (user decisions
-2026-10-17: DB9 option a, "拿掉 1 MiB 回傳上限，只揭露資料大小；穩定性改用分段傳送處理",
-and "傳給外掛的參數上限也拿掉"). Stability comes from the chunked transfer in
+**Tool results and tool arguments have no size cap**. Stability comes from the chunked transfer in
 [section 4.4](#44-chunked-transfer-of-results-and-arguments), never from
 refusing a call. The sizes are disclosed instead, one field each:
 
@@ -254,12 +248,12 @@ the Host sent no valid size and 0 means the call has no result.
 The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
 the error-code list for older readers but is no longer produced.
 
-### 2.8 Consent binding (for B1-a)
+### 2.8 Consent binding
 
 The existing native-backend consent binds to the package digest and to
 `permissions`, `backend.methods` and `backend.events`
-(`backendPermissionsKey`). B1-a adds the canonical spelling of the disclosure's
-`agentTools` array to that key **only when it is non-empty**, so a package
+(`backendPermissionsKey`). The key adds the canonical spelling of the disclosure's
+`agentTools` array **only when it is non-empty**, so a package
 without agent tools keeps its existing key and its existing consent records
 stay valid. Any change to any tool (name, method, risk, text, schema, timeout)
 then requires new consent, and until then all of that package's tools are in
@@ -276,7 +270,7 @@ prefix derived from the id ([2.2](#22-names-and-the-prefix)), the reserved
 names ([2.3](#23-reserved-names)), the text rules ([2.4](#24-text-rules)),
 the validation order ([2.5](#25-validation-order-and-error-codes)) with one
 more code, `AGENT_TOOL_VIEW_UNDECLARED` (the view id is not declared), and the
-DB9 cap ([2.7](#27-db9-stability-cap)). Names are unique across both lists; a
+stability cap ([2.7](#27-stability-cap)). Names are unique across both lists; a
 `validateAgentTools` error for a `contributes` entry carries `list:
 "contributes"`. A package with a backend may declare both lists.
 
@@ -300,8 +294,8 @@ for a write tool; it does not add `nativeBackend`.
 
 Consent is the install grant of the exact package version: the install card
 lists the tools like a backend's, and the version's grant is what
-`hasConsent` checks. The C3 rule applies (allowing the package turns the
-master switch on while it is still at its default). The Disabled switch of
+`hasConsent` checks. Allowing the package turns the
+master switch on while it is still at its default. The Disabled switch of
 the package applies; the native-backend switches do not.
 
 A call ([4.2](#42-backend--host-the-agent-tool-call)) reaches the view only
@@ -319,7 +313,7 @@ tool's deadline (`PLUGIN_TOOL_TIMEOUT`, `reason: "execution"`) or when the
 view goes away. No view open on that workspace answers
 `PLUGIN_TOOL_UNAVAILABLE` with `reason: "view-not-open"`; the Host never
 loads a view behind the user's back for a call. Every other check of 4.2
-(master switch, caller kind, package state, consent, workspace grant, DB3
+(master switch, caller kind, package state, consent, workspace grant,
 first write, execution policy) runs before the dispatch, the same as for a
 backend tool; the headless backend binding is skipped.
 
@@ -399,7 +393,7 @@ optional manifest arrays become `[]`.
 
 The one-line summary is not free text: it is the ordered list `clauses`, and
 each surface renders it from the localized i18n template
-`plugin-disclosure.summary.v1` (zh-TW, en, ja; D-c owns the strings,
+`plugin-disclosure.summary.v1` (zh-TW, en, ja;
 i18n key per clause `pluginDisclosure.summary.<key>`). Publishers cannot write
 it. These clauses summarize what the package *declares*. When a scan report
 exists, every surface lists the scan sentences ([3.8](#38-scan-report)) first
@@ -449,7 +443,7 @@ These are the manifest reasons. The level every surface shows is
 `cardRiskLevel(disclosure, scan)`: the highest of this level and the scan
 reasons of [3.8](#38-scan-report). `networkViaShell` adds no reason of its own;
 the `shell.*` reasons already cover it. Every surface shows the level with
-colour, icon and text together (D5).
+colour, icon and text together.
 
 ### 3.4 Registry facts and the card
 
@@ -473,8 +467,8 @@ recompute them. They travel beside it:
 `review.status` is `approved` | `pending` | `rejected` | `not-required`;
 `scan.secretScan` is `clean` | `findings` | `not-run`. `registry` is `null`
 where no Registry is involved. This `DisclosureCard` is what every surface
-renders: list card (summary and level), detail page, consent dialog and the B2
-approval card. `scan` is the signed scan report of the version
+renders: list card (summary and level), detail page, consent dialog and the
+agent approval card. `scan` is the signed scan report of the version
 ([3.5](#35-trust-check-the-disclosure-envelope)); the card derives its
 sentences, its scan risk reasons and the declared-vs-scanned comparison
 ([3.9](#39-declared-vs-scanned)) from it. The `registry.scan` object above is
@@ -503,7 +497,7 @@ content.
 
 Surfaces state these values as facts (for example "自動發佈，未經人工審核" /
 "Published automatically, not reviewed by a person"), not as warnings. Red
-stays reserved for the three anomalies of D5.
+stays reserved for the three anomalies (`anomalies[]` in the activity summary).
 
 ### 3.5 Trust check: the disclosure envelope
 
@@ -538,7 +532,7 @@ here with `scanDigest` from the start rather than versioned later.
   `canonicalContractJson(scan)` for the scan report of the same artifact, or
   `null` when the version has no scan report (published before the scanner
   existed, or by a Registry without one). `scan-cases.json` pins one value as
-  `scanDigestExpected`. The two digests are separate (DS1) so the App can
+  `scanDigestExpected`. The two digests are separate so the App can
   check the part it recomputes on its own, and a rescan replaces only
   `scanDigest`.
 - `artifactDigest`, `packageId`, `version`, `target` and `keyId` equal the
@@ -558,13 +552,13 @@ here with `scanDigest` from the start rather than versioned later.
 | `scan` | the scan report of 3.8, or `null`; `null` exactly when `scanDigest` is `null` |
 | `registry` | the Registry facts of 3.4, or `null` |
 
-A version published before D-a has `null` in all three disclosure fields.
+A version published before disclosure envelopes existed has `null` in all three disclosure fields.
 `registry` does not depend on the manifest and may be present for any
 version. It is **not signed**: its values change after publish (a domain gets
 verified, a review completes), it is informational, and nothing in the App
 decides on it.
 
-**D-b** at `prepareInstall`, after the existing package-envelope verification:
+At `prepareInstall`, after the existing package-envelope verification:
 
 1. No disclosure envelope (all three fields `null`): install exactly as today.
    No disclosure card is shown for that version; its absence is shown as
@@ -576,7 +570,7 @@ decides on it.
    `disclosureDigest`. `scan` and `scanDigest` must both be `null`, or
    `sha256(canonicalContractJson(scan))` must equal `scanDigest`; the scan
    report's `artifactDigest` and `target` must equal the envelope's.
-3. D-b recomputes the disclosure from the manifest inside the downloaded
+3. The App recomputes the disclosure from the manifest inside the downloaded
    package. If its canonical spelling differs from the signed one, the install
    is refused with `DISCLOSURE_MISMATCH`. A malformed, unsigned, mismatched or
    partly missing disclosure envelope is refused with `DISCLOSURE_INVALID`.
@@ -584,8 +578,8 @@ decides on it.
 These two codes are the only new install-blocking rules. The App cannot rerun
 the scan, so the Registry signature is the scan report's only tamper
 evidence; the card says the scan was done and signed by the Registry. What the
-scan found never blocks an install (DS3): it changes only the card and the
-risk level. An App that predates D-b ignores the new fields and verifies the
+scan found never blocks an install: it changes only the card and the
+risk level. An App that predates disclosure envelopes ignores the new fields and verifies the
 package envelope as before.
 
 ### 3.6 Diff
@@ -646,7 +640,7 @@ widened}` (`widened` when `added` is non-empty):
 | `scanCapability` | capability address |
 | `scanDynamicCode` | `frontend` / `backend` |
 
-D2: an update is widened when either diff is widened, or when
+An update is widened when either diff is widened, or when
 `cardRiskLevel` rose. An update that is not widened installs without a dialog
 and shows one notification; a widened one shows the consent dialog with only
 the difference. The same functions serve rollback, and a rescan that widens
@@ -668,10 +662,9 @@ as strings; contract keys are ASCII, so both languages sort them the same way.
 ### 3.8 Scan report
 
 Disclosure is driven primarily by a static scan the Registry runs on every
-published artifact, not by what the package claims (user decision
-2026-10-17: "不是他申請，而是上架時系統掃描，掃描後揭露說明"). The Registry
+published artifact, not by what the package claims. The Registry
 scans at publish and again at review approval, synchronously within a time
-budget (DS4); a scanner upgrade is applied by a manual admin rescan (DS7).
+budget; a scanner upgrade is applied by a manual admin rescan.
 The report holds facts only:
 
 ```json
@@ -706,11 +699,11 @@ The report holds facts only:
 | `coverage` | `skipped[].reason` is one of `binaryAsset`, `tooLarge`, `redacted`, `unsupported`, `scannerError` (the scanner failed on that file and went on with the others), `tooComplex` (the file hit a structural ceiling: template nesting, section, import or symbol counts); `truncated` when any bound below was hit; `timedOut` when the time budget ran out. None of them fails a publish; `scannerError` and `tooComplex` (`INCOMPLETE_SKIP_REASONS`) make the scan incomplete, as `truncated` and `timedOut` do |
 | `shell.calls` | one entry per distinct `(executable, subcommand, source, evidence)`; `category` from `classifyShellCommand`; `evidence` is `callSite` (the `command` value of a `shell.run` call is a string literal) or `commandLikeString` (a literal that reads as a command); `files` counts the files it occurs in |
 | `shell.dynamic` | `shell.run` calls whose command is built at run time (a template with `${}`, an identifier, an expression): count and files only |
-| `network.hosts` | host names from URLs (`http(s)`, `ws(s)`, `ssh`, `git@host:`); never a path, query or credential (DS5) |
+| `network.hosts` | host names from URLs (`http(s)`, `ws(s)`, `ssh`, `git@host:`); never a path, query or credential |
 | `files` | string-literal `path` values of `fs.*` calls; a path that is not ASCII, not relative or longer than `maxPathLength` counts in `dynamicPaths` instead |
 | `capabilities` | capability addresses (`namespace.method`) that occur as literals |
 | `code` | per source, `null` when that source has no code: counts of `eval(`, `new Function(`, non-literal `import(`, string `setTimeout`/`setInterval`; `obfuscationSignals` names (for example `hexEscapes`, `hexIdentifiers`, `longBase64`, `charCodeStrings`) |
-| `native` | one entry per native executable: format, architecture, linked libraries, notable imports, import count; `packer` (`upx`, ...) or `embeddedRuntime` (`pyinstaller`, `node-sea`, `bun`, `deno`) when the code inside cannot be scanned (DS6). Commands, hosts and capability addresses found in its strings go into `shell`, `network` and `capabilities` with `source: "backend"` |
+| `native` | one entry per native executable: format, architecture, linked libraries, notable imports, import count; `packer` (`upx`, ...) or `embeddedRuntime` (`pyinstaller`, `node-sea`, `bun`, `deno`) when the code inside cannot be scanned. Commands, hosts and capability addresses found in its strings go into `shell`, `network` and `capabilities` with `source: "backend"` |
 
 Every string in a report is ASCII (hosts in their IDNA form, commands and
 subcommands matching `^[a-z][a-z0-9-]{0,39}$`, paths in the scope pattern
@@ -730,14 +723,13 @@ dropped and counted under `coverage.skipped` as `redacted`.
 `maxNativeBytes` 512 MiB per executable, `timeBudgetMs` 30000 per artifact.
 
 **Sentences.** `scanSentences(scan)` derives the ordered list a card shows;
-i18n key `pluginDisclosure.scan.<key>`, zh-TW, en and ja (D-c owns the
-strings). Publishers cannot write them.
+i18n key `pluginDisclosure.scan.<key>`, zh-TW, en and ja. Publishers cannot write them.
 
 | `key` | When | `params` | zh-TW example |
 |---|---|---|---|
 | `shell.remoteWrite` | a call with that category | `{commands}` | 這個外掛會執行 git push，可能把專案資料送到遠端。 |
 | `shell.other` | an executable outside the allowlist | `{commands}` | 這個外掛會執行 curl，可以把資料送到任何網址。 |
-| `shell.unknownSubcommand` | a subcommand not in the table (DS9) | `{commands}` | 這個外掛會執行 git frobnicate；這個子指令不在對照表裡，請當成可能連到遠端。 |
+| `shell.unknownSubcommand` | a subcommand not in the table | `{commands}` | 這個外掛會執行 git frobnicate；這個子指令不在對照表裡，請當成可能連到遠端。 |
 | `shell.remoteRead` | | `{commands}` | 這個外掛會執行 git fetch，會用你的登入身分連到遠端讀取資料。 |
 | `shell.localWrite` | | `{commands}` | 這個外掛會執行 git commit，會改變你本機儲存庫的內容。 |
 | `shell.local` | | `{commands}` | 這個外掛會執行 git status，讀取本機儲存庫的狀態。 |
@@ -772,7 +764,7 @@ order; `cardRiskLevel` takes the highest of these and the manifest level
 | `scan.shell.localWrite` | a `localWrite` call | high |
 | `scan.shell.unknownSubcommand` | an `unknownSubcommand` call | high |
 | `scan.code.eval.backend` | eval-like code in the backend | high |
-| `scan.incomplete` | any `coverage.incomplete` reason (DS2) | high |
+| `scan.incomplete` | any `coverage.incomplete` reason | high |
 
 ### 3.9 Declared vs scanned
 
@@ -780,10 +772,10 @@ order; `cardRiskLevel` takes the highest of these and the manifest level
 each a sorted list of `{kind, key}`. `undeclared` is shown first on the card,
 in red: the code does something the manifest does not declare. The Host
 still refuses the undeclared call at run time, but the mismatch itself is the
-strongest warning a card can carry (the D5 "used but not declared" red).
+strongest warning a card can carry (the "used but not declared" red).
 `declaredNotSeen` is grey and worded "宣告了，靜態掃描未發現" (it may be
 dynamic or unused), never "unused". Neither ever blocks an install or a
-publish (DS3).
+publish.
 
 | Finding | `kind` / `key` |
 |---|---|
@@ -838,7 +830,7 @@ A Host event carrying the complete catalog; each one replaces the previous one.
   a snapshot whose revision is not greater than the last one it applied, and
   starts again from the first snapshot after a Host reconnect.
 - `enabled` is true while the Host serves any tool. Two switches decide which
-  packages are in the snapshot: the DB8 master switch (off by default; since
+  packages are in the snapshot: the master switch (off by default; since
   0.2.39 the consent card is the switch — allowing a third-party package whose
   card lists agent tools, at install or at the native-backend prompt, turns it
   on while it is still at its default, and the card says so; a value the user
@@ -853,14 +845,15 @@ A Host event carrying the complete catalog; each one replaces the previous one.
   (no-regression guarantee: `tools/list` equals main). When the last served
   package goes, the Host sends one snapshot with `enabled: false` and
   `tools: []`.
-- `externalCallers` is the DB4 switch.
+- `externalCallers` is the switch that lets callers other than a pane
+  (`external` and `host`) call tools; it is off by default.
 - `state` is `available` | `consent-required` | `plugin-disabled` |
   `plugin-quarantined` | `plugin-revoked` | `name-collision`. Only `available`
   tools are registered (`add_tool`); every other entry is removed
   (`remove_tool`) but kept so a call can name the reason. A removed package is
   simply absent.
 - `permissions` is the package version's disclosure `permissions` object, from
-  which the backend builds the D4 label.
+  which the backend builds the source label.
 - The Host pushes on install, consent, disable, enable, quarantine, revoke,
   remove, a new version awaiting consent, and either switch.
 
@@ -884,7 +877,7 @@ The generic proxy tool sends the existing `agent.capability.request` event
 `caller` comes from `_resolve_caller` and is never taken from tool arguments.
 `kind` is `pane` (with `paneId` and the pane's `workspace`), `external` or
 `host` (both with `paneId: null`, `workspace: null`). `external` and `host`
-callers need the DB4 switch.
+callers need the `externalCallers` switch.
 
 `caller` may also carry `verifiedTo` (`pane` for a pane caller, `caller-kind`
 for `external` and `host`), the label the core attaches from its credential
@@ -916,9 +909,9 @@ chunks it again). The tool can still use its key to call its service; only the
 answer is cleaned. No MCP tool returns a `secrets.*` value.
 
 Host checks run on every call, in this order, regardless of what the CLI has
-cached: the package's switch (DB8 for third-party, the first-party switch for first-party) → caller kind → package installed, enabled, not
+cached: the package's switch (the master switch for third-party, the first-party switch for first-party) → caller kind → package installed, enabled, not
 quarantined, not revoked, not stopping → tool in the consented list →
-workspace grant → first-write confirmation (DB3) → execution policy →
+workspace grant → first-write confirmation → execution policy →
 headless binding → `callBound`.
 
 | `error_code` | Meaning |
@@ -1006,7 +999,7 @@ keywords are not mapped.
 
 ### 4.3 Backend → Host: `marketplace.query`
 
-For the B2 read-only tools (`marketplace_search`, `marketplace_detail`,
+For the read-only Marketplace tools (`marketplace_search`, `marketplace_detail`,
 `plugins_list_installed`). The backend unicasts `marketplace.query.request` to
 the authenticated Host session; the Host answers with the WebSocket message
 `marketplace.query.result`.
@@ -1028,11 +1021,11 @@ error, error_code}` with `BAD_REQUEST` | `NOT_FOUND` | `REGISTRY_UNAVAILABLE` |
 `HOST_UNAVAILABLE`. Every piece of third-party text (names, descriptions) is
 wrapped as external content by the backend before an agent sees it.
 
-The B2 request tools (section 6) use `detail` and `installed` to resolve their
+The request tools (section 6) use `detail` and `installed` to resolve their
 target: the Registry must list the requested version, and update, rollback
 and remove need the package installed.
 
-### 4.3.1 Backend → Host: `plugins.agent_action` (B2-c)
+### 4.3.1 Backend → Host: `plugins.agent_action`
 
 For `plugins_disable` / `plugins_enable`. The backend unicasts
 `plugins.agent_action.request` to the authenticated Host session:
@@ -1068,7 +1061,7 @@ and the audit records `no-op`. The undo acts only while the package is still
 in the state the agent left it in. The requester's pane name and workspace go
 through `neutralize_external_text`.
 
-Who disabled a package decides whether an agent may enable it (B2-c option B).
+Who disabled a package decides whether an agent may enable it.
 The Host keeps, beside the Disabled list (whose file format older Navide
 versions read and which stays as it is), who disabled each Marketplace package
 in `.navide-disabled-source.json`: `{by: "user" | "agent", at (Unix ms), agent:
@@ -1084,7 +1077,7 @@ decision and answers the agent `{ok: false, error_code: "APPROVAL_REQUIRED",
 error, approval_id, status: "pending", expires_at}`. A second `enable` returns
 the same pending request.
 
-`update` (O1, user ruling 2026-10-20) is asked by `marketplace_request_update`
+`update` is asked by `marketplace_request_update`
 after its own checks (installed, newer, not bundled) and before it files a
 request. It carries one more key, `version`. The Host verifies that Registry
 version exactly as the window's install does and updates at once only when
@@ -1299,7 +1292,7 @@ lone surrogate in it arrives as U+FFFD: pieces must be well-formed UTF-16
 text, as `splitAgentToolPayloadText` makes them. Every other caller (the
 built-in Plans, Git and mini-IDE views, a third-party view) receives the parsed
 value, so for them the main thread still decodes and parses a large result
-once, as before DB9 within the old 1 MiB bound; only the frame parsing has
+once, as it did when results were bounded at 1 MiB; only the frame parsing has
 moved off it. Reading a child's stdout yields to other work after about 8 ms
 in one event-loop turn (pacing, not a limit: every byte is read).
 
@@ -1346,7 +1339,7 @@ Navide plugin's result from it. A new helper must first write
 `{"ready": true}` within 30 s (a onefile build unpacks itself on every
 start). A helper that cannot be used, because it does not start or does not
 say it is ready (a broken build), leaves a result up to 1 MiB (what the
-backend handled before DB9) to be handled in the backend as then; a larger
+backend handled before results were sent in pieces) to be handled in the backend as then; a larger
 one answers `result_helper_failed`, `reason` `unavailable`. Each failed start is logged and recorded as
 `AGENT_TOOL_RESULT_HELPER_UNAVAILABLE` in the error ledger, and the next start
 is tried after 60 s. The helper's state (`idle`, `ready` or `unavailable`,
@@ -1411,19 +1404,19 @@ and otherwise behaves as today.
 
 #### Wire schema
 
-`backend-wire-v1.schema.json` gains the two notifications, the summary-only
+`backend-wire-v1.schema.json` has the two notifications, the summary-only
 success response, the `navide/call` without `arguments` and the health
-capability together with the Host's parser change (the contract gate test pins
-every valid wire fixture to the parser), in the implementation PR.
+capability, matching the Host's parser (the contract gate test pins
+every valid wire fixture to the parser).
 
 ## 5. Storage in `navide.db`
 
-The DDL is `PLUGIN_AUDIT_DDL` in `agent_tools_contract.py`; B1-d and D-e
-execute it inside navide.db's existing schema setup (no migration framework is
+The DDL is `PLUGIN_AUDIT_DDL` in `agent_tools_contract.py`; the backend
+executes it inside navide.db's existing schema setup (no migration framework is
 involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 `day` is the UTC date `YYYY-MM-DD`.
 
-`plugin_tool_calls` (B1-d; one row per agent tool call):
+`plugin_tool_calls` (one row per agent tool call):
 
 | Column | Type | Content |
 |---|---|---|
@@ -1442,7 +1435,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
 
-`plugin_activity` (D-e; one row per agent tool call with `tool_call_id` set,
+`plugin_activity` (one row per agent tool call with `tool_call_id` set,
 and the broker and shell-broker rows an earlier version wrote, until they
 expire): `id`, `at`, `plugin_id`,
 `plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
@@ -1453,9 +1446,9 @@ call error code, or `undeclared` for a use the manifest did not declare;
 `PLUGIN_ACTIVITY_DENIED_REASONS`, anything else is `other`), `fs_path`
 (workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
-Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
+Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days.
 
-`plugin_activity_counts` (final review part 2, H1; broker and shell-broker
+`plugin_activity_counts` (broker and shell-broker
 calls). Counted, never one row per call: a plugin needs no permission to be
 refused, so it can make refused calls as fast as it likes. The Host counts
 calls per `(plugin, version, workspace, source, address, outcome,
@@ -1525,7 +1518,7 @@ range); a row outside it is skipped. Every report field below reads `plugin_acti
 `plugin_activity_counts` together, with the same values as one row per call;
 a window reads the minute it starts in whole.
 
-`plugin_backend_call_minutes` (D-e; calls into a third-party plugin's own
+`plugin_backend_call_minutes` (calls into a third-party plugin's own
 backend, whichever path made them: its frontend, an agent tool, an agent
 capability request). Counted, never one row per call: the Host counts calls
 per `(plugin, version, workspace, address, outcome, minute)` within each batch
@@ -1557,14 +1550,14 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
 
-`plugin_activity_denied_daily` (D-e): `(day, plugin_id, workspace, source,
+`plugin_activity_denied_daily`: `(day, plugin_id, workspace, source,
 address, denied_reason)` primary key and `count`; the refusals among the detail rows, by reason, rolled up in the
 same transaction as `plugin_activity_daily` and kept as long (90 days), so the
 reason of a refusal ("used but not declared" above all) outlives the 7 days of
 detail. It was added after the first tables: every open runs the audit DDL (all
 `CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
 
-`plugin_tool_first_seen` (D-e): `(plugin_id, tool, workspace)` primary key and
+`plugin_tool_first_seen`: `(plugin_id, tool, workspace)` primary key and
 `first_at`; the earliest call of each `risk: write` agent tool in each target
 workspace, written with the call rows. It is not pruned with them, so
 `writeToolNewWorkspace` flags a workspace once, not again each time its old
@@ -1591,7 +1584,7 @@ views, exports):
 
 - A size of `-1` (`result_bytes`, or `args_bytes` should it ever be unknown)
   is shown as "unknown", never as "-1 bytes", and is never added into a sum.
-  Every statistic and rollup (the D-e daily rollup, D-f trends, averages,
+  Every statistic and rollup (the daily rollup, trends, averages,
   totals) leaves `-1` out and counts the unknown rows separately.
 - `fs_path`, `shell_command`, `address`, `denied_reason`, `pane_name`, the
   workspace paths and every other stored text are shown as plain text: never
@@ -1607,15 +1600,14 @@ whose close failed and that may still be running.
 `views[].child.stdoutPending` (`{bytes, peakBytes}`) is the size of a stdout
 frame the child has started but not ended (no newline yet), held in Host
 memory. Frames have no size limit (4.4, R1), so a child that never ends a
-frame (a bug, or binary data written to stdout) grows it without bound; before
-DB9 such a child was restarted at 1 MiB. It is disclosed, never cut off.
-Proposed notification for the resource watchdog (line 5, watchdog C), handled
+frame (a bug, or binary data written to stdout) grows it without bound. It is
+disclosed, never cut off. The resource watchdog notifies about it, handled
 like its other resource items: when `stdoutPending.bytes` passes
 **256 MiB, or 1/8 of the machine's memory if that is lower**, notify the user,
 who chooses to stop the plugin or let it continue; nothing is terminated
 automatically.
 
-`plugin_agent_actions` (B2-c; one row per attempt to request, decide, finish,
+`plugin_agent_actions` (one row per attempt to request, decide, finish,
 disable or enable a change to a Navide plugin). Its DDL is
 `PLUGIN_AGENT_ACTIONS_DDL`, run as its own schema component
 (`plugin_agent_actions`, version 1): an older navide.db gets the table at start
@@ -1659,7 +1651,7 @@ The activity page reads it back with `plugins.activity.report`
 
 ### 5.1 Reading activity: `plugins.activity.report`
 
-The activity page and the disclosure overview (D-f) read one plugin's report.
+The activity page and the disclosure overview read one plugin's report.
 The backend accepts `plugins.activity.report` only from the Host's
 authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
@@ -1689,7 +1681,7 @@ without the staged activation) never have one; the request then carries no
 `installedAt` and the backend keeps its earlier behaviour. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
-(D-e) builds it from the tables above and does the aggregation and the
+builds it from the tables above and does the aggregation and the
 anomaly checks; the renderer rebuilds it from validated fields and refuses a
 malformed one whole.
 
@@ -1709,8 +1701,8 @@ malformed one whole.
 | `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool` / `networkHost`), `key`, `lastUsedAt` (or null); a declared `*.example.com` is used by any `network.<host>` row below it |
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
-| `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
-| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`; the child's own life is three more fixed entries, `backend.<crashed>` (`error`), `backend.<restarted>` (`allowed`) and `backend.<stopped-after-crashes>` (`error`), C4), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
+| `agentActions` | the `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`; the child's own life is three more fixed entries, `backend.<crashed>` (`error`), `backend.<restarted>` (`allowed`) and `backend.<stopped-after-crashes>` (`error`)), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted
@@ -1751,7 +1743,7 @@ user's choice. Fixture:
 
 | Field | Content |
 |---|---|
-| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds (#367's counts have no threshold); `stdoutPending`: the stdout a plugin's children have sent without a newline yet (review M2 on #375), read from #375's `views[].child.stdoutPending.bytes` summed over the plugin's children (0 until #375 lands); threshold the smaller of 256 MiB and an eighth of the machine's memory; noticed like the others (Keep running doubles it, never lowered) |
+| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds; `stdoutPending`: the stdout a plugin's children have sent without a newline yet, read from `views[].child.stdoutPending.bytes` summed over the plugin's children; threshold the smaller of 256 MiB and an eighth of the machine's memory; noticed like the others (Keep running doubles it, never lowered) |
 | `usage`, `threshold` | non-negative finite numbers; `memory`, `disk` and `stdoutPending` in bytes, `processes` a count, `cpu` in cores (fractional). `threshold` is the level this notice was raised at |
 | `decision` | `notified` (raised, no answer yet), `continue`, `terminate` |
 | `at` | Host Unix ms (the backend clamps a future time to now) |
@@ -1775,7 +1767,7 @@ the log, never with its content. Columns: `id`, `at`, `plugin_id`,
 `plugin_version`, `item`, `usage` (REAL), `threshold` (REAL), `decision`;
 indexes `(at)` and `(plugin_id, at)`.
 
-## 6. Approval registry (B2)
+## 6. Approval registry
 
 The skills `ApprovalRegistry` gains a `kind` field: `skill` |
 `plugin-install` | `plugin-update` | `plugin-rollback` | `plugin-remove`.
@@ -1822,9 +1814,9 @@ unchanged. A plugin request:
   `CONFIRMATION_REQUIRED`. On approval the main window itself runs
   `prepareInstall` → trust dialog → `commitInstall`.
 
-B2-c tools and messages:
+The tools and messages:
 
-- `plugin-enable` (option B): filed by `plugins_enable` for a package the user
+- `plugin-enable`: filed by `plugins_enable` for a package the user
   disabled. `owner` `plugin-enable:<id>@<installed version>`, `target.version`
   the installed version, `fromVersion` null, `card` the Registry card of that
   version (null when not listed), `reason` empty. Every plugin record carries
@@ -1910,48 +1902,47 @@ B2-c tools and messages:
 ## 7. Changing this contract
 
 Edit the fixture, then both implementations, then this document; both test
-suites must pass. When B1-a accepts `backend.agentTools`, it also updates
+suites must pass. A change to `backend.agentTools` also updates
 [plugin-development-v2.md](plugin-development-v2.md) (manifest field
 reference) in the same PR, as for every manifest schema change.
 
-## 8. Decisions taken in step 0
+## 8. Decisions
 
-These were not fixed by the design and were decided here; each can be changed
-by editing the fixture.
+Each of these can be changed by editing the fixture.
 
 | Question | Decision | Why |
 |---|---|---|
-| Which part of the id is the "name part" | last dot segment, hyphens removed | `nerdtechnic.devmap` → `devmap` as in the design; hyphens are legal in ids but not in prefixes |
+| Which part of the id is the "name part" | last dot segment, hyphens removed | `nerdtechnic.devmap` → `devmap`; hyphens are legal in ids but not in prefixes |
 | Extra reserved prefix | `navide_` added | a package id ending in `.navide` would otherwise look official |
-| `title` length | no limit (DB9 only) | the design removes text length limits |
+| `title` length | no limit | text length is disclosed, not limited |
 | `timeoutMs` range | 1–120000 | the Host's existing backend-call bound; no new policy |
 | Numbers in `inputSchema` | safe integers only | both languages must spell the signed disclosure identically |
 | Publisher verification and review/scan | beside the disclosure (`registry`), not inside | the App cannot recompute them, and the trust check compares recomputable data only |
-| Where the disclosure is signed | a separate disclosure envelope, same signer key; the 8-field package envelope is unchanged | released Apps reject any extra package-envelope field; user decision 2026-10-17 (option B) |
-| `nativeCodeInspected` | `true` = backend + admin-approved, `false` = backend auto-published, `null` = no backend | the Registry records review per version but no separate inspection flag; user decision 2026-10-17 |
+| Where the disclosure is signed | a separate disclosure envelope, same signer key; the 8-field package envelope is unchanged | released Apps reject any extra package-envelope field |
+| `nativeCodeInspected` | `true` = backend + admin-approved, `false` = backend auto-published, `null` = no backend | the Registry records review per version but no separate inspection flag |
 | Shell executables | `allowlist` → the Host allowlist `gh, git, glab`; `full` → `null` (any) | a manifest declares only the mode |
-| `host` caller kind | gated by the DB4 switch, like `external` | it is not attributable to a pane either |
+| `host` caller kind | gated by the `externalCallers` switch, like `external` | it is not attributable to a pane either |
 | Daily rollup retention | 90 days | the 30-day "never used" signal needs more than 7 days of history |
 | Error-code case | new Host codes upper-case | matches the Host's existing `CAPABILITY_DENIED`, `PLUGIN_STOPPING` |
-| What drives the disclosure card | the Registry's static scan (3.8) first, manifest declarations beside it (3.9) | user decision 2026-10-17: the system scans at publish, the package does not apply |
-| Shell scope | no sub-scopes: the broker rules stay those of `shell.run` (`allowlist` = `gh, git, glab`; `full` = any) | user decision 2026-10-17 ("一律不限制") |
+| What drives the disclosure card | the Registry's static scan (3.8) first, manifest declarations beside it (3.9) | the system scans at publish; the package does not apply for disclosure |
+| Shell scope | no sub-scopes: the broker rules stay those of `shell.run` (`allowlist` = `gh, git, glab`; `full` = any) | disclose, don't restrict |
 | Manifest `network` | `via-shell` whenever shell is declared, else `none` | a declared shell reaches remote hosts through git/gh/glab even without a network permission |
 | Scan report content | facts only; sentences, reasons and the comparison are derived by pure functions in both languages | the App renders what it can check against the signed facts, and wording changes need no rescan |
-| DS1 How the scan is signed | separate `scanDigest` in the disclosure envelope | the App checks the recomputable half alone; a rescan replaces only `scanDigest` |
-| DS2 Incomplete scan | at least `high` (`scan.incomplete`) plus a visible "掃描不完整" | what cannot be seen is not evidence of no risk |
-| DS3 Undeclared findings | disclosed (red), never block publish or install | disclose, don't restrict; the Host refuses undeclared calls at run time anyway |
-| DS4 When the scan runs | synchronously in the publish (and approval) request, `timeBudgetMs` 30000 | the result is signed with the version; a timeout is disclosed, not fatal |
-| DS5 Network detail | host names only | URL paths and queries can carry tokens |
-| DS6 Embedded runtimes and packed executables | disclosed as "無法掃描", not unpacked | unpacking is deferred work |
-| DS7 Rescan | manual admin rescan; old reports are kept | a scanner upgrade is a deliberate operation |
-| DS8 Envelope | the 9-field disclosure envelope ships first, `scanDigest` may be `null` | D-a, D-b and D-c can merge before the scanner without another envelope change |
-| DS2 for scanner failures and ceilings | new `coverage.skipped` reasons `scannerError` and `tooComplex`, both incomplete (at least high, "掃描不完整"); added in the scanner PR, existing values unchanged | a scanner crash or a hostile structure must never leave a version without a report or with a report that looks complete (review of #355) |
-| DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
-| DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
-| Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
-| Transfer time | `timeoutMs` covers the plugin's execution only; transfers run on a 30 s idle timer restarted by every piece, and `agent.capability.progress` keeps the backend's wait alive | time must not turn into a size limit (review of #358, M2); the idle timer detects a dead peer, it does not bound a size |
-| Piece counts and odd input | an integral float counts (`1.0` = `1`); a non-object piece is `seq`; a repeated, skipped or backward `seq` fails on arrival; Python escapes lone surrogates like `JSON.stringify` | both languages give the same answer for every input (#358 review L1–L3, INFO) |
-| Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child (user decision 2026-10-17); pieces stay the normal path for interleaving |
+| How the scan is signed | separate `scanDigest` in the disclosure envelope | the App checks the recomputable half alone; a rescan replaces only `scanDigest` |
+| Incomplete scan | at least `high` (`scan.incomplete`) plus a visible "掃描不完整" | what cannot be seen is not evidence of no risk |
+| Undeclared findings | disclosed (red), never block publish or install | disclose, don't restrict; the Host refuses undeclared calls at run time anyway |
+| When the scan runs | synchronously in the publish (and approval) request, `timeBudgetMs` 30000 | the result is signed with the version; a timeout is disclosed, not fatal |
+| Network detail | host names only | URL paths and queries can carry tokens |
+| Embedded runtimes and packed executables | disclosed as "無法掃描", not unpacked | unpacking is deferred work |
+| Rescan | manual admin rescan; old reports are kept | a scanner upgrade is a deliberate operation |
+| Envelope | the 9-field disclosure envelope is complete without a scan, `scanDigest` may be `null` | a version without a scan report needs no other envelope shape |
+| Incomplete scan: scanner failures and ceilings | `coverage.skipped` reasons `scannerError` and `tooComplex`, both incomplete (at least high, "掃描不完整") | a scanner crash or a hostile structure must never leave a version without a report or with a report that looks complete |
+| Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
+| Result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | a size is disclosed, never refused |
+| Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | a size is disclosed, never refused |
+| Transfer time | `timeoutMs` covers the plugin's execution only; transfers run on a 30 s idle timer restarted by every piece, and `agent.capability.progress` keeps the backend's wait alive | time must not turn into a size limit; the idle timer detects a dead peer, it does not bound a size |
+| Piece counts and odd input | an integral float counts (`1.0` = `1`); a non-object piece is `seq`; a repeated, skipped or backward `seq` fails on arrival; Python escapes lone surrogates like `JSON.stringify` | both languages give the same answer for every input |
+| Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child; pieces stay the normal path for interleaving |
 | Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under 1 MiB, the frame size child readers use (the built-in Plans backend's `MAX_FRAME_BYTES`); small enough that other calls interleave |
 | Arguments-size field | `args_bytes` only, measured by the backend as UTF-8 bytes of the compact spelling (the `resultBytes` measure); `args_sha256` stays canonical; no `meta.argsBytes` | one number for one fact, in the same unit as the result size; the backend sees the arguments first and writes the audit row |
 | Who measures the size | the Host, once, compact JSON (`agentToolResultBytes`) | one number from the hop that sees the plugin's value; the backend's spelling differs |

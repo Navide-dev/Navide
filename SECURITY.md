@@ -6,7 +6,7 @@ Navide is currently pre-1.0. Security fixes target the latest code on `main` and
 
 | Version | Supported |
 |---|---|
-| Latest `0.1.x` release | Yes |
+| Latest `0.2.x` release | Yes |
 | Older snapshots | No guaranteed fixes |
 
 ## Reporting a vulnerability
@@ -27,7 +27,7 @@ The project aims to acknowledge reports within 48 hours and provide a status upd
 
 In scope: this repository, the Navide desktop application, and the Navide Cloud relay at `server.navide.dev`. Out of scope: the external coding CLIs Navide launches (report those upstream), findings that require physical access to an unlocked machine, and findings that only apply with `contextIsolation`, `sandbox`, or code signing deliberately disabled.
 
-Good-faith research that stays within that scope, avoids privacy violations and service disruption, and allows reasonable time for a fix before disclosure will not be met with legal action. Do not test against other people's accounts or devices on the production relay; the server can be run locally (see `Navide-Server/server/deploy/`).
+Good-faith research that stays within that scope, avoids privacy violations and service disruption, and allows reasonable time for a fix before disclosure will not be met with legal action. Do not test against other people's accounts or devices on the production relay; the server can be run locally (see the Navide-Server repository's deployment notes).
 
 ## Security model
 
@@ -39,7 +39,7 @@ Navide is local-first, not universally offline. External coding CLIs, cloud AI p
 
 ### Credentials
 
-- Coding-agent credentials remain in each external CLI's own configuration. The one exception is a **portable credential** you paste in Settings → Accounts on purpose: it is stored encrypted, reaches the CLI only through its pane's environment, and — only if you switch the Credentials sync section on — travels to your other devices as ciphertext under your account's sync key (see `docs/en-US/security-threat-model.md`).
+- Coding-agent credentials remain in each external CLI's own configuration. The exception is an API key account (Claude Code, Codex) you add in Settings → Accounts: it is stored only on this computer, never synced, and described in [Privacy and Data Flows](docs/en-US/privacy.md#credentials).
 - Cloud AI keys entered in Navide are stored locally in the application data directory with restrictive file permissions (`0600` on supported systems).
 - Exported settings redact API keys and tokens.
 - Local file permissions are not protection against malware, a compromised account, unrestricted agents, backups, or another process running with equivalent authority.
@@ -76,7 +76,7 @@ MCP servers and provider integrations execute according to their own configurati
 - No complete cross-platform workspace sandbox
 - No complete secret-redaction guarantee for handoffs and diagnostics
 - External CLI permission semantics differ and may change between versions
-- Locally persisted API keys are not stored in an operating-system secret vault
+- Locally persisted cloud AI keys and most API key accounts are not stored in an operating-system secret vault (see [Credentials](docs/en-US/privacy.md#credentials) for each case)
 - Provider log readers depend on files or databases owned by external tools
 - Automatic update security depends on signed, notarized release artifacts and GitHub Release metadata on macOS; Windows builds are not yet code-signed, so their updates install without signature verification
 

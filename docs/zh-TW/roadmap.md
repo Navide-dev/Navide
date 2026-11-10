@@ -63,7 +63,6 @@ Exit Criteria：
 
 - 新使用者能解釋 Genesis、Evolution、Intervention 與 Private Project Intelligence
 - 全新且受支援的 Mac 能完成文件中的安裝與首次啟動流程
-- 第一個正式簽章 GitHub Release 包含所有必要 Updater Asset
 - 文件清楚區分目前行為與未來方向
 
 ## Horizon 1 — 可靠的 Session Fabric
@@ -209,7 +208,7 @@ Exit Criteria：
 - 可重用 Role、Pipeline、Policy、Team Configuration 與 Engineering Template
 - 具有 Version 與 Capability Metadata 的安全 Template Packaging
 - 具有 PTY、Path、Permission、Packaging 與 Update 對等性的 Linux Support——已在 `main`，由 Linux CI Gate 涵蓋，x64 的 AppImage 與 `.deb` 自 v0.2.2 起隨發行提供；剩餘工作是發布 arm64 版本（Release CI 目前只在手動 dispatch 時建置）
-- 具有 ConPTY、Filesystem Behavior、Packaging 與 Policy 對等性的 Windows Support——已在 `main`，由 Windows CI Gate 涵蓋，x64 的 NSIS 安裝程式自 v0.2.2 起隨發行提供；剩餘工作是程式碼簽章與可優雅關閉 CLI 的訊號。Task Scheduler 整合不在計畫內：Navide 本身從不建立排程工作，而工作排程器已能列出、啟用、停用與移除機器上的工作。只有在 Navide 開始自行註冊工作時才重新評估——屆時以第三種 execution kind 走 PowerShell `ScheduledTasks` 模組
+- 具有 ConPTY、Filesystem Behavior、Packaging 與 Policy 對等性的 Windows Support——已在 `main`，由 Windows CI Gate 涵蓋，x64 與 Arm64 的 NSIS 安裝程式隨發行提供；剩餘工作是程式碼簽章與可優雅關閉 CLI 的訊號。Task Scheduler 整合不在計畫內：Navide 本身從不建立排程工作，而工作排程器已能列出、啟用、停用與移除機器上的工作。只有在 Navide 開始自行註冊工作時才重新評估——屆時以第三種 execution kind 走 PowerShell `ScheduledTasks` 模組
 - Platform 與 Adapter Capability Matrix
 - Internationalization 與 Accessible Workflow
 

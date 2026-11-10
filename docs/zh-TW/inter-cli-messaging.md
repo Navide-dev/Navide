@@ -234,6 +234,18 @@ Please review src/main.ts and reply with the blocking issues only.
 第一行一律標明寄件者。結尾的提示是用來教會從未拿到協定的分格該怎麼回答；它只有
 一行，因此絕不會被誤認成 marker。
 
+### 回答聊天室寄件者
+
+聊天室寄件者不是分格，但分格用同樣的方式回答它：寫一個收件者是 `telegram:alice`
+（任何 `<platform>:` handle）的 MSG 區塊。視窗不會替它轉送。這個區塊會被記錄為已交給
+頻道（`delivered`，絕不算失敗，也不會對分格發出通知）。回合結束時，後端
+（`channels/manager.py` 的 `_send_reply`）會把以聊天室為收件者的區塊本文，不帶
+marker、`to:` 或 `re:` 行，貼到該分格已綁定的聊天室，該回合的其他內容一概不貼。
+若這次貼文失敗，就改貼整段回合文字，並移除所有 marker 行。以聊天室為收件者的區塊
+在任何鏡像層級都會貼出，包括「只回覆」。沒有這種區塊的回合，則照舊貼出並移除
+marker 行。目的地絕不由模型決定：位址只表示這段文字是給聊天室的，而回覆一律送到
+分格已綁定的聊天室。平台離線時，回覆會被丟棄，並在後端 Log 寫一則警告。
+
 ### 投遞失敗通知
 
 當訊息無法送達時，會通知**傳送端** 分格：
@@ -385,6 +397,19 @@ task: Review the diff on this branch and report blocking issues.
 區塊結尾。Spawn 沒有上限 —— 超過 Advisory 門檻之後呼叫仍然會成功，並會告訴請求者
 它的代價。格式錯誤的請求（未知的 agent key、缺少或已被使用的名稱、空白的任務）會
 以指出問題所在的 [Spawn 回饋通知](#spawn-回饋通知)回來。
+
+### 開到另一個專案
+
+分格呼叫 `cli_open_agent(workspace_path=...)`，會在該專案中開出子分格——它的工作
+目錄、CLAUDE.md、記憶、Plans 與 git——而呼叫者仍是它的 parent：子分格向呼叫者的
+`<folder>/<pane>` 位址回報，呼叫者則用工具回傳的 `address` 回收它。`window: "current"`
+（預設）由呼叫者所在的視窗把該專案收進側邊欄，但不切換過去；`window: "new"` 在自己的
+視窗中開啟，且不取得焦點；`window: "existing"` 在已經持有該專案的視窗（任何視窗）
+中開啟，或用 `window_id`（取自 `window_list`）指定視窗，該視窗在沒有任何視窗持有
+該專案時會接手它（分離出來的群組視窗不行：`window-cannot-hold`）。一個專案只存在於
+一個視窗，所以另一個視窗已持有的專案會被拒絕，回傳 `workspace-in-other-window` 與
+`holding_window_id`。子分格的側邊欄那一列會寫明是誰開的（"Opened by alpha/lead"），
+因為樹狀圖畫不出住在另一個專案裡的 parent。指定自己的 workspace 等同於省略它。
 
 ### 代轉回報
 
@@ -849,7 +874,7 @@ resume 的 CLI，但它還沒顯示收到。Messages 面板那一列顯示為 `d
 
 ### 設定
 
-1. **Settings → Channels**：填入平台憑證（Telegram bot token、Discord bot token、Slack App＋Bot token…）。機密存進系統鑰匙圈（`channel-<platform>`，單行），`navide.db` 只存非機密設定。平台卡片會顯示連線狀態（`starting`／`ready`／`recovering`／`blocked`／`stopped`）與最近的錯誤。
+1. **Settings → Channels**：填入平台憑證（Telegram bot token、Discord bot token、Slack App＋Bot token…）。機密存進系統鑰匙圈（`channel-<platform>-<account>`，單行；預設帳號先前的 `channel-<platform>` 項目仍會被讀取），`navide.db` 只存非機密設定。平台卡片會顯示連線狀態（`starting`／`ready`／`recovering`／`blocked`／`stopped`）與最近的錯誤。
 2. **分格快速連接**：在分格上按「連接聊天室」→ 選已設定的平台 →「新開主題（以分格名稱）」或「使用既有聊天室」。已連接的分格會顯示標記，按 ✕ 解除。尚未設定任何平台時，按鈕會直接開啟 Settings → Channels。
 
 一個分格對一個位置。綁定在視窗重新載入、分格重建、群組分離、切換 workspace 後都會保留，只有手動解除（或真正關閉分格）才會結束。訊息送到不在線上的已綁定分格時，會用 Navide 介面語言回覆「它所在的 Navide 視窗沒有開著，或分格已關閉」，綁定保留；Navide 啟動後一分鐘內，還沒登記的分格會先等它。綁定知道分格的 workspace 與對話之後（分格每次在線上時都會更新），回覆會附「▶️ 喚醒」（打字：`/wake`），並暫存這則訊息：

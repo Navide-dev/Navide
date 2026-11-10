@@ -261,10 +261,8 @@ vendor names there:
   vendor gets multi-account support by filling in the credential fields of its
   own `SPEC`; the vault's remaining `claude` branches are its own history.
 - **`CODEX_HOME` per-pane isolation** (`ws_handlers.py`, `codex_home.py`).
-  `CodexHomeManager` is owned by the app and injected into the spawn path, so
-  moving it into `cli_vendors/codex.py` would invert the import direction that
-  `cli_vendors/base.py` forbids. It stays put until the spawn path grows a
-  hook that can express it.
+  `CodexHomeManager` lives in `cli_vendors/codex.py`; `codex_home.py`
+  re-exports it for older imports.
 - **Plugins** (`plugins/builtin/**`). Plugin wiring — MCP server injection,
   per-pane shim homes, skills — still branches on `agent_key` inside each
   plugin. Plugins are not part of the vendor contract: a new vendor works

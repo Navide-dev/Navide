@@ -14,8 +14,8 @@ unsandboxed fallback by design. This assessment covers:
   started from Electron;
 - the attack surface of the alternative, a "no sandbox, highest-risk
   disclosure" mode;
-- how either relates to DB8 (the third-party agent-tools master switch, which
-  PR C3 folds into the install consent card);
+- how either relates to the install consent card, which is the switch for
+  third-party agent tools;
 - what Windows users lose while nothing ships.
 
 ## What Windows users lose today
@@ -23,9 +23,9 @@ unsandboxed fallback by design. This assessment covers:
 Everything that lives in a third-party backend: `backend.agentTools` (an
 agent cannot call any third-party plugin's tools on Windows), the backend's
 bridge ports (`shell`, and `network` if TA-1 ships), automatic backend
-restart (C4), pipeline nodes provided by plugins (E2), channel adapters
+restart, pipeline nodes provided by plugins, channel adapters
 (TA-4). What still works: views, their `shell.run` (the broker runs in the
-Host), declared executables (C2) and network hosts (C1) from a view, first-
+Host), declared executables and network hosts from a view, first-
 party backends (the Plans backend runs directly on every platform; it is
 Navide's own code, shipped and signed with the app).
 
@@ -46,7 +46,7 @@ PACKAGES` default grants too.
 | Network | Declared per capability at process creation: none (parity with today's macOS/Linux), `internetClient` (any host; parity with TA-1 option A), or none plus the Host bridge (TA-1 option B — the recommended shape works unchanged, because the bridge is a pipe, not a socket). Loopback is **blocked** for AppContainers unless a loopback exemption is registered (`CheckNetIsolation`), which is itself a useful property. |
 | Resource watchdog | `pluginBackendResourceWatchdog.ts` identifies escaped processes on macOS by kernel exec image. On Windows the equivalent is a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and `BREAKAWAY` denied, created by the same helper; the AppContainer SID doubles as the process-tree marker (`GetTokenInformation(TokenAppContainerSid)`). |
 | Known failure modes | Python under AppContainer: named pipes and `multiprocessing` need the pipe ACL to include the SID; `ssl` loads the Windows cert store fine; some wheels write to `%LOCALAPPDATA%` and fail (they get a clear `ERROR_ACCESS_DENIED`). Chromium's own sandbox and Firefox's use AppContainer in production, so the mechanism is mature; what is unverified is PyInstaller one-file inside it, on real user machines, and that needs the Windows VM round in the release loop. |
-| Effort | Medium–large: helper + signing + ACL management + Job Object + a `win32` branch in `resolveBackendSandbox` + VM verification. The plan already names it "v1.1". |
+| Effort | Medium–large: helper + signing + ACL management + Job Object + a `win32` branch in `resolveBackendSandbox` + VM verification. Until it ships, third-party backends stay unavailable on Windows. |
 
 ## Option B — "No sandbox, highest-risk disclosure" mode
 
@@ -72,13 +72,11 @@ but it is a different product promise than macOS and Linux give, and a
 plugin reviewed under the sandbox assumption (scan reports list what the
 *bridge* could reach) is reviewed under false premises on Windows.
 
-## Relationship with DB8 / PR C3
+## Relationship with the install consent card
 
-DB8 is the master switch that keeps third-party agent tools off until the
-user turns them on; C3 makes the install consent card the switch (consent =
-tools live), with the Settings switch kept for turning them off later. On
-Windows under option B that consent card is the **only** gate between an
-agent-requested install and a process with the user's full rights, so:
+On Windows under option B the install consent card is the **only** gate
+between an agent-requested install and a process with the user's full rights,
+so:
 
 - the no-sandbox line must be on the card itself, not in Settings, and must
   be present in the agent install request text the user approves in the main
@@ -93,9 +91,8 @@ agent-requested install and a process with the user's full rights, so:
 ## Recommendation
 
 1. Keep "no backend on Windows" for 0.2.39 and 0.2.40, with the explicit
-   card line "This plugin's backend is not available on Windows" (already the
-   batch 2 VM acceptance item) and the plugin's views, agent-less, still
-   working.
+   card line "This plugin's backend is not available on Windows" and the
+   plugin's views, agent-less, still working.
 2. Build option A (AppContainer helper + Job Object) as the Windows sandbox,
    verified in the Windows VM round, before any third-party backend runs on
    Windows. Its network model (none / bridge / `internetClient`) lines up with
@@ -104,14 +101,6 @@ agent-requested install and a process with the user's full rights, so:
    per-package, highest-risk, main-window-gesture consent with the Job Object
    watchdog in place and the sentence above on the card. Not recommended as
    a default or as an interim.
-
-## Decisions for the user
-
-1. Accept the recommendation (A later, no B interim), or ask for B now with
-   the disclosure described.
-2. Whether first-party backends on Windows should also move under the
-   AppContainer helper once it exists (they run unsandboxed on every platform
-   today, as documented; parity is cheap once the helper is there).
 
 ## Did we do enough (acceptance when A is implemented)
 

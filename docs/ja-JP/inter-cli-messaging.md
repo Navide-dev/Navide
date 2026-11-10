@@ -256,7 +256,7 @@ Workspace `a/b` の Pane `c` として読まれます。`cli_read_log` にはリ
 ```
 [Navide MSG] from: builder-1
 Please review src/main.ts and reply with the blocking issues only.
-（回覆方式：第一行完整寫成 ---MSG-START--- to: builder-1 re: 4f2a…，下一行起為訊息內容，最後一行寫 ---MSG-END---；to: 必須與 ---MSG-START--- 同一行，不可換行；re 欄位請原樣帶回，三行都要頂格，不可縮排，也不可放進 code block）
+（回覆方式：第一行完整寫成 ---MSG-START--- to: builder-1 re: 4f2a…，下一行起為訊息內容，最後一行寫 ---MSG-END---；to: 必須與 ---MSG-START--- 同一行，不可換行；re 欄位請原樣帶回，三行都要頂格，不可縮排，也不可放進 code block。只是「收到」或沒有新資訊就不要回信，純確認請改用 cli_send 的 kind="ack"（不會打擾對方）；已用 cli_send 送出的內容不要再用 MSG 區塊重述）
 ```
 
 背後に pane のない送信者（MCP host や外部クライアント。`a host client`／`an external client` と表示）には MSG ブロックが届く先がないため、ヒントは代わりにこのターンの最後に回答を出力するよう求めます。呼び出し側はそれを読み取ります（`cli_send_and_wait`、`cli_read_log`）：`（呼叫方沒有回信管道，不要用 MSG 區塊回覆：直接把回覆輸出在這個回合的最後；呼叫方會讀取你的最後輸出）`。
@@ -279,6 +279,22 @@ Pane のチャットは、ユーザーが Settings → Channels で、または 
 最初の行は常に送信者を示します。末尾のヒントは、Protocol を教わっていない Pane
 に返信方法を伝えるためのものです。1 行に収まっているため、Marker と誤認される
 ことはありません。
+
+### チャット送信者への返信
+
+チャットの送信者は Pane ではありませんが、Pane は同じ方法で返信します。宛先が
+`telegram:alice`（任意の `<platform>:` handle）の MSG ブロックです。ウィンドウは
+それを転送しません。このブロックは Channel に引き渡されたものとして記録され
+（`delivered`。失敗にはならず、Pane への通知もありません）、ターンが終わると、
+バックエンド（`channels/manager.py` の `_send_reply`）が、チャット宛てのブロックの
+本文を、marker、`to:`、`re:` の行なしで、その Pane に紐付けられたチャットへ投稿します。
+そのターンのそれ以外の内容は投稿しません。この投稿が失敗した場合は、代わりに
+ターンのテキスト全体を、すべての marker 行を取り除いて投稿します。チャット宛ての
+ブロックは、「返信のみ」を含むどのミラーレベルでも投稿されます。そのようなブロックが
+ないターンは、従来どおり marker 行を取り除いて投稿されます。宛先をモデルが選ぶことは
+ありません。アドレスはそのテキストがチャット宛てであることを示すだけで、返信は常に
+Pane に紐付けられたチャットへ送られます。プラットフォームがオフラインのときは、
+バックエンドのログに警告を残して返信は破棄されます。
 
 ### 配信失敗通知
 
@@ -449,6 +465,24 @@ task: Review the diff on this branch and report blocking issues.
 超えても呼び出しは成功し、要求元にはそのコストが伝えられます。不正な Request
 （未知の Agent Key、名前の欠落や重複、空の Task）は、問題を示す
 [Spawn フィードバック通知](#spawn-フィードバック通知)として返ってきます。
+
+### 別のプロジェクトへ
+
+Pane から `cli_open_agent(workspace_path=...)` を呼ぶと、そのプロジェクト内（作業
+ディレクトリ、CLAUDE.md、メモリ、Plans、git）に子を開き、呼び出し元は引き続きその
+親になります。子は呼び出し元の `<folder>/<pane>` アドレスに報告し、呼び出し元は
+ツールが返す `address` で回収します。`window: "current"`（既定）では、呼び出し元の
+ウィンドウがそのプロジェクトをサイドバーに取り込みますが、切り替えはしません。
+`window: "new"` は専用のウィンドウで開き、フォーカスは取りません。`window: "existing"`
+は、そのプロジェクトをすでに保持しているウィンドウ（どのウィンドウでも）で開き、
+`window_id`（`window_list` から取得）を指定した場合はそのウィンドウで開きます。
+どのウィンドウも保持していなければ、そのウィンドウがプロジェクトを引き受けます
+（分離したグループウィンドウは引き受けられません：`window-cannot-hold`）。1 つの
+プロジェクトは 1 つのウィンドウにしか存在できないため、別のウィンドウがすでに保持して
+いるプロジェクトは `workspace-in-other-window` と `holding_window_id` で拒否されます。
+ツリーは別のプロジェクトにいる親を描けないため、子のサイドバー行には誰が開いたかが
+表示されます（"Opened by alpha/lead"）。自分自身の Workspace を指定するのは、省略
+するのと同じです。
 
 ### 代理レポート
 
@@ -984,7 +1018,7 @@ Queue に入った後で断られたものは、この表の Reason 付きで `f
 
 ### 設定
 
-1. **Settings → Channels**：プラットフォームの認証情報（Telegram bot token、Discord bot token、Slack の App／Bot token など）を入力します。秘密情報は OS のキーチェーンに 1 行のエントリ（`channel-<platform>`）として保存され、`navide.db` には秘密でない設定だけが保存されます。カードには接続状態（`starting`／`ready`／`recovering`／`blocked`／`stopped`）と直近のエラーが表示されます。
+1. **Settings → Channels**：プラットフォームの認証情報（Telegram bot token、Discord bot token、Slack の App／Bot token など）を入力します。秘密情報は OS のキーチェーンに 1 行のエントリ（`channel-<platform>-<account>`。既定アカウントの以前の `channel-<platform>` エントリも引き続き読み取られます）として保存され、`navide.db` には秘密でない設定だけが保存されます。カードには接続状態（`starting`／`ready`／`recovering`／`blocked`／`stopped`）と直近のエラーが表示されます。
 2. **pane のクイック接続**：pane で「チャットに接続」→ 設定済みのプラットフォーム →「新しいトピック（pane 名）」または「既存のチャットを使う」を選びます。接続中の pane にはチップが表示され、✕ で解除できます。プラットフォームが未設定の場合は Settings → Channels が開きます。
 
 1 つの pane ↔ 1 つの場所です。バインドはウィンドウの再読み込み、pane の再構築、グループの切り離し、workspace の切り替えを経ても維持され、手動で解除した場合（または pane を本当に閉じた場合）にのみ終わります。バインドされた pane がオンラインでないときは、Navide の表示言語で「所属する Navide ウィンドウが開いていないか、pane が閉じられています」と返信し、バインドは維持します。Navide の起動後 1 分間は、まだ登録されていない pane を待ちます。バインドが pane の workspace と会話を把握している場合（pane がオンラインのときに毎回更新）、返信に「▶️ 喚醒」（入力では `/wake`）を付け、メッセージを保留します：

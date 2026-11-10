@@ -63,7 +63,6 @@ Exit Criteria：
 
 - 新しいユーザーが Genesis、Evolution、Intervention、Private Project Intelligence を説明できる
 - 対応するクリーンな Mac で、文書化された Install と First-run Workflow を完了できる
-- 最初の Signed GitHub Release に必要な Updater Asset がすべて含まれる
 - Documentation が Current Behavior と Future Direction を区別する
 
 ## Horizon 1 — 信頼できる Session Fabric
@@ -209,7 +208,7 @@ Scope：
 - 再利用可能な Role、Pipeline、Policy、Team Configuration、Engineering Template
 - Version と Capability Metadata を持つ安全な Template Packaging
 - PTY、Path、Permission、Packaging、Update が同等な Linux Support——`main` に取り込み済み。Linux CI Gate が対象とし、x64 向けの AppImage と `.deb` は v0.2.2 からリリースで配布済み。残る作業は arm64 ビルドの配布（Release CI は現在手動 Dispatch のときだけビルドする）
-- ConPTY、Filesystem Behavior、Packaging、Policy が同等な Windows Support——`main` に取り込み済み。Windows CI Gate が対象とし、x64 向けの NSIS Installer は v0.2.2 からリリースで配布済み。残る作業は Code Signing と CLI を穏当に停止させるシグナル。Task Scheduler 統合は予定なし：Navide 自身が Scheduled Job を作ることはなく、Task Scheduler が既にマシンの Task の一覧・有効化・無効化・削除を担っているためです。Navide 自身が Task を登録し始めた場合のみ再検討し、その際は PowerShell `ScheduledTasks` モジュール上の第三の execution kind として扱います
+- ConPTY、Filesystem Behavior、Packaging、Policy が同等な Windows Support——`main` に取り込み済み。Windows CI Gate が対象とし、x64 と Arm64 向けの NSIS Installer はリリースで配布済み。残る作業は Code Signing と CLI を穏当に停止させるシグナル。Task Scheduler 統合は予定なし：Navide 自身が Scheduled Job を作ることはなく、Task Scheduler が既にマシンの Task の一覧・有効化・無効化・削除を担っているためです。Navide 自身が Task を登録し始めた場合のみ再検討し、その際は PowerShell `ScheduledTasks` モジュール上の第三の execution kind として扱います
 - Platform と Adapter の Capability Matrix
 - Internationalization と Accessible Workflow
 

@@ -39,12 +39,33 @@ Pane に `✘ Auto-update failed` のような CLI 自身のメッセージが�
 
 ## Pane が「detecting session」のままになる
 
-Codex、Antigravity、Grok は、Log または Database Discovery を利用して新しい CLI Session を Navide Pane に関連付けます。
+Codex と Antigravity は、Log または Database Discovery を利用して新しい CLI Session を Navide Pane に関連付けます。（Grok Build の Pane は自前の session id で起動するため、ここで待つことはありません。）
+
+Codex では、`/hooks` を開いて保留中の Hook Review を確認します。MCP の起動失敗や、サードパーティの `SessionEnd` タイムアウト警告は別途調査が必要で、それだけで Session ID の衝突を示すわけではありません。Codex 0.154 は `SessionStart` を最初のターンまでキューに入れるため、TUI を開いただけではそのイベントが実行済みとは限りません。
+
+Codex のビルドによっては、Navide がコマンドラインで渡す `SessionStart` Hook を未レビューの Hook として扱い、すべての Pane で **Hooks need review** を表示します。バージョン番号からはどのビルドが該当するか分かりません（ここでは 0.155 は該当せず、0.154 は該当すると報告されました）。そのため Navide は観測で判断します。この画面を最初に表示した Pane がそれを記録し、以降の Codex Pane はその Hook なしで開き、Pipeline Log にもその旨が記録されます。
+
+- Navide は `~/.codex/config.toml` を書き換え**ません**。また `--dangerously-bypass-hook-trust` も渡し**ません**。このフラグは、あなた自身の `hooks.json` の Hook までレビュー対象から外してしまいます。
+- Hook を外すことで失うのは、Pane を Session に対応付ける近道だけです。Session は引き続き Log と Marker から特定されるため、動作しなくなるものはありません。
+- 画面がすでに表示されている場合は、その Pane で回答する（`2` = すべて信頼して続行）か、Pane を閉じてください。再びブロックされることはありません。
 
 - 通常の Message を送り、CLI に Pane Marker を保存させます。
 - CLI が通常の Session Directory に書き込めることを確認します。
 - 最初の Session が検出される前に、すぐ Rebuild または Resume しないでください。
 - 検出が完了しない場合は、Issue を作成する前に Pane Output と関連 Backend Log を保存します。
+
+## Grok Build の Pane
+
+- **「Do you trust the contents of this directory?」** Navide は、Pane 自身のワークスペースについての確認であれば、起動するすべての Grok Pane に代わって回答し、その回答を `~/.grok/trusted_folders.toml` を通じてほかの Grok Pane と共有します（便利機能 `grok.folder-trust`、[Convenience features](../en-US/convenience-features.md) を参照）。`~/.grok` に共有されるのは、Pane を開いたワークスペース、またはその中のフォルダーだけです。プロンプトが画面に残っている間、Pane は待機中として表示され、メッセージはプロンプトに入力されず待機します。フォルダーの信頼は持続するため、agent やチャットのリレーができるのは拒否だけです（`cli_answer_prompt` の "deny"、Grok の "No, quit" にあたります）。受け入れる場合は Pane の中で自分で行ってください。
+- **`[startup probe] … does not identify as Grok Build`** は、`PATH` 上の `grok` が同名の別プログラム（たとえばコミュニティ版の `grok-cli`）であることを示します。公式 CLI を `curl -fsSL https://x.ai/cli/install.sh | bash` でインストールしてください。
+- **Credits が利用不可と表示される。** Grok Build は Credits をほかのプログラムに報告しません。Grok の Pane で `/usage` と入力してください。
+- **Grok の作業中に送ったスラッシュコマンドは後で実行される。** Grok Build は現在のターンが終わるまでそれをキューに入れるため、`cli_send_and_wait` で待っている返信が前のターンのものである場合があります。
+- **ターンの終了が遅い。** Grok Build は既定で `~/.claude` の hooks、skills、MCP サーバーをインポートし、ターンの終わりごとに Claude の stop hooks を実行します。これを避けたい場合は、`~/.grok/config.toml` に次を追加します。
+
+  ```toml
+  [compat.claude]
+  hooks = false
+  ```
 
 ## Resume が動作しない
 
@@ -52,6 +73,13 @@ Codex、Antigravity、Grok は、Log または Database Discovery を利用し�
 - 元の CLI の History に Session が残っていることを確認します。
 - Workspace Path が変更されていないことを確認します。
 - CLI Upgrade により Resume Syntax や Session Storage が変わる場合があります。Bug Report に CLI と Navide の Version を含めてください。
+
+## Codex の会話が History に表示されない
+
+- Pane ごとに分離された `~/.codex-panes/<session_home_id>/sessions` ディレクトリにある Codex の Rollout ファイルは、Navide の History メタデータとは別に保存されています。History に項目がなくても、元の会話ファイルが削除されたとは限りません。
+- History 検索は読み込み済みの項目が対象です。現在の検索結果が空でも、さらに項目を読み込めば古い会話の検索を続けられます。内容の検索は、新しく読み込んだ項目に対してもう一度実行されます。
+- Navide の外で既知の会話を再開するには、元の `CODEX_HOME` と正確な Session ID を使ってください。同じ Home に複数の会話がある場合、最新の Session を選ばないでください。
+- **Session** 行のない削除済みの Codex 項目には resume id がないため、History に **Resume** ボタンは表示されません。よくある原因は、起動時の **Hooks need review** 画面が session marker を飲み込んだことと、再起動で Pane が marker なしの新しい会話として開き直されたことでした。Rollout は残っています。時刻と `cwd` から `sessions/` 以下で見つけ、同じ `CODEX_HOME` で `codex resume <id>` を実行してください。
 
 ## Token Stats が空、または重複する
 
@@ -89,12 +117,34 @@ Windows Installer は Code Signing されていないため、SmartScreen が「
 
 Documentation Injection は Best-effort です。MCP Configuration、Package Runtime、Network Access を確認します。Fetch の失敗で Manual Task が Block されるべきではありません。Workspace を Offline に保つ必要がある場合は Integration を無効化してください。
 
+### MCP サーバーが「starting」のまま、または起動に失敗する
+
+`npx` や `uvx` で起動するローカル（stdio）MCP サーバーは、初回実行時にパッケージをダウンロードしてから、Navide のハンドシェイク（`initialize`）に応答します。サーバーのプロセスが動いている間、Navide は待ち続けるため、初回のダウンロードが遅くても失敗とは見なされません。
+
+- **Settings → MCP** にはサーバーが **starting** と表示されます。15 秒後（`backend/agent_team_backend/mcp_manager.py` の `SLOW_START_NOTE_AFTER`）に、どれだけ待ったかと、初回の `npx`/`uvx` 実行ではパッケージをダウンロードしている可能性があることを示す注記が加わります。サーバーが接続するか失敗するまで、画面は自動で更新されます。
+- 応答する前にプロセスが終了した場合、起動はすぐに失敗し、理由に終了コードが示されます。
+- プロセスは動き続けているのに応答しない場合、Navide は **300 秒**後にあきらめます（同じファイルの `STDIO_INIT_HARD_CAP`）。この上限は安全策であり、遅いサーバーを制限するものではありません。リモート（`http`/`sse`）サーバーのハンドシェイクは 15 秒のままです。
+- サーバーは並列に起動するため、遅いサーバーがほかのサーバーを止めることはありません。
+
+起動に失敗したサーバーには **Failed to start:** と理由が表示されます。次に MCP 設定が再読み込みされたとき（たとえば Settings → MCP で変更を保存したとき）に、もう一度試されます。
+
+stdio サーバーが stderr に出力する内容（npm のダウンロードメッセージ、クラッシュ）は、Navide のデータフォルダーの `logs/mcp-<name>.log` に書き込まれます。このファイルはこのコンピューター上にとどまり、読めるのはあなたのユーザーアカウントだけです（0600）。保持されるのは最新の起動分だけです。起動のたびに空になり、1 回の実行中はサーバーが出力し続ける限り大きくなり、サイズの上限はありません。英字・数字・`_`・`.`・`-` 以外の文字や大文字を含む名前は、安全なファイル名に、名前の短いハッシュを加えたものになるため、2 つのサーバーが同じファイルを共有することはありません。Settings → MCP からサーバーを削除するとそのファイルも削除され、オフに切り替えただけの場合は残ります。Settings → MCP には最後の数行が **Last lines the server printed** として表示されます。そのテキストはサーバー自身の出力であり、サーバーが出力することにしたあらゆる内容を含む可能性があります。Navide 自身がサーバーの設定をそこに書くことはなく、`env` や `headers` の値も書きません。agent が `mcp_list` ツールで読む起動エラーでは、設定済みの URL と同様に、含まれる URL がマスクされます。
+
 ## Git Authentication Prompt が完了しない
 
 - `git remote -v` で Remote を確認します。
 - 通常の Terminal で同じ Fetch または Push を試します。
 - 既存の SSH Agent または Credential Manager 設定を優先します。
 - Access Token を Issue Report や Terminal Screenshot に貼り付けないでください。
+
+## Plans が旧版の表示に切り替わる
+
+Plans ウィンドウがパッケージの Backend を起動できない場合、または Backend が終了し続ける場合、Navide はそのワークスペースに前の Plans 表示を出します。表示には **旧版で復旧** というラベルが付き、`forced`、`storage-migration-failure`、Backend 自身の起動エラーなどの理由が 1 行で示されます。プランはワークスペースの `.agent-team/plans/` フォルダにある通常のファイルで、旧版への切り替えで変換や削除はされません。Plans パネルの **再試行** で新しい表示をもう一度試せます（1 Session あたり最大 2 回）。
+
+- **旧版の表示を強制**すると、新しい Plans Backend が原因かどうかを確認できます。Navide を終了し、環境変数 `NAVIDE_PLANS_RECOVERY=legacy` を付けて起動し（macOS では `open --env NAVIDE_PLANS_RECOVERY=legacy -a Navide`）、問題を再現します。変わるのは Plans の表示だけです。強制中は **再試行** がすぐに拒否され、理由が表示されます。新しい表示に戻すには、Navide を終了し、変数なしで起動し直します。
+- **Plans の状態は編集しないでください。** Plans の絞り込み・並べ替え・折りたたみの設定は、アプリの user-data フォルダ内の `plugin-storage-v2/` に保存されています。その中の `plans-lifecycle.json` は、旧版の表示がどのパッケージ Version に戻るかを記録します。これらのファイルには触れないでください。旧版の表示は以前の設定を読み取るだけで、現在の設定を上書きすることはありません。
+- **Bug Report には**、Plans プラグインの Version（Settings → Navide Plugins）、**旧版で復旧** の理由の行、`main.log` の Plans 関連の行、再起動の前後の `plans-lifecycle.json` を含めてください。認証情報、Token、その他の保存データは含めないでください。
+- **受け入れ確認。** 旧版の表示を強制すると、同じワークスペースが開き、そのプランを一覧して開けます。変数を外して再起動すると、Plans タブは通常の表示に戻り、**旧版で復旧** のラベルは出ません。プランフォルダに `_template.html` がない場合、プランの作成は`BACKEND_UNAVAILABLE` という明確なエラーになり、Navide がプラン用のファイルを復元するまで続きます。簡略化したプラン文書が書き出されることはありません。
 
 ## 有用な Bug Report を作成する
 

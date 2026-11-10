@@ -153,7 +153,7 @@ Local-first は常に完全オフラインという意味ではありません�
 
 ## Navide を試す
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.39 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.39 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 と Arm64 の Installer、および Linux x64 Package を提供しています。
 
 - [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.39/Navide-0.2.39-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.39/Navide-0.2.39-arm64.dmg))
 - [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.39/Navide-0.2.39-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.39/Navide-0.2.39-arm64.zip))
@@ -165,7 +165,7 @@ Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 
 
 Navide を Applications にコピーすればそのまま開けます。Gatekeeper の回避は不要です。このリリース以降、アプリ内自動アップデートが利用できます。
 
-Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windows のネイティブ Installer は Release CI でビルドされ、次のリリースから配布されます。それまで Arm 版 Windows では x64 Installer がエミュレーションで動作します。Windows Build はまだ Code Signing されていないため初回起動時に SmartScreen が警告し、Executions ウィンドウはこの Platform では設計上一覧する対象がなく（読み取るのは User の crontab と macOS の launchd で、Windows Task Scheduler は意図的に統合していません——Navide 自身が Scheduled Job を作ることはなく、Task Scheduler が既にマシンの Task を管理しているためです）、Pane ごとの CLI Home と管理対象の Skills は Symbolic Link で構成されるため Windows の開発者モードまたは管理者権限での実行が必要で、CLI は停止を通知されずに終了されるため Pane が閉じる前に Transcript を書き出せない場合があります。
+Linux と Windows は macOS と同じ CI Gate を通過します。Windows Build はまだ Code Signing されていないため初回起動時に SmartScreen が警告し、Executions ウィンドウはこの Platform では設計上一覧する対象がなく（読み取るのは User の crontab と macOS の launchd で、Windows Task Scheduler は意図的に統合していません——Navide 自身が Scheduled Job を作ることはなく、Task Scheduler が既にマシンの Task を管理しているためです）、Pane ごとの CLI Home と管理対象の Skills は Symbolic Link で構成されるため Windows の開発者モードまたは管理者権限での実行が必要で、CLI は停止を通知されずに終了されるため Pane が閉じる前に Transcript を書き出せない場合があります。
 
 開発用 Checkout では、代わりに Source からインストールしてください。
 

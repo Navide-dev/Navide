@@ -29,8 +29,7 @@ consumes its immediately preceding unconditional build without using that cache.
 Package composition tests remain distinct from UI E2E. Packaged Plans checks
 exercise the production backend and its host composition, with the Go fixture
 kept separate from production output. Registry contracts, deterministic STT
-tests and dependency audits retain their own responsibilities. Release,
-publishing and mirror workflows are outside this change.
+tests and dependency audits retain their own responsibilities.
 
 ## Required workflow
 
@@ -53,8 +52,7 @@ for Bash. Backend job budgets are 25 minutes on macOS/Linux and 45 minutes
 per Windows shard, with a separate 35-minute detached-runner wait limit.
 
 Secret scanning remains a separate workflow. Repository branch protection must
-continue requiring the stable `Lint and test` check; changing remote repository
-settings is not part of this local implementation.
+continue requiring the stable `Lint and test` check.
 
 ## Shared and vendor regressions
 
@@ -82,12 +80,16 @@ registries.
 | Codex | Rollout format, explicit turn completion, delayed discovery, launch-scoped SessionStart, pane homes, subagent exclusion and ESC interrupt |
 | Copilot | SQLite and legacy JSONL precedence, cumulative usage, completed turns, markers, hooks and resume |
 | Cursor | Executable aliases, SQLite WAL, JSON/protobuf discrimination, workspace markers, event ordering and reply tails |
+| Devin | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | Droid | Its own cwd encoding (POSIX and native Windows spellings), session layouts, cumulative sidecars, split reply/outcome and inherited parent environment |
+| Goose | One shared SQLite database, sub-agent session exclusion, marker attribution in top-level sessions, usage ledger and inferred final reply |
 | Grok | Official grok-build updates, cwd layouts, UUID resume claims, explicit completion and streamed text |
+| Hermes | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | Kilo | Its own database/root/vendor identity plus the shared OpenCode schema and authenticated TUI push |
 | Kimi | Session-directory identity, wire records, cancellation, inferred idle completion and ESC timeout environment |
 | MiniMax Code | Interactive launch/login and environment handling; no reader, session resume, model or effort contract |
 | Muse | Session-directory identity, main-stream accounting, child-stream exclusion, explicit terminal records and resume |
+| OpenClaw | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | OpenCode | SQLite streaming updates, row checkpoints, top-level markers and unauthenticated loopback TUI push |
 | Pi | Header identity, lazy flush, whole-file rewrites, entry deduplication, workspace-scoped resume and inferred idle |
 | Qwen | Active/archive logs, usage semantics, automated-record exclusion, inferred idle, hooks and input-file push |
@@ -169,22 +171,6 @@ Manual acceptance after lifecycle or vendor changes:
    including multi-pane workspaces and late transcript writes.
 5. Run the existing packaged application/provider smoke procedure manually.
 
-## Why the structure changed
-
-The previous suite already contained substantial reader tests and real native
-PTY tests. The gaps were collection and composition: Mini IDE boundary tests
-were omitted from the root suite, some disconnect tests never disconnected,
-and several frontend coordination tests only searched component source text.
-Global package preparation made even small tests build and pack packages;
-three OS jobs repeated static checks and serialized tests behind builds.
-
-The baseline CI run at `c0eff2e8` took 17 minutes 22 seconds. Its Windows frontend
-job spent about two minutes on typecheck, eight and a half on tests, then five
-and a half on builds. This is a measured starting point, not a promised runtime
-for every runner. Compare setup, test/build durations, shard distribution and
-runner minutes after the change. Do not trade away platform coverage, hide
-flakes behind automatic retries, or infer billing savings from wall time alone.
-
 ## Retained and replaced mechanisms
 
 | Existing mechanism | Decision and reason |
@@ -200,7 +186,9 @@ flakes behind automatic retries, or infer billing savings from wall time alone.
 
 The production refactor is limited to extracting existing frontend coordination
 logic. The regression harness composes the current backend handlers and services;
-it does not replace them with a parallel lifecycle implementation.
+it does not replace them with a parallel lifecycle implementation. CI changes
+must not trade away platform coverage, hide flakes behind automatic retries, or
+infer billing savings from wall time alone.
 
 ## Local commands and diagnostics
 
@@ -271,81 +259,3 @@ inventory requires it on POSIX hosts and excludes it from Windows required
 outcomes. Every other vendor contract, Droid's reader and resume fixtures
 included, is required on every supported platform; Droid's session directory
 is encoded with the host's spelling (POSIX or native Windows).
-
-## Implementation validation (2026-09-30)
-
-Local validation used macOS arm64, Node 22.23.2 and Python 3.12.11 with the
-repository lockfiles. These are local results, not a claim that the new Actions
-matrix has run on Linux or Windows.
-
-| Check actually run | Result |
-| --- | --- |
-| Complete frontend unit + CLI projects with mandatory contract reporter | 786 files, 11,757 tests passed |
-| Complete artifact project with packaged and production Plans enabled | 22 files, 200 tests passed |
-| `pnpm typecheck` (including Mini IDE) | Passed |
-| `pnpm build` and production Plans fixture-exclusion check | Passed |
-| Infrastructure discovery/aggregate/artifact-input tests | 10 passed |
-| Frontend CLI entrypoint after harness isolation changes | 53 passed |
-| Marketplace registry suite | 299 passed |
-| Backend and marketplace Ruff; plugin contract fixture validator | Passed |
-| Rust sidecar | 29 passed; 1 explicit manual model test ignored |
-| Complete backend suite (before the exit-verdict review fix) | 8,583 passed, 3 deferred reader failures, 18 platform/capability skips; 329.21 seconds |
-| Focused harness/shared checks after discovery-file readiness hardening | 22 passed |
-| Exit-verdict review fix: isolation, shared, vendor transport and launch | 51 passed, including premature clean exit, crash and nonzero shutdown rejection |
-| Frontend/backend WebSocket regression after the exit-verdict fix | 1 passed |
-| Diff whitespace check | Passed |
-
-The exit-verdict fix checks the real backend's process outcome and preserves
-cleanup and diagnostics before failing. Both premature exit and nonzero
-shutdown cases first failed against the old harness with `DID NOT RAISE`.
-Focused Ruff checks passed; the complete suites above were not rerun for this
-harness-only follow-up. Native Linux and Windows confirmation remains in CI.
-
-The final frontend run temporarily removed public package distributions,
-`dist-plugins` and `out`. All unit and CLI tests passed without those outputs,
-and none recreated them; the original outputs were restored afterward. SDK
-command tests that execute built packages belong to the artifact project.
-The final artifact run consumed the restored build and passed all 200 tests.
-
-The initial local installations were behind the existing lockfiles; validation
-synchronized them without changing dependencies. STT compilation used CMake
-from a temporary `uv run --no-project --with cmake` environment because CMake
-was absent from the machine. No real provider, login, AI quota or UI automation
-was used. Remote Actions, native Linux/Windows execution, advisory-service
-audits and manual provider/release smoke were not run in this session.
-
-### Post-review corrections (2026-09-30)
-
-The channel approval test's fixture now supplies an explicit pane workspace.
-This PR's temporary HOME isolation exposed the fixture's fallback to HOME and
-changed Guard's classification of relative deletion targets. The earlier
-description of that failure as an upstream defect was incorrect: upstream
-`7c96aca7` passed its normal CI. The fixture correction retains HOME isolation,
-the real Guard and the original rejection assertion; it changes no Guard policy.
-
-Both App kickoff call sites are now executed with the real retry coordinator,
-checking that injection evidence reaches the callback and its returned echo.
-Negative mutations prove either dropped connection is detected. The router
-scan-window assertion starts at the actual awaited kickoff completion, including
-the gap before cancellation handling and the local result assignment. Retry
-limits and their log messages share constants (three kickoff attempts, eight
-pane-session persistence attempts). The separate fake CLI installers remain.
-
-Local validation after these corrections:
-
-| Check actually run | Result |
-| --- | --- |
-| Complete frontend unit + CLI projects with mandatory contract reporter | 797 files, 11,879 tests passed |
-| Infrastructure inventory, actual shell gate and artifact cache | 40 passed |
-| `pnpm typecheck`; backend Ruff | Passed |
-| `pnpm build` and production Plans fixture-exclusion check | Passed |
-| Complete prepared artifact suite, including packaged/production Plans | 22 files, 201 tests passed |
-| Channel mirror suite, native macOS and Windows path seam | 37 passed in each run |
-| Complete backend suite before the subsequent reader fixes | 8,709 passed, exactly three deferred reader failures, 18 platform/capability skips; 333.26 seconds |
-| Complete backend suite after the Droid platform-scoped fixture change (macOS arm64) | 8,724 passed, 18 skipped, 15 warnings; 326.04 seconds |
-| Two consecutive standalone artifact preparations | Both passed; second run preserved the success stamp and sampled output contents/mtimes |
-
-Native Linux/Windows execution, live provider smoke and manual Electron checks
-remain separate from these local results. The two Droid reader/resume fixtures
-were then required on POSIX hosts and excluded from Windows required outcomes;
-the Droid Windows session-path fix later removed that exclusion.

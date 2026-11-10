@@ -21,6 +21,7 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 |---|---|
 | [開始使用](getting-started.md) | 下載已簽章的 macOS 版本或 Windows／Linux 安裝檔，或從原始碼安裝，並完成首次啟動 |
 | [使用指南](user-guide.md) | 學習 Workspace、分格、Pipeline、協調、Git、History 與 Editor 工作流 |
+| [Pipeline Webhooks — English](../en-US/pipeline-webhooks.md) | 從其他系統、GitHub 或表單啟動 Pipeline，以及這樣做會暴露什麼 |
 | [從 n8n 匯入](import-from-n8n.md) | 把匯出的 n8n workflow 轉成 Pipeline：預覽、憑證、外部內容標記、n8n MCP |
 | [疑難排解](troubleshooting.md) | 解決啟動、權限、Agent Session、Analyzer 與 Token Tracking 問題 |
 
@@ -52,10 +53,15 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 | [Contributing — English](../../CONTRIBUTING.md) | 建立開發環境並提交變更 |
 | [Architecture — English](../en-US/architecture.md) | 理解 Process Boundary、State Ownership 與主要 Service |
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | 新增 AI Coding CLI：兩份 Spec 檔、註冊，以及 CI 強制的檢查 |
+| [CI and CLI Regressions — English](../en-US/ci-and-cli-regression.md) | 執行確定性的回歸測試套件、維護各家 CLI 的 Contract，並理解各平台的原生保證 |
+| [UI Verification — English](../en-US/ui-verification.md) | 透過 dev web mode 對主視窗截圖，與真正的 App 和螢幕隔離 |
 | [CLI Integration Records — English](../en-US/cli-extension-guide.md) | 各家 CLI 的整合紀錄：安裝方式、Resume 語法、Session 儲存格式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 已支援的 CLI 總覽：實際執行的指令，以及每家 spec 宣告的能力 |
+| [Glossary — English](../en-US/glossary.md) | 一個概念一個用語：Navide 外掛、Agent Assets、CLI 擴充，以及不可單獨使用的詞 |
+| [Navide Plugin Agent Tools and Disclosure Contract — English](../en-US/plugin-agent-tools-contract.md) | `backend.agentTools` 的 Contract：工具名稱、揭露資料、Host 訊息與稽核資料表 |
 | [外部 MCP 控制](external-mcp-control.md) | 連接外部 MCP Client 控制執行中的 Navide 視窗，並理解安全模型 |
 | [Release Guide — English](../en-US/releases.md) | 版本、封裝、簽章、Notarization、發布與復原 Release |
+| [Release Announcements — English](../en-US/release-announcements.md) | 新增某個版本的 App 內 What's New 項目與它的導覽 |
 
 ## 參考資料
 
@@ -63,6 +69,7 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 |---|---|
 | [CLI 之間的訊息傳遞](inter-cli-messaging.md) | CLI Agent 之間的定址、傳送、接收與問題排查 |
 | [Keyboard Shortcuts — English](../en-US/keybindings.md) | 查閱預設鍵盤 Command 與互動方式 |
+| [What Takes Effect When — English](../en-US/apply-timing.md) | 查看哪些變更會立即生效、哪些需要新的分格或重新建置，以及哪些永遠不會就地重新載入 |
 | [Editor Design — English](../en-US/editor-design.md) | 理解目前 Editor Architecture 與設計方向 |
 | [Historical Milestone Record — English](../en-US/spec.md) | 查閱原始實作 Milestone 紀錄 |
 | [Changelog — English](../../CHANGELOG.md) | 依版本查閱已交付變更 |

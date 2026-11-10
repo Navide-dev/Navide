@@ -27,11 +27,12 @@ around it, not the build itself.
 ## Prerequisites
 
 - Clean `main`, in sync with `origin/main` (`release.sh` enforces this).
-- Signing assets present and GitHub secrets set. See `~/navide-signing/README.md`
-  (5 secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`,
+- Signing assets present and GitHub secrets set. The signing assets and the exact
+  commands to (re)apply the secrets are kept by the release maintainers outside
+  the repository (5 secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`,
   `APPLE_APP_SPECIFIC_PASSWORD`). The mirror job needs two more,
   `NAVIDE_MIRROR_AWS_ACCESS_KEY_ID` and `NAVIDE_MIRROR_AWS_SECRET_ACCESS_KEY`
-  (IAM user `navide-release-upload`, AWS account NT-網域; it can only write
+  (IAM user `navide-release-upload`, in the project's AWS account; it can only write
   `releases/*` in the mirror bucket and invalidate its distribution).
 - `node`, `pnpm`, `uv`, `git` on PATH.
 
@@ -206,7 +207,7 @@ has measured under 60 KB/s — below what a 200 MB installer needs to finish
 before its URL expires (2026-09-16, users could not download the DMG from
 GitHub or navide.dev, which linked the same URL). Every release is therefore
 also served from `https://dl.navide.dev`, a CloudFront distribution in front of
-the private S3 bucket `navide-releases` (AWS account NT-網域, which also holds
+the private S3 bucket `navide-releases` (in the project's AWS account, which also holds
 the `navide.dev` zone).
 
 - **Who writes it**: `.github/workflows/mirror.yml`, called by `release.yml`
@@ -234,20 +235,6 @@ the `navide.dev` zone).
 - **Cost**: ~1.2 GB of S3 per release; CloudFront traffic has stayed inside the
   free tier. Nothing expires; old releases stay downloadable from the mirror
   as they do from GitHub.
-
-## Git recovery switch
-
-If a release needs the retained Git recovery bundle, launch the application
-from its main-process environment with `NAVIDE_GIT_RECOVERY=legacy`. Normal
-startup omits the variable: a verified Marketplace package is preferred, then
-the removable factory `navide.git` package tries v2. A durable user opt-out
-leaves Git absent until **Restore** is selected in Extensions. Load, mount, or
-ready failure may select legacy for that process; trust and permission failures
-must remain fail closed. Verify the Git left and window surfaces open against
-an existing workspace, the Extensions entry reports the expected source and
-version, and existing Git preferences and repository selection are still
-present. To retry v2, quit the application, remove the variable, and relaunch.
-Recovery does not edit Plugin Storage or legacy seed data.
 
 ## Notes
 

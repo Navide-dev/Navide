@@ -21,6 +21,7 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 |---|---|
 | [はじめに](getting-started.md) | 署名済み macOS ビルドまたは Windows／Linux Installer のダウンロード、または Source からのインストールと初回起動 |
 | [ユーザーガイド](user-guide.md) | Workspace、Pane、Pipeline、協調、Git、History、Editor Workflow の理解 |
+| [Pipeline Webhooks — English](../en-US/pipeline-webhooks.md) | 他のシステム、GitHub、フォームから Pipeline を起動する方法と、それによって何が公開されるか |
 | [n8n からインポート](import-from-n8n.md) | エクスポートした n8n ワークフローを Pipeline に変換：プレビュー、認証情報、外部コンテンツのマーク、n8n MCP |
 | [トラブルシューティング](troubleshooting.md) | 起動、権限、Agent Session、Analyzer、Token Tracking の問題解決 |
 
@@ -52,10 +53,15 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 | [Contributing — English](../../CONTRIBUTING.md) | 開発環境を構築し、変更を提出する |
 | [Architecture — English](../en-US/architecture.md) | Process Boundary、State Ownership、主要 Service を理解する |
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | AI Coding CLI を追加する：2 つの Spec ファイル、登録、CI が強制するチェック |
+| [CI and CLI Regressions — English](../en-US/ci-and-cli-regression.md) | 決定的な回帰テストスイートを実行し、ベンダーごとの Contract を保守し、各プラットフォームのネイティブな保証を理解する |
+| [UI Verification — English](../en-US/ui-verification.md) | 実際のアプリや画面から切り離した dev web mode でメインウィンドウのスクリーンショットを撮る |
 | [CLI Integration Records — English](../en-US/cli-extension-guide.md) | ベンダーごとの統合記録：インストール経路、Resume 構文、Session 保存形式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 対応済み CLI の一覧：実際に実行されるコマンドと、各 spec が宣言する機能 |
+| [Glossary — English](../en-US/glossary.md) | 概念ごとに 1 つの用語：Navide プラグイン、Agent Assets、CLI 拡張、単独で使ってはいけない語 |
+| [Navide Plugin Agent Tools and Disclosure Contract — English](../en-US/plugin-agent-tools-contract.md) | `backend.agentTools` の Contract：ツール名、開示データ、Host メッセージ、監査テーブル |
 | [外部 MCP 制御](external-mcp-control.md) | 外部 MCP クライアントを接続して実行中の Navide ウィンドウを操作し、セキュリティモデルを理解する |
 | [Release Guide — English](../en-US/releases.md) | Version、Package、署名、Notarization、公開、Release 復旧を行う |
+| [Release Announcements — English](../en-US/release-announcements.md) | ある Version のアプリ内 What's New エントリとガイドツアーを追加する |
 
 ## リファレンス
 
@@ -63,6 +69,7 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 |---|---|
 | [CLI 間メッセージング](inter-cli-messaging.md) | CLI Agent 間のアドレス指定、送信、受信、トラブルシューティング |
 | [Keyboard Shortcuts — English](../en-US/keybindings.md) | デフォルトの Keyboard Command と操作方法を確認する |
+| [What Takes Effect When — English](../en-US/apply-timing.md) | どの変更がすぐに反映され、どれに新しい Pane や再ビルドが必要で、何がその場で再読み込みされないかを確認する |
 | [Editor Design — English](../en-US/editor-design.md) | 現在の Editor Architecture と設計方針を理解する |
 | [Historical Milestone Record — English](../en-US/spec.md) | 当初の実装 Milestone 記録を確認する |
 | [Changelog — English](../../CHANGELOG.md) | Version ごとに提供済みの変更を確認する |

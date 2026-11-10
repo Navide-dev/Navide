@@ -79,8 +79,7 @@ Some Codex builds treat the `SessionStart` hook Navide passes on the command lin
 - Codex rollout files in the pane's isolated `~/.codex-panes/<session_home_id>/sessions` directory are separate from Navide's history metadata. A missing History entry does not mean the original conversation file was deleted.
 - History search covers loaded entries. Load more entries to continue searching older conversations, even when the current search has no results; content search runs again for the newly loaded entries.
 - To resume a known conversation outside Navide, use its original `CODEX_HOME` and exact session ID. Do not choose the latest session when several conversations share that home.
-- Detected session IDs are now saved by the backend before notifying the UI and preserved when later snapshots omit them. This does not automatically recover older entries whose session identity was already lost.
-- A removed Codex entry with no **Session** line has no resume id, so History shows no **Resume** button. The common causes were a **Hooks need review** screen swallowing the session marker at startup and a restart that reopened the pane as a fresh conversation without one; both are fixed. The rollout still exists — find it by time and `cwd` under `sessions/` and run `codex resume <id>` with that `CODEX_HOME`.
+- A removed Codex entry with no **Session** line has no resume id, so History shows no **Resume** button. The common causes were a **Hooks need review** screen swallowing the session marker at startup and a restart that reopened the pane as a fresh conversation without one. The rollout still exists — find it by time and `cwd` under `sessions/` and run `codex resume <id>` with that `CODEX_HOME`.
 
 ## Token Stats is empty or duplicated
 
@@ -137,6 +136,15 @@ What a stdio server prints on stderr (npm's download messages, a crash) goes to 
 - Test the same fetch or push in a normal terminal.
 - Prefer your existing SSH agent or credential-manager setup.
 - Never paste access tokens into issue reports or terminal screenshots.
+
+## Plans falls back to the legacy view
+
+If the Plans window cannot start its package backend, or the backend keeps exiting, Navide shows the previous Plans view for that workspace instead. It is marked **Legacy recovery** and a line gives the reason, for example `forced`, `storage-migration-failure`, or the backend's own start-up error. Your plans are ordinary files in the workspace's `.agent-team/plans/` folder; the fallback does not convert or delete them. **Retry** in the Plans panel tries the new view again, at most twice per session.
+
+- **Force the legacy view** to check whether the new Plans backend causes a problem. Quit Navide, start it with `NAVIDE_PLANS_RECOVERY=legacy` in its environment (on macOS, `open --env NAVIDE_PLANS_RECOVERY=legacy -a Navide`), and reproduce the issue. Only the Plans view changes. While it is forced, **Retry** refuses and says why. To try the new view again, quit Navide and start it without the variable.
+- **Do not edit Plans state.** Plans filter, sort, and collapse preferences live in the app's user-data folder under `plugin-storage-v2/`. `plans-lifecycle.json` there records which package version the legacy view falls back to. Leave these files alone; the legacy view only reads the earlier preferences and never overwrites the current ones.
+- **For a bug report**, capture the Plans plugin version (Settings → Navide Plugins), the **Legacy recovery** reason line, the Plans lines in `main.log`, and `plans-lifecycle.json` before and after a restart. Do not include credentials, tokens, or other stored data.
+- **Acceptance check.** With the legacy view forced, it opens the same workspace and lists and opens its plans. After you remove the variable and restart, the Plans tab shows the normal view with no **Legacy recovery** label. If `_template.html` is missing from the plans folder, creating a plan fails with an explicit `BACKEND_UNAVAILABLE` error until Navide restores its plan files; it never writes a simplified plan document.
 
 ## Filing a useful bug
 

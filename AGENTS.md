@@ -40,13 +40,13 @@ routed in-repo docs above.
    never bash/python inline search. The largest, as of v0.1.75, are
    `src/renderer/src/App.vue` (~11.8K lines),
    `backend/agent_team_backend/ws_handlers.py` (~5.0K),
-   `src/renderer/src/components/GitPane.vue` (~3.5K),
+   `plugins/navide-git/src/components/GitPane.vue` (~3.5K),
    `src/renderer/src/components/SettingsModal.vue` (~3.0K),
    `backend/agent_team_backend/usage_service.py` (~2.9K),
    `src/renderer/src/components/ControlPane.vue` (~2.8K),
    `backend/agent_team_backend/git_service.py` (~2.7K),
    `src/renderer/src/EditorWindowApp.vue` (~2.7K), and
-   `src/renderer/src/composables/useTerminal.ts` (~2.6K). Check with `wc -l`
+   `src/renderer/src/platform/terminal/composables/useTerminal.ts` (~2.6K). Check with `wc -l`
    rather than trusting this list — it drifts.
 
 ## Workflow (Plan Documents)

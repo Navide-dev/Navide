@@ -52,7 +52,7 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 
 **Reclaim selected (N)** shows how many selected 分格 are eligible, releases their CLI processes, and keeps click-to-resume placeholders. It skips protected 分格, including running 分格, the focused 分格, 分格 awaiting an answer or holding unsent text, and 分格 without a resumable session. The action stays visible but is disabled when none of the selected 分格 can be reclaimed. **Mute selected notifications** mutes the entire selection, including a mix of muted and unmuted 分格; when every selected 分格 is muted, **Unmute selected notifications** restores notifications for all of them. These batch actions affect only the selected 分格.
 
-受支援的內建 Agent Key 涵蓋 14 種 coding CLI：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code。實際 CLI 行為與 Provider Billing 仍由各外部工具控制。
+受支援的內建 Agent Key 涵蓋這些 coding CLI：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code。實際 CLI 行為與 Provider Billing 仍由各外部工具控制。
 
 對 Kimi Code 分格，Navide 會提供 100 ms 的 Escape Sequence 重組時間，讓方向鍵在內嵌 Terminal 中仍能可靠導覽；若環境已有 `PI_TUI_ESC_TIMEOUT`，則仍以既有值為準。
 
@@ -148,11 +148,11 @@ Token Stats 解析相容的本機 CLI Log，將 Usage 歸屬到 Workspace、分�
 
 ### Token Monitor
 
-Open **Window → Token Monitor** for a separate window showing local Claude turn history over 14, 30, or 90 days. Reopening the command focuses the existing monitor. The existing **Turn Stats** modal remains available for inspecting one 分格. Model filters, per-turn trends, and per-turn averages and medians summarize the selected local records.
+開啟 **Window → Token Monitor**，會有一個獨立視窗顯示過去 14、30 或 90 天的本機 Claude 回合歷史。再次執行該指令會聚焦到已開啟的監看視窗。既有的 **Turn Stats** 對話框仍可用來檢視單一分格。模型篩選、每回合趨勢，以及每回合的平均值與中位數，會彙整所選的本機記錄。
 
-Transcript records have **unknown account attribution**: a shared local Claude history cannot establish which signed-in account produced a turn. Other devices, web conversations, and subagent logs are outside this view. Missing history is not zero usage; partial scan coverage and errors are shown. Large histories are bounded, and refresh can reuse a scan for 60 seconds.
+Transcript 記錄的**帳號歸屬未知**：共用的本機 Claude 歷史無法確定某個回合是由哪個已登入帳號產生的。其他裝置、網頁對話與 subagent 的 Log 不在此檢視範圍內。缺少歷史不等於零用量；部分掃描覆蓋與錯誤都會顯示。大型歷史有上限，重新整理最多可重用掃描結果 60 秒。
 
-Quota history records successful observations for the active Claude account slot through the existing usage polling service. It starts accumulating when those observations are available; it cannot reconstruct earlier quota windows. Disabled polling and an empty history are displayed explicitly. Opening the monitor does not make extra provider requests. Observed tokens and quota percentages do not establish an official token allowance, throttling, effort level, or separate thinking-token usage.
+額度歷史會透過既有的用量輪詢服務，記錄使用中 Claude 帳號槽位每次成功的觀測。它從這些觀測可用時才開始累積，無法重建更早的額度視窗。輪詢已停用與歷史為空都會明確顯示。開啟監看視窗不會額外向供應商發出請求。觀測到的 token 與額度百分比，不能用來判定官方的 token 配額、節流、effort 等級，或獨立的 thinking-token 用量。
 
 ### Turn Stats 的帳號額度
 
@@ -168,7 +168,7 @@ session；**帳號額度**顯示此 Navide 安裝歸屬到帳號的所有分格�
 
 週期預設最近 30 天，可選 90 天或自訂 UTC 日期。依半開範圍內的重設時間
 選取週期；範圍到達現在時包含進行中週期。表格與圖表每頁最多 50 筆，摘要
-與符合／排除平均條件的筆數涵蓋整個範圍。使用週期按鈕或圖表查看證據来源、
+與符合／排除平均條件的筆數涵蓋整個範圍。使用週期按鈕或圖表查看證據來源、
 完整本機及 UTC 時間、用量明細、變動讀值與重新核算時間。每觀測百分點的
 本機 token 是總量除以非零觀測峰值，不代表供應商容量或價格。
 
@@ -180,13 +180,12 @@ session；**帳號額度**顯示此 Navide 安裝歸屬到帳號的所有分格�
 
 月／年維持 **UTC 曆期**。日期範圍選取有交集的完整曆期，並顯示展開後邊界。
 token 依事件時間，週期數依開始時間（未知時用重設時間）歸期。視窗篩選只
-影響週期統計，不加總互相重疊的額度視窗。本機活动占比採同一曆期的資料，
+影響週期統計，不加總互相重疊的額度視窗。本機活動占比採同一曆期的資料，
 覆蓋不完整時不捏造完整比例。
 
 「匯出選取範圍」以單次一致回應匯出全部選取記錄，最多 10,000 筆，超過時
 須縮小日期範圍。CSV 包含帳號身份、證據、覆蓋、平均資格、UTC 時間與時區。
-部分／不可用的 token 數值留空，修正舊版缺值當零的行為；已知零值維持 `0`。
-實際鍵盤、主題、語言及額度重設驗收與自動化 fixture 檢查分開進行。
+部分／不可用的 token 數值留空；已知零值維持 `0`。
 
 ## Git 與 Review
 
@@ -223,7 +222,7 @@ Skills 畫面在 backend 成功變更與重新連線後刷新，保留未儲存�
 
 **設定 → 語言** 是側欄中位於「外觀」之後的獨立頁面。可選擇繁體中文、English 或日本語；這項使用者層級偏好套用到所有工作區。初次啟動且尚未儲存語言偏好時，日文系統會使用日文介面。語言切換也會套用到初始設定畫面、Navide 原生選單標籤，以及獨立的 Plans 和 Token Monitor 視窗。作業系統提供的選單角色與外部內容可能保留各自的語言。
 
-Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut，以及獨立的 **Execution Policy** 分頁。Navide 停止 MCP Server 時（結束 Navide、重新載入，或 Server 啟動失敗），也會一併結束這個 Server 啟動、而且還在執行的所有程序，包括它替你開啟的程式，例如它開的瀏覽器。能執行 shell 指令或操控桌面的 Server（回報了 `PowerShell`、`execute_command` 這類 shell 工具，或是 `windows-mcp` 這類已知套件），卡片上會有「高風險權限」標籤，詳細資訊裡也會說明它能做什麼。Navide 不會擋它：Navide Guard 會用和內建 shell 相同的規則，判讀這個 Server 的指令、檔案、登錄檔和程序工具。該分頁會顯示唯讀的 Host 預設值，讓你建立或編輯一個全域的 `full`、`allowlist` 或 `denylist` 使用者政策，並將第一層系統命名空間與最上層 Shell 可執行檔名稱分開管理。完整模式需要明確的高風險確認。開啟工作區後，也會顯示不受信任的 Repository 建議，讓你明確選擇 Host 預設值、使用者政策或接受後的 Repository 政策。全域政策損壞時，可透過獨立確認的重建保留工作區來源選擇；政策資料夾不安全或無法使用時，則必須手動修復。Extensions 會將 Plugin 的 Manifest Permissions、精確 package-version Grant，以及目前選定 Agent 的 Execution Policy 分開顯示。從 Navide 市集安裝的 Navide 外掛可在該處**停用**：Navide 會停止它，之後（包含重新啟動後）不再載入它的畫面與後端，但保留檔案、Grant 與儲存的資料。該列會顯示「已停用」標籤與**啟用**按鈕，啟用後沿用同一份 Grant。停用期間仍可更新、回復與移除，更新後維持停用。內建的 Plans、Git 與 Mini-IDE 不能移除，但可在各自的內建列**停用**。停用後不顯示分頁、視窗或舊版復原畫面，agent 也無法使用：停用 Plans 時 `plan_*` MCP 工具從工具清單消失、呼叫會回 `PLUGIN_TOOL_UNAVAILABLE`、不再於工作區建立 Plan 範本檔，手機對分享計畫的回饋也會被拒絕；停用 Mini-IDE 時，只有 Mini-IDE 能開啟的項目會顯示為停用，預設編輯器為外部編輯器的開啟則照常運作。Grant 與儲存的資料都保留，按**啟用**即全部恢復。停用期間已讀過工具清單的 agent CLI，要重新連線或重新啟動後才會再看到 `plan_*` 工具；Navide 無法主動通知它。停用期間被拒絕的手機回饋不會保留。開關會連同一份備份儲存：檔案損壞時會用備份重建（擴充頁會顯示），兩份都無法讀取時 Plans、Git 與 Mini-IDE 維持停用，直到你按**重設**。舊版曾移除的 Git 或 Mini-IDE 會以「已停用」狀態回來，該列會說明當初的移除已刪除它儲存的資料。**從檔案安裝 .vsix…** 可以安裝你自己選的 Navide 外掛套件檔。這種套件沒有經過 Navide 審核，也沒有簽章，無法確認作者：對話框會寫明這一點，把發佈者標成「自稱」、掃描標成「未掃描」，你必須先勾選「了解風險」才能同意。從檔案安裝的 Navide 外掛不會自動更新。核准的內容會立即生效，不用按**重新啟動**、也不用重開 Navide：首次安裝核准後就啟用；核准的更新（以及 agent 觸發、揭露內容和目前版本完全相同的自動更新）會立刻切換。核准前對話框會先說明：這個外掛開著的畫面會重新載入；用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。真正切換前，Navide 會再確認一次新版的畫面能正常啟動；不能的話，原本的版本照常執行。切換進行中，外掛的面板會顯示正在切換，不會變成一片空白。每次切換都會記錄在公告中心，附**退回**上一版的按鈕。從檔案更新時會保留被取代的檔案版本，退回到它需要你重新同意。切換失敗時會繼續執行原本的版本，更新保留暫存：如果是你核准的更新，「設定 → Navide 外掛」會當下顯示原因，並保留**重新啟動**和**捨棄**，下次啟動 Navide 時公告中心會列出它並附**立即套用**；如果是 agent 觸發的自動更新，公告中心會立即常駐一列說明原因，附**立即套用**。用同一個 id 取代已安裝的 Navide 外掛時（不論哪個方向）都會先詢問；取代後不沿用原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權；來源改變時，它存的資料（原生後端資料和 view 儲存）會保留在一旁、不交給新版本，換回 Navide 市集版本時會詢問要不要接回（預設不接回）。該列的**換回 Navide 市集版本**可以反向換回。**開發者模式**預設關閉，開啟後可以從資料夾載入你正在開發的 Navide 外掛：在 Navide 裡只能在這個頁面切換，在這裡的每次變更都會記錄；這個設定檔以你的身分執行的其他程式（包括 agent CLI）也能改（Navide Guard 會把 agent 寫入它評為 critical），但 Navide 會為自己寫入的每一項另存簽章：發現不是 Navide 寫入的項目時不會套用，開關維持關閉、資料夾不會載入，清單上方和啟動提醒會寫明，活動紀錄也會記一筆，要等你在這個頁面重新開啟開關、或對該資料夾重新同意才會生效。從 0.2.28 以前升級、或簽章檔不見時也一樣：開關要重新開啟一次，每個資料夾都要再同意一次。限制詳見 plugin-development-v2.md；開著的時候清單上方會常駐提醒，每次啟動也會提醒一次。資料夾的權限或後端宣告改變時才會重新詢問，改檔案（包括原生後端程式本身）不會。正式版也只有在開發者模式開啟時才會套用自架 Registry（`AGENT_TEAM_MARKETPLACE_URL`）；關閉時，從自架 Registry 安裝的 Navide 外掛不會載入，頁面會寫明原因。
+Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut，以及獨立的 **Execution Policy** 分頁。Navide 停止 MCP Server 時（結束 Navide、重新載入，或 Server 啟動失敗），也會一併結束這個 Server 啟動、而且還在執行的所有程序，包括它替你開啟的程式，例如它開的瀏覽器。能執行 shell 指令或操控桌面的 Server（回報了 `PowerShell`、`execute_command` 這類 shell 工具，或是 `windows-mcp` 這類已知套件），卡片上會有「高風險權限」標籤，詳細資訊裡也會說明它能做什麼。Navide 不會擋它：Navide Guard 會用和內建 shell 相同的規則，判讀這個 Server 的指令、檔案、登錄檔和程序工具。該分頁會顯示唯讀的 Host 預設值，讓你建立或編輯一個全域的 `full`、`allowlist` 或 `denylist` 使用者政策，並將第一層系統命名空間與最上層 Shell 可執行檔名稱分開管理。完整模式需要明確的高風險確認。開啟工作區後，也會顯示不受信任的 Repository 建議，讓你明確選擇 Host 預設值、使用者政策或接受後的 Repository 政策。全域政策損壞時，可透過獨立確認的重建保留工作區來源選擇；政策資料夾不安全或無法使用時，則必須手動修復。Extensions 會將 Plugin 的 Manifest Permissions、精確 package-version Grant，以及目前選定 Agent 的 Execution Policy 分開顯示。從 Navide 市集安裝的 Navide 外掛可在該處**停用**：Navide 會停止它，之後（包含重新啟動後）不再載入它的畫面與後端，但保留檔案、Grant 與儲存的資料。該列會顯示「已停用」標籤與**啟用**按鈕，啟用後沿用同一份 Grant。停用期間仍可更新、回復與移除，更新後維持停用。內建的 Plans、Git 與 Mini-IDE 不能移除，但可在各自的內建列**停用**。停用後不顯示分頁、視窗或舊版復原畫面，agent 也無法使用：停用 Plans 時 `plan_*` MCP 工具從工具清單消失、呼叫會回 `PLUGIN_TOOL_UNAVAILABLE`、不再於工作區建立 Plan 範本檔，手機對分享計畫的回饋也會被拒絕；停用 Mini-IDE 時，只有 Mini-IDE 能開啟的項目會顯示為停用，預設編輯器為外部編輯器的開啟則照常運作。Grant 與儲存的資料都保留，按**啟用**即全部恢復。停用期間已讀過工具清單的 agent CLI，要重新連線或重新啟動後才會再看到 `plan_*` 工具；Navide 無法主動通知它。停用期間被拒絕的手機回饋不會保留。開關會連同一份備份儲存：檔案損壞時會用備份重建（擴充頁會顯示），兩份都無法讀取時 Plans、Git 與 Mini-IDE 維持停用，直到你按**重設**。舊版曾移除的 Git 或 Mini-IDE 會以「已停用」狀態回來，該列會說明當初的移除已刪除它儲存的資料。**從檔案安裝…** 可以安裝你自己選的 Navide 外掛套件檔。這種套件沒有經過 Navide 審核，也沒有簽章，無法確認作者：對話框會寫明這一點，把發佈者標成「自稱」、掃描標成「未掃描」，你必須先勾選「了解風險」才能同意。從檔案安裝的 Navide 外掛不會自動更新。核准的內容會立即生效，不用按**重新啟動**、也不用重開 Navide：首次安裝核准後就啟用；核准的更新（以及 agent 觸發、揭露內容和目前版本完全相同的自動更新）會立刻切換。核准前對話框會先說明：這個外掛開著的畫面會重新載入；用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。真正切換前，Navide 會再確認一次新版的畫面能正常啟動；不能的話，原本的版本照常執行。切換進行中，外掛的面板會顯示正在切換，不會變成一片空白。每次切換都會記錄在公告中心，附**退回**上一版的按鈕。從檔案更新時會保留被取代的檔案版本，退回到它需要你重新同意。切換失敗時會繼續執行原本的版本，更新保留暫存：如果是你核准的更新，「設定 → Navide 外掛」會當下顯示原因，並保留**重新啟動**和**捨棄**，下次啟動 Navide 時公告中心會列出它並附**立即套用**；如果是 agent 觸發的自動更新，公告中心會立即常駐一列說明原因，附**立即套用**。用同一個 id 取代已安裝的 Navide 外掛時（不論哪個方向）都會先詢問；取代後不沿用原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權；來源改變時，它存的資料（原生後端資料和 view 儲存）會保留在一旁、不交給新版本，換回 Navide 市集版本時會詢問要不要接回（預設不接回）。該列的**換回 Navide 市集版本**可以反向換回。**開發者模式**預設關閉，開啟後可以從資料夾載入你正在開發的 Navide 外掛：在 Navide 裡只能在這個頁面切換，在這裡的每次變更都會記錄；這個設定檔以你的身分執行的其他程式（包括 agent CLI）也能改（Navide Guard 會把 agent 寫入它評為 critical），但 Navide 會為自己寫入的每一項另存簽章：發現不是 Navide 寫入的項目時不會套用，開關維持關閉、資料夾不會載入，清單上方和啟動提醒會寫明，活動紀錄也會記一筆，要等你在這個頁面重新開啟開關、或對該資料夾重新同意才會生效。從 0.2.28 以前升級、或簽章檔不見時也一樣：開關要重新開啟一次，每個資料夾都要再同意一次。限制詳見 plugin-development-v2.md；開著的時候清單上方會常駐提醒，每次啟動也會提醒一次。資料夾的權限或後端宣告改變時才會重新詢問，改檔案（包括原生後端程式本身）不會。正式版也只有在開發者模式開啟時才會套用自架 Registry（`AGENT_TEAM_MARKETPLACE_URL`）；關閉時，從自架 Registry 安裝的 Navide 外掛不會載入，頁面會寫明原因。
 
 **設定 → CLI Agents** 以每個 Agent 一張卡片呈現。使用搜尋及「全部」、「已啟用」或「需注意」篩選找到 Agent，切換啟用狀態。要調整順序，請選擇「全部」並清空搜尋，再使用卡片標題左側的拖曳把手調整順序；篩選或搜尋期間無法重新排序。至少必須保留一個已啟用的 Agent。選擇「管理」會開啟該 Agent 的側邊抽屜，總覽、啟動設定、權限、推送及安裝區段依序排列在同一個可捲動頁面。設定沿用自動儲存方式，不需要另外按下儲存。關閉抽屜或按 Escape 會先返回卡片，不會直接關閉整個設定視窗。
 

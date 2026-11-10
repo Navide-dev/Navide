@@ -35,8 +35,9 @@ signs in through the Registry in the browser and stores a publish token in
 `--registry`, `$NAVIDE_REGISTRY_URL`, or `https://server.navide.dev/registry`
 (the Registry API; the website is `https://marketplace.navide.dev`).
 `dev-backend` runs a built backend under the same sandbox profile Navide uses
-and answers every Host bridge request with `CAPABILITY_DENIED`. There is no
-`dev` command.
+and serves the filesystem, shell and web ports the manifest declares, denies
+the rest with `CAPABILITY_DENIED`, and answers `BACKEND_UNAVAILABLE` for ports
+only Navide serves (agents, secrets). There is no `dev` command.
 
 At runtime a view uses the factories `createPluginCapabilityClient()`
 (capability calls and events), `createPluginViewRuntimeClient()` (`ready()`,
