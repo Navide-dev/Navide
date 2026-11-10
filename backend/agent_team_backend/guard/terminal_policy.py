@@ -471,8 +471,10 @@ def _exemption_matches(pattern: str, text: str) -> bool:
     pattern must have the same number of ``|`` stages, and each glob stage
     must match its whole stage (a plain one must equal it), so a wildcard
     never spans into another stage. Every word on the line that names a
-    ``.ssh`` path must also appear verbatim in the pattern, so a wildcard
-    cannot carry a second credential file along. Whitespace runs collapse."""
+    path (see _path_like) must also appear verbatim in the pattern, so a
+    wildcard cannot carry a second file along, and a line the shell would
+    still rewrite (quotes, escapes, $, globs) is never exempted. Whitespace
+    runs collapse."""
     if any(tok in text for tok in _EXEMPT_UNSAFE):
         return False
     p_stages = [" ".join(st.split()) for st in pattern.split("|")]
@@ -485,8 +487,18 @@ def _exemption_matches(pattern: str, text: str) -> bool:
                 return False
         elif s != p:
             return False
+    # A word the shell would still rewrite (quotes, escapes, $ expansion, a
+    # glob) could name a credential path that reads as something else here.
+    if any(ch in text for ch in "$'\"\\*?["):
+        return False
     named = set(pattern.split())
-    return all(w in named for w in text.split() if ".ssh" in w)
+    return all(w in named for w in text.split() if _path_like(w))
+
+
+def _path_like(word: str) -> bool:
+    """A word that names a file: it must be written out in the pattern."""
+    return (".ssh" in word or "~" in word or word.startswith(("/", "."))
+            or any(tok in word for tok in ("=/", "@/", "=.", "@.")))
 
 
 def _exemption_for(rule: str, text: str, settings: Settings) -> str | None:
