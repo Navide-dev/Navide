@@ -1869,6 +1869,13 @@ interface ActivePane {
    *  Persisted (PaneRecord.spawned_by) and re-keyed by the backend whenever a
    *  pane_id is regenerated, so lineage survives a restart. */
   spawnedBy?: string
+  /** Pane id of the pane that opened this one (cli_open_agent or a SPAWN
+   *  block). Written once at that spawn and carried through restore and
+   *  rebuild, but never moved by a re-parent — cli_rename_pane grants
+   *  permission from it, so adopting a pane into your subtree with
+   *  cli_place_pane does not make it yours to rename. Persisted
+   *  (PaneRecord.opened_by). */
+  openedById?: string
   /** Messaging handle of the parent this pane owes a report to, and whether
    *  that report is still outstanding. Set together when a spawn kickoff lands
    *  and cleared by the first turn that ends — by the pane's own report if it
@@ -2793,6 +2800,7 @@ function mirrorMessagingHandle(pane: ActivePane): void {
       // whose context was compacted has no way left to find out who opened it:
       // the parent's name only ever appeared in the words of its kickoff.
       spawned_by: pane.spawnedBy ?? '',
+      opened_by: pane.openedById ?? '',
     })
     .catch(() => { /* local messaging is unaffected */ })
 }
@@ -3477,6 +3485,9 @@ async function createRequestedPane(
     requestedRunGroupId: req.runGroupId,
     preferredMessagingName: req.name,
     spawnedBy: resumeSpawnedBy,
+    // The caller opened this pane, resume or not — unlike spawnedBy, which a
+    // resume puts back where the conversation last sat.
+    openedById: parent.id,
     model: req.model,
     effort: req.effort,
     // cli_open_agent's `account`: the explicit pin a 📌 pinned pane is spawned
@@ -3513,6 +3524,7 @@ async function createRequestedPane(
     // Must agree with where the pane was actually placed, or the next restore
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
+    opened_by: parent.id,
     // A pinned pane's record keeps its pin, as a rebuild's does; without it the
     // backend files the pane under the live login and a restore reopens it there.
     ...(req.profileId ? { profile_id: req.profileId } : {}),
@@ -7938,6 +7950,8 @@ interface SpawnInternal {
    *  spawn-depth/quota gate, and is mirrored into the pane record and the
    *  spawn-history entry so the tree survives a restart. */
   spawnedBy?: string
+  /** The pane that opened this one; see ActivePane.openedById. */
+  openedById?: string
   /** CLI account profile id for an isolated LOGIN pane: the backend spawns the
    *  CLI inside that profile's login home so signing in never touches the live
    *  credentials or running panes. Never persisted — a restored pane respawns
@@ -8151,6 +8165,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     model: launchedModel.model || undefined,
     effort: launchedModel.effort || undefined,
     spawnedBy: opts.spawnedBy,
+    openedById: opts.openedById,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
@@ -8239,6 +8254,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       // one, but it does not outlive a pruned record — and resuming from
       // Agent History is exactly the case where the record may be long gone.
       spawnedBy: pane.spawnedBy,
+      openedById: pane.openedById,
     })
   } else {
     console.warn(
@@ -9413,6 +9429,7 @@ async function rebuildPaneViaResume(
       workspacePath: ws,
       origin: pane.origin,
       spawnedBy: pane.spawnedBy,
+      openedById: pane.openedById,
       runGroupId: pane.runGroupId,
       sessionHomeId: pane.sessionHomeId,
       profileId: pane.profileId,
@@ -9460,6 +9477,7 @@ async function rebuildPaneViaResume(
       workspacePath: snap.workspacePath,
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
+      openedById: snap.openedById,
       runGroupId: snap.runGroupId || undefined,
       isResume: !fresh,
       skipRoleInjection: !fresh,
@@ -10208,6 +10226,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     workspacePath: pane.workspacePath,
     origin: pane.origin,
     spawnedBy: pane.spawnedBy,
+    openedById: pane.openedById,
     runGroupId: pane.runGroupId,
     // Same reason as the resume rebuild's snapshot: a clean rebuild is still
     // the SAME pane, so it has to relaunch on the model it was running. Drop
@@ -10233,6 +10252,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       workspacePath: snap.workspacePath,
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
+      openedById: snap.openedById,
       runGroupId: snap.runGroupId || undefined,
       isResume: false,
       model: snap.model,
@@ -13041,6 +13061,7 @@ interface ProjectPane {
   run_group_id?: string
   origin: 'pipeline' | 'manual' | 'mcp'
   spawned_by?: string
+  opened_by?: string
   stage_id?: string
   stage_index?: number
   slot_label?: string
@@ -13166,6 +13187,8 @@ interface RestoredPaneSpawnOptions {
    *  and a child with no resolvable parent is a root: it leaves the subtree
    *  and sorts to the end of the list. */
   spawnedBy?: string
+  /** The placeholder's live opener, for the same reason as spawnedBy. */
+  openedById?: string
   workspacePath: string
   runGroupId?: string
   sessionHomeId?: string
@@ -13207,6 +13230,10 @@ function rekeyLineage(oldId: string, newId: string): void {
   // The follow-the-default-account flag rides the same id hand-offs.
   accountFollow.rekey(oldId, newId)
   rekeyChildren(panes.value, (p) => p.id, oldId, newId)
+  // Who opened a pane names the same kind of id, so it follows the same hand-off.
+  for (const p of panes.value) {
+    if (p.openedById === oldId) p.openedById = p.id === newId ? undefined : newId
+  }
   // Agent History keeps its own durable copy of the same pointer, and it
   // outlives the pane record. Left behind, it would still name an id retired
   // restarts ago — so a resume that fell back to history would rebuild the
@@ -13232,6 +13259,7 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     origin: saved.origin,
     // Live value first — see RestoredPaneSpawnOptions.spawnedBy.
     spawnedBy: opts.spawnedBy || saved.spawned_by || undefined,
+    openedById: opts.openedById || saved.opened_by || undefined,
     runGroupId: opts.runGroupId,
     isResume: opts.isResume,
     skipRoleInjection: opts.isResume,
@@ -13978,6 +14006,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
         // backend persists and re-keys spawned_by precisely so the shape
         // survives a restart — dropping it here threw that away.
         spawnedBy: saved.spawned_by || undefined,
+        openedById: saved.opened_by || undefined,
         outputLogFile: saved.output_log_file || undefined,
         runGroupId: runGroupId || undefined,
         injectionStatus: 'pending',
@@ -14143,6 +14172,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
       // The record is being read right here, so take its lineage with it:
       // this is the last point at which a closed pane's parent is known.
       spawnedBy: saved.spawned_by || undefined,
+      openedById: saved.opened_by || undefined,
     })
     backfilledIds.add(saved.pane_id)
   }
@@ -14612,6 +14642,7 @@ async function performRealizeRestoredPane(
       workspacePath: batch.workspacePath,
       runGroupId: placeholder.runGroupId || undefined,
       spawnedBy: placeholder.spawnedBy,
+      openedById: placeholder.openedById,
       sessionHomeId: placeholder.sessionHomeId,
       profileId: restorePin,
       commandOverride,
@@ -20779,6 +20810,7 @@ function projectPaneFromActive(pane: ActivePane): ProjectPane {
     // that belongs in performRealizeRestoredPane, which moves minimized and
     // muted onto the new id and not this.)
     spawned_by: pane.spawnedBy,
+    opened_by: pane.openedById,
     collapsed: collapsedPanes.value.has(pane.id),
     output_log_file: pane.outputLogFile,
     // The realize path rebuilds the launch flags from these two. Leaving them
