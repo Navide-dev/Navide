@@ -11311,7 +11311,8 @@
       "allow": "放行",
       "allow-audit": "放行并记录",
       "ask": "要求本机确认",
-      "deny": "拒绝"
+      "deny": "拒绝",
+      "exempt": "豁免"
     },
     "source": {
       "local": "本机",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "解释器运行内嵌代码",
         "stdin-script": "解释器从 stdin 读取脚本",
         "unknown-script": "运行 Guard 看不到内容的脚本",
-        "dynamic-path": "文件路径不是静态的"
+        "dynamic-path": "文件路径不是静态的",
+        "credential-pipe-upload": "把 ~/.ssh 中的文件 pipe 给网络工具",
+        "plugin-store-write": "写入、删除、移动、链接或 chmod Navide 插件的安装目录或信任存储",
+        "dynamic-stdin-script": "Shell 运行运行时才算出的 here-string",
+        "mcp-registry-write": "MCP 工具修改或删除 Windows 注册表项",
+        "mcp-process-kill": "MCP 工具结束进程",
+        "heredoc-unparsed": "无法判断 heredoc 的分隔符或结尾",
+        "untokenizable-shape": "使用分析器无法处理的 shell 语法",
+        "mcp-unknown-mode": "MCP 工具以 Guard 不认识的模式调用"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "允许例外",
         "warning": "以这些前缀开头的片段会跳过上面所有内置检查 —— 只加入你完全信任的指令。封锁样式仍然适用，把下载内容 pipe 给 shell 永远不会被允许。添加时需要确认。",
         "placeholder": "完整的指令前缀，例如 git push origin"
+      },
+      "exempt": {
+        "title": "豁免：读取凭据再上传",
+        "warning": "整行符合这些模式时，“把 ~/.ssh 的文件 pipe 给网络工具”不再被拒绝 —— 只添加你完全信任的命令。其他检查与屏蔽模式仍然适用，每次豁免都会记在 Guard 记录中。添加时需要确认。",
+        "placeholder": "命令模式或路径，例如 *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "请输入样式。",

@@ -11311,7 +11311,8 @@
       "allow": "放行",
       "allow-audit": "放行並記錄",
       "ask": "要求本機確認",
-      "deny": "拒絕"
+      "deny": "拒絕",
+      "exempt": "豁免"
     },
     "source": {
       "local": "本機",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "直譯器執行內嵌程式碼",
         "stdin-script": "直譯器從 stdin 讀取腳本",
         "unknown-script": "執行 Guard 看不到內容的腳本",
-        "dynamic-path": "檔案路徑不是靜態的"
+        "dynamic-path": "檔案路徑不是靜態的",
+        "credential-pipe-upload": "把 ~/.ssh 裡的檔案 pipe 給網路工具",
+        "plugin-store-write": "寫入、刪除、移動、連結或 chmod Navide 外掛的安裝目錄或信任存放區",
+        "dynamic-stdin-script": "Shell 執行執行時才算出的 here-string",
+        "mcp-registry-write": "MCP 工具修改或刪除 Windows 登錄檔項目",
+        "mcp-process-kill": "MCP 工具結束程序",
+        "heredoc-unparsed": "無法判斷 heredoc 的分隔字或結尾",
+        "untokenizable-shape": "使用分析器無法處理的 shell 語法",
+        "mcp-unknown-mode": "MCP 工具以 Guard 不認得的模式呼叫"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "允許例外",
         "warning": "以這些前綴開頭的片段會跳過上面所有內建檢查 —— 只加入你完全信任的指令。封鎖樣式仍然適用，把下載內容 pipe 給 shell 永遠不會被允許。新增時需要確認。",
         "placeholder": "完整的指令前綴，例如 git push origin"
+      },
+      "exempt": {
+        "title": "豁免：讀取憑證再上傳",
+        "warning": "整行符合這些樣式時，「把 ~/.ssh 的檔案 pipe 給網路工具」不再被拒絕 —— 只加入你完全信任的指令。其他檢查與封鎖樣式仍然適用，每次豁免都會記在 Guard 紀錄。新增時需要確認。",
+        "placeholder": "指令樣式或路徑，例如 *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "請輸入樣式。",

@@ -11311,7 +11311,8 @@
       "allow": "Permitir",
       "allow-audit": "Permitir e registrar",
       "ask": "Perguntar neste computador",
-      "deny": "Negar"
+      "deny": "Negar",
+      "exempt": "Isento"
     },
     "source": {
       "local": "Local",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "O interpretador executa código inline",
         "stdin-script": "O interpretador lê o script da entrada padrão",
         "unknown-script": "Executa um script que o Guard não consegue ver",
-        "dynamic-path": "O caminho do arquivo não é estático"
+        "dynamic-path": "O caminho do arquivo não é estático",
+        "credential-pipe-upload": "Envia um arquivo de ~/.ssh a uma ferramenta de rede via pipe",
+        "plugin-store-write": "Grava, exclui, move, vincula ou altera com chmod a pasta de instalação de plugins do Navide ou seus repositórios de confiança",
+        "dynamic-stdin-script": "O shell executa uma here-string calculada em tempo de execução",
+        "mcp-registry-write": "Uma ferramenta MCP altera ou exclui uma entrada do registro do Windows",
+        "mcp-process-kill": "Uma ferramenta MCP encerra um processo",
+        "heredoc-unparsed": "Não é possível determinar o delimitador ou o fim do heredoc",
+        "untokenizable-shape": "Usa sintaxe de shell que o analisador não consegue modelar",
+        "mcp-unknown-mode": "Uma ferramenta MCP é chamada com um modo que o Guard não conhece"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "Exceções permitidas",
         "warning": "Uma parte de linha que começa com um destes prefixos ignora todas as verificações integradas acima – adicione apenas comandos em que você confia plenamente. Os padrões de bloqueio continuam valendo, e um download enviado direto para um shell nunca é permitido. Adicionar um pede confirmação.",
         "placeholder": "Prefixo exato do comando, ex.: git push origin"
+      },
+      "exempt": {
+        "title": "Isenções: ler uma credencial e enviá-la",
+        "warning": "Uma linha inteira que corresponda a um destes padrões deixa de ser recusada por enviar um arquivo de ~/.ssh a uma ferramenta de rede via pipe; adicione apenas comandos em que você confia totalmente. As demais verificações e seus padrões de bloqueio continuam valendo, e cada linha isenta fica registrada no log do Guard. Adicionar uma pede confirmação.",
+        "placeholder": "Padrão de comando ou caminho, ex.: *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "Digite um padrão.",

@@ -5527,6 +5527,8 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'guard.terminal.set_category',
   'guard.terminal.add_pattern',
   'guard.terminal.remove_pattern',
+  // Exempting a line from the credential pipe-upload rule (M4).
+  'guard.terminal.add_exemption',
   // Loosening Navide Guard's grading (lowering a built-in rule, adding an
   // allow pattern, removing a deny pattern or a protected branch).
   'guard.builtin.set_level',

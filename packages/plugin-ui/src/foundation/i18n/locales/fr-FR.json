@@ -11311,7 +11311,8 @@
       "allow": "Autoriser",
       "allow-audit": "Autoriser + consigner",
       "ask": "Demander sur cet ordinateur",
-      "deny": "Refuser"
+      "deny": "Refuser",
+      "exempt": "Exempté"
     },
     "source": {
       "local": "Local",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "Un interpréteur exécute du code en ligne",
         "stdin-script": "Un interpréteur lit son script sur stdin",
         "unknown-script": "Exécute un script que Guard ne peut pas voir",
-        "dynamic-path": "Le chemin de fichier n’est pas statique"
+        "dynamic-path": "Le chemin de fichier n’est pas statique",
+        "credential-pipe-upload": "Envoie un fichier de ~/.ssh à un outil réseau par un pipe",
+        "plugin-store-write": "Écrit, supprime, déplace, lie ou modifie par chmod le dossier d’installation ou les magasins de confiance des plugins Navide",
+        "dynamic-stdin-script": "Le shell exécute une here-string calculée à l’exécution",
+        "mcp-registry-write": "Un outil MCP modifie ou supprime une entrée du registre Windows",
+        "mcp-process-kill": "Un outil MCP arrête un processus",
+        "heredoc-unparsed": "Le délimiteur ou la fin du heredoc ne peut pas être déterminé",
+        "untokenizable-shape": "Utilise une syntaxe shell que l’analyseur ne sait pas modéliser",
+        "mcp-unknown-mode": "Un outil MCP est appelé avec un mode que Guard ne connaît pas"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "Exceptions autorisées",
         "warning": "Une partie de ligne qui commence par l’un de ces préfixes échappe à toutes les vérifications intégrées ci-dessus : n’ajoutez que des commandes en lesquelles vous avez entièrement confiance. Les motifs de blocage s’appliquent toujours, et un téléchargement envoyé à un shell n’est jamais autorisé. L’ajout demande une confirmation.",
         "placeholder": "Préfixe de commande exact, par ex. git push origin"
+      },
+      "exempt": {
+        "title": "Exemptions : lire un identifiant puis l’envoyer",
+        "warning": "Une ligne entière qui correspond à l’un de ces motifs n’est plus refusée pour avoir envoyé un fichier de ~/.ssh à un outil réseau. N’ajoutez que des commandes en lesquelles vous avez entièrement confiance. Les autres vérifications et vos motifs de blocage s’appliquent toujours, et chaque ligne exemptée est consignée dans le journal de Guard. L’ajout demande une confirmation.",
+        "placeholder": "Motif de commande ou chemin, par ex. *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "Saisissez un motif.",

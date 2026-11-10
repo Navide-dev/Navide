@@ -11311,7 +11311,8 @@
       "allow": "Erlauben",
       "allow-audit": "Erlauben + protokollieren",
       "ask": "Auf diesem Computer nachfragen",
-      "deny": "Ablehnen"
+      "deny": "Ablehnen",
+      "exempt": "Ausgenommen"
     },
     "source": {
       "local": "Lokal",
@@ -11376,7 +11377,15 @@
         "interpreter-inline-code": "Interpreter führt Inline-Code aus",
         "stdin-script": "Interpreter liest sein Skript von stdin",
         "unknown-script": "Führt ein Skript aus, das Guard nicht einsehen kann",
-        "dynamic-path": "Der Dateipfad ist nicht statisch"
+        "dynamic-path": "Der Dateipfad ist nicht statisch",
+        "credential-pipe-upload": "Leitet eine Datei aus ~/.ssh in ein Netzwerkwerkzeug",
+        "plugin-store-write": "Schreibt, löscht, verschiebt, verlinkt oder ändert per chmod den Installationsordner oder die Vertrauensspeicher der Navide-Plugins",
+        "dynamic-stdin-script": "Die Shell führt einen erst zur Laufzeit berechneten Here-String aus",
+        "mcp-registry-write": "Ein MCP-Werkzeug ändert oder löscht einen Eintrag der Windows-Registry",
+        "mcp-process-kill": "Ein MCP-Werkzeug beendet einen Prozess",
+        "heredoc-unparsed": "Trennzeichen oder Ende eines Heredocs lässt sich nicht bestimmen",
+        "untokenizable-shape": "Verwendet Shell-Syntax, die der Analysator nicht abbilden kann",
+        "mcp-unknown-mode": "Ein MCP-Werkzeug wird mit einem Modus aufgerufen, den Guard nicht kennt"
       }
     },
     "branches": {
@@ -11441,6 +11450,11 @@
         "title": "Ausnahmen",
         "warning": "Ein Teil einer Zeile, der mit einem dieser Präfixe beginnt, überspringt alle integrierten Prüfungen oben – fügen Sie nur Befehle hinzu, denen Sie voll vertrauen. Sperrmuster gelten weiterhin, und ein in eine Shell geleiteter Download wird nie erlaubt. Das Hinzufügen erfordert eine Bestätigung.",
         "placeholder": "Exaktes Befehlspräfix, z. B. git push origin"
+      },
+      "exempt": {
+        "title": "Ausnahmen – Anmeldeinformationen lesen und hochladen",
+        "warning": "Eine ganze Zeile, die zu einem dieser Muster passt, wird nicht mehr abgelehnt, weil sie eine Datei aus ~/.ssh in ein Netzwerkwerkzeug leitet – fügen Sie nur Befehle hinzu, denen Sie voll vertrauen. Alle anderen Prüfungen und Ihre Sperrmuster gelten weiterhin, und jede ausgenommene Zeile wird im Guard-Protokoll festgehalten. Das Hinzufügen erfordert eine Bestätigung.",
+        "placeholder": "Befehlsmuster oder Pfad, z. B. *~/.ssh/deploy.pub*"
       },
       "problem": {
         "empty": "Geben Sie ein Muster ein.",

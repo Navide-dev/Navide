@@ -104,6 +104,10 @@ _RULE_CATEGORY = {
 #: Pipeline-context rules: judged on the whole line, never exempted by an
 #: allow prefix on one of its segments.
 _PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-exec", "credential-pipe-upload"}
+#: The pipeline rules a user exemption (Settings → Security) may lift for a
+#: whole line matching its pattern. Nothing else is exemptable: a block
+#: pattern still outranks it, and piping a download into a shell never is.
+EXEMPTABLE_RULES = frozenset({"credential-pipe-upload"})
 #: Opaque verdicts that mean "cannot be judged" rather than "an unknown script".
 _UNANALYZABLE_RULES = {"dynamic-command", "eval", "unbalanced-quotes", "nesting-too-deep", "too-long",
                        "decode-and-exec", "stdin-script", "dynamic-stdin-script"}
@@ -122,6 +126,8 @@ class Settings:
     disabled: frozenset[str] = DEFAULT_OFF
     block_patterns: tuple[str, ...] = ()
     allow_prefixes: tuple[str, ...] = ()
+    #: (rule id, pattern) pairs; rule ids are from EXEMPTABLE_RULES.
+    exemptions: tuple[tuple[str, str], ...] = ()
     # Shared with Guard's CLI grading (store guard_protected_branches).
     protected_branches: frozenset[str] = frozenset(PROTECTED_BRANCHES)
 
@@ -453,6 +459,31 @@ def _classifier_hits(text: str, workspace: str, protected: frozenset[str]) -> li
     return hits
 
 
+def _exemption_for(rule: str, text: str, settings: Settings) -> str | None:
+    """The user exemption pattern that lifts ``rule`` for this whole line, or None."""
+    if rule not in EXEMPTABLE_RULES:
+        return None
+    for exempt_rule, pattern in settings.exemptions:
+        if exempt_rule == rule and _pattern_matches(pattern, text):
+            return pattern
+    return None
+
+
+def exemptions_applied(text: str, *, workspace: str, settings: Settings) -> list[tuple[str, str]]:
+    """The (rule, pattern) pairs a user exemption lifts on this line: rules
+    that would refuse it (their category is on) but for the exemption."""
+    if not settings.exemptions:
+        return []
+    out: list[tuple[str, str]] = []
+    for rule, level, _reason in _classifier_hits(text, workspace, settings.protected_branches):
+        if _category_of(rule, level if level != "opaque" else "high") in settings.disabled:
+            continue
+        pattern = _exemption_for(rule, text, settings)
+        if pattern is not None and (rule, pattern) not in out:
+            out.append((rule, pattern))
+    return out
+
+
 def check(text: str, *, workspace: str, settings: Settings | None = None) -> Refusal | None:
     """The refusal for typing ``text`` into a plain terminal, or None."""
     settings = settings or Settings()
@@ -477,6 +508,8 @@ def check(text: str, *, workspace: str, settings: Settings | None = None) -> Ref
             if rule == "decode-and-exec":
                 cat = "unanalyzable"
             if cat in enabled:
+                if _exemption_for(rule, text, settings) is not None:
+                    continue
                 return Refusal(cat, text, reason)
     # 3. every segment on its own
     for seg in segs:
@@ -528,7 +561,10 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool 
 
     ``prefill``: the line is typed without Enter for the user to run or clear,
     so a refusal is not enforced by the caller. It is still audited, as action
-    "prefill", and no deny notice is shown — nothing was denied."""
+    "prefill", and no deny notice is shown — nothing was denied.
+
+    A line let through only by a user exemption is audited too, as action
+    "exempt", with the exemption's pattern in the excerpt."""
     import logging
     import time
 
@@ -541,6 +577,17 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str, prefill: bool 
         log.warning("guard: terminal check failed; refusing: %s", err, exc_info=True)
         refusal = Refusal("guard-error", text[:200], f"the terminal command check failed ({err})")
     if refusal is None:
+        try:
+            store = runtime.store()
+            for rule, pattern in exemptions_applied(text, workspace=workspace, settings=store.terminal_settings()):
+                store.audit_add({
+                    "ts": time.time(), "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
+                    "tool": f"terminal:{via}", "excerpt": f"{_clip(text, 200)} — exempted by `{pattern}`",
+                    "level": "critical", "action": "exempt", "rule_ids": (f"terminal-{rule}",),
+                    "tainted": False,
+                })
+        except Exception:  # noqa: BLE001 - bookkeeping never overturns the check
+            log.warning("guard: terminal exemption audit failed", exc_info=True)
         return None
     try:
         runtime.store().audit_add({

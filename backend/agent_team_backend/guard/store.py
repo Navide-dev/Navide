@@ -107,6 +107,17 @@ def _v4(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _v5(cur: sqlite3.Cursor) -> None:
+    """Exemptions for the one terminal pipeline rule the user may lift
+    (terminal_policy.EXEMPTABLE_RULES): one row per (rule, pattern). Kept
+    apart from guard_terminal_patterns, whose kind column is CHECK-limited."""
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS guard_terminal_exemptions ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, rule TEXT NOT NULL,"
+        " pattern TEXT NOT NULL, created REAL NOT NULL)"
+    )
+
+
 _BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]{1,200}$")
 
 #: Audit rows are written off the decision path: a hook decision must not
@@ -123,6 +134,7 @@ class GuardStore:
         db.migrate(COMPONENT, 2, _v2)
         db.migrate(COMPONENT, 3, _v3)
         db.migrate(COMPONENT, 4, _v4)
+        db.migrate(COMPONENT, 5, _v5)
         self._inserts = 0
         self._terminal_cache: Any = None
         self._grading_cache: tuple[dict[str, str], frozenset[str]] | None = None
@@ -453,10 +465,12 @@ class GuardStore:
             off = [c for c in CATEGORY_IDS if not rows.get(c, c not in DEFAULT_OFF)]
             with self._db.transaction() as cur:
                 pats = cur.execute("SELECT kind, pattern FROM guard_terminal_patterns ORDER BY id").fetchall()
+                exempts = cur.execute("SELECT rule, pattern FROM guard_terminal_exemptions ORDER BY id").fetchall()
             return Settings(
                 disabled=frozenset(off),
                 block_patterns=tuple(r["pattern"] for r in pats if r["kind"] == "block"),
                 allow_prefixes=tuple(r["pattern"] for r in pats if r["kind"] == "allow"),
+                exemptions=tuple((r["rule"], r["pattern"]) for r in exempts),
                 protected_branches=self.protected_branches(),
             )
 
@@ -505,6 +519,35 @@ class GuardStore:
     def terminal_remove_pattern(self, pattern_id: int) -> bool:
         with self._db.transaction() as cur:
             cur.execute("DELETE FROM guard_terminal_patterns WHERE id = ?", (int(pattern_id),))
+            removed = cur.rowcount > 0
+        self._invalidate(_terminal_cache=None)
+        return removed
+
+    def terminal_exemptions(self) -> list[dict[str, Any]]:
+        with self._db.transaction() as cur:
+            rows = cur.execute("SELECT * FROM guard_terminal_exemptions ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    def terminal_add_exemption(self, rule: str, pattern: str) -> int:
+        from .terminal_policy import EXEMPTABLE_RULES, validate_pattern
+
+        if rule not in EXEMPTABLE_RULES:
+            raise ValueError(f"rule cannot be exempted: {rule}")
+        problem = validate_pattern(pattern)
+        if problem:
+            raise ValueError(problem)
+        with self._db.transaction() as cur:
+            cur.execute(
+                "INSERT INTO guard_terminal_exemptions (rule, pattern, created) VALUES (?,?,?)",
+                (rule, pattern.strip(), time.time()),
+            )
+            new_id = int(cur.lastrowid)
+        self._invalidate(_terminal_cache=None)
+        return new_id
+
+    def terminal_remove_exemption(self, exemption_id: int) -> bool:
+        with self._db.transaction() as cur:
+            cur.execute("DELETE FROM guard_terminal_exemptions WHERE id = ?", (int(exemption_id),))
             removed = cur.rowcount > 0
         self._invalidate(_terminal_cache=None)
         return removed
