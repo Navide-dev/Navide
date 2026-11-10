@@ -608,7 +608,7 @@
          "file": "frontend/a.js",
          "line": 1,
          "col": 7,
-         "excerpt": "fetch('https://user:tok@api.example.com/v1/x?token=abc');const svg = 'http://www.w3.org/2000/svg'; const r = 'git@github"
+         "excerpt": "fetch('https://…@api.example.com/v1/x?token=…');const svg = 'http://www.w3.org/2000/svg'; const r = 'git@github.com:o/r."
         }
        ]
       },
