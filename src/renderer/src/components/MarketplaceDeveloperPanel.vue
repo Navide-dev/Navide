@@ -92,6 +92,12 @@ const entryStep = computed<'signed-out' | 'apply' | 'pending' | 'key' | 'publish
   return current.keyRegistered ? 'publish' : 'key'
 })
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+}
+
 function openLink(url: string): void {
   void window.agentTeam?.openExternal?.(url)
 }
@@ -453,7 +459,7 @@ onMounted(() => {
           <tr v-for="row in members.items" :key="row.member_id" data-testid="developer-member-row">
             <td><code>{{ row.member_id }}</code></td>
             <td><span class="dev-chip">{{ $t(`marketplace-developer.members.roles.${row.role}`) }}</span></td>
-            <td>{{ row.added_at ?? '—' }}</td>
+            <td>{{ row.added_at ? formatDate(row.added_at) : '—' }}</td>
             <td v-if="members.your_role === 'owner'">
               <button
                 v-if="row.role === 'publisher'"
@@ -490,7 +496,7 @@ onMounted(() => {
         <ul>
           <li v-for="item in application.namespaces" :key="item.namespace">
             <code>{{ item.namespace }}</code>
-            <template v-if="item.frozen_at"> · {{ item.frozen_at }}</template>
+            <template v-if="item.frozen_at"> · {{ formatDate(item.frozen_at) }}</template>
             — {{ item.frozen_reason ?? $t('marketplace-developer.application.reclaimed.no-reason') }}
           </li>
         </ul>

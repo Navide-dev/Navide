@@ -5674,7 +5674,7 @@
             "cli_list_sessions": "Las conversaciones de CLI de esta área de trabajo sobre las que se podría abrir un pane nuevo; una conversación sobrevive al pane que la ejecutó: cierra el pane, reinicia la app, reconstruye el pane, y la transcripción sigue en disco. Cada fila indica si aún se puede reanudar y si el pane que la tenía sigue abierto: no reanudes una activa, porque la bifurca o la corrompe; envía un mensaje a ese pane en su lugar",
             "cli_place_pane": "Mover un pane: cambiar el grupo de pestañas en el que está o convertirlo en hijo de otro pane (lo mismo que arrastrarlo en la barra lateral, por la misma vía de escritura, así que la posición se conserva tras reiniciar). Las dos mitades son independientes y la respuesta indica cuál se aplicó. No toca la CLI de ese pane: no se envía, interrumpe ni reinicia nada. Solo panes locales",
             "cli_rename_pane": "Renombrar un pane de CLI: su título y el nombre con el que otros panes lo direccionan, con las mismas comprobaciones y la misma vía de escritura que al editar el título. Se rechaza un nombre que ya usa otro pane. Puedes renombrar tu propio pane y los panes de tu espacio de trabajo que abriste. Las tareas programadas que aún usan el nombre anterior se indican como avisos, no se reescriben. Solo panes locales",
-            "cli_set_model": "Cambiar el modelo de un pane de CLI en ejecución. En Claude y Codex se escribe su propio comando /model y la conversación continúa (también pasa a ser el modelo predeterminado de esa CLI para sesiones nuevas); las demás CLI se reinician con el nuevo modelo y reanudan la conversación. Solo panes inactivos; tu propio pane se rechaza. Solo panes locales",
+            "cli_set_model": "Cambiar el modelo de un pane de CLI en ejecución. En Claude se abre su propio selector /model, se elige la fila del modelo y se pulsa s (solo esta sesión); en Codex se escribe /model con el ID del modelo. Ambos cambian solo la sesión en curso: la conversación continúa y el modelo predeterminado para sesiones nuevas no cambia. Las demás CLI, indicar un effort o un modelo que el selector de Claude no alcanza reinician el pane con el nuevo modelo y reanudan la conversación. Solo panes inactivos; tu propio pane se rechaza. Solo panes locales",
             "cli_inbox_summary": "Cuáles de los mensajes que envié están estancados (más de dos minutos en cola) o han fallado. Un aviso de fallo solo se puede escribir en el pane emisor mientras está inactivo, así que un agent que trabaja sin parar durante una hora no recibe ninguno; así es como va y pregunta",
             "cli_pending_incoming": "Qué mensajes están en cola para mí y aún no han entrado. Un mensaje solo se escribe en un pane entre turnos, así que un agent que sigue ocupado es precisamente al que no se le puede decir nada; una respuesta no vacía es motivo para cerrar el turno y que pueda entrar"
           },
@@ -13344,6 +13344,9 @@
       "close-keep": "Cerrar pane (conservar identidad)",
       "memory-folder": "Abrir carpeta de memoria",
       "stop-remove": "Detener y quitar agente…",
+      "stop-remove-body": "El agente se quita de la lista de agentes de Navide y su pane se cierra si está abierto. La conversación y los archivos de memoria siguen en el disco, pero no se conservan su nombre, su color ni el enlace para reanudar la sesión.",
+      "stop-remove-confirm": "Detener y quitar",
+      "stop-remove-title": "¿Detener y quitar «{name}»?",
       "toggle-panel": "Mostrar u ocultar el panel de control",
       "wake": "Despertar un turno ahora"
     },
