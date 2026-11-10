@@ -46,6 +46,7 @@ import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composab
 import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
+import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
 import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
@@ -521,6 +522,10 @@ const agentConsole = createAgentConsole(backend, useSchedulerJobs(backend), {
   openSettings: (identityId) => openSettingsAgents(identityId),
   setJobEnabled: async (id, enabled) => {
     const resp = await backend.send<{ ok?: boolean }>('scheduler.set_enabled', { id, enabled })
+    return resp.ok && resp.payload?.ok !== false
+  },
+  upsertJob: async (job) => {
+    const resp = await backend.send<{ ok?: boolean }>('scheduler.upsert', { job })
     return resp.ok && resp.payload?.ok !== false
   },
 })
@@ -23578,7 +23583,12 @@ const ctxAgent = computed(() => {
     canWake: !!agentConsole.nextJob(p.id, name),
     hasJobs: jobs.length > 0,
     anyEnabled: jobs.some((j) => j.enabled),
+    memory: agentConsole.notesFor(p.agentKey)?.memory ?? null,
   }
+})
+// The menu's "Open memory folder" needs the vendor's memory root.
+watch(() => ctxAgent.value && panes.value.find((x) => x.id === ctxAgent.value?.paneId)?.agentKey, (key) => {
+  if (key) void agentConsole.refreshNotes(key)
 })
 
 // When the right-clicked pane is part of a multi-select of >1, the menu targets
@@ -26188,9 +26198,11 @@ function paneIsCommander(p: ActivePane): boolean {
           <div class="pane-ctx-sep"></div>
           <div class="pane-ctx-item" data-testid="ctx-agent-channels" @click="openSettingsAt('channels'); closePaneCtxMenu()">{{ $t('agentPane.menu.channels') }}</div>
           <div
-            class="pane-ctx-item disabled"
+            class="pane-ctx-item"
             data-testid="ctx-agent-memory"
-            :title="$t('agentPane.panel.memory-empty')"
+            :class="{ disabled: !ctxAgent.memory?.root || ctxAgent.memory.status === 'missing' }"
+            :title="ctxAgent.memory?.root ? ctxAgent.memory.root : $t('agentPane.panel.memory-empty')"
+            @click="ctxAgent.memory?.root && ctxAgent.memory.status !== 'missing' && revealPath(ctxAgent.memory.root); closePaneCtxMenu()"
           >{{ $t('agentPane.menu.memory-folder') }}</div>
           <div class="pane-ctx-item" data-testid="ctx-agent-panel" @click="paneRefs[ctxAgent.paneId]?.toggleAgentPanel?.(); closePaneCtxMenu()">{{ $t('agentPane.menu.toggle-panel') }}</div>
           <div

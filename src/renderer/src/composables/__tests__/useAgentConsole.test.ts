@@ -19,6 +19,7 @@ function fakeBackend() {
   return {
     on: (type: string, cb: (p: unknown) => void) => { handlers.set(type, cb); return () => handlers.delete(type) },
     emit: (type: string, p: unknown) => handlers.get(type)?.(p),
+    send: vi.fn(async (_type: string, _payload: unknown) => ({ ok: true, payload: NOTES })),
   }
 }
 
@@ -33,13 +34,20 @@ function job(id: string, action: Partial<SchedulerJob['action']>, extra: Partial
   } as SchedulerJob
 }
 
+const NOTES = {
+  agent_key: 'hermes',
+  memory: { status: 'ok', root: '/fake/memories', entries: [{ name: 'MEMORY.md', path: '/fake/memories/MEMORY.md', modified_at: 1, preview: 'x' }] },
+  todos: { status: 'unsupported', root: '', entries: [] },
+}
+
 async function make(jobs: SchedulerJob[] = []) {
   const backend = fakeBackend()
   const scheduler = { jobs: ref(jobs), runNow: vi.fn(async () => {}), refresh: vi.fn(async () => {}) }
   const setJobEnabled = vi.fn(async () => true)
-  const api = createAgentConsole(backend as never, scheduler as never, { openSettings: vi.fn(), setJobEnabled })
+  const upsertJob = vi.fn(async (j: { id: string }) => j.id !== 'bad')
+  const api = createAgentConsole(backend as never, scheduler as never, { openSettings: vi.fn(), setJobEnabled, upsertJob })
   await new Promise((r) => setTimeout(r, 0))
-  return { api, backend, scheduler, setJobEnabled }
+  return { api, backend, scheduler, setJobEnabled, upsertJob }
 }
 
 const pane = (paneId: string, name = 'Secretary') => ({ paneId, name, agentKey: 'hermes', workspacePath: '/w' })
@@ -135,6 +143,58 @@ describe('agent console – schedules', () => {
     ])
     await api.setSchedulesPaused('p1', 'Secretary', true)
     expect(setJobEnabled.mock.calls).toEqual([['on', false]])
+    expect(scheduler.refresh).toHaveBeenCalled()
+  })
+})
+
+describe('agent console – memory and todos', () => {
+  beforeEach(() => { for (const k of Object.keys(store)) delete store[k] })
+
+  it('reads agent.notes per vendor and keeps the answer', async () => {
+    const { api, backend } = await make()
+    expect(api.notesFor('hermes')).toBeNull()
+    await api.refreshNotes('hermes')
+    expect(backend.send).toHaveBeenCalledWith('agent.notes', { agent_key: 'hermes', limit: 5 })
+    expect(api.notesFor('hermes')?.memory.entries[0].name).toBe('MEMORY.md')
+  })
+
+  it('does not ask for a CLI vendor', async () => {
+    const { api, backend } = await make()
+    await api.refreshNotes('claude')
+    expect(backend.send).not.toHaveBeenCalled()
+  })
+
+  it('re-reads after a finished turn only for a vendor already loaded', async () => {
+    const { api, backend } = await make()
+    api.reconcile([pane('p1')])
+    backend.emit('agent.activity', { pane_id: 'p1', event_type: 'turn_complete', timestamp: '2026-11-10T01:00:00Z' })
+    expect(backend.send).not.toHaveBeenCalled()
+    await api.refreshNotes('hermes')
+    backend.emit('agent.activity', { pane_id: 'p1', event_type: 'turn_complete', timestamp: '2026-11-10T01:05:00Z' })
+    expect(backend.send).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('agent console – rename retargeting', () => {
+  beforeEach(() => { for (const k of Object.keys(store)) delete store[k] })
+
+  it('finds message jobs that address the name, whatever pane id they carry', async () => {
+    const { api } = await make([
+      job('a', { pane_name: 'Secretary' }),
+      job('b', { pane_name: 'Secretary', pane_id: 'p9' }),
+      job('c', { pane_name: 'Other' }),
+      job('d', { pane_id: 'p1' }),
+    ])
+    expect(api.jobsNamed('Secretary').map((j) => j.id)).toEqual(['a', 'b'])
+    expect(api.jobsNamed('')).toEqual([])
+  })
+
+  it('upserts only the action with the new name and reports the failures', async () => {
+    const jobs = [job('a', { pane_name: 'Secretary', text: 'hi' }), job('bad', { pane_name: 'Secretary', text: 'yo' })]
+    const { api, upsertJob, scheduler } = await make(jobs)
+    const failed = await api.retargetJobs(jobs, 'Assistant')
+    expect(upsertJob).toHaveBeenCalledWith({ id: 'a', action: { kind: 'message', workspace: '/w', pane_name: 'Assistant', text: 'hi' } })
+    expect(failed).toEqual(['bad'])
     expect(scheduler.refresh).toHaveBeenCalled()
   })
 })

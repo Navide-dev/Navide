@@ -1,21 +1,25 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import { agentConsoleKey, type AgentConsole } from '../../composables/useAgentConsole'
 import { channelsKey, DEFAULT_ACCOUNT, type ChannelsStore } from '../../composables/useChannels'
 import { formatChannelIdentity } from '../../lib/channelIdentity'
 import { describeSchedule, formatClock } from '../../lib/schedulerJobs'
 import { paneStatusLabelText } from '../../lib/paneStatusLabel'
+import { revealPath } from '../../composables/hostShell'
 
 /**
  * The agent pane's control panel (plan agent-0-2-40_78e071, figure 1 ⑤⑥):
  * status, channel, schedules, memory and todos, with wake / pause schedules /
  * agent settings. Read-only summaries; a section with no source says so
- * instead of showing a made-up value.
+ * instead of showing a made-up value. Memory and todos come from
+ * `agent.notes`, read when the panel opens and after each finished turn.
  */
 const props = defineProps<{
   paneId: string
   paneName: string
+  /** Vendor key (hermes, openclaw): whose memory the panel reads. */
+  agentKey?: string
   displayStatus: string
   collapsed: boolean
   /** Test seams; the app provides both stores. */
@@ -47,6 +51,22 @@ function jobWhen(job: (typeof jobs.value)[number]): string {
 }
 
 const identity = computed(() => agents?.identityForPane(props.paneId) ?? null)
+
+const notes = computed(() => (props.agentKey ? agents?.notesFor(props.agentKey) ?? null : null))
+const memory = computed(() => notes.value?.memory ?? null)
+const todos = computed(() => notes.value?.todos ?? null)
+watch(
+  () => [props.agentKey, props.collapsed] as const,
+  ([key, collapsed]) => { if (key && !collapsed) void agents?.refreshNotes(key) },
+  { immediate: true },
+)
+
+function sectionEmptyText(status: string | undefined, kind: 'memory' | 'todos'): string {
+  if (status === undefined) return t('agentPane.panel.memory-loading')
+  if (status === 'unsupported') return t(kind === 'memory' ? 'agentPane.panel.memory-empty' : 'agentPane.panel.todos-empty')
+  if (status === 'missing') return t('agentPane.panel.memory-missing')
+  return kind === 'memory' ? t('agentPane.panel.memory-none') : t('agentPane.panel.todos-empty')
+}
 </script>
 
 <template>
@@ -95,12 +115,38 @@ const identity = computed(() => agents?.identityForPane(props.paneId) ?? null)
 
       <section class="ap-sec">
         <div class="ap-label">{{ t('agentPane.panel.memory') }}</div>
-        <div class="ap-empty" data-testid="agent-panel-memory-empty">{{ t('agentPane.panel.memory-empty') }}</div>
+        <div
+          v-for="entry in memory?.entries ?? []"
+          :key="entry.path"
+          class="ap-note-row"
+          :title="entry.preview"
+          data-testid="agent-panel-memory-entry"
+        >
+          <span class="ap-note-name" v-truncate>{{ entry.name }}</span>
+          <span class="ap-note-preview" v-truncate>{{ entry.preview }}</span>
+        </div>
+        <div v-if="!memory?.entries.length" class="ap-empty" data-testid="agent-panel-memory-empty">{{ sectionEmptyText(memory?.status, 'memory') }}</div>
+        <template v-if="memory?.root">
+          <div class="ap-note ap-source" :title="memory.root" data-testid="agent-panel-memory-source" v-truncate>{{ t('agentPane.panel.memory-source', { path: memory.root }) }}</div>
+          <button
+            v-if="memory.status !== 'missing'"
+            class="ap-link"
+            type="button"
+            data-testid="agent-panel-memory-open"
+            @click.stop="revealPath(memory.root)"
+          >{{ t('agentPane.panel.open-folder') }}</button>
+        </template>
       </section>
 
       <section class="ap-sec">
         <div class="ap-label">{{ t('agentPane.panel.todos') }}</div>
-        <div class="ap-empty">{{ t('agentPane.panel.todos-empty') }}</div>
+        <div
+          v-for="entry in todos?.entries ?? []"
+          :key="entry.path"
+          class="ap-note-row"
+          data-testid="agent-panel-todo-entry"
+        ><span class="ap-note-name" v-truncate>{{ entry.preview || entry.name }}</span></div>
+        <div v-if="!todos?.entries.length" class="ap-empty" data-testid="agent-panel-todos-empty">{{ sectionEmptyText(todos?.status, 'todos') }}</div>
       </section>
 
       <div class="ap-actions">
@@ -186,6 +232,11 @@ const identity = computed(() => agents?.identityForPane(props.paneId) ?? null)
 .ap-job-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ap-job.off { color: var(--text-secondary); }
 .ap-job-off { flex: none; font-size: 10.5px; }
+.ap-note-row { display: flex; flex-direction: column; min-width: 0; margin-bottom: 4px; }
+.ap-note-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-note-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--text-secondary); }
+.ap-source { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-link { font: inherit; font-size: 10.5px; background: none; border: none; padding: 0; color: var(--accent-fg); cursor: pointer; }
 .ap-actions { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .ap-btn {
   font: inherit;
