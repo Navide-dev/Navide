@@ -92,8 +92,8 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     developers: {
       title: 'Developers',
       'build-for-navide': 'Build for Navide',
-      'plugin-development': 'Plugin Development Guide',
-      'plugin-development-v2': 'Plugin API v2 Reference',
+      'plugin-development': 'Navide Plugin Development Guide',
+      'plugin-development-v2': 'Navide Plugin API v2 Reference',
       'marketplace-publishing': 'Publishing to the Navide Marketplace',
       'developer-settings': 'Developer Settings…',
       testplace: 'Testplace…'
@@ -133,8 +133,8 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     developers: {
       title: '開発者',
       'build-for-navide': 'Build for Navide',
-      'plugin-development': 'プラグイン開発ガイド',
-      'plugin-development-v2': 'プラグイン API v2 リファレンス',
+      'plugin-development': 'Navide プラグイン開発ガイド',
+      'plugin-development-v2': 'Navide プラグイン API v2 リファレンス',
       'marketplace-publishing': 'Navide マーケットプレイスへの公開',
       'developer-settings': '開発者設定…',
       testplace: 'Testplace…'
@@ -179,8 +179,8 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     developers: {
       title: '開發者',
       'build-for-navide': 'Build for Navide',
-      'plugin-development': '外掛開發指南',
-      'plugin-development-v2': '外掛 API v2 參考',
+      'plugin-development': 'Navide 外掛開發指南',
+      'plugin-development-v2': 'Navide 外掛 API v2 參考',
       'marketplace-publishing': '發佈到 Navide 市集',
       'developer-settings': '開發者設定…',
       testplace: 'Testplace…'

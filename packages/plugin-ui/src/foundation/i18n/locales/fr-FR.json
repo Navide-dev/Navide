@@ -7988,7 +7988,7 @@
       "title": "Agents CLI",
       "hint": "Activer et réordonner les agents CLI du menu des nouveaux panes. Ouvrez une carte pour gérer l’agent correspondant. Au moins un doit rester activé.",
       "acp-title": "ACP (expérimental)",
-      "acp-hint": "Exécute les agents via l’Agent Client Protocol, Navide dessinant la conversation à la place de l’écran propre à la CLI. Ajoute « Claude Code (ACP) » au menu ＋, qui nécessite l’adaptateur Claude Code ACP (installé à la première utilisation). Expérimental. L’agent demande les autorisations dans son panneau, n’a pas encore les outils MCP de Navide, et un panneau ACP n’est pas restauré après un redémarrage.",
+      "acp-hint": "Exécute les agents via l’Agent Client Protocol, Navide dessinant la conversation à la place de l’écran propre à la CLI. Ajoute « Claude Code (ACP) » au menu ＋, qui nécessite l’adaptateur Claude Code ACP (installé à la première utilisation). Expérimental. L’agent demande les autorisations dans son pane, n’a pas encore les outils MCP de Navide, et un pane ACP n’est pas restauré après un redémarrage.",
       "acp-toggle": "Proposer les agents ACP dans le menu ＋",
       "drag-hint": "Faire glisser pour réordonner",
       "search": "Rechercher un agent…",
