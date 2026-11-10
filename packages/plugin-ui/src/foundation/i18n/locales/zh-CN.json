@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "豁免：读取凭据再上传",
         "warning": "整行符合这些模式时，“把 ~/.ssh 的文件 pipe 给网络工具”不再被拒绝 —— 只添加你完全信任的命令。其他检查与屏蔽模式仍然适用，每次豁免都会记在 Guard 记录中。添加时需要确认。",
-        "placeholder": "命令模式或路径，例如 *~/.ssh/deploy.pub*"
+        "placeholder": "命令模式或路径，例如 cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "请输入样式。",

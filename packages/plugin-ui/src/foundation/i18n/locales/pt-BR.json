@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Isenções: ler uma credencial e enviá-la",
         "warning": "Uma linha inteira que corresponda a um destes padrões deixa de ser recusada por enviar um arquivo de ~/.ssh a uma ferramenta de rede via pipe; adicione apenas comandos em que você confia totalmente. As demais verificações e seus padrões de bloqueio continuam valendo, e cada linha isenta fica registrada no log do Guard. Adicionar uma pede confirmação.",
-        "placeholder": "Padrão de comando ou caminho, ex.: *~/.ssh/deploy.pub*"
+        "placeholder": "Padrão de comando ou caminho, ex.: cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Digite um padrão.",

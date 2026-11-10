@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "豁免：讀取憑證再上傳",
         "warning": "整行符合這些樣式時，「把 ~/.ssh 的檔案 pipe 給網路工具」不再被拒絕 —— 只加入你完全信任的指令。其他檢查與封鎖樣式仍然適用，每次豁免都會記在 Guard 紀錄。新增時需要確認。",
-        "placeholder": "指令樣式或路徑，例如 *~/.ssh/deploy.pub*"
+        "placeholder": "指令樣式或路徑，例如 cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "請輸入樣式。",

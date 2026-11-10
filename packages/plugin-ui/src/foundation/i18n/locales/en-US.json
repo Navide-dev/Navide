@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Exemptions: reading a credential and uploading it",
         "warning": "A whole line that matches one of these patterns is no longer refused for piping a file from ~/.ssh into a network tool — only add commands you fully trust. Every other check and your block patterns still apply, and each exempted line is recorded in the Guard log. Adding one asks for confirmation.",
-        "placeholder": "Command pattern or path, e.g. *~/.ssh/deploy.pub*"
+        "placeholder": "Command pattern or path, e.g. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Type a pattern.",

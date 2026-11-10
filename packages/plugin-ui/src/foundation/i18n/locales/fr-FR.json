@@ -11454,7 +11454,7 @@
       "exempt": {
         "title": "Exemptions : lire un identifiant puis l’envoyer",
         "warning": "Une ligne entière qui correspond à l’un de ces motifs n’est plus refusée pour avoir envoyé un fichier de ~/.ssh à un outil réseau. N’ajoutez que des commandes en lesquelles vous avez entièrement confiance. Les autres vérifications et vos motifs de blocage s’appliquent toujours, et chaque ligne exemptée est consignée dans le journal de Guard. L’ajout demande une confirmation.",
-        "placeholder": "Motif de commande ou chemin, par ex. *~/.ssh/deploy.pub*"
+        "placeholder": "Motif de commande ou chemin, par ex. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Saisissez un motif.",
