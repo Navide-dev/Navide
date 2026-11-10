@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "CLI Agents",
       "hint": "啟用並排序新增分格選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
+      "acp-title": "ACP（實驗）",
+      "acp-hint": "以 Agent Client Protocol 執行 agent，由 Navide 繪製對話，不顯示 CLI 自己的畫面。＋ 選單會多出「Claude Code（ACP）」，需要 Claude Code ACP adapter（第一次使用時安裝）。實驗功能：權限請求在分格內詢問、agent 暫時沒有 Navide MCP 工具、ACP 分格在重新啟動後不會還原。",
+      "acp-toggle": "在 ＋ 選單提供 ACP agent",
       "drag-hint": "拖曳以排序",
       "search": "搜尋 agent…",
       "filter-label": "篩選 CLI agent",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "雲端代理（Grok Bot、dots 等）請到 Navide 市集安裝對應的 Navide 外掛。",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label}（ACP）",
     "select-role": "選擇角色…",
     "waiting-backend": "等待後端…",
     "set-workspace-first": "請先設定工作區路徑",

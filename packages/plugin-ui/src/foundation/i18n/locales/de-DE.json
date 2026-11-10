@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "CLI-Agents",
       "hint": "CLI-Agents im Menü für neue Bereiche aktivieren und neu anordnen. Öffnen Sie eine Karte, um den jeweiligen Agent zu verwalten. Mindestens einer muss aktiviert bleiben.",
+      "acp-title": "ACP (experimentell)",
+      "acp-hint": "Führt Agents über das Agent Client Protocol aus, sodass Navide die Unterhaltung statt des eigenen CLI-Bildschirms zeichnet. Fügt dem ＋-Menü „Claude Code (ACP)“ hinzu, das den Claude Code ACP-Adapter benötigt (wird bei der ersten Verwendung installiert). Experimentell. Der Agent fragt Berechtigungen im Bereich ab, hat noch keine Navide-MCP-Tools, und ein ACP-Bereich wird nach einem Neustart nicht wiederhergestellt.",
+      "acp-toggle": "ACP-Agents im ＋-Menü anbieten",
       "drag-hint": "Zum Neuanordnen ziehen",
       "search": "Agent suchen …",
       "filter-label": "CLI-Agents filtern",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "Cloud-Agents (Grok Bot, dots und weitere) gibt es als Navide-Plug-in im Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Rolle auswählen …",
     "waiting-backend": "Warten auf Backend …",
     "set-workspace-first": "Zuerst Arbeitsbereichspfad festlegen",

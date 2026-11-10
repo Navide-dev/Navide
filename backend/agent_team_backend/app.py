@@ -2552,6 +2552,10 @@ async def _start_log_watcher() -> None:
     # Settings → Resource limits, for code with no handle on the store
     # (terminals marks new panes for the leftover-server list).
     resource_limits.set_settings_reader(lambda: ui_settings_store.get())
+    # Settings → CLI Agents → ACP (experimental); off unless the user turned it on.
+    from . import acp_switch
+
+    acp_switch.apply_settings(ui_settings_store.get())
     # Per-pane watch files hold message text in the clear and belong to panes
     # that died with the previous process. Only a startup sweep ever removes
     # the ones a killed backend left behind.

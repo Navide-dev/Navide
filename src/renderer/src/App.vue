@@ -8407,6 +8407,32 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   return id
 }
 
+/**
+ * The ＋ menu's ACP entry (Settings → CLI Agents → ACP (experimental), off by
+ * default): an ACP pane, which lib/acpHost.ts runs instead of a terminal. The
+ * only caller that asks spawnPane for display 'acp'. No manual_pane record is
+ * written, so the pane is not restored after a restart (a restored record
+ * would come back as a terminal pane).
+ */
+async function onAcpSpawn(payload: SpawnPayload): Promise<string | null> {
+  const target = payload.workspacePath || currentWorkspace.value
+  const onScreen = normWs(target) === normWs(currentWorkspace.value)
+  const spawnGroupId = onScreen
+    ? resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, payload.runGroupId ?? '')
+    : ''
+  return spawnPane({
+    agentKey: payload.agentKey,
+    // A role is typed into a terminal pane's prompt; an ACP pane has none yet.
+    roleKey: '',
+    stageId: payload.stageId,
+    commandOverride: '',
+    workspacePath: payload.workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    display: 'acp',
+  })
+}
+
 async function onManualSpawn(payload: SpawnPayload, quota?: { transactionId: string; originalPaneId: string }): Promise<string | null> {
   // The synthetic manual tab deliberately has no run-group id; a real tab
   // keeps its own id instead of falling back to a background pipeline group.
@@ -9331,6 +9357,8 @@ async function rebuildPaneViaResume(
 ): Promise<RebuildFailure | undefined> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return 'missing-pane'
+  // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
+  if (acp.owns(paneId)) return 'no-session'
   // If the CLI is actively working, skip rebuild so we don't kill in-flight work.
   // The PTY is alive and the pane is already bound — nothing to reattach, just leave it.
   // displayStatus detects active work from CLEANED output bursts. Raw status
@@ -25165,6 +25193,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :agent-identities="agentPaneSummaries"
       @agent-open="openAgentIdentity"
       @spawn="onManualSpawn"
+      @spawn-acp="onAcpSpawn"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"

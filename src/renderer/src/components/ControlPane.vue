@@ -78,6 +78,7 @@ import {
 } from '@navide/plugin-shell'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
+import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -1131,6 +1132,8 @@ const emit = defineEmits<{
   /** Focus an agent identity's pane, or open one that resumes it. */
   (e: 'agent-open', identityId: string): void
   (e: 'spawn', payload: SpawnPayload): void
+  /** Settings → CLI Agents → ACP (experimental) only: open an ACP pane. */
+  (e: 'spawn-acp', payload: SpawnPayload): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
   (e: 'kill-all'): void
@@ -2775,6 +2778,40 @@ const newAgentInput = ref<HTMLInputElement[] | null>(null)
 watch(addMenuOpen, (open) => {
   if (!open) newAgentKey.value = ''
 })
+
+// ── ＋ menu, ACP entries (Settings → CLI Agents → ACP (experimental)) ─────────
+const { acpEnabled } = useAcpPrefs()
+/** Nothing while the switch is off (the default): the menu is main's. */
+const addMenuAcpRows = computed(() =>
+  acpEnabled.value
+    ? ACP_MENU_ENTRIES.flatMap((entry) => {
+        const spec = props.agentSpecs.find((s) => s.agentKey === entry.agentKey)
+        return spec ? [{ ...entry, label: i18n.global.t('label.add-menu-acp', { label: spec.label }) }] : []
+      })
+    : []
+)
+
+/** An ACP pane for `row`, or the adapter's guided install while it is missing. */
+async function spawnAcpFromMenu(row: { agentKey: string; adapterDep: string; label: string }): Promise<void> {
+  const workspace = addMenuWorkspace.value || workspacePath.value
+  const group = addMenuGroup.value
+  addMenuOpen.value = false
+  // Re-detected every time: the adapter is listed only while the switch is on,
+  // so a status read before it was turned on says nothing about it.
+  cliStatusFetchedAt = 0
+  await refreshCliStatus()
+  if (missingClis.value.has(row.adapterDep)) {
+    emit('install-cli', { agentKey: row.adapterDep, label: row.label })
+    return
+  }
+  emit('spawn-acp', {
+    agentKey: row.agentKey,
+    roleKey: pickedRole.value,
+    stageId: '',
+    workspacePath: workspace,
+    runGroupId: group || undefined,
+  })
+}
 
 function openAgentFromMenu(identityId: string): void {
   addMenuOpen.value = false
@@ -4549,6 +4586,21 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 </button>
               </template>
             </template>
+          </template>
+          <template v-if="addMenuAcpRows.length">
+            <div v-if="!addMenuAgentSpecs.length" class="ws-add-sec" data-section="agents">{{ $t('label.add-menu-agents') }}</div>
+            <button
+              v-for="row in addMenuAcpRows"
+              :key="`acp:${row.agentKey}`"
+              class="ws-add-opt ws-add-more"
+              data-section="agents"
+              data-testid="add-menu-acp"
+              @click="spawnAcpFromMenu(row)"
+            >
+              <span class="ws-add-lb" v-truncate>
+                {{ missingClis.has(row.adapterDep) ? $t('label.agent-not-installed', { label: row.label }) : row.label }}
+              </span>
+            </button>
           </template>
         </div>
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they

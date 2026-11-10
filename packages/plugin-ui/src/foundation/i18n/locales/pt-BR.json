@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "Agents de CLI",
       "hint": "Ative e reordene os agents de CLI no menu de novos panes. Abra um cartão para gerenciar esse agent. Pelo menos um precisa continuar ativado.",
+      "acp-title": "ACP (experimental)",
+      "acp-hint": "Executa agentes pelo Agent Client Protocol, para que o Navide desenhe a conversa em vez da tela própria da CLI. Adiciona “Claude Code (ACP)” ao menu ＋, que precisa do adaptador Claude Code ACP (instalado no primeiro uso). Experimental. O agente pede permissões no próprio painel, ainda não tem as ferramentas MCP do Navide e um painel ACP não é restaurado após reiniciar.",
+      "acp-toggle": "Oferecer agentes ACP no menu ＋",
       "drag-hint": "Arraste para reordenar",
       "search": "Encontrar um agent…",
       "filter-label": "Filtrar agents de CLI",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "Agentes na nuvem (Grok Bot, dots e outros) são instalados como plug-in do Navide pelo Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Selecionar papel…",
     "waiting-backend": "Aguardando o back-end…",
     "set-workspace-first": "Defina primeiro o caminho do workspace",

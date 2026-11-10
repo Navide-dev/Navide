@@ -7986,6 +7986,9 @@
     "cliAgents": {
       "title": "CLI エージェント",
       "hint": "新しいペインのメニューに表示する CLI エージェントを有効化し、並べ替えます。カードを開くと、そのエージェントを管理できます。1 つ以上は有効にしておく必要があります。",
+      "acp-title": "ACP（実験的）",
+      "acp-hint": "Agent Client Protocol でエージェントを実行し、CLI 自身の画面の代わりに Navide が会話を描画します。＋ メニューに「Claude Code（ACP）」が追加されます。Claude Code ACP アダプター（初回使用時にインストール）が必要です。実験的機能です。権限の確認はペイン内で行われ、エージェントはまだ Navide の MCP ツールを使えず、ACP ペインは再起動後に復元されません。",
+      "acp-toggle": "＋ メニューに ACP エージェントを表示する",
       "drag-hint": "ドラッグして並べ替え",
       "search": "エージェントを検索…",
       "filter-label": "CLI エージェントを絞り込み",
@@ -8771,6 +8774,7 @@
     "cloud-agents-plugin-hint": "クラウドエージェント（Grok Bot、dots など）は Navide マーケットプレイスで対応する Navide プラグインをインストールしてください。",
     "add-menu-cli": "CLI",
     "add-menu-agents": "エージェント",
+    "add-menu-acp": "{label}（ACP）",
     "select-role": "ロールを選択…",
     "waiting-backend": "バックエンドを待機中…",
     "set-workspace-first": "まずワークスペースのパスを設定してください",
