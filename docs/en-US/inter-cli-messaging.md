@@ -567,6 +567,30 @@ targets the old name comes back in `warnings`. Returns
 `{ok, old_name, new_name, pane_id, address, warnings?}`. Use it instead of
 reopening a session under a new name and reclaiming the old pane.
 
+### Switching a pane's model
+
+```
+cli_set_model(target="<pane>", model="<model id>", effort="")
+```
+
+Claude and Codex take `/model <id>` while they run, so it is typed into the
+pane bare — no envelope, no reply instructions — and submitted, exactly as if
+the user typed it (`method: "slash"`). The conversation and process stay. Both
+CLIs may treat that command as a preference too: claude saves the model as
+its default for new sessions on that account (its `settings.json`), so later
+panes start on it as well. Every other CLI that takes `--model`, and any switch that
+names an `effort`, is rebuilt instead: the pane is restarted on the new model
+and resumes the same conversation (`method: "restart"`; the answer's `pane_id`
+is the new one). Only an idle pane is switched — mid-turn, starting, awaiting
+a prompt answer, being typed in or holding a draft answers `pane-busy` with
+`hold` naming why. Your own pane (`self-set-model`), terminal, ACP and sign-in
+panes, restore placeholders and other devices are refused. Model ids are not
+validated; an unknown one is the CLI's own error, so read `cli_read_log`
+afterwards. `cli_get_status` reports the new model under `ui.model`, a restore
+relaunches on it, and the switch goes into the pane's Guard audit trail. A
+plain `cli_send` of `/model ...` does not switch: it arrives wrapped as a
+message, and the agent reads it as text.
+
 ---
 
 ## How delivery actually works

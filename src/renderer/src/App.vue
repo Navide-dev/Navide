@@ -50,6 +50,7 @@ import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
 import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -11757,6 +11758,50 @@ registerCommand('ui.pane.interrupt', async (args) => {
     awaitingKind,
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
+})
+// cli_set_model: switch a running pane's model. Typed as the CLI's own
+// `/model <id>` where it takes one (lib/liveModelSwitch), else a resume
+// rebuild onto `--model`. Only an idle pane: the same gate a message waits on,
+// plus no prompt box, since the command would be typed into it. Refusals are
+// results, so the backend can relay the reason.
+registerCommand('ui.pane.setModel', async (args) => {
+  const a = (args ?? {}) as { paneId?: string; model?: string; effort?: string }
+  if (!a.paneId) throw new Error(`ui.pane.setModel requires ${PANE_ID_HINT}`)
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`ui.pane.setModel: pane "${a.paneId}" not found`)
+  const model = (a.model ?? '').trim()
+  const effort = (a.effort ?? '').trim()
+  const refuse = (error_code: string, error: string, extra: Record<string, unknown> = {}) =>
+    ({ ok: false, error, error_code, ...extra })
+  if (!model) return refuse('model-required', 'model is required')
+  if (!pane.realized) return refuse('pane-not-open', 'the pane is a restore placeholder; open it first')
+  if (pane.isLogin) return refuse('login-pane-input-refused', SIGN_IN_PANE_INPUT_REFUSAL)
+  if (pane.agentKey === TERMINAL_AGENT_KEY) return refuse('not-agent-pane', 'a terminal pane has no model')
+  if (acp.owns(pane.id)) return refuse('acp-unsupported', 'an ACP pane cannot switch its model in place')
+  const hold = paneRefs[pane.id]?.displayStatus === 'awaiting' ? 'awaiting' : messagingHoldKey(pane.id)
+  if (hold !== null) return refuse('pane-busy', `the pane is not idle (${hold}); wait and retry`, { hold })
+  const command = liveModelCommand(pane.agentKey, model, effort)
+  if (command) {
+    const ok = await injectPane(pane.id, command, 'set-model', true)
+    if (!ok) return refuse('inject-failed', 'the /model command did not go in')
+    pane.model = model
+    return { ok: true, method: 'slash', paneId: pane.id }
+  }
+  const before = { model: pane.model, effort: pane.effort }
+  pane.model = model
+  if (effort) pane.effort = effort
+  let paneId = pane.id
+  const failure = await rebuildPaneViaResume(pane.id, {
+    suppressBusyToast: true,
+    freshWhenNoTranscript: true,
+    onReplaced: (id) => { paneId = id },
+  })
+  if (failure) {
+    pane.model = before.model
+    pane.effort = before.effort
+    return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`)
+  }
+  return { ok: true, method: 'restart', paneId }
 })
 registerCommand('ui.messaging.readIncoming', (args) => {
   const a = (args ?? {}) as {
