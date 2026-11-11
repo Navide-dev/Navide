@@ -2701,14 +2701,14 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  510px: the rows plus the CLI and Agents headings) plus the fixed
+ *  522px: the rows plus the CLI and Agents headings) plus the fixed
  *  furniture around it — role picker, two dividers,
  *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 672
+const ADD_MENU_MAX_H = 692
 /** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
  *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
  *  ~276px of bold system-font text plus 36px of check mark and padding); at
@@ -2883,6 +2883,12 @@ onUnmounted(() => document.removeEventListener('keydown', onSpawnModalKeydown))
 function closeAddMenu(): void {
   addMenuOpen.value = false
 }
+const addMenuEl = ref<HTMLElement | null>(null)
+/** Scroll inside the menu (its capped list) is not the page moving. */
+function onAddMenuScroll(e: Event): void {
+  if (e.target instanceof Node && addMenuEl.value?.contains(e.target)) return
+  closeAddMenu()
+}
 
 // Same three dismissals the ＋ roster uses, for the same reasons: a click
 // anywhere else, Escape, and scroll outside the menu (captured — the pane
@@ -2926,17 +2932,17 @@ watch(addMenuOpen, (open) => {
     // Capture: the pane list is the element that scrolls, and its scroll
     // events do not bubble. Without this the menu would hang in mid-air over
     // whatever scrolled into the button's old place.
-    document.addEventListener('scroll', closeAddMenu, true)
+    document.addEventListener('scroll', onAddMenuScroll, true)
   } else {
     document.removeEventListener('click', closeAddMenu)
     document.removeEventListener('keydown', onAddMenuKeydown)
-    document.removeEventListener('scroll', closeAddMenu, true)
+    document.removeEventListener('scroll', onAddMenuScroll, true)
   }
 })
 onUnmounted(() => {
   document.removeEventListener('click', closeAddMenu)
   document.removeEventListener('keydown', onAddMenuKeydown)
-  document.removeEventListener('scroll', closeAddMenu, true)
+  document.removeEventListener('scroll', onAddMenuScroll, true)
 })
 
 function spawn(agentKey: string = activeSpawnAgent.value): void {
@@ -4507,7 +4513,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </template>
       </div>
-      <div v-if="addMenuOpen" class="ws-add-menu" :style="addMenuStyle" @click.stop>
+      <div v-if="addMenuOpen" ref="addMenuEl" class="ws-add-menu" :style="addMenuStyle" @click.stop>
         <select v-model="pickedRole" class="ws-add-role">
           <option value="">{{ $t('label.select-role') }}</option>
           <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
@@ -6735,17 +6741,17 @@ button.icon-btn.muted:hover {
   margin: 2px 6px 4px;
   font-size: 11.5px;
 }
-.ws-add-div { height: 1px; margin: 4px 0; background: var(--border-muted); }
+.ws-add-div { height: 1px; margin: 6px 0; background: var(--border-muted); }
 /* Tall enough for the whole roster, capped against the viewport so a short
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 456px carries nineteen, and 510px adds the
- * two ~22px section headings. The viewport cap is no longer a guessed 45vh:
- * the menu's own max-height is the room it has, and this box shrinks into it
- * (never below three rows). */
+ * 3px padding either side), so 456px carries nineteen, and 522px adds the
+ * two section headings (~24px, and ~31px with the divider above Agents). The
+ * viewport cap is no longer a guessed 45vh: the menu's own max-height is the
+ * room it has, and this box shrinks into it (never below three rows). */
 .ws-add-scroll {
-  max-height: min(510px, 100vh);
+  max-height: min(522px, 100vh);
   flex-shrink: 1;
   min-height: 72px;
   overflow-y: auto;
@@ -6783,9 +6789,11 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
-/* Section heading in the roster ("CLI", "Agents"): small and muted, aligned
- * with the entry labels, so it reads as a label rather than an option. */
-.ws-add-sec { padding: 6px 10px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); font-weight: 600; line-height: 1.35; }
+/* Section heading in the roster ("CLI", "Agents"): bold and bright, aligned
+ * with the entry labels; every heading after the first sits under a divider,
+ * so the blocks read apart without a background or a highlighted entry. */
+.ws-add-sec { padding: 6px 10px 3px 26px; color: var(--text-bright); font-size: var(--font-2xs); font-weight: 700; line-height: 1.35; letter-spacing: 0.04em; }
+.ws-add-sec:not(:first-child) { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-muted); }
 .ws-add-agent { gap: 8px; padding-left: 8px; }
 .ws-add-avatar {
   flex: none; display: inline-flex; align-items: center; justify-content: center;

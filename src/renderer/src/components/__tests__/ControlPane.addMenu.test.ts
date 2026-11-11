@@ -468,6 +468,19 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
   })
 
+  it('stays open while its own list scrolls', async () => {
+    // A short window caps the list, so reaching the Agents block takes a
+    // scroll inside the menu; that must not count as the page moving.
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    wrapper.find('.ws-add-scroll').element.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(true)
+    document.body.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
   it('closes after a spawn', async () => {
     wrapper = mountWith()
     await openMenu(wrapper)
@@ -568,8 +581,10 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
-/** A `.ws-add-sec` heading (CLI, Agents): ~14px text plus 8px padding. */
-const HEADING_PX = 22
+/** A `.ws-add-sec` heading (CLI, Agents): ~15px text plus 9px padding, and the
+ *  second one adds a divider with 9px more space above it — 24 + 31, rounded up
+ *  to 28 each. */
+const HEADING_PX = 28
 
 /** Everything in the menu that is not the scroller: its own padding, the role
  *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
