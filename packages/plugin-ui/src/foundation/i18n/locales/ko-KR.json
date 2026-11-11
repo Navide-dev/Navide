@@ -1760,6 +1760,10 @@
           "title": "설정 관리",
           "summary": "전체 설정 번들을 내보내거나 가져오고, 설정이 저장된 위치를 확인해요."
         },
+        "general-experimental": {
+          "title": "실험 기능",
+          "summary": "모델 아레나 등 시험 중인 기능"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "이 컴퓨터를 Navide Cloud에 연결해서 여기의 agent가 다른 기기의 agent에게 메시지를 보낼 수 있게 해요."
@@ -7751,6 +7755,7 @@
       "resource-limits": "리소스 제한",
       "session-archive": "세션 로그 보관",
       "settings-management": "설정 관리",
+      "experimental": "실험 기능",
       "theme": "테마",
       "other": "기타"
     },
@@ -8291,6 +8296,7 @@
         "workbench_action_focusNextPane": "다음 pane에 포커스",
         "workbench_action_focusPipeline": "Pipeline에 포커스",
         "workbench_action_focusPreview": "미리보기 패널에 포커스",
+        "workbench_action_startModelArena": "모델 아레나 시작",
         "workbench_action_focusPreviousGroup": "이전 그룹에 포커스",
         "workbench_action_focusPreviousPane": "이전 pane에 포커스",
         "workbench_action_focusSourceControl": "소스 제어에 포커스",
@@ -13453,6 +13459,87 @@
       "unsupported": "지원 안 함",
       "yolo": "위험한 명령 확인 건너뛰기",
       "yolo-flag": "지원 ({flag}), YOLO 스위치를 따름"
+    }
+  },
+  "arena": {
+    "experimental": "실험",
+    "menu": {
+      "section": "비교",
+      "start": "모델 아레나…",
+      "runs": "아레나 기록 ({n})",
+      "hint": "하나의 작업을 2~4개 모델에 보내 각자 worktree에서 나란히 비교"
+    },
+    "ctx": {
+      "compare": "이 작업을 여러 모델로 비교…"
+    },
+    "settings": {
+      "title": "모델 아레나",
+      "hint": "하나의 작업을 2~4개 모델에 동시에 보내 각자 전용 git worktree와 창에서 작업하게 한 뒤, 결과를 나란히 비교하고 고른 것을 병합합니다. 기본값은 꺼짐입니다."
+    },
+    "start": {
+      "title": "비교 시작",
+      "subtitle": "모든 모델이 같은 commit에서 같은 작업을 시작하며 각자 전용 worktree에서 변경합니다. 병합하기 전까지 작업 폴더는 건드리지 않습니다.",
+      "task": "작업",
+      "task-placeholder": "모든 모델이 할 변경을 설명하세요…",
+      "base": "시작 지점",
+      "check": "검수 명령",
+      "check-placeholder": "예: pnpm test:run",
+      "models": "모델 ({min}~{max}개)",
+      "cli": "CLI 도구",
+      "model-default": "{cli} 기본 모델",
+      "remove": "제거",
+      "add": "모델 추가",
+      "time-limit": "창별 시간 제한(분)",
+      "budget": "창별 비용 상한(US$)",
+      "estimate": "창 {panes}개와 worktree {panes}개를 엽니다.",
+      "estimate-branches": "브랜치: arena/<run>/<model>, 위치는 .agent-team/worktrees/arena-<run>/.",
+      "estimate-budget": "최대 비용: 모두 상한까지 합계 US$ {total}.",
+      "starting": "시작하는 중…",
+      "go": "비교 시작",
+      "failed": "비교를 시작할 수 없습니다."
+    },
+    "kickoff": {
+      "check": "작업이 끝나면 `{cmd}`를 실행하고 통과했는지 보고하세요."
+    },
+    "panel": {
+      "title": "모델 아레나",
+      "run": "회차",
+      "base": "시작 {branch}＠{sha}",
+      "elapsed": "경과 {t}",
+      "limits": "상한: 창별 {min}분, US$ {usd}",
+      "dirty-base": "시작할 때 메인 폴더에 커밋되지 않은 변경이 있었습니다. 이 변경은 후보의 시작 지점에 포함되지 않습니다.",
+      "check-note": "검수 명령: {cmd}. 각 창이 직접 실행하고 결과를 보고합니다.",
+      "empty": "이 작업 공간에는 아직 아레나 기록이 없습니다."
+    },
+    "run-state": {
+      "running": "진행 중",
+      "merged": "병합됨",
+      "kept": "브랜치 유지",
+      "closed": "종료됨"
+    },
+    "state": {
+      "running": "실행 중",
+      "no-pane": "창 없음",
+      "pane-closed": "창이 닫힘",
+      "stopped-user": "직접 중지함",
+      "stopped-time": "중지됨: 시간 제한",
+      "stopped-budget": "중지됨: 비용 상한"
+    },
+    "col": {
+      "model": "모델",
+      "state": "상태",
+      "changes": "변경",
+      "tokens": "토큰",
+      "cost": "비용",
+      "default-model": "{cli} 기본",
+      "files": "파일 {n}개",
+      "protected": "민감한 파일 {n}개 변경",
+      "cost-unavailable": "비용 데이터 없음"
+    },
+    "action": {
+      "show": "보기",
+      "stop": "중지",
+      "stop-all": "모두 중지"
     }
   }
 }

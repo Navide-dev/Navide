@@ -1760,6 +1760,10 @@
           "title": "设置管理",
           "summary": "导出／导入完整设置包，并查看设置实际存放的位置。"
         },
+        "general-experimental": {
+          "title": "实验功能",
+          "summary": "模型擂台等仍在试验中的功能"
+        },
         "general-p2p": {
           "title": "跨设备传讯",
           "summary": "把这台机器加入 Navide Cloud，让这里的 agent 可以传消息给你其他设备上的 agent。"
@@ -7751,6 +7755,7 @@
       "resource-limits": "资源限制",
       "session-archive": "会话记录归档",
       "settings-management": "设置管理",
+      "experimental": "实验功能",
       "theme": "主题",
       "other": "其他"
     },
@@ -8291,6 +8296,7 @@
         "workbench_action_focusNextPane": "聚焦下一个分格",
         "workbench_action_focusPipeline": "聚焦 Pipeline",
         "workbench_action_focusPreview": "聚焦预览面板",
+        "workbench_action_startModelArena": "发起模型擂台",
         "workbench_action_focusPreviousGroup": "聚焦上一个编辑器群组",
         "workbench_action_focusPreviousPane": "聚焦上一个分格",
         "workbench_action_focusSourceControl": "聚焦源代码控制",
@@ -13453,6 +13459,87 @@
       "unsupported": "不支持",
       "yolo": "跳过危险命令确认",
       "yolo-flag": "支持（{flag}），跟随 YOLO 开关"
+    }
+  },
+  "arena": {
+    "experimental": "实验",
+    "menu": {
+      "section": "比较",
+      "start": "模型擂台…",
+      "runs": "擂台记录（{n}）",
+      "hint": "同一个需求派给 2–4 个模型，各自 worktree 并排比较"
+    },
+    "ctx": {
+      "compare": "用多个模型比较这个需求…"
+    },
+    "settings": {
+      "title": "模型擂台",
+      "hint": "同一个需求同时派给 2–4 个模型，各自在自己的 git worktree 和窗格里完成，做完后并排比较，再合并你选中的那一份。默认关闭。"
+    },
+    "start": {
+      "title": "发起比较",
+      "subtitle": "每个模型从同一个 commit 开始做同一个需求，各自在独立的 worktree 里修改；合并之前不会动到你的工作目录。",
+      "task": "需求",
+      "task-placeholder": "描述要每个模型完成的修改…",
+      "base": "起点",
+      "check": "验收命令",
+      "check-placeholder": "例如 pnpm test:run",
+      "models": "参赛模型（{min}–{max} 个）",
+      "cli": "命令行工具",
+      "model-default": "{cli} 默认模型",
+      "remove": "移除",
+      "add": "添加一个模型",
+      "time-limit": "每格时限（分钟）",
+      "budget": "每格费用上限（US$）",
+      "estimate": "将打开 {panes} 个窗格、{panes} 个 worktree。",
+      "estimate-branches": "分支：arena/<run>/<model>，位于 .agent-team/worktrees/arena-<run>/ 下。",
+      "estimate-budget": "最多花费：全部到上限共 US$ {total}。",
+      "starting": "启动中…",
+      "go": "开始比较",
+      "failed": "无法发起比较。"
+    },
+    "kickoff": {
+      "check": "完成后请运行 `{cmd}`，并报告是否通过。"
+    },
+    "panel": {
+      "title": "模型擂台",
+      "run": "场次",
+      "base": "起点 {branch}＠{sha}",
+      "elapsed": "已用时 {t}",
+      "limits": "上限：每格 {min} 分钟、US$ {usd}",
+      "dirty-base": "发起时主工作目录有未提交的修改，这些修改不在各格的起点里。",
+      "check-note": "验收命令：{cmd}。由各格自行运行并报告结果。",
+      "empty": "这个工作区还没有擂台记录。"
+    },
+    "run-state": {
+      "running": "进行中",
+      "merged": "已合并",
+      "kept": "保留分支",
+      "closed": "已结束"
+    },
+    "state": {
+      "running": "运行中",
+      "no-pane": "没有窗格",
+      "pane-closed": "窗格已关闭",
+      "stopped-user": "你已停止",
+      "stopped-time": "已停止：到达时限",
+      "stopped-budget": "已停止：到达费用上限"
+    },
+    "col": {
+      "model": "模型",
+      "state": "状态",
+      "changes": "改动",
+      "tokens": "令牌",
+      "cost": "成本",
+      "default-model": "{cli} 默认",
+      "files": "{n} 个文件",
+      "protected": "涉及 {n} 个敏感文件",
+      "cost-unavailable": "没有成本数据"
+    },
+    "action": {
+      "show": "显示",
+      "stop": "停止",
+      "stop-all": "全部停止"
     }
   }
 }

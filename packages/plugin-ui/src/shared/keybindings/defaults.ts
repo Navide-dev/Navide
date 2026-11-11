@@ -207,6 +207,9 @@ export const defaults: KeybindingRule[] = [
   // Right-rail preview panel. cmd+shift+v is left alone because terminals
   // treat it as paste-as-plain-text.
   { key: 'cmd+alt+v',   command: 'workbench.action.focusPreview' },
+  // Model arena (experimental). A no-op while Settings → General →
+  // Experimental features → Model arena is off.
+  { key: 'cmd+alt+a',   command: 'workbench.action.startModelArena' },
   // cmd+shift+p is the command palette and cmd+shift+l is taken by
   // selectHighlights/addSelectionToChat, so Plans lives on cmd+shift+d.
   { key: 'cmd+shift+d', command: 'workbench.action.openPlans' },

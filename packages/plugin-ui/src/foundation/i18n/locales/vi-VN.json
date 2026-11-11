@@ -1760,6 +1760,10 @@
           "title": "Quản lý cài đặt",
           "summary": "Xuất/nhập toàn bộ gói cài đặt và xem nơi lưu cài đặt."
         },
+        "general-experimental": {
+          "title": "Tính năng thử nghiệm",
+          "summary": "Đấu trường mô hình và các tính năng đang thử"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "Đưa máy này vào Navide Cloud để agent ở đây có thể nhắn tin cho agent trên các thiết bị khác của bạn."
@@ -7751,6 +7755,7 @@
       "resource-limits": "Giới hạn tài nguyên",
       "session-archive": "Lưu trữ nhật ký phiên",
       "settings-management": "Quản lý cài đặt",
+      "experimental": "Tính năng thử nghiệm",
       "theme": "Chủ đề",
       "other": "Khác"
     },
@@ -8291,6 +8296,7 @@
         "workbench_action_focusNextPane": "Chuyển tới pane tiếp theo",
         "workbench_action_focusPipeline": "Chuyển tới pipeline",
         "workbench_action_focusPreview": "Chuyển tới bảng xem trước",
+        "workbench_action_startModelArena": "Bắt đầu đấu trường mô hình",
         "workbench_action_focusPreviousGroup": "Chuyển tới nhóm trước",
         "workbench_action_focusPreviousPane": "Chuyển tới pane trước",
         "workbench_action_focusSourceControl": "Chuyển tới quản lý mã nguồn",
@@ -13453,6 +13459,87 @@
       "unsupported": "Không hỗ trợ",
       "yolo": "Bỏ qua xác nhận lệnh nguy hiểm",
       "yolo-flag": "Hỗ trợ ({flag}), theo công tắc YOLO"
+    }
+  },
+  "arena": {
+    "experimental": "Thử nghiệm",
+    "menu": {
+      "section": "So sánh",
+      "start": "Đấu trường mô hình…",
+      "runs": "Lượt đấu trường ({n})",
+      "hint": "Gửi một tác vụ cho 2–4 mô hình, mỗi mô hình một worktree, so sánh song song"
+    },
+    "ctx": {
+      "compare": "So sánh tác vụ này giữa nhiều mô hình…"
+    },
+    "settings": {
+      "title": "Đấu trường mô hình",
+      "hint": "Gửi một tác vụ cùng lúc cho 2–4 mô hình, mỗi mô hình trong git worktree và ô riêng, rồi so sánh kết quả và hợp nhất bản bạn chọn. Mặc định tắt."
+    },
+    "start": {
+      "title": "Bắt đầu so sánh",
+      "subtitle": "Mọi mô hình làm cùng tác vụ từ cùng một commit, mỗi mô hình trong worktree riêng. Thư mục làm việc của bạn không bị đụng tới cho đến khi hợp nhất.",
+      "task": "Tác vụ",
+      "task-placeholder": "Mô tả thay đổi mà mỗi mô hình cần làm…",
+      "base": "Điểm bắt đầu",
+      "check": "Lệnh nghiệm thu",
+      "check-placeholder": "ví dụ pnpm test:run",
+      "models": "Mô hình ({min}–{max})",
+      "cli": "Công cụ CLI",
+      "model-default": "Mô hình mặc định của {cli}",
+      "remove": "Bỏ",
+      "add": "Thêm mô hình",
+      "time-limit": "Giới hạn thời gian mỗi ô (phút)",
+      "budget": "Trần chi phí mỗi ô (US$)",
+      "estimate": "Mở {panes} ô và {panes} worktree.",
+      "estimate-branches": "Nhánh: arena/<run>/<model>, trong .agent-team/worktrees/arena-<run>/.",
+      "estimate-budget": "Tối đa: tổng cộng US$ {total} khi chạm trần.",
+      "starting": "Đang bắt đầu…",
+      "go": "Bắt đầu so sánh",
+      "failed": "Không thể bắt đầu so sánh."
+    },
+    "kickoff": {
+      "check": "Khi xong, hãy chạy `{cmd}` và báo lại có đạt hay không."
+    },
+    "panel": {
+      "title": "Đấu trường mô hình",
+      "run": "Lượt",
+      "base": "Từ {branch} tại {sha}",
+      "elapsed": "Đã qua {t}",
+      "limits": "Giới hạn: {min} phút, US$ {usd} mỗi ô",
+      "dirty-base": "Thư mục chính có thay đổi chưa commit khi bắt đầu; chúng không nằm trong điểm bắt đầu của các ứng viên.",
+      "check-note": "Lệnh nghiệm thu: {cmd}. Mỗi ô tự chạy và báo kết quả.",
+      "empty": "Chưa có lượt đấu trường nào trong không gian làm việc này."
+    },
+    "run-state": {
+      "running": "Đang chạy",
+      "merged": "Đã hợp nhất",
+      "kept": "Giữ nhánh",
+      "closed": "Đã đóng"
+    },
+    "state": {
+      "running": "Đang chạy",
+      "no-pane": "Không có ô",
+      "pane-closed": "Ô đã đóng",
+      "stopped-user": "Bạn đã dừng",
+      "stopped-time": "Đã dừng: hết thời gian",
+      "stopped-budget": "Đã dừng: chạm trần chi phí"
+    },
+    "col": {
+      "model": "Mô hình",
+      "state": "Trạng thái",
+      "changes": "Thay đổi",
+      "tokens": "Số token",
+      "cost": "Chi phí",
+      "default-model": "{cli} mặc định",
+      "files": "{n} tệp",
+      "protected": "Đụng tới {n} tệp nhạy cảm",
+      "cost-unavailable": "Không có dữ liệu chi phí"
+    },
+    "action": {
+      "show": "Hiển thị",
+      "stop": "Dừng",
+      "stop-all": "Dừng tất cả"
     }
   }
 }

@@ -1760,6 +1760,10 @@
           "title": "Gerenciamento de configurações",
           "summary": "Exporte ou importe o pacote completo de configurações e veja onde elas ficam armazenadas."
         },
+        "general-experimental": {
+          "title": "Recursos experimentais",
+          "summary": "A arena de modelos e outros recursos em teste"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "Conecte esta máquina ao Navide Cloud para que os agents daqui possam enviar mensagens aos agents dos seus outros dispositivos."
@@ -7751,6 +7755,7 @@
       "resource-limits": "Limites de recursos",
       "session-archive": "Arquivo de logs de sessão",
       "settings-management": "Gerenciamento de configurações",
+      "experimental": "Recursos experimentais",
       "theme": "Tema",
       "other": "Outros"
     },
@@ -8291,6 +8296,7 @@
         "workbench_action_focusNextPane": "Focar próximo pane",
         "workbench_action_focusPipeline": "Focar pipeline",
         "workbench_action_focusPreview": "Focar painel de pré-visualização",
+        "workbench_action_startModelArena": "Iniciar arena de modelos",
         "workbench_action_focusPreviousGroup": "Focar grupo anterior",
         "workbench_action_focusPreviousPane": "Focar pane anterior",
         "workbench_action_focusSourceControl": "Focar controle do código-fonte",
@@ -13453,6 +13459,87 @@
       "unsupported": "Não compatível",
       "yolo": "Pular confirmação de comandos perigosos",
       "yolo-flag": "Compatível ({flag}), segue a chave YOLO"
+    }
+  },
+  "arena": {
+    "experimental": "Experimental (beta)",
+    "menu": {
+      "section": "Comparar",
+      "start": "Arena de modelos…",
+      "runs": "Execuções da arena ({n})",
+      "hint": "Envie uma tarefa para 2–4 modelos, cada um no seu worktree, e compare lado a lado"
+    },
+    "ctx": {
+      "compare": "Comparar esta tarefa entre modelos…"
+    },
+    "settings": {
+      "title": "Arena de modelos",
+      "hint": "Envie uma tarefa para 2–4 modelos ao mesmo tempo, cada um no seu próprio worktree git e painel; depois compare os resultados e mescle o escolhido. Desativado por padrão."
+    },
+    "start": {
+      "title": "Iniciar uma comparação",
+      "subtitle": "Todos os modelos trabalham na mesma tarefa a partir do mesmo commit, cada um no seu worktree. Sua pasta de trabalho não muda até você mesclar.",
+      "task": "Tarefa",
+      "task-placeholder": "Descreva a mudança que cada modelo deve fazer…",
+      "base": "Ponto de partida",
+      "check": "Comando de aceitação",
+      "check-placeholder": "ex.: pnpm test:run",
+      "models": "Modelos ({min}–{max})",
+      "cli": "Ferramenta CLI",
+      "model-default": "Modelo padrão do {cli}",
+      "remove": "Remover",
+      "add": "Adicionar modelo",
+      "time-limit": "Limite de tempo por painel (minutos)",
+      "budget": "Teto de custo por painel (US$)",
+      "estimate": "Abre {panes} painéis e {panes} worktrees.",
+      "estimate-branches": "Branches: arena/<run>/<model>, em .agent-team/worktrees/arena-<run>/.",
+      "estimate-budget": "Pior caso: US$ {total} no total no teto.",
+      "starting": "Iniciando…",
+      "go": "Iniciar comparação",
+      "failed": "Não foi possível iniciar a comparação."
+    },
+    "kickoff": {
+      "check": "Quando terminar, execute `{cmd}` e informe se passou."
+    },
+    "panel": {
+      "title": "Arena de modelos",
+      "run": "Execução",
+      "base": "A partir de {branch} em {sha}",
+      "elapsed": "Decorrido {t}",
+      "limits": "Limites: {min} min, US$ {usd} por painel",
+      "dirty-base": "A pasta principal tinha alterações não confirmadas no início; elas não estão no ponto de partida dos candidatos.",
+      "check-note": "Comando de aceitação: {cmd}. Cada painel o executa e informa o resultado.",
+      "empty": "Ainda não há execuções da arena neste espaço de trabalho."
+    },
+    "run-state": {
+      "running": "Em andamento",
+      "merged": "Mesclada",
+      "kept": "Branch mantido",
+      "closed": "Encerrada"
+    },
+    "state": {
+      "running": "Executando",
+      "no-pane": "Sem painel",
+      "pane-closed": "Painel fechado",
+      "stopped-user": "Parado por você",
+      "stopped-time": "Parado: limite de tempo",
+      "stopped-budget": "Parado: teto de custo"
+    },
+    "col": {
+      "model": "Modelo",
+      "state": "Situação",
+      "changes": "Alterações",
+      "tokens": "Tokens usados",
+      "cost": "Custo",
+      "default-model": "{cli} padrão",
+      "files": "{n} arquivos",
+      "protected": "{n} arquivos sensíveis alterados",
+      "cost-unavailable": "Sem dados de custo"
+    },
+    "action": {
+      "show": "Mostrar",
+      "stop": "Parar",
+      "stop-all": "Parar todos"
     }
   }
 }

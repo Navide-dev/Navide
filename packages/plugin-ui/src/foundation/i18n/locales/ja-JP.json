@@ -1760,6 +1760,10 @@
           "title": "設定の管理",
           "summary": "設定一式をエクスポート・インポートし、設定の保存場所を確認します。"
         },
+        "general-experimental": {
+          "title": "実験的な機能",
+          "summary": "モデルアリーナなど試験中の機能"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "このマシンを Navide Cloud に接続し、他のデバイスのエージェントとメッセージをやり取りできるようにします。"
@@ -7751,6 +7755,7 @@
       "resource-limits": "リソース制限",
       "session-archive": "Session ログのアーカイブ",
       "settings-management": "設定の管理",
+      "experimental": "実験的な機能",
       "theme": "テーマ",
       "other": "その他"
     },
@@ -8291,6 +8296,7 @@
         "workbench_action_focusNextPane": "次のペインにフォーカス",
         "workbench_action_focusPipeline": "パイプラインにフォーカス",
         "workbench_action_focusPreview": "プレビューパネルにフォーカス",
+        "workbench_action_startModelArena": "モデルアリーナを開始",
         "workbench_action_focusPreviousGroup": "前のグループにフォーカス",
         "workbench_action_focusPreviousPane": "前のペインにフォーカス",
         "workbench_action_focusSourceControl": "ソース管理にフォーカス",
@@ -13453,6 +13459,87 @@
       "unsupported": "非対応",
       "yolo": "危険なコマンドの確認を省略",
       "yolo-flag": "対応（{flag}）、YOLO スイッチに従う"
+    }
+  },
+  "arena": {
+    "experimental": "実験的",
+    "menu": {
+      "section": "比較",
+      "start": "モデルアリーナ…",
+      "runs": "アリーナの記録（{n}）",
+      "hint": "1 つのタスクを 2～4 個のモデルに渡し、それぞれの worktree で並べて比較"
+    },
+    "ctx": {
+      "compare": "このタスクを複数のモデルで比較…"
+    },
+    "settings": {
+      "title": "モデルアリーナ",
+      "hint": "1 つのタスクを 2～4 個のモデルに同時に渡し、それぞれ専用の git worktree とペインで作業させ、結果を並べて比較して選んだものをマージします。既定ではオフです。"
+    },
+    "start": {
+      "title": "比較を開始",
+      "subtitle": "各モデルは同じ commit から同じタスクに取り組み、それぞれ専用の worktree で変更します。マージするまで作業フォルダーには触れません。",
+      "task": "タスク",
+      "task-placeholder": "各モデルに行ってほしい変更を記述…",
+      "base": "開始点",
+      "check": "受け入れコマンド",
+      "check-placeholder": "例: pnpm test:run",
+      "models": "モデル（{min}～{max} 個）",
+      "cli": "CLI ツール",
+      "model-default": "{cli} の既定モデル",
+      "remove": "削除",
+      "add": "モデルを追加",
+      "time-limit": "ペインごとの時間制限（分）",
+      "budget": "ペインごとの費用上限（US$）",
+      "estimate": "{panes} 個のペインと {panes} 個の worktree を開きます。",
+      "estimate-branches": "ブランチ: arena/<run>/<model>、場所は .agent-team/worktrees/arena-<run>/。",
+      "estimate-budget": "最大費用: すべて上限で合計 US$ {total}。",
+      "starting": "開始中…",
+      "go": "比較を開始",
+      "failed": "比較を開始できませんでした。"
+    },
+    "kickoff": {
+      "check": "完了したら `{cmd}` を実行し、成功したかどうかを報告してください。"
+    },
+    "panel": {
+      "title": "モデルアリーナ",
+      "run": "回",
+      "base": "起点 {branch}＠{sha}",
+      "elapsed": "経過 {t}",
+      "limits": "上限: ペインごとに {min} 分、US$ {usd}",
+      "dirty-base": "開始時にメインフォルダーに未コミットの変更がありました。それらは各候補の開始点に含まれていません。",
+      "check-note": "受け入れコマンド: {cmd}。各ペインが自分で実行して結果を報告します。",
+      "empty": "このワークスペースにはまだアリーナの記録がありません。"
+    },
+    "run-state": {
+      "running": "実行中",
+      "merged": "マージ済み",
+      "kept": "ブランチを保持",
+      "closed": "終了"
+    },
+    "state": {
+      "running": "実行中",
+      "no-pane": "ペインなし",
+      "pane-closed": "ペインは閉じられました",
+      "stopped-user": "あなたが停止",
+      "stopped-time": "停止: 時間制限",
+      "stopped-budget": "停止: 費用上限"
+    },
+    "col": {
+      "model": "モデル",
+      "state": "状態",
+      "changes": "変更",
+      "tokens": "トークン",
+      "cost": "費用",
+      "default-model": "{cli} 既定",
+      "files": "{n} ファイル",
+      "protected": "要注意ファイル {n} 個に変更",
+      "cost-unavailable": "費用データなし"
+    },
+    "action": {
+      "show": "表示",
+      "stop": "停止",
+      "stop-all": "すべて停止"
     }
   }
 }
