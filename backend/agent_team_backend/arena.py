@@ -190,6 +190,27 @@ def _worktree(run: dict[str, Any], path: str) -> str | None:
     expected = os.path.join(os.path.realpath(run["workspace"]), *WORKTREE_DIR, f"arena-{run['id']}", os.path.basename(path))
     if os.path.islink(path) or not os.path.isdir(path) or os.path.realpath(path) != expected:
         raise ArenaError(f"arena worktree {path} is not where this run created it")
+    # And it is still this repository's linked worktree: its .git is a file
+    # pointing into <repo>/.git/worktrees/, so git cannot be led to another
+    # repository (or up to a parent one) from here.
+    dotgit = os.path.join(path, ".git")
+    try:
+        if os.path.islink(dotgit) or not os.path.isfile(dotgit):
+            raise OSError
+        with open(dotgit, encoding="utf-8") as fh:
+            line = fh.read(4096).strip()
+    except OSError:
+        raise ArenaError(f"arena worktree {path} is no longer a git worktree") from None
+    gitdir = line[len("gitdir:"):].strip() if line.startswith("gitdir:") else ""
+    repo_worktrees = os.path.join(run["workspace"], ".git", "worktrees")
+    try:
+        # samefile, not string equality: git may spell the path in another
+        # case on a case-insensitive volume.
+        same = bool(gitdir) and os.path.samefile(os.path.dirname(os.path.join(path, gitdir)), repo_worktrees)
+    except OSError:
+        same = False
+    if not same:
+        raise ArenaError(f"arena worktree {path} does not belong to this repository")
     return path
 
 
