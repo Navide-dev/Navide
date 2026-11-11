@@ -259,3 +259,22 @@ async def test_cancel_closes_the_menu(env: Env) -> None:
     assert env.tg.menu_edits[-1][1:] == (mm.text("zh-TW", "cancelled"), [])
     await _press(env, sonnet)
     assert switches.calls == []
+
+
+@pytest.mark.parametrize("revoke", ["allow", "binding"])
+async def test_a_wait_rechecks_the_sender_and_the_binding_before_switching(
+    env: Env, monkeypatch: pytest.MonkeyPatch, revoke: str,
+) -> None:
+    monkeypatch.setattr(mgr_mod, "MODEL_WAIT_POLL_S", 0.01)
+    switches = _setup(env)
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    switches.results.append({"ok": False, "error_code": "pane-busy", "error": "busy"})
+    await env.inbound("/model sonnet")
+    if revoke == "allow":
+        env.store.remove_allow("telegram", "7")
+    else:
+        env.store.unbind("pane-1")
+    env.fake.states["pane-1"] = {"exists": True, "busy": False, "display_status": "idle"}
+    await _until(lambda: env.m._model_waits == {})
+    assert len(switches.calls) == 1  # only the first, busy attempt
+    assert not any("✅" in t for t in env.tg.texts())
