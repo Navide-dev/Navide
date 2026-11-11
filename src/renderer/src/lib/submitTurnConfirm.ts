@@ -46,6 +46,9 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   mcode: false,
   // No log reader yet: Devin's session store is undocumented.
   devin: false,
+  // No log reader: Kiro's sessions sit in an undocumented SQLite store. Its
+  // Stop hook reports turn ends, not turn starts.
+  kiro: false,
   // A plain shell takes its own submit path and never reaches the watch.
   terminal: false,
 }

@@ -17,7 +17,7 @@ CLI_NAMES = frozenset({
     "claude", "codex", "gemini", "kimi", "grok", "qwen", "opencode", "kilo",
     "kilocode", "cursor-agent", "agent", "copilot", "pi", "droid", "aider",
     "agy", "antigravity", "muse", "mcode", "goose", "openclaw", "hermes",
-    "devin",
+    "devin", "kiro-cli",
 })
 
 

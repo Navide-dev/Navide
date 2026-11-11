@@ -10,7 +10,7 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, `goose`, `devin`, `openclaw`, and `hermes`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, `devin`, `kiro`, `openclaw`, and `hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -152,6 +152,28 @@ of it: `cli_vendors/<key>.py` is not touched, and a CLI absent from
 | Not wired (0.2.42 or later) | MCP back to Navide (`session/new` sends `mcpServers: []`), Guard on permission requests, roles (none is injected), restore after a restart (no manual-pane record is written), account switching, Agent History tokens. |
 | Hooks | Claude Code under the adapter runs the user's own hooks (0.102.0 passes `settingSources: ["user", "project", "local"]`; a PreToolUse hook in `~/.claude/settings.json` fired on the Linux VM, 2026-11-10). Navide's hooks (Guard, turn and permission-hold events) do **not** run: a terminal pane gets them through `--settings <runtime/claude/settings.json>` (`claude_hooks.wire_spawn`), and `acp.create` starts `claude-agent-acp` without it. Planned for 0.2.42 with the MCP connection back (candidate: `_meta.claudeCode.options.extraArgs`). |
 | Unverified | Windows (npm `.cmd` shim, non-ASCII user paths) has never run a real adapter. |
+
+### Kiro CLI (`kiro`, AWS) — added 2026-11-12
+
+A coding CLI (the ＋ menu's CLI list), the successor of Amazon Q Developer CLI.
+Read from the official docs on 2026-11-12 (kiro.dev/docs/cli,
+/docs/reference/cli-commands, /docs/reference/settings, /docs/mcp/configuration,
+/docs/hooks, /docs/hooks/types, /docs/hooks/actions, /docs/steering); no binary
+was installed, so nothing here is a live recording. The minimum integration:
+launch, install detection, navide MCP, a turn-end hook.
+
+| Question | Finding (docs, 2026-11-12) |
+|---|---|
+| Install | `curl -fsSL https://cli.kiro.dev/install \| bash` (macOS / Linux), a Homebrew cask `kiro-cli`, `.deb`, AppImage. Windows 11 is listed as supported with no install command. The install entry has no command and links kiro.dev/docs/cli. `kiro-cli update` updates; the diagnostic command is `kiro-cli diagnostic` (there is no `doctor`). |
+| Version | `kiro-cli --version` / `-V`; output undocumented, the generic `(\d+\.\d+\.\d+)` is used. No verified version (`test_spawn_probe_version_drift` exempts it). |
+| Launch | `kiro-cli chat --v3`. `kiro` alone opens the IDE. `--v3` pins the V3 harness, which the hook below is written for (headless runs default to V2). |
+| Permissions | YOLO appends `--trust-all-tools` (a `chat` flag); interactive V3 shows a confirmation warning first. |
+| MCP | No flag or variable carries a document, but `KIRO_HOME` relocates the whole global directory. Each pane gets its own (`mcp_server/pane_home.py`, kimi's shape): every entry links to the user's `~/.kiro`, except `settings/mcp.json` (the user's servers plus `navide` as a bare `url`) and `hooks/`. |
+| Turn end | `hooks/` in the pane's home is a real directory: the user's hook files are links, plus `navide.json`, a V3 hook with trigger `Stop` whose command posts the stdin JSON (`hook_event_name`, `cwd`, `session_id`) to `/hooks/kiro` and always exits 0 (`kiro_hooks.py`). The user's `~/.kiro/hooks` is never written, so a Kiro run outside Navide posts nothing. No reader attributes Kiro sessions, so the hook names its pane by the spawn token (`VendorSpec.hook_pane_token`; `cli_hook` looks it up only for vendors declaring it). Without the hook (for example `chat.agentEngine` set to `v2`) the pane falls back to PTY quiet time. |
+| Sign-in | `kiro-cli login` (GitHub, Google, AWS Builder ID, IAM Identity Center); credential location undocumented. No `login_command_args`, no account switching, no usage. |
+| Instruction files | `~/.kiro/steering/*.md`, `.kiro/steering/*.md`, and `AGENTS.md` at the workspace root (also read from `~/.kiro/steering/`). |
+| Not wired | Reader, resume (`--resume-id <ID>` exists, the session SQLite is undocumented), model / effort flags (documented, not checked against an invalid value), Guard (`PreToolUse` non-zero exit blocks), usage (`/usage`), extensions inventory. Busy/idle detection, bracketed paste and the bare-line reply protocol are unverified. |
+| Unverified | Whether `KIRO_HOME` covers `hooks/` (the docs list settings, sign-ins, sessions, agents, MCP, not hooks); whether Kiro rewrites its SQLite or credential files by atomic rename, which would replace a link in the pane's home with a pane-local file. Both are on the live acceptance list in plan `kiro-cli-kiroween_58d93a`. |
 
 ### Devin CLI (`devin`, Cognition) — added 2026-11-07
 

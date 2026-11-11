@@ -1,0 +1,27 @@
+{
+  "vendor": "kiro",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "backend/tests/vendors/test_kiro.py",
+    "revision": "9e8991079fb6cc0715df34a89f60d59ec2b2b549",
+    "notes": "Hand-authored minimal records from the existing regression schema. No account data, provider calls, or claimed live recording; kiro-cli was not installed when this was written."
+  },
+  "sessionId": null,
+  "expected": {
+    "tokens": [
+      0,
+      0
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "phases": {
+    "initial": [],
+    "response": [],
+    "complete": []
+  },
+  "binary": "kiro-cli",
+  "resumeCommand": null,
+  "guardedEnvironment": [
+    "KIRO_HOME"
+  ]
+}

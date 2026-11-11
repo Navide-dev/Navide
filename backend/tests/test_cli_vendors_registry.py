@@ -31,7 +31,7 @@ CLI_AGENTS_HELP = (
 )
 
 EXPECTED_KEYS = {
-    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin",
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "kiro",
     "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
     "opencode", "openclaw", "pi", "qwen",
 }
@@ -481,6 +481,10 @@ LAZY_BACKREFS: dict[tuple[str, str, str], str] = {
         "spec.install_hooks delegates to the app-side hook installer; "
         "vendor→app edge kept lazy"
     ),
+    ("kiro", "kiro_hooks", "install_hooks"): (
+        "spec.install_hooks delegates to the app-side hook module; "
+        "vendor→app edge kept lazy"
+    ),
     ("qwen", "qwen_hooks", "install_hooks"): (
         "spec.install_hooks delegates to the app-side hook installer; "
         "vendor→app edge kept lazy"
@@ -660,7 +664,9 @@ def test_vendors_without_session_ids() -> None:
     }
     # devin: sessions exist (-c / -r <id>) but their store is undocumented
     # and no reader is written yet.
-    assert others == {"aider", "mcode", "devin"}, (
+    # kiro: sessions exist (--resume-id) in an undocumented SQLite store and
+    # no reader is written yet.
+    assert others == {"aider", "mcode", "devin", "kiro"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

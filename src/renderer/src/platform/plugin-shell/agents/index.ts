@@ -18,6 +18,7 @@ import { SPEC as grok } from './grok'
 import { SPEC as hermes } from './hermes'
 import { SPEC as kilo } from './kilo'
 import { SPEC as kimi } from './kimi'
+import { SPEC as kiro } from './kiro'
 import { SPEC as mcode } from './mcode'
 import { SPEC as muse } from './muse'
 import { SPEC as opencode } from './opencode'
@@ -47,6 +48,7 @@ const ORDERED = [
   mcode,
   goose,
   devin,
+  kiro,
   openclaw,
   hermes,
   terminal

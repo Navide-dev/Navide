@@ -1073,6 +1073,11 @@ class VendorSpec:
     # the hooks at startup and admits the vendor to that endpoint, so a vendor
     # cannot be one without the other. None = no hook mechanism.
     install_hooks: Callable[[str], Any] | None = None
+    # The hooks name their pane by a per-pane spawn token rather than by a
+    # session id: a vendor with no log reader never has its sessions
+    # attributed, so /hooks/<key> would otherwise drop every event. The spawn
+    # puts the token in the pane's environment and the hook command sends it.
+    hook_pane_token: bool = False
 
     # --- shutdown ---
     # How a kill treats this CLI. None = the shared kill path runs unchanged,
