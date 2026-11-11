@@ -424,3 +424,30 @@ async def test_sweep_cost_stays_flat_with_60_panes_and_10k_history(store):
     assert len(service._snapshot["signals"]) == 60
     assert all(len(view["signals"]) == 1 for view in service.current(panes).values())
     assert elapsed < 2.0, f"sweep took {elapsed:.2f}s"
+
+
+async def test_sweep_skips_only_the_pane_whose_observation_fails(store, caplog):
+    async def network(pids):
+        return NetworkSample("successful", tuple(Connection(pid, "198.51.100.7", 443) for pid in pids))
+
+    service = CliRiskService(store, clock=lambda: 100, network_collector=network,
+                             disk_collector=lambda root: DiskSample("successful", {}), resolver=resolver(100))
+    panes = [RiskPane(f"p{i}", "test", (2000 + i,), ("192.0.2.1",), ()) for i in range(5)]
+    original = store.apply_network
+
+    def flaky(pane_id, *args):
+        if pane_id == "p2":
+            raise RuntimeError("one pane's record is broken")
+        return original(pane_id, *args)
+
+    store.apply_network = flaky
+    try:
+        service.request(panes)
+        await settle(service)
+    finally:
+        await service.close()
+
+    views = service.current(panes)
+    assert views["p2"]["signals"] == []
+    assert all(len(views[f"p{i}"]["signals"]) == 1 for i in (0, 1, 3, 4))
+    assert "could not be applied" in caplog.text

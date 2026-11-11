@@ -126,15 +126,25 @@ class CliRiskService:
         return frozenset((ip, port) for ip in LOOPBACK for port in ports)
 
     async def _apply(self, operation, *args):
-        await self._apply_all([(operation, *args)])
+        # Single operations (actions, disk samples) raise to their caller.
+        async with self._apply_lock:
+            def apply():
+                operation(*args)
+                return self.store.snapshot()
+            self._snapshot = await asyncio.to_thread(apply)
 
     async def _apply_all(self, calls: list[tuple]):
         """Apply one sweep's observations in a single worker hop with a single
-        snapshot, so a sweep costs one snapshot however many panes it covers."""
+        snapshot, so a sweep costs one snapshot however many panes it covers.
+        Each operation commits on its own: one that fails is logged and
+        skipped, and the rest of the sweep is still recorded."""
         async with self._apply_lock:
             def apply():
                 for operation, *args in calls:
-                    operation(*args)
+                    try:
+                        operation(*args)
+                    except Exception:
+                        log.exception("CLI risk observation could not be applied")
                 return self.store.snapshot()
             self._snapshot = await asyncio.to_thread(apply)
 
