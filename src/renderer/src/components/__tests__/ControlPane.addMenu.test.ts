@@ -468,6 +468,19 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
   })
 
+  it('stays open while its own list scrolls', async () => {
+    // A short window caps the list, so reaching the Agents block takes a
+    // scroll inside the menu; that must not count as the page moving.
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    wrapper.find('.ws-add-scroll').element.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(true)
+    document.body.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
   it('closes after a spawn', async () => {
     wrapper = mountWith()
     await openMenu(wrapper)

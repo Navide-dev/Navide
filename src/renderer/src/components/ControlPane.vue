@@ -2883,6 +2883,12 @@ onUnmounted(() => document.removeEventListener('keydown', onSpawnModalKeydown))
 function closeAddMenu(): void {
   addMenuOpen.value = false
 }
+const addMenuEl = ref<HTMLElement | null>(null)
+/** Scroll inside the menu (its capped list) is not the page moving. */
+function onAddMenuScroll(e: Event): void {
+  if (e.target instanceof Node && addMenuEl.value?.contains(e.target)) return
+  closeAddMenu()
+}
 
 // Same three dismissals the ＋ roster uses, for the same reasons: a click
 // anywhere else, Escape, and scroll outside the menu (captured — the pane
@@ -2926,17 +2932,17 @@ watch(addMenuOpen, (open) => {
     // Capture: the pane list is the element that scrolls, and its scroll
     // events do not bubble. Without this the menu would hang in mid-air over
     // whatever scrolled into the button's old place.
-    document.addEventListener('scroll', closeAddMenu, true)
+    document.addEventListener('scroll', onAddMenuScroll, true)
   } else {
     document.removeEventListener('click', closeAddMenu)
     document.removeEventListener('keydown', onAddMenuKeydown)
-    document.removeEventListener('scroll', closeAddMenu, true)
+    document.removeEventListener('scroll', onAddMenuScroll, true)
   }
 })
 onUnmounted(() => {
   document.removeEventListener('click', closeAddMenu)
   document.removeEventListener('keydown', onAddMenuKeydown)
-  document.removeEventListener('scroll', closeAddMenu, true)
+  document.removeEventListener('scroll', onAddMenuScroll, true)
 })
 
 function spawn(agentKey: string = activeSpawnAgent.value): void {
@@ -4507,7 +4513,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </template>
       </div>
-      <div v-if="addMenuOpen" class="ws-add-menu" :style="addMenuStyle" @click.stop>
+      <div v-if="addMenuOpen" ref="addMenuEl" class="ws-add-menu" :style="addMenuStyle" @click.stop>
         <select v-model="pickedRole" class="ws-add-role">
           <option value="">{{ $t('label.select-role') }}</option>
           <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
