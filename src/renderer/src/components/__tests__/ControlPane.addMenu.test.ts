@@ -568,8 +568,10 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
-/** A `.ws-add-sec` heading (CLI, Agents): ~14px text plus 8px padding. */
-const HEADING_PX = 22
+/** A `.ws-add-sec` heading (CLI, Agents): ~15px text plus 9px padding, and the
+ *  second one adds a divider with 9px more space above it — 24 + 31, rounded up
+ *  to 28 each. */
+const HEADING_PX = 28
 
 /** Everything in the menu that is not the scroller: its own padding, the role
  *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
