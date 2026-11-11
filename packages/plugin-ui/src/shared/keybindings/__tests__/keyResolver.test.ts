@@ -247,6 +247,14 @@ describe('KeyResolver – defaults integration (new shortcuts)', () => {
       .toBe('workbench.action.reopenClosedEditor')
   })
 
+  it('cmd+shift+t → reopenClosedWindow in the main window only (paneStage)', () => {
+    expect(dr.resolve(mkEvent('T', { metaKey: true, shiftKey: true }), { paneStage: true })?.command)
+      .toBe('workbench.action.reopenClosedWindow')
+    // The Mini IDE and the editor window never set paneStage: their closed tabs keep the key.
+    expect(dr.resolve(mkEvent('T', { metaKey: true, shiftKey: true }), { editorOpen: true })?.command)
+      .toBe('workbench.action.reopenClosedEditor')
+  })
+
   it('f1 → showCommands', () => {
     expect(dr.resolve(mkEvent('F1'), {})?.command).toBe('workbench.action.showCommands')
   })

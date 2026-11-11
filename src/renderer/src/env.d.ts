@@ -364,6 +364,13 @@ declare global {
         dismiss: () => Promise<{ ok: boolean }>
         getAutoRestore: () => Promise<boolean>
         setAutoRestore: (value: boolean) => Promise<{ ok: boolean }>
+        /** Windows closed while the app kept running, newest first. */
+        listRecentlyClosed?: () => Promise<{ workspace_path: string; adopted_workspaces: string[]; closed_at: number }[]>
+        /** Reopen one closed window whole; no path = the newest. */
+        reopenClosed?: (workspacePath?: string) => Promise<{ ok: boolean; opened: number; focused: number; missing: string[] }>
+        onRecentlyClosedChanged?: (cb: () => void) => () => void
+        /** A reopen skipped these folders because they no longer exist. */
+        onReopenMissing?: (cb: (missing: string[]) => void) => () => void
       }
       updater?: {
         getState: () => Promise<UpdateState>
