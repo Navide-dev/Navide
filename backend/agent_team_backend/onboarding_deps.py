@@ -658,7 +658,12 @@ def detect_dep(dep: Dep, quick: bool = False) -> dict[str, Any]:
         "update_cmd": dep.update_cmd,
         "doctor_cmd": dep.doctor_cmd,
         "autoupdate_env": dep.autoupdate_env,
-        "autoupdate_policy": cli_autoupdate_policy(dep.id) if dep.autoupdate_env else "",
+        "autoupdate_args": list(dep.autoupdate_args),
+        "autoupdate_policy": (
+            cli_autoupdate_policy(dep.id) if dep.autoupdate_env or dep.autoupdate_args else ""
+        ),
+        # Newer than `version` only; '' when up to date or unknown.
+        "latest_version": "" if quick else _update_available(dep, version),
         "exit_code": exit_code,
         "signal": signal_name,
         "duration_ms": duration_ms,
@@ -1552,19 +1557,28 @@ def select_cli_binary(agent_key: str, path: str) -> dict[str, Any]:
 AUTOUPDATE_POLICIES = ("vendor", "manual")
 
 
+def _default_autoupdate_policy(agent_key: str) -> str:
+    dep = DEPS_BY_ID.get(agent_key)
+    return "manual" if dep is not None and dep.autoupdate_args else "vendor"
+
+
 def cli_autoupdate_policy(agent_key: str) -> str:
-    """'vendor' (default — the CLI updates itself as it always has) or 'manual'."""
+    """'vendor' (the CLI updates itself as it always has) or 'manual'.
+
+    The default is 'vendor', except for a dep switched by launch arguments
+    (see Dep.autoupdate_args), which defaults to 'manual'."""
     _migrate_legacy_flag()
+    default = _default_autoupdate_policy(agent_key)
     policies = _read_state().get("cli_autoupdate")
     if not isinstance(policies, dict):
-        return "vendor"
+        return default
     policy = str(policies.get(agent_key) or "")
-    return policy if policy in AUTOUPDATE_POLICIES else "vendor"
+    return policy if policy in AUTOUPDATE_POLICIES else default
 
 
 def set_cli_autoupdate_policy(agent_key: str, policy: str) -> dict[str, Any]:
     dep = DEPS_BY_ID.get(agent_key)
-    if dep is None or not dep.autoupdate_env:
+    if dep is None or not (dep.autoupdate_env or dep.autoupdate_args):
         return {"ok": False, "error": "agent has no vendor auto-update switch"}
     if policy not in AUTOUPDATE_POLICIES:
         return {"ok": False, "error": f"unknown policy: {policy!r}"}
@@ -1593,3 +1607,104 @@ def spawn_env_for(agent_key: str) -> dict[str, str]:
     if dep is None or not dep.autoupdate_env:
         return {}
     return {dep.autoupdate_env: "1"} if cli_autoupdate_policy(agent_key) == "manual" else {}
+
+
+def spawn_args_for(agent_key: str) -> list[str]:
+    """Launch arguments the CLI's own update check needs for this spawn.
+
+    Only for a dep whose opt-out is a launch argument, and only under
+    'manual'. Nothing is written to the vendor's config.
+    """
+    dep = DEPS_BY_ID.get(agent_key)
+    if dep is None or not dep.autoupdate_args:
+        return []
+    return list(dep.autoupdate_args) if cli_autoupdate_policy(agent_key) == "manual" else []
+
+
+# ── Newest release (for "update available") ──────────────────────────────────
+#: npm registry answers, by package: (monotonic time, version or '').
+_NPM_LATEST: dict[str, tuple[float, str]] = {}
+_NPM_LATEST_LOCK = threading.Lock()
+_NPM_LATEST_TTL_S = 6 * 3600
+#: A failed lookup (offline, no npm) is retried sooner than a good one.
+_NPM_LATEST_RETRY_S = 1800
+
+
+def _cached_latest_file(dep: Dep) -> str:
+    """The newest `latest_version` the vendor's own cache records, or ''."""
+    best = ""
+    for _scope, home in _config_homes(dep):
+        try:
+            data = json.loads((home / dep.latest_version_file).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        latest = str(data.get("latest_version") or "") if isinstance(data, dict) else ""
+        if re.fullmatch(r"\d+(\.\d+)*", latest) and _version_tuple(latest) > _version_tuple(best or "0"):
+            best = latest
+    return best
+
+
+def _npm_latest(package: str, query: bool = True) -> str:
+    """`npm view <package> version`, cached. '' when npm cannot say.
+
+    Needed alongside the vendor's cache because the launch argument that keeps
+    codex from asking also keeps it from refreshing that cache. query=False
+    only reads the cache: the dependency probe never waits on the network,
+    and update_notices (asked on connect and hourly) is what fills it.
+    """
+    now = time.monotonic()
+    with _NPM_LATEST_LOCK:
+        cached = _NPM_LATEST.get(package)
+        if cached is not None:
+            ttl = _NPM_LATEST_TTL_S if cached[1] else _NPM_LATEST_RETRY_S
+            if not query or now - cached[0] < ttl:
+                return cached[1]
+    if not query:
+        return ""
+    latest = _npm_query(package)
+    with _NPM_LATEST_LOCK:
+        _NPM_LATEST[package] = (time.monotonic(), latest)
+    return latest
+
+
+def update_notices() -> dict[str, dict[str, str]]:
+    """{agent_key: {version, latest_version}} for each CLI with a newer release.
+
+    Only deps that declare `latest_version_file` are checked: one `--version`
+    probe each, plus the cached npm lookup."""
+    notices: dict[str, dict[str, str]] = {}
+    for dep in applicable_deps():
+        if not dep.latest_version_file:
+            continue
+        entry = detect_dep(dep, quick=False)
+        latest = _update_available(dep, entry["version"], query_registry=True)
+        if latest:
+            notices[dep.id] = {"version": entry["version"], "latest_version": latest}
+    return notices
+
+
+def _npm_query(package: str) -> str:
+    """One `npm view <package> version` (the registry's `latest` tag), or ''."""
+    npm = osplat.paths.resolve_program("npm")
+    if not npm:
+        return ""
+    try:
+        proc = subprocess.run(
+            osplat.paths.launch_argv(npm, ["view", package, "version"]),
+            capture_output=True, text=True, timeout=10,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    out = (proc.stdout or "").strip()
+    return out if proc.returncode == 0 and re.fullmatch(r"\d+(\.\d+)*", out) else ""
+
+
+def _update_available(dep: Dep, version: str, query_registry: bool = False) -> str:
+    """The newest release when it is newer than `version`, else ''."""
+    if not dep.latest_version_file or not version:
+        return ""
+    candidates = [_cached_latest_file(dep)]
+    if dep.npm_package:
+        candidates.append(_npm_latest(dep.npm_package, query=query_registry))
+    newest = max((c for c in candidates if c), key=_version_tuple, default="")
+    return newest if newest and _version_tuple(newest) > _version_tuple(version) else ""

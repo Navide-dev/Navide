@@ -230,6 +230,7 @@ import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
+import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -2907,6 +2908,7 @@ async function deliverAgentMessage(
     leftInComposer?: boolean
     foregroundBusy?: boolean
     commandRefused?: string
+    updatePrompt?: 'skipped' | 'blocked'
   } = {}
   // Sampled before typing: our own message's user record is the signal that
   // would confirm the resume, so asking afterwards could answer "confirmed" on
@@ -2923,6 +2925,12 @@ async function deliverAgentMessage(
     (held) => messaging.setDeliveringHold(paneId, held ? { key: 'pty-blocked' } : undefined),
   )
   if (!ok && outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }
+  if (!ok && outcome.updatePrompt) {
+    // The CLI's update menu took nothing: back to the head of the queue. A
+    // skipped menu lets the next pump type it; a held one waits as awaiting.
+    paneRefs[paneId]?.clearDeliveredPending?.()
+    return null
+  }
   if (!ok && outcome.foregroundBusy) {
     // A program took the shell's place between the gate's last look and the
     // write; nothing was typed. Back to the head of the queue, held until the
@@ -3939,6 +3947,7 @@ async function kickoffRequestedPane(
         pressEnter: async () => {
           const sid = paneRefs[paneId]?.sessionId
           if (!sid || !paneAlive(paneId)) return false
+          if (updatePromptOnScreen(paneId)) return false
           try {
             await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
             return true
@@ -4696,6 +4705,7 @@ function pollAwaitingPanes(): void {
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
       const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
+        || updatePromptHolds(pane.id, pane.agentKey)
       // The safety net under a held permission wait (see holdOutlivedBox): the
       // box is no longer on screen, so nothing is left to hold for.
       const held = ref.awaitingHeld?.() as { since: number } | undefined
@@ -4714,6 +4724,56 @@ function pollAwaitingPanes(): void {
       /* leave this pane's badge as-is and carry on with the rest */
     }
   }
+}
+
+// Panes held on a CLI update menu whose skip key did not take (see
+// paneClearUpdatePrompt). An unrecognized look-alike holds on its own.
+const updatePromptHeld = new Set<string>()
+
+function paneVisibleScreen(paneId: string): string {
+  try {
+    return (paneRefs[paneId]?.readVisibleScreen?.() as unknown as string) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function updatePromptOnScreen(paneId: string): boolean {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  return updatePromptState(agentKey, paneVisibleScreen(paneId)) !== 'none'
+}
+
+/** The update menu reads as awaiting: a look-alike always, the real one only
+ *  once its skip key failed — until then it is skipped by whoever types next. */
+function updatePromptHolds(paneId: string, agentKey: string): boolean {
+  const state = updatePromptState(agentKey, paneVisibleScreen(paneId))
+  if (state === 'none') updatePromptHeld.delete(paneId)
+  return state === 'suspect' || (state === 'known' && updatePromptHeld.has(paneId))
+}
+
+/** Before anything is typed into a pane: skip the CLI's own update menu with
+ *  its skip key, never Enter (lib/updatePrompt.ts). 'blocked' holds the pane
+ *  as awaiting at once, so a queued message waits instead of retrying. */
+async function paneClearUpdatePrompt(paneId: string): Promise<UpdatePromptOutcome> {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const outcome = await clearUpdatePrompt({
+    agentKey,
+    readScreen: () => paneVisibleScreen(paneId),
+    send: async (keys) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (sid) await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+    },
+    sleep,
+    now: Date.now,
+    record: (code, message) => recordDiagnostic({
+      level: code === 'update-prompt.blocked' ? 'warn' : 'info', code, message, paneId,
+    }),
+  })
+  if (outcome === 'blocked') {
+    updatePromptHeld.add(paneId)
+    paneRefs[paneId]?.markBoxOnScreen?.(true)
+  }
+  return outcome
 }
 
 function syncViews(): void {
@@ -4842,6 +4902,10 @@ async function injectText(
      *  message after all, and how long into the grace window. */
     late?: LateSubmit
     lateMs?: number
+    /** The CLI's update menu stood in the way (lib/updatePrompt.ts): it was
+     *  skipped and nothing landed ('skipped'), or the pane is held on it
+     *  ('blocked'). No Enter went into it either way. */
+    updatePrompt?: 'skipped' | 'blocked'
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -5046,6 +5110,11 @@ async function injectText(
   let sentAt = 0
   for (let send = 1; send <= MAX_CONTENT_SENDS && !ready; send++) {
     if (aborted()) return giveUp()
+    // A CLI's update menu drops typed text and takes Enter as "update now".
+    if (paneId !== undefined && !shellTarget && await paneClearUpdatePrompt(paneId) === 'blocked') {
+      if (evidence) evidence.updatePrompt = 'blocked'
+      return false
+    }
     const preBytes = cleanBytes()
     bytesBeforeSend = preBytes
     sentAt = Date.now()
@@ -5239,9 +5308,22 @@ async function injectText(
   // Busy lines already on screen (the last turn's "Worked for 12s") say
   // nothing about this message — see lib/submitStall.ts.
   const busyBefore = busyLines(visibleScreen() ?? screenTail())
+  // The update menu came up after our text went in: the text is gone and
+  // Enter would pick "update now". Skip it and report nothing delivered, so
+  // the caller types the text again.
+  const updatePromptInTheWay = async (): Promise<boolean> => {
+    if (paneId === undefined || !updatePromptOnScreen(paneId)) return false
+    const outcome = await paneClearUpdatePrompt(paneId)
+    if (evidence) {
+      evidence.updatePrompt = outcome === 'blocked' ? 'blocked' : 'skipped'
+      evidence.leftInComposer = false
+    }
+    return true
+  }
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     if (stillWanted && !stillWanted()) return stopBeforeEnter()
+    if (await updatePromptInTheWay()) return false
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
     // started the work that raised it, but nothing confirms that.
     if (attempt > 1 && dialogShown()) {
@@ -5302,6 +5384,7 @@ async function injectText(
             stoppedAtExtraEnter = true
             return false
           }
+          if (await updatePromptInTheWay()) return false
           try {
             await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
             return true
@@ -7312,6 +7395,8 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (!paneAlive(paneId)) return false
     const ref = paneRefs[paneId]
     if (!ref) return false
+    // Enter on a CLI's update menu is "update now": skip it with its own key.
+    if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
       if (ref.sessionId) {
@@ -7776,7 +7861,7 @@ function scheduleInjection(pane: ActivePane): void {
     }
     if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
-      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf))) {
+      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
         const r = paneRefs[pane.id]
         if (r?.sessionId) {
@@ -8152,11 +8237,26 @@ async function sendSessionMarkerBootstrap(pane: ActivePane, tag: string): Promis
       label: `session-marker:${pane.agentKey}`,
       text: markerText
     }).catch(() => {/* ignore */})
-    await backend.send('terminal.input', {
-      terminal_session_id: ref.sessionId as string,
-      data: BRACKETED_PASTE_START + markerText + BRACKETED_PASTE_END
-    })
-    await sleep(250)
+    // A CLI update menu drops the paste and takes Enter as "update now": skip
+    // it with its own key and paste again; one that will not go is left alone.
+    let typed = false
+    for (let attempt = 1; attempt <= 2 && !typed; attempt++) {
+      if ((await paneClearUpdatePrompt(pane.id)) === 'blocked') {
+        pipelineLog(`${tag} ⏸ CLI update menu on screen — session marker not sent`)
+        return false
+      }
+      await backend.send('terminal.input', {
+        terminal_session_id: ref.sessionId as string,
+        data: BRACKETED_PASTE_START + markerText + BRACKETED_PASTE_END
+      })
+      await sleep(250)
+      typed = !updatePromptOnScreen(pane.id)
+    }
+    if (!typed) {
+      await paneClearUpdatePrompt(pane.id)
+      pipelineLog(`${tag} ⏸ CLI update menu kept coming back — session marker not sent`)
+      return false
+    }
     await backend.send('terminal.input', {
       terminal_session_id: ref.sessionId as string,
       data: '\r'
@@ -10832,12 +10932,12 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions' | 'agents'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'cliAgents' | 'notifications' | 'extensions' | 'agents'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
   setTab: (tab: string) => void
-  setSection: (tab: string, section: string) => Promise<void>
+  setSection: (tab: string, section: string, query?: string) => Promise<void>
 } | null>(null)
 function openSettingsAt(tab: typeof settingsInitialTab.value): void {
   settingsInitialTab.value = tab
@@ -11591,6 +11691,44 @@ registerCommand('ui.plugins.openMarketplace', (args) => {
   openMarketplaceDetail(link.target)
   return { opened: 'marketplace-detail' }
 })
+// CLIs with a newer release (onboarding.update_notices), for the pane
+// header's "update available" badge. Checked on connect and hourly: the
+// backend caches its registry lookup, so this is one `--version` per CLI.
+const cliUpdateNotices = ref<Record<string, { version: string; latest_version: string }>>({})
+const CLI_UPDATE_NOTICE_POLL_MS = 3_600_000
+async function refreshCliUpdateNotices(): Promise<void> {
+  if (backend.status.value !== 'connected') return
+  try {
+    const resp = await backend.send<{ ok: boolean; notices?: typeof cliUpdateNotices.value }>(
+      'onboarding.update_notices', {}, ONBOARDING_STATUS_TIMEOUT_MS)
+    if (resp.payload?.ok) cliUpdateNotices.value = resp.payload.notices ?? {}
+  } catch {
+    // Keep what was shown; the next tick asks again.
+  }
+}
+watch(() => backend.status.value, (s) => { if (s === 'connected') void refreshCliUpdateNotices() }, { immediate: true })
+onMounted(() => {
+  const timer = window.setInterval(() => void refreshCliUpdateNotices(), CLI_UPDATE_NOTICE_POLL_MS)
+  onUnmounted(() => window.clearInterval(timer))
+})
+// Closing Settings is where an update just run there ends up.
+watch(showSettings, (open) => { if (!open) void refreshCliUpdateNotices() })
+
+function paneUpdateAvailable(p: ActivePane): { version: string; latest: string } | null {
+  const notice = cliUpdateNotices.value[p.agentKey]
+  return notice ? { version: notice.version, latest: notice.latest_version } : null
+}
+
+/** The badge's click: that CLI's drawer in Settings, where its update runs
+ *  in a terminal the user can see. */
+function openCliUpdate(agentKey: string): void {
+  settingsInitialTab.value = 'cliAgents'
+  showSettings.value = true
+  void nextTick(() => {
+    void settingsModalRef.value?.setSection('cliAgents', 'cli-agents-maintenance', agentKey)
+  })
+}
+
 function openExtensionsSection(section: string): void {
   settingsInitialTab.value = 'extensions'
   showSettings.value = true
@@ -16604,6 +16742,7 @@ function kickoffCopyInBox(paneId: string, text: string, stillWanted?: () => bool
           }
           return false
         }
+        if (updatePromptOnScreen(paneId)) return false
         try {
           await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
           return true
@@ -25880,6 +26019,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"
+          :update-available="paneUpdateAvailable(p)"
+          :open-cli-update="() => openCliUpdate(p.agentKey)"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

@@ -89,6 +89,7 @@ function harness() {
     waitForStartupActivity: vi.fn(async () => true), waitForQuiet: vi.fn(async () => {}),
     paneAlive: (id: string) => panes.value.some((pane) => pane.id === id),
     paneScreenBlocked: () => false, hasDetectedCodexSession: () => false,
+    paneClearUpdatePrompt: async () => 'clear', updatePromptOnScreen: () => false,
     pipelineLog: vi.fn(), sleep: async () => {},
     BRACKETED_PASTE_START: '\x1b[200~', BRACKETED_PASTE_END: '\x1b[201~',
     paneResumeSessionId: (pane: Pane) => pane.pinnedSessionId || '',
