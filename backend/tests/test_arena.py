@@ -264,3 +264,15 @@ async def test_record_numbers_and_stop_reasons_are_checked(repo: Path) -> None:
     path.write_text(good)
     with pytest.raises(arena.ArenaError):
         arena.update_candidate(str(repo), run["id"], "A", {"stopped": "later"})
+
+
+@pytest.mark.asyncio
+async def test_a_worktree_pointing_at_another_repository_is_refused(repo: Path, tmp_path: Path) -> None:
+    run = await _start(repo)
+    a = Path(run["candidates"][0]["worktree"])
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-q")
+    (a / ".git").write_text(f"gitdir: {other / '.git'}\n")
+    with pytest.raises(arena.ArenaError, match="does not belong"):
+        await arena.run_status(str(repo), run["id"], None)
