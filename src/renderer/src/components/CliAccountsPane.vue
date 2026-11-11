@@ -25,6 +25,7 @@ import {
   type UsageWindow,
 } from '../composables/useUsage'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { relativeTime } from '../lib/relativeTime'
 import SettingsNotice from './settings/SettingsNotice.vue'
 import AddAccountPanel from './accounts/AddAccountPanel.vue'
 import ApiKeyDetail from './accounts/ApiKeyDetail.vue'
@@ -547,7 +548,11 @@ interface CardUsage {
   windows: UsageWindow[]
   foot: string
   lastSuccess: string
+  /** How long ago the last good read was ("12 hours ago"). */
+  lastSuccessAgo: string
   updated: string
+  /** How long ago the current reading was taken ("8 minutes ago"). */
+  updatedAgo: string
   refreshStatus: string
   /** The whole refresh line: a status label after "Refresh:", or a sentence
    *  of its own when the status alone would read as jargon. */
@@ -583,8 +588,10 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     pending: snap.refreshPending === true && usageBackendConnected(),
     resetExpired: cached && windows.length === 0 && snap.windows.length > 0,
     lastSuccess: formatResetAbsolute(snap.lastSuccessAt ?? snap.fetchedAt),
+    lastSuccessAgo: agoText(snap.lastSuccessAt ?? snap.fetchedAt),
     // When a current figure was read; a cached one says so on its own line.
     updated: !cached && snap.status === 'ok' ? formatResetAbsolute(snap.fetchedAt) : '',
+    updatedAgo: agoText(snap.fetchedAt),
     refreshStatus,
     refreshLine,
     cantRefresh,
@@ -613,7 +620,7 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     tier: remainingTier(rem),
     headLabel: t('usage.window-left', { label: windowLabel(head) }),
     windows,
-    foot: cardFoot(currentSnap, head),
+    foot: cardFoot(currentSnap),
   }
 }
 
@@ -631,21 +638,36 @@ function windowLabel(w: UsageWindow): string {
   return w.label
 }
 
-/** Card footer: the non-headline windows plus the headline reset countdown.
- *  Every figure on the card is what is LEFT — the CLI's own panel prints
- *  what is used, so the word is spelled out rather than implied. */
-function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
-  const parts = snap.windows
-    .filter((w) => w !== head)
-    .map((w) =>
-      t('usage.window-left-pct', { label: windowLabel(w), pct: formatRemaining(windowRemaining(w)) }),
-    )
-  const countdown = formatResetCountdown(head.resetsAt)
-  if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
-  // After the countdown, which belongs to the headline, not to this row.
+/** Card footer: only what no bar can show — a session window the reading
+ *  lacks. Every window's figure and reset time sit beside its own bar. */
+function cardFoot(snap: UsageSnapshot): string {
   const note = absentSessionNote(snap)
-  if (note) parts.push(`${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}`)
-  return parts.join(' · ')
+  return note ? `${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}` : ''
+}
+
+/** Beside a bar: what is LEFT — the CLI's own panel prints what is used, so
+ *  the word is spelled out rather than implied. */
+function windowPctLeft(w: UsageWindow): string {
+  return t('usage.window-pct-left', { pct: formatRemaining(windowRemaining(w)) })
+}
+
+/** Beside a bar: the reset in local time plus how long until then, or that
+ *  it has already passed (a cached reading). Empty when the CLI sent none. */
+function windowReset(w: UsageWindow): string {
+  const at = formatResetAbsolute(w.resetsAt)
+  if (!at) return ''
+  const countdown = formatResetCountdown(w.resetsAt)
+  return countdown
+    ? t('usage.window-reset', { at, countdown })
+    : t('usage.window-reset-passed', { at })
+}
+
+/** "8 minutes ago" in the UI language; empty for a missing timestamp. */
+function agoText(at: string | null | undefined): string {
+  const ms = at ? Date.parse(at) : NaN
+  if (!Number.isFinite(ms)) return ''
+  const { unit, count } = relativeTime(ms, Date.now())
+  return t(`time.ago-${unit}`, { count })
 }
 
 function barTitle(w: UsageWindow): string {
@@ -994,33 +1016,52 @@ onMounted(() => refreshUsage())
             :key="'usage'"
           >
             <template v-if="u && !u.noData">
+              <!-- An old reading must not pass for a current one: say so
+                   before any figure, and grey the figures below. -->
+              <div v-if="u.cached" class="cli-card-cache" role="status">
+                <span class="cli-card-cache-title">⚠ {{ $t('usage.stale-title') }}</span>
+                <span>{{
+                  $t('usage.stale-detail', {
+                    time: u.lastSuccess,
+                    ago: u.lastSuccessAgo,
+                    action: $t('settings.accounts.cli.refresh-quota'),
+                  })
+                }}</span>
+              </div>
               <div v-if="u.resetExpired" class="cli-card-none">
                 <span class="cli-card-foot">{{ $t('usage.cached-reset-expired') }}</span>
               </div>
               <template v-else>
-                <div class="cli-card-big" :class="u.tier">
+                <div class="cli-card-big" :class="[u.tier, { stale: u.cached }]">
                   {{ u.big }}
                   <small>{{ u.headLabel }}</small>
                 </div>
-                <div class="cli-card-bars">
-                  <div
-                    v-for="w in u.windows"
-                    :key="w.kind + w.label"
-                    class="cli-mini-bar"
-                    :title="barTitle(w)"
-                  >
-                    <div
-                      class="cli-mini-fill"
-                      :class="remainingTier(windowRemaining(w))"
-                      :style="{ width: windowRemaining(w) + '%' }"
-                    ></div>
+                <!-- One window per entry: its name above, its bar, and beside
+                     the bar what is left and when it resets. -->
+                <div class="cli-card-bars" :class="{ stale: u.cached }">
+                  <div v-for="w in u.windows" :key="w.kind + w.label" class="cli-win">
+                    <div class="cli-win-name">{{ windowLabel(w) }}</div>
+                    <div class="cli-mini-bar" :title="barTitle(w)">
+                      <div
+                        class="cli-mini-fill"
+                        :class="remainingTier(windowRemaining(w))"
+                        :style="{ width: windowRemaining(w) + '%' }"
+                      ></div>
+                    </div>
+                    <div class="cli-win-val">
+                      <span class="cli-win-pct" :class="remainingTier(windowRemaining(w))">{{
+                        windowPctLeft(w)
+                      }}</span>
+                      <span
+                        v-if="windowReset(w)"
+                        class="cli-win-reset"
+                        :class="{ passed: !formatResetCountdown(w.resetsAt) }"
+                      >{{ windowReset(w) }}</span>
+                    </div>
                   </div>
                 </div>
                 <div v-if="u.foot" class="cli-card-foot">{{ u.foot }}</div>
               </template>
-              <div v-if="u.cached" class="cli-card-cache">
-                {{ $t('usage.cached-at', { time: u.lastSuccess }) }}
-              </div>
               <div v-if="u.pending" class="cli-card-refresh pending">
                 {{ $t('usage.reading-now') }}
               </div>
@@ -1028,7 +1069,7 @@ onMounted(() => refreshUsage())
                 {{ u.refreshLine }}
               </div>
               <div v-else-if="u.updated" class="cli-card-refresh cli-card-updated">
-                {{ $t('usage.updated', { time: u.updated }) }}
+                {{ $t('usage.data-updated', { time: u.updated, ago: u.updatedAgo }) }}
               </div>
               <div v-if="u.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
                 {{ $t('usage.parked-not-measured-hint') }}
@@ -1256,6 +1297,8 @@ onMounted(() => refreshUsage())
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Its quota rows fold by the card's own width (see .cli-card-bars). */
+  container-type: inline-size;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
@@ -1378,9 +1421,44 @@ onMounted(() => refreshUsage())
 }
 .cli-card-big.warn { color: var(--attention-fg); }
 .cli-card-big.crit { color: var(--danger-fg); }
-.cli-card-bars { display: flex; flex-direction: column; gap: 3px; }
+.cli-card-big.stale { color: var(--text-secondary); }
+/* Bars share one column so they line up whatever the text beside them says;
+   a narrow pane moves that text under its bar. */
+.cli-card-bars {
+  display: grid;
+  grid-template-columns: minmax(64px, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+.cli-win { display: contents; }
+.cli-win-name {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cli-win-val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+.cli-win-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cli-win-pct.ok { color: var(--success-fg); }
+.cli-win-pct.warn { color: var(--attention-fg); }
+.cli-win-pct.crit { color: var(--danger-fg); }
+.cli-win-reset { font-variant-numeric: tabular-nums; }
+.cli-win-reset.passed { color: var(--attention-fg); font-weight: 600; }
+.cli-card-bars.stale .cli-mini-fill { opacity: 0.45; }
+.cli-card-bars.stale .cli-win-pct { color: var(--text-secondary); }
+@container (max-width: 440px) {
+  .cli-card-bars { grid-template-columns: minmax(0, 1fr); }
+}
 .cli-mini-bar {
-  height: 3px;
+  height: 6px;
   border-radius: 999px;
   background: var(--bg-muted);
   overflow: hidden;
@@ -1389,7 +1467,20 @@ onMounted(() => refreshUsage())
 .cli-mini-fill.warn { background: var(--attention-fg); }
 .cli-mini-fill.crit { background: var(--danger-fg); }
 .cli-card-foot { font-size: var(--font-xs); color: var(--text-muted); }
-.cli-card-cache { font-size: var(--font-xs); font-weight: 600; color: var(--attention-fg); }
+.cli-card-cache {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--attention-muted, var(--border-default));
+  border-radius: 6px;
+  background: var(--attention-subtle, var(--bg-muted));
+  font-size: var(--font-xs);
+  line-height: 1.45;
+  color: var(--attention-fg);
+}
+.cli-card-cache-title { font-weight: 600; }
 .cli-card-refresh { font-size: var(--font-xs); color: var(--text-muted); }
 /* A read is in flight — the only line on the card that is about right now,
    so it must not read as quietly as the historical ones around it. */
