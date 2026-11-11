@@ -202,10 +202,13 @@ describe('text the plugin wrote is never a key', () => {
       })])
     })
 
-    it('keeps 100,000 stat and readFile calls to paths that do not exist at a handful of keys (HIGH-1)', async () => {
+    // Rows are merged per key, so every missing path that became a key would
+    // add one pending row: 1,000 distinct paths prove the same collapse as any
+    // larger number, and stay well inside the default timeout under load.
+    it('keeps 1,000 stat and readFile calls to paths that do not exist at a handful of keys (HIGH-1)', async () => {
       const sent: Array<{ rows: unknown[] }> = []
       const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
-      for (let i = 0; i < 100_000; i++) {
+      for (let i = 0; i < 1_000; i++) {
         const stat = call({ method: 'stat', args: { path: `missing/${i}` } })
         recorder.record(activityRowFor({
           pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', call: stat, at: AT,
