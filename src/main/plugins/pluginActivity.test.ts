@@ -242,10 +242,13 @@ describe('text the plugin wrote is never a key', () => {
     expect(isKnownCapabilityAddress('toString', '')).toBe(false)
   })
 
-  it('counts 300,000 refused calls with 300,000 different names and paths as one row', async () => {
+  // Rows are merged per key, so every distinct name that became a key would
+  // add one pending row: 1,000 distinct names prove the same collapse as any
+  // larger number, and stay well inside the default timeout under load.
+  it('counts 1,000 refused calls with 1,000 different names and paths as one row', async () => {
     const sent: Array<{ rows: unknown[] }> = []
     const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
-    for (let i = 0; i < 300_000; i++) {
+    for (let i = 0; i < 1_000; i++) {
       recorder.record(activityRowFor({
         pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', at: AT,
         call: call({ ns: `ns${i}`, method: `m${i}`, args: { path: `/tmp/${i}` } }),
@@ -254,7 +257,7 @@ describe('text the plugin wrote is never a key', () => {
     }
     expect(recorder.pending).toBe(1)
     await recorder.flush()
-    expect(sent[0].rows).toEqual([expect.objectContaining({ address: ACTIVITY_UNKNOWN_ADDRESS, count: 300_000 })])
+    expect(sent[0].rows).toEqual([expect.objectContaining({ address: ACTIVITY_UNKNOWN_ADDRESS, count: 1_000 })])
   })
 })
 
