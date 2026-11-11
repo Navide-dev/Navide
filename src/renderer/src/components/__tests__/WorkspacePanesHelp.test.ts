@@ -42,6 +42,13 @@ const QUOTED_LABELS: ReadonlyArray<{ key: string; params?: Record<string, string
   { key: 'action.reapply-role' },
   { key: 'action.remove' },
   { key: 'action.remove-children', params: { count: 'N' } },
+  { key: 'action.remove-with-children', params: { count: 'N' } },
+  { key: 'action.mute' },
+  { key: 'action.fit-width' },
+  { key: 'action.reclaim' },
+  { key: 'reconnect.menu-item' },
+  { key: 'label.add-menu-cli' },               // ＋ menu blocks
+  { key: 'label.add-menu-agents' },
   { key: 'action.restore' },                   // expanded docked row
   { key: 'pane.terminal.click-to-resume' },    // placeholder card
   { key: 'action.interrupt-selected' },        // batch context menu

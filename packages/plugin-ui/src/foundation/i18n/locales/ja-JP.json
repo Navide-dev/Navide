@@ -3732,17 +3732,17 @@
             "git": {
               "title": "Git（ソース管理）",
               "tag": "サイドバーの 4 番目のタブ",
-              "text": "Git が Navide プラグインとして読み込まれているとき、ツールチップは <em>Navide プラグイン：Git · navide.git · 発行者：navide · Navide に組み込み (⌘4)</em> です。読み込まれていないときは <em>Git (⌘4)</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">⌘⇧G</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。"
+              "text": "Git が Navide プラグインとして読み込まれているとき、ツールチップは <em>Navide プラグイン：Git · navide.git · 発行者：navide · Navide に組み込み ({gitTab})</em> です。読み込まれていないときは <em>Git ({gitTab})</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">{gitWindow}</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。Git 自体も同梱の Navide プラグイン（<code>navide.git</code>）で、Plans と並んで<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に表示されます。そのため更新・無効化・起動失敗の扱いも、ほかの Navide プラグインと同じです。Git 自体も同梱の Navide プラグイン（<code>navide.git</code>）で、Plans と並んで<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に表示されます。そのため更新・無効化・起動失敗の扱いも、ほかの Navide プラグインと同じです。"
             },
             "plans": {
               "title": "プラン（プラン文書）",
               "tag": "サイドバーの 5 番目のタブ",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> のタブは<strong>一覧</strong>のみです。項目をクリックすると、<code>&lt;プロジェクトフォルダー&gt; — プラン</code>というタイトルの独立したプランレビューウィンドウが開きます。"
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> のタブは<strong>一覧</strong>のみです。項目をクリックすると、<code>&lt;プロジェクトフォルダー&gt; — プラン</code>というタイトルの独立したプランレビューウィンドウが開きます。"
             },
             "ide": {
               "title": "Mini-IDE（内蔵エディター）",
               "tag": "独立ウィンドウのみ",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd>、またはエクスプローラーでファイルをクリックして開きます。タイトルは <code>&lt;ファイル名&gt; — Mini-IDE</code>で、未保存の変更がある間は先頭に <code>●</code> が付きます。"
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd>、またはエクスプローラーでファイルをクリックして開きます。タイトルは <code>&lt;ファイル名&gt; — Mini-IDE</code>で、未保存の変更がある間は先頭に <code>●</code> が付きます。"
             }
           },
           "callout": {
@@ -3821,7 +3821,7 @@
           "list": {
             "create": "上部に<em>新しいブランチ名…</em>と表示された作成欄があり、右の <code>＋</code> で作成します。",
             "localRow": "各ローカルブランチ行には、<code>⇔</code> <em>比較</em>、<code>⇡</code> <em>このブランチ上にリベース</em>、<code>⇣</code> <em>現在のブランチにマージ</em>、<code>↵</code> <em>切り替え</em>の 4 ボタンがあります。現在のブランチは <code>✓</code> のみで、ボタンはありません。",
-            "context": "ブランチ行を右クリックすると、<em>現在のブランチを {'{'}branch{'}'} にマージ</em>、<em>現在のブランチを {'{'}branch{'}'} にマージしてプッシュ</em>、<em>ブランチを削除</em>が表示されます。",
+            "context": "ブランチ行を右クリックすると、<em>{mergeInto}</em>、<em>{mergeIntoPush}</em>、<em>{deleteBranch}</em>が表示されます。",
             "remote": "<code>⇅</code> で<em>リモートブランチを表示</em> / <em>リモートブランチを非表示</em>を切り替えます。各リモートブランチ行には <code>⬇</code> <em>ローカルにチェックアウト</em>があります。"
           },
           "p2": "<code>⇔</code> を押すとパネル内に結果を展開し、<code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>の見出し、統計、ファイル一覧を表示します。",
@@ -3860,10 +3860,14 @@
               "behavior": "プル・プッシュの追加オプションです。下記を参照してください。"
             }
           },
-          "p3": "<code>▾</code> の中には、<em>↓ プル</em>、<em>↓ プル（リベース）</em>、<em>↑ プッシュ</em>、<em>↑ プッシュ（Force with lease）</em>があります。リモートが複数設定されていると、末尾に<strong>リモートにプッシュ</strong>のグループが追加され、リモートごとに 1 行表示されます。",
+          "p3": "<code>▾</code> の中には、<em>↓ {pull}</em>、<em>↓ {pullRebase}</em>、<em>↑ {push}</em>、<em>↑ {pushForce}</em>があります。リモートが複数設定されていると、末尾に<strong>リモートにプッシュ</strong>のグループが追加され、リモートごとに 1 行表示されます。",
           "callout": {
             "title": "認証に失敗したら、まずアカウントの紐付けを確認",
             "text": "プッシュに失敗したときは、リモートを設定し直す前に、アカウント表示がどのアカウントに紐付いているかを確認してください。認証情報の期限切れの場合は、設定 › アカウントで更新するよう直接案内されます。パスワード欄に必要なのはログインパスワードではなく、Personal Access Token です。"
+          },
+          "worktrees": {
+            "p1": "Git パネルの <strong>{worktrees}</strong> カード（見出しをクリックするまで折りたたまれ、2 つ以上あると件数が表示されます）には、リポジトリのすべての作業ツリーが並びます。<code>✦</code> がメイン、<code>○</code> がそれ以外で、該当する場合は <em>{bare}</em>、<em>{detached}</em>、<em>{locked}</em>、<em>{stale}</em> のバッジが付きます。各行には <code>⧉</code> <em>{openWindow}</em>、<code>◱</code> <em>{reveal}</em>、<code>🔒</code> <em>{lock}</em>、<code>⇄</code> <em>{move}</em>、<code>✕</code> <em>{remove}</em> があり、メインのワークツリーはロック・移動・削除できません。上部の <em>{prune}</em> と <em>{repair}</em> は、フォルダーが削除されたり Git の外で移動されたりしたワークツリーを整理します。",
+            "p2": "追加するには、フォルダーのパスを入力（または参照）してブランチを選ぶか、<em>{createBranch}</em> にチェックを入れて新しい名前を入力し、<code>＋</code> <em>{addWorktree}</em> を押します。複数のペインを別々のブランチで同時に動かせるのはこのおかげです。ペインごとにワークツリーを分ければ、編集が同じフォルダーでぶつかることはありません。"
           }
         },
         "s4": {
@@ -3921,14 +3925,14 @@
           "p1": "プランの保存先は 1 つのフォルダーではありません。Navide はワークスペース内の<strong>7 つのディレクトリ</strong>、<code>.agent-team/plans</code>、<code>.agent-team/reports</code>、<code>.claude/loop-reports</code>、<code>.claude/plans</code>、<code>.cursor/plans</code>、<code>docs/plans</code>、<code>docs/reports</code>を調べます。さらに、<strong>最大 2 階層下</strong>までの入れ子の Git リポジトリ内でも同じ 7 か所を調べます。対象の拡張子は <code>.html</code>、<code>.plan.md</code>、<code>.md</code> です。HTML プランのファイル名は <code>&lt;kebab-slug&gt;_&lt;6 hex digits&gt;.html</code>、Markdown プランは <code>&lt;kebab-slug&gt;.plan.md</code>です。アンダースコアやドットで始まるファイル（<code>_spec.md</code>、<code>_template.html</code>）は作成用のひな型や仕様なので、一覧には表示しません。",
           "p2": "これらのファイルは<strong>エージェントが作成・更新します</strong>。プランウィンドウで行う操作（ToDo の状態変更、レビューコメント、承認）は、すべて同じファイルに反映されます。ユーザーはエージェントに「プランを作成して」と依頼し、ウィンドウでレビューします。",
           "h2": "一覧",
-          "p3": "サイドバーの<strong>プラン</strong>タブ（<kbd class=\"cwh-kbd\">⌘5</kbd>）とプランウィンドウの左列は、同じ一覧を使います。ツールバーはプランが 1 件以上あるときにだけ表示されます。",
+          "p3": "サイドバーの<strong>プラン</strong>タブ（<kbd class=\"cwh-kbd\">{plansTab}</kbd>）とプランウィンドウの左列は、同じ一覧を使います。ツールバーはプランが 1 件以上あるときにだけ表示されます。",
           "listTools": {
             "search": "<em>プランを検索…</em>欄では、タイトル、ファイル名、概要を検索します。",
             "stage": "ステージの絞り込み：<em>すべてのステージ</em> / 下書き / レビュー中 / 承認済み / 進行中 / 完了 / 中止。",
             "sort": "<em>並べ替え</em>：<strong>タイトル</strong>、<strong>最終更新</strong>、<strong>進捗</strong>から選び、隣の <code>↑</code> / <code>↓</code> で昇順・降順を切り替えます。",
             "group": "<code>☰</code> で「ステージ別にまとめる」と 1 つの一覧表示を切り替えます。"
           },
-          "p4": "4 つの選択はすべて<strong>ワークスペースごとに記憶されます</strong>。セクションは上から、<strong>最近</strong>（最大 5 件、ピン留めを優先）、ステージ別の場合は<strong>ドキュメント</strong>と各ステージのセクション、次に<strong>アーカイブ済み</strong>、最後に完了項目への操作（<em>完了したものをすべてアーカイブ</em> / <em>すべて削除</em>）です。一覧表示ではステージ別の部分が<strong>すべてのプラン</strong>にまとまります。各行にはステージ表示、<em>{'{'}done{'}'}/{'{'}total{'}'} 完了</em>の進捗バー、<code>HTML</code> / <code>Markdown</code> の形式タグ、ユーザーにしか完了できない項目数を示す<em>あなたの対応が {'{'}count{'}'} 件</em>が付きます。<strong>各行の右端にはピン留め <code>📌</code> と削除 <code>✕</code> もあります</strong>（アーカイブ済みの行は削除のみ）。",
+          "p4": "4 つの選択はすべて<strong>ワークスペースごとに記憶されます</strong>。セクションは上から、<strong>最近</strong>（最大 5 件、ピン留めを優先）、ステージ別の場合は<strong>ドキュメント</strong>と各ステージのセクション、次に<strong>アーカイブ済み</strong>、最後に完了項目への操作（<em>完了したものをすべてアーカイブ</em> / <em>すべて削除</em>）です。一覧表示ではステージ別の部分が<strong>すべてのプラン</strong>にまとまります。各行にはステージ表示、<em>{'{'}done{'}'}/{'{'}total{'}'} 完了</em>の進捗バー、<code>HTML</code> / <code>Markdown</code> の形式タグ、ユーザーにしか完了できない項目数を示す<em>あなたの対応が {'{'}count{'}'} 件</em>が付きます。<strong>各行の右端にはピン留め <code>📌</code> と削除 <code>✕</code> もあります</strong>（アーカイブ済みの行は削除のみ）。ピンは<em>最近使った項目の先頭に固定</em>の操作です。ピンは<em>最近使った項目の先頭に固定</em>の操作です。",
           "callout1": {
             "title": "メタデータのない文書は専用のセクションに表示されます",
             "text": "ステージ別の一覧では、<strong>プランのメタデータがない通常の文書</strong>を<strong>ドキュメント</strong>セクションにまとめ、各行に <code>ドキュメント</code>タグを付けます。これはステージが<em>進行中</em>かどうかとは関係ありません。正式なプランにするには、右クリックして<strong>プランに変換</strong>を選びます。下書き状態のプラン情報を付加するだけで、<strong>本文は書き換えません</strong>。"
@@ -3984,7 +3988,7 @@
         },
         "s7": {
           "title": "エディターウィンドウ",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd>、またはエクスプローラーでファイルをクリックして開きます。タブ付きの Monaco エディターで、<kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> でタブを切り替えられます（タブ数を超える番号は最後のタブを選びます）。",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd>、またはエクスプローラーでファイルをクリックして開きます。タブ付きの Monaco エディターで、<kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> でタブを切り替えられます（タブ数を超える番号は最後のタブを選びます）。",
           "h1": "左レールの 4 セクション",
           "sectionTable": {
             "section": "セクション",
@@ -3996,7 +4000,7 @@
               "note": "ファイルツリーです。"
             },
             "search": {
-              "note": "ファイルをまたいで検索します。⌘⇧H でファイルをまたいだ置換ができます。"
+              "note": "ファイルをまたいで検索します。{replaceInFiles} でファイルをまたいだ置換ができます。"
             },
             "scm": {
               "note": "変更件数のバッジが付いた、埋め込み版の Git パネルです。"
@@ -4014,7 +4018,7 @@
           "editorActions": {
             "split": {
               "action": "エディター領域を分割",
-              "note": "（⌘K ⌘← / ⌘K ⌘→ でエディターグループを切り替え）"
+              "note": "（{prevGroup} / {nextGroup} でエディターグループを切り替え）"
             },
             "findReplace": {
               "action": "検索 / 置換"
@@ -4030,7 +4034,7 @@
             },
             "fold": {
               "action": "折りたたむ / 展開",
-              "note": "（⌘K ⌘0 / ⌘K ⌘J ですべて操作）"
+              "note": "（{foldAll} / {unfoldAll} ですべて操作）"
             },
             "multiCursor": {
               "action": "マルチカーソル：上または下に追加"
@@ -4049,7 +4053,7 @@
             },
             "aiTerminal": {
               "action": "AI ターミナルを切り替え",
-              "note": "（または ⌘⇧A）"
+              "note": "（または {aiChatAlt}）"
             },
             "sendSelection": {
               "action": "選択中のコードを AI ターミナルに送信",
@@ -4081,7 +4085,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "画像を表示し、ウィンドウに合わせる / 実際のサイズを切り替えられます。"
+              "how": "画像を表示し、{fitWindow} / {actualSize} を切り替えられます。"
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4130,7 +4134,7 @@
             "text": "表の他の形式は<strong>最初からプレビューで開きます</strong>。html と csv は意図的にソースを先に表示し、<em>プレビュー</em>を押したときに切り替えます。<code>docx</code>、<code>xlsx</code>、<code>zip</code>、<code>woff</code> はバイナリの一覧にもありますが、フォント、アーカイブ、Office の判定が先なので、16 進ダンプではなく専用の表示になります。"
           },
           "h2": "変更履歴",
-          "p3": "右スロットの<strong>プレビュー</strong>タブ（<kbd class=\"cwh-kbd\">⌘⌥V</kbd>）の下半分は<strong>最近の変更</strong>で、このワークスペースで最近変更されたものを表示します。各行は 4 列です。",
+          "p3": "右スロットの<strong>プレビュー</strong>タブ（<kbd class=\"cwh-kbd\">{previewTab}</kbd>）の下半分は<strong>最近の変更</strong>で、このワークスペースで最近変更されたものを表示します。各行は 4 列です。",
           "trackList": {
             "time": "<strong>時刻</strong> — 相対表示（<em>たった今</em> / <em>{'{'}n{'}'} 分前</em> / <em>{'{'}n{'}'} 時間前</em> / <em>{'{'}n{'}'} 日前</em>）。",
             "action": "<strong>操作</strong> — <code>+</code> 作成、<code>~</code> 変更、<code>−</code> 削除、<code>▸</code> 表示。",
@@ -4208,7 +4212,7 @@
               "action": "ソース管理 / 問題"
             },
             "fileTabs": {
-              "action": "N 番目のファイルタブに切り替え（⌘1…⌘9）"
+              "action": "N 番目のファイルタブに切り替え（{editorTab1}…{editorTab9}）"
             },
             "split": {
               "action": "エディター領域を分割"
@@ -5256,7 +5260,7 @@
             "openHome": "<strong>ホーム</strong> — ホームディレクトリをそのまま使用します。",
             "recent": "その下には最近開いた項目が表示され、よく使う項目を固定できます。項目を右クリックすると、<em>既定のエディターで開く</em>、<em>Finder に表示</em>、<em>パスをコピー</em>を選べます。"
           },
-          "p2": "後からでもメニューの<strong>ファイル ▸ ワークスペースを開く…</strong>（<kbd class=\"wph-kbd\">⌘O</kbd>）、<strong>ファイル ▸ 最近使った項目を開く</strong>を使えます。新しいウィンドウは<strong>ファイル ▸ 新しいウィンドウ</strong>（<kbd class=\"wph-kbd\">⌘N</kbd>）で開きます。",
+          "p2": "後からでもメニューの<strong>ファイル ▸ ワークスペースを開く…</strong>（<kbd class=\"wph-kbd\">{openWorkspace}</kbd>）、<strong>ファイル ▸ 最近使った項目を開く</strong>を使えます。新しいウィンドウは<strong>ファイル ▸ 新しいウィンドウ</strong>（<kbd class=\"wph-kbd\">{newWindow}</kbd>）で開きます。",
           "h2": "1 つのウィンドウで複数のワークスペースを使う",
           "p3": "別のプロジェクトを使うために、別のウィンドウを開く必要はありません。サイドバーのエージェントタブで、ワークスペース見出しの右にある <strong>＋</strong> を押すと同じ選択画面が開きます。選んだプロジェクトは<strong>同じウィンドウ</strong>に追加され、サイドバーにワークスペースの見出し行が増えます。",
           "p4": "見出し行をクリックすると表示が切り替わります。<strong>表示を切り替えても、元のワークスペースのエージェントは動き続けます</strong>。サイドバーの行は残り、ペインだけが一時的にステージから非表示になります。",
@@ -5274,7 +5278,7 @@
           "p1": "入口は <strong>＋</strong> ボタンです。サイドバーのワークスペース見出し行と各グループの見出し行にあります（新しいペインが入るグループだけが異なります）。押すと小さなメニューが開きます：",
           "addMenu": {
             "role": "上部の<strong>ロールを選択…</strong>ドロップダウンで、用意されたロールを選びます。",
-            "cliList": "中央には CLI の一覧があり、未インストールのものはその状態が表示されます。",
+            "cliList": "その下のリストは見出し付きの 2 ブロックに分かれています。<strong>{cli}</strong> はコーディング用 CLI で、未インストールのものはその旨が表示されます。<strong>{agents}</strong> には常駐エージェント（OpenClaw、Hermes Agent）が名前で並び、開いているものを選ぶとそこへ切り替わり、閉じているものを選ぶと前の会話を再開します。名前を先に入力する<em>新規 …</em>もあり、ACP エージェントもここに並びます。リストの下には、Grok Bot や dots などのクラウドエージェントは Navide プラグインとして提供される、という注記があります。",
             "terminal": "下部には<strong>ターミナル</strong>（エージェントを伴わない通常のターミナル）と<strong>手動起動…</strong>があります。"
           },
           "p2": "<em>手動起動…</em>では詳細ダイアログが開き、エージェントとロール、ステージに追加するか、ターミナルも一緒に開くかを選べます。セッション ID を貼り付けて、以前の会話を直接再開することもできます。",
@@ -5287,7 +5291,7 @@
               "action": "すぐに開く"
             },
             "nthCli": {
-              "action": "N 番目の CLI を開く"
+              "action": "次のペインの CLI を N 番目に切り替える"
             },
             "rename": {
               "action": "名前を変更",
@@ -5305,17 +5309,17 @@
           },
           "note": "自動で名前が付いたペインには、タイトルの後ろに小さな <code>◦</code> が付きます。手動で名前を変更したペインには付きません。",
           "h2": "コンテキストメニュー",
-          "p3": "ペインまたはサイドバーの行を右クリックすると、<em>フォーカス</em>、<em>名前を変更</em>、<em>メッセージを送信</em>、<em>中断</em>、<em>ロールを再適用</em>、<em>削除</em>が表示されます。<em>メッセージを送信</em>は、現在フォーカス中のペインの入力欄に相手のアドレスを挿入するため、ペイン間メッセージを素早く始められます。配下に子ペインがあるペイン（<code>▸</code>）には、<em>N 個の子ペインを削除</em>も表示されます。そのペインが起動した子だけを閉じ、親やほかのペインはそのまま残します。",
+          "p3": "ペインまたはサイドバーの行を右クリックします。多くのペインには <em>{focus}</em>、<em>{rename}</em>、<em>{mute}</em>、<em>{sendMessage}</em>、<em>{interrupt}</em>、<em>{reapplyRole}</em>、<em>{reclaim}</em>、<em>{remove}</em> があります。条件に合うときだけ出る項目もあり、最小化したペインには <em>{restore}</em>、列幅が制限されているときは <em>{fitWidth}</em>、会話が切れたペインには <em>{reconnect}</em>、Agent ペインにはウェイク・スケジュール・チャンネル・メモリフォルダー・設定の項目が加わります。<em>{sendMessage}</em> はそのペインのアドレスを、今フォーカスしているペインの入力欄に挿入します。ペイン間メッセージへの最短ルートです。<em>{reclaim}</em> は CLI を終了してメモリを解放し、クリックで再開できるカードを残します（後述）。下にサブペインがある（<code>▸</code>）ペインには、そのペインが生成したものだけを閉じる <em>{removeChildren}</em> と、生成したものごとまとめて閉じる <em>{removeAll}</em> も表示されます。",
           "h3": "最小化とプレースホルダーカード",
           "p4": "ペイン右上の <code>⊟</code> で最小化します。折りたたまれると、サイドバーの行に<strong>ドック内</strong>と表示され、行を展開すると<em>↑ 復元</em>と<em>削除</em>を選べます。",
           "p5": "さらに<strong>プレースホルダーカード</strong>という状態もあります。場所は保持され、「↩ クリックして再開」のカードと、タイトル、サブタイトル、グループ名が表示されます。アプリの再起動後や待機中ペインの解放後は、この状態になります。カードをクリックすると、同じ会話で CLI を再開します。",
           "h4": "待機中ペインの自動解放",
           "p6": "実行中の CLI はそれぞれメモリや GPU を使用します。既定では、長時間動きのないペインをプレースホルダーカードに戻します：",
           "reclaim": {
-            "default": "<strong>既定でオン</strong>です。30 分のしきい値は設定で変更できます。",
+            "default": "<strong>既定でオン</strong>で、しきい値は {defaultMinutes} 分です（設定で変更できます）。最短は {minMinutes} 分で、それより短い値は {minMinutes} 分に引き上げられます。",
             "scan": "60 秒ごとに確認し、出力もユーザーの入力もないかを判断します。",
             "notClose": "<strong>ペインを閉じる操作ではありません</strong>。場所、名前、メッセージのアドレス、セッションはすべて保持され、ワンクリックで再開できます。",
-            "exempt": "パイプラインが読み取っているペイン、入力欄に下書きがあるペイン、配信待ちメッセージがあるペイン、フォーカス中のペインは解放しません。"
+            "exempt": "次のペインは回収されません：フォーカス中、作業中または回答待ち、ループ実行中、パイプラインのステージが監視中または Manager が振り分け中、入力欄に下書きがある、配信待ちのメッセージがある。再開できるセッションがないペインも、戻せなくなるため回収されません。"
           },
           "note2": "解放すると、履歴ビューのパイプラインログに <code>♻ 待機中の CLI ペイン N 個を解放しました — クリックして再開</code> と表示されます。"
         },
@@ -5381,27 +5385,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "ワークスペース / グループ / ペインのツリー",
-              "keys": "⌘1"
+              "content": "ワークスペース / グループ / ペインのツリー"
             },
             "pipeline": {
-              "content": "複数ステージからなる自動処理",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "複数ステージからなる自動処理"
             },
             "explorer": {
-              "content": "ファイルエクスプローラー",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "ファイルエクスプローラー"
             },
             "git": {
-              "content": "バージョン管理（「コードのワークフロー」を参照）",
-              "keys": "⌘4"
+              "content": "バージョン管理（「コードのワークフロー」を参照）"
             },
             "plans": {
-              "content": "プランのドキュメント一覧（「コードのワークフロー」を参照）",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "プランのドキュメント一覧（「コードのワークフロー」を参照）"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> でサイドバー全体を折りたたみます。インストールした Navide プラグインがタブを追加する場合もあります。",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> でサイドバー全体を折りたたみます。インストールした Navide プラグインがタブを追加する場合もあります。",
           "h2": "エージェントタブの 3 階層",
           "p1": "上から順に、<strong>ワークスペース行 → グループ行 → ペイン行</strong>です。",
           "rows": {
@@ -5426,7 +5425,7 @@
           "foldNote": "\u3069\u3061\u3089\u306e\u6298\u308a\u305f\u305f\u307f\u30dc\u30bf\u30f3\u3082\u3001<strong>\u305d\u306e\u884c\u306e\u5c55\u958b\u30ad\u30e3\u30ec\u30c3\u30c8\u3092 Alt\uff0fOption\uff0b\u30af\u30ea\u30c3\u30af</strong>\u3059\u308c\u3070\u540c\u3058\u52d5\u4f5c\u306b\u306a\u308a\u307e\u3059\uff08\u30c4\u30fc\u30eb\u30c1\u30c3\u30d7\u306b\u3082 Alt+\u30af\u30ea\u30c3\u30af\uff1a\u914d\u4e0b\u3092\u3059\u3079\u3066\u6298\u308a\u305f\u305f\u3080 \u3068\u8868\u793a\u3055\u308c\u307e\u3059\uff09\u3002\u6298\u308a\u305f\u305f\u307f\u72b6\u614b\u306f<strong>\u30da\u30a4\u30f3\u5358\u4f4d\u3067\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u306b\u4fdd\u5b58</strong>\u3055\u308c\u308b\u305f\u3081\u3001\u518d\u8d77\u52d5\u5f8c\u3082\u4fdd\u6301\u3055\u308c\u307e\u3059\u3002",
           "h4": "複数選択とまとめてドラッグ",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> を押しながらクリック：1 行を選択に追加します。",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> を押しながらクリック：1 行を選択に追加します。",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> を押しながらクリック：範囲全体を選択します（内部の順序ではなく、画面上の順序に従います）。",
             "batchMenu": "複数行を選択して右クリックすると、一括操作のメニューになります。<em>選択項目を中断</em>、<em>選択項目を再構築</em>、<em>選択項目を最小化</em>、<em>選択項目を復元</em>、<em>選択項目を解放</em>（対象数を表示）、<em>選択項目の通知をミュート</em>（すべてミュート済みなら解除）、<em>選択項目を削除</em>が使えます。解放したペインは再開可能な状態で保持され、保護対象のペインはスキップします。"
           },
@@ -5516,7 +5515,7 @@
               "action": "新しいペインを開く"
             },
             "nthCli": {
-              "action": "N 番目の CLI でペインを開く"
+              "action": "次のペインの CLI を N 番目に切り替える"
             },
             "closePane": {
               "action": "フォーカス中のペインを閉じる"

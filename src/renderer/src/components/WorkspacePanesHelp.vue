@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isMacPlatform } from '@navide/plugin-ui/shared'
+
+import { helpKey, helpKeySpec } from '../lib/helpKeys'
+import { IDLE_RECLAIM_DEFAULT_MINUTES, IDLE_RECLAIM_MIN_MINUTES } from '../lib/idleReclaim'
 
 import MockFigure from './helpMocks/MockFigure.vue'
 import MockPaneCard from './helpMocks/MockPaneCard.vue'
@@ -15,22 +19,23 @@ import MockWindow from './helpMocks/MockWindow.vue'
 // Static mirror of the Navide user manual, book 1: workspaces and panes; every
 // claim below was verified against the codebase when the manual was written.
 // All prose lives in the locale files under `settings.help.workspace.*`; only
-// the row keys and the untranslatable key symbols stay here. If the layout
-// slots, reclaim thresholds or shortcuts change, update this file too.
+// the row keys stay here; shortcuts, reclaim limits and quoted labels are read
+// from the live bindings, constants and UI keys. If the layout slots change,
+// update this file too.
 
 // Row keys for the prose tables; the text for each row is looked up under
 // `settings.help.workspace.<section>.<table>.<key>` so both locales stay in
 // parity and the row order is fixed here.
 
-// `how` holds the key symbols, which are the same in every locale; the one row
-// whose "how" is prose reads it from the locale files instead.
+// `how` holds the keys as this platform and the user's own bindings have them;
+// the one row whose "how" is prose reads it from the locale files instead.
 const paneActions: { key: string; how: string }[] = [
-  { key: 'open', how: '⌘⇧U' },
-  { key: 'nthCli', how: 'Ctrl+1 … Ctrl+9' },
+  { key: 'open', how: helpKey('workbench.action.spawnAgent') },
+  { key: 'nthCli', how: `${helpKey('controlPane.selectCliType1')} … ${helpKey('controlPane.selectCliType9')}` },
   { key: 'rename', how: '' },
-  { key: 'close', how: '⌘W' },
-  { key: 'rebuild', how: '⌘R' },
-  { key: 'cycle', how: 'Ctrl+Tab / Ctrl+⇧+Tab' },
+  { key: 'close', how: helpKey('workbench.action.closeActivePane') },
+  { key: 'rebuild', how: helpKey('workbench.action.rebuildFocusedPane') },
+  { key: 'cycle', how: `${helpKey('workbench.action.focusNextPane')} / ${helpKey('workbench.action.focusPreviousPane')}` },
 ]
 
 // Mode, preset and tab names are the UI's own labels, so they are read from
@@ -49,12 +54,14 @@ const layoutPresets: { key: string; labelKey: string }[] = [
   { key: 'bottomPanel', labelKey: 'layout.preset.bottom-panel' },
 ]
 
-const sidebarTabs: { key: string; icon: string; labelKey: string }[] = [
-  { key: 'agents', icon: '🤖', labelKey: 'label.agents' },
-  { key: 'pipeline', icon: '🔀', labelKey: 'label.pipeline' },
-  { key: 'explorer', icon: '📁', labelKey: 'label.explorer' },
-  { key: 'git', icon: '🌿', labelKey: 'label.git' },
-  { key: 'plans', icon: '📋', labelKey: 'label.plans' },
+const tabKey = (n: number): string => helpKey(`controlPane.selectSidebarTab${n}`)
+
+const sidebarTabs: { key: string; icon: string; labelKey: string; keys: string }[] = [
+  { key: 'agents', icon: '🤖', labelKey: 'label.agents', keys: tabKey(1) },
+  { key: 'pipeline', icon: '🔀', labelKey: 'label.pipeline', keys: `${tabKey(2)}, ${helpKey('workbench.action.focusPipeline')}` },
+  { key: 'explorer', icon: '📁', labelKey: 'label.explorer', keys: `${tabKey(3)}, ${helpKey('workbench.action.focusExplorer')}` },
+  { key: 'git', icon: '🌿', labelKey: 'label.git', keys: tabKey(4) },
+  { key: 'plans', icon: '📋', labelKey: 'label.plans', keys: `${tabKey(5)}, ${helpKey('workbench.action.openPlans')}` },
 ]
 
 const dropTargets = ['pane', 'tab', 'window'] as const
@@ -164,23 +171,50 @@ const mockStatusLeft = computed(() => [
 ])
 const mockStatusRight = computed(() => [sample('version'), sample('clock'), '\u2715'])
 
+// Open Workspace and New Window are menu accelerators (CmdOrCtrl), not rules.
 const shortcuts: { key: string; keys: string }[] = [
-  { key: 'openWorkspace', keys: '⌘O' },
-  { key: 'newWindow', keys: '⌘N' },
-  { key: 'newPane', keys: '⌘⇧U' },
-  { key: 'nthCli', keys: 'Ctrl+1…9' },
-  { key: 'closePane', keys: '⌘W' },
-  { key: 'rebuildPane', keys: '⌘R' },
-  { key: 'nextPane', keys: 'Ctrl+Tab' },
-  { key: 'toggleSidebar', keys: '⌘B' },
-  { key: 'sidebarTabs', keys: '⌘1…⌘5' },
-  { key: 'explorer', keys: '⌘⇧E' },
-  { key: 'pipeline', keys: '⌘⇧Y' },
-  { key: 'plans', keys: '⌘⇧D' },
-  { key: 'gitWindow', keys: '⌘⇧G' },
-  { key: 'editorWindow', keys: '⌘⇧I' },
-  { key: 'preview', keys: '⌘⌥V' },
+  { key: 'openWorkspace', keys: helpKeySpec('mod+o') },
+  { key: 'newWindow', keys: helpKeySpec('mod+n') },
+  { key: 'newPane', keys: helpKey('workbench.action.spawnAgent') },
+  { key: 'nthCli', keys: `${helpKey('controlPane.selectCliType1')}…${helpKey('controlPane.selectCliType9')}` },
+  { key: 'closePane', keys: helpKey('workbench.action.closeActivePane') },
+  { key: 'rebuildPane', keys: helpKey('workbench.action.rebuildFocusedPane') },
+  { key: 'nextPane', keys: helpKey('workbench.action.focusNextPane') },
+  { key: 'toggleSidebar', keys: helpKey('workbench.action.toggleSidebar') },
+  { key: 'sidebarTabs', keys: `${tabKey(1)}…${tabKey(5)}` },
+  { key: 'explorer', keys: helpKey('workbench.action.focusExplorer') },
+  { key: 'pipeline', keys: helpKey('workbench.action.focusPipeline') },
+  { key: 'plans', keys: helpKey('workbench.action.openPlans') },
+  { key: 'gitWindow', keys: helpKey('workbench.action.openGitWindow') },
+  { key: 'editorWindow', keys: helpKey('workbench.action.openMiniIDE') },
+  { key: 'preview', keys: helpKey('workbench.action.focusPreview') },
 ]
+
+// Values the prose interpolates: keys as this platform binds them, interface
+// labels read from the keys the product renders, and the reclaim limits.
+const prose = computed(() => ({
+  openWorkspace: helpKeySpec('mod+o'),
+  newWindow: helpKeySpec('mod+n'),
+  toggleSidebar: helpKey('workbench.action.toggleSidebar'),
+  mod: isMacPlatform() ? '⌘' : 'Ctrl',
+  cli: t('label.add-menu-cli'),
+  agents: t('label.add-menu-agents'),
+  focus: t('action.focus'),
+  rename: t('action.rename'),
+  mute: t('action.mute'),
+  sendMessage: t('action.send-message'),
+  interrupt: t('action.interrupt'),
+  reapplyRole: t('action.reapply-role'),
+  reclaim: t('action.reclaim'),
+  remove: t('action.remove'),
+  restore: t('action.restore'),
+  fitWidth: t('action.fit-width'),
+  reconnect: t('reconnect.menu-item'),
+  removeChildren: t('action.remove-children', { count: 'N' }),
+  removeAll: t('action.remove-with-children', { count: 'N' }),
+  defaultMinutes: IDLE_RECLAIM_DEFAULT_MINUTES,
+  minMinutes: IDLE_RECLAIM_MIN_MINUTES,
+}))
 </script>
 
 <template>
@@ -280,7 +314,7 @@ const shortcuts: { key: string; keys: string }[] = [
         <li v-html="$t('settings.help.workspace.s2.welcome.openHome')"></li>
         <li v-html="$t('settings.help.workspace.s2.welcome.recent')"></li>
       </ul>
-      <p class="wph-p" v-html="$t('settings.help.workspace.s2.p2')"></p>
+      <p class="wph-p" v-html="$t('settings.help.workspace.s2.p2', prose)"></p>
 
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s2.h2') }}</h3>
       <p class="wph-p" v-html="$t('settings.help.workspace.s2.p3')"></p>
@@ -305,7 +339,7 @@ const shortcuts: { key: string; keys: string }[] = [
       <p class="wph-p" v-html="$t('settings.help.workspace.s3.p1')"></p>
       <ul class="wph-list">
         <li v-html="$t('settings.help.workspace.s3.addMenu.role')"></li>
-        <li v-html="$t('settings.help.workspace.s3.addMenu.cliList')"></li>
+        <li v-html="$t('settings.help.workspace.s3.addMenu.cliList', prose)"></li>
         <li v-html="$t('settings.help.workspace.s3.addMenu.terminal')"></li>
       </ul>
       <p class="wph-p" v-html="$t('settings.help.workspace.s3.p2')"></p>
@@ -331,7 +365,7 @@ const shortcuts: { key: string; keys: string }[] = [
       <p class="wph-note" v-html="$t('settings.help.workspace.s3.note')"></p>
 
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s3.h2') }}</h3>
-      <p class="wph-p" v-html="$t('settings.help.workspace.s3.p3')"></p>
+      <p class="wph-p" v-html="$t('settings.help.workspace.s3.p3', prose)"></p>
 
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s3.h3') }}</h3>
       <p class="wph-p" v-html="$t('settings.help.workspace.s3.p4')"></p>
@@ -340,7 +374,7 @@ const shortcuts: { key: string; keys: string }[] = [
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s3.h4') }}</h3>
       <p class="wph-p">{{ $t('settings.help.workspace.s3.p6') }}</p>
       <ul class="wph-list">
-        <li v-html="$t('settings.help.workspace.s3.reclaim.default')"></li>
+        <li v-html="$t('settings.help.workspace.s3.reclaim.default', prose)"></li>
         <li>{{ $t('settings.help.workspace.s3.reclaim.scan') }}</li>
         <li v-html="$t('settings.help.workspace.s3.reclaim.notClose')"></li>
         <li>{{ $t('settings.help.workspace.s3.reclaim.exempt') }}</li>
@@ -475,13 +509,13 @@ const shortcuts: { key: string; keys: string }[] = [
               <td class="wph-nowrap">{{ row.icon }} {{ $t(row.labelKey) }}</td>
               <td>{{ $t(`settings.help.workspace.s5.sidebarTabs.${row.key}.content`) }}</td>
               <td class="wph-nowrap">
-                <kbd class="wph-kbd">{{ $t(`settings.help.workspace.s5.sidebarTabs.${row.key}.keys`) }}</kbd>
+                <kbd class="wph-kbd">{{ row.keys }}</kbd>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="wph-note" v-html="$t('settings.help.workspace.s5.note')"></p>
+      <p class="wph-note" v-html="$t('settings.help.workspace.s5.note', prose)"></p>
 
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s5.h2') }}</h3>
       <p class="wph-p" v-html="$t('settings.help.workspace.s5.p1')"></p>
@@ -511,7 +545,7 @@ const shortcuts: { key: string; keys: string }[] = [
 
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s5.h4') }}</h3>
       <ul class="wph-list">
-        <li v-html="$t('settings.help.workspace.s5.multiselect.cmdClick')"></li>
+        <li v-html="$t('settings.help.workspace.s5.multiselect.cmdClick', prose)"></li>
         <li v-html="$t('settings.help.workspace.s5.multiselect.shiftClick')"></li>
         <li v-html="$t('settings.help.workspace.s5.multiselect.batchMenu')"></li>
       </ul>

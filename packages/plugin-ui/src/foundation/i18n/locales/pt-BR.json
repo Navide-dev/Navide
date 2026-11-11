@@ -3732,17 +3732,17 @@
             "git": {
               "title": "Git (controle do código-fonte)",
               "tag": "4ª guia da barra lateral",
-              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide (⌘4)</em>; caso contrário, diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
+              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide ({gitTab})</em>; caso contrário, diz <em>Git ({gitTab})</em>. Na janela principal, <kbd class=\"cwh-kbd\">{gitWindow}</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo. O próprio Git também é um plug-in do Navide incluído (<code>navide.git</code>), listado em <em>Integrados</em> em <strong>Configurações ▸ Plug-ins do Navide</strong> ao lado de Plans; por isso ele é atualizado, desativado ou pode falhar ao iniciar como qualquer plug-in do Navide. O próprio Git também é um plug-in do Navide incluído (<code>navide.git</code>), listado em <em>Integrados</em> em <strong>Configurações ▸ Plug-ins do Navide</strong> ao lado de Plans; por isso ele é atualizado, desativado ou pode falhar ao iniciar como qualquer plug-in do Navide."
             },
             "plans": {
               "title": "Plans (documentos de plano)",
               "tag": "5ª guia da barra lateral",
-              "text": "A guia <kbd class=\"cwh-kbd\">⌘5</kbd> é só uma <strong>lista</strong>. Clicar em qualquer entrada abre uma janela separada de revisão de planos com o título <code>&lt;pasta do projeto&gt; — Plans</code>."
+              "text": "A guia <kbd class=\"cwh-kbd\">{plansTab}</kbd> é só uma <strong>lista</strong>. Clicar em qualquer entrada abre uma janela separada de revisão de planos com o título <code>&lt;pasta do projeto&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (o editor integrado)",
               "tag": "apenas como janela separada",
-              "text": "Abra com <kbd class=\"cwh-kbd\">⌘⇧I</kbd> ou clique em um arquivo no explorador. O título é <code>&lt;nome do arquivo&gt; — Mini-IDE</code>, precedido de <code>●</code> enquanto houver alterações não salvas."
+              "text": "Abra com <kbd class=\"cwh-kbd\">{miniIde}</kbd> ou clique em um arquivo no explorador. O título é <code>&lt;nome do arquivo&gt; — Mini-IDE</code>, precedido de <code>●</code> enquanto houver alterações não salvas."
             }
           },
           "callout": {
@@ -3821,7 +3821,7 @@
           "list": {
             "create": "No topo fica o campo para criar branch, com o texto de exemplo <em>Nome do novo branch…</em> e <code>＋</code> à direita para enviar.",
             "localRow": "Cada linha de branch local tem quatro botões: <code>⇔</code> <em>Comparar</em>, <code>⇡</code> <em>Fazer rebase sobre este</em>, <code>⇣</code> <em>Mesclar no branch atual</em>, <code>↵</code> <em>Trocar</em>. O branch atual mostra só um <code>✓</code> e nenhum botão.",
-            "context": "Clique com o botão direito na linha de um branch para ver <em>Mesclar o branch atual em {'{'}branch{'}'}</em>, <em>Mesclar o branch atual em {'{'}branch{'}'} e fazer push</em> e <em>Excluir branch</em>.",
+            "context": "Clique com o botão direito na linha de um branch para ver <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> e <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> alterna entre <em>Mostrar branches remotos</em> e <em>Ocultar branches remotos</em>; cada linha de branch remoto tem um <code>⬇</code> <em>Fazer checkout local</em>."
           },
           "p2": "Clicar em <code>⇔</code> expande o resultado dentro do painel, com o cabeçalho <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, uma linha de estatísticas e a lista de arquivos.",
@@ -3860,10 +3860,14 @@
               "behavior": "Mais opções de pull/push, veja abaixo."
             }
           },
-          "p3": "Dentro do <code>▾</code>: <em>↓ Fazer pull</em>, <em>↓ Fazer pull (rebase)</em>, <em>↑ Fazer push</em>, <em>↑ Fazer push (forçado com lease)</em>; se houver mais de um remoto configurado, um grupo <strong>Fazer push para o remoto</strong> é adicionado no fim, com uma linha por remoto.",
+          "p3": "Dentro do <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; se houver mais de um remoto configurado, um grupo <strong>Fazer push para o remoto</strong> é adicionado no fim, com uma linha por remoto.",
           "callout": {
             "title": "Em uma falha de autenticação, confira primeiro a conta vinculada",
             "text": "Quando um push falhar, veja a qual conta a pílula da conta está vinculada antes de começar a reconfigurar o remoto. Quando as credenciais expiram, o painel leva você direto a Configurações › Contas para renová-las. O campo de senha espera um token de acesso pessoal, não a sua senha de login."
+          },
+          "worktrees": {
+            "p1": "O cartão <strong>{worktrees}</strong> do painel Git (recolhido até você clicar no cabeçalho; mostra uma contagem quando há mais de um) lista todas as árvores de trabalho do repositório: <code>✦</code> é a principal e <code>○</code> as demais, com os selos <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> ou <em>{stale}</em> quando se aplicam. Cada linha tem <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> e <code>✕</code> <em>{remove}</em>; o worktree principal não pode ser bloqueado, movido nem removido. <em>{prune}</em> e <em>{repair}</em>, no topo, limpam worktrees cuja pasta foi apagada ou movida fora do Git.",
+            "p2": "Para adicionar um, digite o caminho de uma pasta (ou procure), escolha um branch — ou marque <em>{createBranch}</em> e digite um nome novo — e pressione <code>＋</code> <em>{addWorktree}</em>. É isso que torna prático ter vários panes em branches separados: dê a cada pane o próprio worktree e as edições nunca caem na mesma pasta."
           }
         },
         "s4": {
@@ -3921,14 +3925,14 @@
           "p1": "Os planos não ficam todos em uma pasta. O Navide verifica <strong>sete pastas</strong> no workspace: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> e <code>docs/reports</code>, além das mesmas sete dentro de qualquer repositório Git aninhado <strong>até dois níveis de profundidade</strong>. Contam três sufixos: <code>.html</code>, <code>.plan.md</code> e <code>.md</code>. Um plano HTML se chama <code>&lt;kebab-slug&gt;_&lt;6 dígitos hex&gt;.html</code>, e um plano Markdown, <code>&lt;kebab-slug&gt;.plan.md</code>. Arquivos que começam com sublinhado ou ponto (<code>_spec.md</code>, <code>_template.html</code>) são estrutura de apoio e nunca aparecem na lista.",
           "p2": "Esses arquivos são <strong>escritos e atualizados pelos agents</strong>: cada ação que você faz na janela de Plans (mudar o status de uma tarefa, deixar uma nota de revisão, aprovar) volta para o mesmo arquivo. A sua parte é pedir a um agent que “crie um plano para mim” e depois revisá-lo na janela.",
           "h2": "A lista",
-          "p3": "A guia <strong>Plans</strong> da barra lateral (<kbd class=\"cwh-kbd\">⌘5</kbd>) e a coluna esquerda da janela de Plans usam a mesma lista. A barra de ferramentas só aparece quando existe pelo menos um plano:",
+          "p3": "A guia <strong>Plans</strong> da barra lateral (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) e a coluna esquerda da janela de Plans usam a mesma lista. A barra de ferramentas só aparece quando existe pelo menos um plano:",
           "listTools": {
             "search": "O campo <em>Pesquisar planos…</em>, que procura no título, no nome do arquivo e na visão geral.",
             "stage": "Filtro de fase: <em>Todas as fases</em> / Rascunho / Em revisão / Aprovado / Em andamento / Concluído / Abandonado.",
             "sort": "<em>Ordenar por</em>: <strong>Título</strong>, <strong>Última atualização</strong> ou <strong>Progresso</strong>, com <code>↑</code> / <code>↓</code> ao lado para ordem crescente ou decrescente.",
             "group": "<code>☰</code> alterna entre “agrupar por etapa” e uma única lista simples."
           },
-          "p4": "As quatro escolhas são <strong>lembradas por workspace</strong>. As seções, de cima para baixo: <strong>Recentes</strong> (no máximo 5, os fixados primeiro); depois, agrupado por etapa, uma seção <strong>Documentos</strong> e uma seção por etapa, que uma lista simples junta em uma só <strong>Todos os planos</strong>; depois <strong>Arquivados</strong>; e, no fim, uma linha de ações para os concluídos (<em>Arquivar todos os concluídos</em> / <em>Excluir todos</em>). Cada linha tem sua pílula de etapa, uma barra de progresso <em>{'{'}done{'}'}/{'{'}total{'}'} concluídas</em>, uma etiqueta de formato <code>HTML</code> / <code>Markdown</code> e <em>{'{'}count{'}'} para você</em>: os itens que só você pode resolver. <strong>Cada linha também tem um alfinete <code>📌</code> e um botão de excluir <code>✕</code> à direita</strong> (as linhas arquivadas têm só o de excluir).",
+          "p4": "As quatro escolhas são <strong>lembradas por workspace</strong>. As seções, de cima para baixo: <strong>Recentes</strong> (no máximo 5, os fixados primeiro); depois, agrupado por etapa, uma seção <strong>Documentos</strong> e uma seção por etapa, que uma lista simples junta em uma só <strong>Todos os planos</strong>; depois <strong>Arquivados</strong>; e, no fim, uma linha de ações para os concluídos (<em>Arquivar todos os concluídos</em> / <em>Excluir todos</em>). Cada linha tem sua pílula de etapa, uma barra de progresso <em>{'{'}done{'}'}/{'{'}total{'}'} concluídas</em>, uma etiqueta de formato <code>HTML</code> / <code>Markdown</code> e <em>{'{'}count{'}'} para você</em>: os itens que só você pode resolver. <strong>Cada linha também tem um alfinete <code>📌</code> e um botão de excluir <code>✕</code> à direita</strong> (as linhas arquivadas têm só o de excluir). O alfinete serve para <em>Fixar no topo dos recentes</em>. O alfinete serve para <em>Fixar no topo dos recentes</em>.",
           "callout1": {
             "title": "Documentos sem metadados ganham uma seção própria",
             "text": "Quando a lista está agrupada por fase, <strong>documentos simples sem metadados de plano</strong> ficam em uma seção <strong>Documentos</strong>, e cada linha recebe a etiqueta <code>Documento</code>, o que não tem nada a ver com uma fase estar <em>in-progress</em>. Para transformar um arquivo assim em um plano de verdade, clique nele com o botão direito e escolha <strong>Transformar em plano</strong>: isso adiciona um envelope de plano em rascunho e <strong>não reescreve o conteúdo</strong>."
@@ -3984,7 +3988,7 @@
         },
         "s7": {
           "title": "A janela do editor",
-          "p1": "Abra com <kbd class=\"cwh-kbd\">⌘⇧I</kbd> ou clique em um arquivo no explorador. Um editor Monaco com guias, com <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> para trocar de guia (números fora do intervalo vão para a última guia).",
+          "p1": "Abra com <kbd class=\"cwh-kbd\">{miniIde}</kbd> ou clique em um arquivo no explorador. Um editor Monaco com guias, com <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> para trocar de guia (números fora do intervalo vão para a última guia).",
           "h1": "As quatro seções da faixa esquerda",
           "sectionTable": {
             "section": "Seção",
@@ -3996,7 +4000,7 @@
               "note": "A árvore de arquivos."
             },
             "search": {
-              "note": "Pesquisa em todos os arquivos; ⌘⇧H substitui em todos os arquivos."
+              "note": "Pesquisa em todos os arquivos; {replaceInFiles} substitui em todos os arquivos."
             },
             "scm": {
               "note": "A versão incorporada do painel do Git, com um selo do número de alterações."
@@ -4014,7 +4018,7 @@
           "editorActions": {
             "split": {
               "action": "Dividir a área do editor",
-              "note": "(troque de grupo de editores com ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(troque de grupo de editores com {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Localizar / Substituir"
@@ -4030,7 +4034,7 @@
             },
             "fold": {
               "action": "Recolher / expandir",
-              "note": "(tudo, com ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(tudo, com {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Vários cursores: adicionar um acima ou abaixo"
@@ -4049,7 +4053,7 @@
             },
             "aiTerminal": {
               "action": "Mostrar ou ocultar o terminal de AI",
-              "note": "(ou ⌘⇧A)"
+              "note": "(ou {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Enviar o código selecionado para o terminal de AI",
@@ -4081,7 +4085,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "A imagem, com Ajustar à janela / Tamanho real."
+              "how": "A imagem, com {fitWindow} / {actualSize}."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4130,7 +4134,7 @@
             "text": "Todos os outros tipos da tabela <strong>abrem direto na visualização</strong>; html e csv mostram primeiro o código-fonte de propósito e só mudam quando você clica em <em>Visualizar</em>. Observe também que <code>docx</code>, <code>xlsx</code>, <code>zip</code> e <code>woff</code> também estão na lista de binários, mas as verificações de fontes, arquivos compactados e Office rodam antes da de binários, então eles recebem sua exibição específica em vez de cair em um dump hexadecimal."
           },
           "h2": "O registro de alterações",
-          "p3": "A metade inferior da guia <strong>Visualização</strong> do espaço direito (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) é <strong>Alterações recentes</strong>: o que foi mexido neste workspace ultimamente. Quatro colunas por linha:",
+          "p3": "A metade inferior da guia <strong>Visualização</strong> do espaço direito (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) é <strong>Alterações recentes</strong>: o que foi mexido neste workspace ultimamente. Quatro colunas por linha:",
           "trackList": {
             "time": "<strong>Horário</strong>: relativo (<em>agora</em> / <em>{'{'}n{'}'} min</em> / <em>{'{'}n{'}'} h</em> / <em>{'{'}n{'}'} d</em>).",
             "action": "<strong>Ação</strong>: <code>+</code> criado, <code>~</code> modificado, <code>−</code> excluído, <code>▸</code> exibido.",
@@ -4208,7 +4212,7 @@
               "action": "Controle do código-fonte / Problemas"
             },
             "fileTabs": {
-              "action": "Ir para a N-ésima guia de arquivo (⌘1…⌘9)"
+              "action": "Ir para a N-ésima guia de arquivo ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Dividir a área do editor"
@@ -5256,7 +5260,7 @@
             "openHome": "<strong>Início</strong>: use simplesmente a pasta pessoal.",
             "recent": "Abaixo fica a lista de abertos recentemente, onde os itens mais usados podem ser fixados. Clicar com o botão direito em um item oferece <em>Abrir no editor padrão</em>, <em>Mostrar no Finder</em> e <em>Copiar caminho</em>."
           },
-          "p2": "Depois, sempre é possível usar o menu: <strong>Arquivo ▸ Abrir workspace…</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>Arquivo ▸ Abrir recente</strong> ou <strong>Arquivo ▸ Nova janela</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) para uma nova janela.",
+          "p2": "Depois, sempre é possível usar o menu: <strong>Arquivo ▸ Abrir workspace…</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>Arquivo ▸ Abrir recente</strong> ou <strong>Arquivo ▸ Nova janela</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) para uma nova janela.",
           "h2": "Vários workspaces em uma janela",
           "p3": "Não é preciso uma segunda janela para um segundo projeto. Na guia Agents da barra lateral, o cabeçalho da seção de workspaces tem à direita um <strong>＋</strong> que abre o mesmo seletor; o projeto escolhido entra na <strong>mesma janela</strong> e adiciona mais uma linha de cabeçalho de workspace à barra lateral.",
           "p4": "Clique nessa linha de cabeçalho para trocar a visualização. O ponto principal: <strong>um workspace do qual você sai continua com os agents em execução</strong>, a linha dele permanece na barra lateral e só os panes dele ficam ocultos do palco por enquanto.",
@@ -5274,7 +5278,7 @@
           "p1": "O ponto de entrada é o botão <strong>＋</strong>: há um na linha de cabeçalho do workspace na barra lateral e um em cada linha de cabeçalho de grupo (a única diferença é em qual grupo o novo pane cai). Clicar nele abre um pequeno menu:",
           "addMenu": {
             "role": "No topo fica o menu suspenso <strong>Selecionar papel…</strong>: escolha um papel predefinido.",
-            "cliList": "No meio fica a lista de CLIs, com as que não estão instaladas marcadas como tal.",
+            "cliList": "Abaixo, a lista se divide em dois blocos com título. <strong>{cli}</strong> reúne as CLIs de programação, marcando as que não estão instaladas. <strong>{agents}</strong> mostra seus agentes permanentes (OpenClaw, Hermes Agent) pelo nome: escolher um que está aberto leva até ele, escolher um fechado retoma a conversa dele. Há também uma entrada <em>Novo …</em> que pede um nome primeiro, e os agentes ACP aparecem nesse bloco. Uma nota sob a lista avisa que agentes na nuvem, como Grok Bot e dots, vêm como plug-ins do Navide.",
             "terminal": "Embaixo ficam <strong>Terminal</strong> (um terminal comum sem agent) e <strong>Iniciar manualmente…</strong>."
           },
           "p2": "<em>Iniciar manualmente…</em> abre a caixa de diálogo completa, onde você pode escolher o agent e o papel, decidir se ele entra no palco e se um terminal abre ao lado, e colar um id de session para retomar diretamente uma conversa anterior.",
@@ -5287,7 +5291,7 @@
               "action": "Abrir um imediatamente"
             },
             "nthCli": {
-              "action": "Abrir a enésima CLI"
+              "action": "Escolher a N-ésima CLI para o próximo pane"
             },
             "rename": {
               "action": "Renomear",
@@ -5305,17 +5309,17 @@
           },
           "note": "Um pane com nome automático tem uma pequena marca <code>◦</code> depois do título; um que você renomeou manualmente não.",
           "h2": "O menu de contexto",
-          "p3": "Clique com o botão direito em um pane ou na linha dele na barra lateral: <em>Focar</em>, <em>Renomear</em>, <em>Enviar mensagem</em>, <em>Interromper</em>, <em>Reaplicar papel</em>, <em>Remover</em>. Desses, <em>Enviar mensagem</em> insere o endereço desse pane na caixa de entrada do pane que está em foco — o caminho mais rápido para mensagens entre panes. Um pane com subpanes (<code>▸</code>) também ganha o item <em>Remover N subpanes</em>: ele fecha só o que esse pane abriu, sem mexer no próprio pane nem nos outros.",
+          "p3": "Clique com o botão direito em um pane ou na linha dele na barra lateral. A maioria dos panes oferece <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> e <em>{remove}</em>; alguns itens só aparecem quando se aplicam: <em>{restore}</em> em um pane minimizado, <em>{fitWidth}</em> quando as colunas do pane estão limitadas, <em>{reconnect}</em> em um pane que perdeu a conversa, e os itens de agente (despertar, agendamentos, canais, pasta de memória, configurações) em um pane Agent. <em>{sendMessage}</em> insere o endereço desse pane na caixa de entrada do pane em foco — o caminho mais rápido para mensagens entre panes. <em>{reclaim}</em> encerra a CLI para liberar memória e deixa um cartão para retomar com um clique (veja abaixo). Um pane com subpanes (<code>▸</code>) também tem <em>{removeChildren}</em>, que fecha só o que ele abriu, e <em>{removeAll}</em>, que fecha o pane junto com tudo o que ele abriu.",
           "h3": "Minimizar e o cartão de espaço reservado",
           "p4": "O <code>⊟</code> no canto superior direito de um pane o minimiza. Depois de recolhido, a linha dele na barra lateral é marcada como <strong>Encaixado</strong>, e expandir essa linha oferece <em>↑ Restaurar</em> e <em>Remover</em>.",
           "p5": "Há também um terceiro estado, o <strong>cartão de espaço reservado</strong>: o espaço continua lá, mas mostra um cartão “↩ Clique para retomar”, com o título, o subtítulo e o rótulo do grupo. Depois de reiniciar o app, ou após uma liberação por ociosidade, um pane fica assim. Clique em qualquer lugar do cartão e a CLI continua a mesma conversa.",
           "h4": "Liberação automática por ociosidade",
           "p6": "Cada CLI em execução ocupa memória e GPU. Por padrão, o Navide volta para cartão de espaço reservado os panes que ficaram em silêncio por tempo demais:",
           "reclaim": {
-            "default": "<strong>Ativada por padrão</strong>, com um limite de 30 minutos que pode ser alterado nas Configurações.",
+            "default": "<strong>Ativado por padrão</strong>, com um limite de {defaultMinutes} minutos que você pode mudar nas configurações. O limite mais curto é de {minMinutes} minutos — um valor menor é elevado a esse.",
             "scan": "A verificação ocorre a cada 60 segundos, e o critério é “nenhuma saída e nada digitado por você”.",
             "notClose": "<strong>Isso não é um fechamento</strong>: o espaço, o nome, o endereço de mensagens e a session são mantidos — um clique traz o pane de volta.",
-            "exempt": "Nunca são liberados os panes que um pipeline está lendo, os que têm um rascunho na caixa de entrada, os que têm mensagens na fila de entrega e o pane em foco."
+            "exempt": "Um pane nunca é recolhido enquanto está em foco, ainda trabalhando ou esperando sua resposta, executando um loop, sendo observado por uma etapa de pipeline ou roteado por um Manager, com um rascunho na caixa de entrada ou com mensagens na fila de entrega. Um pane sem sessão para retomar também fica intacto, pois não conseguiria voltar."
           },
           "note2": "Quando ocorre uma liberação, o log de pipeline da visualização Histórico mostra <code>♻ N panes de CLI ociosos liberados — clique para retomar</code>."
         },
@@ -5381,27 +5385,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Árvore de workspaces / grupos / panes",
-              "keys": "⌘1"
+              "content": "Árvore de workspaces / grupos / panes"
             },
             "pipeline": {
-              "content": "Fluxos automatizados com várias etapas",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Fluxos automatizados com várias etapas"
             },
             "explorer": {
-              "content": "Explorador de arquivos",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "Explorador de arquivos"
             },
             "git": {
-              "content": "Controle de versão (veja o tópico “Fluxo de trabalho com código”)",
-              "keys": "⌘4"
+              "content": "Controle de versão (veja o tópico “Fluxo de trabalho com código”)"
             },
             "plans": {
-              "content": "Lista de documentos de plano (veja o tópico “Fluxo de trabalho com código”)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Lista de documentos de plano (veja o tópico “Fluxo de trabalho com código”)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> recolhe a barra lateral inteira. Plug-ins do Navide instalados podem adicionar mais guias.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> recolhe a barra lateral inteira. Plug-ins do Navide instalados podem adicionar mais guias.",
           "h2": "Os três níveis da guia Agents",
           "p1": "De cima para baixo: <strong>linha de workspace → linha de grupo → linha de pane</strong>.",
           "rows": {
@@ -5426,7 +5425,7 @@
           "foldNote": "<strong>Alt/Option + clique na seta de expansão da linha</strong> faz o mesmo que qualquer um dos botões de dobrar — a dica diz isso: Alt+clique: recolher tudo dentro. O estado de dobra é salvo <strong>por pane, junto com o projeto</strong>, então sobrevive a uma reinicialização.",
           "h4": "Seleção múltipla e arrastar em lote",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> + clique: adiciona uma linha à seleção.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> + clique: adiciona uma linha à seleção.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> + clique: seleciona um intervalo inteiro (na ordem mostrada na tela, não na ordem interna).",
             "batchMenu": "Clicar com o botão direito com várias linhas selecionadas transforma o menu na versão em lote: <em>Interromper selecionados</em>, <em>Reconstruir selecionados</em>, <em>Minimizar selecionados</em>, <em>Restaurar selecionados</em>, <em>Liberar selecionados</em> (mostra quantos se qualificam), <em>Silenciar notificações dos selecionados</em> (ou reativar quando todos os panes selecionados estão silenciados) e <em>Remover selecionados</em>. Liberar mantém os panes disponíveis para retomar e ignora os panes protegidos."
           },
@@ -5516,7 +5515,7 @@
               "action": "Abrir um novo pane"
             },
             "nthCli": {
-              "action": "Abrir um pane com a enésima CLI"
+              "action": "Escolher a N-ésima CLI para o próximo pane"
             },
             "closePane": {
               "action": "Fechar o pane em foco"

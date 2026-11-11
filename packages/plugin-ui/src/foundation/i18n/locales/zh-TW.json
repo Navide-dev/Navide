@@ -3732,17 +3732,17 @@
             "git": {
               "title": "Git（原始碼控制）",
               "tag": "側欄第 4 個分頁",
-              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 (⌘4)</em>；沒有載入時寫著 <em>Git (⌘4)</em>。在主視窗按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。"
+              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 ({gitTab})</em>；沒有載入時寫著 <em>Git ({gitTab})</em>。在主視窗按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。"
             },
             "plans": {
               "title": "Plans（計畫文件）",
               "tag": "側欄第 5 個分頁",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> 那個分頁只是一份<strong>清單</strong>。點任一份會彈出獨立的 Plan Review 視窗，標題是 <code>&lt;專案資料夾&gt; — Plans</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> 那個分頁只是一份<strong>清單</strong>。點任一份會彈出獨立的 Plan Review 視窗，標題是 <code>&lt;專案資料夾&gt; — Plans</code>。"
             },
             "ide": {
               "title": "Mini-IDE（內建編輯器）",
               "tag": "只以獨立視窗存在",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 開啟，或在 檔案總管 點一下檔案。標題是 <code>&lt;檔名&gt; — Mini-IDE</code>，有未存檔時前面加 <code>●</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 開啟，或在 檔案總管 點一下檔案。標題是 <code>&lt;檔名&gt; — Mini-IDE</code>，有未存檔時前面加 <code>●</code>。"
             }
           },
           "callout": {
@@ -3821,7 +3821,7 @@
           "list": {
             "create": "最上面是建立分支的輸入框，提示 <em>新分支名稱…</em>，右邊 <code>＋</code> 送出。",
             "localRow": "本地分支每一列有四顆鈕：<code>⇔</code> <em>比較</em>、<code>⇡</code> <em>Rebase 到此分支</em>、<code>⇣</code> <em>合併到目前分支</em>、<code>↵</code> <em>切換</em>。目前分支只顯示 <code>✓</code>，沒有按鈕。",
-            "context": "在分支列按右鍵：<em>將目前分支合併到 {'{'}branch{'}'}</em>、<em>將目前分支合併到 {'{'}branch{'}'} 並推送</em>、<em>刪除分支</em>。",
+            "context": "在分支列按右鍵：<em>{mergeInto}</em>、<em>{mergeIntoPush}</em>、<em>{deleteBranch}</em>。",
             "remote": "<code>⇅</code> 切換 <em>顯示遠端分支</em> / <em>隱藏遠端分支</em>；遠端分支每列一顆 <code>⬇</code> <em>在本地檢出</em>。"
           },
           "p2": "按 <code>⇔</code> 之後結果直接展在面板裡，標成 <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>，附統計行與檔案清單。",
@@ -3860,10 +3860,14 @@
               "behavior": "更多拉取／推送選項，見下。"
             }
           },
-          "p3": "<code>▾</code> 裡是 <em>↓ 拉取</em>、<em>↓ 拉取（Rebase）</em>、<em>↑ 推送</em>、<em>↑ 推送（Force with lease）</em>；設了不只一個 remote 時，最後還會多一組 <strong>推送到遠端</strong>，每個 remote 一列。",
+          "p3": "<code>▾</code> 裡是 <em>↓ {pull}</em>、<em>↓ {pullRebase}</em>、<em>↑ {push}</em>、<em>↑ {pushForce}</em>；設了不只一個 remote 時，最後還會多一組 <strong>推送到遠端</strong>，每個 remote 一列。",
           "callout": {
             "title": "認證失敗先查帳號綁定",
             "text": "推不上去時，優先看帳號藥丸綁的是不是對的帳號，而不是重設遠端。憑證失效時面板會直接提示到「設定 › 帳號」更新。密碼欄位要貼的是 Personal Access Token，不是登入密碼。"
+          },
+          "worktrees": {
+            "p1": "Git 面板裡的 <strong>{worktrees}</strong> 卡片（預設收合，點標題展開；超過一個時會顯示數量）列出這個 repository 的所有工作樹：<code>✦</code> 是主工作樹，<code>○</code> 是其他的，適用時會掛上 <em>{bare}</em>、<em>{detached}</em>、<em>{locked}</em>、<em>{stale}</em> 徽章。每一列有 <code>⧉</code> <em>{openWindow}</em>、<code>◱</code> <em>{reveal}</em>、<code>🔒</code> <em>{lock}</em>、<code>⇄</code> <em>{move}</em>、<code>✕</code> <em>{remove}</em>；主工作樹不能鎖定、搬移或移除。上方的 <em>{prune}</em> 與 <em>{repair}</em> 用來整理資料夾已被刪掉、或在 Git 之外被搬走的工作樹。",
+            "p2": "要新增時，輸入資料夾路徑（或用瀏覽選），選一個分支——或勾 <em>{createBranch}</em> 再輸入新名字——然後按 <code>＋</code> <em>{addWorktree}</em>。好幾個分格同時在不同分支上工作，靠的就是這個：每個分格各用一個工作樹，改動就不會落在同一個資料夾。"
           }
         },
         "s4": {
@@ -3921,14 +3925,14 @@
           "p1": "計畫不只放在一個資料夾。Navide 會掃工作區底下這<strong>七個目錄</strong>：<code>.agent-team/plans</code>、<code>.agent-team/reports</code>、<code>.claude/loop-reports</code>、<code>.claude/plans</code>、<code>.cursor/plans</code>、<code>docs/plans</code>、<code>docs/reports</code>；工作區裡<strong>最多兩層深</strong>的巢狀 Git 儲存庫，同樣這七個目錄也會被掃到。收三種副檔名 <code>.html</code>、<code>.plan.md</code>、<code>.md</code>：HTML 計畫用 <code>&lt;kebab-slug&gt;_&lt;6 位十六進位&gt;.html</code>，Markdown 計畫用 <code>&lt;kebab-slug&gt;.plan.md</code>。以底線或點開頭的檔案（像 <code>_spec.md</code>、<code>_template.html</code>）是基礎建設，清單不會列。",
           "p2": "這些檔案<strong>由 agent 寫、也由 agent 更新</strong>——你在計畫視窗裡按的每一個動作（改 todo 狀態、留審查意見、核准），最後都落回同一個檔案。你要做的是叫 agent「幫我建一份計畫」，然後在視窗裡審。",
           "h2": "清單",
-          "p3": "側欄 <strong>計畫</strong> 分頁（<kbd class=\"cwh-kbd\">⌘5</kbd>）與 Plan 視窗左欄用的是同一份清單。至少有一份計畫時才會出現工具列：",
+          "p3": "側欄 <strong>計畫</strong> 分頁（<kbd class=\"cwh-kbd\">{plansTab}</kbd>）與 Plan 視窗左欄用的是同一份清單。至少有一份計畫時才會出現工具列：",
           "listTools": {
             "search": "搜尋框 <em>搜尋計畫…</em>，比對標題、檔名與 overview。",
             "stage": "依階段篩選：<em>全部階段</em> / 草稿 / 審查中 / 已核准 / 進行中 / 已完成 / 已放棄。",
             "sort": "排序 <em>排序方式</em>：<strong>標題</strong>、<strong>最後更新</strong>、<strong>進度</strong> 三種，旁邊 <code>↑</code>／<code>↓</code> 換升冪降冪。",
             "group": "<code>☰</code> 在「依 stage 分群」與「單一清單」之間切換。"
           },
-          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。",
+          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。釘選鈕的作用是<em>釘選到「最近」最上方</em>。釘選鈕的作用是<em>釘選到「最近」最上方</em>。",
           "callout1": {
             "title": "沒有 metadata 的文件自成一區",
             "text": "依階段分組時，<strong>沒有計畫 metadata 的純文件</strong>收在 <strong>文件</strong> 這一區，每一列都帶 <code>文件</code> 藥丸——跟 stage 是不是 <em>進行中</em> 無關。要把這種檔案升級成真正的計畫，在它上面按右鍵選 <strong>升級為計畫</strong>；升級只是補上一層草稿信封，<strong>不會改寫原本的內文</strong>。"
@@ -3984,7 +3988,7 @@
         },
         "s7": {
           "title": "編輯器視窗",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 開啟，或在 檔案總管 點一下檔案。分頁式的 Monaco 編輯器，<kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> 切分頁（超出範圍會落到最後一個分頁）。",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 開啟，或在 檔案總管 點一下檔案。分頁式的 Monaco 編輯器，<kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> 切分頁（超出範圍會落到最後一個分頁）。",
           "h1": "左側四個區塊",
           "sectionTable": {
             "section": "區塊",
@@ -3996,7 +4000,7 @@
               "note": "檔案樹。"
             },
             "search": {
-              "note": "跨檔搜尋；⌘⇧H 跨檔取代。"
+              "note": "跨檔搜尋；{replaceInFiles} 跨檔取代。"
             },
             "scm": {
               "note": "就是 Git 面板的嵌入版，帶變更數徽章。"
@@ -4014,7 +4018,7 @@
           "editorActions": {
             "split": {
               "action": "分割編輯區",
-              "note": "（切換編輯群組 ⌘K ⌘← / ⌘K ⌘→）"
+              "note": "（切換編輯群組 {prevGroup} / {nextGroup}）"
             },
             "findReplace": {
               "action": "尋找 / 取代"
@@ -4030,7 +4034,7 @@
             },
             "fold": {
               "action": "摺疊 / 展開",
-              "note": "（全部 ⌘K ⌘0 / ⌘K ⌘J）"
+              "note": "（全部 {foldAll} / {unfoldAll}）"
             },
             "multiCursor": {
               "action": "多游標：上下加一個"
@@ -4049,7 +4053,7 @@
             },
             "aiTerminal": {
               "action": "開關 AI 終端機",
-              "note": "（或 ⌘⇧A）"
+              "note": "（或 {aiChatAlt}）"
             },
             "sendSelection": {
               "action": "把選取的程式碼丟給 AI 終端機",
@@ -4081,7 +4085,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "圖片，可 符合視窗大小 / 實際大小。"
+              "how": "圖片，可切換 {fitWindow} / {actualSize}。"
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4130,7 +4134,7 @@
             "text": "上表其他類型點開<strong>直接是預覽</strong>；html 與 csv 刻意先給你原始碼，要按 <em>預覽</em> 才切過去。另外 <code>docx</code>、<code>xlsx</code>、<code>zip</code>、<code>woff</code> 這些同時也在二進位清單裡，但字型、壓縮檔、Office 的判斷排在二進位前面，所以會拿到專屬的呈現，不會退成 hex dump。"
           },
           "h2": "變更記錄軌",
-          "p3": "右槽 <strong>預覽</strong> 分頁（<kbd class=\"cwh-kbd\">⌘⌥V</kbd>）的下半部是 <strong>最近的變更</strong>——這個工作區最近被動過什麼。每一列四欄：",
+          "p3": "右槽 <strong>預覽</strong> 分頁（<kbd class=\"cwh-kbd\">{previewTab}</kbd>）的下半部是 <strong>最近的變更</strong>——這個工作區最近被動過什麼。每一列四欄：",
           "trackList": {
             "time": "<strong>時間</strong>——相對值（<em>剛剛</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>）。",
             "action": "<strong>動作</strong>——<code>+</code> 新增、<code>~</code> 修改、<code>−</code> 刪除、<code>▸</code> 顯示。",
@@ -4208,7 +4212,7 @@
               "action": "原始碼控制 / 問題"
             },
             "fileTabs": {
-              "action": "切到第 N 個檔案分頁（⌘1…⌘9）"
+              "action": "切到第 N 個檔案分頁（{editorTab1}…{editorTab9}）"
             },
             "split": {
               "action": "分割編輯區"
@@ -5256,7 +5260,7 @@
             "openHome": "<strong>家目錄</strong>——直接用家目錄。",
             "recent": "下方是最近開過的清單，可以把常用的固定起來。在清單項目上按右鍵有 <em>用預設編輯器開啟</em>、<em>在 Finder 中顯示</em>、<em>複製路徑</em>。"
           },
-          "p2": "之後隨時可以從選單 <strong>檔案 ▸ 開啟工作區…</strong>（<kbd class=\"wph-kbd\">⌘O</kbd>）、<strong>檔案 ▸ 開啟最近使用</strong>，或 <strong>檔案 ▸ 開新視窗</strong>（<kbd class=\"wph-kbd\">⌘N</kbd>）開新視窗。",
+          "p2": "之後隨時可以從選單 <strong>檔案 ▸ 開啟工作區…</strong>（<kbd class=\"wph-kbd\">{openWorkspace}</kbd>）、<strong>檔案 ▸ 開啟最近使用</strong>，或 <strong>檔案 ▸ 開新視窗</strong>（<kbd class=\"wph-kbd\">{newWindow}</kbd>）開新視窗。",
           "h2": "同一個視窗擺多個工作區",
           "p3": "不必為第二個專案另開視窗。在側欄「代理」分頁裡，工作區區段標題右邊有一顆 <strong>＋</strong>，按下去會把同一個選擇器叫回來；選中的專案會被收進<strong>同一個視窗</strong>，側欄多出一列工作區標題。",
           "p4": "點該列標題即切換視野。關鍵在於：<strong>被切走的工作區，它的 agent 繼續在跑</strong>，那一列也還在側欄上，只是舞台上暫時不顯示它的分格。",
@@ -5274,7 +5278,7 @@
           "p1": "入口是 <strong>＋</strong> 按鈕，側欄的工作區標題列和每個群組標題列上各有一顆（差別只在新分格落在哪個群組）。按下去會開一個小選單：",
           "addMenu": {
             "role": "最上面是 <strong>選擇角色…</strong> 下拉——選一個預設角色。",
-            "cliList": "中間是 CLI 清單，沒安裝的會標示出來。",
+            "cliList": "下面的清單分成兩個有標題的區塊。<strong>{cli}</strong> 是寫程式用的 CLI，沒安裝的會標示出來。<strong>{agents}</strong> 依名字列出你的常駐 Agent（OpenClaw、Hermes Agent）：已開啟的點了會切過去，已關閉的點了會接續原本的對話；另有一個<em>新增 …</em>，會先請你取名字。ACP Agent 也列在這一區。清單下方有一行提示：Grok Bot、dots 這類雲端 Agent 是以 Navide 外掛的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（開一般終端機，不掛 agent）與 <strong>啟動 Agent…</strong>。"
           },
           "p2": "<em>啟動 Agent…</em> 開的是完整對話框，可以指定 agent 與角色、決定要不要加進舞台、要不要同時開終端機，也可以貼一個 session id 直接接續舊對話。",
@@ -5287,7 +5291,7 @@
               "action": "直接開一個"
             },
             "nthCli": {
-              "action": "指定第 N 種 CLI"
+              "action": "把下一個分格的 CLI 選成第 N 個"
             },
             "rename": {
               "action": "改名",
@@ -5305,17 +5309,17 @@
           },
           "note": "自動取名的分格，標題後面會有一個小小的 <code>◦</code> 記號；手動改過名字的就沒有。",
           "h2": "右鍵選單",
-          "p3": "在分格上或側欄那一列按右鍵：<em>聚焦</em>、<em>重新命名</em>、<em>傳送訊息</em>、<em>中斷</em>、<em>重新套用角色</em>、<em>移除</em>。其中 <em>傳送訊息</em> 會把那個分格的位址插進你目前焦點分格的輸入框——這是跨分格傳訊最快的入口。底下有子分格（<code>▸</code>）的分格還會多一項 <em>移除旗下 N 個子分格</em>：只關掉它派生出來的子分格，它自己和其他分格都不動。",
+          "p3": "在分格或它的側欄列上按右鍵。大部分分格都有 <em>{focus}</em>、<em>{rename}</em>、<em>{mute}</em>、<em>{sendMessage}</em>、<em>{interrupt}</em>、<em>{reapplyRole}</em>、<em>{reclaim}</em>、<em>{remove}</em>；有些項目只在適用時出現：最小化的分格有 <em>{restore}</em>，欄寬被限制時有 <em>{fitWidth}</em>，對話斷掉的分格有 <em>{reconnect}</em>，Agent 分格則多了喚醒、排程、頻道、記憶資料夾、設定等項目。<em>{sendMessage}</em> 會把那個分格的位址插進你目前焦點分格的輸入框，是跨分格傳訊最快的入口。<em>{reclaim}</em> 會結束 CLI 以釋放記憶體，留下一張點一下就能接續的卡片（見下文）。底下有子分格（<code>▸</code>）的分格還會多出 <em>{removeChildren}</em>（只關掉它派生出的分格）和 <em>{removeAll}</em>（連同它派生出的分格一起關掉）。",
           "h3": "收合與佔位卡",
           "p4": "分格右上角的 <code>⊟</code> 是最小化。收起來之後側欄那一列會標上 <strong>已收合</strong>，展開後有 <em>↑ 還原</em> 與 <em>移除</em>。",
           "p5": "另外有一種狀態叫<strong>佔位卡</strong>：位子還在，但顯示一張「↩ 點擊以續接」的卡片，標題、副標、群組標籤全部保留。重開 app、或被閒置回收之後，分格就是這個樣子。點卡片任一處，CLI 會接著原本的對話繼續。",
           "h4": "閒置自動回收",
           "p6": "每個跑著的 CLI 都佔著記憶體與 GPU。Navide 預設會把太久沒動靜的分格降級回佔位卡：",
           "reclaim": {
-            "default": "<strong>預設開啟</strong>，門檻 30 分鐘，可在設定裡調。",
+            "default": "<strong>預設開啟</strong>，門檻 {defaultMinutes} 分鐘，可在設定裡調。門檻最短 {minMinutes} 分鐘，設得更短會自動拉回 {minMinutes} 分鐘。",
             "scan": "每 60 秒掃一次，判準是「既沒有輸出、你也沒有打字」。",
             "notClose": "<strong>這不是關閉</strong>：座位、名字、訊息位址、session 全部留著，點一下就回來。",
-            "exempt": "正在被 pipeline 讀取、輸入框裡有草稿、有訊息排隊等著送進來、或正在焦點上的分格，都不會被回收。"
+            "exempt": "以下分格不會被回收：正在焦點上、還在工作或等你回答、正在跑循環、被 pipeline 階段監看或由 Manager 轉派中、輸入框裡有草稿、有訊息排隊等著送進來。沒有可接續 session 的分格也不會被回收，因為回收後就回不來了。"
           },
           "note2": "回收發生時，歷史記錄分格的 pipeline log 會出現 <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>。"
         },
@@ -5381,27 +5385,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "工作區 / 群組 / 分格的樹狀清單",
-              "keys": "⌘1"
+              "content": "工作區 / 群組 / 分格的樹狀清單"
             },
             "pipeline": {
-              "content": "多階段自動流程",
-              "keys": "⌘2、⌘⇧Y"
+              "content": "多階段自動流程"
             },
             "explorer": {
-              "content": "檔案總管",
-              "keys": "⌘3、⌘⇧E"
+              "content": "檔案總管"
             },
             "git": {
-              "content": "版本控制（見「程式碼工作流」分頁）",
-              "keys": "⌘4"
+              "content": "版本控制（見「程式碼工作流」分頁）"
             },
             "plans": {
-              "content": "計畫文件清單（見「程式碼工作流」分頁）",
-              "keys": "⌘5、⌘⇧D"
+              "content": "計畫文件清單（見「程式碼工作流」分頁）"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> 收合整條側欄。安裝的 Navide 外掛可能再增加分頁。",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> 收合整條側欄。安裝的 Navide 外掛可能再增加分頁。",
           "h2": "「代理」分頁的三層結構",
           "p1": "由上而下是<strong>工作區列 → 群組列 → 分格列</strong>。",
           "rows": {
@@ -5426,7 +5425,7 @@
           "foldNote": "兩顆摺疊鈕的位置上，<strong>Alt／Option＋點擊那一列的展開箭號</strong>也做同一件事（提示寫著「Alt+點擊：收合底下全部」）。收合狀態是<strong>逐分格記在專案裡</strong>的，重開 Navide 之後還在。",
           "h4": "多選與批次拖曳",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> 點：加選單一列。",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> 點：加選單一列。",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> 點：選整段區間（依畫面上實際顯示的順序，不是內部順序）。",
             "batchMenu": "多選之後按右鍵，選單會變成批次版：<em>中斷所選</em>、<em>重建所選</em>、<em>最小化所選</em>、<em>還原所選</em>、<em>回收所選</em>（顯示可回收數量）、<em>靜音所選通知</em>（全部已靜音時改為取消靜音）及<em>移除所選</em>。回收會保留可接續的分格，並略過受保護的分格。"
           },
@@ -5516,7 +5515,7 @@
               "action": "開一個新分格"
             },
             "nthCli": {
-              "action": "指定第 N 種 CLI 開分格"
+              "action": "把下一個分格的 CLI 選成第 N 個"
             },
             "closePane": {
               "action": "關閉焦點分格"

@@ -3732,17 +3732,17 @@
             "git": {
               "title": "Git (Source Control)",
               "tag": "4th sidebar tab",
-              "text": "When Git is loaded as a Navide plugin, the tooltip reads <em>Navide plugin: Git · navide.git · Publisher: navide · Built into Navide (⌘4)</em>; otherwise it reads <em>Git (⌘4)</em>. In the main window <kbd class=\"cwh-kbd\">⌘⇧G</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header."
+              "text": "When Git is loaded as a Navide plugin, the tooltip reads <em>Navide plugin: Git · navide.git · Publisher: navide · Built into Navide ({gitTab})</em>; otherwise it reads <em>Git ({gitTab})</em>. In the main window <kbd class=\"cwh-kbd\">{gitWindow}</kbd> opens the <strong>separate Git window</strong> directly; so does <em>Open in New Window</em> in the panel header. Git itself is a bundled Navide plugin (<code>navide.git</code>), listed under <em>Bundled</em> in <strong>Settings ▸ Navide Plugins</strong> next to Plans, so it is updated, turned off or fails to start the same way any Navide plugin does. Git itself is a bundled Navide plugin (<code>navide.git</code>), listed under <em>Bundled</em> in <strong>Settings ▸ Navide Plugins</strong> next to Plans, so it is updated, turned off or fails to start the same way any Navide plugin does."
             },
             "plans": {
               "title": "Plans (plan documents)",
               "tag": "5th sidebar tab",
-              "text": "The <kbd class=\"cwh-kbd\">⌘5</kbd> tab is only a <strong>list</strong>. Clicking any entry pops up a separate Plan Review window titled <code>&lt;project folder&gt; — Plans</code>."
+              "text": "The <kbd class=\"cwh-kbd\">{plansTab}</kbd> tab is only a <strong>list</strong>. Clicking any entry pops up a separate Plan Review window titled <code>&lt;project folder&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (the built-in editor)",
               "tag": "separate window only",
-              "text": "Open it with <kbd class=\"cwh-kbd\">⌘⇧I</kbd>, or click a file in Explorer. The title is <code>&lt;file name&gt; — Mini-IDE</code>, prefixed with <code>●</code> while there are unsaved changes."
+              "text": "Open it with <kbd class=\"cwh-kbd\">{miniIde}</kbd>, or click a file in Explorer. The title is <code>&lt;file name&gt; — Mini-IDE</code>, prefixed with <code>●</code> while there are unsaved changes."
             }
           },
           "callout": {
@@ -3821,7 +3821,7 @@
           "list": {
             "create": "At the top is the branch creation field, placeholder <em>New branch name…</em>, with <code>＋</code> on the right to submit.",
             "localRow": "Every local branch row carries four buttons: <code>⇔</code> <em>Compare</em>, <code>⇡</code> <em>Rebase Onto</em>, <code>⇣</code> <em>Merge into Current</em>, <code>↵</code> <em>Switch</em>. The current branch shows only a <code>✓</code> and no buttons.",
-            "context": "Right-click a branch row for <em>Merge current branch into {'{'}branch{'}'}</em>, <em>Merge current branch into {'{'}branch{'}'} &amp; push</em> and <em>Delete Branch</em>.",
+            "context": "Right-click a branch row for <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> and <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> toggles <em>Show Remote Branches</em> / <em>Hide Remote Branches</em>; each remote branch row has a <code>⬇</code> <em>Checkout Locally</em>."
           },
           "p2": "Pressing <code>⇔</code> expands the result inline in the panel, headed <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, with a stats line and the file list.",
@@ -3860,10 +3860,14 @@
               "behavior": "More pull/push options, see below."
             }
           },
-          "p3": "Inside <code>▾</code>: <em>↓ Pull</em>, <em>↓ Pull (Rebase)</em>, <em>↑ Push</em>, <em>↑ Push (Force with lease)</em>; if more than one remote is configured, a <strong>Push to remote</strong> group is appended at the end with one row per remote.",
+          "p3": "Inside <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; if more than one remote is configured, a <strong>Push to remote</strong> group is appended at the end with one row per remote.",
           "callout": {
             "title": "On an auth failure, check the account binding first",
             "text": "When a push fails, look at which account the account pill is bound to before you start resetting the remote. When credentials expire the panel points you straight at Settings › Accounts to renew them. The password field wants a Personal Access Token, not your login password."
+          },
+          "worktrees": {
+            "p1": "The <strong>{worktrees}</strong> card in the Git panel (collapsed until you click its header; a count appears once there is more than one) lists every working tree of the repository: <code>✦</code> is the main one, <code>○</code> the others, with <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> or <em>{stale}</em> badges where they apply. A row has <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> and <code>✕</code> <em>{remove}</em>; the main worktree cannot be locked, moved or removed. <em>{prune}</em> and <em>{repair}</em> at the top clean up worktrees whose folder was deleted or moved outside Git.",
+            "p2": "To add one, type a folder path (or browse for it), pick a branch — or tick <em>{createBranch}</em> and type a new name — then press <code>＋</code> <em>{addWorktree}</em>. This is what makes several panes on separate branches practical: give each pane its own worktree and their edits never land in the same folder."
           }
         },
         "s4": {
@@ -3921,14 +3925,14 @@
           "p1": "Plans do not all live in one folder. Navide scans <strong>seven directories</strong> under the workspace: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> and <code>docs/reports</code> — plus the same seven inside any nested Git repository <strong>at most two levels deep</strong>. Three suffixes count: <code>.html</code>, <code>.plan.md</code> and <code>.md</code>. An HTML plan is named <code>&lt;kebab-slug&gt;_&lt;6 hex digits&gt;.html</code>, a Markdown plan <code>&lt;kebab-slug&gt;.plan.md</code>. Files beginning with an underscore or a dot (<code>_spec.md</code>, <code>_template.html</code>) are scaffolding and never appear in the list.",
           "p2": "These files are <strong>written and updated by agents</strong> — every action you take in the plan window (changing a todo's status, leaving a review note, approving) lands back in the same file. Your part is to ask an agent to \"create a plan for me\" and then review it in the window.",
           "h2": "The list",
-          "p3": "The sidebar <strong>Plans</strong> tab (<kbd class=\"cwh-kbd\">⌘5</kbd>) and the left column of the Plan window use the same list. The toolbar only appears once there is at least one plan:",
+          "p3": "The sidebar <strong>Plans</strong> tab (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) and the left column of the Plan window use the same list. The toolbar only appears once there is at least one plan:",
           "listTools": {
             "search": "The <em>Search plans…</em> field, matching title, file name and overview.",
             "stage": "Stage filter: <em>All stages</em> / Draft / In Review / Approved / In Progress / Done / Abandoned.",
             "sort": "<em>Sort by</em>: <strong>Title</strong>, <strong>Last updated</strong> or <strong>Progress</strong>, with <code>↑</code> / <code>↓</code> next to it for ascending or descending.",
             "group": "<code>☰</code> switches between \"group by stage\" and a single flat list."
           },
-          "p4": "All four choices are <strong>remembered per workspace</strong>. The sections, top to bottom: <strong>Recent</strong> (5 at most, pinned ones first); then — grouped by stage — a <strong>Documents</strong> section plus one section per stage, which a flat list collapses into a single <strong>All plans</strong>; then <strong>Archived</strong>; and at the bottom a completed-actions row (<em>Archive All Done</em> / <em>Delete All</em>). Every row carries its stage pill, a <em>{'{'}done{'}'}/{'{'}total{'}'} done</em> progress bar, a <code>HTML</code> / <code>Markdown</code> format tag, and <em>{'{'}count{'}'} for you</em> — the items only you can clear. <strong>Every row also has a pin <code>📌</code> and a delete <code>✕</code> on its right</strong> (archived rows get the delete only).",
+          "p4": "All four choices are <strong>remembered per workspace</strong>. The sections, top to bottom: <strong>Recent</strong> (5 at most, pinned ones first); then — grouped by stage — a <strong>Documents</strong> section plus one section per stage, which a flat list collapses into a single <strong>All plans</strong>; then <strong>Archived</strong>; and at the bottom a completed-actions row (<em>Archive All Done</em> / <em>Delete All</em>). Every row carries its stage pill, a <em>{'{'}done{'}'}/{'{'}total{'}'} done</em> progress bar, a <code>HTML</code> / <code>Markdown</code> format tag, and <em>{'{'}count{'}'} for you</em> — the items only you can clear. <strong>Every row also has a pin <code>📌</code> and a delete <code>✕</code> on its right</strong> (archived rows get the delete only). The pin is <em>Pin to the Top of Recent</em>. The pin is <em>Pin to the Top of Recent</em>.",
           "callout1": {
             "title": "Documents without metadata get their own section",
             "text": "When the list is grouped by stage, <strong>plain documents that carry no plan metadata</strong> collect in a <strong>Documents</strong> section and each row is tagged <code>Document</code> — which has nothing to do with whether a stage is <em>in-progress</em>. To turn such a file into a real plan, right-click it and choose <strong>Promote to Plan</strong>: that adds a draft plan envelope and <strong>does not rewrite the body</strong>."
@@ -3984,7 +3988,7 @@
         },
         "s7": {
           "title": "The editor window",
-          "p1": "Open it with <kbd class=\"cwh-kbd\">⌘⇧I</kbd>, or click a file in Explorer. A tabbed Monaco editor, with <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> to switch tabs (out-of-range numbers land on the last tab).",
+          "p1": "Open it with <kbd class=\"cwh-kbd\">{miniIde}</kbd>, or click a file in Explorer. A tabbed Monaco editor, with <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> to switch tabs (out-of-range numbers land on the last tab).",
           "h1": "The four sections in the left rail",
           "sectionTable": {
             "section": "Section",
@@ -3996,7 +4000,7 @@
               "note": "The file tree."
             },
             "search": {
-              "note": "Search across files; ⌘⇧H replaces across files."
+              "note": "Search across files; {replaceInFiles} replaces across files."
             },
             "scm": {
               "note": "The embedded version of the Git panel, with a change-count badge."
@@ -4014,7 +4018,7 @@
           "editorActions": {
             "split": {
               "action": "Split the editor area",
-              "note": "(switch editor group with ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(switch editor group with {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Find / Replace"
@@ -4030,7 +4034,7 @@
             },
             "fold": {
               "action": "Fold / unfold",
-              "note": "(all of it with ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(all of it with {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Multi-cursor: add one above or below"
@@ -4049,7 +4053,7 @@
             },
             "aiTerminal": {
               "action": "Toggle the AI Terminal",
-              "note": "(or ⌘⇧A)"
+              "note": "(or {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Send the selected code to the AI Terminal",
@@ -4081,7 +4085,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "The image, with Fit to window / Actual size."
+              "how": "The image, with {fitWindow} / {actualSize}."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4130,7 +4134,7 @@
             "text": "Every other kind in the table <strong>opens straight into the preview</strong>; html and csv deliberately give you the source first and only switch when you press <em>Preview</em>. Note also that <code>docx</code>, <code>xlsx</code>, <code>zip</code> and <code>woff</code> are on the binary list as well, but the font, archive and Office checks run before the binary one, so they get their dedicated rendering rather than falling back to a hex dump."
           },
           "h2": "The change record track",
-          "p3": "The lower half of the right-slot <strong>Preview</strong> tab (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) is <strong>Recent changes</strong> — what has been touched in this workspace lately. Four columns per row:",
+          "p3": "The lower half of the right-slot <strong>Preview</strong> tab (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) is <strong>Recent changes</strong> — what has been touched in this workspace lately. Four columns per row:",
           "trackList": {
             "time": "<strong>Time</strong> — relative (<em>now</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>).",
             "action": "<strong>Action</strong> — <code>+</code> created, <code>~</code> modified, <code>−</code> deleted, <code>▸</code> shown.",
@@ -4208,7 +4212,7 @@
               "action": "Source Control / Problems"
             },
             "fileTabs": {
-              "action": "Switch to the Nth file tab (⌘1…⌘9)"
+              "action": "Switch to the Nth file tab ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Split the editor area"
@@ -5256,7 +5260,7 @@
             "openHome": "<strong>Home</strong> — just use the home directory.",
             "recent": "Below that is the recently-opened list, where frequently used entries can be pinned. Right-clicking an entry offers <em>Open in Default Editor</em>, <em>Reveal in Finder</em> and <em>Copy Path</em>."
           },
-          "p2": "Afterwards you can always use the menu: <strong>File ▸ Open Workspace…</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>File ▸ Open Recent</strong>, or <strong>File ▸ New Window</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) for a new window.",
+          "p2": "Afterwards you can always use the menu: <strong>File ▸ Open Workspace…</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>File ▸ Open Recent</strong>, or <strong>File ▸ New Window</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) for a new window.",
           "h2": "Several workspaces in one window",
           "p3": "You do not need a second window for a second project. In the sidebar's Agents tab, the workspace section header has a <strong>＋</strong> on its right that brings the same picker back; the project you choose is taken into the <strong>same window</strong>, adding one more workspace header row to the sidebar.",
           "p4": "Click that header row to switch the view. The key point: <strong>a workspace you switch away from keeps its agents running</strong>, its row stays in the sidebar, and only its panes are hidden from the stage for now.",
@@ -5274,7 +5278,7 @@
           "p1": "The entry point is the <strong>＋</strong> button — there is one on the sidebar's workspace header row and one on every group header row (the only difference is which group the new pane lands in). Pressing it opens a small menu:",
           "addMenu": {
             "role": "At the top is the <strong>Select role…</strong> dropdown — pick a preset role.",
-            "cliList": "In the middle is the CLI list, with the ones that are not installed marked as such.",
+            "cliList": "Below it the list is split into two headed blocks. <strong>{cli}</strong> holds the coding CLIs, with the ones that are not installed marked as such. <strong>{agents}</strong> lists your standing agents (OpenClaw, Hermes Agent) by name — picking an open one switches to it, picking a closed one resumes it — plus a <em>New …</em> entry that asks for a name first; ACP agents are listed there too. A note under the list points out that cloud agents such as Grok Bot and dots come as Navide plugins.",
             "terminal": "At the bottom are <strong>Terminal</strong> (a plain terminal with no agent attached) and <strong>Manual spawn…</strong>."
           },
           "p2": "<em>Manual spawn…</em> opens the full dialog, where you can choose the agent and role, decide whether to add it to the stage, whether to open a terminal alongside it, and paste a session id to resume an earlier conversation directly.",
@@ -5287,7 +5291,7 @@
               "action": "Open one straight away"
             },
             "nthCli": {
-              "action": "Open the Nth CLI"
+              "action": "Pick the Nth CLI for the next pane"
             },
             "rename": {
               "action": "Rename",
@@ -5305,17 +5309,17 @@
           },
           "note": "An auto-named pane carries a tiny <code>◦</code> mark after its title; one you renamed by hand does not.",
           "h2": "The context menu",
-          "p3": "Right-click a pane or its sidebar row: <em>Focus</em>, <em>Rename</em>, <em>Send Message</em>, <em>Interrupt</em>, <em>Reapply Role</em>, <em>Remove</em>. Of these, <em>Send Message</em> inserts that pane's address into the input box of the pane you currently have focused — the fastest way into cross-pane messaging. A pane with sub-panes below it (<code>▸</code>) also gets a <em>Remove N Sub-panes</em> item: it closes only what that pane spawned, leaving the pane itself and every other pane alone.",
+          "p3": "Right-click a pane or its sidebar row. Most panes offer <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> and <em>{remove}</em>; a few items only appear when they apply — <em>{restore}</em> on a minimized pane, <em>{fitWidth}</em> when the pane's columns are capped, <em>{reconnect}</em> on a pane that lost its conversation, and the agent items (wake, schedules, channels, memory folder, settings) on an Agent pane. <em>{sendMessage}</em> inserts that pane's address into the input box of the pane you currently have focused — the fastest way into cross-pane messaging. <em>{reclaim}</em> ends the CLI to free its memory and leaves a click-to-resume card (see below). A pane with sub-panes below it (<code>▸</code>) also gets <em>{removeChildren}</em>, which closes only what that pane spawned, and <em>{removeAll}</em>, which closes the pane together with everything it spawned.",
           "h3": "Minimizing and the placeholder card",
           "p4": "The <code>⊟</code> in a pane's top-right corner minimizes it. Once collapsed, its sidebar row is marked <strong>Docked</strong>, and expanding that row offers <em>↑ Restore</em> and <em>Remove</em>.",
           "p5": "There is also a third state, the <strong>placeholder card</strong>: the slot is still there but shows a \"↩ Click to resume\" card, keeping the title, subtitle and group label. After restarting the app, or after an idle reclaim, a pane looks like this. Click anywhere on the card and the CLI carries on with the same conversation.",
           "h4": "Idle auto-reclaim",
           "p6": "Every running CLI holds on to memory and GPU. By default Navide demotes panes that have been quiet for too long back to a placeholder card:",
           "reclaim": {
-            "default": "<strong>On by default</strong>, with a 30-minute threshold you can change in Settings.",
+            "default": "<strong>On by default</strong>, with a {defaultMinutes}-minute threshold you can change in Settings. The shortest threshold is {minMinutes} minutes — a lower value is raised to that.",
             "scan": "It scans every 60 seconds, and the test is \"no output and no typing from you\".",
             "notClose": "<strong>This is not a close</strong>: the slot, the name, the message address and the session are all kept — one click brings it back.",
-            "exempt": "Panes a pipeline is reading, panes with a draft in the input box, panes with messages queued for delivery, and the focused pane are never reclaimed."
+            "exempt": "A pane is never reclaimed while it is focused, still working or waiting for your answer, running a loop, being watched by a pipeline stage or routed by a Manager, holding a draft in its input box, or has messages queued for delivery. A pane with no session to resume is left alone too, since it could not come back."
           },
           "note2": "When a reclaim happens, the History view's pipeline log shows <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>."
         },
@@ -5381,27 +5385,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Tree of workspaces / groups / panes",
-              "keys": "⌘1"
+              "content": "Tree of workspaces / groups / panes"
             },
             "pipeline": {
-              "content": "Multi-stage automated flows",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Multi-stage automated flows"
             },
             "explorer": {
-              "content": "File explorer",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "File explorer"
             },
             "git": {
-              "content": "Version control (see the \"Code workflow\" topic)",
-              "keys": "⌘4"
+              "content": "Version control (see the \"Code workflow\" topic)"
             },
             "plans": {
-              "content": "Plan document list (see the \"Code workflow\" topic)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Plan document list (see the \"Code workflow\" topic)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> collapses the whole sidebar. Installed Navide plugins may add further tabs.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> collapses the whole sidebar. Installed Navide plugins may add further tabs.",
           "h2": "The three levels of the Agents tab",
           "p1": "Top to bottom: <strong>workspace row → group row → pane row</strong>.",
           "rows": {
@@ -5426,7 +5425,7 @@
           "foldNote": "<strong>Alt/Option-clicking the row\u2019s expand caret</strong> does the same thing as either fold button \u2014 the tooltip says so: Alt+click: collapse everything inside. Fold state is stored <strong>per pane, with the project</strong>, so it survives a restart.",
           "h4": "Multi-select and batch dragging",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> click: add a single row to the selection.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> click: add a single row to the selection.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> click: select a whole range (in the order shown on screen, not the internal order).",
             "batchMenu": "Right-clicking with several rows selected turns the menu into its batch form: <em>Interrupt Selected</em>, <em>Rebuild Selected</em>, <em>Minimize Selected</em>, <em>Restore Selected</em>, <em>Reclaim selected</em> (shows the eligible count), <em>Mute Selected Notifications</em> (or unmute when all selected panes are muted), and <em>Remove Selected</em>. Reclaim keeps panes available to resume and skips protected panes."
           },
@@ -5516,7 +5515,7 @@
               "action": "Open a new pane"
             },
             "nthCli": {
-              "action": "Open a pane with the Nth CLI"
+              "action": "Pick the Nth CLI for the next pane"
             },
             "closePane": {
               "action": "Close the focused pane"
