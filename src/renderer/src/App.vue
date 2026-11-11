@@ -1480,6 +1480,23 @@ void window.agentTeam?.restore?.getSkipped?.().then((list) => {
   const stop = watch(booting, (b) => { if (!b) { stop(); void show() } })
 })
 
+// A reopened window left out folders that no longer exist: say which, on the
+// same surface the breaker notice above uses.
+window.agentTeam?.restore?.onReopenMissing?.((list) => {
+  if (!list.length) return
+  const show = async (): Promise<void> => {
+    await notifyRestore.alert(
+      `${i18n.global.t('restore.reopen-missing-message')}\n\n${list.join('\n')}`,
+      {
+        title: i18n.global.t('restore.reopen-missing-title', { count: list.length }),
+        confirmText: i18n.global.t('restore.skipped-ack'),
+      }
+    )
+  }
+  if (!booting.value) { void show(); return }
+  const stop = watch(booting, (b) => { if (!b) { stop(); void show() } })
+})
+
 function onWorkspaceSelected(path: string): void {
   currentWorkspace.value = path
   workspaceSelected.value = true
@@ -3045,6 +3062,10 @@ function paneStaleConfig(p: ActivePane): StaleConfigPart[] {
   return staleParts(staleConfigByPane.value[p.id], paneRefs[p.id]?.sessionId as string | undefined)
 }
 
+/** Panes a cli_set_model switch is running in (ui.pane.setModel); their
+ *  message queue is held until the switch is over. */
+const modelSwitchingPanes = new Set<string>()
+
 /** idleHoldKey() dep: why a message cannot be injected into this pane right
  *  now, as an i18n key suffix under `msg.hold-*`, or null when it can be.
  *  Gate: PTY alive and past startup, nobody typing into it, not mid role/kickoff
@@ -3079,6 +3100,9 @@ function messagingHoldKey(
   const parkedOnQuestion = status === 'awaiting' && awaitingKind === 'question'
   if (status !== 'running' && status !== 'idle' && !parkedOnQuestion) return 'not-ready'
   if (pane.injectionStatus === 'scheduled' || pane.kickoffStatus === 'pending') return 'starting'
+  // cli_set_model is typing into the pane (the /model picker stays open for
+  // about a second); a message typed now would land in the picker.
+  if (modelSwitchingPanes.has(paneId)) return 'model-switch'
   // A resumed CLI reloads its transcript in silence, which the badge reads as
   // idle; a message typed then is wiped by the resume repaint and the repaint
   // passes for its echo. Hold until the CLI itself says it is up.
@@ -11464,6 +11488,11 @@ registerCommand('workbench.action.newWindow', async () => {
 // window's existing close handling (confirm-before-quit, PTY teardown) runs
 // exactly as it does when the traffic lights are used.
 registerCommand('workbench.action.closeWindow', () => { window.close() })
+// ⌘⇧T: reopen the last closed window with all of its workspaces (main does the
+// work, see reopenClosedWindow in main/index.ts). An empty list is a no-op.
+registerCommand('workbench.action.reopenClosedWindow', () => {
+  void window.agentTeam?.restore?.reopenClosed?.()
+})
 // ⌘W. The pane-level counterpart, so this window has the same two tiers the
 // Mini IDE does (⌘W a unit, ⌘⇧W the container). ⌘W was an empty key here
 // before: closeActiveEditor guards on `editorOpen`, which this window never
@@ -12007,37 +12036,44 @@ registerCommand('ui.pane.setModel', async (args) => {
   if (acp.owns(pane.id)) return refuse('acp-unsupported', 'an ACP pane cannot switch its model in place')
   const hold = paneRefs[pane.id]?.displayStatus === 'awaiting' ? 'awaiting' : messagingHoldKey(pane.id)
   if (hold !== null) return refuse('pane-busy', `the pane is not idle (${hold}); wait and retry`, { hold })
-  let fallback: string | undefined
-  if (pane.agentKey === 'claude' && !effort) {
-    const why = await setModelViaPicker(pane.id, model)
-    if (why === null) {
-      pane.model = model
-      return { ok: true, method: 'picker', paneId: pane.id }
+  // Held from the first key to the last: the picker, the codex command and the
+  // restart all type into the pane, and a queued message must not land in them.
+  modelSwitchingPanes.add(pane.id)
+  try {
+    let fallback: string | undefined
+    if (pane.agentKey === 'claude' && !effort) {
+      const why = await setModelViaPicker(pane.id, model)
+      if (why === null) {
+        pane.model = model
+        return { ok: true, method: 'picker', paneId: pane.id }
+      }
+      fallback = why
     }
-    fallback = why
-  }
-  const command = fallback ? null : liveModelCommand(pane.agentKey, model, effort)
-  if (command) {
-    const ok = await injectPane(pane.id, command, 'set-model', true)
-    if (!ok) return refuse('inject-failed', 'the /model command did not go in')
+    const command = fallback ? null : liveModelCommand(pane.agentKey, model, effort)
+    if (command) {
+      const ok = await injectPane(pane.id, command, 'set-model', true)
+      if (!ok) return refuse('inject-failed', 'the /model command did not go in')
+      pane.model = model
+      return { ok: true, method: 'slash', paneId: pane.id }
+    }
+    const before = { model: pane.model, effort: pane.effort }
     pane.model = model
-    return { ok: true, method: 'slash', paneId: pane.id }
+    if (effort) pane.effort = effort
+    let paneId = pane.id
+    const failure = await rebuildPaneViaResume(pane.id, {
+      suppressBusyToast: true,
+      freshWhenNoTranscript: true,
+      onReplaced: (id) => { paneId = id },
+    })
+    if (failure) {
+      pane.model = before.model
+      pane.effort = before.effort
+      return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`, fallback ? { fallback } : {})
+    }
+    return fallback ? { ok: true, method: 'restart', paneId, fallback } : { ok: true, method: 'restart', paneId }
+  } finally {
+    modelSwitchingPanes.delete(pane.id)
   }
-  const before = { model: pane.model, effort: pane.effort }
-  pane.model = model
-  if (effort) pane.effort = effort
-  let paneId = pane.id
-  const failure = await rebuildPaneViaResume(pane.id, {
-    suppressBusyToast: true,
-    freshWhenNoTranscript: true,
-    onReplaced: (id) => { paneId = id },
-  })
-  if (failure) {
-    pane.model = before.model
-    pane.effort = before.effort
-    return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`, fallback ? { fallback } : {})
-  }
-  return fallback ? { ok: true, method: 'restart', paneId, fallback } : { ok: true, method: 'restart', paneId }
 })
 registerCommand('ui.messaging.readIncoming', (args) => {
   const a = (args ?? {}) as {

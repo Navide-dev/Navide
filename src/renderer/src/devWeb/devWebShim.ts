@@ -32,6 +32,7 @@ const EMPTY_RESULTS: Record<string, unknown> = {
   takeRestoredAdoptedWorkspaces: [],
   'restore.getPending': null,
   'restore.getSkipped': [],
+  'restore.listRecentlyClosed': [],
   'plugins.listContributions': [],
   // The Navide Plugins and Navide Marketplace pages as in an app with no
   // third-party Navide plugins, Developer Mode off and nothing pending.
