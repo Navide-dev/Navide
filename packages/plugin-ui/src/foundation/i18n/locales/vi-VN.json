@@ -4621,8 +4621,8 @@
               "detail": "Chỉ hiện khi tài khoản chưa đăng nhập hoặc thông tin xác thực đã hết hạn."
             },
             "setDefault": {
-              "action": "Đặt làm mặc định",
-              "detail": "Chuyển tài khoản đang dùng. Trong lúc chuyển, nút ghi “Đang chuyển…” và nút của mọi tài khoản tạm thời bị vô hiệu."
+              "action": "{switchLabel}",
+              "detail": "Hiện ở mọi tài khoản không phải tài khoản đang dùng. Nút chuyển đăng nhập hiện tại của CLI này sang tài khoản đó, nên các pane mở sau sẽ dùng nó. Trong lúc chuyển, nút hiển thị \"{switchingLabel}\" và nút của mọi tài khoản tạm thời bị vô hiệu."
             },
             "refreshQuota": {
               "action": "Làm mới hạn mức",
@@ -4660,7 +4660,7 @@
             "title": "Liên kết được thực hiện ở nơi khác",
             "text": "“Workspace này dùng tài khoản Git nào” được chọn bằng nhãn tài khoản trên <strong>bảng Git ở thanh bên</strong>. Trang Cài đặt chỉ thêm, sửa và xóa tài khoản. Xóa một tài khoản cũng xóa luôn mọi liên kết đang trỏ tới nó."
           },
-          "switchToast": "<strong>Chuyển tài khoản thất bại giờ luôn hiện rõ.</strong> Trước đây chỉ hai trường hợp từ chối mới hiện thông báo nổi — “có pane đang chạy” và “chuyển quá thường xuyên”. Mọi trường hợp khác, kể cả hoán đổi thông tin xác thực thất bại, đều đổ vào biểu ngữ riêng của bảng Tài khoản, vốn đã cuộn khuất từ lâu trong lúc bạn xem các hàng của một nhà cung cấp; nhấp “Đặt làm mặc định” trông như không có gì xảy ra. Giờ mọi kiểu chuyển thất bại đều hiện thông báo nổi.",
+          "switchToast": "<strong>Chuyển tài khoản thất bại giờ luôn hiện rõ.</strong> Trước đây chỉ hai trường hợp từ chối mới hiện thông báo nổi — “có pane đang chạy” và “chuyển quá thường xuyên”. Mọi trường hợp khác, kể cả hoán đổi thông tin xác thực thất bại, đều đổ vào biểu ngữ riêng của bảng Tài khoản, vốn đã cuộn khuất từ lâu trong lúc bạn xem các hàng của một nhà cung cấp; nhấp “{switchLabel}” trông như không có gì xảy ra. Giờ mọi kiểu chuyển thất bại đều hiện thông báo nổi.",
           "agentConfirm": "Agent cũng có thể tự yêu cầu những việc này — mở đăng nhập cho một tài khoản, chuyển tài khoản của một CLI, hoặc chuyển riêng một pane sang tài khoản khác. Mỗi yêu cầu mở một hộp xác nhận ghi rõ CLI, tài khoản, pane yêu cầu và lý do; <strong>không có gì xảy ra nếu bạn không đồng ý</strong>, và yêu cầu không được trả lời sẽ tự đóng."
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "Công cụ MCP + giao thức đầu ra",
             "protocolOnly": "Chỉ giao thức đầu ra",
-            "none": "Không có (chỉ nhận)"
+            "none": "Không có (chỉ nhận)",
+            "mcpOnly": "Chỉ công cụ MCP"
           },
           "note1": "Giao thức đầu ra cần Navide đọc được nhật ký riêng của agent đó; mọi nhà cung cấp có trình đọc nhật ký đều được hỗ trợ, nên Navide biết khi nào agent nói xong và đã nói gì. Công cụ MCP còn cần CLI có đường vào (một cờ khởi chạy, một biến môi trường chứa toàn bộ tài liệu cấu hình, hoặc bản sao thư mục cấu hình riêng cho từng pane) và Navide nối vào; {protocolOnly} chưa được nối nên chỉ dùng giao thức đầu ra. <strong>{receiveOnly}</strong> không có cả hai: Navide chưa có trình đọc nhật ký của chúng, nên chúng nhận được tin nhắn nhưng không gửi được.",
           "note2": "Thực tế có hai lưu ý: <strong>Antigravity</strong> không gửi được ở lượt agent đặt câu hỏi cho bạn (lượt đó không có văn bản trả lời) — các lượt trả lời bình thường vẫn ổn; còn <strong>Qwen, Pi và Kimi</strong> không có tín hiệu “kết thúc lượt” rõ ràng, nên Navide suy ra từ 8 giây im lặng và tin nhắn được gửi muộn hơn một chút."
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>Khi hàng chờ của đích đã đầy (tối đa 10), tin nhắn bị bỏ</strong> — nhưng không còn âm thầm nữa: bảng báo “Đích đã có 10 tin đang chờ”, lỗi được gõ ngược vào pane gửi dưới dạng thông báo, và agent gửi cũng có thể tự tra xem tin của mình ra sao. Việc chuyển vẫn là bất đồng bộ, nên <strong>ngay lúc gửi</strong> chưa biết được gì.",
             "noPermission": "<strong>Không có yêu cầu cấp quyền</strong> — nhắn tin giữa các workspace không hiện hộp thoại xác nhận nào, chỉ có thông báo khi tới. Đây là một sự đánh đổi có chủ ý.",
             "ackLocal": "<strong>Xác nhận đơn thuần không đi qua các thiết bị</strong> — bộ chuyển tiếp không thể hứa rằng tin nhắn sẽ không lọt vào ô nhập trên máy của người khác, nên xác nhận liên thiết bị bị từ chối ngay; nếu cần gửi đi, hãy gửi nó như một tin nhắn bình thường.",
-            "acp": "<strong>Pane ACP</strong> (thử nghiệm; bật trong “CLI agent” → ACP) nhận tin nhắn dưới dạng prompt ACP thay vì được gõ vào; “Đã gửi tới” nghĩa là agent đã nhận prompt, không có nghĩa là nó đã đọc hay trả lời."
+            "acp": "<strong>Pane ACP</strong> (thử nghiệm; bật trong “CLI agent” → ACP) nhận tin nhắn dưới dạng prompt ACP thay vì được gõ vào; “Đã gửi tới” nghĩa là agent đã nhận prompt, không có nghĩa là nó đã đọc hay trả lời.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> chỉ gửi được qua công cụ MCP: Navide không đọc văn bản các lượt của nó, nên tin nhắn dòng trần mà nó in ra không bao giờ rời khỏi pane."
           }
         },
         "tip": "Mẹo: hãy đặt tên vai trò cho các pane trước (“reviewer”, “architect”) — tiêu đề chính là địa chỉ, và mọi thứ sau đó đọc tự nhiên hơn nhiều.",

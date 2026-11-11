@@ -409,6 +409,7 @@ const logRows = computed(() => [
       <ul class="cmh-list">
         <li v-html="$t('settings.help.messaging.s10.list.terminalPane')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.receiveOnly', facts)"></li>
+        <li v-if="facts.mcpOnly" v-html="$t('settings.help.messaging.s10.list.mcpOnly', facts)"></li>
         <li v-html="$t('settings.help.messaging.s10.list.detached')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.queueFull')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.noPermission')"></li>

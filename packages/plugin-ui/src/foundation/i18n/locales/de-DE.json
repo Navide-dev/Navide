@@ -4621,8 +4621,8 @@
               "detail": "Nur sichtbar, wenn das Konto nicht angemeldet ist oder seine Anmeldeinformationen abgelaufen sind."
             },
             "setDefault": {
-              "action": "Als Standard festlegen",
-              "detail": "Wechselt das aktive Konto. Während des Wechsels lautet die Schaltfläche „Wird gewechselt …“, und die Schaltflächen aller Konten sind vorübergehend deaktiviert."
+              "action": "{switchLabel}",
+              "detail": "Erscheint bei jedem Konto, das nicht aktiv ist. Es stellt die aktuelle Anmeldung dieser CLI auf das Konto um, sodass die als Nächstes geöffneten Bereiche es verwenden. Während des Wechsels zeigt die Schaltfläche „{switchingLabel}“ und die Schaltflächen aller Konten sind vorübergehend deaktiviert."
             },
             "refreshQuota": {
               "action": "Kontingent aktualisieren",
@@ -4660,7 +4660,7 @@
             "title": "Die Verknüpfung erfolgt an anderer Stelle",
             "text": "„Welches Git-Konto dieser Arbeitsbereich verwendet“ wählen Sie mit der Konto-Pille im <strong>Git-Panel der Seitenleiste</strong>. Die Einstellungsseite fügt Konten nur hinzu, bearbeitet und löscht sie. Das Löschen eines Kontos hebt auch jede Verknüpfung auf, die darauf verwies."
           },
-          "switchToast": "<strong>Ein fehlgeschlagener Wechsel ist jetzt immer sichtbar.</strong> Früher lösten nur zwei Ablehnungen eine Meldung aus – „Bereiche laufen“ und „zu häufiger Wechsel“. Alles andere, auch ein fehlgeschlagener Austausch der Anmeldeinformationen, landete im eigenen Banner des Panels „Konten“, das längst aus dem Blickfeld gescrollt war, während Sie die Zeilen eines Anbieters betrachteten; ein Klick auf „Als Standard festlegen“ sah aus, als sei gar nichts passiert. Jede Art von Fehlschlag beim Wechsel löst jetzt eine Meldung aus.",
+          "switchToast": "<strong>Ein fehlgeschlagener Wechsel ist jetzt immer sichtbar.</strong> Früher lösten nur zwei Ablehnungen eine Meldung aus – „Bereiche laufen“ und „zu häufiger Wechsel“. Alles andere, auch ein fehlgeschlagener Austausch der Anmeldeinformationen, landete im eigenen Banner des Panels „Konten“, das längst aus dem Blickfeld gescrollt war, während Sie die Zeilen eines Anbieters betrachteten; ein Klick auf „{switchLabel}“ sah aus, als sei gar nichts passiert. Jede Art von Fehlschlag beim Wechsel löst jetzt eine Meldung aus.",
           "agentConfirm": "Ein Agent kann das auch selbst anfordern – eine Anmeldung für ein Konto öffnen, das Konto einer CLI wechseln oder einen einzelnen Bereich auf ein anderes Konto verschieben. Jede Anfrage öffnet einen Bestätigungsdialog mit CLI, Konto, anfragendem Bereich und Begründung; <strong>ohne Ihre Zustimmung passiert nichts</strong>, und eine unbeantwortete Anfrage schließt sich von selbst."
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "MCP-Tools + Ausgabeprotokoll",
             "protocolOnly": "Nur Ausgabeprotokoll",
-            "none": "Keins von beiden (nur Empfang)"
+            "none": "Keins von beiden (nur Empfang)",
+            "mcpOnly": "Nur MCP-Tools"
           },
           "note1": "Das Ausgabeprotokoll setzt voraus, dass Navide das eigene Protokoll des Agents lesen kann; jeder Anbieter mit Log-Reader ist abgedeckt, sodass Navide erkennt, wann der Agent etwas fertig gesagt hat und was. MCP-Werkzeuge brauchen zusätzlich einen Zugang in der CLI (ein Start-Flag, eine Umgebungsvariable mit dem ganzen Konfigurationsdokument oder ein Spiegel des Konfigurationsverzeichnisses pro Bereich) und dass Navide ihn anbindet; {protocolOnly} sind nicht angebunden und nutzen nur das Ausgabeprotokoll. <strong>{receiveOnly}</strong> haben beides nicht: Navide hat noch keinen Reader für ihre Protokolle, sie können also Nachrichten empfangen, aber nicht senden.",
           "note2": "Zwei Einschränkungen in der Praxis: <strong>Antigravity</strong> kann in der Runde, in der der Agent Ihnen eine Frage stellt, nicht senden (diese Runde enthält keinen Antworttext) – normale Antwortrunden funktionieren; und <strong>Qwen, Pi und Kimi</strong> haben kein explizites Signal „Runde beendet“, deshalb leitet Navide es aus 8 Sekunden Stille ab, und die Nachricht geht etwas später hinaus."
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>Ist die Warteschlange des Ziels voll (höchstens 10), wird die Nachricht verworfen</strong> – aber nicht mehr stillschweigend: Das Panel meldet „Für das Ziel warten bereits 10 Nachrichten“, der Fehler wird als Hinweis in den sendenden Bereich zurückgetippt, und der sendende Agent kann ebenso nachsehen, was aus seiner Nachricht geworden ist. Die Zustellung bleibt asynchron, daher ist <strong>im Moment des Sendens</strong> nichts bekannt.",
             "noPermission": "<strong>Es gibt keine Berechtigungsabfrage</strong> – arbeitsbereichsübergreifende Nachrichten lösen keinen Bestätigungsdialog aus, nur einen Hinweis bei Ankunft. Das ist ein bewusster Kompromiss.",
             "ackLocal": "<strong>Eine reine Bestätigung überschreitet keine Geräte</strong> – das Relay kann nicht zusichern, dass die Nachricht auf dem Rechner einer anderen Person aus dem Eingabefeld herausbleibt; eine geräteübergreifende Bestätigung wird daher grundsätzlich abgelehnt. Senden Sie sie als normale Nachricht, wenn sie übertragen werden muss.",
-            "acp": "<strong>ACP-Bereiche</strong> (experimentell; eingeschaltet unter „CLI-Agents“ → ACP) bekommen eine Nachricht als ACP-Prompt übergeben, statt dass sie eingetippt wird; „Zugestellt“ heißt, dass der Agent den Prompt angenommen hat, nicht, dass er ihn gelesen oder beantwortet hat."
+            "acp": "<strong>ACP-Bereiche</strong> (experimentell; eingeschaltet unter „CLI-Agents“ → ACP) bekommen eine Nachricht als ACP-Prompt übergeben, statt dass sie eingetippt wird; „Zugestellt“ heißt, dass der Agent den Prompt angenommen hat, nicht, dass er ihn gelesen oder beantwortet hat.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> kann nur über die MCP-Tools senden: Navide liest seinen Turn-Text nicht, daher verlässt eine ausgegebene Bare-Line-Nachricht den Bereich nie."
           }
         },
         "tip": "Tipp: Geben Sie Bereichen zuerst Rollennamen („reviewer“, „architect“) – der Titel ist die Adresse, und alles Weitere liest sich dann viel natürlicher.",

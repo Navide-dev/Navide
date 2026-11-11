@@ -158,6 +158,11 @@ const { t, locale } = useI18n()
 
 // Counts and name lists the prose quotes, read from the vendor specs.
 const facts = computed(() => cliFacts(locale.value))
+// The account switch button, quoted by its own label.
+const switchLabels = computed(() => ({
+  switchLabel: t('settings.accounts.cli.set-default'),
+  switchingLabel: t('settings.accounts.cli.switching'),
+}))
 const menuGroups = computed(() => ({
   cliHeading: t('label.add-menu-cli'),
   agentsHeading: t('label.add-menu-agents'),
@@ -603,8 +608,8 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
           </thead>
           <tbody>
             <tr v-for="key in accountActions" :key="key">
-              <td class="cah-nowrap"><strong>{{ $t(`settings.help.cliAgents.s5.accountActions.${key}.action`) }}</strong></td>
-              <td>{{ $t(`settings.help.cliAgents.s5.accountActions.${key}.detail`) }}</td>
+              <td class="cah-nowrap"><strong>{{ $t(`settings.help.cliAgents.s5.accountActions.${key}.action`, switchLabels) }}</strong></td>
+              <td>{{ $t(`settings.help.cliAgents.s5.accountActions.${key}.detail`, switchLabels) }}</td>
             </tr>
           </tbody>
         </table>
@@ -615,7 +620,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.p5')"></p>
       <p class="cah-p">{{ $t('settings.help.cliAgents.s5.p6') }}</p>
       <p class="cah-p">{{ $t('settings.help.cliAgents.s5.p7') }}</p>
-      <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.switchToast')"></p>
+      <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.switchToast', switchLabels)"></p>
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.agentConfirm')"></p>
 
       <div class="cah-callout cah-callout--warn">

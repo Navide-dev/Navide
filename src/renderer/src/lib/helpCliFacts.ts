@@ -17,16 +17,19 @@ export function joinNames(names: readonly string[], locale: string): string {
 // MCP_WIRED = vendors whose cli_vendors/<key>.py declares `mcp_wiring`;
 // NO_LOG_READER = vendors with no `make_log_reader` (nothing reads their turn
 // text, so the bare-line output protocol cannot reach Navide either).
+// backend/tests/test_cli_vendors_registry.py fails when these drift.
 export const MCP_WIRED: ReadonlySet<string> = new Set([
-  'claude', 'codex', 'copilot', 'qwen', 'opencode', 'kilo', 'kimi', 'grok', 'antigravity', 'cursor',
+  'claude', 'codex', 'copilot', 'qwen', 'opencode', 'kilo', 'kimi', 'grok', 'antigravity', 'cursor', 'kiro',
 ])
-export const NO_LOG_READER: ReadonlySet<string> = new Set(['mcode', 'devin'])
+export const NO_LOG_READER: ReadonlySet<string> = new Set(['mcode', 'devin', 'kiro'])
 
-export type SendRoute = 'both' | 'protocolOnly' | 'none'
+export type SendRoute = 'both' | 'mcpOnly' | 'protocolOnly' | 'none'
 
 export function sendRoute(spec: AgentSpec): SendRoute {
-  if (NO_LOG_READER.has(spec.agentKey)) return 'none'
-  return MCP_WIRED.has(spec.agentKey) ? 'both' : 'protocolOnly'
+  const mcp = MCP_WIRED.has(spec.agentKey)
+  const protocol = !NO_LOG_READER.has(spec.agentKey)
+  if (mcp) return protocol ? 'both' : 'mcpOnly'
+  return protocol ? 'protocolOnly' : 'none'
 }
 
 export interface CliFacts {
@@ -36,6 +39,7 @@ export interface CliFacts {
   noMcpCount: number
   notWired: string
   protocolOnly: string
+  mcpOnly: string
   receiveOnly: string
   sendCount: number
   noFlagCount: number
@@ -50,11 +54,12 @@ export function cliFacts(locale: string): CliFacts {
   const list = (pick: (s: AgentSpec) => boolean): string => joinNames(names(pick), locale)
   return {
     total: CLI_AGENT_SPECS.length,
-    mcpCount: names((s) => sendRoute(s) === 'both').length,
-    mcpNames: list((s) => sendRoute(s) === 'both'),
-    noMcpCount: names((s) => sendRoute(s) !== 'both').length,
-    notWired: list((s) => sendRoute(s) !== 'both'),
+    mcpCount: names((s) => MCP_WIRED.has(s.agentKey)).length,
+    mcpNames: list((s) => MCP_WIRED.has(s.agentKey)),
+    noMcpCount: names((s) => !MCP_WIRED.has(s.agentKey)).length,
+    notWired: list((s) => !MCP_WIRED.has(s.agentKey)),
     protocolOnly: list((s) => sendRoute(s) === 'protocolOnly'),
+    mcpOnly: list((s) => sendRoute(s) === 'mcpOnly'),
     receiveOnly: list((s) => sendRoute(s) === 'none'),
     sendCount: names((s) => sendRoute(s) !== 'none').length,
     noFlagCount: names((s) => !s.skipPermissionFlag).length,

@@ -4621,8 +4621,8 @@
               "detail": "Shown only when the account is not signed in or its credentials expired."
             },
             "setDefault": {
-              "action": "Set as default",
-              "detail": "Switches the active account. While switching, the button reads \"Switching…\" and every account's buttons are temporarily disabled."
+              "action": "{switchLabel}",
+              "detail": "Shown on every account that is not the active one. It switches this CLI's live login to the account, so the panes you open next use it. While switching, the button reads \"{switchingLabel}\" and every account's buttons are temporarily disabled."
             },
             "refreshQuota": {
               "action": "Refresh quota",
@@ -4660,7 +4660,7 @@
             "title": "Binding is done elsewhere",
             "text": "\"Which Git account this workspace uses\" is chosen with the account pill on the <strong>Git panel in the sidebar</strong>. The Settings page only adds, edits and deletes accounts. Deleting an account also clears any binding that pointed to it."
           },
-          "switchToast": "<strong>A failed switch is now always visible.</strong> Only two refusals used to raise a toast — \"panes are running\" and \"switching too often\". Everything else, a failed credential swap included, went into the Accounts panel’s own banner, which had long scrolled out of view while you were looking at one vendor’s rows; pressing \"Set as Default\" looked like nothing happened at all. Every kind of switch failure raises a toast now.",
+          "switchToast": "<strong>A failed switch is now always visible.</strong> Only two refusals used to raise a toast — \"panes are running\" and \"switching too often\". Everything else, a failed credential swap included, went into the Accounts panel’s own banner, which had long scrolled out of view while you were looking at one vendor’s rows; pressing \"{switchLabel}\" looked like nothing happened at all. Every kind of switch failure raises a toast now.",
           "agentConfirm": "An agent can also ask for this itself — to open a sign-in for an account, to switch a CLI’s account, or to move one pane to another account. Each request opens a confirmation dialog naming the CLI, the account, the asking pane and its reason; <strong>nothing happens unless you agree</strong>, and an unanswered request closes by itself."
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "MCP tools + output protocol",
             "protocolOnly": "Output protocol only",
-          "none": "Neither (receive only)"
+          "none": "Neither (receive only)",
+            "mcpOnly": "MCP tools only"
           },
           "note1": "The output protocol needs Navide to read that agent’s own log; every vendor with a log reader is covered, so Navide can tell when the agent has finished saying something, and what it said. MCP tools additionally need the CLI to offer a way in (a launch flag, one environment variable carrying the whole config document, or a per-pane mirror of the config directory) and Navide to wire it; {protocolOnly} are not wired, so they use the output protocol only. <strong>{receiveOnly}</strong> have neither: Navide has no reader for their logs yet, so they can receive messages but cannot send.",
           "note2": "Two caveats in practice: <strong>Antigravity</strong> cannot send on the turn where the agent asks you a question (that turn carries no reply text) — ordinary answering turns are fine; and <strong>Qwen, Pi and Kimi</strong> have no explicit \"turn finished\" signal, so Navide infers it from 8 seconds of silence and the send goes out a little later."
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>When the target's queue is full (10 at most) the message is dropped</strong> — but no longer silently: the panel says \"The target already has 10 messages waiting\", the failure is typed back into the sending pane as a notice, and the sending agent can equally look up what became of its own message. Delivery is still asynchronous, so nothing is known <strong>at the instant of sending</strong>.",
             "noPermission": "<strong>There is no permission prompt</strong> — cross-workspace messaging raises no confirmation dialog, only a notice on arrival. That is a deliberate trade-off.",
             "ackLocal": "<strong>A pure acknowledgement does not cross devices</strong> — the relay cannot promise the message stays out of an input box on someone else's machine, so a cross-device ack is refused outright; send it as an ordinary message if it has to travel.",
-            "acp": "<strong>ACP panes</strong> (experimental; switched on under \"CLI Agents\" → ACP) are handed a message as an ACP prompt instead of having it typed in; \"Delivered\" means the agent accepted the prompt, not that it has read or answered it."
+            "acp": "<strong>ACP panes</strong> (experimental; switched on under \"CLI Agents\" → ACP) are handed a message as an ACP prompt instead of having it typed in; \"Delivered\" means the agent accepted the prompt, not that it has read or answered it.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> can send only through the MCP tools: Navide does not read its turn text, so a bare-line message it prints never leaves the pane."
           }
         },
         "tip": "Tip: give panes role names first (\"reviewer\", \"architect\") — the title is the address, and everything afterwards reads much more naturally.",
