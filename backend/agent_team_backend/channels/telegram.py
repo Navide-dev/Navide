@@ -82,6 +82,7 @@ BOT_COMMANDS = [
     {"command": "stop", "description": "中斷 pane"},
     {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
     {"command": "resume", "description": "恢復被中斷的 pane"},
+    {"command": "model", "description": "切換 pane 的模型"},
 ]
 # BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
 BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -95,6 +96,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrupt the pane",
         "cancel": "Withdraw messages not yet sent to the pane",
         "resume": "Resume an interrupted pane",
+        "model": "Switch the pane's model",
     },
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
@@ -105,6 +107,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "pane を中断",
         "cancel": "まだ pane に送っていないメッセージを取り消す",
         "resume": "中断した pane を再開",
+        "model": "pane のモデルを切り替え",
     },
     "zh-CN": {
         "pending": "列出等待确认的 pane",
@@ -115,6 +118,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "中断 pane",
         "cancel": "撤回还没送进 pane 的消息",
         "resume": "恢复被中断的 pane",
+        "model": "切换 pane 的模型",
     },
     "ko-KR": {
         "pending": "확인 대기 중인 pane 목록",
@@ -125,6 +129,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "pane 중단",
         "cancel": "아직 pane에 보내지 않은 메시지 철회",
         "resume": "중단된 pane 재개",
+        "model": "pane 모델 전환",
     },
     "es-ES": {
         "pending": "Panes en espera de confirmación",
@@ -135,6 +140,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrumpir el pane",
         "cancel": "Retirar mensajes aún no enviados al pane",
         "resume": "Reanudar un pane interrumpido",
+        "model": "Cambiar el modelo del pane",
     },
     "fr-FR": {
         "pending": "Lister les panes en attente de confirmation",
@@ -145,6 +151,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrompre le pane",
         "cancel": "Retirer les messages pas encore envoyés au pane",
         "resume": "Reprendre un pane interrompu",
+        "model": "Changer le modèle du pane",
     },
     "de-DE": {
         "pending": "Panes auflisten, die auf Bestätigung warten",
@@ -155,6 +162,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Das pane unterbrechen",
         "cancel": "Noch nicht an das pane gesendete Nachrichten zurückziehen",
         "resume": "Ein unterbrochenes pane fortsetzen",
+        "model": "Das Modell des pane wechseln",
     },
     "pt-BR": {
         "pending": "Panes aguardando confirmação",
@@ -165,6 +173,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interromper o pane",
         "cancel": "Retirar mensagens ainda não enviadas ao pane",
         "resume": "Retomar um pane interrompido",
+        "model": "Trocar o modelo do pane",
     },
     "ru-RU": {
         "pending": "Pane, ожидающие подтверждения",
@@ -175,6 +184,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Прервать pane",
         "cancel": "Отозвать сообщения, ещё не отправленные в pane",
         "resume": "Возобновить прерванный pane",
+        "model": "Сменить модель pane",
     },
     "vi-VN": {
         "pending": "Liệt kê các pane đang chờ xác nhận",
@@ -185,6 +195,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Ngắt pane",
         "cancel": "Rút lại tin nhắn chưa gửi vào pane",
         "resume": "Tiếp tục pane bị ngắt",
+        "model": "Đổi mô hình của pane",
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.

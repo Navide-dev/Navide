@@ -9,13 +9,14 @@ import unicodedata
 import pytest
 
 from agent_team_backend import prompt_skills as ps
-from agent_team_backend.channels import held, media, quick_menu, telegram, wake
+from agent_team_backend.channels import held, media, model_menu, quick_menu, telegram, wake
 
 _SEED = ps.load_seed()
 TABLES: dict[str, dict[str, dict[str, str]]] = {
     "held": held.STRINGS,
     "wake": wake.STRINGS,
     "quick_menu": quick_menu.STRINGS,
+    "model_menu": model_menu.STRINGS,
     "media": media.STRINGS,
     "telegram": telegram.BOT_COMMAND_DESCRIPTIONS,
     "seed": {lang: {"name": _SEED["name"][lang], "description": _SEED["description"][lang]}

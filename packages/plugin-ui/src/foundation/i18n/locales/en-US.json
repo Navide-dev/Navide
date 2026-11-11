@@ -11011,6 +11011,7 @@
     "token-linked": "Linked with a token"
   },
   "channels": {
+    "model-switched": "{who} switched {pane} to {model} from a chat ({method})",
     "agent": {
       "title": "Requests from agents",
       "from": "Asked by {requester}",

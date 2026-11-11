@@ -11011,6 +11011,7 @@
     "token-linked": "已用權杖連結"
   },
   "channels": {
+    "model-switched": "{who} 從聊天室把 {pane} 切到 {model}（{method}）",
     "agent": {
       "title": "agent 的請求",
       "from": "由 {requester} 提出",

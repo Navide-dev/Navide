@@ -782,7 +782,8 @@ class Mirror:
         if cmd == "status":
             root = directory.get(pane_id) or {"name": binding.title or pane_id, "display_status": ""}
             tree = format_tree(root, self.descendants(pane_id, directory))
-            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id)]))
+            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id)]),
+                                buttons=await self.m.model_buttons())
             return True
         if cmd == "stop":
             target = match_name(arg, kids + ([directory[pane_id]] if pane_id in directory else []))

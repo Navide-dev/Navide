@@ -11011,6 +11011,7 @@
     "token-linked": "已用令牌链接"
   },
   "channels": {
+    "model-switched": "{who} 从聊天室把 {pane} 切到 {model}（{method}）",
     "agent": {
       "title": "agent 的请求",
       "from": "由 {requester} 提出",

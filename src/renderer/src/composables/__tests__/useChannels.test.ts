@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
+import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import { createMockBackend, flush } from './mockBackend'
 import { chatRows, useChannels } from '../useChannels'
 
@@ -156,6 +157,18 @@ describe('useChannels', () => {
     const store = useChannels(mock.backend)
     store.paneClosed('p1')
     expect(mock.sent.map((s) => s.type)).toEqual(['channels.unbind'])
+  })
+
+  it('toasts who switched which pane\'s model from a chat', async () => {
+    const mock = createMockBackend('disconnected')
+    useChannels(mock.backend)
+    const before = useNotify().toasts.value.length
+    mock.emit('channels.model_switched', { who: 'telegram:alice', pane_name: 'api', model: 'sonnet', effort: 'high', method: 'restart' })
+    const toasts = useNotify().toasts.value
+    expect(toasts).toHaveLength(before + 1)
+    expect(toasts[toasts.length - 1].message).toBe(i18n.global.t('channels.model-switched', {
+      who: 'telegram:alice', pane: 'api', model: 'sonnet · high', method: 'restart',
+    }))
   })
 
   it('creates a link invite and records the chat a link brings in', async () => {

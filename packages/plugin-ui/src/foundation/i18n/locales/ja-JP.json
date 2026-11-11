@@ -11011,6 +11011,7 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "model-switched": "{who} がチャットから {pane} を {model} に切り替えました（{method}）",
     "agent": {
       "title": "エージェントからのリクエスト",
       "from": "{requester} からの依頼",
