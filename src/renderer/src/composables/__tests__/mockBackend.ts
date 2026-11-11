@@ -100,7 +100,19 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     })
   }
 
-  const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on } as unknown as Backend
+  /** Workspaces currently declared through watchTokens, one entry per holder. */
+  const tokenWatches: string[] = []
+  function watchTokens(path: string): () => void {
+    tokenWatches.push(path)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      tokenWatches.splice(tokenWatches.indexOf(path), 1)
+    }
+  }
+
+  const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on, watchTokens } as unknown as Backend
   const fileAccess = createHostFileAccessPort(rawBackend)
   const settingsPort = createHostSettingsPort(rawBackend)
   const terminalPort = createHostTerminalDockPort(rawBackend)
@@ -124,6 +136,7 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     setRejection,
     clearRejection,
     sent,
+    tokenWatches,
   }
 }
 

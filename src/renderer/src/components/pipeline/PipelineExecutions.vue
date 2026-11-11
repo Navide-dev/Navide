@@ -11,6 +11,7 @@ import PipelineCanvas from './PipelineCanvas.vue'
 import { formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipelineEditorModel'
 import PipelineActionMenu, { type ActionMenuItem } from './PipelineActionMenu.vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import { TOKENS_NOTICE_REFRESH_MS } from '../../composables/useTokens'
 
 interface RunRecord {
   run_id: string
@@ -74,7 +75,39 @@ const off = props.backend.on('tokens.changed', (raw) => {
   const snap = raw as TokensSnapshot
   if (snap?.workspace_path === props.workspacePath) adopt(snap)
 })
-onScopeDispose(() => off())
+// A backend that knows `tokens.watch` sends a notice instead of the snapshot.
+// `tokens.snapshot` answers with the very snapshot the event carried; adopt it
+// the way the event was adopted — no loading or error state on the way.
+let noticeTimer: ReturnType<typeof setTimeout> | null = null
+let lastNoticeRefresh = 0
+async function refetchOnNotice(): Promise<void> {
+  const path = props.workspacePath
+  try {
+    const resp = await props.backend.send<TokensSnapshot>('tokens.snapshot', { workspace_path: path })
+    if (resp.ok && path === props.workspacePath) adopt(resp.payload)
+  } catch { /* the next notice or reconnect refetches */ }
+}
+const offNotice = props.backend.on('tokens.notice', (raw) => {
+  const path = (raw as { workspace_path?: string } | null)?.workspace_path
+  if (!props.workspacePath || path !== props.workspacePath || noticeTimer) return
+  const wait = Math.max(0, lastNoticeRefresh + TOKENS_NOTICE_REFRESH_MS - Date.now())
+  noticeTimer = setTimeout(() => {
+    noticeTimer = null
+    lastNoticeRefresh = Date.now()
+    void refetchOnNotice()
+  }, wait)
+})
+let releaseWatch: (() => void) | undefined
+watch(() => props.workspacePath, (path) => {
+  releaseWatch?.()
+  releaseWatch = path ? props.backend.watchTokens?.(path) : undefined
+}, { immediate: true })
+onScopeDispose(() => {
+  off()
+  offNotice()
+  releaseWatch?.()
+  if (noticeTimer) clearTimeout(noticeTimer)
+})
 
 /** A record belongs here when it names this pipeline. Records written before
  *  runs carried a pipeline id cannot be attributed and are listed apart. */

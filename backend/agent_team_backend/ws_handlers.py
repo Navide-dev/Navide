@@ -212,6 +212,9 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
     app.note_host_disabled_plugins(session.disabled_plugins)
+    # The plugin broker forwards no tokens.* event to plugins: keep the
+    # token-statistics broadcast off this session.
+    session.tokens_watch = frozenset()
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
     # A Host that connects again (its session dropped, this backend did not)
     # starts from idle: tell it the result helper's state when there is one.
@@ -7636,7 +7639,24 @@ async def tokens_snapshot(session: "Session", msg_id: str, msg_type: str, payloa
     # `tokens.changed` broadcast.
     app.refresh_live_scans(workspace_path or "")
     snap = app.tokens_store.snapshot(workspace_path)
+    if payload.get("global") == "all_time":
+        # The token panel shows only the all-time total; leave the per-day,
+        # per-account and per-version history out of its frequent refetches.
+        snap = {**snap, "global": {"all_time": snap["global"]["all_time"]}}
     await session.send_json(make_response(msg_id, msg_type, snap))
+
+
+@handler("tokens.watch")
+async def tokens_watch(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Declare which workspaces' token changes this connection wants ("*" for
+    all; [] for none). Replaces the previous declaration. From then on the
+    connection gets `tokens.notice` instead of the full `tokens.changed`."""
+    paths = payload.get("paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "paths must be a list of strings"))
+        return
+    session.tokens_watch = frozenset(paths)
+    await session.send_json(make_response(msg_id, msg_type, {"paths": sorted(session.tokens_watch)}))
 
 
 @handler("tokens.turns")
@@ -7662,7 +7682,7 @@ async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: 
     scope = payload.get("scope", "run")
     snap = await run_in_db_thread(app.tokens_store.reset, scope, payload.get("workspace_path") or None)
     await session.send_json(make_response(msg_id, msg_type, snap))
-    await app.broadcast(make_event("tokens.changed", snap))
+    await app.broadcast_tokens_changed(snap.get("workspace_path"), snap)
 
 
 @handler("tokens.quota_cycles")
@@ -11621,7 +11641,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         parent_run_id=_token_run_id(frame["run"].get("log_file_name", ""), project.id) if child_of and frame else "",
     )
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11812,7 +11832,7 @@ async def pipeline_complete(session: "Session", msg_id: str, msg_type: str, payl
     _mirror_pipeline_state(project)
     await run_in_db_thread(app.tokens_store.end_run, project.workspace_path, outcome="completed", node_states=project.node_states)
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11843,7 +11863,7 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
         node_states=project.node_states,
     )
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))

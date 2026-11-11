@@ -137,6 +137,31 @@ describe('useBackend applyBackendChanged', () => {
     await expect(inflight).resolves.toMatchObject({ ok: true })
   })
 
+  it('declares its token watches on connect, on change, and again after a reconnect', async () => {
+    const { backend, socket } = await setupConnected()
+    const watches = (s: FakeWebSocket) => s.sent
+      .map((raw) => JSON.parse(raw) as { type: string; payload: { paths?: string[] } })
+      .filter((m) => m.type === 'tokens.watch')
+      .map((m) => m.payload.paths)
+    // A window that shows no token statistics opts out at once.
+    expect(watches(socket)).toEqual([[]])
+
+    const releaseA = backend.watchTokens!('/ws/a')
+    const releaseA2 = backend.watchTokens!('/ws/a')
+    backend.watchTokens!('/ws/b')
+    releaseA()
+    expect(watches(socket).at(-1)).toEqual(['/ws/a', '/ws/b'])
+    releaseA2()
+    expect(watches(socket).at(-1)).toEqual(['/ws/b'])
+
+    // A new backend has no declaration: send it again.
+    backendChangedCb!({ ...READY_INFO, wsUrl: 'ws://127.0.0.1:9999/ws', port: 9999 })
+    await vi.advanceTimersByTimeAsync(0)
+    const next = FakeWebSocket.instances.at(-1)!
+    next.open()
+    expect(watches(next)).toEqual([['/ws/b']])
+  })
+
   it('opens one socket when backend:changed lands before init()\'s poll resolves', async () => {
     scope = effectScope()
     scope.run(() => {
