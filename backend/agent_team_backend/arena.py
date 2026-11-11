@@ -206,7 +206,12 @@ def _worktree(run: dict[str, Any], path: str) -> str | None:
     try:
         # samefile, not string equality: git may spell the path in another
         # case on a case-insensitive volume.
-        same = bool(gitdir) and os.path.samefile(os.path.dirname(os.path.join(path, gitdir)), repo_worktrees)
+        real = os.path.realpath(os.path.join(path, gitdir)) if gitdir else ""
+        same = (
+            bool(real)
+            and os.path.basename(real) not in ("", ".", "..")
+            and os.path.samefile(os.path.dirname(real), repo_worktrees)
+        )
     except OSError:
         same = False
     if not same:
