@@ -80,6 +80,7 @@ import {
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
+import { useArenaPrefs } from '../composables/useArenaPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -461,6 +462,9 @@ interface Props {
   /** Agent identities with their pane state (App's agentPaneSummaries); the ＋
    *  menu's Agents block lists them. Absent = none. */
   agentIdentities?: AgentIdentitySummary[]
+  /** Model arena runs recorded for the workspace on screen (experimental);
+   *  the ＋ menu's Compare block offers to reopen them when there are any. */
+  arenaRuns?: number
 }
 
 const props = defineProps<Props>()
@@ -1213,6 +1217,9 @@ const emit = defineEmits<{
    *  and restores the folder name. */
   (e: 'rename-workspace', workspacePath: string, name: string): void
   (e: 'install-cli', payload: { agentKey: string; label: string }): void
+  /** Model arena (experimental): open the start dialog / the run view for a workspace. */
+  (e: 'arena-start', workspacePath: string): void
+  (e: 'arena-panel', workspacePath: string): void
   (e: 'update:collapsed', v: boolean): void
   /** The header's mode switch. App owns the value so it can persist it and so
    *  the stage agrees with the list about which panes are on screen. */
@@ -2859,6 +2866,17 @@ function openTerminalFromMenu(): void {
   addMenuOpen.value = false
   if (!canSpawn.value) return
   emit('spawn', { agentKey: 'terminal', roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
+}
+
+// ── ＋ menu, Compare block (Settings → General → Experimental features) ──────
+const { arenaEnabled } = useArenaPrefs()
+const arenaShortcut = formatKeySpec('cmd+alt+a')
+
+function openArenaFromMenu(panel: boolean): void {
+  const ws = addMenuWorkspace.value || workspacePath.value
+  addMenuOpen.value = false
+  if (panel) emit('arena-panel', ws)
+  else emit('arena-start', ws)
 }
 
 function openSpawnCardFromMenu(): void {
@@ -4613,6 +4631,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
              ship as Navide plugins, so the menu points there. -->
         <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
+        <!-- Model arena (experimental): its own block, styled exactly like the
+             CLI / Agents headings and entries; absent while the switch is off. -->
+        <template v-if="arenaEnabled">
+          <div class="ws-add-sec" data-section="compare">{{ $t('arena.menu.section') }}</div>
+          <button class="ws-add-opt ws-add-more ws-add-arena" data-testid="add-menu-arena" @click="openArenaFromMenu(false)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.start') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+            <span class="ws-add-kbd">{{ arenaShortcut }}</span>
+          </button>
+          <button v-if="arenaRuns" class="ws-add-opt ws-add-more" data-testid="add-menu-arena-runs" @click="openArenaFromMenu(true)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.runs', { n: arenaRuns }) }}</span>
+          </button>
+          <div class="ws-add-hint">{{ $t('arena.menu.hint') }}</div>
+        </template>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -6807,6 +6838,8 @@ button.icon-btn.muted:hover {
 .ws-add-newagent-go { font: inherit; font-size: var(--font-xs); padding: 2px 8px; border: none; border-radius: var(--radius-xs); background: var(--accent-emphasis); color: var(--text-on-emphasis); cursor: pointer; }
 .ws-add-newagent-go:disabled { opacity: 0.5; cursor: default; }
 .ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
+.ws-add-exp { color: var(--text-secondary); font-size: var(--font-3xs); }
+.ws-add-kbd { margin-left: auto; padding-left: 8px; color: var(--text-secondary); font-size: var(--font-3xs); }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */

@@ -1760,6 +1760,10 @@
           "title": "Einstellungsverwaltung",
           "summary": "Das vollständige Einstellungspaket exportieren/importieren und prüfen, wo Einstellungen gespeichert sind."
         },
+        "general-experimental": {
+          "title": "Experimentelle Funktionen",
+          "summary": "Modell-Arena und weitere Funktionen in Erprobung"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "Diesen Rechner mit Navide Cloud verbinden, damit Agents hier Agents auf Ihren anderen Geräten Nachrichten senden können."
@@ -7733,6 +7737,7 @@
       "resource-limits": "Ressourcengrenzen",
       "session-archive": "Archiv der Sitzungsprotokolle",
       "settings-management": "Einstellungsverwaltung",
+      "experimental": "Experimentelle Funktionen",
       "theme": "Design",
       "other": "Sonstiges"
     },
@@ -8273,6 +8278,7 @@
         "workbench_action_focusNextPane": "Nächsten Bereich fokussieren",
         "workbench_action_focusPipeline": "Pipeline fokussieren",
         "workbench_action_focusPreview": "Vorschaubereich fokussieren",
+        "workbench_action_startModelArena": "Modell-Arena starten",
         "workbench_action_focusPreviousGroup": "Vorherige Gruppe fokussieren",
         "workbench_action_focusPreviousPane": "Vorherigen Bereich fokussieren",
         "workbench_action_focusSourceControl": "Quellcodeverwaltung fokussieren",
@@ -13435,6 +13441,87 @@
       "unsupported": "Nicht unterstützt",
       "yolo": "Bestätigung gefährlicher Befehle überspringen",
       "yolo-flag": "Unterstützt ({flag}), folgt dem YOLO-Schalter"
+    }
+  },
+  "arena": {
+    "experimental": "Experimentell",
+    "menu": {
+      "section": "Vergleich",
+      "start": "Modell-Arena…",
+      "runs": "Arena-Läufe ({n})",
+      "hint": "Eine Aufgabe an 2–4 Modelle, jedes in einem eigenen Worktree, nebeneinander verglichen"
+    },
+    "ctx": {
+      "compare": "Diese Aufgabe mit mehreren Modellen vergleichen…"
+    },
+    "settings": {
+      "title": "Modell-Arena",
+      "hint": "Eine Aufgabe gleichzeitig an 2–4 Modelle senden, jedes in eigenem Git-Worktree und Bereich, dann die Ergebnisse vergleichen und das gewählte zusammenführen. Standardmäßig aus."
+    },
+    "start": {
+      "title": "Vergleich starten",
+      "subtitle": "Alle Modelle bearbeiten dieselbe Aufgabe ab demselben Commit, jedes in einem eigenen Worktree. Ihr Arbeitsordner bleibt bis zum Zusammenführen unberührt.",
+      "task": "Aufgabe",
+      "task-placeholder": "Beschreiben Sie die Änderung, die jedes Modell umsetzen soll…",
+      "base": "Ausgangspunkt",
+      "check": "Abnahmebefehl",
+      "check-placeholder": "z. B. pnpm test:run",
+      "models": "Modelle ({min}–{max})",
+      "cli": "CLI-Programm",
+      "model-default": "Standardmodell von {cli}",
+      "remove": "Entfernen",
+      "add": "Modell hinzufügen",
+      "time-limit": "Zeitlimit pro Bereich (Minuten)",
+      "budget": "Kostengrenze pro Bereich (US$)",
+      "estimate": "Öffnet {panes} Bereiche und {panes} Worktrees.",
+      "estimate-branches": "Branches: arena/<run>/<model>, unter .agent-team/worktrees/arena-<run>/.",
+      "estimate-budget": "Höchstens: insgesamt US$ {total} bei voller Grenze.",
+      "starting": "Wird gestartet…",
+      "go": "Vergleich starten",
+      "failed": "Der Vergleich konnte nicht gestartet werden."
+    },
+    "kickoff": {
+      "check": "Wenn du fertig bist, führe `{cmd}` aus und melde, ob es erfolgreich ist."
+    },
+    "panel": {
+      "title": "Modell-Arena",
+      "run": "Lauf",
+      "base": "Ab {branch} bei {sha}",
+      "elapsed": "Vergangen {t}",
+      "limits": "Grenzen: {min} Min., US$ {usd} pro Bereich",
+      "dirty-base": "Der Hauptordner hatte beim Start nicht festgeschriebene Änderungen; sie gehören nicht zum Ausgangspunkt der Kandidaten.",
+      "check-note": "Abnahmebefehl: {cmd}. Jeder Bereich führt ihn selbst aus und meldet das Ergebnis.",
+      "empty": "In diesem Arbeitsbereich gibt es noch keinen Arena-Lauf."
+    },
+    "run-state": {
+      "running": "Läuft",
+      "merged": "Zusammengeführt",
+      "kept": "Branch behalten",
+      "closed": "Geschlossen"
+    },
+    "state": {
+      "running": "Läuft",
+      "no-pane": "Kein Bereich",
+      "pane-closed": "Bereich geschlossen",
+      "stopped-user": "Von Ihnen gestoppt",
+      "stopped-time": "Gestoppt: Zeitlimit",
+      "stopped-budget": "Gestoppt: Kostengrenze"
+    },
+    "col": {
+      "model": "Modell",
+      "state": "Status",
+      "changes": "Änderungen",
+      "tokens": "Tokenanzahl",
+      "cost": "Kosten",
+      "default-model": "{cli} Standard",
+      "files": "{n} Dateien",
+      "protected": "{n} sensible Dateien geändert",
+      "cost-unavailable": "Keine Kostendaten"
+    },
+    "action": {
+      "show": "Anzeigen",
+      "stop": "Stoppen",
+      "stop-all": "Alle stoppen"
     }
   }
 }

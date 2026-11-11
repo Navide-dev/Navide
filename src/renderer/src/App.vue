@@ -231,6 +231,9 @@ import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSin
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
+import { useArenaPrefs } from './composables/useArenaPrefs'
+import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
+import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
@@ -510,6 +513,8 @@ const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components
 const AgentAccountSwitchConfirmDialog = defineAsyncComponent(() => import('./components/AgentAccountSwitchConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
+const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
+const ArenaPanel = defineAsyncComponent(() => import('./components/ArenaPanel.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
@@ -23926,6 +23931,152 @@ function openTurnStats(): void {
   showTurnStats.value = true
 }
 
+// ── Model arena (experimental) ─────────────────────────────────────────────
+// One task, 2-4 models, one worktree and pane each (plan navide-0-2-41_c9eeae).
+// The backend (arena.py) makes the worktrees and keeps the record; the panes
+// are opened on the same standalone path cli_open_agent uses, with each
+// candidate's worktree as the pane's folder, and the task is typed into all of
+// them at once. Limits are enforced here: arena.status reads the cost ledger
+// per worktree, and a candidate over its time or budget is interrupted.
+const { arenaEnabled } = useArenaPrefs()
+const arenaRuns = ref<ArenaRun[]>([])
+const arenaStartOpen = ref(false)
+const arenaStartWorkspace = ref('')
+const arenaPrefill = ref<ArenaPrefill | null>(null)
+const arenaStartBusy = ref(false)
+const arenaStartError = ref('')
+const arenaPanelOpen = ref(false)
+const arenaPanelRunId = ref('')
+const arenaStatus = ref<ArenaStatus | null>(null)
+const ARENA_POLL_MS = 15_000
+
+async function loadArenaRuns(): Promise<void> {
+  if (!arenaEnabled.value || !currentWorkspace.value) {
+    arenaRuns.value = []
+    return
+  }
+  const resp = await sendQuiet<{ ok: boolean; runs?: ArenaRun[] }>('arena.list', { workspace_path: currentWorkspace.value })
+  arenaRuns.value = resp?.ok ? (resp.runs ?? []) : []
+}
+watch([arenaEnabled, currentWorkspace], () => { void loadArenaRuns() }, { immediate: true })
+
+function openArenaStart(workspace?: string, prefill?: ArenaPrefill): void {
+  if (!arenaEnabled.value) return
+  arenaStartWorkspace.value = workspace || currentWorkspace.value
+  arenaPrefill.value = prefill ?? null
+  arenaStartError.value = ''
+  arenaStartOpen.value = true
+}
+
+function openArenaPanel(runId?: string): void {
+  if (!arenaEnabled.value) return
+  arenaPanelRunId.value = runId || arenaRuns.value[0]?.id || ''
+  arenaPanelOpen.value = true
+  void pollArena()
+}
+
+/** The kickoff typed into every candidate: the task as written, plus the
+ *  acceptance command when one was given. */
+function arenaKickoff(run: ArenaRun): string {
+  return run.check_command
+    ? `${run.task}\n\n${i18n.global.t('arena.kickoff.check', { cmd: run.check_command })}`
+    : run.task
+}
+
+async function startArena(req: ArenaStartRequest): Promise<void> {
+  arenaStartBusy.value = true
+  arenaStartError.value = ''
+  try {
+    const resp = await backend.send<{ ok: boolean; run?: ArenaRun; error?: string }>('arena.start', {
+      workspace_path: req.workspace,
+      task: req.task,
+      base: req.base,
+      check_command: req.checkCommand,
+      time_limit_min: req.timeLimitMin,
+      budget_usd: req.budgetUsd,
+      candidates: req.candidates,
+    }, 180_000)
+    const run = resp.payload?.run
+    if (!resp.ok || !resp.payload?.ok || !run) {
+      const err = resp.payload?.error || resp.error
+      arenaStartError.value = (typeof err === 'string' ? err : err?.message) || i18n.global.t('arena.start.failed')
+      return
+    }
+    arenaStartOpen.value = false
+    // Open every pane first, then type the task into all of them together, so
+    // no candidate gets a head start of another one's CLI boot time.
+    const opened: { id: string; paneId: string }[] = []
+    for (const cand of run.candidates) {
+      const paneId = await createStandaloneRequestedPane(cand.worktree, {
+        agentKey: cand.agent,
+        name: arenaPaneName(run.id, cand),
+        task: '',
+        model: cand.model || undefined,
+      })
+      if (!paneId) continue
+      opened.push({ id: cand.id, paneId })
+      await sendQuiet('arena.update', { workspace_path: run.workspace, run_id: run.id, candidate: cand.id, pane_id: paneId })
+    }
+    const kickoff = arenaKickoff(run)
+    await Promise.all(opened.map(({ paneId }) =>
+      injectStandaloneTask(paneId, kickoff, 'arena-task', standaloneTaskDeps()).catch(() => false)
+    ))
+    await loadArenaRuns()
+    openArenaPanel(run.id)
+  } catch (err) {
+    arenaStartError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    arenaStartBusy.value = false
+  }
+}
+
+async function stopArenaCandidate(runId: string, candidate: string, reason: 'user' | 'time' | 'budget' = 'user'): Promise<void> {
+  const run = arenaRuns.value.find((r) => r.id === runId)
+  const cand = run?.candidates.find((c) => c.id === candidate)
+  if (!run || !cand) return
+  if (cand.pane_id && paneAlive(cand.pane_id)) await onInterrupt(cand.pane_id, { by: 'user' })
+  await sendQuiet('arena.update', { workspace_path: run.workspace, run_id: run.id, candidate, stopped: reason })
+  await loadArenaRuns()
+}
+
+async function stopArenaRun(runId: string): Promise<void> {
+  const run = arenaRuns.value.find((r) => r.id === runId)
+  for (const cand of run?.candidates ?? []) {
+    if (!cand.stopped) await stopArenaCandidate(runId, cand.id)
+  }
+}
+
+let arenaPolling = false
+async function pollArena(): Promise<void> {
+  if (arenaPolling || !arenaEnabled.value) return
+  arenaPolling = true
+  try {
+    for (const run of arenaRuns.value) {
+      const watched = run.id === arenaPanelRunId.value && arenaPanelOpen.value
+      const live = run.state === 'running' && run.candidates.some((c) => !c.stopped && c.pane_id && paneAlive(c.pane_id))
+      if (!watched && !live) continue
+      const status = await sendQuiet<ArenaStatus & { ok: boolean }>('arena.status', { workspace_path: run.workspace, run_id: run.id })
+      if (!status?.ok) continue
+      if (watched) arenaStatus.value = status
+      for (const hit of candidatesToStop(status, paneAlive)) await stopArenaCandidate(run.id, hit.id, hit.reason)
+    }
+  } finally {
+    arenaPolling = false
+  }
+}
+const arenaPollTimer = window.setInterval(() => { void pollArena() }, ARENA_POLL_MS)
+onUnmounted(() => window.clearInterval(arenaPollTimer))
+
+registerCommand('workbench.action.startModelArena', () => openArenaStart())
+
+/** Right-click → "Compare this task across models…": the pane's CLI and model
+ *  pre-picked as candidate A, its kickoff task (if it had one) as the task. */
+function openArenaFromPane(paneId: string): void {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return
+  openArenaStart(currentWorkspace.value, { task: pane.kickoffPrompt || '', agent: pane.agentKey, model: pane.model || '' })
+}
+
 // Pane right-click context menu, shared by the agent list, spotlight thumbnails,
 // and pane headers. The menu is rendered once in this component; each surface only
 // raises an open request with the pane id and pointer coords.
@@ -25278,6 +25429,30 @@ function paneIsCommander(p: ActivePane): boolean {
     :request="agentAccountSwitchConfirm.pending.value"
     @answer="agentAccountSwitchConfirm.answer"
   />
+  <ArenaStartDialog
+    v-if="arenaStartOpen"
+    :open="arenaStartOpen"
+    :workspace="arenaStartWorkspace"
+    :agent-specs="enabledAgentSpecs"
+    :prefill="arenaPrefill"
+    :busy="arenaStartBusy"
+    :error="arenaStartError"
+    @start="startArena"
+    @cancel="arenaStartOpen = false"
+  />
+  <ArenaPanel
+    v-if="arenaPanelOpen"
+    :open="arenaPanelOpen"
+    :runs="arenaRuns"
+    :run-id="arenaPanelRunId"
+    :status="arenaStatus"
+    :pane-alive="paneAlive"
+    @close="arenaPanelOpen = false"
+    @select-run="(id) => { arenaPanelRunId = id; arenaStatus = null; void pollArena() }"
+    @focus-pane="(id) => { arenaPanelOpen = false; selectPane(id, { userInitiated: true }) }"
+    @stop="(rid, cid) => void stopArenaCandidate(rid, cid)"
+    @stop-all="(rid) => void stopArenaRun(rid)"
+  />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
@@ -25576,6 +25751,9 @@ function paneIsCommander(p: ActivePane): boolean {
       @rename-pane="setPaneCustomName"
       @rename-workspace="onRenameWorkspace"
       @install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"
+      :arena-runs="arenaEnabled ? arenaRuns.length : 0"
+      @arena-start="(ws) => openArenaStart(ws)"
+      @arena-panel="() => openArenaPanel()"
       :collapsed="leftPanelCollapsed"
       :views="shellLayout.slots.left.views"
       @update:collapsed="setLeftCollapsed"
@@ -26548,6 +26726,14 @@ function paneIsCommander(p: ActivePane): boolean {
           class="pane-ctx-item"
           @click="openReconnectPicker(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('reconnect.menu-item') }}</div>
+        <template v-if="arenaEnabled && paneCtxView && paneCtxView.agentKey !== 'terminal'">
+          <div class="pane-ctx-sep"></div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-arena"
+            @click="openArenaFromPane(paneCtxMenu!.paneId); closePaneCtxMenu()"
+          >{{ $t('arena.ctx.compare') }} <span class="pane-ctx-hint">{{ $t('arena.experimental') }}</span></div>
+        </template>
         <div class="pane-ctx-sep"></div>
         <div
           class="pane-ctx-item"
@@ -28605,6 +28791,7 @@ function paneIsCommander(p: ActivePane): boolean {
   border-bottom: 1px solid var(--border-default);
   margin-bottom: 4px;
 }
+.pane-ctx-hint { color: var(--text-secondary); font-size: var(--font-3xs); }
 .pane-ctx-item {
   padding: 6px 14px;
   font-size: var(--font-xs);

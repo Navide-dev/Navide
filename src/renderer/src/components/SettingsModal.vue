@@ -68,6 +68,7 @@ import {
   usePushChannelPrefs,
 } from '../composables/usePushChannelPrefs'
 import { setAcpEnabled, useAcpPrefs } from '../composables/useAcpPrefs'
+import { setArenaEnabled, useArenaPrefs } from '../composables/useArenaPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
@@ -742,6 +743,11 @@ function toggleCliAgent(k: string): void {
 // stale copy until reload.
 const { pushDisabled } = usePushChannelPrefs()
 const { acpEnabled } = useAcpPrefs()
+const { arenaEnabled } = useArenaPrefs()
+const arenaEnabledModel = computed<boolean>({
+  get: () => arenaEnabled.value,
+  set: (v) => setArenaEnabled(v),
+})
 const pushChannelRows = computed(() =>
   CLI_AGENT_SPECS.filter((s) => s.pushChannel)
 )
@@ -1112,6 +1118,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.general'),
     summary: t('settings.search.item.settings-management.summary'),
     keywords: 'settings management export import bundle config path location scope user workspace 設定管理 匯出 匯入 全集 位置 路徑 層級',
+  },
+  {
+    id: 'general-experimental',
+    tab: 'general',
+    section: 'general-experimental',
+    title: t('settings.search.item.general-experimental.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-experimental.summary'),
+    keywords: 'experimental features model arena compare models worktree 實驗功能 模型擂台 比較 模型',
   },
   {
     id: 'general-p2p',
@@ -4315,6 +4330,22 @@ watch(activeTab, (tab) => {
                 <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
                 <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
               </div>
+            </SettingsCard>
+          </SettingsSection>
+
+          <!-- Experimental features, off by default. Model arena: the ＋ menu's
+               Compare block, the pane right-click entry and ⌥⌘A
+               (composables/useArenaPrefs.ts). -->
+          <SettingsSection :label="$t('settings.section.experimental')">
+            <SettingsCard data-settings-section="general-experimental">
+              <SettingRow
+                :title="$t('arena.settings.title')"
+                :description="$t('arena.settings.hint')"
+              >
+                <template #control>
+                  <ToggleSwitch v-model="arenaEnabledModel" data-testid="arena-experimental" :aria-label="$t('arena.settings.title')" />
+                </template>
+              </SettingRow>
             </SettingsCard>
           </SettingsSection>
         </div>

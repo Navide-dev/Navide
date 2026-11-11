@@ -14044,3 +14044,11 @@ from . import api_key_accounts  # noqa: E402
 
 for _api_key_type, _api_key_fn in api_key_accounts.MESSAGE_HANDLERS.items():
     handler(_api_key_type)(_api_key_fn)
+
+# ── Model arena (arena.*), experimental ──
+# Renderer-only. Worktrees, diff stats, ledger reads and merges for one task
+# run by several models side by side; logic in arena.
+from . import arena  # noqa: E402
+
+for _arena_type, _arena_fn in arena.MESSAGE_HANDLERS.items():
+    handler(_arena_type)(_arena_fn)

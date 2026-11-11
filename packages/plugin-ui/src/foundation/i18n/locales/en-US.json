@@ -1760,6 +1760,10 @@
           "title": "Settings management",
           "summary": "Export/import the full settings bundle and inspect where settings are stored."
         },
+        "general-experimental": {
+          "title": "Experimental features",
+          "summary": "Model arena and other features still being tried out"
+        },
         "general-p2p": {
           "title": "Navide Cloud",
           "summary": "Join this machine to Navide Cloud so agents here can message agents on your other devices."
@@ -7733,6 +7737,7 @@
       "resource-limits": "Resource limits",
       "session-archive": "Session log archive",
       "settings-management": "Settings management",
+      "experimental": "Experimental features",
       "theme": "Theme",
       "other": "Other"
     },
@@ -8273,6 +8278,7 @@
         "workbench_action_focusNextPane": "Focus Next Pane",
         "workbench_action_focusPipeline": "Focus Pipeline",
         "workbench_action_focusPreview": "Focus Preview Panel",
+        "workbench_action_startModelArena": "Start Model Arena",
         "workbench_action_focusPreviousGroup": "Focus Previous Group",
         "workbench_action_focusPreviousPane": "Focus Previous Pane",
         "workbench_action_focusSourceControl": "Focus Source Control",
@@ -13435,6 +13441,87 @@
       "unsupported": "Not supported",
       "yolo": "Skip dangerous-command confirmation",
       "yolo-flag": "Supported ({flag}), follows the YOLO switch"
+    }
+  },
+  "arena": {
+    "experimental": "Experimental",
+    "menu": {
+      "section": "Compare",
+      "start": "Model arena…",
+      "runs": "Arena runs ({n})",
+      "hint": "Send one task to 2–4 models, each in its own worktree, and compare side by side"
+    },
+    "ctx": {
+      "compare": "Compare this task across models…"
+    },
+    "settings": {
+      "title": "Model arena",
+      "hint": "Send one task to 2–4 models at once, each in its own git worktree and pane, then compare the results and merge the one you pick. Off by default."
+    },
+    "start": {
+      "title": "Start a comparison",
+      "subtitle": "Every model works on the same task from the same commit, each in its own worktree. Nothing touches your working folder until you merge.",
+      "task": "Task",
+      "task-placeholder": "Describe the change you want every model to make…",
+      "base": "Start from",
+      "check": "Acceptance command",
+      "check-placeholder": "e.g. pnpm test:run",
+      "models": "Models ({min}–{max})",
+      "cli": "CLI",
+      "model-default": "{cli} default model",
+      "remove": "Remove",
+      "add": "Add a model",
+      "time-limit": "Time limit per pane (minutes)",
+      "budget": "Cost cap per pane (US$)",
+      "estimate": "Opens {panes} panes and {panes} worktrees.",
+      "estimate-branches": "Branches: arena/<run>/<model>, under .agent-team/worktrees/arena-<run>/.",
+      "estimate-budget": "Worst case: US$ {total} in total at the cap.",
+      "starting": "Starting…",
+      "go": "Start comparison",
+      "failed": "The comparison could not be started."
+    },
+    "kickoff": {
+      "check": "When you are done, run `{cmd}` and report whether it passes."
+    },
+    "panel": {
+      "title": "Model arena",
+      "run": "Run",
+      "base": "From {branch} at {sha}",
+      "elapsed": "Elapsed {t}",
+      "limits": "Limits: {min} min, US$ {usd} per pane",
+      "dirty-base": "The main folder had uncommitted changes when this run started; they are not in the candidates' starting point.",
+      "check-note": "Acceptance command: {cmd}. Each pane runs it itself and reports the result.",
+      "empty": "No arena run in this workspace yet."
+    },
+    "run-state": {
+      "running": "Running",
+      "merged": "Merged",
+      "kept": "Branch kept",
+      "closed": "Closed"
+    },
+    "state": {
+      "running": "Running",
+      "no-pane": "No pane",
+      "pane-closed": "Pane closed",
+      "stopped-user": "Stopped by you",
+      "stopped-time": "Stopped: time limit",
+      "stopped-budget": "Stopped: cost cap"
+    },
+    "col": {
+      "model": "Model",
+      "state": "State",
+      "changes": "Changes",
+      "tokens": "Tokens",
+      "cost": "Cost",
+      "default-model": "{cli} default",
+      "files": "{n} files",
+      "protected": "{n} sensitive files touched",
+      "cost-unavailable": "No cost data"
+    },
+    "action": {
+      "show": "Show",
+      "stop": "Stop",
+      "stop-all": "Stop all"
     }
   }
 }

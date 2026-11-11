@@ -315,6 +315,7 @@ export const COMMAND_IDS: readonly string[] = [
   'workbench.action.showCommands',
   'workbench.action.spawnAgent',
   'workbench.action.splitEditor',
+  'workbench.action.startModelArena',
   'workbench.action.toggleAIChat',
   'workbench.action.toggleSidebar',
   'workbench.action.toggleZenMode',
