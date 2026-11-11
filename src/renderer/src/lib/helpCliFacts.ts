@@ -32,7 +32,9 @@ export function sendRoute(spec: AgentSpec): SendRoute {
   return protocol ? 'protocolOnly' : 'none'
 }
 
-export interface CliFacts {
+// A type alias, not an interface: vue-i18n's $t takes Record<string, unknown>,
+// which only an alias satisfies without an explicit index signature.
+export type CliFacts = {
   total: number
   mcpCount: number
   mcpNames: string
