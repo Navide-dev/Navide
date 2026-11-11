@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modelConfirmKeys, modelPickerKeys, modelSwitchResult, onModelPicker, onModelSwitchConfirm, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps } from '../paneAnswerKeys'
+import { modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps } from '../paneAnswerKeys'
 
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
@@ -212,5 +212,86 @@ describe('the "Switch model?" confirmation', () => {
     expect(modelSwitchResult(WINDOWS_CONFIRM)).toBeNull()
     expect(modelSwitchResult(`  ⎿  Set model to Opus 5.5\n${LIVE_CONFIRM}`)).toBeNull()
     expect(modelSwitchResult('❯ /model\n  ⎿  Set model to Sonnet 5.5 for this session only\n❯')).toBe('session')
+  })
+})
+
+// The Linux VM run (Claude Code 2.1.286, 106 columns, 11-11) where the switch
+// went through but cli_set_model fell back to a restart: the box's text from
+// the pane log claude-9463c289.log, spacing restored, with the box's title
+// left on the screen tail above the result line that followed it.
+const LINUX_CONFIRM = [
+  '   Switch model?',
+  '   Your next response will be slower and use more tokens',
+  '   This conversation is cached for the current model. Switching to Sonnet 5.5 means the full history',
+  '   gets re-read on your next message.',
+  '   ❯ 1. Yes, switch to Sonnet 5.5',
+  '     2. No, go back',
+].join('\n')
+const LINUX_COMPOSER = ['─'.repeat(106), '❯ ', '─'.repeat(106)].join('\n')
+// A real screen tail after Yes: 2.1.286 at 106x30 replayed into xterm 6 and
+// read like readScreenTail (blank rows dropped).
+const REPLAYED_AFTER_YES = [
+  '❯ say ok',
+  '⏺ ok',
+  '✻ Crunched for 3s · done 10:18 AM',
+  '❯ /model',
+  '  ⎿  Set model to Haiku 4.5 for this session only',
+  '                                                                    auto mode unavailable for this model',
+  '─'.repeat(106),
+  '❯ ',
+  '─'.repeat(106),
+  '  ⏸ manual mode on · ? for shortcuts',
+].join('\n')
+
+describe('modelSwitchResult after the "Switch model?" box', () => {
+  it('reads the result line below a box title left on the tail as session-only', () => {
+    expect(modelSwitchResult(`${LINUX_CONFIRM}\n❯ /model\n  ⎿  Set model to Sonnet 5.5 for this session only\n${LINUX_COMPOSER}`)).toBe('session')
+    expect(modelSwitchResult(`${LIVE_PICKER}\n${LINUX_CONFIRM}\n❯ /model\n  ⎿  Set model to Sonnet 5.5 for this session only\n${LINUX_COMPOSER}`)).toBe('session')
+    expect(modelSwitchResult(REPLAYED_AFTER_YES)).toBe('session')
+  })
+
+  it('is null while the box is still the last thing on the tail', () => {
+    expect(modelSwitchResult(LINUX_CONFIRM)).toBeNull()
+    expect(modelSwitchResult(`❯ /model\n  ⎿  Set model to Opus 5.5 for this session only\n${LINUX_CONFIRM}`)).toBeNull()
+  })
+
+  it('reads a line saved as the default as default', () => {
+    expect(modelSwitchResult(`${LINUX_CONFIRM}\n  ⎿  Set model to Sonnet 5.5 (saved as your default)\n${LINUX_COMPOSER}`)).toBe('default')
+  })
+})
+
+describe('modelSwitchDiagnostic', () => {
+  // Built at runtime: a fake key-like value and customer text on the screen.
+  const fakeKey = ['sk', 'ant', 'api03', 'Z'.repeat(24)].join('-')
+  const customer = ['Customer', 'Ada', 'Example'].join(' ')
+  const screen = [
+    `${LIVE_PICKER}`,
+    `❯ echo ${fakeKey}`,
+    `  ${customer}`,
+    LINUX_CONFIRM,
+    '❯ /model',
+    '  ⎿  Set model to Sonnet 5.5 for this session only',
+    LINUX_COMPOSER,
+  ].join('\n')
+
+  it('gives the line count and the last line of each marker, -1 when absent', () => {
+    const lines = screen.split('\n').filter((l) => l.trim())
+    const d = modelSwitchDiagnostic(screen)
+    expect(d).toEqual({
+      lines: lines.length,
+      selectModel: lines.findIndex((l) => l.includes('Select model')),
+      switchModel: lines.findIndex((l) => l.includes('Switch model?')),
+      setModelTo: lines.findIndex((l) => l.includes('Set model to')),
+      savedAsDefault: -1,
+    })
+    expect(modelSwitchDiagnostic('')).toEqual({ lines: 0, selectModel: -1, switchModel: -1, setModelTo: -1, savedAsDefault: -1 })
+  })
+
+  it('puts none of the screen text into the logged line', () => {
+    const line = JSON.stringify({ fallback: 'confirm-not-confirmed', waitedMs: 5123, ...modelSwitchDiagnostic(screen) })
+    for (const text of [fakeKey, 'Z'.repeat(24), customer, 'Ada', 'Sonnet', 'Set model to', 'Switch model', 'Select model', 'echo']) {
+      expect(line).not.toContain(text)
+    }
+    expect(Object.values(modelSwitchDiagnostic(screen)).every((v) => Number.isInteger(v))).toBe(true)
   })
 })

@@ -288,16 +288,38 @@ const MODEL_SWITCH_RESULT_LINES = 10
 /** What the screen says after the picker's keys: 'session' for claude's "Set
  *  model to …" line, 'default' when that line says it was saved as the
  *  default, null while the picker or its confirmation is still up or no fresh
- *  line is there. */
+ *  line is there. Only the text below the last picker or confirmation title
+ *  counts: a closed box's title can stay on the screen tail above the result
+ *  line, while an open box has no result line below its title. */
 export function modelSwitchResult(screen: string): 'session' | 'default' | null {
-  if (MODEL_PICKER_TITLE.test(screen) || MODEL_CONFIRM_TITLE.test(screen)) return null
-  const tail = screen
-    .split('\n')
-    .filter((l) => l.trim())
+  const lines = screen.split('\n').filter((l) => l.trim())
+  let lastTitle = lines.length - 1
+  while (lastTitle >= 0 && !MODEL_PICKER_TITLE.test(lines[lastTitle]) && !MODEL_CONFIRM_TITLE.test(lines[lastTitle])) lastTitle--
+  const tail = lines
+    .slice(lastTitle + 1)
     .slice(-MODEL_SWITCH_RESULT_LINES)
     .join('\n')
   if (!/\bSet model to\b/.test(tail)) return null
   return /saved as your default/i.test(tail) ? 'default' : 'session'
+}
+
+/** The shape of a screen tail for cli_set_model's fallback diagnostic: its
+ *  non-blank line count and, per marker, the last of those lines (0-based)
+ *  that has it, -1 when none does. Numbers only, never the screen's text: a
+ *  terminal may be showing a key or customer data. */
+export function modelSwitchDiagnostic(screen: string): Record<'lines' | 'selectModel' | 'switchModel' | 'setModelTo' | 'savedAsDefault', number> {
+  const lines = screen.split('\n').filter((l) => l.trim())
+  const last = (re: RegExp) => {
+    for (let i = lines.length - 1; i >= 0; i--) if (re.test(lines[i])) return i
+    return -1
+  }
+  return {
+    lines: lines.length,
+    selectModel: last(MODEL_PICKER_TITLE),
+    switchModel: last(MODEL_CONFIRM_TITLE),
+    setModelTo: last(/\bSet model to\b/),
+    savedAsDefault: last(/saved as your default/i),
+  }
 }
 
 function steps(keys: string[]): AnswerKeys {
