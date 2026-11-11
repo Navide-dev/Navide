@@ -3737,7 +3737,7 @@
             "git": {
               "title": "Git（ソース管理）",
               "tag": "サイドバーの 4 番目のタブ",
-              "text": "Git が Navide プラグインとして読み込まれているとき、ツールチップは <em>Navide プラグイン：Git · navide.git · 発行者：navide · Navide に組み込み ({gitTab})</em> です。読み込まれていないときは <em>Git ({gitTab})</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">{gitWindow}</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。Git 自体も同梱の Navide プラグイン（<code>navide.git</code>）で、Plans と並んで<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に表示されます。そのため更新・無効化・起動失敗の扱いも、ほかの Navide プラグインと同じです。Git 自体も同梱の Navide プラグイン（<code>navide.git</code>）で、Plans と並んで<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に表示されます。そのため更新・無効化・起動失敗の扱いも、ほかの Navide プラグインと同じです。"
+              "text": "Git が Navide プラグインとして読み込まれているとき、ツールチップは <em>Navide プラグイン：Git · navide.git · 発行者：navide · Navide に組み込み ({gitTab})</em> です。読み込まれていないときは <em>Git ({gitTab})</em> です。メインウィンドウで <kbd class=\"cwh-kbd\">{gitWindow}</kbd> を押すと、<strong>独立した Git ウィンドウ</strong>を直接開きます。パネルのヘッダーの<em>新しいウィンドウで開く</em>でも同じです。Git 自体も同梱の Navide プラグイン（<code>navide.git</code>）で、Plans と並んで<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に表示されます。そのため更新・無効化・起動失敗の扱いも、ほかの Navide プラグインと同じです。"
             },
             "plans": {
               "title": "プラン（プラン文書）",
@@ -3937,7 +3937,7 @@
             "sort": "<em>並べ替え</em>：<strong>タイトル</strong>、<strong>最終更新</strong>、<strong>進捗</strong>から選び、隣の <code>↑</code> / <code>↓</code> で昇順・降順を切り替えます。",
             "group": "<code>☰</code> で「ステージ別にまとめる」と 1 つの一覧表示を切り替えます。"
           },
-          "p4": "4 つの選択はすべて<strong>ワークスペースごとに記憶されます</strong>。セクションは上から、<strong>最近</strong>（最大 5 件、ピン留めを優先）、ステージ別の場合は<strong>ドキュメント</strong>と各ステージのセクション、次に<strong>アーカイブ済み</strong>、最後に完了項目への操作（<em>完了したものをすべてアーカイブ</em> / <em>すべて削除</em>）です。一覧表示ではステージ別の部分が<strong>すべてのプラン</strong>にまとまります。各行にはステージ表示、<em>{'{'}done{'}'}/{'{'}total{'}'} 完了</em>の進捗バー、<code>HTML</code> / <code>Markdown</code> の形式タグ、ユーザーにしか完了できない項目数を示す<em>あなたの対応が {'{'}count{'}'} 件</em>が付きます。<strong>各行の右端にはピン留め <code>📌</code> と削除 <code>✕</code> もあります</strong>（アーカイブ済みの行は削除のみ）。ピンは<em>最近使った項目の先頭に固定</em>の操作です。ピンは<em>最近使った項目の先頭に固定</em>の操作です。",
+          "p4": "4 つの選択はすべて<strong>ワークスペースごとに記憶されます</strong>。セクションは上から、<strong>最近</strong>（最大 5 件、ピン留めを優先）、ステージ別の場合は<strong>ドキュメント</strong>と各ステージのセクション、次に<strong>アーカイブ済み</strong>、最後に完了項目への操作（<em>完了したものをすべてアーカイブ</em> / <em>すべて削除</em>）です。一覧表示ではステージ別の部分が<strong>すべてのプラン</strong>にまとまります。各行にはステージ表示、<em>{'{'}done{'}'}/{'{'}total{'}'} 完了</em>の進捗バー、<code>HTML</code> / <code>Markdown</code> の形式タグ、ユーザーにしか完了できない項目数を示す<em>あなたの対応が {'{'}count{'}'} 件</em>が付きます。<strong>各行の右端にはピン留め <code>📌</code> と削除 <code>✕</code> もあります</strong>（アーカイブ済みの行は削除のみ）。ピンは<em>最近使った項目の先頭に固定</em>の操作です。",
           "callout1": {
             "title": "メタデータのない文書は専用のセクションに表示されます",
             "text": "ステージ別の一覧では、<strong>プランのメタデータがない通常の文書</strong>を<strong>ドキュメント</strong>セクションにまとめ、各行に <code>ドキュメント</code>タグを付けます。これはステージが<em>進行中</em>かどうかとは関係ありません。正式なプランにするには、右クリックして<strong>プランに変換</strong>を選びます。下書き状態のプラン情報を付加するだけで、<strong>本文は書き換えません</strong>。"

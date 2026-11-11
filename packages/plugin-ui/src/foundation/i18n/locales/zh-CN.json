@@ -3737,7 +3737,7 @@
             "git": {
               "title": "Git（源代码控制）",
               "tag": "侧栏第 4 个标签页",
-              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 ({gitTab})</em>；没有加载时写着 <em>Git ({gitTab})</em>。在主窗口按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。"
+              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 ({gitTab})</em>；没有加载时写着 <em>Git ({gitTab})</em>。在主窗口按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。"
             },
             "plans": {
               "title": "Plans（计划文档）",
@@ -3937,7 +3937,7 @@
             "sort": "排序 <em>排序方式</em>：<strong>标题</strong>、<strong>最后更新</strong>、<strong>进度</strong> 三种，旁边 <code>↑</code>／<code>↓</code> 换升幂降幂。",
             "group": "<code>☰</code> 在“依 stage 分群”与“单一清单”之间切换。"
           },
-          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。钉选钮的作用是<em>钉选到“最近”最上方</em>。钉选钮的作用是<em>钉选到“最近”最上方</em>。",
+          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。钉选钮的作用是<em>钉选到“最近”最上方</em>。",
           "callout1": {
             "title": "没有 metadata 的文档自成一区",
             "text": "依阶段分组时，<strong>没有计划 metadata 的纯文档</strong>收在 <strong>文档</strong> 这一区，每一行都带 <code>文档</code> 药丸——跟 stage 是不是 <em>进行中</em> 无关。要把这种文件升级成真正的计划，在它上面按右键选 <strong>升级为计划</strong>；升级只是补上一层草稿信封，<strong>不会改写原本的内文</strong>。"
