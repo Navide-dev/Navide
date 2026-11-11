@@ -8154,6 +8154,67 @@ async def onboarding_status_quick(session: "Session", msg_id: str, msg_type: str
 #: refuses it, so no renderer can open a pane that passes as an install run.
 ONBOARDING_RUN_AGENT_KEY = "onboarding-run"
 
+#: The one gated update running on this machine: (session, run id), or empty.
+#: Gated = an update of a dep whose update prompt Navide took over
+#: (Dep.autoupdate_args). Two global installs at once collide, and a running
+#: CLI holds its binary open on Windows.
+_GATED_UPDATE_RUN: list[tuple["Session", str]] = []
+
+#: Pane states in which a CLI is doing something an update would pull the
+#: binary out from under.
+_UPDATE_BLOCKING_STATES = frozenset({"starting", "running", "awaiting"})
+
+
+def _gated_update_dep(payload: dict) -> Any:
+    from . import app
+
+    if payload.get("kind") != "maintenance" or payload.get("action") != "update":
+        return None
+    dep = app.onboarding_deps.DEPS_BY_ID.get(str(payload.get("agent_key") or ""))
+    return dep if dep is not None and dep.autoupdate_args else None
+
+
+def _update_gate(agent_key: str) -> dict[str, Any]:
+    """Why a gated update of `agent_key` may not start now, if it may not.
+
+    {blocked, reason ('' | 'update-running' | 'panes-busy'), busy_panes}.
+    """
+    running = False
+    if _GATED_UPDATE_RUN:
+        owner, run_id = _GATED_UPDATE_RUN[0]
+        term = owner.terminals.get(run_id)
+        running = term is not None and not term.closed
+        if not running:
+            _GATED_UPDATE_RUN.clear()
+    if running:
+        return {"blocked": True, "reason": "update-running", "busy_panes": []}
+    busy = sorted(
+        entry.name or entry.pane_id
+        for entry in agent_messaging.list_panes()
+        if entry.agent_key == agent_key and entry.realized
+        and (entry.busy or entry.display_status in _UPDATE_BLOCKING_STATES)
+    )
+    if busy:
+        return {"blocked": True, "reason": "panes-busy", "busy_panes": busy}
+    return {"blocked": False, "reason": "", "busy_panes": []}
+
+
+@handler("onboarding.update_notices")
+async def onboarding_update_notices(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """CLIs with a newer release, for the pane header's "update available"."""
+    from . import app
+
+    notices = await asyncio.to_thread(app.onboarding_deps.update_notices)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "notices": notices}))
+
+
+@handler("onboarding.update_gate")
+async def onboarding_update_gate(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Whether the one-click update of a gated CLI may run right now."""
+    await session.send_json(make_response(
+        msg_id, msg_type, {"ok": True, **_update_gate(str(payload.get("agent_key") or ""))},
+    ))
+
 
 @handler("onboarding.run")
 async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
@@ -8183,6 +8244,16 @@ async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload
         await session.send_json(make_response(msg_id, msg_type, resolved))
         return
     command = str(resolved["command"])
+    # Checked after the last await: nothing can start another update between
+    # this check and the create below.
+    gated = _gated_update_dep(payload)
+    if gated is not None:
+        gate = _update_gate(gated.id)
+        if gate["blocked"]:
+            await session.send_json(make_response(msg_id, msg_type, {
+                **resolved, "ok": False, "error": f"update blocked: {gate['reason']}", "gate": gate,
+            }))
+            return
     try:
         term = session.terminals.create(
             pane_id=f"{ONBOARDING_RUN_AGENT_KEY}-{__import__('uuid').uuid4().hex}",
@@ -8202,6 +8273,8 @@ async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload
         return
     app._PTY_OWNERS[term.id] = session
     session._onboarding_runs.add(term.id)
+    if gated is not None:
+        _GATED_UPDATE_RUN[:] = [(session, term.id)]
     log.info("onboarding.run %s started: %s", term.id, command)
     await session.send_json(make_response(msg_id, msg_type, {**resolved, "run_id": term.id}))
 
@@ -9257,6 +9330,17 @@ async def _terminal_create_impl(
             )
             if seeded:
                 app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
+    # The vendor's own update check, switched off for this launch when its
+    # opt-out is a launch argument (codex `-c check_for_update_on_startup=false`)
+    # and the user left updates to Navide. Never written to the vendor's config.
+    autoupdate_args = app.onboarding_deps.spawn_args_for(agent_key) if agent_key else []
+    if autoupdate_args and not login_subcommand:
+        command = payload["command"]
+        flag = "".join(" " + osplat.paths.quote_arg(arg) for arg in autoupdate_args)
+        payload["command"] = (
+            [*command[:-1], f"{command[-1]}{flag}"] if isinstance(command, list) and command
+            else f"{command}{flag}"
+        )
     if transaction["cancelled"]:
         raise _TerminalCreateCancelled
     # The pane's previous PTY, when this create replaces it (restore/rebuild).

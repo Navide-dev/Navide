@@ -60,6 +60,22 @@ export const SPEC = {
   awaitingInput: {
     pattern: /Would you like to (run|make|grant) |No, and tell Codex what to do differently/,
   },
+  // Codex 0.166's startup update menu (codex-rs/tui/src/update_prompt.rs),
+  // measured on a real PTY with a stub version.json:
+  //   Update available · 0.166.0 → 99.0.0 / Release notes: … /
+  //   › 1. Update now (runs `npm install -g @openai/codex`) / 2. Skip /
+  //   3. Skip until next version / … enter continue · esc skip
+  // "Update now" is preselected, so Enter installs. Esc is "Skip" for this
+  // launch only and writes nothing (3 would record dismissed_version). Both
+  // patterns end at the screen's end: nothing is drawn below the menu, while
+  // a transcript that merely quotes it has the composer under it. Navide
+  // spawns pass `-c check_for_update_on_startup=false` by default, so this is
+  // the net for a pane launched with the vendor's own check left on.
+  updatePrompt: {
+    pattern: /\bUpdate available\b.{0,400}?\bUpdate now\b.{0,300}?\bSkip until next version\b.{0,160}?\besc skip\s*$/,
+    suspect: /\bUpdate available\b.{0,800}\bUpdate now\b.{0,800}\b[Ss]kip\b.{0,40}$/,
+    skipKeys: '\x1b',
+  },
   hint: 'implementer',
   // Quota failover: _codex_windows resolves primary/secondary by length to
   // session (5h) / weekly. Either can be missing: a lone weekly window is

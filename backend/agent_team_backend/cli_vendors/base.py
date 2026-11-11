@@ -155,6 +155,16 @@ class Dep:
     config_home_env: str = ""        # env var overriding the config home, e.g. 'CLAUDE_CONFIG_DIR'
     config_home_default: str = ""    # default config home relative to $HOME, e.g. '.claude'
     autoupdate_env: str = ""         # vendor's own opt-out env var, e.g. 'DISABLE_AUTOUPDATER'
+    # The same opt-out for a vendor that only offers it as launch arguments,
+    # e.g. codex's ('-c', 'check_for_update_on_startup=false'). Appended to the
+    # spawn for this launch only — Navide never writes the vendor's config. A
+    # dep with these arguments defaults to 'manual': its own update prompt
+    # stops a pane nobody is watching, so Navide tells the user instead.
+    autoupdate_args: tuple[str, ...] = ()
+    # The vendor's own cache of its newest release, relative to a config home
+    # (JSON with a `latest_version` key), e.g. codex's 'version.json'. Read
+    # only, to show "update available".
+    latest_version_file: str = ""
     # Which platforms this dep exists for at all. Empty = every platform.
     # Homebrew is the reason this field exists: offering "install the macOS
     # package manager" on Linux is not a degraded suggestion, it is a wrong

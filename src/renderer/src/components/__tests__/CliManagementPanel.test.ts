@@ -382,6 +382,90 @@ describe('CliManagementPanel', () => {
     expect((select.element as HTMLSelectElement).value).toBe('vendor')
   })
 
+  describe('a CLI whose update Navide gates (codex)', () => {
+    const codex: OnboardDep = {
+      ...depBase,
+      id: 'codex', label: 'Codex CLI (OpenAI)', status: 'ok', version: '0.166.0',
+      binary_path: '/Users/test/.nvm/bin/codex', resolved_path: '/Users/test/.nvm/lib/codex',
+      install_method: 'npm', update_cmd: 'codex update', doctor_cmd: 'codex doctor',
+      autoupdate_env: '', autoupdate_args: ['-c', 'check_for_update_on_startup=false'],
+      autoupdate_policy: 'manual', latest_version: '0.167.1',
+    }
+
+    async function mountCodex(gate: { blocked: boolean; reason: string; busy_panes: string[] }) {
+      stubTerminal()
+      const mock = createMockBackend('connected')
+      mock.setResponse('onboarding.status', { ...status(), deps: [codex] })
+      mock.setResponse('onboarding.update_gate', { ok: true, ...gate })
+      mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: 'codex update' })
+      wrapper = mount(CliManagementPanel, {
+        props: { backend: mock.backend, onboarding: useOnboarding(mock.backend) },
+        global: { plugins: [i18n] },
+      })
+      await flushPromises()
+      return mock
+    }
+
+    function updateButton() {
+      return wrapper!.findAll('button').find((button) => button.text().includes('codex update'))!
+    }
+
+    it('shows the newer release', async () => {
+      await mountCodex({ blocked: false, reason: '', busy_panes: [] })
+      expect(wrapper!.get('[data-testid="cli-update-available"]').text()).toBe(
+        i18n.global.t('cli-manage.update-available', { version: '0.167.1' }))
+    })
+
+    it('offers the auto-update select, so codex can be left to ask itself', async () => {
+      const mock = await mountCodex({ blocked: false, reason: '', busy_panes: [] })
+      const select = wrapper!.get('.cm-policy select')
+      expect((select.element as HTMLSelectElement).value).toBe('manual')
+      await select.setValue('vendor')
+      await flushPromises()
+      expect(mock.sent).toContainEqual({
+        type: 'onboarding.cli_autoupdate',
+        payload: { agent_key: 'codex', policy: 'vendor' },
+      })
+    })
+
+    it('runs the update in the embedded terminal while every codex pane is idle', async () => {
+      const mock = await mountCodex({ blocked: false, reason: '', busy_panes: [] })
+      expect(updateButton().attributes('disabled')).toBeUndefined()
+      await updateButton().trigger('click')
+      await flushPromises()
+      expect(mock.sent).toContainEqual(expect.objectContaining({
+        type: 'onboarding.run',
+        payload: { kind: 'maintenance', agent_key: 'codex', action: 'update', cols: 100, rows: 24 },
+      }))
+      expect(opened).toEqual([])
+    })
+
+    it('cannot be pressed while a codex pane works, and says which', async () => {
+      await mountCodex({ blocked: true, reason: 'panes-busy', busy_panes: ['Codex 實作'] })
+      expect(updateButton().attributes('disabled')).toBeDefined()
+      expect(wrapper!.get('[data-testid="cli-update-gate"]').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-busy', { label: 'Codex CLI (OpenAI)', panes: 'Codex 實作' }))
+    })
+
+    it('cannot be pressed while another update runs', async () => {
+      await mountCodex({ blocked: true, reason: 'update-running', busy_panes: [] })
+      expect(updateButton().attributes('disabled')).toBeDefined()
+      expect(wrapper!.get('[data-testid="cli-update-gate"]').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-running'))
+    })
+
+    it('shows the reason when the backend refuses a press that raced a pane starting', async () => {
+      const mock = await mountCodex({ blocked: false, reason: '', busy_panes: [] })
+      const gate = { blocked: true, reason: 'panes-busy', busy_panes: ['codex-b'] }
+      mock.setResponse('onboarding.run', { ok: false, error: 'update blocked: panes-busy', gate })
+      await updateButton().trigger('click')
+      await flushPromises()
+      expect(wrapper!.get('.cm-message').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-busy', { label: 'Codex CLI (OpenAI)', panes: 'codex-b' }))
+      expect(updateButton().attributes('disabled')).toBeDefined()
+    })
+  })
+
   it('offers no policy control for a CLI without a vendor switch', async () => {
     await mountPanel()
 
