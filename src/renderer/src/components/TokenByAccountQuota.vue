@@ -69,13 +69,22 @@ async function load(): Promise<void> {
 
 watch(() => [props.backend.status.value, props.range] as const, () => void load(), { immediate: true })
 let lastChange = 0
-const unsub = props.backend.on('tokens.changed', () => {
+function onTokensChanged(): void {
   const now = Date.now()
   if (now - lastChange < 15_000) return
   lastChange = now
   void load()
+}
+// `tokens.notice` replaces `tokens.changed` on a backend that knows
+// tokens.watch. Account quotas span workspaces, so this watches all of them.
+const unsub = props.backend.on('tokens.changed', onTokensChanged)
+const unsubNotice = props.backend.on('tokens.notice', onTokensChanged)
+const releaseWatch = props.backend.watchTokens?.('*')
+onBeforeUnmount(() => {
+  unsub()
+  unsubNotice()
+  releaseWatch?.()
 })
-onBeforeUnmount(unsub)
 
 function windowLabel(kind: string, label?: string): string {
   if (label) return label

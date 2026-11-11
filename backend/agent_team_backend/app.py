@@ -395,6 +395,40 @@ async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) 
             _SESSIONS.discard(session)
 
 
+_tokens_version = 0
+
+
+async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[str, Any] | None = None) -> None:
+    """Tell windows that a workspace's token statistics changed.
+
+    A session that declared its workspaces with `tokens.watch` gets a small
+    `tokens.notice` only for those (or every workspace with "*") and fetches
+    `tokens.snapshot` itself. A session that never declared (an older renderer)
+    still gets the full snapshot as `tokens.changed`, which is built only when
+    such a session is connected."""
+    global _tokens_version
+    _tokens_version += 1
+    path = workspace_path or ""
+    notice = make_event("tokens.notice", {"workspace_path": path, "version": _tokens_version})
+    full: dict[str, Any] | None = None
+    for session in list(_SESSIONS):
+        watch = session.tokens_watch
+        if watch is None:
+            if full is None:
+                full = make_event("tokens.changed",
+                                  snapshot if snapshot is not None else tokens_store.snapshot(path or None))
+            event = full
+        elif "*" in watch or path in watch:
+            event = notice
+        else:
+            continue
+        try:
+            await session.send_json(event)
+        except Exception as err:  # noqa: BLE001
+            log.warning("broadcast send failed: %s", err)
+            _SESSIONS.discard(session)
+
+
 async def unicast_to(session: "Session | None", event: dict[str, Any]) -> bool:
     """Send *event* to one named session. Returns False when it is not there.
 
@@ -680,6 +714,10 @@ class Session:
         # count a window holding the caller's workspace as the caller's own
         # even when none of that workspace's panes sit in it.
         self.held_workspaces: tuple[str, ...] = ()
+        # Workspaces whose token changes this connection wants (`tokens.watch`).
+        # None until declared: such a connection gets the full legacy
+        # `tokens.changed` snapshot. See broadcast_tokens_changed.
+        self.tokens_watch: frozenset[str] | None = None
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -1762,9 +1800,7 @@ def _schedule_tokens_broadcast(workspace_path: str) -> None:
             await asyncio.sleep(_TOKENS_BROADCAST_DEBOUNCE_SEC)
         finally:
             _pending_tokens_broadcast.discard(workspace_path)
-        await broadcast(
-            make_event("tokens.changed", tokens_store.snapshot(workspace_path))
-        )
+        await broadcast_tokens_changed(workspace_path)
         changed = await asyncio.to_thread(quota_ledger.reconcile_pending, tokens_store)
         for agent, profile, kind in changed:
             await broadcast(make_event("tokens.quota_cycles_changed", {
@@ -3768,9 +3804,7 @@ def _record_analyzer_tokens(result: dict[str, Any], payload: dict[str, Any]) -> 
         input_tokens=pev,
         output_tokens=ev,
     )
-    asyncio.create_task(
-        broadcast(make_event("tokens.changed", tokens_store.snapshot(workspace_path)))
-    )
+    asyncio.create_task(broadcast_tokens_changed(workspace_path))
 
 
 # Agent-CLI spawns inherit the backend's PATH (terminals.py copies os.environ),

@@ -351,7 +351,10 @@ async def test_token_broadcast_reconciles_late_data_and_notifies_cycle_subscribe
         events.append(event)
         if event['type'] == 'tokens.quota_cycles_changed':
             notified.set()
+    async def tokens_changed(workspace_path):
+        events.append({'type': 'tokens.changed', 'payload': {'workspace_path': workspace_path}})
     monkeypatch.setattr(app, 'broadcast', broadcast)
+    monkeypatch.setattr(app, 'broadcast_tokens_changed', tokens_changed)
     store.record(str(tmp_path), source='cli', vendor='claude', profile_id='a',
                  input_tokens=19, output_tokens=0, timestamp=iso(T0 + H), dedup_key='late-broadcast')
     app._schedule_tokens_broadcast(str(tmp_path))

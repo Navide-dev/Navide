@@ -58,6 +58,7 @@ export function useBackend() {
         // be skipped for a socket that is already healthy — a stale attempt
         // would then mislabel the next ordinary blip as a crash recovery.
         autoRestart.value = null
+        declareTokenWatches()
       }
     },
     onError: () => {
@@ -88,6 +89,31 @@ export function useBackend() {
 
   const send = client.send
   const on = client.on
+
+  // Workspaces whose token statistics this window shows, ref-counted per
+  // mounted consumer. Declared with `tokens.watch` on every connect, so the
+  // backend sends this window a small `tokens.notice` for those workspaces
+  // only — and nothing to a window that shows none (editor, plans). An older
+  // backend answers the request with an error and keeps sending the full
+  // `tokens.changed` snapshot, which the consumers still handle.
+  const tokenWatches = new Map<string, number>()
+  function declareTokenWatches(): void {
+    if (status.value !== 'connected') return
+    send('tokens.watch', { paths: [...tokenWatches.keys()] }).catch(() => {})
+  }
+  function watchTokens(path: string): () => void {
+    tokenWatches.set(path, (tokenWatches.get(path) ?? 0) + 1)
+    declareTokenWatches()
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      const left = (tokenWatches.get(path) ?? 1) - 1
+      if (left > 0) tokenWatches.set(path, left)
+      else tokenWatches.delete(path)
+      declareTokenWatches()
+    }
+  }
 
   // Every connection opens with a challenge (ws.welcome). Main signs it for a
   // main window only; the answer marks this connection as a Navide window, as
@@ -218,5 +244,8 @@ export function useBackend() {
     client.dispose('ws not open')
   })
 
-  return { status, wsUrl, httpUrl, shell, port, pid, lastError, autoRestart, send, on, restart, stop }
+  // Optional in the type: backend-shaped stand-ins (plugin capability
+  // backends, test fakes) need not declare token watches; callers use `?.`.
+  const tokenWatching: { watchTokens?: typeof watchTokens } = { watchTokens }
+  return { status, wsUrl, httpUrl, shell, port, pid, lastError, autoRestart, send, on, ...tokenWatching, restart, stop }
 }

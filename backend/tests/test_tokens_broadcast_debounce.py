@@ -37,35 +37,29 @@ def _fast_debounce(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.asyncio
 async def test_burst_coalesces_to_one_broadcast(monkeypatch: pytest.MonkeyPatch, _fast_debounce) -> None:
-    monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})
-    with patch.object(app, "broadcast", new_callable=AsyncMock) as mock_broadcast:
+    with patch.object(app, "broadcast_tokens_changed", new_callable=AsyncMock) as mock_broadcast:
         for _ in range(50):
             app._schedule_tokens_broadcast("/ws/a")
         await asyncio.wait_for(asyncio.gather(*_fast_debounce), timeout=5)
-        mock_broadcast.assert_called_once()
-        event = mock_broadcast.call_args.args[0]
-        assert event["type"] == "tokens.changed"
-        assert event["payload"] == {"ws": "/ws/a"}
+        mock_broadcast.assert_called_once_with("/ws/a")
 
 
 @pytest.mark.asyncio
 async def test_workspaces_debounce_independently(monkeypatch: pytest.MonkeyPatch, _fast_debounce) -> None:
-    monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})
-    with patch.object(app, "broadcast", new_callable=AsyncMock) as mock_broadcast:
+    with patch.object(app, "broadcast_tokens_changed", new_callable=AsyncMock) as mock_broadcast:
         app._schedule_tokens_broadcast("/ws/a")
         app._schedule_tokens_broadcast("/ws/b")
         await asyncio.wait_for(asyncio.gather(*_fast_debounce), timeout=5)
         assert mock_broadcast.call_count == 2
         broadcast_workspaces = {
-            call.args[0]["payload"]["ws"] for call in mock_broadcast.call_args_list
+            call.args[0] for call in mock_broadcast.call_args_list
         }
         assert broadcast_workspaces == {"/ws/a", "/ws/b"}
 
 
 @pytest.mark.asyncio
 async def test_new_burst_after_window_broadcasts_again(monkeypatch: pytest.MonkeyPatch, _fast_debounce) -> None:
-    monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})
-    with patch.object(app, "broadcast", new_callable=AsyncMock) as mock_broadcast:
+    with patch.object(app, "broadcast_tokens_changed", new_callable=AsyncMock) as mock_broadcast:
         app._schedule_tokens_broadcast("/ws/a")
         # A fixed sleep may expire before _fire even starts on a busy loop.
         # Wait for the first real broadcast before declaring a new burst;
