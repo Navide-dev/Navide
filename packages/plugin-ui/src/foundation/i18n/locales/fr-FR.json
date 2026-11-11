@@ -5927,6 +5927,11 @@
               "where": "Le menu flottant de la barre colorée à l’extrême gauche de la barre latérale",
               "what": "Ajouter un <strong>groupe d’espaces de travail</strong> (le niveau de regroupement utile seulement quand on jongle avec de nombreux projets).",
               "name": "<code>Nouveau groupe</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar d’agent",
+              "where": "Menu ＋, sous le titre Agents",
+              "what": "L’initiale d’un agent permanent sur sa propre couleur. La choisir vous amène à l’agent s’il est ouvert, ou le reprend s’il est fermé."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Nommé automatiquement d’après la première instruction de cette session – renommez-le et le nom restera le vôtre</code>"
             },
             "globalManager": {
-              "where": "À côté du texte du titre, affiché sous la forme <code>🎯 Gest.</code>",
-              "what": "Un simple repère : il s’agit du pane gestionnaire du pipeline."
+              "where": "À côté du texte du titre, affiché sous la forme <code>🎯 Gest.</code>"
             },
             "loop": {
               "where": "Barre de titre",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Continuer</code> / info-bulle <code>Cette session a été restaurée et attend à l’invite…</code>",
               "where": "Sous la vue du terminal",
               "what": "N’apparaît que lorsque le pane a été restauré après un redémarrage et attend, inactif, à l’invite. Un clic envoie <em>continue</em> pour reprendre le travail."
+            },
+            "riskPill": {
+              "what": "Navide a vu ce CLI sortir de ses habitudes : connexion à une adresse hors de l’ensemble attendu, ou écriture d’un fichier opaque jamais écrit auparavant (en rouge si cela se reproduit). Cliquez pour les détails, le processus en cause et, si c’est pris en charge, un bouton <em>{analyze}</em>."
             }
           },
           "placeholder": {

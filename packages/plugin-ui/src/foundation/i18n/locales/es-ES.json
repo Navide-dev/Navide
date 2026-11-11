@@ -5927,6 +5927,11 @@
               "where": "El panel desplegable de la franja de color del extremo izquierdo de la barra lateral",
               "what": "Añadir un <strong>grupo de áreas de trabajo</strong> (la capa de agrupación que solo necesitas si manejas muchos proyectos).",
               "name": "<code>Nuevo grupo</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar del agente",
+              "where": "Menú ＋, bajo el encabezado Agentes",
+              "what": "La inicial de un agente permanente sobre su propio color. Elegirla cambia al agente si está abierto, o lo reanuda si está cerrado."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Nombre puesto automáticamente a partir de la primera instrucción de esta session; si lo cambias, se queda el tuyo</code>"
             },
             "globalManager": {
-              "where": "Junto al texto del título, mostrado como <code>🎯 Gestor</code>",
-              "what": "Una simple marca: este es el pane gestor de la pipeline."
+              "where": "Junto al texto del título, mostrado como <code>🎯 Gestor</code>"
             },
             "loop": {
               "where": "Barra de título",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Continuar</code> / tooltip <code>Esta session se restauró y está esperando en el prompt…</code>",
               "where": "Debajo de la vista del terminal",
               "what": "Solo aparece cuando el pane se restauró tras un reinicio y está inactivo en el prompt. Al pulsarlo se envía <em>continue</em> para retomar el trabajo."
+            },
+            "riskPill": {
+              "what": "Navide vio a esta CLI hacer algo fuera de lo habitual: conectarse a una dirección fuera del conjunto esperado o escribir un archivo opaco que nunca había escrito (en rojo si se repite). Haz clic para ver los detalles, el proceso implicado y, si se admite, un botón <em>{analyze}</em>."
             }
           },
           "placeholder": {

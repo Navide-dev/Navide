@@ -185,7 +185,7 @@ Skills 画面は backend の変更成功と再接続で更新されます。未�
 
 ## Settings と Portability
 
-**設定 → 言語** は、サイドバーの「外観」の次にある独立したページです。繁體中文、English、日本語から選択できます。このユーザー設定はすべてのワークスペースに適用されます。初回起動時に言語設定が保存されていなければ、日本語のシステムでは日本語が選択されます。言語の変更は初期設定画面、Navide のネイティブメニュー項目、独立した Plans とトークンモニターのウィンドウにも反映されます。OS が提供するメニュー項目や外部のコンテンツは、それぞれの言語で表示される場合があります。
+**設定 → 言語** は、サイドバーの「外観」の次にある独立したページです。English、繁體中文、日本語に加え、Beta 表示の简体中文、한국어、Español、Français、Deutsch、Português (Brasil)、Русский、Tiếng Việt の計 11 言語から選べます（Beta は機械翻訳でネイティブのレビュー待ちです。Beta 言語にない文字列は英語で表示されます）。このユーザー設定はすべてのワークスペースに適用されます。初回起動時に言語設定が保存されていなければ、システムの言語がこの 11 言語に含まれる場合はそれに従い（中国語のシステムは台湾・香港・マカオなら繁體中文、それ以外は简体中文）、それ以外のシステム言語では英語になります。言語の変更は初期設定画面、Navide のネイティブメニュー項目、独立した Plans とトークンモニターのウィンドウにも反映されます。OS が提供するメニュー項目や外部のコンテンツは、それぞれの言語で表示される場合があります。
 
 Settings は Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut を扱います。Navide が MCP Server を停止するとき（Navide の終了、再読み込み、Server の起動失敗）は、その Server が起動してまだ動いているすべてのプロセスも終了します。Server があなたのために開いたプログラム（起動したブラウザーなど）も含みます。CLI Agents では Install 済みの Coding CLI も管理します。バージョン、Install 方法、重複 Install、その CLI 自身の最後の更新結果を表示し、その CLI 公式の更新コマンドと診断コマンドを Terminal で実行できます。Navide はベンダーのコマンドを提示して実行するだけで、CLI 自体を更新することはありません。Export された Settings は API Key と Token を Redact します。Third-party Server を有効化する前に、MCP Command と Environment Variable を確認してください。
 

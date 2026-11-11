@@ -5927,6 +5927,11 @@
               "where": "O painel suspenso da faixa colorida na extremidade esquerda da barra lateral",
               "what": "Adicionar um <strong>grupo de workspaces</strong> (a camada de agrupamento que só é necessária ao lidar com muitos projetos).",
               "name": "<code>Novo grupo</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar do agente",
+              "where": "Menu ＋, sob o título Agentes",
+              "what": "A inicial de um agente permanente sobre a cor dele. Escolher leva ao agente se estiver aberto, ou o retoma se estiver fechado."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Nomeado automaticamente a partir da primeira instrução desta session; se você o renomear, o nome fica sendo seu</code>"
             },
             "globalManager": {
-              "where": "Ao lado do texto do título, mostrado como <code>🎯 Gerente</code>",
-              "what": "Uma simples marca: este é o pane gerente do pipeline."
+              "where": "Ao lado do texto do título, mostrado como <code>🎯 Gerente</code>"
             },
             "loop": {
               "where": "Barra de título",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Continuar</code> / dica <code>Esta session foi restaurada e está aguardando no prompt…</code>",
               "where": "Abaixo da visualização do terminal",
               "what": "Só aparece quando o pane foi restaurado depois de uma reinicialização e está ocioso no prompt. Clicar envia <em>continue</em> para retomar o trabalho."
+            },
+            "riskPill": {
+              "what": "O Navide viu esta CLI fazer algo fora do normal: conectar a um endereço fora do conjunto esperado ou gravar um arquivo opaco que nunca havia gravado (vermelho quando se repete). Clique para ver os detalhes, o processo envolvido e, quando houver suporte, um botão <em>{analyze}</em>."
             }
           },
           "placeholder": {

@@ -5927,6 +5927,11 @@
               "where": "側欄最左緣色軌的飛出選單",
               "what": "新增一個<strong>工作區群組</strong>（管很多專案時才用得到的分類層）。",
               "name": "<code>新增群組</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent 頭像",
+              "where": "＋ 選單的 Agent 標題下",
+              "what": "常駐 Agent 名字的第一個字，底色是它自己的顏色。點了會切到已開啟的 Agent，已關閉的則接續原本的對話。"
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名</code>"
             },
             "globalManager": {
-              "where": "標題文字旁，顯示 <code>🎯 管理</code>",
-              "what": "純記號：這是 pipeline 的總管分格。"
+              "where": "標題文字旁，顯示 <code>🎯 管理</code>"
             },
             "loop": {
               "where": "標題列",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ 繼續</code> ／ 提示 <code>This session was restored and is waiting at the prompt…</code>",
               "where": "終端機畫面下方",
               "what": "分格是重啟後還原的、停在提示符不動時才出現。按下去送出 <em>continue</em>，把工作接回去。"
+            },
+            "riskPill": {
+              "what": "Navide 觀察到這個 CLI 做了平常不會做的事：連到預期集合以外的位址，或寫出以前沒寫過的未知格式檔案（再次發生時變紅）。點它可看細節、相關程序，支援的話還有<em>{analyze}</em>按鈕。"
             }
           },
           "placeholder": {

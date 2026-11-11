@@ -5927,6 +5927,11 @@
               "where": "The flyout on the sidebar's far-left colored rail",
               "what": "Add a <strong>workspace group</strong> (the grouping layer you only need when juggling many projects).",
               "name": "<code>New Group</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent avatar",
+              "where": "＋ menu, under the Agents heading",
+              "what": "The first letter of a standing agent's name on its own colour. Picking it switches to the agent if it is open, or resumes it if it is closed."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Named automatically from this session's first instruction — rename it and it stays yours</code>"
             },
             "globalManager": {
-              "where": "Beside the title text, shown as <code>🎯 Mgr</code>",
-              "what": "A plain marker: this is the pipeline's manager pane."
+              "where": "Beside the title text, shown as <code>🎯 Mgr</code>"
             },
             "loop": {
               "where": "Title bar",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Continue</code> / tooltip <code>This session was restored and is waiting at the prompt…</code>",
               "where": "Below the terminal view",
               "what": "Only appears when the pane was restored after a restart and is sitting idle at the prompt. Pressing it sends <em>continue</em> to pick the work back up."
+            },
+            "riskPill": {
+              "what": "Navide saw this CLI do something outside its usual pattern: connect to an address outside its expected set, or write an opaque file it had not written before (red when it happens again). Click it for the details, the process involved and, where supported, an <em>{analyze}</em> button."
             }
           },
           "placeholder": {

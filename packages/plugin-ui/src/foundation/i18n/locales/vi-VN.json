@@ -5927,6 +5927,11 @@
               "where": "Bảng bật ra của dải màu ở mép trái ngoài cùng thanh bên",
               "what": "Thêm một <strong>nhóm workspace</strong> (lớp nhóm chỉ cần khi xoay xở nhiều dự án).",
               "name": "<code>Nhóm mới</code>"
+            },
+            "agentAvatar": {
+              "name": "Ảnh đại diện agent",
+              "where": "Menu ＋, dưới tiêu đề Agent",
+              "what": "Chữ cái đầu tên của agent thường trực trên màu riêng của nó. Chọn sẽ chuyển sang agent nếu đang mở, hoặc tiếp tục nó nếu đã đóng."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Được tự động đặt tên theo chỉ thị đầu tiên của session này — hãy đổi tên và tên đó sẽ được giữ</code>"
             },
             "globalManager": {
-              "where": "Cạnh chữ tiêu đề, hiển thị là <code>🎯 QL</code>",
-              "what": "Chỉ là dấu hiệu: đây là pane quản lý của pipeline."
+              "where": "Cạnh chữ tiêu đề, hiển thị là <code>🎯 QL</code>"
             },
             "loop": {
               "where": "Thanh tiêu đề",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Tiếp tục</code> / chú thích <code>Session này đã được khôi phục và đang chờ ở prompt…</code>",
               "where": "Bên dưới khung terminal",
               "what": "Chỉ hiện khi pane được khôi phục sau khi khởi động lại và đang rảnh ở prompt. Nhấn vào sẽ gửi <em>continue</em> để làm tiếp."
+            },
+            "riskPill": {
+              "what": "Navide thấy CLI này làm điều khác thường: kết nối tới địa chỉ ngoài tập dự kiến, hoặc ghi một tệp không rõ định dạng chưa từng ghi trước đó (đỏ khi lặp lại). Nhấp để xem chi tiết, tiến trình liên quan và, nếu được hỗ trợ, nút <em>{analyze}</em>."
             }
           },
           "placeholder": {

@@ -5927,6 +5927,11 @@
               "where": "Das Flyout an der farbigen Leiste ganz links in der Seitenleiste",
               "what": "Eine <strong>Arbeitsbereichsgruppe</strong> hinzufügen (die Gruppierungsebene, die Sie nur brauchen, wenn Sie viele Projekte jonglieren).",
               "name": "<code>Neue Gruppe</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent-Avatar",
+              "where": "＋-Menü, unter der Überschrift Agents",
+              "what": "Der Anfangsbuchstabe eines dauerhaften Agents auf seiner eigenen Farbe. Die Auswahl wechselt zum Agent, wenn er offen ist, oder setzt ihn fort, wenn er geschlossen ist."
             }
           },
           "group": {
@@ -6004,8 +6009,7 @@
               "name": "<code>Automatisch nach der ersten Anweisung dieser Session benannt – benennen Sie es um, dann bleibt Ihr Name</code>"
             },
             "globalManager": {
-              "where": "Neben dem Titeltext, angezeigt als <code>🎯 Mgr</code>",
-              "what": "Eine reine Markierung: Dies ist der Manager-Bereich der Pipeline."
+              "where": "Neben dem Titeltext, angezeigt als <code>🎯 Mgr</code>"
             },
             "loop": {
               "where": "Titelleiste",
@@ -6052,6 +6056,9 @@
               "name": "<code>↻ Fortfahren</code> / Tooltip <code>Diese Session wurde wiederhergestellt und wartet an der Eingabeaufforderung …</code>",
               "where": "Unter der Terminalansicht",
               "what": "Erscheint nur, wenn der Bereich nach einem Neustart wiederhergestellt wurde und im Leerlauf am Prompt wartet. Ein Klick sendet <em>continue</em>, um die Arbeit wieder aufzunehmen."
+            },
+            "riskPill": {
+              "what": "Navide hat bei dieser CLI etwas Ungewöhnliches beobachtet: eine Verbindung zu einer Adresse außerhalb der erwarteten Menge oder eine undurchsichtige Datei, die sie vorher nie geschrieben hat (rot, wenn es erneut passiert). Ein Klick zeigt Details, den beteiligten Prozess und, wo unterstützt, eine Schaltfläche <em>{analyze}</em>."
             }
           },
           "placeholder": {
