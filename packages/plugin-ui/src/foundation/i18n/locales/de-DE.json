@@ -510,6 +510,7 @@
     "hold-mid-turn": "Der Ziel-Agent ist mitten in einer Runde",
     "hold-settling": "Warten, bis sich das Ziel beruhigt",
     "hold-composer": "Das Eingabefeld enthält noch die letzte Übergabe",
+    "hold-model-switch": "Der Zielbereich wechselt gerade sein Modell",
     "hold-pty-blocked": "Geschrieben – warten, bis das Ziel seine Eingabe liest",
     "hold-remote-ack": "Gesendet – warten auf die Rückmeldung des Zielfensters",
     "hold-cancelling": "Wird zurückgezogen – warten auf die Antwort des Zielfensters",

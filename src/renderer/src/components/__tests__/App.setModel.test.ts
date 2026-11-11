@@ -82,3 +82,18 @@ describe('cli_set_model: claude through the /model picker', () => {
     expect(action.indexOf('setModelViaPicker(')).toBeLessThan(action.indexOf('rebuildPaneViaResume('))
   })
 })
+
+describe('cli_set_model: the message queue is held during the switch', () => {
+  const gate = block('function messagingHoldKey(', '\n}\n')
+
+  it('holds every message to a pane while its switch runs', () => {
+    expect(gate).toContain("if (modelSwitchingPanes.has(paneId)) return 'model-switch'")
+  })
+
+  it('marks the pane after the idle check and always releases it', () => {
+    const add = action.indexOf('modelSwitchingPanes.add(pane.id)\n  try {')
+    expect(add).toBeGreaterThan(action.indexOf("refuse('pane-busy'"))
+    expect(add).toBeLessThan(action.indexOf('setModelViaPicker('))
+    expect(action).toContain('} finally {\n    modelSwitchingPanes.delete(pane.id)\n  }')
+  })
+})
