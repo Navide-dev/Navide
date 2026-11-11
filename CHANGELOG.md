@@ -10,10 +10,6 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
-### Changed
-
-- Plugins (0.2.41): the shared plugin UI strings changed for the account quota card, so the official plugins move to Navide Browser 1.1.3, Git 1.0.6, Mini-IDE 1.0.5, Plans 1.1.5.
-
 ## [0.2.40] — 2026-11-11
 
 ### Added
