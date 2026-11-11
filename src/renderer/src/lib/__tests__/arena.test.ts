@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arenaPaneName, candidatesToStop, defaultArenaLineup, formatElapsed, type ArenaStatus } from '../arena'
+import { arenaDiffLines, arenaPaneName, candidatesToStop, defaultArenaLineup, formatElapsed, type ArenaStatus } from '../arena'
 
 function status(overrides: Partial<ArenaStatus['candidates'][number]>[], stopped: string[] = []): ArenaStatus {
   const ids = ['A', 'B', 'C'].slice(0, overrides.length)
@@ -45,5 +45,10 @@ describe('model arena rules', () => {
     expect(arenaPaneName('ab12', { id: 'B', slug: 'claude-opus-5-5' })).toBe('arena-ab12-B-claude-opus-5-5')
     expect(formatElapsed(65)).toBe('1:05')
     expect(formatElapsed(3725)).toBe('1:02:05')
+  })
+
+  it('colours a unified diff, keeping file headers out of add/del', () => {
+    const lines = arenaDiffLines('diff --git a/x b/x\nindex 1..2\n--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n keep\n-old\n+new\n')
+    expect(lines.map((l) => l.kind)).toEqual(['meta', 'meta', 'meta', 'meta', 'hunk', 'ctx', 'del', 'add'])
   })
 })

@@ -13492,7 +13492,7 @@
       "time-limit": "Límite de tiempo por panel (minutos)",
       "budget": "Tope de coste por panel (US$)",
       "estimate": "Abre {panes} paneles y {panes} worktrees.",
-      "estimate-branches": "Ramas: arena/<run>/<model>, en .agent-team/worktrees/arena-<run>/.",
+      "estimate-branches": "Ramas: arena/EJECUCIÓN/MODELO, en .agent-team/worktrees/arena-EJECUCIÓN/.",
       "estimate-budget": "Peor caso: US$ {total} en total con el tope.",
       "starting": "Iniciando…",
       "go": "Iniciar comparación",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} predeterminado",
       "files": "{n} archivos",
       "protected": "{n} archivos sensibles modificados",
-      "cost-unavailable": "Sin datos de coste"
+      "cost-unavailable": "Sin datos de coste",
+      "rating": "Valoración",
+      "adopt": "Adoptar"
     },
     "action": {
       "show": "Mostrar",
       "stop": "Detener",
       "stop-all": "Detener todo"
-    }
+    },
+    "tab": {
+      "run": "Progreso",
+      "compare": "Comparación"
+    },
+    "compare": {
+      "rate": "{n} estrellas",
+      "adopt": "Adoptar este",
+      "no-changes": "Ningún candidato ha cambiado nada todavía.",
+      "protected-hint": "Lockfile, manifiesto de paquetes, entorno, CI o configuración: revísalo antes de adoptarlo",
+      "unchanged": "Sin cambios aquí",
+      "truncated": "Diff recortado: demasiado largo para mostrarlo entero",
+      "refresh": "Actualizar"
+    },
+    "workspace-alias": "Arena de modelos {run}·{id} {model}"
   }
 }

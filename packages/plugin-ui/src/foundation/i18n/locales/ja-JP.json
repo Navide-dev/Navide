@@ -13492,7 +13492,7 @@
       "time-limit": "ペインごとの時間制限（分）",
       "budget": "ペインごとの費用上限（US$）",
       "estimate": "{panes} 個のペインと {panes} 個の worktree を開きます。",
-      "estimate-branches": "ブランチ: arena/<run>/<model>、場所は .agent-team/worktrees/arena-<run>/。",
+      "estimate-branches": "ブランチ: arena/回/モデル、場所は .agent-team/worktrees/arena-回/。",
       "estimate-budget": "最大費用: すべて上限で合計 US$ {total}。",
       "starting": "開始中…",
       "go": "比較を開始",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} 既定",
       "files": "{n} ファイル",
       "protected": "要注意ファイル {n} 個に変更",
-      "cost-unavailable": "費用データなし"
+      "cost-unavailable": "費用データなし",
+      "rating": "評価",
+      "adopt": "採用"
     },
     "action": {
       "show": "表示",
       "stop": "停止",
       "stop-all": "すべて停止"
-    }
+    },
+    "tab": {
+      "run": "進行状況",
+      "compare": "比較"
+    },
+    "compare": {
+      "rate": "星 {n} 個",
+      "adopt": "これを採用",
+      "no-changes": "まだどの候補もファイルを変更していません。",
+      "protected-hint": "ロックファイル、パッケージ定義、環境変数、CI、設定ファイル: 採用前に確認してください",
+      "unchanged": "この候補では未変更",
+      "truncated": "差分が長すぎるため先頭のみ表示",
+      "refresh": "再読み込み"
+    },
+    "workspace-alias": "アリーナ {run}·{id} {model}"
   }
 }

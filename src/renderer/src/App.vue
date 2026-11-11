@@ -24024,6 +24024,9 @@ async function startArena(req: ArenaStartRequest): Promise<void> {
     // no candidate gets a head start of another one's CLI boot time.
     const opened: { id: string; paneId: string }[] = []
     for (const cand of run.candidates) {
+      // Each worktree is the pane's folder, so the sidebar lists it as a
+      // workspace of its own; name it after the run rather than the model slug.
+      void workspaceAliases.setDisplayName(cand.worktree, i18n.global.t('arena.workspace-alias', { run: run.id, id: cand.id, model: cand.model || cand.agent }))
       const paneId = await createStandaloneRequestedPane(cand.worktree, {
         agentKey: cand.agent,
         name: arenaPaneName(run.id, cand),
@@ -24034,12 +24037,14 @@ async function startArena(req: ArenaStartRequest): Promise<void> {
       opened.push({ id: cand.id, paneId })
       await sendQuiet('arena.update', { workspace_path: run.workspace, run_id: run.id, candidate: cand.id, pane_id: paneId })
     }
-    const kickoff = arenaKickoff(run)
-    await Promise.all(opened.map(({ paneId }) =>
-      injectStandaloneTask(paneId, kickoff, 'arena-task', standaloneTaskDeps()).catch(() => false)
-    ))
     await loadArenaRuns()
     openArenaPanel(run.id)
+    // Typed in the background: each pane's prompt-ready gate can take as long
+    // as its CLI's cold start, and the run view is useful meanwhile.
+    const kickoff = arenaKickoff(run)
+    void Promise.all(opened.map(({ paneId }) =>
+      injectStandaloneTask(paneId, kickoff, 'arena-task', standaloneTaskDeps()).catch(() => false)
+    ))
   } catch (err) {
     arenaStartError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -25464,7 +25469,9 @@ function paneIsCommander(p: ActivePane): boolean {
     :run-id="arenaPanelRunId"
     :status="arenaStatus"
     :pane-alive="paneAlive"
+    :request="sendQuiet"
     @close="arenaPanelOpen = false"
+    @changed="() => { void loadArenaRuns(); void pollArena() }"
     @select-run="(id) => { arenaPanelRunId = id; arenaStatus = null; void pollArena() }"
     @focus-pane="(id) => { arenaPanelOpen = false; selectPane(id, { userInitiated: true }) }"
     @stop="(rid, cid) => void stopArenaCandidate(rid, cid)"

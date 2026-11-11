@@ -13492,7 +13492,7 @@
       "time-limit": "창별 시간 제한(분)",
       "budget": "창별 비용 상한(US$)",
       "estimate": "창 {panes}개와 worktree {panes}개를 엽니다.",
-      "estimate-branches": "브랜치: arena/<run>/<model>, 위치는 .agent-team/worktrees/arena-<run>/.",
+      "estimate-branches": "브랜치: arena/회차/모델, 위치는 .agent-team/worktrees/arena-회차/.",
       "estimate-budget": "최대 비용: 모두 상한까지 합계 US$ {total}.",
       "starting": "시작하는 중…",
       "go": "비교 시작",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} 기본",
       "files": "파일 {n}개",
       "protected": "민감한 파일 {n}개 변경",
-      "cost-unavailable": "비용 데이터 없음"
+      "cost-unavailable": "비용 데이터 없음",
+      "rating": "평가",
+      "adopt": "채택"
     },
     "action": {
       "show": "보기",
       "stop": "중지",
       "stop-all": "모두 중지"
-    }
+    },
+    "tab": {
+      "run": "진행",
+      "compare": "비교"
+    },
+    "compare": {
+      "rate": "별 {n}개",
+      "adopt": "이것을 채택",
+      "no-changes": "아직 어떤 후보도 파일을 바꾸지 않았습니다.",
+      "protected-hint": "lockfile, 패키지 목록, 환경 변수, CI 또는 설정 파일: 채택 전에 확인하세요",
+      "unchanged": "여기서는 변경 없음",
+      "truncated": "차이가 너무 길어 앞부분만 표시",
+      "refresh": "새로 고침"
+    },
+    "workspace-alias": "아레나 {run}·{id} {model}"
   }
 }

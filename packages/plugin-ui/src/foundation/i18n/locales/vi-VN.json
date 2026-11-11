@@ -13492,7 +13492,7 @@
       "time-limit": "Giới hạn thời gian mỗi ô (phút)",
       "budget": "Trần chi phí mỗi ô (US$)",
       "estimate": "Mở {panes} ô và {panes} worktree.",
-      "estimate-branches": "Nhánh: arena/<run>/<model>, trong .agent-team/worktrees/arena-<run>/.",
+      "estimate-branches": "Nhánh: arena/LƯỢT/MÔ-HÌNH, trong .agent-team/worktrees/arena-LƯỢT/.",
       "estimate-budget": "Tối đa: tổng cộng US$ {total} khi chạm trần.",
       "starting": "Đang bắt đầu…",
       "go": "Bắt đầu so sánh",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} mặc định",
       "files": "{n} tệp",
       "protected": "Đụng tới {n} tệp nhạy cảm",
-      "cost-unavailable": "Không có dữ liệu chi phí"
+      "cost-unavailable": "Không có dữ liệu chi phí",
+      "rating": "Đánh giá",
+      "adopt": "Chọn"
     },
     "action": {
       "show": "Hiển thị",
       "stop": "Dừng",
       "stop-all": "Dừng tất cả"
-    }
+    },
+    "tab": {
+      "run": "Tiến độ",
+      "compare": "So sánh"
+    },
+    "compare": {
+      "rate": "{n} sao",
+      "adopt": "Chọn bản này",
+      "no-changes": "Chưa ứng viên nào thay đổi gì.",
+      "protected-hint": "Lockfile, danh sách gói, biến môi trường, CI hoặc tệp cấu hình: kiểm tra trước khi chọn",
+      "unchanged": "Không đổi ở đây",
+      "truncated": "Diff bị cắt: quá dài để hiển thị đầy đủ",
+      "refresh": "Làm mới"
+    },
+    "workspace-alias": "Đấu trường {run}·{id} {model}"
   }
 }
