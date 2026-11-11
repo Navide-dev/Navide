@@ -2848,7 +2848,7 @@
             }
           },
           "resource": {
-            "caption": "Cửa sổ Resource Manager. Số liệu và kết quả quét chỉ cập nhật khi bạn nhấp Làm mới.",
+            "caption": "Cửa sổ Resource Manager. Số liệu {cpu} và {memory} tự cập nhật khi cửa sổ đang mở; việc quét ổ đĩa chỉ chạy khi bạn nhấp {scan}.",
             "legend": {
               "totals": {
                 "label": "Ba thẻ ở trên cùng",
@@ -2886,15 +2886,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
+        "intro": "Mỗi tab trong {tabCount} tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng ra sao, và các phần hệ thống nằm ngoài màn hình chính — menu, cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>27 tab</strong>.",
+          "p1": "Cửa sổ cài đặt mở bằng <kbd class=\"syh-kbd\">{settingsKey}</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ đó. Thanh bên trái chia thành {groupCount} nhóm, tổng cộng <strong>{tabCount} tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
-            "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
+            "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {agents}, {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
           "h2": "Hai mươi bảy tab",
           "tabTable": {
@@ -2913,7 +2913,7 @@
               "more": "mục 2 của trang này"
             },
             "language": {
-              "what": "Ngôn ngữ giao diện cho mọi workspace: tiếng Trung phồn thể, tiếng Anh hoặc tiếng Nhật",
+              "what": "Ngôn ngữ giao diện cho mọi workspace, chọn trong {languageCount} ngôn ngữ ({betaCount} ngôn ngữ đang ở bản Beta)",
               "more": "mục 2 của trang này"
             },
             "statusBadges": {
@@ -3025,7 +3025,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "Hỏi trước khi ⌘W đóng một pane. Pane đang giữa lượt thì luôn hỏi, bất kể công tắc này.",
+              "desc": "Hỏi trước khi {closePaneKey} đóng một pane. Pane đang giữa lượt thì luôn hỏi, bất kể công tắc này.",
               "fallback": "Bật"
             },
             "confirmCloseWorkspace": {
@@ -3089,16 +3089,16 @@
           "appearance": {
             "theme": "<strong>Chủ đề</strong> — năm chủ đề dựng sẵn: Dark (GitHub), Midnight, Forest, Light và High Contrast; mặc định là Dark (GitHub).",
             "colors": "<strong>Màu tùy chỉnh</strong> — tám token màu có thể ghi đè (nền, bề mặt, chữ, chữ phụ, viền, màu nhấn, thành công, nguy hiểm). Các giá trị ghi đè nằm chồng lên chủ đề hiện tại và <strong>được giữ lại khi bạn đổi chủ đề</strong>; <em>↺ Đặt lại mặc định</em> sẽ đưa chúng về như cũ.",
-            "uiScale": "<strong>Tỷ lệ giao diện</strong> — hàng đầu tiên của khối <strong>Giao diện ▸ Khác</strong>, và là một <strong>danh sách thả xuống</strong> chứ không phải thanh trượt: sáu mức (80%, 90%, 100%, 110%, 125%, 150%; mặc định 100%), với <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. Mục này điều khiển mức thu phóng trang của Electron chứ không phải một biến CSS, nên chữ, biểu tượng, viền và khoảng cách đều thay đổi cùng nhau, và tiến trình chính áp dụng nó cho <strong>mọi cửa sổ</strong>, kể cả cửa sổ của plugin Navide. Đây là <strong>một trục riêng</strong> so với cỡ chữ của pane: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> chỉ đổi cỡ chữ của <strong>nội dung</strong> terminal (một giá trị dùng chung cho mọi pane CLI trong cửa sổ), còn Tỷ lệ giao diện đổi phần khung bao quanh — và hai trục này <strong>nhân với nhau</strong>, giống như mức thu phóng trang của trình duyệt nhân với cỡ chữ riêng của một trang web.",
+            "uiScale": "<strong>Tỷ lệ giao diện</strong> — hàng đầu tiên của khối <strong>Giao diện ▸ Khác</strong>, và là một <strong>danh sách thả xuống</strong> chứ không phải thanh trượt: sáu mức (80%, 90%, 100%, 110%, 125%, 150%; mặc định 100%), với <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>. Mục này điều khiển mức thu phóng trang của Electron chứ không phải một biến CSS, nên chữ, biểu tượng, viền và khoảng cách đều thay đổi cùng nhau, và tiến trình chính áp dụng nó cho <strong>mọi cửa sổ</strong>, kể cả cửa sổ của plugin Navide. Đây là <strong>một trục riêng</strong> so với cỡ chữ của pane: <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd> chỉ đổi cỡ chữ của <strong>nội dung</strong> terminal (một giá trị dùng chung cho mọi pane CLI trong cửa sổ), còn Tỷ lệ giao diện đổi phần khung bao quanh — và hai trục này <strong>nhân với nhau</strong>, giống như mức thu phóng trang của trình duyệt nhân với cỡ chữ riêng của một trang web.",
             "restore": "<strong>Khôi phục cửa sổ</strong> — mở lại các cửa sổ workspace đang mở lúc bạn thoát lần trước."
           },
           "callout": {
             "title": "Thông báo và âm thanh nằm ở tab Thông báo",
             "text": "Các công tắc thông báo có tồn tại — chỉ là chúng không nằm ở Giao diện mà ở <strong>tab Thông báo</strong>, gồm ba công tắc: <em>Thông báo hệ thống</em> (một thông báo trên màn hình khi CLI kết thúc lượt hoặc cần bạn trả lời trong lúc Navide chạy nền; huy hiệu trên Dock vẫn tiếp tục đếm trong mọi trường hợp), <em>Âm thanh thông báo</em> (một tiếng chuông ngắn khi hoàn tất lượt và tiếng bíp đôi khi CLI đang chờ bạn) và <em>Quyền thông báo</em> — macOS không cho Navide biết quyền thực tế, nên hàng này chỉ có thể gửi một thông báo thử để bạn xác nhận nó có hiện ra; nếu không hiện, hãy cho phép Navide trong Cài đặt hệ thống → Thông báo. Hàng cuối này chỉ xuất hiện trên những nền tảng có áp dụng."
           },
-          "language": "Ngôn ngữ là một tab riêng, không thuộc Giao diện. <strong>Ba ngôn ngữ</strong>: <code>繁體中文</code>, <code>English</code> và <code>日本語</code>. Khi bạn chưa chọn, Navide theo ngôn ngữ hệ thống (dùng tiếng Trung phồn thể nếu ngôn ngữ hệ thống không thuộc ba ngôn ngữ trên). Đây là tùy chọn của người dùng và áp dụng cho mọi workspace.",
+          "language": "Ngôn ngữ là một tab riêng, không thuộc Giao diện. Có <strong>{languageCount} ngôn ngữ</strong>, mỗi ngôn ngữ được ghi bằng tên của chính nó — <code>繁體中文</code>, <code>English</code>, <code>日本語</code> v.v.; {betaCount} ngôn ngữ gắn nhãn Beta là bản dịch máy, vẫn đang chờ người bản ngữ rà soát. Khi bạn chưa chọn, Navide theo ngôn ngữ hệ thống ({fallbackLanguage} nếu ngôn ngữ hệ thống không nằm trong danh sách). Đây là tùy chọn cấp người dùng, áp dụng cho mọi workspace.",
           "h3": "Huy hiệu trạng thái",
-          "p1": "<strong>Đổi tên và đổi màu</strong> cho từng trạng thái trong chín trạng thái của pane. Tên tiếng Trung, tiếng Anh và tiếng Nhật được nhập riêng (mỗi tên 24 ký tự; để trống một tên để dùng lại bản dịch dựng sẵn). Sau khi thay đổi, huy hiệu pane, thanh bên, thanh cuộc họp và bảng tài nguyên đều làm theo. <strong>Cài đặt này lưu theo tài khoản của bạn, không theo dự án.</strong>",
+          "p1": "<strong>Đổi tên và đổi màu</strong> cho từng trạng thái trong {stateCount} trạng thái của pane. Mỗi ngôn ngữ giao diện có một ô tên riêng (tổng cộng {languageCount} ô, mỗi ô tối đa 24 ký tự). Ô để trống sẽ dùng giá trị thay thế: tiếng Trung phồn thể, tiếng Anh và tiếng Nhật quay thẳng về bản dịch có sẵn, còn mọi ngôn ngữ khác trước tiên mượn tên tiếng Anh bạn đặt, rồi tên tiếng Trung phồn thể, cuối cùng mới là bản dịch có sẵn. Sau khi đổi, huy hiệu pane, thanh bên, thanh cuộc họp và bảng tài nguyên đều thay đổi theo. <strong>Thiết lập này lưu theo tài khoản của bạn, không theo dự án.</strong>",
           "statusTable": {
             "state": "Trạng thái",
             "when": "Khi nào pane ở trạng thái này",
@@ -3143,7 +3143,7 @@
             "title": "Thư mục gốc dùng chung",
             "text": "Skill do Navide tạo luôn nằm trong <code>~/.agents/skills</code>. Trang này <strong>không bao giờ di chuyển hay ghi lại</strong> các skill nằm trong thư mục riêng của một CLI — chúng chỉ được phản chiếu để bạn xem và có thể phân phối cho CLI khác. (Ngoại lệ rõ ràng duy nhất là <em>Chuyển vào thư viện dùng chung</em>: thao tác này di chuyển tệp, để lại một liên kết tượng trưng và có thể hoàn tác.)"
           },
-          "p2": "Trang có hai chế độ xem: <strong>Duyệt</strong> (dạng thẻ) và <strong>Phân phối</strong> (ma trận phân phối). Ma trận có 15 CLI ở hàng trên và các skill ở cột bên; mỗi ô ở một trong bốn trạng thái, và mỗi hàng có các nút hàng loạt <em>Tất cả</em> / <em>Không có</em>:",
+          "p2": "Trang có hai chế độ xem: <strong>Duyệt</strong> (dạng thẻ) và <strong>Phân phối</strong> (ma trận phân phối). Ma trận có {cliCount} CLI ở hàng trên và các skill ở cột bên; mỗi ô ở một trong bốn trạng thái, và mỗi hàng có các nút hàng loạt <em>Tất cả</em> / <em>Không có</em>:",
           "matrixTable": {
             "cell": "Ô",
             "meaning": "Ý nghĩa",
@@ -3163,7 +3163,7 @@
             "none": {
               "cell": "— không có cơ chế skill",
               "meaning": "CLI đó hoàn toàn không có khái niệm skill, nên không có gì để kết nối.",
-              "who": "4: aider, droid, kilo và mcode"
+              "who": "8: aider, devin, droid, goose, hermes, kilo, mcode và openclaw"
             },
             "pending": {
               "cell": "· có hỗ trợ, chưa kết nối",
@@ -3191,14 +3191,14 @@
             "notCreated": "Tệp chưa tồn tại được đánh dấu <em>Chưa tạo</em> — lưu sẽ tạo tệp, cùng với các thư mục cha còn thiếu.",
             "reload": "Nếu một chương trình khác sửa tệp trong lúc bạn đang chỉnh, trình soạn thảo sẽ dừng lại và yêu cầu bạn chọn <em>Tải lại từ đĩa (bỏ bản nháp của bạn)</em> trước, thay vì ghi đè lên công việc của bạn hay của chương trình kia."
           },
-          "p6": "Khối <strong>Mức hỗ trợ CLI</strong> ở cuối chia 15 CLI thành ba nhóm:",
+          "p6": "Khối <strong>Mức hỗ trợ CLI</strong> ở cuối chia {cliCount} CLI thành ba nhóm:",
           "coverageTable": {
             "category": "Danh mục",
             "meaning": "Ý nghĩa"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide biết CLI này lưu hướng dẫn ở đâu. 14 CLI thuộc nhóm này."
+              "value": "Navide biết CLI này lưu hướng dẫn ở đâu. Mọi CLI trừ aider đều thuộc nhóm này."
             },
             "configured": {
               "value": "Chỉ có aider. Nó không có tên tệp riêng — nó đọc bất kỳ tệp nào mà trường read: trong .aider.conf.yml chỉ định, nên bạn ghi gì ở đó thì nơi này liệt kê đúng như vậy (tối đa 20). CONVENTIONS.md chỉ là tên được tài liệu gợi ý; bản thân chương trình không biết đến nó."
@@ -3219,7 +3219,7 @@
           "shortcuts": {
             "record": "Nhấp vào ô phím sẽ bắt đầu <strong>ghi</strong> ngay tại chỗ; <code>+</code> thêm tổ hợp thứ hai; <code>✕</code> xóa một tổ hợp. Một chuỗi phím có tối đa hai bước.",
             "instant": "Thay đổi <strong>được ghi ngay vào <code>keybindings.json</code></strong> và áp dụng cho mọi cửa sổ đang mở; không có nút lưu.",
-            "search": "Ô tìm kiếm khớp đồng thời tên lệnh và cách ghi phím (cả <code>cmd+shift+p</code> lẫn <kbd class=\"syh-kbd\">⌘⇧P</kbd> đều tìm ra); có ba bộ lọc: <em>Tất cả</em> / <em>Đã tùy chỉnh</em> / <em>Xung đột</em>.",
+            "search": "Ô tìm kiếm khớp đồng thời tên lệnh và cách ghi phím (cả <code>cmd+shift+p</code> lẫn <kbd class=\"syh-kbd\">{paletteKey}</kbd> đều tìm ra); có ba bộ lọc: <em>Tất cả</em> / <em>Đã tùy chỉnh</em> / <em>Xung đột</em>.",
             "conflicts": "<em>Xung đột</em> đánh dấu các tổ hợp trùng nhau và giải thích một tổ hợp luôn thắng hay chúng được tách riêng nhờ <em>Hoạt động khi</em>.",
             "reset": "<em>Đặt lại mặc định</em> cho từng hàng, <em>Đặt lại tất cả</em> cho cả trang. <em>Xuất</em> / <em>Nhập</em> để chuyển cài đặt, và <strong>nhập sẽ thay thế chứ không gộp</strong>: trước hết nó cho biết bao nhiêu mục bị bỏ và bao nhiêu mục được nhập, rồi liệt kê các mục bị từ chối."
           },
@@ -3245,7 +3245,7 @@
               "fallback": "Bật, 3 lần thất bại"
             },
             "autoDownload": {
-              "toggle": "Tự động tải bản cập nhật",
+              "toggle": "Tự động tải bản cập nhật (chỉ bản vá; bản cập nhật nhỏ và lớn luôn chờ bạn quyết định)",
               "fallback": "Bật"
             },
             "retryDownload": {
@@ -3359,15 +3359,18 @@
             "text": "Menu nhắc tên <code>{'@'}</code> trong ô nhập của pane chỉ liệt kê pane <strong>cục bộ</strong> (kể cả pane ở các cửa sổ khác trên máy này), và không có nút chèn địa chỉ của thiết bị khác. Địa chỉ của thiết bị khác được viết ở dòng <code>to:</code> của agent hoặc được gửi bằng công cụ MCP (xem chủ đề “Agent cộng tác”). Khi gửi không thành công, phản hồi là <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code> hoặc <code>link-unauthorized</code>; lưu ý thêm rằng chuỗi trả lời không đi qua giữa các máy."
           },
           "h6": "Đồng bộ (giữ nhiều máy giống nhau)",
-          "p11": "Khối đầu tiên trong Cài đặt ▸ Navide Cloud tên là Đồng bộ. <strong>Đây không phải một tab riêng</strong> — mà là phần trên cùng của chính trang này. Mỗi phạm vi đồng bộ được có một hàng với công tắc; bật một phạm vi lên thì phạm vi đó sẽ giống nhau trên mọi thiết bị đăng nhập <strong>cùng một tài khoản</strong>. Bản ghi được <strong>mã hóa trên máy này</strong>, và máy chủ chỉ lưu bản mã mà nó không có khóa.",
+          "p11": "Khối đầu tiên trong Cài đặt ▸ Navide Cloud gọi là Đồng bộ. Khi Navide Cloud đang kết nối, trang có ba tab con — <strong>{sync}</strong>, <strong>{share}</strong> và <strong>{devices}</strong> — và Đồng bộ là tab đầu tiên; khi chưa kết nối, trang chỉ hiện nội dung Đồng bộ. Mỗi phạm vi đồng bộ được có một hàng kèm công tắc; bật lên thì phạm vi đó giữ giống nhau trên mọi thiết bị đăng nhập <strong>cùng một tài khoản</strong>. Dữ liệu được <strong>mã hóa trên máy này</strong>, máy chủ chỉ lưu bản mã mà nó không có khóa.",
           "sync": {
             "scopes": "<strong>Năm hàng, mỗi hàng ứng với một trang tài nguyên agent và theo thứ tự của thanh bên; bật được ba hàng</strong>: <em>MCP</em> (các máy chủ bạn đã thêm trong Navide; bí mật của chúng được mã hóa trước khi gửi đi), <em>Skill</em> (skill nào đang bật và mỗi skill được gửi cho CLI nào, cùng các tệp của skill tạo trong Navide; skill bạn tự đặt vào thư mục chỉ đồng bộ phần cài đặt) và <em>Prompt</em> (skill prompt và prompt của Loop).",
             "credentials": "<em>Bộ nhớ</em> và <em>Tiện ích mở rộng</em> <strong>có trong danh sách nhưng bị làm mờ</strong>, và dòng của chúng ghi “chưa đồng bộ được”. Điều này không có nghĩa là “mặc định tắt, chờ bạn bật” — công tắc không di chuyển. Công tắc Bộ nhớ mà phiên bản cũ để ở trạng thái bật vẫn có thể tắt. <em>Thông tin xác thực và khóa</em> hoàn toàn không có hàng nào: thông tin xác thực tài khoản và khóa không bao giờ rời khỏi máy này. Công tắc Thông tin xác thực mà phiên bản cũ để bật được coi là đã tắt. Cài đặt MCP, khi bật đồng bộ, được mã hóa trên máy này trước khi tải lên, và máy chủ không có khóa để giải mã.",
             "states": "Bên dưới khối nêu rõ hai trạng thái: <em>chưa kết nối</em> (các phạm vi bạn đã bật sẽ bắt kịp khi liên kết trở lại) và <em>thiết bị này chưa có khóa đồng bộ</em> (không tải lên gì cho đến khi có khóa). Ngoài ra có nút <em>Đồng bộ ngay</em>, chỉ bật khi có kết nối.",
             "key": "<strong>Khóa đồng bộ được hiển thị bằng 8 ký tự đầu của ID</strong>, không bao giờ hiện chính khóa. <em>Xoay vòng khóa</em> cần <strong>nhấp hai lần</strong>: lần đầu biến nút thành <em>Xoay vòng ngay</em> và thêm <em>Hủy</em> bên cạnh. Đổi khóa sẽ cho khóa hiện tại ngừng dùng, niêm phong lại mọi bản ghi đã đồng bộ bằng khóa mới và trao khóa mới cho các thiết bị khác của bạn vào lần trao đổi khóa tiếp theo — đó là việc cần làm với khóa mà bạn nghĩ đã bị lộ.",
             "legacy": "<em>Dùng cho tài khoản này</em> chỉ xuất hiện khi thiết bị này giữ một khóa đồng bộ từ trước khi có liên kết tài khoản <em>và</em> tài khoản này chưa có khóa. Đây là lựa chọn một lần: nếu không dùng khóa đó, bạn không đọc được những gì đã đồng bộ bằng khóa ấy, còn nếu tạo khóa mới thay thế thì các bản ghi đó sẽ vĩnh viễn không đọc được.",
-            "conflicts": "Khi hai thiết bị cùng sửa một mục, <strong>không bên nào bị ghi đè</strong>. Mục đó được liệt kê ở “Cần bạn quyết định” với hai phiên bản đặt cạnh nhau, và bạn nhấp <em>Giữ bản này</em> hoặc <em>Giữ bản kia</em>. Xung đột về thông tin xác thực chỉ cho biết đó là vị trí nào (<code>vendor / slot</code>), không bao giờ hiện nội dung."
-          }
+            "conflicts": "Khi hai thiết bị cùng sửa một mục, <strong>không bên nào bị ghi đè</strong>. Mục đó được liệt kê ở “Cần bạn quyết định” với hai phiên bản đặt cạnh nhau, và bạn nhấp <em>Giữ bản này</em> hoặc <em>Giữ bản kia</em>. Xung đột về thông tin xác thực chỉ cho biết đó là vị trí nào (<code>vendor / slot</code>), không bao giờ hiện nội dung.",
+            "inventory": "<strong>{inventory}</strong>: với mỗi phần đang đồng bộ, có bao nhiêu mục ở máy này và trên đám mây, bao nhiêu mục khớp, bao nhiêu mục xung đột, và thiết bị nào ghi vào gần nhất."
+          },
+          "share": "Tab con <strong>{share}</strong> liệt kê mọi liên kết chia sẻ mà tài khoản này đã tạo, từ bất kỳ thiết bị nào của nó. Với liên kết vẫn còn mở được, bạn có thể <em>{copyLink}</em>, thêm bảy ngày bằng <em>{extend}</em>, thay bằng <em>{rekey}</em> (liên kết mới được sao chép và liên kết cũ không mở được nữa) hoặc <em>{revoke}</em>; <em>{revokeAll}</em> chấm dứt mọi liên kết cùng lúc. Trước khi thu hồi sẽ hỏi lại một lần. Agent tạo và quản lý cùng các liên kết đó bằng công cụ MCP <code>share_create</code>, <code>share_list</code> và <code>share_revoke</code>.",
+          "devices": "Tab con <strong>{devices}</strong> liệt kê mọi thiết bị đã ghi vào đám mây của tài khoản này, lần ghi mới nhất ở trên cùng, kèm thời điểm ghi gần nhất và lần trực tuyến gần nhất."
         },
         "s6": {
           "title": "Menu, cửa sổ độc lập và lịch chạy",
@@ -3406,7 +3409,7 @@
           "h2": "Menu Trợ giúp",
           "helpMenu": {
             "github": "<strong>Navide trên GitHub</strong> và <strong>Báo cáo sự cố…</strong> — mở dự án GitHub và trang issue của dự án.",
-            "shortcuts": "<strong>Phím tắt bàn phím</strong> — mở tab Phím tắt trong cài đặt. Mục menu này <strong>không hiển thị phím tắt</strong>; từ bàn phím, đó là chuỗi phím <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd>.",
+            "shortcuts": "<strong>Phím tắt bàn phím</strong> — mở tab Phím tắt trong cài đặt. Mục menu này <strong>không hiển thị phím tắt</strong>; từ bàn phím, đó là chuỗi phím <kbd class=\"syh-kbd\">{shortcutsKey}</kbd>.",
             "legal": "Sáu trang pháp lý, theo thứ tự: <em>Quyền riêng tư</em>, <em>Chính sách bảo mật</em>, <em>Quy tắc ứng xử</em>, <em>Giới hạn</em>, <em>Giấy phép</em> và <em>Pháp lý</em>, mỗi mục mở trang tương ứng trên navide.dev. (<strong>Không có điều khoản dịch vụ</strong>, và đó là chủ ý.)"
           },
           "callout1": {
@@ -3435,7 +3438,7 @@
             }
           },
           "p2": "Cấp hệ thống là chỉ đọc vì động vào nó cần quyền root, mà Navide không bao giờ xin quyền đó — backend cũng chặn, không chỉ giao diện. Riêng các daemon thường chỉ hiển thị được trạng thái là <code>Trạng thái không rõ (cần quyền root)</code>. Mỗi hàng mở rộng ra để hiện Lịch chạy / Lệnh / Dòng gốc, hoặc Nhãn / Phạm vi / Đường dẫn plist / Mã thoát gần nhất / Trạng thái. Gỡ bỏ nằm trong menu ⋯ của từng hàng; gỡ bỏ một LaunchAgent sẽ <strong>dỡ tải nó và xóa vĩnh viễn tệp plist của nó</strong>, và có hỏi xác nhận trước.",
-          "note2": "Ở đây <strong>không có “chạy ngay” hay “hiện trong Finder”</strong>, chỉ có tắt/bật và gỡ bỏ. Phía trên là <em>Quét lại</em> và thời điểm quét gần nhất.",
+          "note2": "Các hàng crontab và launchd <strong>không có “chạy ngay” hay “hiện trong Finder”</strong>, chỉ có tắt/bật và gỡ bỏ. Các tác vụ của chính Navide (tạo trong Navide, hoặc do agent tạo bằng <code>scheduler_upsert</code>) làm được nhiều hơn: có công tắc, có <em>{runNow}</em>, và bấm vào tên sẽ mở <em>{edit}</em>, nơi cũng có <em>{remove}</em>. Tác vụ bị lỗi hiện <em>{repair}</em>, tác vụ mà pane tạo ra nó đã đóng sẽ có <em>{adopt}</em>, tác vụ định kỳ của agent sắp tự tắt sẽ có <em>{keep}</em>, và tác vụ mất pane đích sẽ có <em>{retarget}</em>. Tác vụ gắn nhãn <em>{systemTag}</em> (tự tiến hóa) bị khóa. Phía trên danh sách là <em>{rescan}</em> và thời điểm quét gần nhất.",
           "h4": "Các cửa sổ khác mở từ giao diện",
           "otherTable": {
             "window": "Cửa sổ",
@@ -3444,15 +3447,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "Một cửa sổ chính mới",
-              "how": "Tệp ▸ Cửa sổ mới (⌘N)"
+              "how": "Tệp ▸ Cửa sổ mới ({newWindowKey})"
             },
             "editor": {
               "window": "Cửa sổ trình soạn thảo (Mini-IDE)",
-              "how": "⌘⇧I, hoặc nhấp vào một tệp trong trình duyệt tệp, trong kết quả tìm kiếm, hoặc vào liên kết tệp trong terminal (xem chủ đề “Quy trình làm việc với mã”)"
+              "how": "{miniIdeKey}, hoặc nhấp vào một tệp trong trình duyệt tệp, trong kết quả tìm kiếm, hoặc vào liên kết tệp trong terminal (xem chủ đề “Quy trình làm việc với mã”)"
             },
             "git": {
               "window": "Cửa sổ Git",
-              "how": "Mở trong cửa sổ mới ở đầu bảng Git, hoặc ⌘⇧G"
+              "how": "Mở trong cửa sổ mới ở đầu bảng Git, hoặc {gitWindowKey}"
             },
             "diff": {
               "window": "Một chế độ xem diff",
@@ -3477,7 +3480,7 @@
           },
           "callout2": {
             "title": "Hai điều dễ hiểu lầm",
-            "text": "<strong>Lịch sử Git không có cửa sổ riêng</strong> — “Xem toàn bộ lịch sử” mở chế độ xem lịch sử bên trong cửa sổ Git. <strong><kbd class=\"syh-kbd\">⌘⇧D</kbd> cũng không còn mở cửa sổ nữa</strong>; nó chỉ chuyển thanh bên trái sang tab Plans. Để mở cửa sổ Plan, hãy bắt đầu từ chính tài liệu Plan."
+            "text": "<strong>Lịch sử Git không có cửa sổ riêng</strong> — “Xem toàn bộ lịch sử” mở chế độ xem lịch sử bên trong cửa sổ Git. <strong><kbd class=\"syh-kbd\">{plansKey}</kbd> cũng không còn mở cửa sổ nữa</strong>; nó chỉ chuyển thanh bên trái sang tab Plans. Để mở cửa sổ Plan, hãy bắt đầu từ chính tài liệu Plan."
           },
           "note3": "Khi một workspace đã mở ở cửa sổ khác, Navide không mở bản thứ hai — nó đưa cửa sổ đó ra trước."
         },
@@ -3528,7 +3531,7 @@
           "orphans": {
             "leftover": "<strong>Tiến trình CLI còn sót</strong> — khi <code>⚠ N còn sót</code> xuất hiện trên thanh trạng thái, nhấp vào sẽ hỏi “Tìm thấy N tiến trình CLI còn sót từ lần chạy trước — chúng có thể làm cạn bộ nhớ. Dọn dẹp?”, với <em>Dọn dẹp</em> để xóa và <em>Bỏ qua</em> để bỏ qua. Đây là các tiến trình mà lần chạy trước chưa dọn.",
             "backend": "<strong>Backend</strong> — nhấp vào nhãn Backend trên thanh trạng thái sẽ hiện địa chỉ và PID cùng hai nút: <em>Khởi động lại</em> (<em>Khởi động</em> khi mất kết nối) và <em>Dừng</em> (chỉ khi đang kết nối). <strong>Khởi động lại backend sẽ kéo theo mọi tiến trình CLI</strong>; để cuộc hội thoại tự tiếp tục khi backend chạy lại, hãy bật <em>Tiếp tục session sau khi dịch vụ nền của Navide khởi động lại</em> ở tab Chung.",
-            "timeout": "Khi backend báo lỗi vì khởi động quá chậm, hãy tăng <em>Thời gian chờ khởi động backend</em> (15–120 giây) ở tab Giao diện."
+            "timeout": "Khi backend báo lỗi vì khởi động quá chậm, hãy tăng <em>Thời gian chờ khởi động backend</em> (15–120 giây) ở tab {generalTab}."
           },
           "h4": "Bảo trì tóm tắt",
           "maintenanceTable": {
@@ -3607,7 +3610,7 @@
           "tokenMonitor": {
             "controls": "Hai danh sách thả xuống ở trên cùng: <strong>số ngày</strong> (14 / 30 / 90) và <strong>model</strong> (tất cả hoặc một model). Bên cạnh là <em>Làm mới</em>, bị vô hiệu khi backend chưa kết nối.",
             "stats": "Năm số liệu: <strong>số lượt, tổng token, trung bình mỗi lượt, trung vị mỗi lượt, đầu ra trung bình mỗi lượt</strong>. Một dòng bên dưới cho biết số session đã quét / có sẵn và dữ liệu tính đến lúc nào.",
-            "comparison": "So sánh đầu ra của <strong>7 ngày gần nhất với 7 ngày trước đó</strong>: số mẫu, trung bình, trung vị và phần trăm thay đổi. Cần <strong>ít nhất 10 lượt trong mỗi khoảng</strong> và giá trị gốc khác 0, nếu không sẽ báo là không đủ mẫu. Trang lưu ý rằng đây chỉ mô tả một thay đổi quan sát được — <strong>mức nỗ lực và độ khó của tác vụ không được biết, và việc giảm không chứng minh hạn mức đã bị cắt</strong>.",
+            "comparison": "So sánh đầu ra của <strong>7 ngày gần nhất với 7 ngày trước đó</strong>: số mẫu, trung bình, trung vị và phần trăm thay đổi. Phần này chỉ xuất hiện khi bạn <strong>chọn một mô hình đã biết</strong> trong menu mô hình; ở “All models”, phần này chỉ ghi “Select a single known model to compare.” Cần <strong>ít nhất 10 lượt trong mỗi khoảng</strong> và giá trị gốc khác 0, nếu không sẽ báo là không đủ mẫu. Trang lưu ý rằng đây chỉ mô tả một thay đổi quan sát được — <strong>mức nỗ lực và độ khó của tác vụ không được biết, và việc giảm không chứng minh hạn mức đã bị cắt</strong>.",
             "charts": "Năm biểu đồ xu hướng <strong>theo lượt</strong>. Đường màu nhấn là <strong>trung bình trượt của 10 lượt gần nhất</strong>, còn đường xám là từng lượt; <strong>trục ngang là các lượt theo thứ tự thời gian, cách đều nhau — không phải thời gian trôi qua</strong>.",
             "table": "Bảng các lượt Claude cục bộ, <strong>100 hàng mỗi trang</strong>: thời gian, session (8 ký tự đầu của ID / số thứ tự lượt), model, từng cột token và số lần gọi.",
             "quota": "Ở cuối là các biểu đồ phân tán hạn mức <strong>nhóm theo khung đặt lại</strong>, mỗi khung một biểu đồ. Phần trăm do nhà cung cấp báo; trang ghi rõ trục ngang là “các mẫu theo thứ tự ghi nhận” và <strong>token cục bộ không thể quy đổi thành mức trần hạn mức</strong>. Khi chưa có mẫu, trang hướng dẫn bạn bật tính năng thăm dò mức sử dụng Claude trong cài đặt và để Navide chạy — <strong>các giới hạn trước đây không thể dựng lại từ nhật ký token</strong>."
@@ -3643,7 +3646,7 @@
           "h1": "Navide Guard",
           "p2": "Guard xếp mỗi thao tác rủi ro của CLI vào mức {critical}, {high} hoặc bình thường, rồi xử lý theo <strong>nguồn gốc của yêu cầu</strong>: chính bạn tại máy tính này, một ứng dụng trò chuyện, một pane hay thiết bị khác, hoặc một pane đã nhận nội dung từ bên ngoài. Bảng quyết định ở trên cùng là cố định; các yêu cầu được chấp thuận từ cuộc trò chuyện sẽ bị từ chối từ mức {high} trở lên.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: mỗi quy tắc có thể đặt là {critical}, {high} hoặc “{off}”. Nâng mức có hiệu lực ngay; hạ mức hoặc tắt cần xác nhận, và tám quy tắc sàn (đọc hoặc gửi thông tin xác thực, chuỗi khóa, tải về rồi chạy, xóa thư mục gốc hoặc thư mục chính, định dạng ổ đĩa, ghi thẳng vào đĩa) không thể hạ dưới {high}.",
+            "builtin": "<strong>{builtin}</strong>: mỗi quy tắc có thể đặt là {critical}, {high} hoặc “{off}”. Nâng mức có hiệu lực ngay; hạ mức hoặc tắt cần xác nhận, và mười quy tắc sàn (đọc, gửi hoặc tải lên qua pipe thông tin xác thực, chuỗi khóa, tải về rồi chạy, xóa thư mục gốc hoặc thư mục chính, định dạng ổ đĩa, ghi thẳng vào đĩa, ghi vào kho plugin Navide) không thể hạ dưới {high}.",
             "branches": "<strong>{branches}</strong>: force-push hoặc xóa các nhánh này là {critical}; bước kiểm tra force-push của bảo vệ lệnh terminal dùng cùng danh sách này. Gỡ một nhánh khỏi danh sách cần xác nhận.",
             "rules": "<strong>{rules}</strong>: mỗi quy tắc là “{deny}” hoặc “{allow}”. Mẫu từ chối nâng các lệnh khớp lên mức bạn chọn; mẫu cho phép có thể hạ {high} xuống bình thường (không bao giờ hạ {critical}) — đó chính là ngoại lệ; không có danh sách ngoại lệ riêng. Thêm một mẫu cho phép hoặc gỡ một mẫu từ chối cần xác nhận.",
             "test": "<strong>{test}</strong>: nhập một lệnh để xem Guard sẽ xếp mức thế nào.",
@@ -7017,7 +7020,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>Trình cài đặt chưa được ký mã.</strong> Mỗi phiên bản mới lại bị SmartScreen gắn cờ, và bản cập nhật trong ứng dụng được cài mà không kiểm tra chữ ký vì cùng lý do đó.",
-            "symlinks": "<strong>Thư mục home của CLI theo từng pane và các skill được quản lý đều dựng bằng liên kết tượng trưng</strong>, mà Windows không cho tiến trình thường tạo. Hãy bật Chế độ nhà phát triển của Windows (<em>Cài đặt ▸ Dành cho nhà phát triển</em>) hoặc chạy Navide với quyền nâng cao. Thiếu điều đó cũng không có gì âm thầm lỗi: pane bị ảnh hưởng sẽ in một dòng <code>[mcp]</code> màu vàng giải thích lý do khi khởi động. Việc này chỉ ảnh hưởng các CLI có kết nối MCP là một tệp trong thư mục cấu hình — Antigravity CLI, Grok CLI và Kimi Code.",
+            "symlinks": "<strong>Thư mục home riêng của CLI cho từng pane và các kỹ năng được quản lý đều dựng bằng liên kết tượng trưng</strong>, mà Windows không cho một tiến trình thông thường tạo. Hãy bật Chế độ nhà phát triển của Windows (<em>Settings ▸ For developers</em>) hoặc chạy Navide với quyền quản trị. Thư mục home riêng từng pane được dùng bởi các CLI có kết nối MCP là một tệp trong thư mục cấu hình — Antigravity CLI, Grok CLI và Kimi Code; khi thiếu quyền, pane của chúng sẽ in một dòng <code>[mcp]</code> màu vàng giải thích lý do sau khi khởi động. Lúc đó kỹ năng được quản lý cũng không đến được CLI nào, và điều này chỉ ghi trong nhật ký backend.",
             "schedule": "<strong>Tab Lịch chỉ liệt kê các tác vụ của chính Navide (Navide Jobs).</strong> Navide đọc crontab của người dùng và các tác vụ launchd của macOS, mà Windows không có cái nào; Task Scheduler (taskschd.msc) được cố ý không tích hợp, vì Navide không bao giờ tạo tác vụ hẹn giờ của hệ điều hành và Task Scheduler vốn đã quản lý các tác vụ của máy. Màn hình sẽ nói rõ điều đó thay vì hiện một danh sách trống."
           },
           "h2": "Linux",

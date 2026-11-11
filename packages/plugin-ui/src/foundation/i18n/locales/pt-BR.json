@@ -2848,7 +2848,7 @@
             }
           },
           "resource": {
-            "caption": "A janela do Resource Manager. Os números e as varreduras só são atualizados quando você clica em Atualizar.",
+            "caption": "A janela do Resource Manager. Os números de {cpu} e {memory} se atualizam sozinhos enquanto ela está aberta; a varredura do disco só roda quando você clica em {scan}.",
             "legend": {
               "totals": {
                 "label": "Os três cartões no topo",
@@ -2886,15 +2886,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "O que cada uma das dezenove guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as partes do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visualizações de uso e a manutenção de recursos.",
+        "intro": "O que cada uma das {tabCount} guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as superfícies do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visões de uso e a manutenção de recursos.",
         "s1": {
           "title": "Visão geral das configurações",
-          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>27 guias</strong> no total.",
+          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">{settingsKey}</kbd>; o botão de engrenagem na barra de título leva ao mesmo lugar. A barra lateral esquerda é dividida em {groupCount} grupos, <strong>{tabCount} guias</strong> no total.",
           "h1": "O campo de pesquisa",
           "p2": "Abaixo do título da barra lateral há um campo de pesquisa com o texto de exemplo <code>Pesquisar configurações…</code>. Ele procura nos títulos das configurações, na seção e nas palavras-chave <strong>em todas as guias</strong> (no idioma atual da interface e com as palavras-chave indexadas) e mostra no máximo 8 resultados; clicar em um deles abre a guia correspondente e rola até a seção (com uma exceção: “Armazenamento” fecha as configurações e abre diretamente o Resource Manager). Sem resultados, aparece <code>Nenhuma configuração correspondente</code>. <kbd class=\"syh-kbd\">Esc</kbd> limpa o campo.",
           "callout": {
             "title": "O índice de pesquisa não é completo",
-            "text": "O índice é uma lista mantida à mão, e <strong>as guias {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
+            "text": "O índice é uma lista mantida à mão, e <strong>as guias {agents}, {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
           },
           "h2": "As vinte e sete guias",
           "tabTable": {
@@ -2913,7 +2913,7 @@
               "more": "seção 2 desta página"
             },
             "language": {
-              "what": "Idioma da interface para todos os workspaces: chinês tradicional, inglês ou japonês",
+              "what": "Idioma da interface para todos os workspaces, entre {languageCount} idiomas ({betaCount} deles em Beta)",
               "more": "seção 2 desta página"
             },
             "statusBadges": {
@@ -3025,7 +3025,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "Perguntar antes que ⌘W feche um pane. Um pane no meio de um turno sempre pergunta, independentemente desta chave.",
+              "desc": "Perguntar antes que {closePaneKey} feche um pane. Um pane no meio de um turno sempre pergunta, independentemente desta chave.",
               "fallback": "Ativado"
             },
             "confirmCloseWorkspace": {
@@ -3089,16 +3089,16 @@
           "appearance": {
             "theme": "<strong>Tema</strong>: cinco integrados, Dark (GitHub), Midnight, Forest, Light e High Contrast, sendo Dark (GitHub) o padrão.",
             "colors": "<strong>Cores personalizadas</strong>: oito tokens de cor que podem ser substituídos (fundo, superfície, texto, texto secundário, borda, destaque, sucesso, perigo). As substituições ficam por cima do tema atual e <strong>são mantidas quando você troca de tema</strong>; <em>↺ Restaurar padrões</em> as desfaz.",
-            "uiScale": "<strong>Escala da interface</strong>: a primeira linha do bloco <strong>Aparência ▸ Outros</strong>, e é uma <strong>lista suspensa</strong>, não um controle deslizante: seis níveis (80%, 90%, 100%, 110%, 125%, 150%; 100% por padrão), com <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. Ela controla o zoom de página do Electron em vez de uma variável CSS, então texto, ícones, bordas e espaçamentos mudam juntos, e o processo principal a aplica a <strong>todas as janelas</strong>, inclusive as dos plug-ins do Navide. É um <strong>eixo separado</strong> do tamanho da fonte do pane: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> mudam só o tamanho da fonte do <strong>conteúdo</strong> do terminal (um valor compartilhado por todos os panes de CLI da janela), enquanto a escala da interface muda a estrutura ao redor; e as duas <strong>se multiplicam</strong>, assim como o zoom de página de um navegador se multiplica com o tamanho de fonte próprio de um site.",
+            "uiScale": "<strong>Escala da interface</strong>: a primeira linha do bloco <strong>Aparência ▸ Outros</strong>, e é uma <strong>lista suspensa</strong>, não um controle deslizante: seis níveis (80%, 90%, 100%, 110%, 125%, 150%; 100% por padrão), com <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>. Ela controla o zoom de página do Electron em vez de uma variável CSS, então texto, ícones, bordas e espaçamentos mudam juntos, e o processo principal a aplica a <strong>todas as janelas</strong>, inclusive as dos plug-ins do Navide. É um <strong>eixo separado</strong> do tamanho da fonte do pane: <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd> mudam só o tamanho da fonte do <strong>conteúdo</strong> do terminal (um valor compartilhado por todos os panes de CLI da janela), enquanto a escala da interface muda a estrutura ao redor; e as duas <strong>se multiplicam</strong>, assim como o zoom de página de um navegador se multiplica com o tamanho de fonte próprio de um site.",
             "restore": "<strong>Restaurar janelas</strong>: reabre as janelas de workspaces que estavam abertas quando você saiu pela última vez."
           },
           "callout": {
             "title": "Notificações e som ficam na guia Notificações",
             "text": "As chaves de notificação existem, só não ficam em Aparência, e sim na <strong>guia Notificações</strong>, e são três: <em>Notificações do sistema</em> (uma notificação na área de trabalho quando uma CLI termina o turno ou precisa da sua resposta enquanto o Navide está em segundo plano; o selo do Dock continua contando de qualquer forma), <em>Som de notificação</em> (um toque curto ao terminar um turno e um bipe duplo enquanto uma CLI espera por você) e <em>Permissão de notificações</em>: o macOS não informa a autorização real ao Navide, então esta linha só pode enviar uma notificação de teste para você confirmar que ela aparece; se não aparecer, permita o Navide em Ajustes do Sistema → Notificações. Esta última linha só aparece nas plataformas em que se aplica."
           },
-          "language": "O idioma é uma guia própria, não faz parte de Aparência. <strong>Três idiomas</strong>: <code>繁體中文</code>, <code>English</code> e <code>日本語</code>. Até você escolher um, o Navide segue o idioma do sistema (chinês tradicional quando o idioma do sistema não é nenhum dos três). É uma preferência do usuário e vale para todos os workspaces.",
+          "language": "Idioma é uma guia própria, não faz parte de Aparência. São <strong>{languageCount} idiomas</strong>, cada um listado com o próprio nome — <code>繁體中文</code>, <code>English</code>, <code>日本語</code> e assim por diante; os {betaCount} marcados como Beta são traduzidos por máquina e ainda aguardam revisão de falantes nativos. Até você escolher, o Navide segue o idioma do sistema ({fallbackLanguage} quando o idioma do sistema não é nenhum deles). É uma preferência do usuário e vale para todos os workspaces.",
           "h3": "Selos de status",
-          "p1": "<strong>Renomeie e mude a cor</strong> de cada um dos nove estados de um pane. Os nomes em chinês, inglês e japonês são preenchidos separadamente (24 caracteres cada; deixe um em branco para voltar à tradução integrada). Depois da alteração, os selos dos panes, a barra lateral, a barra de reunião e o painel de recursos passam a segui-la. <strong>A configuração fica na sua conta, não no projeto.</strong>",
+          "p1": "<strong>Renomeie e mude a cor</strong> de cada um dos {stateCount} estados de um pane. Há um campo de nome por idioma da interface ({languageCount} no total, 24 caracteres cada). Um campo em branco recorre a outro valor: chinês tradicional, inglês e japonês voltam direto à tradução embutida, enquanto qualquer outro idioma usa primeiro o seu nome em inglês, depois o em chinês tradicional e só então a tradução embutida. Depois da mudança, os selos dos panes, a barra lateral, a barra de reunião e o painel de recursos acompanham. <strong>A configuração fica na sua conta, não no projeto.</strong>",
           "statusTable": {
             "state": "Estado",
             "when": "Quando um pane está nele",
@@ -3143,7 +3143,7 @@
             "title": "A raiz compartilhada",
             "text": "As skills criadas pelo Navide sempre ficam em <code>~/.agents/skills</code>. Esta página <strong>nunca move nem reescreve</strong> as skills da pasta própria de uma CLI: elas são apenas espelhadas para que você possa vê-las e atribuí-las a outras CLIs. (A única exceção explícita é <em>Mover para a biblioteca compartilhada</em>, que move os arquivos, deixa um link simbólico no lugar e pode ser desfeita.)"
           },
-          "p2": "A página tem duas visualizações, <strong>Navegar</strong> (cartões) e <strong>Distribuição</strong> (a matriz de atribuição). A matriz tem as 15 CLIs no topo e as skills na lateral; cada célula está em um de quatro estados, e cada linha tem os botões em lote <em>Todas</em> / <em>Nenhuma</em>:",
+          "p2": "A página tem duas visualizações, <strong>Navegar</strong> (cartões) e <strong>Distribuição</strong> (a matriz de atribuição). A matriz tem as {cliCount} CLIs no topo e as skills na lateral; cada célula está em um de quatro estados, e cada linha tem os botões em lote <em>Todas</em> / <em>Nenhuma</em>:",
           "matrixTable": {
             "cell": "Célula",
             "meaning": "Significado",
@@ -3163,7 +3163,7 @@
             "none": {
               "cell": "— sem mecanismo de skills",
               "meaning": "Essa CLI não tem nenhuma noção de skills, então não há nada a conectar.",
-              "who": "4: aider, droid, kilo e mcode"
+              "who": "8: aider, devin, droid, goose, hermes, kilo, mcode e openclaw"
             },
             "pending": {
               "cell": "· compatível, ainda não conectada",
@@ -3191,14 +3191,14 @@
             "notCreated": "Um arquivo que ainda não existe é marcado como <em>Não criado</em>: salvar o cria, junto com as pastas superiores que estiverem faltando.",
             "reload": "Se outro programa alterar o arquivo enquanto você o edita, o editor para e pede que você escolha primeiro <em>Recarregar do disco (descarta seu rascunho)</em>, em vez de sobrescrever o seu trabalho ou o do outro programa."
           },
-          "p6": "O bloco <strong>Cobertura das CLIs</strong>, na parte inferior, separa as 15 CLIs em três grupos:",
+          "p6": "O bloco <strong>Cobertura das CLIs</strong>, na parte inferior, separa as {cliCount} CLIs em três grupos:",
           "coverageTable": {
             "category": "Categoria",
             "meaning": "Significado"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "O Navide sabe onde esta CLI guarda suas instruções. 14 CLIs estão neste grupo."
+              "value": "O Navide sabe onde esta CLI guarda suas instruções. Todas as CLIs, exceto o aider, estão neste grupo."
             },
             "configured": {
               "value": "Só o aider. Ele não tem um nome de arquivo próprio: lê o que o campo read: do .aider.conf.yml indicar, então o que você colocar ali é o que aparece aqui (até 20). CONVENTIONS.md é apenas um nome sugerido pela documentação; o programa em si não o conhece."
@@ -3219,7 +3219,7 @@
           "shortcuts": {
             "record": "Clicar em uma caixa de tecla inicia a <strong>gravação</strong> ali mesmo; <code>+</code> adiciona uma segunda combinação; <code>✕</code> remove uma. Uma sequência tem no máximo duas etapas.",
             "instant": "As alterações são <strong>gravadas imediatamente em <code>keybindings.json</code></strong> e aplicadas a todas as janelas abertas; não há botão de salvar.",
-            "search": "O campo de pesquisa procura ao mesmo tempo nos nomes dos comandos e na notação das teclas (tanto <code>cmd+shift+p</code> quanto <kbd class=\"syh-kbd\">⌘⇧P</kbd> encontram o atalho); três filtros: <em>Todos</em> / <em>Personalizados</em> / <em>Conflitos</em>.",
+            "search": "O campo de pesquisa procura ao mesmo tempo nos nomes dos comandos e na notação das teclas (tanto <code>cmd+shift+p</code> quanto <kbd class=\"syh-kbd\">{paletteKey}</kbd> encontram o atalho); três filtros: <em>Todos</em> / <em>Personalizados</em> / <em>Conflitos</em>.",
             "conflicts": "<em>Conflitos</em> marca as combinações que se chocam e explica se uma sempre prevalece ou se <em>Ativo quando</em> as mantém separadas.",
             "reset": "<em>Restaurar padrão</em> em cada linha, <em>Redefinir tudo</em> para a página. <em>Exportar</em> / <em>Importar</em> transferem as configurações, e <strong>a importação substitui em vez de mesclar</strong>: primeiro informa quantas entradas foram descartadas e quantas foram importadas, e lista as rejeitadas."
           },
@@ -3245,7 +3245,7 @@
               "fallback": "Ativado, 3 falhas"
             },
             "autoDownload": {
-              "toggle": "Baixar atualizações automaticamente",
+              "toggle": "Baixar atualizações automaticamente (só versões de correção; atualizações menores e maiores sempre esperam por você)",
               "fallback": "Ativado"
             },
             "retryDownload": {
@@ -3359,15 +3359,18 @@
             "text": "O menu de menções <code>{'@'}</code> da entrada do pane lista apenas panes <strong>locais</strong> (inclusive os de outras janelas desta máquina) e não tem botão para inserir um endereço de outro dispositivo. Endereços de outros dispositivos são escritos na linha <code>to:</code> do agent ou enviados por uma ferramenta MCP (veja o tópico “Colaboração entre agents”). Quando a entrega falha, a resposta é <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code> ou <code>link-unauthorized</code>; observe também que as conversas de resposta não atravessam máquinas."
           },
           "h6": "Sincronização (manter várias máquinas iguais)",
-          "p11": "O primeiro bloco de Configurações ▸ Navide Cloud se chama Sincronização. <strong>Não é uma guia separada</strong>: é a seção superior desta mesma página. Cada escopo sincronizável tem uma linha com uma chave; ative uma, e esse escopo fica igual em todos os dispositivos conectados à <strong>mesma conta</strong>. Os registros são <strong>criptografados nesta máquina</strong>, e o servidor só guarda texto cifrado para o qual não tem chave.",
+          "p11": "O primeiro bloco de Configurações ▸ Navide Cloud se chama Sincronização. Enquanto o Navide Cloud está conectado, a página tem três subguias — <strong>{sync}</strong>, <strong>{share}</strong> e <strong>{devices}</strong> — e a sincronização é a primeira; sem conexão, a página mostra só o conteúdo de sincronização. Cada escopo sincronizável tem uma linha com um interruptor; ative-o e esse escopo fica igual em todos os dispositivos conectados à <strong>mesma conta</strong>. Os dados são <strong>criptografados nesta máquina</strong>, e o servidor só guarda texto cifrado para o qual não tem a chave.",
           "sync": {
             "scopes": "<strong>Cinco linhas, uma por página de Recursos de agent e na ordem da barra lateral; três podem ser ativadas</strong>: <em>MCP</em> (os servidores que você adicionou no Navide; os segredos deles são criptografados antes de sair), <em>Skills</em> (quais skills estão ativas e para quais CLIs cada uma vai, além dos arquivos das skills criadas no Navide; as skills que você mesmo colocou na pasta sincronizam só as configurações) e <em>Prompts</em> (as skills de prompt e o prompt do Loop).",
             "credentials": "<em>Memória</em> e <em>Extensões</em> <strong>aparecem, mas em cinza</strong>, e a linha delas diz “ainda não sincronizável”. Isso não significa “desativado por padrão, esperando você ativar”: a chave não se move. Uma chave de Memória que uma versão anterior deixou ativada ainda pode ser desativada. <em>Credenciais e chaves</em> não tem linha nenhuma: as credenciais de conta e as chaves nunca saem desta máquina. Uma chave de Credenciais e chaves que uma versão anterior deixou ativada é tratada como desativada. As configurações de MCP, com a sincronização ativada, são criptografadas nesta máquina antes do envio, e o servidor não tem chave para descriptografá-las.",
             "states": "Dois estados são indicados abaixo do bloco: <em>não conectado</em> (os escopos que você ativou se atualizam quando a conexão volta) e <em>este dispositivo ainda não tem chave de sincronização</em> (nada é enviado até que tenha). Há também um botão <em>Sincronizar agora</em>, ativo apenas com conexão.",
             "key": "<strong>A chave de sincronização é exibida como os 8 primeiros caracteres do ID dela</strong>, nunca como a própria chave. <em>Trocar chave</em> exige <strong>dois cliques</strong>: o primeiro a transforma em <em>Trocar agora</em> e adiciona <em>Cancelar</em> ao lado. A troca aposenta a chave atual, sela de novo cada registro sincronizado com uma chave nova e entrega a nova chave aos seus outros dispositivos na próxima troca de chaves: é o que fazer quando você acha que uma chave vazou.",
             "legacy": "<em>Adotar para esta conta</em> só aparece quando este dispositivo tem uma chave de sincronização de antes da vinculação das contas <em>e</em> esta conta ainda não tem chave. É uma escolha única: sem adotá-la, você não consegue ler o que foi sincronizado com essa chave, e gerar uma chave nova no lugar deixaria esses registros ilegíveis para sempre.",
-            "conflicts": "Quando dois dispositivos alteram o mesmo item, <strong>nenhum dos lados é sobrescrito</strong>. Ele aparece em “Precisa da sua decisão” com as duas versões lado a lado, e você clica em <em>Manter este</em> ou <em>Manter o outro</em>. Um conflito de credenciais mostra só qual é o espaço (<code>vendor / slot</code>), nunca o conteúdo."
-          }
+            "conflicts": "Quando dois dispositivos alteram o mesmo item, <strong>nenhum dos lados é sobrescrito</strong>. Ele aparece em “Precisa da sua decisão” com as duas versões lado a lado, e você clica em <em>Manter este</em> ou <em>Manter o outro</em>. Um conflito de credenciais mostra só qual é o espaço (<code>vendor / slot</code>), nunca o conteúdo.",
+            "inventory": "<strong>{inventory}</strong>: para cada seção sincronizada, quantos itens ela tem aqui e na nuvem, quantos coincidem, quantos estão em conflito e qual dispositivo gravou nela por último."
+          },
+          "share": "A subguia <strong>{share}</strong> lista todos os links de compartilhamento que esta conta criou, em qualquer um de seus dispositivos. Para um link que ainda abre, você pode usar <em>{copyLink}</em>, somar sete dias com <em>{extend}</em>, trocá-lo com <em>{rekey}</em> (o novo link é copiado e o antigo para de abrir) ou revogá-lo com <em>{revoke}</em>; <em>{revokeAll}</em> encerra todos os links de uma vez. Antes de revogar, há uma confirmação. Os agentes criam e gerenciam os mesmos links com as ferramentas MCP <code>share_create</code>, <code>share_list</code> e <code>share_revoke</code>.",
+          "devices": "A subguia <strong>{devices}</strong> lista cada dispositivo que já gravou na nuvem desta conta, com a gravação mais recente primeiro, junto com quando gravou pela última vez e quando esteve on-line pela última vez."
         },
         "s6": {
           "title": "Menus, janelas independentes e agendamentos",
@@ -3406,7 +3409,7 @@
           "h2": "O menu Ajuda",
           "helpMenu": {
             "github": "<strong>Navide no GitHub</strong> e <strong>Relatar um problema…</strong>: abrem o projeto no GitHub e a página de issues dele.",
-            "shortcuts": "<strong>Atalhos de teclado</strong>: abre a guia Atalhos nas configurações. Este item de menu <strong>não mostra atalho</strong>; pelo teclado, é a sequência <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd>.",
+            "shortcuts": "<strong>Atalhos de teclado</strong>: abre a guia Atalhos nas configurações. Este item de menu <strong>não mostra atalho</strong>; pelo teclado, é a sequência <kbd class=\"syh-kbd\">{shortcutsKey}</kbd>.",
             "legal": "Seis páginas jurídicas, nesta ordem: <em>Privacidade</em>, <em>Política de segurança</em>, <em>Código de conduta</em>, <em>Limites</em>, <em>Licenças</em> e <em>Avisos legais</em>, cada uma abrindo a página correspondente em navide.dev. (<strong>Não há termos de serviço</strong>, e isso é proposital.)"
           },
           "callout1": {
@@ -3435,7 +3438,7 @@
             }
           },
           "p2": "O nível do sistema é somente leitura porque mexer nele exige root, e o Navide nunca pede isso; o back-end também bloqueia, não só a interface. Os daemons, em especial, geralmente só conseguem mostrar o estado como <code>Estado desconhecido (requer root)</code>. Cada linha se expande para mostrar Agendamento / Comando / Linha original, ou Rótulo / Escopo / Caminho do plist / Último código de saída / Estado. Remover fica no menu ⋯ de cada linha; remover um LaunchAgent <strong>o descarrega e exclui o plist dele permanentemente</strong>, e pede confirmação antes.",
-          "note2": "Aqui <strong>não há “executar agora” nem “mostrar no Finder”</strong>, só desativar/ativar e remover. Acima ficam <em>Verificar novamente</em> e o horário da última verificação.",
+          "note2": "Nas linhas de crontab e launchd <strong>não há “executar agora” nem “mostrar no Finder”</strong>, só desativar/ativar e remover. As tarefas do próprio Navide (criadas no Navide ou por um agente com <code>scheduler_upsert</code>) permitem mais: um interruptor, <em>{runNow}</em>, e o nome abre <em>{edit}</em>, onde também fica <em>{remove}</em>. Uma tarefa que falha mostra <em>{repair}</em>, uma cujo pane de origem foi fechado oferece <em>{adopt}</em>, a tarefa periódica de um agente prestes a se desativar oferece <em>{keep}</em>, e uma cujo pane de destino sumiu oferece <em>{retarget}</em>. Tarefas marcadas <em>{systemTag}</em> (autoevolução) ficam bloqueadas. Acima da lista ficam <em>{rescan}</em> e o horário da última verificação.",
           "h4": "As outras janelas abertas pela interface",
           "otherTable": {
             "window": "Janela",
@@ -3444,15 +3447,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "Uma nova janela principal",
-              "how": "Arquivo ▸ Nova janela (⌘N)"
+              "how": "Arquivo ▸ Nova janela ({newWindowKey})"
             },
             "editor": {
               "window": "A janela do editor (Mini-IDE)",
-              "how": "⌘⇧I, ou clique em um arquivo no explorador, nos resultados da pesquisa ou em um link de arquivo no terminal (veja o tópico “Fluxo de trabalho com código”)"
+              "how": "{miniIdeKey}, ou clique em um arquivo no explorador, nos resultados da pesquisa ou em um link de arquivo no terminal (veja o tópico “Fluxo de trabalho com código”)"
             },
             "git": {
               "window": "A janela do Git",
-              "how": "Abrir em nova janela, no cabeçalho do painel do Git, ou ⌘⇧G"
+              "how": "Abrir em nova janela, no cabeçalho do painel do Git, ou {gitWindowKey}"
             },
             "diff": {
               "window": "Uma visualização de diff",
@@ -3477,7 +3480,7 @@
           },
           "callout2": {
             "title": "Duas coisas fáceis de interpretar errado",
-            "text": "<strong>O histórico do Git não tem janela própria</strong>: “Ver histórico completo” abre a visualização do histórico dentro da janela do Git. <strong>O <kbd class=\"syh-kbd\">⌘⇧D</kbd> também não abre mais uma janela</strong>; ele só muda a barra lateral esquerda para a guia Plans. Para abrir a janela de Plans, parta de um documento de plano."
+            "text": "<strong>O histórico do Git não tem janela própria</strong>: “Ver histórico completo” abre a visualização do histórico dentro da janela do Git. <strong>O <kbd class=\"syh-kbd\">{plansKey}</kbd> também não abre mais uma janela</strong>; ele só muda a barra lateral esquerda para a guia Plans. Para abrir a janela de Plans, parta de um documento de plano."
           },
           "note3": "Quando um workspace já está aberto em outra janela, o Navide não abre uma segunda cópia: traz aquela janela para a frente."
         },
@@ -3528,7 +3531,7 @@
           "orphans": {
             "leftover": "<strong>Processos de CLI remanescentes</strong>: quando <code>⚠ N restantes</code> aparece na barra de status, clicar nele pergunta “Foram encontrados N processos de CLI restantes de uma execução anterior; eles podem esgotar a memória. Limpar?”, com <em>Limpar</em> para removê-los e <em>Dispensar</em> para pular. São processos que a execução anterior não limpou.",
             "backend": "<strong>Back-end</strong>: clicar na pílula Back-end da barra de status mostra o endereço e o PID, além de dois botões: <em>Reiniciar</em> (<em>Iniciar</em> quando desconectado) e <em>Parar</em> (só quando conectado). <strong>Reiniciar o back-end derruba todos os processos de CLI</strong>; para que as conversas sejam retomadas automaticamente quando ele voltar, ative <em>Retomar as sessions após o serviço em segundo plano do Navide reiniciar</em> na guia Geral.",
-            "timeout": "Quando o back-end dá erro por demorar demais para iniciar, aumente <em>Tempo limite de inicialização do back-end</em> (15–120 segundos) na guia Aparência."
+            "timeout": "Quando o back-end dá erro por demorar demais para iniciar, aumente <em>Tempo limite de inicialização do back-end</em> (15–120 segundos) na guia {generalTab}."
           },
           "h4": "Manutenção em resumo",
           "maintenanceTable": {
@@ -3607,7 +3610,7 @@
           "tokenMonitor": {
             "controls": "Duas listas suspensas no topo: <strong>dias</strong> (14 / 30 / 90) e <strong>modelo</strong> (todos ou um). <em>Atualizar</em> fica ao lado e fica desativado enquanto o back-end não está conectado.",
             "stats": "Cinco números: <strong>turnos, total de tokens, média por turno, mediana por turno, saída média por turno</strong>. Uma linha abaixo informa as sessions varridas / disponíveis e de quando são os dados.",
-            "comparison": "Uma comparação da saída dos <strong>últimos 7 dias com os 7 anteriores</strong>: número de amostras, médias, medianas e uma variação percentual. Ela precisa de <strong>pelo menos 10 turnos em cada período</strong> e de uma base diferente de zero; caso contrário, informa que as amostras são insuficientes. A página observa que isso só descreve uma mudança observada: <strong>o esforço e a dificuldade das tarefas são desconhecidos, e uma queda não comprova que uma cota foi reduzida</strong>.",
+            "comparison": "Uma comparação da saída dos <strong>últimos 7 dias com os 7 anteriores</strong>: número de amostras, médias, medianas e uma variação percentual. Ela só aparece quando você <strong>escolhe um único modelo conhecido</strong> no menu de modelos; em “All models”, a seção mostra apenas “Select a single known model to compare.” Ela precisa de <strong>pelo menos 10 turnos em cada período</strong> e de uma base diferente de zero; caso contrário, informa que as amostras são insuficientes. A página observa que isso só descreve uma mudança observada: <strong>o esforço e a dificuldade das tarefas são desconhecidos, e uma queda não comprova que uma cota foi reduzida</strong>.",
             "charts": "Cinco gráficos de tendência <strong>por turno</strong>. A linha de destaque é a <strong>média móvel dos últimos 10 turnos</strong>, e a cinza é cada turno; o <strong>eixo horizontal são os turnos em ordem cronológica, com espaçamento igual, e não o tempo decorrido</strong>.",
             "table": "Uma tabela de turnos locais do Claude, <strong>100 linhas por página</strong>: horário, session (8 primeiros caracteres do ID / índice do turno), modelo, cada coluna de tokens e chamadas.",
             "quota": "No final, gráficos de dispersão da cota <strong>agrupados por janela de redefinição</strong>, um gráfico por janela. As porcentagens são informadas pelo fornecedor; a página diz que o eixo horizontal são “amostras na ordem registrada” e que <strong>tokens locais não podem ser convertidos em um teto de cota</strong>. Sem amostras ainda, ela orienta você a ativar a consulta de uso do Claude nas configurações e deixar o Navide rodando: <strong>limites passados não podem ser reconstruídos a partir dos logs de tokens</strong>."
@@ -3643,7 +3646,7 @@
           "h1": "Navide Guard",
           "p2": "O Guard classifica cada ação arriscada de uma CLI como {critical}, {high} ou normal e a trata conforme <strong>a origem da solicitação</strong>: você neste computador, um aplicativo de chat, outro pane ou dispositivo, ou um pane que recebeu conteúdo externo. A tabela de decisão no topo é fixa; solicitações aprovadas por um chat são recusadas a partir de {high}.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: cada regra pode ser definida como {critical}, {high} ou “{off}”. Aumentar vale na hora; diminuir ou desativar exige confirmação, e oito regras mínimas (ler ou enviar credenciais, chaveiro, baixar e executar, excluir a raiz ou a pasta pessoal, formatar, gravações diretas em disco) não podem ficar abaixo de {high}.",
+            "builtin": "<strong>{builtin}</strong>: cada regra pode ser definida como {critical}, {high} ou “{off}”. Aumentar vale na hora; diminuir ou desativar exige confirmação, e dez regras mínimas (ler, enviar ou subir por pipe credenciais, chaveiro, baixar e executar, excluir a raiz ou a pasta pessoal, formatar, gravações diretas em disco, gravar no repositório de plugins do Navide) não podem ficar abaixo de {high}.",
             "branches": "<strong>{branches}</strong>: fazer push forçado ou excluir esses branches é {critical}; a verificação de push forçado da proteção de comandos no terminal usa a mesma lista. Remover um branch exige confirmação.",
             "rules": "<strong>{rules}</strong>: cada uma é “{deny}” ou “{allow}”. Um padrão de bloqueio eleva os comandos correspondentes ao nível que você escolher; um padrão de permissão pode reduzir {high} para normal (nunca {critical}): isso é uma exceção; não existe uma lista de exceções separada. Adicionar uma permissão ou remover um bloqueio exige confirmação.",
             "test": "<strong>{test}</strong>: digite um comando para ver como o Guard o classificaria.",
@@ -7017,7 +7020,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>O instalador não tem assinatura de código.</strong> Cada nova versão é sinalizada de novo pelo SmartScreen, e as atualizações pelo app são instaladas sem verificação de assinatura pelo mesmo motivo.",
-            "symlinks": "<strong>As pastas pessoais de CLI por pane e as skills gerenciadas são montadas com links simbólicos</strong>, que o Windows não deixa um processo comum criar. Ative o Modo de Desenvolvedor do Windows (<em>Configurações ▸ Para desenvolvedores</em>) ou execute o Navide com privilégios elevados. Sem isso, nada falha em silêncio: o pane afetado imprime, ao iniciar, uma linha amarela <code>[mcp]</code> explicando o motivo. Isso só afeta as CLIs cuja conexão MCP é um arquivo no diretório de configuração delas — Antigravity CLI, Grok CLI e Kimi Code.",
+            "symlinks": "<strong>As pastas pessoais de CLI de cada pane e as skills gerenciadas são montadas com links simbólicos</strong>, que o Windows não deixa um processo comum criar. Ative o modo de desenvolvedor do Windows (<em>Settings ▸ For developers</em>) ou execute o Navide como administrador. As pastas próprias de cada pane são usadas pelas CLIs cuja conexão MCP é um arquivo na pasta de configuração — Antigravity CLI, Grok CLI e Kimi Code; sem essa permissão, os panes delas mostram ao iniciar uma linha amarela <code>[mcp]</code> explicando o motivo. As skills gerenciadas também deixam de chegar a qualquer CLI, e isso só aparece no log do back-end.",
             "schedule": "<strong>A guia Agenda lista só os trabalhos do próprio Navide (Navide Jobs).</strong> O Navide lê o crontab do usuário e os trabalhos do launchd do macOS, e o Windows não tem nenhum dos dois; o Agendador de Tarefas (taskschd.msc) não é integrado de propósito, porque o Navide nunca cria tarefas agendadas do sistema operacional e o Agendador de Tarefas já gerencia as da máquina. A tela informa isso em vez de mostrar uma lista vazia."
           },
           "h2": "Linux",
