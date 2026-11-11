@@ -18,9 +18,10 @@ the credential helper ``exec()``s a CLI straight out of ``__main__``.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 
 
 def restore_bundled_library_path(environ: MutableMapping[str, str] = os.environ) -> None:
@@ -41,6 +42,46 @@ def restore_bundled_library_path(environ: MutableMapping[str, str] = os.environ)
         environ["LD_LIBRARY_PATH"] = original
     else:
         environ.pop("LD_LIBRARY_PATH", None)
+
+
+#: Set by the Electron main process when it points the packaged backend's
+#: TMPDIR/TMP/TEMP at <data dir>/backend-tmp (src/main/backend.ts): a JSON
+#: object of the values those keys had before, a missing key meaning unset.
+ORIGINAL_TEMP_ENV_VAR = "AGENT_TEAM_ORIG_TEMP_ENV"
+_TEMP_ENV_KEYS = ("TMPDIR", "TMP", "TEMP")
+
+
+def restore_user_temp_env(
+    env: Mapping[str, str], own: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """Return a copy of a pane's ``env`` with the user's own temp dir back.
+
+    The backend keeps its data-dir temp (no OS cleaner sweeps it), but panes
+    run the user's commands and must see the TMPDIR they would get outside
+    Navide: the backend's path has a space in it and differs in case from the
+    repo name. A key is restored only while it still holds the backend's own
+    value (``own``, default ``os.environ``), so a value a caller chose for the
+    pane is kept. Without the marker, e.g. in a dev run, nothing changes.
+    """
+    own = os.environ if own is None else own
+    out = dict(env)
+    out.pop(ORIGINAL_TEMP_ENV_VAR, None)
+    try:
+        original = json.loads(own.get(ORIGINAL_TEMP_ENV_VAR) or "null")
+    except ValueError:
+        return out
+    if not isinstance(original, dict):
+        return out
+    for key in _TEMP_ENV_KEYS:
+        backend_value = own.get(key)
+        if backend_value is None or out.get(key) != backend_value:
+            continue
+        value = original.get(key)
+        if isinstance(value, str):
+            out[key] = value
+        else:
+            out.pop(key, None)
+    return out
 
 
 def packaged_bin_dir() -> str:
