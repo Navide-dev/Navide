@@ -212,6 +212,11 @@ def _worktree(run: dict[str, Any], path: str) -> str | None:
             and os.path.basename(real) not in ("", ".", "..")
             and os.path.samefile(os.path.dirname(real), repo_worktrees)
         )
+        if same:
+            # git's own back-pointer: the admin entry names this folder's .git.
+            with open(os.path.join(real, "gitdir"), encoding="utf-8") as fh:
+                back = fh.read(4096).strip()
+            same = bool(back) and os.path.samefile(back, dotgit)
     except OSError:
         same = False
     if not same:
