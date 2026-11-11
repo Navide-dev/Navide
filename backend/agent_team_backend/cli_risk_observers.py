@@ -197,9 +197,14 @@ def scan_disk(root: str, *, deadline: float | None = None) -> DiskSample:
                     path = Path(entry.path)
                     # On Windows, DirEntry.stat() obtains FindFirstFile metadata
                     # whose device/inode fields are zero.  Use a real lstat for
-                    # the identity that must match the descriptor below.
-                    path_stat = os.lstat(path)
-                    if path.resolve() != path or not path.is_relative_to(base):
+                    # the identity that must match the descriptor below. On
+                    # POSIX that stat already is an lstat.
+                    path_stat = os.lstat(path) if os.name == "nt" else info
+                    # The parent was checked canonical when it was popped and
+                    # this entry is no symlink or reparse point, so the path is
+                    # canonical too; a per-file resolve() made a 100k-file home
+                    # exceed the scan budget. Directories are still resolved.
+                    if not path.is_relative_to(base):
                         return DiskSample("unknown", root=str(base))
                     if stat.S_ISDIR(info.st_mode):
                         pending.append(path)

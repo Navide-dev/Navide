@@ -384,3 +384,43 @@ async def test_windows_unsupported_skips_dns(store):
     dns.resolve.assert_not_called()
     assert service.current([pane(roots=())])["pane"]["network"]["status"] == "unsupported"
     await service.close()
+
+
+async def test_sweep_cost_stays_flat_with_60_panes_and_10k_history(store):
+    """One network sweep over 60 panes with 10,000 historical signals: one
+    snapshot per sweep, no rewrite of history, and the snapshot carries only
+    active signals. The old path deep-copied the whole table once per pane
+    (~18 s of CPU per sweep on a real 10k-signal store)."""
+    history = {}
+    for i in range(10_000):
+        owner = f"dead-{i // 10}" if i < 9_400 else f"live-{i % 60}"
+        history[f"h{i}"] = {"kind": "network", "pane": owner, "vendor": "test", "target": f"198.51.100.{i % 250}",
+                            "active": False, "data": {"id": f"h{i}", "kind": "network", "severity": "yellow",
+                                                      "vendor": "test", "ip": "198.51.100.1", "port": 443,
+                                                      "history": [{"at": "x", "connections": 1}] * 10}}
+    store._commit({"signals": history})
+
+    async def network(pids):
+        return NetworkSample("successful", tuple(Connection(pid, "198.51.100.7", 443) for pid in pids))
+
+    service = CliRiskService(store, clock=lambda: 100, network_collector=network,
+                             disk_collector=lambda root: DiskSample("successful", {}), resolver=resolver(100))
+    panes = [RiskPane(f"live-{i}", "test", (1000 + i,), ("192.0.2.1",), ()) for i in range(60)]
+    snapshots, written = [], []
+    original_snapshot, original_commit = store.snapshot, store._commit
+    store.snapshot = lambda: snapshots.append(1) or original_snapshot()
+    store._commit = lambda changes, **kw: (written.append(len(changes.get("signals", {}))),
+                                           original_commit(changes, **kw))[1]
+    try:
+        started = time.perf_counter()
+        service.request(panes)
+        await settle(service)
+        elapsed = time.perf_counter() - started
+    finally:
+        await service.close()
+
+    assert len(snapshots) == 1
+    assert sum(written) == 60  # one new signal per pane; inactive history untouched
+    assert len(service._snapshot["signals"]) == 60
+    assert all(len(view["signals"]) == 1 for view in service.current(panes).values())
+    assert elapsed < 2.0, f"sweep took {elapsed:.2f}s"
