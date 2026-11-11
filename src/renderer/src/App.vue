@@ -49,7 +49,7 @@ import { agentConsoleKey, createAgentConsole } from './composables/useAgentConso
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
-import { awaitingPromptText, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, MODEL_RESULT_SCREEN_LINES, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
@@ -4556,6 +4556,15 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
   const sid = ref?.sessionId as string | undefined
   if (!ref || !sid) return fallBack('pane-not-ready')
   const screen = () => (lastScreen = (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '')
+  // The result line is read from a taller window than the boxes: claude's
+  // full-screen TUI keeps a short transcript at the top of a tall pane and
+  // pins the composer to the bottom, so "Set model to" can sit far above the
+  // 25-row tail (Linux VM, 106x~50: the tail held only the composer).
+  const resultScreen = () => (lastScreen = (ref.readScreenTail?.(MODEL_RESULT_SCREEN_LINES) as string | undefined) ?? '')
+  // Asserted, not annotated: set inside sawResult, so a narrowed `null` here
+  // would make the closing check unreachable to the type checker.
+  let switched = null as ReturnType<typeof modelSwitchResult>
+  const sawResult = () => (switched = modelSwitchResult(resultScreen())) !== null
   const write = (data: string) => backend.send('terminal.input', { terminal_session_id: sid, data })
   const waitFor = async (seen: (text: string) => boolean, ms = MODEL_PICKER_WAIT_MS): Promise<string | null> => {
     for (const end = Date.now() + ms; Date.now() < end; ) {
@@ -4589,7 +4598,7 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
   })
   if (resp === 'prompt-changed') return cancel('picker-changed')
   if (!resp.ok) return cancel('keys-failed')
-  let done = await waitFor((text) => onModelSwitchConfirm(text) || modelSwitchResult(text) !== null)
+  let done = await waitFor((text) => onModelSwitchConfirm(text) || sawResult())
   if (!done) return cancel('switch-not-confirmed')
   if (onModelSwitchConfirm(done)) {
     const confirm = done
@@ -4605,10 +4614,10 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
     })
     if (sent === 'prompt-changed') return cancel('confirm-changed', 2)
     if (!sent.ok) return cancel('confirm-keys-failed', 2)
-    done = await waitFor((text) => modelSwitchResult(text) !== null, MODEL_CONFIRM_WAIT_MS)
+    done = await waitFor(sawResult, MODEL_CONFIRM_WAIT_MS)
     if (!done) return cancel('confirm-not-confirmed', 2)
   }
-  return modelSwitchResult(done) === 'default' ? fallBack('saved-as-default') : null
+  return switched === 'default' ? fallBack('saved-as-default') : null
 }
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
