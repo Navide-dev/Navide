@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "進行状況",
-      "compare": "比較"
+      "compare": "比較",
+      "merge": "マージ"
     },
     "compare": {
       "rate": "星 {n} 個",
@@ -13556,6 +13557,42 @@
       "truncated": "差分が長すぎるため先頭のみ表示",
       "refresh": "再読み込み"
     },
-    "workspace-alias": "アリーナ {run}·{id} {model}"
+    "workspace-alias": "アリーナ {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "1 つを丸ごと採用",
+      "mode-mix": "ファイルを組み合わせ",
+      "mode-branch": "ブランチだけ残す",
+      "candidate": "採用する候補",
+      "squash": "1 つの commit にまとめる（squash）",
+      "file": "ファイル",
+      "take-from": "取得元",
+      "skip": "含めない",
+      "mix-hint": "各ファイルは選んだ候補から丸ごと取り、新しいブランチ arena/回/mix に組み立てます。組み合わせても整合するか確認してください。",
+      "into": "メインフォルダーの {branch} にマージします。",
+      "new-commits": "開始後、このブランチに新しい commit が {n} 個あります。rebase はしません。",
+      "already": "この回はすでにマージ済みです。",
+      "dirty": "メインフォルダーに未コミットの変更があります。先にコミットするか破棄してください。",
+      "wrong-branch": "メインフォルダーが開始時のブランチ {branch} にありません。",
+      "empty-mix": "ファイルを 1 つ以上選んでください。",
+      "confirm-check": "先に受け入れコマンドを確認してください。",
+      "check-confirm": "この結果で {cmd} を実行し、成功しました",
+      "branch-hint": "マージせず、候補のブランチを後で決めるために残します。",
+      "go": "マージ",
+      "merging": "マージ中…",
+      "confirm": "確認: {branch} にマージ",
+      "done": "{sha} としてマージしました。",
+      "kept": "ブランチ {branch} を残しました。",
+      "failed": "マージを中止しました。",
+      "conflicts": "Git パネルで解決が必要な競合（自動では解決しません）:"
+    },
+    "cleanup": {
+      "title": "後片付け",
+      "panes": "アリーナのペインを閉じる",
+      "worktrees": "worktree を削除",
+      "branches": "ローカルブランチを削除",
+      "remote": "何もプッシュしていないので、リモートブランチの削除は不要です。",
+      "go": "後片付け",
+      "done": "{n} 件を削除しました。"
+    }
   }
 }

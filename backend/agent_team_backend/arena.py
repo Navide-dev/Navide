@@ -29,6 +29,7 @@ import asyncio
 import fnmatch
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -76,6 +77,7 @@ _RUN_ID_RE = re.compile(r"^[0-9a-f]{4,12}$")
 _SLUG_RE = re.compile(r"[^a-z0-9.-]+")
 _SLUG_OK_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{0,47}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+_STOPPED = ("", "user", "time", "budget")
 
 
 class ArenaError(ValueError):
@@ -106,6 +108,9 @@ async def _git(args: list[str], cwd: str, timeout: float = _GIT_TIMEOUT) -> tupl
         "-c", f"core.hooksPath={_empty_hooks_dir()}",
         "-c", "diff.external=",
         "-c", "core.pager=cat",
+        "-c", "core.sshCommand=",
+        "-c", "credential.helper=",
+        "-c", "protocol.ext.allow=never",
     ]
     if args and args[0] == "diff":
         args = ["diff", "--no-ext-diff", "--no-textconv", *args[1:]]
@@ -165,10 +170,27 @@ def _check_record(run: Any, ws: str, run_id: str) -> dict[str, Any]:
             raise bad("slug")
         if cand.get("worktree") != str(root / slug) or cand.get("branch") != f"arena/{run_id}/{slug}":
             raise bad("worktree or branch")
+        if cand.get("stopped", "") not in _STOPPED or not isinstance(cand.get("pane_id", ""), str):
+            raise bad("candidate state")
     branch = run.get("base_branch", "")
     if not isinstance(branch, str) or branch.startswith("-"):
         raise bad("base branch")
+    for key in ("created_at", "time_limit_min", "budget_usd"):
+        value = run.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise bad(key)
     return run
+
+
+def _worktree(run: dict[str, Any], path: str) -> str | None:
+    """``path`` when it is a real directory exactly where start_run put it
+    (no symlink anywhere in between); None when it is gone."""
+    if not os.path.lexists(path):
+        return None
+    expected = os.path.join(os.path.realpath(run["workspace"]), *WORKTREE_DIR, f"arena-{run['id']}", os.path.basename(path))
+    if os.path.islink(path) or not os.path.isdir(path) or os.path.realpath(path) != expected:
+        raise ArenaError(f"arena worktree {path} is not where this run created it")
+    return path
 
 
 def load_run(ws: str, run_id: str) -> dict[str, Any]:
@@ -339,7 +361,10 @@ def update_candidate(workspace: str, run_id: str, cid: str, fields: dict[str, An
     if "pane_id" in fields:
         cand["pane_id"] = str(fields["pane_id"] or "")
     if "stopped" in fields:
-        cand["stopped"] = str(fields["stopped"] or "")
+        stopped = str(fields["stopped"] or "")
+        if stopped not in _STOPPED:
+            raise ArenaError("invalid stop reason")
+        cand["stopped"] = stopped
     if "rating" in fields:
         cand["rating"] = max(0, min(5, int(fields["rating"] or 0)))
     if "adopted" in fields:
@@ -354,11 +379,12 @@ def update_candidate(workspace: str, run_id: str, cid: str, fields: dict[str, An
 
 # ── status / compare ─────────────────────────────────────────────────────────
 
-async def _changed_files(cand: dict[str, Any], base_sha: str, patterns: tuple[str, ...]) -> list[dict[str, Any]]:
+async def _changed_files(run: dict[str, Any], cand: dict[str, Any], patterns: tuple[str, ...]) -> list[dict[str, Any]]:
     """Every file the candidate's worktree differs from the base on:
     committed, uncommitted and untracked alike."""
-    wt = cand["worktree"]
-    if not os.path.isdir(wt):
+    base_sha = run["base_sha"]
+    wt = _worktree(run, cand["worktree"])
+    if wt is None:
         return []
     files: dict[str, dict[str, Any]] = {}
     _, numstat, _ = await _git(["-c", "core.quotepath=off", "diff", "--numstat", "-z", base_sha], wt)
@@ -444,7 +470,7 @@ async def run_status(workspace: str, run_id: str, cost_ledger: Any) -> dict[str,
     budget = float(run.get("budget_usd") or 0)
     rows = []
     for cand in run["candidates"]:
-        files = await _changed_files(cand, run["base_sha"], patterns)
+        files = await _changed_files(run, cand, patterns)
         spend = await asyncio.to_thread(_spend, cost_ledger, cand["worktree"])
         rows.append({
             "id": cand["id"],
@@ -464,7 +490,7 @@ async def compare(workspace: str, run_id: str) -> dict[str, Any]:
     patterns = protected_patterns(run["workspace"])
     per: dict[str, list[dict[str, Any]]] = {}
     for cand in run["candidates"]:
-        per[cand["id"]] = await _changed_files(cand, run["base_sha"], patterns)
+        per[cand["id"]] = await _changed_files(run, cand, patterns)
     paths = sorted({f["path"] for files in per.values() for f in files})
     table = []
     for path in paths:
@@ -480,7 +506,9 @@ async def compare(workspace: str, run_id: str) -> dict[str, Any]:
 async def file_diff(workspace: str, run_id: str, cid: str, path: str) -> dict[str, Any]:
     run = load_run(workspace, run_id)
     cand = _candidate(run, cid)
-    wt = cand["worktree"]
+    wt = _worktree(run, cand["worktree"])
+    if wt is None:
+        return {"diff": "", "truncated": False}
     if not path or path.startswith("-") or ".." in Path(path).parts or os.path.isabs(path):
         raise ArenaError("invalid path")
     rc, out, _ = await _git(["-c", "core.quotepath=off", "diff", run["base_sha"], "--", path], wt)
@@ -530,7 +558,7 @@ async def _build_mix(run: dict[str, Any], picks: dict[str, str]) -> dict[str, An
     ws = run["workspace"]
     wt = str(Path(ws, *WORKTREE_DIR, f"arena-{run['id']}", "mix"))
     branch = f"arena/{run['id']}/mix"
-    if not os.path.isdir(wt):
+    if _worktree(run, wt) is None:
         await _git_ok(["worktree", "add", "-b", branch, wt, run["base_sha"]], ws)
     for path, cid in sorted(picks.items()):
         if not cid:
@@ -561,7 +589,7 @@ async def merge(
     run = load_run(workspace, run_id)
     ws = run["workspace"]
     for cand in run["candidates"]:
-        if os.path.isdir(cand["worktree"]):
+        if _worktree(run, cand["worktree"]):
             await _commit_worktree(cand["worktree"], f"arena({run_id}): candidate {cand['id']} {cand['model'] or cand['agent']}")
     if candidate == "mix":
         chosen = await _build_mix(run, picks or {})
@@ -610,7 +638,7 @@ async def cleanup(workspace: str, run_id: str, *, worktrees: bool = True, branch
     entries.append({"worktree": mix_wt, "branch": f"arena/{run_id}/mix"})
     if worktrees:
         for entry in entries:
-            if os.path.isdir(entry["worktree"]):
+            if _worktree(run, entry["worktree"]):
                 rc, _, err = await _git(["worktree", "remove", "--force", entry["worktree"]], ws)
                 if rc == 0:
                     removed.append(entry["worktree"])

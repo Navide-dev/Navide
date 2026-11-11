@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Tiến độ",
-      "compare": "So sánh"
+      "compare": "So sánh",
+      "merge": "Hợp nhất"
     },
     "compare": {
       "rate": "{n} sao",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff bị cắt: quá dài để hiển thị đầy đủ",
       "refresh": "Làm mới"
     },
-    "workspace-alias": "Đấu trường {run}·{id} {model}"
+    "workspace-alias": "Đấu trường {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Chọn trọn một bản",
+      "mode-mix": "Trộn tệp",
+      "mode-branch": "Chỉ giữ nhánh",
+      "candidate": "Ứng viên",
+      "squash": "Gộp thành một commit (squash)",
+      "file": "Tệp",
+      "take-from": "Lấy từ",
+      "skip": "Bỏ qua",
+      "mix-hint": "Mỗi tệp được lấy nguyên từ ứng viên bạn chọn, trên nhánh mới arena/LƯỢT/mix; hãy kiểm tra các phần vẫn khớp nhau.",
+      "into": "Hợp nhất vào {branch} của thư mục chính.",
+      "new-commits": "Từ lúc bắt đầu, nhánh có thêm {n} commit mới; không tự rebase.",
+      "already": "Lượt này đã được hợp nhất.",
+      "dirty": "Thư mục chính có thay đổi chưa commit. Hãy commit hoặc bỏ chúng trước.",
+      "wrong-branch": "Thư mục chính không ở nhánh {branch}, nhánh bắt đầu của lượt này.",
+      "empty-mix": "Chọn ít nhất một tệp.",
+      "confirm-check": "Hãy xác nhận lệnh nghiệm thu trước.",
+      "check-confirm": "Tôi đã chạy {cmd} trên kết quả này và đạt",
+      "branch-hint": "Không hợp nhất; nhánh của ứng viên được giữ lại để quyết định sau.",
+      "go": "Hợp nhất",
+      "merging": "Đang hợp nhất…",
+      "confirm": "Xác nhận: hợp nhất vào {branch}",
+      "done": "Đã hợp nhất thành {sha}.",
+      "kept": "Đã giữ nhánh {branch}.",
+      "failed": "Đã dừng hợp nhất.",
+      "conflicts": "Xung đột cần xử lý trong bảng Git (không tự giải quyết):"
+    },
+    "cleanup": {
+      "title": "Dọn dẹp",
+      "panes": "Đóng các ô đấu trường",
+      "worktrees": "Xóa các worktree",
+      "branches": "Xóa các nhánh cục bộ",
+      "remote": "Không đẩy gì lên, nên không có nhánh từ xa nào cần xóa.",
+      "go": "Dọn dẹp",
+      "done": "Đã xóa {n} mục."
+    }
   }
 }

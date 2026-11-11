@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Progression",
-      "compare": "Comparaison"
+      "compare": "Comparaison",
+      "merge": "Fusionner"
     },
     "compare": {
       "rate": "{n} étoiles",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff tronqué : trop long pour être affiché en entier",
       "refresh": "Actualiser"
     },
-    "workspace-alias": "Arène {run}·{id} {model}"
+    "workspace-alias": "Arène {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Adopter un candidat entier",
+      "mode-mix": "Combiner des fichiers",
+      "mode-branch": "Garder seulement la branche",
+      "candidate": "Candidat",
+      "squash": "Écraser en un seul commit (squash)",
+      "file": "Fichier",
+      "take-from": "Prendre de",
+      "skip": "Exclure",
+      "mix-hint": "Chaque fichier vient entier du candidat choisi, sur une nouvelle branche arena/SESSION/mix ; vérifiez que les morceaux s’accordent.",
+      "into": "Fusionne dans {branch} de votre dossier principal.",
+      "new-commits": "{n} nouveaux commits sont arrivés sur la branche depuis le lancement ; aucun rebase n’est fait.",
+      "already": "Cette session a déjà été fusionnée.",
+      "dirty": "Votre dossier principal a des modifications non validées. Validez-les ou abandonnez-les d’abord.",
+      "wrong-branch": "Votre dossier principal n’est pas sur {branch}, la branche de départ.",
+      "empty-mix": "Choisissez au moins un fichier.",
+      "confirm-check": "Confirmez d’abord la commande de recette.",
+      "check-confirm": "J’ai exécuté {cmd} sur ce résultat et cela réussit",
+      "branch-hint": "Rien n’est fusionné ; la branche du candidat reste pour plus tard.",
+      "go": "Fusionner",
+      "merging": "Fusion en cours…",
+      "confirm": "Confirmer : fusionner dans {branch}",
+      "done": "Fusionné en {sha}.",
+      "kept": "Branche {branch} conservée.",
+      "failed": "Fusion arrêtée.",
+      "conflicts": "Conflits à résoudre dans le panneau Git (rien n’a été résolu à votre place) :"
+    },
+    "cleanup": {
+      "title": "Nettoyage",
+      "panes": "Fermer les volets de l’arène",
+      "worktrees": "Supprimer les worktrees",
+      "branches": "Supprimer les branches locales",
+      "remote": "Rien n’a été poussé, il n’y a donc aucune branche distante à supprimer.",
+      "go": "Nettoyer",
+      "done": "{n} éléments supprimés."
+    }
   }
 }

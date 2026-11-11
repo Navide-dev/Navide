@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import {
   arenaDiffLines,
+  defaultMixPicks,
   formatElapsed,
   type ArenaCompareFile,
   type ArenaRun,
@@ -19,7 +20,8 @@ const props = defineProps<{
   runs: readonly ArenaRun[]
   runId: string
   status: ArenaStatus | null
-  paneAlive: (paneId: string) => boolean
+  /** A live pane whose folder is this worktree (lib/arena ArenaPaneCheck). */
+  paneAlive: (paneId: string, worktree: string) => boolean
   request: ArenaRequest
 }>()
 const emit = defineEmits<{
@@ -30,9 +32,11 @@ const emit = defineEmits<{
   'stop-all': [runId: string]
   /** The run record changed here (rating, adopt): reload the list. */
   changed: []
+  /** Close these candidate panes (before cleanup removes their folders). */
+  'close-panes': [paneIds: string[]]
 }>()
 
-type Tab = 'run' | 'compare'
+type Tab = 'run' | 'compare' | 'merge'
 const tab = ref<Tab>('run')
 
 const run = computed<ArenaRun | null>(() =>
@@ -44,7 +48,7 @@ const rows = computed(() => {
   return r.candidates.map((cand) => ({
     cand,
     stat: props.status?.run.id === r.id ? props.status.candidates.find((s) => s.id === cand.id) : undefined,
-    alive: !!cand.pane_id && props.paneAlive(cand.pane_id),
+    alive: !!cand.pane_id && props.paneAlive(cand.pane_id, cand.worktree),
   }))
 })
 
@@ -106,6 +110,109 @@ watch([tab, () => props.runId], ([t]) => {
   files.value = []
   diffs.value = {}
   if (t === 'compare') void loadCompare()
+  if (t === 'merge') void loadMerge()
+})
+
+// ── Merge ────────────────────────────────────────────────────────────────
+type MergeMode = 'whole' | 'mix' | 'branch'
+interface MergePreview { branch: string; expected_branch: string; dirty: boolean; new_commits: string[] }
+interface MergeResult { ok: boolean; error?: string; branch?: string; commit?: string; mode?: string; conflict_files?: string[] }
+
+const mergeMode = ref<MergeMode>('whole')
+const squash = ref(true)
+const mergeCandidate = ref('')
+const picks = ref<Record<string, string>>({})
+const preview = ref<MergePreview | null>(null)
+const checkConfirmed = ref(false)
+const confirming = ref(false)
+const merging = ref(false)
+const mergeResult = ref<MergeResult | null>(null)
+const cleanWorktrees = ref(true)
+const cleanBranches = ref(true)
+const cleanPanes = ref(true)
+const cleaning = ref(false)
+const cleanResult = ref<{ ok: boolean; removed?: string[]; errors?: string[]; error?: string } | null>(null)
+
+async function loadMerge(): Promise<void> {
+  const r = run.value
+  if (!r) return
+  mergeResult.value = null
+  cleanResult.value = null
+  confirming.value = false
+  checkConfirmed.value = false
+  mergeCandidate.value = r.candidates.find((c) => c.adopted)?.id ?? r.candidates[0]?.id ?? ''
+  const [cmp, prev] = await Promise.all([
+    props.request<{ ok: boolean; files?: ArenaCompareFile[] }>('arena.compare', { workspace_path: r.workspace, run_id: r.id }),
+    props.request<MergePreview & { ok: boolean }>('arena.merge_preview', { workspace_path: r.workspace, run_id: r.id }),
+  ])
+  files.value = cmp?.ok ? (cmp.files ?? []) : []
+  preview.value = prev?.ok ? prev : null
+  picks.value = defaultMixPicks(files.value, r.candidates.map((c) => c.id), mergeCandidate.value)
+}
+
+const mergeBlocked = computed<string>(() => {
+  const r = run.value
+  if (!r || merging.value) return 'busy'
+  if (r.state === 'merged') return 'arena.merge.already'
+  if (mergeMode.value !== 'branch' && preview.value?.dirty) return 'arena.merge.dirty'
+  if (mergeMode.value !== 'branch' && preview.value && r.base_branch && preview.value.branch !== r.base_branch) return 'arena.merge.wrong-branch'
+  if (mergeMode.value === 'mix' && !Object.values(picks.value).some(Boolean)) return 'arena.merge.empty-mix'
+  if (mergeMode.value !== 'branch' && r.check_command && !checkConfirmed.value) return 'arena.merge.confirm-check'
+  return ''
+})
+
+async function doMerge(): Promise<void> {
+  const r = run.value
+  if (!r || mergeBlocked.value) return
+  if (!confirming.value) {
+    confirming.value = true
+    return
+  }
+  confirming.value = false
+  merging.value = true
+  try {
+    const resp = await props.request<MergeResult>('arena.merge', {
+      workspace_path: r.workspace,
+      run_id: r.id,
+      candidate: mergeMode.value === 'mix' ? 'mix' : mergeCandidate.value,
+      mode: mergeMode.value === 'branch' ? 'branch' : squash.value ? 'squash' : 'merge',
+      ...(mergeMode.value === 'mix' ? { picks: picks.value } : {}),
+    })
+    mergeResult.value = resp ?? { ok: false, error: 'arena.merge failed' }
+    emit('changed')
+  } finally {
+    merging.value = false
+  }
+}
+
+async function doCleanup(): Promise<void> {
+  const r = run.value
+  if (!r) return
+  cleaning.value = true
+  try {
+    if (cleanPanes.value) emit('close-panes', r.candidates.filter((c) => c.pane_id && props.paneAlive(c.pane_id, c.worktree)).map((c) => c.pane_id))
+    const keep = r.merge?.mode === 'branch' && r.merge.ok ? r.merge.branch : ''
+    const resp = await props.request<{ ok: boolean; removed?: string[]; errors?: string[]; error?: string }>('arena.cleanup', {
+      workspace_path: r.workspace,
+      run_id: r.id,
+      worktrees: cleanWorktrees.value,
+      branches: cleanBranches.value,
+      keep_branch: keep,
+    })
+    cleanResult.value = resp ?? { ok: false, error: 'arena.cleanup failed' }
+    emit('changed')
+  } finally {
+    cleaning.value = false
+  }
+}
+
+/** One line for the record: what was compared and what was taken. */
+const summaryLine = computed(() => {
+  const r = run.value
+  if (!r) return ''
+  const lineup = r.candidates.map((c) => `${c.id}=${c.model || c.agent}${c.rating ? ` ${c.rating}★` : ''}`).join(', ')
+  const taken = r.merge ? `${r.merge.mode} ${r.merge.candidate}${r.merge.commit ? ` @ ${r.merge.commit.slice(0, 9)}` : ''}` : '—'
+  return `arena ${r.id} · ${r.base_branch || 'HEAD'}@${r.base_sha.slice(0, 7)} · ${lineup} · ${taken}`
 })
 
 async function updateCandidate(cid: string, fields: Record<string, unknown>): Promise<void> {
@@ -135,6 +242,7 @@ useDialogFocus(root)
           <nav class="tabs" role="tablist">
             <button role="tab" :aria-selected="tab === 'run'" :class="{ on: tab === 'run' }" @click="tab = 'run'">{{ $t('arena.tab.run') }}</button>
             <button role="tab" :aria-selected="tab === 'compare'" :class="{ on: tab === 'compare' }" data-testid="arena-tab-compare" @click="tab = 'compare'">{{ $t('arena.tab.compare') }}</button>
+            <button role="tab" :aria-selected="tab === 'merge'" :class="{ on: tab === 'merge' }" data-testid="arena-tab-merge" @click="tab = 'merge'">{{ $t('arena.tab.merge') }}</button>
           </nav>
           <div class="bar" data-testid="arena-run-bar">
             <div class="task" :title="run.task">{{ run.task }}</div>
@@ -271,6 +379,80 @@ useDialogFocus(root)
             </div>
           </section>
 
+          <section v-if="tab === 'merge'" class="merge" data-testid="arena-merge">
+            <div class="modes" role="radiogroup">
+              <label><input v-model="mergeMode" type="radio" value="whole" /> {{ $t('arena.merge.mode-whole') }}</label>
+              <label><input v-model="mergeMode" type="radio" value="mix" data-testid="arena-mode-mix" /> {{ $t('arena.merge.mode-mix') }}</label>
+              <label><input v-model="mergeMode" type="radio" value="branch" /> {{ $t('arena.merge.mode-branch') }}</label>
+            </div>
+
+            <div v-if="mergeMode !== 'mix'" class="pick">
+              <span class="lb">{{ $t('arena.merge.candidate') }}</span>
+              <select v-model="mergeCandidate" data-testid="arena-merge-candidate">
+                <option v-for="c in run.candidates" :key="c.id" :value="c.id">{{ c.id }} · {{ c.model || c.agent }}{{ c.adopted ? ` (${$t('arena.col.adopt')})` : '' }}</option>
+              </select>
+              <label v-if="mergeMode === 'whole'" class="squash"><input v-model="squash" type="checkbox" /> {{ $t('arena.merge.squash') }}</label>
+            </div>
+
+            <table v-else class="grid mix" data-testid="arena-mix">
+              <thead><tr><th>{{ $t('arena.merge.file') }}</th><th>{{ $t('arena.merge.take-from') }}</th></tr></thead>
+              <tbody>
+                <tr v-for="f in files" :key="f.path">
+                  <td :class="{ prot: f.protected }"><span v-truncate class="fpath">{{ f.path }}</span></td>
+                  <td>
+                    <select v-model="picks[f.path]">
+                      <option value="">{{ $t('arena.merge.skip') }}</option>
+                      <option v-for="c in run.candidates" :key="c.id" :value="c.id" :disabled="!f.by[c.id]">{{ c.id }} · {{ c.model || c.agent }}</option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="mergeMode === 'mix'" class="muted small">{{ $t('arena.merge.mix-hint') }}</p>
+
+            <div v-if="mergeMode !== 'branch' && preview" class="preview" data-testid="arena-merge-preview">
+              <div>{{ $t('arena.merge.into', { branch: preview.branch || 'HEAD' }) }}</div>
+              <div v-if="preview.new_commits.length" class="warn">{{ $t('arena.merge.new-commits', { n: preview.new_commits.length }) }}</div>
+              <div v-if="mergeBlocked && mergeBlocked !== 'busy' && mergeBlocked !== 'arena.merge.confirm-check'" class="warn">{{ $t(mergeBlocked, { branch: run.base_branch }) }}</div>
+              <label v-if="run.check_command" class="check"><input v-model="checkConfirmed" type="checkbox" data-testid="arena-check-confirm" /> {{ $t('arena.merge.check-confirm', { cmd: run.check_command }) }}</label>
+            </div>
+            <p v-else-if="mergeMode === 'branch'" class="muted small">{{ $t('arena.merge.branch-hint') }}</p>
+
+            <div class="actions left">
+              <button class="primary" :class="{ danger: confirming }" :disabled="!!mergeBlocked" data-testid="arena-merge-go" @click="doMerge">
+                {{ merging ? $t('arena.merge.merging') : confirming ? $t('arena.merge.confirm', { branch: preview?.branch || 'HEAD' }) : $t('arena.merge.go') }}
+              </button>
+              <button v-if="confirming" class="ghost" @click="confirming = false">{{ $t('action.cancel') }}</button>
+            </div>
+
+            <div v-if="mergeResult" class="result" :class="{ bad: !mergeResult.ok }" data-testid="arena-merge-result">
+              <template v-if="mergeResult.ok">
+                {{ mergeResult.commit ? $t('arena.merge.done', { sha: mergeResult.commit.slice(0, 9) }) : $t('arena.merge.kept', { branch: mergeResult.branch }) }}
+              </template>
+              <template v-else>
+                <div>{{ $t('arena.merge.failed') }} {{ mergeResult.error }}</div>
+                <div v-if="mergeResult.conflict_files?.length">
+                  {{ $t('arena.merge.conflicts') }}
+                  <ul><li v-for="p in mergeResult.conflict_files" :key="p" class="mono">{{ p }}</li></ul>
+                </div>
+              </template>
+            </div>
+
+            <fieldset class="cleanup" data-testid="arena-cleanup">
+              <legend>{{ $t('arena.cleanup.title') }}</legend>
+              <label><input v-model="cleanPanes" type="checkbox" /> {{ $t('arena.cleanup.panes') }}</label>
+              <label><input v-model="cleanWorktrees" type="checkbox" /> {{ $t('arena.cleanup.worktrees') }}</label>
+              <label><input v-model="cleanBranches" type="checkbox" /> {{ $t('arena.cleanup.branches') }}</label>
+              <p class="muted small">{{ $t('arena.cleanup.remote') }}</p>
+              <button class="ghost" :disabled="cleaning" data-testid="arena-cleanup-go" @click="doCleanup">{{ $t('arena.cleanup.go') }}</button>
+              <p v-if="cleanResult" :class="cleanResult.ok ? 'muted small' : 'err'">
+                {{ cleanResult.ok ? $t('arena.cleanup.done', { n: cleanResult.removed?.length ?? 0 }) : (cleanResult.errors?.join('; ') || cleanResult.error) }}
+              </p>
+            </fieldset>
+
+            <p v-truncate class="summary-line mono">{{ summaryLine }}</p>
+          </section>
+
           <p class="muted note">{{ $t('arena.panel.check-note', { cmd: run.check_command || '—' }) }}</p>
 
           <footer class="actions">
@@ -370,6 +552,25 @@ button {
 .diff .hunk { color: var(--accent-fg); }
 .diff .meta { color: var(--text-secondary); }
 .actions.left { justify-content: flex-start; }
+.merge { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.modes { display: flex; gap: 18px; flex-wrap: wrap; }
+.modes label, .squash, .check, .cleanup label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.pick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lb { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.mix td.prot .fpath { color: var(--danger-fg); }
+.mix .fpath { display: block; max-width: 520px; }
+.small { font-size: 12px; margin: 0; }
+.preview { padding: 8px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-subtle); display: flex; flex-direction: column; gap: 4px; }
+button.primary { background: var(--accent-emphasis); border-color: transparent; color: var(--text-on-emphasis); }
+button.primary.danger { background: var(--danger-emphasis); }
+button:disabled { opacity: 0.5; cursor: default; }
+.result { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--success-subtle); }
+.result.bad { background: var(--danger-subtle); }
+.result ul { margin: 4px 0 0 18px; padding: 0; }
+.cleanup { border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.cleanup legend { font-size: 12px; font-weight: 600; color: var(--text-secondary); padding: 0 4px; }
+.cleanup p { flex-basis: 100%; }
+.summary-line { margin: 0; color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
 select { padding: 4px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-primary); }
 </style>

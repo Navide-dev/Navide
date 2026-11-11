@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "进度",
-      "compare": "比较"
+      "compare": "比较",
+      "merge": "合并"
     },
     "compare": {
       "rate": "{n} 星",
@@ -13556,6 +13557,42 @@
       "truncated": "差异太长，只显示前面部分",
       "refresh": "刷新"
     },
-    "workspace-alias": "擂台 {run}·{id} {model}"
+    "workspace-alias": "擂台 {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "整份采用",
+      "mode-mix": "混搭文件",
+      "mode-branch": "只保留分支",
+      "candidate": "采用哪一格",
+      "squash": "压成一个 commit（squash）",
+      "file": "文件",
+      "take-from": "取自",
+      "skip": "不要",
+      "mix-hint": "每个文件整份取自你选的那一格，组合在新分支 arena/场次/mix 上；请确认拼起来仍然兼容。",
+      "into": "合并到主工作目录的 {branch}。",
+      "new-commits": "发起后这个分支又多了 {n} 个 commit；不会自动 rebase。",
+      "already": "这场已经合并过了。",
+      "dirty": "主工作目录有未提交的修改，请先提交或丢弃。",
+      "wrong-branch": "主工作目录当前不在这场的起点分支 {branch}。",
+      "empty-mix": "至少选择一个文件。",
+      "confirm-check": "请先确认验收命令。",
+      "check-confirm": "我已在这个结果上运行 {cmd}，并且通过",
+      "branch-hint": "不合并，保留这格的分支以后再决定。",
+      "go": "合并",
+      "merging": "合并中…",
+      "confirm": "确认：合并到 {branch}",
+      "done": "已合并为 {sha}。",
+      "kept": "已保留分支 {branch}。",
+      "failed": "合并已停止。",
+      "conflicts": "需要你在 Git 面板处理的冲突（不会自动解决）："
+    },
+    "cleanup": {
+      "title": "清理",
+      "panes": "关闭擂台窗格",
+      "worktrees": "移除 worktree",
+      "branches": "删除本地分支",
+      "remote": "没有推送任何分支，所以不用删除远程分支。",
+      "go": "清理",
+      "done": "已移除 {n} 项。"
+    }
   }
 }
