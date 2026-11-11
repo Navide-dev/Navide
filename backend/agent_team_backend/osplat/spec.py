@@ -481,9 +481,11 @@ class ProcessTree(Protocol):
     def own_group_spawn_kwargs(self) -> dict[str, int]:
         """Spawn keyword arguments that make the child lead a group of its own.
 
-        POSIX: a new process group (not a new session: the controlling
-        terminal stays), so `end_own_group` also reaches a grandchild forked
-        after any snapshot. Windows has no process groups and adds nothing:
+        Every key must be one both asyncio and uvloop accept: uvicorn runs the
+        backend on uvloop wherever it is installed. POSIX: a new session, and
+        with it a new process group (the child leaves the controlling
+        terminal; credentials go through askpass), so `end_own_group` also
+        reaches a grandchild forked after any snapshot. Windows has no process groups and adds nothing:
         not suspended, no job (each git.exe started suspended in a job left a
         kernel Token object behind), so a timeout ends the tree from a
         snapshot of it."""

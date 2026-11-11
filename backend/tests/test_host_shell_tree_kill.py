@@ -161,8 +161,52 @@ async def test_a_run_that_ends_normally_reports_as_before(tmp_path, monkeypatch)
 
 @pytest.mark.skipif(os.name == "nt", reason="the POSIX implementation")
 def test_on_posix_a_run_gets_nothing_but_its_process_group() -> None:
-    """POSIX keeps what #673 shipped: a process group, no job, nothing to release."""
+    """POSIX: a session (and so a process group) of its own, no job, nothing
+    to release. start_new_session, not #673's process_group=0, which uvloop
+    rejects (test_host_shell_uvloop.py)."""
     tree = osplat.process_tree
-    assert tree.own_group_spawn_kwargs() == {"process_group": 0}
+    assert tree.own_group_spawn_kwargs() == {"start_new_session": True}
     assert tree.start_own_group(os.getpid()) is None
     assert tree.release_contained(os.getpid(), 1) is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="uvloop is not installed on Windows")
+@pytest.mark.skipif(
+    osplat.paths.resolve_program("git") is None,
+    reason="git is not resolvable through osplat.paths on this host",
+)
+def test_on_uvloop_a_grandchild_the_tree_read_missed_still_ends(tmp_path, monkeypatch, caplog) -> None:
+    """The same miss as above on the loop the packaged backend runs on: the
+    group the run leads under uvloop is what still reaches the orphan."""
+    import asyncio
+
+    uvloop = pytest.importorskip("uvloop")
+    marker = tmp_path / "stay.pid"
+    monkeypatch.setenv("NAVIDE_TEST_MARKER", str(marker))
+    monkeypatch.setenv("NAVIDE_TEST_PY", sys.executable)
+    monkeypatch.setenv("NAVIDE_TEST_CODE", _STAY)
+
+    def missed_read(pid: int) -> list[tuple[int, str]]:
+        _wait_for_pid(marker)
+        return []
+
+    monkeypatch.setattr(host_shell, "_descendants_with_identity", missed_read)
+    monkeypatch.setattr(host_shell, "_KILL_REAP_TIMEOUT_S", 10.0)
+    caplog.set_level("WARNING", logger="agent_team_backend.host_shell")
+
+    with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
+        rc, _, stderr = runner.run(
+            host_shell.run_allowlisted_text(
+                ["git", "-c", 'alias.hang=!"$NAVIDE_TEST_PY" -c "$NAVIDE_TEST_CODE"', "hang"],
+                str(tmp_path),
+                timeout=0.5,
+            )
+        )
+
+    assert rc == 128 and "timed out" in stderr
+    assert not [r for r in caplog.records if "stopped waiting" in r.getMessage()]
+    stay_pid = int(marker.read_text())
+    deadline = time.monotonic() + 10
+    while osplat.process_tree.is_alive(stay_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not osplat.process_tree.is_alive(stay_pid)

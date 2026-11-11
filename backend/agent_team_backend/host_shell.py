@@ -963,6 +963,12 @@ async def run_allowlisted(
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode()
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
+        # Logged, not only returned: callers turn rc 128 into a quiet envelope,
+        # and a spawn every run failed (uvloop rejecting a kwarg) went unseen
+        # for months. The executable only -- its arguments may carry secrets.
+        log.warning(
+            "host_shell: %s failed to run: %s", argv[0], type(exc).__name__
+        )
         if process is not None and process.returncode is None:
             ended, job = job, None
             await _kill_tree_and_reap(process, ended)
@@ -1061,6 +1067,12 @@ async def run_allowlisted_capped(
     except FileNotFoundError:
         return 127, b"", f"{argv[0]} not found".encode(), False
     except Exception as exc:  # noqa: BLE001 - preserve service-level error envelope
+        # Logged, not only returned: callers turn rc 128 into a quiet envelope,
+        # and a spawn every run failed (uvloop rejecting a kwarg) went unseen
+        # for months. The executable only -- its arguments may carry secrets.
+        log.warning(
+            "host_shell: %s failed to run: %s", argv[0], type(exc).__name__
+        )
         if process is not None and process.returncode is None:
             ended, job = job, None
             await _kill_tree_and_reap(process, ended)
