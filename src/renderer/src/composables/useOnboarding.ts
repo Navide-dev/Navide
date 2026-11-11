@@ -32,7 +32,14 @@ export interface OnboardDep {
   update_cmd: string
   doctor_cmd: string
   autoupdate_env: string
+  /** The same switch as launch arguments (codex's `-c …`). A dep with these
+   *  has its update gated: one at a time, its panes idle. Absent on an older
+   *  backend. */
+  autoupdate_args?: string[]
   autoupdate_policy: AutoupdatePolicy
+  /** A newer release than `version`; '' when none or unknown. Absent on an
+   *  older backend. */
+  latest_version?: string
   /** The install the user chose for Navide to launch; '' = the PATH default.
    *  Absent on an older backend. */
   binary_override?: string
@@ -160,6 +167,16 @@ export interface InstallResult {
   cancelled?: boolean
   /** The request itself failed (timeout, lost connection): `error` says why. */
   unanswered?: boolean
+  /** A gated update the backend refused to start (see UpdateGate). */
+  gate?: UpdateGate
+}
+
+/** Why a gated CLI update may not start now (onboarding.update_gate). */
+export interface UpdateGate {
+  blocked: boolean
+  reason: '' | 'update-running' | 'panes-busy'
+  /** Names of this CLI's panes that are not idle. */
+  busy_panes: string[]
 }
 
 /** The command running (or just finished) in this surface's install terminal. */
@@ -705,6 +722,16 @@ export function useOnboarding(backend: ReturnType<typeof useBackend>) {
     return true
   }
 
+  /** Whether a gated update may start now; null when the backend did not say. */
+  async function updateGate(agentKey: string): Promise<UpdateGate | null> {
+    try {
+      const resp = await backend.send<UpdateGate & { ok: boolean }>('onboarding.update_gate', { agent_key: agentKey })
+      return resp.payload?.ok ? resp.payload : null
+    } catch {
+      return null
+    }
+  }
+
   /**
    * Stop (or resume) raising the guided-install prompt for one CLI. Declining
    * a prompt is deliberately NOT the same as this: the prompt keeps coming
@@ -757,7 +784,7 @@ export function useOnboarding(backend: ReturnType<typeof useBackend>) {
     run, runBusy, runFallback, attachRunOutput, cancelRun, runInput, runResize,
     dismissRun, openFallbackInTerminal,
     refresh, install, pullModel, startOllamaService, runMaintenance,
-    setAutoupdatePolicy, dismissInstallPrompt, dispose,
+    setAutoupdatePolicy, updateGate, dismissInstallPrompt, dispose,
     deps, foundationDeps, cliDeps, analyzerDeps, models, modelCatalog, gate,
     foundationReady, hasAnyCli, analyzerReady, allRequiredReady, ollamaServiceUp,
     cliHealth, installPromptDismissed,

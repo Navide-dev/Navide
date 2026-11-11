@@ -1075,6 +1075,8 @@
       "stale-config-tooltip-mcp": "這個分格開啟後，此 CLI 的 MCP server 有變動。重建前它會沿用舊清單。點一下重建（接續對話）。",
       "stale-config-tooltip-skills": "這個分格開啟後，送給此 CLI 的 skills 有變動。重建前它可能沿用舊的。點一下重建（接續對話）。",
       "stale-config-tooltip-both": "這個分格開啟後，此 CLI 的 MCP server 與 skills 都有變動。重建前它會沿用舊的。點一下重建（接續對話）。",
+      "update-available-badge": "有新版",
+      "update-available-tooltip": "有新版 {latest}（這個分格是 {version}）。點一下到設定裡更新。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -10146,6 +10148,9 @@
     "use-failed": "無法讓 {label} 改用這個安裝：{error}",
     "use-done": "Navide 之後會從 {path} 啟動 {label}。",
     "autoupdate-failed": "無法變更 {label} 的自動更新設定，設定維持不變。",
+    "update-available": "有新版 {version}",
+    "update-blocked-running": "已有其他 CLI 更新在執行，請等它跑完。",
+    "update-blocked-busy": "所有 {label} 分格閒置後才能更新。未閒置：{panes}",
     "use-this": "改用這個",
     "remove": "移除",
     "autoupdate": "自動更新",
@@ -11035,6 +11040,7 @@
     "token-linked": "已用權杖連結"
   },
   "channels": {
+    "model-switched": "{who} 從聊天室把 {pane} 切到 {model}（{method}）",
     "agent": {
       "title": "agent 的請求",
       "from": "由 {requester} 提出",

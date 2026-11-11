@@ -70,6 +70,7 @@ const vendors: VendorRow[] = [
   { name: 'MiniMax Code', bin: 'mcode', agentKey: 'mcode', skipFlag: '', usage: false, multiAccount: false, signIn: 'login' },
   { name: 'Goose (AAIF)', bin: 'goose', agentKey: 'goose', skipFlag: '', flagNote: 'settings.help.cliAgents.s1.table.flagNoteGoose', usage: false, multiAccount: false, signIn: '' },
   { name: 'Devin CLI (Cognition)', bin: 'devin', agentKey: 'devin', skipFlag: '--permission-mode dangerous', usage: false, multiAccount: false, signIn: '' },
+  { name: 'Kiro CLI (AWS)', bin: 'kiro-cli', agentKey: 'kiro', skipFlag: '--trust-all-tools', usage: false, multiAccount: false, signIn: '' },
   { name: 'OpenClaw', bin: 'openclaw', agentKey: 'openclaw', skipFlag: '', usage: false, multiAccount: false, signIn: '' },
   { name: 'Hermes Agent', bin: 'hermes', agentKey: 'hermes', skipFlag: '--yolo', usage: false, multiAccount: false, signIn: '' },
 ]

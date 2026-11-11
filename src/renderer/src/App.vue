@@ -142,12 +142,14 @@ import {
   MANAGER_READY_SENTINEL,
   MANAGER_STAGE_DONE_SENTINEL,
   PROTOCOL_EXAMPLE_PROMPTS,
+  stageContextText,
   ASK_START,
   ASK_END,
   REPORT_START,
   REPORT_END,
   DISPATCH_START,
   DISPATCH_END,
+  continueNudgeText,
   type AgentKey,
   type StageId,
   type StageSlot
@@ -160,6 +162,7 @@ import { heldPaneKeys, isHeldRecord, readHeldPanes, writeHeldPanes } from './lib
 import { dockWindowLabelKey, historyEntryIsLive, workspaceHasPmPanel } from './lib/dockWindow'
 import { droppedPrefix, remapCursor, type BufferObservation } from './lib/bufferCursor'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from './lib/builtinPipelineText'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { deriveAutoName, stripCliSessionContext } from './lib/autoName'
 import { bootWorkspaceToRecord } from './lib/bootWorkspace'
@@ -230,6 +233,7 @@ import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
+import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -2907,6 +2911,7 @@ async function deliverAgentMessage(
     leftInComposer?: boolean
     foregroundBusy?: boolean
     commandRefused?: string
+    updatePrompt?: 'skipped' | 'blocked'
   } = {}
   // Sampled before typing: our own message's user record is the signal that
   // would confirm the resume, so asking afterwards could answer "confirmed" on
@@ -2923,6 +2928,12 @@ async function deliverAgentMessage(
     (held) => messaging.setDeliveringHold(paneId, held ? { key: 'pty-blocked' } : undefined),
   )
   if (!ok && outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }
+  if (!ok && outcome.updatePrompt) {
+    // The CLI's update menu took nothing: back to the head of the queue. A
+    // skipped menu lets the next pump type it; a held one waits as awaiting.
+    paneRefs[paneId]?.clearDeliveredPending?.()
+    return null
+  }
   if (!ok && outcome.foregroundBusy) {
     // A program took the shell's place between the gate's last look and the
     // write; nothing was typed. Back to the head of the queue, held until the
@@ -3939,6 +3950,7 @@ async function kickoffRequestedPane(
         pressEnter: async () => {
           const sid = paneRefs[paneId]?.sessionId
           if (!sid || !paneAlive(paneId)) return false
+          if (updatePromptOnScreen(paneId)) return false
           try {
             await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
             return true
@@ -4696,6 +4708,7 @@ function pollAwaitingPanes(): void {
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
       const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
+        || updatePromptHolds(pane.id, pane.agentKey)
       // The safety net under a held permission wait (see holdOutlivedBox): the
       // box is no longer on screen, so nothing is left to hold for.
       const held = ref.awaitingHeld?.() as { since: number } | undefined
@@ -4714,6 +4727,56 @@ function pollAwaitingPanes(): void {
       /* leave this pane's badge as-is and carry on with the rest */
     }
   }
+}
+
+// Panes held on a CLI update menu whose skip key did not take (see
+// paneClearUpdatePrompt). An unrecognized look-alike holds on its own.
+const updatePromptHeld = new Set<string>()
+
+function paneVisibleScreen(paneId: string): string {
+  try {
+    return (paneRefs[paneId]?.readVisibleScreen?.() as unknown as string) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function updatePromptOnScreen(paneId: string): boolean {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  return updatePromptState(agentKey, paneVisibleScreen(paneId)) !== 'none'
+}
+
+/** The update menu reads as awaiting: a look-alike always, the real one only
+ *  once its skip key failed — until then it is skipped by whoever types next. */
+function updatePromptHolds(paneId: string, agentKey: string): boolean {
+  const state = updatePromptState(agentKey, paneVisibleScreen(paneId))
+  if (state === 'none') updatePromptHeld.delete(paneId)
+  return state === 'suspect' || (state === 'known' && updatePromptHeld.has(paneId))
+}
+
+/** Before anything is typed into a pane: skip the CLI's own update menu with
+ *  its skip key, never Enter (lib/updatePrompt.ts). 'blocked' holds the pane
+ *  as awaiting at once, so a queued message waits instead of retrying. */
+async function paneClearUpdatePrompt(paneId: string): Promise<UpdatePromptOutcome> {
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const outcome = await clearUpdatePrompt({
+    agentKey,
+    readScreen: () => paneVisibleScreen(paneId),
+    send: async (keys) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (sid) await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+    },
+    sleep,
+    now: Date.now,
+    record: (code, message) => recordDiagnostic({
+      level: code === 'update-prompt.blocked' ? 'warn' : 'info', code, message, paneId,
+    }),
+  })
+  if (outcome === 'blocked') {
+    updatePromptHeld.add(paneId)
+    paneRefs[paneId]?.markBoxOnScreen?.(true)
+  }
+  return outcome
 }
 
 function syncViews(): void {
@@ -4842,6 +4905,10 @@ async function injectText(
      *  message after all, and how long into the grace window. */
     late?: LateSubmit
     lateMs?: number
+    /** The CLI's update menu stood in the way (lib/updatePrompt.ts): it was
+     *  skipped and nothing landed ('skipped'), or the pane is held on it
+     *  ('blocked'). No Enter went into it either way. */
+    updatePrompt?: 'skipped' | 'blocked'
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -5046,6 +5113,11 @@ async function injectText(
   let sentAt = 0
   for (let send = 1; send <= MAX_CONTENT_SENDS && !ready; send++) {
     if (aborted()) return giveUp()
+    // A CLI's update menu drops typed text and takes Enter as "update now".
+    if (paneId !== undefined && !shellTarget && await paneClearUpdatePrompt(paneId) === 'blocked') {
+      if (evidence) evidence.updatePrompt = 'blocked'
+      return false
+    }
     const preBytes = cleanBytes()
     bytesBeforeSend = preBytes
     sentAt = Date.now()
@@ -5239,9 +5311,22 @@ async function injectText(
   // Busy lines already on screen (the last turn's "Worked for 12s") say
   // nothing about this message — see lib/submitStall.ts.
   const busyBefore = busyLines(visibleScreen() ?? screenTail())
+  // The update menu came up after our text went in: the text is gone and
+  // Enter would pick "update now". Skip it and report nothing delivered, so
+  // the caller types the text again.
+  const updatePromptInTheWay = async (): Promise<boolean> => {
+    if (paneId === undefined || !updatePromptOnScreen(paneId)) return false
+    const outcome = await paneClearUpdatePrompt(paneId)
+    if (evidence) {
+      evidence.updatePrompt = outcome === 'blocked' ? 'blocked' : 'skipped'
+      evidence.leftInComposer = false
+    }
+    return true
+  }
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
     if (stillWanted && !stillWanted()) return stopBeforeEnter()
+    if (await updatePromptInTheWay()) return false
     // Never press a resent Enter into a dialog. Our earlier Enter most likely
     // started the work that raised it, but nothing confirms that.
     if (attempt > 1 && dialogShown()) {
@@ -5302,6 +5387,7 @@ async function injectText(
             stoppedAtExtraEnter = true
             return false
           }
+          if (await updatePromptInTheWay()) return false
           try {
             await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
             return true
@@ -7312,6 +7398,8 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (!paneAlive(paneId)) return false
     const ref = paneRefs[paneId]
     if (!ref) return false
+    // Enter on a CLI's update menu is "update now": skip it with its own key.
+    if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
       if (ref.sessionId) {
@@ -7776,7 +7864,7 @@ function scheduleInjection(pane: ActivePane): void {
     }
     if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
-      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf))) {
+      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
         const r = paneRefs[pane.id]
         if (r?.sessionId) {
@@ -8152,11 +8240,26 @@ async function sendSessionMarkerBootstrap(pane: ActivePane, tag: string): Promis
       label: `session-marker:${pane.agentKey}`,
       text: markerText
     }).catch(() => {/* ignore */})
-    await backend.send('terminal.input', {
-      terminal_session_id: ref.sessionId as string,
-      data: BRACKETED_PASTE_START + markerText + BRACKETED_PASTE_END
-    })
-    await sleep(250)
+    // A CLI update menu drops the paste and takes Enter as "update now": skip
+    // it with its own key and paste again; one that will not go is left alone.
+    let typed = false
+    for (let attempt = 1; attempt <= 2 && !typed; attempt++) {
+      if ((await paneClearUpdatePrompt(pane.id)) === 'blocked') {
+        pipelineLog(`${tag} ⏸ CLI update menu on screen — session marker not sent`)
+        return false
+      }
+      await backend.send('terminal.input', {
+        terminal_session_id: ref.sessionId as string,
+        data: BRACKETED_PASTE_START + markerText + BRACKETED_PASTE_END
+      })
+      await sleep(250)
+      typed = !updatePromptOnScreen(pane.id)
+    }
+    if (!typed) {
+      await paneClearUpdatePrompt(pane.id)
+      pipelineLog(`${tag} ⏸ CLI update menu kept coming back — session marker not sent`)
+      return false
+    }
     await backend.send('terminal.input', {
       terminal_session_id: ref.sessionId as string,
       data: '\r'
@@ -10832,12 +10935,12 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions' | 'agents'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'cliAgents' | 'notifications' | 'extensions' | 'agents'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
   setTab: (tab: string) => void
-  setSection: (tab: string, section: string) => Promise<void>
+  setSection: (tab: string, section: string, query?: string) => Promise<void>
 } | null>(null)
 function openSettingsAt(tab: typeof settingsInitialTab.value): void {
   settingsInitialTab.value = tab
@@ -11591,6 +11694,44 @@ registerCommand('ui.plugins.openMarketplace', (args) => {
   openMarketplaceDetail(link.target)
   return { opened: 'marketplace-detail' }
 })
+// CLIs with a newer release (onboarding.update_notices), for the pane
+// header's "update available" badge. Checked on connect and hourly: the
+// backend caches its registry lookup, so this is one `--version` per CLI.
+const cliUpdateNotices = ref<Record<string, { version: string; latest_version: string }>>({})
+const CLI_UPDATE_NOTICE_POLL_MS = 3_600_000
+async function refreshCliUpdateNotices(): Promise<void> {
+  if (backend.status.value !== 'connected') return
+  try {
+    const resp = await backend.send<{ ok: boolean; notices?: typeof cliUpdateNotices.value }>(
+      'onboarding.update_notices', {}, ONBOARDING_STATUS_TIMEOUT_MS)
+    if (resp.payload?.ok) cliUpdateNotices.value = resp.payload.notices ?? {}
+  } catch {
+    // Keep what was shown; the next tick asks again.
+  }
+}
+watch(() => backend.status.value, (s) => { if (s === 'connected') void refreshCliUpdateNotices() }, { immediate: true })
+onMounted(() => {
+  const timer = window.setInterval(() => void refreshCliUpdateNotices(), CLI_UPDATE_NOTICE_POLL_MS)
+  onUnmounted(() => window.clearInterval(timer))
+})
+// Closing Settings is where an update just run there ends up.
+watch(showSettings, (open) => { if (!open) void refreshCliUpdateNotices() })
+
+function paneUpdateAvailable(p: ActivePane): { version: string; latest: string } | null {
+  const notice = cliUpdateNotices.value[p.agentKey]
+  return notice ? { version: notice.version, latest: notice.latest_version } : null
+}
+
+/** The badge's click: that CLI's drawer in Settings, where its update runs
+ *  in a terminal the user can see. */
+function openCliUpdate(agentKey: string): void {
+  settingsInitialTab.value = 'cliAgents'
+  showSettings.value = true
+  void nextTick(() => {
+    void settingsModalRef.value?.setSection('cliAgents', 'cli-agents-maintenance', agentKey)
+  })
+}
+
 function openExtensionsSection(section: string): void {
   settingsInitialTab.value = 'extensions'
   showSettings.value = true
@@ -15532,6 +15673,7 @@ async function preSpawnStage(index: number): Promise<void> {
  *  them directly. Uses prevPane.outputLogFile + the live cleanBuffer. */
 function buildStageContext(index: number, forManager: boolean): string {
   const WORKER_SUMMARY = 1200
+  const text = stageContextText()
   const blocks: string[] = []
   for (let i = 0; i < index; i++) {
     const prevStage = stagesApi.stages.value[i]
@@ -15540,29 +15682,30 @@ function buildStageContext(index: number, forManager: boolean): string {
       (p) => p.stageId === prevStage.id && p.origin === 'pipeline' && !isPriorRunPane(p.id)
     )
     for (const prevPane of prevPanes) {
+      const title = builtinTextForUi(prevStage.title)
       const label = prevPane.slotLabel
-        ? `${prevStage.title} · ${prevPane.slotLabel}`
-        : prevStage.title
+        ? `${title} · ${prevPane.slotLabel}`
+        : title
       const relPath =
         prevPane.outputLogFile && pipeline.workspacePath
           ? prevPane.outputLogFile.replace(`${pipeline.workspacePath}/`, '')
           : (prevPane.outputLogFile ?? '')
       if (forManager) {
-        blocks.push(`- [${label}] 📄 ${relPath || '(無 log 檔)'}`)
+        blocks.push(`- [${label}] 📄 ${relPath || text.noLog}`)
       } else {
         const ref = paneRefs[prevPane.id]
         const buf = ((ref?.cleanBuffer as unknown as string) ?? '').trim()
         if (!buf && !relPath) continue
         const summary =
-          buf.length > WORKER_SUMMARY ? `…${buf.slice(-WORKER_SUMMARY)}` : buf || '(無輸出)'
-        blocks.push(`- [${label}]\n  摘要：${summary}\n  📄 完整內容：${relPath || '(無 log 檔)'}`)
+          buf.length > WORKER_SUMMARY ? `…${buf.slice(-WORKER_SUMMARY)}` : buf || text.noOutput
+        blocks.push(`- [${label}]\n  ${text.summary}${summary}\n  📄 ${text.fullContent}${relPath || text.noLog}`)
       }
     }
   }
   if (blocks.length === 0) return ''
   return forManager
-    ? `[完整前置歷程 — 你是 Manager，負責協調，請逐一完整讀取下列檔案]\n${'='.repeat(60)}\n${blocks.join('\n')}\n${'='.repeat(60)}\n\n`
-    : `[前置階段產出 — 下為摘要，需要細節請讀對應檔案]\n${'='.repeat(60)}\n${blocks.join(`\n${'─'.repeat(60)}\n`)}\n${'='.repeat(60)}\n（開始前請先讀取與你任務相關的檔案）\n\n`
+    ? `${text.managerHeader}\n${'='.repeat(60)}\n${blocks.join('\n')}\n${'='.repeat(60)}\n\n`
+    : `${text.workerHeader}\n${'='.repeat(60)}\n${blocks.join(`\n${'─'.repeat(60)}\n`)}\n${'='.repeat(60)}\n${text.workerFooter}\n\n`
 }
 
 /** Inject kickoffs into pre-spawned panes for one stage, then arm watchers.
@@ -16604,6 +16747,7 @@ function kickoffCopyInBox(paneId: string, text: string, stillWanted?: () => bool
           }
           return false
         }
+        if (updatePromptOnScreen(paneId)) return false
         try {
           await backend.send('terminal.input', { terminal_session_id: sid, data: '\r' })
           return true
@@ -20575,7 +20719,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           pipelineLog(`Stage ${stage.id} ⚡ CLI idle after answer — nudging agent to continue`)
           ;(async () => {
             const sessionId = (ref.sessionId as string | undefined)
-            if (sessionId) await injectText(sessionId, '請繼續', `nudge:${stage.id}`)
+            if (sessionId) await injectText(sessionId, continueNudgeText(), `nudge:${stage.id}`)
           })()
         }
       }
@@ -20880,7 +21024,7 @@ function handleAnalyzerResult(
       stageIndex,
       questions: qs.map((q) => ({ prompt: q.prompt, type: q.type, options: q.options })),
       agentLabel: paneMeta?.agentLabel ?? 'Agent',
-      stageTitle: `${stage.title} · 🧠 analyzer`,
+      stageTitle: `${builtinTextForUi(stage.title)} · 🧠 analyzer`,
       slotLabel: paneMeta?.slotLabel ?? ''
     })
     const choiceCount = qs.filter((q) => q.type === 'choice').length
@@ -25014,7 +25158,7 @@ function paneSubtitle(p: ActivePane): string {
   if (p.origin !== 'pipeline' && !p.stageId) return `${agentType} · ${roleLabel(p.roleKey)} · ${i18n.global.t('label.manual')} · ${preparationLabel}`
   const stage = stagesApi.stageById.value[p.stageId] ?? { shortTitle: p.stageId }
   const prefix = p.origin === 'pipeline' ? `P${p.stageId} · ` : ''
-  const stageLabel = stage.shortTitle || i18n.global.t('label.manual')
+  const stageLabel = builtinTextForUi(stage.shortTitle) || i18n.global.t('label.manual')
   return `${prefix}${agentType} · ${roleLabel(p.roleKey)} · ${stageLabel} · ${preparationLabel}`
 }
 
@@ -25440,7 +25584,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :visible="!!activeQuestion"
       :questions="activeQuestion?.questions ?? []"
       :agent-label="activeQuestion?.agentLabel"
-      :stage-title="activeQuestion?.stageTitle"
+      :stage-title="builtinTextForUi(activeQuestion?.stageTitle ?? '')"
       :slot-label="activeQuestion?.slotLabel"
       :queue-len="questionQueueLen"
       :pane-id="activeQuestion?.paneId"
@@ -25459,7 +25603,7 @@ function paneIsCommander(p: ActivePane): boolean {
             <span v-if="stageStallPrompt.slotLabel" class="stall-slot">· {{ stageStallPrompt.slotLabel }}</span>
           </header>
           <div class="stall-body">
-            <div class="stall-title">{{ stageStallPrompt.stageTitle }}</div>
+            <div class="stall-title">{{ builtinTextForUi(stageStallPrompt.stageTitle) }}</div>
             <div class="stall-reason">
               {{ stageStallPrompt.reason === 'idle'
                 ? `⏸ ${$t('label.stall-reason-idle')}`
@@ -25880,6 +26024,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"
+          :update-available="paneUpdateAvailable(p)"
+          :open-cli-update="() => openCliUpdate(p.agentKey)"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

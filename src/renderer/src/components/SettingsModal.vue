@@ -477,11 +477,12 @@ defineExpose({
   // Same two steps the search results take, for a caller outside this window
   // that knows which section it means — the account view pointing at the rules,
   // for one, which it used to do in prose and with nowhere to click.
-  setSection: async (tab: Tab, section: string): Promise<void> => {
+  // `query` names the CLI a cliAgents section opens on (see openCliSection).
+  setSection: async (tab: Tab, section: string, query = ''): Promise<void> => {
     activeTab.value = tab
     if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'extensions' && PLUGINS_SECTION_PAGE[section]) pluginsPage.value = PLUGINS_SECTION_PAGE[section]
-    if (tab === 'cliAgents') await openCliSection(section)
+    if (tab === 'cliAgents') await openCliSection(section, query)
     await nextTick()
     requestAnimationFrame(() => {
       document

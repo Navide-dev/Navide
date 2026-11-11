@@ -257,7 +257,10 @@ def test_hook_vendors_are_exactly_those_declaring_an_installer() -> None:
     declared = {k for k, s in VENDORS.items() if s.install_hooks is not None}
 
     assert declared == set(app_module._HOOK_VENDORS)
-    assert declared == {"claude", "copilot", "qwen"}
+    assert declared == {"claude", "copilot", "qwen", "kiro"}
+    # Only kiro names its pane by the spawn token; the others keep waiting for
+    # their log path to attribute the session.
+    assert app_module._HOOK_PANE_TOKEN_VENDORS == {"kiro"}
 
 
 def test_each_declared_installer_is_callable_and_isolated(monkeypatch, tmp_path) -> None:
@@ -495,6 +498,78 @@ def test_hook_with_no_resolvable_pane_records_nothing(
         json={"session_id": "unclaimed", "cwd": "/ws/alpha"},
     )
     assert app_module._pane_activity == {}
+
+
+def _token_pane(monkeypatch, pane_id: str, token: str) -> None:
+    """A live PTY whose spawn environment carries ``token`` for ``pane_id``."""
+    from types import SimpleNamespace
+
+    term = SimpleNamespace(pane_id=pane_id, closed=False, metadata={"guard_pane_token": token})
+    monkeypatch.setitem(app_module._PTY_OWNERS, "t-kiro", SimpleNamespace(terminals={"t-kiro": term}))
+
+
+def test_kiro_stop_hook_names_its_pane_by_the_spawn_token(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """Kiro has no log reader, so no session is ever attributed: its Stop hook
+    finds the pane by the token Navide put in the pane's environment, and the
+    turn end reaches cli_wait_idle like any other hook vendor's."""
+    from agent_team_backend import agent_messaging, guard_hooks
+
+    agent_messaging._reset_for_test()
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: (None, None, None)
+    )
+    _token_pane(monkeypatch, "kiro-pane", "kiro-token")
+    agent_messaging.register("kiro-pane", "kiro-worker", "/ws/alpha", agent_key="kiro")
+    try:
+        # What Kiro pipes to a Stop hook (kiro.dev/docs/hooks).
+        body = {"hook_event_name": "Stop", "session_id": "kiro-s-1", "cwd": "/ws/alpha/sub"}
+        resp = client.post(
+            "/hooks/kiro",
+            headers={"X-Agent-Team-Event": "stop", guard_hooks.PANE_TOKEN_HEADER: "kiro-token"},
+            json=body,
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
+        assert app_module._pane_activity["kiro-pane"]["event_type"] == "turn_complete"
+        payload = _payload(events)
+        assert payload["vendor"] == "kiro"
+        assert payload["event_type"] == "turn_complete"
+        assert payload["pane_id"] == "kiro-pane"
+        assert payload["workspace_path"] == "/ws/alpha"
+
+        # A wrong token, or none (a Kiro session outside Navide), names nobody.
+        app_module._pane_activity.clear()
+        for headers in ({guard_hooks.PANE_TOKEN_HEADER: "wrong"}, {}):
+            client.post("/hooks/kiro", headers={"X-Agent-Team-Event": "stop", **headers}, json=body)
+        assert app_module._pane_activity == {}
+    finally:
+        agent_messaging._reset_for_test()
+        app_module._pane_activity.clear()
+
+
+@pytest.mark.parametrize("vendor", ["claude", "copilot", "qwen"])
+def test_the_spawn_token_does_not_name_a_pane_for_the_other_hook_vendors(
+    vendor: str, client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    """claude and copilot hooks send the same token header. Their turn ends
+    still wait for the log path to attribute the session, as before."""
+    from agent_team_backend import guard_hooks
+
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: (None, None, None)
+    )
+    _token_pane(monkeypatch, "token-pane", "tok")
+    client.post(
+        f"/hooks/{vendor}",
+        headers={"X-Agent-Team-Event": "stop", guard_hooks.PANE_TOKEN_HEADER: "tok"},
+        json={"session_id": "unclaimed", "cwd": "/ws/alpha"},
+    )
+    assert app_module._pane_activity == {}
+    assert _payload(events)["pane_id"] == ""
 
 
 # ── Background-subagent counting ───────────────────────────────────────────

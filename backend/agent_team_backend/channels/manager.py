@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import held, media, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import held, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -69,7 +69,7 @@ WAKE_WORDS = {"/wake"}
 MATTERMOST_WAKE_WORD = "wake"
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
-                      WAKE_CALLBACK: "/wake"}
+                      WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -77,6 +77,9 @@ MAX_QUEUED_PER_PANE = 20
 CHAT_RATE_MAX = 30
 CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
+# /model on a busy pane: how often its idle state is checked, and how long it is waited for.
+MODEL_WAIT_POLL_S = 1.0
+MODEL_WAIT_TIMEOUT_S = 900.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
 STATUS_SEND_WAIT_S = 5.0  # how long a turn's end waits for a status message still on its way
@@ -286,6 +289,17 @@ class Seams:
     # The text the pane's own log holds for its last turn since a wall-clock time ("" when
     # it holds none): a direct read, for a run whose log events never came.
     turn_text: Callable[[str, float], Awaitable[str]] = lambda *_a: _no_turn_text()
+    # pane_id -> {agent_key, model, effort, supports_model, efforts, known}: the recorded
+    # model and effort, what the CLI accepts, and the models this workspace's panes of the
+    # same CLI were recorded on; {} when unknown. Blocking (reads the pane records)
+    pane_model: Callable[[str], dict[str, Any]] = lambda _pane_id: {}
+    # (pane_id, model, effort, who) -> cli_set_model's answer: {ok, pane_id, method,
+    # fallback?} or {ok: False, error, error_code, hold?}; audited as from `who`
+    set_model: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_set_model()
+
+
+async def _no_set_model() -> dict[str, Any]:
+    return {"ok": False, "error": "model switching is not available", "error_code": "unavailable"}
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -476,6 +490,9 @@ class ChannelManager:
         self._managed: dict[str, _ManagedRequest] = {}  # request_id -> open t.me/newbot request
         self.relay = relay.RelayTable(clock=clock, on_expired=self._relay_expired)
         self.quick = quick_menu.QuickMenus(clock=clock)
+        self.models = model_menu.ModelMenus(clock=clock)
+        # pane id -> (its wait task, the message that asked, pane name, model shown, lang)
+        self._model_waits: dict[str, tuple[asyncio.Task[Any], InboundMessage, str, str, str]] = {}
         self.share_buttons = share_cmds.RevokeButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
@@ -1950,6 +1967,9 @@ class ChannelManager:
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
             await self._quick_press(msg)
             return
+        if model_menu.parse_callback(msg.callback_data) is not None:
+            await self._model_press(msg)
+            return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
         wake_pressed = msg.callback_data == WAKE_CALLBACK
@@ -2031,6 +2051,10 @@ class ChannelManager:
             return
         if _command_word(command) in RESUME_WORDS:
             await self._resume(msg, pane_id)
+            return
+        model_cmd = model_menu.parse_command(command)
+        if model_cmd is not None:
+            await self._model_command(msg, binding, pane_id, model_cmd)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
@@ -3027,6 +3051,287 @@ class ChannelManager:
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: sending the quick menu on %s failed: %s", msg.platform, exc)
             await self._reply(msg, quick_menu.text(lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    # --- /model: switch a pane's model from the chat (channels.model_menu) ----------------
+
+    async def model_buttons(self) -> list[tuple[str, str]]:
+        """The /status button that opens /model, in the Navide language."""
+        lang = prompt_skills.language(await self._ui_settings())
+        return [(model_menu.text(lang, "open"), model_menu.OPEN_CALLBACK)]
+
+    async def _model_rows(self, root_pane_id: str, binding: Binding) -> list[model_menu.PaneRow]:
+        """The panes /model offers: the bound pane and its children (the /status tree),
+        minus the ones without a model to switch."""
+        directory = self.mirror._directory()
+        ids = [root_pane_id, *(str(p["pane_id"]) for _, p in self.mirror.descendants(root_pane_id, directory))]
+        rows: list[model_menu.PaneRow] = []
+        for pid in ids:
+            if self._seams.is_login_pane(pid):
+                continue
+            try:
+                info = await asyncio.to_thread(self._seams.pane_model, pid)
+            except Exception as exc:  # noqa: BLE001 — the pane is left out, the rest still listed
+                log.warning("channels: reading the model of %s failed: %s", pid, exc)
+                continue
+            agent = str(info.get("agent_key") or self._seams.pane_agent(pid) or "")
+            if not agent or agent == "terminal" or not info.get("supports_model", True):
+                continue
+            current = str(info.get("model") or "")
+            fallback = binding.title.removeprefix("↳ ") if pid == root_pane_id and binding.title else pid
+            rows.append(model_menu.PaneRow(
+                pane_id=pid, name=str((directory.get(pid) or {}).get("name") or fallback),
+                agent_key=agent, model=current, efforts=tuple(info.get("efforts") or ()),
+                models=model_menu.model_options(agent, current, list(info.get("known") or [])),
+            ))
+        return rows
+
+    @staticmethod
+    def _model_who(msg: InboundMessage) -> str:
+        return f"{msg.platform}:{msg.sender_name or msg.sender_id}"
+
+    async def _model_command(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                             parsed: tuple[int | None, str, str]) -> None:
+        """``/model`` opens the menu (numbered lines where there are no buttons);
+        ``/model [n] <model> [effort]`` switches pane n (default: the bound one) at once,
+        and on a busy pane waits for it to go idle."""
+        lang = prompt_skills.language(await self._ui_settings())
+        index, model, effort = parsed
+        rows = await self._model_rows(pane_id, binding)
+        if not rows:
+            await self._reply(msg, model_menu.text(lang, "no_panes"))
+            return
+        if model:
+            if index is not None and not 1 <= index <= len(rows):
+                await self._reply(msg, self._model_list(rows, lang))
+                return
+            await self._model_switch(msg, rows[(index or 1) - 1], model, effort, lang)
+            return
+        if not self._menu_buttons(msg):
+            await self._reply(msg, self._model_list(rows, lang))
+            return
+        menu = self.models.create(location_key=msg.location_key(), sender_id=msg.sender_id, lang=lang,
+                                  root_pane_id=pane_id, panes=rows)
+        if index is not None and 1 <= index <= len(rows):
+            menu.step, menu.pane_id = "model", rows[index - 1].pane_id
+        await self._model_show(msg, menu)
+
+    @staticmethod
+    def _model_list(rows: list[model_menu.PaneRow], lang: str) -> str:
+        lines = [model_menu.text(lang, "pick_pane")]
+        for i, r in enumerate(rows, 1):
+            models = ", ".join(m for m, _ in r.models)
+            lines.append(f"{i}. {r.name} · {r.agent_key} · {r.model or model_menu.text(lang, 'default')}"
+                         + (f" — {models}" if models else ""))
+        lines.append(model_menu.text(lang, "list_hint"))
+        return "\n".join(lines)
+
+    async def _model_show(self, msg: InboundMessage, menu: model_menu.Menu, body: str | None = None) -> None:
+        """Render the menu's step into its message (a new one the first time)."""
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        text, rows = self.models.render(menu)
+        text = redact.redact_text(body if body is not None else text)
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if menu.message_id:
+            try:
+                await adapter.edit_menu(loc, menu.message_id, text, rows)
+                return
+            except Exception as exc:  # noqa: BLE001 — sent afresh below
+                log.warning("channels: editing the model menu on %s failed: %s", msg.platform, exc)
+        try:
+            menu.message_id = await adapter.send_menu(loc, text, rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the model menu on %s failed: %s", msg.platform, exc)
+            self.models.close(menu)
+            await self._reply(msg, quick_menu.text(menu.lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    async def _model_settle(self, msg: InboundMessage, menu: model_menu.Menu, body: str) -> None:
+        """The menu's message as plain text, its buttons gone (the menu itself is kept)."""
+        self.models.freeze(menu)
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not menu.message_id:
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            await adapter.edit_menu(loc, menu.message_id, redact.redact_text(body), [])
+        except Exception as exc:  # noqa: BLE001 — its buttons are dead anyway
+            log.warning("channels: closing the model menu on %s failed: %s", msg.platform, exc)
+
+    async def _model_press(self, msg: InboundMessage) -> None:
+        token = model_menu.parse_callback(msg.callback_data) or ""
+        press, why = self.models.press(token, msg.location_key(), msg.sender_id)
+        lang = press.menu.lang if press is not None else prompt_skills.language(await self._ui_settings())
+        if press is None:
+            await self._reply(msg, model_menu.text(lang, why or "expired"))
+            return
+        menu = press.menu
+        binding = self._binding_for(msg)
+        root = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+
+        async def expired() -> None:
+            self.models.close(menu)
+            await self._model_settle(msg, menu, model_menu.text(lang, "expired"))
+
+        # A menu made for a pane tree the chat no longer drives is as dead as an expired one.
+        if binding is None or not root or root != self._seams.resolve_pane(menu.root_pane_id):
+            await expired()
+            return
+        if press.action == "cancel":
+            self.models.close(menu)
+            await self._model_settle(msg, menu, model_menu.text(lang, "cancelled"))
+            return
+        if press.action == "back":
+            menu.step, menu.pane_id, menu.with_effort = "pane", "", False
+            await self._model_show(msg, menu)
+            return
+        if press.action == "effort-step":
+            menu.with_effort = not menu.with_effort
+            await self._model_show(msg, menu)
+            return
+        # Re-read the tree: the pane may have closed, moved away or restarted under a new id.
+        live = {r.pane_id: r for r in await self._model_rows(root, binding)}
+        target = press.value if press.action == "pane" else menu.pane_id
+        row = live.get(target)
+        if row is None:
+            await expired()
+            return
+        if press.action == "pane":
+            menu.step, menu.pane_id, menu.with_effort = "model", row.pane_id, False
+            await self._model_show(msg, menu)
+            return
+        if press.action == "model":
+            if press.value not in {m for m, _ in row.models}:
+                await expired()
+                return
+            menu.model, menu.effort = press.value, ""
+            if menu.with_effort and row.efforts:
+                menu.step = "effort"
+                await self._model_show(msg, menu)
+                return
+        elif press.action == "effort":
+            if press.value not in row.efforts or not menu.model:
+                await expired()
+                return
+            menu.effort = press.value
+        elif press.action == "wait":
+            if not menu.model:
+                await expired()
+                return
+            self.models.close(menu)
+            await self._model_settle(msg, menu, self._model_queued_text(row.name, menu.model, menu.effort, lang))
+            self._model_queue(msg, row, menu.model, menu.effort, lang)
+            return
+        await self._model_switch(msg, row, menu.model, menu.effort, lang, menu=menu)
+
+    @staticmethod
+    def _model_shown(model: str, effort: str) -> str:
+        return f"{model} · {effort}" if effort else model
+
+    def _model_queued_text(self, pane: str, model: str, effort: str, lang: str) -> str:
+        return model_menu.text(lang, "queued", pane=pane, model=self._model_shown(model, effort),
+                               minutes=int(MODEL_WAIT_TIMEOUT_S // 60))
+
+    async def _model_switch(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                            lang: str, menu: model_menu.Menu | None = None) -> None:
+        shown = self._model_shown(model, effort)
+        if menu is not None:
+            await self._model_settle(msg, menu, model_menu.text(lang, "switching", pane=row.name, model=shown))
+        result = await self._seams.set_model(row.pane_id, model, effort, self._model_who(msg))
+        if not result.get("ok") and result.get("error_code") == "pane-busy":
+            # Not interrupted: offered a switch once it is idle (a typed /model asked for it outright).
+            body = model_menu.text(lang, "busy", pane=row.name)
+            if result.get("hold") == "awaiting":
+                body += "\n" + model_menu.text(lang, "busy_awaiting")
+            if menu is not None:
+                menu.step = "busy"
+                await self._model_show(msg, menu, body=body)
+                return
+            await self._reply(msg, body + "\n" + self._model_queued_text(row.name, model, effort, lang))
+            self._model_queue(msg, row, model, effort, lang)
+            return
+        if menu is not None:
+            self.models.close(menu)
+        await self._model_report(msg, row, model, effort, result, lang)
+
+    async def _model_report(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                            result: dict[str, Any], lang: str) -> None:
+        shown = self._model_shown(model, effort)
+        if result.get("ok"):
+            new_id = str(result.get("pane_id") or row.pane_id)
+            lines = [model_menu.text(lang, "ok", pane=row.name, model=shown, method=str(result.get("method") or ""))]
+            if new_id != row.pane_id:
+                lines.append(model_menu.text(lang, "restarted", old=row.pane_id, new=new_id))
+            if result.get("fallback"):
+                lines.append(model_menu.text(lang, "fallback", reason=str(result["fallback"])))
+            lines.append(model_menu.text(lang, "audited"))
+            # Shown in the Navide window too: whoever sits there sees who changed which model.
+            await self._seams.broadcast("channels.model_switched", {
+                "pane_id": row.pane_id, "new_pane_id": new_id, "pane_name": row.name,
+                "model": model, "effort": effort, "method": str(result.get("method") or ""),
+                "who": self._model_who(msg), "platform": msg.platform,
+            })
+        else:
+            error = str(result.get("error") or result.get("error_code") or "")
+            lines = [model_menu.text(lang, "failed", pane=row.name, model=shown, error=error)]
+        await self._reply(msg, redact.redact_text("\n".join(lines)))
+
+    def _model_queue(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                     lang: str) -> None:
+        """Switch once the pane is idle; one wait per pane, the newer replacing the older."""
+        old = self._model_waits.pop(row.pane_id, None)
+        if old is not None:
+            task, old_msg, pane, old_shown, old_lang = old
+            task.cancel()
+            self._spawn(self._reply(old_msg, model_menu.text(old_lang, "replaced", pane=pane, model=old_shown)))
+        task = self._spawn(self._model_wait(msg, row, model, effort, lang))
+        self._model_waits[row.pane_id] = (task, msg, row.name, self._model_shown(model, effort), lang)
+
+    async def _model_still_allowed(self, msg: InboundMessage, pane_id: str) -> bool:
+        """What a press checks, asked again: channels on, the sender still allowed, the chat
+        still bound, and the pane still in its tree."""
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            return False
+        if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            return False
+        binding = self._binding_for(msg)
+        root = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+        if binding is None or not root:
+            return False
+        return pane_id in {r.pane_id for r in await self._model_rows(root, binding)}
+
+    async def _model_wait(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                          lang: str) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + MODEL_WAIT_TIMEOUT_S
+        me = asyncio.current_task()
+        try:
+            while loop.time() < deadline:
+                await asyncio.sleep(MODEL_WAIT_POLL_S)
+                pane_id = self._seams.resolve_pane(row.pane_id)
+                state = self._seams.pane_state(pane_id) if pane_id else {"exists": False}
+                if not state.get("exists", True):
+                    await self._model_report(msg, row, model, effort,
+                                             {"ok": False, "error": "pane is gone", "error_code": "pane-gone"}, lang)
+                    return
+                if state.get("busy") or state.get("display_status") == "awaiting":
+                    continue
+                # Up to 15 minutes may have passed: the switch is made only on what holds now.
+                if not await self._model_still_allowed(msg, pane_id):
+                    await self._reply(msg, model_menu.text(lang, "expired"))
+                    return
+                result = await self._seams.set_model(pane_id, model, effort, self._model_who(msg))
+                if not result.get("ok") and result.get("error_code") == "pane-busy":
+                    continue  # busy again the moment it was asked: keep waiting
+                await self._model_report(msg, row, model, effort, result, lang)
+                return
+            await self._reply(msg, model_menu.text(lang, "timeout", pane=row.name,
+                                                   model=self._model_shown(model, effort),
+                                                   minutes=int(MODEL_WAIT_TIMEOUT_S // 60)))
+        finally:
+            held_wait = self._model_waits.get(row.pane_id)
+            if held_wait is not None and held_wait[0] is me:
+                del self._model_waits[row.pane_id]
 
     def _menu_buttons(self, msg: InboundMessage) -> bool:
         """Whether this chat's quick menus come as buttons rather than numbered lines."""

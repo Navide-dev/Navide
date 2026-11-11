@@ -1075,6 +1075,8 @@
       "stale-config-tooltip-mcp": "Các máy chủ MCP của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng danh sách cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
       "stale-config-tooltip-skills": "Các skills gửi cho CLI này đã đổi sau khi pane khởi động. Nó có thể vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
       "stale-config-tooltip-both": "Các máy chủ MCP và skills của CLI này đã đổi sau khi pane khởi động. Nó vẫn dùng bản cũ cho đến khi được dựng lại. Bấm để dựng lại (tiếp tục cuộc trò chuyện).",
+      "update-available-badge": "Có bản mới",
+      "update-available-tooltip": "Đã có {latest} (khung này đang chạy {version}). Bấm để cập nhật trong Cài đặt.",
       "usage-limit-badge": "⛔ trở lại lúc {time}",
       "usage-limit-badge-unknown": "⛔ hết hạn mức",
       "usage-limit-tooltip": "CLI này đã hết hạn mức — dự kiến dùng lại được lúc {time}. Nhấp để bỏ qua",
@@ -10146,6 +10148,9 @@
     "use-failed": "Không chuyển {label} sang bản cài này được: {error}",
     "use-done": "Từ giờ Navide sẽ khởi chạy {label} từ {path}.",
     "autoupdate-failed": "Không đổi được cài đặt tự động cập nhật của {label}; cài đặt vẫn như cũ.",
+    "update-available": "Phiên bản mới {version}",
+    "update-blocked-running": "Đang có một bản cập nhật CLI khác chạy. Hãy đợi nó xong.",
+    "update-blocked-busy": "Chỉ cập nhật khi mọi khung {label} đều rảnh. Chưa rảnh: {panes}",
     "use-this": "Dùng bản này",
     "remove": "Gỡ",
     "autoupdate": "Tự động cập nhật",
@@ -11035,6 +11040,7 @@
     "token-linked": "Đã liên kết bằng token"
   },
   "channels": {
+    "model-switched": "{who} đã đổi {pane} sang {model} từ cuộc trò chuyện ({method})",
     "agent": {
       "title": "Yêu cầu từ agent",
       "from": "Do {requester} yêu cầu",

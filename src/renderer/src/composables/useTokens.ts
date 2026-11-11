@@ -35,10 +35,13 @@ export interface CumulativeSnapshot {
   by_version?: Record<string, TokenBucket>
 }
 
+/** The panel asks for `global: 'all_time'`, so only `all_time` is always
+ *  present; the history fields come with a full snapshot or a legacy
+ *  `tokens.changed` event. */
 export interface GlobalSnapshot {
   all_time: TokenBucket
-  by_vendor: Record<string, TokenBucket>
-  by_day: Record<string, TokenBucket>
+  by_vendor?: Record<string, TokenBucket>
+  by_day?: Record<string, TokenBucket>
   by_account?: Record<string, TokenBucket>
   by_version?: Record<string, TokenBucket>
 }
@@ -59,6 +62,9 @@ export interface TokensSnapshot {
 }
 
 export type ResetScope = 'run' | 'workspace' | 'global'
+
+/** At most one refetch per this long while notices keep arriving. */
+export const TOKENS_NOTICE_REFRESH_MS = 1_000
 
 export function emptyBucket(): TokenBucket {
   return { input: 0, output: 0, calls: 0 }
@@ -89,7 +95,8 @@ export function useTokens(
     lastError.value = ''
     try {
       const resp = await backend.send<TokensSnapshot>('tokens.snapshot', {
-        workspace_path: workspacePath.value || undefined
+        workspace_path: workspacePath.value || undefined,
+        global: 'all_time'
       })
       if (seq !== refreshSeq) return
       if (resp.ok && resp.payload) {
@@ -132,6 +139,30 @@ export function useTokens(
     }
   })
 
+  // A backend that knows `tokens.watch` sends a small notice instead of the
+  // snapshot; refetch, coalescing a burst into one trailing request.
+  let noticeTimer: ReturnType<typeof setTimeout> | null = null
+  let lastNoticeRefresh = 0
+  const unsubNotice = backend.on('tokens.notice', (raw) => {
+    const theirs = (raw as { workspace_path?: string } | null)?.workspace_path || ''
+    if (theirs !== (workspacePath.value || '') || noticeTimer) return
+    const wait = Math.max(0, lastNoticeRefresh + TOKENS_NOTICE_REFRESH_MS - Date.now())
+    noticeTimer = setTimeout(() => {
+      noticeTimer = null
+      lastNoticeRefresh = Date.now()
+      void refresh()
+    }, wait)
+  })
+  let releaseWatch: (() => void) | undefined
+  watch(
+    workspacePath,
+    (path) => {
+      releaseWatch?.()
+      releaseWatch = backend.watchTokens?.(path || '')
+    },
+    { immediate: true }
+  )
+
   // Re-fetch on connect transition + workspace change. Watch via array so
   // both inputs trigger one common handler.
   watch(
@@ -148,6 +179,9 @@ export function useTokens(
 
   onScopeDispose(() => {
     unsubChanged()
+    unsubNotice()
+    releaseWatch?.()
+    if (noticeTimer) clearTimeout(noticeTimer)
   })
 
   return { snapshot, loading, lastError, refresh, reset }

@@ -18,17 +18,23 @@ def _refusal(code: str, error: str, **extra: Any) -> dict[str, Any]:
     return {"ok": False, "error": error, "error_code": code, **extra}
 
 
-def _audit(pane: Any, who: str, model: str, effort: str, method: str) -> None:
+def _audit(
+    pane: Any, who: str, model: str, effort: str, method: str, *, source: str = "agent",
+    refused: str = "",
+) -> None:
     """Record the switch in the pane's Navide Guard audit trail, so a model
-    change can be traced to the agent that asked for it."""
+    change can be traced to whoever asked for it: an agent over MCP, or a
+    chat sender (source "channel", `who` like "telegram:alice")."""
     from agent_team_backend.guard import runtime as guard_runtime
 
     what = f"model={model}" + (f" effort={effort}" if effort else "")
+    by = f"by agent {who} via MCP" if source == "agent" else f"by {who} via chat"
     try:
         guard_runtime.store().audit_add({
             "ts": time.time(), "pane_id": pane.pane_id, "vendor": pane.agent_key or "",
-            "source": "agent", "tool": "set_model",
-            "excerpt": f"model switched by agent {who} via MCP ({method}): {what}"[:500],
+            "source": source, "tool": "set_model",
+            "excerpt": (f"model switch {by} refused ({refused}): {what}" if refused
+                        else f"model switched {by} ({method}): {what}")[:500],
             "level": "normal", "action": "allow", "rule_ids": [], "tainted": False,
         })
     except Exception:  # noqa: BLE001 — the switch itself already happened
@@ -79,7 +85,7 @@ async def cli_set_model(
     trail. Returns {ok, target, pane_id, model, effort?, method, fallback?}
     or {ok: false, error, error_code}.
     """
-    from agent_team_backend import app, message_routing
+    from agent_team_backend import message_routing
 
     try:
         caller = core._resolve_caller(ctx)
@@ -111,6 +117,20 @@ async def cli_set_model(
     if pane.agent_key == core._TERMINAL_AGENT:
         return _refusal("not-agent-pane", "a terminal pane is a plain shell — it has no model",
                         target=pane.qualified_name)
+    return await switch_pane_model(
+        pane, model, effort, caller=caller, who=core._caller_label(caller), source="agent",
+    )
+
+
+async def switch_pane_model(
+    pane: Any, model: str, effort: str, *, caller: Any, who: str, source: str,
+) -> dict[str, Any]:
+    """The switch itself, shared by cli_set_model and the chat /model menu:
+    check the model, ask the pane's window, persist the model on the pane id
+    it answers with, and audit it. `pane` is a resolved registry entry; the
+    caller-side checks (own pane, terminal, addressing) are the caller's."""
+    from agent_team_backend import app
+
     refusal = core._refuse_unsupported_model(pane.agent_key, model, effort)
     if refusal:
         return _refusal("model-unsupported", refusal, target=pane.qualified_name)
@@ -143,7 +163,7 @@ async def cli_set_model(
         app.project_store.set_pane_model, pane.workspace_path,
         pane_id=new_pane_id, model=model, effort=effort,
     )
-    await core.run_in_db_thread(_audit, pane, core._caller_label(caller), model, effort, method)
+    await core.run_in_db_thread(_audit, pane, who, model, effort, method, source=source)
     answer: dict[str, Any] = {
         "ok": True,
         "target": pane.qualified_name,

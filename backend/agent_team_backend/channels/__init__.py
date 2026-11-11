@@ -277,6 +277,51 @@ def default_seams() -> Seams:
         return {"workspace_path": pane.workspace_path,
                 "session_id": (getattr(record, "session_id", "") or "").strip()}
 
+    def pane_model(pane_id: str) -> dict[str, Any]:
+        from .. import app
+        from ..cli_vendors import registry
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        spec = registry.VENDORS.get(pane.agent_key or "")
+        project = app.project_store.peek(pane.workspace_path)
+        records = list(project.panes) if project else []
+        me = next((r for r in records if r.pane_id == pane.pane_id), None)
+        known: list[str] = []
+        for r in reversed(records):  # newest records last: most recent first
+            model = (r.model or "").strip()
+            if r.agent == pane.agent_key and model and model not in known:
+                known.append(model)
+        return {
+            "agent_key": pane.agent_key or "",
+            "model": (me.model if me else "") or "",
+            "effort": (me.effort if me else "") or "",
+            "supports_model": bool(spec and spec.supports_model),
+            "efforts": list(spec.known_efforts) if spec and spec.supports_effort else [],
+            "known": known,
+        }
+
+    async def set_model(pane_id: str, model: str, effort: str, who: str) -> dict[str, Any]:
+        from ..mcp_server import pane_model_tool
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"ok": False, "error": "pane is gone", "error_code": "pane-gone"}
+        if pane.agent_key == mcp._TERMINAL_AGENT:
+            return {"ok": False, "error": "a terminal pane has no model", "error_code": "not-agent-pane"}
+        # No caller: a chat sender is not a pane, so the window sees a host request.
+        result = await pane_model_tool.switch_pane_model(
+            pane, model, effort, caller=None, who=who, source="channel",
+        )
+        if not result.get("ok"):
+            # A chat's refused attempt is on the record too (a switch is audited on its own).
+            await run_in_db_thread(
+                pane_model_tool._audit, pane, who, model, effort, "",
+                source="channel", refused=str(result.get("error_code") or "failed"),
+            )
+        return result
+
     def windows_open() -> bool:
         from .. import app
 
@@ -310,7 +355,7 @@ def default_seams() -> Seams:
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
         wake_target=wake_target, windows_open=windows_open, pane_live=pane_live, wake=wake, turn_text=turn_text,
-        is_login_pane=login_panes.is_login_pane,
+        is_login_pane=login_panes.is_login_pane, pane_model=pane_model, set_model=set_model,
     )
 
 

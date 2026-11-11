@@ -35,7 +35,7 @@ from agent_team_backend.terminals import TerminalService
 # a new vendor must extend the launch coverage below; the inventory test fails
 # first, so coverage cannot silently shrink.
 EXPECTED_VENDORS = frozenset({
-    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "droid",
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "droid", "kiro",
     "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse", "opencode",
     "openclaw", "pi", "qwen",
 })

@@ -1075,6 +1075,8 @@
       "stale-config-tooltip-mcp": "Los servidores MCP de esta CLI cambiaron después de abrir el panel. Sigue con la lista anterior hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
       "stale-config-tooltip-skills": "Las skills que recibe esta CLI cambiaron después de abrir el panel. Puede seguir con las anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
       "stale-config-tooltip-both": "Los servidores MCP y las skills de esta CLI cambiaron después de abrir el panel. Sigue con los anteriores hasta que lo reconstruyas. Haz clic para reconstruir (reanudar la conversación).",
+      "update-available-badge": "Actualización disponible",
+      "update-available-tooltip": "{latest} está disponible (este panel usa {version}). Haz clic para actualizar en Ajustes.",
       "usage-limit-badge": "⛔ vuelve {time}",
       "usage-limit-badge-unknown": "⛔ sin cuota",
       "usage-limit-tooltip": "Esta CLI se ha quedado sin cuota: se espera que vuelva a las {time}. Haz clic para descartar",
@@ -10146,6 +10148,9 @@
     "use-failed": "No se pudo cambiar {label} a esta instalación: {error}",
     "use-done": "Navide iniciará ahora {label} desde {path}.",
     "autoupdate-failed": "No se pudo cambiar el ajuste de actualización automática de {label}; sigue sin cambios.",
+    "update-available": "Nueva versión {version}",
+    "update-blocked-running": "Ya hay otra actualización de CLI en curso. Espera a que termine.",
+    "update-blocked-busy": "Actualiza cuando todos los paneles de {label} estén inactivos. No inactivos: {panes}",
     "use-this": "Usar esta",
     "remove": "Quitar",
     "autoupdate": "Actualización automática",
@@ -11035,6 +11040,7 @@
     "token-linked": "Vinculado con un token"
   },
   "channels": {
+    "model-switched": "{who} cambió {pane} a {model} desde un chat ({method})",
     "agent": {
       "title": "Solicitudes de agents",
       "from": "Solicitado por {requester}",

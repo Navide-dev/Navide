@@ -9,7 +9,8 @@ history stay links to the user's own, and writes go straight through to them.
 
 Two shapes, picked by what the CLI offers:
 
-- kimi has a dedicated config-dir variable (``KIMI_CODE_HOME``), so its shim is
+- kimi and kiro have a dedicated config-dir variable (``KIMI_CODE_HOME``,
+  ``KIRO_HOME``), so their shim is
   just that directory and ``$HOME`` is left alone.
 - grok and antigravity have none (their config root is hardcoded to
   ``Path.home()``), so theirs is a whole HOME shim: the top level of ``$HOME``
@@ -500,6 +501,8 @@ def prepare(
             skip = {name}
             if agent_key == "grok" and dst == vendor_root:
                 skip.add(GROK_TRUST_FILE)  # the pane's own copy, written below
+            if agent_key == "kiro" and dst == vendor_root:
+                skip.add(KIRO_HOOKS_DIR)  # rebuilt below, with Navide's hook in it
             _mirror(dst, src, skip, adopt=True, volatile=spec.volatile)
             src, dst = src / name, dst / name
         existing = _base_config(src, dst)
@@ -514,10 +517,38 @@ def prepare(
         _write_config(dst, document)
         if agent_key == "grok":
             _seed_grok_shim_trust(real_vendor, vendor_root, pane_id)
+        if agent_key == "kiro":
+            _write_kiro_pane_hooks(real_vendor, vendor_root)
     except OSError as err:
         log.warning("could not prepare %s shim home for pane %s: %s", agent_key, pane_id, err)
         return None
     return spec.env_var, str(root)
+
+
+# ---- kiro turn-end hook ----
+
+#: Kiro CLI's global hooks directory, inside its home (``KIRO_HOME``).
+KIRO_HOOKS_DIR = "hooks"
+
+
+def _write_kiro_pane_hooks(real_vendor: Path, vendor_root: Path) -> None:
+    """Give the pane's ``hooks/`` Navide's Stop hook beside the user's own.
+
+    Kiro loads every ``*.json`` in the directory, so it is rebuilt like the
+    directories on the way to the MCP config: the user's hook files stay links
+    to their own, and only ``kiro_hooks.HOOK_FILENAME`` is a real file. The
+    user's ``~/.kiro/hooks`` is never written: a Kiro session outside Navide
+    does not run this hook.
+    """
+    from .. import kiro_hooks
+
+    hooks = vendor_root / KIRO_HOOKS_DIR
+    if hooks.is_symlink():
+        # A link to the user's directory: writing through it would put
+        # Navide's hook into their own ~/.kiro/hooks.
+        hooks.unlink()
+    _mirror(hooks, real_vendor / KIRO_HOOKS_DIR, {kiro_hooks.HOOK_FILENAME}, adopt=True)
+    _write_text(hooks / kiro_hooks.HOOK_FILENAME, kiro_hooks.render(str(applog.backend_port_file())))
 
 
 # ---- grok folder trust (convenience feature grok.folder-trust) ----

@@ -39,7 +39,7 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         out["saved"].append({"workspace_path": workspace_path, **kwargs})
 
     monkeypatch.setattr(app, "project_store", SimpleNamespace(set_pane_model=set_pane_model), raising=False)
-    monkeypatch.setattr(pane_model_tool, "_audit", lambda *a: out["audited"].append(a))
+    monkeypatch.setattr(pane_model_tool, "_audit", lambda *a, **k: out["audited"].append(a))
     return out
 
 

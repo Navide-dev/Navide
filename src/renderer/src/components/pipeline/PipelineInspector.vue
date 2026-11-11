@@ -12,6 +12,7 @@ import type { useBackend } from '../../composables/useBackend'
 import type { Role } from '../../composables/useRoles'
 import type { Stage, StageSlot } from '../../data/stages'
 import { pipelineDisplayName } from '../../lib/builtinNames'
+import { builtinTextForUi } from '../../lib/builtinPipelineText'
 import {
   edgeId,
   isPropertyVisible,
@@ -77,7 +78,7 @@ const upstream = computed(() => {
 const glyph = computed(() => (role.value?.label || title.value).trim().charAt(0).toUpperCase() || '?')
 const title = computed(() => {
   if (n.value) return nodeTitle(n.value)
-  return props.stage?.shortTitle || props.stage?.title || ''
+  return builtinTextForUi(props.stage?.shortTitle || props.stage?.title || '')
 })
 const kindLabel = computed(() => {
   if (!n.value) return t('pipelineEditor.inspector.layer')
@@ -457,7 +458,7 @@ const tokens = computed(() => formatTokens(runState.value?.tokens))
       <template v-else-if="n?.kind === 'gate'">
         <section v-if="isAwaitingGate" class="pi-decision">
           <h3>{{ t('pipelineEditor.gate.awaiting') }}</h3>
-          <p>{{ n.gate?.prompt || t('pipelineEditor.gate.default-prompt') }}</p>
+          <p>{{ builtinTextForUi(n.gate?.prompt ?? '') || t('pipelineEditor.gate.default-prompt') }}</p>
           <textarea v-model="gateComment" rows="2" :placeholder="t('pipelineEditor.gate.comment')" spellcheck="false"></textarea>
           <div class="pi-row">
             <button type="button" class="pi-btn pi-btn--primary" @click="emit('gate', n.id, 'approve', gateComment); gateComment = ''">{{ t('pipelineEditor.gate.approve') }}</button>

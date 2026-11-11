@@ -1075,6 +1075,8 @@
       "stale-config-tooltip-mcp": "Les serveurs MCP de cette CLI ont changé après l'ouverture du panneau. Elle garde l'ancienne liste jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
       "stale-config-tooltip-skills": "Les skills fournies à cette CLI ont changé après l'ouverture du panneau. Elle peut garder les anciennes jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
       "stale-config-tooltip-both": "Les serveurs MCP et les skills de cette CLI ont changé après l'ouverture du panneau. Elle garde les anciens jusqu'à sa reconstruction. Cliquez pour reconstruire (reprendre la conversation).",
+      "update-available-badge": "Mise à jour disponible",
+      "update-available-tooltip": "{latest} est disponible (ce volet utilise {version}). Cliquez pour mettre à jour dans les réglages.",
       "usage-limit-badge": "⛔ retour à {time}",
       "usage-limit-badge-unknown": "⛔ quota épuisé",
       "usage-limit-tooltip": "Le quota de cette CLI est épuisé – retour prévu à {time}. Cliquer pour masquer",
@@ -10146,6 +10148,9 @@
     "use-failed": "Impossible de faire passer {label} à cette installation : {error}",
     "use-done": "Navide lancera désormais {label} depuis {path}.",
     "autoupdate-failed": "Impossible de modifier le réglage de mise à jour automatique de {label} ; il reste inchangé.",
+    "update-available": "Nouvelle version {version}",
+    "update-blocked-running": "Une autre mise à jour de CLI est en cours. Attendez qu’elle se termine.",
+    "update-blocked-busy": "Mise à jour possible quand tous les volets {label} sont inactifs. Non inactifs : {panes}",
     "use-this": "Utiliser celle-ci",
     "remove": "Supprimer",
     "autoupdate": "Mise à jour automatique",
@@ -11035,6 +11040,7 @@
     "token-linked": "Lié avec un token"
   },
   "channels": {
+    "model-switched": "{who} a passé {pane} à {model} depuis un chat ({method})",
     "agent": {
       "title": "Demandes des agents",
       "from": "Demandé par {requester}",
