@@ -8528,7 +8528,7 @@
       "delete-confirm": "Supprimer ce compte ?",
       "cli": {
         "title": "Comptes CLI",
-        "hint": "Cliquez sur « Se connecter » ou « + Nouveau compte » pour ouvrir un pane de connexion temporaire ; il se ferme une fois l’autorisation donnée dans le navigateur. « Définir par défaut » choisit le compte utilisé par les nouveaux panes ; les panes ouverts gardent le leur jusqu’à leur réouverture.",
+        "hint": "Cliquez sur « Se connecter » ou « + Nouveau compte » pour ouvrir un pane de connexion temporaire ; il se ferme une fois l’autorisation donnée dans le navigateur. « Passer à ce compte » bascule la connexion active de ce CLI sur ce compte, que les nouveaux panes utilisent. Si des panes tournent avec la connexion actuelle, Navide demande d’abord, puis les redémarre sur le nouveau compte en reprenant leurs conversations.",
         "hint-detail": "Tous les comptes partagent votre dossier personnel ; les sessions et l’historique sont donc conservés. Changer de compte échange les identifiants stockés sur place, et une connexion ne touche jamais le compte actif.",
         "hint-more": "Détails",
         "login-no-workspace": "Ouvrez d’abord un espace de travail – la connexion lance un pane de connexion temporaire.",

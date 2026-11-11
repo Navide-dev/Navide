@@ -8528,7 +8528,7 @@
       "delete-confirm": "Xóa tài khoản này?",
       "cli": {
         "title": "Tài khoản CLI",
-        "hint": "Nhấp “Đăng nhập” hoặc “+ Tài khoản mới” để mở một pane đăng nhập tạm thời; pane sẽ đóng khi bạn ủy quyền trong trình duyệt. “Đặt làm mặc định” chọn tài khoản cho các pane mới, còn các pane đang mở giữ tài khoản của chúng cho đến khi được mở lại.",
+        "hint": "Nhấp “Đăng nhập” hoặc “+ Tài khoản mới” để mở một pane đăng nhập tạm thời; pane sẽ đóng khi bạn ủy quyền trong trình duyệt. “Chuyển sang tài khoản này” chuyển đăng nhập hiện tại của CLI này sang tài khoản đó, và các pane mới sẽ dùng nó. Nếu có pane đang chạy bằng đăng nhập hiện tại, Navide sẽ hỏi trước, rồi khởi động lại chúng bằng tài khoản mới và tiếp tục các cuộc trò chuyện.",
         "hint-detail": "Mọi tài khoản dùng chung thư mục home của bạn, nên session và lịch sử được giữ nguyên; khi chuyển tài khoản, thông tin xác thực đã lưu được hoán đổi tại chỗ và việc đăng nhập không bao giờ đụng tới tài khoản đang hoạt động.",
         "hint-more": "Chi tiết",
         "login-no-workspace": "Hãy mở một workspace trước — đăng nhập sẽ khởi chạy một pane đăng nhập tạm thời.",

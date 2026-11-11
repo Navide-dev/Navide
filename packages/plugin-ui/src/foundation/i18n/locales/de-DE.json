@@ -8528,7 +8528,7 @@
       "delete-confirm": "Dieses Konto löschen?",
       "cli": {
         "title": "CLI-Konten",
-        "hint": "Klicken Sie auf „Anmelden“ oder „+ Neues Konto“, um einen temporären Anmeldebereich zu öffnen; er schließt sich, sobald Sie im Browser autorisiert haben. „Als Standard festlegen“ wählt das Konto, das neue Bereiche verwenden; geöffnete Bereiche behalten ihres, bis sie neu geöffnet werden.",
+        "hint": "Klicken Sie auf „Anmelden“ oder „+ Neues Konto“, um einen temporären Anmeldebereich zu öffnen; er schließt sich, sobald Sie im Browser autorisiert haben. „Zu diesem Konto wechseln“ stellt die aktuelle Anmeldung dieser CLI auf das Konto um, und neue Bereiche verwenden es. Laufen Bereiche mit der aktuellen Anmeldung, fragt Navide zuerst und startet sie dann mit dem neuen Konto neu, wobei ihre Gespräche fortgesetzt werden.",
         "hint-detail": "Alle Konten teilen sich Ihr Home-Verzeichnis, daher bleiben Sessions und Verlauf erhalten; beim Wechseln werden die gespeicherten Anmeldeinformationen direkt ausgetauscht, und eine Anmeldung berührt das aktive Konto nie.",
         "hint-more": "Einzelheiten",
         "login-no-workspace": "Öffnen Sie zuerst einen Arbeitsbereich – die Anmeldung startet einen temporären Anmeldebereich.",

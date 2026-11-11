@@ -8528,7 +8528,7 @@
       "delete-confirm": "¿Eliminar esta cuenta?",
       "cli": {
         "title": "Cuentas de CLI",
-        "hint": "Haz clic en «Iniciar sesión» o «+ Nueva cuenta» para abrir un pane de inicio de sesión temporal; se cierra en cuanto autorizas en el navegador. «Establecer como predeterminada» elige la cuenta que usan los panes nuevos, y los panes abiertos conservan la suya hasta que se vuelvan a abrir.",
+        "hint": "Haz clic en «Iniciar sesión» o «+ Nueva cuenta» para abrir un pane de inicio de sesión temporal; se cierra en cuanto autorizas en el navegador. «Cambiar a esta cuenta» cambia el inicio de sesión activo de esta CLI a esa cuenta, y los panes nuevos la usan. Si hay panes en ejecución con el inicio de sesión actual, Navide pregunta primero y luego los reinicia con la cuenta nueva, reanudando sus conversaciones.",
         "hint-detail": "Todas las cuentas comparten tu directorio personal, así que las sessions y el historial se mantienen; cambiar de cuenta sustituye las credenciales guardadas en el mismo sitio, e iniciar sesión nunca toca la cuenta activa.",
         "hint-more": "Detalles",
         "login-no-workspace": "Abre primero un área de trabajo: iniciar sesión abre un pane de inicio de sesión temporal.",

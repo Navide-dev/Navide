@@ -8528,7 +8528,7 @@
       "delete-confirm": "Excluir esta conta?",
       "cli": {
         "title": "Contas de CLI",
-        "hint": "Clique em “Entrar” ou “+ Nova conta” para abrir um pane de login temporário; ele fecha assim que você autoriza no navegador. “Definir como padrão” escolhe a conta que os novos panes usam, e os panes abertos mantêm a deles até serem reabertos.",
+        "hint": "Clique em “Entrar” ou “+ Nova conta” para abrir um pane de login temporário; ele fecha assim que você autoriza no navegador. “Trocar para esta conta” troca o login ativo desta CLI para essa conta, e os novos panes passam a usá-la. Se houver panes rodando com o login atual, o Navide pergunta antes e depois os reinicia na nova conta, retomando as conversas.",
         "hint-detail": "Todas as contas compartilham seu diretório pessoal, então as sessions e o histórico continuam; trocar de conta substitui as credenciais armazenadas no mesmo lugar, e entrar em uma conta nunca mexe na conta ativa.",
         "hint-more": "Detalhes",
         "login-no-workspace": "Abra um workspace primeiro: entrar abre um pane de login temporário.",

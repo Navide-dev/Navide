@@ -8528,7 +8528,7 @@
       "delete-confirm": "Delete this account?",
       "cli": {
         "title": "CLI accounts",
-        "hint": "Click \"Sign In\" or \"+ New Account\" to open a temporary login pane; it closes once you authorize in the browser. \"Set as Default\" picks the account new panes use, and open panes keep theirs until reopened.",
+        "hint": "Click \"Sign In\" or \"+ New Account\" to open a temporary login pane; it closes once you authorize in the browser. \"Switch to This Account\" moves this CLI's live login to that account, and new panes use it. If panes on the current login are running, Navide asks first, then restarts them on the new account with their conversations resumed.",
         "hint-detail": "All accounts share your home directory, so sessions and history carry over; switching swaps the stored credentials in place, and signing in never touches the active account.",
         "hint-more": "Details",
         "login-no-workspace": "Open a workspace first — signing in launches a temporary login pane.",
