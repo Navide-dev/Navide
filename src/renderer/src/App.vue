@@ -160,6 +160,7 @@ import { heldPaneKeys, isHeldRecord, readHeldPanes, writeHeldPanes } from './lib
 import { dockWindowLabelKey, historyEntryIsLive, workspaceHasPmPanel } from './lib/dockWindow'
 import { droppedPrefix, remapCursor, type BufferObservation } from './lib/bufferCursor'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from './lib/builtinPipelineText'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { deriveAutoName, stripCliSessionContext } from './lib/autoName'
 import { bootWorkspaceToRecord } from './lib/bootWorkspace'
@@ -20858,7 +20859,7 @@ function handleAnalyzerResult(
       stageIndex,
       questions: qs.map((q) => ({ prompt: q.prompt, type: q.type, options: q.options })),
       agentLabel: paneMeta?.agentLabel ?? 'Agent',
-      stageTitle: `${stage.title} · 🧠 analyzer`,
+      stageTitle: `${builtinTextForUi(stage.title)} · 🧠 analyzer`,
       slotLabel: paneMeta?.slotLabel ?? ''
     })
     const choiceCount = qs.filter((q) => q.type === 'choice').length
@@ -24992,7 +24993,7 @@ function paneSubtitle(p: ActivePane): string {
   if (p.origin !== 'pipeline' && !p.stageId) return `${agentType} · ${roleLabel(p.roleKey)} · ${i18n.global.t('label.manual')} · ${preparationLabel}`
   const stage = stagesApi.stageById.value[p.stageId] ?? { shortTitle: p.stageId }
   const prefix = p.origin === 'pipeline' ? `P${p.stageId} · ` : ''
-  const stageLabel = stage.shortTitle || i18n.global.t('label.manual')
+  const stageLabel = builtinTextForUi(stage.shortTitle) || i18n.global.t('label.manual')
   return `${prefix}${agentType} · ${roleLabel(p.roleKey)} · ${stageLabel} · ${preparationLabel}`
 }
 
@@ -25418,7 +25419,7 @@ function paneIsCommander(p: ActivePane): boolean {
       :visible="!!activeQuestion"
       :questions="activeQuestion?.questions ?? []"
       :agent-label="activeQuestion?.agentLabel"
-      :stage-title="activeQuestion?.stageTitle"
+      :stage-title="builtinTextForUi(activeQuestion?.stageTitle ?? '')"
       :slot-label="activeQuestion?.slotLabel"
       :queue-len="questionQueueLen"
       :pane-id="activeQuestion?.paneId"
@@ -25437,7 +25438,7 @@ function paneIsCommander(p: ActivePane): boolean {
             <span v-if="stageStallPrompt.slotLabel" class="stall-slot">· {{ stageStallPrompt.slotLabel }}</span>
           </header>
           <div class="stall-body">
-            <div class="stall-title">{{ stageStallPrompt.stageTitle }}</div>
+            <div class="stall-title">{{ builtinTextForUi(stageStallPrompt.stageTitle) }}</div>
             <div class="stall-reason">
               {{ stageStallPrompt.reason === 'idle'
                 ? `⏸ ${$t('label.stall-reason-idle')}`

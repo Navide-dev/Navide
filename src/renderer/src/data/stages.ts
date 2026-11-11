@@ -1,6 +1,7 @@
 // Pipeline stage type definitions and utility functions.
 // The actual stage data is loaded dynamically from the backend via useStages().
 
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import { MSG_START, MSG_END, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX, MSG_FORMAT_PREFIX, MSG_FALLBACK_PREFIX, MSG_SPAWN_FAILED_PREFIX, MSG_SPAWN_PARTIAL_PREFIX, SPAWN_START, SPAWN_END } from '../lib/agentMessaging'
 
 export type StageId = string
@@ -319,16 +320,18 @@ export function renderSlotKickoff(
     slotRoster?: { label: string; agentLabel: string; roleLabel: string }[]
   } = {},
 ): string {
-  const placed = slot.kickoffBody.replaceAll(
+  // A builtin step still carrying its Chinese seed goes out in the UI language.
+  const kickoffBody = builtinTextForUi(slot.kickoffBody)
+  const placed = kickoffBody.replaceAll(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
   // A step imported from n8n has no {{task}} of its own. A webhook's data is what
   // such a step exists to work on, and it comes wrapped and is not someone's word.
   let body = placed
-  if (holdsWebhookData(task) && !slot.kickoffBody.includes('{{task}}')) {
+  if (holdsWebhookData(task) && !kickoffBody.includes('{{task}}')) {
     body = `${placed}\n\n${task.trim()}`
-  } else if (isImportedWithoutTask(slot.kickoffBody) && task.trim()) {
+  } else if (isImportedWithoutTask(kickoffBody) && task.trim()) {
     // Ahead of the header, which says everything below it came from the
     // workflow file. Worded for what is known: a schedule or an agent can start
     // a run too, so this does not claim a person typed it.

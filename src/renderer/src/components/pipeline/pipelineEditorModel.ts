@@ -3,6 +3,7 @@
 // views understand. No component state lives here.
 import type { GraphNode, NodeRunState, NodeRunStatus } from '../../lib/pipelineGraph'
 import type { AgentKey, Stage } from '../../data/stages'
+import { builtinTextForUi } from '../../lib/builtinPipelineText'
 
 /** Something the palette can place: a Role becomes a slot node; a gate is the
  *  one flow-control node v1 offers (branch/join are drawn with edges). */
@@ -66,7 +67,7 @@ export function agentMonogram(agentKey: AgentKey | string | undefined): string {
 }
 
 export function nodeTitle(node: GraphNode): string {
-  return node.slot?.label || node.label || node.id
+  return builtinTextForUi(node.slot?.label || node.label || node.id)
 }
 
 /** The pipelineEditor.status.* key for a node's run state: a skip because no
