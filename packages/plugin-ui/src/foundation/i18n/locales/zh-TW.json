@@ -3737,7 +3737,7 @@
             "git": {
               "title": "Git（原始碼控制）",
               "tag": "側欄第 4 個分頁",
-              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 ({gitTab})</em>；沒有載入時寫著 <em>Git ({gitTab})</em>。在主視窗按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。"
+              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 ({gitTab})</em>；沒有載入時寫著 <em>Git ({gitTab})</em>。在主視窗按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。"
             },
             "plans": {
               "title": "Plans（計畫文件）",
@@ -3937,7 +3937,7 @@
             "sort": "排序 <em>排序方式</em>：<strong>標題</strong>、<strong>最後更新</strong>、<strong>進度</strong> 三種，旁邊 <code>↑</code>／<code>↓</code> 換升冪降冪。",
             "group": "<code>☰</code> 在「依 stage 分群」與「單一清單」之間切換。"
           },
-          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。釘選鈕的作用是<em>釘選到「最近」最上方</em>。釘選鈕的作用是<em>釘選到「最近」最上方</em>。",
+          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。釘選鈕的作用是<em>釘選到「最近」最上方</em>。",
           "callout1": {
             "title": "沒有 metadata 的文件自成一區",
             "text": "依階段分組時，<strong>沒有計畫 metadata 的純文件</strong>收在 <strong>文件</strong> 這一區，每一列都帶 <code>文件</code> 藥丸——跟 stage 是不是 <em>進行中</em> 無關。要把這種檔案升級成真正的計畫，在它上面按右鍵選 <strong>升級為計畫</strong>；升級只是補上一層草稿信封，<strong>不會改寫原本的內文</strong>。"
@@ -8528,7 +8528,7 @@
       "delete-confirm": "確定刪除此帳號？",
       "cli": {
         "title": "CLI 帳號",
-        "hint": "按「登入」或「＋ 新增帳號」會開一個暫時的登入分格，在瀏覽器授權後自動關閉。「設為預設」決定新分格用哪個帳號，已開的分格重開前維持原帳號。",
+        "hint": "按「登入」或「＋ 新增帳號」會開一個暫時的登入分格，在瀏覽器授權後自動關閉。「切換到此帳號」會把這個 CLI 的現用登入換成該帳號，新開的分格就用它。若有分格正在用目前的登入執行，Navide 會先詢問，同意後把它們重啟到新帳號並接回原本的對話。",
         "hint-detail": "所有帳號共用你的家目錄，session 與歷史互通；切換時就地替換儲存的憑證，登入也不會動到使用中的帳號。",
         "hint-more": "詳細說明",
         "login-no-workspace": "請先開啟工作區 — 登入需要啟動暫時的登入分格。",

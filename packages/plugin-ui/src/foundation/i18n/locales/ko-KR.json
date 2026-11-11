@@ -3737,7 +3737,7 @@
             "git": {
               "title": "Git(소스 제어)",
               "tag": "사이드바 네 번째 탭",
-              "text": "Git이 Navide 플러그인으로 로드되어 있으면 툴팁은 <em>Navide 플러그인: Git · navide.git · 게시자: navide · Navide에 기본 제공 ({gitTab})</em>이고, 로드되지 않았으면 <em>Git ({gitTab})</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">{gitWindow}</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요. Git 자체도 번들된 Navide 플러그인(<code>navide.git</code>)이라 Plans와 함께 <strong>설정 ▸ Navide 플러그인</strong>의 <em>번들</em> 아래에 나열돼요. 그래서 업데이트, 끄기, 시작 실패도 다른 Navide 플러그인과 똑같이 일어나요. Git 자체도 번들된 Navide 플러그인(<code>navide.git</code>)이라 Plans와 함께 <strong>설정 ▸ Navide 플러그인</strong>의 <em>번들</em> 아래에 나열돼요. 그래서 업데이트, 끄기, 시작 실패도 다른 Navide 플러그인과 똑같이 일어나요."
+              "text": "Git이 Navide 플러그인으로 로드되어 있으면 툴팁은 <em>Navide 플러그인: Git · navide.git · 게시자: navide · Navide에 기본 제공 ({gitTab})</em>이고, 로드되지 않았으면 <em>Git ({gitTab})</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">{gitWindow}</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요. Git 자체도 번들된 Navide 플러그인(<code>navide.git</code>)이라 Plans와 함께 <strong>설정 ▸ Navide 플러그인</strong>의 <em>번들</em> 아래에 나열돼요. 그래서 업데이트, 끄기, 시작 실패도 다른 Navide 플러그인과 똑같이 일어나요."
             },
             "plans": {
               "title": "계획(계획 문서)",
@@ -3937,7 +3937,7 @@
             "sort": "<em>정렬 기준</em>: <strong>제목</strong>, <strong>마지막 업데이트</strong>, <strong>진행률</strong>이며, 옆의 <code>↑</code> / <code>↓</code>로 오름차순과 내림차순을 바꿔요.",
             "group": "<code>☰</code>로 \"단계별 그룹\"과 단일 평면 목록을 전환해요."
           },
-          "p4": "네 가지 선택은 모두 <strong>작업 영역별로 기억돼요</strong>. 섹션은 위에서부터: <strong>최근</strong>(최대 5개, 고정된 항목 먼저), 그다음 단계별로 묶을 때는 <strong>문서</strong> 섹션과 단계마다 하나씩의 섹션(평면 목록에서는 하나의 <strong>모든 계획</strong>으로 합쳐져요), 그다음 <strong>보관됨</strong>, 맨 아래에는 완료 항목 동작 줄(<em>완료 항목 모두 보관</em> / <em>모두 삭제</em>)이 있어요. 모든 행에는 단계 표시, <em>{'{'}done{'}'}/{'{'}total{'}'} 완료</em> 진행률 막대, <code>HTML</code> / <code>Markdown</code> 형식 태그, 그리고 사용자만 처리할 수 있는 항목인 <em>내 차례 {'{'}count{'}'}개</em>가 표시돼요. <strong>모든 행 오른쪽에는 고정 <code>📌</code>과 삭제 <code>✕</code>도 있어요</strong>(보관된 행에는 삭제만 있어요). 핀은 <em>최근 항목 맨 위에 고정</em> 기능이에요. 핀은 <em>최근 항목 맨 위에 고정</em> 기능이에요.",
+          "p4": "네 가지 선택은 모두 <strong>작업 영역별로 기억돼요</strong>. 섹션은 위에서부터: <strong>최근</strong>(최대 5개, 고정된 항목 먼저), 그다음 단계별로 묶을 때는 <strong>문서</strong> 섹션과 단계마다 하나씩의 섹션(평면 목록에서는 하나의 <strong>모든 계획</strong>으로 합쳐져요), 그다음 <strong>보관됨</strong>, 맨 아래에는 완료 항목 동작 줄(<em>완료 항목 모두 보관</em> / <em>모두 삭제</em>)이 있어요. 모든 행에는 단계 표시, <em>{'{'}done{'}'}/{'{'}total{'}'} 완료</em> 진행률 막대, <code>HTML</code> / <code>Markdown</code> 형식 태그, 그리고 사용자만 처리할 수 있는 항목인 <em>내 차례 {'{'}count{'}'}개</em>가 표시돼요. <strong>모든 행 오른쪽에는 고정 <code>📌</code>과 삭제 <code>✕</code>도 있어요</strong>(보관된 행에는 삭제만 있어요). 핀은 <em>최근 항목 맨 위에 고정</em> 기능이에요.",
           "callout1": {
             "title": "메타데이터가 없는 문서는 별도 섹션에 모여요",
             "text": "목록을 단계별로 묶으면 <strong>계획 메타데이터가 없는 일반 문서</strong>는 <strong>문서</strong> 섹션에 모이고 각 행에 <code>Document</code> 태그가 붙어요. 단계가 <em>in-progress</em>인지와는 관계없어요. 이런 파일을 실제 계획으로 바꾸려면 오른쪽 클릭 후 <strong>계획으로 승격</strong>을 선택하세요. 초안 계획 틀을 추가할 뿐 <strong>본문은 다시 쓰지 않아요</strong>."
@@ -8528,7 +8528,7 @@
       "delete-confirm": "이 계정을 삭제할까요?",
       "cli": {
         "title": "CLI 계정",
-        "hint": "\"로그인\" 또는 \"+ 새 계정\"을 누르면 임시 로그인 pane이 열리고, 브라우저에서 승인하면 닫혀요. \"기본값으로 설정\"은 새 pane이 쓸 계정을 정하며, 열려 있는 pane은 다시 열 때까지 기존 계정을 유지해요.",
+        "hint": "\"로그인\" 또는 \"+ 새 계정\"을 누르면 임시 로그인 pane이 열리고, 브라우저에서 승인하면 닫혀요. \"이 계정으로 전환\"은 이 CLI의 현재 로그인을 그 계정으로 바꾸고, 새 pane은 그 계정을 써요. 현재 로그인으로 실행 중인 pane이 있으면 Navide가 먼저 물어보고, 동의하면 대화를 이어서 새 계정으로 다시 시작해요.",
         "hint-detail": "모든 계정이 홈 디렉터리를 공유하므로 session과 기록이 그대로 이어져요. 전환하면 저장된 자격 증명을 그 자리에서 바꾸며, 로그인은 활성 계정을 건드리지 않아요.",
         "hint-more": "자세히",
         "login-no-workspace": "먼저 작업 영역을 여세요. 로그인하면 임시 로그인 pane이 열려요.",
