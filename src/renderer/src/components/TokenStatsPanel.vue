@@ -9,6 +9,7 @@ import { accountUsageFor, formatRemaining, isExhausted, remainingPercent } from 
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import { DEFAULT_PROFILE_ID, UNKNOWN_PROFILE_ID, accountLabel } from '../lib/accountLabel'
 import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import type { useBackend } from '../composables/useBackend'
 import HistoryPanel from './HistoryPanel.vue'
 import TaskerPanel from './TaskerPanel.vue'
@@ -278,7 +279,7 @@ const stageRows = computed(() => {
   const map = cumulativeByStage.value
   return (props.stages ?? []).map((s) => ({
     id: s.id,
-    label: s.shortTitle ?? s.title ?? s.id,
+    label: builtinTextForUi(s.shortTitle ?? s.title ?? s.id),
     bucket: map[s.id] ?? EMPTY
   }))
 })

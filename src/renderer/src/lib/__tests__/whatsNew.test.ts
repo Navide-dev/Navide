@@ -8,6 +8,7 @@ import {
   cmpSemver,
   type WhatsNewText,
 } from '../whatsNew'
+import { i18n } from '@navide/plugin-ui/foundation'
 
 describe('cmpSemver', () => {
   it('orders X.Y.Z versions', () => {
@@ -584,5 +585,24 @@ describe('pickWhatsNewOnDemand (Help → What’s New…)', () => {
 
   it('has nothing to show a shipped build with no version', () => {
     expect(pickWhatsNewOnDemand('', false)).toBeNull()
+  })
+})
+
+// The 0.2.40 notes once named the Guard exemption, the plugin Activity monitor
+// and the STOP badge differently from the UI, so readers looked for screens
+// that do not exist under those names.
+describe('0.2.40 announcement wording', () => {
+  const entry = whatsNewFor('0.2.40')!
+  const locales = Object.keys(entry.title) as (keyof WhatsNewText)[]
+
+  it.each(locales)('uses the UI names in %s', (locale) => {
+    const text = entry.highlights.map((h) => h[locale] ?? '').join('\n')
+    const ui = (key: string) => String(i18n.global.t(key, {}, { locale }))
+    expect(text).toContain(ui('guard.terminal.title'))
+    expect(text).toContain(ui('guard.terminal.exempt.title'))
+    expect(text).toContain(ui('pluginActivity.monitor.title'))
+    expect(text).toContain(ui('pane.terminal.stop-ineffective'))
+    expect(text).toContain('Claude')
+    expect(text).toContain('Codex')
   })
 })

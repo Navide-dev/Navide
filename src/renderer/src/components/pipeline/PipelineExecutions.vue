@@ -12,6 +12,7 @@ import { formatElapsed, formatTokens, nodeTitle, type RunSnapshot } from './pipe
 import PipelineActionMenu, { type ActionMenuItem } from './PipelineActionMenu.vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { TOKENS_NOTICE_REFRESH_MS } from '../../composables/useTokens'
+import { builtinTextForUi } from '../../lib/builtinPipelineText'
 
 interface RunRecord {
   run_id: string
@@ -230,7 +231,7 @@ function onRecover(id: string): void {
         <span class="px-gate-mark" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1.8 14.2 8 8 14.2 1.8 8z" /></svg></span>
         <span class="px-gate-text">
           <strong>{{ t('pipelineEditor.gate.awaiting') }}</strong>
-          <span>{{ graph.nodes.find((n) => n.id === awaitingGate)?.gate?.prompt || t('pipelineEditor.gate.default-prompt') }}</span>
+          <span>{{ builtinTextForUi(graph.nodes.find((n) => n.id === awaitingGate)?.gate?.prompt ?? '') || t('pipelineEditor.gate.default-prompt') }}</span>
         </span>
         <input v-model="gateComment" type="text" class="px-gate-input" :placeholder="t('pipelineEditor.gate.comment')" spellcheck="false" />
         <button type="button" class="px-btn px-btn--primary" @click="emit('gate', awaitingGate, 'approve', gateComment); gateComment = ''">{{ t('pipelineEditor.gate.approve') }}</button>

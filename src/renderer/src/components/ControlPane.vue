@@ -10,6 +10,7 @@ import { setBatchDragImage } from '../lib/batchDragImage'
 import { paneStatusLabelText, type PaneStatusValue } from '../lib/paneStatusLabel'
 import { rollupPaneStatus } from '../lib/paneStatusRollup'
 import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
@@ -3687,7 +3688,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
-            <span v-if="pipelineCurrentStage" class="muted">· {{ pipelineCurrentStage.shortTitle }}</span>
+            <span v-if="pipelineCurrentStage" class="muted">· {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}</span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
             <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
@@ -3715,7 +3716,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
@@ -4875,7 +4876,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
             <span v-if="pipelineCurrentStage" class="muted">
-              · {{ pipelineCurrentStage.shortTitle }}
+              · {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}
             </span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
@@ -4904,7 +4905,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
