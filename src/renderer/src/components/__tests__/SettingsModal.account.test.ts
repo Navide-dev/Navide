@@ -221,7 +221,8 @@ describe('re-signing the pane-authorization rules', () => {
   it('can be scrolled to from outside this window', () => {
     // The account view points here now, so "which tab" is not enough — the
     // rules are one section of a page.
-    expect(SETTINGS).toMatch(/setSection: async \(tab: Tab, section: string\)/)
+    // Optional trailing parameters (e.g. a search query) are allowed.
+    expect(SETTINGS).toMatch(/setSection: async \(tab: Tab, section: string(?:, [^)]*)?\)/)
     expect(SETTINGS).toContain('data-settings-section="general-p2p-policy"')
   })
 
