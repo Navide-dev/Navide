@@ -2846,7 +2846,7 @@
             }
           },
           "resource": {
-            "caption": "資源控管視窗。掃描與數字只在你按下重新整理時才更新。",
+            "caption": "資源控管視窗。開著的時候 {cpu} 與 {memory} 數字會自己更新；磁碟掃描只在你按下「{scan}」時才跑。",
             "legend": {
               "totals": {
                 "label": "上方三張卡",
@@ -2884,15 +2884,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
+        "intro": "設定視窗的 {tabCount} 個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>27 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">{settingsKey}</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分 {groupCount} 組，共 <strong>{tabCount} 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
-            "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
+            "text": "索引是一份人工維護的清單，<strong>{agents}、{layout}、{notifications}、{security}、{channels} 這五個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
           "h2": "二十七個分頁",
           "tabTable": {
@@ -2911,7 +2911,7 @@
               "more": "本頁第 2 章"
             },
             "language": {
-              "what": "所有工作區共用的介面語言：繁體中文、English 或日本語",
+              "what": "所有工作區共用的介面語言，共 {languageCount} 種可選（其中 {betaCount} 種為 Beta）",
               "more": "本頁第 2 章"
             },
             "statusBadges": {
@@ -3023,7 +3023,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "按 ⌘W 關分格前先問。正在跑一個 turn 的分格一定會問，不受這個開關影響。",
+              "desc": "按 {closePaneKey} 關分格前先問。正在跑一個 turn 的分格一定會問，不受這個開關影響。",
               "fallback": "開"
             },
             "confirmCloseWorkspace": {
@@ -3087,16 +3087,16 @@
           "appearance": {
             "theme": "<strong>主題</strong> — 五種內建：Dark (GitHub)、Midnight、Forest、Light、High Contrast，預設是 Dark (GitHub)。",
             "colors": "<strong>自訂顏色</strong> — 八個可覆寫的色彩 token（背景、表面、文字、次要文字、邊框、強調、成功、危險）。覆寫疊在目前主題之上，<strong>換主題時保留</strong>；<em>↺ 重設為預設值</em> 還原。",
-            "uiScale": "<strong>介面縮放</strong> — 在 <strong>外觀 ▸ 其他</strong> 區塊的第一列，控制項是<strong>下拉選單</strong>而不是滑桿，六段 80%／90%／100%／110%／125%／150%，預設 100%，快捷鍵 <kbd class=\"syh-kbd\">⇧⌘=</kbd>／<kbd class=\"syh-kbd\">⇧⌘-</kbd>／<kbd class=\"syh-kbd\">⇧⌘0</kbd>。它走的是 Electron 的頁面縮放而不是 CSS 變數，所以文字、圖示、邊框、間距會一起變，而且由主行程套用到<strong>每一個視窗</strong>，Navide 外掛視窗也算。它和分格字級是<strong>兩條獨立的軸</strong>：<kbd class=\"syh-kbd\">⌘=</kbd>／<kbd class=\"syh-kbd\">⌘-</kbd>／<kbd class=\"syh-kbd\">⌘0</kbd> 只改終端機<strong>內容</strong>的字級（整個視窗的 CLI 分格共用同一個值），介面縮放改的是外面那層殼；兩者是<strong>相乘</strong>的，就像瀏覽器的頁面縮放疊在網站自己的字級上。",
+            "uiScale": "<strong>介面縮放</strong> — 在 <strong>外觀 ▸ 其他</strong> 區塊的第一列，控制項是<strong>下拉選單</strong>而不是滑桿，六段 80%／90%／100%／110%／125%／150%，預設 100%，快捷鍵 <kbd class=\"syh-kbd\">{uiZoomIn}</kbd>／<kbd class=\"syh-kbd\">{uiZoomOut}</kbd>／<kbd class=\"syh-kbd\">{uiZoomReset}</kbd>。它走的是 Electron 的頁面縮放而不是 CSS 變數，所以文字、圖示、邊框、間距會一起變，而且由主行程套用到<strong>每一個視窗</strong>，Navide 外掛視窗也算。它和分格字級是<strong>兩條獨立的軸</strong>：<kbd class=\"syh-kbd\">{fontZoomIn}</kbd>／<kbd class=\"syh-kbd\">{fontZoomOut}</kbd>／<kbd class=\"syh-kbd\">{fontZoomReset}</kbd> 只改終端機<strong>內容</strong>的字級（整個視窗的 CLI 分格共用同一個值），介面縮放改的是外面那層殼；兩者是<strong>相乘</strong>的，就像瀏覽器的頁面縮放疊在網站自己的字級上。",
             "restore": "<strong>還原視窗</strong> — 下次啟動時重開上次結束時開著的工作區視窗。"
           },
           "callout": {
             "title": "通知與音效在通知分頁",
             "text": "通知開關是有的，只是不在外觀，而在 <strong>通知分頁</strong>，共三項：<em>系統通知</em>（Navide 在背景時，CLI 完成回合或需要你輸入會送出桌面通知；Dock 徽章的計數不受這個開關影響）、<em>提示音</em>（回合完成播一聲短提示音，CLI 等你回覆時播兩聲），以及 <em>通知權限</em>——macOS 不會把真實授權狀態回報給 Navide，所以這一項只能送一則測試通知、由你確認它有沒有出現；沒出現就到「系統設定 → 通知」允許 Navide。最後這一項只在適用的平台上才出現。"
           },
-          "language": "語言是獨立的分頁，不在外觀底下。<strong>三種語言</strong>：<code>繁體中文</code>、<code>English</code> 與 <code>日本語</code>。沒選過之前，Navide 跟隨系統語言（系統語言不是這三種時用繁體中文）。這是使用者層級偏好，套用到所有工作區。",
+          "language": "語言是獨立的分頁，不在外觀底下。共有 <strong>{languageCount} 種語言</strong>，每一種都用它自己的名稱列出，例如 <code>繁體中文</code>、<code>English</code>、<code>日本語</code>；標著 Beta 的 {betaCount} 種是機器翻譯，還在等母語者校對。沒選過之前，Navide 跟隨系統語言（系統語言都不符合時用 {fallbackLanguage}）。這是使用者層級偏好，套用到所有工作區。",
           "h3": "狀態徽章",
-          "p1": "把九種分格狀態各自<strong>改名並選顏色</strong>。中文、英文與日文名稱可以分開填（各限 24 字，留空就退回內建翻譯）。改完之後分格徽章、側欄、會議條與資源面板全部跟著變。<strong>設定存在你的帳號上，不跟著專案走。</strong>",
+          "p1": "把 {stateCount} 種分格狀態各自<strong>改名並選顏色</strong>。每種介面語言各有一欄名稱（共 {languageCount} 欄，各限 24 字）。留空時：繁體中文、英文、日文直接退回內建翻譯；其他語言先借用你填的英文名稱，再來是繁體中文名稱，最後才是內建翻譯。改完之後分格徽章、側欄、會議條與資源面板全部跟著變。<strong>設定存在你的帳號上，不跟著專案走。</strong>",
           "statusTable": {
             "state": "狀態",
             "when": "什麼時候是這個狀態",
@@ -3141,7 +3141,7 @@
             "title": "共用根目錄",
             "text": "Navide 建立的技能一律放在 <code>~/.agents/skills</code>。這一頁<strong>不會搬動或改寫</strong>各家 CLI 自己資料夾裡的技能——那些只是被反射出來讓你看見，並且可以投遞給別家。（有一個明確的 <em>移入共用庫</em> 動作是例外，它會搬檔並留下 symlink，可以還原。）"
           },
-          "p2": "頁面有 <strong>瀏覽</strong>（卡片瀏覽）與 <strong>投遞</strong>（投遞矩陣）兩種檢視。矩陣橫軸是 15 家 CLI，直軸是技能，每格四種狀態，每一列還有 <em>全選</em>／<em>全不選</em> 兩顆批次鈕：",
+          "p2": "頁面有 <strong>瀏覽</strong>（卡片瀏覽）與 <strong>投遞</strong>（投遞矩陣）兩種檢視。矩陣橫軸是 {cliCount} 家 CLI，直軸是技能，每格四種狀態，每一列還有 <em>全選</em>／<em>全不選</em> 兩顆批次鈕：",
           "matrixTable": {
             "cell": "格子",
             "meaning": "意思",
@@ -3161,7 +3161,7 @@
             "none": {
               "cell": "— 無 skills 機制",
               "meaning": "那家 CLI 根本沒有技能這回事，接不上。",
-              "who": "4 家：aider、droid、kilo、mcode"
+              "who": "8 家：aider、devin、droid、goose、hermes、kilo、mcode、openclaw"
             },
             "pending": {
               "cell": "· 支援但尚未接線",
@@ -3189,14 +3189,14 @@
             "notCreated": "還不存在的檔案標 <em>尚未建立</em>——按存檔就會建立它，連同上層缺的資料夾。",
             "reload": "編輯中若檔案被別的程式改掉，會擋下來要你先 <em>重新載入（會捨棄你的草稿）</em>，不會直接覆蓋你或對方的內容。"
           },
-          "p6": "底部的 <strong>CLI 涵蓋範圍</strong> 把 15 家分成三類：",
+          "p6": "底部的 <strong>CLI 涵蓋範圍</strong> 把 {cliCount} 家分成三類：",
           "coverageTable": {
             "category": "分類",
             "meaning": "意思"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide 知道這家 CLI 把指示放哪。14 家屬於這類。"
+              "value": "Navide 知道這家 CLI 把指示放哪。除了 aider 以外的 CLI 都屬於這類。"
             },
             "configured": {
               "value": "只有 aider。它沒有自己的檔名——它讀的是 .aider.conf.yml 裡 read: 那一欄指名的檔案，所以你在那裡寫了什麼，這裡就列什麼（最多 20 個）。CONVENTIONS.md 只是官方文件的建議名稱，程式本身並不認得它。"
@@ -3217,7 +3217,7 @@
           "shortcuts": {
             "record": "點一顆按鍵方塊就地開始<strong>錄製</strong>；<code>+</code> 加第二組綁定；<code>✕</code> 移除一組。和弦最多兩段。",
             "instant": "改動<strong>立即寫進 <code>keybindings.json</code></strong> 並套用到每一個開著的視窗，沒有存檔鈕。",
-            "search": "搜尋框同時比對命令名稱與按鍵寫法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">⌘⇧P</kbd> 都找得到）；三個篩選器 <em>全部</em>／<em>已自訂</em>／<em>衝突</em>。",
+            "search": "搜尋框同時比對命令名稱與按鍵寫法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">{paletteKey}</kbd> 都找得到）；三個篩選器 <em>全部</em>／<em>已自訂</em>／<em>衝突</em>。",
             "conflicts": "<em>衝突</em> 會標出互相打架的綁定，並說明是誰永遠贏、還是靠 <em>生效條件</em> 分開的。",
             "reset": "單列 <em>還原成預設</em>，整頁 <em>全部還原</em>。<em>匯出</em>／<em>匯入</em> 搬設定，<strong>匯入是取代不是合併</strong>，會先告訴你幾條被丟棄、幾條被匯入，被拒絕的條目也會列出來。"
           },
@@ -3243,7 +3243,7 @@
               "fallback": "開，3 次"
             },
             "autoDownload": {
-              "toggle": "自動下載更新",
+              "toggle": "自動下載更新（只限修補版；次版與主版更新一律等你決定）",
               "fallback": "開"
             },
             "retryDownload": {
@@ -3357,15 +3357,18 @@
             "text": "分格輸入框的 <code>{'@'}</code> 提及選單只列<strong>本機</strong>的分格（含同一台機器上其他視窗的），沒有插入跨裝置位址的按鈕。跨裝置位址是寫在 agent 的 <code>to:</code> 那一行、或由 MCP 工具送出的（見本面板的「Agent 協作」分頁）。送不到時的回覆是 <code>device-offline</code>、<code>unknown-target</code>、<code>link-offline</code> 或 <code>link-unauthorized</code>；另外，回覆串接不跨機器。"
           },
           "h6": "同步（讓幾台機器的設定一致）",
-          "p11": "設定 ▸ Navide Cloud 最上面那一塊叫「同步」。<strong>它不是獨立分頁</strong>，就是這一頁的第一個區塊。每個可同步的範圍一列一個開關；開啟之後那一塊會在登入<strong>同一個帳號</strong>的每台裝置上保持一致，內容<strong>在本機加密</strong>，伺服器只存它沒有金鑰的密文。",
+          "p11": "設定 ▸ Navide Cloud 最上面那一塊叫「同步」。連上 Navide Cloud 時，這一頁有 <strong>{sync}</strong>、<strong>{share}</strong>、<strong>{devices}</strong> 三個子分頁，同步是第一個；沒連上時，整頁只顯示同步的內容。每個可同步的範圍一列一個開關；開啟之後那一塊會在登入<strong>同一個帳號</strong>的每台裝置上保持一致，內容<strong>在本機加密</strong>，伺服器只存它沒有金鑰的密文。",
           "sync": {
             "scopes": "<strong>共五列，跟側欄「Agent 資產」一頁一列、順序相同；可以開啟的有三個</strong>：<em>MCP</em>（你在 Navide 加的 server，其中的秘密加密後才離開這台機器）、<em>技能</em>（哪些技能開著、各自送給哪幾家 CLI，以及在 Navide 建立的技能的檔案；你自己放進資料夾的技能只同步設定）、<em>Prompt 技能</em>（提示技能與 Loop 提示詞）。",
             "credentials": "<em>記憶</em>、<em>擴充</em>這兩列<strong>列出來但呈灰色停用</strong>，說明寫的是「尚未支援同步」。它們不是「預設關閉、等你去開啟」——現在按不動。舊版留下開著的記憶開關，仍可以關掉。<em>憑證與金鑰</em>完全沒有這一列：帳號憑證與金鑰不會離開這台機器。舊版留下開著的憑證開關一律視為關閉。MCP 設定若開啟同步，會先在這台機器加密才上傳，伺服器沒有解密金鑰。",
             "states": "兩種狀態會寫在區塊底下：<em>未連線</em>（已開的範圍會在連線恢復後自動補上）與<em>這台裝置還沒有同步金鑰</em>（拿到之前不會上傳任何東西）。另有一顆<em>立即同步</em>，只有連線時能按。",
             "key": "<strong>同步金鑰只顯示 id 的前 8 碼</strong>，金鑰本身永遠不出現。<em>更換金鑰</em>是<strong>兩段式</strong>：按第一次會變成<em>立即更換</em>，旁邊多一顆<em>取消</em>。更換會讓現有金鑰退役、所有同步記錄改用新金鑰重新加密，其他裝置在下次交換金鑰時取得新的——懷疑金鑰外洩時才用它。",
             "legacy": "只有在「這台裝置上有一把帳號綁定之前的舊金鑰、而這個帳號還沒有金鑰」時，才會出現<em>採用為此帳號的金鑰</em>。它是一次性的：不採用就讀不到當初用那把金鑰同步過的內容，而直接發一把新的會讓那些記錄永久解不開。",
-            "conflicts": "兩台裝置改了同一項時<strong>沒有任何一邊被覆蓋</strong>，而是列成「需要你決定」，兩邊內容並排、由你按<em>保留這邊</em>或<em>保留那邊</em>。憑證類的衝突只顯示是哪個槽位（<code>廠商 / 槽位</code>），不顯示內容。"
-          }
+            "conflicts": "兩台裝置改了同一項時<strong>沒有任何一邊被覆蓋</strong>，而是列成「需要你決定」，兩邊內容並排、由你按<em>保留這邊</em>或<em>保留那邊</em>。憑證類的衝突只顯示是哪個槽位（<code>廠商 / 槽位</code>），不顯示內容。",
+            "inventory": "<strong>{inventory}</strong>：每個同步中的區塊在本機與雲端各有幾筆、幾筆一致、幾筆衝突，以及最後是哪台裝置寫入的。"
+          },
+          "share": "<strong>{share}</strong> 子分頁列出這個帳號從任何一台裝置建立的所有分享連結。還能開的連結可以 <em>{copyLink}</em>、用 <em>{extend}</em> 延長七天、用 <em>{rekey}</em> 換成新連結（新連結會複製起來，舊的就打不開了），或 <em>{revoke}</em>；<em>{revokeAll}</em> 一次撤銷全部。撤銷前會再問一次。Agent 用 MCP 工具 <code>share_create</code>、<code>share_list</code>、<code>share_revoke</code> 建立與管理同一批連結。",
+          "devices": "<strong>{devices}</strong> 子分頁列出寫入過這個帳號雲端的每一台裝置，最近寫入的排最前面，並標出最後寫入與最後上線的時間。"
         },
         "s6": {
           "title": "選單、獨立視窗與排程",
@@ -3404,7 +3407,7 @@
           "h2": "Help 選單",
           "helpMenu": {
             "github": "<strong>在 GitHub 上的 Navide</strong>、<strong>回報問題…</strong> — 開到 GitHub 專案與 issue 頁。",
-            "shortcuts": "<strong>鍵盤快捷鍵</strong> — 開設定的快捷鍵分頁。這個選單項<strong>不帶快捷鍵標示</strong>，鍵盤走的是 <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd> 這組和弦。",
+            "shortcuts": "<strong>鍵盤快捷鍵</strong> — 開設定的快捷鍵分頁。這個選單項<strong>不帶快捷鍵標示</strong>，鍵盤走的是 <kbd class=\"syh-kbd\">{shortcutsKey}</kbd> 這組和弦。",
             "legal": "法律頁面六條，依序 <em>隱私權</em>、<em>安全性政策</em>、<em>行為準則</em>、<em>使用界線</em>、<em>授權條款</em>、<em>法律資訊</em>，都開到 navide.dev 上對應的頁。（<strong>沒有服務條款</strong>，這是刻意的。）"
           },
           "callout1": {
@@ -3433,7 +3436,7 @@
             }
           },
           "p2": "系統層唯讀是因為動它們需要 root，而 Navide 從不要求——後端也擋著，不只是介面不給按。尤其 daemon 的狀態多半只能顯示成 <code>狀態未知（需 root）</code>。每一列可展開看 排程／指令／原始內容，或 Label／層級／plist 路徑／上次結束碼／狀態。移除放在每一列的 ⋯ 選單裡；移除 LaunchAgent 會<strong>卸載並永久刪除它的 plist</strong>，會先跳確認。",
-          "note2": "這裡<strong>沒有「立刻執行」也沒有「在 Finder 顯示」</strong>，只有停用／啟用與移除兩種動作。上方有 <em>重新掃描</em> 與上次掃描時間。",
+          "note2": "crontab 與 launchd 的列<strong>沒有「立刻執行」也沒有「在 Finder 顯示」</strong>，只有停用／啟用與移除兩種動作。Navide 自己的排程（在 Navide 裡建立，或由 Agent 用 <code>scheduler_upsert</code> 建立）能做的更多：有開關、有 <em>{runNow}</em>，點名稱會開 <em>{edit}</em>，<em>{remove}</em> 也在那裡。執行失敗的排程會出現 <em>{repair}</em>；建立它的分格關掉了，會出現 <em>{adopt}</em>；Agent 的週期排程快要自動停用時，會出現 <em>{keep}</em>；目標分格不見了，會出現 <em>{retarget}</em>。標著 <em>{systemTag}</em> 的排程（自我進化）鎖定不能改。清單上方有 <em>{rescan}</em> 與上次掃描時間。",
           "h4": "其他從 UI 開的視窗",
           "otherTable": {
             "window": "視窗",
@@ -3442,15 +3445,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "新的主視窗",
-              "how": "檔案 ▸ 開新視窗（⌘N）"
+              "how": "檔案 ▸ 開新視窗（{newWindowKey}）"
             },
             "editor": {
               "window": "編輯器（Mini-IDE）視窗",
-              "how": "⌘⇧I，或點檔案總管／搜尋結果／終端機裡的檔案連結（見本面板的「程式碼工作流」分頁）"
+              "how": "{miniIdeKey}，或點檔案總管／搜尋結果／終端機裡的檔案連結（見本面板的「程式碼工作流」分頁）"
             },
             "git": {
               "window": "Git 視窗",
-              "how": "Git 面板標題列的 在新視窗開啟，或 ⌘⇧G"
+              "how": "Git 面板標題列的 在新視窗開啟，或 {gitWindowKey}"
             },
             "diff": {
               "window": "差異檢視",
@@ -3475,7 +3478,7 @@
           },
           "callout2": {
             "title": "兩個容易誤會的地方",
-            "text": "<strong>Git History 沒有自己的視窗</strong>——「查看完整歷史」開的是 Git 視窗裡的歷史檢視。<strong><kbd class=\"syh-kbd\">⌘⇧D</kbd> 也不再開視窗</strong>，它只是把左側側欄切到 Plans 分頁；要開 Plan 視窗得從計畫文件本身開。"
+            "text": "<strong>Git History 沒有自己的視窗</strong>——「查看完整歷史」開的是 Git 視窗裡的歷史檢視。<strong><kbd class=\"syh-kbd\">{plansKey}</kbd> 也不再開視窗</strong>，它只是把左側側欄切到 Plans 分頁；要開 Plan 視窗得從計畫文件本身開。"
           },
           "note3": "同一個工作區已經在別的視窗開著時，Navide 不會再開一份，而是把那個視窗叫到前面。"
         },
@@ -3526,7 +3529,7 @@
           "orphans": {
             "leftover": "<strong>殘留的 CLI 行程</strong> — 狀態列出現 <code>⚠ N 殘留</code> 時點開，會問「偵測到 N 個先前殘留的 CLI 程序 — 可能耗盡記憶體。要清理嗎？」，按 <em>清理</em> 清掉、<em>關閉</em> 略過。這些是上一輪執行沒收乾淨的行程。",
             "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>Navide 背景服務重啟後自動接回工作階段</em> 開啟。",
-            "timeout": "Backend 起太慢而報錯時，調一般分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
+            "timeout": "Backend 起太慢而報錯時，調{generalTab}分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
           },
           "h4": "維護動作速查",
           "maintenanceTable": {
@@ -3605,7 +3608,7 @@
           "tokenMonitor": {
             "controls": "上方兩個下拉：<strong>天數</strong> 14／30／90，以及<strong>模型</strong>（可選全部）。旁邊是<em>重新整理</em>，後端沒連上時按不動。",
             "stats": "五個數字：<strong>輪數、總 Token、每輪平均、中位數、每輪平均輸出</strong>。底下一行寫已掃描／可用 session 數與資料時間。",
-            "comparison": "<strong>最近 7 天與前 7 天</strong>的輸出比較：樣本數、平均、中位數與變化百分比。兩期各<strong>至少 10 輪</strong>、且前期不為零才算得出來，否則寫「樣本不足」。畫面自己註明這只是描述觀察到的變化——<strong>Effort 與任務難度未知，下降不能證明額度被縮減</strong>。",
+            "comparison": "<strong>最近 7 天與前 7 天</strong>的輸出比較：樣本數、平均、中位數與變化百分比。要先在模型選單<strong>選一個已知的單一模型</strong>才會出現；停在「全部模型」時，這一區只寫「請選擇單一已知模型以比較。」兩期各<strong>至少 10 輪</strong>、且前期不為零才算得出來，否則寫「樣本不足」。畫面自己註明這只是描述觀察到的變化——<strong>Effort 與任務難度未知，下降不能證明額度被縮減</strong>。",
             "charts": "五張<strong>每回合</strong>趨勢圖。強調色那條是<strong>最近 10 輪的移動平均</strong>，灰色是各輪原值；<strong>橫軸是依時間排序的輪次、等距，不是經過時間</strong>。",
             "table": "本機 Claude 回合歷史表，<strong>每頁 100 列</strong>，欄位是時間、session（id 前 8 碼／輪次）、模型、各項 token 與呼叫次數。",
             "quota": "最下面是額度散點圖，<strong>按 reset window 分群</strong>、一個週期一張。百分比來自供應商，圖上寫明橫軸是「依記錄順序排列的快照」，也寫明<strong>不能把本機 token 換算成帳號額度上限</strong>。還沒有樣本時它會告訴你要在設定裡開 Claude 額度輪詢並讓 Navide 持續執行——<strong>歷史上限無法從 token 記錄反推</strong>。"
@@ -3641,7 +3644,7 @@
           "h1": "Navide Guard",
           "p2": "Guard 把 CLI 每一個有風險的動作分成 {critical}、{high}、一般三級，再依請求<strong>從哪裡來</strong>決定怎麼處理：你在這台電腦前、聊天軟體、別的分格或裝置，或是一個吃進過外部內容的分格。上方的決策表固定不變；從聊天核准的請求，高以上一律拒絕。",
           "items": {
-            "builtin": "<strong>{builtin}</strong>：每一條可設成 {critical}、{high} 或「{off}」。調高立即生效，調低或關閉要確認；八條安全底線（憑證讀取與外送、Keychain、下載後直接執行、刪除根目錄或家目錄、格式化、直接寫磁碟）最低只能到 {high}。",
+            "builtin": "<strong>{builtin}</strong>：每一條可設成 {critical}、{high} 或「{off}」。調高立即生效，調低或關閉要確認；十條安全底線（憑證讀取、外送與透過管線上傳、Keychain、下載後直接執行、刪除根目錄或家目錄、格式化、直接寫磁碟、寫入 Navide 外掛存放區）最低只能到 {high}。",
             "branches": "<strong>{branches}</strong>：對這些分支 force-push 或刪除屬於 {critical}；終端機指令防護的 force-push 檢查用的也是這份清單。移除分支要確認。",
             "rules": "<strong>{rules}</strong>：種類是「{deny}」或「{allow}」。拒絕樣式把符合的指令提升到你選的等級；允許樣式可以把 {high} 降為一般（動不了 {critical}）——這就是例外，沒有另一份例外清單。新增允許或移除拒絕要確認。",
             "test": "<strong>{test}</strong>：輸入一條指令，看 Guard 會怎麼判。",
@@ -7015,7 +7018,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>安裝檔沒有程式碼簽章。</strong>每一個新版本都會再被 SmartScreen 警告一次，而且 App 內更新也是在不驗證簽章的情況下裝上去的。",
-            "symlinks": "<strong>每個分格一份的 CLI 家目錄、以及受管技能，是用符號連結做出來的</strong>，而 Windows 預設不讓一般程式建立符號連結。要嘛開啟 Windows 的開發人員模式（<em>Settings ▸ For developers</em>），要嘛用系統管理員身分執行 Navide。沒開也不會無聲失敗：受影響的分格會在啟動後印一行黃色的 <code>[mcp]</code> 說明告訴你原因。會碰到這件事的是靠設定檔接 MCP 的那幾家——Antigravity CLI、Grok CLI、Kimi Code。",
+            "symlinks": "<strong>每個分格一份的 CLI 家目錄、以及受管技能，是用符號連結做出來的</strong>，而 Windows 預設不讓一般程式建立符號連結。要嘛開啟 Windows 的開發人員模式（<em>Settings ▸ For developers</em>），要嘛用系統管理員身分執行 Navide。分格專屬家目錄是靠設定檔接 MCP 的那幾家在用——Antigravity CLI、Grok CLI、Kimi Code；沒有權限時，它們的分格啟動後會印一行黃色的 <code>[mcp]</code> 說明原因。受管技能這時也送不到任何一家 CLI，這一點只會記在 Backend 記錄裡。",
             "schedule": "<strong>Schedule 分頁只會列出 Navide 自己的排程（Navide Jobs）。</strong>Navide 讀的是使用者的 crontab 與 macOS 的 launchd，Windows 兩者都沒有；工作排程器（taskschd.msc）是刻意沒有接進來的，因為 Navide 從不建立作業系統的排程工作，而工作排程器本來就在管這台機器上的工作。畫面會直接把這件事寫出來，而不是給你一份空清單。"
           },
           "h2": "Linux",

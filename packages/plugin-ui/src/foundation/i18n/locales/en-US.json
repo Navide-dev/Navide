@@ -2846,7 +2846,7 @@
             }
           },
           "resource": {
-            "caption": "The Resource Manager window. Figures and scans update only when you press Refresh.",
+            "caption": "The Resource Manager window. The {cpu} and {memory} figures update on their own while it is open; the disk scan runs only when you press {scan}.",
             "legend": {
               "totals": {
                 "label": "The three cards on top",
@@ -2884,15 +2884,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
+        "intro": "What each of the {tabCount} settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>27 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">{settingsKey}</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into {groupCount} groups, <strong>{tabCount} tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
-            "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
+            "text": "The index is a hand-maintained list, and <strong>the {agents}, {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
           "h2": "The twenty-seven tabs",
           "tabTable": {
@@ -2911,7 +2911,7 @@
               "more": "section 2 of this page"
             },
             "language": {
-              "what": "Interface language for every workspace: Traditional Chinese, English, or Japanese",
+              "what": "Interface language for every workspace, in any of {languageCount} languages ({betaCount} of them in Beta)",
               "more": "section 2 of this page"
             },
             "statusBadges": {
@@ -3023,7 +3023,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "Ask before ⌘W closes a pane. A pane in the middle of a turn always asks, regardless of this toggle.",
+              "desc": "Ask before {closePaneKey} closes a pane. A pane in the middle of a turn always asks, regardless of this toggle.",
               "fallback": "On"
             },
             "confirmCloseWorkspace": {
@@ -3087,16 +3087,16 @@
           "appearance": {
             "theme": "<strong>Theme</strong> — five built in: Dark (GitHub), Midnight, Forest, Light and High Contrast, with Dark (GitHub) as the default.",
             "colors": "<strong>Custom Colors</strong> — eight overridable color tokens (background, surface, text, secondary text, border, accent, success, danger). Overrides sit on top of the current theme and are <strong>kept when you switch themes</strong>; <em>↺ Reset to Defaults</em> restores them.",
-            "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, Navide plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
+            "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, Navide plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
             "restore": "<strong>Restore windows</strong> — reopen the workspace windows that were open when you last quit."
           },
           "callout": {
             "title": "Notifications and sound live on the Notifications tab",
             "text": "The notification toggles do exist — they are simply not on Appearance but on the <strong>Notifications tab</strong>, three of them: <em>System notifications</em> (a desktop notification when a CLI finishes its turn or needs your input while Navide is in the background; the Dock badge keeps counting either way), <em>Notification sound</em> (a short chime on turn completion and a double ping while a CLI waits for you), and <em>Notification permission</em> — macOS does not report the real authorization to Navide, so this one can only send a test notification for you to confirm it appears; if it does not, allow Navide under System Settings → Notifications. That last row only appears on platforms where it applies."
           },
-          "language": "Language is a tab of its own, not part of Appearance. <strong>Three languages</strong>: <code>繁體中文</code>, <code>English</code>, and <code>日本語</code>. Until you pick one, Navide follows the system language (Traditional Chinese when the system language is none of the three). This is a user-level preference and applies to every workspace.",
+          "language": "Language is a tab of its own, not part of Appearance. It offers <strong>{languageCount} languages</strong>, each listed under its own name — <code>繁體中文</code>, <code>English</code>, <code>日本語</code> and so on; the {betaCount} marked Beta are machine-translated and still await review by native speakers. Until you pick one, Navide follows the system language ({fallbackLanguage} when the system language is none of them). This is a user-level preference and applies to every workspace.",
           "h3": "Status badges",
-          "p1": "<strong>Rename and recolor</strong> each of the nine pane states. The Chinese, English, and Japanese names are filled in separately (24 characters each; leave one blank to fall back to the built-in translation). Once changed, the pane badges, the sidebar, the meeting bar and the resource panel all follow. <strong>The setting lives on your account, not with the project.</strong>",
+          "p1": "<strong>Rename and recolor</strong> each of the {stateCount} pane states. There is one name field per interface language ({languageCount} in all, 24 characters each). A field left blank falls back: Traditional Chinese, English and Japanese go straight to the built-in translation, while any other language first borrows your English name, then your Traditional Chinese one, then the built-in translation. Once changed, the pane badges, the sidebar, the meeting bar and the resource panel all follow. <strong>The setting lives on your account, not with the project.</strong>",
           "statusTable": {
             "state": "State",
             "when": "When a pane is in it",
@@ -3141,7 +3141,7 @@
             "title": "The shared root",
             "text": "Skills created by Navide always live in <code>~/.agents/skills</code>. This page <strong>never moves or rewrites</strong> the skills inside a CLI's own folder — those are merely reflected so you can see them, and can be routed to other CLIs. (The one explicit exception is <em>Move into Shared Library</em>, which moves the files and leaves a symlink behind, and can be undone.)"
           },
-          "p2": "The page has two views, <strong>Browse</strong> (cards) and <strong>Route</strong> (the routing matrix). The matrix has the 15 CLIs across the top and the skills down the side, each cell in one of four states, and every row carries <em>All</em> / <em>None</em> batch buttons:",
+          "p2": "The page has two views, <strong>Browse</strong> (cards) and <strong>Route</strong> (the routing matrix). The matrix has the {cliCount} CLIs across the top and the skills down the side, each cell in one of four states, and every row carries <em>All</em> / <em>None</em> batch buttons:",
           "matrixTable": {
             "cell": "Cell",
             "meaning": "Means",
@@ -3161,7 +3161,7 @@
             "none": {
               "cell": "— no skills mechanism",
               "meaning": "That CLI has no notion of skills at all, so there is nothing to connect to.",
-              "who": "4: aider, droid, kilo, mcode"
+              "who": "8: aider, devin, droid, goose, hermes, kilo, mcode, openclaw"
             },
             "pending": {
               "cell": "· supported, not wired yet",
@@ -3189,14 +3189,14 @@
             "notCreated": "A file that does not exist yet is marked <em>Not created</em> — saving creates it, along with any missing parent directories.",
             "reload": "If another program changes the file while you are editing, it stops and asks you to <em>Reload from Disk (Discards Your Draft)</em> first, rather than overwriting your work or theirs."
           },
-          "p6": "The <strong>CLI coverage</strong> block at the bottom sorts the 15 CLIs into three groups:",
+          "p6": "The <strong>CLI coverage</strong> block at the bottom sorts the {cliCount} CLIs into three groups:",
           "coverageTable": {
             "category": "Category",
             "meaning": "Means"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide knows where this CLI keeps its instructions. 14 of them are in this group."
+              "value": "Navide knows where this CLI keeps its instructions. Every CLI except aider is in this group."
             },
             "configured": {
               "value": "Only aider. It has no file name of its own — it reads whatever the read: field in .aider.conf.yml names, so whatever you put there is what is listed here (up to 20). CONVENTIONS.md is only a name suggested by the documentation; the program itself does not know it."
@@ -3217,7 +3217,7 @@
           "shortcuts": {
             "record": "Clicking a key box starts <strong>recording</strong> in place; <code>+</code> adds a second binding; <code>✕</code> removes one. A chord is at most two steps.",
             "instant": "Changes are <strong>written to <code>keybindings.json</code> immediately</strong> and applied to every open window; there is no save button.",
-            "search": "The search field matches command names and key notation at the same time (both <code>cmd+shift+p</code> and <kbd class=\"syh-kbd\">⌘⇧P</kbd> find it); three filters, <em>All</em> / <em>Customized</em> / <em>Conflicts</em>.",
+            "search": "The search field matches command names and key notation at the same time (both <code>cmd+shift+p</code> and <kbd class=\"syh-kbd\">{paletteKey}</kbd> find it); three filters, <em>All</em> / <em>Customized</em> / <em>Conflicts</em>.",
             "conflicts": "<em>Conflicts</em> marks bindings that collide and explains whether one always wins or they are kept apart by <em>Active when</em>.",
             "reset": "<em>Reset to Default</em> per row, <em>Reset All</em> for the page. <em>Export</em> / <em>Import</em> move the settings, and <strong>import replaces rather than merges</strong>: it first tells you how many entries were discarded and how many imported, and lists the rejected ones."
           },
@@ -3243,7 +3243,7 @@
               "fallback": "On, 3 failures"
             },
             "autoDownload": {
-              "toggle": "Automatically download updates",
+              "toggle": "Automatically download updates (patch releases only; minor and major updates always wait for you)",
               "fallback": "On"
             },
             "retryDownload": {
@@ -3357,15 +3357,18 @@
             "text": "The <code>{'@'}</code> mention menu in the pane input lists <strong>local</strong> panes only (including those in other windows on this machine), and has no button for inserting a cross-device address. Cross-device addresses are written on the agent's <code>to:</code> line, or sent by an MCP tool (see the \"Agent collaboration\" topic). When delivery fails the reply is <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code> or <code>link-unauthorized</code>; note also that reply threading does not cross machines."
           },
           "h6": "Sync (keeping several machines the same)",
-          "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
+          "p11": "The first block on Settings ▸ Navide Cloud is called Sync. While Navide Cloud is connected, the page has three sub-tabs — <strong>{sync}</strong>, <strong>{share}</strong> and <strong>{devices}</strong> — and Sync is the first; while it is not connected, the page shows the Sync content alone. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
             "scopes": "<strong>Five rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
             "credentials": "<em>Memory</em> and <em>Extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory switch an older build left on can still be turned off. <em>Credentials &amp; Keys</em> has no row at all: account credentials and keys never leave this machine. A Credentials &amp; Keys switch an older build left on is treated as off. MCP settings, when their sync is on, are encrypted on this machine before they are uploaded, and the server has no key to decrypt them.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync Now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate Key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate Now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for This Account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
-            "conflicts": "When two devices change the same item, <strong>neither side is overwritten</strong>. It is listed under \"Needs your decision\" with both versions side by side, and you press <em>Keep This One</em> or <em>Keep Theirs</em>. A credential conflict shows only which slot it is (<code>vendor / slot</code>), never the contents."
-          }
+            "conflicts": "When two devices change the same item, <strong>neither side is overwritten</strong>. It is listed under \"Needs your decision\" with both versions side by side, and you press <em>Keep This One</em> or <em>Keep Theirs</em>. A credential conflict shows only which slot it is (<code>vendor / slot</code>), never the contents.",
+            "inventory": "<strong>{inventory}</strong>: for each synced section, how many items it holds here and in the cloud, how many match, how many conflict, and which device wrote to it last."
+          },
+          "share": "The <strong>{share}</strong> sub-tab lists every share link this account has made, from any of its devices. For a link that still opens you can <em>{copyLink}</em>, add seven days with <em>{extend}</em>, replace it with <em>{rekey}</em> (the new link is copied and the old one stops opening) or <em>{revoke}</em> it; <em>{revokeAll}</em> ends every link at once. Revoking asks once more first. Agents create and manage the same links with the MCP tools <code>share_create</code>, <code>share_list</code> and <code>share_revoke</code>.",
+          "devices": "The <strong>{devices}</strong> sub-tab lists every device that has written to this account's cloud, newest write first, with when it last wrote and when it was last online."
         },
         "s6": {
           "title": "Menus, standalone windows and schedules",
@@ -3404,7 +3407,7 @@
           "h2": "The Help menu",
           "helpMenu": {
             "github": "<strong>Navide on GitHub</strong> and <strong>Report an Issue…</strong> — open the GitHub project and its issues page.",
-            "shortcuts": "<strong>Keyboard Shortcuts</strong> — opens the Shortcuts tab in settings. This menu item <strong>shows no shortcut</strong>; from the keyboard it is the chord <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd>.",
+            "shortcuts": "<strong>Keyboard Shortcuts</strong> — opens the Shortcuts tab in settings. This menu item <strong>shows no shortcut</strong>; from the keyboard it is the chord <kbd class=\"syh-kbd\">{shortcutsKey}</kbd>.",
             "legal": "Six legal pages, in order: <em>Privacy</em>, <em>Security Policy</em>, <em>Code of Conduct</em>, <em>Boundaries</em>, <em>Licenses</em> and <em>Legal</em>, each opening the matching page on navide.dev. (There are <strong>no terms of service</strong>, and that is deliberate.)"
           },
           "callout1": {
@@ -3433,7 +3436,7 @@
             }
           },
           "p2": "The system level is read-only because touching it needs root, and Navide never asks for it — the backend blocks it too, not just the interface. Daemons in particular can usually only show their state as <code>State unknown (requires root)</code>. Every row expands to show Schedule / Command / Raw line, or Label / Scope / Plist path / Last exit code / State. Remove sits in each row's ⋯ menu; removing a LaunchAgent <strong>unloads it and permanently deletes its plist</strong>, and asks for confirmation first.",
-          "note2": "There is <strong>no \"run now\" and no \"reveal in Finder\"</strong> here, only disable/enable and remove. Above them are <em>Rescan</em> and the time of the last scan.",
+          "note2": "For crontab and launchd rows there is <strong>no \"run now\" and no \"reveal in Finder\"</strong>, only disable/enable and remove. Navide's own jobs (created in Navide, or by an agent with <code>scheduler_upsert</code>) have more: a toggle, <em>{runNow}</em>, and their name opens <em>{edit}</em>, where <em>{remove}</em> also sits. A failing job shows <em>{repair}</em>, a job whose creating pane has closed offers <em>{adopt}</em>, an agent's periodic job about to switch itself off offers <em>{keep}</em>, and a job whose target pane is gone offers <em>{retarget}</em>. Jobs tagged <em>{systemTag}</em> (self-evolution) are locked. Above the list are <em>{rescan}</em> and the time of the last scan.",
           "h4": "The other windows opened from the UI",
           "otherTable": {
             "window": "Window",
@@ -3442,15 +3445,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "A new main window",
-              "how": "File ▸ New Window (⌘N)"
+              "how": "File ▸ New Window ({newWindowKey})"
             },
             "editor": {
               "window": "The editor (Mini-IDE) window",
-              "how": "⌘⇧I, or click a file in the explorer, in search results, or a file link in the terminal (see the \"Code workflow\" topic)"
+              "how": "{miniIdeKey}, or click a file in the explorer, in search results, or a file link in the terminal (see the \"Code workflow\" topic)"
             },
             "git": {
               "window": "The Git window",
-              "how": "Open in New Window in the Git panel header, or ⌘⇧G"
+              "how": "Open in New Window in the Git panel header, or {gitWindowKey}"
             },
             "diff": {
               "window": "A diff view",
@@ -3475,7 +3478,7 @@
           },
           "callout2": {
             "title": "Two things that are easy to misread",
-            "text": "<strong>Git History has no window of its own</strong> — \"View Full History\" opens the history view inside the Git window. <strong><kbd class=\"syh-kbd\">⌘⇧D</kbd> no longer opens a window either</strong>; it simply switches the left sidebar to the Plans tab. To open the Plan window, start from a plan document itself."
+            "text": "<strong>Git History has no window of its own</strong> — \"View Full History\" opens the history view inside the Git window. <strong><kbd class=\"syh-kbd\">{plansKey}</kbd> no longer opens a window either</strong>; it simply switches the left sidebar to the Plans tab. To open the Plan window, start from a plan document itself."
           },
           "note3": "When a workspace is already open in another window, Navide does not open a second copy — it brings that window to the front."
         },
@@ -3526,7 +3529,7 @@
           "orphans": {
             "leftover": "<strong>Leftover CLI processes</strong> — when <code>⚠ N leftover</code> appears in the status bar, clicking it asks \"Found N leftover CLI process(es) from a previous run — they can exhaust memory. Clean them up?\", with <em>Clean Up</em> to clear them and <em>Dismiss</em> to skip. These are processes the previous run did not clean up.",
             "backend": "<strong>Backend</strong> — clicking the Backend pill in the status bar shows the address and PID plus two buttons: <em>Restart</em> (<em>Start</em> while disconnected) and <em>Stop</em> (only while connected). <strong>Restarting the backend takes every CLI process with it</strong>; to have conversations resume automatically once it is back, turn on <em>Resume sessions after Navide's background service restarts</em> on the General tab.",
-            "timeout": "When the backend errors out because it starts too slowly, raise <em>Backend Startup Timeout</em> (15–120 seconds) on the Appearance tab."
+            "timeout": "When the backend errors out because it starts too slowly, raise <em>Backend Startup Timeout</em> (15–120 seconds) on the {generalTab} tab."
           },
           "h4": "Upkeep at a glance",
           "maintenanceTable": {
@@ -3605,7 +3608,7 @@
           "tokenMonitor": {
             "controls": "Two dropdowns at the top: <strong>days</strong> (14 / 30 / 90) and <strong>model</strong> (all, or one). <em>Refresh</em> sits beside them and is disabled while the backend is not connected.",
             "stats": "Five figures: <strong>turns, total tokens, mean per turn, median per turn, mean output per turn</strong>. A line under them gives sessions scanned / available and when the data is from.",
-            "comparison": "An output comparison of the <strong>last 7 days against the 7 before</strong>: sample counts, means, medians and a percentage change. It needs <strong>at least 10 turns in each period</strong> and a nonzero baseline, otherwise it says the samples are insufficient. The page notes that this only describes an observed change — <strong>effort and task difficulty are unknown, and a decline does not establish that an allowance was cut</strong>.",
+            "comparison": "An output comparison of the <strong>last 7 days against the 7 before</strong>: sample counts, means, medians and a percentage change. It appears only once you <strong>pick a single known model</strong> in the Model menu; on \"All models\" the section reads \"Select a single known model to compare.\" It needs <strong>at least 10 turns in each period</strong> and a nonzero baseline, otherwise it says the samples are insufficient. The page notes that this only describes an observed change — <strong>effort and task difficulty are unknown, and a decline does not establish that an allowance was cut</strong>.",
             "charts": "Five <strong>per-turn</strong> trend charts. The accent line is the <strong>trailing 10-turn mean</strong> and the gray one is each turn; the <strong>horizontal axis is turns in chronological order, equally spaced — not elapsed time</strong>.",
             "table": "A table of local Claude turns, <strong>100 rows per page</strong>: time, session (first 8 characters of the id / turn index), model, each token column, and calls.",
             "quota": "At the bottom, quota scatter plots <strong>grouped by reset window</strong>, one figure per window. The percentages are provider-reported; the page states that the horizontal axis is \"samples in recorded order\" and that <strong>local tokens cannot be converted into an allowance ceiling</strong>. With no samples yet it tells you to enable Claude usage polling in settings and leave Navide running — <strong>past limits cannot be reconstructed from token logs</strong>."
@@ -3641,7 +3644,7 @@
           "h1": "Navide Guard",
           "p2": "Guard grades each risky CLI action as {critical}, {high} or normal, then handles it by <strong>where the request came from</strong>: you at this computer, a chat app, another pane or device, or a pane that has taken in outside content. The decision table at the top is fixed; requests approved from a chat are refused at high and above.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: each rule can be set to {critical}, {high} or \"{off}\". Raising takes effect at once; lowering or turning off needs a confirmation, and eight floor rules (reading or sending credentials, Keychain, download-and-run, deleting root or home, formatting, raw disk writes) can go no lower than {high}.",
+            "builtin": "<strong>{builtin}</strong>: each rule can be set to {critical}, {high} or \"{off}\". Raising takes effect at once; lowering or turning off needs a confirmation, and ten floor rules (reading, sending or pipe-uploading credentials, Keychain, download-and-run, deleting root or home, formatting, raw disk writes, writing into the Navide plugin store) can go no lower than {high}.",
             "branches": "<strong>{branches}</strong>: force-pushing or deleting these branches is {critical}; terminal command protection's force-push check uses the same list. Removing a branch needs a confirmation.",
             "rules": "<strong>{rules}</strong>: each is \"{deny}\" or \"{allow}\". A deny pattern raises matching commands to the level you choose; an allow pattern can lower {high} to normal (never {critical}) — that is what an exception is; there is no separate exceptions list. Adding an allow or removing a deny needs a confirmation.",
             "test": "<strong>{test}</strong>: type a command to see how Guard would grade it.",
@@ -7015,7 +7018,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>The installer is not code-signed.</strong> Every new version is flagged by SmartScreen again, and in-app updates are installed without signature verification for the same reason.",
-            "symlinks": "<strong>Per-pane CLI homes and managed skills are built from symbolic links</strong>, which Windows does not let an ordinary process create. Either turn on Windows Developer Mode (<em>Settings ▸ For developers</em>) or run Navide elevated. Without it nothing fails silently: the affected pane prints a yellow <code>[mcp]</code> line explaining why once it starts. This only reaches the CLIs whose MCP wiring is a file in their config directory — Antigravity CLI, Grok CLI and Kimi Code.",
+            "symlinks": "<strong>Per-pane CLI homes and managed skills are built from symbolic links</strong>, which Windows does not let an ordinary process create. Either turn on Windows Developer Mode (<em>Settings ▸ For developers</em>) or run Navide elevated. Per-pane homes are what the CLIs whose MCP wiring is a file in their config directory use — Antigravity CLI, Grok CLI and Kimi Code; without the privilege their panes print a yellow <code>[mcp]</code> line explaining why once they start. Managed skills are then not delivered to any CLI either, and that shows only in the backend log.",
             "schedule": "<strong>The Schedule tab lists only Navide's own jobs (Navide Jobs).</strong> Navide reads the user crontab and macOS launchd jobs, and Windows has neither; Task Scheduler (taskschd.msc) is deliberately not integrated, because Navide never creates OS scheduled jobs and Task Scheduler already manages the machine's. The screen says so rather than showing you an empty list."
           },
           "h2": "Linux",

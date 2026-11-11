@@ -2846,7 +2846,7 @@
             }
           },
           "resource": {
-            "caption": "Resource Manager 창이에요. 수치와 검사 결과는 새로 고침을 눌렀을 때만 업데이트돼요.",
+            "caption": "Resource Manager 창이에요. 열려 있는 동안 {cpu}와 {memory} 수치는 저절로 갱신되고, 디스크 검사는 \"{scan}\"을 눌렀을 때만 실행돼요.",
             "legend": {
               "totals": {
                 "label": "위쪽의 카드 세 개",
@@ -2884,15 +2884,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "열아홉 개 설정 탭이 각각 무엇을 제어하는지, Navide Cloud가 여러 컴퓨터를 하나의 비공개 네트워크로 연결하는 방법, 그리고 메인 화면 밖에 있는 시스템 화면(메뉴, 독립 창, 사용량 보기, 리소스 관리)을 설명해요.",
+        "intro": "설정 탭 {tabCount}개가 각각 무엇을 다루는지, Navide Cloud가 여러 기기를 하나의 비공개 네트워크로 어떻게 묶는지, 그리고 메뉴, 독립 창, 사용량 보기, 리소스 관리처럼 메인 화면 밖에 있는 시스템 기능을 설명해요.",
         "s1": {
           "title": "설정 개요",
-          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>27개 탭</strong>으로 나뉘어 있어요.",
+          "p1": "설정 창은 <kbd class=\"syh-kbd\">{settingsKey}</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 {groupCount}개 그룹, 모두 <strong>{tabCount}개 탭</strong>으로 나뉘어요.",
           "h1": "검색 필드",
           "p2": "사이드바 제목 아래에 자리 표시자가 <code>Search settings…</code>인 검색 필드가 있어요. 설정 제목, 섹션, 키워드를 <strong>모든 탭에서</strong> 찾으며(현재 인터페이스 언어와 색인된 키워드 사용) 최대 8개 결과를 보여 줘요. 결과를 클릭하면 해당 탭으로 전환하고 그 섹션으로 스크롤해요(예외 하나: \"저장 공간\"은 설정을 닫고 Resource Manager를 바로 열어요). 일치하는 항목이 없으면 <code>No matching settings</code>를 표시해요. <kbd class=\"syh-kbd\">Esc</kbd> 키로 지워요.",
           "callout": {
             "title": "검색 색인이 모든 항목을 다루지는 않아요",
-            "text": "색인은 직접 관리하는 목록이라 <strong>{layout}, {notifications}, {security}, {channels} 탭에는 항목이 전혀 없어서</strong> 그 안의 내용은 검색되지 않아요 — 직접 열어야 해요. CLI Agent 항목은 한 CLI의 설정 서랍을 바로 열어요(\"CLI Agent 및 계정\" 주제 참고)."
+            "text": "색인은 직접 관리하는 목록이라 <strong>{agents}, {layout}, {notifications}, {security}, {channels} 탭에는 항목이 전혀 없어서</strong> 그 안의 내용은 검색되지 않아요 — 직접 열어야 해요. CLI Agent 항목은 한 CLI의 설정 서랍을 바로 열어요(\"CLI Agent 및 계정\" 주제 참고)."
           },
           "h2": "스물일곱 개 탭",
           "tabTable": {
@@ -2911,7 +2911,7 @@
               "more": "이 페이지의 2절"
             },
             "language": {
-              "what": "모든 작업 영역의 인터페이스 언어: 번체 중국어, 영어, 일본어",
+              "what": "모든 작업 영역의 인터페이스 언어: {languageCount}개 언어 중 선택(그중 {betaCount}개는 Beta)",
               "more": "이 페이지의 2절"
             },
             "statusBadges": {
@@ -3023,7 +3023,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "⌘W로 pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 스위치와 관계없이 항상 물어봐요.",
+              "desc": "{closePaneKey}로 pane을 닫기 전에 물어봐요. 턴이 진행 중인 pane은 이 스위치와 관계없이 항상 물어봐요.",
               "fallback": "켜짐"
             },
             "confirmCloseWorkspace": {
@@ -3087,16 +3087,16 @@
           "appearance": {
             "theme": "<strong>테마</strong> — 기본 제공 테마 다섯 개: Dark (GitHub), Midnight, Forest, Light, High Contrast이며 기본값은 Dark (GitHub)예요.",
             "colors": "<strong>사용자 지정 색</strong> — 재정의할 수 있는 색 토큰 여덟 개(배경, 표면, 텍스트, 보조 텍스트, 테두리, 강조, 성공, 위험)예요. 재정의는 현재 테마 위에 적용되며 <strong>테마를 바꿔도 유지돼요</strong>. <em>↺ 기본값으로 재설정</em>으로 되돌려요.",
-            "uiScale": "<strong>인터페이스 크기</strong> — <strong>모양 ▸ 기타</strong> 블록의 첫 번째 행이며, 슬라이더가 아니라 <strong>드롭다운</strong>이에요. 6단계(80%, 90%, 100%, 110%, 125%, 150%, 기본값 100%)이며 <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>로 바꿔요. CSS 변수가 아니라 Electron의 페이지 확대/축소를 쓰므로 텍스트, 아이콘, 테두리, 간격이 함께 바뀌며, 메인 프로세스가 Navide 플러그인 창을 포함한 <strong>모든 창</strong>에 적용해요. pane 글꼴 크기와는 <strong>별개의 축</strong>이에요. <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd>는 터미널 <strong>내용</strong>의 글꼴 크기(창의 모든 CLI pane이 공유하는 값 하나)만 바꾸고, 인터페이스 크기는 그 주변 셸을 바꿔요. 브라우저의 페이지 확대/축소가 사이트 자체 글꼴 크기와 곱해지듯 두 값은 <strong>곱해져요</strong>.",
+            "uiScale": "<strong>인터페이스 크기</strong> — <strong>모양 ▸ 기타</strong> 블록의 첫 번째 행이며, 슬라이더가 아니라 <strong>드롭다운</strong>이에요. 6단계(80%, 90%, 100%, 110%, 125%, 150%, 기본값 100%)이며 <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>로 바꿔요. CSS 변수가 아니라 Electron의 페이지 확대/축소를 쓰므로 텍스트, 아이콘, 테두리, 간격이 함께 바뀌며, 메인 프로세스가 Navide 플러그인 창을 포함한 <strong>모든 창</strong>에 적용해요. pane 글꼴 크기와는 <strong>별개의 축</strong>이에요. <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd>는 터미널 <strong>내용</strong>의 글꼴 크기(창의 모든 CLI pane이 공유하는 값 하나)만 바꾸고, 인터페이스 크기는 그 주변 셸을 바꿔요. 브라우저의 페이지 확대/축소가 사이트 자체 글꼴 크기와 곱해지듯 두 값은 <strong>곱해져요</strong>.",
             "restore": "<strong>창 복원</strong> — 마지막으로 종료할 때 열려 있던 작업 영역 창을 다시 열어요."
           },
           "callout": {
             "title": "알림과 소리는 알림 탭에 있어요",
             "text": "알림 스위치는 있어요 — 모양이 아니라 <strong>알림 탭</strong>에 세 개가 있을 뿐이에요. <em>시스템 알림</em>(Navide가 백그라운드에 있을 때 CLI가 턴을 마치거나 입력이 필요하면 데스크톱 알림을 표시하며, Dock 배지는 어느 경우든 계속 개수를 세요), <em>알림 소리</em>(턴이 끝나면 짧은 차임, CLI가 기다리는 동안 두 번 울리는 소리), 그리고 <em>알림 권한</em>이에요. macOS는 실제 권한 상태를 Navide에 알려 주지 않으므로 이 항목은 테스트 알림을 보내 표시되는지 직접 확인하게 할 수만 있어요. 표시되지 않으면 시스템 설정 → 알림에서 Navide를 허용하세요. 마지막 행은 해당하는 플랫폼에서만 표시돼요."
           },
-          "language": "언어는 모양의 일부가 아니라 별도의 탭이에요. <strong>세 가지 언어</strong>: <code>繁體中文</code>, <code>English</code>, <code>日本語</code>. 하나를 고르기 전까지 Navide는 시스템 언어를 따라요(시스템 언어가 셋 중 어느 것도 아니면 번체 중국어). 사용자 수준 환경설정이며 모든 작업 영역에 적용돼요.",
+          "language": "언어는 모양의 일부가 아닌 독립된 탭이에요. <strong>{languageCount}개 언어</strong>가 있고, <code>繁體中文</code>, <code>English</code>, <code>日本語</code>처럼 각 언어의 자기 이름으로 표시돼요. Beta 표시가 붙은 {betaCount}개는 기계 번역이라 원어민 검토를 기다리고 있어요. 직접 고르기 전에는 시스템 언어를 따라가요(어느 것과도 맞지 않으면 {fallbackLanguage}). 사용자 단위 설정이라 모든 작업 영역에 적용돼요.",
           "h3": "상태 배지",
-          "p1": "아홉 가지 pane 상태 각각의 <strong>이름과 색을 바꿀 수 있어요</strong>. 중국어, 영어, 일본어 이름을 따로 입력하며(각 24자, 비워 두면 기본 번역을 사용), 바꾸면 pane 배지, 사이드바, 회의 표시줄, 리소스 패널이 모두 따라가요. <strong>이 설정은 프로젝트가 아니라 계정에 저장돼요.</strong>",
+          "p1": "pane 상태 {stateCount}가지의 <strong>이름과 색을 바꿀</strong> 수 있어요. 이름 칸은 인터페이스 언어마다 하나씩 있어요(모두 {languageCount}칸, 각 24자까지). 비워 두면 번체 중국어·영어·일본어는 바로 기본 번역으로 돌아가고, 다른 언어는 먼저 영어 칸의 이름, 다음으로 번체 중국어 칸의 이름, 마지막으로 기본 번역을 써요. 바꾸면 pane 배지, 사이드바, 회의 바, 리소스 패널이 모두 따라 바뀌어요. <strong>이 설정은 프로젝트가 아니라 계정에 저장돼요.</strong>",
           "statusTable": {
             "state": "상태",
             "when": "pane이 이 상태일 때",
@@ -3141,7 +3141,7 @@
             "title": "공유 루트",
             "text": "Navide가 만든 스킬은 항상 <code>~/.agents/skills</code>에 있어요. 이 페이지는 CLI 자체 폴더 안의 스킬을 <strong>절대 옮기거나 다시 쓰지 않아요</strong> — 볼 수 있도록 반영만 하며, 다른 CLI로 보낼 수 있어요. (명시적인 예외 하나는 <em>공유 라이브러리로 이동</em>으로, 파일을 옮기고 심볼릭 링크를 남기며 되돌릴 수 있어요.)"
           },
-          "p2": "페이지에는 <strong>둘러보기</strong>(카드)와 <strong>라우팅</strong>(라우팅 매트릭스) 두 가지 보기가 있어요. 매트릭스는 위쪽에 CLI 15개, 옆쪽에 스킬이 있고, 각 칸은 네 가지 상태 중 하나이며, 모든 행에 <em>전체</em> / <em>없음</em> 일괄 버튼이 있어요:",
+          "p2": "페이지에는 <strong>둘러보기</strong>(카드)와 <strong>라우팅</strong>(라우팅 매트릭스) 두 가지 보기가 있어요. 매트릭스는 위쪽에 CLI {cliCount}개, 옆쪽에 스킬이 있고, 각 칸은 네 가지 상태 중 하나이며, 모든 행에 <em>전체</em> / <em>없음</em> 일괄 버튼이 있어요:",
           "matrixTable": {
             "cell": "칸",
             "meaning": "의미",
@@ -3161,7 +3161,7 @@
             "none": {
               "cell": "— 스킬 기능 없음",
               "meaning": "그 CLI에는 스킬 개념이 아예 없어서 연결할 대상이 없어요.",
-              "who": "4개: aider, droid, kilo, mcode"
+              "who": "8개: aider, devin, droid, goose, hermes, kilo, mcode, openclaw"
             },
             "pending": {
               "cell": "· 지원하지만 아직 연결 안 됨",
@@ -3189,14 +3189,14 @@
             "notCreated": "아직 없는 파일은 <em>만들지 않음</em>으로 표시돼요 — 저장하면 없는 상위 디렉터리와 함께 만들어져요.",
             "reload": "편집하는 동안 다른 프로그램이 파일을 바꾸면, 사용자나 상대의 작업을 덮어쓰지 않고 멈춘 뒤 먼저 <em>디스크에서 다시 불러오기(초안 삭제)</em>를 하라고 요청해요."
           },
-          "p6": "아래쪽의 <strong>CLI 지원 범위</strong> 블록은 CLI 15개를 세 그룹으로 나눠요:",
+          "p6": "아래쪽의 <strong>CLI 지원 범위</strong> 블록은 CLI {cliCount}개를 세 그룹으로 나눠요:",
           "coverageTable": {
             "category": "분류",
             "meaning": "의미"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide가 이 CLI의 지시문 저장 위치를 알아요. 14개가 이 그룹이에요."
+              "value": "Navide가 이 CLI의 지시문 저장 위치를 알아요. aider를 뺀 모든 CLI가 이 그룹이에요."
             },
             "configured": {
               "value": "aider만 해당해요. 자체 파일 이름이 없고 .aider.conf.yml의 read: 필드에 적힌 파일을 읽으므로, 거기에 넣은 것이 여기에 표시돼요(최대 20개). CONVENTIONS.md는 문서에서 제안하는 이름일 뿐이며 프로그램 자체는 알지 못해요."
@@ -3217,7 +3217,7 @@
           "shortcuts": {
             "record": "키 상자를 클릭하면 그 자리에서 <strong>기록</strong>이 시작돼요. <code>+</code>로 두 번째 지정을 추가하고 <code>✕</code>로 제거해요. 연속 키는 최대 두 단계예요.",
             "instant": "변경 사항은 <strong>바로 <code>keybindings.json</code>에 기록되며</strong> 열린 모든 창에 적용돼요. 저장 버튼은 없어요.",
-            "search": "검색 필드는 명령 이름과 키 표기를 동시에 찾아요(<code>cmd+shift+p</code>와 <kbd class=\"syh-kbd\">⌘⇧P</kbd> 모두 찾아져요). 필터는 <em>전체</em> / <em>사용자 지정됨</em> / <em>충돌</em> 세 가지예요.",
+            "search": "검색 필드는 명령 이름과 키 표기를 동시에 찾아요(<code>cmd+shift+p</code>와 <kbd class=\"syh-kbd\">{paletteKey}</kbd> 모두 찾아져요). 필터는 <em>전체</em> / <em>사용자 지정됨</em> / <em>충돌</em> 세 가지예요.",
             "conflicts": "<em>충돌</em>은 겹치는 지정을 표시하고, 한쪽이 항상 이기는지 아니면 <em>적용 조건</em>으로 분리되는지 설명해요.",
             "reset": "행마다 <em>기본값으로 재설정</em>, 페이지 전체는 <em>모두 재설정</em>이에요. <em>내보내기</em> / <em>가져오기</em>로 설정을 옮기며, <strong>가져오기는 병합하지 않고 대체해요</strong>: 먼저 버려진 항목 수와 가져온 항목 수를 알려 주고 거부된 항목을 나열해요."
           },
@@ -3243,7 +3243,7 @@
               "fallback": "켜짐, 3회 실패"
             },
             "autoDownload": {
-              "toggle": "자동으로 업데이트 다운로드",
+              "toggle": "자동으로 업데이트 다운로드(패치 릴리스만 해당, 마이너·메이저 업데이트는 항상 직접 결정)",
               "fallback": "켜짐"
             },
             "retryDownload": {
@@ -3357,15 +3357,18 @@
             "text": "pane 입력란의 <code>{'@'}</code> 멘션 메뉴는 <strong>로컬</strong> pane만 나열하며(이 기기의 다른 창에 있는 pane 포함), 기기 간 주소를 삽입하는 버튼은 없어요. 기기 간 주소는 agent의 <code>to:</code> 줄에 쓰거나 MCP 도구로 보내요(\"Agent 협업\" 주제 참고). 전달에 실패하면 <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code>, <code>link-unauthorized</code> 중 하나가 회신돼요. 또한 회신 스레드는 기기를 넘나들지 않아요."
           },
           "h6": "동기화(여러 기기를 같은 상태로 유지)",
-          "p11": "설정 ▸ Navide Cloud의 첫 블록은 동기화예요. <strong>별도 탭이 아니라</strong> 이 페이지의 맨 위 섹션이에요. 동기화할 수 있는 범위마다 토글이 있는 행이 있으며, 하나를 켜면 그 범위는 <strong>같은 계정</strong>으로 로그인한 모든 기기에서 같은 상태로 유지돼요. 레코드는 <strong>이 기기에서 암호화</strong>되고, 서버는 키가 없는 암호문만 저장해요.",
+          "p11": "설정 ▸ Navide Cloud의 첫 블록은 동기화예요. Navide Cloud에 연결되어 있으면 이 페이지에 <strong>{sync}</strong>, <strong>{share}</strong>, <strong>{devices}</strong> 세 하위 탭이 있고 동기화가 첫 번째예요. 연결되어 있지 않으면 동기화 내용만 보여요. 동기화할 수 있는 범위마다 스위치가 달린 행이 있고, 켜면 그 범위가 <strong>같은 계정</strong>으로 로그인한 모든 기기에서 똑같이 유지돼요. 기록은 <strong>이 기기에서 암호화</strong>되고, 서버에는 키가 없는 암호문만 저장돼요.",
           "sync": {
             "scopes": "<strong>Agent 자산 페이지마다 한 줄씩, 사이드바 순서대로 다섯 줄이 있고, 그중 세 개를 켤 수 있어요</strong>: <em>MCP</em>(Navide에서 추가한 서버. 비밀 값은 보내기 전에 암호화돼요), <em>스킬</em>(어떤 스킬이 켜져 있고 각각 어느 CLI로 가는지, 그리고 Navide에서 만든 스킬의 파일. 폴더에 직접 넣은 스킬은 설정만 동기화돼요), <em>프롬프트</em>(프롬프트 스킬과 loop 프롬프트).",
             "credentials": "<em>메모리</em>와 <em>확장</em>은 <strong>목록에는 있지만 회색으로 비활성화</strong>되어 있고, \"아직 동기화할 수 없음\"이라고 표시돼요. \"기본값이 꺼짐이라 켜기를 기다리는 상태\"가 아니라, 스위치 자체가 움직이지 않아요. 이전 버전에서 켜 둔 메모리 스위치는 여전히 끌 수 있어요. <em>자격 증명 및 키</em>는 줄 자체가 없어요: 계정 자격 증명과 키는 이 컴퓨터를 절대 떠나지 않아요. 이전 버전에서 켜 둔 자격 증명 및 키 스위치는 꺼진 것으로 처리돼요. MCP 설정은 동기화를 켰을 때 이 컴퓨터에서 암호화된 뒤 업로드되며, 서버에는 이를 복호화할 키가 없어요.",
             "states": "블록 아래에 두 가지 상태가 표시돼요: <em>연결되지 않음</em>(켜 둔 범위는 연결이 돌아오면 따라잡아요)과 <em>이 기기에 아직 동기화 키가 없음</em>(키가 생길 때까지 아무것도 업로드하지 않아요). 연결된 동안에만 활성화되는 <em>지금 동기화</em> 버튼도 있어요.",
             "key": "<strong>동기화 키는 ID의 앞 8자로만 표시되며</strong> 키 자체는 절대 표시되지 않아요. <em>키 교체</em>는 <strong>두 번 클릭</strong>해야 해요. 첫 클릭에서 <em>지금 교체</em>로 바뀌고 옆에 <em>취소</em>가 생겨요. 교체하면 현재 키가 폐기되고, 동기화된 모든 레코드를 새 키로 다시 봉인하며, 다른 기기가 다음에 키를 교환할 때 새 키를 전달해요. 키가 유출됐다고 생각될 때 쓰는 방법이에요.",
             "legacy": "<em>이 계정에 채택</em>은 이 기기가 계정 연결 이전의 동기화 키를 가지고 있고 <em>동시에</em> 이 계정에 아직 키가 없을 때만 나타나요. 한 번만 하는 선택이에요. 채택하지 않으면 그 키로 동기화된 내용을 읽을 수 없고, 대신 새 키를 만들면 그 레코드는 영구히 읽을 수 없게 돼요.",
-            "conflicts": "두 기기가 같은 항목을 변경하면 <strong>어느 쪽도 덮어쓰지 않아요</strong>. \"결정이 필요함\" 아래에 두 버전이 나란히 표시되고, <em>이것 유지</em> 또는 <em>상대 것 유지</em>를 누르면 돼요. 자격 증명 충돌은 어느 슬롯인지(<code>vendor / slot</code>)만 보여 주며 내용은 절대 보여 주지 않아요."
-          }
+            "conflicts": "두 기기가 같은 항목을 변경하면 <strong>어느 쪽도 덮어쓰지 않아요</strong>. \"결정이 필요함\" 아래에 두 버전이 나란히 표시되고, <em>이것 유지</em> 또는 <em>상대 것 유지</em>를 누르면 돼요. 자격 증명 충돌은 어느 슬롯인지(<code>vendor / slot</code>)만 보여 주며 내용은 절대 보여 주지 않아요.",
+            "inventory": "<strong>{inventory}</strong>: 동기화 중인 섹션마다 이 기기와 클라우드에 있는 항목 수, 일치하는 수, 충돌하는 수, 마지막으로 쓴 기기를 보여 줘요."
+          },
+          "share": "<strong>{share}</strong> 하위 탭에는 이 계정이 어느 기기에서든 만든 공유 링크가 모두 나와요. 아직 열리는 링크는 <em>{copyLink}</em>, <em>{extend}</em>로 7일 연장, <em>{rekey}</em>로 새 링크로 교체(새 링크가 복사되고 예전 링크는 더 이상 열리지 않음), 또는 <em>{revoke}</em>할 수 있어요. <em>{revokeAll}</em>은 모든 링크를 한 번에 끝내요. 취소하기 전에 한 번 더 물어봐요. 에이전트는 MCP 도구 <code>share_create</code>, <code>share_list</code>, <code>share_revoke</code>로 같은 링크를 만들고 관리해요.",
+          "devices": "<strong>{devices}</strong> 하위 탭에는 이 계정의 클라우드에 기록한 적 있는 모든 기기가 최근에 기록한 순서로 나오고, 마지막 기록 시각과 마지막 온라인 시각이 함께 표시돼요."
         },
         "s6": {
           "title": "메뉴, 독립 창, 일정",
@@ -3404,7 +3407,7 @@
           "h2": "도움말 메뉴",
           "helpMenu": {
             "github": "<strong>GitHub의 Navide</strong>와 <strong>문제 신고…</strong> — GitHub 프로젝트와 이슈 페이지를 열어요.",
-            "shortcuts": "<strong>키보드 단축키</strong> — 설정의 단축키 탭을 열어요. 이 메뉴 항목에는 <strong>단축키가 표시되지 않으며</strong>, 키보드로는 <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd> 코드 조합이에요.",
+            "shortcuts": "<strong>키보드 단축키</strong> — 설정의 단축키 탭을 열어요. 이 메뉴 항목에는 <strong>단축키가 표시되지 않으며</strong>, 키보드로는 <kbd class=\"syh-kbd\">{shortcutsKey}</kbd> 코드 조합이에요.",
             "legal": "법률 페이지 여섯 개가 순서대로 있어요: <em>개인정보 처리방침</em>, <em>보안 정책</em>, <em>행동 강령</em>, <em>경계</em>, <em>라이선스</em>, <em>법적 고지</em>. 각각 navide.dev의 해당 페이지를 열어요. (<strong>서비스 약관은 없으며</strong>, 의도된 것이에요.)"
           },
           "callout1": {
@@ -3433,7 +3436,7 @@
             }
           },
           "p2": "시스템 수준은 건드리려면 root 권한이 필요하고 Navide는 이를 절대 요청하지 않기 때문에 읽기 전용이에요. 인터페이스뿐 아니라 백엔드에서도 막아요. 특히 데몬은 대개 상태를 <code>State unknown (requires root)</code>로만 표시할 수 있어요. 모든 행을 펼치면 일정 / 명령 / 원본 줄, 또는 레이블 / 범위 / Plist 경로 / 마지막 종료 코드 / 상태가 표시돼요. 제거는 각 행의 ⋯ 메뉴에 있으며, LaunchAgent를 제거하면 <strong>언로드하고 plist를 영구 삭제</strong>하므로 먼저 확인을 요청해요.",
-          "note2": "여기에는 <strong>\"지금 실행\"과 \"Finder에서 보기\"가 없고</strong>, 비활성화/활성화와 제거만 있어요. 그 위에 <em>다시 검색</em>과 마지막 검색 시간이 있어요.",
+          "note2": "crontab과 launchd 행에는 <strong>\"지금 실행\"과 \"Finder에서 보기\"가 없고</strong>, 비활성화/활성화와 제거만 있어요. Navide 자체 작업(Navide에서 만들었거나 에이전트가 <code>scheduler_upsert</code>로 만든 것)은 더 많은 걸 할 수 있어요. 스위치와 <em>{runNow}</em>가 있고, 이름을 누르면 <em>{edit}</em>이 열리며 <em>{remove}</em>도 거기 있어요. 실패한 작업에는 <em>{repair}</em>, 만든 pane이 닫힌 작업에는 <em>{adopt}</em>, 곧 스스로 꺼질 에이전트의 주기 작업에는 <em>{keep}</em>, 대상 pane이 사라진 작업에는 <em>{retarget}</em>이 나타나요. <em>{systemTag}</em> 태그가 붙은 작업(자기 진화)은 잠겨 있어요. 목록 위에 <em>{rescan}</em>과 마지막 검색 시간이 있어요.",
           "h4": "UI에서 여는 다른 창",
           "otherTable": {
             "window": "창",
@@ -3442,15 +3445,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "새 메인 창",
-              "how": "파일 ▸ 새 창(⌘N)"
+              "how": "파일 ▸ 새 창({newWindowKey})"
             },
             "editor": {
               "window": "편집기(Mini-IDE) 창",
-              "how": "⌘⇧I, 또는 탐색기나 검색 결과의 파일, 터미널의 파일 링크를 클릭(\"코드 워크플로\" 주제 참고)"
+              "how": "{miniIdeKey}, 또는 탐색기나 검색 결과의 파일, 터미널의 파일 링크를 클릭(\"코드 워크플로\" 주제 참고)"
             },
             "git": {
               "window": "Git 창",
-              "how": "Git 패널 헤더의 새 창에서 열기, 또는 ⌘⇧G"
+              "how": "Git 패널 헤더의 새 창에서 열기, 또는 {gitWindowKey}"
             },
             "diff": {
               "window": "차이 보기",
@@ -3475,7 +3478,7 @@
           },
           "callout2": {
             "title": "헷갈리기 쉬운 두 가지",
-            "text": "<strong>Git 기록에는 자체 창이 없어요</strong>. \"전체 기록 보기\"는 Git 창 안에서 기록 보기를 열어요. <strong><kbd class=\"syh-kbd\">⌘⇧D</kbd>도 더 이상 창을 열지 않으며</strong>, 왼쪽 사이드바를 계획 탭으로 전환할 뿐이에요. 계획 창을 열려면 계획 문서에서 시작하세요."
+            "text": "<strong>Git 기록에는 자체 창이 없어요</strong>. \"전체 기록 보기\"는 Git 창 안에서 기록 보기를 열어요. <strong><kbd class=\"syh-kbd\">{plansKey}</kbd>도 더 이상 창을 열지 않으며</strong>, 왼쪽 사이드바를 계획 탭으로 전환할 뿐이에요. 계획 창을 열려면 계획 문서에서 시작하세요."
           },
           "note3": "작업 영역이 이미 다른 창에서 열려 있으면 Navide는 두 번째 사본을 열지 않고 그 창을 앞으로 가져와요."
         },
@@ -3526,7 +3529,7 @@
           "orphans": {
             "leftover": "<strong>남은 CLI 프로세스</strong> — 상태 표시줄에 <code>⚠ N leftover</code>가 나타나면, 클릭 시 \"이전 실행에서 남은 CLI 프로세스 N개를 찾았어요. 메모리를 고갈시킬 수 있어요. 정리할까요?\"라고 묻고, <em>정리</em>로 지우거나 <em>닫기</em>로 건너뛸 수 있어요. 이전 실행이 정리하지 못한 프로세스예요.",
             "backend": "<strong>백엔드</strong> — 상태 표시줄의 백엔드 표시를 클릭하면 주소와 PID, 그리고 버튼 두 개가 보여요: <em>재시작</em>(연결이 끊긴 동안에는 <em>시작</em>)과 <em>중지</em>(연결된 동안에만). <strong>백엔드를 재시작하면 모든 CLI 프로세스도 함께 종료돼요</strong>. 백엔드가 돌아온 뒤 대화가 자동으로 이어지게 하려면 일반 탭에서 <em>백엔드 재시작 후 session 재개</em>를 켜세요.",
-            "timeout": "백엔드 시작이 너무 느려 오류가 나면 모양 탭에서 <em>백엔드 시작 제한 시간</em>(15–120초)을 늘리세요."
+            "timeout": "백엔드 시작이 너무 느려 오류가 나면 {generalTab} 탭에서 <em>백엔드 시작 제한 시간</em>(15–120초)을 늘리세요."
           },
           "h4": "유지 관리 한눈에 보기",
           "maintenanceTable": {
@@ -3605,7 +3608,7 @@
           "tokenMonitor": {
             "controls": "상단에 드롭다운이 두 개 있어요: <strong>일수</strong>(14 / 30 / 90)와 <strong>모델</strong>(전체 또는 하나). 옆에 <em>새로 고침</em>이 있으며, 백엔드가 연결되지 않은 동안에는 비활성화돼요.",
             "stats": "다섯 가지 수치: <strong>턴 수, 총 token, 턴당 평균, 턴당 중앙값, 턴당 평균 출력</strong>. 그 아래 줄에 검사한 / 사용 가능한 session 수와 데이터 시점이 표시돼요.",
-            "comparison": "<strong>최근 7일과 그 이전 7일</strong>의 출력 비교: 표본 수, 평균, 중앙값, 변화율이에요. <strong>각 기간에 최소 10턴</strong>과 0이 아닌 기준값이 필요하며, 없으면 표본이 부족하다고 표시해요. 이것은 관찰된 변화를 설명할 뿐이라고 페이지에 적혀 있어요 — <strong>노력 수준과 작업 난이도는 알 수 없으며, 감소했다고 해서 허용량이 줄었다는 증거는 아니에요</strong>.",
+            "comparison": "<strong>최근 7일과 그 이전 7일</strong>의 출력 비교: 표본 수, 평균, 중앙값, 변화율이에요. 모델 메뉴에서 <strong>알려진 모델 하나를 골라야</strong> 나타나요. \"All models\"로 두면 이 영역에는 \"Select a single known model to compare.\"만 보여요. <strong>각 기간에 최소 10턴</strong>과 0이 아닌 기준값이 필요하며, 없으면 표본이 부족하다고 표시해요. 이것은 관찰된 변화를 설명할 뿐이라고 페이지에 적혀 있어요 — <strong>노력 수준과 작업 난이도는 알 수 없으며, 감소했다고 해서 허용량이 줄었다는 증거는 아니에요</strong>.",
             "charts": "<strong>턴별</strong> 추세 차트 다섯 개예요. 강조선은 <strong>최근 10턴 이동 평균</strong>이고 회색 선은 각 턴이에요. <strong>가로축은 시간 경과가 아니라 시간순으로 같은 간격에 놓인 턴</strong>이에요.",
             "table": "로컬 Claude 턴 표이며 <strong>페이지당 100행</strong>이에요: 시간, session(ID 앞 8자 / 턴 번호), 모델, 각 token 열, 호출 수.",
             "quota": "맨 아래에는 <strong>재설정 기간별로 묶은</strong> 할당량 산점도가 기간마다 하나씩 있어요. 백분율은 제공자가 보고한 값이며, 가로축은 \"기록된 순서의 표본\"이고 <strong>로컬 token을 허용량 상한으로 환산할 수 없다</strong>고 페이지에 적혀 있어요. 아직 표본이 없으면 설정에서 Claude 사용량 폴링을 켜고 Navide를 계속 실행해 두라고 안내해요 — <strong>지난 한도는 token 로그로 재구성할 수 없어요</strong>."
@@ -3641,7 +3644,7 @@
           "h1": "Navide Guard",
           "p2": "Guard는 위험한 CLI 동작을 {critical}, {high}, 일반으로 등급을 매긴 뒤 <strong>요청이 어디서 왔는지</strong>에 따라 처리해요: 이 컴퓨터 앞의 사용자, 채팅 앱, 다른 pane이나 기기, 또는 외부 콘텐츠를 받아들인 pane. 맨 위의 결정표는 고정되어 있으며, 채팅에서 승인된 요청은 높음 이상에서 거부돼요.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: 각 규칙을 {critical}, {high}, \"{off}\"로 설정할 수 있어요. 올리면 즉시 적용되고, 낮추거나 끄려면 확인이 필요해요. 여덟 개의 하한 규칙(자격 증명 읽기·전송, 키체인, 다운로드 후 실행, 루트나 홈 삭제, 포맷, 디스크 직접 쓰기)은 {high}보다 낮출 수 없어요.",
+            "builtin": "<strong>{builtin}</strong>: 각 규칙을 {critical}, {high}, \"{off}\"로 설정할 수 있어요. 올리면 즉시 적용되고, 낮추거나 끄려면 확인이 필요해요. 열 개의 하한 규칙(자격 증명 읽기·전송·파이프로 업로드, 키체인, 다운로드 후 실행, 루트나 홈 삭제, 포맷, 디스크 직접 쓰기, Navide 플러그인 저장소에 쓰기)은 {high}보다 낮출 수 없어요.",
             "branches": "<strong>{branches}</strong>: 이 브랜치를 강제 푸시하거나 삭제하면 {critical}이에요. 터미널 명령 보호의 강제 푸시 검사도 같은 목록을 사용해요. 브랜치를 제거하려면 확인이 필요해요.",
             "rules": "<strong>{rules}</strong>: 각각 \"{deny}\" 또는 \"{allow}\"예요. 거부 패턴은 일치하는 명령을 선택한 수준으로 올리고, 허용 패턴은 {high}를 일반으로 낮출 수 있어요({critical}은 불가). 이것이 예외이며, 별도의 예외 목록은 없어요. 허용을 추가하거나 거부를 제거하려면 확인이 필요해요.",
             "test": "<strong>{test}</strong>: 명령을 입력하면 Guard가 어떻게 등급을 매길지 볼 수 있어요.",
@@ -7015,7 +7018,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>설치 프로그램에 코드 서명이 없어요.</strong> 새 버전마다 SmartScreen이 다시 경고하고, 같은 이유로 앱 내 업데이트도 서명 검증 없이 설치돼요.",
-            "symlinks": "<strong>pane별 CLI 홈과 관리되는 스킬은 심볼릭 링크로 만들어지는데</strong>, Windows는 일반 프로세스가 이를 만들지 못하게 해요. Windows 개발자 모드(<em>설정 ▸ 개발자용</em>)를 켜거나 Navide를 관리자 권한으로 실행하세요. 그렇지 않아도 조용히 실패하지는 않아요. 해당 pane이 시작되면 이유를 설명하는 노란색 <code>[mcp]</code> 줄을 출력해요. MCP 연결이 설정 디렉터리의 파일로 이루어지는 CLI(Antigravity CLI, Grok CLI, Kimi Code)에만 해당해요.",
+            "symlinks": "<strong>pane마다 하나씩 있는 CLI 홈과 관리되는 스킬은 심볼릭 링크로 만들어지는데</strong>, Windows는 일반 프로세스가 심볼릭 링크를 만들지 못하게 해요. Windows 개발자 모드(<em>Settings ▸ For developers</em>)를 켜거나 Navide를 관리자 권한으로 실행하세요. pane별 홈은 MCP 연결이 설정 디렉터리 안의 파일인 CLI—Antigravity CLI, Grok CLI, Kimi Code—가 써요. 권한이 없으면 이들 pane은 시작한 뒤 이유를 알려 주는 노란 <code>[mcp]</code> 줄을 출력해요. 이때 관리되는 스킬도 어떤 CLI에도 전달되지 않는데, 이건 백엔드 로그에만 남아요.",
             "schedule": "<strong>일정 탭에는 Navide 자체 작업(Navide Jobs)만 나열돼요.</strong> Navide는 사용자 crontab과 macOS launchd 작업을 읽는데 Windows에는 둘 다 없어요. 작업 스케줄러(taskschd.msc)는 일부러 연동하지 않았어요. Navide는 OS 예약 작업을 만들지 않고, 작업 스케줄러가 이미 컴퓨터의 작업을 관리하기 때문이에요. 빈 목록을 보여 주는 대신 화면에 그렇게 안내해요."
           },
           "h2": "Linux",

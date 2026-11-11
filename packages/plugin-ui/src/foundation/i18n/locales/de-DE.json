@@ -2846,7 +2846,7 @@
             }
           },
           "resource": {
-            "caption": "Das Fenster „Ressourcenverwaltung“. Werte und Scans werden nur aktualisiert, wenn Sie auf „Aktualisieren“ klicken.",
+            "caption": "Das Fenster „Ressourcenverwaltung“. Die Werte für {cpu} und {memory} aktualisieren sich von selbst, solange es offen ist; der Datenträgerscan läuft nur, wenn Sie auf „{scan}“ klicken.",
             "legend": {
               "totals": {
                 "label": "Die drei Karten oben",
@@ -2884,15 +2884,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
+        "intro": "Was jeder der {tabCount} Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netz verbindet, und die Systemflächen außerhalb des Hauptfensters – Menüs, eigenständige Fenster, Nutzungsansichten und Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>27 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnet sich mit <kbd class=\"syh-kbd\">{settingsKey}</kbd>; das Zahnrad in der Titelleiste führt an dieselbe Stelle. Die linke Seitenleiste ist in {groupCount} Gruppen geteilt, insgesamt <strong>{tabCount} Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
-            "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
+            "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {agents}, {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
           "h2": "Die siebenundzwanzig Tabs",
           "tabTable": {
@@ -2911,7 +2911,7 @@
               "more": "Abschnitt 2 dieser Seite"
             },
             "language": {
-              "what": "Oberflächensprache für alle Arbeitsbereiche: traditionelles Chinesisch, Englisch oder Japanisch",
+              "what": "Oberflächensprache für alle Arbeitsbereiche, in einer von {languageCount} Sprachen ({betaCount} davon als Beta)",
               "more": "Abschnitt 2 dieser Seite"
             },
             "statusBadges": {
@@ -3023,7 +3023,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "Nachfragen, bevor ⌘W einen Bereich schließt. Ein Bereich mitten in einer Runde fragt unabhängig von diesem Schalter immer nach.",
+              "desc": "Nachfragen, bevor {closePaneKey} einen Bereich schließt. Ein Bereich mitten in einer Runde fragt unabhängig von diesem Schalter immer nach.",
               "fallback": "Ein"
             },
             "confirmCloseWorkspace": {
@@ -3087,16 +3087,16 @@
           "appearance": {
             "theme": "<strong>Design</strong> – fünf integrierte: Dark (GitHub), Midnight, Forest, Light und High Contrast, mit Dark (GitHub) als Standard.",
             "colors": "<strong>Eigene Farben</strong> – acht überschreibbare Farb-Tokens (Hintergrund, Fläche, Text, Sekundärtext, Rahmen, Akzent, Erfolg, Gefahr). Überschreibungen liegen über dem aktuellen Design und <strong>bleiben beim Designwechsel erhalten</strong>; <em>↺ Auf Standard zurücksetzen</em> stellt sie wieder her.",
-            "uiScale": "<strong>Oberflächenskalierung</strong> – die erste Zeile des Blocks <strong>Darstellung ▸ Sonstiges</strong>, und zwar ein <strong>Dropdown</strong>, kein Schieberegler: sechs Stufen (80 %, 90 %, 100 %, 110 %, 125 %, 150 %; standardmäßig 100 %), über <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. Sie steuert den Seitenzoom von Electron statt einer CSS-Variablen, sodass sich Text, Symbole, Rahmen und Abstände gemeinsam ändern, und der Hauptprozess wendet sie auf <strong>jedes Fenster</strong> an, einschließlich der Fenster von Navide-Plug-ins. Sie ist eine <strong>eigene Achse</strong> neben der Schriftgröße der Bereiche: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> ändern nur die Schriftgröße des Terminal-<strong>Inhalts</strong> (ein Wert, den alle CLI-Bereiche im Fenster teilen), während die Oberflächenskalierung die Oberfläche drumherum ändert – und beide <strong>multiplizieren sich</strong>, so wie der Seitenzoom eines Browsers sich mit der Schriftgröße einer Website multipliziert.",
+            "uiScale": "<strong>Oberflächenskalierung</strong> – die erste Zeile des Blocks <strong>Darstellung ▸ Sonstiges</strong>, und zwar ein <strong>Dropdown</strong>, kein Schieberegler: sechs Stufen (80 %, 90 %, 100 %, 110 %, 125 %, 150 %; standardmäßig 100 %), über <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>. Sie steuert den Seitenzoom von Electron statt einer CSS-Variablen, sodass sich Text, Symbole, Rahmen und Abstände gemeinsam ändern, und der Hauptprozess wendet sie auf <strong>jedes Fenster</strong> an, einschließlich der Fenster von Navide-Plug-ins. Sie ist eine <strong>eigene Achse</strong> neben der Schriftgröße der Bereiche: <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd> ändern nur die Schriftgröße des Terminal-<strong>Inhalts</strong> (ein Wert, den alle CLI-Bereiche im Fenster teilen), während die Oberflächenskalierung die Oberfläche drumherum ändert – und beide <strong>multiplizieren sich</strong>, so wie der Seitenzoom eines Browsers sich mit der Schriftgröße einer Website multipliziert.",
             "restore": "<strong>Fenster wiederherstellen</strong> – die Arbeitsbereichsfenster erneut öffnen, die beim letzten Beenden geöffnet waren."
           },
           "callout": {
             "title": "Benachrichtigungen und Ton befinden sich im Tab „Benachrichtigungen“",
             "text": "Die Benachrichtigungsschalter gibt es durchaus – sie befinden sich nur nicht unter „Darstellung“, sondern im <strong>Tab „Benachrichtigungen“</strong>, und zwar drei: <em>Systembenachrichtigungen</em> (eine Desktopbenachrichtigung, wenn eine CLI ihre Runde beendet oder Ihre Eingabe braucht, während Navide im Hintergrund ist; das Dock-Badge zählt in jedem Fall weiter), <em>Benachrichtigungston</em> (ein kurzer Ton beim Abschluss einer Runde und ein doppelter Ping, solange eine CLI auf Sie wartet) und <em>Benachrichtigungsberechtigung</em> – macOS teilt Navide die tatsächliche Berechtigung nicht mit, daher kann diese Zeile nur eine Testbenachrichtigung senden, deren Erscheinen Sie bestätigen; erscheint sie nicht, erlauben Sie Navide unter Systemeinstellungen → Mitteilungen. Diese letzte Zeile erscheint nur auf Plattformen, auf denen sie zutrifft."
           },
-          "language": "Die Sprache ist ein eigener Tab und nicht Teil von „Darstellung“. <strong>Drei Sprachen</strong>: <code>繁體中文</code>, <code>English</code> und <code>日本語</code>. Solange Sie keine auswählen, folgt Navide der Systemsprache (traditionelles Chinesisch, wenn die Systemsprache keine der drei ist). Dies ist eine Benutzereinstellung und gilt für jeden Arbeitsbereich.",
+          "language": "Sprache ist ein eigener Tab, kein Teil von Darstellung. Es gibt <strong>{languageCount} Sprachen</strong>, jede unter ihrem eigenen Namen – <code>繁體中文</code>, <code>English</code>, <code>日本語</code> usw.; die {betaCount} mit Beta markierten sind maschinell übersetzt und warten noch auf die Prüfung durch Muttersprachler. Solange Sie keine wählen, folgt Navide der Systemsprache ({fallbackLanguage}, wenn die Systemsprache keine davon ist). Die Einstellung gilt pro Benutzer und für alle Arbeitsbereiche.",
           "h3": "Status-Badges",
-          "p1": "Jeden der neun Bereichszustände <strong>umbenennen und umfärben</strong>. Die chinesischen, englischen und japanischen Namen werden getrennt eingetragen (je 24 Zeichen; lassen Sie einen leer, um auf die integrierte Übersetzung zurückzufallen). Nach einer Änderung folgen die Bereichs-Badges, die Seitenleiste, die Besprechungsleiste und das Ressourcenpanel. <strong>Die Einstellung gehört zu Ihrem Konto, nicht zum Projekt.</strong>",
+          "p1": "Jeden der {stateCount} Bereichszustände können Sie <strong>umbenennen und umfärben</strong>. Pro Oberflächensprache gibt es ein Namensfeld (insgesamt {languageCount}, je 24 Zeichen). Ein leeres Feld fällt zurück: Traditionelles Chinesisch, Englisch und Japanisch gehen direkt auf die eingebaute Übersetzung, jede andere Sprache nimmt zuerst Ihren englischen Namen, dann den traditionell-chinesischen und erst danach die eingebaute Übersetzung. Nach der Änderung folgen Bereichs-Badges, Seitenleiste, Meeting-Leiste und Ressourcenpanel. <strong>Die Einstellung hängt an Ihrem Konto, nicht am Projekt.</strong>",
           "statusTable": {
             "state": "Zustand",
             "when": "Wann ein Bereich darin ist",
@@ -3141,7 +3141,7 @@
             "title": "Das gemeinsame Stammverzeichnis",
             "text": "Von Navide erstellte Skills liegen immer in <code>~/.agents/skills</code>. Diese Seite <strong>verschiebt oder überschreibt nie</strong> die Skills im eigenen Ordner einer CLI – diese werden nur gespiegelt, damit Sie sie sehen und anderen CLIs zuordnen können. (Die einzige ausdrückliche Ausnahme ist <em>In gemeinsame Bibliothek verschieben</em>: Das verschiebt die Dateien, hinterlässt einen Symlink und lässt sich rückgängig machen.)"
           },
-          "p2": "Die Seite hat zwei Ansichten, <strong>Durchsuchen</strong> (Karten) und <strong>Zuordnen</strong> (die Zuordnungsmatrix). Die Matrix zeigt oben die 15 CLIs und seitlich die Skills; jede Zelle hat einen von vier Zuständen, und jede Zeile trägt die Sammelschaltflächen <em>Alle</em> / <em>Keine</em>:",
+          "p2": "Die Seite hat zwei Ansichten, <strong>Durchsuchen</strong> (Karten) und <strong>Zuordnen</strong> (die Zuordnungsmatrix). Die Matrix zeigt oben die {cliCount} CLIs und seitlich die Skills; jede Zelle hat einen von vier Zuständen, und jede Zeile trägt die Sammelschaltflächen <em>Alle</em> / <em>Keine</em>:",
           "matrixTable": {
             "cell": "Zelle",
             "meaning": "Bedeutung",
@@ -3161,7 +3161,7 @@
             "none": {
               "cell": "— kein Skill-Mechanismus",
               "meaning": "Diese CLI kennt überhaupt keine Skills, es gibt also nichts zu verbinden.",
-              "who": "4: aider, droid, kilo und mcode"
+              "who": "8: aider, devin, droid, goose, hermes, kilo, mcode und openclaw"
             },
             "pending": {
               "cell": "· unterstützt, noch nicht angebunden",
@@ -3189,14 +3189,14 @@
             "notCreated": "Eine Datei, die noch nicht existiert, ist mit <em>Nicht erstellt</em> markiert – beim Speichern wird sie angelegt, samt fehlender übergeordneter Verzeichnisse.",
             "reload": "Ändert ein anderes Programm die Datei, während Sie sie bearbeiten, hält der Editor an und bittet Sie, zuerst <em>Vom Datenträger neu laden (verwirft Ihren Entwurf)</em> zu wählen, statt Ihre Arbeit oder die des anderen Programms zu überschreiben."
           },
-          "p6": "Der Block <strong>CLI-Abdeckung</strong> unten teilt die 15 CLIs in drei Gruppen ein:",
+          "p6": "Der Block <strong>CLI-Abdeckung</strong> unten teilt die {cliCount} CLIs in drei Gruppen ein:",
           "coverageTable": {
             "category": "Kategorie",
             "meaning": "Bedeutung"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide weiß, wo diese CLI ihre Anweisungen ablegt. 14 CLIs gehören zu dieser Gruppe."
+              "value": "Navide weiß, wo diese CLI ihre Anweisungen ablegt. Jede CLI außer aider gehört zu dieser Gruppe."
             },
             "configured": {
               "value": "Nur aider. Es hat keinen eigenen Dateinamen – es liest, was das Feld read: in .aider.conf.yml angibt; was Sie dort eintragen, wird also hier aufgeführt (bis zu 20). CONVENTIONS.md ist nur ein in der Dokumentation vorgeschlagener Name; das Programm selbst kennt ihn nicht."
@@ -3217,7 +3217,7 @@
           "shortcuts": {
             "record": "Ein Klick auf ein Tastenfeld startet direkt dort die <strong>Aufnahme</strong>; <code>+</code> fügt eine zweite Belegung hinzu; <code>✕</code> entfernt eine. Eine Tastenfolge hat höchstens zwei Schritte.",
             "instant": "Änderungen werden <strong>sofort in <code>keybindings.json</code> geschrieben</strong> und auf jedes geöffnete Fenster angewendet; eine Speichern-Schaltfläche gibt es nicht.",
-            "search": "Das Suchfeld durchsucht Befehlsnamen und Tastenschreibweise gleichzeitig (sowohl <code>cmd+shift+p</code> als auch <kbd class=\"syh-kbd\">⌘⇧P</kbd> finden den Eintrag); drei Filter: <em>Alle</em> / <em>Angepasst</em> / <em>Konflikte</em>.",
+            "search": "Das Suchfeld durchsucht Befehlsnamen und Tastenschreibweise gleichzeitig (sowohl <code>cmd+shift+p</code> als auch <kbd class=\"syh-kbd\">{paletteKey}</kbd> finden den Eintrag); drei Filter: <em>Alle</em> / <em>Angepasst</em> / <em>Konflikte</em>.",
             "conflicts": "<em>Konflikte</em> markiert kollidierende Belegungen und erklärt, ob eine davon immer gewinnt oder ob <em>Aktiv, wenn</em> sie trennt.",
             "reset": "<em>Auf Standard zurücksetzen</em> pro Zeile, <em>Alle zurücksetzen</em> für die Seite. <em>Exportieren</em> / <em>Importieren</em> übertragen die Einstellungen, und <strong>ein Import ersetzt, statt zusammenzuführen</strong>: Er meldet zuerst, wie viele Einträge verworfen und wie viele importiert wurden, und listet die abgelehnten auf."
           },
@@ -3243,7 +3243,7 @@
               "fallback": "Ein, 3 Fehlschläge"
             },
             "autoDownload": {
-              "toggle": "Updates automatisch herunterladen",
+              "toggle": "Updates automatisch herunterladen (nur Patch-Releases; Minor- und Major-Updates warten immer auf Sie)",
               "fallback": "Ein"
             },
             "retryDownload": {
@@ -3357,15 +3357,18 @@
             "text": "Das Erwähnungsmenü <code>{'@'}</code> in der Eingabe des Bereichs listet nur <strong>lokale</strong> Bereiche auf (einschließlich derer in anderen Fenstern auf diesem Rechner) und hat keine Schaltfläche zum Einfügen einer geräteübergreifenden Adresse. Geräteübergreifende Adressen schreibt der Agent in seine <code>to:</code>-Zeile, oder ein MCP-Werkzeug sendet sie (siehe das Thema „Zusammenarbeit von Agents“). Schlägt die Zustellung fehl, lautet die Antwort <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code> oder <code>link-unauthorized</code>; beachten Sie außerdem, dass Antwort-Threads nicht über Rechner hinweg reichen."
           },
           "h6": "Sync (mehrere Rechner gleich halten)",
-          "p11": "Der erste Block unter Einstellungen ▸ Navide Cloud heißt Sync. <strong>Er ist kein eigener Tab</strong> – er ist der oberste Abschnitt dieser einen Seite. Jeder synchronisierbare Bereich erhält eine Zeile mit einem Schalter; schalten Sie einen ein, bleibt dieser Bereich auf jedem mit <strong>demselben Konto</strong> angemeldeten Gerät gleich. Einträge werden <strong>auf diesem Rechner verschlüsselt</strong>, und der Server speichert nur Chiffretext, für den er keinen Schlüssel hat.",
+          "p11": "Der erste Block unter Einstellungen ▸ Navide Cloud heißt Synchronisierung. Solange Navide Cloud verbunden ist, hat die Seite drei Untertabs – <strong>{sync}</strong>, <strong>{share}</strong> und <strong>{devices}</strong> –, und die Synchronisierung ist der erste; ohne Verbindung zeigt die Seite nur den Synchronisierungsinhalt. Jeder synchronisierbare Bereich hat eine Zeile mit Schalter; ist er an, bleibt dieser Bereich auf jedem Gerät gleich, das mit <strong>demselben Konto</strong> angemeldet ist. Die Daten werden <strong>auf diesem Rechner verschlüsselt</strong>, der Server speichert nur Chiffretext, für den er keinen Schlüssel hat.",
           "sync": {
             "scopes": "<strong>Fünf Zeilen, eine pro Seite der Agent-Assets und in der Reihenfolge der Seitenleiste; drei lassen sich einschalten</strong>: <em>MCP</em> (die in Navide hinzugefügten Server; ihre Geheimnisse werden verschlüsselt, bevor sie den Rechner verlassen), <em>Skills</em> (welche Skills aktiv sind und an welche CLIs jeder geht, dazu die Dateien der in Navide erstellten Skills; Skills, die Sie selbst in den Ordner gelegt haben, synchronisieren nur ihre Einstellungen) und <em>Prompts</em> (Prompt-Skills und der Loop-Prompt).",
             "credentials": "<em>Gedächtnis</em> und <em>Erweiterungen</em> sind <strong>aufgeführt, aber ausgegraut</strong>, und ihre Zeile lautet „noch nicht synchronisierbar“. Das bedeutet nicht „standardmäßig aus, wartet darauf, dass Sie es einschalten“ – der Schalter bewegt sich nicht. Ein Gedächtnis-Schalter, den eine ältere Version eingeschaltet gelassen hat, lässt sich noch ausschalten. <em>Zugangsdaten</em> hat überhaupt keine Zeile: Kontoanmeldeinformationen und Schlüssel verlassen diesen Rechner nie. Ein Zugangsdaten-Schalter, den eine ältere Version eingeschaltet gelassen hat, gilt als ausgeschaltet. MCP-Einstellungen werden bei eingeschaltetem Sync auf diesem Rechner verschlüsselt, bevor sie hochgeladen werden, und der Server hat keinen Schlüssel, um sie zu entschlüsseln.",
             "states": "Zwei Zustände werden unter dem Block ausdrücklich genannt: <em>nicht verbunden</em> (eingeschaltete Bereiche holen auf, sobald die Verbindung wieder besteht) und <em>dieses Gerät hat noch keinen Sync-Schlüssel</em> (nichts wird hochgeladen, bis es einen hat). Außerdem gibt es eine Schaltfläche <em>Jetzt synchronisieren</em>, die nur bei bestehender Verbindung aktiv ist.",
             "key": "<strong>Der Sync-Schlüssel wird als die ersten 8 Zeichen seiner ID angezeigt</strong>, nie als der Schlüssel selbst. <em>Schlüssel rotieren</em> erfordert <strong>zwei Klicks</strong>: Der erste macht daraus <em>Jetzt rotieren</em> und fügt daneben <em>Abbrechen</em> hinzu. Das Rotieren setzt den aktuellen Schlüssel außer Dienst, versiegelt jeden synchronisierten Eintrag unter einem neuen und übergibt den neuen Schlüssel Ihren anderen Geräten beim nächsten Schlüsselaustausch – der richtige Schritt bei einem Schlüssel, den Sie für kompromittiert halten.",
             "legacy": "<em>Für dieses Konto übernehmen</em> erscheint nur, wenn dieses Gerät einen Sync-Schlüssel aus der Zeit vor der Kontobindung besitzt <em>und</em> dieses Konto noch keinen Schlüssel hat. Es ist eine einmalige Entscheidung: Ohne Übernahme können Sie nicht lesen, was unter diesem Schlüssel synchronisiert wurde, und ein stattdessen neu erzeugter Schlüssel würde diese Einträge dauerhaft unlesbar machen.",
-            "conflicts": "Ändern zwei Geräte denselben Eintrag, wird <strong>keine Seite überschrieben</strong>. Er wird unter „Ihre Entscheidung ist gefragt“ mit beiden Versionen nebeneinander aufgeführt, und Sie klicken auf <em>Diese Version behalten</em> oder <em>Andere Version behalten</em>. Ein Konflikt bei Anmeldeinformationen zeigt nur, welcher Platz betroffen ist (<code>vendor / slot</code>), nie den Inhalt."
-          }
+            "conflicts": "Ändern zwei Geräte denselben Eintrag, wird <strong>keine Seite überschrieben</strong>. Er wird unter „Ihre Entscheidung ist gefragt“ mit beiden Versionen nebeneinander aufgeführt, und Sie klicken auf <em>Diese Version behalten</em> oder <em>Andere Version behalten</em>. Ein Konflikt bei Anmeldeinformationen zeigt nur, welcher Platz betroffen ist (<code>vendor / slot</code>), nie den Inhalt.",
+            "inventory": "<strong>{inventory}</strong>: für jeden synchronisierten Abschnitt, wie viele Einträge er hier und in der Cloud hat, wie viele übereinstimmen, wie viele kollidieren und welches Gerät zuletzt hineingeschrieben hat."
+          },
+          "share": "Der Untertab <strong>{share}</strong> listet jeden Freigabelink, den dieses Konto auf einem seiner Geräte erstellt hat. Einen Link, der noch öffnet, können Sie mit <em>{copyLink}</em> kopieren, mit <em>{extend}</em> um sieben Tage verlängern, mit <em>{rekey}</em> ersetzen (der neue Link wird kopiert, der alte öffnet nicht mehr) oder mit <em>{revoke}</em> widerrufen; <em>{revokeAll}</em> beendet alle Links auf einmal. Vor dem Widerrufen wird noch einmal nachgefragt. Agents erstellen und verwalten dieselben Links mit den MCP-Tools <code>share_create</code>, <code>share_list</code> und <code>share_revoke</code>.",
+          "devices": "Der Untertab <strong>{devices}</strong> listet jedes Gerät, das in die Cloud dieses Kontos geschrieben hat, den jüngsten Schreibvorgang zuerst, mit dem Zeitpunkt des letzten Schreibens und der letzten Onlinezeit."
         },
         "s6": {
           "title": "Menüs, eigenständige Fenster und Zeitpläne",
@@ -3404,7 +3407,7 @@
           "h2": "Das Menü „Hilfe“",
           "helpMenu": {
             "github": "<strong>Navide auf GitHub</strong> und <strong>Problem melden …</strong> – öffnen das GitHub-Projekt und dessen Issues-Seite.",
-            "shortcuts": "<strong>Tastenkombinationen</strong> – öffnet den Tab „Tastenkombinationen“ in den Einstellungen. Dieser Menüeintrag <strong>zeigt kein Tastenkürzel an</strong>; über die Tastatur erreichen Sie ihn mit der Tastenfolge <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd>.",
+            "shortcuts": "<strong>Tastenkombinationen</strong> – öffnet den Tab „Tastenkombinationen“ in den Einstellungen. Dieser Menüeintrag <strong>zeigt kein Tastenkürzel an</strong>; über die Tastatur erreichen Sie ihn mit der Tastenfolge <kbd class=\"syh-kbd\">{shortcutsKey}</kbd>.",
             "legal": "Sechs rechtliche Seiten, in dieser Reihenfolge: <em>Datenschutz</em>, <em>Sicherheitsrichtlinie</em>, <em>Verhaltenskodex</em>, <em>Grenzen</em>, <em>Lizenzen</em> und <em>Rechtliches</em>, jeweils mit der passenden Seite auf navide.dev. (Es gibt <strong>keine Nutzungsbedingungen</strong>, und das ist Absicht.)"
           },
           "callout1": {
@@ -3433,7 +3436,7 @@
             }
           },
           "p2": "Die Systemebene ist schreibgeschützt, weil Änderungen dort root-Rechte erfordern, und Navide fragt nie danach – auch das Backend blockiert es, nicht nur die Oberfläche. Insbesondere Daemons können ihren Zustand meist nur als <code>Zustand unbekannt (erfordert root)</code> anzeigen. Jede Zeile lässt sich aufklappen und zeigt Zeitplan / Befehl / Rohzeile oder Label / Bereich / Plist-Pfad / Letzter Exitcode / Zustand. „Entfernen“ steht im Menü ⋯ jeder Zeile; das Entfernen eines LaunchAgent <strong>entlädt ihn und löscht seine plist dauerhaft</strong> und fragt vorher nach einer Bestätigung.",
-          "note2": "Hier gibt es <strong>kein „Jetzt ausführen“ und kein „Im Finder zeigen“</strong>, nur Deaktivieren/Aktivieren und Entfernen. Darüber stehen <em>Erneut scannen</em> und der Zeitpunkt des letzten Scans.",
+          "note2": "Für crontab- und launchd-Zeilen gibt es <strong>kein „Jetzt ausführen“ und kein „Im Finder zeigen“</strong>, nur Deaktivieren/Aktivieren und Entfernen. Navides eigene Jobs (in Navide angelegt oder von einem Agent mit <code>scheduler_upsert</code>) können mehr: einen Schalter, <em>{runNow}</em>, und ihr Name öffnet <em>{edit}</em>, wo auch <em>{remove}</em> liegt. Ein fehlschlagender Job zeigt <em>{repair}</em>, ein Job, dessen erstellender Bereich geschlossen ist, bietet <em>{adopt}</em>, ein periodischer Agent-Job kurz vor der Selbstabschaltung bietet <em>{keep}</em>, und ein Job ohne Zielbereich bietet <em>{retarget}</em>. Mit <em>{systemTag}</em> markierte Jobs (Selbstentwicklung) sind gesperrt. Über der Liste stehen <em>{rescan}</em> und der Zeitpunkt des letzten Scans.",
           "h4": "Die anderen Fenster, die aus der Oberfläche geöffnet werden",
           "otherTable": {
             "window": "Fenster",
@@ -3442,15 +3445,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "Ein neues Hauptfenster",
-              "how": "Ablage ▸ Neues Fenster (⌘N)"
+              "how": "Ablage ▸ Neues Fenster ({newWindowKey})"
             },
             "editor": {
               "window": "Das Editorfenster (Mini-IDE)",
-              "how": "⌘⇧I oder Klick auf eine Datei im Explorer, in Suchergebnissen oder auf einen Dateilink im Terminal (siehe das Thema „Code-Workflow“)"
+              "how": "{miniIdeKey} oder Klick auf eine Datei im Explorer, in Suchergebnissen oder auf einen Dateilink im Terminal (siehe das Thema „Code-Workflow“)"
             },
             "git": {
               "window": "Das Git-Fenster",
-              "how": "„In neuem Fenster öffnen“ im Kopf des Git-Panels oder ⌘⇧G"
+              "how": "„In neuem Fenster öffnen“ im Kopf des Git-Panels oder {gitWindowKey}"
             },
             "diff": {
               "window": "Eine Diff-Ansicht",
@@ -3475,7 +3478,7 @@
           },
           "callout2": {
             "title": "Zwei Dinge, die leicht missverstanden werden",
-            "text": "<strong>Der Git-Verlauf hat kein eigenes Fenster</strong> – „Vollständigen Verlauf anzeigen“ öffnet die Verlaufsansicht im Git-Fenster. <strong>Auch <kbd class=\"syh-kbd\">⌘⇧D</kbd> öffnet kein Fenster mehr</strong>; es schaltet nur die linke Seitenleiste auf den Tab „Plans“ um. Um das Plan-Fenster zu öffnen, gehen Sie von einem Plan-Dokument selbst aus."
+            "text": "<strong>Der Git-Verlauf hat kein eigenes Fenster</strong> – „Vollständigen Verlauf anzeigen“ öffnet die Verlaufsansicht im Git-Fenster. <strong>Auch <kbd class=\"syh-kbd\">{plansKey}</kbd> öffnet kein Fenster mehr</strong>; es schaltet nur die linke Seitenleiste auf den Tab „Plans“ um. Um das Plan-Fenster zu öffnen, gehen Sie von einem Plan-Dokument selbst aus."
           },
           "note3": "Ist ein Arbeitsbereich bereits in einem anderen Fenster geöffnet, öffnet Navide keine zweite Kopie, sondern holt dieses Fenster nach vorn."
         },
@@ -3526,7 +3529,7 @@
           "orphans": {
             "leftover": "<strong>Übrig gebliebene CLI-Prozesse</strong> – erscheint <code>⚠ N übrig geblieben</code> in der Statusleiste, fragt ein Klick darauf „N übrig gebliebene CLI-Prozesse aus einem früheren Lauf gefunden – sie können den Arbeitsspeicher erschöpfen. Bereinigen?“, mit <em>Bereinigen</em> zum Entfernen und <em>Verwerfen</em> zum Überspringen. Das sind Prozesse, die der vorherige Lauf nicht aufgeräumt hat.",
             "backend": "<strong>Backend</strong> – ein Klick auf die Backend-Pille in der Statusleiste zeigt Adresse und PID sowie zwei Schaltflächen: <em>Neu starten</em> (<em>Starten</em>, solange keine Verbindung besteht) und <em>Stoppen</em> (nur bei bestehender Verbindung). <strong>Ein Neustart des Backends reißt alle CLI-Prozesse mit</strong>; damit Gespräche automatisch fortgesetzt werden, sobald es wieder läuft, aktivieren Sie <em>Sessions nach einem Neustart des Navide-Hintergrunddienstes fortsetzen</em> im Tab „Allgemein“.",
-            "timeout": "Meldet das Backend einen Fehler, weil es zu langsam startet, erhöhen Sie <em>Zeitlimit für den Backend-Start</em> (15–120 Sekunden) im Tab „Darstellung“."
+            "timeout": "Meldet das Backend einen Fehler, weil es zu langsam startet, erhöhen Sie <em>Zeitlimit für den Backend-Start</em> (15–120 Sekunden) im Tab „{generalTab}“."
           },
           "h4": "Pflege auf einen Blick",
           "maintenanceTable": {
@@ -3605,7 +3608,7 @@
           "tokenMonitor": {
             "controls": "Oben zwei Dropdowns: <strong>Tage</strong> (14 / 30 / 90) und <strong>Modell</strong> (alle oder eines). Daneben steht <em>Aktualisieren</em>, das deaktiviert ist, solange das Backend nicht verbunden ist.",
             "stats": "Fünf Kennzahlen: <strong>Runden, Tokens insgesamt, Mittelwert pro Runde, Median pro Runde, mittlere Ausgabe pro Runde</strong>. Eine Zeile darunter nennt gescannte / verfügbare Sessions und den Stand der Daten.",
-            "comparison": "Ein Ausgabevergleich der <strong>letzten 7 Tage mit den 7 Tagen davor</strong>: Stichprobengrößen, Mittelwerte, Mediane und eine prozentuale Änderung. Er braucht <strong>mindestens 10 Runden in jedem Zeitraum</strong> und eine Basis ungleich null, sonst meldet er unzureichende Stichproben. Die Seite weist darauf hin, dass dies nur eine beobachtete Veränderung beschreibt – <strong>Aufwand und Schwierigkeit der Aufgaben sind unbekannt, und ein Rückgang belegt nicht, dass ein Kontingent gekürzt wurde</strong>.",
+            "comparison": "Ein Ausgabevergleich der <strong>letzten 7 Tage mit den 7 Tagen davor</strong>: Stichprobengrößen, Mittelwerte, Mediane und eine prozentuale Änderung. Er erscheint erst, wenn Sie im Modellmenü <strong>ein einzelnes bekanntes Modell wählen</strong>; bei „All models“ steht dort nur „Select a single known model to compare.“ Er braucht <strong>mindestens 10 Runden in jedem Zeitraum</strong> und eine Basis ungleich null, sonst meldet er unzureichende Stichproben. Die Seite weist darauf hin, dass dies nur eine beobachtete Veränderung beschreibt – <strong>Aufwand und Schwierigkeit der Aufgaben sind unbekannt, und ein Rückgang belegt nicht, dass ein Kontingent gekürzt wurde</strong>.",
             "charts": "Fünf Verlaufsdiagramme <strong>pro Runde</strong>. Die Akzentlinie ist der <strong>gleitende Mittelwert über 10 Runden</strong>, die graue Linie jede einzelne Runde; die <strong>waagerechte Achse sind Runden in zeitlicher Reihenfolge, gleichmäßig verteilt – nicht die verstrichene Zeit</strong>.",
             "table": "Eine Tabelle lokaler Claude-Runden, <strong>100 Zeilen pro Seite</strong>: Zeit, Session (erste 8 Zeichen der ID / Index der Runde), Modell, jede Token-Spalte und Aufrufe.",
             "quota": "Ganz unten Streudiagramme zum Kontingent, <strong>gruppiert nach Rücksetzfenster</strong>, ein Diagramm pro Fenster. Die Prozentwerte stammen vom Anbieter; die Seite gibt an, dass die waagerechte Achse „Messwerte in aufgezeichneter Reihenfolge“ ist und dass <strong>sich lokale Tokens nicht in eine Kontingentobergrenze umrechnen lassen</strong>. Gibt es noch keine Messwerte, werden Sie gebeten, die Abfrage der Claude-Nutzung in den Einstellungen zu aktivieren und Navide laufen zu lassen – <strong>frühere Limits lassen sich aus Token-Logs nicht rekonstruieren</strong>."
@@ -3641,7 +3644,7 @@
           "h1": "Navide Guard",
           "p2": "Guard stuft jede riskante CLI-Aktion als {critical}, {high} oder normal ein und behandelt sie dann danach, <strong>woher die Anfrage kam</strong>: von Ihnen an diesem Computer, aus einer Chat-App, von einem anderen Bereich oder Gerät oder von einem Bereich, der Inhalte von außen aufgenommen hat. Die Entscheidungstabelle oben ist fest; aus einem Chat genehmigte Anfragen werden ab {high} abgelehnt.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: Jede Regel lässt sich auf {critical}, {high} oder „{off}“ setzen. Eine Erhöhung wirkt sofort; Senken oder Ausschalten erfordert eine Bestätigung, und acht Mindestregeln (Anmeldeinformationen lesen oder senden, Schlüsselbund, Herunterladen und Ausführen, Löschen von Stamm- oder Home-Verzeichnis, Formatieren, direkte Schreibzugriffe auf Datenträger) können nicht unter {high} gesenkt werden.",
+            "builtin": "<strong>{builtin}</strong>: Jede Regel lässt sich auf {critical}, {high} oder „{off}“ setzen. Eine Erhöhung wirkt sofort; Senken oder Ausschalten erfordert eine Bestätigung, und zehn Mindestregeln (Anmeldeinformationen lesen, senden oder per Pipe hochladen, Schlüsselbund, Herunterladen und Ausführen, Löschen von Stamm- oder Home-Verzeichnis, Formatieren, direkte Schreibzugriffe auf Datenträger, Schreiben in den Navide-Plug-in-Speicher) können nicht unter {high} gesenkt werden.",
             "branches": "<strong>{branches}</strong>: Force-Push oder Löschen dieser Branches ist {critical}; die Force-Push-Prüfung des Befehlsschutzes im Terminal verwendet dieselbe Liste. Das Entfernen eines Branches erfordert eine Bestätigung.",
             "rules": "<strong>{rules}</strong>: Jede ist „{deny}“ oder „{allow}“. Ein Verbotsmuster hebt passende Befehle auf die von Ihnen gewählte Stufe; ein Erlaubnismuster kann {high} auf normal senken (nie {critical}) – genau das ist eine Ausnahme; eine separate Ausnahmeliste gibt es nicht. Das Hinzufügen einer Erlaubnis oder das Entfernen eines Verbots erfordert eine Bestätigung.",
             "test": "<strong>{test}</strong>: Geben Sie einen Befehl ein, um zu sehen, wie Guard ihn einstufen würde.",
@@ -7015,7 +7018,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>Das Installationsprogramm ist nicht codesigniert.</strong> Jede neue Version wird von SmartScreen erneut markiert, und Updates in der App werden aus demselben Grund ohne Signaturprüfung installiert.",
-            "symlinks": "<strong>CLI-Home-Verzeichnisse pro Bereich und verwaltete Skills bestehen aus symbolischen Links</strong>, die Windows einem normalen Prozess nicht zu erstellen erlaubt. Aktivieren Sie entweder den Windows-Entwicklermodus (<em>Einstellungen ▸ Für Entwickler</em>) oder führen Sie Navide mit erhöhten Rechten aus. Ohne das scheitert nichts stillschweigend: Der betroffene Bereich gibt nach dem Start eine gelbe Zeile <code>[mcp]</code> mit der Begründung aus. Das betrifft nur die CLIs, deren MCP-Anbindung eine Datei in ihrem Konfigurationsverzeichnis ist – Antigravity CLI, Grok CLI und Kimi Code.",
+            "symlinks": "<strong>Bereichseigene CLI-Home-Verzeichnisse und verwaltete Skills werden aus symbolischen Links gebaut</strong>, die Windows einem gewöhnlichen Prozess nicht erlaubt. Schalten Sie entweder den Windows-Entwicklermodus ein (<em>Settings ▸ For developers</em>) oder starten Sie Navide mit erhöhten Rechten. Bereichseigene Home-Verzeichnisse nutzen die CLIs, deren MCP-Anbindung eine Datei in ihrem Konfigurationsverzeichnis ist – Antigravity CLI, Grok CLI und Kimi Code; ohne das Recht geben ihre Bereiche nach dem Start eine gelbe <code>[mcp]</code>-Zeile mit dem Grund aus. Verwaltete Skills erreichen dann auch keine andere CLI, und das steht nur im Backend-Log.",
             "schedule": "<strong>Der Tab „Zeitplan“ listet nur die eigenen Jobs von Navide (Navide Jobs).</strong> Navide liest die Crontab des Benutzers und launchd-Jobs von macOS, und Windows hat keines von beiden; die Aufgabenplanung (taskschd.msc) ist bewusst nicht integriert, weil Navide nie geplante Aufgaben des Betriebssystems anlegt und die Aufgabenplanung die des Rechners bereits verwaltet. Der Bildschirm sagt das, statt eine leere Liste zu zeigen."
           },
           "h2": "Linux",
