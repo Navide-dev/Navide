@@ -438,6 +438,14 @@ export async function startBackend(
     // Windows (GetTempPath) does; the two unused ones are harmless.
     const tmpDir = prepareBackendTmpDir(persistentBackendTmpDir(backendDataDir(env)))
     if (tmpDir) {
+      // Panes the backend opens get the user's own values back from this
+      // (frozen_env.restore_user_temp_env); a missing key means it was unset.
+      const original: Record<string, string> = {}
+      for (const key of ['TMPDIR', 'TMP', 'TEMP'] as const) {
+        const value = env[key]
+        if (value !== undefined) original[key] = value
+      }
+      env.AGENT_TEAM_ORIG_TEMP_ENV = JSON.stringify(original)
       env.TMPDIR = tmpDir
       env.TMP = tmpDir
       env.TEMP = tmpDir
