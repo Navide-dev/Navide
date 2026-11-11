@@ -102,6 +102,7 @@ const {
   gitTags,
   logScope,
   logOrder,
+  statusError,
   isLoadingStatus,
   isLoadingLog,
   canLoadMoreLog,
@@ -1429,6 +1430,12 @@ registerCommand('git.focusAgent', () => {
     <div v-if="gitError" class="err-bar">{{ gitError }}</div>
 
     <div v-if="!hasWorkspace" class="empty">{{ $t('label.no-workspace-path') }}</div>
+    <!-- A failed git.status is not "not a repository": show git's own error
+         (dubious ownership, git not runnable, timeout) like the Git pane does. -->
+    <div v-else-if="statusError && !gitStatus.is_git_repo" class="empty status-error">
+      <p class="init-sub">{{ statusError }}</p>
+      <button class="pbtn" :disabled="isLoadingStatus" @click="loadStatus">{{ $t('action.retry') }}</button>
+    </div>
     <div v-else-if="!isRepo && !isLoadingStatus" class="empty">
       <div class="init-card">
         <h2 class="init-title">{{ $t('error.not-git-repo') }}</h2>
