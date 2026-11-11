@@ -4621,8 +4621,8 @@
               "detail": "該帳號尚未登入或憑證過期時才出現。"
             },
             "setDefault": {
-              "action": "設為預設",
-              "detail": "切換使用中的帳號。切換期間按鈕變成「切換中…」，且全部帳號的按鈕都暫時停用。"
+              "action": "{switchLabel}",
+              "detail": "出現在每一個不是使用中的帳號上。按下後把這個 CLI 的現用登入切到該帳號，之後開的分格就用它。切換期間按鈕變成「{switchingLabel}」，且全部帳號的按鈕都暫時停用。"
             },
             "refreshQuota": {
               "action": "重新偵測額度",
@@ -4660,7 +4660,7 @@
             "title": "綁定不在這裡做",
             "text": "「這個工作區要用哪個 Git 帳號」是在<strong>側欄的 Git 面板</strong>上那顆帳號膠囊選的。設定頁只負責帳號本身的增刪改。刪掉一個帳號時，指向它的綁定會一起清掉。"
           },
-          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「設為預設」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。",
+          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「{switchLabel}」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。",
           "agentConfirm": "agent 也可以自己提出這些要求——為某個帳號開登入、切換某家 CLI 的帳號，或把單一分格搬到另一個帳號。每個要求都會跳出確認框，寫明是哪家 CLI、哪個帳號、哪個分格提出的、理由是什麼；<strong>你不同意就什麼都不會發生</strong>，沒回應的要求會自己關掉。"
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "MCP 工具 ＋ 輸出協定",
             "protocolOnly": "僅輸出協定",
-          "none": "兩條都沒有（只收得到）"
+          "none": "兩條都沒有（只收得到）",
+            "mcpOnly": "僅 MCP 工具"
           },
           "note1": "輸出協定要靠 Navide 讀得到那個 agent 自己的記錄；有記錄讀取器的廠商全都涵蓋，所以 Navide 知道 agent 何時講完一段話、講了什麼。MCP 工具另外需要 CLI 提供接入的方式（啟動參數、一個帶著整份設定的環境變數，或一份只給這個分格用的設定目錄鏡像），而且要 Navide 接上；{protocolOnly} 沒有接上，所以只走輸出協定。<strong>{receiveOnly}</strong> 兩條都沒有：Navide 還沒有讀它們記錄的讀取器，所以收得到訊息、送不出去。",
           "note2": "兩個實務上的但書：<strong>Antigravity</strong> 在「agent 反問你」的那個回合送不出訊息（那個回合不帶回覆文字），一般回答的回合正常；<strong>Qwen、Pi、Kimi</strong> 沒有明確的「回合結束」訊號，Navide 靠 8 秒靜默推斷，所以送出時機會晚一些。"
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>對方佇列滿的時候（最多 10 則）訊息會被丟棄</strong>，但不再是無聲的：面板會寫出「目標已有 10 則訊息在排隊」，失敗也會以通知的形式打回寄件的那個分格，寄件的 agent 同樣查得到自己那則的下場。只是遞送是非同步的，<strong>送出的那一瞬間</strong>仍然不知道結果。",
             "noPermission": "<strong>沒有權限確認</strong> — 跨工作區傳訊不會跳確認框，只會在收到時提示。這是刻意的取捨。",
             "ackLocal": "<strong>純確認（ack）不跨裝置</strong> — 中繼不保證訊息在別人的機器上不會進到輸入框，所以跨裝置的 ack 直接被拒絕，要傳就當一般訊息傳。",
-            "acp": "<strong>ACP 分格</strong>（實驗功能，在「CLI 代理」 → ACP 開啟）收到的訊息是以 ACP prompt 交給它，而不是打字進去；「已投遞」代表 agent 接受了這個 prompt，不代表它已經讀過或回覆。"
+            "acp": "<strong>ACP 分格</strong>（實驗功能，在「CLI 代理」 → ACP 開啟）收到的訊息是以 ACP prompt 交給它，而不是打字進去；「已投遞」代表 agent 接受了這個 prompt，不代表它已經讀過或回覆。",
+            "mcpOnly": "<strong>{mcpOnly}</strong> 只能透過 MCP 工具送訊息：Navide 不讀它每一輪的輸出，所以它印出的裸行訊息不會送出分格。"
           }
         },
         "tip": "小訣竅：先幫分格改個角色名（「reviewer」「架構師」），標題就是位址，之後交代事情會順很多。",
@@ -5929,6 +5931,11 @@
               "where": "側欄最左緣色軌的飛出選單",
               "what": "新增一個<strong>工作區群組</strong>（管很多專案時才用得到的分類層）。",
               "name": "<code>新增群組</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent 頭像",
+              "where": "＋ 選單的 Agent 標題下",
+              "what": "常駐 Agent 名字的第一個字，底色是它自己的顏色。點了會切到已開啟的 Agent，已關閉的則接續原本的對話。"
             }
           },
           "group": {
@@ -6006,8 +6013,7 @@
               "name": "<code>此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名</code>"
             },
             "globalManager": {
-              "where": "標題文字旁，顯示 <code>🎯 管理</code>",
-              "what": "純記號：這是 pipeline 的總管分格。"
+              "where": "標題文字旁，顯示 <code>🎯 管理</code>"
             },
             "loop": {
               "where": "標題列",
@@ -6054,6 +6060,9 @@
               "name": "<code>↻ 繼續</code> ／ 提示 <code>This session was restored and is waiting at the prompt…</code>",
               "where": "終端機畫面下方",
               "what": "分格是重啟後還原的、停在提示符不動時才出現。按下去送出 <em>continue</em>，把工作接回去。"
+            },
+            "riskPill": {
+              "what": "Navide 觀察到這個 CLI 做了平常不會做的事：連到預期集合以外的位址，或寫出以前沒寫過的未知格式檔案（再次發生時變紅）。點它可看細節、相關程序，支援的話還有<em>{analyze}</em>按鈕。"
             }
           },
           "placeholder": {

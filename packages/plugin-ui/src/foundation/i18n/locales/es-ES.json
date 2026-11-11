@@ -4621,8 +4621,8 @@
               "detail": "Solo aparece cuando la cuenta no tiene la sesión iniciada o sus credenciales han caducado."
             },
             "setDefault": {
-              "action": "Establecer como predeterminada",
-              "detail": "Cambia la cuenta activa. Durante el cambio, el botón dice «Cambiando…» y los botones de todas las cuentas se desactivan temporalmente."
+              "action": "{switchLabel}",
+              "detail": "Aparece en cada cuenta que no es la activa. Cambia el inicio de sesión activo de esta CLI a esa cuenta, así que los panes que abras después la usarán. Mientras cambia, el botón muestra «{switchingLabel}» y los botones de todas las cuentas se desactivan temporalmente."
             },
             "refreshQuota": {
               "action": "Actualizar cuota",
@@ -4660,7 +4660,7 @@
             "title": "La vinculación se hace en otro sitio",
             "text": "«Qué cuenta de Git usa esta área de trabajo» se elige con la píldora de cuenta del <strong>panel de Git de la barra lateral</strong>. La página de ajustes solo añade, edita y elimina cuentas. Eliminar una cuenta también borra cualquier vinculación que apuntara a ella."
           },
-          "switchToast": "<strong>Un cambio fallido ahora siempre se ve.</strong> Antes solo dos rechazos mostraban un aviso emergente: «hay panes en ejecución» y «cambios demasiado frecuentes». Todo lo demás, incluido un intercambio de credenciales fallido, iba al propio banner del panel Cuentas, que hacía tiempo que había quedado fuera de la vista mientras mirabas las filas de un proveedor; pulsar «Establecer como predeterminada» parecía no hacer nada. Ahora cualquier tipo de fallo al cambiar muestra un aviso emergente.",
+          "switchToast": "<strong>Un cambio fallido ahora siempre se ve.</strong> Antes solo dos rechazos mostraban un aviso emergente: «hay panes en ejecución» y «cambios demasiado frecuentes». Todo lo demás, incluido un intercambio de credenciales fallido, iba al propio banner del panel Cuentas, que hacía tiempo que había quedado fuera de la vista mientras mirabas las filas de un proveedor; pulsar «{switchLabel}» parecía no hacer nada. Ahora cualquier tipo de fallo al cambiar muestra un aviso emergente.",
           "agentConfirm": "Un agente también puede pedirlo por su cuenta: abrir un inicio de sesión para una cuenta, cambiar la cuenta de una CLI o mover un solo pane a otra cuenta. Cada solicitud abre un cuadro de confirmación con la CLI, la cuenta, el pane que lo pide y su motivo; <strong>no pasa nada sin tu aprobación</strong>, y una solicitud sin respuesta se cierra sola."
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "Herramientas MCP + protocolo de salida",
             "protocolOnly": "Solo protocolo de salida",
-            "none": "Ninguna (solo recibe)"
+            "none": "Ninguna (solo recibe)",
+            "mcpOnly": "Solo herramientas MCP"
           },
           "note1": "El protocolo de salida necesita que Navide pueda leer el registro propio del agente; todos los proveedores con lector de registro están cubiertos, así que Navide sabe cuándo el agente terminó de decir algo y qué dijo. Las herramientas MCP necesitan además que la CLI ofrezca una vía de entrada (una opción de inicio, una variable de entorno con todo el documento de configuración o un espejo del directorio de configuración por pane) y que Navide la conecte; {protocolOnly} no están conectadas, así que solo usan el protocolo de salida. <strong>{receiveOnly}</strong> no tienen ninguna de las dos: Navide aún no tiene lector para sus registros, de modo que pueden recibir mensajes pero no enviarlos.",
           "note2": "Dos salvedades en la práctica: <strong>Antigravity</strong> no puede enviar en el turno en que el agent te hace una pregunta (ese turno no lleva texto de respuesta); los turnos normales de respuesta funcionan bien. Y <strong>Qwen, Pi y Kimi</strong> no tienen una señal explícita de «turno terminado», así que Navide lo deduce tras 8 segundos de silencio y el envío sale un poco más tarde."
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>Cuando la cola del destino está llena (10 como máximo), el mensaje se descarta</strong>, pero ya no en silencio: el panel dice «El destino ya tiene 10 mensajes esperando», el fallo se escribe de vuelta en el pane emisor como aviso y el agent emisor también puede consultar qué ha sido de su mensaje. La entrega sigue siendo asíncrona, así que <strong>en el instante del envío</strong> no se sabe nada.",
             "noPermission": "<strong>No hay solicitud de permiso</strong>: los mensajes entre áreas de trabajo no muestran ningún diálogo de confirmación, solo un aviso al llegar. Es una concesión deliberada.",
             "ackLocal": "<strong>Un simple acuse de recibo no cruza dispositivos</strong>: el relé no puede garantizar que el mensaje no acabe en el cuadro de entrada de un equipo ajeno, así que un acuse entre dispositivos se rechaza directamente; envíalo como mensaje normal si tiene que viajar.",
-            "acp": "<strong>Los panes ACP</strong> (experimental; se activa en «Agents de CLI» → ACP) reciben el mensaje como un prompt de ACP en lugar de escribirlo; «Entregado» significa que el agente aceptó el prompt, no que lo haya leído o respondido."
+            "acp": "<strong>Los panes ACP</strong> (experimental; se activa en «Agents de CLI» → ACP) reciben el mensaje como un prompt de ACP en lugar de escribirlo; «Entregado» significa que el agente aceptó el prompt, no que lo haya leído o respondido.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> solo puede enviar mediante las herramientas MCP: Navide no lee el texto de sus turnos, así que un mensaje de línea simple que imprima nunca sale del pane."
           }
         },
         "tip": "Consejo: pon primero nombres de rol a los panes («reviewer», «architect»). El título es la dirección, y todo lo demás se lee después con mucha más naturalidad.",
@@ -5929,6 +5931,11 @@
               "where": "El panel desplegable de la franja de color del extremo izquierdo de la barra lateral",
               "what": "Añadir un <strong>grupo de áreas de trabajo</strong> (la capa de agrupación que solo necesitas si manejas muchos proyectos).",
               "name": "<code>Nuevo grupo</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar del agente",
+              "where": "Menú ＋, bajo el encabezado Agentes",
+              "what": "La inicial de un agente permanente sobre su propio color. Elegirla cambia al agente si está abierto, o lo reanuda si está cerrado."
             }
           },
           "group": {
@@ -6006,8 +6013,7 @@
               "name": "<code>Nombre puesto automáticamente a partir de la primera instrucción de esta session; si lo cambias, se queda el tuyo</code>"
             },
             "globalManager": {
-              "where": "Junto al texto del título, mostrado como <code>🎯 Gestor</code>",
-              "what": "Una simple marca: este es el pane gestor de la pipeline."
+              "where": "Junto al texto del título, mostrado como <code>🎯 Gestor</code>"
             },
             "loop": {
               "where": "Barra de título",
@@ -6054,6 +6060,9 @@
               "name": "<code>↻ Continuar</code> / tooltip <code>Esta session se restauró y está esperando en el prompt…</code>",
               "where": "Debajo de la vista del terminal",
               "what": "Solo aparece cuando el pane se restauró tras un reinicio y está inactivo en el prompt. Al pulsarlo se envía <em>continue</em> para retomar el trabajo."
+            },
+            "riskPill": {
+              "what": "Navide vio a esta CLI hacer algo fuera de lo habitual: conectarse a una dirección fuera del conjunto esperado o escribir un archivo opaco que nunca había escrito (en rojo si se repite). Haz clic para ver los detalles, el proceso implicado y, si se admite, un botón <em>{analyze}</em>."
             }
           },
           "placeholder": {

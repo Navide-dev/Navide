@@ -27,6 +27,7 @@ export const FRONTEND_SHARED = [
   'src/renderer/src/lib/__tests__/fixtures/n8n-forged-signals.json',
   'src/renderer/src/lib/__tests__/fixtures/n8n-native-flow-signals.json',
   'src/renderer/src/lib/builtinPipelineText.json',
+  'src/renderer/src/lib/helpCliFacts.ts',
   'src/renderer/src/lib/liveModelSwitch.ts',
   'src/renderer/src/lib/promptSkillSeed.ts',
   'src/renderer/src/main.ts',

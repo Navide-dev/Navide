@@ -4621,8 +4621,8 @@
               "detail": "Affiché uniquement lorsque le compte n’est pas connecté ou que ses identifiants ont expiré."
             },
             "setDefault": {
-              "action": "Définir par défaut",
-              "detail": "Change le compte actif. Pendant le changement, le bouton indique « Changement… » et les boutons de tous les comptes sont temporairement désactivés."
+              "action": "{switchLabel}",
+              "detail": "Affiché sur chaque compte qui n’est pas le compte actif. Il bascule la connexion active de ce CLI sur ce compte, que les panes ouverts ensuite utiliseront. Pendant le changement, le bouton affiche « {switchingLabel} » et les boutons de tous les comptes sont temporairement désactivés."
             },
             "refreshQuota": {
               "action": "Actualiser le quota",
@@ -4660,7 +4660,7 @@
             "title": "L’association se fait ailleurs",
             "text": "« Quel compte Git cet espace de travail utilise » se choisit avec la pastille du compte du <strong>panneau Git de la barre latérale</strong>. La page des paramètres se contente d’ajouter, de modifier et de supprimer des comptes. Supprimer un compte efface aussi toute association qui pointait vers lui."
           },
-          "switchToast": "<strong>Un changement de compte en échec est désormais toujours visible.</strong> Auparavant, seuls deux refus affichaient une notification : « des panes sont en cours » et « changements trop fréquents ». Tout le reste, y compris un échec du remplacement des identifiants, allait dans la bannière propre au panneau Comptes, depuis longtemps sortie de l’écran pendant que vous regardiez les lignes d’un fournisseur ; cliquer sur « Définir par défaut » semblait ne rien faire du tout. Désormais, tout type d’échec de changement affiche une notification.",
+          "switchToast": "<strong>Un changement de compte en échec est désormais toujours visible.</strong> Auparavant, seuls deux refus affichaient une notification : « des panes sont en cours » et « changements trop fréquents ». Tout le reste, y compris un échec du remplacement des identifiants, allait dans la bannière propre au panneau Comptes, depuis longtemps sortie de l’écran pendant que vous regardiez les lignes d’un fournisseur ; cliquer sur « {switchLabel} » semblait ne rien faire du tout. Désormais, tout type d’échec de changement affiche une notification.",
           "agentConfirm": "Un agent peut aussi le demander lui-même : ouvrir une connexion pour un compte, changer le compte d’une CLI ou déplacer un seul pane vers un autre compte. Chaque demande ouvre une boîte de confirmation qui indique la CLI, le compte, le pane demandeur et sa raison ; <strong>rien ne se passe sans votre accord</strong>, et une demande restée sans réponse se ferme d’elle-même."
         },
         "s6": {
@@ -4879,7 +4879,8 @@
           "sendModes": {
             "both": "Outils MCP + protocole de sortie",
             "protocolOnly": "Protocole de sortie uniquement",
-            "none": "Aucune (réception uniquement)"
+            "none": "Aucune (réception uniquement)",
+            "mcpOnly": "Outils MCP uniquement"
           },
           "note1": "Le protocole de sortie exige que Navide puisse lire le journal propre de l’agent ; tous les fournisseurs dotés d’un lecteur de journal sont couverts, si bien que Navide sait quand l’agent a fini de dire quelque chose, et ce qu’il a dit. Les outils MCP demandent en plus que la CLI offre une porte d’entrée (une option de lancement, une variable d’environnement contenant tout le document de configuration, ou un miroir du dossier de configuration propre au pane) et que Navide la branche ; {protocolOnly} ne sont pas branchées et n’utilisent que le protocole de sortie. <strong>{receiveOnly}</strong> n’ont ni l’un ni l’autre : Navide n’a pas encore de lecteur pour leurs journaux, elles peuvent donc recevoir des messages mais pas en envoyer.",
           "note2": "Deux réserves en pratique : <strong>Antigravity</strong> ne peut pas envoyer lors du tour où l’agent vous pose une question (ce tour ne contient pas de texte de réponse) – les tours de réponse ordinaires fonctionnent ; et <strong>Qwen, Pi et Kimi</strong> n’ont pas de signal explicite de « tour terminé » ; Navide le déduit donc de 8 secondes de silence, et l’envoi part un peu plus tard."
@@ -5071,7 +5072,8 @@
             "queueFull": "<strong>Quand la file de la cible est pleine (10 au maximum), le message est abandonné</strong> – mais plus en silence : le panneau indique « La cible a déjà 10 messages en attente », l’échec est retapé sous forme d’avis dans le pane émetteur, et l’agent émetteur peut tout aussi bien vérifier ce qu’est devenu son message. La remise reste asynchrone ; rien n’est donc connu <strong>au moment de l’envoi</strong>.",
             "noPermission": "<strong>Il n’y a pas de demande d’autorisation</strong> – la messagerie entre espaces de travail n’affiche aucune boîte de confirmation, seulement un avis à l’arrivée. C’est un compromis délibéré.",
             "ackLocal": "<strong>Un simple accusé de réception ne traverse pas les appareils</strong> – le relais ne peut pas garantir que le message reste hors d’une zone de saisie sur la machine de quelqu’un d’autre ; un accusé entre appareils est donc refusé d’emblée. Envoyez-le comme un message ordinaire s’il doit voyager.",
-            "acp": "<strong>Les panes ACP</strong> (expérimental ; activé sous « Agents CLI » → ACP) reçoivent un message sous forme de prompt ACP au lieu qu’il soit saisi ; « Remis » signifie que l’agent a accepté le prompt, pas qu’il l’a lu ni qu’il y a répondu."
+            "acp": "<strong>Les panes ACP</strong> (expérimental ; activé sous « Agents CLI » → ACP) reçoivent un message sous forme de prompt ACP au lieu qu’il soit saisi ; « Remis » signifie que l’agent a accepté le prompt, pas qu’il l’a lu ni qu’il y a répondu.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> ne peut envoyer que par les outils MCP : Navide ne lit pas le texte de ses tours, donc un message en ligne nue qu’il affiche ne quitte jamais le pane."
           }
         },
         "tip": "Astuce : donnez d’abord des noms de rôle aux panes (« reviewer », « architect ») – le titre est l’adresse, et tout le reste se lit ensuite bien plus naturellement.",
@@ -5929,6 +5931,11 @@
               "where": "Le menu flottant de la barre colorée à l’extrême gauche de la barre latérale",
               "what": "Ajouter un <strong>groupe d’espaces de travail</strong> (le niveau de regroupement utile seulement quand on jongle avec de nombreux projets).",
               "name": "<code>Nouveau groupe</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar d’agent",
+              "where": "Menu ＋, sous le titre Agents",
+              "what": "L’initiale d’un agent permanent sur sa propre couleur. La choisir vous amène à l’agent s’il est ouvert, ou le reprend s’il est fermé."
             }
           },
           "group": {
@@ -6006,8 +6013,7 @@
               "name": "<code>Nommé automatiquement d’après la première instruction de cette session – renommez-le et le nom restera le vôtre</code>"
             },
             "globalManager": {
-              "where": "À côté du texte du titre, affiché sous la forme <code>🎯 Gest.</code>",
-              "what": "Un simple repère : il s’agit du pane gestionnaire du pipeline."
+              "where": "À côté du texte du titre, affiché sous la forme <code>🎯 Gest.</code>"
             },
             "loop": {
               "where": "Barre de titre",
@@ -6054,6 +6060,9 @@
               "name": "<code>↻ Continuer</code> / info-bulle <code>Cette session a été restaurée et attend à l’invite…</code>",
               "where": "Sous la vue du terminal",
               "what": "N’apparaît que lorsque le pane a été restauré après un redémarrage et attend, inactif, à l’invite. Un clic envoie <em>continue</em> pour reprendre le travail."
+            },
+            "riskPill": {
+              "what": "Navide a vu ce CLI sortir de ses habitudes : connexion à une adresse hors de l’ensemble attendu, ou écriture d’un fichier opaque jamais écrit auparavant (en rouge si cela se reproduit). Cliquez pour les détails, le processus en cause et, si c’est pris en charge, un bouton <em>{analyze}</em>."
             }
           },
           "placeholder": {
