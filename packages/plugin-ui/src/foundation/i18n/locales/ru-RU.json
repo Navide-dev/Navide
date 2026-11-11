@@ -11017,6 +11017,7 @@
     "token-linked": "Привязано с помощью токена"
   },
   "channels": {
+    "model-switched": "{who} переключил(а) {pane} на {model} из чата ({method})",
     "agent": {
       "title": "Запросы агентов",
       "from": "Запросил {requester}",

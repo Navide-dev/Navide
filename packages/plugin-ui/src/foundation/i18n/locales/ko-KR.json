@@ -11017,6 +11017,7 @@
     "token-linked": "token으로 연결됨"
   },
   "channels": {
+    "model-switched": "{who}님이 채팅에서 {pane}을(를) {model}(으)로 전환했어요({method})",
     "agent": {
       "title": "에이전트의 요청",
       "from": "{requester}의 요청",

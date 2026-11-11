@@ -11017,6 +11017,7 @@
     "token-linked": "Đã liên kết bằng token"
   },
   "channels": {
+    "model-switched": "{who} đã đổi {pane} sang {model} từ cuộc trò chuyện ({method})",
     "agent": {
       "title": "Yêu cầu từ agent",
       "from": "Do {requester} yêu cầu",
