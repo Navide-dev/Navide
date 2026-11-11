@@ -51,7 +51,7 @@ describe('CliMessagingHelp', () => {
 
     const tables = wrapper.findAll('.cmh-table')
     expect(tables).toHaveLength(5)
-    expect(tables[0].findAll('tbody tr')).toHaveLength(15) // coverage
+    expect(tables[0].findAll('tbody tr')).toHaveLength(19) // coverage: one row per CLI spec
     expect(tables[1].findAll('tbody tr')).toHaveLength(5) // addressing
     expect(tables[2].findAll('tbody tr')).toHaveLength(3) // spawn guidelines
     expect(tables[3].findAll('tbody tr')).toHaveLength(4) // guardrails
@@ -88,7 +88,7 @@ describe('CliMessagingHelp', () => {
     expect(text).toContain('已知限制')
     expect(text).toContain('僅輸出協定')
     expect(wrapper.findAll('.cmh-h2')).toHaveLength(13)
-    expect(wrapper.findAll('.cmh-table').at(0)!.findAll('tbody tr')).toHaveLength(15)
+    expect(wrapper.findAll('.cmh-table').at(0)!.findAll('tbody tr')).toHaveLength(19)
     expect(wrapper.findAll('.mk-fig')).toHaveLength(2)
 
     expect(text).toContain('@')

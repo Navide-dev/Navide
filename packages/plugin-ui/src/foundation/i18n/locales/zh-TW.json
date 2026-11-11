@@ -4373,9 +4373,9 @@
             "signInInside": "在 CLI 內登入",
             "flagNoteGoose": "無——Goose 預設會自己核准所有工具（GOOSE_MODE=auto）；要先詢問，請把 GOOSE_MODE 設成 approve 或 smart_approve。Navide 的 Guard 目前還不涵蓋 Goose。"
           },
-          "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。四家沒有略過權限旗標的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
+          "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。沒有略過權限旗標的 {noFlagCount} 家 CLI（{noFlag}）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
           "callout": {
-            "title": "第 16 個選項不是 agent",
+            "title": "最後一項不是 agent",
             "text": "＋ 選單最下方的 <strong>>_ 開啟終端機</strong> 是一般 shell，不掛任何 agent，也不會注入角色。它刻意獨立放在清單外，不會被 CLI 清單的捲動吃掉。"
           }
         },
@@ -4424,7 +4424,8 @@
           "callout2": {
             "title": "Grok CLI 換成官方的 xAI CLI",
             "text": "安裝方式改成官方的安裝腳本（用 <code>curl</code> 抓 <code>https://x.ai/cli/install.sh</code> 交給 bash 執行），不再是 npm 套件——所以它需要 <code>curl</code>，也需要一個真正的終端機視窗；更新指令是 <code>grok update</code>；設定檔換成 <code>~/.grok/config.toml</code>，MCP 以 TOML 寫入，舊社群版的 <code>user-settings.json</code> 不再讀。它<strong>沒有診斷指令</strong>（官方沒提供，設定頁改成指向官方文件），也沒有 effort 欄與權限略過旗標。同名的社群版 CLI 會裝在同一個路徑，<code>which grok</code> 分不出來，只能靠版本字串的形狀分辨。"
-          }
+          },
+          "menuGroups": "+ 選單分成兩個標題：寫程式的 CLI 在 <strong>{cliHeading}</strong> 底下，長駐型的 agent（{agents}）在 <strong>{agentsHeading}</strong> 底下。"
         },
         "s3": {
           "title": "角色",
@@ -4458,7 +4459,7 @@
             "global": "最上面一顆<strong>全域開關</strong>：<em>預設略過權限提示（YOLO 模式）</em>。每一家的抽屜都看得到同一顆，在哪一家改，影響的都是全部。",
             "perVendor": "下面是這一家的一列，顯示它的實際旗標（例如 <code>--yolo</code>），右邊一個三態下拉：<strong>跟隨全域 / 一律略過 / 一律不略過</strong>。"
           },
-          "p4": "沒有旗標的四家（Grok CLI / OpenCode / Pi / MiniMax Code）在抽屜的這一段只有那顆全域開關，下面一行寫明這家 CLI 沒有權限略過旗標、沒有東西可切換。",
+          "p4": "沒有旗標的 {noFlagCount} 家 CLI（{noFlag}），抽屜這一區只會顯示全域開關，下方加一行說明這家 CLI 沒有略過權限旗標、沒有東西可切。",
           "callout1": {
             "title": "改了不會影響正在跑的分格",
             "text": "旗標是在分格<strong>啟動的那一刻</strong>就寫進它的命令列的。這裡的變更只影響之後開的分格；已經在跑的會保留它啟動時的設定，直到你重建或還原它。"
@@ -4497,7 +4498,8 @@
           "note": "更新會替換執行檔；已經在執行中的分格要重新啟動才會用到新版本。",
           "callout2": {
             "title": "這裡沒有的東西",
-            "text": "仍然<strong>沒有「預設參數」欄位</strong>——啟動指令是<em>整條取代</em>，不是在預設命令後面追加。<strong>執行檔的指定也不是打路徑</strong>，而是在偵測到多套實體安裝時從候選裡挑一套（挑過之後抽屜「總覽」會出現「自訂執行檔」chip）。模型與 reasoning effort 則<strong>不再只有 MCP 那一條路</strong>：現在啟動覆寫就有正式的欄位，手動開面板的對話框也有。"
+            "text": "仍然<strong>沒有「預設參數」欄位</strong>——啟動指令是<em>整條取代</em>，不是在預設命令後面追加。<strong>執行檔的指定也不是打路徑</strong>，而是在偵測到多套實體安裝時從候選裡挑一套（挑過之後抽屜「總覽」會出現「自訂執行檔」chip）。模型與 reasoning effort 則<strong>不再只有 MCP 那一條路</strong>：現在啟動覆寫就有正式的欄位，手動開面板的對話框也有。",
+            "setModel": "已經在跑的分格也能換模型：由 agent 呼叫 <code>cli_set_model</code>。Claude Code 和 Codex 當場切換（Claude 用它的模型選單、Codex 用 <code>/model</code>）；其他 CLI 會重啟該分格並接回原本的對話。"
           },
           "chipsIntro": "卡片上只放三個 chip：安裝狀態、登入與帳號數、推送通道。完整的一排 chip 在抽屜最上面的「{overview}」，把那家 CLI 目前的設定現況直接讀回來。順序是固定的，照著「它是什麼 → 它會用什麼跑 → 怎麼找得到它」排：",
           "chipsTable": {
@@ -4580,19 +4582,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "模型與推理強度都有（5 家）",
-              "vendors": "Claude Code、Antigravity CLI、Copilot CLI、Muse Code、Pi"
+              "group": "模型與推理強度都有（{count} 家）",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "只有模型（7 家）",
-              "vendors": "Codex、Cursor CLI、Grok CLI、Kilo Code、Kimi Code、OpenCode、Qwen Code"
+              "group": "只有模型（{count} 家）",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "兩欄都沒有（4 項）",
-              "vendors": "Aider、Droid、MiniMax Code，以及 Terminal（它不是 agent）"
+              "group": "兩欄都沒有（{count} 項）",
+              "vendors": "{names}（Terminal 不是 agent）"
             }
           },
-          "spawnNote": "「只有模型」的那七家並不是沒有思考強度可調，而是那個旋鈕不在啟動參數上：有的寫在模型 id 裡（例如結尾的 <code>-high</code>），有的在設定檔，有的要進 CLI 後用它自己的指令切。打的值不合規矩時（模型 id 帶空白、或以「-」開頭）對話框會當場說明原因並把送出鈕停用。如果那家 CLI 設了自訂啟動指令，這兩欄會直接停用並寫上原因——那條命令照原樣執行，Navide 不會往裡面加模型。",
+          "spawnNote": "「只有模型」的那幾家並不是沒有思考強度可調，而是那個旋鈕不在啟動參數上：有的寫在模型 id 裡（例如結尾的 <code>-high</code>），有的在設定檔，有的要進 CLI 後用它自己的指令切。打的值不合規矩時（模型 id 帶空白、或以「-」開頭）對話框會當場說明原因並把送出鈕停用。如果那家 CLI 設了自訂啟動指令，這兩欄會直接停用並寫上原因——那條命令照原樣執行，Navide 不會往裡面加模型。",
           "h5": "5 · 推送通道",
           "h6": "6 · 安裝與更新",
           "pushAllOff": "<strong>全部關掉是合法的選擇</strong>，這裡沒有「至少留一家」的規則。四家都關掉時，抽屜的推送段會直接列出三項代價：訊息改成等對方分格閒置之後再打進輸入框，所以比較慢才會到；Claude Code 的 rewake 是唯一能叫醒閒置 agent 的手段，關掉之後只能等它自己回到閒置；已經開著的分格會保留它啟動時的通道，直到重新啟動為止。"
@@ -4601,7 +4603,7 @@
           "title": "帳號",
           "p1": "設定 ▸ <strong>帳號</strong> 一頁裝了兩塊互不相干的東西：上半是 Git 帳號，下半是 CLI 帳號。",
           "h1": "CLI 帳號",
-          "p2": "15 家都會列出標題，但只有 <strong>5 家支援多帳號</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Kilo Code。其餘只印一行「此 agent 不支援多帳號。」，連新增按鈕都沒有。",
+          "p2": "一家 CLI 能不能掛<strong>多個帳號</strong>、切換時怎麼生效（當場切換、重啟它的分格，或要你手動處理），看第 1 章表格的「多帳號」欄：那欄照該 CLI 自己的宣告顯示，不是說明頁另外維護的清單。",
           "p3": "每家底下第一張卡片永遠是內建的 <strong>預設</strong>（你原本的登入憑證），後面才是你自己加的帳號。卡片上顯示登入身分的 email、<em>預設</em> 標籤，以及該帳號的剩餘額度。",
           "table": {
             "action": "操作",
@@ -4636,7 +4638,7 @@
           "p7": "切換太頻繁會被擋（每家 CLI 60 秒最多 3 次），確認強制切換也繞不過去。",
           "callout1": {
             "title": "已開著的分格保留原帳號",
-            "text": "面板上的說明就寫著：「已開啟的分格在重開前仍使用原帳號」。所有帳號共用你真實的家目錄（session 與歷史是共通的），切換帳號是<strong>就地替換儲存的憑證</strong>。"
+            "text": "已開著的分格會沿用它開啟時的帳號，直到重開為止。所有帳號共用你真正的家目錄（session 與歷史共用），切換帳號是<strong>就地替換存好的憑證</strong>。Claude 帳號另外可以登入到<strong>自己的資料夾</strong>（「登入到帳號資料夾」）；之後可以只把某一個分格搬到那個帳號，不動 CLI 目前的登入，也不影響其他分格。"
           },
           "apiKeys": {
             "title": "API key 帳號",
@@ -4656,13 +4658,14 @@
             "title": "綁定不在這裡做",
             "text": "「這個工作區要用哪個 Git 帳號」是在<strong>側欄的 Git 面板</strong>上那顆帳號膠囊選的。設定頁只負責帳號本身的增刪改。刪掉一個帳號時，指向它的綁定會一起清掉。"
           },
-          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「設為預設」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。"
+          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「設為預設」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。",
+          "agentConfirm": "agent 也可以自己提出這些要求——為某個帳號開登入、切換某家 CLI 的帳號，或把單一分格搬到另一個帳號。每個要求都會跳出確認框，寫明是哪家 CLI、哪個帳號、哪個分格提出的、理由是什麼；<strong>你不同意就什麼都不會發生</strong>，沒回應的要求會自己關掉。"
         },
         "s6": {
           "title": "額度顯示",
           "p1": "額度徽章長在 <strong>CLI 分格的標題列</strong>上（不是狀態列），顯示剩餘百分比；滑鼠停留展開詳細視窗，裡面有各個計量窗口、重置時間，以及帳號切換入口。「設定 ▸ 帳號」的帳號卡片讀的是同一份資料。",
           "h1": "涵蓋哪幾家",
-          "p2": "<strong>11 家</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Antigravity CLI、OpenCode、Qwen Code、Kilo Code、Pi、Copilot CLI、Cursor CLI。Aider、Muse Code、Droid、MiniMax Code 沒有可讀的額度來源。",
+          "p2": "<strong>{withCount} 家</strong>：{withQuota}。{withoutQuota} 沒有可讀的額度來源。",
           "h2": "資料從哪來",
           "list": {
             "claude": "<strong>Claude Code 是特例</strong>：Navide 完全不碰它的憑證，而是去跑 <code>claude -p /usage</code>，讀 CLI 自己印出來的額度報表。因此讀一次要啟動一整個 Claude Code，需要幾秒。",
@@ -4850,23 +4853,23 @@
             "tools": {
               "list": "<strong>查詢對象</strong> — 有誰在線上、位址怎麼寫、對方現在是不是忙碌中。",
               "send": "<strong>送出指令</strong> — 把任意文字送給指定的分格。",
-              "spawn": "<strong>開新 agent 並派工</strong> — 請 Navide 開一個新的 CLI 分格、指定用哪家 CLI、給它任務。新分格完成後應該會用訊息回報給呼叫者，但那是子 agent 自己輸出的，不是 Navide 的保證：呼叫者忙碌時會排隊，子 agent 沒照格式輸出時則不會送達。",
+              "spawn": "<strong>開一個新 agent 並交派工作</strong>——請 Navide 開一個新的 CLI 分格、指定它跑哪個 CLI、交給它一項任務。新分格做完後應該發訊息回報給呼叫者；那份回報是子 agent 自己的輸出，呼叫者忙的時候會排隊等。如果新分格的第一個 turn 結束時沒有回報，Navide 會把那個 turn 的最後輸出轉交給呼叫者一次，並標明是代為轉交的備援回報，不是它自己寫的。",
               "ack": "<strong>純確認回覆</strong> — 「收到」「做完了」這種不需要對方動作的回信。它會寫進訊息記錄給你看（面板上標成「僅記錄」），但<strong>不會打進對方的輸入框</strong>，所以不打斷、也不吵醒對方；反過來說，需要對方看到或處理的事就不能用這種。",
               "pending": "<strong>查有沒有人在等我</strong> — 忙碌中的分格收不到注入，所以 agent 可以自己回頭查：有哪些訊息正排隊等我閒下來、以及自己寄出去的訊息是不是卡住了。"
             },
-            "note": "十五家裡有 <strong>十家</strong>接上了這組工具（見下一節的表）。沒接上的是 Aider、Droid、Muse Code、Pi，它們改走下面的輸出協定；MiniMax Code 兩條路都還沒有，只收得到訊息。"
+            "note": "{total} 家 CLI 裡有 <strong>{mcpCount} 家</strong>接上了這套工具（見下一節的表格）。{protocolOnly} 改用下面的輸出協定；{receiveOnly} 兩條路都還沒有，只能收訊息。"
           },
           "proto": {
             "title": "輸出協定",
             "tag": "流程（pipeline）的分格自動具備",
             "p1": "agent 在回覆裡輸出這種裸文字區塊，Navide 會攔下來當作訊息：",
             "code": "---MSG-START--- to: reviewer\n幫我跑一下 pnpm test:run，把失敗清單回報給我\n---MSG-END---",
-            "note": "to: 可以跟 ---MSG-START--- 寫在同一行，也可以單獨寫在它<strong>正下方那一行</strong>；再往下的 to: 就會被當成內容。---MSG-START--- 與 ---MSG-END--- 這兩行必須頂格、不可縮排，也不可以放在 markdown 的程式碼區塊裡，否則不會被辨識，而且不會有任何錯誤提示。流程的 slot 在開場時就會被告知這個協定；手動開的分格不會，但你可以把上面這段直接貼給它——前提是那個 CLI 在下表裡支援輸出協定。"
+            "note": "to: 可以跟 ---MSG-START--- 寫在同一行，也可以單獨寫在它<strong>正下方那一行</strong>；再往下的 to: 就會被當成內容。---MSG-START--- 與 ---MSG-END--- 這兩行必須頂格、不可縮排，也不可以放在 markdown 的程式碼區塊裡，否則不會被辨識；一個 turn 出現了 ---MSG-START--- 卻沒解析出任何訊息時，Navide 會在那個分格打一則「message not recognized」提示。流程的 slot 在開場時就會被告知這個協定；手動開的分格不會，但你可以把上面這段直接貼給它——前提是那個 CLI 在下表裡支援輸出協定。"
           }
         },
         "s3": {
           "title": "哪些 CLI 送得出訊息",
-          "p1": "<strong>所有 CLI 分格都收得到訊息</strong>——那是 Navide 直接把文字打進終端機，跟 CLI 種類無關。<strong>主動送出的是十五家裡的十四家</strong>，差別只在它手上有哪條路：",
+          "p1": "<strong>每個 CLI 分格都收得到訊息</strong>——Navide 直接把文字打進終端機，跟 CLI 本身無關。<strong>{total} 家裡有 {sendCount} 家也送得出去</strong>，差別只在能走哪條路：",
           "table": {
             "cli": "CLI",
             "send": "能主動送訊嗎"
@@ -4876,7 +4879,7 @@
             "protocolOnly": "僅輸出協定",
           "none": "兩條都沒有（只收得到）"
           },
-          "note1": "<strong>十五家裡有十四家送得出訊息</strong>，差別只在走哪條路。輸出協定要 Navide 讀得懂那家 agent 的記錄檔——有記錄讀取器的十四家都通，Navide 因此知道它「講完一段話」以及它講了什麼。MCP 工具則要那家 CLI 提供接入點（啟動參數、一個帶整份設定的環境變數，或一份只給這個分格用的設定目錄鏡像），Aider、Droid、Muse Code、Pi 目前沒有，所以它們只走輸出協定。<strong>MiniMax Code 兩條都還沒有</strong>：它把對話存在 SQLite 裡，Navide 還沒有讀得懂那個格式的記錄讀取器，所以它收得到訊息、但送不出來。",
+          "note1": "輸出協定要靠 Navide 讀得到那個 agent 自己的記錄；有記錄讀取器的廠商全都涵蓋，所以 Navide 知道 agent 何時講完一段話、講了什麼。MCP 工具另外需要 CLI 提供接入的方式（啟動參數、一個帶著整份設定的環境變數，或一份只給這個分格用的設定目錄鏡像），而且要 Navide 接上；{protocolOnly} 沒有接上，所以只走輸出協定。<strong>{receiveOnly}</strong> 兩條都沒有：Navide 還沒有讀它們記錄的讀取器，所以收得到訊息、送不出去。",
           "note2": "兩個實務上的但書：<strong>Antigravity</strong> 在「agent 反問你」的那個回合送不出訊息（那個回合不帶回覆文字），一般回答的回合正常；<strong>Qwen、Pi、Kimi</strong> 沒有明確的「回合結束」訊號，Navide 靠 8 秒靜默推斷，所以送出時機會晚一些。"
         },
         "s4": {
@@ -4921,7 +4924,7 @@
           "list": {
             "alive": "對方的 CLI 還活著，而且已經過了啟動階段",
             "noTyping": "沒有人正在那個分格裡打字（輸入框有草稿、或四秒內按過鍵，就先等）",
-            "noTurn": "沒有正在跑的回合",
+            "noTurn": "目前沒有 turn 在跑——{midTurn} 例外：它自己會把 turn 中途打進來的訊息排進佇列，所以只需要等沒人在打字",
             "quiet": "最近 2 秒沒有任何輸出"
           },
           "p2": "條件不滿足就先排隊，滿足了自動送出。所以對方正在跑長任務時，你的訊息會等它做完 — 這是刻意的。「CLI 互傳訊息」面板會直接寫出是哪一個條件擋著：「目標分格未在執行」「目標分格仍在啟動中」「使用者正在該分格輸入中」「目標 agent 正在執行中」「等待目標靜置」，所以「一直沒送出去」永遠查得到原因。對方收到的訊息開頭會標明來源，它才知道要回覆給誰。",
@@ -4946,7 +4949,9 @@
             "rejected": "被拒絕的原因<strong>只跟寫錯有關</strong>：CLI 名稱不存在、名稱重複或不合法、任務空白、指定了那家 CLI 無法接受的模型或思考強度。",
             "kickoff": "<strong>第一段任務有沒有真的送進去，會一併回報。</strong>Navide 會等到 CLI 開機、出現提示字元、把任務打進去為止才回答。沒能確認送達時，它會說「先查狀態再決定」而不是叫你重送——盲目重送等於把同一份工作派兩次。",
             "duplicate": "<strong>同一個請求重複開分格會被擋下來</strong>，所以 agent 因為等太久而再送一次時，不會多出一個分格。",
-            "resume": "<strong>也可以接續舊對話開新分格。</strong>agent 先列出這個工作區還留著的 CLI 對話，再指定其中一個開起來，新分格帶著那段對話的記憶開始（連在一般終端機裡開的也算）。對話 id 會先對那家 CLI 的紀錄檔查證，查不到就直接拒絕，不會默默開成一個空的。"
+            "resume": "<strong>也可以接續舊對話開新分格。</strong>agent 先列出這個工作區還留著的 CLI 對話，再指定其中一個開起來，新分格帶著那段對話的記憶開始（連在一般終端機裡開的也算）。對話 id 會先對那家 CLI 的紀錄檔查證，查不到就直接拒絕，不會默默開成一個空的。",
+            "otherProject": "<strong>新分格可以開在別的專案</strong>——用那個專案自己的資料夾、CLAUDE.md、記憶、Plans 與 git——呼叫者仍是它的上層、照樣收到回報。預設放進目前視窗的側欄，也可以開在新視窗，或開在已經開著那個專案的視窗。",
+            "release": "<strong>做完的子分格可以用 <code>cli_reclaim_agent</code> 釋放</strong>：它的 CLI 程序會結束，分格留在原處變成「點一下接回」的卡片、對話完整保留，你還是看得到它做了什麼。分格也可以用 <code>cli_rename_pane</code> 改名。"
           },
           "table": {
             "suggestion": "建議值",
@@ -4980,7 +4985,7 @@
           "guards": {
             "rate": {
               "limit": "同一組「來源 → 目標」的頻率",
-              "value": "每 60 秒最多 5 則",
+              "value": "每 60 秒 5 則（聊天傳送者：30 則）",
               "why": "兩個 agent 互相回覆可能無限往返"
             },
             "queue": {
@@ -4989,9 +4994,9 @@
               "why": "對方忙不過來時不要無限堆積"
             },
             "timeout": {
-              "limit": "送出後等不到結果",
+              "limit": "送往其他視窗的訊息一直沒有結果",
               "value": "30 分鐘後標為失敗",
-              "why": "對方視窗被關掉時，訊息不會永遠卡在「佇列中」"
+              "why": "接收的視窗被關掉或電腦睡眠時，跨工作區的訊息不能永遠卡在「佇列中」。送給同一視窗裡忙碌分格的訊息只會繼續等。"
             },
             "pause": {
               "limit": "暫停開關",
@@ -5031,7 +5036,7 @@
             "stuckQueued": {
               "symptom": "訊息一直停在「佇列中」",
               "cause": "對方正在跑長任務，還沒閒下來",
-              "fix": "正常現象，等它做完；真的卡住 30 分鐘會自動標為失敗"
+              "fix": "正常——等它做完。排超過 2 分鐘時寄件方會收到「還在等」的通知，你也可以在面板上按「撤回」收回；只有送往其他視窗的訊息會在 30 分鐘後標成失敗。"
             },
             "rateLimit": {
               "symptom": "面板寫出「頻率上限：同兩個分格之間每 60 秒最多 5 則」",
@@ -5058,12 +5063,13 @@
         "s10": {
           "title": "已知限制",
           "list": {
-            "terminalPane": "<strong>純終端機分格不能當收發對象</strong> — 只有 CLI agent 分格才有名稱。",
-            "receiveOnly": "<strong>五家沒有 MCP 工具</strong> — Aider、Droid、Muse Code、Pi 只能走裸行輸出協定；<strong>MiniMax Code 連輸出協定都還沒有</strong>，它只收得到訊息、送不出去。見上方「哪些 CLI 送得出訊息」。",
+            "terminalPane": "<strong>純終端機分格收得到、送不出。</strong>送給它的訊息會原樣打進去、當成 shell 指令執行——沒有信封、也沒有回覆提示。終端機不會收到廣播；你最後一次按鍵後會先擋 60 秒；排隊超過 2 分鐘就直接標成失敗、不會晚打進去；具破壞性的指令一律拒絕。",
+            "receiveOnly": "<strong>有 {noMcpCount} 家 CLI 沒有 MCP 工具</strong>——{protocolOnly} 只能用裸行輸出協定，<strong>{receiveOnly}</strong> 連這個都沒有：收得到訊息、送不出去。見上面「哪些 CLI 送得出訊息」。",
             "detached": "<strong>分格被拆到獨立視窗、或視窗重新載入後</strong>，MCP 工具那條路要重開分格才恢復；輸出協定不受影響。",
             "queueFull": "<strong>對方佇列滿的時候（最多 10 則）訊息會被丟棄</strong>，但不再是無聲的：面板會寫出「目標已有 10 則訊息在排隊」，失敗也會以通知的形式打回寄件的那個分格，寄件的 agent 同樣查得到自己那則的下場。只是遞送是非同步的，<strong>送出的那一瞬間</strong>仍然不知道結果。",
             "noPermission": "<strong>沒有權限確認</strong> — 跨工作區傳訊不會跳確認框，只會在收到時提示。這是刻意的取捨。",
-            "ackLocal": "<strong>純確認（ack）不跨裝置</strong> — 中繼不保證訊息在別人的機器上不會進到輸入框，所以跨裝置的 ack 直接被拒絕，要傳就當一般訊息傳。"
+            "ackLocal": "<strong>純確認（ack）不跨裝置</strong> — 中繼不保證訊息在別人的機器上不會進到輸入框，所以跨裝置的 ack 直接被拒絕，要傳就當一般訊息傳。",
+            "acp": "<strong>ACP 分格</strong>（實驗功能，在「CLI 代理」 → ACP 開啟）收到的訊息是以 ACP prompt 交給它，而不是打字進去；「已投遞」代表 agent 接受了這個 prompt，不代表它已經讀過或回覆。"
           }
         },
         "tip": "小訣竅：先幫分格改個角色名（「reviewer」「架構師」），標題就是位址，之後交代事情會順很多。",
@@ -5086,7 +5092,7 @@
             "legend": {
               "actions": {
                 "label": "標題列",
-                "text": "「暫停投遞」會讓之後的訊息排隊但不送出；「清除記錄」只清畫面，不影響已送達的訊息。"
+                "text": "「暫停投遞」會讓之後的訊息先排隊、不送出；「清除記錄」清掉已結束的列，還在路上的會留著。"
               },
               "route": {
                 "label": "來源 → 目標",
@@ -5157,12 +5163,13 @@
           "h3": "從聊天回答 CLI 的提問",
           "answer": {
             "bare": "權限提示與問題會一則一則貼到聊天。只有一則還沒回答時，直接回 <code>1</code>–<code>9</code>、<code>yes</code> 或 <code>no</code> 就行；有好幾則時，在答案後面加上編號（例如 <code>yes &lt;id&gt;</code>）。其他文字會立刻收到提示，不會排隊。",
-            "which": "能從聊天代答的只有 Claude Code、Codex 與 Aider；其他 CLI、多選題與自由輸入的問題，會請你回到電腦前回答，而不是顯示按了也沒用的按鈕。",
+            "which": "能從聊天代答的只有 Claude Code、Codex、Aider 與 Grok Build；其他 CLI、多選題與自由輸入的問題，會請你回到電腦前回答，而不是顯示按了也沒用的按鈕。",
             "never": "「不要再問」「一律允許」「這個 session 都允許」這類永久選項，<strong>從聊天永遠不會被按下</strong>。",
             "guard": "從聊天核准的請求仍要經過 Navide Guard：被判為嚴重或高的一律拒絕，Guard 判斷不了的也拒絕，聊天會收到「這個動作需要在電腦前確認」。"
           },
           "h4": "標題列的監控按鈕",
-          "p4": "標題列的「{monitor}」按鈕帶一個狀態點：有 bot 被擋是紅、重新連線中是黃、正常是綠，沒有啟用的 bot 就沒有點。點開列出每個綁了聊天的分格，可以跳到那個分格或直接斷開；自動開出的子主題收在它的父綁定底下。"
+          "p4": "標題列的「{monitor}」按鈕帶一個狀態點：有 bot 被擋是紅、重新連線中是黃、正常是綠，沒有啟用的 bot 就沒有點。點開列出每個綁了聊天的分格，可以跳到那個分格或直接斷開；自動開出的子主題收在它的父綁定底下。",
+          "commands": "在已綁定的聊天裡，<code>/prompts</code>、<code>/skills</code>、<code>/mcp</code> 會回一排按鈕，分別是你的提示技能、該分格 CLI 的技能，以及 MCP server（唯讀）；<code>/shares</code> 與 <code>/revoke</code> 列出與撤銷分享連結；<code>/plugins status</code> 與 <code>/plugins stop</code> 顯示第三方 Navide 外掛並停掉其中一個。傳到聊天的檔案會存給該分格；分格也能在 MSG 區塊裡加一行 <code>---ATTACH--- &lt;路徑&gt;</code> 把檔案傳回聊天。"
         }
       },
       "workspace": {
@@ -5602,7 +5609,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供給 CLI agent 的工具",
-          "p1": "分格一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>64 個</strong>（核心 57 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
+          "p1": "分格一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。這一頁依用途分組介紹其中 <strong>{listed} 個</strong>，另外還有 3 份唯讀資源與 3 個提示樣板。工具每一版都會增加，最完整、最新的清單以 agent 自己的 MCP 畫面裡 navide 這個 server 所列為準（例如 Claude Code 的 <code>/mcp</code>）。",
           "h1": "計畫文件",
           "planTools": {
             "plan_list": "列出這個工作區的所有計畫，含階段與待辦進度",
@@ -5685,9 +5692,9 @@
           "note4": "同一個工作區裡可以有兩個分格同名，這時候光靠名字說不清要找誰，上面幾個工具會直接以 <code>ambiguous-target</code> 拒絕，而不是隨便挑一個。要指定其中一個，就把 <code>cli_list_targets</code> 回傳的 <code>pane_id</code> 當參數傳給 <code>cli_send</code>、<code>cli_send_and_wait</code>、<code>cli_read_log</code>、<code>cli_get_status</code> 或 <code>cli_wait_idle</code>，這時候位址參數就不用填了。平常還是用名字比較好讀；分格換了新的 CLI 重開之後 id 會換一個，遇到 <code>unknown-pane-id</code> 重新查一次即可。跨裝置的分格沒有本機 id，只能用名字定址。",
           "note5": "<code>cli_send</code> 的位址填 <code>group</code>，不是去找名叫 group 的分格，而是廣播給<strong>自己所在分頁群組</strong>裡的其他分格（同工作區）。這跟裸行協定的 <code>all</code> 不一樣：<code>all</code> 是整個視窗、不分群組。沒有分到任何群組的分格共用同一個隱含群組，所以它們彼此送得到，而不是誰也送不到。回傳的形狀也不一樣：<code>recipients</code> 裡每個收件者各有一個 <code>msg_key</code>，要分別拿去 <code>cli_check_message</code> 查；空的 <code>recipients</code> 代表你的群組裡沒有別人，不是失敗。代價與 <code>all</code> 相同：真的取名叫 group 的分格從此無法用名字定址。",
           "h4": "哪些 CLI 接得到",
-          "p2": "十五家裡目前有 <strong>十家</strong>：Claude Code、Codex、Copilot CLI、Qwen Code、OpenCode、Kilo Code、Kimi Code、Grok CLI、Antigravity CLI、Cursor CLI。接法看那家 CLI 自己提供什麼介面——啟動參數（Claude Code、Codex、Copilot、Qwen）、一個帶著整份設定的環境變數（OpenCode、Kilo），或一份只給這個分格用的設定目錄鏡像（Kimi、Grok、Antigravity）。這三種都<strong>不會動到你自己的 MCP 設定檔</strong>。",
+          "p2": "{total} 家裡目前有 <strong>{mcpCount} 家</strong>：{mcpNames}。接法看那家 CLI 自己提供什麼介面——啟動參數（Claude Code、Codex、Copilot、Qwen）、一個帶著整份設定的環境變數（OpenCode、Kilo），或一份只給這個分格用的設定目錄鏡像（Kimi、Grok、Antigravity）。這三種都<strong>不會動到你自己的 MCP 設定檔</strong>。",
           "note6": "<strong>Cursor 是唯一的例外</strong>：它只讀工作區裡的 <code>.cursor/mcp.json</code>，所以 Navide 會合併寫入那個檔，並把它加進 <code>.git/info/exclude</code>，不會弄髒你的 git 狀態。",
-          "note7": "還沒接上的是 <strong>Aider、Muse Code、Pi</strong>（這三家的 CLI 沒有 MCP 介面）與 <strong>Droid、MiniMax Code</strong>（Navide 尚未接，它們的 CLI 有沒有介面也還沒查證）。這些分格大多仍然可以用裸行輸出協定跟其他分格傳訊，只是沒有 MCP 工具可以呼叫；MiniMax Code 是例外，它連輸出協定都還沒有，只收得到訊息。",
+          "note7": "還沒接上的是 <strong>{notWired}</strong>。其中有些 CLI 本身沒有 MCP 介面，其他的是 Navide 還沒接。這些分格大多仍能用裸行輸出協定傳訊息給其他分格，只是沒有 MCP 工具可呼叫。{receiveOnly} 是例外：連輸出協定也沒有，只能收訊息。",
           "note8": "接線是 <strong>分格啟動當下</strong>做的。所以功能更新後，已經開著的分格還是舊的工具清單——關掉重開才會拿到新的。",
           "h5": "「預覽」面板",
           "previewTools": {
@@ -5696,7 +5703,8 @@
             "preview_list": "讀回這個工作區的變更記錄軌——別的 agent、使用者、以及檔案監看各自做了什麼，最新的在前；可以帶時間游標只讀新增的部分",
             "preview_clear": "清空變更記錄軌；刪掉的是使用者在「預覽」面板上看到的那些行，含檔案監看與使用者自己的操作，無法復原。可以只清某個時間點以前的"
           },
-          "note9": "<strong>跨裝置只有四個工具走得通</strong>：傳訊、傳訊並等待、查狀態、等對方閒下來。讀對方的對話紀錄、送中斷鍵、關掉對方的分格都需要那台機器自己來，所以一律拒絕。而且遠端分格 <strong>沒有本機 id</strong>，三段式名稱是唯一的把手；它的狀態是對方視窗最後一次上傳給 Navide Cloud 的字，接近即時但不是即時，也沒有額度快照（本機的額度快照講的是本機的登入，對別台機器上的分格是錯的答案）。"
+          "note9": "<strong>跨裝置只有四個工具走得通</strong>：傳訊、傳訊並等待、查狀態、等對方閒下來。讀對方的對話紀錄、送中斷鍵、關掉對方的分格都需要那台機器自己來，所以一律拒絕。而且遠端分格 <strong>沒有本機 id</strong>，三段式名稱是唯一的把手；它的狀態是對方視窗最後一次上傳給 Navide Cloud 的字，接近即時但不是即時，也沒有額度快照（本機的額度快照講的是本機的登入，對別台機器上的分格是錯的答案）。",
+          "note10": "這裡沒列出、但一樣有內建的還有：聊天頻道（<code>channels_*</code>）、Navide Marketplace 與 Navide 外掛管理（<code>marketplace_*</code>、<code>plugins_*</code>）、視窗（<code>window_*</code>、<code>workspace_close</code>）、分享連結（<code>share_*</code>）、<code>evolve_report</code> / <code>evolve_retro</code>，以及 <code>pipeline_import_n8n</code>。每個工具在 agent 工具清單裡都有自己的說明。"
         },
         "s2": {
           "title": "方向二：Navide 取用外部 MCP",
@@ -5712,7 +5720,8 @@
           "warn": {
             "p1": "<strong>這裡設定的 server 不會出現在 CLI agent 的工具清單裡。</strong>它們只服務「讀取上下文 → 注入開場提示」這一件事，而且<strong>只在跑流程時</strong>觸發，你手動開的分格完全不會用到。",
             "p2": "想讓 Claude Code 或 Codex 自己能用某個 MCP server（例如讓它直接查 GitHub），請用那個 CLI 自己的 MCP 設定，不是這裡。"
-          }
+          },
+          "p3": "每一列 server 都會顯示狀態與工具數，啟動失敗時還有它最後印出的幾行。透過 Node.js 啟動的 server 在找不到 Node.js 時會標「需要 Node.js」，並提供引導安裝。留空的值（例如環境變數與 header）要在這台電腦上填，永遠不會在裝置之間同步。「對照」會用矩陣列出哪家 CLI 有哪個 server。"
         },
         "s3": {
           "title": "方向三：外部 client 控制 Navide",
@@ -5773,15 +5782,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "agent 說它沒有計畫或傳訊的工具",
-              "detail": "那個分格開啟時還沒接上（功能更新前開的），或用的 CLI 屬於尚未接上 MCP 的五家（Aider／Droid／Muse Code／Pi／MiniMax Code）。前者關掉重開即可；後者請改用裸行輸出協定傳訊——MiniMax Code 連這條也沒有，只收得到訊息。"
+              "detail": "那個分格開啟時還沒接上（比更新還早開），或它跑的是還沒接上 MCP 的 {noMcpCount} 家 CLI 之一（{notWired}）。前者關掉重開即可；後者改用裸行輸出協定傳訊息——{receiveOnly} 連這個都沒有，只能收訊息。"
             },
             "serverUnused": {
               "symptom": "設定 → MCP 加了 server，但 agent 用不到",
-              "detail": "那是方向二，只給流程讀文件用。要讓 agent 自己能呼叫，得設定在那個 CLI 自己的 MCP 設定裡。設定 → MCP 下半部的「各 CLI 的 MCP」會唯讀列出每家 CLI 自己設了哪些 server，可以直接對照確認。"
+              "detail": "那是方向二，純粹給流程讀文件用。要讓 agent 自己呼叫，得設定在那家 CLI 自己的 MCP 設定裡。「設定 → MCP」會把每家 CLI 已有的 server 和 Navide 自己的列在一起（唯讀）；切到「對照」就能看哪家 CLI 有哪個。"
             },
             "planLoadFailed": {
               "symptom": "agent 說計畫載入失敗",
-              "detail": "計畫工具都要指定工作區路徑。若 agent 傳的路徑跟分格實際的工作區不同，就會寫到 Navide 看不見的地方。請它改用分格的工作區路徑。"
+              "detail": "沒有傳工作區路徑時，plan 工具就用分格自己的工作區。如果 agent 傳了別的路徑，就會寫到 Navide 可能沒在顯示的專案（工具這時會警告沒有分格在用它）。請它不要帶工作區路徑。"
             },
             "staleIdentity": {
               "symptom": "提示分格身分已失效",
@@ -5811,7 +5820,7 @@
               },
               "actions": {
                 "label": "頂列動作",
-                "text": "「新增 MCP +」從內建目錄加、「新增自訂」手動加一個 server、「重新整理」重新讀取設定檔。"
+                "text": "「+ 新增 MCP」從內建目錄新增、「新增自訂」手動新增，「開啟 MCP 設定」則開啟設定檔。"
               },
               "card": {
                 "label": "目錄卡片",

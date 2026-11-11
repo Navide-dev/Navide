@@ -4373,9 +4373,9 @@
             "signInInside": "Dans la CLI",
             "flagNoteGoose": "Aucune : par défaut, Goose approuve lui-même chaque outil (GOOSE_MODE=auto) ; réglez GOOSE_MODE sur approve ou smart_approve pour qu’il vous le demande. Navide Guard ne couvre pas encore Goose."
           },
-          "note": "« Quota » = Navide peut lire l’utilisation restante (chapitre 6). « Multicompte » = plusieurs connexions peuvent être enregistrées dans les paramètres et permutées (chapitre 5). Les quatre CLI sans option de contournement des autorisations (Grok CLI, OpenCode, Pi, MiniMax Code) n’ont tout simplement pas d’option de ce type : ce n’est pas un oubli de Navide. « Commande de connexion » = ce que Navide exécute réellement lorsque vous cliquez sur Se connecter dans Paramètres ▸ Comptes ; les CLI marquées « Dans la CLI » ne déclarent pas de commande de connexion distincte, le bouton les lance donc normalement et la connexion se fait sur leur propre écran.",
+          "note": "« Quota » = Navide peut lire l’utilisation restante (chapitre 6). « Multicompte » = plusieurs connexions peuvent être enregistrées dans les paramètres et permutées (chapitre 5). Les {noFlagCount} CLI sans option de contournement des autorisations ({noFlag}) n’ont tout simplement pas d’option de ce type : ce n’est pas un oubli de Navide. « Commande de connexion » = ce que Navide exécute réellement lorsque vous cliquez sur Se connecter dans Paramètres ▸ Comptes ; les CLI marquées « Dans la CLI » ne déclarent pas de commande de connexion distincte, le bouton les lance donc normalement et la connexion se fait sur leur propre écran.",
           "callout": {
-            "title": "La 16e entrée n’est pas un agent",
+            "title": "La dernière entrée n’est pas un agent",
             "text": "<strong>>_ Ouvrir un terminal</strong>, en bas du menu +, est un simple shell : aucun agent n’y est rattaché et aucun rôle n’y est injecté. Il est volontairement placé hors de la liste pour que le défilement de la liste des CLI ne le masque jamais."
           }
         },
@@ -4424,7 +4424,8 @@
           "callout2": {
             "title": "Grok CLI est désormais la CLI officielle de xAI",
             "text": "Elle s’installe avec le script propre au fournisseur (<code>curl</code> récupère <code>https://x.ai/cli/install.sh</code> et le transmet à bash) plutôt que depuis npm : elle a donc besoin de <code>curl</code> et d’une vraie fenêtre de Terminal. La commande de mise à jour est <code>grok update</code>, et le fichier de configuration est désormais <code>~/.grok/config.toml</code>, avec MCP écrit en TOML ; le <code>user-settings.json</code> de la version communautaire n’est plus lu. Elle n’a <strong>pas de commande de diagnostic</strong> (le fournisseur n’en propose pas, les paramètres renvoient donc à la documentation officielle), pas de champ d’effort et pas d’option de contournement des autorisations. La CLI communautaire du même nom s’installe au même emplacement, si bien que <code>which grok</code> ne peut pas les distinguer : seule la forme de la chaîne de version le permet."
-          }
+          },
+          "menuGroups": "Le menu + comporte deux rubriques : les CLI de développement se trouvent sous <strong>{cliHeading}</strong>, les agents de longue durée ({agents}) sous <strong>{agentsHeading}</strong>."
         },
         "s3": {
           "title": "Rôles",
@@ -4458,7 +4459,7 @@
             "global": "Un <strong>interrupteur global</strong> en haut : <em>Contourner les demandes d’autorisation par défaut (mode YOLO)</em>. Le panneau de chaque CLI affiche ce même interrupteur, le modifier dans l’un le modifie donc pour toutes.",
             "perVendor": "En dessous, une ligne pour cette CLI, avec son option réelle (par exemple <code>--yolo</code>) et à droite une liste déroulante à trois choix : <strong>Suivre le réglage global / Toujours contourner / Ne jamais contourner</strong>."
           },
-          "p4": "Pour les quatre CLI sans option (Grok CLI / OpenCode / Pi / MiniMax Code), cette partie du panneau n’affiche que l’interrupteur global, avec une ligne en dessous indiquant que cette CLI n’a pas d’option de contournement et qu’il n’y a rien à basculer.",
+          "p4": "Pour les {noFlagCount} CLI sans option ({noFlag}), cette partie du tiroir n’affiche que l’interrupteur global, avec en dessous une ligne indiquant que cette CLI n’a pas d’option de contournement et qu’il n’y a rien à basculer.",
           "callout1": {
             "title": "Les modifications n’atteignent pas les panes en cours",
             "text": "L’option est écrite dans la ligne de commande d’un pane <strong>au moment de son démarrage</strong>. Les modifications faites ici ne concernent que les panes lancés ensuite ; un pane en cours conserve ce avec quoi il a démarré jusqu’à ce que vous le reconstruisiez ou le restauriez."
@@ -4497,7 +4498,8 @@
           "note": "Les mises à jour remplacent le binaire ; les panes déjà en cours doivent redémarrer pour utiliser la nouvelle version.",
           "callout2": {
             "title": "Ce qui ne se trouve pas ici",
-            "text": "Il n’y a toujours <strong>pas de champ « arguments par défaut »</strong> : une commande de lancement <em>remplace</em> la ligne au lieu de s’ajouter à celle par défaut. <strong>Le binaire ne se choisit toujours pas en saisissant un chemin</strong>, mais en sélectionnant l’un des candidats lorsque plusieurs installations physiques sont détectées (la vue d’ensemble du panneau affiche alors une puce « Binaire personnalisé »). En revanche, le modèle et l’effort de raisonnement <strong>ne sont plus réservés à MCP</strong> : les réglages de lancement disposent de vrais champs pour eux, tout comme la boîte de dialogue Lancer manuellement."
+            "text": "Il n’y a toujours <strong>pas de champ « arguments par défaut »</strong> : une commande de lancement <em>remplace</em> la ligne au lieu de s’ajouter à celle par défaut. <strong>Le binaire ne se choisit toujours pas en saisissant un chemin</strong>, mais en sélectionnant l’un des candidats lorsque plusieurs installations physiques sont détectées (la vue d’ensemble du panneau affiche alors une puce « Binaire personnalisé »). En revanche, le modèle et l’effort de raisonnement <strong>ne sont plus réservés à MCP</strong> : les réglages de lancement disposent de vrais champs pour eux, tout comme la boîte de dialogue Lancer manuellement.",
+            "setModel": "Un pane déjà lancé peut aussi changer de modèle : un agent le demande avec <code>cli_set_model</code>. Claude Code et Codex basculent sur place (le sélecteur de modèle de Claude, <code>/model</code> pour Codex) ; les autres CLI redémarrent le pane et reprennent sa conversation."
           },
           "chipsIntro": "Une carte n’affiche que trois puces : état d’installation, connexion et comptes, et canal de push. La bande complète se trouve dans « {overview} », en haut du panneau, et reflète la configuration actuelle de cette CLI. L’ordre est fixe et suit « ce qu’elle est → avec quoi elle s’exécute → comment on l’atteint » :",
           "chipsTable": {
@@ -4580,19 +4582,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "Modèle et Effort (5)",
-              "vendors": "Claude Code, Antigravity CLI, Copilot CLI, Muse Code et Pi"
+              "group": "Modèle et Effort ({count})",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "Modèle seulement (7)",
-              "vendors": "Codex, Cursor CLI, Grok CLI, Kilo Code, Kimi Code, OpenCode et Qwen Code"
+              "group": "Modèle seulement ({count})",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "Aucun des deux (4)",
-              "vendors": "Aider, Droid, MiniMax Code et Terminal (qui n’est pas un agent)"
+              "group": "Aucun des deux ({count})",
+              "vendors": "{names} (Terminal n’est pas un agent)"
             }
           },
-          "spawnNote": "Il ne manque pas aux sept CLI « Modèle seulement » un réglage de raisonnement : ce réglage n’est simplement pas un argument de lancement. Pour certaines, il est intégré à l’identifiant du modèle (un <code>-high</code> final, par exemple) ; pour d’autres, il se trouve dans un fichier de configuration ou derrière une commande à l’intérieur de la session. Une valeur qui enfreint les règles (un identifiant de modèle contenant une espace ou commençant par « - ») est expliquée sur-le-champ et désactive le bouton de validation. Et si cette CLI a une commande de lancement personnalisée, les deux champs sont désactivés avec la raison indiquée : cette ligne s’exécute telle qu’elle est écrite et Navide n’y ajoute aucun modèle.",
+          "spawnNote": "Il ne manque pas aux CLI « Modèle seulement » un réglage de raisonnement : ce réglage n’est simplement pas un argument de lancement. Pour certaines, il est intégré à l’identifiant du modèle (un <code>-high</code> final, par exemple) ; pour d’autres, il se trouve dans un fichier de configuration ou derrière une commande à l’intérieur de la session. Une valeur qui enfreint les règles (un identifiant de modèle contenant une espace ou commençant par « - ») est expliquée sur-le-champ et désactive le bouton de validation. Et si cette CLI a une commande de lancement personnalisée, les deux champs sont désactivés avec la raison indiquée : cette ligne s’exécute telle qu’elle est écrite et Navide n’y ajoute aucun modèle.",
           "h5": "5 · Canaux push",
           "h6": "6 · Installation et mises à jour",
           "pushAllOff": "<strong>Tous les désactiver est un choix valable</strong> ; il n’y a pas ici de règle « en garder au moins un ». Avec les quatre désactivés, la partie push du panneau indique trois conséquences : les messages attendent que le pane destinataire soit inactif, puis sont tapés dans sa saisie, ils arrivent donc plus tard ; le rewake de Claude Code est le seul moyen de réveiller un agent inactif, sans lui il faut donc attendre que l’agent devienne inactif de lui-même ; et les panes déjà ouverts conservent le canal avec lequel ils ont démarré jusqu’à leur redémarrage."
@@ -4601,7 +4603,7 @@
           "title": "Comptes",
           "p1": "Paramètres ▸ <strong>Comptes</strong> contient deux choses sans rapport entre elles : les comptes Git dans la moitié supérieure, les comptes CLI dans la moitié inférieure.",
           "h1": "Comptes CLI",
-          "p2": "Les 15 fournisseurs ont chacun un en-tête, mais seuls <strong>5 prennent en charge plusieurs comptes</strong> : Claude Code, Codex, Kimi Code, Grok CLI, Kilo Code. Les autres affichent une ligne, « Cet agent ne prend pas en charge plusieurs comptes. », sans aucun bouton d’ajout.",
+          "p2": "Si une CLI peut conserver <strong>plusieurs comptes</strong>, et comment un changement l’atteint – sur place, en redémarrant ses panes ou à la main –, c’est la colonne « Multicompte » du tableau du chapitre 1 qui l’indique pour chaque CLI ; elle lit la déclaration de la CLI elle-même, pas une liste tenue dans l’aide.",
           "p3": "Sous chaque fournisseur, la première carte est toujours le compte <strong>Par défaut</strong> intégré (vos identifiants de connexion d’origine) ; les comptes que vous avez ajoutés suivent. Une carte affiche l’adresse e-mail connectée, l’étiquette <em>Par défaut</em> et le quota restant de ce compte.",
           "table": {
             "action": "Action",
@@ -4636,7 +4638,7 @@
           "p7": "Les changements trop fréquents sont bloqués (au plus 3 toutes les 60 secondes par CLI) ; confirmer un changement forcé ne contourne pas cette limite.",
           "callout1": {
             "title": "Les panes ouverts conservent le compte précédent",
-            "text": "Le panneau le dit lui-même : « les panes déjà ouverts conservent le compte précédent jusqu’à leur réouverture ». Tous les comptes partagent votre véritable dossier personnel (les sessions et l’historique sont partagés) ; changer de compte <strong>remplace sur place les identifiants enregistrés</strong>."
+            "text": "Les panes ouverts gardent le compte avec lequel ils ont démarré jusqu’à leur réouverture. Tous les comptes partagent votre vrai dossier personnel (sessions et historique partagés), et changer de compte <strong>remplace sur place les identifiants enregistrés</strong>. Un compte Claude peut aussi être connecté dans <strong>son propre dossier</strong> (« Se connecter dans son propre dossier ») ; un seul pane peut alors passer sur ce compte sans toucher à la connexion active de la CLI ni aux autres panes."
           },
           "apiKeys": {
             "title": "Comptes à clé API",
@@ -4656,13 +4658,14 @@
             "title": "L’association se fait ailleurs",
             "text": "« Quel compte Git cet espace de travail utilise » se choisit avec la pastille du compte du <strong>panneau Git de la barre latérale</strong>. La page des paramètres se contente d’ajouter, de modifier et de supprimer des comptes. Supprimer un compte efface aussi toute association qui pointait vers lui."
           },
-          "switchToast": "<strong>Un changement de compte en échec est désormais toujours visible.</strong> Auparavant, seuls deux refus affichaient une notification : « des panes sont en cours » et « changements trop fréquents ». Tout le reste, y compris un échec du remplacement des identifiants, allait dans la bannière propre au panneau Comptes, depuis longtemps sortie de l’écran pendant que vous regardiez les lignes d’un fournisseur ; cliquer sur « Définir par défaut » semblait ne rien faire du tout. Désormais, tout type d’échec de changement affiche une notification."
+          "switchToast": "<strong>Un changement de compte en échec est désormais toujours visible.</strong> Auparavant, seuls deux refus affichaient une notification : « des panes sont en cours » et « changements trop fréquents ». Tout le reste, y compris un échec du remplacement des identifiants, allait dans la bannière propre au panneau Comptes, depuis longtemps sortie de l’écran pendant que vous regardiez les lignes d’un fournisseur ; cliquer sur « Définir par défaut » semblait ne rien faire du tout. Désormais, tout type d’échec de changement affiche une notification.",
+          "agentConfirm": "Un agent peut aussi le demander lui-même : ouvrir une connexion pour un compte, changer le compte d’une CLI ou déplacer un seul pane vers un autre compte. Chaque demande ouvre une boîte de confirmation qui indique la CLI, le compte, le pane demandeur et sa raison ; <strong>rien ne se passe sans votre accord</strong>, et une demande restée sans réponse se ferme d’elle-même."
         },
         "s6": {
           "title": "Affichage du quota",
           "p1": "Le badge de quota se trouve dans la <strong>barre de titre du pane CLI</strong> (pas dans la barre d’état) et affiche le pourcentage restant ; survolez-le pour déplier les détails : chaque fenêtre de mesure, les heures de réinitialisation et le sélecteur de compte. Les cartes de compte de Paramètres ▸ Comptes lisent les mêmes données.",
           "h1": "Les fournisseurs couverts",
-          "p2": "<strong>11</strong> : Claude Code, Codex, Kimi Code, Grok CLI, Antigravity CLI, OpenCode, Qwen Code, Kilo Code, Pi, Copilot CLI et Cursor CLI. Aider, Muse Code, Droid et MiniMax Code n’ont aucune source de quota lisible.",
+          "p2": "<strong>{withCount}</strong> : {withQuota}. {withoutQuota} n’ont aucune source de quota lisible.",
           "h2": "D’où viennent les données",
           "list": {
             "claude": "<strong>Claude Code est un cas particulier</strong> : Navide ne touche jamais à ses identifiants ; il exécute <code>claude -p /usage</code> et lit le rapport de quota que la CLI affiche elle-même. Chaque lecture lance donc un Claude Code complet et prend quelques secondes.",
@@ -4850,23 +4853,23 @@
             "tools": {
               "list": "<strong>Lister les cibles</strong> – qui est en ligne, comment s’écrit son adresse et s’il est occupé en ce moment.",
               "send": "<strong>Envoyer une instruction</strong> – remettre un texte quelconque à un pane nommé.",
-              "spawn": "<strong>Ouvrir un nouvel agent et lui confier du travail</strong> – demander à Navide d’ouvrir un nouveau pane CLI, choisir la CLI qu’il exécute et lui donner une tâche. Le nouveau pane devrait rendre compte à l’appelant par un message une fois terminé, mais c’est la propre sortie du sous-agent, pas une garantie de Navide : le message attend tant que l’appelant est occupé, et n’arrive jamais si le sous-agent ne respecte pas le format.",
+              "spawn": "<strong>Ouvrir un nouvel agent et lui confier du travail</strong> – demandez à Navide d’ouvrir un nouveau pane CLI, choisissez la CLI qu’il exécute et donnez-lui une tâche. Le nouveau pane devrait rendre compte à l’appelant par un message une fois terminé ; ce rapport est la sortie du sous-agent lui-même et attend dans la file si l’appelant est occupé. Si le premier tour du nouveau pane se termine sans rapport, Navide transmet une fois la dernière sortie de ce tour à l’appelant, signalée comme rapport de secours et non comme celui du pane.",
               "ack": "<strong>Un simple accusé de réception</strong> – « bien reçu », « fait », tout ce sur quoi l’autre côté n’a pas à agir. Il est écrit dans le journal des messages pour que vous le lisiez (avec le badge « accusé seul ») mais n’est <strong>jamais tapé dans la zone de saisie de l’autre agent</strong> ; il ne l’interrompt donc pas et ne le réveille pas – ce qui signifie aussi que tout ce que l’autre côté doit lire ou traiter ne peut pas passer par là.",
               "pending": "<strong>Vérifier qui m’attend</strong> – on ne peut pas taper dans un pane occupé ; l’agent peut donc poser la question lui-même : ce qui attend qu’il devienne inactif, et si un message qu’il a envoyé est bloqué."
             },
-            "note": "<strong>Dix</strong> des quinze CLI sont branchées sur cet ensemble d’outils (voir le tableau de la section suivante). Celles qui ne le sont pas – Aider, Droid, Muse Code, Pi – utilisent à la place le protocole de sortie ci-dessous ; MiniMax Code n’a encore aucune des deux voies et peut seulement recevoir."
+            "note": "<strong>{mcpCount}</strong> des {total} CLI sont reliées à cet ensemble d’outils (voir le tableau de la section suivante). {protocolOnly} utilisent plutôt le protocole de sortie ci-dessous ; {receiveOnly} n’ont encore aucune des deux voies et ne peuvent que recevoir."
           },
           "proto": {
             "title": "Protocole de sortie",
             "tag": "les panes d’un pipeline l’ont automatiquement",
             "p1": "L’agent émet dans sa réponse un bloc de texte brut comme celui-ci, et Navide le récupère comme message :",
             "code": "---MSG-START--- to: reviewer\nLancez pnpm test:run pour moi et renvoyez-moi la liste des échecs\n---MSG-END---",
-            "note": "Le champ <code>to:</code> peut se trouver sur la même ligne que ---MSG-START--- ou seul sur la <strong>ligne juste en dessous</strong> ; un <code>to:</code> plus bas compte comme du contenu. Les lignes ---MSG-START--- et ---MSG-END--- doivent commencer en première colonne – sans retrait – et ne doivent pas se trouver dans un bloc de code markdown, sinon elles ne sont pas reconnues et aucune erreur n’est signalée. Les emplacements de pipeline sont informés de ce protocole dans leur brief d’ouverture ; les panes ouverts manuellement ne le sont pas, mais vous pouvez coller directement le bloc ci-dessus dans l’un d’eux – à condition que cette CLI prenne en charge le protocole de sortie dans le tableau ci-dessous."
+            "note": "Le champ <code>to:</code> peut se trouver sur la même ligne que ---MSG-START--- ou seul sur la <strong>ligne juste en dessous</strong> ; un <code>to:</code> plus bas compte comme du contenu. Les lignes ---MSG-START--- et ---MSG-END--- doivent commencer en première colonne – sans retrait – et ne doivent pas se trouver dans un bloc de code markdown, sinon elles ne sont pas reconnues ; quand un tour affiche ---MSG-START--- sans qu’aucun message n’en sorte, Navide saisit un avis « message not recognized » dans ce pane. Les emplacements de pipeline sont informés de ce protocole dans leur brief d’ouverture ; les panes ouverts manuellement ne le sont pas, mais vous pouvez coller directement le bloc ci-dessus dans l’un d’eux – à condition que cette CLI prenne en charge le protocole de sortie dans le tableau ci-dessous."
           }
         },
         "s3": {
           "title": "Quelles CLI peuvent envoyer",
-          "p1": "<strong>Tous les panes CLI peuvent recevoir des messages</strong> – Navide tape le texte directement dans le terminal, ce qui ne dépend pas de la CLI. <strong>Quatorze des quinze peuvent aussi envoyer</strong> ; seule la voie disponible diffère :",
+          "p1": "<strong>Chaque pane CLI peut recevoir des messages</strong> – Navide saisit le texte directement dans le terminal, ce qui ne dépend pas de la CLI. <strong>{sendCount} des {total} peuvent aussi envoyer</strong> ; seule la voie disponible diffère :",
           "table": {
             "cli": "CLI",
             "send": "Peut-elle envoyer ?"
@@ -4876,7 +4879,7 @@
             "protocolOnly": "Protocole de sortie uniquement",
             "none": "Aucune (réception uniquement)"
           },
-          "note1": "<strong>Quatorze des quinze peuvent envoyer</strong> ; seule la voie diffère. Le protocole de sortie nécessite que Navide lise le journal propre à l’agent – les quatorze fournisseurs dotés d’un lecteur de journal sont tous couverts ; Navide sait donc quand l’agent a fini de dire quelque chose, et ce qu’il a dit. Les outils MCP exigent en plus que la CLI offre un point d’entrée (une option de lancement, une variable d’environnement contenant tout le document de configuration, ou un miroir du dossier de configuration propre à chaque pane) ; Aider, Droid, Muse Code et Pi n’en offrent aucun et utilisent donc uniquement le protocole de sortie. <strong>MiniMax Code n’a ni l’un ni l’autre</strong> : il conserve ses conversations dans SQLite et Navide n’a pas encore de lecteur pour ce format ; il peut donc recevoir des messages mais pas en envoyer.",
+          "note1": "Le protocole de sortie exige que Navide puisse lire le journal propre de l’agent ; tous les fournisseurs dotés d’un lecteur de journal sont couverts, si bien que Navide sait quand l’agent a fini de dire quelque chose, et ce qu’il a dit. Les outils MCP demandent en plus que la CLI offre une porte d’entrée (une option de lancement, une variable d’environnement contenant tout le document de configuration, ou un miroir du dossier de configuration propre au pane) et que Navide la branche ; {protocolOnly} ne sont pas branchées et n’utilisent que le protocole de sortie. <strong>{receiveOnly}</strong> n’ont ni l’un ni l’autre : Navide n’a pas encore de lecteur pour leurs journaux, elles peuvent donc recevoir des messages mais pas en envoyer.",
           "note2": "Deux réserves en pratique : <strong>Antigravity</strong> ne peut pas envoyer lors du tour où l’agent vous pose une question (ce tour ne contient pas de texte de réponse) – les tours de réponse ordinaires fonctionnent ; et <strong>Qwen, Pi et Kimi</strong> n’ont pas de signal explicite de « tour terminé » ; Navide le déduit donc de 8 secondes de silence, et l’envoi part un peu plus tard."
         },
         "s4": {
@@ -4921,7 +4924,7 @@
           "list": {
             "alive": "Sa CLI est toujours en vie et a passé la phase de démarrage",
             "noTyping": "Personne ne tape dans ce pane (un brouillon dans la zone de saisie, ou une frappe au cours des quatre dernières secondes, le fait attendre)",
-            "noTurn": "Aucun tour n’est en cours",
+            "noTurn": "Aucun tour n’est en cours – sauf pour {midTurn}, qui met lui-même en file un message saisi en plein tour ; seule l’attente de frappe s’y applique",
             "quiet": "Aucune sortie depuis 2 secondes"
           },
           "p2": "Si les conditions ne sont pas réunies, le message attend ; dès qu’elles le sont, il part automatiquement. Ainsi, pendant que la cible mène une longue tâche, votre message attend qu’elle la termine – c’est voulu. Le panneau Messages inter-CLI indique la condition qui le retient – « Le pane cible n’est pas en cours d’exécution », « Le pane cible est encore en train de démarrer », « Quelqu’un est en train de saisir dans le pane cible », « L’agent cible est au milieu d’un tour », « En attente de la stabilisation de la cible » – de sorte que « il n’est jamais parti » a toujours une raison identifiable. Le message que reçoit la cible est préfixé par sa source, pour qu’elle sache à qui répondre.",
@@ -4946,7 +4949,9 @@
             "rejected": "Un refus <strong>ne vient jamais que d’une requête erronée</strong> : nom de CLI inexistant, nom en double ou non valide, tâche vide, ou modèle ou effort de raisonnement que cette CLI n’accepte pas.",
             "kickoff": "<strong>Le fait que la tâche de départ a bien été transmise est aussi signalé.</strong> Navide attend que la CLI démarre, que son invite s’affiche et que la tâche soit tapée avant de répondre. S’il n’a pas pu confirmer la remise, il dit « vérifiez d’abord l’état » plutôt que « renvoyez » – un renvoi à l’aveugle lancerait deux fois le même travail.",
             "duplicate": "<strong>Une demande répétée pour le même lancement est bloquée</strong> ; un agent qui se lasse d’attendre et redemande ne se retrouve donc pas avec un second pane.",
-            "resume": "<strong>Un nouveau pane peut aussi s’ouvrir sur une ancienne conversation.</strong> L’agent liste les conversations CLI que cet espace de travail conserve encore et en désigne une ; le nouveau pane démarre avec la mémoire de cette conversation intacte (y compris une conversation commencée dans un simple terminal). L’identifiant est d’abord vérifié dans le stockage de sessions propre à cette CLI, et un identifiant qui ne correspond à rien est refusé au lieu d’ouvrir silencieusement une session vide."
+            "resume": "<strong>Un nouveau pane peut aussi s’ouvrir sur une ancienne conversation.</strong> L’agent liste les conversations CLI que cet espace de travail conserve encore et en désigne une ; le nouveau pane démarre avec la mémoire de cette conversation intacte (y compris une conversation commencée dans un simple terminal). L’identifiant est d’abord vérifié dans le stockage de sessions propre à cette CLI, et un identifiant qui ne correspond à rien est refusé au lieu d’ouvrir silencieusement une session vide.",
+            "otherProject": "<strong>Le nouveau pane peut s’ouvrir dans un autre projet</strong> – avec son dossier, son CLAUDE.md, sa mémoire, ses Plans et son git – tandis que l’appelant reste son parent et reçoit le rapport. Par défaut il va dans la barre latérale de cette fenêtre ; il peut aussi s’ouvrir dans une nouvelle fenêtre ou dans celle qui contient déjà ce projet.",
+            "release": "<strong>Un pane enfant terminé peut être libéré</strong> avec <code>cli_reclaim_agent</code> : son processus CLI s’arrête et le pane reste en place sous forme de carte « cliquer pour reprendre », conversation intacte, pour que vous puissiez encore vérifier le travail. Un pane peut aussi être renommé avec <code>cli_rename_pane</code>."
           },
           "table": {
             "suggestion": "Recommandation",
@@ -4980,7 +4985,7 @@
           "guards": {
             "rate": {
               "limit": "Débit pour une paire source → cible",
-              "value": "5 par 60 secondes",
+              "value": "5 par 60 secondes (expéditeur de chat : 30)",
               "why": "Deux agents qui se répondent peuvent boucler indéfiniment"
             },
             "queue": {
@@ -4989,9 +4994,9 @@
               "why": "Rien ne doit s’accumuler sans limite pendant que la cible est débordée"
             },
             "timeout": {
-              "limit": "Aucun résultat après l’envoi",
+              "limit": "Aucun résultat pour un message vers une autre fenêtre",
               "value": "Marqué en échec après 30 minutes",
-              "why": "Quand la fenêtre cible est fermée, un message ne doit pas rester « En file d’attente » indéfiniment"
+              "why": "Si la fenêtre destinataire est fermée ou que la machine se met en veille, un message inter-espaces ne doit pas rester « En file d’attente » indéfiniment. Un message vers un pane occupé de la même fenêtre attend simplement."
             },
             "pause": {
               "limit": "Interrupteur de pause",
@@ -5031,7 +5036,7 @@
             "stuckQueued": {
               "symptom": "Le message reste « En file d’attente » indéfiniment",
               "cause": "La cible mène une longue tâche et n’est pas encore inactive",
-              "fix": "Normal – attendez qu’elle termine ; si elle est vraiment bloquée, le message est marqué en échec après 30 minutes"
+              "fix": "Normal – attendez qu’il ait fini. Au bout de 2 minutes, l’expéditeur est prévenu que le message est toujours retenu, et vous pouvez le retirer depuis le panneau avec « Retirer » ; seul un message vers une autre fenêtre est marqué en échec, après 30 minutes."
             },
             "rateLimit": {
               "symptom": "Le panneau indique « Limite de débit : 5 messages au plus par 60 s entre les deux mêmes panes »",
@@ -5058,12 +5063,13 @@
         "s10": {
           "title": "Limites connues",
           "list": {
-            "terminalPane": "<strong>Un simple pane de terminal ne peut ni envoyer ni recevoir</strong> – seuls les panes d’agent CLI ont un nom.",
-            "receiveOnly": "<strong>Cinq CLI n’ont pas d’outils MCP</strong> – Aider, Droid, Muse Code et Pi ne peuvent utiliser que le protocole de sortie en lignes brutes, et <strong>MiniMax Code n’a même pas cela</strong> : il peut recevoir des messages mais pas en envoyer. Voir « Quelles CLI peuvent envoyer » ci-dessus.",
+            "terminalPane": "<strong>Un simple pane de terminal peut recevoir mais pas envoyer.</strong> Un message qui lui est adressé est saisi tel quel et s’exécute comme commande shell – sans enveloppe ni consigne de réponse. Les terminaux sont exclus des diffusions, retenus 60 secondes après votre dernière frappe, marqués en échec plutôt que saisis en retard après 2 minutes en file, et les commandes destructrices sont refusées.",
+            "receiveOnly": "<strong>{noMcpCount} CLI n’ont pas d’outils MCP</strong> – {protocolOnly} ne peuvent utiliser que le protocole de sortie en lignes nues, et <strong>{receiveOnly}</strong> n’ont même pas cela : elles peuvent recevoir des messages mais pas en envoyer. Voir « Quelles CLI peuvent envoyer » ci-dessus.",
             "detached": "<strong>Après le détachement d’un pane dans sa propre fenêtre, ou un rechargement de la fenêtre</strong>, la voie des outils MCP ne revient qu’une fois le pane rouvert ; le protocole de sortie n’est pas affecté.",
             "queueFull": "<strong>Quand la file de la cible est pleine (10 au maximum), le message est abandonné</strong> – mais plus en silence : le panneau indique « La cible a déjà 10 messages en attente », l’échec est retapé sous forme d’avis dans le pane émetteur, et l’agent émetteur peut tout aussi bien vérifier ce qu’est devenu son message. La remise reste asynchrone ; rien n’est donc connu <strong>au moment de l’envoi</strong>.",
             "noPermission": "<strong>Il n’y a pas de demande d’autorisation</strong> – la messagerie entre espaces de travail n’affiche aucune boîte de confirmation, seulement un avis à l’arrivée. C’est un compromis délibéré.",
-            "ackLocal": "<strong>Un simple accusé de réception ne traverse pas les appareils</strong> – le relais ne peut pas garantir que le message reste hors d’une zone de saisie sur la machine de quelqu’un d’autre ; un accusé entre appareils est donc refusé d’emblée. Envoyez-le comme un message ordinaire s’il doit voyager."
+            "ackLocal": "<strong>Un simple accusé de réception ne traverse pas les appareils</strong> – le relais ne peut pas garantir que le message reste hors d’une zone de saisie sur la machine de quelqu’un d’autre ; un accusé entre appareils est donc refusé d’emblée. Envoyez-le comme un message ordinaire s’il doit voyager.",
+            "acp": "<strong>Les panes ACP</strong> (expérimental ; activé sous « Agents CLI » → ACP) reçoivent un message sous forme de prompt ACP au lieu qu’il soit saisi ; « Remis » signifie que l’agent a accepté le prompt, pas qu’il l’a lu ni qu’il y a répondu."
           }
         },
         "tip": "Astuce : donnez d’abord des noms de rôle aux panes (« reviewer », « architect ») – le titre est l’adresse, et tout le reste se lit ensuite bien plus naturellement.",
@@ -5086,7 +5092,7 @@
             "legend": {
               "actions": {
                 "label": "Barre de titre",
-                "text": "« Suspendre la remise » met en attente les messages suivants au lieu de les envoyer ; « Effacer le journal » vide seulement l’affichage et ne touche pas aux messages remis."
+                "text": "« Suspendre la remise » met les messages suivants en file au lieu de les envoyer ; « Effacer le journal » retire les lignes terminées et garde celles encore en route."
               },
               "route": {
                 "label": "Source → cible",
@@ -5157,12 +5163,13 @@
           "h3": "Répondre aux demandes de la CLI depuis le chat",
           "answer": {
             "bare": "Les demandes d’autorisation et les questions sont publiées dans le chat une par une. Quand une seule est ouverte, un simple <code>1</code>–<code>9</code>, <code>yes</code> ou <code>no</code> y répond ; quand plusieurs sont ouvertes, ajoutez l’identifiant après la réponse (par exemple <code>yes &lt;id&gt;</code>). Tout autre texte reçoit immédiatement une indication au lieu d’attendre dans une file.",
-            "which": "Seuls Claude Code, Codex et Aider peuvent recevoir une réponse depuis le chat ; pour les autres CLI, les questions à choix multiples et les questions à texte libre, il vous est demandé de répondre sur l’ordinateur au lieu d’afficher des boutons sans effet.",
+            "which": "Seuls Claude Code, Codex, Aider et Grok Build peuvent recevoir une réponse depuis le chat ; pour les autres CLI, les questions à choix multiples et les questions à texte libre, il vous est demandé de répondre sur l’ordinateur au lieu d’afficher des boutons sans effet.",
             "never": "Les choix permanents comme « ne plus demander », « toujours autoriser » ou « autoriser pour cette session » ne sont <strong>jamais actionnés depuis un chat</strong>.",
             "guard": "Les demandes approuvées depuis un chat passent toujours par Navide Guard : tout ce qui est classé critique ou élevé est refusé, de même que tout ce que Guard ne peut pas évaluer ; le chat est informé que l’action doit être confirmée sur l’ordinateur."
           },
           "h4": "Le moniteur de la barre de titre",
-          "p4": "Le bouton « {monitor} » de la barre de titre porte une pastille d’état : rouge quand un bot est bloqué, jaune pendant qu’un bot se reconnecte, verte quand tout va bien, et aucune pastille quand aucun bot n’est activé. Il ouvre la liste de tous les panes liés à un chat, d’où vous pouvez aller au pane ou le déconnecter ; les sujets enfants automatiques sont regroupés sous leur liaison parente."
+          "p4": "Le bouton « {monitor} » de la barre de titre porte une pastille d’état : rouge quand un bot est bloqué, jaune pendant qu’un bot se reconnecte, verte quand tout va bien, et aucune pastille quand aucun bot n’est activé. Il ouvre la liste de tous les panes liés à un chat, d’où vous pouvez aller au pane ou le déconnecter ; les sujets enfants automatiques sont regroupés sous leur liaison parente.",
+          "commands": "Dans un chat associé, <code>/prompts</code>, <code>/skills</code> et <code>/mcp</code> répondent par des boutons pour vos skills de prompt, les skills de la CLI du pane et les serveurs MCP (lecture seule) ; <code>/shares</code> et <code>/revoke</code> listent et révoquent les liens de partage ; <code>/plugins status</code> et <code>/plugins stop</code> affichent les plugins Navide tiers et en arrêtent un. Les fichiers envoyés au chat sont enregistrés pour le pane, et un pane peut renvoyer un fichier avec une ligne <code>---ATTACH--- &lt;chemin&gt;</code> dans son bloc MSG."
         }
       },
       "workspace": {
@@ -5602,7 +5609,7 @@
         },
         "s1": {
           "title": "Sens 1 : les outils que Navide fournit aux agents CLI",
-          "p1": "Dès qu’un pane démarre, ces outils apparaissent dans la liste d’outils de l’agent. Vous n’avez pas à les lui apprendre et il n’y a rien à configurer – dites simplement ce que vous voulez en langage courant, par ex. « marquez la phase deux de ce plan comme terminée ». Il y en a <strong>64</strong> aujourd’hui (57 de base, plus les 7 qu’enregistre le plugin Navide Plans), accompagnés de 3 ressources en lecture seule et de 3 modèles de prompt.",
+          "p1": "Dès qu’un pane démarre, ces outils apparaissent dans la liste d’outils de l’agent. Vous n’avez pas à les lui apprendre et il n’y a rien à configurer – dites simplement ce que vous voulez en langage courant, par ex. « marquez la phase deux de ce plan comme terminée ». Cette page en présente <strong>{listed}</strong> par groupe, avec 3 ressources en lecture seule et 3 modèles de prompt. L’ensemble s’enrichit à chaque version : la liste complète et à jour est celle qu’affiche la vue MCP de l’agent pour le serveur navide (par exemple <code>/mcp</code> dans Claude Code).",
           "h1": "Documents de plan",
           "planTools": {
             "plan_list": "Lister tous les plans de cet espace de travail, avec leur phase et l’avancement de leurs tâches",
@@ -5685,9 +5692,9 @@
           "note4": "Un espace de travail peut contenir deux panes de même nom, et un nom seul ne permet alors pas de savoir lequel est visé ; les outils ci-dessus refusent donc d’emblée avec <code>ambiguous-target</code> au lieu d’en choisir un. Pour désigner un pane précis, passez le <code>pane_id</code> renvoyé par <code>cli_list_targets</code> à <code>cli_send</code>, <code>cli_send_and_wait</code>, <code>cli_read_log</code>, <code>cli_get_status</code> ou <code>cli_wait_idle</code>, et omettez l’argument d’adresse. Les noms sont plus lisibles au quotidien ; un pane rouvert avec une autre CLI reçoit un nouvel identifiant, et en cas de <code>unknown-pane-id</code> il suffit de le rechercher de nouveau. Les panes d’un autre appareil n’ont pas d’identifiant local et ne peuvent être désignés que par leur nom.",
           "note5": "Donner à <code>cli_send</code> l’adresse <code>group</code> ne cherche pas un pane nommé group : cela diffuse aux autres panes <strong>de mon propre groupe d’onglets</strong> (même espace de travail). C’est différent du <code>all</code> du protocole en lignes brutes : <code>all</code> désigne toute la fenêtre, quel que soit le regroupement. Les panes sans groupe partagent un même groupe implicite ; ils peuvent donc s’atteindre les uns les autres plutôt que personne. La forme de la réponse diffère aussi : chaque destinataire de <code>recipients</code> a son propre <code>msg_key</code> à interroger séparément avec <code>cli_check_message</code>, et une liste <code>recipients</code> vide signifie que personne d’autre n’est dans votre groupe, pas un échec. Le coût est le même qu’avec <code>all</code> : un pane réellement nommé group ne peut plus être désigné par son nom.",
           "h4": "Quelles CLI sont branchées",
-          "p2": "<strong>Dix</strong> des quinze pour l’instant : Claude Code, Codex, Copilot CLI, Qwen Code, OpenCode, Kilo Code, Kimi Code, Grok CLI, Antigravity CLI, Cursor CLI. Le branchement dépend de l’interface offerte par chaque CLI – une option de lancement (Claude Code, Codex, Copilot, Qwen), une variable d’environnement contenant tout le document de configuration (OpenCode, Kilo), ou un miroir du dossier de configuration propre à chaque pane (Kimi, Grok, Antigravity). Aucune des trois méthodes <strong>ne touche à votre propre fichier de configuration MCP</strong>.",
+          "p2": "<strong>{mcpCount}</strong> des {total} pour l’instant : {mcpNames}. Le branchement dépend de l’interface offerte par chaque CLI – une option de lancement (Claude Code, Codex, Copilot, Qwen), une variable d’environnement contenant tout le document de configuration (OpenCode, Kilo), ou un miroir du dossier de configuration propre à chaque pane (Kimi, Grok, Antigravity). Aucune des trois méthodes <strong>ne touche à votre propre fichier de configuration MCP</strong>.",
           "note6": "<strong>Cursor est la seule exception</strong> : il ne lit que <code>.cursor/mcp.json</code> dans l’espace de travail ; Navide fusionne donc son entrée dans ce fichier et l’ajoute à <code>.git/info/exclude</code>, ce qui laisse votre git status propre.",
-          "note7": "Ne sont pas encore branchées <strong>Aider, Muse Code et Pi</strong> (ces trois CLI n’ont pas d’interface MCP) ainsi que <strong>Droid et MiniMax Code</strong> (Navide ne les a pas branchées, et il n’est pas établi que leurs CLI offrent un point d’entrée). La plupart de ces panes peuvent tout de même envoyer des messages à d’autres panes via le protocole de sortie en lignes brutes ; ils n’ont simplement pas d’outils MCP à appeler. MiniMax Code fait exception : il n’a pas non plus de protocole de sortie et ne peut donc que recevoir.",
+          "note7": "Pas encore branchées : <strong>{notWired}</strong>. Certaines de ces CLI n’ont aucune interface MCP ; pour les autres, Navide ne l’a pas encore branchée. La plupart de ces panes peuvent quand même écrire aux autres panes via le protocole de sortie en lignes nues ; ils n’ont simplement aucun outil MCP à appeler. {receiveOnly} font exception : sans protocole de sortie non plus, elles ne peuvent que recevoir.",
           "note8": "Le branchement a lieu <strong>au démarrage du pane</strong>. Après une mise à jour, les panes déjà ouverts conservent donc l’ancienne liste d’outils – fermez-en un et rouvrez-le pour obtenir la nouvelle.",
           "h5": "Le panneau Aperçu",
           "previewTools": {
@@ -5696,7 +5703,8 @@
             "preview_list": "Relire la piste d’enregistrement des modifications – ce qu’ont fait les autres agents, l’utilisateur et l’observateur de fichiers, du plus récent au plus ancien ; un curseur horodaté permet de ne lire que les nouveautés",
             "preview_clear": "Vider la piste d’enregistrement des modifications ; ce qui disparaît, ce sont les lignes que l’utilisateur voit dans le panneau Aperçu, y compris celles de l’observateur de fichiers et de l’utilisateur lui-même, et c’est irréversible. Il est aussi possible d’effacer uniquement ce qui est antérieur à un point donné"
           },
-          "note9": "<strong>Seuls quatre outils traversent les appareils</strong> : envoyer, envoyer et attendre, obtenir l’état et attendre l’inactivité. Lire la transcription d’un autre pane, envoyer une touche d’interruption et fermer un pane nécessitent tous la machine de ce pane ; ces trois opérations sont donc refusées. Un pane distant n’a pas non plus <strong>d’identifiant local</strong> ; le nom en trois parties est donc le seul moyen de le désigner. Son état est le dernier que la fenêtre distante a transmis à Navide Cloud – quasi en direct, pas en direct – et il n’y a pas non plus d’instantané de quota (le cache de quota de cette machine décrit les connexions de cette machine, ce qui serait une mauvaise réponse pour un pane qui tourne ailleurs)."
+          "note9": "<strong>Seuls quatre outils traversent les appareils</strong> : envoyer, envoyer et attendre, obtenir l’état et attendre l’inactivité. Lire la transcription d’un autre pane, envoyer une touche d’interruption et fermer un pane nécessitent tous la machine de ce pane ; ces trois opérations sont donc refusées. Un pane distant n’a pas non plus <strong>d’identifiant local</strong> ; le nom en trois parties est donc le seul moyen de le désigner. Son état est le dernier que la fenêtre distante a transmis à Navide Cloud – quasi en direct, pas en direct – et il n’y a pas non plus d’instantané de quota (le cache de quota de cette machine décrit les connexions de cette machine, ce qui serait une mauvaise réponse pour un pane qui tourne ailleurs).",
+          "note10": "Non listés ici mais fournis aussi : canaux de chat (<code>channels_*</code>), gestion du Navide Marketplace et des plugins Navide (<code>marketplace_*</code>, <code>plugins_*</code>), fenêtres (<code>window_*</code>, <code>workspace_close</code>), liens de partage (<code>share_*</code>), <code>evolve_report</code> / <code>evolve_retro</code> et <code>pipeline_import_n8n</code>. La description de chaque outil dans la liste d’outils de l’agent indique ce qu’il fait."
         },
         "s2": {
           "title": "Sens 2 : Navide consomme des MCP externes",
@@ -5712,7 +5720,8 @@
           "warn": {
             "p1": "<strong>Les serveurs configurés ici n’apparaissent jamais dans la liste d’outils d’un agent CLI.</strong> Ils ne servent qu’à une chose – « lire du contexte → l’injecter dans le prompt d’ouverture » – et ne se déclenchent <strong>que pendant l’exécution d’un pipeline</strong> ; les panes que vous ouvrez à la main n’y touchent jamais.",
             "p2": "Pour que Claude Code ou Codex utilise lui-même un serveur MCP (pour interroger directement GitHub, par exemple), configurez-le dans la configuration MCP propre à cette CLI, pas ici."
-          }
+          },
+          "p3": "Chaque ligne de serveur affiche son état et son nombre d’outils, ainsi que les dernières lignes qu’il a écrites s’il ne démarre pas. Un serveur lancé via Node.js est marqué « Nécessite Node.js » quand Node.js est absent, avec une installation guidée. Les valeurs laissées vides, comme les variables d’environnement et les en-têtes, se remplissent sur cette machine et ne se synchronisent jamais entre appareils. « Comparer » affiche une matrice indiquant quelle CLI a quel serveur."
         },
         "s3": {
           "title": "Sens 3 : des clients externes pilotent Navide",
@@ -5773,15 +5782,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "L’agent dit qu’il n’a pas d’outils de plan ni de messagerie",
-              "detail": "Ce pane n’a pas été branché à son ouverture (il est antérieur à la mise à jour), ou il exécute l’une des cinq CLI pas encore branchées sur MCP (Aider / Droid / Muse Code / Pi / MiniMax Code). Dans le premier cas, fermez-le et rouvrez-le ; dans le second, utilisez plutôt le protocole de sortie en lignes brutes pour envoyer des messages – MiniMax Code n’a même pas cela et ne peut que recevoir."
+              "detail": "Ce pane n’a pas été branché à son ouverture (il est antérieur à la mise à jour), ou il exécute l’une des {noMcpCount} CLI pas encore branchées à MCP ({notWired}). Dans le premier cas, fermez-le et rouvrez-le ; dans le second, utilisez plutôt le protocole de sortie en lignes nues – {receiveOnly} n’ont même pas cela et ne peuvent que recevoir."
             },
             "serverUnused": {
               "symptom": "Un serveur a été ajouté dans Paramètres → MCP mais l’agent ne peut pas l’utiliser",
-              "detail": "C’est le sens 2, réservé à la lecture de documentation par les pipelines. Pour que l’agent l’appelle lui-même, configurez-le dans la configuration MCP propre à cette CLI. La section « MCP de chaque CLI » dans la moitié inférieure de Paramètres → MCP liste, en lecture seule, les serveurs configurés pour chaque CLI ; vous pouvez donc vérifier directement."
+              "detail": "C’est la direction 2, uniquement pour que les pipelines lisent de la documentation. Pour que l’agent l’appelle lui-même, configurez-le dans la configuration MCP propre à cette CLI. Paramètres → MCP liste, en lecture seule, les serveurs que chaque CLI possède déjà, à côté de ceux de Navide ; passez à « Comparer » pour voir quelle CLI a lequel."
             },
             "planLoadFailed": {
               "symptom": "L’agent dit que le plan n’a pas pu être chargé",
-              "detail": "Chaque outil de plan prend un chemin d’espace de travail. Si le chemin transmis par l’agent diffère de l’espace de travail réel du pane, il écrit à un endroit que Navide ne voit pas. Demandez-lui d’utiliser le chemin de l’espace de travail du pane."
+              "detail": "Sans chemin d’espace de travail, les outils de plan utilisent l’espace de travail du pane lui-même. Si l’agent passe un autre chemin, il écrit dans un projet que Navide n’affiche peut-être pas (l’outil prévient alors qu’aucun pane ne l’utilise). Demandez-lui d’omettre le chemin de l’espace de travail."
             },
             "staleIdentity": {
               "symptom": "Il signale que l’identité du pane est obsolète",
@@ -5811,7 +5820,7 @@
               },
               "actions": {
                 "label": "Actions de la barre supérieure",
-                "text": "« Ajouter un MCP + » en ajoute un depuis le catalogue intégré, « Ajouter un serveur personnalisé » en ajoute un à la main, et « Actualiser » relit le fichier de configuration."
+                "text": "« + Ajouter un MCP » en ajoute un depuis le catalogue intégré, « Ajouter un serveur personnalisé » en ajoute un à la main, et « Ouvrir la configuration MCP » ouvre le fichier de configuration."
               },
               "card": {
                 "label": "Carte du catalogue",

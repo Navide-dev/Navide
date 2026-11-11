@@ -4373,9 +4373,9 @@
             "signInInside": "Bên trong CLI",
             "flagNoteGoose": "Không có — theo mặc định Goose tự phê duyệt mọi công cụ (GOOSE_MODE=auto); đặt GOOSE_MODE thành approve hoặc smart_approve để được hỏi. Navide Guard chưa bao phủ Goose."
           },
-          "note": "“Hạn mức” = Navide đọc được mức sử dụng còn lại (chương 6). “Nhiều tài khoản” = có thể lưu nhiều lần đăng nhập trong Cài đặt và chuyển qua lại (chương 5). Bốn CLI không có cờ bỏ qua quyền (Grok CLI, OpenCode, Pi, MiniMax Code) đơn giản là không có cờ đó — không phải Navide bỏ sót. “Lệnh đăng nhập” = những gì Navide thực sự chạy khi bạn nhấp Đăng nhập trong Cài đặt ▸ Tài khoản; các CLI ghi “Bên trong CLI” không khai báo lệnh đăng nhập riêng, nên nút đó khởi chạy chúng như bình thường và việc đăng nhập diễn ra trên màn hình của chính CLI.",
+          "note": "“Hạn mức” = Navide đọc được mức sử dụng còn lại (chương 6). “Nhiều tài khoản” = có thể lưu nhiều lần đăng nhập trong Cài đặt và chuyển qua lại (chương 5). {noFlagCount} CLI không có cờ bỏ qua quyền ({noFlag}) đơn giản là không có cờ đó — không phải Navide bỏ sót. “Lệnh đăng nhập” = những gì Navide thực sự chạy khi bạn nhấp Đăng nhập trong Cài đặt ▸ Tài khoản; các CLI ghi “Bên trong CLI” không khai báo lệnh đăng nhập riêng, nên nút đó khởi chạy chúng như bình thường và việc đăng nhập diễn ra trên màn hình của chính CLI.",
           "callout": {
-            "title": "Mục thứ 16 không phải agent",
+            "title": "Mục cuối cùng không phải là agent",
             "text": "<strong>>_ Mở terminal</strong> ở cuối menu + là một shell thường: không gắn agent nào và không đưa vai trò nào vào. Mục này cố ý nằm ngoài danh sách để việc cuộn danh sách CLI không bao giờ che mất nó."
           }
         },
@@ -4424,7 +4424,8 @@
           "callout2": {
             "title": "Grok CLI giờ là bản chính thức của xAI",
             "text": "CLI này được cài bằng script của chính nhà cung cấp (<code>curl</code> tải <code>https://x.ai/cli/install.sh</code> rồi đưa cho bash) chứ không qua npm — nên cần có <code>curl</code> và một cửa sổ Terminal thật. Lệnh cập nhật là <code>grok update</code>, và tệp cấu hình giờ là <code>~/.grok/config.toml</code>, với MCP được ghi dạng TOML; tệp <code>user-settings.json</code> của bản cộng đồng không còn được đọc. CLI này <strong>không có lệnh chẩn đoán</strong> (nhà cung cấp không cung cấp, nên Cài đặt dẫn tới tài liệu chính thức), không có trường mức nỗ lực và không có cờ bỏ qua quyền. CLI cộng đồng cùng tên cài vào cùng đường dẫn, nên <code>which grok</code> không phân biệt được — chỉ có hình dạng chuỗi phiên bản là phân biệt được."
-          }
+          },
+          "menuGroups": "Menu + có hai tiêu đề: các CLI lập trình nằm dưới <strong>{cliHeading}</strong>, còn các agent chạy lâu dài ({agents}) nằm dưới <strong>{agentsHeading}</strong>."
         },
         "s3": {
           "title": "Vai trò",
@@ -4458,7 +4459,7 @@
             "global": "Một <strong>công tắc chung</strong> ở trên cùng: <em>Mặc định bỏ qua lời nhắc cấp quyền (chế độ YOLO)</em>. Ngăn của mọi CLI đều hiện cùng công tắc này, nên đổi ở một nơi là đổi cho tất cả.",
             "perVendor": "Bên dưới là một hàng cho CLI này, hiện cờ thực tế của nó (ví dụ <code>--yolo</code>) với danh sách ba lựa chọn ở bên phải: <strong>Theo cài đặt chung / Luôn bỏ qua / Không bao giờ bỏ qua</strong>."
           },
-          "p4": "Với bốn CLI không có cờ (Grok CLI / OpenCode / Pi / MiniMax Code), phần này của ngăn chỉ hiện công tắc chung, bên dưới có một dòng cho biết CLI này không có cờ bỏ qua quyền nên không có gì để bật tắt.",
+          "p4": "Với {noFlagCount} CLI không có cờ ({noFlag}), phần này của ngăn kéo chỉ hiện công tắc toàn cục, kèm một dòng bên dưới cho biết CLI này không có cờ bỏ qua quyền nên không có gì để chuyển.",
           "callout1": {
             "title": "Thay đổi không tác động tới pane đang chạy",
             "text": "Cờ được ghi vào dòng lệnh của pane <strong>ngay lúc pane khởi động</strong>. Thay đổi ở đây chỉ ảnh hưởng tới pane khởi chạy sau đó; pane đang chạy vẫn giữ những gì nó đã dùng khi khởi động cho đến khi bạn dựng lại hoặc khôi phục nó."
@@ -4497,7 +4498,8 @@
           "note": "Cập nhật sẽ thay tệp thực thi; các pane đang chạy phải khởi động lại mới dùng phiên bản mới.",
           "callout2": {
             "title": "Những gì không có ở đây",
-            "text": "Vẫn <strong>không có trường “tham số mặc định”</strong> — lệnh khởi chạy sẽ <em>thay thế</em> cả dòng chứ không nối thêm vào dòng mặc định. <strong>Tệp thực thi vẫn không được chọn bằng cách gõ đường dẫn</strong>, mà bằng cách chọn một trong các ứng viên khi phát hiện nhiều bản cài vật lý (sau đó phần tổng quan của ngăn có thêm chip “Tệp thực thi tùy chỉnh”). Tuy nhiên, model và mức nỗ lực <strong>không còn chỉ dùng được qua MCP</strong>: phần ghi đè khởi chạy đã có trường riêng cho chúng, và hộp thoại Khởi chạy thủ công cũng vậy."
+            "text": "Vẫn <strong>không có trường “tham số mặc định”</strong> — lệnh khởi chạy sẽ <em>thay thế</em> cả dòng chứ không nối thêm vào dòng mặc định. <strong>Tệp thực thi vẫn không được chọn bằng cách gõ đường dẫn</strong>, mà bằng cách chọn một trong các ứng viên khi phát hiện nhiều bản cài vật lý (sau đó phần tổng quan của ngăn có thêm chip “Tệp thực thi tùy chỉnh”). Tuy nhiên, model và mức nỗ lực <strong>không còn chỉ dùng được qua MCP</strong>: phần ghi đè khởi chạy đã có trường riêng cho chúng, và hộp thoại Khởi chạy thủ công cũng vậy.",
+            "setModel": "Pane đang chạy cũng có thể đổi model: agent yêu cầu bằng <code>cli_set_model</code>. Claude Code và Codex đổi ngay tại chỗ (bộ chọn model của Claude, <code>/model</code> của Codex); các CLI khác khởi động lại pane và tiếp tục cuộc hội thoại."
           },
           "chipsIntro": "Mỗi thẻ chỉ hiện ba chip: trạng thái cài đặt, đăng nhập và tài khoản, và kênh đẩy trực tiếp. Dải đầy đủ nằm trong “{overview}” ở đầu ngăn và phản ánh cách CLI đó đang được thiết lập. Thứ tự cố định, theo trình tự “nó là gì → chạy với gì → liên lạc bằng cách nào”:",
           "chipsTable": {
@@ -4580,19 +4582,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "Cả Model và Mức nỗ lực (5)",
-              "vendors": "Claude Code, Antigravity CLI, Copilot CLI, Muse Code và Pi"
+              "group": "Cả Model và Mức nỗ lực ({count})",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "Chỉ Model (7)",
-              "vendors": "Codex, Cursor CLI, Grok CLI, Kilo Code, Kimi Code, OpenCode và Qwen Code"
+              "group": "Chỉ Model ({count})",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "Không có cả hai (4)",
-              "vendors": "Aider, Droid, MiniMax Code và Terminal (không phải agent)"
+              "group": "Không có cả hai ({count})",
+              "vendors": "{names} (Terminal không phải là agent)"
             }
           },
-          "spawnNote": "Bảy CLI thuộc nhóm “Chỉ Model” không phải thiếu nút chỉnh mức nỗ lực; chỉ là nút đó không phải tham số khởi chạy. Với một số CLI, nó nằm sẵn trong ID model (ví dụ đuôi <code>-high</code>), với số khác thì nằm trong tệp cấu hình hoặc sau một lệnh trong session. Giá trị vi phạm quy tắc (ID model có dấu cách, hoặc bắt đầu bằng “-”) sẽ được giải thích ngay và làm vô hiệu nút gửi. Và nếu CLI đó có lệnh khởi chạy tùy chỉnh, cả hai trường đều bị vô hiệu kèm lý do — dòng lệnh đó chạy đúng như đã viết và Navide không thêm model nào vào.",
+          "spawnNote": "Các CLI thuộc nhóm “Chỉ Model” không phải thiếu nút chỉnh mức nỗ lực; chỉ là nút đó không phải tham số khởi chạy. Với một số CLI, nó nằm sẵn trong ID model (ví dụ đuôi <code>-high</code>), với số khác thì nằm trong tệp cấu hình hoặc sau một lệnh trong session. Giá trị vi phạm quy tắc (ID model có dấu cách, hoặc bắt đầu bằng “-”) sẽ được giải thích ngay và làm vô hiệu nút gửi. Và nếu CLI đó có lệnh khởi chạy tùy chỉnh, cả hai trường đều bị vô hiệu kèm lý do — dòng lệnh đó chạy đúng như đã viết và Navide không thêm model nào vào.",
           "h5": "5 · Kênh đẩy trực tiếp",
           "h6": "6 · Cài đặt và cập nhật",
           "pushAllOff": "<strong>Tắt tất cả là một lựa chọn hợp lệ</strong>; ở đây không có quy tắc “phải giữ ít nhất một”. Khi cả bốn đều tắt, phần push của ngăn liệt kê ba hệ quả: tin nhắn phải chờ pane nhận rảnh rồi mới được gõ vào ô nhập của nó, nên đến muộn hơn; rewake của Claude Code là cách duy nhất để đánh thức một agent đang rảnh, nên không có nó thì bạn phải chờ agent tự rảnh; và các pane đã mở giữ nguyên kênh mà chúng đã dùng lúc khởi động cho đến khi khởi động lại."
@@ -4601,7 +4603,7 @@
           "title": "Tài khoản",
           "p1": "Cài đặt ▸ <strong>Tài khoản</strong> chứa hai thứ không liên quan đến nhau: tài khoản Git ở nửa trên, tài khoản CLI ở nửa dưới.",
           "h1": "Tài khoản CLI",
-          "p2": "Cả 15 nhà cung cấp đều có tiêu đề, nhưng chỉ <strong>5 nhà cung cấp hỗ trợ nhiều tài khoản</strong>: Claude Code, Codex, Kimi Code, Grok CLI, Kilo Code. Số còn lại chỉ in một dòng — “Agent này không hỗ trợ nhiều tài khoản.” — và hoàn toàn không có nút thêm.",
+          "p2": "CLI có giữ được <strong>nhiều tài khoản</strong> hay không, và việc chuyển đổi áp dụng thế nào — ngay tại chỗ, bằng cách khởi động lại các pane của nó, hay thủ công — được hiển thị cho từng CLI ở cột “Nhiều tài khoản” trong bảng chương 1; cột này đọc từ khai báo của chính CLI, không phải danh sách do trang trợ giúp tự duy trì.",
           "p3": "Dưới mỗi nhà cung cấp, thẻ đầu tiên luôn là <strong>Mặc định</strong> dựng sẵn (thông tin đăng nhập gốc của bạn); tiếp theo là các tài khoản bạn đã thêm. Thẻ hiển thị email đã đăng nhập, nhãn <em>Mặc định</em> và hạn mức còn lại của tài khoản đó.",
           "table": {
             "action": "Thao tác",
@@ -4636,7 +4638,7 @@
           "p7": "Chuyển quá thường xuyên sẽ bị chặn (tối đa 3 lần mỗi 60 giây cho mỗi CLI); xác nhận chuyển cưỡng bức cũng không vượt qua được giới hạn này.",
           "callout1": {
             "title": "Pane đang mở giữ tài khoản cũ",
-            "text": "Chính bảng này cũng nói: “các pane đã mở vẫn giữ tài khoản cũ cho đến khi mở lại”. Mọi tài khoản dùng chung thư mục chính thật của bạn (session và lịch sử được dùng chung); chuyển tài khoản <strong>hoán đổi thông tin xác thực đã lưu ngay tại chỗ</strong>."
+            "text": "Các pane đang mở giữ tài khoản lúc khởi động cho đến khi được mở lại. Mọi tài khoản dùng chung thư mục home thật của bạn (session và lịch sử dùng chung), và việc chuyển tài khoản <strong>thay thông tin đăng nhập đã lưu ngay tại chỗ</strong>. Tài khoản Claude còn có thể đăng nhập vào <strong>thư mục riêng</strong> (“Đăng nhập vào thư mục riêng”); khi đó có thể chuyển riêng một pane sang tài khoản đó mà không đụng tới phiên đăng nhập hiện tại của CLI hay các pane khác."
           },
           "apiKeys": {
             "title": "Tài khoản khóa API",
@@ -4656,13 +4658,14 @@
             "title": "Liên kết được thực hiện ở nơi khác",
             "text": "“Workspace này dùng tài khoản Git nào” được chọn bằng nhãn tài khoản trên <strong>bảng Git ở thanh bên</strong>. Trang Cài đặt chỉ thêm, sửa và xóa tài khoản. Xóa một tài khoản cũng xóa luôn mọi liên kết đang trỏ tới nó."
           },
-          "switchToast": "<strong>Chuyển tài khoản thất bại giờ luôn hiện rõ.</strong> Trước đây chỉ hai trường hợp từ chối mới hiện thông báo nổi — “có pane đang chạy” và “chuyển quá thường xuyên”. Mọi trường hợp khác, kể cả hoán đổi thông tin xác thực thất bại, đều đổ vào biểu ngữ riêng của bảng Tài khoản, vốn đã cuộn khuất từ lâu trong lúc bạn xem các hàng của một nhà cung cấp; nhấp “Đặt làm mặc định” trông như không có gì xảy ra. Giờ mọi kiểu chuyển thất bại đều hiện thông báo nổi."
+          "switchToast": "<strong>Chuyển tài khoản thất bại giờ luôn hiện rõ.</strong> Trước đây chỉ hai trường hợp từ chối mới hiện thông báo nổi — “có pane đang chạy” và “chuyển quá thường xuyên”. Mọi trường hợp khác, kể cả hoán đổi thông tin xác thực thất bại, đều đổ vào biểu ngữ riêng của bảng Tài khoản, vốn đã cuộn khuất từ lâu trong lúc bạn xem các hàng của một nhà cung cấp; nhấp “Đặt làm mặc định” trông như không có gì xảy ra. Giờ mọi kiểu chuyển thất bại đều hiện thông báo nổi.",
+          "agentConfirm": "Agent cũng có thể tự yêu cầu những việc này — mở đăng nhập cho một tài khoản, chuyển tài khoản của một CLI, hoặc chuyển riêng một pane sang tài khoản khác. Mỗi yêu cầu mở một hộp xác nhận ghi rõ CLI, tài khoản, pane yêu cầu và lý do; <strong>không có gì xảy ra nếu bạn không đồng ý</strong>, và yêu cầu không được trả lời sẽ tự đóng."
         },
         "s6": {
           "title": "Hiển thị hạn mức",
           "p1": "Huy hiệu hạn mức nằm trên <strong>thanh tiêu đề của pane CLI</strong> (không phải thanh trạng thái) và hiển thị phần trăm còn lại; rê chuột để mở rộng chi tiết — từng khung đo, thời điểm đặt lại và bộ chuyển tài khoản. Các thẻ tài khoản trong Cài đặt ▸ Tài khoản đọc cùng dữ liệu này.",
           "h1": "Những nhà cung cấp nào được hỗ trợ",
-          "p2": "<strong>11</strong>: Claude Code, Codex, Kimi Code, Grok CLI, Antigravity CLI, OpenCode, Qwen Code, Kilo Code, Pi, Copilot CLI và Cursor CLI. Aider, Muse Code, Droid và MiniMax Code không có nguồn hạn mức nào đọc được.",
+          "p2": "<strong>{withCount}</strong>: {withQuota}. {withoutQuota} không có nguồn hạn mức nào đọc được.",
           "h2": "Dữ liệu lấy từ đâu",
           "list": {
             "claude": "<strong>Claude Code là trường hợp đặc biệt</strong>: Navide không bao giờ động vào thông tin xác thực của nó; Navide chạy <code>claude -p /usage</code> và đọc báo cáo hạn mức mà chính CLI in ra. Vì vậy mỗi lần đọc sẽ khởi chạy một Claude Code đầy đủ và mất vài giây.",
@@ -4850,23 +4853,23 @@
             "tools": {
               "list": "<strong>Liệt kê đích đến</strong> — ai đang trực tuyến, địa chỉ của họ được viết thế nào và hiện họ có đang bận không.",
               "send": "<strong>Gửi chỉ dẫn</strong> — gửi văn bản bất kỳ tới một pane có tên.",
-              "spawn": "<strong>Mở agent mới và giao việc</strong> — nhờ Navide mở một CLI pane mới, chọn CLI chạy trong đó và giao cho nó một nhiệm vụ. Khi xong, pane mới sẽ gửi tin nhắn báo lại cho bên gọi, nhưng đó là đầu ra của chính sub-agent, Navide không bảo đảm: tin nhắn sẽ xếp hàng chờ khi bên gọi đang bận, và sẽ không bao giờ tới nếu sub-agent không làm đúng định dạng.",
+              "spawn": "<strong>Mở một agent mới và giao việc</strong> — nhờ Navide mở một pane CLI mới, chọn CLI chạy trong đó và giao một nhiệm vụ. Pane mới nên nhắn báo cáo lại cho bên gọi khi xong; báo cáo đó là đầu ra của chính sub-agent và sẽ xếp hàng chờ khi bên gọi đang bận. Nếu turn đầu tiên của pane mới kết thúc mà không có báo cáo, Navide chuyển đầu ra cuối của turn đó cho bên gọi một lần, ghi rõ là báo cáo dự phòng chứ không phải do pane tự viết.",
               "ack": "<strong>Một xác nhận đơn thuần</strong> — “đã nhận”, “xong rồi”, bất cứ điều gì bên kia không cần xử lý. Nó được ghi vào nhật ký tin nhắn để bạn đọc (có huy hiệu “chỉ xác nhận”) nhưng <strong>không bao giờ được gõ vào ô nhập của agent bên kia</strong>, nên không làm gián đoạn hay đánh thức nó — điều đó cũng có nghĩa là mọi thứ bên kia cần đọc hoặc xử lý đều không thể gửi theo cách này.",
               "pending": "<strong>Kiểm tra ai đang chờ mình</strong> — không thể gõ vào một pane đang bận, nên agent có thể tự hỏi: có gì đang xếp hàng chờ nó rảnh, và có tin nào nó đã gửi bị kẹt không."
             },
-            "note": "<strong>Mười</strong> trong mười lăm CLI được kết nối với bộ công cụ này (xem bảng ở phần tiếp theo). Những CLI không được kết nối — Aider, Droid, Muse Code, Pi — dùng giao thức đầu ra bên dưới; MiniMax Code hiện chưa có cách nào và chỉ có thể nhận."
+            "note": "<strong>{mcpCount}</strong> trong {total} CLI được nối với bộ công cụ này (xem bảng ở mục tiếp theo). {protocolOnly} dùng giao thức đầu ra bên dưới thay thế; {receiveOnly} chưa có đường nào nên chỉ nhận được tin."
           },
           "proto": {
             "title": "Giao thức đầu ra",
             "tag": "các pane trong pipeline có sẵn",
             "p1": "Agent in ra một khối văn bản đơn giản như thế này trong câu trả lời, và Navide nhận nó làm tin nhắn:",
             "code": "---MSG-START--- to: reviewer\nChạy pnpm test:run giúp tôi và gửi lại danh sách lỗi\n---MSG-END---",
-            "note": "to: có thể nằm cùng dòng với ---MSG-START--- hoặc đứng riêng ở <strong>dòng ngay bên dưới</strong>; mọi to: ở xa hơn đều được tính là nội dung. Dòng ---MSG-START--- và ---MSG-END--- phải bắt đầu ở cột đầu tiên — không thụt lề — và không được nằm trong khối code Markdown, nếu không chúng sẽ không được nhận diện và cũng không có lỗi nào được báo. Các slot trong pipeline được giới thiệu giao thức này trong chỉ dẫn mở đầu; pane mở thủ công thì không, nhưng bạn có thể dán thẳng khối ở trên vào một pane như vậy — miễn là CLI đó hỗ trợ giao thức đầu ra theo bảng bên dưới."
+            "note": "to: có thể nằm cùng dòng với ---MSG-START--- hoặc đứng riêng ở <strong>dòng ngay bên dưới</strong>; mọi to: ở xa hơn đều được tính là nội dung. Dòng ---MSG-START--- và ---MSG-END--- phải bắt đầu ở cột đầu tiên — không thụt lề — và không được nằm trong khối code Markdown, nếu không chúng sẽ không được nhận diện; khi một turn có ---MSG-START--- nhưng không tách ra được tin nào, Navide sẽ gõ thông báo “message not recognized” vào pane đó. Các slot trong pipeline được giới thiệu giao thức này trong chỉ dẫn mở đầu; pane mở thủ công thì không, nhưng bạn có thể dán thẳng khối ở trên vào một pane như vậy — miễn là CLI đó hỗ trợ giao thức đầu ra theo bảng bên dưới."
           }
         },
         "s3": {
           "title": "Những CLI nào có thể gửi",
-          "p1": "<strong>Mọi CLI pane đều nhận được tin nhắn</strong> — Navide gõ thẳng văn bản vào terminal, việc này không liên quan đến CLI. <strong>Mười bốn trong mười lăm CLI cũng gửi được</strong>; chỉ khác ở cách gửi có sẵn:",
+          "p1": "<strong>Mọi pane CLI đều nhận được tin nhắn</strong> — Navide gõ thẳng văn bản vào terminal, không phụ thuộc vào CLI. <strong>{sendCount} trong {total} CLI cũng gửi được</strong>; chỉ khác ở đường gửi có thể dùng:",
           "table": {
             "cli": "CLI",
             "send": "Có gửi được không?"
@@ -4876,7 +4879,7 @@
             "protocolOnly": "Chỉ giao thức đầu ra",
             "none": "Không có (chỉ nhận)"
           },
-          "note1": "<strong>Mười bốn trong mười lăm CLI gửi được</strong>; chỉ khác ở cách gửi. Giao thức đầu ra cần Navide đọc nhật ký riêng của agent — cả mười bốn nhà cung cấp có trình đọc nhật ký đều được hỗ trợ, nên Navide biết khi nào agent nói xong và nói gì. Công cụ MCP còn cần CLI cung cấp một lối vào (một cờ khởi động, một biến môi trường chứa toàn bộ tài liệu cấu hình, hoặc một bản sao thư mục cấu hình cho từng pane); Aider, Droid, Muse Code và Pi không cung cấp lối nào, nên chỉ dùng giao thức đầu ra. <strong>MiniMax Code không có cả hai</strong>: nó lưu các cuộc trò chuyện trong SQLite và Navide chưa có trình đọc cho định dạng đó, nên nó nhận được tin nhắn nhưng không gửi được.",
+          "note1": "Giao thức đầu ra cần Navide đọc được nhật ký riêng của agent đó; mọi nhà cung cấp có trình đọc nhật ký đều được hỗ trợ, nên Navide biết khi nào agent nói xong và đã nói gì. Công cụ MCP còn cần CLI có đường vào (một cờ khởi chạy, một biến môi trường chứa toàn bộ tài liệu cấu hình, hoặc bản sao thư mục cấu hình riêng cho từng pane) và Navide nối vào; {protocolOnly} chưa được nối nên chỉ dùng giao thức đầu ra. <strong>{receiveOnly}</strong> không có cả hai: Navide chưa có trình đọc nhật ký của chúng, nên chúng nhận được tin nhắn nhưng không gửi được.",
           "note2": "Thực tế có hai lưu ý: <strong>Antigravity</strong> không gửi được ở lượt agent đặt câu hỏi cho bạn (lượt đó không có văn bản trả lời) — các lượt trả lời bình thường vẫn ổn; còn <strong>Qwen, Pi và Kimi</strong> không có tín hiệu “kết thúc lượt” rõ ràng, nên Navide suy ra từ 8 giây im lặng và tin nhắn được gửi muộn hơn một chút."
         },
         "s4": {
@@ -4921,7 +4924,7 @@
           "list": {
             "alive": "CLI của nó vẫn đang chạy và đã qua giai đoạn khởi động",
             "noTyping": "Không ai đang gõ trong pane đó (có bản nháp trong ô, hoặc có phím được nhấn trong bốn giây gần nhất, thì sẽ phải chờ)",
-            "noTurn": "Không có lượt nào đang chạy",
+            "noTurn": "Không có turn nào đang chạy — trừ {midTurn}, vốn tự đưa tin nhắn gõ vào giữa turn vào hàng đợi của nó, nên ở đó chỉ áp dụng việc chờ người đang gõ",
             "quiet": "Không có đầu ra trong 2 giây gần nhất"
           },
           "p2": "Nếu chưa đủ điều kiện, tin nhắn sẽ xếp hàng; khi đủ, nó tự động được gửi đi. Vì vậy, trong lúc đích đến đang làm một việc dài, tin nhắn của bạn sẽ chờ đến khi việc đó xong — đó là cố ý. Bảng “Tin nhắn giữa các CLI” cho biết điều kiện nào đang giữ tin nhắn lại — “Pane đích không chạy”, “Pane đích vẫn đang khởi động”, “Có người đang gõ trong pane đích”, “Agent đích đang giữa lượt”, “Đang chờ đích ổn định” — nên “không bao giờ được gửi” luôn có lý do để tìm. Tin nhắn đích nhận được có ghi nguồn ở đầu, để nó biết trả lời cho ai.",
@@ -4946,7 +4949,9 @@
             "rejected": "Bị từ chối <strong>chỉ khi yêu cầu sai</strong>: tên CLI không tồn tại, tên trùng hoặc không hợp lệ, nhiệm vụ trống, hoặc model hay mức nỗ lực mà CLI đó không chấp nhận.",
             "kickoff": "<strong>Việc nhiệm vụ mở đầu có thật sự được đưa vào hay không cũng được báo lại.</strong> Navide chờ CLI khởi động, prompt của nó xuất hiện và nhiệm vụ được gõ vào rồi mới trả lời. Khi không xác nhận được, nó sẽ nói “hãy kiểm tra trạng thái trước” thay vì “gửi lại” — gửi lại mù quáng sẽ giao cùng một việc hai lần.",
             "duplicate": "<strong>Yêu cầu lặp lại cho cùng một lần mở sẽ bị chặn</strong>, nên agent sốt ruột hỏi lại cũng không bị mở thêm pane thứ hai.",
-            "resume": "<strong>Pane mới cũng có thể được mở trên một cuộc trò chuyện cũ.</strong> Agent liệt kê các cuộc trò chuyện CLI mà workspace này còn giữ và chọn một; pane mới bắt đầu với nguyên bộ nhớ của cuộc trò chuyện đó (kể cả cuộc trò chuyện bắt đầu trong một terminal thường). Id được kiểm tra với kho session của CLI đó trước, và id không có gì phía sau sẽ bị từ chối thay vì lặng lẽ mở ra trống rỗng."
+            "resume": "<strong>Pane mới cũng có thể được mở trên một cuộc trò chuyện cũ.</strong> Agent liệt kê các cuộc trò chuyện CLI mà workspace này còn giữ và chọn một; pane mới bắt đầu với nguyên bộ nhớ của cuộc trò chuyện đó (kể cả cuộc trò chuyện bắt đầu trong một terminal thường). Id được kiểm tra với kho session của CLI đó trước, và id không có gì phía sau sẽ bị từ chối thay vì lặng lẽ mở ra trống rỗng.",
+            "otherProject": "<strong>Pane mới có thể mở trong một dự án khác</strong> — dùng thư mục, CLAUDE.md, bộ nhớ, Plans và git của dự án đó — trong khi bên gọi vẫn là cha và nhận báo cáo. Mặc định nó vào thanh bên của cửa sổ này; cũng có thể mở trong cửa sổ mới hoặc trong cửa sổ đang giữ dự án đó.",
+            "release": "<strong>Pane con đã xong việc có thể được giải phóng</strong> bằng <code>cli_reclaim_agent</code>: tiến trình CLI kết thúc, pane vẫn ở chỗ cũ dưới dạng thẻ “bấm để tiếp tục” với cuộc hội thoại còn nguyên, nên bạn vẫn kiểm tra được công việc. Pane cũng có thể đổi tên bằng <code>cli_rename_pane</code>."
           },
           "table": {
             "suggestion": "Khuyến nghị",
@@ -4980,7 +4985,7 @@
           "guards": {
             "rate": {
               "limit": "Tần suất cho một cặp nguồn → đích",
-              "value": "5 tin mỗi 60 giây",
+              "value": "5 tin mỗi 60 giây (người gửi qua chat: 30)",
               "why": "Hai agent trả lời qua lại có thể lặp mãi"
             },
             "queue": {
@@ -4989,9 +4994,9 @@
               "why": "Không gì được dồn lại vô hạn khi đích đang quá tải"
             },
             "timeout": {
-              "limit": "Không có kết quả sau khi gửi",
+              "limit": "Tin gửi sang cửa sổ khác không có kết quả",
               "value": "Đánh dấu lỗi sau 30 phút",
-              "why": "Khi cửa sổ đích đã đóng, tin nhắn không được nằm “Đang xếp hàng” mãi mãi"
+              "why": "Khi cửa sổ nhận bị đóng hoặc máy ngủ, tin nhắn giữa các không gian làm việc không được nằm mãi ở trạng thái “Đang xếp hàng”. Tin gửi tới pane đang bận trong cùng cửa sổ thì chỉ chờ."
             },
             "pause": {
               "limit": "Công tắc tạm dừng",
@@ -5031,7 +5036,7 @@
             "stuckQueued": {
               "symptom": "Tin nhắn cứ nằm ở “Đang xếp hàng” mãi",
               "cause": "Đích đang làm một việc dài và chưa rảnh",
-              "fix": "Bình thường — chờ nó làm xong; nếu thật sự bị kẹt, tin sẽ được đánh dấu lỗi sau 30 phút"
+              "fix": "Bình thường — chờ nó xong. Sau 2 phút bên gửi được báo là tin vẫn đang bị giữ, và bạn có thể rút lại trong bảng bằng “Rút lại”; chỉ tin gửi sang cửa sổ khác mới bị đánh dấu thất bại, sau 30 phút."
             },
             "rateLimit": {
               "symptom": "Bảng báo “Giới hạn tần suất: tối đa 5 tin mỗi 60 giây giữa cùng hai pane”",
@@ -5058,12 +5063,13 @@
         "s10": {
           "title": "Giới hạn đã biết",
           "list": {
-            "terminalPane": "<strong>Pane terminal thường không gửi và không nhận được</strong> — chỉ pane CLI agent mới có tên.",
-            "receiveOnly": "<strong>Năm CLI không có công cụ MCP</strong> — Aider, Droid, Muse Code và Pi chỉ dùng được giao thức đầu ra theo dòng, còn <strong>MiniMax Code thậm chí không có cả cái đó</strong>: nó nhận được tin nhắn nhưng không gửi được. Xem “Những CLI nào có thể gửi” ở trên.",
+            "terminalPane": "<strong>Pane terminal thường nhận được nhưng không gửi được.</strong> Tin gửi cho nó được gõ nguyên văn và chạy như lệnh shell — không có phong bì, không có gợi ý trả lời. Terminal không nhận tin phát chung, bị giữ 60 giây sau lần gõ phím cuối của bạn, bị đánh dấu thất bại thay vì gõ muộn khi đã chờ 2 phút, và lệnh có tính phá hủy bị từ chối.",
+            "receiveOnly": "<strong>{noMcpCount} CLI không có công cụ MCP</strong> — {protocolOnly} chỉ dùng được giao thức đầu ra dạng dòng trần, còn <strong>{receiveOnly}</strong> thì không có cả cái đó: nhận được tin nhắn nhưng không gửi được. Xem “Những CLI nào có thể gửi” ở trên.",
             "detached": "<strong>Sau khi pane được tách ra cửa sổ riêng, hoặc cửa sổ tải lại</strong>, cách dùng công cụ MCP chỉ quay lại khi pane được mở lại; giao thức đầu ra không bị ảnh hưởng.",
             "queueFull": "<strong>Khi hàng chờ của đích đã đầy (tối đa 10), tin nhắn bị bỏ</strong> — nhưng không còn âm thầm nữa: bảng báo “Đích đã có 10 tin đang chờ”, lỗi được gõ ngược vào pane gửi dưới dạng thông báo, và agent gửi cũng có thể tự tra xem tin của mình ra sao. Việc chuyển vẫn là bất đồng bộ, nên <strong>ngay lúc gửi</strong> chưa biết được gì.",
             "noPermission": "<strong>Không có yêu cầu cấp quyền</strong> — nhắn tin giữa các workspace không hiện hộp thoại xác nhận nào, chỉ có thông báo khi tới. Đây là một sự đánh đổi có chủ ý.",
-            "ackLocal": "<strong>Xác nhận đơn thuần không đi qua các thiết bị</strong> — bộ chuyển tiếp không thể hứa rằng tin nhắn sẽ không lọt vào ô nhập trên máy của người khác, nên xác nhận liên thiết bị bị từ chối ngay; nếu cần gửi đi, hãy gửi nó như một tin nhắn bình thường."
+            "ackLocal": "<strong>Xác nhận đơn thuần không đi qua các thiết bị</strong> — bộ chuyển tiếp không thể hứa rằng tin nhắn sẽ không lọt vào ô nhập trên máy của người khác, nên xác nhận liên thiết bị bị từ chối ngay; nếu cần gửi đi, hãy gửi nó như một tin nhắn bình thường.",
+            "acp": "<strong>Pane ACP</strong> (thử nghiệm; bật trong “CLI agent” → ACP) nhận tin nhắn dưới dạng prompt ACP thay vì được gõ vào; “Đã gửi tới” nghĩa là agent đã nhận prompt, không có nghĩa là nó đã đọc hay trả lời."
           }
         },
         "tip": "Mẹo: hãy đặt tên vai trò cho các pane trước (“reviewer”, “architect”) — tiêu đề chính là địa chỉ, và mọi thứ sau đó đọc tự nhiên hơn nhiều.",
@@ -5086,7 +5092,7 @@
             "legend": {
               "actions": {
                 "label": "Thanh tiêu đề",
-                "text": "“Tạm dừng gửi” cho các tin sau xếp hàng thay vì gửi đi; “Xóa nhật ký” chỉ xóa phần hiển thị, không đụng đến các tin đã chuyển."
+                "text": "“Tạm dừng gửi” cho các tin sau vào hàng đợi thay vì gửi đi; “Xóa nhật ký” xóa các dòng đã xong và giữ lại các dòng vẫn đang trên đường."
               },
               "route": {
                 "label": "Nguồn → đích",
@@ -5157,12 +5163,13 @@
           "h3": "Trả lời câu hỏi của CLI từ cuộc chat",
           "answer": {
             "bare": "Các yêu cầu cấp quyền và câu hỏi được đăng lên cuộc chat từng cái một. Khi chỉ có một cái đang mở, chỉ cần gõ <code>1</code>–<code>9</code>, <code>yes</code> hoặc <code>no</code> là trả lời; khi có nhiều cái, thêm id sau câu trả lời (ví dụ <code>yes &lt;id&gt;</code>). Mọi văn bản khác sẽ nhận gợi ý ngay thay vì nằm chờ trong hàng đợi.",
-            "which": "Chỉ Claude Code, Codex và Aider mới trả lời được từ cuộc chat; với CLI khác, câu hỏi chọn nhiều và câu hỏi văn bản tự do, bạn sẽ được nhờ trả lời trên máy tính, thay vì hiện những nút không làm gì cả.",
+            "which": "Chỉ Claude Code, Codex, Aider và Grok Build mới trả lời được từ cuộc chat; với CLI khác, câu hỏi chọn nhiều và câu hỏi văn bản tự do, bạn sẽ được nhờ trả lời trên máy tính, thay vì hiện những nút không làm gì cả.",
             "never": "Các lựa chọn lâu dài như “không hỏi lại”, “luôn cho phép” hay “cho phép trong session này” <strong>không bao giờ được nhấn từ cuộc chat</strong>.",
             "guard": "Yêu cầu được duyệt từ cuộc chat vẫn đi qua Navide Guard: mọi thứ bị xếp mức nghiêm trọng hoặc cao đều bị từ chối, cả những gì Guard không đánh giá được cũng vậy; cuộc chat sẽ được báo rằng hành động cần xác nhận trên máy tính."
           },
           "h4": "Bộ theo dõi trên thanh tiêu đề",
-          "p4": "Nút “{monitor}” trên thanh tiêu đề có một chấm trạng thái: đỏ khi có bot bị chặn, vàng khi có bot đang kết nối lại, xanh khi mọi thứ ổn, và không có chấm khi không bot nào được bật. Nó mở danh sách mọi pane đang gắn với cuộc chat, từ đó bạn có thể chuyển tới pane hoặc ngắt kết nối; các chủ đề con tự động được nhóm dưới liên kết cha của chúng."
+          "p4": "Nút “{monitor}” trên thanh tiêu đề có một chấm trạng thái: đỏ khi có bot bị chặn, vàng khi có bot đang kết nối lại, xanh khi mọi thứ ổn, và không có chấm khi không bot nào được bật. Nó mở danh sách mọi pane đang gắn với cuộc chat, từ đó bạn có thể chuyển tới pane hoặc ngắt kết nối; các chủ đề con tự động được nhóm dưới liên kết cha của chúng.",
+          "commands": "Trong cuộc chat đã liên kết, <code>/prompts</code>, <code>/skills</code> và <code>/mcp</code> trả lời bằng các nút cho prompt skill của bạn, skill của CLI trong pane và các MCP server (chỉ đọc); <code>/shares</code> và <code>/revoke</code> liệt kê và thu hồi liên kết chia sẻ; <code>/plugins status</code> và <code>/plugins stop</code> hiển thị plugin Navide của bên thứ ba và dừng một plugin Navide. Tệp gửi vào chat được lưu cho pane, và pane có thể gửi tệp ngược lại bằng một dòng <code>---ATTACH--- &lt;đường dẫn&gt;</code> trong khối MSG."
         }
       },
       "workspace": {
@@ -5602,7 +5609,7 @@
         },
         "s1": {
           "title": "Hướng 1: các công cụ Navide cung cấp cho CLI agent",
-          "p1": "Ngay khi pane khởi động, chúng xuất hiện trong danh sách công cụ của agent. Bạn không cần dạy nó cũng không cần cấu hình gì — chỉ cần nói điều mình muốn bằng lời thường, ví dụ “đánh dấu giai đoạn hai của Plan này là xong”. Hiện có <strong>64</strong> công cụ (57 công cụ lõi, cộng 7 công cụ do plugin Navide Plans đăng ký), cùng 3 tài nguyên chỉ đọc và 3 mẫu prompt.",
+          "p1": "Ngay khi pane khởi động, chúng xuất hiện trong danh sách công cụ của agent. Bạn không cần dạy nó cũng không cần cấu hình gì — chỉ cần nói điều mình muốn bằng lời thường, ví dụ “đánh dấu giai đoạn hai của Plan này là xong”. Trang này giới thiệu <strong>{listed}</strong> công cụ theo nhóm, cùng 3 tài nguyên chỉ đọc và 3 mẫu prompt. Bộ công cụ tăng lên sau mỗi bản phát hành, nên danh sách đầy đủ và mới nhất là danh sách mà màn hình MCP của chính agent hiển thị cho server navide (ví dụ <code>/mcp</code> trong Claude Code).",
           "h1": "Tài liệu Plan",
           "planTools": {
             "plan_list": "Liệt kê mọi Plan trong workspace này, kèm giai đoạn và tiến độ việc cần làm",
@@ -5685,9 +5692,9 @@
           "note4": "Một workspace có thể có hai pane trùng tên, khi đó chỉ dựa vào tên thì không biết là pane nào, nên các công cụ trên từ chối ngay với <code>ambiguous-target</code> thay vì tự chọn. Để chỉ định một pane cụ thể, hãy truyền <code>pane_id</code> do <code>cli_list_targets</code> trả về cho <code>cli_send</code>, <code>cli_send_and_wait</code>, <code>cli_read_log</code>, <code>cli_get_status</code> hoặc <code>cli_wait_idle</code>, và bỏ đối số địa chỉ. Hằng ngày dùng tên sẽ dễ đọc hơn; pane được mở lại với CLI khác sẽ có id mới, và khi gặp <code>unknown-pane-id</code> chỉ cần tra lại. Pane trên thiết bị khác không có id cục bộ và chỉ gửi tới được bằng tên.",
           "note5": "Đưa cho <code>cli_send</code> địa chỉ <code>group</code> không phải là tìm pane tên group: nó phát cho các pane khác <strong>trong nhóm tab của tôi</strong> (cùng workspace). Điều này khác với <code>all</code> của giao thức theo dòng: <code>all</code> là cả cửa sổ, bất kể nhóm. Các pane không thuộc nhóm nào dùng chung một nhóm ngầm định, nên chúng vẫn tới được nhau thay vì không tới được ai. Dạng câu trả lời cũng khác: mỗi người nhận trong <code>recipients</code> có <code>msg_key</code> riêng để tra riêng bằng <code>cli_check_message</code>, và <code>recipients</code> trống nghĩa là không còn ai khác trong nhóm của bạn, không phải lỗi. Cái giá giống như <code>all</code>: pane thực sự tên là group sẽ không còn gửi tới được bằng tên.",
           "h4": "Những CLI nào đã được kết nối",
-          "p2": "Hiện có <strong>mười</strong> trong mười lăm: Claude Code, Codex, Copilot CLI, Qwen Code, OpenCode, Kilo Code, Kimi Code, Grok CLI, Antigravity CLI và Cursor CLI. Cách kết nối tùy vào giao diện mỗi CLI cung cấp — một cờ khởi động (Claude Code, Codex, Copilot, Qwen), một biến môi trường chứa toàn bộ tài liệu cấu hình (OpenCode, Kilo), hoặc một bản sao thư mục cấu hình cho từng pane (Kimi, Grok, Antigravity). Không cách nào trong ba cách này <strong>đụng tới tệp cấu hình MCP của chính bạn</strong>.",
+          "p2": "Hiện có <strong>{mcpCount}</strong> trong {total}: {mcpNames}. Cách kết nối tùy vào giao diện mỗi CLI cung cấp — một cờ khởi động (Claude Code, Codex, Copilot, Qwen), một biến môi trường chứa toàn bộ tài liệu cấu hình (OpenCode, Kilo), hoặc một bản sao thư mục cấu hình cho từng pane (Kimi, Grok, Antigravity). Không cách nào trong ba cách này <strong>đụng tới tệp cấu hình MCP của chính bạn</strong>.",
           "note6": "<strong>Cursor là ngoại lệ duy nhất</strong>: nó chỉ đọc <code>.cursor/mcp.json</code> trong workspace, nên Navide merge mục của mình vào tệp đó và thêm tệp vào <code>.git/info/exclude</code>, giữ git status của bạn sạch sẽ.",
-          "note7": "Chưa được kết nối là <strong>Aider, Muse Code và Pi</strong> (ba CLI này không có giao diện MCP) và <strong>Droid cùng MiniMax Code</strong> (Navide chưa kết nối chúng, và chưa xác định được CLI của chúng có lối vào hay không). Phần lớn các pane này vẫn nhắn tin được cho pane khác qua giao thức đầu ra theo dòng; chúng chỉ không có công cụ MCP để gọi. MiniMax Code là ngoại lệ: nó cũng không có giao thức đầu ra, nên chỉ có thể nhận.",
+          "note7": "Chưa được nối: <strong>{notWired}</strong>. Một số CLI trong đó hoàn toàn không có giao diện MCP; số còn lại thì Navide chưa nối. Phần lớn các pane này vẫn nhắn được cho pane khác bằng giao thức đầu ra dạng dòng trần; chỉ là không có công cụ MCP để gọi. {receiveOnly} là ngoại lệ: không có cả giao thức đầu ra nên chỉ nhận được tin.",
           "note8": "Việc kết nối diễn ra <strong>ngay lúc pane khởi động</strong>. Vì vậy sau khi cập nhật, các pane đang mở vẫn giữ danh sách công cụ cũ — hãy đóng và mở lại một pane để có danh sách mới.",
           "h5": "Bảng Xem trước",
           "previewTools": {
@@ -5696,7 +5703,8 @@
             "preview_list": "Đọc lại dòng ghi thay đổi — những gì agent khác, người dùng và trình theo dõi tệp đã làm, mới nhất trước; con trỏ thời gian chỉ đọc phần mới",
             "preview_clear": "Xóa sạch dòng ghi thay đổi; những gì bị xóa là các dòng người dùng thấy trong bảng Xem trước, kể cả của trình theo dõi tệp và của chính người dùng, và không thể hoàn tác. Cũng có thể chỉ xóa những gì cũ hơn một mốc nhất định"
           },
-          "note9": "<strong>Chỉ bốn công cụ đi qua các thiết bị</strong>: gửi, gửi và chờ, xem trạng thái, và chờ rảnh. Đọc bản ghi của pane khác, gửi phím ngắt và đóng pane đều cần chính máy của pane đó, nên cả ba đều bị từ chối. Pane ở xa cũng <strong>không có id cục bộ</strong>, nên tên ba phần là cách duy nhất để chỉ tới nó; trạng thái của nó là giá trị cửa sổ ở xa tải lên Navide Cloud lần gần nhất — gần như tức thời, không phải tức thời — và cũng không có ảnh chụp hạn mức (bộ nhớ đệm hạn mức của máy này mô tả các lần đăng nhập trên máy này, là câu trả lời sai cho một pane đang chạy ở nơi khác)."
+          "note9": "<strong>Chỉ bốn công cụ đi qua các thiết bị</strong>: gửi, gửi và chờ, xem trạng thái, và chờ rảnh. Đọc bản ghi của pane khác, gửi phím ngắt và đóng pane đều cần chính máy của pane đó, nên cả ba đều bị từ chối. Pane ở xa cũng <strong>không có id cục bộ</strong>, nên tên ba phần là cách duy nhất để chỉ tới nó; trạng thái của nó là giá trị cửa sổ ở xa tải lên Navide Cloud lần gần nhất — gần như tức thời, không phải tức thời — và cũng không có ảnh chụp hạn mức (bộ nhớ đệm hạn mức của máy này mô tả các lần đăng nhập trên máy này, là câu trả lời sai cho một pane đang chạy ở nơi khác).",
+          "note10": "Không liệt kê ở đây nhưng cũng có sẵn: kênh chat (<code>channels_*</code>), quản lý Navide Marketplace và plugin Navide (<code>marketplace_*</code>, <code>plugins_*</code>), cửa sổ (<code>window_*</code>, <code>workspace_close</code>), liên kết chia sẻ (<code>share_*</code>), <code>evolve_report</code> / <code>evolve_retro</code> và <code>pipeline_import_n8n</code>. Mô tả của từng công cụ trong danh sách công cụ của agent cho biết nó làm gì."
         },
         "s2": {
           "title": "Hướng 2: Navide dùng MCP bên ngoài",
@@ -5712,7 +5720,8 @@
           "warn": {
             "p1": "<strong>Máy chủ cấu hình ở đây không bao giờ xuất hiện trong danh sách công cụ của CLI agent.</strong> Chúng chỉ phục vụ một việc — “đọc ngữ cảnh → chèn vào prompt mở đầu” — và chỉ chạy <strong>khi có pipeline đang chạy</strong>; các pane bạn mở thủ công không bao giờ dùng tới.",
             "p2": "Để Claude Code hoặc Codex tự dùng một máy chủ MCP (ví dụ để truy vấn trực tiếp GitHub), hãy cấu hình nó trong cấu hình MCP riêng của CLI đó, không phải ở đây."
-          }
+          },
+          "p3": "Mỗi dòng server hiển thị trạng thái và số công cụ, cùng vài dòng cuối nó in ra khi khởi động thất bại. Server chạy qua Node.js được đánh dấu “Cần Node.js” khi thiếu Node.js, kèm hướng dẫn cài đặt. Các giá trị để trống như biến môi trường và header được điền trên máy này và không bao giờ đồng bộ giữa các thiết bị. “So sánh” hiển thị bảng cho biết CLI nào có server nào."
         },
         "s3": {
           "title": "Hướng 3: client bên ngoài điều khiển Navide",
@@ -5773,15 +5782,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "Agent nói nó không có công cụ Plan hay nhắn tin",
-              "detail": "Pane đó không được kết nối khi mở (nó có từ trước bản cập nhật), hoặc nó chạy một trong năm CLI chưa kết nối MCP (Aider / Droid / Muse Code / Pi / MiniMax Code). Trường hợp đầu, hãy đóng và mở lại; trường hợp sau, hãy dùng giao thức đầu ra theo dòng để nhắn tin — MiniMax Code thậm chí không có cả cái đó và chỉ có thể nhận."
+              "detail": "Pane đó chưa được nối khi mở (mở trước bản cập nhật), hoặc nó chạy một trong {noMcpCount} CLI chưa nối MCP ({notWired}). Trường hợp đầu, đóng rồi mở lại; trường hợp sau, dùng giao thức đầu ra dạng dòng trần để nhắn — {receiveOnly} không có cả cái đó và chỉ nhận được tin."
             },
             "serverUnused": {
               "symptom": "Đã thêm máy chủ trong Cài đặt → MCP nhưng agent không dùng được",
-              "detail": "Đó là hướng 2, chỉ dành cho pipeline đọc tài liệu. Để agent tự gọi nó, hãy cấu hình trong cấu hình MCP riêng của CLI đó. Mục “MCP của mọi CLI” ở nửa dưới trang Cài đặt → MCP liệt kê (chỉ đọc) những máy chủ mỗi CLI đã cấu hình, để bạn kiểm tra trực tiếp."
+              "detail": "Đó là hướng 2, chỉ để pipeline đọc tài liệu. Muốn agent tự gọi nó, hãy cấu hình trong cấu hình MCP riêng của CLI đó. Cài đặt → MCP liệt kê (chỉ đọc) các server mà mỗi CLI đã có, cạnh các server của Navide; chuyển sang “So sánh” để xem CLI nào có server nào."
             },
             "planLoadFailed": {
               "symptom": "Agent nói không tải được Plan",
-              "detail": "Mọi công cụ Plan đều nhận một đường dẫn workspace. Nếu đường dẫn agent truyền vào khác với workspace thật của pane, nó sẽ ghi vào chỗ Navide không thấy. Hãy nhờ nó dùng đường dẫn workspace của pane."
+              "detail": "Khi không truyền đường dẫn không gian làm việc, công cụ plan dùng không gian làm việc của chính pane. Nếu agent truyền đường dẫn khác, nó sẽ ghi vào một dự án mà Navide có thể không hiển thị (khi đó công cụ cảnh báo không có pane nào dùng dự án đó). Hãy bảo nó bỏ đường dẫn không gian làm việc."
             },
             "staleIdentity": {
               "symptom": "Nó báo danh tính pane đã cũ",
@@ -5811,7 +5820,7 @@
               },
               "actions": {
                 "label": "Thao tác trên thanh trên cùng",
-                "text": "“Thêm MCP +” thêm một máy chủ từ danh mục có sẵn, “Thêm tùy chỉnh” thêm thủ công, còn “Làm mới” đọc lại tệp cấu hình."
+                "text": "“+ Thêm MCP” thêm một server từ danh mục có sẵn, “Thêm tùy chỉnh” thêm thủ công, còn “Mở cấu hình MCP” mở tệp cấu hình."
               },
               "card": {
                 "label": "Thẻ danh mục",
