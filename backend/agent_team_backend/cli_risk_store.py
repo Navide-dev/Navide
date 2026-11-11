@@ -81,6 +81,12 @@ class CliRiskStore:
         }
         for row in rows:
             self.records[row["category"]][row["key"]] = json.loads(row["data"])
+        # Signals are never deleted, so the table only grows. These indexes keep
+        # per-observation work proportional to one pane's or root's signals and
+        # snapshots proportional to the active ones, not to the whole history.
+        self._active: dict[str, dict] = {}
+        self._by_owner: dict[tuple[str, str], set[str]] = {}
+        self._index_signals(self.records["signals"])
         # A new backend has no current observation, even if the last run did.
         for value in self.records["availability"].values():
             value["status"] = "unknown"
@@ -106,6 +112,25 @@ class CliRiskStore:
                     raise ValueError("allowed-address settings exceed storage limit")
         for category, entries in changes.items():
             self.records[category].update(entries)
+        self._index_signals(changes.get("signals", {}))
+
+    @staticmethod
+    def _owner(value: dict) -> tuple[str, str]:
+        return ("network", value["pane"]) if value["kind"] == "network" else ("disk", value["root"])
+
+    def _index_signals(self, entries: dict[str, dict]):
+        for key, value in entries.items():
+            self._by_owner.setdefault(self._owner(value), set()).add(key)
+            if value["active"]:
+                self._active[key] = value
+            else:
+                self._active.pop(key, None)
+
+    def _deactivate(self, owner: tuple[str, str]) -> dict[str, dict]:
+        """Inactive copies of an owner's currently active signals; signals that
+        are already inactive are left as they are rather than rewritten."""
+        return {key: {**self._active[key], "active": False}
+                for key in self._by_owner.get(owner, ()) if key in self._active}
 
     def allowed_hosts(self, vendor: str) -> tuple[str, ...]:
         settings = self.db.kv_get("ui_settings", {})
@@ -129,9 +154,7 @@ class CliRiskStore:
         changes: dict[str, dict] = {}
         if status == "successful":
             availability["expectedSetObservedAt"] = iso(expected.observed_at)
-            for key, old in self.records["signals"].items():
-                if old["kind"] == "network" and old["pane"] == pane:
-                    changes[key] = {**old, "active": False}
+            changes.update(self._deactivate(("network", pane)))
             for (ip, port), count in endpoints.items():
                 key = identity("network", vendor, pane, ip, str(port))
                 old = self.records["signals"].get(key, {})
@@ -167,12 +190,12 @@ class CliRiskStore:
             self._commit(updates)
             return
         previous = self.records["roots"].get(root_key)
-        inventory = copy.deepcopy(previous["files"]) if previous else {}
+        # Entries are updated below; copy the two levels that change instead of
+        # deep-copying the whole inventory.
+        inventory = {path: {**entry, "flagged": {size: dict(history) for size, history in entry["flagged"].items()}}
+                     for path, entry in previous["files"].items()} if previous else {}
         current = sample.files or {}
-        signals: dict[str, dict] = {}
-        for key, old in self.records["signals"].items():
-            if old["kind"] == "disk" and old["root"] == root_key:
-                signals[key] = {**old, "active": False}
+        signals: dict[str, dict] = self._deactivate(("disk", root_key))
         for path, entry in inventory.items():
             if path not in current and entry["present"]:
                 entry["present"] = False
@@ -225,10 +248,13 @@ class CliRiskStore:
                      allowed=(vendor, signal["target"]) if action == "allow" else None, now=now)
 
     def snapshot(self) -> dict:
-        # Inventories stay in the worker/store; request projection only copies
-        # findings and small availability records.
-        return copy.deepcopy({category: self.records[category]
-                              for category in ("signals", "availability", "decisions", "aliases")})
+        # Inventories stay in the worker/store; request projection only reads
+        # active findings and small availability records. Committed values are
+        # replaced, never mutated in place, so a shallow copy is a stable view;
+        # projection copies whatever it hands out.
+        return {"signals": dict(self._active),
+                **{category: dict(self.records[category])
+                   for category in ("availability", "decisions", "aliases")}}
 
 
 def project(snapshot: dict, panes: list, now: float) -> dict[str, dict]:
