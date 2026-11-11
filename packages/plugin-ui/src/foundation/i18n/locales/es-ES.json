@@ -3734,17 +3734,17 @@
             "git": {
               "title": "Git (control de código fuente)",
               "tag": "4.ª pestaña de la barra lateral",
-              "text": "Cuando Git se carga como complemento de Navide, la descripción emergente dice <em>Complemento de Navide: Git · navide.git · Editor: navide · Integrado en Navide (⌘4)</em>; si no, dice <em>Git (⌘4)</em>. En la ventana principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel."
+              "text": "Cuando Git se carga como complemento de Navide, la descripción emergente dice <em>Complemento de Navide: Git · navide.git · Editor: navide · Integrado en Navide ({gitTab})</em>; si no, dice <em>Git ({gitTab})</em>. En la ventana principal, <kbd class=\"cwh-kbd\">{gitWindow}</kbd> abre directamente la <strong>ventana de Git independiente</strong>; lo mismo hace <em>Abrir en una ventana nueva</em> en la cabecera del panel. Git también es un complemento de Navide incluido (<code>navide.git</code>), que aparece en <em>Integrados</em> en <strong>Ajustes ▸ Complementos de Navide</strong> junto a Plans, así que se actualiza, se desactiva o puede fallar al iniciar igual que cualquier complemento de Navide. Git también es un complemento de Navide incluido (<code>navide.git</code>), que aparece en <em>Integrados</em> en <strong>Ajustes ▸ Complementos de Navide</strong> junto a Plans, así que se actualiza, se desactiva o puede fallar al iniciar igual que cualquier complemento de Navide."
             },
             "plans": {
               "title": "Plans (documentos de plan)",
               "tag": "5.ª pestaña de la barra lateral",
-              "text": "La pestaña <kbd class=\"cwh-kbd\">⌘5</kbd> es solo una <strong>lista</strong>. Al hacer clic en cualquier entrada se abre una ventana independiente de revisión de planes titulada <code>&lt;carpeta del proyecto&gt; — Plans</code>."
+              "text": "La pestaña <kbd class=\"cwh-kbd\">{plansTab}</kbd> es solo una <strong>lista</strong>. Al hacer clic en cualquier entrada se abre una ventana independiente de revisión de planes titulada <code>&lt;carpeta del proyecto&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (el editor integrado)",
               "tag": "solo como ventana independiente",
-              "text": "Ábrelo con <kbd class=\"cwh-kbd\">⌘⇧I</kbd> o haz clic en un archivo del explorador. El título es <code>&lt;nombre del archivo&gt; — Mini-IDE</code>, precedido de <code>●</code> mientras haya cambios sin guardar."
+              "text": "Ábrelo con <kbd class=\"cwh-kbd\">{miniIde}</kbd> o haz clic en un archivo del explorador. El título es <code>&lt;nombre del archivo&gt; — Mini-IDE</code>, precedido de <code>●</code> mientras haya cambios sin guardar."
             }
           },
           "callout": {
@@ -3823,7 +3823,7 @@
           "list": {
             "create": "Arriba está el campo para crear ramas, con el texto de ejemplo <em>Nombre de la nueva rama…</em> y <code>＋</code> a la derecha para enviarlo.",
             "localRow": "Cada fila de rama local tiene cuatro botones: <code>⇔</code> <em>Comparar</em>, <code>⇡</code> <em>Hacer rebase sobre esta</em>, <code>⇣</code> <em>Fusionar en la actual</em>, <code>↵</code> <em>Cambiar</em>. La rama actual solo muestra un <code>✓</code> y ningún botón.",
-            "context": "Haz clic derecho en la fila de una rama para ver <em>Fusionar la rama actual en {'{'}branch{'}'}</em>, <em>Fusionar la rama actual en {'{'}branch{'}'} y hacer push</em> y <em>Eliminar rama</em>.",
+            "context": "Haz clic derecho en la fila de una rama para ver <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> y <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> alterna entre <em>Mostrar ramas remotas</em> y <em>Ocultar ramas remotas</em>; cada fila de rama remota tiene un <code>⬇</code> <em>Hacer checkout local</em>."
           },
           "p2": "Al pulsar <code>⇔</code>, el resultado se despliega dentro del panel, con el encabezado <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, una línea de estadísticas y la lista de archivos.",
@@ -3862,10 +3862,14 @@
               "behavior": "Más opciones de pull/push, ver abajo."
             }
           },
-          "p3": "Dentro de <code>▾</code>: <em>↓ Hacer pull</em>, <em>↓ Hacer pull (rebase)</em>, <em>↑ Hacer push</em>, <em>↑ Hacer push (forzado con lease)</em>; si hay más de un remoto configurado, al final se añade un grupo <strong>Hacer push al remoto</strong> con una fila por remoto.",
+          "p3": "Dentro de <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; si hay más de un remoto configurado, al final se añade un grupo <strong>Hacer push al remoto</strong> con una fila por remoto.",
           "callout": {
             "title": "Ante un fallo de autenticación, comprueba primero la cuenta vinculada",
             "text": "Cuando falla un push, mira a qué cuenta está vinculada la píldora de cuenta antes de ponerte a reconfigurar el remoto. Cuando caducan las credenciales, el panel te lleva directamente a Ajustes › Cuentas para renovarlas. El campo de contraseña espera un token de acceso personal, no tu contraseña de inicio de sesión."
+          },
+          "worktrees": {
+            "p1": "La tarjeta <strong>{worktrees}</strong> del panel Git (plegada hasta que haces clic en su encabezado; muestra un número cuando hay más de uno) lista todos los árboles de trabajo del repositorio: <code>✦</code> es el principal y <code>○</code> los demás, con las insignias <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> o <em>{stale}</em> cuando corresponde. Cada fila tiene <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> y <code>✕</code> <em>{remove}</em>; el worktree principal no se puede bloquear, mover ni quitar. <em>{prune}</em> y <em>{repair}</em>, arriba, limpian los worktrees cuya carpeta se borró o se movió fuera de Git.",
+            "p2": "Para añadir uno, escribe la ruta de una carpeta (o búscala), elige una rama —o marca <em>{createBranch}</em> y escribe un nombre nuevo— y pulsa <code>＋</code> <em>{addWorktree}</em>. Esto es lo que hace práctico tener varios panes en ramas distintas: dale a cada pane su propio worktree y sus cambios nunca caerán en la misma carpeta."
           }
         },
         "s4": {
@@ -3923,14 +3927,14 @@
           "p1": "Los planes no están todos en una carpeta. Navide analiza <strong>siete carpetas</strong> del área de trabajo: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> y <code>docs/reports</code>, además de las mismas siete dentro de cualquier repositorio Git anidado <strong>hasta dos niveles de profundidad</strong>. Cuentan tres sufijos: <code>.html</code>, <code>.plan.md</code> y <code>.md</code>. Un plan HTML se llama <code>&lt;kebab-slug&gt;_&lt;6 dígitos hex&gt;.html</code>, y un plan Markdown, <code>&lt;kebab-slug&gt;.plan.md</code>. Los archivos que empiezan por guion bajo o por punto (<code>_spec.md</code>, <code>_template.html</code>) son andamiaje y nunca aparecen en la lista.",
           "p2": "Estos archivos <strong>los escriben y actualizan los agents</strong>: cada acción que realizas en la ventana de Plans (cambiar el estado de una tarea, dejar una nota de revisión, aprobar) se guarda en ese mismo archivo. Lo tuyo es pedir a un agent que «cree un plan» y después revisarlo en la ventana.",
           "h2": "La lista",
-          "p3": "La pestaña <strong>Plans</strong> de la barra lateral (<kbd class=\"cwh-kbd\">⌘5</kbd>) y la columna izquierda de la ventana de Plans usan la misma lista. La barra de herramientas solo aparece cuando hay al menos un plan:",
+          "p3": "La pestaña <strong>Plans</strong> de la barra lateral (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) y la columna izquierda de la ventana de Plans usan la misma lista. La barra de herramientas solo aparece cuando hay al menos un plan:",
           "listTools": {
             "search": "El campo <em>Buscar planes…</em>, que busca en el título, el nombre del archivo y el resumen.",
             "stage": "Filtro de fase: <em>Todas las fases</em> / Borrador / En revisión / Aprobado / En curso / Hecho / Abandonado.",
             "sort": "<em>Ordenar por</em>: <strong>Título</strong>, <strong>Última actualización</strong> o <strong>Progreso</strong>, con <code>↑</code> / <code>↓</code> al lado para orden ascendente o descendente.",
             "group": "<code>☰</code> alterna entre «agrupar por fase» y una sola lista plana."
           },
-          "p4": "Las cuatro opciones <strong>se recuerdan por área de trabajo</strong>. Las secciones, de arriba abajo: <strong>Recientes</strong> (5 como máximo, primero los fijados); después, agrupado por fase, una sección <strong>Documentos</strong> y una sección por fase, que en la lista plana se reducen a una sola <strong>Todos los planes</strong>; luego <strong>Archivados</strong>; y al final una fila de acciones para lo completado (<em>Archivar todos los terminados</em> / <em>Eliminar todos</em>). Cada fila lleva su píldora de fase, una barra de progreso <em>{'{'}done{'}'}/{'{'}total{'}'} hechas</em>, una etiqueta de formato <code>HTML</code> / <code>Markdown</code> y <em>{'{'}count{'}'} para ti</em>: los elementos que solo tú puedes resolver. <strong>Cada fila tiene además una chincheta <code>📌</code> y un botón de eliminar <code>✕</code> a la derecha</strong> (las filas archivadas solo tienen el de eliminar).",
+          "p4": "Las cuatro opciones <strong>se recuerdan por área de trabajo</strong>. Las secciones, de arriba abajo: <strong>Recientes</strong> (5 como máximo, primero los fijados); después, agrupado por fase, una sección <strong>Documentos</strong> y una sección por fase, que en la lista plana se reducen a una sola <strong>Todos los planes</strong>; luego <strong>Archivados</strong>; y al final una fila de acciones para lo completado (<em>Archivar todos los terminados</em> / <em>Eliminar todos</em>). Cada fila lleva su píldora de fase, una barra de progreso <em>{'{'}done{'}'}/{'{'}total{'}'} hechas</em>, una etiqueta de formato <code>HTML</code> / <code>Markdown</code> y <em>{'{'}count{'}'} para ti</em>: los elementos que solo tú puedes resolver. <strong>Cada fila tiene además una chincheta <code>📌</code> y un botón de eliminar <code>✕</code> a la derecha</strong> (las filas archivadas solo tienen el de eliminar). La chincheta sirve para <em>Fijar arriba en recientes</em>. La chincheta sirve para <em>Fijar arriba en recientes</em>.",
           "callout1": {
             "title": "Los documentos sin metadatos tienen su propia sección",
             "text": "Cuando la lista está agrupada por fase, <strong>los documentos simples sin metadatos de plan</strong> se reúnen en una sección <strong>Documentos</strong> y cada fila lleva la etiqueta <code>Documento</code>, lo que no tiene nada que ver con que una fase esté <em>in-progress</em>. Para convertir un archivo así en un plan de verdad, haz clic derecho en él y elige <strong>Convertir en plan</strong>: añade un envoltorio de plan en borrador y <strong>no reescribe el contenido</strong>."
@@ -3986,7 +3990,7 @@
         },
         "s7": {
           "title": "La ventana del editor",
-          "p1": "Ábrela con <kbd class=\"cwh-kbd\">⌘⇧I</kbd> o haz clic en un archivo del explorador. Un editor Monaco con pestañas, con <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> para cambiar de pestaña (los números fuera de rango van a la última pestaña).",
+          "p1": "Ábrela con <kbd class=\"cwh-kbd\">{miniIde}</kbd> o haz clic en un archivo del explorador. Un editor Monaco con pestañas, con <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> para cambiar de pestaña (los números fuera de rango van a la última pestaña).",
           "h1": "Las cuatro secciones de la franja izquierda",
           "sectionTable": {
             "section": "Sección",
@@ -3998,7 +4002,7 @@
               "note": "El árbol de archivos."
             },
             "search": {
-              "note": "Buscar en todos los archivos; ⌘⇧H reemplaza en todos los archivos."
+              "note": "Buscar en todos los archivos; {replaceInFiles} reemplaza en todos los archivos."
             },
             "scm": {
               "note": "La versión integrada del panel de Git, con una insignia del número de cambios."
@@ -4016,7 +4020,7 @@
           "editorActions": {
             "split": {
               "action": "Dividir la zona del editor",
-              "note": "(cambia de grupo de editores con ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(cambia de grupo de editores con {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Buscar / Reemplazar"
@@ -4032,7 +4036,7 @@
             },
             "fold": {
               "action": "Contraer / desplegar",
-              "note": "(todo con ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(todo con {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Varios cursores: añadir uno encima o debajo"
@@ -4051,7 +4055,7 @@
             },
             "aiTerminal": {
               "action": "Mostrar u ocultar el terminal de AI",
-              "note": "(o ⌘⇧A)"
+              "note": "(o {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Enviar el código seleccionado al terminal de AI",
@@ -4083,7 +4087,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "La imagen, con Ajustar a la ventana / Tamaño real."
+              "how": "La imagen, con {fitWindow} / {actualSize}."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4132,7 +4136,7 @@
             "text": "Todos los demás tipos de la tabla <strong>se abren directamente en la vista previa</strong>; html y csv muestran primero el código fuente a propósito y solo cambian cuando pulsas <em>Vista previa</em>. Ten en cuenta también que <code>docx</code>, <code>xlsx</code>, <code>zip</code> y <code>woff</code> están también en la lista de binarios, pero las comprobaciones de fuentes, archivos comprimidos y Office se ejecutan antes que la de binarios, así que obtienen su presentación específica en lugar de quedarse en un volcado hexadecimal."
           },
           "h2": "El registro de cambios",
-          "p3": "La mitad inferior de la pestaña <strong>Vista previa</strong> del hueco derecho (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) es <strong>Cambios recientes</strong>: lo que se ha tocado últimamente en esta área de trabajo. Cuatro columnas por fila:",
+          "p3": "La mitad inferior de la pestaña <strong>Vista previa</strong> del hueco derecho (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) es <strong>Cambios recientes</strong>: lo que se ha tocado últimamente en esta área de trabajo. Cuatro columnas por fila:",
           "trackList": {
             "time": "<strong>Hora</strong>: relativa (<em>ahora</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>).",
             "action": "<strong>Acción</strong>: <code>+</code> creado, <code>~</code> modificado, <code>−</code> eliminado, <code>▸</code> mostrado.",
@@ -4210,7 +4214,7 @@
               "action": "Control de código fuente / Problemas"
             },
             "fileTabs": {
-              "action": "Ir a la pestaña de archivo N (⌘1…⌘9)"
+              "action": "Ir a la pestaña de archivo N ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Dividir la zona del editor"
@@ -5258,7 +5262,7 @@
             "openHome": "<strong>Inicio</strong>: usa directamente la carpeta personal.",
             "recent": "Debajo está la lista de abiertos recientemente, donde puedes fijar las entradas que más uses. Al hacer clic derecho en una entrada aparecen <em>Abrir en el editor predeterminado</em>, <em>Mostrar en Finder</em> y <em>Copiar ruta</em>."
           },
-          "p2": "Después siempre puedes usar el menú: <strong>Archivo ▸ Abrir área de trabajo…</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>Archivo ▸ Abrir reciente</strong> o <strong>Archivo ▸ Nueva ventana</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) para una ventana nueva.",
+          "p2": "Después siempre puedes usar el menú: <strong>Archivo ▸ Abrir área de trabajo…</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>Archivo ▸ Abrir reciente</strong> o <strong>Archivo ▸ Nueva ventana</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) para una ventana nueva.",
           "h2": "Varias áreas de trabajo en una ventana",
           "p3": "No necesitas una segunda ventana para un segundo proyecto. En la pestaña Agents de la barra lateral, la cabecera de la sección de áreas de trabajo tiene a la derecha un <strong>＋</strong> que vuelve a abrir el mismo selector; el proyecto que elijas se incorpora a la <strong>misma ventana</strong> y añade otra fila de cabecera de área de trabajo a la barra lateral.",
           "p4": "Haz clic en esa fila de cabecera para cambiar la vista. Lo importante: <strong>un área de trabajo de la que te vas sigue con sus agents en marcha</strong>, su fila permanece en la barra lateral y solo sus panes se ocultan del escenario por ahora.",
@@ -5276,7 +5280,7 @@
           "p1": "El punto de entrada es el botón <strong>＋</strong>: hay uno en la fila de cabecera del área de trabajo de la barra lateral y otro en cada fila de cabecera de grupo (la única diferencia es en qué grupo cae el pane nuevo). Al pulsarlo se abre un pequeño menú:",
           "addMenu": {
             "role": "Arriba está el desplegable <strong>Seleccionar rol…</strong>: elige un rol predefinido.",
-            "cliList": "En el centro está la lista de CLI, con las que no están instaladas marcadas como tales.",
+            "cliList": "Debajo, la lista se divide en dos bloques con encabezado. <strong>{cli}</strong> reúne las CLI de programación y marca las que no están instaladas. <strong>{agents}</strong> muestra tus agentes permanentes (OpenClaw, Hermes Agent) por nombre: si eliges uno abierto, cambias a él; si eliges uno cerrado, se reanuda su conversación. También hay una entrada <em>Nuevo …</em> que primero pide un nombre, y los agentes ACP aparecen en este bloque. Una nota bajo la lista indica que los agentes en la nube, como Grok Bot y dots, se ofrecen como complementos de Navide.",
             "terminal": "Abajo están <strong>Terminal</strong> (un terminal normal sin agent) y <strong>Creación manual…</strong>."
           },
           "p2": "<em>Creación manual…</em> abre el diálogo completo, donde puedes elegir el agent y el rol, decidir si añadirlo al escenario y si abrir un terminal junto a él, y pegar un id de session para reanudar directamente una conversación anterior.",
@@ -5289,7 +5293,7 @@
               "action": "Abrir uno directamente"
             },
             "nthCli": {
-              "action": "Abrir la enésima CLI"
+              "action": "Elegir la N-ésima CLI para el siguiente pane"
             },
             "rename": {
               "action": "Cambiar nombre",
@@ -5307,17 +5311,17 @@
           },
           "note": "Un pane con nombre automático lleva una diminuta marca <code>◦</code> tras su título; uno que renombraste a mano, no.",
           "h2": "El menú contextual",
-          "p3": "Haz clic derecho en un pane o en su fila de la barra lateral: <em>Enfocar</em>, <em>Cambiar nombre</em>, <em>Enviar mensaje</em>, <em>Interrumpir</em>, <em>Volver a aplicar el rol</em>, <em>Quitar</em>. De ellos, <em>Enviar mensaje</em> inserta la dirección de ese pane en el cuadro de entrada del pane que tienes enfocado: la vía más rápida para enviar mensajes entre panes. Un pane con subpanes debajo (<code>▸</code>) tiene además la opción <em>Quitar N subpanes</em>: cierra solo lo que ese pane lanzó y deja intactos el propio pane y todos los demás.",
+          "p3": "Haz clic derecho en un pane o en su fila de la barra lateral. La mayoría de los panes ofrecen <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> y <em>{remove}</em>; algunas opciones solo aparecen cuando corresponden: <em>{restore}</em> en un pane minimizado, <em>{fitWidth}</em> cuando las columnas del pane están limitadas, <em>{reconnect}</em> en un pane que perdió su conversación, y las opciones de agente (despertar, programaciones, canales, carpeta de memoria, ajustes) en un pane Agent. <em>{sendMessage}</em> inserta la dirección de ese pane en el cuadro de entrada del pane que tienes enfocado: la vía más rápida para enviar mensajes entre panes. <em>{reclaim}</em> cierra la CLI para liberar memoria y deja una tarjeta para reanudar con un clic (ver más abajo). Un pane con subpanes (<code>▸</code>) también ofrece <em>{removeChildren}</em>, que cierra solo lo que ese pane lanzó, y <em>{removeAll}</em>, que lo cierra junto con todo lo que lanzó.",
           "h3": "Minimizar y la tarjeta de marcador",
           "p4": "El <code>⊟</code> de la esquina superior derecha de un pane lo minimiza. Una vez contraído, su fila en la barra lateral se marca como <strong>Acoplado</strong> y, al desplegar esa fila, aparecen <em>↑ Restaurar</em> y <em>Quitar</em>.",
           "p5": "Hay también un tercer estado, la <strong>tarjeta de marcador</strong>: el hueco sigue ahí, pero muestra una tarjeta «↩ Haz clic para reanudar» que conserva el título, el subtítulo y la etiqueta del grupo. Tras reiniciar la app, o tras una liberación por inactividad, un pane tiene este aspecto. Haz clic en cualquier parte de la tarjeta y la CLI continúa con la misma conversación.",
           "h4": "Liberación automática por inactividad",
           "p6": "Cada CLI en ejecución ocupa memoria y GPU. De forma predeterminada, Navide devuelve a tarjeta de marcador los panes que llevan demasiado tiempo en silencio:",
           "reclaim": {
-            "default": "<strong>Activada de forma predeterminada</strong>, con un umbral de 30 minutos que puedes cambiar en Ajustes.",
+            "default": "<strong>Activado de forma predeterminada</strong>, con un umbral de {defaultMinutes} minutos que puedes cambiar en Ajustes. El umbral mínimo es de {minMinutes} minutos: un valor menor se sube a ese.",
             "scan": "Revisa cada 60 segundos, y el criterio es «ni salida ni escritura por tu parte».",
             "notClose": "<strong>No es un cierre</strong>: se conservan el hueco, el nombre, la dirección de mensajes y la session; un clic lo recupera.",
-            "exempt": "Nunca se liberan los panes que una pipeline está leyendo, los que tienen un borrador en el cuadro de entrada, los que tienen mensajes en cola para entregar ni el pane con el foco."
+            "exempt": "Un pane nunca se libera mientras tiene el foco, sigue trabajando o espera tu respuesta, ejecuta un bucle, está vigilado por una etapa de pipeline o enrutado por un Manager, tiene un borrador en el cuadro de entrada o tiene mensajes en cola de entrega. Tampoco se toca un pane sin sesión que reanudar, porque no podría volver."
           },
           "note2": "Cuando se produce una liberación, el registro de pipeline de la vista Historial muestra <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>."
         },
@@ -5383,27 +5387,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Árbol de áreas de trabajo / grupos / panes",
-              "keys": "⌘1"
+              "content": "Árbol de áreas de trabajo / grupos / panes"
             },
             "pipeline": {
-              "content": "Flujos automatizados de varias etapas",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Flujos automatizados de varias etapas"
             },
             "explorer": {
-              "content": "Explorador de archivos",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "Explorador de archivos"
             },
             "git": {
-              "content": "Control de versiones (consulta el tema «Flujo de trabajo con código»)",
-              "keys": "⌘4"
+              "content": "Control de versiones (consulta el tema «Flujo de trabajo con código»)"
             },
             "plans": {
-              "content": "Lista de documentos de plan (consulta el tema «Flujo de trabajo con código»)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Lista de documentos de plan (consulta el tema «Flujo de trabajo con código»)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> contrae toda la barra lateral. Los complementos de Navide instalados pueden añadir más pestañas.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> contrae toda la barra lateral. Los complementos de Navide instalados pueden añadir más pestañas.",
           "h2": "Los tres niveles de la pestaña Agents",
           "p1": "De arriba abajo: <strong>fila de área de trabajo → fila de grupo → fila de pane</strong>.",
           "rows": {
@@ -5428,7 +5427,7 @@
           "foldNote": "<strong>Alt/Opción + clic en la flecha de despliegue de la fila</strong> hace lo mismo que cualquiera de los dos botones de plegado; el tooltip lo indica: Alt+clic: contraer todo lo de dentro. El estado de plegado se guarda <strong>por pane, junto con el proyecto</strong>, así que se conserva tras reiniciar.",
           "h4": "Selección múltiple y arrastre por lotes",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> + clic: añade una sola fila a la selección.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> + clic: añade una sola fila a la selección.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> + clic: selecciona un rango completo (en el orden que se ve en pantalla, no en el interno).",
             "batchMenu": "Al hacer clic derecho con varias filas seleccionadas, el menú pasa a su forma por lotes: <em>Interrumpir seleccionados</em>, <em>Reconstruir seleccionados</em>, <em>Minimizar seleccionados</em>, <em>Restaurar seleccionados</em>, <em>Liberar seleccionados</em> (muestra cuántos cumplen los requisitos), <em>Silenciar notificaciones de los seleccionados</em> (o reactivarlas si todos los panes seleccionados están silenciados) y <em>Quitar seleccionados</em>. Liberar mantiene los panes disponibles para reanudarlos y omite los panes protegidos."
           },
@@ -5518,7 +5517,7 @@
               "action": "Abrir un pane nuevo"
             },
             "nthCli": {
-              "action": "Abrir un pane con la enésima CLI"
+              "action": "Elegir la N-ésima CLI para el siguiente pane"
             },
             "closePane": {
               "action": "Cerrar el pane con el foco"

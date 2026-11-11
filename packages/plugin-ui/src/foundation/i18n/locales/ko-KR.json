@@ -3734,17 +3734,17 @@
             "git": {
               "title": "Git(소스 제어)",
               "tag": "사이드바 네 번째 탭",
-              "text": "Git이 Navide 플러그인으로 로드되어 있으면 툴팁은 <em>Navide 플러그인: Git · navide.git · 게시자: navide · Navide에 기본 제공 (⌘4)</em>이고, 로드되지 않았으면 <em>Git (⌘4)</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">⌘⇧G</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요."
+              "text": "Git이 Navide 플러그인으로 로드되어 있으면 툴팁은 <em>Navide 플러그인: Git · navide.git · 게시자: navide · Navide에 기본 제공 ({gitTab})</em>이고, 로드되지 않았으면 <em>Git ({gitTab})</em>예요. 메인 창에서 <kbd class=\"cwh-kbd\">{gitWindow}</kbd>를 누르면 <strong>별도의 Git 창</strong>이 바로 열리며, 패널 헤더의 <em>새 창에서 열기</em>도 마찬가지예요. Git 자체도 번들된 Navide 플러그인(<code>navide.git</code>)이라 Plans와 함께 <strong>설정 ▸ Navide 플러그인</strong>의 <em>번들</em> 아래에 나열돼요. 그래서 업데이트, 끄기, 시작 실패도 다른 Navide 플러그인과 똑같이 일어나요. Git 자체도 번들된 Navide 플러그인(<code>navide.git</code>)이라 Plans와 함께 <strong>설정 ▸ Navide 플러그인</strong>의 <em>번들</em> 아래에 나열돼요. 그래서 업데이트, 끄기, 시작 실패도 다른 Navide 플러그인과 똑같이 일어나요."
             },
             "plans": {
               "title": "계획(계획 문서)",
               "tag": "사이드바 다섯 번째 탭",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> 탭은 <strong>목록</strong>일 뿐이에요. 항목을 클릭하면 <code>&lt;project folder&gt; — Plans</code> 제목의 별도 계획 검토 창이 열려요."
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> 탭은 <strong>목록</strong>일 뿐이에요. 항목을 클릭하면 <code>&lt;project folder&gt; — Plans</code> 제목의 별도 계획 검토 창이 열려요."
             },
             "ide": {
               "title": "Mini-IDE(기본 제공 편집기)",
               "tag": "별도 창 전용",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd>로 열거나 탐색기에서 파일을 클릭하세요. 제목은 <code>&lt;file name&gt; — Mini-IDE</code>이며, 저장하지 않은 변경 사항이 있으면 앞에 <code>●</code>가 붙어요."
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd>로 열거나 탐색기에서 파일을 클릭하세요. 제목은 <code>&lt;file name&gt; — Mini-IDE</code>이며, 저장하지 않은 변경 사항이 있으면 앞에 <code>●</code>가 붙어요."
             }
           },
           "callout": {
@@ -3823,7 +3823,7 @@
           "list": {
             "create": "맨 위에는 브랜치 생성 필드가 있으며 자리 표시자는 <em>새 브랜치 이름…</em>이고, 오른쪽의 <code>＋</code>로 제출해요.",
             "localRow": "모든 로컬 브랜치 행에는 버튼 네 개가 있어요: <code>⇔</code> <em>비교</em>, <code>⇡</code> <em>이 브랜치로 리베이스</em>, <code>⇣</code> <em>현재 브랜치에 병합</em>, <code>↵</code> <em>전환</em>. 현재 브랜치에는 버튼 없이 <code>✓</code>만 표시돼요.",
-            "context": "브랜치 행을 오른쪽 클릭하면 <em>현재 브랜치를 {'{'}branch{'}'}에 병합</em>, <em>현재 브랜치를 {'{'}branch{'}'}에 병합 &amp; 푸시</em>, <em>브랜치 삭제</em>가 나와요.",
+            "context": "브랜치 행을 오른쪽 클릭하면 <em>{mergeInto}</em>, <em>{mergeIntoPush}</em>, <em>{deleteBranch}</em>가 나와요.",
             "remote": "<code>⇅</code>로 <em>원격 브랜치 표시</em> / <em>원격 브랜치 숨기기</em>를 전환하며, 각 원격 브랜치 행에는 <code>⬇</code> <em>로컬로 체크아웃</em>이 있어요."
           },
           "p2": "<code>⇔</code>를 누르면 결과가 패널 안에 펼쳐지며, 제목은 <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>이고 통계 줄과 파일 목록이 표시돼요.",
@@ -3862,10 +3862,14 @@
               "behavior": "추가 풀/푸시 옵션. 아래 참고."
             }
           },
-          "p3": "<code>▾</code> 안에는 <em>↓ 풀</em>, <em>↓ 풀(리베이스)</em>, <em>↑ 푸시</em>, <em>↑ 푸시(Force with lease)</em>가 있어요. 원격이 두 개 이상 설정되어 있으면 끝에 <strong>원격으로 푸시</strong> 그룹이 추가되고 원격마다 한 행씩 있어요.",
+          "p3": "<code>▾</code> 안에는 <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>가 있어요. 원격이 두 개 이상 설정되어 있으면 끝에 <strong>원격으로 푸시</strong> 그룹이 추가되고 원격마다 한 행씩 있어요.",
           "callout": {
             "title": "인증 실패 시 먼저 계정 연결을 확인하세요",
             "text": "푸시가 실패하면 원격을 다시 설정하기 전에 계정 표시가 어느 계정에 연결되어 있는지 확인하세요. 자격 증명이 만료되면 패널이 갱신할 수 있도록 설정 › 계정으로 바로 안내해요. 비밀번호 필드에는 로그인 비밀번호가 아니라 Personal Access Token을 입력해야 해요."
+          },
+          "worktrees": {
+            "p1": "Git 패널의 <strong>{worktrees}</strong> 카드(헤더를 클릭하기 전까지 접혀 있고, 두 개 이상이면 개수가 표시돼요)에는 저장소의 모든 작업 트리가 나열돼요. <code>✦</code>는 메인, <code>○</code>는 나머지이고, 해당하면 <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em>, <em>{stale}</em> 배지가 붙어요. 각 행에는 <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em>, <code>✕</code> <em>{remove}</em>가 있고, 메인 worktree는 잠그거나 옮기거나 제거할 수 없어요. 위쪽의 <em>{prune}</em>과 <em>{repair}</em>는 폴더가 삭제됐거나 Git 밖에서 옮겨진 worktree를 정리해요.",
+            "p2": "추가하려면 폴더 경로를 입력하거나 찾아보기로 고르고, 브랜치를 선택하거나 <em>{createBranch}</em>에 체크한 뒤 새 이름을 입력하고 <code>＋</code> <em>{addWorktree}</em>를 누르세요. 여러 pane을 서로 다른 브랜치에서 동시에 돌릴 수 있는 것도 이 덕분이에요. pane마다 worktree를 따로 주면 수정 내용이 같은 폴더에 섞이지 않아요."
           }
         },
         "s4": {
@@ -3923,14 +3927,14 @@
           "p1": "계획은 한 폴더에만 있지 않아요. Navide는 작업 영역 아래 <strong>일곱 개 디렉터리</strong>를 검사해요: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code>, <code>docs/reports</code>. 그리고 <strong>최대 두 단계 깊이</strong>의 중첩된 Git 리포지토리 안에 있는 같은 일곱 곳도 검사해요. 인정되는 확장자는 <code>.html</code>, <code>.plan.md</code>, <code>.md</code> 세 가지예요. HTML 계획 이름은 <code>&lt;kebab-slug&gt;_&lt;6 hex digits&gt;.html</code>, Markdown 계획은 <code>&lt;kebab-slug&gt;.plan.md</code>예요. 밑줄이나 점으로 시작하는 파일(<code>_spec.md</code>, <code>_template.html</code>)은 기본 틀이라 목록에 나타나지 않아요.",
           "p2": "이 파일들은 <strong>agent가 작성하고 갱신해요</strong>. 계획 창에서 하는 모든 동작(할 일 상태 변경, 검토 메모 남기기, 승인)은 같은 파일에 반영돼요. 사용자는 agent에게 \"계획을 만들어 줘\"라고 요청한 뒤 창에서 검토하면 돼요.",
           "h2": "목록",
-          "p3": "사이드바의 <strong>계획</strong> 탭(<kbd class=\"cwh-kbd\">⌘5</kbd>)과 계획 창의 왼쪽 열은 같은 목록을 사용해요. 도구 모음은 계획이 하나 이상 있을 때만 나타나요:",
+          "p3": "사이드바의 <strong>계획</strong> 탭(<kbd class=\"cwh-kbd\">{plansTab}</kbd>)과 계획 창의 왼쪽 열은 같은 목록을 사용해요. 도구 모음은 계획이 하나 이상 있을 때만 나타나요:",
           "listTools": {
             "search": "<em>계획 검색…</em> 필드로 제목, 파일 이름, 개요를 검색해요.",
             "stage": "단계 필터: <em>모든 단계</em> / 초안 / 검토 중 / 승인됨 / 진행 중 / 완료 / 중단됨.",
             "sort": "<em>정렬 기준</em>: <strong>제목</strong>, <strong>마지막 업데이트</strong>, <strong>진행률</strong>이며, 옆의 <code>↑</code> / <code>↓</code>로 오름차순과 내림차순을 바꿔요.",
             "group": "<code>☰</code>로 \"단계별 그룹\"과 단일 평면 목록을 전환해요."
           },
-          "p4": "네 가지 선택은 모두 <strong>작업 영역별로 기억돼요</strong>. 섹션은 위에서부터: <strong>최근</strong>(최대 5개, 고정된 항목 먼저), 그다음 단계별로 묶을 때는 <strong>문서</strong> 섹션과 단계마다 하나씩의 섹션(평면 목록에서는 하나의 <strong>모든 계획</strong>으로 합쳐져요), 그다음 <strong>보관됨</strong>, 맨 아래에는 완료 항목 동작 줄(<em>완료 항목 모두 보관</em> / <em>모두 삭제</em>)이 있어요. 모든 행에는 단계 표시, <em>{'{'}done{'}'}/{'{'}total{'}'} 완료</em> 진행률 막대, <code>HTML</code> / <code>Markdown</code> 형식 태그, 그리고 사용자만 처리할 수 있는 항목인 <em>내 차례 {'{'}count{'}'}개</em>가 표시돼요. <strong>모든 행 오른쪽에는 고정 <code>📌</code>과 삭제 <code>✕</code>도 있어요</strong>(보관된 행에는 삭제만 있어요).",
+          "p4": "네 가지 선택은 모두 <strong>작업 영역별로 기억돼요</strong>. 섹션은 위에서부터: <strong>최근</strong>(최대 5개, 고정된 항목 먼저), 그다음 단계별로 묶을 때는 <strong>문서</strong> 섹션과 단계마다 하나씩의 섹션(평면 목록에서는 하나의 <strong>모든 계획</strong>으로 합쳐져요), 그다음 <strong>보관됨</strong>, 맨 아래에는 완료 항목 동작 줄(<em>완료 항목 모두 보관</em> / <em>모두 삭제</em>)이 있어요. 모든 행에는 단계 표시, <em>{'{'}done{'}'}/{'{'}total{'}'} 완료</em> 진행률 막대, <code>HTML</code> / <code>Markdown</code> 형식 태그, 그리고 사용자만 처리할 수 있는 항목인 <em>내 차례 {'{'}count{'}'}개</em>가 표시돼요. <strong>모든 행 오른쪽에는 고정 <code>📌</code>과 삭제 <code>✕</code>도 있어요</strong>(보관된 행에는 삭제만 있어요). 핀은 <em>최근 항목 맨 위에 고정</em> 기능이에요. 핀은 <em>최근 항목 맨 위에 고정</em> 기능이에요.",
           "callout1": {
             "title": "메타데이터가 없는 문서는 별도 섹션에 모여요",
             "text": "목록을 단계별로 묶으면 <strong>계획 메타데이터가 없는 일반 문서</strong>는 <strong>문서</strong> 섹션에 모이고 각 행에 <code>Document</code> 태그가 붙어요. 단계가 <em>in-progress</em>인지와는 관계없어요. 이런 파일을 실제 계획으로 바꾸려면 오른쪽 클릭 후 <strong>계획으로 승격</strong>을 선택하세요. 초안 계획 틀을 추가할 뿐 <strong>본문은 다시 쓰지 않아요</strong>."
@@ -3986,7 +3990,7 @@
         },
         "s7": {
           "title": "편집기 창",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd>로 열거나 탐색기에서 파일을 클릭하세요. 탭 방식의 Monaco 편집기이며, <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd>로 탭을 전환해요(범위를 넘는 숫자는 마지막 탭으로 가요).",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd>로 열거나 탐색기에서 파일을 클릭하세요. 탭 방식의 Monaco 편집기이며, <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd>로 탭을 전환해요(범위를 넘는 숫자는 마지막 탭으로 가요).",
           "h1": "왼쪽 레일의 네 섹션",
           "sectionTable": {
             "section": "섹션",
@@ -3998,7 +4002,7 @@
               "note": "파일 트리예요."
             },
             "search": {
-              "note": "여러 파일에서 검색해요. ⌘⇧H로 여러 파일에서 바꿔요."
+              "note": "여러 파일에서 검색해요. {replaceInFiles}로 여러 파일에서 바꿔요."
             },
             "scm": {
               "note": "Git 패널의 내장 버전이며, 변경 수 배지가 있어요."
@@ -4016,7 +4020,7 @@
           "editorActions": {
             "split": {
               "action": "편집기 영역 분할",
-              "note": "(⌘K ⌘← / ⌘K ⌘→로 편집기 그룹 전환)"
+              "note": "({prevGroup} / {nextGroup}로 편집기 그룹 전환)"
             },
             "findReplace": {
               "action": "찾기 / 바꾸기"
@@ -4032,7 +4036,7 @@
             },
             "fold": {
               "action": "접기 / 펼치기",
-              "note": "(전체는 ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(전체는 {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "다중 커서: 위나 아래에 추가"
@@ -4051,7 +4055,7 @@
             },
             "aiTerminal": {
               "action": "AI 터미널 전환",
-              "note": "(또는 ⌘⇧A)"
+              "note": "(또는 {aiChatAlt})"
             },
             "sendSelection": {
               "action": "선택한 코드를 AI 터미널로 보내기",
@@ -4083,7 +4087,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "이미지이며, 창에 맞춤 / 실제 크기가 있어요."
+              "how": "이미지이며, {fitWindow} / {actualSize}로 전환할 수 있어요."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4132,7 +4136,7 @@
             "text": "표의 다른 모든 종류는 <strong>바로 미리 보기로 열려요</strong>. html과 csv는 의도적으로 소스를 먼저 보여 주고 <em>미리 보기</em>를 눌러야 전환돼요. 또한 <code>docx</code>, <code>xlsx</code>, <code>zip</code>, <code>woff</code>는 바이너리 목록에도 있지만, 글꼴·압축 파일·Office 검사가 바이너리 검사보다 먼저 실행되므로 16진수 덤프로 떨어지지 않고 전용 렌더링을 받아요."
           },
           "h2": "변경 기록",
-          "p3": "오른쪽 슬롯 <strong>미리 보기</strong> 탭(<kbd class=\"cwh-kbd\">⌘⌥V</kbd>)의 아래쪽 절반은 <strong>최근 변경</strong>이에요. 이 작업 영역에서 최근에 무엇이 바뀌었는지 보여 줘요. 행마다 열이 네 개 있어요:",
+          "p3": "오른쪽 슬롯 <strong>미리 보기</strong> 탭(<kbd class=\"cwh-kbd\">{previewTab}</kbd>)의 아래쪽 절반은 <strong>최근 변경</strong>이에요. 이 작업 영역에서 최근에 무엇이 바뀌었는지 보여 줘요. 행마다 열이 네 개 있어요:",
           "trackList": {
             "time": "<strong>시간</strong> — 상대 시간(<em>방금</em> / <em>{'{'}n{'}'}분</em> / <em>{'{'}n{'}'}시간</em> / <em>{'{'}n{'}'}일</em>).",
             "action": "<strong>동작</strong> — <code>+</code> 생성, <code>~</code> 수정, <code>−</code> 삭제, <code>▸</code> 표시.",
@@ -4210,7 +4214,7 @@
               "action": "소스 제어 / 문제"
             },
             "fileTabs": {
-              "action": "N번째 파일 탭으로 전환(⌘1…⌘9)"
+              "action": "N번째 파일 탭으로 전환({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "편집기 영역 분할"
@@ -5258,7 +5262,7 @@
             "openHome": "<strong>홈</strong> — 홈 디렉터리를 그대로 써요.",
             "recent": "그 아래에 최근에 연 목록이 있으며, 자주 쓰는 항목을 고정할 수 있어요. 항목을 오른쪽 클릭하면 <em>기본 편집기에서 열기</em>, <em>Finder에서 보기</em>, <em>경로 복사</em>가 나와요."
           },
-          "p2": "이후에는 언제든 메뉴를 쓸 수 있어요: <strong>파일 ▸ 작업 영역 열기…</strong>(<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>파일 ▸ 최근 항목 열기</strong>, 또는 새 창은 <strong>파일 ▸ 새 창</strong>(<kbd class=\"wph-kbd\">⌘N</kbd>).",
+          "p2": "이후에는 언제든 메뉴를 쓸 수 있어요: <strong>파일 ▸ 작업 영역 열기…</strong>(<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>파일 ▸ 최근 항목 열기</strong>, 또는 새 창은 <strong>파일 ▸ 새 창</strong>(<kbd class=\"wph-kbd\">{newWindow}</kbd>).",
           "h2": "한 창에 여러 작업 영역",
           "p3": "두 번째 프로젝트를 위해 두 번째 창이 필요하지 않아요. 사이드바 Agent 탭의 작업 영역 섹션 헤더 오른쪽에 있는 <strong>＋</strong>를 누르면 같은 선택기가 다시 나오고, 고른 프로젝트가 <strong>같은 창</strong>에 들어와 사이드바에 작업 영역 헤더 행이 하나 추가돼요.",
           "p4": "그 헤더 행을 클릭하면 보기가 전환돼요. 핵심은 <strong>전환해서 벗어난 작업 영역의 agent는 계속 실행된다</strong>는 거예요. 그 행은 사이드바에 남고, pane만 잠시 스테이지에서 숨겨져요.",
@@ -5276,7 +5280,7 @@
           "p1": "입구는 <strong>＋</strong> 버튼이에요. 사이드바의 작업 영역 헤더 행과 모든 그룹 헤더 행에 하나씩 있어요(차이는 새 pane이 어느 그룹에 들어가느냐뿐이에요). 누르면 작은 메뉴가 열려요:",
           "addMenu": {
             "role": "맨 위에 <strong>역할 선택…</strong> 드롭다운이 있어 미리 정의된 역할을 골라요.",
-            "cliList": "가운데에 CLI 목록이 있으며, 설치되지 않은 것은 그렇게 표시돼요.",
+            "cliList": "그 아래 목록은 제목이 붙은 두 블록으로 나뉘어요. <strong>{cli}</strong>에는 코딩용 CLI가 있고, 설치되지 않은 것은 따로 표시돼요. <strong>{agents}</strong>에는 상주 에이전트(OpenClaw, Hermes Agent)가 이름으로 나열되는데, 열려 있는 것을 고르면 그쪽으로 전환되고 닫힌 것을 고르면 이전 대화를 이어서 열어요. 이름을 먼저 입력받는 <em>새로 만들기 …</em> 항목도 있고, ACP 에이전트도 여기에 표시돼요. 목록 아래에는 Grok Bot, dots 같은 클라우드 에이전트는 Navide 플러그인으로 제공된다는 안내가 있어요.",
             "terminal": "맨 아래에 <strong>터미널</strong>(agent가 없는 일반 터미널)과 <strong>수동 생성…</strong>이 있어요."
           },
           "p2": "<em>수동 생성…</em>은 전체 대화 상자를 열어요. agent와 역할을 고르고, 스테이지에 추가할지, 옆에 터미널을 함께 열지 정하고, session ID를 붙여 넣어 이전 대화를 바로 재개할 수 있어요.",
@@ -5289,7 +5293,7 @@
               "action": "바로 하나 열기"
             },
             "nthCli": {
-              "action": "N번째 CLI 열기"
+              "action": "다음 pane의 CLI를 N번째로 고르기"
             },
             "rename": {
               "action": "이름 바꾸기",
@@ -5307,17 +5311,17 @@
           },
           "note": "자동으로 이름이 붙은 pane은 제목 뒤에 작은 <code>◦</code> 표시가 있고, 직접 이름을 바꾼 pane에는 없어요.",
           "h2": "컨텍스트 메뉴",
-          "p3": "pane이나 사이드바 행을 오른쪽 클릭하면: <em>포커스</em>, <em>이름 바꾸기</em>, <em>메시지 보내기</em>, <em>중단</em>, <em>역할 다시 적용</em>, <em>제거</em>. 이 중 <em>메시지 보내기</em>는 현재 포커스된 pane의 입력란에 그 pane의 주소를 넣어요. pane 간 메시지로 가는 가장 빠른 길이에요. 아래에 하위 pane이 있는 pane(<code>▸</code>)에는 <em>하위 pane N개 제거</em> 항목도 있어요: 그 pane이 생성한 것만 닫고, 그 pane 자체와 다른 pane은 그대로 둬요.",
+          "p3": "pane이나 사이드바 행을 우클릭하세요. 대부분의 pane에는 <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em>, <em>{remove}</em>가 있어요. 해당할 때만 나오는 항목도 있어요. 최소화된 pane에는 <em>{restore}</em>, 열 너비가 제한될 때는 <em>{fitWidth}</em>, 대화가 끊긴 pane에는 <em>{reconnect}</em>, Agent pane에는 깨우기·일정·채널·메모리 폴더·설정 항목이 더해져요. <em>{sendMessage}</em>는 그 pane의 주소를 지금 포커스된 pane의 입력란에 넣어 줘요. pane 간 메시지로 가는 가장 빠른 길이에요. <em>{reclaim}</em>은 CLI를 종료해 메모리를 비우고, 클릭하면 이어지는 카드를 남겨요(아래 참고). 아래에 하위 pane이 있는(<code>▸</code>) pane에는 그 pane이 만든 것만 닫는 <em>{removeChildren}</em>과, 만든 것까지 함께 닫는 <em>{removeAll}</em>도 나와요.",
           "h3": "최소화와 자리 표시 카드",
           "p4": "pane 오른쪽 위의 <code>⊟</code>로 최소화해요. 접히면 사이드바 행에 <strong>도킹됨</strong>이 표시되고, 그 행을 펼치면 <em>↑ 복원</em>과 <em>제거</em>가 나와요.",
           "p5": "세 번째 상태인 <strong>자리 표시 카드</strong>도 있어요: 슬롯은 남아 있지만 \"↩ 클릭해서 재개\" 카드가 표시되며, 제목, 부제목, 그룹 레이블은 유지돼요. 앱을 재시작하거나 유휴 회수 후에는 pane이 이렇게 보여요. 카드의 아무 곳이나 클릭하면 CLI가 같은 대화를 이어가요.",
           "h4": "유휴 자동 회수",
           "p6": "실행 중인 모든 CLI는 메모리와 GPU를 차지해요. 기본적으로 Navide는 너무 오래 조용한 pane을 자리 표시 카드로 되돌려요:",
           "reclaim": {
-            "default": "<strong>기본적으로 켜져 있으며</strong>, 기준은 30분이고 설정에서 바꿀 수 있어요.",
+            "default": "<strong>기본으로 켜져 있고</strong>, 기준 시간은 {defaultMinutes}분이며 설정에서 바꿀 수 있어요. 가장 짧은 기준은 {minMinutes}분이고, 그보다 짧게 설정하면 {minMinutes}분으로 올라가요.",
             "scan": "60초마다 검사하며, 기준은 \"출력도 없고 사용자 입력도 없음\"이에요.",
             "notClose": "<strong>닫는 것이 아니에요</strong>: 슬롯, 이름, 메시지 주소, session이 모두 유지되며, 클릭 한 번으로 돌아와요.",
-            "exempt": "pipeline이 읽고 있는 pane, 입력란에 초안이 있는 pane, 전달 대기 중인 메시지가 있는 pane, 포커스된 pane은 회수하지 않아요."
+            "exempt": "다음 pane은 회수되지 않아요: 포커스된 pane, 아직 작업 중이거나 답을 기다리는 pane, 루프 실행 중인 pane, 파이프라인 단계가 지켜보거나 Manager가 라우팅 중인 pane, 입력란에 초안이 있는 pane, 전달 대기 중인 메시지가 있는 pane. 이어 갈 세션이 없는 pane도 돌아올 수 없으니 회수하지 않아요."
           },
           "note2": "회수가 일어나면 기록 보기의 pipeline 로그에 <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>이 표시돼요."
         },
@@ -5383,27 +5387,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "작업 영역 / 그룹 / pane 트리",
-              "keys": "⌘1"
+              "content": "작업 영역 / 그룹 / pane 트리"
             },
             "pipeline": {
-              "content": "여러 단계로 된 자동화 흐름",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "여러 단계로 된 자동화 흐름"
             },
             "explorer": {
-              "content": "파일 탐색기",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "파일 탐색기"
             },
             "git": {
-              "content": "버전 관리(\"코드 워크플로\" 주제 참고)",
-              "keys": "⌘4"
+              "content": "버전 관리(\"코드 워크플로\" 주제 참고)"
             },
             "plans": {
-              "content": "계획 문서 목록(\"코드 워크플로\" 주제 참고)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "계획 문서 목록(\"코드 워크플로\" 주제 참고)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd>로 사이드바 전체를 접어요. 설치된 Navide 플러그인이 탭을 더 추가할 수 있어요.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd>로 사이드바 전체를 접어요. 설치된 Navide 플러그인이 탭을 더 추가할 수 있어요.",
           "h2": "Agent 탭의 세 단계",
           "p1": "위에서 아래로: <strong>작업 영역 행 → 그룹 행 → pane 행</strong>.",
           "rows": {
@@ -5428,7 +5427,7 @@
           "foldNote": "<strong>행의 펼치기 화살표를 Alt/Option 클릭</strong>하면 두 접기 버튼과 같은 동작을 해요. 툴팁에도 적혀 있어요: Alt+클릭: 안의 모든 항목 접기. 접기 상태는 <strong>pane별로 프로젝트와 함께</strong> 저장되어 재시작해도 유지돼요.",
           "h4": "다중 선택과 일괄 드래그",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> 클릭: 행 하나를 선택에 추가해요.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> 클릭: 행 하나를 선택에 추가해요.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> 클릭: 범위 전체를 선택해요(내부 순서가 아니라 화면에 표시된 순서).",
             "batchMenu": "여러 행을 선택한 상태에서 오른쪽 클릭하면 메뉴가 일괄 형태로 바뀌어요: <em>선택 항목 중단</em>, <em>선택 항목 다시 빌드</em>, <em>선택 항목 최소화</em>, <em>선택 항목 복원</em>, <em>선택 항목 회수</em>(대상 수 표시), <em>선택 항목 알림 음소거</em>(선택한 pane이 모두 음소거 상태면 음소거 해제), <em>선택 항목 제거</em>. 회수는 pane을 재개할 수 있게 유지하며 보호된 pane은 건너뛰어요."
           },
@@ -5518,7 +5517,7 @@
               "action": "새 pane 열기"
             },
             "nthCli": {
-              "action": "N번째 CLI로 pane 열기"
+              "action": "다음 pane의 CLI를 N번째로 고르기"
             },
             "closePane": {
               "action": "포커스된 pane 닫기"

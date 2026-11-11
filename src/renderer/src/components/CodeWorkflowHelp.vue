@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { helpKey } from '../lib/helpKeys'
+
 import MockDiff from './helpMocks/MockDiff.vue'
 import MockFigure from './helpMocks/MockFigure.vue'
 import MockFormRow from './helpMocks/MockFormRow.vue'
@@ -92,29 +94,35 @@ const planTools = [
 // Mini-IDE: the four sections in the left rail, named by the same keys the
 // activity bar's own tooltips use (EditorWindowApp.vue:1965-1990).
 const editorSections: EditorSectionRow[] = [
-  { key: 'explorer', section: 'pane.explorer.title', shortcut: '⌘⇧E' },
-  { key: 'search', section: 'pane.search.title', shortcut: '⌘⇧F' },
-  { key: 'scm', section: 'pane.git.tab', shortcut: '⌘⇧G' },
-  { key: 'problems', section: 'pane.problems.title', shortcut: '⌘⇧M' },
+  { key: 'explorer', section: 'pane.explorer.title', shortcut: helpKey('workbench.action.focusExplorer') },
+  { key: 'search', section: 'pane.search.title', shortcut: helpKey('workbench.action.findInFiles') },
+  { key: 'scm', section: 'pane.git.tab', shortcut: helpKey('workbench.action.focusSourceControl') },
+  { key: 'problems', section: 'pane.problems.title', shortcut: helpKey('workbench.action.problems.focus') },
 ]
+
+// Keys are read from the live bindings (this platform plus the user's own
+// rules). Split and quick open are handled inside the editor, not by a rule,
+// so they keep their macOS glyphs.
+const k = helpKey
+const uniq = (keys: string[]): string[] => [...new Set(keys)]
 
 // Mini-IDE: the common editing actions. `note` marks the rows that carry a
 // parenthetical remark next to the keys.
 const editorActions: EditorActionRow[] = [
   { key: 'split', keys: ['⌘\\'], note: true },
-  { key: 'findReplace', keys: ['⌘F', '⌘⌥F'] },
-  { key: 'findNext', keys: ['⌘G', '⌘⇧G'] },
-  { key: 'goto', keys: ['⌘L', '⌘⇧O', '⌘T'] },
-  { key: 'format', keys: ['⇧⌥F', '⌘K ⌘F'] },
-  { key: 'fold', keys: ['⌘⌥[', '⌘⌥]'], note: true },
-  { key: 'multiCursor', keys: ['⌘⌥↑', '⌘⌥↓'] },
-  { key: 'selectNext', keys: ['⌘D', '⌘⇧L'] },
-  { key: 'quickFix', keys: ['⌘.'] },
-  { key: 'aiRewrite', keys: ['⌘K ⌘K'] },
-  { key: 'aiComplete', keys: ['⌘I'] },
-  { key: 'aiTerminal', keys: ['⌘J'], note: true },
-  { key: 'sendSelection', keys: ['⌘⇧L'], note: true },
-  { key: 'quickOpen', keys: ['⌘P', '⌘⇧P'] },
+  { key: 'findReplace', keys: [k('editor.action.openFind'), k('editor.action.openReplace')] },
+  { key: 'findNext', keys: [k('editor.action.nextMatch'), k('editor.action.prevMatch')] },
+  { key: 'goto', keys: [k('editor.action.gotoLine'), k('workbench.action.gotoSymbol'), k('workbench.action.gotoWorkspaceSymbol')] },
+  { key: 'format', keys: [k('editor.action.formatDocument'), k('editor.action.formatSelection')] },
+  { key: 'fold', keys: [k('editor.fold'), k('editor.unfold')], note: true },
+  { key: 'multiCursor', keys: [k('editor.action.insertCursorAbove'), k('editor.action.insertCursorBelow')] },
+  { key: 'selectNext', keys: [k('editor.action.addSelectionToNextFindMatch'), k('editor.action.selectHighlights')] },
+  { key: 'quickFix', keys: [k('editor.action.quickFix')] },
+  { key: 'aiRewrite', keys: [k('editor.action.inlineRewrite')] },
+  { key: 'aiComplete', keys: [k('editor.action.triggerGhost')] },
+  { key: 'aiTerminal', keys: [k('workbench.action.toggleAIChat', 'cmd+j')], note: true },
+  { key: 'sendSelection', keys: [k('workbench.action.addSelectionToChat')], note: true },
+  { key: 'quickOpen', keys: uniq(['⌘P', k('workbench.action.showCommands')]) },
 ]
 
 // Preview: the extension decides how a file opens. Both the extension list and
@@ -135,30 +143,71 @@ const previewTypes = [
 
 // Shortcut cheat sheet. "where" is a condition, not a remark.
 const shortcuts: ShortcutRow[] = [
-  { key: 'gitTab', keys: ['⌘4'], where: 'main' },
-  { key: 'plansTab', keys: ['⌘5'], where: 'main' },
-  { key: 'gitWindow', keys: ['⌘⇧G'], where: 'main' },
-  { key: 'editorWindow', keys: ['⌘⇧I'], where: 'any' },
-  { key: 'previewTab', keys: ['⌘⌥V'], where: 'main' },
-  { key: 'commit', keys: ['⌘↩', '⌘⇧↩'], where: 'git' },
-  { key: 'aiMessage', keys: ['⌘⇧M'], where: 'git' },
-  { key: 'stageAll', keys: ['⌘⇧A', '⌘⇧U'], where: 'git' },
-  { key: 'fetchPull', keys: ['⌘⇧F', '⌘⇧L'], where: 'git' },
-  { key: 'pushSync', keys: ['⌘⇧P', '⌘⇧S'], where: 'git' },
-  { key: 'refresh', keys: ['F5', '⌘⇧R'], where: 'git' },
-  { key: 'gotoAiTerminal', keys: ['⌘L'], where: 'git' },
+  { key: 'gitTab', keys: [k('controlPane.selectSidebarTab4')], where: 'main' },
+  { key: 'plansTab', keys: [k('controlPane.selectSidebarTab5')], where: 'main' },
+  { key: 'gitWindow', keys: [k('workbench.action.openGitWindow')], where: 'main' },
+  { key: 'editorWindow', keys: [k('workbench.action.openMiniIDE')], where: 'any' },
+  { key: 'previewTab', keys: [k('workbench.action.focusPreview')], where: 'main' },
+  { key: 'commit', keys: [k('git.commit'), k('git.amend')], where: 'git' },
+  { key: 'aiMessage', keys: [k('git.generateMessage')], where: 'git' },
+  { key: 'stageAll', keys: [k('git.stageAll'), k('git.unstageAll')], where: 'git' },
+  { key: 'fetchPull', keys: [k('git.fetch'), k('git.pull')], where: 'git' },
+  { key: 'pushSync', keys: [k('git.push'), k('git.sync')], where: 'git' },
+  { key: 'refresh', keys: uniq([k('git.refresh', 'f5'), k('git.refresh', 'cmd+shift+r')]), where: 'git' },
+  { key: 'gotoAiTerminal', keys: [k('git.focusAgent')], where: 'git' },
   { key: 'quickOpenPlan', keys: ['⌘P'], where: 'plan' },
   { key: 'escape', keys: ['Esc'], where: 'plan' },
-  { key: 'explorerSearch', keys: ['⌘⇧E', '⌘⇧F'], where: 'ide' },
-  { key: 'scmProblems', keys: ['⌘⇧G', '⌘⇧M'], where: 'ide' },
-  { key: 'fileTabs', keys: ['⌘1', '⌘9'], where: 'ide' },
+  { key: 'explorerSearch', keys: [k('workbench.action.focusExplorer'), k('workbench.action.findInFiles')], where: 'ide' },
+  { key: 'scmProblems', keys: [k('workbench.action.focusSourceControl'), k('workbench.action.problems.focus')], where: 'ide' },
+  { key: 'fileTabs', keys: [k('workbench.action.openEditorAtIndex1'), k('workbench.action.openEditorAtIndex9')], where: 'ide' },
   { key: 'split', keys: ['⌘\\'], where: 'ide' },
-  { key: 'quickFix', keys: ['⌘.'], where: 'ide' },
-  { key: 'aiRewriteComplete', keys: ['⌘K ⌘K', '⌘I'], where: 'ide' },
-  { key: 'aiTerminal', keys: ['⌘J'], where: 'ide' },
-  { key: 'cheatsheet', keys: ['⌘K ⌘S'], where: 'ide' },
+  { key: 'quickFix', keys: [k('editor.action.quickFix')], where: 'ide' },
+  { key: 'aiRewriteComplete', keys: [k('editor.action.inlineRewrite'), k('editor.action.triggerGhost')], where: 'ide' },
+  { key: 'aiTerminal', keys: [k('workbench.action.toggleAIChat', 'cmd+j')], where: 'ide' },
+  { key: 'cheatsheet', keys: [k('workbench.action.openKeyboardShortcuts')], where: 'ide' },
 ]
 const { t } = useI18n()
+
+// Values the prose interpolates: keys as the live bindings have them, and the
+// interface labels read from the keys the product renders.
+const prose = computed(() => ({
+  gitTab: k('controlPane.selectSidebarTab4'),
+  plansTab: k('controlPane.selectSidebarTab5'),
+  gitWindow: k('workbench.action.openGitWindow'),
+  miniIde: k('workbench.action.openMiniIDE'),
+  previewTab: k('workbench.action.focusPreview'),
+  editorTab1: k('workbench.action.openEditorAtIndex1'),
+  editorTab9: k('workbench.action.openEditorAtIndex9'),
+  replaceInFiles: k('workbench.action.findInFilesReplace'),
+  prevGroup: k('workbench.action.focusPreviousGroup'),
+  nextGroup: k('workbench.action.focusNextGroup'),
+  foldAll: k('editor.foldAll'),
+  unfoldAll: k('editor.unfoldAll'),
+  aiChatAlt: k('workbench.action.toggleAIChat', 'cmd+shift+a'),
+  pull: t('action.pull'),
+  pullRebase: t('action.pull-rebase'),
+  push: t('action.push'),
+  pushForce: t('action.push-force-lease'),
+  mergeInto: t('action.merge-current-into', { branch: '{branch}' }),
+  mergeIntoPush: t('action.merge-current-into-push', { branch: '{branch}' }),
+  deleteBranch: t('action.delete-branch'),
+  fitWindow: t('preview.fit-window'),
+  actualSize: t('preview.actual-size'),
+  worktrees: t('label.worktrees'),
+  bare: t('label.bare'),
+  detached: t('label.detached'),
+  locked: t('label.locked'),
+  stale: t('label.stale'),
+  openWindow: t('action.open-in-new-window'),
+  reveal: t('action.reveal-in-finder'),
+  lock: t('action.lock'),
+  move: t('action.move'),
+  remove: t('action.remove'),
+  prune: t('action.prune'),
+  repair: t('action.repair'),
+  createBranch: t('label.create-new-branch'),
+  addWorktree: t('action.add-worktree'),
+}))
 
 // ── Mock screenshots ────────────────────────────────────────────────────────
 // Three HTML pictures of the Git surfaces this topic describes, drawn from
@@ -212,52 +261,52 @@ const conflictLines = [
 
 <template>
   <div class="cwh">
-    <p class="cwh-intro">{{ $t('settings.help.codeWorkflow.intro') }}</p>
+    <p class="cwh-intro">{{ $t('settings.help.codeWorkflow.intro', prose) }}</p>
 
     <!-- ── 1 · The three work surfaces ──────────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s1.title') }}</h2>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.p1')"></p>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s1.title', prose) }}</h2>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.p1', prose)"></p>
 
       <div class="cwh-card">
         <div class="cwh-card-head">
-          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.git.title') }}</span>
-          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.git.tag') }}</span>
+          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.git.title', prose) }}</span>
+          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.git.tag', prose) }}</span>
         </div>
-        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.git.text')"></p>
+        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.git.text', prose)"></p>
       </div>
 
       <div class="cwh-card">
         <div class="cwh-card-head">
-          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.plans.title') }}</span>
-          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.plans.tag') }}</span>
+          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.plans.title', prose) }}</span>
+          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.plans.tag', prose) }}</span>
         </div>
-        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.plans.text')"></p>
+        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.plans.text', prose)"></p>
       </div>
 
       <div class="cwh-card">
         <div class="cwh-card-head">
-          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.ide.title') }}</span>
-          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.ide.tag') }}</span>
+          <span class="cwh-card-title">{{ $t('settings.help.codeWorkflow.s1.cards.ide.title', prose) }}</span>
+          <span class="cwh-tag">{{ $t('settings.help.codeWorkflow.s1.cards.ide.tag', prose) }}</span>
         </div>
-        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.ide.text')"></p>
+        <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s1.cards.ide.text', prose)"></p>
       </div>
 
       <div class="cwh-callout">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s1.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s1.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s1.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s1.callout.text', prose)"></div>
       </div>
     </section>
 
     <!-- ── 2 · Git: staging and committing ──────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s2.title') }}</h2>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s2.title', prose) }}</h2>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p1')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p1', prose)"></p>
 
       <MockFigure
-        :caption="$t('settings.help.codeWorkflow.mock.git.caption')"
+        :caption="$t('settings.help.codeWorkflow.mock.git.caption', prose)"
         :legend="gitLegend"
       >
         <MockPanel>
@@ -286,113 +335,117 @@ const conflictLines = [
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.glyph') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.meaning') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.where') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.glyph', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.meaning', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s2.fileTable.where', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in fileButtons" :key="row.key">
               <td class="cwh-nowrap"><code>{{ row.glyph }}</code></td>
               <td>{{ row.meaning.map((k) => $t(k)).join(' / ') }}</td>
-              <td>{{ $t(`settings.help.codeWorkflow.s2.fileButtons.${row.key}.where`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s2.fileButtons.${row.key}.where`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p2')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p2', prose)"></p>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s2.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s2.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s2.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s2.callout.text', prose)"></div>
       </div>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h2') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p3')"></p>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p4')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h2', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p3', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p4', prose)"></p>
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s2.commitTable.item') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s2.commitTable.what') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s2.commitTable.item', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s2.commitTable.what', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in commitMenu" :key="row.key">
               <td class="cwh-nowrap"><code>{{ row.glyph }} {{ $t(row.label) }}</code></td>
-              <td>{{ $t(`settings.help.codeWorkflow.s2.commitMenu.${row.key}.what`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s2.commitMenu.${row.key}.what`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p5')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p5', prose)"></p>
 
-      <h3 class="cwh-h3" v-html="$t('settings.help.codeWorkflow.s2.h3')"></h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p6')"></p>
+      <h3 class="cwh-h3" v-html="$t('settings.help.codeWorkflow.s2.h3', prose)"></h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p6', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h4') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p7')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s2.h4', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p7', prose)"></p>
     </section>
 
     <!-- ── 3 · Git: branches and remotes ────────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s3.title') }}</h2>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s3.title', prose) }}</h2>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s3.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p1')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s3.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p1', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s3.list.create')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s3.list.localRow')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s3.list.context')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s3.list.remote')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s3.list.create', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s3.list.localRow', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s3.list.context', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s3.list.remote', prose)"></li>
       </ul>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p2')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p2', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s3.h2') }}</h3>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s3.h2', prose) }}</h3>
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s3.remoteTable.control') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s3.remoteTable.behavior') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s3.remoteTable.control', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s3.remoteTable.behavior', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="key in remoteActions" :key="key">
-              <td class="cwh-nowrap">{{ $t(`settings.help.codeWorkflow.s3.remoteActions.${key}.control`) }}</td>
-              <td>{{ $t(`settings.help.codeWorkflow.s3.remoteActions.${key}.behavior`) }}</td>
+              <td class="cwh-nowrap">{{ $t(`settings.help.codeWorkflow.s3.remoteActions.${key}.control`, prose) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s3.remoteActions.${key}.behavior`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p3')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.p3', prose)"></p>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s3.callout.title') }}</div>
-        <div class="cwh-callout-text">{{ $t('settings.help.codeWorkflow.s3.callout.text') }}</div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s3.callout.title', prose) }}</div>
+        <div class="cwh-callout-text">{{ $t('settings.help.codeWorkflow.s3.callout.text', prose) }}</div>
       </div>
+
+      <h3 class="cwh-h3">{{ $t('label.worktrees') }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.worktrees.p1', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s3.worktrees.p2', prose)"></p>
     </section>
 
     <!-- ── 4 · Git: conflicts, drafts and history ───────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s4.title') }}</h2>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s4.title', prose) }}</h2>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p1')"></p>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p2')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p1', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p2', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.badge')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.choices')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.base')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.apply')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.binary')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.agent')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.badge', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.choices', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.base', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.apply', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.binary', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.conflictList.agent', prose)"></li>
       </ul>
 
       <MockFigure
-        :caption="$t('settings.help.codeWorkflow.mock.conflict.caption')"
+        :caption="$t('settings.help.codeWorkflow.mock.conflict.caption', prose)"
         :legend="conflictLegend"
       >
         <MockPanel>
@@ -413,18 +466,18 @@ const conflictLines = [
         </MockPanel>
       </MockFigure>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h2') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p3')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h2', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p3', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s4.draftList.save')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s4.draftList.restore')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.draftList.save', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s4.draftList.restore', prose)"></li>
       </ul>
-      <p class="cwh-note">{{ $t('settings.help.codeWorkflow.s4.note') }}</p>
+      <p class="cwh-note">{{ $t('settings.help.codeWorkflow.s4.note', prose) }}</p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h3') }}</h3>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h3', prose) }}</h3>
 
       <MockFigure
-        :caption="$t('settings.help.codeWorkflow.mock.diff.caption')"
+        :caption="$t('settings.help.codeWorkflow.mock.diff.caption', prose)"
         :legend="diffLegend"
       >
         <MockPanel>
@@ -442,264 +495,264 @@ const conflictLines = [
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s4.diffTable.how') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s4.diffTable.what') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s4.diffTable.how', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s4.diffTable.what', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="key in diffViews" :key="key">
-              <td>{{ $t(`settings.help.codeWorkflow.s4.diffViews.${key}.how`) }}</td>
-              <td>{{ $t(`settings.help.codeWorkflow.s4.diffViews.${key}.what`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s4.diffViews.${key}.how`, prose) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s4.diffViews.${key}.what`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p4')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s4.p4', prose)"></p>
 
       <div class="cwh-callout">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s4.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s4.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s4.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s4.callout.text', prose)"></div>
       </div>
     </section>
 
     <!-- ── 5 · Plans: the list and the lifecycle ────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s5.title') }}</h2>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s5.title', prose) }}</h2>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p1')"></p>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p2')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p1', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p2', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h2') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p3')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h2', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p3', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.search')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.stage')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.sort')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.group')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.search', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.stage', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.sort', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s5.listTools.group', prose)"></li>
       </ul>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p4')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p4', prose)"></p>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s5.callout1.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s5.callout1.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s5.callout1.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s5.callout1.text', prose)"></div>
       </div>
 
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p5')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p5', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h3') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p6')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h3', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p6', prose)"></p>
       <div class="cwh-callout">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s5.callout2.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s5.callout2.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s5.callout2.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s5.callout2.text', prose)"></div>
       </div>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p7')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p7', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h4') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p8')"></p>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p9')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s5.h4', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p8', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s5.p9', prose)"></p>
     </section>
 
     <!-- ── 6 · Plans: the review toolbox ────────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s6.title') }}</h2>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s6.p1')"></p>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s6.title', prose) }}</h2>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s6.p1', prose)"></p>
 
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s6.toolsTable.tool') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s6.toolsTable.opens') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s6.toolsTable.tool', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s6.toolsTable.opens', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in planTools" :key="row.key">
               <td class="cwh-nowrap">{{ row.glyph }} {{ $t(row.label) }}</td>
-              <td v-html="$t(`settings.help.codeWorkflow.s6.planTools.${row.key}.opens`)"></td>
+              <td v-html="$t(`settings.help.codeWorkflow.s6.planTools.${row.key}.opens`, prose)"></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s6.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s6.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s6.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s6.callout.text', prose)"></div>
       </div>
 
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s6.p2')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s6.p2', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s6.moreList.outline')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s6.moreList.history')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s6.moreList.outline', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s6.moreList.history', prose)"></li>
       </ul>
 
-      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s6.note')"></p>
+      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s6.note', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s6.h1') }}</h3>
-      <p class="cwh-p">{{ $t('settings.help.codeWorkflow.s6.p3') }}</p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s6.h1', prose) }}</h3>
+      <p class="cwh-p">{{ $t('settings.help.codeWorkflow.s6.p3', prose) }}</p>
     </section>
 
     <!-- ── 10 · Plans runs as a bundled plugin ──────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s10.title') }}</h2>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s10.p1')"></p>
-      <p class="cwh-p">{{ $t('settings.help.codeWorkflow.s10.p2') }}</p>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s10.title', prose) }}</h2>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s10.p1', prose)"></p>
+      <p class="cwh-p">{{ $t('settings.help.codeWorkflow.s10.p2', prose) }}</p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s10.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s10.p3')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s10.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s10.p3', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s10.list.retry')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s10.list.repair')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s10.list.retry', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s10.list.repair', prose)"></li>
       </ul>
-      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s10.p4')"></p>
+      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s10.p4', prose)"></p>
     </section>
 
     <!-- ── 7 · The editor window ────────────────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s7.title') }}</h2>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p1')"></p>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s7.title', prose) }}</h2>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p1', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h1') }}</h3>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h1', prose) }}</h3>
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.section') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.key') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.note') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.section', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.key', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s7.sectionTable.note', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in editorSections" :key="row.key">
               <td class="cwh-nowrap">{{ $t(row.section) }}</td>
               <td class="cwh-nowrap"><kbd class="cwh-kbd">{{ row.shortcut }}</kbd></td>
-              <td>{{ $t(`settings.help.codeWorkflow.s7.editorSections.${row.key}.note`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s7.editorSections.${row.key}.note`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s7.note1')"></p>
+      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s7.note1', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h2') }}</h3>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h2', prose) }}</h3>
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s7.actionTable.action') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s7.actionTable.keys') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s7.actionTable.action', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s7.actionTable.keys', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in editorActions" :key="row.key">
-              <td>{{ $t(`settings.help.codeWorkflow.s7.editorActions.${row.key}.action`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s7.editorActions.${row.key}.action`, prose) }}</td>
               <td class="cwh-keycell">
-                <template v-for="(key, i) in row.keys" :key="key">
+                <template v-for="(key, i) in row.keys" :key="i">
                   <span v-if="i > 0" class="cwh-keysep">/</span>
                   <kbd class="cwh-kbd">{{ key }}</kbd>
                 </template>
                 <span v-if="row.note" class="cwh-keynote">{{
-                  $t(`settings.help.codeWorkflow.s7.editorActions.${row.key}.note`)
+                  $t(`settings.help.codeWorkflow.s7.editorActions.${row.key}.note`, prose)
                 }}</span>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s7.note2')"></p>
+      <p class="cwh-note" v-html="$t('settings.help.codeWorkflow.s7.note2', prose)"></p>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h3') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p2')"></p>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p3')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s7.h3', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p2', prose)"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p3', prose)"></p>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s7.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s7.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s7.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s7.callout.text', prose)"></div>
       </div>
 
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p4')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s7.p4', prose)"></p>
     </section>
 
     <!-- ── 8 · File preview and the change record track ─────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s8.title') }}</h2>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s8.title', prose) }}</h2>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s8.h1') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p1')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s8.h1', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p1', prose)"></p>
 
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.kind') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.ext') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.how') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.kind', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.ext', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s8.previewTable.how', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="kind in previewTypes" :key="kind">
               <td class="cwh-nowrap">{{ kind }}</td>
-              <td><code>{{ $t(`settings.help.codeWorkflow.s8.previewTypes.${kind}.ext`) }}</code></td>
-              <td>{{ $t(`settings.help.codeWorkflow.s8.previewTypes.${kind}.how`) }}</td>
+              <td><code>{{ $t(`settings.help.codeWorkflow.s8.previewTypes.${kind}.ext`, prose) }}</code></td>
+              <td>{{ $t(`settings.help.codeWorkflow.s8.previewTypes.${kind}.how`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p2')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p2', prose)"></p>
 
       <div class="cwh-callout">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s8.callout1.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s8.callout1.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s8.callout1.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s8.callout1.text', prose)"></div>
       </div>
 
-      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s8.h2') }}</h3>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p3')"></p>
+      <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s8.h2', prose) }}</h3>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p3', prose)"></p>
       <ul class="cwh-list">
-        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.time')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.action')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.path')"></li>
-        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.who')"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.time', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.action', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.path', prose)"></li>
+        <li v-html="$t('settings.help.codeWorkflow.s8.trackList.who', prose)"></li>
       </ul>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p4')"></p>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s8.p4', prose)"></p>
 
       <div class="cwh-callout">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s8.callout2.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s8.callout2.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s8.callout2.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s8.callout2.text', prose)"></div>
       </div>
     </section>
 
     <!-- ── 9 · Shortcut cheat sheet ─────────────────────────────────── -->
     <section class="cwh-section">
-      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s9.title') }}</h2>
-      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s9.p1')"></p>
+      <h2 class="cwh-h2">{{ $t('settings.help.codeWorkflow.s9.title', prose) }}</h2>
+      <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s9.p1', prose)"></p>
 
       <div class="cwh-tablewrap">
         <table class="cwh-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.keys') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.action') }}</th>
-              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.where') }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.keys', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.action', prose) }}</th>
+              <th>{{ $t('settings.help.codeWorkflow.s9.shortcutTable.where', prose) }}</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in shortcuts" :key="row.key">
               <td class="cwh-keycell">
-                <template v-for="(key, i) in row.keys" :key="key">
+                <template v-for="(key, i) in row.keys" :key="i">
                   <span v-if="i > 0" class="cwh-keysep">/</span>
                   <kbd class="cwh-kbd">{{ key }}</kbd>
                 </template>
               </td>
-              <td>{{ $t(`settings.help.codeWorkflow.s9.rows.${row.key}.action`) }}</td>
-              <td class="cwh-nowrap">{{ $t(`settings.help.codeWorkflow.s9.where.${row.where}`) }}</td>
+              <td>{{ $t(`settings.help.codeWorkflow.s9.rows.${row.key}.action`, prose) }}</td>
+              <td class="cwh-nowrap">{{ $t(`settings.help.codeWorkflow.s9.where.${row.where}`, prose) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="cwh-callout cwh-callout--warn">
-        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s9.callout.title') }}</div>
-        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s9.callout.text')"></div>
+        <div class="cwh-callout-title">{{ $t('settings.help.codeWorkflow.s9.callout.title', prose) }}</div>
+        <div class="cwh-callout-text" v-html="$t('settings.help.codeWorkflow.s9.callout.text', prose)"></div>
       </div>
     </section>
   </div>

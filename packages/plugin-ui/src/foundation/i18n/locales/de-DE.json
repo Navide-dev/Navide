@@ -3734,17 +3734,17 @@
             "git": {
               "title": "Git (Quellcodeverwaltung)",
               "tag": "4. Tab der Seitenleiste",
-              "text": "Ist Git als Navide-Plug-in geladen, lautet der Tooltip <em>Navide-Plug-in: Git · navide.git · Herausgeber: navide · In Navide integriert (⌘4)</em>, sonst <em>Git (⌘4)</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">⌘⇧G</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels."
+              "text": "Ist Git als Navide-Plug-in geladen, lautet der Tooltip <em>Navide-Plug-in: Git · navide.git · Herausgeber: navide · In Navide integriert ({gitTab})</em>, sonst <em>Git ({gitTab})</em>. Im Hauptfenster öffnet <kbd class=\"cwh-kbd\">{gitWindow}</kbd> direkt das <strong>eigene Git-Fenster</strong>; ebenso <em>In neuem Fenster öffnen</em> im Kopf des Panels. Git selbst ist ebenfalls ein mitgeliefertes Navide-Plug-in (<code>navide.git</code>), das neben Plans unter <strong>Einstellungen ▸ Navide-Plug-ins</strong> bei <em>Mitgeliefert</em> steht – es wird also wie jedes Navide-Plug-in aktualisiert, deaktiviert oder kann beim Start scheitern. Git selbst ist ebenfalls ein mitgeliefertes Navide-Plug-in (<code>navide.git</code>), das neben Plans unter <strong>Einstellungen ▸ Navide-Plug-ins</strong> bei <em>Mitgeliefert</em> steht – es wird also wie jedes Navide-Plug-in aktualisiert, deaktiviert oder kann beim Start scheitern."
             },
             "plans": {
               "title": "Plans (Plan-Dokumente)",
               "tag": "5. Tab der Seitenleiste",
-              "text": "Der Tab <kbd class=\"cwh-kbd\">⌘5</kbd> ist nur eine <strong>Liste</strong>. Ein Klick auf einen beliebigen Eintrag öffnet ein eigenes Fenster zur Plan-Prüfung mit dem Titel <code>&lt;Projektordner&gt; — Plans</code>."
+              "text": "Der Tab <kbd class=\"cwh-kbd\">{plansTab}</kbd> ist nur eine <strong>Liste</strong>. Ein Klick auf einen beliebigen Eintrag öffnet ein eigenes Fenster zur Plan-Prüfung mit dem Titel <code>&lt;Projektordner&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (der integrierte Editor)",
               "tag": "nur als eigenes Fenster",
-              "text": "Öffnen Sie sie mit <kbd class=\"cwh-kbd\">⌘⇧I</kbd> oder per Klick auf eine Datei im Explorer. Der Titel lautet <code>&lt;file name&gt; — Mini-IDE</code>, mit vorangestelltem <code>●</code>, solange ungespeicherte Änderungen vorliegen."
+              "text": "Öffnen Sie sie mit <kbd class=\"cwh-kbd\">{miniIde}</kbd> oder per Klick auf eine Datei im Explorer. Der Titel lautet <code>&lt;file name&gt; — Mini-IDE</code>, mit vorangestelltem <code>●</code>, solange ungespeicherte Änderungen vorliegen."
             }
           },
           "callout": {
@@ -3823,7 +3823,7 @@
           "list": {
             "create": "Oben steht das Feld zum Erstellen eines Branches, Platzhalter <em>Name des neuen Branches …</em>, mit <code>＋</code> rechts zum Absenden.",
             "localRow": "Jede Zeile eines lokalen Branches hat vier Schaltflächen: <code>⇔</code> <em>Vergleichen</em>, <code>⇡</code> <em>Rebase auf diesen Branch</em>, <code>⇣</code> <em>In aktuellen Branch mergen</em>, <code>↵</code> <em>Wechseln</em>. Der aktuelle Branch zeigt nur ein <code>✓</code> und keine Schaltflächen.",
-            "context": "Ein Rechtsklick auf eine Branch-Zeile bietet <em>Aktuellen Branch in {'{'}branch{'}'} mergen</em>, <em>Aktuellen Branch in {'{'}branch{'}'} mergen und pushen</em> und <em>Branch löschen</em>.",
+            "context": "Ein Rechtsklick auf eine Branch-Zeile bietet <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> und <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> schaltet zwischen <em>Remote-Branches anzeigen</em> / <em>Remote-Branches ausblenden</em> um; jede Zeile eines Remote-Branches hat ein <code>⬇</code> <em>Lokal auschecken</em>."
           },
           "p2": "Ein Klick auf <code>⇔</code> klappt das Ergebnis direkt im Panel auf, überschrieben mit <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, mit einer Statistikzeile und der Dateiliste.",
@@ -3862,10 +3862,14 @@
               "behavior": "Weitere Pull-/Push-Optionen, siehe unten."
             }
           },
-          "p3": "In <code>▾</code>: <em>↓ Pull</em>, <em>↓ Pull (Rebase)</em>, <em>↑ Push</em>, <em>↑ Push (Force with lease)</em>; sind mehrere Remotes konfiguriert, wird am Ende eine Gruppe <strong>Push zum Remote</strong> mit einer Zeile pro Remote angehängt.",
+          "p3": "In <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; sind mehrere Remotes konfiguriert, wird am Ende eine Gruppe <strong>Push zum Remote</strong> mit einer Zeile pro Remote angehängt.",
           "callout": {
             "title": "Bei einem Authentifizierungsfehler zuerst die Kontoverknüpfung prüfen",
             "text": "Schlägt ein Push fehl, sehen Sie nach, mit welchem Konto die Konto-Pille verknüpft ist, bevor Sie das Remote neu einrichten. Laufen Anmeldeinformationen ab, verweist das Panel Sie direkt auf Einstellungen › Konten, um sie zu erneuern. Das Passwortfeld erwartet ein Personal Access Token, nicht Ihr Anmeldepasswort."
+          },
+          "worktrees": {
+            "p1": "Die Karte <strong>{worktrees}</strong> im Git-Bereich (eingeklappt, bis Sie auf die Überschrift klicken; ab mehr als einem Eintrag erscheint eine Anzahl) listet alle Arbeitsverzeichnisse des Repositorys auf: <code>✦</code> ist das Haupt-Worktree, <code>○</code> sind die übrigen, mit den Badges <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> oder <em>{stale}</em>, wo zutreffend. Eine Zeile bietet <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> und <code>✕</code> <em>{remove}</em>; das Haupt-Worktree lässt sich nicht sperren, verschieben oder entfernen. <em>{prune}</em> und <em>{repair}</em> oben räumen Worktrees auf, deren Ordner gelöscht oder außerhalb von Git verschoben wurde.",
+            "p2": "Zum Hinzufügen geben Sie einen Ordnerpfad ein (oder wählen ihn aus), wählen einen Branch – oder setzen ein Häkchen bei <em>{createBranch}</em> und geben einen neuen Namen ein – und drücken <code>＋</code> <em>{addWorktree}</em>. Damit werden mehrere Bereiche auf getrennten Branches praktikabel: Jeder Bereich bekommt sein eigenes Worktree, und ihre Änderungen landen nie im selben Ordner."
           }
         },
         "s4": {
@@ -3923,14 +3927,14 @@
           "p1": "Pläne liegen nicht alle in einem Ordner. Navide durchsucht <strong>sieben Verzeichnisse</strong> im Arbeitsbereich: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> und <code>docs/reports</code> – dazu dieselben sieben in jedem verschachtelten Git-Repository <strong>bis zu zwei Ebenen tief</strong>. Drei Endungen zählen: <code>.html</code>, <code>.plan.md</code> und <code>.md</code>. Ein HTML-Plan heißt <code>&lt;kebab-slug&gt;_&lt;6 hex digits&gt;.html</code>, ein Markdown-Plan <code>&lt;kebab-slug&gt;.plan.md</code>. Dateien, die mit einem Unterstrich oder einem Punkt beginnen (<code>_spec.md</code>, <code>_template.html</code>), sind Gerüste und erscheinen nie in der Liste.",
           "p2": "Diese Dateien werden <strong>von Agents geschrieben und aktualisiert</strong> – jede Aktion, die Sie im Plan-Fenster ausführen (Status eines Todos ändern, eine Prüfnotiz hinterlassen, genehmigen), landet wieder in derselben Datei. Ihr Teil ist, einen Agent zu bitten, „einen Plan für mich zu erstellen“, und ihn dann im Fenster zu prüfen.",
           "h2": "Die Liste",
-          "p3": "Der Tab <strong>Plans</strong> in der Seitenleiste (<kbd class=\"cwh-kbd\">⌘5</kbd>) und die linke Spalte des Plan-Fensters verwenden dieselbe Liste. Die Werkzeugleiste erscheint erst, wenn es mindestens einen Plan gibt:",
+          "p3": "Der Tab <strong>Plans</strong> in der Seitenleiste (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) und die linke Spalte des Plan-Fensters verwenden dieselbe Liste. Die Werkzeugleiste erscheint erst, wenn es mindestens einen Plan gibt:",
           "listTools": {
             "search": "Das Feld <em>Pläne durchsuchen …</em>, das Titel, Dateiname und Überblick durchsucht.",
             "stage": "Phasenfilter: <em>Alle Phasen</em> / Entwurf / In Prüfung / Genehmigt / In Arbeit / Erledigt / Aufgegeben.",
             "sort": "<em>Sortieren nach</em>: <strong>Titel</strong>, <strong>Zuletzt aktualisiert</strong> oder <strong>Fortschritt</strong>, daneben <code>↑</code> / <code>↓</code> für auf- oder absteigend.",
             "group": "<code>☰</code> wechselt zwischen „nach Phase gruppieren“ und einer einzigen flachen Liste."
           },
-          "p4": "Alle vier Einstellungen werden <strong>pro Arbeitsbereich gespeichert</strong>. Die Abschnitte von oben nach unten: <strong>Zuletzt verwendet</strong> (höchstens 5, angeheftete zuerst); dann – nach Phase gruppiert – ein Abschnitt <strong>Dokumente</strong> und ein Abschnitt pro Phase, die eine flache Liste zu einem einzigen Abschnitt <strong>Alle Pläne</strong> zusammenfasst; dann <strong>Archiviert</strong>; und ganz unten eine Zeile mit Aktionen für Erledigtes (<em>Alle erledigten archivieren</em> / <em>Alle löschen</em>). Jede Zeile trägt ihre Phasen-Pille, einen Fortschrittsbalken <em>{'{'}done{'}'}/{'{'}total{'}'} erledigt</em>, eine Formatkennzeichnung <code>HTML</code> / <code>Markdown</code> und <em>{'{'}count{'}'} für Sie</em> – die Einträge, die nur Sie erledigen können. <strong>Jede Zeile hat rechts außerdem eine Anheftnadel <code>📌</code> und ein Löschen <code>✕</code></strong> (archivierte Zeilen haben nur das Löschen).",
+          "p4": "Alle vier Einstellungen werden <strong>pro Arbeitsbereich gespeichert</strong>. Die Abschnitte von oben nach unten: <strong>Zuletzt verwendet</strong> (höchstens 5, angeheftete zuerst); dann – nach Phase gruppiert – ein Abschnitt <strong>Dokumente</strong> und ein Abschnitt pro Phase, die eine flache Liste zu einem einzigen Abschnitt <strong>Alle Pläne</strong> zusammenfasst; dann <strong>Archiviert</strong>; und ganz unten eine Zeile mit Aktionen für Erledigtes (<em>Alle erledigten archivieren</em> / <em>Alle löschen</em>). Jede Zeile trägt ihre Phasen-Pille, einen Fortschrittsbalken <em>{'{'}done{'}'}/{'{'}total{'}'} erledigt</em>, eine Formatkennzeichnung <code>HTML</code> / <code>Markdown</code> und <em>{'{'}count{'}'} für Sie</em> – die Einträge, die nur Sie erledigen können. <strong>Jede Zeile hat rechts außerdem eine Anheftnadel <code>📌</code> und ein Löschen <code>✕</code></strong> (archivierte Zeilen haben nur das Löschen). Die Pinnadel bedeutet <em>Oben in „Zuletzt verwendet“ anheften</em>. Die Pinnadel bedeutet <em>Oben in „Zuletzt verwendet“ anheften</em>.",
           "callout1": {
             "title": "Dokumente ohne Metadaten erhalten einen eigenen Abschnitt",
             "text": "Ist die Liste nach Phase gruppiert, sammeln sich <strong>einfache Dokumente ohne Plan-Metadaten</strong> in einem Abschnitt <strong>Dokumente</strong>, und jede Zeile ist mit <code>Dokument</code> gekennzeichnet – das hat nichts damit zu tun, ob ein Plan <em>In Arbeit</em> ist. Um eine solche Datei in einen echten Plan umzuwandeln, klicken Sie mit der rechten Maustaste darauf und wählen <strong>Zum Plan machen</strong>: Das fügt eine Plan-Hülle im Entwurfsstadium hinzu und <strong>schreibt den Inhalt nicht um</strong>."
@@ -3986,7 +3990,7 @@
         },
         "s7": {
           "title": "Das Editorfenster",
-          "p1": "Öffnen Sie es mit <kbd class=\"cwh-kbd\">⌘⇧I</kbd> oder per Klick auf eine Datei im Explorer. Ein Monaco-Editor mit Tabs, mit <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> zum Wechseln der Tabs (Zahlen außerhalb des Bereichs landen auf dem letzten Tab).",
+          "p1": "Öffnen Sie es mit <kbd class=\"cwh-kbd\">{miniIde}</kbd> oder per Klick auf eine Datei im Explorer. Ein Monaco-Editor mit Tabs, mit <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> zum Wechseln der Tabs (Zahlen außerhalb des Bereichs landen auf dem letzten Tab).",
           "h1": "Die vier Abschnitte in der linken Leiste",
           "sectionTable": {
             "section": "Abschnitt",
@@ -3998,7 +4002,7 @@
               "note": "Der Dateibaum."
             },
             "search": {
-              "note": "Dateiübergreifend suchen; ⌘⇧H ersetzt dateiübergreifend."
+              "note": "Dateiübergreifend suchen; {replaceInFiles} ersetzt dateiübergreifend."
             },
             "scm": {
               "note": "Die eingebettete Version des Git-Panels, mit einem Badge für die Anzahl der Änderungen."
@@ -4016,7 +4020,7 @@
           "editorActions": {
             "split": {
               "action": "Den Editorbereich teilen",
-              "note": "(Editorgruppe wechseln mit ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(Editorgruppe wechseln mit {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Suchen / Ersetzen"
@@ -4032,7 +4036,7 @@
             },
             "fold": {
               "action": "Einklappen / Aufklappen",
-              "note": "(alles mit ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(alles mit {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Mehrfachcursor: einen darüber oder darunter hinzufügen"
@@ -4051,7 +4055,7 @@
             },
             "aiTerminal": {
               "action": "AI-Terminal ein-/ausblenden",
-              "note": "(oder ⌘⇧A)"
+              "note": "(oder {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Den ausgewählten Code an das AI-Terminal senden",
@@ -4083,7 +4087,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "Das Bild, mit „An Fenster anpassen“ / „Originalgröße“."
+              "how": "Das Bild, mit „{fitWindow}“ / „{actualSize}“."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4132,7 +4136,7 @@
             "text": "Jede andere Art in der Tabelle <strong>öffnet sich direkt in der Vorschau</strong>; html und csv zeigen absichtlich zuerst den Quelltext und wechseln erst, wenn Sie auf <em>Vorschau</em> klicken. Beachten Sie außerdem, dass <code>docx</code>, <code>xlsx</code>, <code>zip</code> und <code>woff</code> auch auf der Binärliste stehen, die Prüfungen für Schriften, Archive und Office aber vor der Binärprüfung laufen, sodass sie ihre eigene Darstellung erhalten, statt auf einen Hexdump zurückzufallen."
           },
           "h2": "Die Änderungsspur",
-          "p3": "Die untere Hälfte des Tabs <strong>Vorschau</strong> im rechten Platz (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) ist <strong>Letzte Änderungen</strong> – was in diesem Arbeitsbereich zuletzt angefasst wurde. Vier Spalten pro Zeile:",
+          "p3": "Die untere Hälfte des Tabs <strong>Vorschau</strong> im rechten Platz (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) ist <strong>Letzte Änderungen</strong> – was in diesem Arbeitsbereich zuletzt angefasst wurde. Vier Spalten pro Zeile:",
           "trackList": {
             "time": "<strong>Zeit</strong> – relativ (<em>jetzt</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>).",
             "action": "<strong>Aktion</strong> – <code>+</code> erstellt, <code>~</code> geändert, <code>−</code> gelöscht, <code>▸</code> angezeigt.",
@@ -4210,7 +4214,7 @@
               "action": "Quellcodeverwaltung / Probleme"
             },
             "fileTabs": {
-              "action": "Zum N-ten Datei-Tab wechseln (⌘1…⌘9)"
+              "action": "Zum N-ten Datei-Tab wechseln ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Den Editorbereich teilen"
@@ -5258,7 +5262,7 @@
             "openHome": "<strong>Home</strong> – einfach das Home-Verzeichnis verwenden.",
             "recent": "Darunter steht die Liste der zuletzt geöffneten Einträge, in der häufig genutzte angeheftet werden können. Ein Rechtsklick auf einen Eintrag bietet <em>Im Standardeditor öffnen</em>, <em>Im Finder anzeigen</em> und <em>Pfad kopieren</em>."
           },
-          "p2": "Danach können Sie jederzeit das Menü verwenden: <strong>Datei ▸ Arbeitsbereich öffnen …</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>Datei ▸ Zuletzt verwendet</strong> oder <strong>Datei ▸ Neues Fenster</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) für ein neues Fenster.",
+          "p2": "Danach können Sie jederzeit das Menü verwenden: <strong>Datei ▸ Arbeitsbereich öffnen …</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>Datei ▸ Zuletzt verwendet</strong> oder <strong>Datei ▸ Neues Fenster</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) für ein neues Fenster.",
           "h2": "Mehrere Arbeitsbereiche in einem Fenster",
           "p3": "Für ein zweites Projekt brauchen Sie kein zweites Fenster. Im Tab „Agents“ der Seitenleiste hat die Kopfzeile des Arbeitsbereichsabschnitts rechts ein <strong>＋</strong>, das dieselbe Auswahl erneut öffnet; das gewählte Projekt wird ins <strong>selbe Fenster</strong> übernommen, und die Seitenleiste erhält eine weitere Arbeitsbereichs-Kopfzeile.",
           "p4": "Klicken Sie auf diese Kopfzeile, um die Ansicht zu wechseln. Wichtig: <strong>Ein Arbeitsbereich, von dem Sie wegwechseln, lässt seine Agents weiterlaufen</strong>, seine Zeile bleibt in der Seitenleiste, und nur seine Bereiche werden vorerst von der Bühne ausgeblendet.",
@@ -5276,7 +5280,7 @@
           "p1": "Der Einstieg ist die Schaltfläche <strong>＋</strong> – es gibt eine in der Arbeitsbereichs-Kopfzeile der Seitenleiste und eine in jeder Gruppen-Kopfzeile (der einzige Unterschied ist, in welcher Gruppe der neue Bereich landet). Ein Klick öffnet ein kleines Menü:",
           "addMenu": {
             "role": "Oben befindet sich das Dropdown <strong>Rolle auswählen …</strong> – wählen Sie eine vordefinierte Rolle.",
-            "cliList": "In der Mitte steht die CLI-Liste; nicht installierte CLIs sind entsprechend markiert.",
+            "cliList": "Darunter ist die Liste in zwei Blöcke mit Überschrift geteilt. <strong>{cli}</strong> enthält die Coding-CLIs; nicht installierte sind entsprechend markiert. <strong>{agents}</strong> listet Ihre dauerhaften Agents (OpenClaw, Hermes Agent) nach Namen auf – ein geöffneter wird angezeigt, ein geschlossener setzt sein Gespräch fort – dazu einen Eintrag <em>Neu …</em>, der zuerst nach einem Namen fragt; ACP-Agents stehen ebenfalls dort. Ein Hinweis unter der Liste erklärt, dass Cloud-Agents wie Grok Bot und dots als Navide-Plug-ins kommen.",
             "terminal": "Unten stehen <strong>Terminal</strong> (ein einfaches Terminal ohne Agent) und <strong>Manuell starten</strong>."
           },
           "p2": "<em>Manuell starten</em> öffnet den vollständigen Dialog, in dem Sie Agent und Rolle wählen, festlegen, ob er zur Bühne hinzugefügt und ob daneben ein Terminal geöffnet wird, und eine Session-ID einfügen können, um eine frühere Unterhaltung direkt fortzusetzen.",
@@ -5289,7 +5293,7 @@
               "action": "Sofort einen öffnen"
             },
             "nthCli": {
-              "action": "Die N-te CLI öffnen"
+              "action": "Die N-te CLI für den nächsten Bereich wählen"
             },
             "rename": {
               "action": "Umbenennen",
@@ -5307,17 +5311,17 @@
           },
           "note": "Ein automatisch benannter Bereich trägt hinter seinem Titel ein winziges <code>◦</code>; ein von Hand umbenannter nicht.",
           "h2": "Das Kontextmenü",
-          "p3": "Rechtsklick auf einen Bereich oder seine Seitenleistenzeile: <em>Fokussieren</em>, <em>Umbenennen</em>, <em>Nachricht senden</em>, <em>Unterbrechen</em>, <em>Rolle erneut anwenden</em>, <em>Entfernen</em>. Davon fügt <em>Nachricht senden</em> die Adresse dieses Bereichs in das Eingabefeld des gerade fokussierten Bereichs ein – der schnellste Einstieg in Nachrichten zwischen Bereichen. Ein Bereich mit Unterbereichen (<code>▸</code>) erhält zusätzlich den Eintrag <em>N Unterbereiche entfernen</em>: Er schließt nur, was dieser Bereich gestartet hat, und lässt den Bereich selbst und alle anderen Bereiche unberührt.",
+          "p3": "Klicken Sie mit rechts auf einen Bereich oder seine Zeile in der Seitenleiste. Die meisten Bereiche bieten <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> und <em>{remove}</em>; einige Einträge erscheinen nur, wenn sie zutreffen – <em>{restore}</em> bei einem minimierten Bereich, <em>{fitWidth}</em>, wenn die Spaltenzahl begrenzt ist, <em>{reconnect}</em> bei einem Bereich, der sein Gespräch verloren hat, und die Agent-Einträge (Wecken, Zeitpläne, Kanäle, Speicherordner, Einstellungen) bei einem Agent-Bereich. <em>{sendMessage}</em> fügt die Adresse dieses Bereichs in das Eingabefeld des Bereichs ein, der gerade den Fokus hat – der schnellste Weg zur bereichsübergreifenden Nachricht. <em>{reclaim}</em> beendet die CLI, um Speicher freizugeben, und hinterlässt eine Karte zum Fortsetzen per Klick (siehe unten). Ein Bereich mit Unterbereichen (<code>▸</code>) bietet zusätzlich <em>{removeChildren}</em>, das nur schließt, was er gestartet hat, und <em>{removeAll}</em>, das ihn samt allem schließt, was er gestartet hat.",
           "h3": "Minimieren und die Platzhalterkarte",
           "p4": "Das <code>⊟</code> in der oberen rechten Ecke eines Bereichs minimiert ihn. Eingeklappt ist seine Seitenleistenzeile mit <strong>Angedockt</strong> markiert, und beim Aufklappen dieser Zeile stehen <em>↑ Wiederherstellen</em> und <em>Entfernen</em> zur Wahl.",
           "p5": "Es gibt noch einen dritten Zustand, die <strong>Platzhalterkarte</strong>: Der Platz bleibt erhalten, zeigt aber eine Karte „↩ Zum Fortsetzen klicken“ mit Titel, Untertitel und Gruppenbezeichnung. Nach einem Neustart der App oder einer Freigabe wegen Inaktivität sieht ein Bereich so aus. Klicken Sie irgendwo auf die Karte, und die CLI setzt dieselbe Unterhaltung fort.",
           "h4": "Automatische Freigabe bei Inaktivität",
           "p6": "Jede laufende CLI belegt Arbeitsspeicher und GPU. Standardmäßig stuft Navide Bereiche, die zu lange ruhig waren, auf eine Platzhalterkarte zurück:",
           "reclaim": {
-            "default": "<strong>Standardmäßig aktiviert</strong>, mit einem Schwellenwert von 30 Minuten, den Sie in den Einstellungen ändern können.",
+            "default": "<strong>Standardmäßig an</strong>, mit einer Schwelle von {defaultMinutes} Minuten, die Sie in den Einstellungen ändern können. Die kürzeste Schwelle ist {minMinutes} Minuten – ein kleinerer Wert wird darauf angehoben.",
             "scan": "Die Prüfung läuft alle 60 Sekunden; das Kriterium ist „keine Ausgabe und keine Eingabe von Ihnen“.",
             "notClose": "<strong>Das ist kein Schließen</strong>: Platz, Name, Nachrichtenadresse und Session bleiben erhalten – ein Klick holt den Bereich zurück.",
-            "exempt": "Bereiche, die eine Pipeline gerade liest, Bereiche mit einem Entwurf im Eingabefeld, Bereiche mit wartenden Nachrichten und der fokussierte Bereich werden nie freigegeben."
+            "exempt": "Ein Bereich wird nie zurückgeholt, solange er den Fokus hat, noch arbeitet oder auf Ihre Antwort wartet, eine Schleife ausführt, von einer Pipeline-Stufe beobachtet oder von einem Manager angesteuert wird, einen Entwurf im Eingabefeld hat oder Nachrichten zur Zustellung warten. Auch ein Bereich ohne fortsetzbare Sitzung bleibt unberührt, da er nicht zurückkommen könnte."
           },
           "note2": "Bei einer Freigabe zeigt das Pipeline-Log der Verlaufsansicht <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>."
         },
@@ -5383,27 +5387,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Baum aus Arbeitsbereichen / Gruppen / Bereichen",
-              "keys": "⌘1"
+              "content": "Baum aus Arbeitsbereichen / Gruppen / Bereichen"
             },
             "pipeline": {
-              "content": "Mehrstufige automatisierte Abläufe",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Mehrstufige automatisierte Abläufe"
             },
             "explorer": {
-              "content": "Datei-Explorer",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "Datei-Explorer"
             },
             "git": {
-              "content": "Versionsverwaltung (siehe Thema „Code-Workflow“)",
-              "keys": "⌘4"
+              "content": "Versionsverwaltung (siehe Thema „Code-Workflow“)"
             },
             "plans": {
-              "content": "Liste der Plan-Dokumente (siehe Thema „Code-Workflow“)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Liste der Plan-Dokumente (siehe Thema „Code-Workflow“)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> klappt die gesamte Seitenleiste ein. Installierte Navide-Plug-ins können weitere Tabs hinzufügen.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> klappt die gesamte Seitenleiste ein. Installierte Navide-Plug-ins können weitere Tabs hinzufügen.",
           "h2": "Die drei Ebenen des Tabs „Agents“",
           "p1": "Von oben nach unten: <strong>Arbeitsbereichszeile → Gruppenzeile → Bereichszeile</strong>.",
           "rows": {
@@ -5428,7 +5427,7 @@
           "foldNote": "<strong>Alt/Option-Klick auf den Aufklapppfeil der Zeile</strong> bewirkt dasselbe wie eine der beiden Falt-Schaltflächen – der Tooltip sagt es: Alt+Klick: alles darin einklappen. Der Faltzustand wird <strong>pro Bereich, zusammen mit dem Projekt</strong> gespeichert und übersteht daher einen Neustart.",
           "h4": "Mehrfachauswahl und Ziehen im Stapel",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd>-Klick: eine einzelne Zeile zur Auswahl hinzufügen.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd>-Klick: eine einzelne Zeile zur Auswahl hinzufügen.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd>-Klick: einen ganzen Bereich auswählen (in der Reihenfolge auf dem Bildschirm, nicht der internen).",
             "batchMenu": "Ein Rechtsklick bei mehreren ausgewählten Zeilen schaltet das Menü in die Stapelform: <em>Ausgewählte unterbrechen</em>, <em>Ausgewählte neu aufbauen</em>, <em>Ausgewählte minimieren</em>, <em>Ausgewählte wiederherstellen</em>, <em>Ausgewählte freigeben</em> (zeigt die Anzahl der infrage kommenden), <em>Ausgewählte stummschalten</em> (oder <em>Stummschaltung der Ausgewählten aufheben</em>, wenn alle ausgewählten Bereiche stumm sind) und <em>Ausgewählte entfernen</em>. Freigeben hält Bereiche zum Fortsetzen verfügbar und überspringt geschützte Bereiche."
           },
@@ -5518,7 +5517,7 @@
               "action": "Einen neuen Bereich öffnen"
             },
             "nthCli": {
-              "action": "Einen Bereich mit der N-ten CLI öffnen"
+              "action": "Die N-te CLI für den nächsten Bereich wählen"
             },
             "closePane": {
               "action": "Den fokussierten Bereich schließen"

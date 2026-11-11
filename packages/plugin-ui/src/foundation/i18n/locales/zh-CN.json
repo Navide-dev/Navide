@@ -3734,17 +3734,17 @@
             "git": {
               "title": "Git（源代码控制）",
               "tag": "侧栏第 4 个标签页",
-              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 (⌘4)</em>；没有加载时写着 <em>Git (⌘4)</em>。在主窗口按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。"
+              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 ({gitTab})</em>；没有加载时写着 <em>Git ({gitTab})</em>。在主窗口按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。"
             },
             "plans": {
               "title": "Plans（计划文档）",
               "tag": "侧栏第 5 个标签页",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> 那个标签页只是一份<strong>清单</strong>。点任一份会弹出独立的 Plan Review 窗口，标题是 <code>&lt;项目文件夹&gt; — Plans</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> 那个标签页只是一份<strong>清单</strong>。点任一份会弹出独立的 Plan Review 窗口，标题是 <code>&lt;项目文件夹&gt; — Plans</code>。"
             },
             "ide": {
               "title": "Mini-IDE（内置编辑器）",
               "tag": "只以独立窗口存在",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 打开，或在 文件总管 点一下文件。标题是 <code>&lt;文件名&gt; — Mini-IDE</code>，有未存盘时前面加 <code>●</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 打开，或在 文件总管 点一下文件。标题是 <code>&lt;文件名&gt; — Mini-IDE</code>，有未存盘时前面加 <code>●</code>。"
             }
           },
           "callout": {
@@ -3823,7 +3823,7 @@
           "list": {
             "create": "最上面是创建分支的输入框，提示 <em>新分支名称…</em>，右边 <code>＋</code> 送出。",
             "localRow": "本地分支每一行有四颗钮：<code>⇔</code> <em>比较</em>、<code>⇡</code> <em>Rebase 到此分支</em>、<code>⇣</code> <em>合并到目前分支</em>、<code>↵</code> <em>切换</em>。目前分支只显示 <code>✓</code>，没有按钮。",
-            "context": "在分支行按右键：<em>将目前分支合并到 {'{'}branch{'}'}</em>、<em>将目前分支合并到 {'{'}branch{'}'} 并推送</em>、<em>删除分支</em>。",
+            "context": "在分支行按右键：<em>{mergeInto}</em>、<em>{mergeIntoPush}</em>、<em>{deleteBranch}</em>。",
             "remote": "<code>⇅</code> 切换 <em>显示远程分支</em> / <em>隐藏远程分支</em>；远程分支每行一颗 <code>⬇</code> <em>在本地检出</em>。"
           },
           "p2": "按 <code>⇔</code> 之后结果直接展在面板里，标成 <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>，附统计行与文件清单。",
@@ -3862,10 +3862,14 @@
               "behavior": "更多拉取／推送选项，见下。"
             }
           },
-          "p3": "<code>▾</code> 里是 <em>↓ 拉取</em>、<em>↓ 拉取（Rebase）</em>、<em>↑ 推送</em>、<em>↑ 推送（Force with lease）</em>；设了不只一个 remote 时，最后还会多一组 <strong>推送到远程</strong>，每个 remote 一行。",
+          "p3": "<code>▾</code> 里是 <em>↓ {pull}</em>、<em>↓ {pullRebase}</em>、<em>↑ {push}</em>、<em>↑ {pushForce}</em>；设了不只一个 remote 时，最后还会多一组 <strong>推送到远程</strong>，每个 remote 一行。",
           "callout": {
             "title": "认证失败先查账号绑定",
             "text": "推不上去时，优先看账号药丸绑的是不是对的账号，而不是重设远程。凭据失效时面板会直接提示到“设置 › 账号”更新。密码字段要贴的是 Personal Access Token，不是登录密码。"
+          },
+          "worktrees": {
+            "p1": "Git 面板里的 <strong>{worktrees}</strong> 卡片（默认收起，点标题展开；超过一个时会显示数量）列出这个仓库的所有工作树：<code>✦</code> 是主工作树，<code>○</code> 是其他的，适用时会带上 <em>{bare}</em>、<em>{detached}</em>、<em>{locked}</em>、<em>{stale}</em> 徽章。每一行有 <code>⧉</code> <em>{openWindow}</em>、<code>◱</code> <em>{reveal}</em>、<code>🔒</code> <em>{lock}</em>、<code>⇄</code> <em>{move}</em>、<code>✕</code> <em>{remove}</em>；主工作树不能锁定、移动或移除。上方的 <em>{prune}</em> 与 <em>{repair}</em> 用来整理文件夹已被删除、或在 Git 之外被移走的工作树。",
+            "p2": "要新增时，输入文件夹路径（或用浏览选择），选一个分支——或勾选 <em>{createBranch}</em> 再输入新名字——然后按 <code>＋</code> <em>{addWorktree}</em>。好几个分格同时在不同分支上工作，靠的就是这个：每个分格各用一个工作树，改动就不会落在同一个文件夹。"
           }
         },
         "s4": {
@@ -3923,14 +3927,14 @@
           "p1": "计划不只放在一个文件夹。Navide 会扫工作区底下这<strong>七个目录</strong>：<code>.agent-team/plans</code>、<code>.agent-team/reports</code>、<code>.claude/loop-reports</code>、<code>.claude/plans</code>、<code>.cursor/plans</code>、<code>docs/plans</code>、<code>docs/reports</code>；工作区里<strong>最多两层深</strong>的嵌套 Git 仓库，同样这七个目录也会被扫到。收三种扩展名 <code>.html</code>、<code>.plan.md</code>、<code>.md</code>：HTML 计划用 <code>&lt;kebab-slug&gt;_&lt;6 位十六进位&gt;.html</code>，Markdown 计划用 <code>&lt;kebab-slug&gt;.plan.md</code>。以底线或点开头的文件（像 <code>_spec.md</code>、<code>_template.html</code>）是基础建设，清单不会列。",
           "p2": "这些文件<strong>由 agent 写、也由 agent 更新</strong>——你在计划窗口里按的每一个动作（改 todo 状态、留审查意见、核准），最后都落回同一个文件。你要做的是叫 agent“帮我建一份计划”，然后在窗口里审。",
           "h2": "清单",
-          "p3": "侧栏 <strong>计划</strong> 标签页（<kbd class=\"cwh-kbd\">⌘5</kbd>）与 Plan 窗口左栏用的是同一份清单。至少有一份计划时才会出现工具栏：",
+          "p3": "侧栏 <strong>计划</strong> 标签页（<kbd class=\"cwh-kbd\">{plansTab}</kbd>）与 Plan 窗口左栏用的是同一份清单。至少有一份计划时才会出现工具栏：",
           "listTools": {
             "search": "搜索框 <em>搜索计划…</em>，比对标题、文件名与 overview。",
             "stage": "依阶段筛选：<em>全部阶段</em> / 草稿 / 审查中 / 已核准 / 进行中 / 已完成 / 已放弃。",
             "sort": "排序 <em>排序方式</em>：<strong>标题</strong>、<strong>最后更新</strong>、<strong>进度</strong> 三种，旁边 <code>↑</code>／<code>↓</code> 换升幂降幂。",
             "group": "<code>☰</code> 在“依 stage 分群”与“单一清单”之间切换。"
           },
-          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。",
+          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。钉选钮的作用是<em>钉选到“最近”最上方</em>。钉选钮的作用是<em>钉选到“最近”最上方</em>。",
           "callout1": {
             "title": "没有 metadata 的文档自成一区",
             "text": "依阶段分组时，<strong>没有计划 metadata 的纯文档</strong>收在 <strong>文档</strong> 这一区，每一行都带 <code>文档</code> 药丸——跟 stage 是不是 <em>进行中</em> 无关。要把这种文件升级成真正的计划，在它上面按右键选 <strong>升级为计划</strong>；升级只是补上一层草稿信封，<strong>不会改写原本的内文</strong>。"
@@ -3986,7 +3990,7 @@
         },
         "s7": {
           "title": "编辑器窗口",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 打开，或在 文件总管 点一下文件。标签页式的 Monaco 编辑器，<kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> 切标签页（超出范围会落到最后一个标签页）。",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 打开，或在 文件总管 点一下文件。标签页式的 Monaco 编辑器，<kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> 切标签页（超出范围会落到最后一个标签页）。",
           "h1": "左侧四个区块",
           "sectionTable": {
             "section": "区块",
@@ -3998,7 +4002,7 @@
               "note": "文件树。"
             },
             "search": {
-              "note": "跨档搜索；⌘⇧H 跨档取代。"
+              "note": "跨档搜索；{replaceInFiles} 跨档取代。"
             },
             "scm": {
               "note": "就是 Git 面板的嵌入版，带变更数徽章。"
@@ -4016,7 +4020,7 @@
           "editorActions": {
             "split": {
               "action": "分割编辑区",
-              "note": "（切换编辑群组 ⌘K ⌘← / ⌘K ⌘→）"
+              "note": "（切换编辑群组 {prevGroup} / {nextGroup}）"
             },
             "findReplace": {
               "action": "寻找 / 取代"
@@ -4032,7 +4036,7 @@
             },
             "fold": {
               "action": "折叠 / 展开",
-              "note": "（全部 ⌘K ⌘0 / ⌘K ⌘J）"
+              "note": "（全部 {foldAll} / {unfoldAll}）"
             },
             "multiCursor": {
               "action": "多光标：上下加一个"
@@ -4051,7 +4055,7 @@
             },
             "aiTerminal": {
               "action": "开关 AI 终端",
-              "note": "（或 ⌘⇧A）"
+              "note": "（或 {aiChatAlt}）"
             },
             "sendSelection": {
               "action": "把选取的代码丢给 AI 终端",
@@ -4083,7 +4087,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "图片，可 符合窗口大小 / 实际大小。"
+              "how": "图片，可切换 {fitWindow} / {actualSize}。"
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4132,7 +4136,7 @@
             "text": "上表其他类型点开<strong>直接是预览</strong>；html 与 csv 刻意先给你源代码，要按 <em>预览</em> 才切过去。另外 <code>docx</code>、<code>xlsx</code>、<code>zip</code>、<code>woff</code> 这些同时也在二进位清单里，但字体、压缩档、Office 的判断排在二进位前面，所以会拿到专属的呈现，不会退成 hex dump。"
           },
           "h2": "变更记录轨",
-          "p3": "右槽 <strong>预览</strong> 标签页（<kbd class=\"cwh-kbd\">⌘⌥V</kbd>）的下半部是 <strong>最近的变更</strong>——这个工作区最近被动过什么。每一行四栏：",
+          "p3": "右槽 <strong>预览</strong> 标签页（<kbd class=\"cwh-kbd\">{previewTab}</kbd>）的下半部是 <strong>最近的变更</strong>——这个工作区最近被动过什么。每一行四栏：",
           "trackList": {
             "time": "<strong>时间</strong>——相对值（<em>刚刚</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>）。",
             "action": "<strong>动作</strong>——<code>+</code> 添加、<code>~</code> 修改、<code>−</code> 删除、<code>▸</code> 显示。",
@@ -4210,7 +4214,7 @@
               "action": "源代码控制 / 问题"
             },
             "fileTabs": {
-              "action": "切到第 N 个文件标签页（⌘1…⌘9）"
+              "action": "切到第 N 个文件标签页（{editorTab1}…{editorTab9}）"
             },
             "split": {
               "action": "分割编辑区"
@@ -5258,7 +5262,7 @@
             "openHome": "<strong>家目录</strong>——直接用家目录。",
             "recent": "下方是最近开过的清单，可以把常用的固定起来。在清单项目上按右键有 <em>用默认编辑器打开</em>、<em>在 Finder 中显示</em>、<em>复制路径</em>。"
           },
-          "p2": "之后随时可以从菜单 <strong>文件 ▸ 打开工作区…</strong>（<kbd class=\"wph-kbd\">⌘O</kbd>）、<strong>文件 ▸ 打开最近使用</strong>，或 <strong>文件 ▸ 开新窗口</strong>（<kbd class=\"wph-kbd\">⌘N</kbd>）开新窗口。",
+          "p2": "之后随时可以从菜单 <strong>文件 ▸ 打开工作区…</strong>（<kbd class=\"wph-kbd\">{openWorkspace}</kbd>）、<strong>文件 ▸ 打开最近使用</strong>，或 <strong>文件 ▸ 开新窗口</strong>（<kbd class=\"wph-kbd\">{newWindow}</kbd>）开新窗口。",
           "h2": "同一个窗口摆多个工作区",
           "p3": "不必为第二个项目另开窗口。在侧栏“代理”标签页里，工作区区段标题右边有一颗 <strong>＋</strong>，按下去会把同一个选择器叫回来；选中的项目会被收进<strong>同一个窗口</strong>，侧栏多出一行工作区标题。",
           "p4": "点该行标题即切换视野。关键在于：<strong>被切走的工作区，它的 agent 继续在跑</strong>，那一行也还在侧栏上，只是舞台上暂时不显示它的分格。",
@@ -5276,7 +5280,7 @@
           "p1": "入口是 <strong>＋</strong> 按钮，侧栏的工作区标题栏和每个群组标题栏上各有一颗（差别只在新分格落在哪个群组）。按下去会开一个小菜单：",
           "addMenu": {
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
-            "cliList": "中间是 CLI 清单，没安装的会标示出来。",
+            "cliList": "下面的列表分成两个带标题的区块。<strong>{cli}</strong> 是写代码用的 CLI，未安装的会标示出来。<strong>{agents}</strong> 按名字列出你的常驻 Agent（OpenClaw、Hermes Agent）：已打开的点击后切换过去，已关闭的点击后接续原来的对话；另有一个<em>新建 …</em>，会先请你起名字。ACP Agent 也列在这一区。列表下方有一行提示：Grok Bot、dots 这类云端 Agent 以 Navide 插件的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。"
           },
           "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
@@ -5289,7 +5293,7 @@
               "action": "直接开一个"
             },
             "nthCli": {
-              "action": "指定第 N 种 CLI"
+              "action": "把下一个分格的 CLI 选为第 N 个"
             },
             "rename": {
               "action": "改名",
@@ -5307,17 +5311,17 @@
           },
           "note": "自动取名的分格，标题后面会有一个小小的 <code>◦</code> 记号；手动改过名字的就没有。",
           "h2": "右键菜单",
-          "p3": "在分格上或侧栏那一行按右键：<em>聚焦</em>、<em>重命名</em>、<em>发送消息</em>、<em>中断</em>、<em>重新应用角色</em>、<em>移除</em>。其中 <em>发送消息</em> 会把那个分格的地址插进你目前焦点分格的输入框——这是跨分格传讯最快的入口。底下有子分格（<code>▸</code>）的分格还会多一项 <em>移除旗下 N 个子分格</em>：只关掉它派生出来的子分格，它自己和其他分格都不动。",
+          "p3": "在分格或它的侧栏行上右键。大部分分格都有 <em>{focus}</em>、<em>{rename}</em>、<em>{mute}</em>、<em>{sendMessage}</em>、<em>{interrupt}</em>、<em>{reapplyRole}</em>、<em>{reclaim}</em>、<em>{remove}</em>；有些项目只在适用时出现：最小化的分格有 <em>{restore}</em>，列宽被限制时有 <em>{fitWidth}</em>，对话断开的分格有 <em>{reconnect}</em>，Agent 分格则多了唤醒、计划任务、频道、记忆文件夹、设置等项目。<em>{sendMessage}</em> 会把那个分格的地址插入你当前焦点分格的输入框，是跨分格传消息最快的入口。<em>{reclaim}</em> 会结束 CLI 以释放内存，留下一张点一下就能接续的卡片（见下文）。下面有子分格（<code>▸</code>）的分格还会多出 <em>{removeChildren}</em>（只关闭它派生出的分格）和 <em>{removeAll}</em>（连同它派生出的分格一起关闭）。",
           "h3": "收合与占位卡",
           "p4": "分格右上角的 <code>⊟</code> 是最小化。收起来之后侧栏那一行会标上 <strong>已收合</strong>，展开后有 <em>↑ 还原</em> 与 <em>移除</em>。",
           "p5": "另外有一种状态叫<strong>占位卡</strong>：位子还在，但显示一张“↩ 点击以续接”的卡片，标题、副标、群组标签全部保留。重开 app、或被闲置回收之后，分格就是这个样子。点卡片任一处，CLI 会接着原本的对话继续。",
           "h4": "闲置自动回收",
           "p6": "每个跑着的 CLI 都占着内存与 GPU。Navide 默认会把太久没动静的分格降级回占位卡：",
           "reclaim": {
-            "default": "<strong>默认打开</strong>，门槛 30 分钟，可在设置里调。",
+            "default": "<strong>默认开启</strong>，阈值 {defaultMinutes} 分钟，可在设置里调整。阈值最短 {minMinutes} 分钟，设得更短会自动调回 {minMinutes} 分钟。",
             "scan": "每 60 秒扫一次，判准是“既没有输出、你也没有打字”。",
             "notClose": "<strong>这不是关闭</strong>：座位、名字、消息地址、session 全部留着，点一下就回来。",
-            "exempt": "正在被 pipeline 读取、输入框里有草稿、有消息排队等着送进来、或正在焦点上的分格，都不会被回收。"
+            "exempt": "以下分格不会被回收：正在焦点上、还在工作或等你回答、正在运行循环、被 pipeline 阶段监视或由 Manager 转派中、输入框里有草稿、有消息排队等着送进来。没有可接续 session 的分格也不会被回收，因为回收后就回不来了。"
           },
           "note2": "回收发生时，历史记录分格的 pipeline log 会出现 <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>。"
         },
@@ -5383,27 +5387,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "工作区 / 群组 / 分格的树状清单",
-              "keys": "⌘1"
+              "content": "工作区 / 群组 / 分格的树状清单"
             },
             "pipeline": {
-              "content": "多阶段自动流程",
-              "keys": "⌘2、⌘⇧Y"
+              "content": "多阶段自动流程"
             },
             "explorer": {
-              "content": "文件总管",
-              "keys": "⌘3、⌘⇧E"
+              "content": "文件总管"
             },
             "git": {
-              "content": "版本控制（见“代码工作流”标签页）",
-              "keys": "⌘4"
+              "content": "版本控制（见“代码工作流”标签页）"
             },
             "plans": {
-              "content": "计划文档清单（见“代码工作流”标签页）",
-              "keys": "⌘5、⌘⇧D"
+              "content": "计划文档清单（见“代码工作流”标签页）"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> 收合整条侧栏。安装的 Navide 插件可能再增加标签页。",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> 收合整条侧栏。安装的 Navide 插件可能再增加标签页。",
           "h2": "“代理”标签页的三层结构",
           "p1": "由上而下是<strong>工作区行 → 群组行 → 分格行</strong>。",
           "rows": {
@@ -5428,7 +5427,7 @@
           "foldNote": "两颗折叠钮的位置上，<strong>Alt／Option＋点击那一行的展开箭号</strong>也做同一件事（提示写着“Alt+点击：收合底下全部”）。收合状态是<strong>逐分格记在项目里</strong>的，重开 Navide 之后还在。",
           "h4": "多选与批量拖曳",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> 点：加菜单一行。",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> 点：加选单独一行。",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> 点：选整段区间（依画面上实际显示的顺序，不是内部顺序）。",
             "batchMenu": "多选之后按右键，菜单会变成批量版：<em>中断所选</em>、<em>重建所选</em>、<em>最小化所选</em>、<em>还原所选</em>、<em>回收所选</em>（显示可回收数量）、<em>静音所选通知</em>（全部已静音时改为取消静音）及<em>移除所选</em>。回收会保留可接续的分格，并略过受保护的分格。"
           },
@@ -5518,7 +5517,7 @@
               "action": "开一个新分格"
             },
             "nthCli": {
-              "action": "指定第 N 种 CLI 开分格"
+              "action": "把下一个分格的 CLI 选为第 N 个"
             },
             "closePane": {
               "action": "关闭焦点分格"

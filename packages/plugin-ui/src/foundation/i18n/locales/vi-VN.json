@@ -3734,17 +3734,17 @@
             "git": {
               "title": "Git (quản lý mã nguồn)",
               "tag": "tab thứ 4 trên thanh bên",
-              "text": "Khi Git được tải dưới dạng plugin Navide, chú thích ghi <em>Plugin Navide: Git · navide.git · Nhà phát hành: navide · Tích hợp sẵn trong Navide (⌘4)</em>; nếu không, chú thích ghi <em>Git (⌘4)</em>. Trong cửa sổ chính, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> mở thẳng <strong>cửa sổ Git riêng</strong>; <em>Mở trong cửa sổ mới</em> ở đầu bảng cũng vậy."
+              "text": "Khi Git được tải dưới dạng plugin Navide, chú thích ghi <em>Plugin Navide: Git · navide.git · Nhà phát hành: navide · Tích hợp sẵn trong Navide ({gitTab})</em>; nếu không, chú thích ghi <em>Git ({gitTab})</em>. Trong cửa sổ chính, <kbd class=\"cwh-kbd\">{gitWindow}</kbd> mở thẳng <strong>cửa sổ Git riêng</strong>; <em>Mở trong cửa sổ mới</em> ở đầu bảng cũng vậy. Bản thân Git cũng là một plugin Navide đi kèm (<code>navide.git</code>), được liệt kê cạnh Plans trong <em>Đi kèm</em> ở <strong>Cài đặt ▸ Plugin Navide</strong>, nên nó cũng được cập nhật, tắt hoặc có thể khởi động lỗi như mọi plugin Navide khác. Bản thân Git cũng là một plugin Navide đi kèm (<code>navide.git</code>), được liệt kê cạnh Plans trong <em>Đi kèm</em> ở <strong>Cài đặt ▸ Plugin Navide</strong>, nên nó cũng được cập nhật, tắt hoặc có thể khởi động lỗi như mọi plugin Navide khác."
             },
             "plans": {
               "title": "Plans (tài liệu Plan)",
               "tag": "tab thứ 5 trên thanh bên",
-              "text": "Tab <kbd class=\"cwh-kbd\">⌘5</kbd> chỉ là một <strong>danh sách</strong>. Nhấp vào bất kỳ mục nào sẽ mở một cửa sổ xem xét Plan riêng có tiêu đề <code>&lt;thư mục dự án&gt; — Plans</code>."
+              "text": "Tab <kbd class=\"cwh-kbd\">{plansTab}</kbd> chỉ là một <strong>danh sách</strong>. Nhấp vào bất kỳ mục nào sẽ mở một cửa sổ xem xét Plan riêng có tiêu đề <code>&lt;thư mục dự án&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (trình soạn thảo tích hợp)",
               "tag": "chỉ là cửa sổ riêng",
-              "text": "Mở bằng <kbd class=\"cwh-kbd\">⌘⇧I</kbd>, hoặc nhấp vào một tệp trong trình duyệt tệp. Tiêu đề là <code>&lt;tên tệp&gt; — Mini-IDE</code>, có thêm <code>●</code> phía trước khi còn thay đổi chưa lưu."
+              "text": "Mở bằng <kbd class=\"cwh-kbd\">{miniIde}</kbd>, hoặc nhấp vào một tệp trong trình duyệt tệp. Tiêu đề là <code>&lt;tên tệp&gt; — Mini-IDE</code>, có thêm <code>●</code> phía trước khi còn thay đổi chưa lưu."
             }
           },
           "callout": {
@@ -3823,7 +3823,7 @@
           "list": {
             "create": "Trên cùng là ô tạo nhánh, chữ gợi ý <em>Tên nhánh mới…</em>, có <code>＋</code> bên phải để gửi.",
             "localRow": "Mỗi hàng nhánh cục bộ có bốn nút: <code>⇔</code> <em>So sánh</em>, <code>⇡</code> <em>Rebase lên</em>, <code>⇣</code> <em>Merge vào nhánh hiện tại</em>, <code>↵</code> <em>Chuyển</em>. Nhánh hiện tại chỉ có <code>✓</code> và không có nút nào.",
-            "context": "Nhấp chuột phải vào hàng nhánh để có <em>Merge nhánh hiện tại vào {'{'}branch{'}'}</em>, <em>Merge nhánh hiện tại vào {'{'}branch{'}'} rồi push</em> và <em>Xóa nhánh</em>.",
+            "context": "Nhấp chuột phải vào hàng nhánh để có <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> và <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> bật tắt giữa <em>Hiện nhánh remote</em> / <em>Ẩn nhánh remote</em>; mỗi hàng nhánh remote có <code>⬇</code> <em>Checkout cục bộ</em>."
           },
           "p2": "Nhấp <code>⇔</code> sẽ mở rộng kết quả ngay trong bảng, với tiêu đề <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, một dòng thống kê và danh sách tệp.",
@@ -3862,10 +3862,14 @@
               "behavior": "Các tùy chọn pull/push khác, xem bên dưới."
             }
           },
-          "p3": "Bên trong <code>▾</code>: <em>↓ Pull</em>, <em>↓ Pull (rebase)</em>, <em>↑ Push</em>, <em>↑ Push (force with lease)</em>; nếu có nhiều remote được cấu hình, cuối danh sách sẽ có thêm nhóm <strong>Push lên remote</strong> với mỗi remote một hàng.",
+          "p3": "Bên trong <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; nếu có nhiều remote được cấu hình, cuối danh sách sẽ có thêm nhóm <strong>Push lên remote</strong> với mỗi remote một hàng.",
           "callout": {
             "title": "Khi xác thực thất bại, hãy kiểm tra liên kết tài khoản trước",
             "text": "Khi push không thành công, hãy xem nhãn tài khoản đang liên kết với tài khoản nào trước khi bắt tay cấu hình lại remote. Khi thông tin xác thực hết hạn, bảng sẽ đưa bạn thẳng tới Cài đặt › Tài khoản để gia hạn. Ô mật khẩu cần Personal Access Token, không phải mật khẩu đăng nhập của bạn."
+          },
+          "worktrees": {
+            "p1": "Thẻ <strong>{worktrees}</strong> trong bảng Git (thu gọn cho đến khi bạn nhấp vào tiêu đề; có từ hai mục trở lên thì hiện số lượng) liệt kê mọi cây làm việc của repository: <code>✦</code> là cây chính, <code>○</code> là các cây khác, kèm huy hiệu <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> hoặc <em>{stale}</em> khi phù hợp. Mỗi hàng có <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> và <code>✕</code> <em>{remove}</em>; worktree chính không thể khóa, di chuyển hay gỡ. <em>{prune}</em> và <em>{repair}</em> ở trên cùng dọn các worktree có thư mục đã bị xóa hoặc bị chuyển đi bên ngoài Git.",
+            "p2": "Để thêm, nhập đường dẫn thư mục (hoặc duyệt chọn), chọn một nhánh — hoặc đánh dấu <em>{createBranch}</em> rồi nhập tên mới — sau đó bấm <code>＋</code> <em>{addWorktree}</em>. Nhờ vậy nhiều pane có thể làm việc trên các nhánh khác nhau cùng lúc: mỗi pane một worktree riêng thì thay đổi không bao giờ rơi vào cùng một thư mục."
           }
         },
         "s4": {
@@ -3923,14 +3927,14 @@
           "p1": "Các Plan không nằm chung một thư mục. Navide quét <strong>bảy thư mục</strong> trong workspace: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> và <code>docs/reports</code> — cùng bảy thư mục đó bên trong mọi kho Git lồng nhau <strong>sâu tối đa hai cấp</strong>. Có ba đuôi được tính: <code>.html</code>, <code>.plan.md</code> và <code>.md</code>. Plan HTML có tên <code>&lt;kebab-slug&gt;_&lt;6 chữ số hex&gt;.html</code>, Plan Markdown có tên <code>&lt;kebab-slug&gt;.plan.md</code>. Tệp bắt đầu bằng dấu gạch dưới hoặc dấu chấm (<code>_spec.md</code>, <code>_template.html</code>) là khung mẫu và không bao giờ xuất hiện trong danh sách.",
           "p2": "Các tệp này <strong>do agent viết và cập nhật</strong> — mọi thao tác bạn làm trong cửa sổ Plan (đổi trạng thái một việc cần làm, để lại ghi chú xem xét, phê duyệt) đều được ghi lại vào chính tệp đó. Phần của bạn là nhờ agent “lập Plan giúp tôi” rồi xem xét nó trong cửa sổ.",
           "h2": "Danh sách",
-          "p3": "Tab <strong>Plans</strong> trên thanh bên (<kbd class=\"cwh-kbd\">⌘5</kbd>) và cột bên trái của cửa sổ Plan dùng cùng một danh sách. Thanh công cụ chỉ xuất hiện khi có ít nhất một Plan:",
+          "p3": "Tab <strong>Plans</strong> trên thanh bên (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) và cột bên trái của cửa sổ Plan dùng cùng một danh sách. Thanh công cụ chỉ xuất hiện khi có ít nhất một Plan:",
           "listTools": {
             "search": "Ô <em>Tìm Plan…</em>, khớp theo tiêu đề, tên tệp và phần tổng quan.",
             "stage": "Bộ lọc giai đoạn: <em>Mọi giai đoạn</em> / Bản nháp / Đang xem xét / Đã duyệt / Đang thực hiện / Hoàn tất / Đã bỏ.",
             "sort": "<em>Sắp xếp theo</em>: <strong>Tiêu đề</strong>, <strong>Cập nhật gần nhất</strong> hoặc <strong>Tiến độ</strong>, bên cạnh có <code>↑</code> / <code>↓</code> để sắp tăng hoặc giảm.",
             "group": "<code>☰</code> chuyển giữa “nhóm theo giai đoạn” và một danh sách phẳng duy nhất."
           },
-          "p4": "Cả bốn lựa chọn đều được <strong>ghi nhớ theo từng workspace</strong>. Các phần, từ trên xuống: <strong>Gần đây</strong> (tối đa 5, mục đã ghim đứng trước); rồi — khi nhóm theo giai đoạn — một phần <strong>Tài liệu</strong> và mỗi giai đoạn một phần, còn danh sách phẳng gộp tất cả thành một phần <strong>Mọi Plan</strong>; sau đó là <strong>Đã lưu trữ</strong>; và ở cuối là một hàng thao tác cho các mục đã xong (<em>Lưu trữ mọi Plan đã xong</em> / <em>Xóa tất cả</em>). Mỗi hàng có nhãn giai đoạn, thanh tiến độ <em>Đã xong {'{'}done{'}'}/{'{'}total{'}'}</em>, thẻ định dạng <code>HTML</code> / <code>Markdown</code> và <em>{'{'}count{'}'} việc cho bạn</em> — các mục chỉ bạn mới xử lý được. <strong>Mỗi hàng còn có ghim <code>📌</code> và nút xóa <code>✕</code> ở bên phải</strong> (hàng đã lưu trữ chỉ có nút xóa).",
+          "p4": "Cả bốn lựa chọn đều được <strong>ghi nhớ theo từng workspace</strong>. Các phần, từ trên xuống: <strong>Gần đây</strong> (tối đa 5, mục đã ghim đứng trước); rồi — khi nhóm theo giai đoạn — một phần <strong>Tài liệu</strong> và mỗi giai đoạn một phần, còn danh sách phẳng gộp tất cả thành một phần <strong>Mọi Plan</strong>; sau đó là <strong>Đã lưu trữ</strong>; và ở cuối là một hàng thao tác cho các mục đã xong (<em>Lưu trữ mọi Plan đã xong</em> / <em>Xóa tất cả</em>). Mỗi hàng có nhãn giai đoạn, thanh tiến độ <em>Đã xong {'{'}done{'}'}/{'{'}total{'}'}</em>, thẻ định dạng <code>HTML</code> / <code>Markdown</code> và <em>{'{'}count{'}'} việc cho bạn</em> — các mục chỉ bạn mới xử lý được. <strong>Mỗi hàng còn có ghim <code>📌</code> và nút xóa <code>✕</code> ở bên phải</strong> (hàng đã lưu trữ chỉ có nút xóa). Nút ghim dùng để <em>Ghim lên đầu mục gần đây</em>. Nút ghim dùng để <em>Ghim lên đầu mục gần đây</em>.",
           "callout1": {
             "title": "Tài liệu không có siêu dữ liệu có phần riêng",
             "text": "Khi danh sách được nhóm theo giai đoạn, <strong>các tài liệu thường không có siêu dữ liệu Plan</strong> được gom vào phần <strong>Tài liệu</strong> và mỗi hàng được gắn thẻ <code>Tài liệu</code> — điều này không liên quan gì đến việc một giai đoạn có đang <em>in-progress</em> hay không. Để biến một tệp như vậy thành Plan thật sự, hãy nhấp chuột phải vào nó và chọn <strong>Nâng thành Plan</strong>: thao tác này thêm lớp vỏ Plan ở giai đoạn bản nháp và <strong>không viết lại nội dung</strong>."
@@ -3986,7 +3990,7 @@
         },
         "s7": {
           "title": "Cửa sổ trình soạn thảo",
-          "p1": "Mở bằng <kbd class=\"cwh-kbd\">⌘⇧I</kbd>, hoặc nhấp vào một tệp trong trình duyệt tệp. Đây là trình soạn thảo Monaco nhiều tab, với <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> để chuyển tab (số vượt quá số tab sẽ tới tab cuối).",
+          "p1": "Mở bằng <kbd class=\"cwh-kbd\">{miniIde}</kbd>, hoặc nhấp vào một tệp trong trình duyệt tệp. Đây là trình soạn thảo Monaco nhiều tab, với <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> để chuyển tab (số vượt quá số tab sẽ tới tab cuối).",
           "h1": "Bốn phần trên dải bên trái",
           "sectionTable": {
             "section": "Phần",
@@ -3998,7 +4002,7 @@
               "note": "Cây tệp."
             },
             "search": {
-              "note": "Tìm trong các tệp; ⌘⇧H để thay thế trong các tệp."
+              "note": "Tìm trong các tệp; {replaceInFiles} để thay thế trong các tệp."
             },
             "scm": {
               "note": "Phiên bản nhúng của bảng Git, có huy hiệu số thay đổi."
@@ -4016,7 +4020,7 @@
           "editorActions": {
             "split": {
               "action": "Chia khu vực soạn thảo",
-              "note": "(chuyển nhóm trình soạn thảo bằng ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(chuyển nhóm trình soạn thảo bằng {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Tìm / Thay thế"
@@ -4032,7 +4036,7 @@
             },
             "fold": {
               "action": "Thu gọn / mở rộng",
-              "note": "(tất cả bằng ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(tất cả bằng {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Nhiều con trỏ: thêm một con trỏ ở trên hoặc dưới"
@@ -4051,7 +4055,7 @@
             },
             "aiTerminal": {
               "action": "Bật tắt Terminal AI",
-              "note": "(hoặc ⌘⇧A)"
+              "note": "(hoặc {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Gửi đoạn mã đang chọn tới Terminal AI",
@@ -4083,7 +4087,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "Hình ảnh, với Vừa cửa sổ / Kích thước thực."
+              "how": "Hình ảnh, với {fitWindow} / {actualSize}."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4132,7 +4136,7 @@
             "text": "Mọi loại khác trong bảng đều <strong>mở thẳng vào bản xem trước</strong>; html và csv cố ý hiện mã nguồn trước và chỉ chuyển khi bạn nhấp <em>Xem trước</em>. Lưu ý thêm rằng <code>docx</code>, <code>xlsx</code>, <code>zip</code> và <code>woff</code> cũng có trong danh sách nhị phân, nhưng phần kiểm tra phông chữ, tệp nén và Office chạy trước phần kiểm tra nhị phân, nên chúng được hiển thị theo cách riêng thay vì rơi về hex dump."
           },
           "h2": "Dòng thời gian thay đổi",
-          "p3": "Nửa dưới của tab <strong>Xem trước</strong> ở vị trí bên phải (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) là <strong>Thay đổi gần đây</strong> — những gì đã bị động tới gần đây trong workspace này. Mỗi hàng có bốn cột:",
+          "p3": "Nửa dưới của tab <strong>Xem trước</strong> ở vị trí bên phải (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) là <strong>Thay đổi gần đây</strong> — những gì đã bị động tới gần đây trong workspace này. Mỗi hàng có bốn cột:",
           "trackList": {
             "time": "<strong>Thời gian</strong> — tương đối (<em>vừa xong</em> / <em>{'{'}n{'}'} phút</em> / <em>{'{'}n{'}'} giờ</em> / <em>{'{'}n{'}'} ngày</em>).",
             "action": "<strong>Thao tác</strong> — <code>+</code> tạo, <code>~</code> sửa, <code>−</code> xóa, <code>▸</code> hiển thị.",
@@ -4210,7 +4214,7 @@
               "action": "Quản lý mã nguồn / Vấn đề"
             },
             "fileTabs": {
-              "action": "Chuyển tới tab tệp thứ N (⌘1…⌘9)"
+              "action": "Chuyển tới tab tệp thứ N ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Chia khu vực soạn thảo"
@@ -5258,7 +5262,7 @@
             "openHome": "<strong>Thư mục chính</strong> — dùng luôn thư mục home.",
             "recent": "Bên dưới là danh sách mở gần đây, có thể ghim các mục hay dùng. Nhấp chuột phải vào một mục sẽ có <em>Mở trong trình soạn thảo mặc định</em>, <em>Hiện trong Finder</em> và <em>Sao chép đường dẫn</em>."
           },
-          "p2": "Sau đó bạn luôn có thể dùng menu: <strong>Tệp ▸ Mở workspace…</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>Tệp ▸ Mở gần đây</strong>, hoặc <strong>Tệp ▸ Cửa sổ mới</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) để mở cửa sổ mới.",
+          "p2": "Sau đó bạn luôn có thể dùng menu: <strong>Tệp ▸ Mở workspace…</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>Tệp ▸ Mở gần đây</strong>, hoặc <strong>Tệp ▸ Cửa sổ mới</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) để mở cửa sổ mới.",
           "h2": "Nhiều workspace trong một cửa sổ",
           "p3": "Bạn không cần cửa sổ thứ hai cho dự án thứ hai. Trong tab Agents ở thanh bên, phần đầu mục workspace có một nút <strong>＋</strong> ở bên phải để mở lại cùng bộ chọn; dự án bạn chọn sẽ được đưa vào <strong>cùng cửa sổ</strong>, thêm một hàng tiêu đề workspace nữa vào thanh bên.",
           "p4": "Nhấp vào hàng tiêu đề đó để chuyển chế độ xem. Điểm quan trọng: <strong>workspace bạn chuyển đi vẫn để các agent tiếp tục chạy</strong>, hàng của nó vẫn ở thanh bên, chỉ các pane của nó tạm thời bị ẩn khỏi khu vực chính.",
@@ -5276,7 +5280,7 @@
           "p1": "Điểm vào là nút <strong>＋</strong> — có một nút ở hàng tiêu đề workspace trên thanh bên và một nút ở mỗi hàng tiêu đề nhóm (khác nhau duy nhất ở chỗ pane mới rơi vào nhóm nào). Nhấn nút sẽ mở một menu nhỏ:",
           "addMenu": {
             "role": "Trên cùng là danh sách thả xuống <strong>Chọn vai trò…</strong> — chọn một vai trò có sẵn.",
-            "cliList": "Ở giữa là danh sách CLI, những CLI chưa cài được đánh dấu.",
+            "cliList": "Bên dưới, danh sách chia thành hai khối có tiêu đề. <strong>{cli}</strong> gồm các CLI lập trình, CLI nào chưa cài sẽ được đánh dấu. <strong>{agents}</strong> liệt kê các agent thường trực của bạn (OpenClaw, Hermes Agent) theo tên: chọn agent đang mở sẽ chuyển sang nó, chọn agent đã đóng sẽ tiếp tục cuộc trò chuyện cũ. Còn có mục <em>Mới …</em> hỏi tên trước, và các agent ACP cũng nằm ở khối này. Một ghi chú dưới danh sách cho biết các agent đám mây như Grok Bot và dots được cung cấp dưới dạng plugin Navide.",
             "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>."
           },
           "p2": "<em>Khởi chạy thủ công…</em> mở hộp thoại đầy đủ, nơi bạn có thể chọn agent và vai trò, quyết định có thêm vào khu vực chính hay không, có mở terminal bên cạnh hay không, và dán id session để tiếp tục ngay một cuộc trò chuyện trước.",
@@ -5289,7 +5293,7 @@
               "action": "Mở ngay một pane"
             },
             "nthCli": {
-              "action": "Mở CLI thứ N"
+              "action": "Chọn CLI thứ N cho pane tiếp theo"
             },
             "rename": {
               "action": "Đổi tên",
@@ -5307,17 +5311,17 @@
           },
           "note": "Pane được đặt tên tự động có một dấu <code>◦</code> nhỏ sau tiêu đề; pane bạn đổi tên thủ công thì không có.",
           "h2": "Menu ngữ cảnh",
-          "p3": "Nhấp chuột phải vào một pane hoặc hàng của nó trên thanh bên: <em>Chọn</em>, <em>Đổi tên</em>, <em>Gửi tin nhắn</em>, <em>Ngắt</em>, <em>Áp dụng lại vai trò</em>, <em>Gỡ</em>. Trong đó, <em>Gửi tin nhắn</em> chèn địa chỉ của pane đó vào ô nhập của pane bạn đang chọn — cách nhanh nhất để nhắn tin giữa các pane. Pane có pane con bên dưới (<code>▸</code>) còn có mục <em>Gỡ N pane con</em>: nó chỉ đóng những gì pane đó đã mở, giữ nguyên chính pane đó và mọi pane khác.",
+          "p3": "Nhấp chuột phải vào một pane hoặc hàng của nó ở thanh bên. Phần lớn pane có <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> và <em>{remove}</em>; một số mục chỉ hiện khi áp dụng được: <em>{restore}</em> ở pane đã thu nhỏ, <em>{fitWidth}</em> khi số cột của pane bị giới hạn, <em>{reconnect}</em> ở pane bị mất cuộc trò chuyện, và các mục agent (đánh thức, lịch, kênh, thư mục bộ nhớ, cài đặt) ở pane Agent. <em>{sendMessage}</em> chèn địa chỉ của pane đó vào ô nhập của pane bạn đang chọn — cách nhanh nhất để nhắn tin giữa các pane. <em>{reclaim}</em> kết thúc CLI để giải phóng bộ nhớ và để lại một thẻ bấm để tiếp tục (xem bên dưới). Pane có pane con bên dưới (<code>▸</code>) còn có <em>{removeChildren}</em>, chỉ đóng những gì pane đó đã mở, và <em>{removeAll}</em>, đóng pane đó cùng mọi thứ nó đã mở.",
           "h3": "Thu nhỏ và thẻ giữ chỗ",
           "p4": "Nút <code>⊟</code> ở góc trên bên phải của pane sẽ thu nhỏ nó. Khi đã thu gọn, hàng của nó trên thanh bên được đánh dấu <strong>Đã neo</strong>, và mở rộng hàng đó sẽ có <em>↑ Khôi phục</em> và <em>Gỡ</em>.",
           "p5": "Còn có trạng thái thứ ba, <strong>thẻ giữ chỗ</strong>: vị trí vẫn còn nhưng hiển thị thẻ “↩ Nhấp để tiếp tục”, giữ nguyên tiêu đề, tiêu đề phụ và nhãn nhóm. Sau khi khởi động lại ứng dụng, hoặc sau khi bị thu hồi do rảnh, pane sẽ trông như vậy. Nhấp vào bất kỳ đâu trên thẻ và CLI sẽ tiếp tục cùng cuộc trò chuyện.",
           "h4": "Tự động thu hồi khi rảnh",
           "p6": "Mỗi CLI đang chạy đều chiếm bộ nhớ và GPU. Theo mặc định, Navide đưa các pane im lặng quá lâu trở về thẻ giữ chỗ:",
           "reclaim": {
-            "default": "<strong>Bật theo mặc định</strong>, ngưỡng 30 phút, có thể đổi trong Cài đặt.",
+            "default": "<strong>Bật sẵn theo mặc định</strong>, ngưỡng {defaultMinutes} phút, có thể đổi trong Cài đặt. Ngưỡng ngắn nhất là {minMinutes} phút — giá trị nhỏ hơn sẽ được nâng lên mức đó.",
             "scan": "Quét mỗi 60 giây, tiêu chí là “không có đầu ra và bạn không gõ gì”.",
             "notClose": "<strong>Đây không phải là đóng</strong>: vị trí, tên, địa chỉ nhắn tin và session đều được giữ lại — một cú nhấp là quay lại.",
-            "exempt": "Không bao giờ thu hồi pane mà pipeline đang đọc, pane có bản nháp trong ô nhập, pane có tin nhắn đang chờ chuyển và pane đang được chọn."
+            "exempt": "Pane không bao giờ bị thu hồi khi đang được chọn, vẫn đang làm việc hoặc chờ bạn trả lời, đang chạy vòng lặp, đang được một giai đoạn pipeline theo dõi hoặc Manager điều phối, có bản nháp trong ô nhập, hoặc có tin nhắn đang chờ gửi vào. Pane không có phiên để tiếp tục cũng được giữ nguyên, vì thu hồi rồi sẽ không mở lại được."
           },
           "note2": "Khi có thu hồi, nhật ký pipeline trong chế độ xem Lịch sử sẽ hiện <code>♻ đã thu hồi N CLI pane đang rảnh — nhấp để tiếp tục</code>."
         },
@@ -5383,27 +5387,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Cây workspace / nhóm / pane",
-              "keys": "⌘1"
+              "content": "Cây workspace / nhóm / pane"
             },
             "pipeline": {
-              "content": "Quy trình tự động nhiều giai đoạn",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Quy trình tự động nhiều giai đoạn"
             },
             "explorer": {
-              "content": "Trình duyệt tệp",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "Trình duyệt tệp"
             },
             "git": {
-              "content": "Quản lý phiên bản (xem chủ đề “Quy trình làm việc với code”)",
-              "keys": "⌘4"
+              "content": "Quản lý phiên bản (xem chủ đề “Quy trình làm việc với code”)"
             },
             "plans": {
-              "content": "Danh sách tài liệu Plan (xem chủ đề “Quy trình làm việc với code”)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Danh sách tài liệu Plan (xem chủ đề “Quy trình làm việc với code”)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> thu gọn toàn bộ thanh bên. Các plugin Navide đã cài có thể thêm tab khác.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> thu gọn toàn bộ thanh bên. Các plugin Navide đã cài có thể thêm tab khác.",
           "h2": "Ba cấp của tab Agents",
           "p1": "Từ trên xuống: <strong>hàng workspace → hàng nhóm → hàng pane</strong>.",
           "rows": {
@@ -5428,7 +5427,7 @@
           "foldNote": "<strong>Alt/Option + nhấp vào mũi tên mở rộng của hàng</strong> có tác dụng như hai nút gập — chú thích cũng nói vậy: Alt+nhấp: thu gọn mọi thứ bên trong. Trạng thái gập được lưu <strong>theo từng pane, cùng với dự án</strong>, nên vẫn còn sau khi khởi động lại.",
           "h4": "Chọn nhiều và kéo hàng loạt",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> + nhấp: thêm một hàng vào vùng chọn.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> + nhấp: thêm một hàng vào vùng chọn.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> + nhấp: chọn cả một dải (theo thứ tự trên màn hình, không phải thứ tự nội bộ).",
             "batchMenu": "Nhấp chuột phải khi đang chọn nhiều hàng sẽ chuyển menu sang dạng hàng loạt: <em>Ngắt các mục đã chọn</em>, <em>Dựng lại các mục đã chọn</em>, <em>Thu nhỏ các mục đã chọn</em>, <em>Khôi phục các mục đã chọn</em>, <em>Thu hồi các mục đã chọn</em> (hiện số mục đủ điều kiện), <em>Tắt thông báo của các mục đã chọn</em> (hoặc bật lại khi mọi pane đã chọn đều đang tắt) và <em>Gỡ các mục đã chọn</em>. Thu hồi giữ pane sẵn sàng để tiếp tục và bỏ qua các pane được bảo vệ."
           },
@@ -5518,7 +5517,7 @@
               "action": "Mở pane mới"
             },
             "nthCli": {
-              "action": "Mở pane với CLI thứ N"
+              "action": "Chọn CLI thứ N cho pane tiếp theo"
             },
             "closePane": {
               "action": "Đóng pane đang chọn"
