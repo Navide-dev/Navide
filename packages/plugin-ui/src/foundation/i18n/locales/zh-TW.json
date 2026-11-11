@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "進度",
-      "compare": "比較"
+      "compare": "比較",
+      "merge": "合併"
     },
     "compare": {
       "rate": "{n} 星",
@@ -13556,6 +13557,42 @@
       "truncated": "差異太長，只顯示前段",
       "refresh": "重新整理"
     },
-    "workspace-alias": "擂台 {run}·{id} {model}"
+    "workspace-alias": "擂台 {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "整份採用",
+      "mode-mix": "混搭檔案",
+      "mode-branch": "只留分支",
+      "candidate": "採用哪一格",
+      "squash": "壓成一個 commit（squash）",
+      "file": "檔案",
+      "take-from": "取自",
+      "skip": "不要",
+      "mix-hint": "每個檔案整份取自你選的那一格，組在新分支 arena/場次/mix 上；請確認拼起來仍然相容。",
+      "into": "合併進主工作目錄的 {branch}。",
+      "new-commits": "發起後這個分支又多了 {n} 個 commit；不會自動 rebase。",
+      "already": "這場已經合併過了。",
+      "dirty": "主工作目錄有未提交的改動，請先提交或捨棄。",
+      "wrong-branch": "主工作目錄目前不在這場的起點分支 {branch}。",
+      "empty-mix": "至少選一個檔案。",
+      "confirm-check": "請先確認驗收指令。",
+      "check-confirm": "我已在這個結果上執行 {cmd}，而且通過",
+      "branch-hint": "不合併，保留這格的分支之後再決定。",
+      "go": "合併",
+      "merging": "合併中…",
+      "confirm": "確認：合併進 {branch}",
+      "done": "已合併為 {sha}。",
+      "kept": "已保留分支 {branch}。",
+      "failed": "合併已停止。",
+      "conflicts": "需要你在 Git 面板處理的衝突（不會自動解）："
+    },
+    "cleanup": {
+      "title": "清理",
+      "panes": "關閉擂台分格",
+      "worktrees": "移除 worktree",
+      "branches": "刪除本機分支",
+      "remote": "沒有推送任何分支，所以不用刪遠端分支。",
+      "go": "清理",
+      "done": "已移除 {n} 項。"
+    }
   }
 }

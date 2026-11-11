@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Progress",
-      "compare": "Compare"
+      "compare": "Compare",
+      "merge": "Merge"
     },
     "compare": {
       "rate": "{n} stars",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff cut off: too long to show in full",
       "refresh": "Refresh"
     },
-    "workspace-alias": "Arena {run}·{id} {model}"
+    "workspace-alias": "Arena {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Take one whole",
+      "mode-mix": "Mix files",
+      "mode-branch": "Keep the branch only",
+      "candidate": "Candidate",
+      "squash": "Squash into one commit",
+      "file": "File",
+      "take-from": "Take from",
+      "skip": "Leave out",
+      "mix-hint": "Each file comes whole from the candidate you pick, on a new branch arena/RUN/mix; check that the pieces still fit together.",
+      "into": "Merges into {branch} in your main folder.",
+      "new-commits": "{n} new commits landed on the branch since this run started; they are not rebased.",
+      "already": "This run has already been merged.",
+      "dirty": "Your main folder has uncommitted changes. Commit or discard them first.",
+      "wrong-branch": "Your main folder is not on {branch}, the branch this run started from.",
+      "empty-mix": "Pick at least one file.",
+      "confirm-check": "Confirm the acceptance command first.",
+      "check-confirm": "I ran {cmd} on this result and it passes",
+      "branch-hint": "Nothing is merged; the candidate's branch stays for later.",
+      "go": "Merge",
+      "merging": "Merging…",
+      "confirm": "Confirm: merge into {branch}",
+      "done": "Merged as {sha}.",
+      "kept": "Kept branch {branch}.",
+      "failed": "Merge stopped.",
+      "conflicts": "Conflicts to resolve in the Git panel (nothing was resolved for you):"
+    },
+    "cleanup": {
+      "title": "Clean up",
+      "panes": "Close the arena panes",
+      "worktrees": "Remove the worktrees",
+      "branches": "Delete the local branches",
+      "remote": "Nothing was pushed, so there is no remote branch to delete.",
+      "go": "Clean up",
+      "done": "Removed {n} items."
+    }
   }
 }

@@ -23967,6 +23967,14 @@ const arenaPanelRunId = ref('')
 const arenaStatus = ref<ArenaStatus | null>(null)
 const ARENA_POLL_MS = 15_000
 
+/** A live pane running in this candidate's worktree. The pane id itself is
+ *  read from the run record, which a model inside the repo could rewrite, so
+ *  it is only trusted when the pane's folder matches. */
+function arenaPaneLive(paneId: string, worktree: string): boolean {
+  const pane = panes.value.find((p) => p.id === paneId)
+  return !!pane && normWs(pane.workspacePath) === normWs(worktree)
+}
+
 async function loadArenaRuns(): Promise<void> {
   if (!arenaEnabled.value || !currentWorkspace.value) {
     arenaRuns.value = []
@@ -24056,7 +24064,7 @@ async function stopArenaCandidate(runId: string, candidate: string, reason: 'use
   const run = arenaRuns.value.find((r) => r.id === runId)
   const cand = run?.candidates.find((c) => c.id === candidate)
   if (!run || !cand) return
-  if (cand.pane_id && paneAlive(cand.pane_id)) await onInterrupt(cand.pane_id, { by: 'user' })
+  if (cand.pane_id && arenaPaneLive(cand.pane_id, cand.worktree)) await onInterrupt(cand.pane_id, { by: 'user' })
   await sendQuiet('arena.update', { workspace_path: run.workspace, run_id: run.id, candidate, stopped: reason })
   await loadArenaRuns()
 }
@@ -24075,12 +24083,12 @@ async function pollArena(): Promise<void> {
   try {
     for (const run of arenaRuns.value) {
       const watched = run.id === arenaPanelRunId.value && arenaPanelOpen.value
-      const live = run.state === 'running' && run.candidates.some((c) => !c.stopped && c.pane_id && paneAlive(c.pane_id))
+      const live = run.state === 'running' && run.candidates.some((c) => !c.stopped && c.pane_id && arenaPaneLive(c.pane_id, c.worktree))
       if (!watched && !live) continue
       const status = await sendQuiet<ArenaStatus & { ok: boolean }>('arena.status', { workspace_path: run.workspace, run_id: run.id })
       if (!status?.ok) continue
       if (watched) arenaStatus.value = status
-      for (const hit of candidatesToStop(status, paneAlive)) await stopArenaCandidate(run.id, hit.id, hit.reason)
+      for (const hit of candidatesToStop(status, arenaPaneLive)) await stopArenaCandidate(run.id, hit.id, hit.reason)
     }
   } finally {
     arenaPolling = false
@@ -25468,9 +25476,10 @@ function paneIsCommander(p: ActivePane): boolean {
     :runs="arenaRuns"
     :run-id="arenaPanelRunId"
     :status="arenaStatus"
-    :pane-alive="paneAlive"
-    :request="sendQuiet"
+    :pane-alive="arenaPaneLive"
+    :request="(t, p) => sendQuiet(t, p, 180_000)"
     @close="arenaPanelOpen = false"
+    @close-panes="(ids) => { for (const id of ids) void onKill(id) }"
     @changed="() => { void loadArenaRuns(); void pollArena() }"
     @select-run="(id) => { arenaPanelRunId = id; arenaStatus = null; void pollArena() }"
     @focus-pane="(id) => { arenaPanelOpen = false; selectPane(id, { userInitiated: true }) }"

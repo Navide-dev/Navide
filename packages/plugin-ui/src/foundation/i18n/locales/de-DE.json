@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Fortschritt",
-      "compare": "Vergleichen"
+      "compare": "Vergleichen",
+      "merge": "Zusammenführen"
     },
     "compare": {
       "rate": "{n} Sterne",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff gekürzt: zu lang für die volle Anzeige",
       "refresh": "Aktualisieren"
     },
-    "workspace-alias": "Arena-Lauf {run}·{id} {model}"
+    "workspace-alias": "Arena-Lauf {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Einen ganz übernehmen",
+      "mode-mix": "Dateien mischen",
+      "mode-branch": "Nur den Branch behalten",
+      "candidate": "Kandidat",
+      "squash": "Zu einem Commit zusammenfassen (Squash)",
+      "file": "Datei",
+      "take-from": "Übernehmen von",
+      "skip": "Weglassen",
+      "mix-hint": "Jede Datei kommt vollständig vom gewählten Kandidaten, auf einem neuen Branch arena/LAUF/mix; prüfen Sie, ob die Teile zusammenpassen.",
+      "into": "Führt in {branch} Ihres Hauptordners zusammen.",
+      "new-commits": "Seit dem Start kamen {n} neue Commits auf den Branch; es wird nicht rebased.",
+      "already": "Dieser Lauf wurde bereits zusammengeführt.",
+      "dirty": "Ihr Hauptordner hat nicht festgeschriebene Änderungen. Bitte zuerst festschreiben oder verwerfen.",
+      "wrong-branch": "Ihr Hauptordner ist nicht auf {branch}, dem Ausgangsbranch dieses Laufs.",
+      "empty-mix": "Wählen Sie mindestens eine Datei.",
+      "confirm-check": "Bestätigen Sie zuerst den Abnahmebefehl.",
+      "check-confirm": "Ich habe {cmd} auf diesem Ergebnis ausgeführt und es ist erfolgreich",
+      "branch-hint": "Nichts wird zusammengeführt; der Branch des Kandidaten bleibt für später.",
+      "go": "Zusammenführen",
+      "merging": "Wird zusammengeführt…",
+      "confirm": "Bestätigen: in {branch} zusammenführen",
+      "done": "Zusammengeführt als {sha}.",
+      "kept": "Branch {branch} behalten.",
+      "failed": "Zusammenführen gestoppt.",
+      "conflicts": "Konflikte, die im Git-Bereich zu lösen sind (nichts wurde automatisch gelöst):"
+    },
+    "cleanup": {
+      "title": "Aufräumen",
+      "panes": "Arena-Bereiche schließen",
+      "worktrees": "Worktrees entfernen",
+      "branches": "Lokale Branches löschen",
+      "remote": "Es wurde nichts gepusht, also gibt es keinen Remote-Branch zu löschen.",
+      "go": "Aufräumen",
+      "done": "{n} Einträge entfernt."
+    }
   }
 }

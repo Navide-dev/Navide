@@ -232,3 +232,35 @@ async def test_repo_hooks_never_run_and_a_fifo_does_not_block(repo: Path) -> Non
     result = await arena.merge(str(repo), run["id"], candidate="A", mode="squash")
     assert result["ok"], result
     assert not marker.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_worktree_swapped_for_a_symlink_is_refused(repo: Path, tmp_path: Path) -> None:
+    run = await _start(repo)
+    a = Path(run["candidates"][0]["worktree"])
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    subprocess.run(["git", "worktree", "remove", "--force", str(a)], cwd=repo, check=True)
+    a.symlink_to(elsewhere)
+    with pytest.raises(arena.ArenaError, match="not where this run created it"):
+        await arena.run_status(str(repo), run["id"], None)
+
+
+@pytest.mark.asyncio
+async def test_record_numbers_and_stop_reasons_are_checked(repo: Path) -> None:
+    run = await _start(repo)
+    path = repo / ".agent-team" / "arena" / f"{run['id']}.json"
+    good = path.read_text()
+    for mutate in (
+        lambda r: r.update(budget_usd=float("nan")),
+        lambda r: r.update(time_limit_min=-1),
+        lambda r: r["candidates"][0].update(stopped="later"),
+    ):
+        tampered = json.loads(good)
+        mutate(tampered)
+        path.write_text(json.dumps(tampered))
+        with pytest.raises(arena.ArenaError, match="not valid"):
+            arena.load_run(str(repo), run["id"])
+    path.write_text(good)
+    with pytest.raises(arena.ArenaError):
+        arena.update_candidate(str(repo), run["id"], "A", {"stopped": "later"})

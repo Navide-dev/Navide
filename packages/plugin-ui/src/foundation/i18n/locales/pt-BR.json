@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Progresso",
-      "compare": "Comparação"
+      "compare": "Comparação",
+      "merge": "Mesclar"
     },
     "compare": {
       "rate": "{n} estrelas",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff cortado: longo demais para mostrar inteiro",
       "refresh": "Atualizar"
     },
-    "workspace-alias": "Arena de modelos {run}·{id} {model}"
+    "workspace-alias": "Arena de modelos {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Adotar um inteiro",
+      "mode-mix": "Combinar arquivos",
+      "mode-branch": "Manter só o branch",
+      "candidate": "Candidato",
+      "squash": "Compactar em um commit (squash)",
+      "file": "Arquivo",
+      "take-from": "Pegar de",
+      "skip": "Deixar de fora",
+      "mix-hint": "Cada arquivo vem inteiro do candidato escolhido, num branch novo arena/EXECUÇÃO/mix; confira se as partes combinam.",
+      "into": "Mescla em {branch} da sua pasta principal.",
+      "new-commits": "Desde o início chegaram {n} commits novos ao branch; não é feito rebase.",
+      "already": "Esta execução já foi mesclada.",
+      "dirty": "Sua pasta principal tem alterações não confirmadas. Confirme ou descarte primeiro.",
+      "wrong-branch": "Sua pasta principal não está em {branch}, o branch de partida.",
+      "empty-mix": "Escolha ao menos um arquivo.",
+      "confirm-check": "Confirme primeiro o comando de aceitação.",
+      "check-confirm": "Executei {cmd} neste resultado e passou",
+      "branch-hint": "Nada é mesclado; o branch do candidato fica para depois.",
+      "go": "Mesclar",
+      "merging": "Mesclando…",
+      "confirm": "Confirmar: mesclar em {branch}",
+      "done": "Mesclado como {sha}.",
+      "kept": "Branch {branch} mantido.",
+      "failed": "Mesclagem interrompida.",
+      "conflicts": "Conflitos para resolver no painel Git (nada foi resolvido por você):"
+    },
+    "cleanup": {
+      "title": "Limpeza",
+      "panes": "Fechar os painéis da arena",
+      "worktrees": "Remover os worktrees",
+      "branches": "Excluir os branches locais",
+      "remote": "Nada foi enviado, então não há branch remoto para excluir.",
+      "go": "Limpar",
+      "done": "{n} itens removidos."
+    }
   }
 }

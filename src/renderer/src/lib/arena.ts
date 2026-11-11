@@ -88,16 +88,21 @@ export function defaultArenaLineup(agentKeys: readonly string[]): ArenaCandidate
   return rows
 }
 
+/** Is `paneId` a live pane of this candidate? The pane id comes from the run
+ *  record, which sits inside the repository; the caller checks it against a
+ *  live pane whose folder IS the candidate's worktree before acting on it. */
+export type ArenaPaneCheck = (paneId: string, worktree: string) => boolean
+
 /** Which candidates the window should stop now: over a limit, still running,
- *  and with a live pane to interrupt. */
+ *  and with a live pane of their own to interrupt. */
 export function candidatesToStop(
   status: ArenaStatus,
-  paneAlive: (paneId: string) => boolean,
+  paneLive: ArenaPaneCheck,
 ): { id: string; paneId: string; reason: 'time' | 'budget' }[] {
   const out: { id: string; paneId: string; reason: 'time' | 'budget' }[] = []
   for (const row of status.candidates) {
     const cand = status.run.candidates.find((c) => c.id === row.id)
-    if (!cand || cand.stopped || !cand.pane_id || !paneAlive(cand.pane_id)) continue
+    if (!cand || cand.stopped || !cand.pane_id || !paneLive(cand.pane_id, cand.worktree)) continue
     if (row.over_budget) out.push({ id: row.id, paneId: cand.pane_id, reason: 'budget' })
     else if (row.over_time) out.push({ id: row.id, paneId: cand.pane_id, reason: 'time' })
   }
@@ -148,4 +153,23 @@ export function arenaDiffLines(text: string): { kind: ArenaDiffLineKind; text: s
     }
   }
   return out
+}
+
+/** The merge tab's starting mix: every changed file from the adopted
+ *  candidate when it touched the file, else from the first one that did;
+ *  sensitive files start unpicked (''), so taking one is a deliberate act. */
+export function defaultMixPicks(
+  files: readonly ArenaCompareFile[],
+  candidateIds: readonly string[],
+  adopted: string,
+): Record<string, string> {
+  const picks: Record<string, string> = {}
+  for (const f of files) {
+    if (f.protected) {
+      picks[f.path] = ''
+      continue
+    }
+    picks[f.path] = adopted && f.by[adopted] ? adopted : (candidateIds.find((id) => f.by[id]) ?? '')
+  }
+  return picks
 }

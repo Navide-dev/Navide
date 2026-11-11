@@ -13545,7 +13545,8 @@
     },
     "tab": {
       "run": "Progreso",
-      "compare": "Comparación"
+      "compare": "Comparación",
+      "merge": "Fusionar"
     },
     "compare": {
       "rate": "{n} estrellas",
@@ -13556,6 +13557,42 @@
       "truncated": "Diff recortado: demasiado largo para mostrarlo entero",
       "refresh": "Actualizar"
     },
-    "workspace-alias": "Arena de modelos {run}·{id} {model}"
+    "workspace-alias": "Arena de modelos {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Adoptar uno entero",
+      "mode-mix": "Combinar archivos",
+      "mode-branch": "Conservar solo la rama",
+      "candidate": "Candidato",
+      "squash": "Aplastar en un commit (squash)",
+      "file": "Archivo",
+      "take-from": "Tomar de",
+      "skip": "Excluir",
+      "mix-hint": "Cada archivo se toma entero del candidato elegido, en una rama nueva arena/EJECUCIÓN/mix; comprueba que las piezas encajan.",
+      "into": "Se fusiona en {branch} de tu carpeta principal.",
+      "new-commits": "Desde el inicio llegaron {n} commits nuevos a la rama; no se hace rebase.",
+      "already": "Esta ejecución ya se fusionó.",
+      "dirty": "Tu carpeta principal tiene cambios sin confirmar. Confírmalos o descártalos primero.",
+      "wrong-branch": "Tu carpeta principal no está en {branch}, la rama de partida.",
+      "empty-mix": "Elige al menos un archivo.",
+      "confirm-check": "Confirma primero el comando de aceptación.",
+      "check-confirm": "Ejecuté {cmd} sobre este resultado y pasa",
+      "branch-hint": "No se fusiona nada; la rama del candidato queda para más tarde.",
+      "go": "Fusionar",
+      "merging": "Fusionando…",
+      "confirm": "Confirmar: fusionar en {branch}",
+      "done": "Fusionado como {sha}.",
+      "kept": "Rama {branch} conservada.",
+      "failed": "Fusión detenida.",
+      "conflicts": "Conflictos que resolver en el panel de Git (no se resolvió nada por ti):"
+    },
+    "cleanup": {
+      "title": "Limpieza",
+      "panes": "Cerrar los paneles de la arena",
+      "worktrees": "Eliminar los worktrees",
+      "branches": "Borrar las ramas locales",
+      "remote": "No se subió nada, así que no hay ramas remotas que borrar.",
+      "go": "Limpiar",
+      "done": "Se eliminaron {n} elementos."
+    }
   }
 }
