@@ -3287,6 +3287,19 @@ class ChannelManager:
         task = self._spawn(self._model_wait(msg, row, model, effort, lang))
         self._model_waits[row.pane_id] = (task, msg, row.name, self._model_shown(model, effort), lang)
 
+    async def _model_still_allowed(self, msg: InboundMessage, pane_id: str) -> bool:
+        """What a press checks, asked again: channels on, the sender still allowed, the chat
+        still bound, and the pane still in its tree."""
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            return False
+        if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            return False
+        binding = self._binding_for(msg)
+        root = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+        if binding is None or not root:
+            return False
+        return pane_id in {r.pane_id for r in await self._model_rows(root, binding)}
+
     async def _model_wait(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
                           lang: str) -> None:
         loop = asyncio.get_running_loop()
@@ -3303,6 +3316,10 @@ class ChannelManager:
                     return
                 if state.get("busy") or state.get("display_status") == "awaiting":
                     continue
+                # Up to 15 minutes may have passed: the switch is made only on what holds now.
+                if not await self._model_still_allowed(msg, pane_id):
+                    await self._reply(msg, model_menu.text(lang, "expired"))
+                    return
                 result = await self._seams.set_model(pane_id, model, effort, self._model_who(msg))
                 if not result.get("ok") and result.get("error_code") == "pane-busy":
                     continue  # busy again the moment it was asked: keep waiting
