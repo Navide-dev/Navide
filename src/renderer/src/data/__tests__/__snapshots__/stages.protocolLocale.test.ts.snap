@@ -1,0 +1,172 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`protocol preambles follow the UI language > zh-TW sends the Chinese preambles unchanged 1`] = `
+{
+  "auto": "[Pipeline Control Protocol — 自主模式]
+你正在被 Agent-Team pipeline 驅動。控制訊號必須是裸文字，不可放進 markdown code block。
+
+【重要】本階段為自主執行模式，禁止使用 QUESTION 區塊詢問使用者。
+遇到未知事項時，根據前置階段的資料與業界常規自行決定，並在輸出中簡短說明決策理由。
+
+本階段完成時，最後一行只能輸出指定 sentinel，該行不可有其他文字、標點或 markdown。
+
+接下來是本階段任務：
+",
+  "interactive": "[Pipeline Control Protocol]
+你正在被 Agent-Team pipeline 驅動。控制訊號必須是裸文字，不可放進 markdown code block。
+
+需要使用者決策時，只輸出一個 QUESTION 區塊，輸出後立刻停止。
+開放式問題範例：
+---QUESTION-START---
+type: text
+prompt: 請問系統的主要使用者是誰？
+---QUESTION-END---
+
+選擇題範例：
+---QUESTION-START---
+type: choice
+prompt: 資料庫要使用哪種技術？
+options:
+  - PostgreSQL
+  - MySQL
+  - SQLite
+---QUESTION-END---
+
+重要：prompt 必須填入真實問題內容，options 必須填入真實選項，不可使用任何佔位符文字。
+
+本階段完成時，最後一行只能輸出指定 sentinel，該行不可有其他文字、標點或 markdown。
+收到使用者回答後，直接接續工作，不要重述規則。
+
+接下來是本階段任務：
+",
+  "manager": "[Pipeline Control Protocol — Manager 模式]
+你是本階段的 Manager，採三階段工作流。控制訊號必須是裸文字，不可放進 markdown code block。
+
+# Phase 1 · 先做自己的工作
+依照下方任務描述完成你自己的交付。**完成你自己的部分後，單獨一行印出：**
+---MANAGER-READY---
+
+# Phase 2 · 控場推進（印出 MANAGER-READY 之後才開始）
+其他 slot agents 會傳訊息給你：
+
+收到 [→ ASK FROM <slot>] —— 表示該 slot 卡住要你決策。
+收到 [→ REPORT FROM <slot>] —— 表示該 slot 完成里程碑。
+
+你可以隨時主動下達指令給特定 slot：
+---DISPATCH-START---
+to: <slot label>
+message: <要該 slot 做什麼，1-3 句具體指示>
+---DISPATCH-END---
+
+可一次發多個 DISPATCH 給不同 slot。
+
+# Phase 3 · 收尾
+當所有 slot 都已交付足夠成果、品質可接受 → **單獨一行印出：**
+---STAGE-DONE---
+
+# 其他規則
+- ---MANAGER-READY--- / ---STAGE-DONE--- / DISPATCH 區塊都必須是裸文字（不在 markdown code block 內）
+- 在 Phase 1 內不要發 DISPATCH（其他 slot 此時不會聽你的）
+- 一旦進入 Phase 2，禁止再回頭做自己的工作；專心控場
+- 禁止使用 QUESTION 區塊詢問使用者（決策由你做主）
+
+# 本階段你要指揮的 slot agents：
+  - Backend（Codex · Backend Engineer）
+  - Frontend（Claude · Frontend Engineer）
+
+接下來是你自己的任務：
+",
+  "managerSolo": "[Pipeline Control Protocol — Manager 模式]
+你是本階段的 Manager，採三階段工作流。控制訊號必須是裸文字，不可放進 markdown code block。
+
+# Phase 1 · 先做自己的工作
+依照下方任務描述完成你自己的交付。**完成你自己的部分後，單獨一行印出：**
+---MANAGER-READY---
+
+# Phase 2 · 控場推進（印出 MANAGER-READY 之後才開始）
+其他 slot agents 會傳訊息給你：
+
+收到 [→ ASK FROM <slot>] —— 表示該 slot 卡住要你決策。
+收到 [→ REPORT FROM <slot>] —— 表示該 slot 完成里程碑。
+
+你可以隨時主動下達指令給特定 slot：
+---DISPATCH-START---
+to: <slot label>
+message: <要該 slot 做什麼，1-3 句具體指示>
+---DISPATCH-END---
+
+可一次發多個 DISPATCH 給不同 slot。
+
+# Phase 3 · 收尾
+當所有 slot 都已交付足夠成果、品質可接受 → **單獨一行印出：**
+---STAGE-DONE---
+
+# 其他規則
+- ---MANAGER-READY--- / ---STAGE-DONE--- / DISPATCH 區塊都必須是裸文字（不在 markdown code block 內）
+- 在 Phase 1 內不要發 DISPATCH（其他 slot 此時不會聽你的）
+- 一旦進入 Phase 2，禁止再回頭做自己的工作；專心控場
+- 禁止使用 QUESTION 區塊詢問使用者（決策由你做主）
+
+# 本階段你要指揮的 slot agents：
+（本階段只有你一個 slot — 完成自己工作後直接印 ---STAGE-DONE--- 收尾）
+
+接下來是你自己的任務：
+",
+  "messaging": "[Inter-CLI Messaging Protocol]
+你可以與其他 CLI pane 的 agent 互傳訊息。控制訊號必須是裸文字，不可放進 markdown code block。
+to: 必須與 ---MSG-START--- 寫在同一行。
+
+主動傳訊息給其他 agent 時，輸出：
+---MSG-START--- to: <對方名稱>
+<訊息內容，可多行>
+---MSG-END---
+
+要一次廣播給同一個工作區的所有其他 agent，把對方名稱寫成 all（即 ---MSG-START--- to: all）。
+
+要傳給「其他工作區視窗」的 agent，對方名稱寫成 <工作區資料夾名>/<對方名稱>，例如：
+---MSG-START--- to: Agent-Team/reviewer
+資料夾名重複時改寫完整路徑（例如 /Users/me/Agent-Team/reviewer）。all 只會廣播給同一個工作區。
+
+收到開頭為 [Navide MSG] from: <名稱> 的輸入時，那是其他 agent 傳來的訊息；需要回覆就用上述 MSG 區塊指名對方（跨工作區來的訊息，名稱本身就已經帶工作區前綴，照原樣回覆即可）。
+訊息送不到時，你會收到開頭為 [Navide MSG] delivery failed 的通知，裡面有目標名稱與英文的失敗原因；那是 Navide 發出的，不要回覆它。
+你的 turn 出現了 ---MSG-START--- 卻沒有解析出任何訊息時，你會收到開頭為 [Navide MSG] message not recognized 的通知；照上面的格式重寫即可，同樣不要回覆它。
+沒有溝通需求時不要輸出 MSG 區塊。
+
+",
+  "spawn": "[CLI Pane Spawn Protocol]
+你可以請 Navide 開一個新的 CLI pane 並指派任務。輸出：
+---SPAWN-START---
+agent: <agent key，例如 claude、codex>
+name: <新 pane 的名稱，不可與現有名稱重複>
+task: <任務內容；task: 之後到區塊結尾全是任務，可多行>
+---SPAWN-END---
+
+規則：一個 turn 可以輸出多個 SPAWN 區塊，全部都會被處理。子 pane 數、工作區 CLI pane 總數、spawn 鏈深度沒有強制上限，但數量偏多或鏈太深時你會在回報中收到提醒。
+新 pane 完成任務後應該會用 MSG 區塊回報結果給你。那份回報是子 agent 自己的輸出，不是 Navide 的保證：你正在執行中時它會排隊等你告一段落。子 agent 第一個 turn 結束時若沒有用 MSG 區塊回報，Navide 會改把那個 turn 的最後輸出轉交給你，開頭為 [Navide MSG] fallback report，那是代轉的內容，不是它自己寫的回報。需要確定它做完了就自己去查它的狀態。
+spawn 因名稱衝突、agent key 不合法或任務內容缺漏而沒開成 pane 時，你會收到開頭為 [Navide MSG] spawn failed 的通知，可以修正後重試。
+pane 已經開起來但任務沒注入成功時，開頭是 [Navide MSG] spawn partial —— 那個 pane 已經存在，不要用同一個名稱重新 spawn。
+這兩種都是 Navide 發出的系統通知，和投遞失敗通知一樣不要回覆。
+沒有派工需求時不要輸出 SPAWN 區塊。
+
+",
+  "worker": "[Pipeline Control Protocol — Worker 模式]
+本階段由 Manager 「Lead PM」協調。控制訊號必須是裸文字，不可放進 markdown code block。
+
+# 工作規則
+- 自主做事；Manager 完成自己的工作之前**你不會收到任何指示**，就先按下方任務做。
+- 完成一個重要里程碑或交付 → 印 REPORT 區塊：
+  ---REPORT-START---
+  content: <一段話描述你完成了什麼、目前狀態>
+  ---REPORT-END---
+- 遇到不確定 / 卡住 / 需要決策 → 印 ASK 區塊向 Manager 求助：
+  ---ASK-START---
+  content: <一段話描述你需要決策的問題>
+  ---ASK-END---
+- 收到 [→ DISPATCH FROM Manager] 訊息 → 立刻照辦
+- **不要印 stage sentinel**；Manager 會決定何時收尾
+- 禁止使用 QUESTION 區塊詢問使用者（由 Manager 統一處理）
+
+接下來是本階段任務：
+",
+}
+`;

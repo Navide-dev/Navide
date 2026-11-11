@@ -142,12 +142,14 @@ import {
   MANAGER_READY_SENTINEL,
   MANAGER_STAGE_DONE_SENTINEL,
   PROTOCOL_EXAMPLE_PROMPTS,
+  stageContextText,
   ASK_START,
   ASK_END,
   REPORT_START,
   REPORT_END,
   DISPATCH_START,
   DISPATCH_END,
+  continueNudgeText,
   type AgentKey,
   type StageId,
   type StageSlot
@@ -15511,6 +15513,7 @@ async function preSpawnStage(index: number): Promise<void> {
  *  them directly. Uses prevPane.outputLogFile + the live cleanBuffer. */
 function buildStageContext(index: number, forManager: boolean): string {
   const WORKER_SUMMARY = 1200
+  const text = stageContextText()
   const blocks: string[] = []
   for (let i = 0; i < index; i++) {
     const prevStage = stagesApi.stages.value[i]
@@ -15519,29 +15522,30 @@ function buildStageContext(index: number, forManager: boolean): string {
       (p) => p.stageId === prevStage.id && p.origin === 'pipeline' && !isPriorRunPane(p.id)
     )
     for (const prevPane of prevPanes) {
+      const title = builtinTextForUi(prevStage.title)
       const label = prevPane.slotLabel
-        ? `${prevStage.title} · ${prevPane.slotLabel}`
-        : prevStage.title
+        ? `${title} · ${prevPane.slotLabel}`
+        : title
       const relPath =
         prevPane.outputLogFile && pipeline.workspacePath
           ? prevPane.outputLogFile.replace(`${pipeline.workspacePath}/`, '')
           : (prevPane.outputLogFile ?? '')
       if (forManager) {
-        blocks.push(`- [${label}] 📄 ${relPath || '(無 log 檔)'}`)
+        blocks.push(`- [${label}] 📄 ${relPath || text.noLog}`)
       } else {
         const ref = paneRefs[prevPane.id]
         const buf = ((ref?.cleanBuffer as unknown as string) ?? '').trim()
         if (!buf && !relPath) continue
         const summary =
-          buf.length > WORKER_SUMMARY ? `…${buf.slice(-WORKER_SUMMARY)}` : buf || '(無輸出)'
-        blocks.push(`- [${label}]\n  摘要：${summary}\n  📄 完整內容：${relPath || '(無 log 檔)'}`)
+          buf.length > WORKER_SUMMARY ? `…${buf.slice(-WORKER_SUMMARY)}` : buf || text.noOutput
+        blocks.push(`- [${label}]\n  ${text.summary}${summary}\n  📄 ${text.fullContent}${relPath || text.noLog}`)
       }
     }
   }
   if (blocks.length === 0) return ''
   return forManager
-    ? `[完整前置歷程 — 你是 Manager，負責協調，請逐一完整讀取下列檔案]\n${'='.repeat(60)}\n${blocks.join('\n')}\n${'='.repeat(60)}\n\n`
-    : `[前置階段產出 — 下為摘要，需要細節請讀對應檔案]\n${'='.repeat(60)}\n${blocks.join(`\n${'─'.repeat(60)}\n`)}\n${'='.repeat(60)}\n（開始前請先讀取與你任務相關的檔案）\n\n`
+    ? `${text.managerHeader}\n${'='.repeat(60)}\n${blocks.join('\n')}\n${'='.repeat(60)}\n\n`
+    : `${text.workerHeader}\n${'='.repeat(60)}\n${blocks.join(`\n${'─'.repeat(60)}\n`)}\n${'='.repeat(60)}\n${text.workerFooter}\n\n`
 }
 
 /** Inject kickoffs into pre-spawned panes for one stage, then arm watchers.
@@ -20554,7 +20558,7 @@ function startStageWatcher(stageIndex: number, paneId: string, kickoffScanFrom?:
           pipelineLog(`Stage ${stage.id} ⚡ CLI idle after answer — nudging agent to continue`)
           ;(async () => {
             const sessionId = (ref.sessionId as string | undefined)
-            if (sessionId) await injectText(sessionId, '請繼續', `nudge:${stage.id}`)
+            if (sessionId) await injectText(sessionId, continueNudgeText(), `nudge:${stage.id}`)
           })()
         }
       }

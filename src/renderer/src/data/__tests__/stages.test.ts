@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, describe, it, expect } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect } from 'vitest'
 import { i18n } from '@navide/plugin-ui/foundation'
 import {
   renderManagerProtocol,
@@ -15,6 +15,9 @@ import {
 } from '../stages'
 
 describe('renderManagerProtocol', () => {
+  beforeEach(() => { i18n.global.locale.value = 'zh-TW' })
+  afterEach(() => { i18n.global.locale.value = 'en-US' })
+
   it('lists every coordinated slot and both manager sentinels', () => {
     const out = renderManagerProtocol([
       { label: 'Backend', agentLabel: 'Codex', roleLabel: 'Backend Engineer' },
@@ -33,6 +36,9 @@ describe('renderManagerProtocol', () => {
 })
 
 describe('renderWorkerProtocol', () => {
+  beforeEach(() => { i18n.global.locale.value = 'zh-TW' })
+  afterEach(() => { i18n.global.locale.value = 'en-US' })
+
   it('names the coordinating manager and forbids printing the stage sentinel', () => {
     const out = renderWorkerProtocol('Lead PM')
     expect(out).toContain('Lead PM')
@@ -110,13 +116,13 @@ describe('renderSlotKickoff', () => {
 
   it('selects the Manager protocol when isCommander', () => {
     const out = renderSlotKickoff({ ...slot, isCommander: true }, 't', { isCommander: true })
-    expect(out).toContain('Manager 模式')
+    expect(out).toContain('Manager Mode')
     expect(out).toContain(MANAGER_READY_SENTINEL)
   })
 
   it('selects the Worker protocol when a commander exists', () => {
     const out = renderSlotKickoff(slot, 't', { hasCommander: true, commanderLabel: 'Boss' })
-    expect(out).toContain('Worker 模式')
+    expect(out).toContain('Worker Mode')
     expect(out).toContain('Boss')
   })
 
@@ -127,7 +133,7 @@ describe('renderSlotKickoff', () => {
 
   it('defaults to the autonomous protocol', () => {
     const out = renderSlotKickoff(slot, 't')
-    expect(out).toContain('自主執行模式')
+    expect(out).toContain('autonomous mode')
   })
 
   describe('a builtin seed kickoff', () => {
