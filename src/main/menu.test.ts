@@ -196,6 +196,17 @@ describe('installApplicationMenu', () => {
     }
   })
 
+  it('on darwin the app menu names Navide, not the package name, in About, Hide and Quit', () => {
+    installOn('darwin')
+    const menu = submenuOf('Agent-Team')
+    const byRole = (role: string) => menu.find((item) => item.role === role)
+    // app.name is the package name ("agent-team"), which Electron's role
+    // labels would show; the menu must say the product name instead.
+    expect(byRole('about')?.label).toBe('About Navide')
+    expect(byRole('hide')?.label).toBe('Hide Navide')
+    expect(byRole('quit')?.label).toBe('Quit Navide')
+  })
+
   it('File has Open Workspace… with ⌘O that invokes its hook', () => {
     const open = itemIn(submenuOf('File'), 'Open Workspace…')
     expect(open.accelerator).toBe('CmdOrCtrl+O')
@@ -609,7 +620,11 @@ describe('application menu — locale', () => {
 
   // Chromium labels a `role` item in the SYSTEM locale, and Electron cannot
   // re-localize it. Supplying our own label would silently take those items
-  // out of the OS's hands, so no role may carry one.
+  // out of the OS's hands, so no role may carry one. The one exception is the
+  // macOS about, hide and quit roles: Electron words those itself, in English,
+  // around app.name (the package name), so they carry the same English wording
+  // around the product name.
+  const PRODUCT_NAMED = new Set(['darwin:about', 'darwin:hide', 'darwin:quit'])
   it('leaves every role item unlabeled so the OS keeps wording them', () => {
     for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
       for (const platform of ['darwin', 'linux'] as const) {
@@ -618,7 +633,7 @@ describe('application menu — locale', () => {
         const labeledRoles: string[] = []
         const walk = (items: MenuItemConstructorOptions[]): void => {
           for (const item of items) {
-            if (item.role && item.label) labeledRoles.push(`${locale}/${platform}:${item.role}`)
+            if (item.role && item.label && !PRODUCT_NAMED.has(`${platform}:${item.role}`)) labeledRoles.push(`${locale}/${platform}:${item.role}`)
             if (Array.isArray(item.submenu)) walk(item.submenu as MenuItemConstructorOptions[])
           }
         }

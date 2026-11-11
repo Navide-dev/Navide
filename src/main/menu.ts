@@ -55,6 +55,12 @@ import { getTerminalSelection } from './terminal-selection-cache'
  * Installing a menu without them is the only way to drop them: Electron has no
  * API to edit the default menu in place.
  */
+// Electron labels the about, hide and quit roles with app.name, which is the
+// package name ("agent-team"). app.name is not renamed: it keys the userData
+// directory, the single-instance lock and the updater cache. The menu names
+// the product instead, worded the way Electron words those roles.
+const PRODUCT_NAME = 'Navide'
+
 const DEVELOPER_DOCS = Object.keys(DEVELOPER_DOC_URLS) as DeveloperDoc[]
 const DEVELOPER_PAGES: readonly DeveloperPage[] = ['developer-settings', 'testplace']
 
@@ -262,7 +268,7 @@ export function installApplicationMenu(
           {
             label: app.name,
             submenu: [
-              { role: 'about' },
+              { role: 'about', label: `About ${PRODUCT_NAME}` },
               { type: 'separator' },
               settingsItem,
               checkUpdatesItem,
@@ -270,11 +276,11 @@ export function installApplicationMenu(
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
-              { role: 'hide' },
+              { role: 'hide', label: `Hide ${PRODUCT_NAME}` },
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' },
-              { role: 'quit' }
+              { role: 'quit', label: `Quit ${PRODUCT_NAME}` }
             ]
           } as MenuItemConstructorOptions
         ]
