@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { MSG_ENVELOPE_PREFIX } from '../lib/agentMessaging'
+import { cliFacts, cliName, sendRoute } from '../lib/helpCliFacts'
+import { CLI_AGENT_SPECS } from '../platform/plugin-shell/agents'
 import MockEnvelopePane from './helpMocks/MockEnvelopePane.vue'
 import MockFigure from './helpMocks/MockFigure.vue'
 import MockMessageLog from './helpMocks/MockMessageLog.vue'
@@ -13,50 +15,17 @@ import MockPaneCard from './helpMocks/MockPaneCard.vue'
 // under `settings.help.messaging.*` — the limits quoted there are the real
 // constants from useAgentMessaging.ts, so keep them in sync if those change.
 
-interface CoverageRow {
-  cli: string
-  send: 'both' | 'protocolOnly' | 'none'
-}
-
-// Sending needs one of the two routes. Fourteen of the fifteen vendors have
-// at least one; mcode has neither.
-//
-// The output protocol needs Navide to read the agent's turn text: the 14
-// readers in log_readers/ put the reply on `turn_complete` as `text=`, and the
-// parser (agentMessaging.ts) is vendor-agnostic — App.vue hands it `ev.text`
-// with no vendor check — so the protocol route is open wherever a reader
-// exists. mcode is the one vendor with no reader at all
-// (log_readers/mcode.py is a documented placeholder: its conversations live in
-// SQLite, and the row payloads cannot be modelled without an authenticated
-// session), so nothing ever reaches the parser for an mcode pane.
-//
-// The MCP tools are wired at spawn for the 10 vendors whose CLI offers a way
-// in: a launch flag (Claude Code, Codex, Copilot, Qwen), one env var carrying
-// the whole config document (OpenCode, Kilo), or a per-pane mirror of the
-// config directory (Kimi, Grok, Antigravity). Cursor is the exception that
-// only reads a workspace file, so its wiring writes `.cursor/mcp.json` (and
-// excludes it from git). Aider, Muse and Pi have no MCP surface at all
-// (base.py says so outright); Droid and mcode are simply not wired yet.
-//
-// Receiving is unaffected throughout — that is text injected into the
-// terminal, and it works for every CLI, mcode included.
-const coverage: CoverageRow[] = [
-  { cli: 'Claude Code', send: 'both' },
-  { cli: 'Codex', send: 'both' },
-  { cli: 'Copilot CLI', send: 'both' },
-  { cli: 'Qwen Code', send: 'both' },
-  { cli: 'OpenCode', send: 'both' },
-  { cli: 'Kilo Code', send: 'both' },
-  { cli: 'Kimi Code', send: 'both' },
-  { cli: 'Grok CLI', send: 'both' },
-  { cli: 'Antigravity CLI', send: 'both' },
-  { cli: 'Cursor CLI', send: 'both' },
-  { cli: 'Aider', send: 'protocolOnly' },
-  { cli: 'Droid', send: 'protocolOnly' },
-  { cli: 'Muse Code', send: 'protocolOnly' },
-  { cli: 'Pi', send: 'protocolOnly' },
-  { cli: 'MiniMax Code', send: 'none' },
-]
+// Sending needs one of the two routes. The output protocol needs Navide to
+// read the agent's turn text: the readers in log_readers/ put the reply on
+// `turn_complete` as `text=`, and the parser (agentMessaging.ts) is
+// vendor-agnostic, so the protocol route is open wherever a reader exists.
+// The MCP tools are wired at spawn only for the vendors whose CLI offers a way
+// in (a launch flag, one env var carrying the whole config document, or a
+// per-pane config-directory mirror; Cursor reads a workspace file). Receiving
+// is unaffected throughout — that is text injected into the terminal.
+// Rows, counts and name lists all come from the vendor specs plus the two
+// backend facts in lib/helpCliFacts.ts.
+const coverage = CLI_AGENT_SPECS.map((spec) => ({ cli: cliName(spec), send: sendRoute(spec) }))
 
 // Row keys for the prose tables; each row's text is looked up under
 // `settings.help.messaging.<section>.<table>.<key>` so both locales stay in
@@ -86,7 +55,10 @@ const troubleshooting = [
   'paused',
 ] as const
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// Counts and name lists the prose quotes, read from the vendor specs.
+const facts = computed(() => cliFacts(locale.value))
 
 // ── Channels ─────────────────────────────────────────────────────────────
 // Settings ▸ Channels, the bind dialog and the titlebar monitor, quoted with
@@ -217,7 +189,7 @@ const logRows = computed(() => [
           <li v-html="$t('settings.help.messaging.s2.mcp.tools.ack')"></li>
           <li v-html="$t('settings.help.messaging.s2.mcp.tools.pending')"></li>
         </ul>
-        <p class="cmh-note" v-html="$t('settings.help.messaging.s2.mcp.note')"></p>
+        <p class="cmh-note" v-html="$t('settings.help.messaging.s2.mcp.note', facts)"></p>
       </div>
 
       <div class="cmh-card">
@@ -234,7 +206,7 @@ const logRows = computed(() => [
     <!-- ── Which CLIs can send ──────────────────────────────────────── -->
     <section class="cmh-section">
       <h2 class="cmh-h2">{{ $t('settings.help.messaging.s3.title') }}</h2>
-      <p class="cmh-p" v-html="$t('settings.help.messaging.s3.p1')"></p>
+      <p class="cmh-p" v-html="$t('settings.help.messaging.s3.p1', facts)"></p>
       <div class="cmh-tablewrap">
         <table class="cmh-table">
           <thead>
@@ -251,7 +223,7 @@ const logRows = computed(() => [
           </tbody>
         </table>
       </div>
-      <p class="cmh-note" v-html="$t('settings.help.messaging.s3.note1')"></p>
+      <p class="cmh-note" v-html="$t('settings.help.messaging.s3.note1', facts)"></p>
       <p class="cmh-note" v-html="$t('settings.help.messaging.s3.note2')"></p>
     </section>
 
@@ -291,7 +263,7 @@ const logRows = computed(() => [
       <ul class="cmh-list">
         <li>{{ $t('settings.help.messaging.s5.list.alive') }}</li>
         <li>{{ $t('settings.help.messaging.s5.list.noTyping') }}</li>
-        <li>{{ $t('settings.help.messaging.s5.list.noTurn') }}</li>
+        <li>{{ $t('settings.help.messaging.s5.list.noTurn', facts) }}</li>
         <li>{{ $t('settings.help.messaging.s5.list.quiet') }}</li>
       </ul>
       <p class="cmh-p">{{ $t('settings.help.messaging.s5.p2') }}</p>
@@ -361,6 +333,8 @@ const logRows = computed(() => [
         <li v-html="$t('settings.help.messaging.s7.list.duplicate')"></li>
         <li v-html="$t('settings.help.messaging.s7.list.rejected')"></li>
         <li v-html="$t('settings.help.messaging.s7.list.resume')"></li>
+        <li v-html="$t('settings.help.messaging.s7.list.otherProject')"></li>
+        <li v-html="$t('settings.help.messaging.s7.list.release')"></li>
       </ul>
       <div class="cmh-tablewrap">
         <table class="cmh-table">
@@ -434,11 +408,12 @@ const logRows = computed(() => [
       <h2 class="cmh-h2">{{ $t('settings.help.messaging.s10.title') }}</h2>
       <ul class="cmh-list">
         <li v-html="$t('settings.help.messaging.s10.list.terminalPane')"></li>
-        <li v-html="$t('settings.help.messaging.s10.list.receiveOnly')"></li>
+        <li v-html="$t('settings.help.messaging.s10.list.receiveOnly', facts)"></li>
         <li v-html="$t('settings.help.messaging.s10.list.detached')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.queueFull')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.noPermission')"></li>
         <li v-html="$t('settings.help.messaging.s10.list.ackLocal')"></li>
+        <li v-html="$t('settings.help.messaging.s10.list.acp')"></li>
       </ul>
     </section>
 
@@ -490,6 +465,8 @@ const logRows = computed(() => [
       <ul class="cmh-list">
         <li v-for="key in channelAnswers" :key="key" v-html="$t(`settings.help.messaging.channels.answer.${key}`)"></li>
       </ul>
+
+      <p class="cmh-p" v-html="$t('settings.help.messaging.channels.commands')"></p>
 
       <h3 class="cmh-h3">{{ $t('settings.help.messaging.channels.h4') }}</h3>
       <p class="cmh-p">{{ $t('settings.help.messaging.channels.p4', channelLabels) }}</p>

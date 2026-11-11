@@ -4375,9 +4375,9 @@
             "signInInside": "Innerhalb der CLI",
             "flagNoteGoose": "Keines – Goose genehmigt standardmäßig jedes Werkzeug selbst (GOOSE_MODE=auto); setzen Sie GOOSE_MODE auf approve oder smart_approve, um gefragt zu werden. Navide Guard deckt Goose noch nicht ab."
           },
-          "note": "„Kontingent“ = Navide kann die verbleibende Nutzung lesen (Kapitel 6). „Mehrere Konten“ = mehrere Anmeldungen lassen sich in den Einstellungen speichern und umschalten (Kapitel 5). Die vier CLIs ohne Flag zur Umgehung der Berechtigungen (Grok CLI, OpenCode, Pi, MiniMax Code) haben schlicht kein solches Flag – Navide hat es nicht weggelassen. „Anmeldebefehl“ = was Navide tatsächlich ausführt, wenn Sie unter Einstellungen ▸ Konten auf „Anmelden“ klicken; die mit „Innerhalb der CLI“ markierten CLIs deklarieren keinen separaten Anmeldebefehl, die Schaltfläche startet sie also wie gewohnt, und die Anmeldung erfolgt auf ihrem eigenen Bildschirm.",
+          "note": "„Kontingent“ = Navide kann die verbleibende Nutzung lesen (Kapitel 6). „Mehrere Konten“ = mehrere Anmeldungen lassen sich in den Einstellungen speichern und umschalten (Kapitel 5). Die {noFlagCount} CLIs ohne Flag zur Umgehung der Berechtigungen ({noFlag}) haben schlicht kein solches Flag – Navide hat es nicht weggelassen. „Anmeldebefehl“ = was Navide tatsächlich ausführt, wenn Sie unter Einstellungen ▸ Konten auf „Anmelden“ klicken; die mit „Innerhalb der CLI“ markierten CLIs deklarieren keinen separaten Anmeldebefehl, die Schaltfläche startet sie also wie gewohnt, und die Anmeldung erfolgt auf ihrem eigenen Bildschirm.",
           "callout": {
-            "title": "Der 16. Eintrag ist kein Agent",
+            "title": "Der letzte Eintrag ist kein Agent",
             "text": "<strong>>_ Terminal öffnen</strong> unten im +-Menü ist eine einfache Shell: Kein Agent ist angebunden, und keine Rolle wird eingefügt. Der Eintrag steht absichtlich außerhalb der Liste, damit das Scrollen der CLI-Liste ihn nie verdeckt."
           }
         },
@@ -4426,7 +4426,8 @@
           "callout2": {
             "title": "Grok CLI ist jetzt die offizielle CLI von xAI",
             "text": "Sie wird über das eigene Skript des Anbieters installiert (<code>curl</code> lädt <code>https://x.ai/cli/install.sh</code> und übergibt es an bash) statt über npm – sie braucht daher <code>curl</code> und ein echtes Terminal-Fenster. Der Update-Befehl ist <code>grok update</code>, und die Konfigurationsdatei ist jetzt <code>~/.grok/config.toml</code>, mit MCP als TOML; die <code>user-settings.json</code> der Community-Version wird nicht mehr gelesen. Sie hat <strong>keinen Diagnosebefehl</strong> (der Anbieter liefert keinen, daher verlinken die Einstellungen stattdessen die offizielle Dokumentation), kein Aufwandsfeld und kein Flag zur Umgehung der Berechtigungen. Die gleichnamige Community-CLI installiert in denselben Pfad, sodass <code>which grok</code> sie nicht unterscheiden kann – nur die Form der Versionsangabe kann es."
-          }
+          },
+          "menuGroups": "Das +-Menü hat zwei Überschriften: Coding-CLIs stehen unter <strong>{cliHeading}</strong>, dauerhaft laufende Agents ({agents}) unter <strong>{agentsHeading}</strong>."
         },
         "s3": {
           "title": "Rollen",
@@ -4460,7 +4461,7 @@
             "global": "Ein <strong>globaler Schalter</strong> oben: <em>Berechtigungsabfragen standardmäßig umgehen (YOLO-Modus)</em>. Die Seitenleiste jeder CLI zeigt denselben Schalter, eine Änderung in einer gilt also für alle.",
             "perVendor": "Darunter eine Zeile für diese CLI mit ihrem tatsächlichen Flag (zum Beispiel <code>--yolo</code>) und rechts einem Dropdown mit drei Optionen: <strong>Global folgen / Immer umgehen / Nie umgehen</strong>."
           },
-          "p4": "Bei den vier CLIs ohne Flag (Grok CLI / OpenCode / Pi / MiniMax Code) zeigt dieser Teil der Seitenleiste nur den globalen Schalter, mit einer Zeile darunter, dass diese CLI kein Flag zur Umgehung hat und es nichts umzuschalten gibt.",
+          "p4": "Bei den {noFlagCount} CLIs ohne Flag ({noFlag}) zeigt dieser Teil der Schublade nur den globalen Schalter, darunter eine Zeile, dass diese CLI kein Umgehungs-Flag hat und es nichts umzuschalten gibt.",
           "callout1": {
             "title": "Änderungen erreichen laufende Bereiche nicht",
             "text": "Das Flag wird <strong>im Moment des Starts</strong> in die Befehlszeile eines Bereichs geschrieben. Änderungen hier wirken nur auf danach gestartete Bereiche; ein laufender Bereich behält, womit er gestartet wurde, bis Sie ihn neu aufbauen oder wiederherstellen."
@@ -4499,7 +4500,8 @@
           "note": "Updates ersetzen die Programmdatei; bereits laufende Bereiche müssen neu starten, um die neue Version zu übernehmen.",
           "callout2": {
             "title": "Was es hier nicht gibt",
-            "text": "Es gibt weiterhin <strong>kein Feld für „Standardargumente“</strong> – ein Startbefehl <em>ersetzt</em> die Zeile, statt an die Standardzeile anzuhängen. <strong>Die Programmdatei wird weiterhin nicht durch Eingabe eines Pfads gewählt</strong>, sondern durch Auswahl eines der Kandidaten, wenn mehrere physische Installationen erkannt werden (danach erhält der Überblick der Seitenleiste den Chip „Eigene Binärdatei“). Modell und Denkaufwand sind dagegen <strong>nicht mehr nur über MCP</strong> erreichbar: Die Startüberschreibungen haben eigene Felder dafür, ebenso der Dialog „Manuell starten“."
+            "text": "Es gibt weiterhin <strong>kein Feld für „Standardargumente“</strong> – ein Startbefehl <em>ersetzt</em> die Zeile, statt an die Standardzeile anzuhängen. <strong>Die Programmdatei wird weiterhin nicht durch Eingabe eines Pfads gewählt</strong>, sondern durch Auswahl eines der Kandidaten, wenn mehrere physische Installationen erkannt werden (danach erhält der Überblick der Seitenleiste den Chip „Eigene Binärdatei“). Modell und Denkaufwand sind dagegen <strong>nicht mehr nur über MCP</strong> erreichbar: Die Startüberschreibungen haben eigene Felder dafür, ebenso der Dialog „Manuell starten“.",
+            "setModel": "Auch ein bereits laufender Bereich kann das Modell wechseln: Ein Agent fordert es mit <code>cli_set_model</code> an. Claude Code und Codex wechseln direkt (Claudes Modellauswahl, Codex’ <code>/model</code>); andere CLIs starten den Bereich neu und setzen die Unterhaltung fort."
           },
           "chipsIntro": "Eine Karte zeigt nur drei Chips: Installationsstatus, Anmeldung und Konten sowie Push-Kanal. Die vollständige Reihe steht in „{overview}“ oben in der Seitenleiste und gibt wieder, wie diese CLI derzeit eingerichtet ist. Die Reihenfolge ist fest und folgt „was sie ist → womit sie läuft → wie sie erreicht wird“:",
           "chipsTable": {
@@ -4582,19 +4584,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "Modell und Aufwand (5)",
-              "vendors": "Claude Code, Antigravity CLI, Copilot CLI, Muse Code und Pi"
+              "group": "Modell und Aufwand ({count})",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "Nur Modell (7)",
-              "vendors": "Codex, Cursor CLI, Grok CLI, Kilo Code, Kimi Code, OpenCode und Qwen Code"
+              "group": "Nur Modell ({count})",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "Keines von beiden (4)",
-              "vendors": "Aider, Droid, MiniMax Code und Terminal (das kein Agent ist)"
+              "group": "Keines von beiden ({count})",
+              "vendors": "{names} (Terminal ist kein Agent)"
             }
           },
-          "spawnNote": "Den sieben CLIs mit „Nur Modell“ fehlt kein Regler für den Denkaufwand; der Regler ist nur kein Startargument. Bei manchen steckt er in der Modell-ID (etwa ein angehängtes <code>-high</code>), bei anderen in einer Konfigurationsdatei oder hinter einem Befehl innerhalb der Session. Ein Wert, der gegen die Regeln verstößt (eine Modell-ID mit Leerzeichen oder einem führenden „-“), wird sofort erklärt und deaktiviert die Schaltfläche zum Absenden. Und hat diese CLI einen eigenen Startbefehl, sind beide Felder deaktiviert, mit ausgeschriebener Begründung – diese Zeile läuft wie geschrieben, und Navide fügt ihr kein Modell hinzu.",
+          "spawnNote": "Den CLIs mit „Nur Modell“ fehlt kein Regler für den Denkaufwand; der Regler ist nur kein Startargument. Bei manchen steckt er in der Modell-ID (etwa ein angehängtes <code>-high</code>), bei anderen in einer Konfigurationsdatei oder hinter einem Befehl innerhalb der Session. Ein Wert, der gegen die Regeln verstößt (eine Modell-ID mit Leerzeichen oder einem führenden „-“), wird sofort erklärt und deaktiviert die Schaltfläche zum Absenden. Und hat diese CLI einen eigenen Startbefehl, sind beide Felder deaktiviert, mit ausgeschriebener Begründung – diese Zeile läuft wie geschrieben, und Navide fügt ihr kein Modell hinzu.",
           "h5": "5 · Push-Kanäle",
           "h6": "6 · Installation und Updates",
           "pushAllOff": "<strong>Alle auszuschalten ist eine gültige Wahl</strong>; eine Regel „mindestens einen behalten“ gibt es hier nicht. Sind alle vier aus, nennt der Push-Teil der Seitenleiste drei Folgen: Nachrichten warten, bis der empfangende Bereich im Leerlauf ist, und werden dann in seine Eingabe getippt, kommen also später an; das Rewake von Claude Code ist der einzige Weg, einen Agent im Leerlauf aufzuwecken, ohne es warten Sie also, bis der Agent von selbst in den Leerlauf geht; und bereits geöffnete Bereiche behalten den Kanal, mit dem sie gestartet wurden, bis zu ihrem Neustart."
@@ -4603,7 +4605,7 @@
           "title": "Konten",
           "p1": "Einstellungen ▸ <strong>Konten</strong> enthält zwei voneinander unabhängige Dinge: Git-Konten in der oberen Hälfte, CLI-Konten in der unteren.",
           "h1": "CLI-Konten",
-          "p2": "Alle 15 Anbieter erhalten eine Überschrift, aber nur <strong>5 unterstützen mehrere Konten</strong>: Claude Code, Codex, Kimi Code, Grok CLI, Kilo Code. Die übrigen zeigen eine Zeile – „Dieser Agent unterstützt keine mehreren Konten.“ – und gar keine Schaltfläche zum Hinzufügen.",
+          "p2": "Ob eine CLI <strong>mehrere Konten</strong> halten kann und wie ein Wechsel bei ihr ankommt – direkt, durch Neustart ihrer Bereiche oder von Hand –, zeigt die Spalte „Mehrere Konten“ der Tabelle in Kapitel 1 für jede CLI; sie liest die Angabe der CLI selbst, keine in der Hilfe gepflegte Liste.",
           "p3": "Unter jedem Anbieter ist die erste Karte immer das integrierte Konto <strong>Standard</strong> (Ihre ursprünglichen Anmeldeinformationen); danach folgen die hinzugefügten Konten. Eine Karte zeigt die angemeldete E-Mail-Adresse, die Kennzeichnung <em>Standard</em> und das verbleibende Kontingent dieses Kontos.",
           "table": {
             "action": "Aktion",
@@ -4638,7 +4640,7 @@
           "p7": "Zu häufiges Wechseln wird blockiert (höchstens 3-mal pro 60 Sekunden pro CLI); die Bestätigung eines erzwungenen Wechsels umgeht das nicht.",
           "callout1": {
             "title": "Geöffnete Bereiche behalten das vorherige Konto",
-            "text": "Das Panel sagt es selbst: „Bereits geöffnete Bereiche behalten das vorherige Konto, bis sie neu geöffnet werden“. Alle Konten teilen sich Ihr echtes Home-Verzeichnis (Sessions und Verlauf werden geteilt); ein Kontowechsel <strong>tauscht die gespeicherten Anmeldeinformationen an Ort und Stelle</strong>."
+            "text": "Offene Bereiche behalten das Konto, mit dem sie gestartet wurden, bis sie neu geöffnet werden. Alle Konten teilen Ihr echtes Home-Verzeichnis (Sessions und Verlauf sind gemeinsam), und ein Wechsel <strong>tauscht die gespeicherten Anmeldedaten an Ort und Stelle aus</strong>. Ein Claude-Konto lässt sich zusätzlich in einem <strong>eigenen Ordner</strong> anmelden („Im eigenen Ordner anmelden“); dann kann ein einzelner Bereich auf dieses Konto wechseln, ohne die aktuelle Anmeldung der CLI oder andere Bereiche zu berühren."
           },
           "apiKeys": {
             "title": "API-Schlüssel-Konten",
@@ -4658,13 +4660,14 @@
             "title": "Die Verknüpfung erfolgt an anderer Stelle",
             "text": "„Welches Git-Konto dieser Arbeitsbereich verwendet“ wählen Sie mit der Konto-Pille im <strong>Git-Panel der Seitenleiste</strong>. Die Einstellungsseite fügt Konten nur hinzu, bearbeitet und löscht sie. Das Löschen eines Kontos hebt auch jede Verknüpfung auf, die darauf verwies."
           },
-          "switchToast": "<strong>Ein fehlgeschlagener Wechsel ist jetzt immer sichtbar.</strong> Früher lösten nur zwei Ablehnungen eine Meldung aus – „Bereiche laufen“ und „zu häufiger Wechsel“. Alles andere, auch ein fehlgeschlagener Austausch der Anmeldeinformationen, landete im eigenen Banner des Panels „Konten“, das längst aus dem Blickfeld gescrollt war, während Sie die Zeilen eines Anbieters betrachteten; ein Klick auf „Als Standard festlegen“ sah aus, als sei gar nichts passiert. Jede Art von Fehlschlag beim Wechsel löst jetzt eine Meldung aus."
+          "switchToast": "<strong>Ein fehlgeschlagener Wechsel ist jetzt immer sichtbar.</strong> Früher lösten nur zwei Ablehnungen eine Meldung aus – „Bereiche laufen“ und „zu häufiger Wechsel“. Alles andere, auch ein fehlgeschlagener Austausch der Anmeldeinformationen, landete im eigenen Banner des Panels „Konten“, das längst aus dem Blickfeld gescrollt war, während Sie die Zeilen eines Anbieters betrachteten; ein Klick auf „Als Standard festlegen“ sah aus, als sei gar nichts passiert. Jede Art von Fehlschlag beim Wechsel löst jetzt eine Meldung aus.",
+          "agentConfirm": "Ein Agent kann das auch selbst anfordern – eine Anmeldung für ein Konto öffnen, das Konto einer CLI wechseln oder einen einzelnen Bereich auf ein anderes Konto verschieben. Jede Anfrage öffnet einen Bestätigungsdialog mit CLI, Konto, anfragendem Bereich und Begründung; <strong>ohne Ihre Zustimmung passiert nichts</strong>, und eine unbeantwortete Anfrage schließt sich von selbst."
         },
         "s6": {
           "title": "Kontingentanzeige",
           "p1": "Das Kontingent-Badge befindet sich in der <strong>Titelleiste des CLI-Bereichs</strong> (nicht in der Statusleiste) und zeigt den verbleibenden Prozentsatz; beim Darüberfahren klappen die Details auf – jedes Messfenster, Rücksetzzeiten und die Kontoauswahl. Die Kontokarten unter Einstellungen ▸ Konten lesen dieselben Daten.",
           "h1": "Welche Anbieter abgedeckt sind",
-          "p2": "<strong>11</strong>: Claude Code, Codex, Kimi Code, Grok CLI, Antigravity CLI, OpenCode, Qwen Code, Kilo Code, Pi, Copilot CLI, Cursor CLI. Aider, Muse Code, Droid und MiniMax Code haben keine lesbare Kontingentquelle.",
+          "p2": "<strong>{withCount}</strong>: {withQuota}. {withoutQuota} haben keine lesbare Kontingentquelle.",
           "h2": "Woher die Daten stammen",
           "list": {
             "claude": "<strong>Claude Code ist ein Sonderfall</strong>: Navide rührt seine Anmeldeinformationen nie an; es führt <code>claude -p /usage</code> aus und liest den Kontingentbericht, den die CLI selbst ausgibt. Jedes Auslesen startet daher ein vollständiges Claude Code und dauert einige Sekunden.",
@@ -4852,23 +4855,23 @@
             "tools": {
               "list": "<strong>Ziele auflisten</strong> – wer online ist, wie die Adresse geschrieben wird und ob das Ziel gerade beschäftigt ist.",
               "send": "<strong>Anweisung senden</strong> – beliebigen Text an einen benannten Bereich zustellen.",
-              "spawn": "<strong>Neuen Agent öffnen und ihm Arbeit übergeben</strong> – Navide bitten, einen neuen CLI-Bereich zu öffnen, die darin laufende CLI auszuwählen und ihm eine Aufgabe zu geben. Der neue Bereich sollte sich nach Abschluss mit einer Nachricht beim Aufrufer zurückmelden; das ist aber die Ausgabe des Sub-Agents selbst und keine Garantie von Navide: Sie wird in die Warteschlange gestellt, solange der Aufrufer beschäftigt ist, und kommt nie an, wenn der Sub-Agent das Format nicht einhält.",
+              "spawn": "<strong>Einen neuen Agent öffnen und ihm Arbeit geben</strong> – lassen Sie Navide einen neuen CLI-Bereich öffnen, wählen Sie, welche CLI darin läuft, und geben Sie ihm eine Aufgabe. Der neue Bereich sollte dem Aufrufer nach Abschluss mit einer Nachricht berichten; dieser Bericht ist die eigene Ausgabe des Sub-Agents und wartet in der Warteschlange, solange der Aufrufer beschäftigt ist. Endet der erste Turn des neuen Bereichs ohne Bericht, leitet Navide die letzte Ausgabe dieses Turns einmal an den Aufrufer weiter, gekennzeichnet als Ersatzbericht und nicht als Bericht des Bereichs selbst.",
               "ack": "<strong>Eine reine Bestätigung</strong> – „verstanden“, „erledigt“, alles, worauf die Gegenseite nicht reagieren muss. Sie wird für Sie lesbar ins Nachrichtenprotokoll geschrieben (mit dem Badge „nur Bestätigung“), aber <strong>nie in das Eingabefeld des anderen Agents getippt</strong>; sie unterbricht oder weckt ihn also nicht – und alles, was die Gegenseite lesen oder bearbeiten muss, kann deshalb nicht auf diesem Weg gehen.",
               "pending": "<strong>Prüfen, wer auf mich wartet</strong> – in einen beschäftigten Bereich kann nicht getippt werden, deshalb kann der Agent selbst nachfragen: Was wartet in der Warteschlange darauf, dass er in den Leerlauf wechselt, und hängt etwas fest, das er gesendet hat?"
             },
-            "note": "<strong>Zehn</strong> der fünfzehn CLIs sind an dieses Tool-Set angebunden (siehe Tabelle im nächsten Abschnitt). Die übrigen – Aider, Droid, Muse Code, Pi – verwenden stattdessen das Ausgabeprotokoll unten; MiniMax Code hat noch keinen der beiden Wege und kann nur empfangen."
+            "note": "<strong>{mcpCount}</strong> der {total} CLIs sind an diese Werkzeuge angebunden (siehe Tabelle im nächsten Abschnitt). {protocolOnly} nutzen stattdessen das Ausgabeprotokoll unten; {receiveOnly} haben noch keinen der beiden Wege und können nur empfangen."
           },
           "proto": {
             "title": "Ausgabeprotokoll",
             "tag": "Bereiche in einer Pipeline haben es automatisch",
             "p1": "Der Agent gibt in seiner Antwort einen solchen einfachen Textblock aus, und Navide übernimmt ihn als Nachricht:",
             "code": "---MSG-START--- to: reviewer\nBitte pnpm test:run ausführen und die Liste der Fehlschläge zurückmelden\n---MSG-END---",
-            "note": "to: kann in derselben Zeile wie ---MSG-START--- stehen oder allein in der <strong>Zeile direkt darunter</strong>; jedes to: weiter unten zählt als Inhalt. Die Zeilen ---MSG-START--- und ---MSG-END--- müssen in Spalte eins beginnen – ohne Einrückung – und dürfen nicht in einem Markdown-Codeblock stehen, sonst werden sie nicht erkannt, und es wird kein Fehler gemeldet. Pipeline-Slots erfahren in ihrem Eröffnungs-Briefing von diesem Protokoll; manuell geöffnete Bereiche nicht, aber Sie können den Block oben direkt in einen solchen Bereich einfügen – sofern diese CLI laut Tabelle unten das Ausgabeprotokoll unterstützt."
+            "note": "to: kann in derselben Zeile wie ---MSG-START--- stehen oder allein in der <strong>Zeile direkt darunter</strong>; jedes to: weiter unten zählt als Inhalt. Die Zeilen ---MSG-START--- und ---MSG-END--- müssen in Spalte eins beginnen – ohne Einrückung – und dürfen nicht in einem Markdown-Codeblock stehen, sonst werden sie nicht erkannt; zeigt ein Turn ---MSG-START---, ohne dass daraus eine Nachricht wird, tippt Navide einen Hinweis „message not recognized“ in diesen Bereich. Pipeline-Slots erfahren in ihrem Eröffnungs-Briefing von diesem Protokoll; manuell geöffnete Bereiche nicht, aber Sie können den Block oben direkt in einen solchen Bereich einfügen – sofern diese CLI laut Tabelle unten das Ausgabeprotokoll unterstützt."
           }
         },
         "s3": {
           "title": "Welche CLIs senden können",
-          "p1": "<strong>Jeder CLI-Bereich kann Nachrichten empfangen</strong> – Navide tippt den Text direkt ins Terminal, das hat mit der CLI nichts zu tun. <strong>Vierzehn der fünfzehn können auch senden</strong>; nur der verfügbare Weg unterscheidet sich:",
+          "p1": "<strong>Jeder CLI-Bereich kann Nachrichten empfangen</strong> – Navide tippt den Text direkt ins Terminal, das hat mit der CLI nichts zu tun. <strong>{sendCount} der {total} können auch senden</strong>; nur der verfügbare Weg unterscheidet sich:",
           "table": {
             "cli": "CLI",
             "send": "Kann sie senden?"
@@ -4878,7 +4881,7 @@
             "protocolOnly": "Nur Ausgabeprotokoll",
             "none": "Keins von beiden (nur Empfang)"
           },
-          "note1": "<strong>Vierzehn der fünfzehn können senden</strong>; nur der Weg unterscheidet sich. Für das Ausgabeprotokoll muss Navide das eigene Log des Agents lesen – alle vierzehn Anbieter mit Log-Reader sind abgedeckt, sodass Navide erkennt, wann der Agent etwas fertig gesagt hat und was. MCP-Tools brauchen zusätzlich einen Zugang über die CLI (ein Start-Flag, eine Umgebungsvariable mit dem gesamten Konfigurationsdokument oder eine Spiegelung des Konfigurationsverzeichnisses pro Bereich); Aider, Droid, Muse Code und Pi bieten keinen davon und nutzen daher nur das Ausgabeprotokoll. <strong>MiniMax Code hat keins von beiden</strong>: Es speichert seine Unterhaltungen in SQLite, und Navide hat für dieses Format noch keinen Reader – es kann also Nachrichten empfangen, aber nicht senden.",
+          "note1": "Das Ausgabeprotokoll setzt voraus, dass Navide das eigene Protokoll des Agents lesen kann; jeder Anbieter mit Log-Reader ist abgedeckt, sodass Navide erkennt, wann der Agent etwas fertig gesagt hat und was. MCP-Werkzeuge brauchen zusätzlich einen Zugang in der CLI (ein Start-Flag, eine Umgebungsvariable mit dem ganzen Konfigurationsdokument oder ein Spiegel des Konfigurationsverzeichnisses pro Bereich) und dass Navide ihn anbindet; {protocolOnly} sind nicht angebunden und nutzen nur das Ausgabeprotokoll. <strong>{receiveOnly}</strong> haben beides nicht: Navide hat noch keinen Reader für ihre Protokolle, sie können also Nachrichten empfangen, aber nicht senden.",
           "note2": "Zwei Einschränkungen in der Praxis: <strong>Antigravity</strong> kann in der Runde, in der der Agent Ihnen eine Frage stellt, nicht senden (diese Runde enthält keinen Antworttext) – normale Antwortrunden funktionieren; und <strong>Qwen, Pi und Kimi</strong> haben kein explizites Signal „Runde beendet“, deshalb leitet Navide es aus 8 Sekunden Stille ab, und die Nachricht geht etwas später hinaus."
         },
         "s4": {
@@ -4923,7 +4926,7 @@
           "list": {
             "alive": "Seine CLI läuft noch und hat die Startphase hinter sich",
             "noTyping": "Niemand tippt in diesem Bereich (ein Entwurf im Feld oder ein Tastendruck in den letzten vier Sekunden lässt ihn warten)",
-            "noTurn": "Gerade läuft keine Runde",
+            "noTurn": "Gerade läuft kein Turn – außer bei {midTurn}, das eine mitten im Turn getippte Nachricht selbst in die Warteschlange stellt; dort gilt nur die Tipp-Sperre",
             "quiet": "Keine Ausgabe in den letzten 2 Sekunden"
           },
           "p2": "Sind die Bedingungen nicht erfüllt, kommt die Nachricht in die Warteschlange; sobald sie erfüllt sind, geht sie automatisch hinaus. Während das Ziel an einer langen Aufgabe arbeitet, wartet Ihre Nachricht also, bis es fertig ist – das ist beabsichtigt. Das Panel „Nachrichten zwischen CLIs“ nennt die Bedingung, die sie aufhält – „Der Zielbereich läuft nicht“, „Der Zielbereich startet noch“, „Im Zielbereich wird gerade getippt“, „Der Ziel-Agent ist mitten in einer Runde“, „Warten, bis sich das Ziel beruhigt“ –, sodass „sie ging nie hinaus“ immer einen auffindbaren Grund hat. Die Nachricht, die das Ziel erhält, ist mit ihrer Quelle versehen, damit es weiß, wem es antworten soll.",
@@ -4948,7 +4951,9 @@
             "rejected": "Eine Ablehnung <strong>entsteht nur durch eine fehlerhafte Anfrage</strong>: unbekannter CLI-Name, doppelter oder ungültiger Name, leere Aufgabe oder ein Modell bzw. Reasoning-Aufwand, den diese CLI nicht akzeptiert.",
             "kickoff": "<strong>Ob die Startaufgabe tatsächlich angekommen ist, wird ebenfalls gemeldet.</strong> Navide wartet vor der Antwort, bis die CLI gestartet ist, ihr Prompt erscheint und die Aufgabe eingetippt wurde. Kann es die Zustellung nicht bestätigen, heißt es „zuerst den Status prüfen“ statt „erneut senden“ – ein blindes erneutes Senden vergibt dieselbe Arbeit zweimal.",
             "duplicate": "<strong>Eine wiederholte Anfrage für denselben Start wird blockiert</strong>, sodass ein Agent, der das Warten aufgibt und erneut fragt, nicht mit einem zweiten Bereich endet.",
-            "resume": "<strong>Ein neuer Bereich kann auch mit einer alten Unterhaltung geöffnet werden.</strong> Der Agent listet die CLI-Unterhaltungen auf, die dieser Arbeitsbereich noch enthält, und nennt eine davon; der neue Bereich startet mit dem vollständigen Gedächtnis dieser Unterhaltung (auch einer, die in einem einfachen Terminal begonnen wurde). Die ID wird zuerst mit dem Session-Speicher dieser CLI abgeglichen, und eine ID ohne Inhalt wird abgelehnt, statt stillschweigend leer geöffnet zu werden."
+            "resume": "<strong>Ein neuer Bereich kann auch mit einer alten Unterhaltung geöffnet werden.</strong> Der Agent listet die CLI-Unterhaltungen auf, die dieser Arbeitsbereich noch enthält, und nennt eine davon; der neue Bereich startet mit dem vollständigen Gedächtnis dieser Unterhaltung (auch einer, die in einem einfachen Terminal begonnen wurde). Die ID wird zuerst mit dem Session-Speicher dieser CLI abgeglichen, und eine ID ohne Inhalt wird abgelehnt, statt stillschweigend leer geöffnet zu werden.",
+            "otherProject": "<strong>Der neue Bereich kann in einem anderen Projekt öffnen</strong> – mit dessen Ordner, CLAUDE.md, Gedächtnis, Plans und git –, während der Aufrufer sein Elternteil bleibt und den Bericht erhält. Standardmäßig landet er in der Seitenleiste dieses Fensters, wahlweise in einem neuen Fenster oder in dem Fenster, das das Projekt schon geöffnet hat.",
+            "release": "<strong>Ein fertiger Kind-Bereich lässt sich mit <code>cli_reclaim_agent</code> freigeben</strong>: Sein CLI-Prozess endet, der Bereich bleibt als Karte zum Fortsetzen per Klick stehen, die Unterhaltung bleibt erhalten, sodass Sie die Arbeit noch prüfen können. Umbenennen geht mit <code>cli_rename_pane</code>."
           },
           "table": {
             "suggestion": "Richtwert",
@@ -4982,7 +4987,7 @@
           "guards": {
             "rate": {
               "limit": "Rate für ein Paar Quelle → Ziel",
-              "value": "5 pro 60 Sekunden",
+              "value": "5 pro 60 Sekunden (Chat-Absender: 30)",
               "why": "Zwei Agents, die einander antworten, können endlos kreisen"
             },
             "queue": {
@@ -4991,9 +4996,9 @@
               "why": "Nichts soll sich unbegrenzt anstauen, während das Ziel überlastet ist"
             },
             "timeout": {
-              "limit": "Kein Ergebnis nach dem Senden",
+              "limit": "Kein Ergebnis für eine Nachricht an ein anderes Fenster",
               "value": "Nach 30 Minuten als fehlgeschlagen markiert",
-              "why": "Ist das Zielfenster geschlossen, darf eine Nachricht nicht ewig auf „In Warteschlange“ stehen"
+              "why": "Wird das empfangende Fenster geschlossen oder schläft der Rechner, darf eine arbeitsbereichsübergreifende Nachricht nicht ewig auf „In Warteschlange“ stehen. Eine Nachricht an einen beschäftigten Bereich im selben Fenster wartet einfach."
             },
             "pause": {
               "limit": "Pausenschalter",
@@ -5033,7 +5038,7 @@
             "stuckQueued": {
               "symptom": "Die Nachricht bleibt ewig „In Warteschlange“",
               "cause": "Das Ziel arbeitet an einer langen Aufgabe und ist noch nicht im Leerlauf",
-              "fix": "Normal – warten Sie, bis es fertig ist; hängt es wirklich, wird es nach 30 Minuten als fehlgeschlagen markiert"
+              "fix": "Normal – warten Sie, bis es fertig ist. Nach 2 Minuten erfährt der Absender, dass die Nachricht noch zurückgehalten wird, und Sie können sie im Panel mit „Zurückziehen“ zurückziehen; nur eine Nachricht an ein anderes Fenster wird nach 30 Minuten als fehlgeschlagen markiert."
             },
             "rateLimit": {
               "symptom": "Das Panel meldet „Ratenbegrenzung: höchstens 5 Nachrichten pro 60 s zwischen denselben zwei Bereichen“",
@@ -5060,12 +5065,13 @@
         "s10": {
           "title": "Bekannte Grenzen",
           "list": {
-            "terminalPane": "<strong>Ein einfacher Terminalbereich kann weder senden noch empfangen</strong> – nur CLI-Agent-Bereiche haben einen Namen.",
-            "receiveOnly": "<strong>Fünf CLIs haben keine MCP-Tools</strong> – Aider, Droid, Muse Code und Pi können nur das zeilenbasierte Ausgabeprotokoll nutzen, und <strong>MiniMax Code hat nicht einmal das</strong>: Es kann Nachrichten empfangen, aber nicht senden. Siehe „Welche CLIs senden können“ oben.",
+            "terminalPane": "<strong>Ein reiner Terminalbereich kann empfangen, aber nicht senden.</strong> Eine Nachricht an ihn wird unverändert eingetippt und als Shell-Befehl ausgeführt – ohne Umschlag, ohne Antworthinweis. Terminals sind von Broadcasts ausgenommen, werden nach Ihrem letzten Tastendruck 60 Sekunden zurückgehalten, nach 2 Minuten in der Warteschlange als fehlgeschlagen markiert statt verspätet getippt, und zerstörerische Befehle werden abgelehnt.",
+            "receiveOnly": "<strong>{noMcpCount} CLIs haben keine MCP-Werkzeuge</strong> – {protocolOnly} können nur das Ausgabeprotokoll mit freistehenden Zeilen nutzen, und <strong>{receiveOnly}</strong> nicht einmal das: Sie können Nachrichten empfangen, aber nicht senden. Siehe „Welche CLIs senden können“ oben.",
             "detached": "<strong>Nachdem ein Bereich in ein eigenes Fenster abgelöst oder das Fenster neu geladen wurde</strong>, steht der Weg über MCP-Tools erst wieder zur Verfügung, wenn der Bereich neu geöffnet wird; das Ausgabeprotokoll ist nicht betroffen.",
             "queueFull": "<strong>Ist die Warteschlange des Ziels voll (höchstens 10), wird die Nachricht verworfen</strong> – aber nicht mehr stillschweigend: Das Panel meldet „Für das Ziel warten bereits 10 Nachrichten“, der Fehler wird als Hinweis in den sendenden Bereich zurückgetippt, und der sendende Agent kann ebenso nachsehen, was aus seiner Nachricht geworden ist. Die Zustellung bleibt asynchron, daher ist <strong>im Moment des Sendens</strong> nichts bekannt.",
             "noPermission": "<strong>Es gibt keine Berechtigungsabfrage</strong> – arbeitsbereichsübergreifende Nachrichten lösen keinen Bestätigungsdialog aus, nur einen Hinweis bei Ankunft. Das ist ein bewusster Kompromiss.",
-            "ackLocal": "<strong>Eine reine Bestätigung überschreitet keine Geräte</strong> – das Relay kann nicht zusichern, dass die Nachricht auf dem Rechner einer anderen Person aus dem Eingabefeld herausbleibt; eine geräteübergreifende Bestätigung wird daher grundsätzlich abgelehnt. Senden Sie sie als normale Nachricht, wenn sie übertragen werden muss."
+            "ackLocal": "<strong>Eine reine Bestätigung überschreitet keine Geräte</strong> – das Relay kann nicht zusichern, dass die Nachricht auf dem Rechner einer anderen Person aus dem Eingabefeld herausbleibt; eine geräteübergreifende Bestätigung wird daher grundsätzlich abgelehnt. Senden Sie sie als normale Nachricht, wenn sie übertragen werden muss.",
+            "acp": "<strong>ACP-Bereiche</strong> (experimentell; eingeschaltet unter „CLI-Agents“ → ACP) bekommen eine Nachricht als ACP-Prompt übergeben, statt dass sie eingetippt wird; „Zugestellt“ heißt, dass der Agent den Prompt angenommen hat, nicht, dass er ihn gelesen oder beantwortet hat."
           }
         },
         "tip": "Tipp: Geben Sie Bereichen zuerst Rollennamen („reviewer“, „architect“) – der Titel ist die Adresse, und alles Weitere liest sich dann viel natürlicher.",
@@ -5088,7 +5094,7 @@
             "legend": {
               "actions": {
                 "label": "Titelleiste",
-                "text": "„Zustellung pausieren“ stellt spätere Nachrichten in die Warteschlange, statt sie zu senden; „Protokoll leeren“ leert nur die Anzeige und lässt zugestellte Nachrichten unberührt."
+                "text": "„Zustellung pausieren“ stellt spätere Nachrichten in die Warteschlange, statt sie zu senden; „Protokoll leeren“ entfernt abgeschlossene Zeilen und behält die, die noch unterwegs sind."
               },
               "route": {
                 "label": "Quelle → Ziel",
@@ -5159,12 +5165,13 @@
           "h3": "CLI-Abfragen aus dem Chat beantworten",
           "answer": {
             "bare": "Berechtigungsabfragen und Fragen werden einzeln im Chat gepostet. Ist nur eine offen, beantwortet ein einfaches <code>1</code>–<code>9</code>, <code>yes</code> oder <code>no</code> sie; sind mehrere offen, hängen Sie die ID an die Antwort an (zum Beispiel <code>yes &lt;id&gt;</code>). Jeder andere Text erhält sofort einen Hinweis, statt in einer Warteschlange zu warten.",
-            "which": "Nur Claude Code, Codex und Aider lassen sich aus dem Chat beantworten; bei anderen CLIs, Mehrfachauswahl und Freitextfragen werden Sie gebeten, am Computer zu antworten, statt wirkungslose Schaltflächen anzuzeigen.",
+            "which": "Nur Claude Code, Codex, Aider und Grok Build lassen sich aus dem Chat beantworten; bei anderen CLIs, Mehrfachauswahl und Freitextfragen werden Sie gebeten, am Computer zu antworten, statt wirkungslose Schaltflächen anzuzeigen.",
             "never": "Dauerhafte Entscheidungen wie „nicht mehr fragen“, „immer erlauben“ oder „für diese Session erlauben“ werden <strong>nie aus einem Chat ausgelöst</strong>.",
             "guard": "Aus einem Chat genehmigte Anfragen durchlaufen trotzdem Navide Guard: Alles, was als kritisch oder hoch eingestuft wird, wird abgelehnt, ebenso alles, was Guard nicht beurteilen kann; der Chat erfährt, dass die Aktion am Computer bestätigt werden muss."
           },
           "h4": "Der Monitor in der Titelleiste",
-          "p4": "Die Schaltfläche „{monitor}“ in der Titelleiste trägt einen Statuspunkt: rot, wenn ein Bot blockiert ist, gelb, während einer neu verbindet, grün, wenn alles in Ordnung ist, und kein Punkt, wenn kein Bot aktiviert ist. Sie öffnet eine Liste aller an einen Chat gebundenen Bereiche, in der Sie zum Bereich springen oder ihn trennen können; automatische untergeordnete Themen sind unter ihrer übergeordneten Bindung gruppiert."
+          "p4": "Die Schaltfläche „{monitor}“ in der Titelleiste trägt einen Statuspunkt: rot, wenn ein Bot blockiert ist, gelb, während einer neu verbindet, grün, wenn alles in Ordnung ist, und kein Punkt, wenn kein Bot aktiviert ist. Sie öffnet eine Liste aller an einen Chat gebundenen Bereiche, in der Sie zum Bereich springen oder ihn trennen können; automatische untergeordnete Themen sind unter ihrer übergeordneten Bindung gruppiert.",
+          "commands": "In einem verbundenen Chat antworten <code>/prompts</code>, <code>/skills</code> und <code>/mcp</code> mit Schaltflächen für Ihre Prompt-Skills, die Skills der CLI dieses Bereichs und die MCP-Server (schreibgeschützt); <code>/shares</code> und <code>/revoke</code> listen Freigabelinks auf und widerrufen sie; <code>/plugins status</code> und <code>/plugins stop</code> zeigen Navide-Plug-ins von Drittanbietern und stoppen eines. In den Chat gesendete Dateien werden für den Bereich gespeichert, und ein Bereich kann mit einer Zeile <code>---ATTACH--- &lt;Pfad&gt;</code> in seinem MSG-Block eine Datei zurückschicken."
         }
       },
       "workspace": {
@@ -5604,7 +5611,7 @@
         },
         "s1": {
           "title": "Richtung 1: die Tools, die Navide CLI-Agents bereitstellt",
-          "p1": "Sobald ein Bereich startet, erscheinen diese in der Tool-Liste des Agents. Sie müssen ihm nichts beibringen und nichts konfigurieren – sagen Sie einfach in normaler Sprache, was Sie möchten, z. B. „Phase zwei dieses Plans als erledigt markieren“. Derzeit sind es <strong>64</strong> (57 Kern-Tools plus die 7, die das Navide-Plug-in „Plans“ registriert), dazu 3 schreibgeschützte Ressourcen und 3 Prompt-Vorlagen.",
+          "p1": "Sobald ein Bereich startet, erscheinen diese in der Tool-Liste des Agents. Sie müssen ihm nichts beibringen und nichts konfigurieren – sagen Sie einfach in normaler Sprache, was Sie möchten, z. B. „Phase zwei dieses Plans als erledigt markieren“. Diese Seite beschreibt <strong>{listed}</strong> davon nach Gruppen, dazu 3 schreibgeschützte Ressourcen und 3 Prompt-Vorlagen. Mit jeder Version kommen Tools hinzu; die vollständige, aktuelle Liste zeigt die MCP-Ansicht des Agents beim Server navide (in Claude Code etwa <code>/mcp</code>).",
           "h1": "Plan-Dokumente",
           "planTools": {
             "plan_list": "Alle Pläne in diesem Arbeitsbereich mit Phase und Todo-Fortschritt auflisten",
@@ -5687,9 +5694,9 @@
           "note4": "Ein Arbeitsbereich kann zwei gleichnamige Bereiche enthalten, und ein Name allein kann dann nicht sagen, welcher gemeint ist; die Tools oben lehnen daher mit <code>ambiguous-target</code> ab, statt einen auszuwählen. Um einen bestimmten Bereich zu benennen, übergeben Sie die von <code>cli_list_targets</code> zurückgegebene <code>pane_id</code> an <code>cli_send</code>, <code>cli_send_and_wait</code>, <code>cli_read_log</code>, <code>cli_get_status</code> oder <code>cli_wait_idle</code> und lassen das Adressargument weg. Namen sind im Alltag besser lesbar; ein mit einer anderen CLI neu geöffneter Bereich erhält eine neue ID, und bei <code>unknown-pane-id</code> schlagen Sie sie einfach erneut nach. Bereiche auf einem anderen Gerät haben keine lokale ID und können nur über den Namen adressiert werden.",
           "note5": "Erhält <code>cli_send</code> die Adresse <code>group</code>, sucht es keinen Bereich namens group: Es sendet an die anderen Bereiche <strong>in der eigenen Tab-Gruppe</strong> (gleicher Arbeitsbereich). Das unterscheidet sich vom <code>all</code> des zeilenbasierten Protokolls: <code>all</code> ist das ganze Fenster, unabhängig von der Gruppierung. Bereiche ohne Gruppe teilen sich eine implizite Gruppe, damit sie einander erreichen statt niemanden. Auch die Form der Antwort unterscheidet sich: Jeder Empfänger in <code>recipients</code> hat einen eigenen <code>msg_key</code>, der einzeln mit <code>cli_check_message</code> abgefragt wird, und ein leeres <code>recipients</code> bedeutet, dass niemand sonst in Ihrer Gruppe ist, kein Fehlschlag. Der Preis ist derselbe wie bei <code>all</code>: Ein Bereich, der tatsächlich group heißt, ist nicht mehr über seinen Namen adressierbar.",
           "h4": "Welche CLIs angebunden sind",
-          "p2": "Bisher <strong>zehn</strong> der fünfzehn: Claude Code, Codex, Copilot CLI, Qwen Code, OpenCode, Kilo Code, Kimi Code, Grok CLI, Antigravity CLI, Cursor CLI. Die Art der Anbindung hängt von der Schnittstelle ab, die jede CLI bietet – ein Start-Flag (Claude Code, Codex, Copilot, Qwen), eine Umgebungsvariable mit dem gesamten Konfigurationsdokument (OpenCode, Kilo) oder eine Spiegelung des Konfigurationsverzeichnisses pro Bereich (Kimi, Grok, Antigravity). Keine der drei <strong>verändert Ihre eigene MCP-Konfigurationsdatei</strong>.",
+          "p2": "Bisher <strong>{mcpCount}</strong> der {total}: {mcpNames}. Die Art der Anbindung hängt von der Schnittstelle ab, die jede CLI bietet – ein Start-Flag (Claude Code, Codex, Copilot, Qwen), eine Umgebungsvariable mit dem gesamten Konfigurationsdokument (OpenCode, Kilo) oder eine Spiegelung des Konfigurationsverzeichnisses pro Bereich (Kimi, Grok, Antigravity). Keine der drei <strong>verändert Ihre eigene MCP-Konfigurationsdatei</strong>.",
           "note6": "<strong>Cursor ist die einzige Ausnahme</strong>: Es liest nur <code>.cursor/mcp.json</code> im Arbeitsbereich, deshalb fügt Navide seinen Eintrag in diese Datei ein und trägt sie in <code>.git/info/exclude</code> ein, sodass Ihr git status sauber bleibt.",
-          "note7": "Noch nicht angebunden sind <strong>Aider, Muse Code und Pi</strong> (diese drei CLIs haben keine MCP-Schnittstelle) sowie <strong>Droid und MiniMax Code</strong> (Navide hat sie nicht angebunden, und ob ihre CLIs einen Zugang bieten, ist nicht geklärt). Die meisten dieser Bereiche können anderen Bereichen weiterhin über das zeilenbasierte Ausgabeprotokoll Nachrichten senden; sie haben nur keine MCP-Tools zum Aufrufen. MiniMax Code ist die Ausnahme: Es hat auch kein Ausgabeprotokoll und kann daher nur empfangen.",
+          "note7": "Noch nicht angebunden: <strong>{notWired}</strong>. Manche dieser CLIs haben gar keine MCP-Schnittstelle, die übrigen hat Navide noch nicht angebunden. Die meisten dieser Bereiche können anderen Bereichen trotzdem über das Ausgabeprotokoll mit freistehenden Zeilen schreiben; sie haben nur keine MCP-Werkzeuge. Ausnahme sind {receiveOnly}: Sie haben auch kein Ausgabeprotokoll und können nur empfangen.",
           "note8": "Die Anbindung erfolgt <strong>in dem Moment, in dem der Bereich startet</strong>. Nach einem Update haben bereits geöffnete Bereiche also noch die alte Tool-Liste – schließen und öffnen Sie einen Bereich erneut, um die neue zu erhalten.",
           "h5": "Das Vorschau-Panel",
           "previewTools": {
@@ -5698,7 +5705,8 @@
             "preview_list": "Die Änderungsspur zurücklesen – was andere Agents, die Person am Rechner und der Dateiwächter jeweils getan haben, neueste zuerst; ein Zeitstempel-Cursor liest nur Neues",
             "preview_clear": "Die Änderungsspur leeren; entfernt werden die Zeilen, die im Vorschau-Panel zu sehen sind, auch die des Dateiwächters und die eigenen Einträge der Person am Rechner, und das kann nicht rückgängig gemacht werden. Es kann auch nur Einträge löschen, die älter als ein bestimmter Zeitpunkt sind"
           },
-          "note9": "<strong>Nur vier Tools funktionieren geräteübergreifend</strong>: Senden, Senden und Warten, Status abfragen und Warten auf Leerlauf. Das Transkript eines anderen Bereichs zu lesen, eine Unterbrechungstaste zu senden und einen Bereich zu schließen erfordern jeweils den Rechner dieses Bereichs, daher werden alle drei abgelehnt. Ein entfernter Bereich hat außerdem <strong>keine lokale ID</strong>, der dreiteilige Name ist also das einzige Handle; sein Status ist der Wert, den das entfernte Fenster zuletzt an Navide Cloud übertragen hat – nahezu aktuell, nicht live –, und es gibt auch keinen Kontingent-Schnappschuss (der Kontingent-Cache dieses Rechners beschreibt die Anmeldungen dieses Rechners, also die falsche Antwort für einen Bereich, der anderswo läuft)."
+          "note9": "<strong>Nur vier Tools funktionieren geräteübergreifend</strong>: Senden, Senden und Warten, Status abfragen und Warten auf Leerlauf. Das Transkript eines anderen Bereichs zu lesen, eine Unterbrechungstaste zu senden und einen Bereich zu schließen erfordern jeweils den Rechner dieses Bereichs, daher werden alle drei abgelehnt. Ein entfernter Bereich hat außerdem <strong>keine lokale ID</strong>, der dreiteilige Name ist also das einzige Handle; sein Status ist der Wert, den das entfernte Fenster zuletzt an Navide Cloud übertragen hat – nahezu aktuell, nicht live –, und es gibt auch keinen Kontingent-Schnappschuss (der Kontingent-Cache dieses Rechners beschreibt die Anmeldungen dieses Rechners, also die falsche Antwort für einen Bereich, der anderswo läuft).",
+          "note10": "Hier nicht aufgeführt, aber ebenfalls enthalten: Chat-Kanäle (<code>channels_*</code>), Verwaltung von Navide Marketplace und Navide-Plug-ins (<code>marketplace_*</code>, <code>plugins_*</code>), Fenster (<code>window_*</code>, <code>workspace_close</code>), Freigabelinks (<code>share_*</code>), <code>evolve_report</code> / <code>evolve_retro</code> und <code>pipeline_import_n8n</code>. Was jedes Tool tut, steht in seiner eigenen Beschreibung in der Tool-Liste des Agents."
         },
         "s2": {
           "title": "Richtung 2: Navide nutzt externe MCP-Server",
@@ -5714,7 +5722,8 @@
           "warn": {
             "p1": "<strong>Hier konfigurierte Server erscheinen nie in der Tool-Liste eines CLI-Agents.</strong> Sie dienen genau einem Zweck – „Kontext lesen → in den Eröffnungs-Prompt einfügen“ – und werden <strong>nur ausgelöst, während eine Pipeline läuft</strong>; von Hand geöffnete Bereiche berühren sie nie.",
             "p2": "Damit Claude Code oder Codex einen MCP-Server selbst nutzen kann (etwa um GitHub direkt abzufragen), konfigurieren Sie ihn in der eigenen MCP-Konfiguration dieser CLI, nicht hier."
-          }
+          },
+          "p3": "Jede Serverzeile zeigt Status und Werkzeuganzahl und, wenn der Start fehlschlägt, die letzten ausgegebenen Zeilen. Ein über Node.js gestarteter Server wird mit „Benötigt Node.js“ markiert, wenn Node.js fehlt, mit geführter Installation. Leer gelassene Werte wie Umgebungsvariablen und Header werden auf diesem Rechner ausgefüllt und nie zwischen Geräten synchronisiert. „Vergleichen“ zeigt als Matrix, welche CLI welchen Server hat."
         },
         "s3": {
           "title": "Richtung 3: externe Clients steuern Navide",
@@ -5775,15 +5784,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "Der Agent sagt, er habe keine Plan- oder Nachrichten-Tools",
-              "detail": "Der Bereich wurde beim Öffnen nicht angebunden (er stammt von vor dem Update), oder er führt eine der fünf noch nicht an MCP angebundenen CLIs aus (Aider / Droid / Muse Code / Pi / MiniMax Code). Im ersten Fall schließen und öffnen Sie ihn erneut; im zweiten verwenden Sie stattdessen das zeilenbasierte Ausgabeprotokoll für Nachrichten – MiniMax Code hat nicht einmal das und kann nur empfangen."
+              "detail": "Dieser Bereich wurde beim Öffnen nicht angebunden (er ist älter als das Update), oder er führt eine der {noMcpCount} noch nicht an MCP angebundenen CLIs aus ({notWired}). Im ersten Fall schließen und neu öffnen; im zweiten stattdessen das Ausgabeprotokoll mit freistehenden Zeilen nutzen – {receiveOnly} haben nicht einmal das und können nur empfangen."
             },
             "serverUnused": {
               "symptom": "Unter Einstellungen → MCP wurde ein Server hinzugefügt, aber der Agent kann ihn nicht nutzen",
-              "detail": "Das ist Richtung 2, ausschließlich für Pipelines, die Dokumentation lesen. Damit der Agent ihn selbst aufrufen kann, konfigurieren Sie ihn in der eigenen MCP-Konfiguration dieser CLI. Der Abschnitt „MCP aller CLIs“ in der unteren Hälfte von Einstellungen → MCP listet schreibgeschützt auf, welche Server jede CLI konfiguriert hat, sodass Sie es direkt prüfen können."
+              "detail": "Das ist Richtung 2, nur dafür, dass Pipelines Dokumentation lesen. Damit der Agent ihn selbst aufrufen kann, konfigurieren Sie ihn in der eigenen MCP-Konfiguration dieser CLI. Einstellungen → MCP listet schreibgeschützt die Server, die jede CLI schon hat, neben Navides eigenen; mit „Vergleichen“ sehen Sie, welche CLI welchen hat."
             },
             "planLoadFailed": {
               "symptom": "Der Agent meldet, dass der Plan nicht geladen werden konnte",
-              "detail": "Jedes Plan-Tool erwartet einen Arbeitsbereichspfad. Weicht der übergebene Pfad vom tatsächlichen Arbeitsbereich des Bereichs ab, schreibt der Agent an einen Ort, den Navide nicht sieht. Bitten Sie ihn, den Arbeitsbereichspfad des Bereichs zu verwenden."
+              "detail": "Ohne übergebenen Arbeitsbereichspfad arbeiten die Plan-Werkzeuge im Arbeitsbereich des Bereichs selbst. Übergibt der Agent einen anderen Pfad, schreibt er in ein Projekt, das Navide womöglich nicht anzeigt (das Werkzeug warnt dann, dass kein Bereich es nutzt). Bitten Sie ihn, den Arbeitsbereichspfad wegzulassen."
             },
             "staleIdentity": {
               "symptom": "Er meldet die Bereichsidentität als veraltet",
@@ -5813,7 +5822,7 @@
               },
               "actions": {
                 "label": "Aktionen in der oberen Leiste",
-                "text": "„MCP hinzufügen +“ fügt einen aus dem integrierten Katalog hinzu, „Eigenen hinzufügen“ einen von Hand, und „Aktualisieren“ liest die Konfigurationsdatei neu ein."
+                "text": "„+ MCP hinzufügen“ fügt einen aus dem eingebauten Katalog hinzu, „Eigenen hinzufügen“ einen von Hand, und „MCP-Konfiguration öffnen“ öffnet die Konfigurationsdatei."
               },
               "card": {
                 "label": "Katalogkarte",

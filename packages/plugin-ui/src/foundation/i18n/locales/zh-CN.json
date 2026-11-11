@@ -4375,9 +4375,9 @@
             "signInInside": "在 CLI 内登录",
             "flagNoteGoose": "无——Goose 默认会自己核准所有工具（GOOSE_MODE=auto）；要先询问，请把 GOOSE_MODE 设成 approve 或 smart_approve。Navide 的 Guard 目前还不涵盖 Goose。"
           },
-          "note": "“额度”＝ Navide 读得到剩余用量（第 6 章）。“多账号”＝ 可以在设置里挂多组登录并切换（第 5 章）。四家没有略过权限旗标的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因为它们本身就没有这个旗标，不是 Navide 没接。“登录指令”＝ 在设置 ▸ 账号按“登录”时，Navide 实际会运行的指令；标示“在 CLI 内登录”的那几家没有独立的登录指令，按下去就是照常启动该 CLI，登录在它自己的画面里完成。",
+          "note": "“额度”＝ Navide 读得到剩余用量（第 6 章）。“多账号”＝ 可以在设置里挂多组登录并切换（第 5 章）。没有略过权限旗标的 {noFlagCount} 家 CLI（{noFlag}）是因为它们本身就没有这个旗标，不是 Navide 没接。“登录指令”＝ 在设置 ▸ 账号按“登录”时，Navide 实际会运行的指令；标示“在 CLI 内登录”的那几家没有独立的登录指令，按下去就是照常启动该 CLI，登录在它自己的画面里完成。",
           "callout": {
-            "title": "第 16 个选项不是 agent",
+            "title": "最后一项不是 agent",
             "text": "＋ 菜单最下方的 <strong>>_ 打开终端</strong> 是一般 shell，不挂任何 agent，也不会注入角色。它刻意独立放在清单外，不会被 CLI 清单的卷动吃掉。"
           }
         },
@@ -4426,7 +4426,8 @@
           "callout2": {
             "title": "Grok CLI 换成官方的 xAI CLI",
             "text": "安装方式改成官方的安装脚本（用 <code>curl</code> 抓 <code>https://x.ai/cli/install.sh</code> 交给 bash 运行），不再是 npm 套件——所以它需要 <code>curl</code>，也需要一个真正的终端窗口；更新指令是 <code>grok update</code>；设置档换成 <code>~/.grok/config.toml</code>，MCP 以 TOML 写入，旧社区版的 <code>user-settings.json</code> 不再读。它<strong>没有诊断指令</strong>（官方没提供，设置页改成指向官方文档），也没有 effort 栏与权限略过旗标。同名的社区版 CLI 会装在同一个路径，<code>which grok</code> 分不出来，只能靠版本字符串的形状分辨。"
-          }
+          },
+          "menuGroups": "+ 菜单分成两个标题：写代码的 CLI 在 <strong>{cliHeading}</strong> 下面，长驻型的 agent（{agents}）在 <strong>{agentsHeading}</strong> 下面。"
         },
         "s3": {
           "title": "角色",
@@ -4460,7 +4461,7 @@
             "global": "最上面一颗<strong>全域开关</strong>：<em>默认略过权限提示（YOLO 模式）</em>。每一家的抽屉都看得到同一颗，在哪一家改，影响的都是全部。",
             "perVendor": "下面是这一家的一行，显示它的实际旗标（例如 <code>--yolo</code>），右边一个三态下拉：<strong>跟随全域 / 一律略过 / 一律不略过</strong>。"
           },
-          "p4": "没有旗标的四家（Grok CLI / OpenCode / Pi / MiniMax Code）在抽屉的这一段只有那颗全域开关，下面一行写明这家 CLI 没有权限略过旗标、没有东西可切换。",
+          "p4": "没有旗标的 {noFlagCount} 家 CLI（{noFlag}），抽屉这一区只会显示全局开关，下方加一行说明这家 CLI 没有略过权限旗标、没有东西可切。",
           "callout1": {
             "title": "改了不会影响正在跑的分格",
             "text": "旗标是在分格<strong>启动的那一刻</strong>就写进它的命令行的。这里的变更只影响之后开的分格；已经在跑的会保留它启动时的设置，直到你重建或还原它。"
@@ -4499,7 +4500,8 @@
           "note": "更新会替换可执行文件；已经在运行中的分格要重新启动才会用到新版本。",
           "callout2": {
             "title": "这里没有的东西",
-            "text": "仍然<strong>没有“默认参数”字段</strong>——启动指令是<em>整条取代</em>，不是在默认命令后面追加。<strong>可执行文件的指定也不是打路径</strong>，而是在侦测到多套实体安装时从候选里挑一套（挑过之后抽屉“总览”会出现“自订可执行文件”chip）。模型与 reasoning effort 则<strong>不再只有 MCP 那一条路</strong>：现在启动覆写就有正式的字段，手动开面板的对话框也有。"
+            "text": "仍然<strong>没有“默认参数”字段</strong>——启动指令是<em>整条取代</em>，不是在默认命令后面追加。<strong>可执行文件的指定也不是打路径</strong>，而是在侦测到多套实体安装时从候选里挑一套（挑过之后抽屉“总览”会出现“自订可执行文件”chip）。模型与 reasoning effort 则<strong>不再只有 MCP 那一条路</strong>：现在启动覆写就有正式的字段，手动开面板的对话框也有。",
+            "setModel": "已经在跑的分格也能换模型：由 agent 调用 <code>cli_set_model</code>。Claude Code 和 Codex 当场切换（Claude 用它的模型选单、Codex 用 <code>/model</code>）；其他 CLI 会重启该分格并接回原本的对话。"
           },
           "chipsIntro": "卡片上只放三个 chip：安装状态、登录与账号数、推送通道。完整的一排 chip 在抽屉最上面的“{overview}”，把那家 CLI 目前的设置现况直接读回来。顺序是固定的，照着“它是什么 → 它会用什么跑 → 怎么找得到它”排：",
           "chipsTable": {
@@ -4582,19 +4584,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "模型与推理强度都有（5 家）",
-              "vendors": "Claude Code、Antigravity CLI、Copilot CLI、Muse Code、Pi"
+              "group": "模型与推理强度都有（{count} 家）",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "只有模型（7 家）",
-              "vendors": "Codex、Cursor CLI、Grok CLI、Kilo Code、Kimi Code、OpenCode、Qwen Code"
+              "group": "只有模型（{count} 家）",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "两栏都没有（4 项）",
-              "vendors": "Aider、Droid、MiniMax Code，以及 Terminal（它不是 agent）"
+              "group": "两栏都没有（{count} 项）",
+              "vendors": "{names}（Terminal 不是 agent）"
             }
           },
-          "spawnNote": "“只有模型”的那七家并不是没有思考强度可调，而是那个旋钮不在启动参数上：有的写在模型 id 里（例如结尾的 <code>-high</code>），有的在设置档，有的要进 CLI 后用它自己的指令切。打的值不合规矩时（模型 id 带空白、或以“-”开头）对话框会当场说明原因并把送出钮禁用。如果那家 CLI 设了自订启动指令，这两栏会直接禁用并写上原因——那条命令照原样运行，Navide 不会往里面加模型。",
+          "spawnNote": "“只有模型”的那几家并不是没有思考强度可调，而是那个旋钮不在启动参数上：有的写在模型 id 里（例如结尾的 <code>-high</code>），有的在设置档，有的要进 CLI 后用它自己的指令切。打的值不合规矩时（模型 id 带空白、或以“-”开头）对话框会当场说明原因并把送出钮禁用。如果那家 CLI 设了自订启动指令，这两栏会直接禁用并写上原因——那条命令照原样运行，Navide 不会往里面加模型。",
           "h5": "5 · 推送通道",
           "h6": "6 · 安装与更新",
           "pushAllOff": "<strong>全部关掉是合法的选择</strong>，这里没有“至少留一家”的规则。四家都关掉时，抽屉的推送段会直接列出三项代价：消息改成等对方分格闲置之后再打进输入框，所以比较慢才会到；Claude Code 的 rewake 是唯一能叫醒闲置 agent 的手段，关掉之后只能等它自己回到闲置；已经开着的分格会保留它启动时的通道，直到重新启动为止。"
@@ -4603,7 +4605,7 @@
           "title": "账号",
           "p1": "设置 ▸ <strong>账号</strong> 一页装了两块互不相干的东西：上半是 Git 账号，下半是 CLI 账号。",
           "h1": "CLI 账号",
-          "p2": "15 家都会列出标题，但只有 <strong>5 家支持多账号</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Kilo Code。其余只印一行“此 agent 不支持多账号。”，连添加按钮都没有。",
+          "p2": "一家 CLI 能不能挂<strong>多个账号</strong>、切换时怎么生效（当场切换、重启它的分格，或要你手动处理），看第 1 章表格的“多账号”栏：那栏照该 CLI 自己的声明显示，不是说明页另外维护的清单。",
           "p3": "每家底下第一张卡片永远是内置的 <strong>默认</strong>（你原本的登录凭据），后面才是你自己加的账号。卡片上显示登录身分的 email、<em>默认</em> 标签，以及该账号的剩余额度。",
           "table": {
             "action": "操作",
@@ -4638,7 +4640,7 @@
           "p7": "切换太频繁会被挡（每家 CLI 60 秒最多 3 次），确认强制切换也绕不过去。",
           "callout1": {
             "title": "已开着的分格保留原账号",
-            "text": "面板上的说明就写着：“已打开的分格在重开前仍使用原账号”。所有账号共用你真实的家目录（session 与历史是共通的），切换账号是<strong>就地替换保存的凭据</strong>。"
+            "text": "已开着的分格会沿用它开启时的账号，直到重开为止。所有账号共用你真正的家目录（session 与历史共用），切换账号是<strong>就地替换存好的凭证</strong>。Claude 账号另外可以登录到<strong>自己的文件夹</strong>（“登录到账号文件夹”）；之后可以只把某一个分格搬到那个账号，不动 CLI 当前的登录，也不影响其他分格。"
           },
           "apiKeys": {
             "title": "API 密钥账号",
@@ -4658,13 +4660,14 @@
             "title": "绑定不在这里做",
             "text": "“这个工作区要用哪个 Git 账号”是在<strong>侧栏的 Git 面板</strong>上那颗账号胶囊选的。设置页只负责账号本身的增删改。删掉一个账号时，指向它的绑定会一起清掉。"
           },
-          "switchToast": "<strong>切换失败现在一定看得到。</strong>以前只有“有分格在跑”和“切太频繁”这两种拒绝会跳提示，其他失败（例如凭据交换本身失败）只写进账号面板自己的横幅——而你在看某一家的行时，那条横幅早就卷出画面了，按下“设为默认”看起来像什么都没发生。现在每一种切换失败都会跳提示。"
+          "switchToast": "<strong>切换失败现在一定看得到。</strong>以前只有“有分格在跑”和“切太频繁”这两种拒绝会跳提示，其他失败（例如凭据交换本身失败）只写进账号面板自己的横幅——而你在看某一家的行时，那条横幅早就卷出画面了，按下“设为默认”看起来像什么都没发生。现在每一种切换失败都会跳提示。",
+          "agentConfirm": "agent 也可以自己提出这些请求——为某个账号开登录、切换某家 CLI 的账号，或把单一分格搬到另一个账号。每个请求都会弹出确认框，写明是哪家 CLI、哪个账号、哪个分格提出的、理由是什么；<strong>你不同意就什么都不会发生</strong>，没回应的请求会自己关掉。"
         },
         "s6": {
           "title": "额度显示",
           "p1": "额度徽章长在 <strong>CLI 分格的标题栏</strong>上（不是状态栏），显示剩余百分比；鼠标停留展开详细窗口，里面有各个计量窗口、重置时间，以及账号切换入口。“设置 ▸ 账号”的账号卡片读的是同一份数据。",
           "h1": "涵盖哪几家",
-          "p2": "<strong>11 家</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Antigravity CLI、OpenCode、Qwen Code、Kilo Code、Pi、Copilot CLI、Cursor CLI。Aider、Muse Code、Droid、MiniMax Code 没有可读的额度来源。",
+          "p2": "<strong>{withCount} 家</strong>：{withQuota}。{withoutQuota} 没有可读的额度来源。",
           "h2": "数据从哪来",
           "list": {
             "claude": "<strong>Claude Code 是特例</strong>：Navide 完全不碰它的凭据，而是去跑 <code>claude -p /usage</code>，读 CLI 自己印出来的额度报表。因此读一次要启动一整个 Claude Code，需要几秒。",
@@ -4852,23 +4855,23 @@
             "tools": {
               "list": "<strong>查找对象</strong> — 有谁在在线、地址怎么写、对方现在是不是忙碌中。",
               "send": "<strong>送出指令</strong> — 把任意文字送给指定的分格。",
-              "spawn": "<strong>开新 agent 并派工</strong> — 请 Navide 开一个新的 CLI 分格、指定用哪家 CLI、给它任务。新分格完成后应该会用消息回报给调用者，但那是子 agent 自己输出的，不是 Navide 的保证：调用者忙碌时会排队，子 agent 没照格式输出时则不会送达。",
+              "spawn": "<strong>开一个新 agent 并交派工作</strong>——请 Navide 开一个新的 CLI 分格、指定它跑哪个 CLI、交给它一项任务。新分格做完后应该发消息回报给调用者；那份回报是子 agent 自己的输出，调用者忙的时候会排队等。如果新分格的第一个 turn 结束时没有回报，Navide 会把那个 turn 的最后输出转交给调用者一次，并标明是代为转交的备援回报，不是它自己写的。",
               "ack": "<strong>纯确认回复</strong> — “收到”“做完了”这种不需要对方动作的回信。它会写进消息记录给你看（面板上标成“仅记录”），但<strong>不会打进对方的输入框</strong>，所以不打断、也不吵醒对方；反过来说，需要对方看到或处理的事就不能用这种。",
               "pending": "<strong>查有没有人在等我</strong> — 忙碌中的分格收不到注入，所以 agent 可以自己回头查：有哪些消息正排队等我闲下来、以及自己寄出去的消息是不是卡住了。"
             },
-            "note": "十五家里有 <strong>十家</strong>接上了这组工具（见下一节的表）。没接上的是 Aider、Droid、Muse Code、Pi，它们改走下面的输出协定；MiniMax Code 两条路都还没有，只收得到消息。"
+            "note": "{total} 家 CLI 里有 <strong>{mcpCount} 家</strong>接上了这套工具（见下一节的表格）。{protocolOnly} 改用下面的输出协定；{receiveOnly} 两条路都还没有，只能收消息。"
           },
           "proto": {
             "title": "输出协定",
             "tag": "流程（pipeline）的分格自动具备",
             "p1": "agent 在回复里输出这种裸文字区块，Navide 会拦下来当作消息：",
             "code": "---MSG-START--- to: reviewer\n帮我跑一下 pnpm test:run，把失败清单回报给我\n---MSG-END---",
-            "note": "to: 可以跟 ---MSG-START--- 写在同一行，也可以单独写在它<strong>正下方那一行</strong>；再往下的 to: 就会被当成内容。---MSG-START--- 与 ---MSG-END--- 这两行必须顶格、不可缩进，也不可以放在 markdown 的代码区块里，否则不会被辨识，而且不会有任何错误提示。流程的 slot 在开场时就会被告知这个协定；手动开的分格不会，但你可以把上面这段直接贴给它——前提是那个 CLI 在下表里支持输出协定。"
+            "note": "to: 可以跟 ---MSG-START--- 写在同一行，也可以单独写在它<strong>正下方那一行</strong>；再往下的 to: 就会被当成内容。---MSG-START--- 与 ---MSG-END--- 这两行必须顶格、不可缩进，也不可以放在 markdown 的代码区块里，否则不会被辨识；一个 turn 出现了 ---MSG-START--- 却没解析出任何消息时，Navide 会在那个分格打一则“message not recognized”提示。流程的 slot 在开场时就会被告知这个协定；手动开的分格不会，但你可以把上面这段直接贴给它——前提是那个 CLI 在下表里支持输出协定。"
           }
         },
         "s3": {
           "title": "哪些 CLI 送得出消息",
-          "p1": "<strong>所有 CLI 分格都收得到消息</strong>——那是 Navide 直接把文字打进终端，跟 CLI 种类无关。<strong>主动送出的是十五家里的十四家</strong>，差别只在它手上有哪条路：",
+          "p1": "<strong>每个 CLI 分格都收得到消息</strong>——Navide 直接把文字打进终端，跟 CLI 本身无关。<strong>{total} 家里有 {sendCount} 家也送得出去</strong>，差别只在能走哪条路：",
           "table": {
             "cli": "CLI",
             "send": "能主动送讯吗"
@@ -4878,7 +4881,7 @@
             "protocolOnly": "仅输出协定",
             "none": "两条都没有（只收得到）"
           },
-          "note1": "<strong>十五家里有十四家送得出消息</strong>，差别只在走哪条路。输出协定要 Navide 读得懂那家 agent 的记录档——有记录读取器的十四家都通，Navide 因此知道它“讲完一段话”以及它讲了什么。MCP 工具则要那家 CLI 提供接入点（启动参数、一个带整份设置的环境变量，或一份只给这个分格用的设置目录镜像），Aider、Droid、Muse Code、Pi 目前没有，所以它们只走输出协定。<strong>MiniMax Code 两条都还没有</strong>：它把对话存在 SQLite 里，Navide 还没有读得懂那个格式的记录读取器，所以它收得到消息、但送不出来。",
+          "note1": "输出协定要靠 Navide 读得到那个 agent 自己的记录；有记录读取器的厂商全都涵盖，所以 Navide 知道 agent 何时讲完一段话、讲了什么。MCP 工具另外需要 CLI 提供接入的方式（启动参数、一个带着整份设置的环境变量，或一份只给这个分格用的设置目录镜像），而且要 Navide 接上；{protocolOnly} 没有接上，所以只走输出协定。<strong>{receiveOnly}</strong> 两条都没有：Navide 还没有读它们记录的读取器，所以收得到消息、送不出去。",
           "note2": "两个实务上的但书：<strong>Antigravity</strong> 在“agent 反问你”的那个回合送不出消息（那个回合不带回复文字），一般回答的回合正常；<strong>Qwen、Pi、Kimi</strong> 没有明确的“回合结束”信号，Navide 靠 8 秒静默推断，所以送出时机会晚一些。"
         },
         "s4": {
@@ -4923,7 +4926,7 @@
           "list": {
             "alive": "对方的 CLI 还活着，而且已经过了启动阶段",
             "noTyping": "没有人正在那个分格里打字（输入框有草稿、或四秒内按过键，就先等）",
-            "noTurn": "没有正在跑的回合",
+            "noTurn": "目前没有 turn 在跑——{midTurn} 例外：它自己会把 turn 中途打进来的消息排进队列，所以只需要等没人在打字",
             "quiet": "最近 2 秒没有任何输出"
           },
           "p2": "条件不满足就先排队，满足了自动送出。所以对方正在跑长任务时，你的消息会等它做完 — 这是刻意的。“CLI 互传消息”面板会直接写出是哪一个条件挡着：“目标分格未在运行”“目标分格仍在启动中”“用户正在该分格输入中”“目标 agent 正在运行中”“等待目标静置”，所以“一直没送出去”永远查得到原因。对方收到的消息开头会标明来源，它才知道要回复给谁。",
@@ -4948,7 +4951,9 @@
             "rejected": "被拒绝的原因<strong>只跟写错有关</strong>：CLI 名称不存在、名称重复或不合法、任务空白、指定了那家 CLI 无法接受的模型或思考强度。",
             "kickoff": "<strong>第一段任务有没有真的送进去，会一并回报。</strong>Navide 会等到 CLI 开机、出现提示字符、把任务打进去为止才回答。没能确认送达时，它会说“先查状态再决定”而不是叫你重送——盲目重送等于把同一份工作派两次。",
             "duplicate": "<strong>同一个请求重复开分格会被挡下来</strong>，所以 agent 因为等太久而再送一次时，不会多出一个分格。",
-            "resume": "<strong>也可以接续旧对话开新分格。</strong>agent 先列出这个工作区还留着的 CLI 对话，再指定其中一个开起来，新分格带着那段对话的记忆开始（连在一般终端里开的也算）。对话 id 会先对那家 CLI 的记录档查证，查不到就直接拒绝，不会默默开成一个空的。"
+            "resume": "<strong>也可以接续旧对话开新分格。</strong>agent 先列出这个工作区还留着的 CLI 对话，再指定其中一个开起来，新分格带着那段对话的记忆开始（连在一般终端里开的也算）。对话 id 会先对那家 CLI 的记录档查证，查不到就直接拒绝，不会默默开成一个空的。",
+            "otherProject": "<strong>新分格可以开在别的项目</strong>——用那个项目自己的文件夹、CLAUDE.md、记忆、Plans 与 git——调用者仍是它的上层、照样收到回报。默认放进当前窗口的侧栏，也可以开在新窗口，或开在已经开着那个项目的窗口。",
+            "release": "<strong>做完的子分格可以用 <code>cli_reclaim_agent</code> 释放</strong>：它的 CLI 进程会结束，分格留在原处变成“点一下接回”的卡片、对话完整保留，你还是看得到它做了什么。分格也可以用 <code>cli_rename_pane</code> 改名。"
           },
           "table": {
             "suggestion": "建议值",
@@ -4982,7 +4987,7 @@
           "guards": {
             "rate": {
               "limit": "同一组“来源 → 目标”的频率",
-              "value": "每 60 秒最多 5 则",
+              "value": "每 60 秒 5 条（聊天发送者：30 条）",
               "why": "两个 agent 互相回复可能无限往返"
             },
             "queue": {
@@ -4991,9 +4996,9 @@
               "why": "对方忙不过来时不要无限堆积"
             },
             "timeout": {
-              "limit": "送出后等不到结果",
+              "limit": "发往其他窗口的消息一直没有结果",
               "value": "30 分钟后标为失败",
-              "why": "对方窗口被关掉时，消息不会永远卡在“队列中”"
+              "why": "接收的窗口被关掉或电脑睡眠时，跨工作区的消息不能永远卡在“队列中”。发给同一窗口里忙碌分格的消息只会继续等。"
             },
             "pause": {
               "limit": "暂停开关",
@@ -5033,7 +5038,7 @@
             "stuckQueued": {
               "symptom": "消息一直停在“队列中”",
               "cause": "对方正在跑长任务，还没闲下来",
-              "fix": "正常现象，等它做完；真的卡住 30 分钟会自动标为失败"
+              "fix": "正常——等它做完。排超过 2 分钟时发送方会收到“还在等”的通知，你也可以在面板上按“撤回”收回；只有发往其他窗口的消息会在 30 分钟后标成失败。"
             },
             "rateLimit": {
               "symptom": "面板写出“频率上限：同两个分格之间每 60 秒最多 5 则”",
@@ -5060,12 +5065,13 @@
         "s10": {
           "title": "已知限制",
           "list": {
-            "terminalPane": "<strong>纯终端分格不能当收发对象</strong> — 只有 CLI agent 分格才有名称。",
-            "receiveOnly": "<strong>五家没有 MCP 工具</strong> — Aider、Droid、Muse Code、Pi 只能走裸行输出协定；<strong>MiniMax Code 连输出协定都还没有</strong>，它只收得到消息、送不出去。见上方“哪些 CLI 送得出消息”。",
+            "terminalPane": "<strong>纯终端分格收得到、送不出。</strong>发给它的消息会原样打进去、当成 shell 指令运行——没有信封、也没有回复提示。终端不会收到广播；你最后一次按键后会先挡 60 秒；排队超过 2 分钟就直接标成失败、不会晚打进去；具破坏性的指令一律拒绝。",
+            "receiveOnly": "<strong>有 {noMcpCount} 家 CLI 没有 MCP 工具</strong>——{protocolOnly} 只能用裸行输出协定，<strong>{receiveOnly}</strong> 连这个都没有：收得到消息、送不出去。见上面“哪些 CLI 送得出消息”。",
             "detached": "<strong>分格被拆到独立窗口、或窗口重新加载后</strong>，MCP 工具那条路要重开分格才恢复；输出协定不受影响。",
             "queueFull": "<strong>对方队列满的时候（最多 10 则）消息会被丢弃</strong>，但不再是无声的：面板会写出“目标已有 10 则消息在排队”，失败也会以通知的形式打回寄件的那个分格，寄件的 agent 同样查得到自己那则的下场。只是递送是异步的，<strong>送出的那一瞬间</strong>仍然不知道结果。",
             "noPermission": "<strong>没有权限确认</strong> — 跨工作区传讯不会跳确认框，只会在收到时提示。这是刻意的取舍。",
-            "ackLocal": "<strong>纯确认（ack）不跨设备</strong> — 中继不保证消息在别人的机器上不会进到输入框，所以跨设备的 ack 直接被拒绝，要传就当一般消息传。"
+            "ackLocal": "<strong>纯确认（ack）不跨设备</strong> — 中继不保证消息在别人的机器上不会进到输入框，所以跨设备的 ack 直接被拒绝，要传就当一般消息传。",
+            "acp": "<strong>ACP 分格</strong>（实验功能，在“CLI 代理” → ACP 开启）收到的消息是以 ACP prompt 交给它，而不是打字进去；“已投递”代表 agent 接受了这个 prompt，不代表它已经读过或回复。"
           }
         },
         "tip": "小诀窍：先帮分格改个角色名（“reviewer”“架构师”），标题就是地址，之后交代事情会顺很多。",
@@ -5088,7 +5094,7 @@
             "legend": {
               "actions": {
                 "label": "标题栏",
-                "text": "“暂停投递”会让之后的消息排队但不送出；“清除记录”只清画面，不影响已送达的消息。"
+                "text": "“暂停投递”会让之后的消息先排队、不送出；“清除记录”清掉已结束的行，还在路上的会留着。"
               },
               "route": {
                 "label": "来源 → 目标",
@@ -5159,12 +5165,13 @@
           "h3": "从聊天回答 CLI 的提问",
           "answer": {
             "bare": "权限提示与问题会一则一则贴到聊天。只有一则还没回答时，直接回 <code>1</code>–<code>9</code>、<code>yes</code> 或 <code>no</code> 就行；有好几则时，在答案后面加上编号（例如 <code>yes &lt;id&gt;</code>）。其他文字会立刻收到提示，不会排队。",
-            "which": "能从聊天代答的只有 Claude Code、Codex 与 Aider；其他 CLI、多选题与自由输入的问题，会请你回到电脑前回答，而不是显示按了也没用的按钮。",
+            "which": "能从聊天代答的只有 Claude Code、Codex、Aider 与 Grok Build；其他 CLI、多选题与自由输入的问题，会请你回到电脑前回答，而不是显示按了也没用的按钮。",
             "never": "“不要再问”“一律允许”“这个 session 都允许”这类永久选项，<strong>从聊天永远不会被按下</strong>。",
             "guard": "从聊天核准的请求仍要经过 Navide Guard：被判为严重或高的一律拒绝，Guard 判断不了的也拒绝，聊天会收到“这个动作需要在电脑前确认”。"
           },
           "h4": "标题栏的监控按钮",
-          "p4": "标题栏的“{monitor}”按钮带一个状态点：有 bot 被挡是红、重新连接中是黄、正常是绿，没有激活的 bot 就没有点。点开列出每个绑了聊天的分格，可以跳到那个分格或直接断开；自动开出的子主题收在它的父绑定底下。"
+          "p4": "标题栏的“{monitor}”按钮带一个状态点：有 bot 被挡是红、重新连接中是黄、正常是绿，没有激活的 bot 就没有点。点开列出每个绑了聊天的分格，可以跳到那个分格或直接断开；自动开出的子主题收在它的父绑定底下。",
+          "commands": "在已绑定的聊天里，<code>/prompts</code>、<code>/skills</code>、<code>/mcp</code> 会回一排按钮，分别是你的提示技能、该分格 CLI 的技能，以及 MCP server（只读）；<code>/shares</code> 与 <code>/revoke</code> 列出与撤销分享链接；<code>/plugins status</code> 与 <code>/plugins stop</code> 显示第三方 Navide 插件并停掉其中一个。发到聊天的文件会存给该分格；分格也能在 MSG 区块里加一行 <code>---ATTACH--- &lt;路径&gt;</code> 把文件传回聊天。"
         }
       },
       "workspace": {
@@ -5604,7 +5611,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供给 CLI agent 的工具",
-          "p1": "分格一启动，agent 的工具清单里就会多出这些。你不需要教它，也不用设置——直接用中文交代就好，例如“帮我把这份计划的第二阶段标成完成”。目前一共 <strong>64 个</strong>（内核 57 个，加上 Navide 插件“Plans”注册的 7 个），另外还有 3 份唯读资源与 3 个提示样板。",
+          "p1": "分格一启动，agent 的工具清单里就会多出这些。你不需要教它，也不用设置——直接用中文交代就好，例如“帮我把这份计划的第二阶段标成完成”。这一页按用途分组介绍其中 <strong>{listed} 个</strong>，另外还有 3 份只读资源与 3 个提示样板。工具每一版都会增加，最完整、最新的清单以 agent 自己的 MCP 画面里 navide 这个 server 所列为准（例如 Claude Code 的 <code>/mcp</code>）。",
           "h1": "计划文档",
           "planTools": {
             "plan_list": "列出这个工作区的所有计划，含阶段与待办进度",
@@ -5687,9 +5694,9 @@
           "note4": "同一个工作区里可以有两个分格同名，这时候光靠名字说不清要找谁，上面几个工具会直接以 <code>ambiguous-target</code> 拒绝，而不是随便挑一个。要指定其中一个，就把 <code>cli_list_targets</code> 回传的 <code>pane_id</code> 当参数传给 <code>cli_send</code>、<code>cli_send_and_wait</code>、<code>cli_read_log</code>、<code>cli_get_status</code> 或 <code>cli_wait_idle</code>，这时候地址参数就不用填了。平常还是用名字比较好读；分格换了新的 CLI 重开之后 id 会换一个，遇到 <code>unknown-pane-id</code> 重新查一次即可。跨设备的分格没有本机 id，只能用名字寻址。",
           "note5": "<code>cli_send</code> 的地址填 <code>group</code>，不是去找名叫 group 的分格，而是广播给<strong>自己所在标签页群组</strong>里的其他分格（同工作区）。这跟裸行协定的 <code>all</code> 不一样：<code>all</code> 是整个窗口、不分群组。没有分到任何群组的分格共用同一个隐含群组，所以它们彼此送得到，而不是谁也送不到。回传的形状也不一样：<code>recipients</code> 里每个收件者各有一个 <code>msg_key</code>，要分别拿去 <code>cli_check_message</code> 查；空的 <code>recipients</code> 代表你的群组里没有别人，不是失败。代价与 <code>all</code> 相同：真的取名叫 group 的分格从此无法用名字寻址。",
           "h4": "哪些 CLI 接得到",
-          "p2": "十五家里目前有 <strong>十家</strong>：Claude Code、Codex、Copilot CLI、Qwen Code、OpenCode、Kilo Code、Kimi Code、Grok CLI、Antigravity CLI、Cursor CLI。接法看那家 CLI 自己提供什么界面——启动参数（Claude Code、Codex、Copilot、Qwen）、一个带着整份设置的环境变量（OpenCode、Kilo），或一份只给这个分格用的设置目录镜像（Kimi、Grok、Antigravity）。这三种都<strong>不会动到你自己的 MCP 设置档</strong>。",
+          "p2": "{total} 家里目前有 <strong>{mcpCount} 家</strong>：{mcpNames}。接法看那家 CLI 自己提供什么界面——启动参数（Claude Code、Codex、Copilot、Qwen）、一个带着整份设置的环境变量（OpenCode、Kilo），或一份只给这个分格用的设置目录镜像（Kimi、Grok、Antigravity）。这三种都<strong>不会动到你自己的 MCP 设置档</strong>。",
           "note6": "<strong>Cursor 是唯一的例外</strong>：它只读工作区里的 <code>.cursor/mcp.json</code>，所以 Navide 会合并写入那个档，并把它加进 <code>.git/info/exclude</code>，不会弄脏你的 git 状态。",
-          "note7": "还没接上的是 <strong>Aider、Muse Code、Pi</strong>（这三家的 CLI 没有 MCP 界面）与 <strong>Droid、MiniMax Code</strong>（Navide 尚未接，它们的 CLI 有没有界面也还没查证）。这些分格大多仍然可以用裸行输出协定跟其他分格传讯，只是没有 MCP 工具可以调用；MiniMax Code 是例外，它连输出协定都还没有，只收得到消息。",
+          "note7": "还没接上的是 <strong>{notWired}</strong>。其中有些 CLI 本身没有 MCP 界面，其他的是 Navide 还没接。这些分格大多仍能用裸行输出协定传消息给其他分格，只是没有 MCP 工具可调用。{receiveOnly} 是例外：连输出协定也没有，只能收消息。",
           "note8": "接线是 <strong>分格启动当下</strong>做的。所以功能更新后，已经开着的分格还是旧的工具清单——关掉重开才会拿到新的。",
           "h5": "“预览”面板",
           "previewTools": {
@@ -5698,7 +5705,8 @@
             "preview_list": "读回这个工作区的变更记录轨——别的 agent、用户、以及文件监看各自做了什么，最新的在前；可以带时间光标只读添加的部分",
             "preview_clear": "清空变更记录轨；删掉的是用户在“预览”面板上看到的那些行，含文件监看与用户自己的操作，无法恢复。可以只清某个时间点以前的"
           },
-          "note9": "<strong>跨设备只有四个工具走得通</strong>：传讯、传讯并等待、查状态、等对方闲下来。读对方的对话记录、送中断键、关掉对方的分格都需要那台机器自己来，所以一律拒绝。而且远程分格 <strong>没有本机 id</strong>，三段式名称是唯一的把手；它的状态是对方窗口最后一次上传给 Navide Cloud 的字，接近实时但不是实时，也没有额度快照（本机的额度快照讲的是本机的登录，对别台机器上的分格是错的答案）。"
+          "note9": "<strong>跨设备只有四个工具走得通</strong>：传讯、传讯并等待、查状态、等对方闲下来。读对方的对话记录、送中断键、关掉对方的分格都需要那台机器自己来，所以一律拒绝。而且远程分格 <strong>没有本机 id</strong>，三段式名称是唯一的把手；它的状态是对方窗口最后一次上传给 Navide Cloud 的字，接近实时但不是实时，也没有额度快照（本机的额度快照讲的是本机的登录，对别台机器上的分格是错的答案）。",
+          "note10": "这里没列出、但一样有内建的还有：聊天频道（<code>channels_*</code>）、Navide Marketplace 与 Navide 插件管理（<code>marketplace_*</code>、<code>plugins_*</code>）、窗口（<code>window_*</code>、<code>workspace_close</code>）、分享链接（<code>share_*</code>）、<code>evolve_report</code> / <code>evolve_retro</code>，以及 <code>pipeline_import_n8n</code>。每个工具在 agent 工具清单里都有自己的说明。"
         },
         "s2": {
           "title": "方向二：Navide 取用外部 MCP",
@@ -5714,7 +5722,8 @@
           "warn": {
             "p1": "<strong>这里设置的 server 不会出现在 CLI agent 的工具清单里。</strong>它们只服务“读取上下文 → 注入开场提示”这一件事，而且<strong>只在跑流程时</strong>触发，你手动开的分格完全不会用到。",
             "p2": "想让 Claude Code 或 Codex 自己能用某个 MCP server（例如让它直接查 GitHub），请用那个 CLI 自己的 MCP 设置，不是这里。"
-          }
+          },
+          "p3": "每一行 server 都会显示状态与工具数，启动失败时还有它最后打印的几行。通过 Node.js 启动的 server 在找不到 Node.js 时会标“需要 Node.js”，并提供引导安装。留空的值（例如环境变量与 header）要在这台电脑上填，永远不会在设备之间同步。“对照”会用矩阵列出哪家 CLI 有哪个 server。"
         },
         "s3": {
           "title": "方向三：外部 client 控制 Navide",
@@ -5775,15 +5784,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "agent 说它没有计划或传讯的工具",
-              "detail": "那个分格打开时还没接上（功能更新前开的），或用的 CLI 属于尚未接上 MCP 的五家（Aider／Droid／Muse Code／Pi／MiniMax Code）。前者关掉重开即可；后者请改用裸行输出协定传讯——MiniMax Code 连这条也没有，只收得到消息。"
+              "detail": "那个分格开启时还没接上（比更新还早开），或它跑的是还没接上 MCP 的 {noMcpCount} 家 CLI 之一（{notWired}）。前者关掉重开即可；后者改用裸行输出协定传消息——{receiveOnly} 连这个都没有，只能收消息。"
             },
             "serverUnused": {
               "symptom": "设置 → MCP 加了 server，但 agent 用不到",
-              "detail": "那是方向二，只给流程读文档用。要让 agent 自己能调用，得设置在那个 CLI 自己的 MCP 设置里。设置 → MCP 下半部的“各 CLI 的 MCP”会唯读列出每家 CLI 自己设了哪些 server，可以直接对照确认。"
+              "detail": "那是方向二，纯粹给流程读文档用。要让 agent 自己调用，得设置在那家 CLI 自己的 MCP 设置里。“设置 → MCP”会把每家 CLI 已有的 server 和 Navide 自己的列在一起（只读）；切到“对照”就能看哪家 CLI 有哪个。"
             },
             "planLoadFailed": {
               "symptom": "agent 说计划加载失败",
-              "detail": "计划工具都要指定工作区路径。若 agent 传的路径跟分格实际的工作区不同，就会写到 Navide 看不见的地方。请它改用分格的工作区路径。"
+              "detail": "没有传工作区路径时，plan 工具就用分格自己的工作区。如果 agent 传了别的路径，就会写到 Navide 可能没在显示的项目（工具这时会警告没有分格在用它）。请它不要带工作区路径。"
             },
             "staleIdentity": {
               "symptom": "提示分格身分已失效",
@@ -5813,7 +5822,7 @@
               },
               "actions": {
                 "label": "顶行动作",
-                "text": "“添加 MCP +”从内置目录加、“添加自订”手动加一个 server、“刷新”重新读取设置档。"
+                "text": "“+ 添加 MCP”从内建目录添加、“添加自订”手动添加，“打开 MCP 设置”则打开设置档。"
               },
               "card": {
                 "label": "目录卡片",

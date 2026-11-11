@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useQuotaFailover } from '../composables/useQuotaFailover'
+import { cliFacts, joinNames, spawnGroupNames } from '../lib/helpCliFacts'
 
 import MockDialog from './helpMocks/MockDialog.vue'
 import MockFigure from './helpMocks/MockFigure.vue'
@@ -111,9 +112,8 @@ const chips = [
 const launchFields = ['model', 'effort', 'command', 'env'] as const
 
 // Which fields the Manual spawn dialog shows, decided by whether the vendor
-// spec declares `modelArgs` / `effortArgs` — not by a hard-coded list. Counted
-// against the specs in platform/plugin-shell/agents on 2026-09-18: 5 / 7 / 3,
-// the last group being aider, droid and terminal.
+// spec declares `modelArgs` / `effortArgs` — not by a hard-coded list. The
+// counts and names are read from the specs (lib/helpCliFacts.ts).
 const spawnGroups = ['both', 'modelOnly', 'neither'] as const
 
 const installActions = ['update', 'doctor', 'install', 'autoUpdate', 'redetect'] as const
@@ -154,7 +154,25 @@ const riskActions = [
   { key: 'reveal', labelKey: 'cli-risk.reveal' },
 ] as const
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// Counts and name lists the prose quotes, read from the vendor specs.
+const facts = computed(() => cliFacts(locale.value))
+const menuGroups = computed(() => ({
+  cliHeading: t('label.add-menu-cli'),
+  agentsHeading: t('label.add-menu-agents'),
+  agents: facts.value.agents,
+}))
+// Chapter 6's quota split, read off the vendor table above.
+const quota = computed(() => {
+  const short = (row: VendorRow): string => row.name.replace(/\s*\([^)]*\)$/, '')
+  const withQuota = vendors.filter((row) => row.usage).map(short)
+  return {
+    withCount: withQuota.length,
+    withQuota: joinNames(withQuota, locale.value),
+    withoutQuota: joinNames(vendors.filter((row) => !row.usage).map(short), locale.value),
+  }
+})
 
 // ── Mock screenshots ────────────────────────────────────────────────────────
 // Four HTML pictures of surfaces this topic describes, drawn from the
@@ -268,7 +286,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
         </table>
       </div>
 
-      <p class="cah-note">{{ $t('settings.help.cliAgents.s1.note') }}</p>
+      <p class="cah-note">{{ $t('settings.help.cliAgents.s1.note', facts) }}</p>
 
       <div class="cah-callout">
         <div class="cah-callout-title">{{ $t('settings.help.cliAgents.s1.callout.title') }}</div>
@@ -283,6 +301,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
 
       <h3 class="cah-h3">{{ $t('settings.help.cliAgents.s2.h1') }}</h3>
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s2.p2')"></p>
+      <p class="cah-p" v-html="$t('settings.help.cliAgents.s2.menuGroups', menuGroups)"></p>
       <p class="cah-p">{{ $t('settings.help.cliAgents.s2.p3') }}</p>
 
       <MockFigure
@@ -471,8 +490,8 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
           </thead>
           <tbody>
             <tr v-for="key in spawnGroups" :key="key">
-              <td class="cah-nowrap"><strong>{{ $t(`settings.help.cliAgents.s4.spawnGroups.${key}.group`) }}</strong></td>
-              <td>{{ $t(`settings.help.cliAgents.s4.spawnGroups.${key}.vendors`) }}</td>
+              <td class="cah-nowrap"><strong>{{ $t(`settings.help.cliAgents.s4.spawnGroups.${key}.group`, spawnGroupNames(key, locale)) }}</strong></td>
+              <td>{{ $t(`settings.help.cliAgents.s4.spawnGroups.${key}.vendors`, spawnGroupNames(key, locale)) }}</td>
             </tr>
           </tbody>
         </table>
@@ -485,7 +504,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
         <li v-html="$t('settings.help.cliAgents.s4.list.global')"></li>
         <li v-html="$t('settings.help.cliAgents.s4.list.perVendor')"></li>
       </ul>
-      <p class="cah-p">{{ $t('settings.help.cliAgents.s4.p4') }}</p>
+      <p class="cah-p">{{ $t('settings.help.cliAgents.s4.p4', facts) }}</p>
 
       <MockFigure
         :caption="$t('settings.help.cliAgents.mock.settings.caption')"
@@ -561,6 +580,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <div class="cah-callout">
         <div class="cah-callout-title">{{ $t('settings.help.cliAgents.s4.callout2.title') }}</div>
         <div class="cah-callout-text" v-html="$t('settings.help.cliAgents.s4.callout2.text')"></div>
+        <div class="cah-callout-text" v-html="$t('settings.help.cliAgents.s4.callout2.setModel')"></div>
       </div>
     </section>
 
@@ -596,6 +616,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p">{{ $t('settings.help.cliAgents.s5.p6') }}</p>
       <p class="cah-p">{{ $t('settings.help.cliAgents.s5.p7') }}</p>
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.switchToast')"></p>
+      <p class="cah-p" v-html="$t('settings.help.cliAgents.s5.agentConfirm')"></p>
 
       <div class="cah-callout cah-callout--warn">
         <div class="cah-callout-title">{{ $t('settings.help.cliAgents.s5.callout1.title') }}</div>
@@ -628,7 +649,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p" v-html="$t('settings.help.cliAgents.s6.p1')"></p>
 
       <h3 class="cah-h3">{{ $t('settings.help.cliAgents.s6.h1') }}</h3>
-      <p class="cah-p" v-html="$t('settings.help.cliAgents.s6.p2')"></p>
+      <p class="cah-p" v-html="$t('settings.help.cliAgents.s6.p2', quota)"></p>
 
       <h3 class="cah-h3">{{ $t('settings.help.cliAgents.s6.h2') }}</h3>
       <ul class="cah-list">
