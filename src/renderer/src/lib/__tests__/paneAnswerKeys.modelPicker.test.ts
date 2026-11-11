@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { modelConfirmKeys, modelPickerKeys, modelSwitchResult, onModelPicker, onModelSwitchConfirm, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps } from '../paneAnswerKeys'
+import { modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps } from '../paneAnswerKeys'
 
 const UP = '\x1b[A'
 const DOWN = '\x1b[B'
@@ -257,5 +257,41 @@ describe('modelSwitchResult after the "Switch model?" box', () => {
 
   it('reads a line saved as the default as default', () => {
     expect(modelSwitchResult(`${LINUX_CONFIRM}\n  ⎿  Set model to Sonnet 5.5 (saved as your default)\n${LINUX_COMPOSER}`)).toBe('default')
+  })
+})
+
+describe('modelSwitchDiagnostic', () => {
+  // Built at runtime: a fake key-like value and customer text on the screen.
+  const fakeKey = ['sk', 'ant', 'api03', 'Z'.repeat(24)].join('-')
+  const customer = ['Customer', 'Ada', 'Example'].join(' ')
+  const screen = [
+    `${LIVE_PICKER}`,
+    `❯ echo ${fakeKey}`,
+    `  ${customer}`,
+    LINUX_CONFIRM,
+    '❯ /model',
+    '  ⎿  Set model to Sonnet 5.5 for this session only',
+    LINUX_COMPOSER,
+  ].join('\n')
+
+  it('gives the line count and the last line of each marker, -1 when absent', () => {
+    const lines = screen.split('\n').filter((l) => l.trim())
+    const d = modelSwitchDiagnostic(screen)
+    expect(d).toEqual({
+      lines: lines.length,
+      selectModel: lines.findIndex((l) => l.includes('Select model')),
+      switchModel: lines.findIndex((l) => l.includes('Switch model?')),
+      setModelTo: lines.findIndex((l) => l.includes('Set model to')),
+      savedAsDefault: -1,
+    })
+    expect(modelSwitchDiagnostic('')).toEqual({ lines: 0, selectModel: -1, switchModel: -1, setModelTo: -1, savedAsDefault: -1 })
+  })
+
+  it('puts none of the screen text into the logged line', () => {
+    const line = JSON.stringify({ fallback: 'confirm-not-confirmed', waitedMs: 5123, ...modelSwitchDiagnostic(screen) })
+    for (const text of [fakeKey, 'Z'.repeat(24), customer, 'Ada', 'Sonnet', 'Set model to', 'Switch model', 'Select model', 'echo']) {
+      expect(line).not.toContain(text)
+    }
+    expect(Object.values(modelSwitchDiagnostic(screen)).every((v) => Number.isInteger(v))).toBe(true)
   })
 })

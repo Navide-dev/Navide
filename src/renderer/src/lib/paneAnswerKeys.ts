@@ -303,6 +303,25 @@ export function modelSwitchResult(screen: string): 'session' | 'default' | null 
   return /saved as your default/i.test(tail) ? 'default' : 'session'
 }
 
+/** The shape of a screen tail for cli_set_model's fallback diagnostic: its
+ *  non-blank line count and, per marker, the last of those lines (0-based)
+ *  that has it, -1 when none does. Numbers only, never the screen's text: a
+ *  terminal may be showing a key or customer data. */
+export function modelSwitchDiagnostic(screen: string): Record<'lines' | 'selectModel' | 'switchModel' | 'setModelTo' | 'savedAsDefault', number> {
+  const lines = screen.split('\n').filter((l) => l.trim())
+  const last = (re: RegExp) => {
+    for (let i = lines.length - 1; i >= 0; i--) if (re.test(lines[i])) return i
+    return -1
+  }
+  return {
+    lines: lines.length,
+    selectModel: last(MODEL_PICKER_TITLE),
+    switchModel: last(MODEL_CONFIRM_TITLE),
+    setModelTo: last(/\bSet model to\b/),
+    savedAsDefault: last(/saved as your default/i),
+  }
+}
+
 function steps(keys: string[]): AnswerKeys {
   return { ok: true, keys: keys.join(''), steps: keys }
 }

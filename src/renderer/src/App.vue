@@ -49,7 +49,7 @@ import { agentConsoleKey, createAgentConsole } from './composables/useAgentConso
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { isAgentVendor } from './lib/agentIdentity'
-import { awaitingPromptText, modelConfirmKeys, modelPickerKeys, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { awaitingPromptText, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
@@ -4542,12 +4542,20 @@ const MODEL_PICKER_POLL_MS = 100
 // Returns null once the screen confirms the switch, else why it fell back; the
 // picker is closed with Esc before every fallback that may have opened it.
 async function setModelViaPicker(paneId: string, model: string): Promise<string | null> {
+  const startedAt = Date.now()
+  let lastScreen = ''
+  // One [set-model] line per fallback, describing the last screen read by its
+  // shape alone: the text itself never goes to the log.
+  const fallBack = (reason: string) => {
+    console.warn('[set-model]', JSON.stringify({ fallback: reason, waitedMs: Date.now() - startedAt, ...modelSwitchDiagnostic(lastScreen) }))
+    return reason
+  }
   const label = claudePickerLabel(model)
-  if (!label) return 'model-not-in-picker'
+  if (!label) return fallBack('model-not-in-picker')
   const ref = paneRefs[paneId]
   const sid = ref?.sessionId as string | undefined
-  if (!ref || !sid) return 'pane-not-ready'
-  const screen = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+  if (!ref || !sid) return fallBack('pane-not-ready')
+  const screen = () => (lastScreen = (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '')
   const write = (data: string) => backend.send('terminal.input', { terminal_session_id: sid, data })
   const waitFor = async (seen: (text: string) => boolean, ms = MODEL_PICKER_WAIT_MS): Promise<string | null> => {
     for (const end = Date.now() + ms; Date.now() < end; ) {
@@ -4564,7 +4572,7 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
       if (i) await sleep(ANSWER_STEP_GAP_MS)
       await write('\x1b')
     }
-    return reason
+    return fallBack(reason)
   }
   if (!(await injectPane(paneId, '/model', 'set-model', true))) return cancel('inject-failed')
   const menu = await waitFor(onModelPicker)
@@ -4600,7 +4608,7 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
     done = await waitFor((text) => modelSwitchResult(text) !== null, MODEL_CONFIRM_WAIT_MS)
     if (!done) return cancel('confirm-not-confirmed', 2)
   }
-  return modelSwitchResult(done) === 'default' ? 'saved-as-default' : null
+  return modelSwitchResult(done) === 'default' ? fallBack('saved-as-default') : null
 }
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been

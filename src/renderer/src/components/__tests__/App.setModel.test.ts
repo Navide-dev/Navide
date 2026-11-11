@@ -26,7 +26,7 @@ describe('cli_set_model: claude through the /model picker', () => {
   it('presses the computed keys only while the same picker is up', () => {
     expect(picker).toContain('modelPickerKeys(menu, label)')
     expect(picker).toContain('stillOn: stillOnModelPicker,')
-    expect(picker).toContain("return modelSwitchResult(done) === 'default' ? 'saved-as-default' : null")
+    expect(picker).toContain("return modelSwitchResult(done) === 'default' ? fallBack('saved-as-default') : null")
   })
 
   it('closes the picker with Esc before every fallback after it opened', () => {
@@ -43,6 +43,18 @@ describe('cli_set_model: claude through the /model picker', () => {
     for (const reason of ['confirm-not-matched', 'confirm-changed', 'confirm-keys-failed', 'confirm-not-confirmed']) {
       expect(picker).toContain(`return cancel('${reason}', 2)`)
     }
+  })
+
+  it('logs one [set-model] line per fallback with the screen shape only, never its text', () => {
+    expect(picker).toContain("console.warn('[set-model]', JSON.stringify({ fallback: reason, waitedMs: Date.now() - startedAt, ...modelSwitchDiagnostic(lastScreen) }))")
+    expect(picker.match(/console\./g)).toHaveLength(1)
+    // lastScreen is only assigned and handed to the shape reader.
+    expect(picker.match(/lastScreen/g)).toHaveLength(3)
+    expect(picker).toContain("return fallBack('model-not-in-picker')")
+    expect(picker).toContain("return fallBack('pane-not-ready')")
+    expect(picker).toContain('    return fallBack(reason)\n')
+    // Every other return of a reason goes through cancel, which logs it.
+    expect(picker).not.toMatch(/return '[a-z-]+'/)
   })
 
   it('waits longer for the result after Yes than after the picker keys', () => {
