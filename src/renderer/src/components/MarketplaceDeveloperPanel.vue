@@ -41,7 +41,7 @@ import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const notify = useNotify()
 
 type FieldName = (typeof DEVELOPER_APPLICATION_FIELDS)[number]
@@ -95,7 +95,7 @@ const entryStep = computed<'signed-out' | 'apply' | 'pending' | 'key' | 'publish
 function formatDate(value: string | null | undefined): string {
   if (!value) return ''
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(locale.value)
 }
 
 function openLink(url: string): void {

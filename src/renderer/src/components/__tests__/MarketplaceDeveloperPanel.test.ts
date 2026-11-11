@@ -169,6 +169,18 @@ describe('MarketplaceDeveloperPanel', () => {
       expect(cells[2].text()).not.toContain('T05:00')
     })
 
+    it('formats the added date in the Navide language, not the system one', async () => {
+      const previous = i18n.global.locale.value
+      i18n.global.locale.value = 'zh-TW'
+      try {
+        wrapper = await mountAs('owner')
+        const cells = wrapper.findAll('[data-testid="developer-member-row"]')[1].findAll('td')
+        expect(cells[2].text()).toBe(new Date(publisher.added_at).toLocaleDateString('zh-TW'))
+      } finally {
+        i18n.global.locale.value = previous
+      }
+    })
+
     it('adds a publisher only after the user confirms', async () => {
       const addMember = vi.fn(async () => ({ ok: true, status: 201, body: { your_role: 'owner', items: [owner, publisher] } }))
       wrapper = await mountAs('owner', { addMember })
