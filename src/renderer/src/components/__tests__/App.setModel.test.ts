@@ -45,6 +45,13 @@ describe('cli_set_model: claude through the /model picker', () => {
     }
   })
 
+  it('waits longer for the result after Yes than after the picker keys', () => {
+    expect(appSource).toContain('const MODEL_PICKER_WAIT_MS = 3000')
+    expect(appSource).toContain('const MODEL_CONFIRM_WAIT_MS = 5000')
+    expect(picker).toContain('done = await waitFor((text) => modelSwitchResult(text) !== null, MODEL_CONFIRM_WAIT_MS)')
+    expect(picker).toContain('let done = await waitFor((text) => onModelSwitchConfirm(text) || modelSwitchResult(text) !== null)\n')
+  })
+
   it('answers picker, slash or restart, and falls back to the restart with its reason', () => {
     expect(action).toContain("if (pane.agentKey === 'claude' && !effort) {")
     expect(action).toContain("return { ok: true, method: 'picker', paneId: pane.id }")

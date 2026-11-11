@@ -4534,6 +4534,8 @@ const ANSWER_STEP_GAP_MS = 60
 // How long cli_set_model waits for claude's /model picker to show, and then
 // for its "Set model to" line after the keys.
 const MODEL_PICKER_WAIT_MS = 3000
+// After Yes on the "Switch model?" box: longer, for slow machines.
+const MODEL_CONFIRM_WAIT_MS = 5000
 const MODEL_PICKER_POLL_MS = 100
 // claude: open the bare /model picker and pick the row with `s`, which switches
 // this session only (Enter would save the default for every new session).
@@ -4547,8 +4549,8 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
   if (!ref || !sid) return 'pane-not-ready'
   const screen = () => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
   const write = (data: string) => backend.send('terminal.input', { terminal_session_id: sid, data })
-  const waitFor = async (seen: (text: string) => boolean): Promise<string | null> => {
-    for (const end = Date.now() + MODEL_PICKER_WAIT_MS; Date.now() < end; ) {
+  const waitFor = async (seen: (text: string) => boolean, ms = MODEL_PICKER_WAIT_MS): Promise<string | null> => {
+    for (const end = Date.now() + ms; Date.now() < end; ) {
       await sleep(MODEL_PICKER_POLL_MS)
       const text = screen()
       if (seen(text)) return text
@@ -4595,7 +4597,7 @@ async function setModelViaPicker(paneId: string, model: string): Promise<string 
     })
     if (sent === 'prompt-changed') return cancel('confirm-changed', 2)
     if (!sent.ok) return cancel('confirm-keys-failed', 2)
-    done = await waitFor((text) => modelSwitchResult(text) !== null)
+    done = await waitFor((text) => modelSwitchResult(text) !== null, MODEL_CONFIRM_WAIT_MS)
     if (!done) return cancel('confirm-not-confirmed', 2)
   }
   return modelSwitchResult(done) === 'default' ? 'saved-as-default' : null

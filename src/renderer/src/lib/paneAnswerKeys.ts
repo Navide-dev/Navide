@@ -288,12 +288,15 @@ const MODEL_SWITCH_RESULT_LINES = 10
 /** What the screen says after the picker's keys: 'session' for claude's "Set
  *  model to …" line, 'default' when that line says it was saved as the
  *  default, null while the picker or its confirmation is still up or no fresh
- *  line is there. */
+ *  line is there. Only the text below the last picker or confirmation title
+ *  counts: a closed box's title can stay on the screen tail above the result
+ *  line, while an open box has no result line below its title. */
 export function modelSwitchResult(screen: string): 'session' | 'default' | null {
-  if (MODEL_PICKER_TITLE.test(screen) || MODEL_CONFIRM_TITLE.test(screen)) return null
-  const tail = screen
-    .split('\n')
-    .filter((l) => l.trim())
+  const lines = screen.split('\n').filter((l) => l.trim())
+  let lastTitle = lines.length - 1
+  while (lastTitle >= 0 && !MODEL_PICKER_TITLE.test(lines[lastTitle]) && !MODEL_CONFIRM_TITLE.test(lines[lastTitle])) lastTitle--
+  const tail = lines
+    .slice(lastTitle + 1)
     .slice(-MODEL_SWITCH_RESULT_LINES)
     .join('\n')
   if (!/\bSet model to\b/.test(tail)) return null
