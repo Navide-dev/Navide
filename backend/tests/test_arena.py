@@ -276,3 +276,6 @@ async def test_a_worktree_pointing_at_another_repository_is_refused(repo: Path, 
     (a / ".git").write_text(f"gitdir: {other / '.git'}\n")
     with pytest.raises(arena.ArenaError, match="does not belong"):
         await arena.run_status(str(repo), run["id"], None)
+    (a / ".git").write_text(f"gitdir: {repo / '.git' / 'worktrees' / '..'}\n")
+    with pytest.raises(arena.ArenaError, match="does not belong"):
+        await arena.run_status(str(repo), run["id"], None)
