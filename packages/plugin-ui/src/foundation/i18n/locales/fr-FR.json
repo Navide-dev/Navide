@@ -510,6 +510,7 @@
     "hold-mid-turn": "L’agent cible est au milieu d’un tour",
     "hold-settling": "En attente de la stabilisation de la cible",
     "hold-composer": "La zone de saisie contient encore le dernier envoi",
+    "hold-model-switch": "Le pane cible est en train de changer de modèle",
     "hold-pty-blocked": "Écrit : en attente de la lecture de son entrée par la cible",
     "hold-remote-ack": "Envoyé : en attente du compte rendu de la fenêtre cible",
     "hold-cancelling": "Retrait en cours : en attente de la réponse de la fenêtre cible",

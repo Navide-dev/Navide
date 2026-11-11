@@ -510,6 +510,7 @@
     "hold-mid-turn": "Agent đích đang giữa lượt",
     "hold-settling": "Đang chờ đích ổn định",
     "hold-composer": "Ô nhập vẫn còn lần đẩy trước",
+    "hold-model-switch": "Pane đích đang đổi mô hình",
     "hold-pty-blocked": "Đã ghi — đang chờ đích đọc dữ liệu nhập",
     "hold-remote-ack": "Đã gửi — đang chờ cửa sổ đích báo lại",
     "hold-cancelling": "Đang rút lại — đang chờ cửa sổ đích trả lời",

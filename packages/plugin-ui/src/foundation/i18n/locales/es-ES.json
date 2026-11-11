@@ -510,6 +510,7 @@
     "hold-mid-turn": "El agent de destino está en mitad de un turno",
     "hold-settling": "Esperando a que el destino se calme",
     "hold-composer": "El cuadro de entrada aún contiene el último envío",
+    "hold-model-switch": "El pane de destino está cambiando de modelo",
     "hold-pty-blocked": "Escrito: esperando a que el destino lea su entrada",
     "hold-remote-ack": "Enviado: esperando el informe de la ventana de destino",
     "hold-cancelling": "Retirando: esperando la respuesta de la ventana de destino",

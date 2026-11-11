@@ -510,6 +510,7 @@
     "hold-mid-turn": "目標 agent 正在執行中",
     "hold-settling": "等待目標靜置",
     "hold-composer": "輸入框仍握著上一次推送的文字",
+    "hold-model-switch": "目標分格正在切換模型",
     "hold-pty-blocked": "已寫入，等待目標讀取輸入",
     "hold-remote-ack": "已送出，等待對方視窗回報",
     "hold-cancelling": "撤回中，等待對方視窗回應",

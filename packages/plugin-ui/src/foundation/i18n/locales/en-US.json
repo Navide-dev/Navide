@@ -510,6 +510,7 @@
     "hold-mid-turn": "Target agent is mid-turn",
     "hold-settling": "Waiting for the target to settle",
     "hold-composer": "Input box still holds the last push",
+    "hold-model-switch": "Target pane is switching its model",
     "hold-pty-blocked": "Written — waiting for the target to read its input",
     "hold-remote-ack": "Sent — awaiting the target window's report",
     "hold-cancelling": "Withdrawing — awaiting the target window's answer",

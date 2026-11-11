@@ -510,6 +510,7 @@
     "hold-mid-turn": "대상 agent가 턴을 진행 중이에요",
     "hold-settling": "대상이 안정되기를 기다리는 중",
     "hold-composer": "입력란에 아직 마지막 푸시가 남아 있어요",
+    "hold-model-switch": "대상 pane이 모델을 바꾸는 중이에요",
     "hold-pty-blocked": "기록함 — 대상이 입력을 읽기를 기다리는 중",
     "hold-remote-ack": "보냄 — 대상 창의 보고를 기다리는 중",
     "hold-cancelling": "철회 중 — 대상 창의 응답을 기다리는 중",
