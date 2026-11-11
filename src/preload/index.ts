@@ -216,6 +216,25 @@ function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChang
   )
 }
 
+/** A window closed while the app kept running, as Welcome lists it. */
+export interface RecentlyClosedWindow {
+  workspace_path: string
+  /** The other workspaces it held, its own excluded. */
+  adopted_workspaces: string[]
+  /** Epoch milliseconds. */
+  closed_at: number
+}
+
+export interface ReopenClosedResult {
+  ok: boolean
+  /** Workspaces that came back in a new window. */
+  opened: number
+  /** Workspaces already open elsewhere, focused instead. */
+  focused: number
+  /** Folders that no longer exist, skipped. */
+  missing: string[]
+}
+
 export interface GitContributionState {
   workspacePath: string
   analyzerModel: string
@@ -1258,6 +1277,22 @@ contextBridge.exposeInMainWorld('agentTeam', {
     getSkipped: (): Promise<string[]> => ipcRenderer.invoke('restore:getSkipped'),
     apply: (): Promise<{ ok: boolean; opened: number }> => ipcRenderer.invoke('restore:apply'),
     dismiss: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('restore:dismiss'),
+    // Reopen Closed Window: the list newest first, and reopen one (no path =
+    // the newest). The two events say the list changed, or that a reopen
+    // skipped folders that no longer exist.
+    listRecentlyClosed: (): Promise<RecentlyClosedWindow[]> => ipcRenderer.invoke('restore:listRecentlyClosed'),
+    reopenClosed: (workspacePath?: string): Promise<ReopenClosedResult> =>
+      ipcRenderer.invoke('restore:reopenClosed', workspacePath),
+    onRecentlyClosedChanged: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('restore:recentlyClosedChanged', listener)
+      return () => ipcRenderer.removeListener('restore:recentlyClosedChanged', listener)
+    },
+    onReopenMissing: (cb: (missing: string[]) => void): (() => void) => {
+      const listener = (_event: unknown, missing: string[]): void => cb(Array.isArray(missing) ? missing : [])
+      ipcRenderer.on('restore:reopenMissing', listener)
+      return () => ipcRenderer.removeListener('restore:reopenMissing', listener)
+    },
     getAutoRestore: (): Promise<boolean> => ipcRenderer.invoke('restore:getAutoRestore'),
     setAutoRestore: (value: boolean): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('restore:setAutoRestore', value),

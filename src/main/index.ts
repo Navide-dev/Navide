@@ -21,7 +21,8 @@ import {
 import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
-import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
+import { installApplicationMenu, type AppMenuHooks, type ClosedWindowMenuEntry, type RecentMenuEntry } from './menu'
+import { planReopen } from './reopen-closed-window'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
 import { DEVELOPER_DOC_URLS } from '../shared/marketplaceDeveloper'
 import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
@@ -806,6 +807,7 @@ async function createWindow(
       mainWindow = remaining.length ? remaining[remaining.length - 1] : null
     }
     broadcastOpenWorkspacesChanged()
+    recentlyClosedChanged()
   })
 
   const mainBootParams: Record<string, string> = {
@@ -4272,6 +4274,111 @@ ipcMain.handle('restore:getSkipped', () => {
   return claimed
 })
 
+// ── Reopen Closed Window (plan 0-2-41_bbfee9) ────────────────────────────────
+// A workspace window closed while the app kept running is remembered by the
+// registry (remove()) and can be brought back whole: its own workspace, the
+// ones its sidebar adopted, and its bounds. Panes come back the way a restore
+// brings them back — from each workspace's project.json, as resume cards.
+
+function workspaceName(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+}
+
+/** The menu and every Welcome screen show the list; tell both it changed. */
+function recentlyClosedChanged(): void {
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (win.isDestroyed() || detachedWindowIds.has(win.id)) continue
+    win.webContents.send('restore:recentlyClosedChanged')
+  }
+}
+
+function recentlyClosedMenuEntries(): ClosedWindowMenuEntry[] {
+  return windowRegistry.recentlyClosedWindows().map((w) => ({
+    name: workspaceName(w.workspace_path),
+    // The sidebar's list includes the window's own workspace; count the rest.
+    others: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path).map(workspaceName),
+    closedAt: w.closed_at,
+  }))
+}
+
+/** Tell a window which folders a reopen skipped because they are gone. */
+function sendReopenMissing(win: BrowserWindow, missing: string[], fresh: boolean): void {
+  if (!missing.length || win.isDestroyed()) return
+  const send = (): void => { if (!win.isDestroyed()) win.webContents.send('restore:reopenMissing', missing) }
+  if (fresh) win.webContents.once('did-finish-load', send)
+  else send()
+}
+
+/** Reopen one closed window, the newest when no index is given. Returns how
+ *  many workspaces came back in a new window, were focused, or were skipped. */
+async function reopenClosedWindow(index = 0): Promise<{ opened: number; focused: number; missing: string[] }> {
+  const entry = windowRegistry.takeRecentlyClosed(index)
+  if (!entry) return { opened: 0, focused: 0, missing: [] }
+  const plan = planReopen(entry, {
+    exists: (path) => existsSync(path),
+    isOpen: (path) => findMainWindowForWorkspace(path) !== null,
+  })
+  let target: BrowserWindow | null = null
+  for (const path of plan.focus) {
+    const existing = findMainWindowForWorkspace(path)
+    if (existing) { revealMainWindow(existing); target = existing }
+  }
+  let fresh = false
+  if (plan.open) {
+    const { workspace_path, bounds, adopted_workspaces } = plan.open
+    // Same boot as a crash restore: the closed window's CLIs are gone, so the
+    // renderer runs pane restore and offers each session as a resume card.
+    const win = await createWindow({ workspace_path, restore: '1' }, bounds ? { bounds } : undefined)
+    if (adopted_workspaces?.length) pendingAdoptedWorkspaces.set(win.id, adopted_workspaces)
+    target = win
+    fresh = true
+  }
+  if (plan.missing.length) {
+    warnMain(`[main] reopen closed window skipped ${plan.missing.length} missing folder(s)`)
+    if (!target) {
+      // Nothing opened or focused, and possibly no window at all (macOS keeps
+      // running windowless): a Welcome window is where the notice can land.
+      const focused = BrowserWindow.getFocusedWindow()
+      target = focused && mainWindows.has(focused) ? focused : mainWindow
+      if (!target || target.isDestroyed()) { target = await createWindow(); fresh = true }
+    }
+    sendReopenMissing(target, plan.missing, fresh)
+  }
+  recentlyClosedChanged()
+  return {
+    opened: plan.open ? 1 + (plan.open.adopted_workspaces?.length ?? 0) : 0,
+    focused: plan.focus.length,
+    missing: plan.missing,
+  }
+}
+
+ipcMain.handle('restore:listRecentlyClosed', () =>
+  windowRegistry.recentlyClosedWindows().map((w) => ({
+    workspace_path: w.workspace_path,
+    adopted_workspaces: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path),
+    closed_at: w.closed_at,
+  })))
+
+// No path: the newest (⇧⌘T). A path picks that entry (the Welcome list), so a
+// list that changed since the renderer last read it cannot reopen the wrong one.
+ipcMain.handle('restore:reopenClosed', async (event, workspacePath?: unknown) => {
+  const list = windowRegistry.recentlyClosedWindows()
+  const index = typeof workspacePath === 'string' && workspacePath
+    ? list.findIndex((w) => w.workspace_path === workspacePath)
+    : 0
+  if (index < 0 || !list.length) return { ok: false, opened: 0, focused: 0, missing: [] }
+  const result = await reopenClosedWindow(index)
+  // Asked from a startup Welcome screen that holds no workspace: the restored
+  // window replaces it, rather than leaving an empty window behind.
+  const sender = BrowserWindow.fromWebContents(event.sender)
+  if (result.opened && sender && mainWindows.has(sender) && !detachedWindowIds.has(sender.id)
+    && !mainWindowWorkspaces.has(sender) && !adoptedWorkspaces.has(sender)) {
+    sender.close()
+  }
+  return { ok: true, ...result }
+})
+
 ipcMain.handle('restore:getAutoRestore', () => windowRegistry.getRestoreOnLaunch())
 
 ipcMain.handle('restore:setAutoRestore', (_e, value: boolean) => {
@@ -6273,6 +6380,8 @@ app.whenReady().then(async () => {
     onOpenTurnStats: () => requestTurnStats(),
     onOpenTokenMonitor: () => requestTokenMonitor(),
     onOpenAccount: () => sendMenuAction('open-account'),
+    recentlyClosedWindows: () => recentlyClosedMenuEntries(),
+    onReopenClosedWindow: (index) => void reopenClosedWindow(index),
     onOpenRepo: () => void shell.openExternal('https://github.com/Navide-dev/Navide'),
     onReportIssue: () => void shell.openExternal('https://github.com/Navide-dev/Navide/issues'),
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),

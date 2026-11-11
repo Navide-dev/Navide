@@ -51,6 +51,11 @@ export interface MenuStrings {
   resourceManager: string
   turnStats: string
   tokenMonitor: string
+  reopenClosedWindow: string
+  recentlyClosedWindows: string
+  noRecentlyClosedWindows: string
+  /** A closed window's menu label: its workspace and how many more it held. */
+  windowWithOthers: (name: string, count: number) => string
   repo: string
   reportIssue: string
   shortcuts: string
@@ -84,6 +89,10 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: 'Resource Manager',
     turnStats: 'Turn Stats',
     tokenMonitor: 'Token Monitor',
+    reopenClosedWindow: 'Reopen Closed Window',
+    recentlyClosedWindows: 'Recently Closed Windows',
+    noRecentlyClosedWindows: 'No Recently Closed Windows',
+    windowWithOthers: (name, count) => `${name} + ${count} more`,
     repo: 'Navide on GitHub',
     reportIssue: 'Report an Issue…',
     shortcuts: 'Keyboard Shortcuts',
@@ -125,6 +134,10 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: 'リソース管理',
     turnStats: 'ターン別使用量',
     tokenMonitor: 'トークンモニター',
+    reopenClosedWindow: '閉じたウィンドウを開き直す',
+    recentlyClosedWindows: '最近閉じたウィンドウ',
+    noRecentlyClosedWindows: '最近閉じたウィンドウはありません',
+    windowWithOthers: (name, count) => `${name} ほか ${count} 件`,
     repo: 'GitHub で Navide を見る',
     reportIssue: '問題を報告…',
     shortcuts: 'キーボードショートカット',
@@ -171,6 +184,10 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: '資源控管',
     turnStats: '每輪消耗',
     tokenMonitor: 'Token 監看',
+    reopenClosedWindow: '重新打開剛關閉的視窗',
+    recentlyClosedWindows: '最近關閉的視窗',
+    noRecentlyClosedWindows: '沒有最近關閉的視窗',
+    windowWithOthers: (name, count) => `${name} 與其他 ${count} 個工作區`,
     repo: '在 GitHub 上的 Navide',
     reportIssue: '回報問題…',
     shortcuts: '鍵盤快捷鍵',

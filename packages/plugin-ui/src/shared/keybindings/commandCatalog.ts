@@ -307,6 +307,7 @@ export const COMMAND_IDS: readonly string[] = [
   'workbench.action.rebuildFocusedPane',
   'workbench.action.reloadWindow',
   'workbench.action.reopenClosedEditor',
+  'workbench.action.reopenClosedWindow',
   'workbench.action.revealFileInOS',
   'workbench.action.revealInExplorer',
   'workbench.action.saveAll',

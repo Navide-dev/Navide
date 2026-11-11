@@ -35,6 +35,16 @@ export interface WindowEntry {
   adopted_workspaces?: string[]
 }
 
+/** A workspace window the user closed while the app kept running, kept so it
+ *  can be reopened whole (Window → Reopen Closed Window, the Welcome list). */
+export interface ClosedWindowEntry extends WindowEntry {
+  /** When it was closed, epoch milliseconds. */
+  closed_at: number
+}
+
+/** How many closed windows are remembered; the oldest drops off past this. */
+export const MAX_RECENTLY_CLOSED = 10
+
 /** The long-lived windows that live beside the workspace windows and are worth
  *  bringing back: the Plans review window, the unified Git window (its History
  *  view included — same window), and the machine-wide Token Monitor.
@@ -72,6 +82,10 @@ export interface RegistryDoc {
   /** Consecutive restore attempts charged to each workspace path that the
    *  backend never survived. Cleared once the backend proves stable. */
   restoreFailures: Record<string, number>
+  /** Workspace windows closed while the app kept running, newest first. Kept
+   *  across launches: "closed the wrong window, then restarted the app" is the
+   *  most common way to lose one. */
+  recentlyClosed: ClosedWindowEntry[]
 }
 
 /** Restore attempts a single workspace may cost before it is left unrestored.
@@ -139,6 +153,22 @@ function adopted(value: unknown): string[] {
   return value.filter((p): p is string => typeof p === 'string' && p.length > 0)
 }
 
+/** Keep only well-formed closed-window entries, capped at MAX_RECENTLY_CLOSED.
+ *  Detached group windows never get here (see remove()), so one carried by a
+ *  hand-edited doc is dropped rather than reopened as a main window. */
+function sanitizeClosed(list: unknown): ClosedWindowEntry[] {
+  if (!Array.isArray(list)) return []
+  const out: ClosedWindowEntry[] = []
+  for (const raw of list) {
+    const [entry] = sanitizeEntries([raw])
+    if (!entry || entry.detached_group) continue
+    const closedAt = (raw as ClosedWindowEntry).closed_at
+    out.push({ ...entry, closed_at: typeof closedAt === 'number' && Number.isFinite(closedAt) ? closedAt : 0 })
+    if (out.length >= MAX_RECENTLY_CLOSED) break
+  }
+  return out
+}
+
 /** Keep only well-formed ledger entries: workspace path → positive attempt count. */
 function sanitizeFailures(value: unknown): Record<string, number> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
@@ -155,7 +185,7 @@ function sanitizeFailures(value: unknown): Record<string, number> {
 export function parseRegistryDoc(text: string | null): RegistryDoc {
   const empty: RegistryDoc = {
     version: 1, cleanExit: true, windows: [], snapshot: [], aux: [], auxSnapshot: [],
-    restoreOnLaunch: true, restoreFailures: {},
+    restoreOnLaunch: true, restoreFailures: {}, recentlyClosed: [],
   }
   if (!text) return empty
   try {
@@ -174,6 +204,8 @@ export function parseRegistryDoc(text: string | null): RegistryDoc {
       restoreOnLaunch: data.restoreOnLaunch !== false,
       // Missing key (doc written before the breaker existed) → empty ledger.
       restoreFailures: sanitizeFailures(data.restoreFailures),
+      // Missing key (doc written before windows could be reopened) → empty.
+      recentlyClosed: sanitizeClosed(data.recentlyClosed),
     }
   } catch {
     return empty
@@ -229,6 +261,7 @@ export class WindowRegistry {
   /** Windows a cancelled quit had already closed. They are owed to the next
    *  clean-exit snapshot: the user never closed them, the quit did. */
   private cancelledQuitClosed: WindowEntry[] = []
+  private recentlyClosed: ClosedWindowEntry[] = []
   private persistTimer: ReturnType<typeof setTimeout> | null = null
 
   // Accepts a path PROVIDER so the location can be resolved lazily: the dev
@@ -256,6 +289,7 @@ export class WindowRegistry {
     // that the previous launch charged a workspace an attempt it never
     // finished paying off.
     this.restoreFailures = new Map(Object.entries(doc.restoreFailures))
+    this.recentlyClosed = doc.recentlyClosed
     this.lastCleanRestore = (doc.cleanExit && doc.restoreOnLaunch) ? doc.snapshot : []
     this.lastCleanAuxRestore = (doc.cleanExit && doc.restoreOnLaunch) ? doc.auxSnapshot : []
     const pending = pendingFromDoc(doc)
@@ -405,15 +439,41 @@ export class WindowRegistry {
     this.persistNow()
   }
 
-  remove(winId: number): void {
+  remove(winId: number, now: number = Date.now()): void {
     // Both maps, unconditionally: window ids are unique across the process, so
     // at most one of them holds this id, and returning early on the first miss
     // would leave every auxiliary window in the doc forever — it would look
     // open at the next launch and be restored on top of nothing.
+    const entry = this.entries.get(winId)
     const removed = this.entries.delete(winId)
     const removedAux = this.auxEntries.delete(winId)
     if (!removed && !removedAux) return
+    // Remembered for Reopen Closed Window. Not during a quit: every window
+    // closes then, which would flood the list and push out the one the user
+    // actually lost — the clean-exit snapshot covers those. Not a detached
+    // group either: closing one hands the group back to its main window.
+    if (entry && !this.cleanExit && !entry.detached_group) {
+      this.recentlyClosed = [
+        { ...entry, closed_at: now },
+        ...this.recentlyClosed.filter((w) => !sameWindow(w, entry)),
+      ].slice(0, MAX_RECENTLY_CLOSED)
+    }
     this.persistNow()
+  }
+
+  /** Closed windows that can be reopened, newest first. */
+  recentlyClosedWindows(): ClosedWindowEntry[] {
+    return this.recentlyClosed.map((w) => ({ ...w }))
+  }
+
+  /** Take one closed window off the list to reopen it: the newest when no
+   *  index is given. Returns null when there is nothing at that index. */
+  takeRecentlyClosed(index = 0): ClosedWindowEntry | null {
+    const entry = this.recentlyClosed[index]
+    if (!entry) return null
+    this.recentlyClosed = this.recentlyClosed.filter((_, i) => i !== index)
+    this.persistNow()
+    return entry
   }
 
   /** Mark this run as a clean exit. Synchronous — called from before-quit, and
@@ -476,6 +536,7 @@ export class WindowRegistry {
       auxSnapshot: this.auxSnapshot,
       restoreOnLaunch: this.restoreOnLaunch,
       restoreFailures: Object.fromEntries(this.restoreFailures),
+      recentlyClosed: this.recentlyClosed,
     }
   }
 

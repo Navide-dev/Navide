@@ -1479,6 +1479,23 @@ void window.agentTeam?.restore?.getSkipped?.().then((list) => {
   const stop = watch(booting, (b) => { if (!b) { stop(); void show() } })
 })
 
+// A reopened window left out folders that no longer exist: say which, on the
+// same surface the breaker notice above uses.
+window.agentTeam?.restore?.onReopenMissing?.((list) => {
+  if (!list.length) return
+  const show = async (): Promise<void> => {
+    await notifyRestore.alert(
+      `${i18n.global.t('restore.reopen-missing-message')}\n\n${list.join('\n')}`,
+      {
+        title: i18n.global.t('restore.reopen-missing-title', { count: list.length }),
+        confirmText: i18n.global.t('restore.skipped-ack'),
+      }
+    )
+  }
+  if (!booting.value) { void show(); return }
+  const stop = watch(booting, (b) => { if (!b) { stop(); void show() } })
+})
+
 function onWorkspaceSelected(path: string): void {
   currentWorkspace.value = path
   workspaceSelected.value = true
@@ -11364,6 +11381,11 @@ registerCommand('workbench.action.newWindow', async () => {
 // window's existing close handling (confirm-before-quit, PTY teardown) runs
 // exactly as it does when the traffic lights are used.
 registerCommand('workbench.action.closeWindow', () => { window.close() })
+// ⌘⇧T: reopen the last closed window with all of its workspaces (main does the
+// work, see reopenClosedWindow in main/index.ts). An empty list is a no-op.
+registerCommand('workbench.action.reopenClosedWindow', () => {
+  void window.agentTeam?.restore?.reopenClosed?.()
+})
 // ⌘W. The pane-level counterpart, so this window has the same two tiers the
 // Mini IDE does (⌘W a unit, ⌘⇧W the container). ⌘W was an empty key here
 // before: closeActiveEditor guards on `editorOpen`, which this window never

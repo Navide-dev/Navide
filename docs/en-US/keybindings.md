@@ -35,7 +35,7 @@ rules the editor writes.
 | `⌘O` | Open file |
 | `⌘N` | New file |
 | `⌘⇧N` | New window |
-| `⌘⇧T` | Reopen closed editor |
+| `⌘⇧T` | Reopen closed editor; in the main window, reopen the last closed window with all of its workspaces (Window → Recently Closed Windows lists the last 10) |
 
 ### Panels & Sidebar
 
