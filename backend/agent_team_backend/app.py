@@ -3083,6 +3083,12 @@ _HOOK_VENDORS = frozenset(
     key for key, spec in _CLI_VENDORS.items() if spec.install_hooks is not None
 )
 
+# Hook vendors whose events name their pane by the spawn token instead of a
+# session id (VendorSpec.hook_pane_token).
+_HOOK_PANE_TOKEN_VENDORS = frozenset(
+    key for key in _HOOK_VENDORS if _CLI_VENDORS[key].hook_pane_token
+)
+
 # Vendors whose hooks report BOTH halves of a subagent's life — the Task going
 # in (PreToolUse) and its stop coming back out (SubagentStop). Counting on a
 # vendor that reports only the first would climb forever, and a count stuck
@@ -3319,6 +3325,13 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # lookup bypasses it. Race (stop before JSONL claimed the session) → empty
     # pane_id, and the JSONL path's matching event supplies it shortly.
     pane_id, ws_path, stage_id = attribution.pane_for_session(session_id)
+    if not pane_id and vendor in _HOOK_PANE_TOKEN_VENDORS:
+        # No log reader attributes this vendor's sessions, so the session id
+        # never names a pane: the pane's spawn token does (Kiro). Other
+        # vendors keep waiting for their log path, as above.
+        pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
+        pane = agent_messaging.current(pane_id) if pane_id else None
+        ws_path = pane.workspace_path if pane is not None else ws_path
     # Background-subagent bookkeeping: Task in on PreToolUse, out on
     # SubagentStop. The frontend loop reads the resulting count to tell a turn
     # that ended DONE from one that ended to WAIT — see subagent_tracker.

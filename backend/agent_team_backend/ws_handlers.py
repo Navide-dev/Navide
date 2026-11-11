@@ -9143,9 +9143,12 @@ async def _terminal_create_impl(
                 raise webhook_service.LaunchRefused("codex has not trusted Navide's hooks, so no Guard would run")
     from . import guard_hooks
 
-    if agent_key in guard_hooks.PANE_TOKEN_VENDORS:
+    if agent_key in guard_hooks.PANE_TOKEN_VENDORS or (
+        vendor_spec is not None and vendor_spec.hook_pane_token
+    ):
         # Navide Guard: names this pane to its PreToolUse hook when the hook's
         # session id is not attributed yet. Only this pane's processes see it.
+        # A hook_pane_token vendor's turn hooks name their pane the same way.
         import secrets
 
         guard_token = secrets.token_urlsafe(24)

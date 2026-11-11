@@ -18,7 +18,10 @@ matrices below do not.) Devin CLI
 (`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
 CLI list), making 19; it too appears in the roster only, for the same reason —
 it was wired from the docs with no binary installed (see the
-[integration record](cli-extension-guide.md)).
+[integration record](cli-extension-guide.md)). Kiro CLI (`kiro`, AWS) was
+added on 2026-11-12 the same way, making 20: roster only, docs-wired, with
+the navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook but
+no reader, resume, model flag, usage or account switching.
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -111,6 +114,7 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
 | `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
 | `devin` | Devin CLI (Cognition) | `devin` (`--permission-mode dangerous`) | install script (docs.devin.ai/cli) — user runs it |
+| `kiro` | Kiro CLI (AWS) | `kiro-cli chat --v3` (`--trust-all-tools`) | install script (kiro.dev/docs/cli) — user runs it |
 | `openclaw` | OpenClaw | `openclaw tui --local` | install script (docs.openclaw.ai) — user runs it |
 | `hermes` | Hermes Agent | `hermes chat` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
 

@@ -295,6 +295,25 @@
         }
       }
     },
+    "kiro": {
+      "capabilities": [
+        "launch",
+        "unsupported_session",
+        "hooks"
+      ],
+      "fixture": "kiro.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kiro]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[kiro]"
+        },
+        "hooks": {
+          "nodeid": "tests/test_cli_hook_endpoint.py::test_kiro_stop_hook_names_its_pane_by_the_spawn_token"
+        }
+      }
+    },
     "mcode": {
       "capabilities": [
         "launch",

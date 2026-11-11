@@ -146,6 +146,7 @@ export const SPAWN_ENV_RESERVED_KEYS: readonly string[] = [
   'KILO_CONFIG',
   'KILO_CONFIG_DIR',
   'KIMI_CODE_HOME',
+  'KIRO_HOME',
   'MAVIS_DATA_DIR',
   'MINIMAX_DATA_DIR',
   'OPENCODE_CONFIG',

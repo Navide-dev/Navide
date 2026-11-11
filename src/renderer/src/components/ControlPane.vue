@@ -2701,14 +2701,14 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  522px: the rows plus the CLI and Agents headings) plus the fixed
+ *  546px: the rows plus the CLI and Agents headings) plus the fixed
  *  furniture around it — role picker, two dividers,
  *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 692
+const ADD_MENU_MAX_H = 716
 /** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
  *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
  *  ~276px of bold system-font text plus 36px of check mark and padding); at
@@ -6746,12 +6746,12 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 456px carries nineteen, and 522px adds the
+ * 3px padding either side), so 480px carries twenty, and 546px adds the
  * two section headings (~24px, and ~31px with the divider above Agents). The
  * viewport cap is no longer a guessed 45vh: the menu's own max-height is the
  * room it has, and this box shrinks into it (never below three rows). */
 .ws-add-scroll {
-  max-height: min(522px, 100vh);
+  max-height: min(546px, 100vh);
   flex-shrink: 1;
   min-height: 72px;
   overflow-y: auto;

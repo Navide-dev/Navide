@@ -151,6 +151,9 @@ NATIVE_SOURCES: tuple[NativeMcpSource, ...] = (
         "antigravity", (".gemini", "config", "mcp_config.json"), "jsonc", ("mcpServers",)
     ),
     NativeMcpSource("droid", (".factory", "mcp.json"), "jsonc", ("mcpServers",)),
+    # The one row from documentation alone (kiro.dev/docs/mcp/configuration,
+    # 2026-11-12, no binary installed): re-check against the installed CLI.
+    NativeMcpSource("kiro", (".kiro", "settings", "mcp.json"), "jsonc", ("mcpServers",)),
 )
 
 

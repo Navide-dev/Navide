@@ -228,6 +228,12 @@ MEMORY_SOURCES: tuple[MemorySource, ...] = (
     # -- kimi: $KIMI_CODE_HOME/AGENTS.md, else ~/.kimi-code/AGENTS.md.
     MemorySource("kimi", USER_SCOPE, (".kimi-code", "AGENTS.md"), canonical=True),
     MemorySource("kimi", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    # -- kiro: steering files, global under the home and per workspace, plus
+    # AGENTS.md at the workspace root (kiro.dev/docs/steering, read
+    # 2026-11-12 -- docs only, no binary installed).
+    MemorySource("kiro", USER_SCOPE, (".kiro", "steering"), glob="*.md"),
+    MemorySource("kiro", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("kiro", PROJECT_SCOPE, (".kiro", "steering"), glob="*.md"),
     # -- mcode: `mcode init .` writes AGENTS.md from a directory analysis,
     # which is the only instruction file the CLI documents. No user-scope row:
     # the data dir (~/.minimax, $MINIMAX_DATA_DIR) holds config.yaml, auth and
