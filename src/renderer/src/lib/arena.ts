@@ -117,3 +117,35 @@ export function formatElapsed(seconds: number): string {
   const sec = String(s % 60).padStart(2, '0')
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
 }
+
+/** One row of the compare view's file table (arena.compare). */
+export interface ArenaCompareFile {
+  path: string
+  protected: boolean
+  by: Record<string, { added: number; deleted: number; status: string; binary: boolean }>
+}
+
+export type ArenaDiffLineKind = 'add' | 'del' | 'hunk' | 'meta' | 'ctx'
+
+/** A unified diff split into lines the diff columns can colour. The file
+ *  header lines (diff --git, index, ---/+++) are 'meta', not add/del. */
+export function arenaDiffLines(text: string): { kind: ArenaDiffLineKind; text: string }[] {
+  const out: { kind: ArenaDiffLineKind; text: string }[] = []
+  let inHeader = true
+  for (const line of text.replace(/\n$/, '').split('\n')) {
+    if (line.startsWith('diff --git ')) inHeader = true
+    if (line.startsWith('@@')) {
+      inHeader = false
+      out.push({ kind: 'hunk', text: line })
+    } else if (inHeader) {
+      out.push({ kind: 'meta', text: line })
+    } else if (line.startsWith('+')) {
+      out.push({ kind: 'add', text: line })
+    } else if (line.startsWith('-')) {
+      out.push({ kind: 'del', text: line })
+    } else {
+      out.push({ kind: 'ctx', text: line })
+    }
+  }
+  return out
+}

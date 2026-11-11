@@ -33,6 +33,8 @@ import os
 import re
 import secrets
 import shutil
+import stat
+import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -72,6 +74,8 @@ _GIT_TIMEOUT = 120.0
 _DIFF_CAP = 400_000
 _RUN_ID_RE = re.compile(r"^[0-9a-f]{4,12}$")
 _SLUG_RE = re.compile(r"[^a-z0-9.-]+")
+_SLUG_OK_RE = re.compile(r"^[a-z0-9][a-z0-9.-]{0,47}$")
+_SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 
 
 class ArenaError(ValueError):
@@ -80,8 +84,34 @@ class ArenaError(ValueError):
 
 # ── git ──────────────────────────────────────────────────────────────────────
 
+_hooks_dir: str | None = None
+
+
+def _empty_hooks_dir() -> str:
+    global _hooks_dir
+    if _hooks_dir is None or not os.path.isdir(_hooks_dir):
+        _hooks_dir = tempfile.mkdtemp(prefix="navide-arena-hooks-")
+    return _hooks_dir
+
+
 async def _git(args: list[str], cwd: str, timeout: float = _GIT_TIMEOUT) -> tuple[int, str, str]:
-    rc, out, err = await run_allowlisted_text(["git", *args], cwd, timeout=timeout)
+    """git with the repo's own hook and helper commands switched off.
+
+    Every arena call runs in a tree a model has just been working in, so the
+    config and hooks it reaches may have been written by that model: no
+    fsmonitor, no hooks, no external diff or textconv, no pager."""
+    hardened = [
+        "git",
+        "-c", "core.fsmonitor=false",
+        "-c", f"core.hooksPath={_empty_hooks_dir()}",
+        "-c", "diff.external=",
+        "-c", "core.pager=cat",
+    ]
+    if args and args[0] == "diff":
+        args = ["diff", "--no-ext-diff", "--no-textconv", *args[1:]]
+    elif len(args) > 2 and args[0] == "-c" and args[2] == "diff":
+        args = [*args[:3], "--no-ext-diff", "--no-textconv", *args[3:]]
+    rc, out, err = await run_allowlisted_text([*hardened, *args], cwd, timeout=timeout)
     return rc, out, err
 
 
@@ -111,12 +141,46 @@ def _record_path(ws: str, run_id: str) -> Path:
     return _record_dir(ws) / f"{run_id}.json"
 
 
+def _check_record(run: Any, ws: str, run_id: str) -> dict[str, Any]:
+    """The record lives inside the repository, where a model could have
+    rewritten it: accept it only in the exact shape start_run wrote, so no
+    path or branch in it can point git anywhere else."""
+    def bad(why: str) -> ArenaError:
+        return ArenaError(f"arena run {run_id} record is not valid ({why})")
+    if not isinstance(run, dict) or run.get("id") != run_id:
+        raise bad("id")
+    if run.get("workspace") != ws:
+        raise bad("workspace")
+    if not isinstance(run.get("base_sha"), str) or not _SHA_RE.match(run["base_sha"]):
+        raise bad("base")
+    cands = run.get("candidates")
+    if not isinstance(cands, list) or not MIN_CANDIDATES <= len(cands) <= MAX_CANDIDATES:
+        raise bad("candidates")
+    root = Path(ws, *WORKTREE_DIR, f"arena-{run_id}")
+    for index, cand in enumerate(cands):
+        if not isinstance(cand, dict) or cand.get("id") != CANDIDATE_IDS[index]:
+            raise bad("candidate id")
+        slug = cand.get("slug")
+        if not isinstance(slug, str) or not _SLUG_OK_RE.match(slug) or slug == "mix":
+            raise bad("slug")
+        if cand.get("worktree") != str(root / slug) or cand.get("branch") != f"arena/{run_id}/{slug}":
+            raise bad("worktree or branch")
+    branch = run.get("base_branch", "")
+    if not isinstance(branch, str) or branch.startswith("-"):
+        raise bad("base branch")
+    return run
+
+
 def load_run(ws: str, run_id: str) -> dict[str, Any]:
-    path = _record_path(_norm_ws(ws), run_id)
+    ws = _norm_ws(ws)
+    path = _record_path(ws, run_id)
     try:
-        return json.loads(path.read_text("utf-8"))
+        run = json.loads(path.read_text("utf-8"))
     except FileNotFoundError:
         raise ArenaError(f"no arena run {run_id}") from None
+    except ValueError:
+        raise ArenaError(f"arena run {run_id} record is not valid (json)") from None
+    return _check_record(run, ws, run_id)
 
 
 def save_run(run: dict[str, Any]) -> None:
@@ -133,8 +197,8 @@ def list_runs(ws: str) -> list[dict[str, Any]]:
     if folder.is_dir():
         for entry in folder.glob("*.json"):
             try:
-                runs.append(json.loads(entry.read_text("utf-8")))
-            except (OSError, ValueError):
+                runs.append(load_run(ws, entry.stem))
+            except (OSError, ArenaError):
                 continue
     runs.sort(key=lambda r: r.get("created_at", 0), reverse=True)
     return runs
@@ -215,9 +279,9 @@ async def start_run(
     picked = _clean_candidates(candidates)
     if base.strip().startswith("-"):
         raise ArenaError("invalid base")
-    rc, top, _ = await _git(["rev-parse", "--show-toplevel"], ws)
+    rc, _, err = await _git(["rev-parse", "--show-toplevel"], ws)
     if rc != 0:
-        raise ArenaError("the workspace is not a git repository")
+        raise ArenaError(f"the workspace is not a git repository ({err.strip()[:200]})")
     base_sha = (await _git_ok(["rev-parse", "--verify", f"{base.strip() or 'HEAD'}^{{commit}}"], ws)).strip()
     _, branch_out, _ = await _git(["symbolic-ref", "--quiet", "--short", "HEAD"], ws)
     base_branch = branch_out.strip()
@@ -232,8 +296,10 @@ async def start_run(
     try:
         for index, cand in enumerate(picked):
             slug = model_slug(cand["agent"], cand["model"])
+            if slug == "mix":
+                slug = "mix-model"
             while slug in used:
-                slug = f"{slug}-{index + 1}"
+                slug = f"{slug[:44]}-{index + 1}"
             used.add(slug)
             path = str(root / slug)
             branch = f"arena/{run_id}/{slug}"
@@ -330,17 +396,25 @@ async def _changed_files(cand: dict[str, Any], base_sha: str, patterns: tuple[st
                        "status": status_of.get(path, "M"), "binary": cols[0] == "-"}
     _, untracked, _ = await _git(["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard", "-z"], wt)
     for path in filter(None, untracked.split("\0")):
-        added = 0
-        try:
-            with open(os.path.join(wt, path), "rb") as fh:
-                added = fh.read(2_000_000).count(b"\n")
-        except OSError:
-            pass
+        added = await asyncio.to_thread(_count_lines, os.path.join(wt, path))
         files[path] = {"path": path, "added": added, "deleted": 0, "status": "A", "binary": False}
     out = sorted(files.values(), key=lambda f: f["path"])
     for f in out:
         f["protected"] = is_protected(f["path"], patterns)
     return out
+
+
+def _count_lines(path: str) -> int:
+    """Lines in an untracked file, reading regular files only: a FIFO or a
+    symlink planted in the worktree must not block or redirect the read."""
+    try:
+        if not stat.S_ISREG(os.lstat(path).st_mode):
+            return 0
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(fd, "rb") as fh:
+            return fh.read(2_000_000).count(b"\n")
+    except OSError:
+        return 0
 
 
 def _spend(cost_ledger: Any, worktree: str) -> dict[str, Any]:
@@ -410,7 +484,8 @@ async def file_diff(workspace: str, run_id: str, cid: str, path: str) -> dict[st
     if not path or path.startswith("-") or ".." in Path(path).parts or os.path.isabs(path):
         raise ArenaError("invalid path")
     rc, out, _ = await _git(["-c", "core.quotepath=off", "diff", run["base_sha"], "--", path], wt)
-    if not out.strip() and os.path.isfile(os.path.join(wt, path)):
+    full = os.path.join(wt, path)
+    if not out.strip() and os.path.lexists(full) and stat.S_ISREG(os.lstat(full).st_mode):
         # Untracked: diff it against nothing.
         rc, out, _ = await _git(["diff", "--no-index", "--", os.devnull, path], wt)
     truncated = len(out) > _DIFF_CAP

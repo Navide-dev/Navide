@@ -13492,7 +13492,7 @@
       "time-limit": "Лимит времени на панель (минуты)",
       "budget": "Предел стоимости на панель (US$)",
       "estimate": "Откроет панелей: {panes}, worktree: {panes}.",
-      "estimate-branches": "Ветки: arena/<run>/<model>, в .agent-team/worktrees/arena-<run>/.",
+      "estimate-branches": "Ветки: arena/ЗАПУСК/МОДЕЛЬ, в .agent-team/worktrees/arena-ЗАПУСК/.",
       "estimate-budget": "В худшем случае: всего US$ {total} при пределе.",
       "starting": "Запуск…",
       "go": "Начать сравнение",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} по умолчанию",
       "files": "Файлов: {n}",
       "protected": "Затронуто чувствительных файлов: {n}",
-      "cost-unavailable": "Нет данных о стоимости"
+      "cost-unavailable": "Нет данных о стоимости",
+      "rating": "Оценка",
+      "adopt": "Принять"
     },
     "action": {
       "show": "Показать",
       "stop": "Остановить",
       "stop-all": "Остановить все"
-    }
+    },
+    "tab": {
+      "run": "Ход работы",
+      "compare": "Сравнение"
+    },
+    "compare": {
+      "rate": "Звёзд: {n}",
+      "adopt": "Принять этот",
+      "no-changes": "Ни один кандидат пока ничего не изменил.",
+      "protected-hint": "Lockfile, манифест пакетов, окружение, CI или конфигурация: проверьте перед принятием",
+      "unchanged": "Здесь без изменений",
+      "truncated": "Diff обрезан: слишком длинный для полного показа",
+      "refresh": "Обновить"
+    },
+    "workspace-alias": "Арена {run}·{id} {model}"
   }
 }

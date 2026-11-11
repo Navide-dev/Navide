@@ -13492,7 +13492,7 @@
       "time-limit": "每格時限（分鐘）",
       "budget": "每格費用上限（US$）",
       "estimate": "會開 {panes} 個分格、{panes} 個 worktree。",
-      "estimate-branches": "分支：arena/<run>/<model>，放在 .agent-team/worktrees/arena-<run>/ 下。",
+      "estimate-branches": "分支：arena/場次/模型，放在 .agent-team/worktrees/arena-場次/ 下。",
       "estimate-budget": "最多花費：全部到上限共 US$ {total}。",
       "starting": "啟動中…",
       "go": "開始比較",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} 預設",
       "files": "{n} 個檔案",
       "protected": "動到 {n} 個敏感檔",
-      "cost-unavailable": "沒有成本資料"
+      "cost-unavailable": "沒有成本資料",
+      "rating": "評價",
+      "adopt": "採用"
     },
     "action": {
       "show": "顯示",
       "stop": "停止",
       "stop-all": "全部停止"
-    }
+    },
+    "tab": {
+      "run": "進度",
+      "compare": "比較"
+    },
+    "compare": {
+      "rate": "{n} 星",
+      "adopt": "採用這份",
+      "no-changes": "還沒有任何一格改了檔案。",
+      "protected-hint": "lockfile、套件清單、環境變數、CI 或設定檔：採用前先確認",
+      "unchanged": "這格沒改",
+      "truncated": "差異太長，只顯示前段",
+      "refresh": "重新整理"
+    },
+    "workspace-alias": "擂台 {run}·{id} {model}"
   }
 }

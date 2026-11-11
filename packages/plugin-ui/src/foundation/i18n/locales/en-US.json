@@ -13492,7 +13492,7 @@
       "time-limit": "Time limit per pane (minutes)",
       "budget": "Cost cap per pane (US$)",
       "estimate": "Opens {panes} panes and {panes} worktrees.",
-      "estimate-branches": "Branches: arena/<run>/<model>, under .agent-team/worktrees/arena-<run>/.",
+      "estimate-branches": "Branches: arena/RUN/MODEL, under .agent-team/worktrees/arena-RUN/.",
       "estimate-budget": "Worst case: US$ {total} in total at the cap.",
       "starting": "Starting…",
       "go": "Start comparison",
@@ -13534,12 +13534,28 @@
       "default-model": "{cli} default",
       "files": "{n} files",
       "protected": "{n} sensitive files touched",
-      "cost-unavailable": "No cost data"
+      "cost-unavailable": "No cost data",
+      "rating": "Rating",
+      "adopt": "Adopt"
     },
     "action": {
       "show": "Show",
       "stop": "Stop",
       "stop-all": "Stop all"
-    }
+    },
+    "tab": {
+      "run": "Progress",
+      "compare": "Compare"
+    },
+    "compare": {
+      "rate": "{n} stars",
+      "adopt": "Adopt this one",
+      "no-changes": "No candidate has changed anything yet.",
+      "protected-hint": "Lockfile, package manifest, environment, CI or config file: check before taking it",
+      "unchanged": "Unchanged here",
+      "truncated": "Diff cut off: too long to show in full",
+      "refresh": "Refresh"
+    },
+    "workspace-alias": "Arena {run}·{id} {model}"
   }
 }

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -189,12 +192,43 @@ async def test_file_level_mix_takes_each_file_from_its_pick(repo: Path) -> None:
     assert not (repo / "a_only.py").exists()
 
 
-def test_update_candidate_keeps_one_adopted_and_clamps_rating(repo: Path) -> None:
-    run = {"id": "ab12", "workspace": str(repo), "candidates": [
-        {"id": "A", "rating": 0, "adopted": False}, {"id": "B", "rating": 0, "adopted": True}]}
-    arena.save_run(run)
-    after = arena.update_candidate(str(repo), "ab12", "A", {"adopted": True, "rating": 9})
+@pytest.mark.asyncio
+async def test_update_candidate_keeps_one_adopted_and_clamps_rating(repo: Path) -> None:
+    run = await _start(repo)
+    arena.update_candidate(str(repo), run["id"], "B", {"adopted": True})
+    after = arena.update_candidate(str(repo), run["id"], "A", {"adopted": True, "rating": 9})
     assert [c["adopted"] for c in after["candidates"]] == [True, False]
     assert after["candidates"][0]["rating"] == 5
     with pytest.raises(arena.ArenaError):
         arena.load_run(str(repo), "../x")
+
+
+@pytest.mark.asyncio
+async def test_a_rewritten_record_is_refused(repo: Path, tmp_path: Path) -> None:
+    run = await _start(repo)
+    path = repo / ".agent-team" / "arena" / f"{run['id']}.json"
+    for field, value in (("worktree", str(tmp_path)), ("branch", "main"), ("slug", "../x")):
+        tampered = json.loads(path.read_text())
+        tampered["candidates"][0][field] = value
+        path.write_text(json.dumps(tampered))
+        with pytest.raises(arena.ArenaError, match="not valid"):
+            arena.load_run(str(repo), run["id"])
+    assert arena.list_runs(str(repo)) == []
+
+
+@pytest.mark.asyncio
+async def test_repo_hooks_never_run_and_a_fifo_does_not_block(repo: Path) -> None:
+    run = await _start(repo)
+    a = Path(run["candidates"][0]["worktree"])
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    marker = repo.parent / "hook-ran"
+    hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
+    hook.chmod(0o755)
+    os.mkfifo(a / "pipe")
+    (a / "app.py").write_text("print('A')\n")
+    status = await asyncio.wait_for(arena.run_status(str(repo), run["id"], None), timeout=30)
+    assert {r["id"]: r for r in status["candidates"]}["A"]["files"] >= 1
+    (a / "pipe").unlink()
+    result = await arena.merge(str(repo), run["id"], candidate="A", mode="squash")
+    assert result["ok"], result
+    assert not marker.exists()
