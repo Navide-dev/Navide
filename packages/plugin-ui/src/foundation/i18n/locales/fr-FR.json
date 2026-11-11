@@ -10132,7 +10132,7 @@
     "autoupdate-failed": "Impossible de modifier le réglage de mise à jour automatique de {label} ; il reste inchangé.",
     "update-available": "Nouvelle version {version}",
     "update-blocked-running": "Une autre mise à jour de CLI est en cours. Attendez qu’elle se termine.",
-    "update-blocked-busy": "Mise à jour possible quand tous les volets {label} sont inactifs. Non inactifs : {panes}",
+    "update-blocked-busy": "Mise à jour possible quand tous les volets {label} sont inactifs. Non inactifs : {panes}",
     "use-this": "Utiliser celle-ci",
     "remove": "Supprimer",
     "autoupdate": "Mise à jour automatique",

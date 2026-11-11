@@ -5312,7 +5312,7 @@ async function injectText(
   // Enter would pick "update now". Skip it and report nothing delivered, so
   // the caller types the text again.
   const updatePromptInTheWay = async (): Promise<boolean> => {
-    if (paneId === undefined || updatePromptState(agentKey, renderedScreen()) === 'none') return false
+    if (paneId === undefined || !updatePromptOnScreen(paneId)) return false
     const outcome = await paneClearUpdatePrompt(paneId)
     if (evidence) {
       evidence.updatePrompt = outcome === 'blocked' ? 'blocked' : 'skipped'
