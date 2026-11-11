@@ -48,6 +48,7 @@ from typing import Any, Callable
 
 import psutil
 
+from .. import frozen_env
 from .proctree import children_map, walk_descendants
 from .spec import ProcInfo, windows_refused_file_name, windows_short_name
 
@@ -1086,6 +1087,7 @@ class WindowsTerminalBackend:
         head, tail = paths.pty_launch_parts(exe, words[1:], path=env.get("PATH") or None)
         appname = subprocess.list2cmdline([head])
         cmdline = subprocess.list2cmdline(tail) or None
+        env = frozen_env.restore_user_temp_env(env)
         env_block = "\0".join(f"{k}={v}" for k, v in env.items()) + "\0"
         try:
             import winpty

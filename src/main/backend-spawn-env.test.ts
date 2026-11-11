@@ -108,9 +108,16 @@ describe('backend spawn environment: temp directory', () => {
           expect(env.TMP).toBe(expected)
           expect(env.TEMP).toBe(expected)
           expect(existsSync(expected)).toBe(true)
+          // Panes the backend opens get the user's own temp dir back from this.
+          const original: Record<string, string> = {}
+          for (const key of ['TMPDIR', 'TMP', 'TEMP']) {
+            if (process.env[key] !== undefined) original[key] = process.env[key] as string
+          }
+          expect(JSON.parse(env.AGENT_TEAM_ORIG_TEMP_ENV as string)).toEqual(original)
         } else {
           expect(env.TMPDIR).toBe(process.env.TMPDIR)
           expect(existsSync(join(dataDir, 'backend-tmp'))).toBe(false)
+          expect(env.AGENT_TEAM_ORIG_TEMP_ENV).toBeUndefined()
         }
       } finally {
         if (before === undefined) delete process.env.AGENT_TEAM_DATA_DIR

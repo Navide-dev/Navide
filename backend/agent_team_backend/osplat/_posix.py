@@ -18,6 +18,8 @@ import subprocess
 from collections.abc import Mapping
 from typing import Callable
 
+from .. import frozen_env
+
 # Guarded so the module imports on Windows: the ratchet test and the Windows
 # suite import it for its classes, and only a call into them needs the
 # terminal modules — which no Windows caller ever makes.
@@ -386,6 +388,7 @@ class PosixTerminalBackend:
     ) -> PosixTerminalHandle:
         if isinstance(argv, str):
             argv = self.parse_command(argv)
+        env = frozen_env.restore_user_temp_env(env)
         master, slave = pty.openpty()
         _set_winsize(master, rows, cols)
         flags = fcntl.fcntl(master, fcntl.F_GETFL)
