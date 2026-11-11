@@ -44,6 +44,7 @@ import {
   type CodeSignals,
   type NativeSummary,
   type ScanReport,
+  type ScanSite,
   type ScanSource,
   type ShellCall,
   type ShellCategory,
@@ -149,7 +150,7 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'secrets': case 'networkViaShell': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'web': case 'agents': case 'agentMessages': case 'secrets': case 'agentNotify': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
     case 'network': {
       const hosts = isRecord(params) ? hostList(params.hosts) : null
@@ -212,7 +213,7 @@ function permissionsBlock(value: unknown): DisclosurePermissions | null {
   if (!isRecord(value)) return null
   const system = strings(value.system)
   if (!system || !system.every((name) => name === 'aiCli' || name === 'fs' || name === 'ui' || name === 'web' ||
-    name === 'agents' || name === 'agentMessages' || name === 'secrets')) return null
+    name === 'agents' || name === 'agentMessages' || name === 'secrets' || name === 'agentNotify')) return null
   const shell = value.shell === null ? null : shellParams(value.shell)
   if (shell === undefined) return null
   let scopes: DisclosurePermissions['scopes'] = null
@@ -423,6 +424,21 @@ function codeSignals(value: unknown): CodeSignals | null | undefined {
   }
 }
 
+/** Scanner 1.2.0 sites, rebuilt: absent (older scanners) or malformed sites
+ *  leave the finding without them; they never reject the report. */
+function scanSites(value: unknown): { sites?: ScanSite[] } {
+  if (!Array.isArray(value)) return {}
+  const sites: ScanSite[] = []
+  for (const site of value) {
+    if (
+      !isRecord(site) || typeof site.file !== 'string' || !isSafeCount(site.line) || !isSafeCount(site.col) ||
+      !(typeof site.excerpt === 'string' || site.excerpt === null)
+    ) return {}
+    sites.push({ file: site.file, line: site.line, col: site.col, excerpt: site.excerpt })
+  }
+  return { sites }
+}
+
 /** The Registry's scan report (contract 3.8) rebuilt from validated fields, or null when malformed. */
 export function scanReport(value: unknown): ScanReport | null {
   if (!isRecord(value) || value.schemaVersion !== SCAN_SCHEMA_VERSION) return null
@@ -446,15 +462,16 @@ export function scanReport(value: unknown): ScanReport | null {
           source: entry.source,
           evidence: entry.evidence,
           files: entry.files,
+          ...scanSites(entry.sites),
         }
       : null)
   const hosts = entries(network.hosts, (entry) =>
     typeof entry.host === 'string' && isOneOf(SCAN_SOURCES, entry.source) && isSafeCount(entry.count)
-      ? { host: entry.host, source: entry.source, count: entry.count }
+      ? { host: entry.host, source: entry.source, count: entry.count, ...scanSites(entry.sites) }
       : null)
   const capabilities = entries(value.capabilities, (entry) =>
     typeof entry.address === 'string' && isOneOf(SCAN_SOURCES, entry.source)
-      ? { address: entry.address, source: entry.source }
+      ? { address: entry.address, source: entry.source, ...scanSites(entry.sites) }
       : null)
   const native = entries(value.native, (entry): NativeSummary | null => {
     const libraries = strings(entry.libraries)

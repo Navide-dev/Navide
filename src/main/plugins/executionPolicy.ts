@@ -18,7 +18,9 @@ export const HOST_DEFAULT_EXECUTION_POLICY: ExecutionPolicy = {
   mode: 'allowlist',
   // Message text reaches an agent only when the user names it in a policy, so
   // the default allowlist leaves it out.
-  system: V2_SYSTEM_NAMESPACES.filter((namespace) => namespace !== 'agentMessages'),
+  // A notification into an agent pane on an agent's behalf is the same: off
+  // unless a policy names it.
+  system: V2_SYSTEM_NAMESPACES.filter((namespace) => namespace !== 'agentMessages' && namespace !== 'agentNotify'),
   shell: [...HOST_SHELL_EXECUTABLE_ALLOWLIST],
 }
 

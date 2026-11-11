@@ -5,12 +5,15 @@ import {
   createPluginViewRuntimeClient,
   createPluginBackendClient,
   PluginBackendError,
+  PluginError,
   createPluginSecretStore,
   createPluginSettingsStore,
   createPluginViewState,
+  getHostLocale,
   hideView,
   onBackendStatus,
   onAgentToolCall,
+  onHostLocaleChanged,
   onOpenTarget,
   openContributionWindow,
   viewReady,
@@ -881,6 +884,33 @@ describe('createPluginViewState', () => {
   })
 })
 
+describe('Host locale', () => {
+  it('reads ui.getLocale and follows ui.localeChanged', async () => {
+    let localeListener: ((payload: unknown) => void) | undefined
+    const unsubscribe = vi.fn()
+    const bridge: TestCapabilityBridge = {
+      callCapability: vi.fn(async () => ({ reqId: 'locale', ok: true, result: { locale: 'ja-JP' } })),
+      on: vi.fn((_event: string, listener: (payload: unknown) => void) => {
+        localeListener = listener
+        return unsubscribe
+      }),
+    }
+    ;(globalThis as unknown as { nav: TestCapabilityBridge }).nav = bridge
+
+    await expect(getHostLocale()).resolves.toBe('ja-JP')
+    expect(bridge.callCapability).toHaveBeenCalledWith('ui', 'getLocale', {})
+
+    const seen: string[] = []
+    const subscription = onHostLocaleChanged((locale) => seen.push(locale))
+    expect(bridge.on).toHaveBeenCalledWith('ui.localeChanged', expect.any(Function))
+    localeListener?.({ locale: 'zh-TW' })
+    expect(seen).toEqual(['zh-TW'])
+    subscription.dispose()
+    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(() => onHostLocaleChanged(null as never)).toThrow(PluginError)
+  })
+})
+
 describe('createPluginSecretStore', () => {
   it('maps each method to its secrets.* capability and passes nothing else', async () => {
     const invoke = vi.fn(async () => ({ ok: true }))
@@ -909,10 +939,12 @@ const SDK_EXPORTS = [
   'createPluginViewRuntimeClient',
   'createPluginViewState',
   'definePlugin',
+  'getHostLocale',
   'hideView',
   'hostApiVersion',
   'onAgentToolCall',
   'onBackendStatus',
+  'onHostLocaleChanged',
   'onOpenTarget',
   'openContributionWindow',
   'viewReady',

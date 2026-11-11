@@ -264,3 +264,32 @@ def test_a_stale_parent_naming_a_retired_record_does_not_overwrite_the_lineage(
     store.record_manual_pane_spawn(ws, pane_id="kid-2", previous_pane_id="kid", agent="claude",
                                    spawned_by="cmd-old")
     assert _panes(store, ws)["kid-2"].spawned_by == "cmd-new"
+
+
+# ── opened_by: who opened a pane, fixed at its spawn ──────────────────────
+def test_opened_by_is_written_once(store_ws: tuple[ProjectStore, str]) -> None:
+    """A re-spawn (restore, rebuild) naming someone else does not move it."""
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="child", agent="claude", spawned_by="a", opened_by="a")
+    store.record_manual_pane_spawn(ws, pane_id="child", agent="claude", opened_by="b")
+    store.record_manual_pane_spawn(ws, pane_id="child", agent="claude")
+    assert _panes(store, ws)["child"].opened_by == "a"
+
+
+def test_re_parenting_leaves_opened_by_alone(store_ws: tuple[ProjectStore, str]) -> None:
+    """cli_place_pane's write path moves the sidebar position only."""
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="a", agent="claude")
+    store.record_manual_pane_spawn(ws, pane_id="c", agent="claude")
+    store.record_manual_pane_spawn(ws, pane_id="b", agent="claude", spawned_by="a", opened_by="a")
+    store.set_pane_parent(ws, pane_id="b", spawned_by="c")
+    assert _panes(store, ws)["b"].spawned_by == "c"
+    assert _panes(store, ws)["b"].opened_by == "a"
+
+
+def test_restoring_the_opener_rekeys_opened_by(store_ws: tuple[ProjectStore, str]) -> None:
+    store, ws = store_ws
+    store.record_manual_pane_spawn(ws, pane_id="p-old", agent="claude")
+    store.record_manual_pane_spawn(ws, pane_id="child", agent="claude", spawned_by="p-old", opened_by="p-old")
+    store.record_manual_pane_spawn(ws, pane_id="p-new", previous_pane_id="p-old", agent="claude")
+    assert _panes(store, ws)["child"].opened_by == "p-new"

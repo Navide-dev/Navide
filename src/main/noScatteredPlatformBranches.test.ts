@@ -77,6 +77,11 @@ export const PLATFORM_BRANCH_ALLOWLIST: ReadonlyMap<string, string> = new Map([
     'src/main/plugins/workbenchSourceStore.ts',
     'The O_NOFOLLOW read copied from executionPolicySourceStore, and the same fact: a syscall flag for the real kernel.',
   ],
+  [
+    'src/main/backend-tmpdir.ts',
+    'The 0o700 chmod sets mode bits on the filesystem this process creates the directory on: ' +
+      'a fact about the real kernel, like the 0o077 owner-only check in ownerOnlyJsonPersistence.',
+  ],
 ])
 
 function offenders(files: string[]): Set<string> {

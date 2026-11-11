@@ -20,7 +20,8 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
-import type { PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginAutoPauseNotice, PluginGlobalStopRecord, PluginStopSummary } from '../shared/pluginStop'
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
 import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
@@ -1395,6 +1396,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
     publish: (input) => ipcRenderer.invoke('developer:publish', input),
     yank: (input) => ipcRenderer.invoke('developer:yank', input),
+    members: () => ipcRenderer.invoke('developer:members'),
+    addMember: (input) => ipcRenderer.invoke('developer:addMember', input),
+    removeMember: (input) => ipcRenderer.invoke('developer:removeMember', input),
   } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>
@@ -1413,6 +1417,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
     activityReport: (id: string): Promise<
       { ok: true; report: PluginActivityReport } | { ok: false; error: string }
     > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+    activityOverview: (): Promise<
+      { ok: true; overview: PluginActivityOverview } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityOverview'),
     /** D-f: installed Registry packages' disclosures and install-time scans. */
     installedDisclosures: (): Promise<Array<{
       id: string
@@ -1649,6 +1657,31 @@ contextBridge.exposeInMainWorld('agentTeam', {
     > => ipcRenderer.invoke('plugins:runPipelineNode', request),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
+    /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+    stop: (id: string, via: 'settings' | 'status-bar'): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> =>
+      ipcRenderer.invoke('plugins:stop', { id, via }),
+    /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+    stopAll: (via: 'settings' | 'status-bar'): Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:stopAll', { via }),
+    /** Plan P3: the user's "Resume all": enable what the global stop disabled and put the switches back. */
+    resumeAll: (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:resumeAll'),
+    /** Plan P3: the global stop in effect, or null. */
+    globalStopState: (): Promise<PluginGlobalStopRecord | null> => ipcRenderer.invoke('plugins:globalStopState'),
+    /** Plan P4: the user's "Notify agent panes" switch for a package that declares agentNotify. */
+    setNotifyAgents: (id: string, allowed: boolean): Promise<{ id: string; notifyAgents: boolean }> =>
+      ipcRenderer.invoke('plugins:setNotifyAgents', { id, allowed }),
+    /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+    autoPauseState: (): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:autoPauseState'),
+    setAutoPause: (enabled: boolean): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:setAutoPause', { enabled }),
+    /** Plan P5: Navide paused a plugin on an anomaly rule. */
+    onAutoPaused: (handler: (notice: PluginAutoPauseNotice) => void): (() => void) => {
+      const listener = (_event: unknown, notice: PluginAutoPauseNotice) => handler(notice)
+      ipcRenderer.on('plugins:autoPaused', listener)
+      return () => { ipcRenderer.removeListener('plugins:autoPaused', listener) }
+    },
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
     setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>

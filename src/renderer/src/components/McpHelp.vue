@@ -48,6 +48,8 @@ const cliTools = [
   'cli_close_agent',
   'cli_reclaim_agent',
   'cli_place_pane',
+  'cli_rename_pane',
+  'cli_set_model',
   'cli_message_log',
   'cli_usage',
   'cli_failover_state',
@@ -89,6 +91,7 @@ const workspaceTools = [
   'scheduler_run_now',
   'scheduler_runs',
   'cli_permission_settings',
+  'plugins_developer_backend_call',
 ] as const
 
 // The Preview panel's four verbs: record adds to the feed, show pushes to it,

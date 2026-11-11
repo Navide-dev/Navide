@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { TURN_STALE_MS, isTurnInFlight, messagingGateStatus } from '../agentMessaging'
+import { INTERRUPT_ACTIVITY_DETAIL, TURN_STALE_MS, isTurnInFlight, messagingGateStatus } from '../agentMessaging'
 
 // 0.2.37: two Claude panes interrupted by cli_interrupt sat at their prompt
 // ("Interrupted · What should Claude do instead?") for 90 minutes while every
@@ -119,5 +119,19 @@ describe('App.vue wiring', () => {
     expect(pane).toContain('stoppedBy: terminal.stoppedBy')
     expect(pane).toContain('stopHeldForUser: terminal.stopHeldForUser')
     expect(pane).toContain('markAgentTurnStart: terminal.markAgentTurnStart')
+  })
+
+  it('Claude\'s interrupt record reaches the pane as STOP evidence', () => {
+    // 0.2.40: without it every Claude STOP would read "STOP not applied".
+    const at = appSource.indexOf("ev.event_type === 'agent_active'")
+    const branch = appSource.slice(at, at + 4000)
+    expect(branch).toContain('if (ev.detail === INTERRUPT_ACTIVITY_DETAIL) paneRefs[ev.pane_id]?.noteInterruptEvidence?.()')
+    const pane = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/TerminalPane.vue'), 'utf8')
+    expect(pane).toContain('noteInterruptEvidence: terminal.noteInterruptEvidence')
+    expect(pane).toContain("reportsInterrupt: () => VENDORS_REPORTING_INTERRUPT.has(props.agentKey ?? '')")
+    expect(pane).toContain('data-testid="stop-ineffective"')
+    // The detail is a cross-end contract with the Claude log reader.
+    const reader = readFileSync(resolve(process.cwd(), 'backend/agent_team_backend/cli_vendors/claude.py'), 'utf8')
+    expect(reader).toContain(`INTERRUPT_DETAIL = "${INTERRUPT_ACTIVITY_DETAIL}"`)
   })
 })

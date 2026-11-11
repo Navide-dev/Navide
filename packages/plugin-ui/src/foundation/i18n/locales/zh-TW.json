@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "程序仍在執行，但 Agent 已完成最後一個回合，正停在輸入提示等待指令",
       "awaiting-status-tooltip": "Agent 停在權限確認上等你選，在你回應前不會有任何進展",
       "question-status-tooltip": "Agent 問了你一個問題，正在等你選，在你回應前不會有任何進展",
+      "stop-ineffective": "STOP 未生效",
+      "stop-ineffective-tooltip": "中斷已送到 CLI，但回合仍在執行（Ctrl-C 可能只清掉了排隊的輸入）。再按一次 Interrupt 才能停止。",
       "rename-title-tooltip": "雙擊可重新命名此分格",
       "auto-named-tooltip": "此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名",
       "loop-tag-tooltip": "此分格正在執行 Loop",
@@ -1045,7 +1047,7 @@
       "loop-start-failed": "無法在此分格以「{name}」啟動 Loop",
       "loop-badge-tooltip": "已對此分格送出 Loop 提示詞 — 點擊標籤可關閉 Loop",
       "loop-waiting-tooltip": "Loop 暫停 — 已達工作階段上限；將於 {time} 自動續跑，點擊標籤可立即續跑",
-      "loop-badge-estimate": "∞ Loop · ~{time}",
+      "loop-badge-estimate": "∞ Loop · 約 {time}",
       "loop-badge-resume": "∞ {time} 續跑",
       "loop-estimate-tooltip": "額度重置時間估計約 {time}（依 5 小時工作階段視窗推算）；若撞到上限訊息會換成準確時間。點擊標籤可關閉 Loop",
       "loop-estimate-weekly-tooltip": "週額度於 {time} 重置；此帳號沒有 5 小時窗口。點擊標籤可關閉 Loop",
@@ -1978,6 +1980,7 @@
         "web": "瀏覽網頁",
         "agents": "agent 分格",
         "agentMessages": "agent 訊息",
+        "agentNotify": "Agent 通知",
         "secrets": "Navide 外掛金鑰"
       },
       "shellLabel": "Shell 可執行檔",
@@ -2434,6 +2437,7 @@
           "web": "可開啟並瀏覽任何網站；網站登入資料會儲存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；交給 agent 操作的網頁，此 Navide 外掛本身也能在其中執行腳本並讀取內容與登入狀態；可同時開啟多個網頁，每個網頁都會占用記憶體。",
           "agents": "查看你的 agent 分格、哪個分格開了哪個，以及它們何時互傳訊息——但看不到訊息內容。",
           "agentMessages": "讀取 agent 之間訊息的完整內文；內文可能包含程式碼、檔案內容或機密。",
+          "agentNotify": "在你允許後通知你的 agent 分格；通知是資料，不會當成指令。",
           "secrets": "Navide 外掛會在本機加密保存它自己的金鑰與 token；Navide 不會上傳、不會顯示。",
           "shell": "在你的電腦上執行指令。",
           "terminal": "開啟並操作 Navide 終端機。"
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "帳號",
       "cliAgents": "CLI 代理",
+      "agents": "Agent",
       "cliExtensions": "擴充",
       "roles": "角色",
       "pipelines": "流程",
@@ -2881,14 +2886,14 @@
         "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>26 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>27 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
             "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十六個分頁",
+          "h2": "二十七個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "把 Telegram、Slack 等聊天軟體的 bot 接到 CLI 分格：bot、配對、允許名單、帳號連結",
               "more": "本面板的「{messaging}」分頁"
+            },
+            "agents": {
+              "what": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出：頻道、排程、記憶位置、啟動旗標",
+              "more": "也可從 Agent 分格的「Agent 設定…」開啟"
             },
             "mcp": {
               "what": "MCP server 的新增、啟用與檢視",
@@ -4484,7 +4493,7 @@
           },
           "chipsIntro": "卡片上只放三個 chip：安裝狀態、登入與帳號數、推送通道。完整的一排 chip 在抽屜最上面的「{overview}」，把那家 CLI 目前的設定現況直接讀回來。順序是固定的，照著「它是什麼 → 它會用什麼跑 → 怎麼找得到它」排：",
           "chipsTable": {
-            "chip": "Chip",
+            "chip": "標籤",
             "shows": "顯示什麼"
           },
           "chips": {
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "不照時間表、立刻跑一次自己建的 job；執行一開始就回覆，會清除失敗退避，不會移動下次排定的時段，並計入 agent 每天合計 300 次",
             "scheduler_runs": "某個 job 的執行紀錄，新的在前：ok、error 或 skipped 加原因——略過（無視窗、忙碌、每日上限或額度、agent 每日總量、agent job 到期、目標不存在）不算錯誤。任何 job 的紀錄都能讀",
             "cli_permission_settings": "讀寫 CLI 權限略過旗標（yolo）。這是全域設定，不是 pipeline 專屬，只影響之後開的分格；某家 CLI 實際會不會帶旗標要看回傳的 agents[].skipFlag，不是只看全域值",
+            "plugins_developer_backend_call": "僅限開發者模式：呼叫「從資料夾載入」的 Navide 外掛的後端方法，不必先宣告 agent 工具。其餘一律拒絕；每次呼叫都列在它的活動紀錄，也計入自動暫停規則",
             "workspace_open": "在 Navide 裡開啟一個專案；要開成新視窗還是併進已經開著它的視窗，由 Navide 決定",
             "workspace_switch": "把自己所在的視窗切到它本來就持有的另一個專案；被切走的專案，它的分格會繼續跑。視窗裡有 pipeline 正在跑時會拒絕，因為切換會中止它",
             "prompt_list": "使用者在「設定 → Prompt 技能」存的提示技能有哪些；唯讀，新增與編輯是使用者的事",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "這個工作區目前的 token 用量",
             "cli_list_sessions": "這個工作區還留得住、可以接續的 CLI 對話有哪些——對話比分格活得久，分格關掉、App 重開、分格重建過，紀錄都還在磁碟上。每一列會說它還接不接得起來，以及當初擁有它的分格是不是還開著：還開著的別去接，那會分岔或弄壞它，直接傳訊給那個分格就好",
             "cli_place_pane": "搬動一個分格：換分頁群組、或改掛在另一個分格底下（等同你在側欄拖放，走同一組寫入路徑，所以重開也還在原位）。兩半各自獨立，回傳會說哪一半成功了。不會動到那個分格的 CLI——不送訊息、不中斷、不重啟。只能搬本機的分格",
+            "cli_rename_pane": "幫 CLI 分格改名：同時改標題和其他分格用來定址它的名稱，走與手動改標題相同的檢查和寫入路徑。名稱已被其他分格使用會被拒絕。只能改自己的分格，以及同工作區裡自己開出來的分格。仍指向舊名的排程不會被改寫，只會列在警告裡。只能改本機的分格",
+            "cli_set_model": "切換執行中 CLI 分格的模型。Claude 會打開自己的 /model 選單、選到該模型那一列並按 s（只用於這次 session）；Codex 會輸入 /model 加模型 id。兩者都只改這次 session，對話不中斷，新 session 的預設模型不變。其他 CLI、有指定 effort，或 Claude 選單對不到的模型，會帶新模型重開分格並接回原對話。只切換閒置的分格，不能切換自己的分格。只能切換本機的分格",
             "cli_inbox_summary": "我寄出去的訊息裡，卡住（排隊超過兩分鐘）或已經失敗的有哪些。失敗通知要等寄件的分格閒下來才打得進去，所以連續忙一小時的 agent 一則也收不到——這是它自己回頭查的方式",
             "cli_pending_incoming": "正在排隊等著送進我這裡、還沒進來的訊息有哪些。訊息只在回合之間才會被打進分格，所以一直忙的 agent 正好就是最無從得知的那個；答案不是空的，就是該收個尾讓訊息進來"
           },
@@ -7842,7 +7854,7 @@
         "tab-login": "登入",
         "tab-register": "建立帳號",
         "tab-token": "使用 Token",
-        "email": "Email",
+        "email": "電子郵件",
         "password": "密碼",
         "password-placeholder": "至少 8 個字元",
         "display-name": "顯示名稱",
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "CLI Agents",
       "hint": "啟用並排序新增分格選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
+      "acp-title": "ACP（實驗）",
+      "acp-hint": "以 Agent Client Protocol 執行 agent，由 Navide 繪製對話，不顯示 CLI 自己的畫面。＋ 選單會多出「Claude Code（ACP）」，需要 Claude Code ACP adapter（第一次使用時安裝）。實驗功能：權限請求在分格內詢問、agent 暫時沒有 Navide MCP 工具、ACP 分格在重新啟動後不會還原。",
+      "acp-toggle": "在 ＋ 選單提供 ACP agent",
       "drag-hint": "拖曳以排序",
       "search": "搜尋 agent…",
       "filter-label": "篩選 CLI agent",
@@ -8224,7 +8239,7 @@
         "editor_unfoldRecursively": "遞迴展開",
         "git_amend": "修改上一次 commit",
         "git_commit": "Commit",
-        "git_fetch": "Fetch",
+        "git_fetch": "擷取（Fetch）",
         "git_focusAgent": "聚焦 AI 面板",
         "git_generateMessage": "產生 commit 訊息",
         "git_pull": "Pull",
@@ -8397,7 +8412,7 @@
           "back-unknown": "重置時間不明",
           "wait": "等待重置"
         },
-        "kind": "API key",
+        "kind": "API 金鑰",
         "list": {
           "aria": "帳號",
           "search": "搜尋帳號",
@@ -8423,7 +8438,7 @@
           "title": "貼上 API key",
           "billing": "這個帳號依用量計費，不會使用訂閱額度。",
           "name": "名稱",
-          "key": "API key",
+          "key": "API 金鑰",
           "key-new": "新的 API key",
           "key-hint": "儲存後不會再顯示。",
           "reminder": "每月預算備註（USD）",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "雲端代理（Grok Bot、dots 等）請到 Navide 市集安裝對應的 Navide 外掛。",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label}（ACP）",
     "select-role": "選擇角色…",
     "waiting-backend": "等待後端…",
     "set-workspace-first": "請先設定工作區路徑",
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "另開新對話",
     "failover-unverified": "尚未以真實帳號驗證",
     "failover-platform-unsupported": "不支援此平台",
+    "failover-no-adapter": "尚無帳號切換轉接器",
     "failover-audit-degraded": "切換稽核紀錄無法寫入；自動切換暫停，直到可以寫入為止。手動切換不受影響。",
     "settings-signing-title": "Antigravity 憑證（maintainer）",
     "settings-signing-hint": "僅開發模式顯示。寫入 ~/navide-signing/usage_secrets.py，讓下次 release build 打包 Antigravity 的公開 installed-app OAuth 常數。不會存進 repo。",
@@ -11160,9 +11177,9 @@
       "client_secret": "Client Secret",
       "access_token": "存取權杖",
       "server_url": "伺服器 URL",
-      "homeserver": "Homeserver URL",
+      "homeserver": "主伺服器（Homeserver）URL",
       "domain": "區域",
-      "robot_code": "Robot code"
+      "robot_code": "機器人代碼"
     },
     "secret-stored": "已儲存 ••••••••（留空則保留原值）",
     "remove": "移除",
@@ -11268,7 +11285,7 @@
       "auto-child-hint": "為子分格自動建立的話題；關閉父分格的連線時會一併關閉。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已關閉",
-      "chat-id": "chat {id}"
+      "chat-id": "聊天 {id}"
     }
   },
   "guard": {
@@ -11305,7 +11322,8 @@
       "allow": "放行",
       "allow-audit": "放行並記錄",
       "ask": "要求本機確認",
-      "deny": "拒絕"
+      "deny": "拒絕",
+      "exempt": "豁免"
     },
     "source": {
       "local": "本機",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "直譯器執行內嵌程式碼",
         "stdin-script": "直譯器從 stdin 讀取腳本",
         "unknown-script": "執行 Guard 看不到內容的腳本",
-        "dynamic-path": "檔案路徑不是靜態的"
+        "dynamic-path": "檔案路徑不是靜態的",
+        "credential-pipe-upload": "把 ~/.ssh 裡的檔案 pipe 給網路工具",
+        "plugin-store-write": "寫入、刪除、移動、連結或 chmod Navide 外掛的安裝目錄或信任存放區",
+        "dynamic-stdin-script": "Shell 執行執行時才算出的 here-string",
+        "mcp-registry-write": "MCP 工具修改或刪除 Windows 登錄檔項目",
+        "mcp-process-kill": "MCP 工具結束程序",
+        "heredoc-unparsed": "無法判斷 heredoc 的分隔字或結尾",
+        "untokenizable-shape": "使用分析器無法處理的 shell 語法",
+        "mcp-unknown-mode": "MCP 工具以 Guard 不認得的模式呼叫"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "允許例外",
         "warning": "以這些前綴開頭的片段會跳過上面所有內建檢查 —— 只加入你完全信任的指令。封鎖樣式仍然適用，把下載內容 pipe 給 shell 永遠不會被允許。新增時需要確認。",
         "placeholder": "完整的指令前綴，例如 git push origin"
+      },
+      "exempt": {
+        "title": "豁免：讀取憑證再上傳",
+        "warning": "整行符合這些樣式時，「把 ~/.ssh 的檔案 pipe 給網路工具」不再被拒絕 —— 只加入你完全信任的指令。其他檢查與封鎖樣式仍然適用，每次豁免都會記在 Guard 紀錄。新增時需要確認。",
+        "placeholder": "指令樣式或路徑，例如 cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "請輸入樣式。",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "用了但沒宣告（被 Navide 拒絕）",
       "item": "{address}（{source}）在 {workspace}：{count} 次，最近一次 {date}",
+      "code": "這些呼叫會被 Navide 以 CAPABILITY_DENIED 拒絕，直到 manifest 宣告為止。",
+      "doc": "查看文件",
       "reasons": "原因：{reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "最近活動",
       "undeclaredCount": "{count} 次沒宣告的使用被拒絕",
       "anomalyCount": "{count} 項異常"
+    },
+    "monitor": {
+      "headless": "隱藏 view 背景執行中（{count}）",
+      "title": "Activity 總覽",
+      "intro": "所有已安裝的 Navide 外掛列在同一張表，每幾秒更新一次。只是紀錄，這裡不會改變 Navide 外掛能做什麼。點開任一列可看完整 Activity。",
+      "empty": "尚未安裝任何 Navide 外掛。",
+      "open": "顯示 {id} 的 Activity",
+      "builtin": "內建",
+      "noHosts": "無",
+      "noBackend": "沒有後端",
+      "hostUndeclared": "{host}（未宣告）",
+      "hostRefused": "{host}（已拒絕）",
+      "status": {
+        "running": "運作中",
+        "disabled": "已停用"
+      },
+      "column": {
+        "plugin": "Navide 外掛",
+        "status": "狀態",
+        "toolCalls": "工具呼叫／分",
+        "capabilityCalls": "能力呼叫／分",
+        "hosts": "網路主機（7 天）",
+        "failures": "連續失敗",
+        "resources": "資源"
+      }
+    },
+    "autoPauses": {
+      "heading": "自動暫停紀錄",
+      "item": "{date} {rule}（{reason}）：{value}，門檻 {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "停止",
+    "confirm": "立即停止",
+    "cancel": "取消",
+    "stopping": "停止中…",
+    "note": "立即停止 {id}：進行中的呼叫會被結束、視圖關閉、後端停止。檔案、授權與資料都保留；要重新啟用請到設定。",
+    "failed": "無法停止 {id}：{error}",
+    "column": "停止",
+    "via": {
+      "settings": "設定的 Activity 總覽",
+      "status-bar": "狀態列",
+      "telegram": "聊天室指令",
+      "mcp": "agent（plugins_disable）",
+      "auto": "Navide 異常規則"
+    },
+    "summary": {
+      "heading": "{date} 從{via}停止。當時：",
+      "inFlight": "進行中的呼叫（已結束）：{count}",
+      "toolCalls": "最近一分鐘工具呼叫：{count}",
+      "capabilityCalls": "最近一分鐘能力呼叫：{count}",
+      "failures": "連續失敗的工具呼叫：{count}",
+      "notRead": "未及時讀到",
+      "hosts": "未宣告或被拒絕的主機：{hosts}",
+      "noHosts": "未宣告或被拒絕的主機：無"
+    },
+    "enable": {
+      "heading": "要重新啟用 {id} 嗎？",
+      "confirm": "啟用"
+    },
+    "all": {
+      "stop": "全部停止",
+      "confirm": "立即全部停止",
+      "note": "立即停止所有運作中的第三方 Navide 外掛，並關閉第三方原生後端與 agent 工具。內建 Navide 外掛照常運作。",
+      "heading": "所有第三方 Navide 外掛都已停止。",
+      "banner": "{date} 從{via}停止：共 {count} 個 Navide 外掛，第三方原生後端與 agent 工具已關閉。",
+      "resume": "全部恢復",
+      "resumeConfirm": "立即全部恢復",
+      "resumeNote": "把各開關恢復成停止前的狀態，並重新啟用這次停止的 Navide 外掛。",
+      "stopFailed": "無法停止：{ids}",
+      "resumeFailed": "無法重新啟用：{ids}"
+    },
+    "rule": {
+      "R1": "工具或能力呼叫過於頻繁",
+      "R2": "未宣告或被拒絕的網路主機",
+      "R3": "連續失敗或反覆重啟",
+      "R4": "資源超過門檻",
+      "R5": "通知分格過於頻繁"
+    },
+    "autoPause": {
+      "label": "Navide 外掛行為異常時自動暫停",
+      "thresholds": "R1 每分鐘超過 {toolCallsPerMinute} 次工具呼叫或 {capabilityCallsPerMinute} 次能力呼叫 · R2 視圖連到未宣告或被拒絕的主機 · R3 連續 {consecutiveFailures} 次工具呼叫失敗，或 10 分鐘內後端重啟 {restartsInTenMinutes} 次 · R4 後端超過資源門檻 · R5 每分鐘超過 {notificationsPerMinute} 則通知。暫停就是停止；要恢復請在這裡重新啟用 Navide 外掛。",
+      "toast": "Navide 自動暫停了 Navide 外掛 {id}：{reason}。請到 設定 → Navide 外掛 查看。",
+      "badge": "已暫停（{rule}）",
+      "because": "因規則 {rule} 暫停：{reason}"
+    },
+    "statusBar": {
+      "label": "Navide 外掛 {running}",
+      "title": "Navide 外掛：立即停止其中一個",
+      "heading": "第三方 Navide 外掛",
+      "openSettings": "開啟 Activity 總覽",
+      "allStopped": "Navide 外掛已全部停止",
+      "allStoppedTitle": "所有第三方 Navide 外掛都已停止；請到設定恢復",
+      "resumeInSettings": "所有第三方 Navide 外掛都已停止。請到設定按「全部恢復」。"
+    }
+  },
+  "pluginNotify": {
+    "switch": "通知 agent 分格",
+    "switchNote": "允許這個 Navide 外掛通知它所在專案的 agent 分格，每分鐘最多 6 則。通知是資料，不會當成指令。預設關閉。",
+    "paneMenu": {
+      "refuse": "拒收 Navide 外掛通知",
+      "accept": "接收 Navide 外掛通知",
+      "title": "拒收期間，可通知 agent 分格的 Navide 外掛無法通知這個分格"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "可開啟並瀏覽任何網站；網站登入資料會儲存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；交給 agent 操作的網頁，此 Navide 外掛本身也能在其中執行腳本並讀取內容與登入狀態；可同時開啟多個網頁，每個網頁都會占用記憶體。",
       "agents": "可看到這個專案裡的 agent 分格、哪個分格開了哪個、訊息的送達紀錄（不含內容）與 session 清單（不含對話內容）",
       "agentMessages": "可讀取這個專案裡 agent 之間訊息的完整內文，內文可能包含程式碼、檔案內容或機密",
+      "agentNotify": "在你於設定開啟後，可以通知這個專案的 agent 分格；通知是資料，不會當成指令",
       "secrets": "Navide 外掛會在本機加密保存它自己的金鑰，Navide 不會上傳、不會顯示",
       "ui": "顯示自己的畫面",
       "agentTools": "提供 agent 可呼叫的工具（唯讀 {read} 個、寫入 {write} 個）",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。",
       "noScanLocal": "Navide 沒有掃描這個檔案，以下只有這個 Navide 外掛自己的宣告。"
+    },
+    "sites": {
+      "heading": "靜態掃描看到這些項目的位置（{count}）",
+      "kind": {
+        "command": "指令 {key}",
+        "host": "主機 {key}",
+        "capability": "能力 {key}"
+      },
+      "hidden": "節錄看起來像金鑰，已隱藏"
     },
     "incompleteReason": {
       "timedOut": "超過掃描時間",
@@ -12776,6 +12922,30 @@
       "confirm": "要從 Navide 市集下架 {plugin} {version} 嗎？",
       "done": "{plugin} {version} 已下架"
     },
+    "members": {
+      "title": "命名空間成員",
+      "desc": "可以在這個命名空間發佈與撤回版本的帳號。只有擁有者能新增或移除發佈者；發佈者不能變更成員或簽章金鑰，並使用命名空間的金鑰簽章。",
+      "account": "帳號",
+      "role": "角色",
+      "added-at": "加入時間",
+      "roles": {
+        "owner": "擁有者",
+        "publisher": "發佈者"
+      },
+      "add-label": "新增發佈者（Navide Cloud 帳號 ID）",
+      "add": "新增發佈者",
+      "add-hint": "對方必須是已核准的開發者。加入後，對方在自己的 Navide 以發佈者身分登入並選擇這個命名空間。",
+      "add-confirm": "讓 {member} 在 {namespace} 發佈與撤回版本？",
+      "added": "{member} 現在可以在這個命名空間發佈",
+      "remove": "移除",
+      "remove-confirm": "把 {member} 從 {namespace} 移除？對方在這個命名空間的發佈者登入會立即失效。",
+      "removed": "已將 {member} 從這個命名空間移除",
+      "publisher-note": "你是這個命名空間的發佈者：可以發佈與撤回它的版本。成員由擁有者管理。",
+      "error": {
+        "not-developer": "這個帳號還不是已核准的開發者，需要先提出申請。",
+        "owner-only": "只有命名空間的擁有者能變更成員。"
+      }
+    },
     "versions": {
       "title": "你上架的版本",
       "refresh": "重新整理",
@@ -12788,9 +12958,22 @@
         "yanked": "已下架"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "在 Navide 市集審核之前，先把測試版交給你挑選的測試者。只有受邀的人看得到、裝得到；只經過自動掃描，發佈後 90 天到期。",
+      "channel": "用 testplace 頻道發佈測試版（?channel=testplace）：",
+      "invites": "邀請是一次性的加入代碼，一位測試者一組；撤銷後該測試者就失去存取權。",
+      "codes": "公開測試代碼讓你設定人數內的測試者用同一組代碼加入；每個套件的第一組代碼要先經過簡易審核：",
+      "promote": "測試完成後，把同一個版本送進 Navide 市集審核：",
+      "owner-only": "邀請、測試代碼、撤銷與升級測試版只限命名空間擁有者；發佈成員可以發佈版本，但不能管理 Testplace。",
+      "owner-only-member": "你是這個命名空間的發佈成員，Testplace 的邀請、測試代碼、撤銷與升級由擁有者操作。",
+      "joined": "我加入的測試",
+      "doc": "Testplace 文件"
+    },
     "error": {
       "not-signed-in": "請先在「開發者帳號」登入。",
       "qualification": "開發者申請需要先通過審核。",
+      "doc": "查看文件",
       "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "近 7 天每日最高",
     "week-tokens": "本週 Token",
     "day-tokens": "今日 Token"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "暫停排程",
+      "resume-schedules": "恢復排程",
+      "settings": "Agent 設定…",
+      "wake": "立即喚醒",
+      "wake-none": "沒有啟用中的排程可以喚醒",
+      "wake-title": "立即執行下一個排程（{name}）"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 已關，開分格並接回",
+      "create": "建立",
+      "name-placeholder": "Agent 名稱",
+      "new": "新 Agent（{vendor}）…",
+      "open": "{vendor} · 分格開著，切過去"
+    },
+    "header": {
+      "last-done": "上次完成 {time}",
+      "model": "模型 {model}",
+      "model-default": "預設模型",
+      "more-badges": "還有 {n} 個",
+      "never-done": "尚未完成回合",
+      "next-schedule": "下次 {time}",
+      "next-schedule-title": "下一個排程：{name}，{time}",
+      "turn": "本回合 {minutes} 分",
+      "vendor-since": "{vendor} · 自 {date} 起",
+      "vendor-today": "{vendor} · 今天建立"
+    },
+    "menu": {
+      "channels": "頻道設定…",
+      "close-keep": "關閉分格（身分保留）",
+      "memory-folder": "開啟記憶資料夾",
+      "stop-remove": "停止並移除 Agent…",
+      "stop-remove-body": "這個 Agent 會從 Navide 的 Agent 清單移除，開著的分格也會關閉。對話紀錄與記憶檔仍留在磁碟上，但名稱、顏色與接續 session 的連結不會保留。",
+      "stop-remove-confirm": "停止並移除",
+      "stop-remove-title": "停止並移除「{name}」？",
+      "toggle-panel": "展開／收合控制面板",
+      "wake": "立即喚醒一回合"
+    },
+    "panel": {
+      "channel-unbound": "尚未綁定頻道",
+      "channel-unbound-hint": "用標題列的頻道按鈕綁定",
+      "channels": "頻道",
+      "collapse": "收合控制面板",
+      "expand": "展開控制面板",
+      "memory": "記憶",
+      "memory-empty": "這一版還讀不到",
+      "memory-loading": "讀取中…",
+      "memory-missing": "找不到記憶資料夾",
+      "memory-none": "還沒有記憶",
+      "memory-source": "來源：{path}",
+      "open-folder": "開啟資料夾",
+      "schedule-paused": "暫停",
+      "schedules": "排程",
+      "schedules-empty": "沒有排程指向這個 Agent",
+      "status": "狀態",
+      "status-source": "來源：終端機輸出",
+      "title": "控制面板",
+      "todos": "待辦",
+      "todos-empty": "這一版還讀不到"
+    },
+    "settings": {
+      "channel": "頻道",
+      "channel-closed": "分格開著時才有綁定",
+      "channel-note": "bot 沿用「設定 → 聊天室」；綁定屬於開著的分格。",
+      "closed": "已關",
+      "color": "代表色",
+      "command": "啟動指令",
+      "empty": "還沒有 Agent。從＋選單的 Agent 區新增。",
+      "flags": "模型與旗標",
+      "flags-note": "環境變數與權限開關和「CLI 代理」頁共用；Agent 的金鑰由它自己保管。",
+      "go-channels": "前往「設定 → 聊天室」",
+      "go-cli-agents": "前往「設定 → CLI 代理」",
+      "identity": "身分",
+      "identity-note": "身分存在 Navide；關分格不會刪身分，重開時接回原 session。",
+      "intro": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出。",
+      "job-on": "開",
+      "list": "我的 Agent",
+      "memory": "記憶位置",
+      "memory-note": "記憶位置由 Agent 自己決定，Navide 不搬不改。",
+      "name": "名稱（＝分格名稱）",
+      "open-pane": "開分格",
+      "pane-closed": "分格已關",
+      "pane-open": "分格開著",
+      "rename-cancel": "取消",
+      "rename-channels": "頻道綁定：{n} 個",
+      "rename-channels-note": "綁定跟著分格、不跟名稱，所以維持不變。",
+      "rename-confirm": "改名",
+      "rename-failed": "這些排程沒有更新：{names}",
+      "rename-no-schedules": "沒有排程用這個名稱。",
+      "rename-schedules": "用名稱「{old}」指向的排程：{n} 個",
+      "rename-title": "把「{old}」改名為「{name}」？",
+      "rename-update": "一併把這些排程改指向新名稱",
+      "resume": "重開時接回 session",
+      "resume-on": "支援",
+      "schedules": "排程",
+      "schedules-note": "在 Tasker 新增排程，對象選這個 Agent 的分格。",
+      "session": "上次 session",
+      "session-none": "尚未取得",
+      "stop-remove": "停止並移除",
+      "switch-to": "切到分格",
+      "unsupported": "不支援",
+      "yolo": "跳過危險指令確認",
+      "yolo-flag": "支援（{flag}），跟隨 YOLO 開關"
+    }
   }
 }

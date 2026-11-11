@@ -253,7 +253,7 @@ async def test_v3_to_v4_keeps_legacy_deny_rows_critical(tmp_path):
         cur.execute("INSERT INTO guard_rules (kind, pattern, note, created) VALUES ('deny', 'docker', '', 0)")
         cur.execute("INSERT INTO guard_rules (kind, pattern, note, created) VALUES ('allow', 'git push', '', 0)")
     store = GuardStore(db)
-    assert db.schema_version(COMPONENT) == 4
+    assert db.schema_version(COMPONENT) == 5  # v5 adds terminal exemptions
     assert [(r["kind"], r["level"]) for r in store.rules_list()] == [("deny", "critical"), ("allow", "normal")]
     assert store.protected_branches() == frozenset({"main", "master"})
     assert store.rule_overrides() == {}

@@ -13,6 +13,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from .. import confirm_token
+from ..db_executor import run_in_db_thread
 from ..ipc import make_error, make_response
 from . import policy, runtime, taint, terminal_policy
 from .builtin_rules import BUILTIN_RULES, FLOOR_RULES, LEVELS, RULES_BY_ID
@@ -29,6 +30,7 @@ MESSAGE_TYPES = (
     "guard.audit.list", "guard.taint.list", "guard.taint.events", "guard.taint.clear", "guard.test",
     "guard.terminal.get", "guard.terminal.set_category", "guard.terminal.add_pattern",
     "guard.terminal.remove_pattern", "guard.terminal.test",
+    "guard.terminal.add_exemption", "guard.terminal.remove_exemption",
     "guard.builtin.get", "guard.builtin.set_level", "guard.branches.add", "guard.branches.remove",
 )
 
@@ -58,6 +60,9 @@ def _terminal_state() -> dict[str, Any]:
             for c in terminal_policy.CATEGORIES
         ],
         "patterns": [{"id": r["id"], "kind": r["kind"], "pattern": r["pattern"]} for r in store.terminal_patterns()],
+        "exemptable_rules": sorted(terminal_policy.EXEMPTABLE_RULES),
+        "exemptions": [{"id": r["id"], "rule": r["rule"], "pattern": r["pattern"]}
+                       for r in store.terminal_exemptions()],
     }
 
 
@@ -98,6 +103,26 @@ def _terminal(msg_type: str, payload: dict) -> dict[str, Any]:
         if row["kind"] == "block":
             _require_confirm(msg_type, payload, str(pattern_id))
         store.terminal_remove_pattern(pattern_id)
+        return _terminal_state()
+    if msg_type == "guard.terminal.add_exemption":
+        rule = str(payload.get("rule") or "")
+        pattern = str(payload.get("pattern") or "").strip()
+        if rule not in terminal_policy.EXEMPTABLE_RULES:
+            raise ValueError(f"rule cannot be exempted: {rule}")
+        problem = terminal_policy.validate_pattern(pattern)
+        if problem:
+            raise ValueError(problem)
+        # An exemption loosens protection: only a person's window can confirm it.
+        _require_confirm(msg_type, payload, f"{rule}:{pattern}")
+        store.terminal_add_exemption(rule, pattern)
+        return _terminal_state()
+    if msg_type == "guard.terminal.remove_exemption":
+        try:
+            exemption_id = int(payload.get("id"))
+        except (TypeError, ValueError):
+            raise ValueError("id must be an integer") from None
+        if not store.terminal_remove_exemption(exemption_id):
+            raise ValueError("no such exemption")
         return _terminal_state()
     if msg_type == "guard.terminal.test":
         # The very function every enforcement path calls, minus the audit row
@@ -155,6 +180,14 @@ def _builtin(msg_type: str, payload: dict) -> dict[str, Any]:
         store.remove_protected_branch(name)
         return _builtin_state()
     return {"ok": False, "error": f"unknown request {msg_type}"}
+
+
+# Requests that write the guard store; handle() runs these on the db thread.
+_WRITES = frozenset({
+    "guard.set_enabled", "guard.rules.add", "guard.rules.remove", "guard.taint.clear",
+    "guard.terminal.set_category", "guard.terminal.add_pattern", "guard.terminal.remove_pattern",
+    "guard.builtin.set_level", "guard.branches.add", "guard.branches.remove",
+})
 
 
 def _dispatch(msg_type: str, payload: dict) -> dict[str, Any]:
@@ -269,7 +302,11 @@ def _test(payload: dict) -> dict[str, Any]:
 
 async def handle(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     try:
-        result = _dispatch(msg_type, payload or {})
+        if msg_type in _WRITES:
+            # Commits on the db thread: a slow fsync must not stall the loop.
+            result = await run_in_db_thread(_dispatch, msg_type, payload or {})
+        else:
+            result = _dispatch(msg_type, payload or {})
     except ConfirmationRequired as exc:
         log.warning("refusing %s: %s", msg_type, exc)
         await session.send_json(make_error(msg_id, msg_type, "CONFIRMATION_REQUIRED", str(exc)))

@@ -373,7 +373,9 @@ def test_help_panel_sign_in_column_matches_login_command_args() -> None:
         key = re.search(r"agentKey: '([a-z]+)'", spec_source)
         command = re.search(r"defaultCommand: '([^']+)'", spec_source)
         assert key and command, f"{path.name} declares no agentKey/defaultCommand"
-        bin_to_key[command.group(1)] = key.group(1)
+        # The binary is the first word: a default command may carry a
+        # subcommand (`hermes chat`).
+        bin_to_key[command.group(1).split()[0]] = key.group(1)
 
     help_panel = {}
     for binary, sign_in in rows:
@@ -656,11 +658,9 @@ def test_vendors_without_session_ids() -> None:
     others = {
         k for k, s in registry.VENDORS.items() if not s.supports_session_resume
     }
-    # openclaw and hermes: general agents whose sessions live in their own
-    # runtime (OpenClaw's Gateway, Hermes's home), with no reader written yet.
     # devin: sessions exist (-c / -r <id>) but their store is undocumented
     # and no reader is written yet.
-    assert others == {"aider", "mcode", "openclaw", "hermes", "devin"}, (
+    assert others == {"aider", "mcode", "devin"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 

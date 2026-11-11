@@ -23,6 +23,7 @@ import { abandonPendingBackends } from './backend-pending'
 import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS } from '../shared/marketplaceDeveloper'
 import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -1339,6 +1340,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
   secretsPort: () => frontendPluginManager.createThirdPartySecretsPort(),
+  agentNotifyPort: () => frontendPluginManager.createThirdPartyAgentNotifyPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
@@ -2136,6 +2138,19 @@ frontendPluginManager.setAgentToolWorkspaceResolver((root) => {
   ]
   return open.some((path) => canonicalExistingDirectory(path) === root)
 })
+// 0.2.40: a view that declares `headless: true` mounts hidden on a Navide
+// window of the target workspace, with the query a user's open there gets.
+frontendPluginManager.setHeadlessViewHost((root) => {
+  const windows: Array<[BrowserWindow, string]> = [
+    ...[...mainWindowWorkspaces].filter(([win]) => !win.isDestroyed()),
+    ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed())
+      .flatMap(([win, paths]) => paths.map((path): [BrowserWindow, string] => [win, path])),
+  ]
+  const match = windows.find(([, path]) => canonicalExistingDirectory(path) === root)
+  if (!match) return null
+  const [hostWindow, workspacePath] = match
+  return { hostWindow, query: (contributionKey) => catalogContributionQuery(contributionKey, workspacePath) }
+})
 const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
   (channel, listener) => ipcMain.handle(channel, listener),
@@ -2161,6 +2176,34 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    // Plan P5: the anomaly rules run every 30 s; R4 reads the watchdog's
+    // notices, and the main windows hear each automatic pause.
+    autoPauseIntervalMs: 30_000,
+    resourceNotices: () => thirdPartyBackends.resourceNotices(),
+    onPluginAutoPaused: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:autoPaused', notice)
+      }
+    },
+    // Plan P3: a global stop turns the third-party switches off (native
+    // backends, DB8, DB4) and "Resume all" puts them back as they were. A
+    // choice made this way counts as the user's own (C3).
+    globalStopSwitches: {
+      read: () => {
+        const switches = nativeBackendStore.agentToolSwitches()
+        return { nativeBackends: nativeBackendStore.isEnabled(), agentTools: switches.enabled, externalCallers: switches.externalCallers }
+      },
+      turnOff: async () => {
+        await thirdPartyBackends.setEnabled(false)
+        await agentToolsControls.setSwitches({ enabled: false, enabledSetByUser: true })
+      },
+      restore: async (previous) => {
+        await thirdPartyBackends.setEnabled(previous.nativeBackends)
+        await agentToolsControls.setSwitches({ enabled: previous.agentTools, enabledSetByUser: true })
+        if (previous.agentTools) await agentToolsControls.setSwitches({ externalCallers: previous.externalCallers })
+      },
+    },
     onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
     // H1: a switch drains the plugin's views now, or has settled; only
     // Navide's own main windows hear it, never a plugin guest or window.
@@ -5498,6 +5541,8 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'guard.terminal.set_category',
   'guard.terminal.add_pattern',
   'guard.terminal.remove_pattern',
+  // Exempting a line from the credential pipe-upload rule (M4).
+  'guard.terminal.add_exemption',
   // Loosening Navide Guard's grading (lowering a built-in rule, adding an
   // allow pattern, removing a deny pattern or a protected branch).
   'guard.builtin.set_level',
@@ -5720,6 +5765,7 @@ ipcMain.on('settings:language-changed', (_event, locale: string) => {
     frontendPluginManager.dispatchHostSettingsChanged({
       settings: { 'agent-team:language': normalizedLocale },
     })
+    frontendPluginManager.notifyHostLocaleChanged(normalizedLocale)
     // The native menu is built once at startup; Electron has no API to
     // re-label it in place, so a language change has to install a new one.
     rebuildAppMenu()
@@ -6232,6 +6278,8 @@ app.whenReady().then(async () => {
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
     onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
+    onOpenDeveloperDoc: (doc) => void shell.openExternal(DEVELOPER_DOC_URLS[doc]),
+    onOpenDeveloperPage: (page) => sendMenuAction(`open-developer:${page}`),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onLockNow: () => void appLock.lock(),
     lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),

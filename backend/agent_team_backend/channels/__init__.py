@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from ..db_executor import run_in_db_thread
 from ..pane_account_history import parse_event_time
 from . import relay, wake
 from .manager import ChannelManager, Seams
@@ -97,7 +98,7 @@ def default_seams() -> Seams:
         pane = agent_messaging.current(pane_id)
         if pane is None:
             return {"ok": False, "error": "pane is gone"}
-        app.project_store.set_pane_stopped(pane.workspace_path, pane_id=pane.pane_id, stopped=False)
+        await run_in_db_thread(app.project_store.set_pane_stopped, pane.workspace_path, pane_id=pane.pane_id, stopped=False)
         await app.broadcast(make_event("pane.stopped", {
             "workspace_path": pane.workspace_path, "pane_id": pane.pane_id, "stopped": False,
         }))

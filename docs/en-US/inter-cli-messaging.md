@@ -541,6 +541,60 @@ session cannot be resumed are refused. The answer lists
 `{reclaimed, refused: [{paneId, reason, detail}]}`. Prefer this to
 `cli_close_agent`, which ends the conversation for good.
 
+### Renaming a pane
+
+A pane's name is its address, so renaming it moves where messages go:
+
+```
+cli_rename_pane(target="<pane>", new_name="<new name>")
+```
+
+It is the same rename as editing the pane's title — the same checks (one
+non-empty line; `/` stays in the title but becomes `-` in the address) and the
+same write path — so the title on screen, `cli_list_targets`, `cli_send`,
+`cli_get_status` and `cli_list_sessions`' `pane_name` switch together. A name
+another pane already answers to is refused with `name-taken` (nothing is
+suffixed for you). You can rename your own pane and the panes in your
+workspace you opened, directly or through panes you opened; anything else
+answers `rename-not-permitted`. Who opened a pane (`opened_by`) is fixed when
+it is spawned by `cli_open_agent` or a SPAWN block — moving a pane under you
+with `cli_place_pane` changes its parent, not its opener, so it does not make
+the pane yours to rename. A pane the user opened, or one recorded before
+0.2.40, can be renamed only by itself. CLI panes only, restore
+placeholders included; panes on another device answer `rename-local-only`.
+Scheduled jobs are the user's data and are not rewritten: one that still
+targets the old name comes back in `warnings`. Returns
+`{ok, old_name, new_name, pane_id, address, warnings?}`. Use it instead of
+reopening a session under a new name and reclaiming the old pane.
+
+### Switching a pane's model
+
+```
+cli_set_model(target="<pane>", model="<model id>", effort="")
+```
+
+Claude is switched through its bare `/model` picker: Navide opens it, moves
+the cursor to the model's row and presses `s` ("use this session only"), so
+only that session changes and the default for new sessions is left alone
+(`method: "picker"`). Codex takes `/model <id>`, which with an argument
+switches only the running session, so it is typed into the pane bare — no
+envelope, no reply instructions — and submitted, exactly as if the user typed
+it (`method: "slash"`). Either way the conversation and process stay. Every
+other CLI that takes `--model`, and any switch that names an `effort`, is
+rebuilt instead: the pane is restarted on the new model and resumes the same
+conversation (`method: "restart"`; the answer's `pane_id` is the new one). A
+claude switch the picker cannot make — a model with no row on its list or one
+under "More models", no picker or no `s` key, a screen that changed mid-way —
+closes the picker and takes the restart too, with `fallback` naming why. Only an idle pane is switched — mid-turn, starting, awaiting
+a prompt answer, being typed in or holding a draft answers `pane-busy` with
+`hold` naming why. Your own pane (`self-set-model`), terminal, ACP and sign-in
+panes, restore placeholders and other devices are refused. Model ids are not
+validated; an unknown one is the CLI's own error, so read `cli_read_log`
+afterwards. `cli_get_status` reports the new model under `ui.model`, a restore
+relaunches on it, and the switch goes into the pane's Guard audit trail. A
+plain `cli_send` of `/model ...` does not switch: it arrives wrapped as a
+message, and the agent reads it as text.
+
 ---
 
 ## How delivery actually works
@@ -630,6 +684,22 @@ window hands the address to the backend registry, and the window that owns the
 target pane queues, injects and reports the outcome. Until that report arrives
 the message stays queued. If the report never comes — the other window was
 killed, the machine slept — the message is failed after about 30 minutes.
+
+**ACP panes are delivered to as prompts, not typed** (experimental, only while
+Settings → CLI Agents → ACP (experimental) is on). An ACP pane runs its agent
+over the Agent Client Protocol with no terminal, and is otherwise an ordinary
+pane: it has a handle, `cli_list_targets` lists it and `cli_send` reaches it.
+The window queues, rate-limits, logs acks, renders the envelope and holds the
+message mid-turn as for any pane, then hands it to the backend (`acp.prompt`)
+as `session/prompt`. Delivered means the backend accepted the prompt — sent,
+or queued behind a running turn — not that the agent read or answered it; with
+no window it waits in the queue as for any pane. Its turn end comes from the
+protocol itself (the prompt's `stopReason`) and is reported as `turn_complete`
+with the reply text on `agent.activity`, the same event a log reader sends, so
+`cli_wait_idle`, `cli_send_and_wait`, chat channels and bare-line replies in
+that text work unchanged; there is no Stop hook or log reader behind it, and
+none of the hook/log pairing applies. The agent itself is given no Navide MCP
+tools yet, so its replies reach other panes only as bare-line blocks.
 
 ---
 
@@ -1164,7 +1234,21 @@ computer: multi-select menus and free-text ("Type something") options, and
 prompts from vendors Navide has no answer keys for (only Claude Code, Codex and
 Aider have them), which post a notice without buttons. A turn that ends on a
 plain-text question posts no request; reply by typing. Other text sent to a
-pane waiting on a prompt is not queued: the chat is told how to answer instead.
+pane waiting on a permission prompt is kept, not refused (`channels/held.py`):
+the chat is told at once that it was kept (with the prompt and its buttons
+quoted, plus a withdraw button), and once the pane leaves the prompt the kept
+messages go in, in order, each one confirmed in the chat as sent. At most 20
+are kept per pane; a kept message still waiting after 30 minutes is dropped
+and the chat told, and so are those kept for a pane that goes away, for a
+chat that is unbound or rebound, from a sender taken off the allowlist, or
+while its bot is stopped or removed or channels are turned off (checked again
+just before each one goes in). `/cancel`
+withdraws them. A bare `yes`, `no` or option number that answered nothing is
+never kept: sent in later, it would answer whatever is on screen by then.
+Keeping a message never answers or allows the prompt. `/status` is answered
+by Navide itself, never sent to the pane, even while it waits on a prompt:
+the pane tree, how long the prompt has waited, how many kept messages follow
+it, and the pane's last turn text on one line (redacted in full, then shortened).
 
 **Security note:** anyone on the allowlist can approve tool calls on your
 machine while the relay is on. Keep the allowlist short; Navide Guard refuses

@@ -14,7 +14,7 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 
 const GRANTS_FILE = '.navide-capability-grants.json'
-const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets'])
+const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify'])
 /** C2: a declared executable is a bare lowercase name (packages/plugin-contracts V2_SHELL_EXECUTABLE). */
 const SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
 

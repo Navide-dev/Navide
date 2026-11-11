@@ -43,6 +43,20 @@ def restore_bundled_library_path(environ: MutableMapping[str, str] = os.environ)
         environ.pop("LD_LIBRARY_PATH", None)
 
 
+def packaged_bin_dir() -> str:
+    """``<resources>/bin`` of a frozen build, where the app's sidecars live.
+
+    electron-builder puts the pane helper and ``navide-stt`` in
+    ``<resources>/bin``. A onedir backend runs from its own directory one
+    level below, ``bin/agent_team_backend/`` (the executable next to
+    ``_internal/``); a single-file backend sits in ``bin`` itself.
+    """
+    exe_dir = os.path.dirname(os.path.realpath(sys.executable))
+    if os.path.isdir(os.path.join(exe_dir, "_internal")):
+        return os.path.dirname(exe_dir)
+    return exe_dir
+
+
 #: How often the extraction directory is touched. macOS purges files under
 #: $TMPDIR that have not been accessed for three days; systemd-tmpfiles defaults
 #: to ten days for /tmp. Twice a day keeps either from seeing the files as idle.
@@ -74,13 +88,33 @@ def touch_extraction_tree(root: str | os.PathLike[str] | None = None) -> int:
     return touched
 
 
+def is_onefile_build() -> bool:
+    """Whether this is a frozen onefile build, i.e. one that unpacked itself.
+
+    Both kinds set ``sys._MEIPASS``. A onedir build's is its own ``_internal``
+    directory next to the executable (the installed files); a onefile build's
+    is the temporary directory it unpacked into, somewhere else entirely.
+    """
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not getattr(sys, "frozen", False) or not meipass:
+        return False
+    bundle = os.path.dirname(os.path.realpath(sys.executable))
+    root = os.path.realpath(meipass)
+    try:
+        return os.path.commonpath([bundle, root]) != bundle
+    except ValueError:  # Windows: different drives, so not inside the bundle
+        return True
+
+
 async def keep_extraction_warm(interval_s: float = EXTRACTION_KEEPALIVE_INTERVAL_S) -> None:
     """Touch the extraction directory now and every ``interval_s`` seconds.
 
-    Returns at once in a dev run (nothing is extracted); in a frozen build it
-    runs for the life of the backend.
+    Returns at once in a dev run (nothing is extracted) and in a onedir build,
+    which runs from its installed files -- touching those would only rewrite
+    timestamps inside the signed app, or fail on a read-only AppImage mount.
+    In a onefile build it runs for the life of the backend.
     """
-    if not getattr(sys, "frozen", False) or not getattr(sys, "_MEIPASS", None):
+    if not is_onefile_build():
         return
     import asyncio
 

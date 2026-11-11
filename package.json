@@ -216,8 +216,8 @@
       "icon": "resources/icon.png",
       "extraResources": [
         {
-          "from": "backend/dist/agent_team_backend.exe",
-          "to": "bin/agent_team_backend.exe"
+          "from": "backend/dist/agent_team_backend",
+          "to": "bin/agent_team_backend"
         },
         {
           "from": "build/stt",

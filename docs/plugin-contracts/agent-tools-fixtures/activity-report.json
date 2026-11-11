@@ -262,7 +262,10 @@
           "cancelled": 0
         }
       ]
-    }
+    },
+    "autoPauses": [
+      {"at": 1792799000000, "rule": "R2", "value": 1, "threshold": 0, "detail": "evil.example", "pluginVersion": "0.2.0"}
+    ]
   },
   "invalid": [
     {

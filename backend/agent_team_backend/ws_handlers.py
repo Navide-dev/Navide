@@ -56,6 +56,7 @@ from .ipc import make_error, make_event, make_response
 from .log_readers.claude import ClaudeLogReader, first_user_prompts
 from .applog import app_data_dir, in_data_dir
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
+from .db_executor import run_in_db_thread
 from .host_shell import parse_public_allowlisted_command, run_public_allowlisted_text, declared_executables
 from .mcp_settings import (
     MCPSettingsConflictError,
@@ -461,6 +462,29 @@ async def plugins_agent_action_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("plugins.stop.result")
+async def plugins_stop_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.stop.request`` (plan P2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .plugins import plugin_stop
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.stop.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plugin_stop.resolve(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
 #: The Host records broker and shell-broker calls, and (C1) its plugin frames'
@@ -776,6 +800,36 @@ async def plugins_activity_report(
         app.plugin_audit_log.activity_report, plugin_id, declared=declared, installed_at=installed_at
     )
     await session.send_json(make_response(msg_id, msg_type, report))
+
+
+@handler("plugins.activity.overview")
+async def plugins_activity_overview(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Every asked plugin's ``PluginActivityOverviewRow`` for the Settings monitor (plan P1).
+
+    Host-authenticated, like ``plugins.activity.report``: the Host sends the
+    installed ids and marks which hosts each manifest declares.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_ids = payload.get("plugin_ids") if isinstance(payload, dict) else None
+    if (
+        not isinstance(plugin_ids, list)
+        or not all(isinstance(plugin_id, str) and plugin_id for plugin_id in plugin_ids)
+        or set(payload) != {"plugin_ids"}
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.overview is malformed")
+        )
+        return
+    overview = await asyncio.to_thread(app.plugin_audit_log.activity_overview, plugin_ids)
+    await session.send_json(make_response(msg_id, msg_type, overview))
 
 
 @handler("editor.rewrite")
@@ -3648,6 +3702,20 @@ async def agent_session_exists(session: "Session", msg_id: str, msg_type: str, p
     )
 
 
+@handler("agent.notes")
+async def agent_notes(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Read-only memory / todo summary of an agent vendor's own files."""
+    from .agent_notes import DEFAULT_LIMIT, read_agent_notes
+
+    agent_key = str(payload.get("agent_key", ""))
+    try:
+        limit = int(payload.get("limit") or DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        limit = DEFAULT_LIMIT
+    result = await asyncio.to_thread(read_agent_notes, agent_key, limit)
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("agent.orphan_scan")
 async def agent_orphan_scan(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -4766,7 +4834,7 @@ async def workspace_touch(session: "Session", msg_id: str, msg_type: str, payloa
     # Workspaces open in the asking window (its own list, which knows
     # pane-less ones) and anywhere a CLI pane runs are never trimmed.
     open_paths = [p for p in payload.get("open") or [] if isinstance(p, str)]
-    app.recent_workspaces_store.touch(
+    await run_in_db_thread(app.recent_workspaces_store.touch,
         payload["path"],
         state=payload.get("state", ""),
         task=payload.get("task", ""),
@@ -4808,7 +4876,7 @@ async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: 
     from . import app
 
     try:
-        app.recent_workspaces_store.set_limit(
+        await run_in_db_thread(app.recent_workspaces_store.set_limit,
             payload.get("limit"), keep=_live_pane_workspaces_for_recent()
         )
     except ValueError as err:
@@ -4825,7 +4893,7 @@ async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: 
 async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    app.recent_workspaces_store.pin(payload["path"])
+    await run_in_db_thread(app.recent_workspaces_store.pin, payload["path"])
     recent = app.recent_workspaces_store.list()
     await session.send_json(
         make_response(msg_id, msg_type, {"recent": recent})
@@ -4839,7 +4907,7 @@ async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload:
 async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    app.recent_workspaces_store.unpin(payload["path"])
+    await run_in_db_thread(app.recent_workspaces_store.unpin, payload["path"])
     recent = app.recent_workspaces_store.list()
     await session.send_json(
         make_response(msg_id, msg_type, {"recent": recent})
@@ -4853,7 +4921,7 @@ async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payloa
 async def workspace_remove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    app.recent_workspaces_store.remove(payload["path"])
+    await run_in_db_thread(app.recent_workspaces_store.remove, payload["path"])
     recent = app.recent_workspaces_store.list()
     await session.send_json(
         make_response(msg_id, msg_type, {"recent": recent})
@@ -4932,7 +5000,7 @@ async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payloa
     claude_was_off = (
         "claude" in push_delivery.disabled_agents() if touches_channels else False
     )
-    delta = app.ui_settings_store.set(updates) if isinstance(updates, dict) else {}
+    delta = await run_in_db_thread(app.ui_settings_store.set, updates) if isinstance(updates, dict) else {}
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
     from . import sync_scopes
 
@@ -4950,6 +5018,10 @@ async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payloa
             }))
         if ("claude" in push_delivery.disabled_agents()) != claude_was_off:
             await _reinstall_claude_hooks()
+    from . import acp_switch
+
+    if acp_switch.SETTING_KEY in delta:
+        acp_switch.apply_settings(delta)
     if delta:
         # Other windows (EditorWindow, roles/stages) hold their own ws
         # connections — broadcast the merged delta so their caches
@@ -5007,7 +5079,7 @@ async def p2p_link_set_paused(
     from . import app
 
     paused = bool(payload.get("paused"))
-    app.ui_settings_store.set({LINK_PAUSED_SETTING: paused})
+    await run_in_db_thread(app.ui_settings_store.set, {LINK_PAUSED_SETTING: paused})
     if paused:
         await server_link.stop()
     else:
@@ -5044,7 +5116,7 @@ async def p2p_link_configure(session: "Session", msg_id: str, msg_type: str, pay
     # An install upgrading from the configurable era still carries the address
     # its user typed. Nothing reads it any more, so drop it rather than leave a
     # value that looks like it is in effect.
-    delta = app.ui_settings_store.set({server_link.SERVER_URL_SETTING: None})
+    delta = await run_in_db_thread(app.ui_settings_store.set, {server_link.SERVER_URL_SETTING: None})
     if token is not None:
         try:
             await vault_to_thread(server_link.replace_access_token, token)
@@ -5121,7 +5193,7 @@ async def _account_call(
         )
         return
 
-    delta = app.ui_settings_store.set(
+    delta = await run_in_db_thread(app.ui_settings_store.set,
         {
             # Only the signed-in identity is stored; the address is built in and
             # any stale user-entered one is cleared on the way past.
@@ -5302,7 +5374,7 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
             "(offline, or a server without auth.logout), so this device's token may "
             "stay valid there until it is revoked from another device"
         )
-    delta = app.ui_settings_store.set({server_link.ACCOUNT_EMAIL_SETTING: None})
+    delta = await run_in_db_thread(app.ui_settings_store.set, {server_link.ACCOUNT_EMAIL_SETTING: None})
     await server_link.reconfigure()
     await session.send_json(
         make_response(msg_id, msg_type, {"status": await server_link.status()})
@@ -6105,11 +6177,11 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
         return
     applied: list[str] = []
     if isinstance(bundle.get("roles"), list):
-        roles = app.roles_store.replace_all(bundle["roles"])
+        roles = await run_in_db_thread(app.roles_store.replace_all, bundle["roles"])
         applied.append("roles")
         await app.broadcast(make_event("roles.changed", {"roles": roles, "reason": "bundle_import"}))
     if isinstance(bundle.get("pipelines_document"), dict):
-        app.stages_store.replace_document(bundle["pipelines_document"])
+        await run_in_db_thread(app.stages_store.replace_document, bundle["pipelines_document"])
         pipelines = app.stages_store.list_pipelines()
         active_id = app.stages_store.get_active_pipeline_id()
         applied.append("pipelines")
@@ -6171,7 +6243,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
         await app.mcp_manager.reload(app.mcp_settings_store.path)
         applied.append("mcp")
     if isinstance(bundle.get("analyzer"), dict):
-        updated = app.analyzer_settings_store.set(bundle["analyzer"])
+        updated = await run_in_db_thread(app.analyzer_settings_store.set, bundle["analyzer"])
         applied.append("analyzer")
         await app.broadcast(make_event("analyzer.settings_changed", updated))
     if isinstance(bundle.get("ai_chat"), dict):
@@ -6180,7 +6252,7 @@ async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str,
             if k not in app._AI_SECRET_KEYS and v != "__redacted__"
         }
         if safe_chat:
-            app.ai_chat_settings_store.set(safe_chat)
+            await run_in_db_thread(app.ai_chat_settings_store.set, safe_chat)
             applied.append("ai_chat")
     await session.send_json(make_response(msg_id, msg_type, {
         "ok": True,
@@ -6713,7 +6785,7 @@ async def _clear_dangling_role_refs(reason: str) -> None:
     from . import app
 
     valid = {str(r.get("key", "")) for r in app.roles_store.list()}
-    touched = app.stages_store.clear_missing_role_references(valid)
+    touched = await run_in_db_thread(app.stages_store.clear_missing_role_references, valid)
     await _broadcast_stage_role_changes(touched, reason)
 
 
@@ -6734,7 +6806,7 @@ async def roles_list(session: "Session", msg_id: str, msg_type: str, payload: di
 async def roles_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    role = app.roles_store.upsert(
+    role = await run_in_db_thread(app.roles_store.upsert,
         key=payload["key"],
         label=payload.get("label", ""),
         one_line=payload.get("one_line", ""),
@@ -6787,16 +6859,16 @@ async def roles_rename(session: "Session", msg_id: str, msg_type: str, payload: 
     properties = payload.get("properties")
     if properties is None:
         properties = (app.roles_store.get(old_key) or {}).get("properties")
-    role = app.roles_store.upsert(
+    role = await run_in_db_thread(app.roles_store.upsert,
         key=new_key,
         label=payload.get("label", ""),
         one_line=payload.get("one_line", ""),
         system_prompt=payload.get("system_prompt", ""),
         properties=properties,
     )
-    touched = app.stages_store.repoint_role_references(old_key, new_key)
+    touched = await run_in_db_thread(app.stages_store.repoint_role_references, old_key, new_key)
     if new_key != old_key:
-        app.roles_store.delete(old_key)
+        await run_in_db_thread(app.roles_store.delete, old_key)
     roles = app.roles_store.list()
     await session.send_json(
         make_response(
@@ -6832,7 +6904,7 @@ async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: 
             )
         )
         return
-    roles = app.roles_store.delete(key)
+    roles = await run_in_db_thread(app.roles_store.delete, key)
     await session.send_json(
         make_response(msg_id, msg_type, {"roles": roles})
     )
@@ -6845,7 +6917,7 @@ async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: 
 async def roles_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    roles = app.roles_store.reset()
+    roles = await run_in_db_thread(app.roles_store.reset)
     await session.send_json(
         make_response(msg_id, msg_type, {"roles": roles})
     )
@@ -6911,7 +6983,7 @@ async def pipelines_create(session: "Session", msg_id: str, msg_type: str, paylo
     from . import app
 
     name = payload.get("name", "New Pipeline")
-    pipeline = app.stages_store.create_pipeline(name)
+    pipeline = await run_in_db_thread(app.stages_store.create_pipeline, name)
     pipelines = app.stages_store.list_pipelines()
     await session.send_json(
         make_response(msg_id, msg_type, {"pipeline": pipeline, "pipelines": pipelines})
@@ -6975,7 +7047,7 @@ async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, paylo
     pipeline_id = payload.get("pipeline_id", "")
     name = payload.get("name", "")
     try:
-        pipeline = app.stages_store.rename_pipeline(pipeline_id, name)
+        pipeline = await run_in_db_thread(app.stages_store.rename_pipeline, pipeline_id, name)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
@@ -7006,7 +7078,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
             )
             return
     try:
-        pipelines = app.stages_store.delete_pipeline(pipeline_id)
+        pipelines = await run_in_db_thread(app.stages_store.delete_pipeline, pipeline_id)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
@@ -7036,7 +7108,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
             )
             return
     try:
-        app.stages_store.set_active_pipeline(pipeline_id)
+        await run_in_db_thread(app.stages_store.set_active_pipeline, pipeline_id)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
@@ -7071,7 +7143,7 @@ async def pipelines_reset_builtin(session: "Session", msg_id: str, msg_type: str
         )
         return
     try:
-        pipeline = app.stages_store.reset_builtin(pipeline_id)
+        pipeline = await run_in_db_thread(app.stages_store.reset_builtin, pipeline_id)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
@@ -7166,7 +7238,7 @@ async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload:
         return
     data = payload["stage"]
     try:
-        stage = app.stages_store.upsert(data, pipeline_id)
+        stage = await run_in_db_thread(app.stages_store.upsert, data, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
         return
@@ -7201,7 +7273,7 @@ async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload
         return
     ids = payload["ids"]
     try:
-        updated_stages = app.stages_store.reorder(ids, pipeline_id)
+        updated_stages = await run_in_db_thread(app.stages_store.reorder, ids, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
         return
@@ -7235,7 +7307,7 @@ async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload:
         return
     stage_id = payload["id"]
     try:
-        updated_stages = app.stages_store.delete(stage_id, pipeline_id)
+        updated_stages = await run_in_db_thread(app.stages_store.delete, stage_id, pipeline_id)
     except GraphNonLinearError as err:
         await session.send_json(make_error(msg_id, msg_type, "GRAPH_NONLINEAR", str(err)))
         return
@@ -7270,7 +7342,7 @@ async def stages_reset(session: "Session", msg_id: str, msg_type: str, payload: 
     try:
         # Only an explicit true deletes a drawn graph (the editor sends it
         # once the user confirmed); anything else is refused by the store.
-        updated_stages = app.stages_store.reset(pipeline_id, discard_graph=payload.get("discard_graph") is True)
+        updated_stages = await run_in_db_thread(app.stages_store.reset, pipeline_id, discard_graph=payload.get("discard_graph") is True)
     except (KeyError, ValueError) as err:
         if not _is_store_refusal(err):
             raise
@@ -7404,7 +7476,7 @@ async def analyzer_settings_get(session: "Session", msg_id: str, msg_type: str, 
 async def analyzer_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    updated = app.analyzer_settings_store.set(payload)
+    updated = await run_in_db_thread(app.analyzer_settings_store.set, payload)
     await session.send_json(make_response(msg_id, msg_type, updated))
     await app.broadcast(make_event("analyzer.settings_changed", updated))
 
@@ -7420,7 +7492,7 @@ async def archive_settings_get(session: "Session", msg_id: str, msg_type: str, p
 async def archive_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    updated = app.archive_settings_store.set(payload)
+    updated = await run_in_db_thread(app.archive_settings_store.set, payload)
     await session.send_json(make_response(msg_id, msg_type, updated))
     await app.broadcast(make_event("archive.settings_changed", updated))
 
@@ -7588,7 +7660,7 @@ async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: 
     from . import app
 
     scope = payload.get("scope", "run")
-    snap = app.tokens_store.reset(scope, payload.get("workspace_path") or None)
+    snap = await run_in_db_thread(app.tokens_store.reset, scope, payload.get("workspace_path") or None)
     await session.send_json(make_response(msg_id, msg_type, snap))
     await app.broadcast(make_event("tokens.changed", snap))
 
@@ -7765,7 +7837,7 @@ async def devtime_reset(session: "Session", msg_id: str, msg_type: str, payload:
     from . import app
 
     workspace_path = str(payload.get("workspace_path") or "")
-    app.dev_time_store.reset(workspace_path)
+    await run_in_db_thread(app.dev_time_store.reset, workspace_path)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
     await app.broadcast(make_event("devtime.changed", {"workspace_path": workspace_path}))
 
@@ -8239,7 +8311,7 @@ async def ai_chat_settings_get(session: "Session", msg_id: str, msg_type: str, p
 async def ai_chat_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    updated = app.ai_chat_settings_store.set(payload)
+    updated = await run_in_db_thread(app.ai_chat_settings_store.set, payload)
     await session.send_json(make_response(msg_id, msg_type, updated))
 
 
@@ -9540,7 +9612,7 @@ async def _terminal_create_impl(
         # Open the pane's account interval now, before the CLI's first call
         # can land: the bookkeeping message repeats the same pin (a no-op)
         # a beat later. Non-account agents pin the Default slot.
-        app.pane_account_history.pin(
+        await run_in_db_thread(app.pane_account_history.pin,
             term.pane_id,
             _account_pin_for_history(
                 history_pin if history_pin is not None else _profile_pin_for_bookkeeping(
@@ -9558,7 +9630,7 @@ async def _terminal_create_impl(
         # while the CLI itself sat at its prompt (issue #118). It runs
         # off-loop after the ack; until it lands the pane binds only through
         # the deterministic paths (explicit id, per-pane home, marker).
-        app.attribution.register_pane(
+        await run_in_db_thread(app.attribution.register_pane,
             term.pane_id,
             vendor=agent_key,
             cwd=payload["cwd"],
@@ -9654,7 +9726,7 @@ async def _terminal_create_impl(
         raise _TerminalCreateCancelled
     transaction["response_payload"] = response_payload
     transaction["committed"] = True
-    _record_dock_spawn(payload, metadata, agent_key, term.id)
+    await run_in_db_thread(_record_dock_spawn, payload, metadata, agent_key, term.id)
 
 
 @handler("terminal.create.cancel")
@@ -9739,7 +9811,9 @@ def _guarded_terminal_write_refusal(
     submit = "\r" in text
     line = _GUARDED_LINES.get(session_id, "") + text.replace("\r", "")
     workspace = str(term.metadata.get("workspace_path") or term.cwd)
-    refusal = terminal_policy.enforce(line, workspace=workspace, pane_id=term.pane_id, via="terminal.input")
+    refusal = terminal_policy.enforce(
+        line, workspace=workspace, pane_id=term.pane_id, via="terminal.input", audit_exempt=submit
+    )
     if refusal is not None:
         _GUARDED_LINES.pop(session_id, None)
         return refusal
@@ -9797,7 +9871,7 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
         term = session.terminals.get(payload["terminal_session_id"])
         if term is not None:
             workspace_path = str(term.metadata.get("workspace_path") or term.cwd)
-            if app.dev_time_store.human_input(workspace_path, term.pane_id):
+            if await run_in_db_thread(app.dev_time_store.human_input, workspace_path, term.pane_id):
                 await app.broadcast(make_event("devtime.changed", {"workspace_path": workspace_path}))
 
 
@@ -10159,7 +10233,7 @@ async def terminal_kill(session: "Session", msg_id: str, msg_type: str, payload:
     # The process behind the pane is gone (idle reclaim comes through here
     # too): nothing can beat for it until a respawn, so close its intervals.
     if pane_id_for_unreg:
-        for workspace_path in app.dev_time_store.pane_removed(pane_id_for_unreg):
+        for workspace_path in await run_in_db_thread(app.dev_time_store.pane_removed, pane_id_for_unreg):
             await app.broadcast(make_event("devtime.changed", {"workspace_path": workspace_path}))
 
 
@@ -10199,7 +10273,7 @@ async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, 
         app.attribution.unregister_pane(pane_id)
         ended.setdefault(pane_id, workspace_path)
     for pane_id, workspace_path in ended.items():
-        for ws in app.dev_time_store.pane_removed(pane_id):
+        for ws in await run_in_db_thread(app.dev_time_store.pane_removed, pane_id):
             await app.broadcast(make_event("devtime.changed", {"workspace_path": ws}))
         entry = agent_messaging.get(pane_id)
         if entry is not None and entry.is_dock and agent_messaging.unregister(pane_id):
@@ -10210,9 +10284,9 @@ async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, 
         try:
             # Only a panel's own record: the store never lets a panel take over
             # a window pane's, and ending the panel must not retire one either.
-            project = app.project_store.load_or_create(workspace_path)
+            project = await run_in_db_thread(app.project_store.load_or_create, workspace_path)
             if any(p.pane_id == pane_id and p.surface == surface for p in project.panes):
-                app.project_store.record_manual_pane_unspawn(workspace_path, pane_id=pane_id)
+                await run_in_db_thread(app.project_store.record_manual_pane_unspawn, workspace_path, pane_id=pane_id)
         except Exception:  # noqa: BLE001 — the PTY is down; a lost record update must not fail the close
             log.exception("terminal.kill_surface: retiring %s in %s failed", pane_id, workspace_path)
     await session.send_json(
@@ -10255,7 +10329,7 @@ async def terminal_dock_retire(session: "Session", msg_id: str, msg_type: str, p
     surface = str(payload.get("surface") or "")
     workspace_path = str(payload.get("workspace_path") or "")
     if pane_id and workspace_path and surface and surface != "main":
-        _retire_dock_record(workspace_path, pane_id, surface)
+        await run_in_db_thread(_retire_dock_record, workspace_path, pane_id, surface)
     await session.send_json(make_response(msg_id, msg_type, {}))
 
 
@@ -10446,7 +10520,7 @@ async def terminal_redraw(session: "Session", msg_id: str, msg_type: str, payloa
 async def project_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.load_or_create(
+    project = await run_in_db_thread(app.project_store.load_or_create,
         payload["workspace_path"],
         name=payload.get("name", ""),
         backend_version=app.__version__,
@@ -10461,7 +10535,7 @@ async def project_upsert(session: "Session", msg_id: str, msg_type: str, payload
 async def project_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.load_or_create(payload["workspace_path"])
+    project = await run_in_db_thread(app.project_store.load_or_create, payload["workspace_path"])
     app._register_workspace_and_backfill(project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -10512,7 +10586,7 @@ async def project_set_layout_mode(session: "Session", msg_id: str, msg_type: str
     mode = payload.get("layout_mode", "grid")
     if mode not in ("auto", "grid", "spotlight", "fullscreen"):
         mode = "grid"
-    app.project_store.set_layout_mode(ws_raw, mode)
+    await run_in_db_thread(app.project_store.set_layout_mode, ws_raw, mode)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10523,7 +10597,7 @@ async def project_set_pane_order(session: "Session", msg_id: str, msg_type: str,
     ws_raw = payload.get("workspace_path", "") or ""
     pane_ids = payload.get("pane_ids") or []
     if isinstance(pane_ids, list):
-        app.project_store.set_pane_order(
+        await run_in_db_thread(app.project_store.set_pane_order,
             ws_raw, pane_ids=[p for p in pane_ids if isinstance(p, str)]
         )
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
@@ -10537,7 +10611,7 @@ async def project_set_pane_stopped(session: "Session", msg_id: str, msg_type: st
     pane_id = payload.get("pane_id", "") or ""
     stopped = bool(payload.get("stopped", False))
     if ws_raw and pane_id:
-        app.project_store.set_pane_stopped(ws_raw, pane_id=pane_id, stopped=stopped)
+        await run_in_db_thread(app.project_store.set_pane_stopped, ws_raw, pane_id=pane_id, stopped=stopped)
         asyncio.create_task(
             app.broadcast(make_event("pane.stopped", {
                 "workspace_path": ws_raw, "pane_id": pane_id, "stopped": stopped,
@@ -10560,7 +10634,7 @@ async def project_set_pane_minimized(session: "Session", msg_id: str, msg_type: 
     pane_id = payload.get("pane_id", "") or ""
     is_minimized = bool(payload.get("is_minimized", False))
     if ws_raw and pane_id:
-        app.project_store.set_pane_minimized(ws_raw, pane_id=pane_id, is_minimized=is_minimized)
+        await run_in_db_thread(app.project_store.set_pane_minimized, ws_raw, pane_id=pane_id, is_minimized=is_minimized)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10574,7 +10648,7 @@ async def project_set_pane_muted(session: "Session", msg_id: str, msg_type: str,
     pane_id = payload.get("pane_id", "") or ""
     is_muted = bool(payload.get("is_muted", False))
     if ws_raw and pane_id:
-        app.project_store.set_pane_muted(ws_raw, pane_id=pane_id, is_muted=is_muted)
+        await run_in_db_thread(app.project_store.set_pane_muted, ws_raw, pane_id=pane_id, is_muted=is_muted)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10594,7 +10668,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
-        project = app.project_store.set_pane_resume_state(
+        project = await run_in_db_thread(app.project_store.set_pane_resume_state,
             ws_raw,
             pane_id=pane_id,
             last_turn_state=turn_state if isinstance(turn_state, str) else None,
@@ -10617,7 +10691,7 @@ async def project_set_pane_collapsed(session: "Session", msg_id: str, msg_type: 
     pane_id = payload.get("pane_id", "") or ""
     collapsed = bool(payload.get("collapsed", False))
     if ws_raw and pane_id:
-        app.project_store.set_pane_collapsed(ws_raw, pane_id=pane_id, collapsed=collapsed)
+        await run_in_db_thread(app.project_store.set_pane_collapsed, ws_raw, pane_id=pane_id, collapsed=collapsed)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -10628,7 +10702,7 @@ async def project_set_tab_order(session: "Session", msg_id: str, msg_type: str, 
     ws_raw = payload.get("workspace_path", "") or ""
     tab_order = payload.get("tab_order") or []
     if isinstance(tab_order, list):
-        app.project_store.set_tab_order(
+        await run_in_db_thread(app.project_store.set_tab_order,
             ws_raw, tab_order=[t for t in tab_order if isinstance(t, str)]
         )
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
@@ -10866,7 +10940,7 @@ async def project_rename_pane(session: "Session", msg_id: str, msg_type: str, pa
     pane_id = payload.get("pane_id", "") or ""
     custom_name = (payload.get("custom_name", "") or "").strip()
     if pane_id:
-        project = app.project_store.rename_pane(
+        project = await run_in_db_thread(app.project_store.rename_pane,
             ws_raw, pane_id=pane_id, custom_name=custom_name
         )
         # Patch the full store (spawn-history.json) at the source too: the
@@ -10926,7 +11000,7 @@ async def project_set_pane_auto_name(session: "Session", msg_id: str, msg_type: 
     if source not in ("heuristic", "llm"):
         source = "heuristic"
     if pane_id:
-        project, changed = app.project_store.set_pane_auto_name(
+        project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
             ws_raw, pane_id=pane_id, auto_name=auto_name, source=source
         )
         if project is not None and changed:
@@ -10988,7 +11062,7 @@ async def pane_generate_auto_name(session: "Session", msg_id: str, msg_type: str
         return
 
     name = result["name"]
-    project, changed = app.project_store.set_pane_auto_name(
+    project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
         ws_raw, pane_id=pane_id, auto_name=name, source="llm"
     )
     if project is not None and changed:
@@ -11220,7 +11294,7 @@ async def project_set_theme(session: "Session", msg_id: str, msg_type: str, payl
     ws_raw = payload.get("workspace_path", "") or ""
     theme = payload.get("theme")
     custom = payload.get("theme_custom")
-    app.project_store.set_theme(
+    await run_in_db_thread(app.project_store.set_theme,
         ws_raw,
         theme=theme if isinstance(theme, str) and theme else None,
         theme_custom=custom if isinstance(custom, dict) else None,
@@ -11236,7 +11310,7 @@ async def project_set_language(session: "Session", msg_id: str, msg_type: str, p
     # of truth. Unknown workspace → silently no-op.
     ws_raw = payload.get("workspace_path", "") or ""
     lang = payload.get("language")
-    app.project_store.set_language(ws_raw, lang if isinstance(lang, str) and lang else None)
+    await run_in_db_thread(app.project_store.set_language, ws_raw, lang if isinstance(lang, str) and lang else None)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
@@ -11265,7 +11339,7 @@ async def project_log_event(session: "Session", msg_id: str, msg_type: str, payl
     _details = payload.get("details") or {}
     _line = _details.get("line") if isinstance(_details, dict) else None
     if payload.get("event_type") == "orchestrator_log" and _line:
-        _ev = app.history_store.record_line(
+        _ev = await run_in_db_thread(app.history_store.record_line,
             ws_path,
             _line,
             run_dir=_run_dir,
@@ -11273,7 +11347,7 @@ async def project_log_event(session: "Session", msg_id: str, msg_type: str, payl
             vendor=payload.get("agent") or None,
         )
     else:
-        _ev = app.history_store.record(
+        _ev = await run_in_db_thread(app.history_store.record,
             ws_path,
             run_dir=_run_dir,
             type=payload.get("event_type", "note"),
@@ -11334,7 +11408,7 @@ async def pipeline_suspend(session: "Session", msg_id: str, msg_type: str, paylo
 
     ws = payload["workspace_path"]
     try:
-        project, frame = app.project_store.suspend_for_child(
+        project, frame = await run_in_db_thread(app.project_store.suspend_for_child,
             ws,
             node_id=str(payload.get("node_id") or ""),
             next_index=int(payload.get("next_index", 0) or 0),
@@ -11345,7 +11419,7 @@ async def pipeline_suspend(session: "Session", msg_id: str, msg_type: str, paylo
     except ValueError as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
-    app.tokens_store.suspend_run(ws)
+    await run_in_db_thread(app.tokens_store.suspend_run, ws)
     _mirror_pipeline_state(project)
     resp = app._project_payload(project)
     resp["frame_id"] = frame["id"]
@@ -11363,7 +11437,7 @@ async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str
     child = app.project_store.peek(ws)
     child_run_id = _token_run_id(child.log_file_name, child.id) if child is not None else ""
     outcome = "completed" if payload.get("outcome") == "completed" else "failed"
-    popped = app.project_store.finish_child(
+    popped = await run_in_db_thread(app.project_store.finish_child,
         ws, outcome=outcome, summary=str(payload.get("summary") or ""),
         output=payload.get("output"), error=str(payload.get("error") or ""),
     )
@@ -11371,7 +11445,7 @@ async def pipeline_child_finished(session: "Session", msg_id: str, msg_type: str
         await session.send_json(make_response(msg_id, msg_type, {"popped": False}))
         return
     project, frame = popped
-    app.tokens_store.resume_suspended_run(ws, child_run_id=child_run_id)
+    await run_in_db_thread(app.tokens_store.resume_suspended_run, ws, child_run_id=child_run_id)
     # Merged, never cleared: the child's output flows into the parent, so a
     # taint the child run carries stays on the parent too.
     restore_pipeline_run_taint(ws, str(frame.get("taint") or "") or pipeline_run_taint(ws))
@@ -11452,7 +11526,7 @@ async def pipeline_resume(session: "Session", msg_id: str, msg_type: str, payloa
     # Judged before the resume claims the run, which makes it live again.
     was_interrupted = pipeline_liveness.is_interrupted(before)
     try:
-        project, resume_index = app.project_store.resume_pipeline(payload["workspace_path"])
+        project, resume_index = await run_in_db_thread(app.project_store.resume_pipeline, payload["workspace_path"])
     except NoRunToResume as err:
         await session.send_json(make_error(msg_id, msg_type, "NO_RUN_TO_RESUME", str(err)))
         return
@@ -11489,25 +11563,32 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     from .projects import ParentRunSuspended
 
     child_of = str(payload.get("child_of") or "")
-    frame = None
-    # What the run this start overwrites had come to, for its webhook row.
-    peek = getattr(app.project_store, "peek", None)
-    ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
-    if child_of:
-        before = app.project_store.peek(payload["workspace_path"])
-        stack = getattr(before, "run_stack", None) or []
-        frame = stack[-1] if stack else None
-    try:
+    pipeline_id = payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id()
+
+    def _start() -> tuple[Any, Any, Any]:
+        # Runs on the db thread: the commit's fsync must not stall the loop.
+        frame = None
+        # What the run this start overwrites had come to, for its webhook row.
+        peek = getattr(app.project_store, "peek", None)
+        ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
+        if child_of:
+            before = app.project_store.peek(payload["workspace_path"])
+            stack = getattr(before, "run_stack", None) or []
+            frame = stack[-1] if stack else None
         project = app.project_store.start_pipeline(
             payload["workspace_path"],
             task_description=payload.get("task_description", ""),
             total_stages=int(payload.get("total_stages", len(payload.get("stage_blueprint") or []))),
             stage_blueprint=payload.get("stage_blueprint", []),
             backend_version=app.__version__,
-            pipeline_id=payload.get("pipeline_id", "") or app.stages_store.get_active_pipeline_id(),
+            pipeline_id=pipeline_id,
             start_index=int(payload.get("start_index", 0) or 0),
             child_of=child_of,
         )
+        return project, frame, ended
+
+    try:
+        project, frame, ended = await run_in_db_thread(_start)
     except ParentRunSuspended as err:
         await session.send_json(make_error(msg_id, msg_type, "PIPELINE_SUSPENDED", str(err)))
         return
@@ -11531,7 +11612,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
     # Start a fresh token-stats run for this workspace.
     log_name = project.log_file_name or ""
     run_dir = log_name.rsplit("/", 1)[0] if "/" in log_name else ""
-    app.tokens_store.start_run(
+    await run_in_db_thread(app.tokens_store.start_run,
         project.workspace_path,
         run_id=run_dir or project.id,
         task=project.task_description,
@@ -11553,7 +11634,8 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
     from .projects import StageOutOfRange
 
     try:
-        project = app.project_store.record_stage_spawn(
+        project = await run_in_db_thread(
+            app.project_store.record_stage_spawn,
             payload["workspace_path"],
             stage_index=int(payload["stage_index"]),
             pane_id=payload["pane_id"],
@@ -11565,7 +11647,7 @@ async def pipeline_stage_spawn(session: "Session", msg_id: str, msg_type: str, p
         return
     from .guard.taint import pipeline_pane_spawned
 
-    pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    await run_in_db_thread(pipeline_pane_spawned, payload["workspace_path"], str(payload["pane_id"]))
     pipeline_liveness.claim_run(session, project.workspace_path)
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11580,7 +11662,8 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
     slot_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
     try:
-        project = app.project_store.record_slot_spawn(
+        project = await run_in_db_thread(
+            app.project_store.record_slot_spawn,
             payload["workspace_path"],
             stage_index=int(payload["stage_index"]),
             slot_label=payload["slot_label"],
@@ -11598,10 +11681,10 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
     except StageOutOfRange as err:
         await session.send_json(_stage_out_of_range(msg_id, msg_type, err))
         return
-    app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
+    await run_in_db_thread(app.pane_account_history.pin, str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
 
-    pipeline_pane_spawned(payload["workspace_path"], str(payload["pane_id"]))
+    await run_in_db_thread(pipeline_pane_spawned, payload["workspace_path"], str(payload["pane_id"]))
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -11616,7 +11699,7 @@ def _stage_out_of_range(msg_id: str, msg_type: str, err: Any) -> dict:
 async def pipeline_slot_session(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.record_slot_session(
+    project = await run_in_db_thread(app.project_store.record_slot_session,
         payload["workspace_path"],
         stage_index=int(payload["stage_index"]),
         slot_label=payload["slot_label"],
@@ -11664,7 +11747,7 @@ async def _sweep_pane_ptys(session: "Session", pane_id: str, *, force: bool = Tr
         await session.terminals.kill(term_session_id, force=force)
         app._PTY_OWNERS.pop(term_session_id, None)
         app.attribution.unregister_pane(pane_id)
-    for workspace_path in app.dev_time_store.pane_removed(pane_id):
+    for workspace_path in await run_in_db_thread(app.dev_time_store.pane_removed, pane_id):
         await app.broadcast(make_event("devtime.changed", {"workspace_path": workspace_path}))
 
 
@@ -11676,7 +11759,7 @@ async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, 
     stage_index = int(payload["stage_index"])
     slot_label = payload["slot_label"]
     try:
-        project = app.project_store.record_slot_unspawn(
+        project = await run_in_db_thread(app.project_store.record_slot_unspawn,
             payload["workspace_path"],
             stage_index=stage_index,
             slot_label=slot_label,
@@ -11706,7 +11789,7 @@ async def pipeline_slot_kickoff(session: "Session", msg_id: str, msg_type: str, 
     from .projects import SlotNotFound
 
     try:
-        project = app.project_store.update_slot_kickoff(
+        project = await run_in_db_thread(app.project_store.update_slot_kickoff,
             payload["workspace_path"],
             stage_index=int(payload["stage_index"]),
             slot_label=payload["slot_label"],
@@ -11725,9 +11808,9 @@ async def pipeline_slot_kickoff(session: "Session", msg_id: str, msg_type: str, 
 async def pipeline_complete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.complete_pipeline(payload["workspace_path"])
+    project = await run_in_db_thread(app.project_store.complete_pipeline, payload["workspace_path"])
     _mirror_pipeline_state(project)
-    app.tokens_store.end_run(project.workspace_path, outcome="completed", node_states=project.node_states)
+    await run_in_db_thread(app.tokens_store.end_run, project.workspace_path, outcome="completed", node_states=project.node_states)
     asyncio.create_task(
         app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
     )
@@ -11748,11 +11831,11 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
         # crash left behind: never a run another window is still driving.
         await session.send_json(make_error(msg_id, msg_type, "NOT_INTERRUPTED", "no interrupted run in this workspace"))
         return
-    project = app.project_store.abort_pipeline(payload["workspace_path"], reason=reason)
+    project = await run_in_db_thread(app.project_store.abort_pipeline, payload["workspace_path"], reason=reason)
     _mirror_pipeline_state(project)
     if reason == "failed" and payload.get("kickoff_failed") is True and (webhooks := webhook_service.current()) is not None:
         webhooks.note_kickoff_failed(payload["workspace_path"])
-    app.tokens_store.end_run(
+    await run_in_db_thread(app.tokens_store.end_run,
         project.workspace_path,
         # The engine aborts with reason "failed" when a run cannot go on (a
         # reject loop out of budget); everything else is a stop.
@@ -11776,7 +11859,7 @@ async def pipeline_reset(session: "Session", msg_id: str, msg_type: str, payload
 
     peek = getattr(app.project_store, "peek", None)
     ended = webhook_service.end_state_of(peek(payload["workspace_path"]) if peek else None)
-    project = app.project_store.reset_pipeline(payload["workspace_path"])
+    project = await run_in_db_thread(app.project_store.reset_pipeline, payload["workspace_path"])
     if (webhooks := webhook_service.current()) is not None:
         webhooks.run_reset(payload["workspace_path"], ended)
     if project is not None:
@@ -11829,7 +11912,7 @@ async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, p
         known = app.stages_store.node_ids(getattr(before, "pipeline_id", "") or None)
     except (KeyError, ValueError):
         known = None
-    project = app.project_store.record_node_states(
+    project = await run_in_db_thread(app.project_store.record_node_states,
         payload["workspace_path"], nodes=nodes, gate=gate, outputs=outputs, known_ids=known
     )
     dropped = sorted({str(n) for n in [*nodes, *(outputs or {})]} - known) if known is not None else []
@@ -11916,7 +11999,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
     previous_pane_id = str(payload.get("previous_pane_id") or "")
     previous_session_id = ""
     if previous_pane_id:
-        before = app.project_store.load_or_create(payload["workspace_path"])
+        before = await run_in_db_thread(app.project_store.load_or_create, payload["workspace_path"])
         previous = next((p for p in before.panes
                          if p.origin != "pipeline" and p.pane_id == previous_pane_id), None)
         previous_session_id = previous.session_id if previous is not None else ""
@@ -11926,11 +12009,11 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
     session_id = str(payload.get("session_id") or "")
     closed_lineage: set[str] = set()
     if session_id:
-        known = app.project_store.load_or_create(payload["workspace_path"])
+        known = await run_in_db_thread(app.project_store.load_or_create, payload["workspace_path"])
         closed_lineage = {p.pane_id for p in known.panes
                           if p.origin != "pipeline" and p.spawn_status == "removed"
                           and p.session_id == session_id}
-    project = app.project_store.record_manual_pane_spawn(
+    project = await run_in_db_thread(app.project_store.record_manual_pane_spawn,
         payload["workspace_path"],
         pane_id=payload["pane_id"],
         previous_pane_id=payload.get("previous_pane_id", ""),
@@ -11947,8 +12030,9 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         origin=payload.get("origin", ""),
         spawned_by=payload.get("spawned_by", ""),
         launch_id=launch_id.current(),
+        opened_by=str(payload.get("opened_by") or ""),
     )
-    app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(manual_pin))
+    await run_in_db_thread(app.pane_account_history.pin, str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
@@ -11982,7 +12066,7 @@ async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, pa
     # drifted id, and that pane's PTY has to go down too. The requested id is
     # always swept, matching record or not.
     pane_id = payload["pane_id"]
-    project, removed_pane_ids = app.project_store.record_manual_pane_unspawn(
+    project, removed_pane_ids = await run_in_db_thread(app.project_store.record_manual_pane_unspawn,
         payload["workspace_path"],
         pane_id=pane_id,
         session_id=payload.get("session_id", "") or "",
@@ -12022,7 +12106,7 @@ async def pipeline_slot_unspawn_by_pane(session: "Session", msg_id: str, msg_typ
     # renderer could not kill what it has no terminal ref for. Losing the
     # record update to that is recoverable; losing the process is not.
     await _sweep_pane_ptys(session, pane_id)
-    project, retired = app.project_store.record_pane_unspawn_by_id(
+    project, retired = await run_in_db_thread(app.project_store.record_pane_unspawn_by_id,
         payload["workspace_path"], pane_id=pane_id
     )
     if not retired:
@@ -12096,7 +12180,7 @@ async def limits_detached_stop(session: "Session", msg_id: str, msg_type: str, p
 async def manual_pane_session(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.record_manual_pane_session(
+    project = await run_in_db_thread(app.project_store.record_manual_pane_session,
         payload["workspace_path"],
         pane_id=payload["pane_id"],
         session_id=payload.get("session_id", ""),
@@ -12110,7 +12194,7 @@ async def manual_pane_session(session: "Session", msg_id: str, msg_type: str, pa
 async def pane_set_run_group(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    project = app.project_store.set_pane_run_group(
+    project = await run_in_db_thread(app.project_store.set_pane_run_group,
         payload["workspace_path"],
         pane_id=payload["pane_id"],
         run_group_id=payload.get("run_group_id", ""),
@@ -12145,7 +12229,7 @@ async def pane_set_parent(session: "Session", msg_id: str, msg_type: str, payloa
     pane, next to pane.set_run_group. "" as spawned_by makes it a root."""
     from . import app
 
-    outcome = app.project_store.set_pane_parent(
+    outcome = await run_in_db_thread(app.project_store.set_pane_parent,
         payload["workspace_path"],
         pane_id=payload["pane_id"],
         spawned_by=str(payload.get("spawned_by") or ""),
@@ -12241,7 +12325,7 @@ async def pane_reconnect_session(session: "Session", msg_id: str, msg_type: str,
         ))
         return
     try:
-        project = app.project_store.reconnect_pane_session(
+        project = await run_in_db_thread(app.project_store.reconnect_pane_session,
             workspace_path, pane_id=pane_id, session_id=session_id,
         )
     except KeyError as err:
@@ -12470,6 +12554,9 @@ async def agent_msg_register(session: "Session", msg_id: str, msg_type: str, pay
         # that knows it (lineage is renderer state), and cli_whoami is the only
         # reader — a child asking who it owes its report to.
         spawned_by=str(payload.get("spawned_by") or ""),
+        # Who opened this pane, set once at its spawn and never moved by a
+        # re-parent; cli_rename_pane decides permission from it.
+        opened_by=str(payload.get("opened_by") or ""),
         # Only an embedded AI panel (AiCliDock) sends these; a window pane
         # leaves them out and is registered exactly as before.
         surface=str(payload.get("surface") or ""),
@@ -12820,6 +12907,105 @@ async def agents_public(session: "Session", msg_id: str, msg_type: str, payload:
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("plugins.auto_paused")
+async def plugins_auto_paused(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The Host paused a plugin on an anomaly rule (plan P5): record it in
+    Activity and tell the bound direct chats. Host-authenticated."""
+    from . import app
+    from .channels import plugin_cmds
+    from .plugins import agent_tools_contract as contract
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    keys = {"plugin_id", "plugin_version", "rule", "value", "threshold", "detail"}
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0  # noqa: E731
+    if (
+        not isinstance(payload, dict) or set(payload) != keys
+        or not isinstance(payload["plugin_id"], str) or not payload["plugin_id"]
+        or not isinstance(payload["plugin_version"], str) or not isinstance(payload["detail"], str)
+        or payload["rule"] not in contract.PLUGIN_AUTO_PAUSE_RULES
+        or not number(payload["value"]) or not number(payload["threshold"])
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.auto_paused is malformed")
+        )
+        return
+    await asyncio.to_thread(
+        app.plugin_audit_log.record_auto_pause,
+        plugin_id=payload["plugin_id"], plugin_version=payload["plugin_version"], rule=payload["rule"],
+        value=payload["value"], threshold=payload["threshold"], detail=payload["detail"],
+    )
+    await plugin_cmds.notify_auto_paused(payload["plugin_id"], payload["rule"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
+@handler("plugins.agent_notify")
+async def plugins_agent_notify(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """One plugin notification to an agent pane (plan P4), Host-authenticated.
+
+    The Host has checked Manifest, Grant, Execution Policy, the user's
+    per-plugin switch and the per-minute limit, and binds the plugin id and the
+    workspace; plugins/agent_notify.py delivers it.
+    """
+    from .plugins import agent_notify
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    text_fields = ("plugin_id", "plugin_version", "workspace_path", "to", "text")
+    if (
+        not isinstance(payload, dict)
+        or not {*text_fields} <= set(payload) <= {*text_fields, "ref"}
+        or not all(isinstance(payload.get(key), str) for key in text_fields)
+        or not payload["plugin_id"] or not payload["workspace_path"].strip() or not payload["to"]
+        or not payload["text"].strip() or len(payload["text"].encode("utf-8")) > 2048 or len(payload["to"]) > 128
+        or ("ref" in payload and (not isinstance(payload["ref"], str) or not 0 < len(payload["ref"]) <= 200))
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_notify is malformed")
+        )
+        return
+    answer = await agent_notify.deliver(
+        payload["plugin_id"], payload["plugin_version"], payload["workspace_path"], payload["to"],
+        payload["text"], payload.get("ref"),
+    )
+    await session.send_json(make_response(msg_id, msg_type, answer))
+
+
+@handler("plugins.agent_notify.pane_refusals")
+async def plugins_agent_notify_pane_refusals(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The live panes that refuse plugin notifications (the pane menu's state)."""
+    from .plugins import agent_notify
+
+    panes = await asyncio.to_thread(agent_notify.refusing_live_panes)
+    await session.send_json(make_response(msg_id, msg_type, {"pane_ids": panes}))
+
+
+@handler("plugins.agent_notify.set_pane_refusal")
+async def plugins_agent_notify_set_pane_refusal(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's "Refuse plugin notifications" for one pane (the pane menu):
+    only a connection that proved it is a Navide window may change it."""
+    from .plugins import agent_notify
+
+    if not getattr(session, "navide_window", False):
+        await session.send_json(make_error(msg_id, msg_type, "UNAUTHORIZED", "only a Navide window may change this"))
+        return
+    pane_id = payload.get("pane_id") if isinstance(payload, dict) else None
+    refuse = payload.get("refuse") if isinstance(payload, dict) else None
+    if not isinstance(pane_id, str) or not pane_id or not isinstance(refuse, bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_notify.set_pane_refusal is malformed")
+        )
+        return
+    state = await asyncio.to_thread(agent_notify.set_refusal, pane_id, refuse)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "refuse": state}))
+
+
 @handler("agent_msg.route")
 async def agent_msg_route(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, message_routing
@@ -12961,7 +13147,7 @@ async def agent_msg_route(session: "Session", msg_id: str, msg_type: str, payloa
         deliver_payload["reply_to"] = reply_to
     from .guard.taint import safe_mark_tainted
 
-    safe_mark_tainted(
+    await run_in_db_thread(safe_mark_tainted,
         result.pane.pane_id,
         "agent",
         f"message from {agent_messaging.readable_sender(from_pane_id, from_display)}",
@@ -13213,7 +13399,7 @@ async def agent_msg_log_append(session: "Session", msg_id: str, msg_type: str, p
         if isinstance(row, dict):
             row["sender_workspace"] = agent_messaging.workspace_of_name(str(row.get("sender") or ""), session)
             row["recipient_workspace"] = agent_messaging.workspace_of_name(str(row.get("recipient") or ""), session)
-    written = app.agent_message_log.append(rows)
+    written = await run_in_db_thread(app.agent_message_log.append, rows)
     agent_messaging.notify_message_rows(rows)
     await session.send_json(make_response(msg_id, msg_type, {"written": written}))
 
@@ -13230,7 +13416,7 @@ async def agent_msg_log_update(session: "Session", msg_id: str, msg_type: str, p
             )
         )
         return
-    updated = app.agent_message_log.update(updates)
+    updated = await run_in_db_thread(app.agent_message_log.update, updates)
     await session.send_json(make_response(msg_id, msg_type, {"updated": updated}))
 
 
@@ -13246,7 +13432,7 @@ async def agent_msg_log_clear(session: "Session", msg_id: str, msg_type: str, pa
             )
         )
         return
-    deleted = app.agent_message_log.clear(
+    deleted = await run_in_db_thread(app.agent_message_log.clear,
         [str(s) for s in keep] if keep is not None else None
     )
     await session.send_json(make_response(msg_id, msg_type, {"deleted": deleted}))
@@ -13314,7 +13500,7 @@ async def preview_log_append(session: "Session", msg_id: str, msg_type: str, pay
     # The broadcast below carries this same value, so it has to be the
     # normalised one the snapshot reads back.
     workspace_path = await asyncio.to_thread(resolve_plan_root, workspace_path)
-    entry = app.preview_log.append(
+    entry = await run_in_db_thread(app.preview_log.append,
         workspace_path,
         change=change,
         kind=str(payload.get("kind") or "file"),
@@ -13362,7 +13548,7 @@ async def preview_log_clear(session: "Session", msg_id: str, msg_type: str, payl
                 )
             )
             return
-    removed = app.preview_log.clear(workspace_path, before=before)
+    removed = await run_in_db_thread(app.preview_log.clear, workspace_path, before=before)
     if removed:
         await app.broadcast(
             make_event(

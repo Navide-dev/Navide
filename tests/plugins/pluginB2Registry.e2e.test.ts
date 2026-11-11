@@ -50,6 +50,7 @@ import {
 } from '../../src/renderer/src/lib/pluginAgentRequestApply'
 import { usePluginAgentRequests } from '../../src/renderer/src/composables/usePluginAgentRequests'
 import { pluginAgentUndoApplies } from '../../src/renderer/src/composables/useAnnouncements'
+import { PLUGIN_ACTIVITY_OVERVIEW_MESSAGE } from '../../src/shared/pluginAgentTools'
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 })
 
@@ -296,8 +297,12 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
     const before = sent.length
     if (type === 'marketplace.query.request') await host.handleMarketplaceQueryRequest(backendSession, payload)
     else await host.handlePluginAgentActionRequest(backendSession, payload)
-    expect(sent.length).toBe(before + 1)
-    const answer = sent[sent.length - 1]
+    // Besides its one answer, a disable reads the plugin's activity overview
+    // from the backend (P2, 45ba4401f: a stop records what the plugin was
+    // doing); that read is the Host's own request, not an answer.
+    const answers = sent.slice(before).filter((message) => message.type !== PLUGIN_ACTIVITY_OVERVIEW_MESSAGE)
+    expect(answers.length).toBe(1)
+    const answer = answers[0]
     const resultType = type === 'marketplace.query.request' ? 'marketplace.query.result' : 'plugins.agent_action.result'
     expect(answer.type).toBe(resultType)
     expectWire(resultType, answer.payload)

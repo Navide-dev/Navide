@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "Der Prozess läuft noch, aber der Agent hat seine letzte Runde beendet und wartet an der Eingabeaufforderung",
       "awaiting-status-tooltip": "Der Agent wartet auf eine Berechtigungsabfrage – nichts geht weiter, bis Sie antworten",
       "question-status-tooltip": "Der Agent hat Ihnen eine Frage gestellt und wartet auf die Antwort – nichts geht weiter, bis Sie antworten",
+      "stop-ineffective": "STOP nicht wirksam",
+      "stop-ineffective-tooltip": "Die Unterbrechung hat die CLI erreicht, aber der Durchgang läuft weiter (Ctrl-C hat womöglich nur die wartende Eingabe gelöscht). Drücke Interrupt erneut, um ihn zu stoppen.",
       "rename-title-tooltip": "Doppelklicken, um diesen Bereich umzubenennen",
       "auto-named-tooltip": "Automatisch nach der ersten Anweisung dieser Session benannt – benennen Sie es um, dann bleibt Ihr Name",
       "loop-tag-tooltip": "In diesem Bereich läuft ein Loop",
@@ -1978,6 +1980,7 @@
         "web": "Surfen im Web",
         "agents": "Agent-Bereiche",
         "agentMessages": "Agent-Nachrichten",
+        "agentNotify": "Agent-Benachrichtigungen",
         "secrets": "Geheimnisse des Navide-Plug-ins"
       },
       "shellLabel": "Ausführbare Shell-Dateien",
@@ -2434,6 +2437,7 @@
           "web": "Kann jede Website öffnen und darin navigieren; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können Anfragen auf Websites in Ihrem Namen senden) und können jede von ihm geöffnete Seite und deren Anmeldestatus lesen; nachdem Sie übernommen haben, enden bereits in einer Seite laufende Agent-Skripte erst, wenn Sie die Seite neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
           "agents": "Sieht deine Agent-Bereiche, welcher Bereich welchen geöffnet hat und wann sie einander Nachrichten geschickt haben – nicht, was darin stand.",
           "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents; er kann Code, Dateiinhalte oder Geheimnisse enthalten.",
+          "agentNotify": "Sendet nach Ihrer Freigabe Benachrichtigungen an Ihre Agent-Bereiche; sie kommen als Daten an, nie als Anweisungen.",
           "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an.",
           "shell": "Befehle auf Ihrem Computer ausführen.",
           "terminal": "Navide-Terminals öffnen und steuern."
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Konten",
       "cliAgents": "CLI-Agents",
+      "agents": "Agenten",
       "cliExtensions": "Erweiterungen",
       "roles": "Rollen",
       "pipelines": "Pipelines",
@@ -2881,14 +2886,14 @@
         "intro": "Was jeder der neunzehn Einstellungs-Tabs steuert, wie Navide Cloud mehrere Rechner zu einem privaten Netzwerk verbindet, und die Systemoberflächen außerhalb des Hauptbildschirms – die Menüs, die eigenständigen Fenster, die Nutzungsansichten und die Ressourcenpflege.",
         "s1": {
           "title": "Einstellungen im Überblick",
-          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>26 Tabs</strong>.",
+          "p1": "Das Einstellungsfenster öffnen Sie mit <kbd class=\"syh-kbd\">⌘,</kbd>; die Zahnradschaltfläche in der Titelleiste führt zum selben Ziel. Die linke Seitenleiste ist in fünf Gruppen unterteilt, insgesamt <strong>27 Tabs</strong>.",
           "h1": "Das Suchfeld",
           "p2": "Unter der Überschrift der Seitenleiste befindet sich ein Suchfeld mit dem Platzhalter <code>Einstellungen durchsuchen …</code>. Es durchsucht Titel, Abschnitte und Stichwörter der Einstellungen <strong>über alle Tabs hinweg</strong> (in der aktuellen Oberflächensprache und mit den indizierten Stichwörtern) und listet höchstens 8 Ergebnisse auf; ein Klick auf ein Ergebnis wechselt zu dessen Tab und scrollt zum Abschnitt (mit einer Ausnahme: „Speicher“ schließt die Einstellungen und öffnet direkt die Ressourcenverwaltung). Ohne Treffer erscheint <code>Keine passenden Einstellungen</code>. <kbd class=\"syh-kbd\">Esc</kbd> leert das Feld.",
           "callout": {
             "title": "Der Suchindex ist nicht vollständig",
             "text": "Der Index ist eine von Hand gepflegte Liste, und <strong>die Tabs {layout}, {notifications}, {security} und {channels} haben überhaupt keine Einträge</strong>, sodass sich darin nichts suchen lässt – Sie müssen sie selbst öffnen. Ein Eintrag unter „CLI-Agents“ öffnet direkt die Einstellungsleiste einer CLI (siehe das Thema „CLI-Agents und Konten“)."
           },
-          "h2": "Die sechsundzwanzig Tabs",
+          "h2": "Die siebenundzwanzig Tabs",
           "tabTable": {
             "group": "Gruppe",
             "tab": "Tab",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "Chat-App-Bots wie Telegram oder Slack mit CLI-Bereichen verbinden: Bots, Kopplung, Zulassungsliste, Kontoverknüpfung",
               "more": "Das Thema „{messaging}“"
+            },
+            "agents": {
+              "what": "Dauerhaft laufende Agenten wie Hermes Agent und OpenClaw, nach Identität: Kanal, Zeitpläne, Speicherort, Startflags",
+              "more": "Auch über „Agent-Einstellungen…“ eines Agentenbereichs erreichbar"
             },
             "mcp": {
               "what": "MCP-Server hinzufügen, aktivieren und prüfen",
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "Einen selbst erstellten Job jetzt einmal außerhalb seines Zeitplans ausführen; antwortet, sobald die Ausführung startet, setzt eine Fehler-Wartezeit zurück, lässt den nächsten geplanten Termin unverändert und zählt zu den 300 täglichen Ausführungen der Agents",
             "scheduler_runs": "Der Ausführungsverlauf eines Jobs, neueste zuerst: ok, error oder skipped mit Grund – ein Überspringen (kein Fenster, beschäftigt, Tageslimit oder Kontingent, Tagessumme der Agents, abgelaufener Agent-Job, verschwundenes Ziel) ist kein Fehler. Der Verlauf jedes Jobs kann gelesen werden",
             "cli_permission_settings": "Das Flag zum Umgehen von CLI-Berechtigungen (yolo) lesen und schreiben. Es ist eine globale Einstellung, nicht Pipeline-spezifisch, und wirkt nur auf danach geöffnete Bereiche; ob eine bestimmte CLI das Flag tatsächlich trägt, steht im zurückgegebenen agents[].skipFlag, nicht allein im globalen Wert",
+            "plugins_developer_backend_call": "Nur im Entwicklermodus: ruft eine Backend-Methode eines aus einem Ordner geladenen Navide-Plug-ins auf, ohne ein Agent-Tool zu deklarieren. Alles andere wird abgelehnt; jeder Aufruf erscheint in seiner Aktivität und zählt für die automatische Pause",
             "workspace_open": "Ein Projekt als Arbeitsbereich in Navide öffnen; ob das in einem neuen Fenster geschieht oder in einem, das das Projekt bereits geöffnet hat, entscheidet Navide",
             "workspace_switch": "Das eigene Fenster zu einem anderen Projekt wechseln, das es bereits enthält; Bereiche des verlassenen Projekts laufen weiter. Abgelehnt, solange in diesem Fenster eine Pipeline läuft, weil der Wechsel sie abbrechen würde",
             "prompt_list": "Die Prompt-Skills, die unter Einstellungen → Prompts gepflegt werden; schreibgeschützt, da Erstellen und Bearbeiten Sache der Person am Rechner ist",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "Der aktuelle Token-Verbrauch dieses Arbeitsbereichs",
             "cli_list_sessions": "Die CLI-Unterhaltungen in diesem Arbeitsbereich, mit denen ein neuer Bereich geöffnet werden könnte – eine Unterhaltung überdauert den Bereich, in dem sie lief: Schließen Sie den Bereich, starten Sie die App neu, bauen Sie den Bereich neu auf, und das Transkript bleibt auf der Festplatte. Jede Zeile gibt an, ob sie noch fortsetzbar ist und ob der Bereich, dem sie gehörte, noch offen ist: Setzen Sie keine aktive fort, das verzweigt oder beschädigt sie – senden Sie stattdessen diesem Bereich eine Nachricht",
             "cli_place_pane": "Einen Bereich verschieben: die Tab-Gruppe ändern, in der er sitzt, oder ihn einem anderen Bereich unterordnen (dasselbe wie Ziehen in der Seitenleiste, über denselben Schreibpfad, sodass die Position einen Neustart übersteht). Die beiden Hälften sind unabhängig, und die Antwort sagt, welche gegriffen hat. Die CLI dieses Bereichs bleibt unberührt – nichts wird gesendet, unterbrochen oder neu gestartet. Nur lokale Bereiche",
+            "cli_rename_pane": "Einen CLI-Bereich umbenennen: seinen Titel und den Namen, unter dem andere Bereiche ihn ansprechen, mit denselben Prüfungen und demselben Schreibpfad wie beim Bearbeiten des Titels. Ein Name, den ein anderer Bereich trägt, wird abgelehnt. Umbenennen lassen sich der eigene Bereich und die Bereiche im eigenen Arbeitsbereich, die man selbst geöffnet hat. Geplante Aufträge, die noch den alten Namen nutzen, werden als Warnung gemeldet, nicht umgeschrieben. Nur lokale Bereiche",
+            "cli_set_model": "Das Modell eines laufenden CLI-Bereichs wechseln. Bei Claude wird die eigene /model-Auswahl geöffnet, die Zeile des Modells gewählt und s (nur diese Sitzung) gedrückt; bei Codex wird /model mit der Modell-ID eingegeben. Beides ändert nur die laufende Sitzung: Das Gespräch bleibt erhalten, und der Standard für neue Sitzungen bleibt unverändert. Andere CLIs, eine Effort-Angabe oder ein Modell, das die Claude-Auswahl nicht erreicht, starten den Bereich mit dem neuen Modell neu und setzen das Gespräch fort. Nur Bereiche im Leerlauf; der eigene Bereich wird abgelehnt. Nur lokale Bereiche",
             "cli_inbox_summary": "Welche meiner gesendeten Nachrichten hängen (mehr als zwei Minuten in der Warteschlange) oder fehlgeschlagen sind. Ein Fehlerhinweis kann nur in den sendenden Bereich getippt werden, während er im Leerlauf ist; ein Agent, der eine Stunde durcharbeitet, erhält also keinen – auf diesem Weg fragt er selbst nach",
             "cli_pending_incoming": "Welche Nachrichten für mich in der Warteschlange stehen und noch nicht angekommen sind. Eine Nachricht wird nur zwischen Runden in einen Bereich getippt; ein dauerhaft beschäftigter Agent ist also genau der, dem man nichts mitteilen kann – eine nicht leere Antwort ist ein Grund, die Runde abzuschließen, damit sie ankommen kann"
           },
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "CLI-Agents",
       "hint": "CLI-Agents im Menü für neue Bereiche aktivieren und neu anordnen. Öffnen Sie eine Karte, um den jeweiligen Agent zu verwalten. Mindestens einer muss aktiviert bleiben.",
+      "acp-title": "ACP (experimentell)",
+      "acp-hint": "Führt Agents über das Agent Client Protocol aus, sodass Navide die Unterhaltung statt des eigenen CLI-Bildschirms zeichnet. Fügt dem ＋-Menü „Claude Code (ACP)“ hinzu, das den Claude Code ACP-Adapter benötigt (wird bei der ersten Verwendung installiert). Experimentell. Der Agent fragt Berechtigungen im Bereich ab, hat noch keine Navide-MCP-Tools, und ein ACP-Bereich wird nach einem Neustart nicht wiederhergestellt.",
+      "acp-toggle": "ACP-Agents im ＋-Menü anbieten",
       "drag-hint": "Zum Neuanordnen ziehen",
       "search": "Agent suchen …",
       "filter-label": "CLI-Agents filtern",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "Cloud-Agents (Grok Bot, dots und weitere) gibt es als Navide-Plug-in im Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Rolle auswählen …",
     "waiting-backend": "Warten auf Backend …",
     "set-workspace-first": "Zuerst Arbeitsbereichspfad festlegen",
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "Neue Unterhaltung",
     "failover-unverified": "Nicht mit einem echten Konto verifiziert",
     "failover-platform-unsupported": "Nicht auf dieser Plattform",
+    "failover-no-adapter": "Kein Adapter für den Kontowechsel",
     "failover-audit-degraded": "Der Prüfeintrag für den Wechsel konnte nicht geschrieben werden; automatische Wechsel pausieren, bis das möglich ist. Manuelle Wechsel funktionieren weiterhin.",
     "settings-signing-title": "Antigravity-Anmeldeinformationen (Maintainer)",
     "settings-signing-hint": "Nur für die Entwicklung. Schreibt ~/navide-signing/usage_secrets.py, damit der nächste Release-Build die öffentlichen OAuth-Konstanten der installierten Antigravity-App enthält. Wird nie im Repository gespeichert.",
@@ -11305,7 +11322,8 @@
       "allow": "Erlauben",
       "allow-audit": "Erlauben + protokollieren",
       "ask": "Auf diesem Computer nachfragen",
-      "deny": "Ablehnen"
+      "deny": "Ablehnen",
+      "exempt": "Ausgenommen"
     },
     "source": {
       "local": "Lokal",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "Interpreter führt Inline-Code aus",
         "stdin-script": "Interpreter liest sein Skript von stdin",
         "unknown-script": "Führt ein Skript aus, das Guard nicht einsehen kann",
-        "dynamic-path": "Der Dateipfad ist nicht statisch"
+        "dynamic-path": "Der Dateipfad ist nicht statisch",
+        "credential-pipe-upload": "Leitet eine Datei aus ~/.ssh in ein Netzwerkwerkzeug",
+        "plugin-store-write": "Schreibt, löscht, verschiebt, verlinkt oder ändert per chmod den Installationsordner oder die Vertrauensspeicher der Navide-Plugins",
+        "dynamic-stdin-script": "Die Shell führt einen erst zur Laufzeit berechneten Here-String aus",
+        "mcp-registry-write": "Ein MCP-Werkzeug ändert oder löscht einen Eintrag der Windows-Registry",
+        "mcp-process-kill": "Ein MCP-Werkzeug beendet einen Prozess",
+        "heredoc-unparsed": "Trennzeichen oder Ende eines Heredocs lässt sich nicht bestimmen",
+        "untokenizable-shape": "Verwendet Shell-Syntax, die der Analysator nicht abbilden kann",
+        "mcp-unknown-mode": "Ein MCP-Werkzeug wird mit einem Modus aufgerufen, den Guard nicht kennt"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "Ausnahmen",
         "warning": "Ein Teil einer Zeile, der mit einem dieser Präfixe beginnt, überspringt alle integrierten Prüfungen oben – fügen Sie nur Befehle hinzu, denen Sie voll vertrauen. Sperrmuster gelten weiterhin, und ein in eine Shell geleiteter Download wird nie erlaubt. Das Hinzufügen erfordert eine Bestätigung.",
         "placeholder": "Exaktes Befehlspräfix, z. B. git push origin"
+      },
+      "exempt": {
+        "title": "Ausnahmen – Anmeldeinformationen lesen und hochladen",
+        "warning": "Eine ganze Zeile, die zu einem dieser Muster passt, wird nicht mehr abgelehnt, weil sie eine Datei aus ~/.ssh in ein Netzwerkwerkzeug leitet – fügen Sie nur Befehle hinzu, denen Sie voll vertrauen. Alle anderen Prüfungen und Ihre Sperrmuster gelten weiterhin, und jede ausgenommene Zeile wird im Guard-Protokoll festgehalten. Das Hinzufügen erfordert eine Bestätigung.",
+        "placeholder": "Befehlsmuster oder Pfad, z. B. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Geben Sie ein Muster ein.",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "Verwendet, aber nicht deklariert (von Navide abgelehnt)",
       "item": "{address} ({source}) in {workspace}: {count}-mal, zuletzt {date}",
+      "code": "Navide lehnt diese Aufrufe mit CAPABILITY_DENIED ab, bis das Manifest sie deklariert.",
+      "doc": "Dokumentation öffnen",
       "reasons": "Gründe: {reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "Letzte Aktivität",
       "undeclaredCount": "{count} nicht deklarierte Verwendungen abgelehnt",
       "anomalyCount": "{count} ungewöhnliche Einträge"
+    },
+    "monitor": {
+      "headless": "Versteckte Ansicht läuft im Hintergrund ({count})",
+      "title": "Activity-Übersicht",
+      "intro": "Alle installierten Navide-Plugins in einer Tabelle, alle paar Sekunden aktualisiert. Nur Aufzeichnungen; hier ändert sich nichts daran, was ein Navide-Plugin darf. Öffnen Sie eine Zeile für die vollständige Activity.",
+      "empty": "Es sind keine Navide-Plugins installiert.",
+      "open": "Activity von {id} anzeigen",
+      "builtin": "integriert",
+      "noHosts": "Keine",
+      "noBackend": "Kein Backend",
+      "hostUndeclared": "{host} (nicht deklariert)",
+      "hostRefused": "{host} (abgelehnt)",
+      "status": {
+        "running": "Läuft",
+        "disabled": "Deaktiviert"
+      },
+      "column": {
+        "plugin": "Navide-Plugin",
+        "status": "Zustand",
+        "toolCalls": "Tool-Aufrufe / Min.",
+        "capabilityCalls": "Capability-Aufrufe / Min.",
+        "hosts": "Netzwerk-Hosts (7 Tage)",
+        "failures": "Fehler in Folge",
+        "resources": "Ressourcen"
+      }
+    },
+    "autoPauses": {
+      "heading": "Automatische Pausen",
+      "item": "{date} {rule} ({reason}): {value}, Schwellenwert {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "Stoppen",
+    "confirm": "Jetzt stoppen",
+    "cancel": "Abbrechen",
+    "stopping": "Wird gestoppt…",
+    "note": "Stoppt {id} sofort: laufende Aufrufe werden beendet, seine Ansichten geschlossen und sein Backend angehalten. Dateien, Berechtigungen und Daten bleiben; aktivieren Sie es in den Einstellungen wieder.",
+    "failed": "{id} konnte nicht gestoppt werden: {error}",
+    "column": "Stoppen",
+    "via": {
+      "settings": "die Activity-Übersicht der Einstellungen",
+      "status-bar": "die Statusleiste",
+      "telegram": "ein Chat-Befehl",
+      "mcp": "ein Agent (plugins_disable)",
+      "auto": "Navides Anomalie-Regeln"
+    },
+    "summary": {
+      "heading": "Am {date} über {via} gestoppt. Zu diesem Zeitpunkt:",
+      "inFlight": "Laufende Aufrufe, beendet: {count}",
+      "toolCalls": "Tool-Aufrufe in der letzten Minute: {count}",
+      "capabilityCalls": "Capability-Aufrufe in der letzten Minute: {count}",
+      "failures": "Tool-Aufrufe in Folge fehlgeschlagen: {count}",
+      "notRead": "nicht rechtzeitig gelesen",
+      "hosts": "Nicht deklarierte oder abgelehnte Hosts: {hosts}",
+      "noHosts": "Nicht deklarierte oder abgelehnte Hosts: keine"
+    },
+    "enable": {
+      "heading": "{id} wieder aktivieren?",
+      "confirm": "Aktivieren"
+    },
+    "all": {
+      "stop": "Alle stoppen",
+      "confirm": "Jetzt alle stoppen",
+      "note": "Stoppt sofort alle laufenden Navide-Plugins von Drittanbietern und schaltet native Backends und Agent-Tools von Drittanbietern aus. Integrierte Navide-Plugins laufen weiter.",
+      "heading": "Alle Navide-Plugins von Drittanbietern sind gestoppt.",
+      "banner": "Am {date} über {via} gestoppt: {count} Navide-Plugins; native Backends und Agent-Tools von Drittanbietern sind aus.",
+      "resume": "Alle fortsetzen",
+      "resumeConfirm": "Jetzt alle fortsetzen",
+      "resumeNote": "Stellt die Schalter wie zuvor wieder her und aktiviert die Navide-Plugins, die dieser Stopp deaktiviert hat.",
+      "stopFailed": "Nicht gestoppt: {ids}",
+      "resumeFailed": "Nicht wieder aktiviert: {ids}"
+    },
+    "rule": {
+      "R1": "zu viele Tool- oder Capability-Aufrufe",
+      "R2": "ein nicht deklarierter oder abgelehnter Netzwerk-Host",
+      "R3": "Fehler in Folge oder Neustarts",
+      "R4": "eine Ressource über dem Schwellenwert",
+      "R5": "zu viele Benachrichtigungen an Agent-Bereiche"
+    },
+    "autoPause": {
+      "label": "Ein Navide-Plugin bei ungewöhnlichem Verhalten selbst pausieren",
+      "thresholds": "R1 mehr als {toolCallsPerMinute} Tool-Aufrufe oder {capabilityCallsPerMinute} Capability-Aufrufe pro Minute · R2 eine Ansicht erreicht einen nicht deklarierten oder abgelehnten Host · R3 {consecutiveFailures} fehlgeschlagene Tool-Aufrufe in Folge oder {restartsInTenMinutes} Backend-Neustarts in 10 Minuten · R4 ein Backend über einem Ressourcen-Schwellenwert · R5 mehr als {notificationsPerMinute} Benachrichtigungen pro Minute. Eine Pause ist ein Stopp; aktivieren Sie das Navide-Plugin hier wieder.",
+      "toast": "Navide hat das Navide-Plugin {id} pausiert: {reason}. Prüfen Sie es unter Einstellungen → Navide-Plugins.",
+      "badge": "Pausiert ({rule})",
+      "because": "Pausiert nach Regel {rule}: {reason}"
+    },
+    "statusBar": {
+      "label": "Navide-Plugins {running}",
+      "title": "Navide-Plugins: eines sofort stoppen",
+      "heading": "Navide-Plugins von Drittanbietern",
+      "openSettings": "Activity-Übersicht öffnen",
+      "allStopped": "Navide-Plugins gestoppt",
+      "allStoppedTitle": "Alle Navide-Plugins von Drittanbietern sind gestoppt; setzen Sie sie in den Einstellungen fort",
+      "resumeInSettings": "Alle Navide-Plugins von Drittanbietern sind gestoppt. Setzen Sie sie mit „Alle fortsetzen“ in den Einstellungen fort."
+    }
+  },
+  "pluginNotify": {
+    "switch": "Agent-Bereiche benachrichtigen",
+    "switchNote": "Erlaubt diesem Navide-Plugin, die Agent-Bereiche seines Projekts zu benachrichtigen, höchstens 6 pro Minute. Die Nachrichten kommen als Daten an, nie als Anweisungen. Standardmäßig aus.",
+    "paneMenu": {
+      "refuse": "Benachrichtigungen von Navide-Plugins ablehnen",
+      "accept": "Benachrichtigungen von Navide-Plugins annehmen",
+      "title": "Solange abgelehnt, können Navide-Plugins, die Agent-Bereiche benachrichtigen dürfen, diesem Bereich nichts senden"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "Kann jede Website öffnen und durchsuchen; Website-Anmeldungen werden auf diesem Computer gespeichert; Agents verwenden Ihre Anmeldungen in diesem Navide-Plug-in (sie können auf Websites in Ihrem Namen Anfragen senden) und können jede geöffnete Seite und ihren Anmeldestatus lesen; nachdem Sie übernommen haben, stoppen bereits laufende Agent-Skripte auf einer Seite erst, wenn Sie sie neu laden; solange Sie eine Seite Agents überlassen, kann auch dieses Navide-Plug-in selbst darin Skripte ausführen und sie samt Anmeldestatus lesen; es kann viele Webseiten gleichzeitig öffnen, und jede belegt Arbeitsspeicher.",
       "agents": "Sieht die Agent-Bereiche in diesem Projekt, welcher Bereich welchen geöffnet hat, Zustellprotokolle von Nachrichten (ohne Inhalt) und die Session-Liste (ohne Gesprächsinhalt)",
       "agentMessages": "Liest den vollständigen Text der Nachrichten zwischen deinen Agents in diesem Projekt; er kann Code, Dateiinhalte oder Geheimnisse enthalten",
+      "agentNotify": "Kann nach dem Einschalten in den Einstellungen die Agent-Bereiche dieses Projekts benachrichtigen; die Nachrichten kommen als Daten an, nie als Anweisungen",
       "secrets": "Speichert eigene API-Schlüssel und Tokens verschlüsselt auf diesem Computer; Navide lädt sie nie hoch und zeigt sie nie an",
       "ui": "Zeigt eigene Ansichten",
       "agentTools": "Bietet Tools, die Agents aufrufen können ({read} nur lesend, {write} schreibend)",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "Diese Version wurde vor der Einführung von Systemscans veröffentlicht; unten steht nur die eigene Deklaration dieses Navide-Plug-ins.",
       "noScanLocal": "Navide hat diese Datei nicht gescannt; unten steht nur die eigene Deklaration dieses Navide-Plug-ins."
+    },
+    "sites": {
+      "heading": "Wo der statische Scan dies gefunden hat ({count})",
+      "kind": {
+        "command": "Befehl {key}",
+        "host": "Hostname {key}",
+        "capability": "Fähigkeit {key}"
+      },
+      "hidden": "Auszug ausgeblendet, da er wie ein Geheimnis aussieht"
     },
     "incompleteReason": {
       "timedOut": "der Scan hat das Zeitlimit überschritten",
@@ -12776,6 +12922,30 @@
       "confirm": "{plugin} {version} aus dem Navide Marketplace zurückziehen?",
       "done": "{plugin} {version} wurde zurückgezogen"
     },
+    "members": {
+      "title": "Mitglieder des Namespace",
+      "desc": "Konten, die in diesem Namespace Versionen veröffentlichen und zurückziehen dürfen. Nur der Inhaber fügt Herausgeber hinzu oder entfernt sie; ein Herausgeber kann weder die Mitglieder noch den Signaturschlüssel ändern und signiert mit dem Schlüssel des Namespace.",
+      "account": "Konto",
+      "role": "Rolle",
+      "added-at": "Hinzugefügt",
+      "roles": {
+        "owner": "Inhaber",
+        "publisher": "Herausgeber"
+      },
+      "add-label": "Herausgeber hinzufügen (Navide-Cloud-Konto-ID)",
+      "add": "Herausgeber hinzufügen",
+      "add-hint": "Das Konto muss ein zugelassener Entwickler sein. Danach meldet es sich im eigenen Navide als Herausgeber an und wählt diesen Namespace.",
+      "add-confirm": "{member} erlauben, in {namespace} Versionen zu veröffentlichen und zurückzuziehen?",
+      "added": "{member} kann jetzt in diesem Namespace veröffentlichen",
+      "remove": "Entfernen",
+      "remove-confirm": "{member} aus {namespace} entfernen? Seine Herausgeber-Anmeldungen für diesen Namespace funktionieren sofort nicht mehr.",
+      "removed": "{member} wurde aus diesem Namespace entfernt",
+      "publisher-note": "Sie sind Herausgeber dieses Namespace: Sie können seine Versionen veröffentlichen und zurückziehen. Die Mitglieder verwaltet der Inhaber.",
+      "error": {
+        "not-developer": "Dieses Konto ist noch kein zugelassener Entwickler; es muss sich zuerst bewerben.",
+        "owner-only": "Nur der Inhaber des Namespace kann seine Mitglieder ändern."
+      }
+    },
     "versions": {
       "title": "Ihre veröffentlichten Versionen",
       "refresh": "Aktualisieren",
@@ -12788,9 +12958,22 @@
         "yanked": "Zurückgezogen"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Gib einen Test-Build an ausgewählte Testpersonen, bevor der Navide Marketplace ihn prüft. Nur Eingeladene sehen und installieren ihn; er erhält nur den automatischen Scan und läuft 90 Tage nach der Veröffentlichung ab.",
+      "channel": "Test-Build im Testplace-Kanal veröffentlichen (?channel=testplace):",
+      "invites": "Einladungen sind einmalig nutzbare Beitritts-Tokens, eines pro Testperson. Ein Widerruf entzieht dieser Testperson den Zugriff.",
+      "codes": "Mit einem öffentlichen Testcode treten so viele Testpersonen bei, wie du festlegst. Der erste Code jedes Pakets wartet auf eine kurze Prüfung:",
+      "promote": "Nach dem Test denselben Build zur Prüfung an den Navide Marketplace senden:",
+      "owner-only": "Einladungen, Testcodes sowie Widerruf und Freigabe von Test-Builds sind dem Namespace-Inhaber vorbehalten; Publisher-Mitglieder können Versionen veröffentlichen, Testplace aber nicht verwalten.",
+      "owner-only-member": "Du bist Publisher-Mitglied dieses Namespace, daher erledigt der Inhaber Testplace-Einladungen, Testcodes, Widerruf und Freigabe.",
+      "joined": "Meine Tests",
+      "doc": "Testplace-Dokumentation"
+    },
     "error": {
       "not-signed-in": "Melden Sie sich zuerst unter „Entwicklerkonto“ an.",
       "qualification": "Ihre Entwicklerbewerbung muss zuerst genehmigt werden.",
+      "doc": "Dokumentation öffnen",
       "registry": "Der Navide Marketplace hat es abgelehnt ({status} {code}): {message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "Tageshöchstwert, letzte 7 Tage",
     "week-tokens": "Tokens diese Woche",
     "day-tokens": "Tokens heute"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Zeitpläne pausieren",
+      "resume-schedules": "Zeitpläne fortsetzen",
+      "settings": "Agent-Einstellungen…",
+      "wake": "Jetzt wecken",
+      "wake-none": "Kein aktiver Zeitplan vorhanden",
+      "wake-title": "Nächsten Zeitplan jetzt ausführen ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · geschlossen, öffnen und fortsetzen",
+      "create": "Anlegen",
+      "name-placeholder": "Name des Agenten",
+      "new": "Neuer Agent ({vendor})…",
+      "open": "{vendor} · offen, dorthin wechseln"
+    },
+    "header": {
+      "last-done": "zuletzt fertig {time}",
+      "model": "Modell {model}",
+      "model-default": "Standardmodell",
+      "more-badges": "{n} weitere",
+      "never-done": "noch keine fertige Runde",
+      "next-schedule": "nächster {time}",
+      "next-schedule-title": "Nächster Zeitplan: {name} um {time}",
+      "turn": "diese Runde {minutes} Min.",
+      "vendor-since": "{vendor} · seit {date}",
+      "vendor-today": "{vendor} · seit heute"
+    },
+    "menu": {
+      "channels": "Kanaleinstellungen…",
+      "close-keep": "Bereich schließen (Identität bleibt)",
+      "memory-folder": "Speicherordner öffnen",
+      "stop-remove": "Agent stoppen und entfernen…",
+      "stop-remove-body": "Der Agent wird aus der Agent-Liste von Navide entfernt, und sein offener Bereich wird geschlossen. Gespräch und Speicherdateien bleiben auf der Festplatte, Name, Farbe und die Verknüpfung zum Fortsetzen der Sitzung jedoch nicht.",
+      "stop-remove-confirm": "Stoppen und entfernen",
+      "stop-remove-title": "„{name}“ stoppen und entfernen?",
+      "toggle-panel": "Steuerleiste ein- oder ausblenden",
+      "wake": "Jetzt für eine Runde wecken"
+    },
+    "panel": {
+      "channel-unbound": "Kein Kanal verbunden",
+      "channel-unbound-hint": "Über die Kanal-Schaltfläche im Kopf verbinden",
+      "channels": "Kanal",
+      "collapse": "Steuerleiste einklappen",
+      "expand": "Steuerleiste ausklappen",
+      "memory": "Gedächtnis",
+      "memory-empty": "In dieser Version nicht gelesen",
+      "memory-loading": "Wird gelesen…",
+      "memory-missing": "Speicherordner nicht gefunden",
+      "memory-none": "Noch kein Gedächtnis gespeichert",
+      "memory-source": "Aus {path}",
+      "open-folder": "Ordner öffnen",
+      "schedule-paused": "pausiert",
+      "schedules": "Zeitpläne",
+      "schedules-empty": "Kein Zeitplan zielt auf diesen Agenten",
+      "status": "Zustand",
+      "status-source": "Quelle: Terminalausgabe",
+      "title": "Steuerleiste",
+      "todos": "Aufgaben",
+      "todos-empty": "In dieser Version nicht gelesen"
+    },
+    "settings": {
+      "channel": "Kanal",
+      "channel-closed": "Nur verbunden, solange der Bereich offen ist",
+      "channel-note": "Bots stammen aus Einstellungen → Kanäle. Eine Verbindung gehört zum offenen Bereich.",
+      "closed": "geschlossen",
+      "color": "Farbe",
+      "command": "Startbefehl",
+      "empty": "Noch keine Agenten. Über den Agenten-Block im ＋-Menü hinzufügen.",
+      "flags": "Modell und Flags",
+      "flags-note": "Umgebungsvariablen und der Berechtigungsschalter werden mit der Seite CLI-Agents geteilt. Der Agent verwaltet seine Schlüssel selbst.",
+      "go-channels": "Einstellungen → Kanäle öffnen",
+      "go-cli-agents": "Einstellungen → CLI-Agents öffnen",
+      "identity": "Identität",
+      "identity-note": "Navide bewahrt Identitäten auf. Schließen behält die Identität, erneutes Öffnen setzt die Sitzung fort.",
+      "intro": "Dauerhaft laufende Agenten wie Hermes Agent und OpenClaw, nach Identität.",
+      "job-on": "an",
+      "list": "Meine Agenten",
+      "memory": "Speicherort des Gedächtnisses",
+      "memory-note": "Der Agent bestimmt den Ort. Navide verschiebt oder ändert nichts.",
+      "name": "Name (Name des Bereichs)",
+      "open-pane": "Bereich öffnen",
+      "pane-closed": "Bereich geschlossen",
+      "pane-open": "Bereich offen",
+      "rename-cancel": "Abbrechen",
+      "rename-channels": "Kanalverbindungen: {n}",
+      "rename-channels-note": "Eine Verbindung gehört zum Bereich, nicht zu seinem Namen, und bleibt deshalb bestehen.",
+      "rename-confirm": "Umbenennen",
+      "rename-failed": "Diese Zeitpläne wurden nicht aktualisiert: {names}",
+      "rename-no-schedules": "Kein Zeitplan spricht diesen Namen an.",
+      "rename-schedules": "Zeitpläne, die „{old}“ per Name ansprechen: {n}",
+      "rename-title": "„{old}“ in „{name}“ umbenennen?",
+      "rename-update": "Diese Zeitpläne auch auf den neuen Namen umstellen",
+      "resume": "Beim erneuten Öffnen fortsetzen",
+      "resume-on": "Unterstützt",
+      "schedules": "Zeitpläne",
+      "schedules-note": "Zeitpläne im Tasker anlegen und auf den Bereich dieses Agenten richten.",
+      "session": "Letzte Sitzung",
+      "session-none": "Noch keine",
+      "stop-remove": "Stoppen und entfernen",
+      "switch-to": "Zum Bereich wechseln",
+      "unsupported": "Nicht unterstützt",
+      "yolo": "Bestätigung gefährlicher Befehle überspringen",
+      "yolo-flag": "Unterstützt ({flag}), folgt dem YOLO-Schalter"
+    }
   }
 }

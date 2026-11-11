@@ -23,7 +23,7 @@ import {
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
 import { requestChannelsBot } from './channelsBotRequest'
 import { isPublishDeepLink, parseDeepLink, type DeepLinkExtensionTarget, type DeepLinkPublishTarget } from '../../shared/deepLink'
-import { installMarketplaceFormListeners, restorePendingForms, showMarketplaceForm } from './composables/useMarketplaceForms'
+import { installMarketplaceFormListeners, restorePendingForms, showDeveloperPage, showMarketplaceForm } from './composables/useMarketplaceForms'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
 import { workspaceAliasKey } from './lib/workspaceAlias'
 import { createStageWidthCap, type CappablePane } from './lib/stageWidthCap'
@@ -45,7 +45,12 @@ import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/res
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
-import { awaitingPromptText, parseMenuOptions, resolveAnswerKeys, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
+import { revealPath } from './composables/hostShell'
+import { useSchedulerJobs } from './composables/useSchedulerJobs'
+import { isAgentVendor } from './lib/agentIdentity'
+import { awaitingPromptText, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
+import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
 import ResourceManagerModal from './components/ResourceManagerModal.vue'
 import TurnStatsModal from './components/TurnStatsModal.vue'
@@ -85,7 +90,7 @@ import { createMessageLogPersistence } from './composables/useMessageLogPersiste
 import type { ParsedAgentMessage } from './lib/agentMessaging'
 import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
-import { VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
+import { INTERRUPT_ACTIVITY_DETAIL, VENDORS_WITHOUT_TURN_END, agentTurnActivityAt, fenceExternalContent, hasReplyRoute, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, messagingGateStatus, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
   evaluateTurnSpawns,
   evaluateSpawnRequest,
@@ -124,6 +129,7 @@ import { useRecentWorkspaces } from './composables/useRecentWorkspaces'
 import { useWorkspaceAliases } from './composables/useWorkspaceAliases'
 import { useAnalyzer, type ClassifyResult } from './composables/useAnalyzer'
 import { isPaneMuted, setPaneMuted, useSystemNotify } from './composables/useSystemNotify'
+import { usePluginNotifyRefusals } from './composables/usePluginNotifyRefusals'
 import { useUpdater } from './composables/useUpdater'
 import { usePaneReorderDrag } from './composables/usePaneReorderDrag'
 import { cliHealthGuideForLaunch, type CliHealthStatus, type OnboardStatus } from './composables/useOnboarding'
@@ -506,8 +512,25 @@ const AnnouncementsPanel = defineAsyncComponent(() => import('./components/Annou
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
+// Plan P2: the status bar's Navide plugins item and its Stop popover.
+const PluginStopStatusItem = defineAsyncComponent(() => import('./components/PluginStopStatusItem.vue'))
 
 const backend = useBackend()
+// Agent panes (spec kind 'agent'): identities, turn clock, schedules — read by
+// TerminalPane's agent header and control panel, Settings → Agents and the
+// pane context menu (plan agent-0-2-40_78e071).
+const agentConsole = createAgentConsole(backend, useSchedulerJobs(backend), {
+  openSettings: (identityId) => openSettingsAgents(identityId),
+  setJobEnabled: async (id, enabled) => {
+    const resp = await backend.send<{ ok?: boolean }>('scheduler.set_enabled', { id, enabled })
+    return resp.ok && resp.payload?.ok !== false
+  },
+  upsertJob: async (job) => {
+    const resp = await backend.send<{ ok?: boolean }>('scheduler.upsert', { job })
+    return resp.ok && resp.payload?.ok !== false
+  },
+})
+provide(agentConsoleKey, agentConsole)
 // Warn and error diagnostics also go to the backend's on-disk error ledger,
 // which outlives a reload and is what ui_diagnostics returns as `persisted`.
 setDiagnosticSink((entry) => {
@@ -1866,6 +1889,13 @@ interface ActivePane {
    *  Persisted (PaneRecord.spawned_by) and re-keyed by the backend whenever a
    *  pane_id is regenerated, so lineage survives a restart. */
   spawnedBy?: string
+  /** Pane id of the pane that opened this one (cli_open_agent or a SPAWN
+   *  block). Written once at that spawn and carried through restore and
+   *  rebuild, but never moved by a re-parent — cli_rename_pane grants
+   *  permission from it, so adopting a pane into your subtree with
+   *  cli_place_pane does not make it yours to rename. Persisted
+   *  (PaneRecord.opened_by). */
+  openedById?: string
   /** Messaging handle of the parent this pane owes a report to, and whether
    *  that report is still outstanding. Set together when a spawn kickoff lands
    *  and cleared by the first turn that ends — by the pane's own report if it
@@ -2790,6 +2820,7 @@ function mirrorMessagingHandle(pane: ActivePane): void {
       // whose context was compacted has no way left to find out who opened it:
       // the parent's name only ever appeared in the words of its kickoff.
       spawned_by: pane.spawnedBy ?? '',
+      opened_by: pane.openedById ?? '',
     })
     .catch(() => { /* local messaging is unaffected */ })
 }
@@ -3474,6 +3505,9 @@ async function createRequestedPane(
     requestedRunGroupId: req.runGroupId,
     preferredMessagingName: req.name,
     spawnedBy: resumeSpawnedBy,
+    // The caller opened this pane, resume or not — unlike spawnedBy, which a
+    // resume puts back where the conversation last sat.
+    openedById: parent.id,
     model: req.model,
     effort: req.effort,
     // cli_open_agent's `account`: the explicit pin a 📌 pinned pane is spawned
@@ -3510,6 +3544,7 @@ async function createRequestedPane(
     // Must agree with where the pane was actually placed, or the next restore
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
+    opened_by: parent.id,
     // A pinned pane's record keeps its pin, as a rebuild's does; without it the
     // backend files the pane under the live login and a restore reopens it there.
     ...(req.profileId ? { profile_id: req.profileId } : {}),
@@ -4365,6 +4400,13 @@ watch(
   () => backend.status.value,
   (s) => { if (s === 'connected') msgLog.onConnected() }
 )
+// Plan P4: panes that refuse notifications from Navide plugins (pane menu).
+const pluginNotifyRefusals = usePluginNotifyRefusals(backend)
+watch(
+  () => backend.status.value,
+  (s) => { if (s === 'connected') void pluginNotifyRefusals.load() },
+  { immediate: true },
+)
 
 let _msgPumpTimer = 0
 let _remoteTargetsTimer = 0
@@ -4489,6 +4531,85 @@ onUnmounted(() => {
 const AWAITING_SCREEN_LINES = 25
 // Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
 const ANSWER_STEP_GAP_MS = 60
+// How long cli_set_model waits for claude's /model picker to show, and then
+// for its "Set model to" line after the keys.
+const MODEL_PICKER_WAIT_MS = 3000
+// After Yes on the "Switch model?" box: longer, for slow machines.
+const MODEL_CONFIRM_WAIT_MS = 5000
+const MODEL_PICKER_POLL_MS = 100
+// claude: open the bare /model picker and pick the row with `s`, which switches
+// this session only (Enter would save the default for every new session).
+// Returns null once the screen confirms the switch, else why it fell back; the
+// picker is closed with Esc before every fallback that may have opened it.
+async function setModelViaPicker(paneId: string, model: string): Promise<string | null> {
+  const startedAt = Date.now()
+  let lastScreen = ''
+  // One [set-model] line per fallback, describing the last screen read by its
+  // shape alone: the text itself never goes to the log.
+  const fallBack = (reason: string) => {
+    console.warn('[set-model]', JSON.stringify({ fallback: reason, waitedMs: Date.now() - startedAt, ...modelSwitchDiagnostic(lastScreen) }))
+    return reason
+  }
+  const label = claudePickerLabel(model)
+  if (!label) return fallBack('model-not-in-picker')
+  const ref = paneRefs[paneId]
+  const sid = ref?.sessionId as string | undefined
+  if (!ref || !sid) return fallBack('pane-not-ready')
+  const screen = () => (lastScreen = (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '')
+  const write = (data: string) => backend.send('terminal.input', { terminal_session_id: sid, data })
+  const waitFor = async (seen: (text: string) => boolean, ms = MODEL_PICKER_WAIT_MS): Promise<string | null> => {
+    for (const end = Date.now() + ms; Date.now() < end; ) {
+      await sleep(MODEL_PICKER_POLL_MS)
+      const text = screen()
+      if (seen(text)) return text
+    }
+    return null
+  }
+  // Esc on the "Switch model?" box goes back to the picker, so a fallback
+  // from there takes a second Esc to close it.
+  const cancel = async (reason: string, escapes = 1) => {
+    for (let i = 0; i < escapes; i++) {
+      if (i) await sleep(ANSWER_STEP_GAP_MS)
+      await write('\x1b')
+    }
+    return fallBack(reason)
+  }
+  if (!(await injectPane(paneId, '/model', 'set-model', true))) return cancel('inject-failed')
+  const menu = await waitFor(onModelPicker)
+  if (!menu) return cancel('picker-not-shown')
+  const keys = modelPickerKeys(menu, label)
+  if (!keys) return cancel('model-not-in-picker')
+  const resp = await writeAnswerSteps({
+    steps: keys,
+    menu,
+    read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screen() }),
+    write,
+    gapMs: ANSWER_STEP_GAP_MS,
+    stillOn: stillOnModelPicker,
+  })
+  if (resp === 'prompt-changed') return cancel('picker-changed')
+  if (!resp.ok) return cancel('keys-failed')
+  let done = await waitFor((text) => onModelSwitchConfirm(text) || modelSwitchResult(text) !== null)
+  if (!done) return cancel('switch-not-confirmed')
+  if (onModelSwitchConfirm(done)) {
+    const confirm = done
+    const yes = modelConfirmKeys(confirm, label)
+    if (!yes) return cancel('confirm-not-matched', 2)
+    const sent = await writeAnswerSteps({
+      steps: yes,
+      menu: confirm,
+      read: () => ({ displayStatus: ref.displayStatus as string | undefined, screen: screen() }),
+      write,
+      gapMs: ANSWER_STEP_GAP_MS,
+      stillOn: stillOnModelSwitchConfirm,
+    })
+    if (sent === 'prompt-changed') return cancel('confirm-changed', 2)
+    if (!sent.ok) return cancel('confirm-keys-failed', 2)
+    done = await waitFor((text) => modelSwitchResult(text) !== null, MODEL_CONFIRM_WAIT_MS)
+    if (!done) return cancel('confirm-not-confirmed', 2)
+  }
+  return modelSwitchResult(done) === 'default' ? fallBack('saved-as-default') : null
+}
 
 /** Flag a pane whose turn is in flight but whose log and screen have both been
  *  quiet past the threshold, and record it once per episode. Reminder only:
@@ -7928,6 +8049,8 @@ interface SpawnInternal {
    *  spawn-depth/quota gate, and is mirrored into the pane record and the
    *  spawn-history entry so the tree survives a restart. */
   spawnedBy?: string
+  /** The pane that opened this one; see ActivePane.openedById. */
+  openedById?: string
   /** CLI account profile id for an isolated LOGIN pane: the backend spawns the
    *  CLI inside that profile's login home so signing in never touches the live
    *  credentials or running panes. Never persisted — a restored pane respawns
@@ -8141,6 +8264,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     model: launchedModel.model || undefined,
     effort: launchedModel.effort || undefined,
     spawnedBy: opts.spawnedBy,
+    openedById: opts.openedById,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
   }
@@ -8229,6 +8353,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       // one, but it does not outlive a pruned record — and resuming from
       // Agent History is exactly the case where the record may be long gone.
       spawnedBy: pane.spawnedBy,
+      openedById: pane.openedById,
     })
   } else {
     console.warn(
@@ -8360,6 +8485,32 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     syncViews()
   }
   return id
+}
+
+/**
+ * The ＋ menu's ACP entry (Settings → CLI Agents → ACP (experimental), off by
+ * default): an ACP pane, which lib/acpHost.ts runs instead of a terminal. The
+ * only caller that asks spawnPane for display 'acp'. No manual_pane record is
+ * written, so the pane is not restored after a restart (a restored record
+ * would come back as a terminal pane).
+ */
+async function onAcpSpawn(payload: SpawnPayload): Promise<string | null> {
+  const target = payload.workspacePath || currentWorkspace.value
+  const onScreen = normWs(target) === normWs(currentWorkspace.value)
+  const spawnGroupId = onScreen
+    ? resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, payload.runGroupId ?? '')
+    : ''
+  return spawnPane({
+    agentKey: payload.agentKey,
+    // A role is typed into a terminal pane's prompt; an ACP pane has none yet.
+    roleKey: '',
+    stageId: payload.stageId,
+    commandOverride: '',
+    workspacePath: payload.workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    display: 'acp',
+  })
 }
 
 async function onManualSpawn(payload: SpawnPayload, quota?: { transactionId: string; originalPaneId: string }): Promise<string | null> {
@@ -9286,6 +9437,8 @@ async function rebuildPaneViaResume(
 ): Promise<RebuildFailure | undefined> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.realized) return 'missing-pane'
+  // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
+  if (acp.owns(paneId)) return 'no-session'
   // If the CLI is actively working, skip rebuild so we don't kill in-flight work.
   // The PTY is alive and the pane is already bound — nothing to reattach, just leave it.
   // displayStatus detects active work from CLEANED output bursts. Raw status
@@ -9403,6 +9556,7 @@ async function rebuildPaneViaResume(
       workspacePath: ws,
       origin: pane.origin,
       spawnedBy: pane.spawnedBy,
+      openedById: pane.openedById,
       runGroupId: pane.runGroupId,
       sessionHomeId: pane.sessionHomeId,
       profileId: pane.profileId,
@@ -9450,6 +9604,7 @@ async function rebuildPaneViaResume(
       workspacePath: snap.workspacePath,
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
+      openedById: snap.openedById,
       runGroupId: snap.runGroupId || undefined,
       isResume: !fresh,
       skipRoleInjection: !fresh,
@@ -10198,6 +10353,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     workspacePath: pane.workspacePath,
     origin: pane.origin,
     spawnedBy: pane.spawnedBy,
+    openedById: pane.openedById,
     runGroupId: pane.runGroupId,
     // Same reason as the resume rebuild's snapshot: a clean rebuild is still
     // the SAME pane, so it has to relaunch on the model it was running. Drop
@@ -10223,6 +10379,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       workspacePath: snap.workspacePath,
       origin: snap.origin,
       spawnedBy: snap.spawnedBy,
+      openedById: snap.openedById,
       runGroupId: snap.runGroupId || undefined,
       isResume: false,
       model: snap.model,
@@ -10642,7 +10799,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications' | 'extensions' | 'agents'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -10653,6 +10810,12 @@ function openSettingsAt(tab: typeof settingsInitialTab.value): void {
   settingsInitialTab.value = tab
   if (showSettings.value) settingsModalRef.value?.setTab(tab)
   else showSettings.value = true
+}
+/** Settings → Agents, on one identity (the agent pane's "Agent settings…"). */
+const settingsAgentFocusId = ref('')
+function openSettingsAgents(identityId: string): void {
+  settingsAgentFocusId.value = identityId
+  openSettingsAt('agents')
 }
 // navide://extension/<id> (src/main/deep-link.ts): show that extension's
 // Marketplace detail page. Only opens the page — installing still takes the
@@ -10977,6 +11140,12 @@ async function onMenuAction(action: string): Promise<void> {
     // Same destination as Cmd+K Cmd+S: two entry points labelled "Keyboard
     // Shortcuts" must not show two different lists.
     openSettingsAt('keybindings')
+    return
+  }
+  if (action === 'open-developer:developer-settings' || action === 'open-developer:testplace') {
+    // Help → Developers: Settings → Navide Marketplace → Developer, at the top or its Testplace section.
+    showDeveloperPage(action === 'open-developer:testplace' ? 'testplace' : 'top')
+    openSettingsAt('marketplace')
     return
   }
   if (action === 'check-updates') {
@@ -11592,6 +11761,34 @@ registerCommand('ui.pane.place', async (args) => {
     spawnedBy: pane.spawnedBy ?? '',
   }
 })
+// cli_rename_pane's window half: the same rename as editing the title
+// (setPaneCustomName), except that a name another pane holds is refused with a
+// code instead of opening the collision prompt — nobody is at the keyboard to
+// answer it. CLI panes only (they hold a messaging handle), placeholders
+// included. The answer carries the handle actually applied.
+registerCommand('ui.pane.rename', async (args) => {
+  const a = (args as { paneId?: string; name?: string } | undefined) ?? {}
+  if (!a.paneId) throw new Error(`ui.pane.rename requires ${PANE_ID_HINT}`)
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`ui.pane.rename: pane "${a.paneId}" not found`)
+  const oldName = messaging.nameOf(pane.id)
+  if (oldName === null) {
+    throw Object.assign(new Error('ui.pane.rename: only CLI panes can be renamed'), { code: 'not-cli-pane' })
+  }
+  const title = (a.name ?? '').trim()
+  if (!title || title.includes('\n')) {
+    throw Object.assign(new Error('ui.pane.rename: the name must be one non-empty line'), { code: 'invalid-name' })
+  }
+  const owner = messaging.paneIdOf(title.replaceAll('/', '-'))
+  if (owner !== null && owner !== pane.id) {
+    throw Object.assign(
+      new Error(`ui.pane.rename: "${title}" is already another pane's name — pick another`),
+      { code: 'name-taken', params: { name: title } },
+    )
+  }
+  await setPaneCustomName(pane.id, title)
+  return { paneId: pane.id, oldName, name: messaging.nameOf(pane.id) ?? oldName, title: pane.customName ?? '' }
+})
 // The official form of what ui.pane.focus does as a side effect: open a
 // cold-restore placeholder. Unlike focus it waits for the restore to finish,
 // reports why it did or did not open, and — because the caller named ONE pane
@@ -11640,6 +11837,60 @@ registerCommand('ui.pane.interrupt', async (args) => {
     awaitingKind,
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
+})
+// cli_set_model: switch a running pane's model. claude through its /model
+// picker's `s` (setModelViaPicker), codex by typing `/model <id>`
+// (lib/liveModelSwitch), else — and whenever the picker falls back — a resume
+// rebuild onto `--model`. Only an idle pane: the same gate a message waits on,
+// plus no prompt box, since the command would be typed into it. Refusals are
+// results, so the backend can relay the reason.
+registerCommand('ui.pane.setModel', async (args) => {
+  const a = (args ?? {}) as { paneId?: string; model?: string; effort?: string }
+  if (!a.paneId) throw new Error(`ui.pane.setModel requires ${PANE_ID_HINT}`)
+  const pane = panes.value.find((p) => p.id === a.paneId)
+  if (!pane) throw new Error(`ui.pane.setModel: pane "${a.paneId}" not found`)
+  const model = (a.model ?? '').trim()
+  const effort = (a.effort ?? '').trim()
+  const refuse = (error_code: string, error: string, extra: Record<string, unknown> = {}) =>
+    ({ ok: false, error, error_code, ...extra })
+  if (!model) return refuse('model-required', 'model is required')
+  if (!pane.realized) return refuse('pane-not-open', 'the pane is a restore placeholder; open it first')
+  if (pane.isLogin) return refuse('login-pane-input-refused', SIGN_IN_PANE_INPUT_REFUSAL)
+  if (pane.agentKey === TERMINAL_AGENT_KEY) return refuse('not-agent-pane', 'a terminal pane has no model')
+  if (acp.owns(pane.id)) return refuse('acp-unsupported', 'an ACP pane cannot switch its model in place')
+  const hold = paneRefs[pane.id]?.displayStatus === 'awaiting' ? 'awaiting' : messagingHoldKey(pane.id)
+  if (hold !== null) return refuse('pane-busy', `the pane is not idle (${hold}); wait and retry`, { hold })
+  let fallback: string | undefined
+  if (pane.agentKey === 'claude' && !effort) {
+    const why = await setModelViaPicker(pane.id, model)
+    if (why === null) {
+      pane.model = model
+      return { ok: true, method: 'picker', paneId: pane.id }
+    }
+    fallback = why
+  }
+  const command = fallback ? null : liveModelCommand(pane.agentKey, model, effort)
+  if (command) {
+    const ok = await injectPane(pane.id, command, 'set-model', true)
+    if (!ok) return refuse('inject-failed', 'the /model command did not go in')
+    pane.model = model
+    return { ok: true, method: 'slash', paneId: pane.id }
+  }
+  const before = { model: pane.model, effort: pane.effort }
+  pane.model = model
+  if (effort) pane.effort = effort
+  let paneId = pane.id
+  const failure = await rebuildPaneViaResume(pane.id, {
+    suppressBusyToast: true,
+    freshWhenNoTranscript: true,
+    onReplaced: (id) => { paneId = id },
+  })
+  if (failure) {
+    pane.model = before.model
+    pane.effort = before.effort
+    return refuse(`restart-${failure}`, `the restart onto the new model did not happen (${failure})`, fallback ? { fallback } : {})
+  }
+  return fallback ? { ok: true, method: 'restart', paneId, fallback } : { ok: true, method: 'restart', paneId }
 })
 registerCommand('ui.messaging.readIncoming', (args) => {
   const a = (args ?? {}) as {
@@ -13003,6 +13254,7 @@ interface ProjectPane {
   run_group_id?: string
   origin: 'pipeline' | 'manual' | 'mcp'
   spawned_by?: string
+  opened_by?: string
   stage_id?: string
   stage_index?: number
   slot_label?: string
@@ -13128,6 +13380,8 @@ interface RestoredPaneSpawnOptions {
    *  and a child with no resolvable parent is a root: it leaves the subtree
    *  and sorts to the end of the list. */
   spawnedBy?: string
+  /** The placeholder's live opener, for the same reason as spawnedBy. */
+  openedById?: string
   workspacePath: string
   runGroupId?: string
   sessionHomeId?: string
@@ -13169,6 +13423,10 @@ function rekeyLineage(oldId: string, newId: string): void {
   // The follow-the-default-account flag rides the same id hand-offs.
   accountFollow.rekey(oldId, newId)
   rekeyChildren(panes.value, (p) => p.id, oldId, newId)
+  // Who opened a pane names the same kind of id, so it follows the same hand-off.
+  for (const p of panes.value) {
+    if (p.openedById === oldId) p.openedById = p.id === newId ? undefined : newId
+  }
   // Agent History keeps its own durable copy of the same pointer, and it
   // outlives the pane record. Left behind, it would still name an id retired
   // restarts ago — so a resume that fell back to history would rebuild the
@@ -13194,6 +13452,7 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     origin: saved.origin,
     // Live value first — see RestoredPaneSpawnOptions.spawnedBy.
     spawnedBy: opts.spawnedBy || saved.spawned_by || undefined,
+    openedById: opts.openedById || saved.opened_by || undefined,
     runGroupId: opts.runGroupId,
     isResume: opts.isResume,
     skipRoleInjection: opts.isResume,
@@ -13940,6 +14199,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
         // backend persists and re-keys spawned_by precisely so the shape
         // survives a restart — dropping it here threw that away.
         spawnedBy: saved.spawned_by || undefined,
+        openedById: saved.opened_by || undefined,
         outputLogFile: saved.output_log_file || undefined,
         runGroupId: runGroupId || undefined,
         injectionStatus: 'pending',
@@ -14105,6 +14365,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
       // The record is being read right here, so take its lineage with it:
       // this is the last point at which a closed pane's parent is known.
       spawnedBy: saved.spawned_by || undefined,
+      openedById: saved.opened_by || undefined,
     })
     backfilledIds.add(saved.pane_id)
   }
@@ -14574,6 +14835,7 @@ async function performRealizeRestoredPane(
       workspacePath: batch.workspacePath,
       runGroupId: placeholder.runGroupId || undefined,
       spawnedBy: placeholder.spawnedBy,
+      openedById: placeholder.openedById,
       sessionHomeId: placeholder.sessionHomeId,
       profileId: restorePin,
       commandOverride,
@@ -17254,7 +17516,9 @@ backend.on('agent.activity', (raw) => {
     // judgeTurnText and the sentinel paths — it only reads ev.text.
     // Envelope guard mirrors the agent_active path: a reader that echoes the
     // injected inter-CLI message back as turn text must not title the pane.
-    if (ev.text && !markerReply && !isInjectedMessageText(ev.text)) {
+    // An ACP pane is never titled from its reply: its name is the handle
+    // callers address it by, and a reply ("finished") is no title.
+    if (ev.text && !markerReply && !isInjectedMessageText(ev.text) && !acp.owns(ev.pane_id)) {
       const pane = panes.value.find((p) => p.id === ev.pane_id)
       if (pane && !pane.customName && !pane.nameLocked && !pane.autoName) {
         setPaneAutoName(ev.pane_id, deriveAutoName(ev.text))
@@ -17275,6 +17539,8 @@ backend.on('agent.activity', (raw) => {
         paneTurnStartedAt.set(ev.pane_id, Date.now())
       }
       paneLastActiveAt.set(ev.pane_id, Date.now())
+      // Claude's "[Request interrupted by user]": the STOP took effect.
+      if (ev.detail === INTERRUPT_ACTIVITY_DETAIL) paneRefs[ev.pane_id]?.noteInterruptEvidence?.()
       // A turn the agent started on its own ends a STOP badge, user records
       // included: see agentTurnActivityAt.
       paneRefs[ev.pane_id]?.markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))
@@ -20739,6 +21005,7 @@ function projectPaneFromActive(pane: ActivePane): ProjectPane {
     // that belongs in performRealizeRestoredPane, which moves minimized and
     // muted onto the new id and not this.)
     spawned_by: pane.spawnedBy,
+    opened_by: pane.openedById,
     collapsed: collapsedPanes.value.has(pane.id),
     output_log_file: pane.outputLogFile,
     // The realize path rebuilds the launch flags from these two. Leaving them
@@ -23258,6 +23525,78 @@ provide(cliRiskKey, resourceUsage)
 provide(channelsKey, useChannels(backend))
 provide(guardKey, useGuard(backend))
 
+// ── Agent panes (plan agent-0-2-40_78e071) ───────────────────────────────────
+function agentPaneName(p: ActivePane): string {
+  return p.messagingName || p.customName || p.autoName || p.agentLabel
+}
+// Every agent pane this window holds, matched to its identity on each change.
+watch(
+  () => panes.value
+    .filter((p) => isAgentVendor(p.agentKey))
+    .map((p) => ({ paneId: p.id, name: agentPaneName(p), agentKey: p.agentKey, workspacePath: p.workspacePath, sessionId: p.pinnedSessionId ?? null, model: p.model })),
+  (list) => agentConsole.reconcile(list),
+  { immediate: true },
+)
+
+/** Settings → Agents and the ＋ menu: each identity with its pane's status. */
+const agentPaneSummaries = computed(() => {
+  const statusById = new Map(paneViews.value.map((v) => [v.id, v.status]))
+  return agentConsole.identities.value.map((identity) => ({
+    identity,
+    open: !!identity.paneId && statusById.has(identity.paneId),
+    status: identity.paneId ? statusById.get(identity.paneId) ?? '' : '',
+  }))
+})
+
+/** Focus an identity's open pane, else open one for it — resuming its last
+ *  session when the vendor can (reconcile attaches the new pane by name). */
+function openAgentIdentity(identityId: string): void {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) {
+    onSetFocus(a.paneId)
+    return
+  }
+  const spec = AGENT_SPECS.find((s) => s.agentKey === a.agentKey)
+  if (a.sessionId && spec?.resumeArgs) {
+    void onManualResume({ agentKey: a.agentKey, workspacePath: a.workspacePath, sessionId: a.sessionId, customName: a.name, autoName: '' })
+  } else {
+    void onManualSpawn({ agentKey: a.agentKey, roleKey: '', stageId: '', workspacePath: a.workspacePath, customName: a.name })
+  }
+}
+
+/** The identity's name is its pane's name: an open pane is renamed (and the
+ *  identity follows it); a closed one is renamed in place. */
+function renameAgentIdentity(identityId: string, name: string): void {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) void setPaneCustomName(a.paneId, name)
+  else agentConsole.patch(identityId, { name })
+}
+
+/** "Stop and remove agent": asks first (the identity cannot be restored),
+ *  closes its pane, then forgets the identity. */
+async function onStopAgentIdentity(identityId: string): Promise<void> {
+  const a = agentConsole.identities.value.find((x) => x.id === identityId)
+  if (!a) return
+  const ok = await notifyRestore.confirm(
+    i18n.global.t('agentPane.menu.stop-remove-body'),
+    {
+      title: i18n.global.t('agentPane.menu.stop-remove-title', { name: a.name }),
+      confirmText: i18n.global.t('agentPane.menu.stop-remove-confirm'),
+      cancelText: i18n.global.t('pane.terminal.rebuild-running-confirm-cancel'),
+      danger: true,
+    }
+  )
+  if (!ok) return
+  if (a.paneId && panes.value.some((p) => p.id === a.paneId)) {
+    await onKill(a.paneId)
+    // The close was cancelled (confirm dialog): keep the identity.
+    if (panes.value.some((p) => p.id === a.paneId)) return
+  }
+  agentConsole.remove(identityId)
+}
+
 const resourceRows = computed<ResourceSummaryRow[]>(() => {
   const statusById = new Map(paneViews.value.map((v) => [v.id, v.status]))
   const reclaimable = new Set(reclaimableNowIds.value)
@@ -23410,6 +23749,28 @@ const paneCtxColsCapped = ref(false)
 const paneCtxView = computed<ActivePaneView | null>(() =>
   paneCtxMenu.value ? paneViews.value.find((v) => v.id === paneCtxMenu.value!.paneId) ?? null : null
 )
+/** The right-clicked pane is an agent pane: its menu takes the Agent branch
+ *  (plan agent-0-2-40_78e071, figure 3). Null for a CLI pane. */
+const ctxAgent = computed(() => {
+  const id = paneCtxMenu.value?.paneId
+  const p = id ? panes.value.find((x) => x.id === id) : undefined
+  if (!p || !isAgentVendor(p.agentKey)) return null
+  const name = agentPaneName(p)
+  const jobs = agentConsole.jobsFor(p.id, name)
+  return {
+    paneId: p.id,
+    name,
+    identity: agentConsole.identityForPane(p.id),
+    canWake: !!agentConsole.nextJob(p.id, name),
+    hasJobs: jobs.length > 0,
+    anyEnabled: jobs.some((j) => j.enabled),
+    memory: agentConsole.notesFor(p.agentKey)?.memory ?? null,
+  }
+})
+// The menu's "Open memory folder" needs the vendor's memory root.
+watch(() => ctxAgent.value && panes.value.find((x) => x.id === ctxAgent.value?.paneId)?.agentKey, (key) => {
+  if (key) void agentConsole.refreshNotes(key)
+})
 
 // When the right-clicked pane is part of a multi-select of >1, the menu targets
 // the whole (still-live) selection; otherwise it targets just that one pane.
@@ -24976,7 +25337,10 @@ function paneIsCommander(p: ActivePane): boolean {
       :rebuilding-all="rebuildingTabPanes"
       :detached-window="isDetachedWindow"
       v-model:sidebar-mode="sidebarMode"
+      :agent-identities="agentPaneSummaries"
+      @agent-open="openAgentIdentity"
       @spawn="onManualSpawn"
+      @spawn-acp="onAcpSpawn"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"
@@ -25113,6 +25477,11 @@ function paneIsCommander(p: ActivePane): boolean {
       :workspace-path="currentWorkspace"
       :initial-tab="settingsInitialTab"
       :tab-request="settingsTabRequest"
+      :agent-focus-id="settingsAgentFocusId"
+      :agent-panes="agentPaneSummaries"
+      @agent-open="openAgentIdentity"
+      @agent-stop="onStopAgentIdentity"
+      @agent-rename="renameAgentIdentity"
       v-model:confirm-before-close="confirmBeforeClose"
       v-model:confirm-before-close-pane="confirmBeforeClosePane"
       v-model:confirm-before-close-workspace="confirmBeforeCloseWorkspace"
@@ -25965,6 +26334,11 @@ function paneIsCommander(p: ActivePane): boolean {
           @click="restorePane(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.restore') }}</div>
         <div class="pane-ctx-item" @click="startRenamePane(paneCtxMenu!.paneId)">{{ $t('action.rename') }}</div>
+        <div
+          class="pane-ctx-item"
+          :title="$t('pluginNotify.paneMenu.title')"
+          @click="void pluginNotifyRefusals.toggle(paneCtxMenu!.paneId); closePaneCtxMenu()"
+        >{{ pluginNotifyRefusals.refuses(paneCtxMenu!.paneId) ? $t('pluginNotify.paneMenu.accept') : $t('pluginNotify.paneMenu.refuse') }}</div>
         <div class="pane-ctx-item" @click="togglePaneMuted(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ paneCtxView?.isMuted ? $t('action.unmute') : $t('action.mute') }}</div>
         <div
           v-if="paneCtxColsCapped"
@@ -25989,6 +26363,38 @@ function paneIsCommander(p: ActivePane): boolean {
           :class="{ disabled: paneCtxView?.status !== 'running' }"
           @click="onInterrupt(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('action.interrupt') }}</div>
+        <template v-if="ctxAgent">
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-wake"
+            :class="{ disabled: !ctxAgent.canWake }"
+            :title="ctxAgent.canWake ? '' : $t('agentPane.action.wake-none')"
+            @click="ctxAgent.canWake && agentConsole.wakeNow(ctxAgent.paneId, ctxAgent.name); closePaneCtxMenu()"
+          >{{ $t('agentPane.menu.wake') }}</div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-pause"
+            :class="{ disabled: !ctxAgent.hasJobs }"
+            @click="ctxAgent.hasJobs && agentConsole.setSchedulesPaused(ctxAgent.paneId, ctxAgent.name, ctxAgent.anyEnabled); closePaneCtxMenu()"
+          >{{ ctxAgent.anyEnabled || !ctxAgent.hasJobs ? $t('agentPane.action.pause-schedules') : $t('agentPane.action.resume-schedules') }}</div>
+          <div class="pane-ctx-sep"></div>
+          <div class="pane-ctx-item" data-testid="ctx-agent-channels" @click="openSettingsAt('channels'); closePaneCtxMenu()">{{ $t('agentPane.menu.channels') }}</div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-memory"
+            :class="{ disabled: !ctxAgent.memory?.root || ctxAgent.memory.status === 'missing' }"
+            :title="ctxAgent.memory?.root ? ctxAgent.memory.root : $t('agentPane.panel.memory-empty')"
+            @click="ctxAgent.memory?.root && ctxAgent.memory.status !== 'missing' && revealPath(ctxAgent.memory.root); closePaneCtxMenu()"
+          >{{ $t('agentPane.menu.memory-folder') }}</div>
+          <div class="pane-ctx-item" data-testid="ctx-agent-panel" @click="paneRefs[ctxAgent.paneId]?.toggleAgentPanel?.(); closePaneCtxMenu()">{{ $t('agentPane.menu.toggle-panel') }}</div>
+          <div
+            class="pane-ctx-item"
+            data-testid="ctx-agent-settings"
+            :class="{ disabled: !ctxAgent.identity }"
+            @click="ctxAgent.identity && openSettingsAgents(ctxAgent.identity.id); closePaneCtxMenu()"
+          >{{ $t('agentPane.action.settings') }}</div>
+        </template>
+        <template v-else>
         <div
           class="pane-ctx-item"
           :class="{ disabled: paneCtxView?.status !== 'running' || !paneCtxView?.roleKey }"
@@ -26001,6 +26407,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="$t('action.reclaim-title')"
           @click="reclaimPaneFromMenu(paneCtxMenu!.paneId)"
         >{{ $t('action.reclaim') }}</div>
+        </template>
         <div
           v-if="ctxDescendantIds.length"
           class="pane-ctx-item danger"
@@ -26018,7 +26425,13 @@ function paneIsCommander(p: ActivePane): boolean {
           >{{ pluginSlotLabel(item) }} <span class="pane-ctx-plugin">· {{ revealInvisibleText(item.pluginName) }}</span></div>
           <div class="pane-ctx-sep"></div>
         </template>
-        <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ $t('action.remove') }}</div>
+        <div class="pane-ctx-item danger" @click="onKill(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ ctxAgent ? $t('agentPane.menu.close-keep') : $t('action.remove') }}</div>
+        <div
+          v-if="ctxAgent?.identity"
+          class="pane-ctx-item danger"
+          data-testid="ctx-agent-stop"
+          @click="void onStopAgentIdentity(ctxAgent.identity.id); closePaneCtxMenu()"
+        >{{ $t('agentPane.menu.stop-remove') }}</div>
         <div
           v-if="ctxDescendantIds.length"
           class="pane-ctx-item danger"
@@ -26241,6 +26654,13 @@ function paneIsCommander(p: ActivePane): boolean {
           >⚡ {{ $t('reconnect.banner', { count: disconnectedCount }) }}</span>
           <span class="sb-reconnect-dismiss" :title="$t('restore.dismiss')" @click="dismissReconnectBanner">✕</span>
         </span>
+        <PluginStopStatusItem
+          v-if="!isDetachedWindow"
+          :open="openPopover === 'plugins'"
+          @toggle="togglePopover('plugins')"
+          @close="closePopover()"
+          @open-settings="closePopover(); openSettingsAt('extensions')"
+        />
         <span
           class="sb-item sb-clickable sb-notify"
           :class="{ 'sb-off': !systemNotifyOn, 'sb-warn': notifyPermissionDenied }"

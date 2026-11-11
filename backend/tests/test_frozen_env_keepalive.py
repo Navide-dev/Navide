@@ -59,6 +59,7 @@ async def test_keepalive_touches_the_tree_on_a_schedule(
     files = _old_tree(tmp_path)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path.parent / "bin" / "agent_team_backend"))
 
     task = asyncio.create_task(frozen_env.keep_extraction_warm(interval_s=0.05))
     try:
@@ -72,3 +73,53 @@ async def test_keepalive_touches_the_tree_on_a_schedule(
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+def _onedir(root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Lay out a onedir bundle under ``root`` and point ``sys`` at it."""
+    internal = root / "agent_team_backend" / "_internal"
+    internal.mkdir(parents=True)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(internal), raising=False)
+    monkeypatch.setattr(sys, "executable", str(root / "agent_team_backend" / "agent_team_backend"))
+    return internal
+
+
+def test_a_onedir_build_is_not_onefile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _onedir(tmp_path, monkeypatch)
+    assert frozen_env.is_onefile_build() is False
+
+
+def test_an_extraction_dir_away_from_the_executable_is_onefile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path / "backend-tmp" / "_MEIabc123"), raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "resources" / "bin" / "agent_team_backend"))
+    assert frozen_env.is_onefile_build() is True
+
+
+def test_a_dev_run_is_not_onefile(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+    assert frozen_env.is_onefile_build() is False
+
+
+@pytest.mark.asyncio
+async def test_keepalive_leaves_a_onedir_bundle_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    internal = _onedir(tmp_path, monkeypatch)
+    files = _old_tree(internal)
+
+    await asyncio.wait_for(frozen_env.keep_extraction_warm(interval_s=0.01), timeout=1)
+
+    assert all(f.stat().st_mtime == OLD for f in files)
+
+
+def test_bin_dir_of_a_onedir_build_is_one_level_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _onedir(tmp_path, monkeypatch)
+    assert frozen_env.packaged_bin_dir() == os.path.realpath(tmp_path)
+
+
+def test_bin_dir_of_a_single_file_build_is_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "agent_team_backend"))
+    assert frozen_env.packaged_bin_dir() == os.path.realpath(tmp_path)

@@ -33,8 +33,8 @@ const contracts = [
   { key: 'mcode', binary: 'mcode', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'goose', binary: 'goose', permission: '', resume: 'goose session -r --session-id session-123', model: false, effort: null, paste: true, fullScreen: false, silence: false },
   { key: 'devin', binary: 'devin', permission: '--permission-mode dangerous', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
-  { key: 'openclaw', binary: 'openclaw', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
-  { key: 'hermes', binary: 'hermes', permission: '--yolo', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'openclaw', binary: 'openclaw tui --local', permission: '', resume: 'openclaw tui --local --session session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'hermes', binary: 'hermes chat', permission: '--yolo', resume: 'hermes chat --continue session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },
 ] as const
 
 describe('frontend CLI contract inventory', () => {

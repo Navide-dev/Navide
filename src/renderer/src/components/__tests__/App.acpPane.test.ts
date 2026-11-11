@@ -74,6 +74,17 @@ describe('ACP hooks in App.vue', () => {
     expect(start).toBeLessThan(spawn.indexOf('command: shellCommandArgv('))
   })
 
+  it('never auto-names an ACP pane from its reply text (its name is its handle)', () => {
+    const fallback = appSource.indexOf('// Auto-name fallback: for vendors whose readers')
+    expect(fallback).toBeGreaterThan(-1)
+    const gate = appSource.indexOf('\n', appSource.indexOf('    if (ev.text && !markerReply', fallback))
+    const condition = appSource.slice(appSource.indexOf('    if (ev.text && !markerReply', fallback), gate)
+    expect(condition).toContain('!acp.owns(ev.pane_id)')
+    // The gate sits ahead of both namers in that block.
+    expect(gate).toBeLessThan(appSource.indexOf('setPaneAutoName(ev.pane_id, deriveAutoName(ev.text))', fallback))
+    expect(gate).toBeLessThan(appSource.indexOf('requestLlmPaneName(ev.pane_id, ev.text)', fallback))
+  })
+
   it('mounts AcpPane only for an ACP pane, and the TerminalPane block unchanged otherwise', () => {
     const acpBlock = appSource.indexOf('<template v-if="acp.owns(p.id)">')
     const terminal = appSource.indexOf('<TerminalPane')

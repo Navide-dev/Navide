@@ -175,6 +175,21 @@ export interface PluginActivityReport {
   /** Calls into the plugin's own backend (any path), counted per minute; not in
    *  `totals`, `daily` or `volumeSpike`. */
   backendCalls: PluginActivityBackendCalls
+  /** Plan P5: Navide's automatic pauses of this plugin in the 30 days, newest
+   *  first: the rule, the number that tripped it, its threshold and a short
+   *  detail (a host for R2, a resource item for R4). [] from an older backend. */
+  autoPauses: PluginActivityAutoPause[]
+}
+
+export type PluginAutoPauseRule = 'R1' | 'R2' | 'R3' | 'R4' | 'R5'
+
+export interface PluginActivityAutoPause {
+  at: number
+  rule: PluginAutoPauseRule
+  value: number
+  threshold: number
+  detail: string
+  pluginVersion: string
 }
 
 export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
@@ -359,8 +374,14 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
   const anomalies = list(value.anomalies, anomaly)
   const agentActions = value.agentActions === null ? null : list(value.agentActions, agentAction)
   const backendCalls = backendCallsOf(value.backendCalls)
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+  const autoPauses = value.autoPauses === undefined ? [] : list(value.autoPauses, (e) =>
+    isTime(e.at) && oneOf(['R1', 'R2', 'R3', 'R4', 'R5'] as const, e.rule) && finite(e.value) && finite(e.threshold) &&
+    isText(e.detail) && isText(e.pluginVersion)
+      ? { at: e.at, rule: e.rule, value: e.value, threshold: e.threshold, detail: e.detail, pluginVersion: e.pluginVersion }
+      : null)
   if (!toolCalls || !pipelineNodeRuns || !files || !commands || !network || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
-    (value.agentActions !== null && agentActions === null) || !backendCalls) return null
+    (value.agentActions !== null && agentActions === null) || !backendCalls || !autoPauses) return null
   return {
     schemaVersion: PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION,
     pluginId: value.pluginId,
@@ -371,6 +392,7 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     undeclaredSince: value.undeclaredSince,
     toolCalls, pipelineNodeRuns, files, commands, network, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
     backendCalls,
+    autoPauses,
   }
 }
 
@@ -388,4 +410,68 @@ function backendCallsOf(value: unknown): PluginActivityBackendCalls | null {
       ? { day: e.day, calls: e.calls, denied: e.denied, errors: e.errors, cancelled: e.cancelled }
       : null)
   return methods && daily ? { methods, daily } : null
+}
+
+// ── The Settings monitor (plan P1): every plugin on one table ──
+
+export const PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION = 1
+
+/** A host one of the plugin's views reached or was refused, in the 7 days of
+ *  detail. `refused`: some request to it was refused. `declared` is filled by
+ *  the Host from the installed manifest: null when the manifest has no
+ *  network declaration to compare against (Manifest v1, or none read). */
+export interface PluginActivityOverviewHost {
+  host: string
+  refused: boolean
+  lastAt: number
+  declared: boolean | null
+}
+
+/** One plugin's row on the monitor. Records only; nothing here is enforced. */
+export interface PluginActivityOverviewRow {
+  pluginId: string
+  /** Agent tool calls that ended in the last 60 s. */
+  toolCallsLastMinute: number
+  /** Broker and shell-broker calls from the minute 60 s ago started in. */
+  capabilityCallsLastMinute: number
+  /** The newest run of tool calls that did not end ok (read from at most 100). */
+  consecutiveFailures: number
+  /** When the newest tool call ended, or null (plan P5's R3 reads only new failures). */
+  lastToolCallAt: number | null
+  /** Automatic restarts of its backend in the last 10 minutes (P5's R3). */
+  backendRestartsLast10Minutes: number
+  hosts: PluginActivityOverviewHost[]
+  /** 0.2.40, added by the Host: views running mounted hidden to answer
+   *  agent tools (`headless: true`). Absent from an older Host. */
+  headlessViews?: number
+}
+
+export interface PluginActivityOverview {
+  schemaVersion: typeof PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION
+  generatedAt: number
+  plugins: PluginActivityOverviewRow[]
+}
+
+/** The backend's overview rebuilt from validated fields (`declared` is the
+ *  Host's to add), or null when anything is malformed. */
+export function parsePluginActivityOverview(value: unknown): Omit<PluginActivityOverview, 'plugins'> & {
+  plugins: Array<Omit<PluginActivityOverviewRow, 'hosts'> & { hosts: Array<Omit<PluginActivityOverviewHost, 'declared'>> }>
+} | null {
+  if (!isRec(value) || value.schemaVersion !== PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION || !isTime(value.generatedAt)) return null
+  const plugins = list(value.plugins, (e) => {
+    const hosts = list(e.hosts, (h) => (isText(h.host) && typeof h.refused === 'boolean' && isTime(h.lastAt)
+      ? { host: h.host, refused: h.refused, lastAt: h.lastAt }
+      : null))
+    // An older backend sends neither P5 field: no restarts, no last call known.
+    const lastToolCallAt = e.lastToolCallAt === undefined ? null : e.lastToolCallAt
+    const restarts = e.backendRestartsLast10Minutes === undefined ? 0 : e.backendRestartsLast10Minutes
+    if (!isText(e.pluginId) || !isCount(e.toolCallsLastMinute) || !isCount(e.capabilityCallsLastMinute) ||
+      !isCount(e.consecutiveFailures) || !nullable(lastToolCallAt, isTime) || !isCount(restarts) || !hosts) return null
+    return {
+      pluginId: e.pluginId, toolCallsLastMinute: e.toolCallsLastMinute,
+      capabilityCallsLastMinute: e.capabilityCallsLastMinute, consecutiveFailures: e.consecutiveFailures,
+      lastToolCallAt, backendRestartsLast10Minutes: restarts, hosts,
+    }
+  })
+  return plugins ? { schemaVersion: PLUGIN_ACTIVITY_OVERVIEW_SCHEMA_VERSION, generatedAt: value.generatedAt, plugins } : null
 }

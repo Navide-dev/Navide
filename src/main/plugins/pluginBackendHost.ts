@@ -1067,7 +1067,7 @@ export class PluginBackendHost {
     const agentMethods = view.agentToolBinding
       ? this.agentToolMethodsFor(view.activation.pluginId, view.activation.packageVersion)
       : view.activation.agentMethods
-    if (initiator.kind === 'agent' && !agentMethods?.includes(name)) {
+    if (initiator.kind === 'agent' && options?.developerCall !== true && !agentMethods?.includes(name)) {
       throw new BackendPluginError('CAPABILITY_DENIED')
     }
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
@@ -1085,6 +1085,7 @@ export class PluginBackendHost {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginCallOptions = { ...options }
       delete supervisorOptions.initiator
+      delete supervisorOptions.developerCall
       try {
         await view.bindingTask
       } catch (error) {

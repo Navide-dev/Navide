@@ -43,6 +43,8 @@ from .self_service import (
     exchange_cli_code,
     issue_cli_code,
     list_tokens,
+    member_publisher,
+    member_publishers,
     owned_publisher,
     owned_publishers,
     revoke_token,
@@ -166,6 +168,24 @@ def _owned_or_404(session: Session, viewer: cloud_auth.Viewer, namespace: str) -
     return publisher
 
 
+def scan_sites(scan: dict | None, target: str) -> list[dict]:
+    """Scanner 1.2.0 call sites of one artifact's scan, one line each: what
+    was found, and the file, line, column and excerpt where. Reports of
+    older scanners have none."""
+    if not scan:
+        return []
+    found = [("command", " ".join(filter(None, (c.get("executable"), c.get("subcommand")))), c.get("sites"))
+             for c in scan.get("shell", {}).get("calls", [])]
+    found += [("host", h.get("host"), h.get("sites")) for h in scan.get("network", {}).get("hosts", [])]
+    found += [("capability", c.get("address"), c.get("sites")) for c in scan.get("capabilities", [])]
+    return [
+        {"kind": kind, "key": key, "target": target, "file": site.get("file"), "line": site.get("line"),
+         "col": site.get("col"), "excerpt": site.get("excerpt")}
+        for kind, key, sites in found if isinstance(sites, list)
+        for site in sites if isinstance(site, dict)
+    ]
+
+
 def _version_rows(session: Session, publisher: Publisher) -> list[dict]:
     rows = []
     extensions = session.exec(
@@ -189,11 +209,13 @@ def _version_rows(session: Session, publisher: Publisher) -> list[dict]:
                     "downloads": 0,
                     "yanked": row.yanked,
                     "secret_findings": [],
+                    "scan_sites": [],
                 },
             )
             item["targets"].append(row.target)
             item["downloads"] += row.download_count
             item["secret_findings"].extend(review.secret_findings(row.review_report))
+            item["scan_sites"].extend(scan_sites(row.scan, row.target))
         rows.extend(grouped.values())
     rows.sort(key=lambda r: r["submitted_at"], reverse=True)
     return rows
@@ -710,7 +732,7 @@ def create_publisher_router() -> APIRouter:
         with _session(request) as session:
             # Only a namespace that may publish is offered (qualification.py).
             namespaces = [
-                p.name for p in owned_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
+                p.name for p in member_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
             ]
             qualification_status = qualification.status_of(session, viewer.member_id)
         return page(
@@ -750,8 +772,13 @@ def create_publisher_router() -> APIRouter:
                         session, viewer.member_id, code_challenge=code_challenge, label=label
                     )
                 else:
-                    publisher = _owned_or_404(session, viewer, namespace)
-                    code = issue_cli_code(session, publisher, code_challenge=code_challenge, label=label)
+                    # The owner or a publisher member (namespace members).
+                    publisher = member_publisher(session, viewer.member_id, namespace)
+                    if publisher is None:
+                        raise HTTPException(status_code=404, detail="namespace not found")
+                    code = issue_cli_code(
+                        session, publisher, code_challenge=code_challenge, label=label, member_id=viewer.member_id
+                    )
             except QualificationRequired as exc:
                 raise HTTPException(status_code=403, detail={"code": exc.code, "message": str(exc)}) from exc
             except SelfServiceError as exc:

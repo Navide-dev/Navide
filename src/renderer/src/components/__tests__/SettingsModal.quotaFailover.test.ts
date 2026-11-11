@@ -171,6 +171,21 @@ describe('Settings ▸ quota failover policy and capability table', { timeout: 1
     expect(wrapper!.get('[data-settings-section="general-quota-failover-caps"]').html()).not.toContain('usage.failover')
   })
 
+  it('shows the backend note for a CLI with no account switch in the UI language', async () => {
+    const state = failoverState()
+    state.capabilities.aider = { ...state.capabilities.aider, todo: 'no account-switch adapter' }
+    const original = i18n.global.locale.value
+    i18n.global.locale.value = 'zh-TW'
+    try {
+      await mountGeneral(state)
+      const aider = wrapper!.get('[data-failover-agent="aider"]')
+      expect(aider.text()).toContain('尚無帳號切換轉接器')
+      expect(aider.text()).not.toContain('no account-switch adapter')
+    } finally {
+      i18n.global.locale.value = original
+    }
+  })
+
   it('warns when the audit record cannot be written (automatic switching paused)', async () => {
     await mountGeneral(failoverState({ auditDegraded: 'disk full' }))
     expect(wrapper!.get('.failover-warn').text()).toBe(i18n.global.t('usage.failover-audit-degraded'))

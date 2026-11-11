@@ -13,6 +13,7 @@ import { AGENTS_EVENTS, type AgentsEventAddress, type AgentsEventPayloads, type 
 import type { PluginsParams, PluginsResults } from './plugins.js'
 import type { WebEventPayloads, WebParams, WebResults } from './web.js'
 import type { SecretsParams, SecretsResults } from './secrets.js'
+import type { AgentNotifyParams, AgentNotifyResults } from './agentNotify.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
@@ -29,6 +30,7 @@ export * from './agents.js'
 export * from './plugins.js'
 export * from './web.js'
 export * from './secrets.js'
+export * from './agentNotify.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
 export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
@@ -44,7 +46,7 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
 /** Most executables one package may declare in `permissions.shell.executables`. */
 export const MAX_SHELL_EXECUTABLES = 32
@@ -222,6 +224,9 @@ export type PluginManifestV2View = {
   detailView?: string
   targetSchema?: string
   receives?: PluginManifestV2Receiver
+  /** 0.2.40: the Host may open this view hidden to answer its agent tools
+   *  while it is not open (opt-in; a window or detail view cannot). */
+  headless?: boolean
 }
 
 export type PluginManifestV2 = {
@@ -771,7 +776,7 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
   }
   const views = contributes.views.map((raw, index) => {
     const view = assertObject(raw, `manifest contributes.views[${index}]`)
-    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives'], `manifest contributes.views[${index}]`)
+    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives', 'headless'], `manifest contributes.views[${index}]`)
     const id = stringValue(required(view, 'id', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].id`)
     if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id ${JSON.stringify(id)} is invalid; ${VIEW_ID_RULE}`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
@@ -828,6 +833,13 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (parsed.detailView !== undefined && parsed.location !== 'left') fail(`manifest contributes.views[${index}].detailView is only valid for a left view`)
     if (parsed.targetSchema !== undefined && parsed.location !== 'detail') fail(`manifest contributes.views[${index}].targetSchema is only valid for a detail view`)
     if (parsed.receives !== undefined && parsed.location !== 'window') fail(`manifest contributes.views[${index}].receives is only valid for a window view`)
+    if (view.headless !== undefined) {
+      if (typeof view.headless !== 'boolean') fail(`manifest contributes.views[${index}].headless must be a boolean`)
+      parsed.headless = view.headless
+      if (view.headless && (parsed.location === 'window' || parsed.location === 'detail')) {
+        fail(`manifest contributes.views[${index}].headless is not valid for a ${parsed.location} view`)
+      }
+    }
     return parsed
   })
   const ids = new Set<string>()
@@ -1458,9 +1470,10 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams, AgentNotifyParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
+  /** `encoding: 'base64'` (Navide 0.2.40+) writes binary: `content` is the base64 text of the bytes. */
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
   'fs.readImage': { path: string; selectionGrant?: string }
   'fs.listDirectory': { path: string; showHidden?: boolean }
@@ -1485,6 +1498,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'ui.shareCreate': { path: string; ttlSeconds?: number; requireLogin?: boolean; sendToChat?: boolean; chatId?: string }
   'ui.shareChatTargets': Record<string, never>
   'ui.openExternal': { url: string }
+  'ui.getLocale': Record<string, never>
   'aiCli.listProfiles': { terminalView?: boolean }
   'aiCli.startSession': { profileId: string; requestId?: string; cols: number; rows: number; yolo?: boolean; persistView?: boolean }
   'aiCli.resumeSession': { cols: number; rows: number; persistView?: boolean }
@@ -1501,7 +1515,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults, SecretsResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults, SecretsResults, AgentNotifyResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string
@@ -1546,6 +1560,8 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     | { ok: true; chats: Array<{ chatId: string; platform: string; name: string }> }
     | { ok: false; code: string; message: string }
   'ui.openExternal': { opened: boolean }
+  /** The interface language now in effect, a BCP 47 tag such as `en-US` (Navide 0.2.40+). */
+  'ui.getLocale': { locale: string }
   'aiCli.listProfiles': { profiles: Array<{ id: string; label: string; fullScreenTui?: boolean; bracketedPaste?: boolean; shiftEnterSequence?: string }> }
   'aiCli.startSession': { sessionId: string }
   'aiCli.resumeSession': { sessionId: string; profileId: string } | null
@@ -1574,6 +1590,8 @@ export type Result<M extends PublicMethod> = PublicMethodResults[M]
 export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads, WebEventPayloads {
   /** UI notification for a write to this receiver's own selected snapshot. */
   'ui.pluginStorageChanged': { scope: StoragePartitionScope; key: string; value: JsonValue; deleted: boolean }
+  /** The interface switched language; `locale` is what `ui.getLocale` now returns (Navide 0.2.40+). */
+  'ui.localeChanged': { locale: string }
   'workspace.filesChanged': {
     changes: Array<{ path: string; kind: 'created' | 'changed' | 'deleted' }>
   }

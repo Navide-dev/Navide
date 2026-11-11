@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "The process is still running, but the agent has finished its last turn and is waiting at the input prompt",
       "awaiting-status-tooltip": "The agent is parked on a permission prompt — nothing moves until you answer",
       "question-status-tooltip": "The agent asked you something and is waiting for the answer — nothing moves until you reply",
+      "stop-ineffective": "STOP not applied",
+      "stop-ineffective-tooltip": "The interrupt reached the CLI, but the turn kept running (Ctrl-C may only have cleared queued input). Press Interrupt again to stop it.",
       "rename-title-tooltip": "Double-click to rename this pane",
       "auto-named-tooltip": "Named automatically from this session's first instruction — rename it and it stays yours",
       "loop-tag-tooltip": "Loop is running on this pane",
@@ -1978,6 +1980,7 @@
         "web": "Web browsing",
         "agents": "Agent panes",
         "agentMessages": "Agent messages",
+        "agentNotify": "Agent notifications",
         "secrets": "Navide plugin secrets"
       },
       "shellLabel": "Shell executables",
@@ -2434,6 +2437,7 @@
           "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
           "agents": "See your agent panes, which pane opened which, and when they messaged each other — not what they said.",
           "agentMessages": "Read the full text of messages between your agents; it can contain code, file contents or secrets.",
+          "agentNotify": "Send notifications to your agent panes once you allow it; they arrive as data, never as instructions.",
           "secrets": "Keep its own API keys and tokens encrypted on this computer; Navide never uploads or shows them.",
           "shell": "Run commands on your computer.",
           "terminal": "Open and control Navide terminals."
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Accounts",
       "cliAgents": "CLI Agents",
+      "agents": "Agents",
       "cliExtensions": "Extensions",
       "roles": "Roles",
       "pipelines": "Pipelines",
@@ -2881,14 +2886,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>26 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>27 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-six tabs",
+          "h2": "The twenty-seven tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "Connect chat-app bots such as Telegram or Slack to CLI panes: bots, pairing, allowlist, account linking",
               "more": "The \"{messaging}\" topic"
+            },
+            "agents": {
+              "what": "Long-lived agents such as Hermes Agent and OpenClaw, by identity: channel, schedules, memory location, launch flags",
+              "more": "Opened from an agent pane’s “Agent settings…” too"
             },
             "mcp": {
               "what": "Adding, enabling and inspecting MCP servers",
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "Run a job you created once right now, outside its timetable; answers as soon as the run starts, clears a failure backoff, leaves the next scheduled slot where it was and counts toward the agents' 300 runs a day",
             "scheduler_runs": "A job's run history, newest first: ok, error or skipped with its reason — a skip (no window, busy, daily cap or quota, agents' daily total, an expired agent job, a vanished target) is not an error. Any job's history can be read",
             "cli_permission_settings": "Read and write the CLI permission-bypass flag (yolo). It is a global setting, not pipeline-specific, and only affects panes opened afterwards; whether a given CLI actually carries the flag is in the returned agents[].skipFlag, not the global value alone",
+            "plugins_developer_backend_call": "Developer Mode only: call a backend method of a Navide plugin loaded from a folder, without declaring an agent tool. Anything else is refused; each call is listed in its Activity and counts toward the automatic pause",
             "workspace_open": "Open a project as a workspace in Navide; whether that is a new window or one that already has the project open is Navide's decision",
             "workspace_switch": "Switch my own window to another project it already holds; panes of the project being left keep running. Refused while a pipeline is running in that window, because switching would abort it",
             "prompt_list": "The prompt skills the user keeps in Settings → Prompts; read-only, since creating and editing them is the user's job",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "This workspace's current token usage",
             "cli_list_sessions": "The CLI conversations in this workspace a new pane could be opened onto — a conversation outlives the pane that ran it: close the pane, restart the app, rebuild the pane, and the transcript stays on disk. Each row says whether it is still resumable and whether the pane that owned it is still open: do not resume a live one, which forks or corrupts it — message that pane instead",
             "cli_place_pane": "Move a pane: change the tab group it sits in, or make it a child of another pane (the same thing as dragging it in the sidebar, through the same write path, so the position survives a restart). The two halves are independent and the reply says which landed. It does not touch that pane's CLI — nothing is sent, interrupted or restarted. Local panes only",
+            "cli_rename_pane": "Rename a CLI pane: its title and the name other panes address it by, through the same checks and write path as editing the title. A name another pane holds is refused. You can rename your own pane and the panes in your workspace you opened. Scheduled jobs that still use the old name are listed as warnings, not rewritten. Local panes only",
+            "cli_set_model": "Switch the model of a running CLI pane. Claude has its own /model picker opened, the model's row chosen and s (this session only) pressed; Codex gets /model with the model id typed in. Both change only the running session: the conversation stays and the default for new sessions is left alone. Other CLIs, an effort, or a model the Claude picker cannot reach restart the pane onto the new model and resume the conversation. Only an idle pane; your own pane is refused. Local panes only",
             "cli_inbox_summary": "Which of the messages I sent are stale (queued for more than two minutes) or have failed. A failure notice can only be typed into the sending pane while it is idle, so an agent that works solidly for an hour receives none — this is how it goes and asks",
             "cli_pending_incoming": "Which messages are queued for me and have not gone in yet. A message is typed into a pane only between turns, so an agent that stays busy is precisely the one that cannot be told; a non-empty answer is grounds to wrap up the turn so it can land"
           },
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "CLI Agents",
       "hint": "Enable and reorder the CLI agents in the new-pane menu. Open a card to manage that agent. At least one must stay enabled.",
+      "acp-title": "ACP (experimental)",
+      "acp-hint": "Runs agents over the Agent Client Protocol, so Navide draws the conversation instead of the CLI's own screen. Adds “Claude Code (ACP)” to the ＋ menu, which needs the Claude Code ACP adapter (installed on first use). Experimental. The agent asks for permissions in its pane, has no Navide MCP tools yet, and an ACP pane is not restored after a restart.",
+      "acp-toggle": "Offer ACP agents in the ＋ menu",
       "drag-hint": "Drag to reorder",
       "search": "Find an agent…",
       "filter-label": "Filter CLI agents",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "Cloud agents (Grok Bot, dots and others) come as Navide plugins: install them from the Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Select role…",
     "waiting-backend": "Waiting for backend…",
     "set-workspace-first": "Set workspace path first",
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "New conversation",
     "failover-unverified": "Not verified on a real account",
     "failover-platform-unsupported": "Not on this platform",
+    "failover-no-adapter": "No account-switch adapter",
     "failover-audit-degraded": "The switch audit record could not be written; automatic switching is paused until it can. Manual switching still works.",
     "settings-signing-title": "Antigravity credentials (maintainer)",
     "settings-signing-hint": "Dev-only. Writes ~/navide-signing/usage_secrets.py so the next release build bundles Antigravity's public installed-app OAuth constants. Never stored in the repo.",
@@ -11305,7 +11322,8 @@
       "allow": "Allow",
       "allow-audit": "Allow + record",
       "ask": "Ask on this computer",
-      "deny": "Deny"
+      "deny": "Deny",
+      "exempt": "Exempted"
     },
     "source": {
       "local": "Local",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "Interpreter runs inline code",
         "stdin-script": "Interpreter reads its script from stdin",
         "unknown-script": "Runs a script Guard cannot see",
-        "dynamic-path": "File path is not static"
+        "dynamic-path": "File path is not static",
+        "credential-pipe-upload": "Pipes a file from ~/.ssh into a network tool",
+        "plugin-store-write": "Writes, deletes, moves, links or chmods the Navide plugin install root or trust stores",
+        "dynamic-stdin-script": "Shell runs a here-string computed at run time",
+        "mcp-registry-write": "An MCP tool changes or deletes a Windows registry entry",
+        "mcp-process-kill": "An MCP tool kills a process",
+        "heredoc-unparsed": "Heredoc delimiter or end cannot be determined",
+        "untokenizable-shape": "Uses shell syntax the analyser cannot model",
+        "mcp-unknown-mode": "An MCP tool is called with a mode Guard does not know"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "Allow exceptions",
         "warning": "A part of a line that starts with one of these prefixes skips every built-in check above — only add commands you fully trust. Block patterns still apply, and a download piped into a shell is never allowed. Adding one asks for confirmation.",
         "placeholder": "Exact command prefix, e.g. git push origin"
+      },
+      "exempt": {
+        "title": "Exemptions: reading a credential and uploading it",
+        "warning": "A whole line that matches one of these patterns is no longer refused for piping a file from ~/.ssh into a network tool — only add commands you fully trust. Every other check and your block patterns still apply, and each exempted line is recorded in the Guard log. Adding one asks for confirmation.",
+        "placeholder": "Command pattern or path, e.g. cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Type a pattern.",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "Used but not declared (refused by Navide)",
       "item": "{address} ({source}) in {workspace}: {count} times, last {date}",
+      "code": "Navide refuses each of these calls with CAPABILITY_DENIED until the manifest declares it.",
+      "doc": "View Documentation",
       "reasons": "Reasons: {reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "Recent activity",
       "undeclaredCount": "{count} undeclared uses refused",
       "anomalyCount": "{count} unusual items"
+    },
+    "monitor": {
+      "headless": "Hidden view running ({count})",
+      "title": "Activity monitor",
+      "intro": "Every installed Navide plugin on one table, refreshed every few seconds. Records only; nothing here changes what a Navide plugin may do. Open a row for its full activity.",
+      "empty": "No Navide plugins are installed.",
+      "open": "Show the activity of {id}",
+      "builtin": "built-in",
+      "noHosts": "None",
+      "noBackend": "No backend",
+      "hostUndeclared": "{host} (not declared)",
+      "hostRefused": "{host} (refused)",
+      "status": {
+        "running": "Running",
+        "disabled": "Disabled"
+      },
+      "column": {
+        "plugin": "Navide plugin",
+        "status": "Status",
+        "toolCalls": "Tool calls / min",
+        "capabilityCalls": "Capability calls / min",
+        "hosts": "Network hosts (7 days)",
+        "failures": "Failed in a row",
+        "resources": "Resources"
+      }
+    },
+    "autoPauses": {
+      "heading": "Automatic pauses",
+      "item": "{date} {rule} ({reason}): {value}, threshold {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "Stop",
+    "confirm": "Stop now",
+    "cancel": "Cancel",
+    "stopping": "Stopping…",
+    "note": "Stops {id} at once: calls in flight are ended, its views close and its backend stops. Its files, grants and data stay; enable it again in Settings.",
+    "failed": "{id} could not be stopped: {error}",
+    "column": "Stop",
+    "via": {
+      "settings": "the Settings Activity monitor",
+      "status-bar": "the status bar",
+      "telegram": "a chat command",
+      "mcp": "an agent (plugins_disable)",
+      "auto": "Navide's anomaly rules"
+    },
+    "summary": {
+      "heading": "Stopped {date} from {via}. At that moment:",
+      "inFlight": "Calls in flight, ended: {count}",
+      "toolCalls": "Tool calls in the last minute: {count}",
+      "capabilityCalls": "Capability calls in the last minute: {count}",
+      "failures": "Tool calls failed in a row: {count}",
+      "notRead": "not read in time",
+      "hosts": "Undeclared or refused hosts: {hosts}",
+      "noHosts": "Undeclared or refused hosts: none"
+    },
+    "enable": {
+      "heading": "Enable {id} again?",
+      "confirm": "Enable"
+    },
+    "all": {
+      "stop": "Stop all",
+      "confirm": "Stop all now",
+      "note": "Stops every running third-party Navide plugin at once and turns off third-party native backends and agent tools. Bundled Navide plugins keep running.",
+      "heading": "Every third-party Navide plugin is stopped.",
+      "banner": "Stopped {date} from {via}: {count} Navide plugins, and third-party native backends and agent tools are off.",
+      "resume": "Resume all",
+      "resumeConfirm": "Resume all now",
+      "resumeNote": "Puts the switches back as they were and enables the Navide plugins this stop disabled.",
+      "stopFailed": "Could not stop: {ids}",
+      "resumeFailed": "Could not enable again: {ids}"
+    },
+    "rule": {
+      "R1": "too many tool or capability calls",
+      "R2": "an undeclared or refused network host",
+      "R3": "failures in a row, or restarts",
+      "R4": "a resource over its threshold",
+      "R5": "too many notifications to agent panes"
+    },
+    "autoPause": {
+      "label": "Pause a Navide plugin on its own when it behaves unusually",
+      "thresholds": "R1 more than {toolCallsPerMinute} tool calls or {capabilityCallsPerMinute} capability calls a minute · R2 a view reaching an undeclared or refused host · R3 {consecutiveFailures} failed tool calls in a row, or {restartsInTenMinutes} backend restarts in 10 minutes · R4 a backend over a resource threshold · R5 more than {notificationsPerMinute} notifications a minute. A pause is a stop; enable the Navide plugin again here.",
+      "toast": "Navide paused the Navide plugin {id}: {reason}. Check it in Settings → Navide Plugins.",
+      "badge": "Paused ({rule})",
+      "because": "Paused on rule {rule}: {reason}"
+    },
+    "statusBar": {
+      "label": "Navide plugins {running}",
+      "title": "Navide plugins: stop one at once",
+      "heading": "Third-party Navide plugins",
+      "openSettings": "Open the Activity monitor",
+      "allStopped": "Navide plugins stopped",
+      "allStoppedTitle": "Every third-party Navide plugin is stopped; resume them in Settings",
+      "resumeInSettings": "Every third-party Navide plugin is stopped. Resume them with Resume all in Settings."
+    }
+  },
+  "pluginNotify": {
+    "switch": "Notify agent panes",
+    "switchNote": "Lets this Navide plugin send notifications to the agent panes of its project, at most 6 a minute. They arrive as data, never as instructions. Off by default.",
+    "paneMenu": {
+      "refuse": "Refuse Navide plugin notifications",
+      "accept": "Accept Navide plugin notifications",
+      "title": "Navide plugins that may notify agent panes cannot send to this pane while it refuses them"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "Can open and browse any website; site sign-ins are kept on this computer; agents use your sign-ins in this Navide plugin (they can send requests on websites for you) and can read every page it opens and its sign-in state; after you take over, agent scripts already running in a page stop only when you reload it; while you let agents drive a page, this Navide plugin itself can also run scripts in it and read it and its sign-in state; it can open many web pages at once, and each one uses memory.",
       "agents": "Sees your agent panes in this project, which pane opened which, message delivery records (not what was said) and the session list (no conversation content)",
       "agentMessages": "Reads the full text of messages between your agents in this project, which can contain code, file contents or secrets",
+      "agentNotify": "Can send notifications to the agent panes of this project once you turn it on in Settings; they arrive as data, never as instructions",
       "secrets": "Keeps its own API keys and tokens encrypted on this computer; Navide never uploads or shows them",
       "ui": "Shows its own views",
       "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration.",
       "noScanLocal": "Navide did not scan this file; below is only this Navide plugin's own declaration."
+    },
+    "sites": {
+      "heading": "Where the static scan saw these ({count})",
+      "kind": {
+        "command": "Command {key}",
+        "host": "Host {key}",
+        "capability": "Capability {key}"
+      },
+      "hidden": "Excerpt hidden because it looks like a secret"
     },
     "incompleteReason": {
       "timedOut": "the scan ran out of time",
@@ -12776,6 +12922,30 @@
       "confirm": "Yank {plugin} {version} from the Navide Marketplace?",
       "done": "{plugin} {version} was yanked"
     },
+    "members": {
+      "title": "Namespace members",
+      "desc": "Accounts that may publish and yank versions under this namespace. Only the owner adds or removes publishers; a publisher cannot change the members or the signing key, and signs with the namespace's key.",
+      "account": "Account",
+      "role": "Role",
+      "added-at": "Added",
+      "roles": {
+        "owner": "Owner",
+        "publisher": "Publisher"
+      },
+      "add-label": "Add a publisher (Navide Cloud account id)",
+      "add": "Add Publisher",
+      "add-hint": "The account must be an approved developer. It then signs in as a publisher in its own Navide and chooses this namespace.",
+      "add-confirm": "Let {member} publish and yank versions under {namespace}?",
+      "added": "{member} can now publish under this namespace",
+      "remove": "Remove",
+      "remove-confirm": "Remove {member} from {namespace}? Its publisher sign-ins for this namespace stop working at once.",
+      "removed": "{member} was removed from this namespace",
+      "publisher-note": "You are a publisher of this namespace: you can publish and yank its versions. Its owner manages the members.",
+      "error": {
+        "not-developer": "That account is not an approved developer yet; it has to apply first.",
+        "owner-only": "Only the namespace owner can change its members."
+      }
+    },
     "versions": {
       "title": "Your published versions",
       "refresh": "Refresh",
@@ -12788,9 +12958,22 @@
         "yanked": "Yanked"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Hand a test build to the testers you pick before the Navide Marketplace reviews it. Only invited people can see or install it; it gets the automated scan only and expires 90 days after it is published.",
+      "channel": "Publish a test build on the testplace channel (?channel=testplace):",
+      "invites": "Invites are single-use join tokens, one per tester. Revoking one removes that tester’s access.",
+      "codes": "A public test code lets as many testers as you set join with one code. Each package’s first code waits for a light review:",
+      "promote": "When testing is done, send the same build to Navide Marketplace review:",
+      "owner-only": "Invites, test codes, revoking and promoting test builds are for the namespace owner only; publisher members can publish versions but cannot manage Testplace.",
+      "owner-only-member": "You are a publisher member of this namespace, so Testplace invites, test codes, revoking and promoting are done by its owner.",
+      "joined": "Tests I Joined",
+      "doc": "Testplace Documentation"
+    },
     "error": {
       "not-signed-in": "Sign in under Developer account first.",
       "qualification": "Your developer application must be approved first.",
+      "doc": "View Documentation",
       "registry": "The Navide Marketplace refused it ({status} {code}): {message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "Daily peak, last 7 days",
     "week-tokens": "Tokens this week",
     "day-tokens": "Tokens today"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Pause schedules",
+      "resume-schedules": "Resume schedules",
+      "settings": "Agent settings…",
+      "wake": "Wake now",
+      "wake-none": "No enabled schedule to run",
+      "wake-title": "Run the next schedule now ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · closed, opens and resumes",
+      "create": "Create",
+      "name-placeholder": "Agent name",
+      "new": "New agent ({vendor})…",
+      "open": "{vendor} · open, switch to it"
+    },
+    "header": {
+      "last-done": "last done {time}",
+      "model": "model {model}",
+      "model-default": "default model",
+      "more-badges": "{n} more",
+      "never-done": "no finished turn yet",
+      "next-schedule": "next {time}",
+      "next-schedule-title": "Next schedule: {name} at {time}",
+      "turn": "this turn {minutes} min",
+      "vendor-since": "{vendor} · since {date}",
+      "vendor-today": "{vendor} · since today"
+    },
+    "menu": {
+      "channels": "Channels settings…",
+      "close-keep": "Close pane (keep identity)",
+      "memory-folder": "Open memory folder",
+      "stop-remove": "Stop and remove agent…",
+      "stop-remove-body": "The agent leaves Navide's list of agents, and its pane closes if it is open. Its conversation and memory files stay on disk, but its name, color and resume link are not kept.",
+      "stop-remove-confirm": "Stop and remove",
+      "stop-remove-title": "Stop and remove “{name}”?",
+      "toggle-panel": "Show or hide control panel",
+      "wake": "Wake for one turn now"
+    },
+    "panel": {
+      "channel-unbound": "No channel bound",
+      "channel-unbound-hint": "Bind one with the channel button in the header",
+      "channels": "Channel",
+      "collapse": "Collapse control panel",
+      "expand": "Expand control panel",
+      "memory": "Memory",
+      "memory-empty": "Not read in this version",
+      "memory-loading": "Reading…",
+      "memory-missing": "Memory folder not found",
+      "memory-none": "No memory saved yet",
+      "memory-source": "From {path}",
+      "open-folder": "Open folder",
+      "schedule-paused": "paused",
+      "schedules": "Schedules",
+      "schedules-empty": "No schedule targets this agent",
+      "status": "Status",
+      "status-source": "Source: terminal output",
+      "title": "Control panel",
+      "todos": "Todos",
+      "todos-empty": "Not read in this version"
+    },
+    "settings": {
+      "channel": "Channel",
+      "channel-closed": "Bound while its pane is open",
+      "channel-note": "Bots come from Settings → Channels. A binding belongs to the open pane.",
+      "closed": "closed",
+      "color": "Colour",
+      "command": "Launch command",
+      "empty": "No agents yet. Add one from the Agents block of the ＋ menu.",
+      "flags": "Model and flags",
+      "flags-note": "Environment variables and the permission switch are shared with the CLI Agents page. The agent keeps its own keys.",
+      "go-channels": "Open Settings → Channels",
+      "go-cli-agents": "Open Settings → CLI Agents",
+      "identity": "Identity",
+      "identity-note": "Identities are kept by Navide. Closing a pane keeps the identity, and reopening resumes its session.",
+      "intro": "Long-lived agents such as Hermes Agent and OpenClaw, listed by identity.",
+      "job-on": "on",
+      "list": "My agents",
+      "memory": "Memory location",
+      "memory-note": "The agent decides where its memory lives. Navide does not move or change it.",
+      "name": "Name (the pane name)",
+      "open-pane": "Open pane",
+      "pane-closed": "pane closed",
+      "pane-open": "pane open",
+      "rename-cancel": "Cancel",
+      "rename-channels": "Channel bindings: {n}",
+      "rename-channels-note": "A binding belongs to the pane, not its name, so it stays as it is.",
+      "rename-confirm": "Rename",
+      "rename-failed": "These schedules were not updated: {names}",
+      "rename-no-schedules": "No schedule targets this name.",
+      "rename-schedules": "Schedules that target “{old}” by name: {n}",
+      "rename-title": "Rename “{old}” to “{name}”?",
+      "rename-update": "Also point these schedules at the new name",
+      "resume": "Resume on reopen",
+      "resume-on": "Supported",
+      "schedules": "Schedules",
+      "schedules-note": "Add schedules in Tasker and point them at this agent’s pane.",
+      "session": "Last session",
+      "session-none": "None seen yet",
+      "stop-remove": "Stop and remove",
+      "switch-to": "Switch to pane",
+      "unsupported": "Not supported",
+      "yolo": "Skip dangerous-command confirmation",
+      "yolo-flag": "Supported ({flag}), follows the YOLO switch"
+    }
   }
 }

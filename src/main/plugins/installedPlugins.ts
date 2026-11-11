@@ -162,6 +162,7 @@ function manifestViewsToDescriptors(
       ...(view.detailView ? { detailView: view.detailView } : {}),
       ...(view.targetSchema ? { targetSchema: view.targetSchema } : {}),
       ...(view.receives ? { receives: view.receives } : {}),
+      ...(view.headless === true ? { headless: true as const } : {}),
       entryFile: join(pluginDir, view.entry),
     }
   })

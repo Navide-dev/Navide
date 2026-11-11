@@ -103,7 +103,9 @@ function makeHooks(): AppMenuHooks & { calls: string[] } {
     onShowShortcuts: () => calls.push('show-shortcuts'),
     onShowWhatsNew: () => calls.push('show-whats-new'),
     onShowWelcomeTour: () => calls.push('show-welcome-tour'),
-    onOpenLegal: (route) => calls.push('legal:' + route)
+    onOpenLegal: (route) => calls.push('legal:' + route),
+    onOpenDeveloperDoc: (doc) => calls.push('developer-doc:' + doc),
+    onOpenDeveloperPage: (page) => calls.push('developer-page:' + page)
   }
 }
 
@@ -274,6 +276,38 @@ describe('installApplicationMenu', () => {
     const labels = menu.map((i) => i.label ?? (i.type === 'separator' ? '—' : '?'))
     expect(labels.indexOf('Keyboard Shortcuts')).toBeLessThan(labels.indexOf('Privacy'))
     expect(labels[labels.indexOf('Privacy') - 1]).toBe('—')
+  })
+
+  it('Help menu has a Developers submenu above the legal block: four documents, then the Developer page and Testplace', () => {
+    const help = h.template.find((i) => i.role === 'help')
+    if (!help || !Array.isArray(help.submenu)) throw new Error('no Help menu with submenu')
+    const menu = help.submenu as MenuItemConstructorOptions[]
+    const labels = menu.map((i) => i.label ?? (i.type === 'separator' ? '—' : '?'))
+    expect(labels.indexOf('Developers')).toBeGreaterThan(labels.indexOf('First-Run Tour…'))
+    expect(labels.indexOf('Developers')).toBeLessThan(labels.indexOf('Privacy'))
+    const sub = itemIn(menu, 'Developers').submenu as MenuItemConstructorOptions[]
+    expect(sub.map((i) => i.label ?? '—')).toEqual([
+      'Build for Navide', 'Navide Plugin Development Guide', 'Navide Plugin API v2 Reference', 'Publishing to the Navide Marketplace',
+      '—', 'Developer Settings…', 'Testplace…',
+    ])
+    for (const item of sub) if (item.label) fire(item)
+    expect(hooks.calls).toEqual([
+      'developer-doc:build-for-navide', 'developer-doc:plugin-development', 'developer-doc:plugin-development-v2',
+      'developer-doc:marketplace-publishing', 'developer-page:developer-settings', 'developer-page:testplace',
+    ])
+  })
+
+  it('translates the Developers submenu with every item in each table', () => {
+    for (const locale of ['ja-JP', 'zh-TW'] as const) {
+      expect(Object.keys(MENU_STRINGS[locale].developers).sort()).toEqual(Object.keys(MENU_STRINGS['en-US'].developers).sort())
+    }
+    setPlatformId('linux')
+    installApplicationMenu(hooks, [], 'zh-TW')
+    const help = h.template.find((i) => i.role === 'help')
+    const menu = (help?.submenu ?? []) as MenuItemConstructorOptions[]
+    const sub = itemIn(menu, '開發者').submenu as MenuItemConstructorOptions[]
+    fire(itemIn(sub, '開發者設定…'))
+    expect(hooks.calls).toEqual(['developer-page:developer-settings'])
   })
 
   it('Window has Pipeline Manager wired to its hook', () => {

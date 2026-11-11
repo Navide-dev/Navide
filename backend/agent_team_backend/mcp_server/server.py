@@ -55,6 +55,7 @@ from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
 from agent_team_backend import pipeline_liveness
 from agent_team_backend.fs_service import FsError
+from agent_team_backend.db_executor import run_in_db_thread
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
 # workspace the same way plans do, and both must agree on what one root means.
@@ -154,7 +155,9 @@ server = NavideMCP(
         "a send refused outright returns ok: false and no msg_key at all. "
         "That table is backend memory, not a log: only the last hour and the "
         "last 500 sends, gone on restart, so an unknown key means "
-        "\"no longer tracked\", not \"never sent\".\n"
+        "\"no longer tracked\", not \"never sent\". To rename a pane "
+        "(yours, or one you opened), use cli_rename_pane — do not reopen its "
+        "session under a new name and reclaim the old pane.\n"
         "\n"
         "Other machines: when this machine is linked to a Navide-Server, the "
         "user's other machines are in reach too. cli_list_targets returns "
@@ -1605,7 +1608,7 @@ async def cli_open_agent(
         if cross_workspace:
             _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
         return refused_spawn
-    _taint_spawned(caller, str(verdict.get("pane_id") or ""))
+    await run_in_db_thread(_taint_spawned, caller, str(verdict.get("pane_id") or ""))
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
     # "delivered" by every caller that got it.
@@ -2502,7 +2505,7 @@ async def _dispatch_delivery(
         from agent_team_backend.guard.taint import safe_mark_tainted
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
-        safe_mark_tainted(entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+        await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -6385,6 +6388,12 @@ _DEDICATED_CLOSE_ACTIONS = {
     # Takes a project into a window's sidebar; only cli_open_agent's cross-
     # workspace spawn asks for it, and that path records the action (review #546).
     "ui.workspace.adopt": "cli_open_agent with workspace_path",
+    # Renaming moves a messaging address; cli_rename_pane checks the caller
+    # may rename that pane, which a raw invoke would skip.
+    "ui.pane.rename": "cli_rename_pane",
+    # Typing /model or rebuilding a pane; cli_set_model checks the pane is
+    # idle and records the switch, which a raw invoke would skip.
+    "ui.pane.setModel": "cli_set_model",
 }
 
 
@@ -6426,6 +6435,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # Restores a placeholder around a spawned (often resumed) CLI: the same
     # startup wait as ui.pane.create, plus a session probe before it.
     "ui.pane.open",
+    # cli_set_model's restart fallback resumes the pane around a new CLI.
+    "ui.pane.setModel",
     "ui.pipeline.start",
     "ui.pipeline.next",
     "ui.pipeline.resume",
@@ -10890,8 +10901,8 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "secrets", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "system.secrets", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "secrets", "agentNotify", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "system.secrets", "system.agentNotify", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
@@ -11121,7 +11132,7 @@ async def marketplace_search(
         "nextCursor": next_cursor if isinstance(next_cursor, str) and _MQ_CURSOR.fullmatch(next_cursor) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_search")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_search")
     return out
 
 
@@ -11160,7 +11171,7 @@ async def marketplace_detail(ctx: Context, id: str, version: str | None = None) 
         "card": _fence_untrusted(card, label, fenced) if isinstance(card, dict) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_detail")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_detail")
     return out
 
 
@@ -11195,7 +11206,7 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
         ],
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "plugins_list_installed")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "plugins_list_installed")
     return out
 
 
@@ -11823,6 +11834,56 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     false, error, error_code}; `changed` is false when it was already enabled.
     """
     return await _plugin_agent_action(ctx, "enable", namespace, name)
+
+
+@server.tool()
+async def plugins_disable_all(ctx: Context) -> dict[str, Any]:
+    """Stop every running third-party Navide plugin at once (an emergency stop).
+
+    Navide first turns off third-party native backends and the third-party
+    agent-tool switches (agents and external MCP clients), then disables each
+    running third-party plugin as plugins_disable does: calls in flight end,
+    its views, events and backend stop; its files, grants and data stay. The
+    user is told which agent did it for each plugin, and the status bar shows
+    that every third-party plugin is stopped. The bundled Navide plugins are
+    not touched.
+
+    This can only stop. Turning the switches back on ("Resume all") is the
+    user's alone, in Navide's Settings; plugins_enable can enable again only a
+    plugin an agent stopped, and none the user stopped.
+
+    Returns {ok: true, stopped: [plugin ids], failed: [plugin ids]} or {ok:
+    false, error, error_code} (HOST_UNAVAILABLE, ACTION_FAILED).
+    """
+    from agent_team_backend.plugins import plugin_stop
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    requester = _approval_requester(caller)
+    answer = await plugin_stop.ask_host("stop-all", requester=requester)
+    if answer is None:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="HOST_UNAVAILABLE")
+        return _marketplace_error("HOST_UNAVAILABLE", "Navide Host did not answer the stop request")
+    if answer.get("ok") is not True:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+        return _marketplace_error("ACTION_FAILED", "Navide could not stop the third-party plugins")
+    def ids(key: str) -> list[str]:
+        """The Host's ids with the package-id grammar; anything else is dropped."""
+        values = answer.get(key)
+        return [value for value in values if isinstance(value, str) and "." in value
+                and _package_id(*value.split(".", 1)) == value] if isinstance(values, list) else []
+
+    stopped, failed = ids("stopped"), ids("failed")
+    for plugin_id in stopped:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="allowed")
+    for plugin_id in failed:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+    return {"ok": True, "stopped": stopped, "failed": failed}
 
 
 # ── Quota failover state (read-only) ────────────────────────────────────────
@@ -12581,3 +12642,9 @@ from . import window_tools as _window_tools  # noqa: E402,F401
 from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
 # Plan mcp-bot_507912: chat-channel tools (channels_*).
 from . import channel_tools as _channel_tools  # noqa: E402,F401
+# Registered last so the tools/list order before it stays main's (0.2.40).
+from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401
+# Registered after it (0.2.40): the Developer Mode backend call.
+from . import developer_backend_tool as _developer_backend_tool  # noqa: E402,F401
+# Registered after it (0.2.40): switching a running pane's model.
+from . import pane_model_tool as _pane_model_tool  # noqa: E402,F401

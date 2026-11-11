@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -44,6 +44,18 @@ describe('prepareBackendTmpDir', () => {
     const dir = join(scratch(), 'nested', 'backend-tmp')
     expect(prepareBackendTmpDir(dir)).toBe(dir)
     expect(existsSync(dir)).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('makes the directory owner-only, an existing one included', () => {
+    const fresh = join(scratch(), 'nested', 'backend-tmp')
+    expect(prepareBackendTmpDir(fresh)).toBe(fresh)
+    expect(statSync(fresh).mode & 0o777).toBe(0o700)
+
+    const existing = join(scratch(), 'backend-tmp')
+    mkdirSync(existing, { mode: 0o755 })
+    chmodSync(existing, 0o755)
+    expect(prepareBackendTmpDir(existing, false)).toBe(existing)
+    expect(statSync(existing).mode & 0o777).toBe(0o700)
   })
 
   it('removes extraction directories a crashed backend left behind and nothing else', () => {

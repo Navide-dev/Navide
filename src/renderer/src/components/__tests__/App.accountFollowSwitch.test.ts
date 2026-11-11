@@ -219,10 +219,12 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // pane_id, moveAgentPaneAccount: a fixed pane or a following one): the
     // move is the point
     // and a pane with no transcript has nothing to lose. The API key takeover
-    // (reopenOnKey) moves one pane at a time for the same reason. The follow
+    // (reopenOnKey) moves one pane at a time for the same reason. So does
+    // cli_set_model's restart fallback (ui.pane.setModel): it rebuilds one
+    // pane, never a batch. The follow
     // batch and every other rebuild keep the plain resume preflight.
     const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
-    expect(optIns).toBe(7)
+    expect(optIns).toBe(8)
     expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
     expect(functionBody('moveAgentPaneAccount').split('freshWhenNoTranscript: true').length - 1).toBe(2)
     expect(appSource).toContain(

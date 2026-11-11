@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "O processo continua em execução, mas o agent terminou o último turno e está esperando no prompt de entrada",
       "awaiting-status-tooltip": "O agent está parado em uma solicitação de permissão: nada avança até você responder",
       "question-status-tooltip": "O agent fez uma pergunta e está esperando a resposta: nada avança até você responder",
+      "stop-ineffective": "STOP sem efeito",
+      "stop-ineffective-tooltip": "A interrupção chegou à CLI, mas o turno continuou rodando (o Ctrl-C pode ter apenas limpado a entrada na fila). Pressione Interrupt de novo para pará-lo.",
       "rename-title-tooltip": "Clique duas vezes para renomear este pane",
       "auto-named-tooltip": "Nomeado automaticamente a partir da primeira instrução desta session; se você o renomear, o nome fica sendo seu",
       "loop-tag-tooltip": "Há um loop em execução neste pane",
@@ -1978,6 +1980,7 @@
         "web": "Navegação na web",
         "agents": "Panes de agentes",
         "agentMessages": "Mensagens entre agentes",
+        "agentNotify": "Notificações a agentes",
         "secrets": "Segredos do plug-in do Navide"
       },
       "shellLabel": "Executáveis de shell",
@@ -2434,6 +2437,7 @@
           "web": "Pode abrir e navegar por qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (eles podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent que já estão em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
           "agents": "Vê seus panes de agent, qual pane abriu qual e quando trocaram mensagens, mas não o que disseram.",
           "agentMessages": "Lê o texto completo das mensagens entre seus agents; ele pode conter código, conteúdo de arquivos ou segredos.",
+          "agentNotify": "Envia notificações aos seus painéis de agente quando você permitir; chegam como dados, nunca como instruções.",
           "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra.",
           "shell": "Executar comandos no seu computador.",
           "terminal": "Abrir e controlar terminais do Navide."
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Contas",
       "cliAgents": "Agents de CLI",
+      "agents": "Agentes",
       "cliExtensions": "Extensões",
       "roles": "Papéis",
       "pipelines": "Pipelines",
@@ -2881,14 +2886,14 @@
         "intro": "O que cada uma das dezenove guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as partes do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visualizações de uso e a manutenção de recursos.",
         "s1": {
           "title": "Visão geral das configurações",
-          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>26 guias</strong> no total.",
+          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>27 guias</strong> no total.",
           "h1": "O campo de pesquisa",
           "p2": "Abaixo do título da barra lateral há um campo de pesquisa com o texto de exemplo <code>Pesquisar configurações…</code>. Ele procura nos títulos das configurações, na seção e nas palavras-chave <strong>em todas as guias</strong> (no idioma atual da interface e com as palavras-chave indexadas) e mostra no máximo 8 resultados; clicar em um deles abre a guia correspondente e rola até a seção (com uma exceção: “Armazenamento” fecha as configurações e abre diretamente o Resource Manager). Sem resultados, aparece <code>Nenhuma configuração correspondente</code>. <kbd class=\"syh-kbd\">Esc</kbd> limpa o campo.",
           "callout": {
             "title": "O índice de pesquisa não é completo",
             "text": "O índice é uma lista mantida à mão, e <strong>as guias {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
           },
-          "h2": "As vinte e seis guias",
+          "h2": "As vinte e sete guias",
           "tabTable": {
             "group": "Grupo",
             "tab": "Guia",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "Conecte bots de aplicativos de chat, como Telegram ou Slack, a panes de CLI: bots, pareamento, lista de permissões, vinculação de contas",
               "more": "O tópico “{messaging}”"
+            },
+            "agents": {
+              "what": "Agentes de longa duração como Hermes Agent e OpenClaw, por identidade: canal, agendamentos, memória, opções de início",
+              "more": "Também abre pelo “Configurações do agente…” de um pane de agente"
             },
             "mcp": {
               "what": "Adicionar, ativar e inspecionar servidores MCP",
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "Executar agora, uma vez, fora do horário, um trabalho que você criou; responde assim que a execução começa, limpa a espera por falha, deixa o próximo horário agendado onde estava e conta para as 300 execuções diárias dos agents",
             "scheduler_runs": "O histórico de execuções de um trabalho, do mais recente para o mais antigo: ok, error ou skipped com o motivo — um pulo (sem janela, ocupado, limite diário ou cota, total diário dos agents, trabalho de agent expirado, destino desaparecido) não é um erro. O histórico de qualquer trabalho pode ser lido",
             "cli_permission_settings": "Ler e escrever a flag de ignorar permissões das CLIs (yolo). É uma configuração global, não específica do pipeline, e só afeta panes abertos depois; se uma CLI realmente leva a flag está em agents[].skipFlag na resposta, não apenas no valor global",
+            "plugins_developer_backend_call": "Somente no modo de desenvolvedor: chama um método do backend de um plugin do Navide carregado de uma pasta, sem declarar uma ferramenta de agente. Todo o resto é recusado; cada chamada aparece na atividade dele e conta para a pausa automática",
             "workspace_open": "Abrir um projeto como workspace no Navide; se isso acontece em uma nova janela ou em uma que já tem o projeto aberto é decisão do Navide",
             "workspace_switch": "Trocar a minha janela para outro projeto que ela já contém; os panes do projeto deixado continuam em execução. Recusado enquanto um pipeline está em execução nessa janela, porque a troca o cancelaria",
             "prompt_list": "As skills de prompt que a pessoa usuária mantém em Configurações → Prompts; somente leitura, porque criá-las e editá-las é tarefa dela",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "O uso atual de tokens deste workspace",
             "cli_list_sessions": "As conversas de CLI deste workspace sobre as quais um novo pane poderia ser aberto — uma conversa sobrevive ao pane que a executou: feche o pane, reinicie o app, reconstrua o pane, e a transcrição continua no disco. Cada linha diz se ainda pode ser retomada e se o pane que a tinha ainda está aberto: não retome uma ativa, isso a bifurca ou corrompe — envie uma mensagem para esse pane",
             "cli_place_pane": "Mover um pane: trocar o grupo de guias em que ele está ou torná-lo filho de outro pane (o mesmo que arrastá-lo na barra lateral, pelo mesmo caminho de gravação, então a posição sobrevive a uma reinicialização). As duas metades são independentes e a resposta diz qual foi aplicada. Não mexe na CLI desse pane — nada é enviado, interrompido ou reiniciado. Só panes locais",
+            "cli_rename_pane": "Renomear um pane de CLI: o título e o nome pelo qual outros panes o endereçam, com as mesmas verificações e o mesmo caminho de gravação de editar o título. Um nome que outro pane já usa é recusado. Você pode renomear o seu próprio pane e os panes do seu espaço de trabalho que você abriu. Tarefas agendadas que ainda usam o nome antigo aparecem como avisos, sem ser reescritas. Só panes locais",
+            "cli_set_model": "Trocar o modelo de um pane de CLI em execução. No Claude, o próprio seletor /model é aberto, a linha do modelo é escolhida e s (só esta sessão) é pressionado; no Codex é digitado /model com o ID do modelo. Os dois mudam só a sessão em andamento: a conversa continua e o modelo padrão para novas sessões não muda. As outras CLIs, um effort informado ou um modelo que o seletor do Claude não alcança reiniciam o pane com o novo modelo e retomam a conversa. Só panes ociosos; o seu próprio pane é recusado. Só panes locais",
             "cli_inbox_summary": "Quais das mensagens que enviei estão paradas (mais de dois minutos na fila) ou falharam. Um aviso de falha só pode ser digitado no pane que enviou enquanto ele está ocioso, então um agent que trabalha sem parar por uma hora não recebe nenhum — é assim que ele vai e pergunta",
             "cli_pending_incoming": "Quais mensagens estão na fila para mim e ainda não entraram. Uma mensagem só é digitada em um pane entre turnos, então um agent que continua ocupado é justamente o que não pode ser avisado; uma resposta não vazia é motivo para encerrar o turno para que ela possa entrar"
           },
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "Agents de CLI",
       "hint": "Ative e reordene os agents de CLI no menu de novos panes. Abra um cartão para gerenciar esse agent. Pelo menos um precisa continuar ativado.",
+      "acp-title": "ACP (experimental)",
+      "acp-hint": "Executa agentes pelo Agent Client Protocol, para que o Navide desenhe a conversa em vez da tela própria da CLI. Adiciona “Claude Code (ACP)” ao menu ＋, que precisa do adaptador Claude Code ACP (instalado no primeiro uso). Experimental. O agente pede permissões no próprio pane, ainda não tem as ferramentas MCP do Navide e um pane ACP não é restaurado após reiniciar.",
+      "acp-toggle": "Oferecer agentes ACP no menu ＋",
       "drag-hint": "Arraste para reordenar",
       "search": "Encontrar um agent…",
       "filter-label": "Filtrar agents de CLI",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "Agentes na nuvem (Grok Bot, dots e outros) são instalados como plug-in do Navide pelo Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "Selecionar papel…",
     "waiting-backend": "Aguardando o back-end…",
     "set-workspace-first": "Defina primeiro o caminho do workspace",
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "Nova conversa",
     "failover-unverified": "Não verificado em uma conta real",
     "failover-platform-unsupported": "Não disponível nesta plataforma",
+    "failover-no-adapter": "Sem adaptador para troca de conta",
     "failover-audit-degraded": "Não foi possível gravar o registro de auditoria da troca; a troca automática fica pausada até que isso seja possível. A troca manual continua funcionando.",
     "settings-signing-title": "Credenciais do Antigravity (mantenedor)",
     "settings-signing-hint": "Somente para desenvolvimento. Grava ~/navide-signing/usage_secrets.py para que o próximo build de versão inclua as constantes OAuth públicas de app instalado do Antigravity. Nunca armazenado no repositório.",
@@ -11305,7 +11322,8 @@
       "allow": "Permitir",
       "allow-audit": "Permitir e registrar",
       "ask": "Perguntar neste computador",
-      "deny": "Negar"
+      "deny": "Negar",
+      "exempt": "Isento"
     },
     "source": {
       "local": "Local",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "O interpretador executa código inline",
         "stdin-script": "O interpretador lê o script da entrada padrão",
         "unknown-script": "Executa um script que o Guard não consegue ver",
-        "dynamic-path": "O caminho do arquivo não é estático"
+        "dynamic-path": "O caminho do arquivo não é estático",
+        "credential-pipe-upload": "Envia um arquivo de ~/.ssh a uma ferramenta de rede via pipe",
+        "plugin-store-write": "Grava, exclui, move, vincula ou altera com chmod a pasta de instalação de plugins do Navide ou seus repositórios de confiança",
+        "dynamic-stdin-script": "O shell executa uma here-string calculada em tempo de execução",
+        "mcp-registry-write": "Uma ferramenta MCP altera ou exclui uma entrada do registro do Windows",
+        "mcp-process-kill": "Uma ferramenta MCP encerra um processo",
+        "heredoc-unparsed": "Não é possível determinar o delimitador ou o fim do heredoc",
+        "untokenizable-shape": "Usa sintaxe de shell que o analisador não consegue modelar",
+        "mcp-unknown-mode": "Uma ferramenta MCP é chamada com um modo que o Guard não conhece"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "Exceções permitidas",
         "warning": "Uma parte de linha que começa com um destes prefixos ignora todas as verificações integradas acima – adicione apenas comandos em que você confia plenamente. Os padrões de bloqueio continuam valendo, e um download enviado direto para um shell nunca é permitido. Adicionar um pede confirmação.",
         "placeholder": "Prefixo exato do comando, ex.: git push origin"
+      },
+      "exempt": {
+        "title": "Isenções: ler uma credencial e enviá-la",
+        "warning": "Uma linha inteira que corresponda a um destes padrões deixa de ser recusada por enviar um arquivo de ~/.ssh a uma ferramenta de rede via pipe; adicione apenas comandos em que você confia totalmente. As demais verificações e seus padrões de bloqueio continuam valendo, e cada linha isenta fica registrada no log do Guard. Adicionar uma pede confirmação.",
+        "placeholder": "Padrão de comando ou caminho, ex.: cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "Digite um padrão.",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "Usado, mas não declarado (recusado pelo Navide)",
       "item": "{address} ({source}) em {workspace}: {count} vezes, última em {date}",
+      "code": "O Navide recusa essas chamadas com CAPABILITY_DENIED até que o manifesto as declare.",
+      "doc": "Ver documentação",
       "reasons": "Motivos: {reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "Atividade recente",
       "undeclaredCount": "{count} usos não declarados recusados",
       "anomalyCount": "{count} itens incomuns"
+    },
+    "monitor": {
+      "headless": "Visualização oculta em segundo plano ({count})",
+      "title": "Visão geral da Activity",
+      "intro": "Todos os plugins do Navide instalados em uma única tabela, atualizada a cada poucos segundos. Apenas registros; nada aqui muda o que um plugin do Navide pode fazer. Abra uma linha para ver toda a Activity.",
+      "empty": "Nenhum plugin do Navide está instalado.",
+      "open": "Mostrar a Activity de {id}",
+      "builtin": "integrado",
+      "noHosts": "Nenhum",
+      "noBackend": "Sem backend",
+      "hostUndeclared": "{host} (não declarado)",
+      "hostRefused": "{host} (recusado)",
+      "status": {
+        "running": "Em execução",
+        "disabled": "Desativado"
+      },
+      "column": {
+        "plugin": "Plugin do Navide",
+        "status": "Situação",
+        "toolCalls": "Chamadas de ferramentas / min",
+        "capabilityCalls": "Chamadas de capacidades / min",
+        "hosts": "Hosts de rede (7 dias)",
+        "failures": "Falhas seguidas",
+        "resources": "Recursos"
+      }
+    },
+    "autoPauses": {
+      "heading": "Pausas automáticas",
+      "item": "{date} {rule} ({reason}): {value}, limite {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "Parar",
+    "confirm": "Parar agora",
+    "cancel": "Cancelar",
+    "stopping": "Parando…",
+    "note": "Para {id} na hora: as chamadas em andamento terminam, suas visualizações fecham e seu backend para. Seus arquivos, permissões e dados ficam; ative-o de novo nas Configurações.",
+    "failed": "Não foi possível parar {id}: {error}",
+    "column": "Parar",
+    "via": {
+      "settings": "a visão geral da Activity nas Configurações",
+      "status-bar": "a barra de status",
+      "telegram": "um comando do chat",
+      "mcp": "um agente (plugins_disable)",
+      "auto": "as regras de anomalia do Navide"
+    },
+    "summary": {
+      "heading": "Parado em {date} por {via}. Naquele momento:",
+      "inFlight": "Chamadas em andamento, encerradas: {count}",
+      "toolCalls": "Chamadas de ferramentas no último minuto: {count}",
+      "capabilityCalls": "Chamadas de capacidades no último minuto: {count}",
+      "failures": "Chamadas de ferramentas com falha seguidas: {count}",
+      "notRead": "não lido a tempo",
+      "hosts": "Hosts não declarados ou recusados: {hosts}",
+      "noHosts": "Hosts não declarados ou recusados: nenhum"
+    },
+    "enable": {
+      "heading": "Ativar {id} de novo?",
+      "confirm": "Ativar"
+    },
+    "all": {
+      "stop": "Parar tudo",
+      "confirm": "Parar tudo agora",
+      "note": "Para na hora todos os plugins do Navide de terceiros em execução e desliga os backends nativos e as ferramentas de agente de terceiros. Os plugins do Navide integrados continuam rodando.",
+      "heading": "Todos os plugins do Navide de terceiros estão parados.",
+      "banner": "Parados em {date} por {via}: {count} plugins do Navide; os backends nativos e as ferramentas de agente de terceiros estão desligados.",
+      "resume": "Retomar tudo",
+      "resumeConfirm": "Retomar tudo agora",
+      "resumeNote": "Volta os interruptores ao que eram e ativa de novo os plugins do Navide que esta parada desativou.",
+      "stopFailed": "Não foi possível parar: {ids}",
+      "resumeFailed": "Não foi possível ativar de novo: {ids}"
+    },
+    "rule": {
+      "R1": "chamadas demais a ferramentas ou capacidades",
+      "R2": "um host de rede não declarado ou recusado",
+      "R3": "falhas seguidas ou reinícios",
+      "R4": "um recurso acima do limite",
+      "R5": "notificações demais aos painéis de agente"
+    },
+    "autoPause": {
+      "label": "Pausar por conta própria um plugin do Navide que se comporte de forma incomum",
+      "thresholds": "R1 mais de {toolCallsPerMinute} chamadas a ferramentas ou {capabilityCallsPerMinute} a capacidades por minuto · R2 uma visualização alcança um host não declarado ou recusado · R3 {consecutiveFailures} chamadas a ferramentas com falha seguidas, ou {restartsInTenMinutes} reinícios do backend em 10 minutos · R4 um backend acima de um limite de recursos · R5 mais de {notificationsPerMinute} notificações por minuto. Uma pausa é uma parada; ative o plugin do Navide de novo aqui.",
+      "toast": "O Navide pausou o plugin do Navide {id}: {reason}. Veja em Configurações → Plugins do Navide.",
+      "badge": "Pausado ({rule})",
+      "because": "Pausado pela regra {rule}: {reason}"
+    },
+    "statusBar": {
+      "label": "Plugins do Navide {running}",
+      "title": "Plugins do Navide: parar um na hora",
+      "heading": "Plugins do Navide de terceiros",
+      "openSettings": "Abrir a visão geral da Activity",
+      "allStopped": "Plugins do Navide parados",
+      "allStoppedTitle": "Todos os plugins do Navide de terceiros estão parados; retome-os nas Configurações",
+      "resumeInSettings": "Todos os plugins do Navide de terceiros estão parados. Retome-os com \"Retomar tudo\" nas Configurações."
+    }
+  },
+  "pluginNotify": {
+    "switch": "Notificar os painéis de agente",
+    "switchNote": "Permite que este plugin do Navide envie notificações aos painéis de agente do projeto, no máximo 6 por minuto. Chegam como dados, nunca como instruções. Desativado por padrão.",
+    "paneMenu": {
+      "refuse": "Recusar notificações de plugins do Navide",
+      "accept": "Aceitar notificações de plugins do Navide",
+      "title": "Enquanto recusar, os plugins do Navide que podem notificar os painéis de agente não podem enviar a este painel"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "Pode abrir e navegar em qualquer site; os logins nos sites ficam guardados neste computador; os agents usam seus logins neste plug-in do Navide (podem enviar solicitações a sites em seu nome) e podem ler todas as páginas que ele abre e o estado de login delas; depois que você assume o controle, os scripts de agent já em execução em uma página só param quando você a recarrega; enquanto você deixa os agents controlarem uma página, este plug-in do Navide também pode executar scripts nela e lê-la junto com o estado de login; ele pode abrir muitas páginas ao mesmo tempo, e cada uma usa memória.",
       "agents": "Vê os panes de agent deste projeto, qual pane abriu qual, os registros de entrega das mensagens (sem o conteúdo) e a lista de sessions (sem o conteúdo das conversas)",
       "agentMessages": "Lê o texto completo das mensagens entre seus agents neste projeto, que pode conter código, conteúdo de arquivos ou segredos",
+      "agentNotify": "Pode enviar notificações aos painéis de agente deste projeto quando você ativar nas Configurações; chegam como dados, nunca como instruções",
       "secrets": "Guarda as próprias chaves de API e tokens criptografados neste computador; o Navide nunca os envia nem os mostra",
       "ui": "Mostra visualizações próprias",
       "agentTools": "Oferece ferramentas que os agents podem chamar ({read} somente leitura, {write} de escrita)",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "Esta versão foi publicada antes das verificações do sistema; o que está abaixo é apenas a declaração do próprio plug-in do Navide.",
       "noScanLocal": "O Navide não verificou este arquivo; o que está abaixo é apenas a declaração do próprio plug-in do Navide."
+    },
+    "sites": {
+      "heading": "Onde a verificação estática encontrou isto ({count})",
+      "kind": {
+        "command": "Comando {key}",
+        "host": "Servidor {key}",
+        "capability": "Capacidade {key}"
+      },
+      "hidden": "Trecho oculto porque parece um segredo"
     },
     "incompleteReason": {
       "timedOut": "o tempo da verificação se esgotou",
@@ -12776,6 +12922,30 @@
       "confirm": "Retirar {plugin} {version} do Navide Marketplace?",
       "done": "{plugin} {version} foi retirado"
     },
+    "members": {
+      "title": "Membros do namespace",
+      "desc": "Contas que podem publicar e retirar versões neste namespace. Só o proprietário adiciona ou remove publicadores; um publicador não pode alterar os membros nem a chave de assinatura, e assina com a chave do namespace.",
+      "account": "Conta",
+      "role": "Função",
+      "added-at": "Adicionado em",
+      "roles": {
+        "owner": "Proprietário",
+        "publisher": "Publicador"
+      },
+      "add-label": "Adicionar um publicador (ID da conta Navide Cloud)",
+      "add": "Adicionar publicador",
+      "add-hint": "A conta precisa ser de um desenvolvedor aprovado. Depois ela entra como publicador no próprio Navide e escolhe este namespace.",
+      "add-confirm": "Permitir que {member} publique e retire versões em {namespace}?",
+      "added": "{member} agora pode publicar neste namespace",
+      "remove": "Remover",
+      "remove-confirm": "Remover {member} de {namespace}? Os logins de publicador dessa conta para este namespace param de funcionar na hora.",
+      "removed": "{member} foi removido deste namespace",
+      "publisher-note": "Você é publicador deste namespace: pode publicar e retirar as versões dele. O proprietário gerencia os membros.",
+      "error": {
+        "not-developer": "Essa conta ainda não é de um desenvolvedor aprovado; ela precisa se candidatar primeiro.",
+        "owner-only": "Só o proprietário do namespace pode alterar os membros."
+      }
+    },
     "versions": {
       "title": "Suas versões publicadas",
       "refresh": "Atualizar",
@@ -12788,9 +12958,22 @@
         "yanked": "Retirada"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Entregue um build de teste aos testadores que você escolher antes da revisão do Navide Marketplace. Só as pessoas convidadas podem vê-lo e instalá-lo; ele passa só pela verificação automática e expira 90 dias após a publicação.",
+      "channel": "Publique um build de teste no canal testplace (?channel=testplace):",
+      "invites": "Convites são tokens de entrada de uso único, um por testador. Revogar um remove o acesso desse testador.",
+      "codes": "Um código de teste público deixa entrar com um só código quantos testadores você definir. O primeiro código de cada pacote aguarda uma revisão rápida:",
+      "promote": "Quando os testes terminarem, envie o mesmo build para a revisão do Navide Marketplace:",
+      "owner-only": "Convites, códigos de teste e revogar ou promover builds de teste são só para o proprietário do namespace; membros publicadores podem publicar versões, mas não gerenciar o Testplace.",
+      "owner-only-member": "Você é membro publicador deste namespace, então o proprietário cuida dos convites, códigos de teste, revogação e promoção no Testplace.",
+      "joined": "Testes de que participo",
+      "doc": "Documentação do Testplace"
+    },
     "error": {
       "not-signed-in": "Entre primeiro em Conta de desenvolvedor.",
       "qualification": "Sua candidatura de desenvolvedor precisa ser aprovada primeiro.",
+      "doc": "Ver documentação",
       "registry": "O Navide Marketplace recusou ({status} {code}): {message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "Pico diário, últimos 7 dias",
     "week-tokens": "Tokens nesta semana",
     "day-tokens": "Tokens hoje"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "Pausar agendamentos",
+      "resume-schedules": "Retomar agendamentos",
+      "settings": "Configurações do agente…",
+      "wake": "Acordar agora",
+      "wake-none": "Nenhum agendamento ativo para executar",
+      "wake-title": "Executar agora o próximo agendamento ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · fechado, abrir e retomar",
+      "create": "Criar",
+      "name-placeholder": "Nome do agente",
+      "new": "Novo agente ({vendor})…",
+      "open": "{vendor} · aberto, ir para ele"
+    },
+    "header": {
+      "last-done": "último concluído {time}",
+      "model": "modelo {model}",
+      "model-default": "modelo padrão",
+      "more-badges": "mais {n}",
+      "never-done": "nenhum turno concluído ainda",
+      "next-schedule": "próximo {time}",
+      "next-schedule-title": "Próximo agendamento: {name} às {time}",
+      "turn": "este turno {minutes} min",
+      "vendor-since": "{vendor} · desde {date}",
+      "vendor-today": "{vendor} · desde hoje"
+    },
+    "menu": {
+      "channels": "Configurações de canais…",
+      "close-keep": "Fechar pane (manter identidade)",
+      "memory-folder": "Abrir pasta de memória",
+      "stop-remove": "Parar e remover agente…",
+      "stop-remove-body": "O agente sai da lista de agentes do Navide e o pane dele é fechado se estiver aberto. A conversa e os arquivos de memória continuam no disco, mas o nome, a cor e o link para retomar a sessão não são mantidos.",
+      "stop-remove-confirm": "Parar e remover",
+      "stop-remove-title": "Parar e remover “{name}”?",
+      "toggle-panel": "Mostrar ou ocultar painel de controle",
+      "wake": "Acordar por um turno agora"
+    },
+    "panel": {
+      "channel-unbound": "Nenhum canal vinculado",
+      "channel-unbound-hint": "Vincule pelo botão de canal no cabeçalho",
+      "channels": "Canal",
+      "collapse": "Recolher painel de controle",
+      "expand": "Expandir painel de controle",
+      "memory": "Memória",
+      "memory-empty": "Não lida nesta versão",
+      "memory-loading": "Lendo…",
+      "memory-missing": "Pasta de memória não encontrada",
+      "memory-none": "Nenhuma memória salva ainda",
+      "memory-source": "De {path}",
+      "open-folder": "Abrir pasta",
+      "schedule-paused": "pausado",
+      "schedules": "Agendamentos",
+      "schedules-empty": "Nenhum agendamento aponta para este agente",
+      "status": "Estado",
+      "status-source": "Fonte: saída do terminal",
+      "title": "Painel de controle",
+      "todos": "Tarefas",
+      "todos-empty": "Não lidas nesta versão"
+    },
+    "settings": {
+      "channel": "Canal",
+      "channel-closed": "Vinculado só enquanto o pane está aberto",
+      "channel-note": "Os bots vêm de Configurações → Canais. Um vínculo pertence ao pane aberto.",
+      "closed": "fechado",
+      "color": "Cor",
+      "command": "Comando de início",
+      "empty": "Ainda não há agentes. Adicione um no bloco de agentes do menu ＋.",
+      "flags": "Modelo e opções",
+      "flags-note": "Variáveis de ambiente e a chave de permissões são compartilhadas com a página Agents de CLI. O agente guarda as próprias chaves.",
+      "go-channels": "Abrir Configurações → Canais",
+      "go-cli-agents": "Abrir Configurações → Agents de CLI",
+      "identity": "Identidade",
+      "identity-note": "O Navide guarda as identidades. Fechar um pane mantém a identidade, e reabrir retoma a sessão.",
+      "intro": "Agentes de longa duração como Hermes Agent e OpenClaw, por identidade.",
+      "job-on": "ligado",
+      "list": "Meus agentes",
+      "memory": "Local da memória",
+      "memory-note": "O agente decide onde fica a memória. O Navide não move nem altera.",
+      "name": "Nome (o do pane)",
+      "open-pane": "Abrir pane",
+      "pane-closed": "pane fechado",
+      "pane-open": "pane aberto",
+      "rename-cancel": "Cancelar",
+      "rename-channels": "Vínculos de canal: {n}",
+      "rename-channels-note": "Um vínculo pertence ao pane, não ao nome dele, então continua como está.",
+      "rename-confirm": "Renomear",
+      "rename-failed": "Estes agendamentos não foram atualizados: {names}",
+      "rename-no-schedules": "Nenhum agendamento aponta para este nome.",
+      "rename-schedules": "Agendamentos que apontam para “{old}” pelo nome: {n}",
+      "rename-title": "Renomear “{old}” para “{name}”?",
+      "rename-update": "Fazer esses agendamentos apontarem também para o novo nome",
+      "resume": "Retomar ao reabrir",
+      "resume-on": "Compatível",
+      "schedules": "Agendamentos",
+      "schedules-note": "Adicione agendamentos no Tasker e aponte para o pane deste agente.",
+      "session": "Última sessão",
+      "session-none": "Nenhuma ainda",
+      "stop-remove": "Parar e remover",
+      "switch-to": "Ir para o pane",
+      "unsupported": "Não compatível",
+      "yolo": "Pular confirmação de comandos perigosos",
+      "yolo-flag": "Compatível ({flag}), segue a chave YOLO"
+    }
   }
 }

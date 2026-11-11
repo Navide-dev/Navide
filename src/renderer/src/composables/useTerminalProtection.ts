@@ -7,7 +7,7 @@ import type { useBackend } from './useBackend'
  * wrappers around the renderer-only `guard.terminal.*` WS requests.
  *
  * A change that LOOSENS protection — switching a category off, adding an allow
- * prefix, removing a block pattern — carries a one-time confirmation minted by
+ * prefix, removing a block pattern, adding an exemption — carries a one-time confirmation minted by
  * the main process (window.agentTeam.trustConfirm), bound to exactly that
  * change. The backend refuses it without one, which is what keeps MCP and the
  * plugin broker (same socket, no main process) from loosening anything.
@@ -28,6 +28,14 @@ export interface TerminalPattern {
   pattern: string
 }
 
+/** Lifts one exemptable pipeline rule (credential-pipe-upload) for a whole
+ *  line matching `pattern`; a block pattern still outranks it. */
+export interface TerminalExemption {
+  id: number
+  rule: string
+  pattern: string
+}
+
 export interface TerminalRefusal {
   rule: string
   segment: string
@@ -41,6 +49,8 @@ interface TerminalState {
   error?: string
   categories?: TerminalCategory[]
   patterns?: TerminalPattern[]
+  exemptions?: TerminalExemption[]
+  exemptable_rules?: string[]
 }
 
 type Backend = Pick<ReturnType<typeof useBackend>, 'send'>
@@ -55,6 +65,8 @@ export interface Result<T = undefined> {
 export function useTerminalProtection(backend: Backend) {
   const categories = ref<TerminalCategory[]>([])
   const patterns = ref<TerminalPattern[]>([])
+  const exemptions = ref<TerminalExemption[]>([])
+  const exemptableRules = ref<string[]>([])
   const error = ref('')
 
   async function call(type: string, payload: Record<string, unknown>): Promise<Result<TerminalState>> {
@@ -72,6 +84,8 @@ export function useTerminalProtection(backend: Backend) {
   function adopt(state: TerminalState | undefined): void {
     if (state?.categories) categories.value = state.categories
     if (state?.patterns) patterns.value = state.patterns
+    if (state?.exemptions) exemptions.value = state.exemptions
+    if (state?.exemptable_rules) exemptableRules.value = state.exemptable_rules
   }
 
   async function mutate(type: string, payload: Record<string, unknown>): Promise<Result> {
@@ -117,6 +131,16 @@ export function useTerminalProtection(backend: Backend) {
     return mutate('guard.terminal.remove_pattern', payload)
   }
 
+  async function addExemption(rule: string, pattern: string): Promise<Result> {
+    const value = pattern.trim()
+    const confirm = await confirmFor('guard.terminal.add_exemption', `${rule}:${value}`)
+    return mutate('guard.terminal.add_exemption', { rule, pattern: value, confirm })
+  }
+
+  async function removeExemption(e: TerminalExemption): Promise<Result> {
+    return mutate('guard.terminal.remove_exemption', { id: e.id })
+  }
+
   async function test(command: string): Promise<Result<{ refused: boolean; refusal: TerminalRefusal | null }>> {
     try {
       const res = await backend.send<{ ok: boolean; error?: string; refused: boolean; refusal: TerminalRefusal | null }>(
@@ -131,7 +155,10 @@ export function useTerminalProtection(backend: Backend) {
     }
   }
 
-  return { categories, patterns, error, refresh, setCategory, addPattern, removePattern, test }
+  return {
+    categories, patterns, exemptions, exemptableRules, error, refresh, setCategory, addPattern, removePattern,
+    addExemption, removeExemption, test,
+  }
 }
 
 /** Client-side mirror of the backend's validate_pattern, for an immediate

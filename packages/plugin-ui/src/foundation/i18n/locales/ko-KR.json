@@ -699,7 +699,7 @@
       "apply-blocked": "먼저 모든 충돌을 해결하세요",
       "apply": "적용 및 스테이징",
       "ours-default": "HEAD(현재 쪽)",
-      "versus": "vs",
+      "versus": "대",
       "theirs-default": "상대 쪽",
       "empty-side": "(비어 있음)",
       "accepted-ours": "현재 쪽 적용됨",
@@ -1031,6 +1031,8 @@
       "idle-status-tooltip": "프로세스는 아직 실행 중이지만 agent가 마지막 턴을 마치고 입력 프롬프트에서 기다리고 있어요",
       "awaiting-status-tooltip": "agent가 권한 확인에서 멈춰 있어요 — 답하기 전까지 진행되지 않아요",
       "question-status-tooltip": "agent가 질문하고 답을 기다리고 있어요 — 답하기 전까지 진행되지 않아요",
+      "stop-ineffective": "STOP 미적용",
+      "stop-ineffective-tooltip": "중단 신호가 CLI에 전달되었지만 턴이 계속 실행 중입니다(Ctrl-C가 대기 중인 입력만 지웠을 수 있습니다). 멈추려면 Interrupt를 다시 누르세요.",
       "rename-title-tooltip": "두 번 클릭해서 이 pane 이름 변경",
       "auto-named-tooltip": "이 session의 첫 지시에서 자동으로 지은 이름이에요 — 이름을 바꾸면 그대로 유지돼요",
       "loop-tag-tooltip": "이 pane에서 Loop가 실행 중이에요",
@@ -1342,7 +1344,7 @@
     "commit-and-push": "커밋 및 푸시",
     "commit-and-sync": "커밋 및 동기화",
     "undo-last-commit": "마지막 커밋 실행 취소",
-    "auto-commit": "Auto Commit",
+    "auto-commit": "자동 커밋",
     "publish": "게시",
     "fetch": "페치",
     "sync-title": "동기화(pull --rebase + push)",
@@ -1514,21 +1516,21 @@
         "slack-app-token": "Slack 앱 token",
         "aws-access-key": "AWS 액세스 키",
         "jwt": "JWT",
-        "bot-token": "bot token",
-        "telegram-bot-token": "Telegram bot token",
-        "discord-bot-token": "Discord bot token",
+        "bot-token": "봇 토큰",
+        "telegram-bot-token": "Telegram 봇 토큰",
+        "discord-bot-token": "Discord 봇 토큰",
         "authorization-header": "Authorization 헤더",
-        "bearer-token": "bearer token",
+        "bearer-token": "Bearer 토큰",
         "credential-assignment": "자격 증명",
         "credential-flag": "자격 증명 플래그",
         "url-credentials": "URL 안의 자격 증명",
         "google-api-key": "Google API 키",
         "gitlab-token": "GitLab token",
         "stripe-key": "Stripe 키",
-        "npm-token": "npm token",
-        "huggingface-token": "Hugging Face token",
+        "npm-token": "npm 토큰",
+        "huggingface-token": "Hugging Face 토큰",
         "sendgrid-key": "SendGrid 키",
-        "pypi-token": "PyPI token",
+        "pypi-token": "PyPI 토큰",
         "private-key": "개인 키",
         "possible-secret": "비밀 정보"
       }
@@ -1844,7 +1846,7 @@
           "summary": "Resource Manager를 열어 앱 데이터, Electron 캐시, CLI 홈, 작업 영역의 디스크 사용량을 검사하고 정리해요."
         },
         "execution-policy": {
-          "title": "Execution Policy",
+          "title": "실행 정책",
           "summary": "전역 agent 정책을 편집하고, 작업 영역 소스를 선택하고, 저장소 권장 사항을 검토하고, 손상된 정책 저장소를 복구해요."
         },
         "marketplace": {
@@ -1956,7 +1958,7 @@
       "notCreated": "만들지 않음",
       "userHint": "작업 영역이 사용자 소스를 선택할 때 쓰는 전역 정책을 편집해요. 저장하면 현재 사용자 정책을 대체해요.",
       "mode": {
-        "full": "Full",
+        "full": "전체",
         "allowlist": "허용한 명령만",
         "denylist": "거부 목록"
       },
@@ -1976,8 +1978,9 @@
         "ui": "자체 보기",
         "aiCli": "AI CLI 세션",
         "web": "웹 탐색",
-        "agents": "에이전트 pane",
+        "agents": "agent pane",
         "agentMessages": "에이전트 메시지",
+        "agentNotify": "에이전트 알림",
         "secrets": "Navide 플러그인 시크릿"
       },
       "shellLabel": "셸 실행 파일",
@@ -2434,6 +2437,7 @@
           "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인은 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 사용자의 로그인을 사용하며(사용자 대신 웹사이트에 요청을 보낼 수 있어요), 열린 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 제어로 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 다시 불러와야 멈춰요. agent에게 맡긴 페이지에서는 이 Navide 플러그인 자체도 스크립트를 실행하고 내용과 로그인 상태를 읽을 수 있어요. 웹 페이지를 동시에 여러 개 열 수 있으며 각각 메모리를 사용해요.",
           "agents": "agent pane, 어떤 pane이 어떤 pane을 열었는지, 서로 언제 메시지를 보냈는지 볼 수 있습니다. 메시지 내용은 볼 수 없습니다.",
           "agentMessages": "agent 간 메시지의 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다.",
+          "agentNotify": "허용하면 agent pane에 알림을 보냅니다. 알림은 데이터로 전달되며 지시로 취급되지 않습니다.",
           "secrets": "자체 API 키와 토큰을 이 컴퓨터에 암호화해 보관합니다. Navide는 이를 업로드하거나 표시하지 않습니다.",
           "shell": "컴퓨터에서 명령을 실행해요.",
           "terminal": "Navide 터미널을 열고 제어해요."
@@ -2778,7 +2782,7 @@
       "accounts": "🔑 계정",
       "shortcuts": "⌨️ 단축키",
       "extensions": "🧩 Navide 플러그인",
-      "executionPolicy": "🛡️ Execution Policy"
+      "executionPolicy": "🛡️ 실행 정책"
     },
     "nav": {
       "title": "설정",
@@ -2798,6 +2802,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "계정",
       "cliAgents": "CLI Agent",
+      "agents": "Agent",
       "cliExtensions": "확장",
       "roles": "역할",
       "pipelines": "pipeline",
@@ -2811,7 +2816,7 @@
       "extensions": "Navide 플러그인",
       "marketplace": "Navide 마켓플레이스",
       "disclosureOverview": "공개 정보 개요",
-      "executionPolicy": "Execution Policy",
+      "executionPolicy": "실행 정책",
       "statusBadges": "상태 배지",
       "voice": "음성 입력",
       "appLock": "App Lock",
@@ -2881,14 +2886,14 @@
         "intro": "열아홉 개 설정 탭이 각각 무엇을 제어하는지, Navide Cloud가 여러 컴퓨터를 하나의 비공개 네트워크로 연결하는 방법, 그리고 메인 화면 밖에 있는 시스템 화면(메뉴, 독립 창, 사용량 보기, 리소스 관리)을 설명해요.",
         "s1": {
           "title": "설정 개요",
-          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>26개 탭</strong>으로 나뉘어 있어요.",
+          "p1": "설정 창은 <kbd class=\"syh-kbd\">⌘,</kbd>로 열어요. 제목 표시줄의 톱니바퀴 버튼도 같은 입구예요. 왼쪽 사이드바는 다섯 그룹, 모두 <strong>27개 탭</strong>으로 나뉘어 있어요.",
           "h1": "검색 필드",
           "p2": "사이드바 제목 아래에 자리 표시자가 <code>Search settings…</code>인 검색 필드가 있어요. 설정 제목, 섹션, 키워드를 <strong>모든 탭에서</strong> 찾으며(현재 인터페이스 언어와 색인된 키워드 사용) 최대 8개 결과를 보여 줘요. 결과를 클릭하면 해당 탭으로 전환하고 그 섹션으로 스크롤해요(예외 하나: \"저장 공간\"은 설정을 닫고 Resource Manager를 바로 열어요). 일치하는 항목이 없으면 <code>No matching settings</code>를 표시해요. <kbd class=\"syh-kbd\">Esc</kbd> 키로 지워요.",
           "callout": {
             "title": "검색 색인이 모든 항목을 다루지는 않아요",
             "text": "색인은 직접 관리하는 목록이라 <strong>{layout}, {notifications}, {security}, {channels} 탭에는 항목이 전혀 없어서</strong> 그 안의 내용은 검색되지 않아요 — 직접 열어야 해요. CLI Agent 항목은 한 CLI의 설정 서랍을 바로 열어요(\"CLI Agent 및 계정\" 주제 참고)."
           },
-          "h2": "스물여섯 개 탭",
+          "h2": "스물일곱 개 탭",
           "tabTable": {
             "group": "그룹",
             "tab": "탭",
@@ -2963,6 +2968,10 @@
             "channels": {
               "what": "Telegram이나 Slack 같은 채팅 앱 bot을 CLI pane에 연결: bot, 페어링, 허용 목록, 계정 연결",
               "more": "\"{messaging}\" 주제"
+            },
+            "agents": {
+              "what": "Hermes Agent, OpenClaw 같은 상주형 Agent를 신원별로 표시: 채널, 일정, 메모리 위치, 실행 플래그",
+              "more": "Agent pane의 Agent 설정…에서도 열 수 있어요"
             },
             "mcp": {
               "what": "MCP 서버 추가, 사용, 확인",
@@ -3711,7 +3720,7 @@
             "theirs": "상대",
             "progress": "1 / 3 해결됨",
             "apply": "적용 및 스테이징",
-            "base": "Base"
+            "base": "공통 조상"
           }
         },
         "intro": "Git 패널, 계획 문서, 기본 제공 편집기와 미리 보기 — agent가 무엇을 바꿨는지 보고, 검토하고, 커밋하는 데 필요한 모든 것이에요. 작업 영역/pane 용어를 그대로 사용해요.",
@@ -5628,6 +5637,7 @@
             "scheduler_run_now": "내가 만든 작업을 일정과 별개로 지금 한 번 실행해요. 실행이 시작되면 바로 응답하고, 실패 백오프를 해제하며, 다음 예약 시점은 그대로 두고, agent의 하루 300회 실행에 포함돼요",
             "scheduler_runs": "작업의 실행 기록(최신순): ok, error 또는 이유가 붙은 skipped. 건너뜀(창 없음, 사용 중, 일일 한도나 할당량, agent 일일 합계, 만료된 agent 작업, 사라진 대상)은 오류가 아니에요. 모든 작업의 기록을 읽을 수 있어요",
             "cli_permission_settings": "CLI 권한 우회 플래그(yolo)를 읽고 써요. pipeline 전용이 아닌 전역 설정이며 이후에 열린 pane에만 적용돼요. 특정 CLI가 실제로 플래그를 갖는지는 전역 값만이 아니라 반환된 agents[].skipFlag에 있어요",
+            "plugins_developer_backend_call": "개발자 모드 전용: 폴더에서 불러온 Navide 플러그인의 백엔드 메서드를 에이전트 도구 선언 없이 호출합니다. 그 밖의 대상은 거부되며, 모든 호출은 활동에 기록되고 자동 일시 중지 규칙에도 집계됩니다",
             "workspace_open": "Navide에서 프로젝트를 작업 영역으로 열어요. 새 창으로 열지, 이미 그 프로젝트가 열린 창을 쓸지는 Navide가 정해요",
             "workspace_switch": "내 창을 이미 가지고 있는 다른 프로젝트로 전환해요. 떠나는 프로젝트의 pane은 계속 실행돼요. 그 창에서 pipeline이 실행 중이면 전환 시 중단되므로 거부돼요",
             "prompt_list": "사용자가 설정 → 프롬프트에 보관한 프롬프트 스킬. 만들고 편집하는 것은 사용자 몫이라 읽기 전용이에요",
@@ -5663,6 +5673,8 @@
             "cli_token_stats": "이 작업 영역의 현재 token 사용량",
             "cli_list_sessions": "새 pane으로 이어서 열 수 있는 이 작업 영역의 CLI 대화예요. 대화는 그것을 실행한 pane보다 오래 남아요. pane을 닫고 앱을 다시 시작하고 pane을 다시 만들어도 기록은 디스크에 남아 있어요. 각 행에는 아직 재개할 수 있는지, 그것을 가진 pane이 아직 열려 있는지가 표시돼요. 살아 있는 대화는 재개하지 마세요. 분기되거나 손상돼요. 대신 그 pane에 메시지를 보내세요",
             "cli_place_pane": "pane을 옮겨요. 속한 탭 그룹을 바꾸거나 다른 pane의 자식으로 만들어요(사이드바에서 드래그하는 것과 같은 동작이며 같은 쓰기 경로를 거치므로 위치가 재시작 후에도 유지돼요). 두 동작은 독립적이며 응답에 어느 쪽이 적용됐는지 표시돼요. 그 pane의 CLI는 건드리지 않아 아무것도 전송, 중단, 재시작되지 않아요. 로컬 pane만 가능해요",
+            "cli_rename_pane": "CLI pane의 이름을 바꿔요. 제목과 다른 pane이 주소로 쓰는 이름이 함께 바뀌며, 제목을 직접 편집할 때와 같은 검사와 쓰기 경로를 거쳐요. 다른 pane이 쓰는 이름은 거부돼요. 자기 pane과 같은 워크스페이스에서 자기가 연 pane만 바꿀 수 있어요. 옛 이름을 가리키는 예약 작업은 고치지 않고 경고로 알려 줘요. 로컬 pane만 가능해요",
+            "cli_set_model": "실행 중인 CLI pane의 모델을 바꿔요. Claude는 자체 /model 선택 화면을 열어 그 모델의 행을 고른 뒤 s(이 세션만)를 누르고, Codex에는 /model과 모델 ID를 입력해요. 둘 다 실행 중인 세션만 바뀌어서 대화가 이어지고 새 세션의 기본 모델은 그대로예요. 다른 CLI, effort 지정, Claude 선택 화면에 없는 모델은 새 모델로 pane을 다시 시작해 대화를 이어 가요. 유휴 상태인 pane만 가능하고 자기 pane은 거부돼요. 로컬 pane만 가능해요",
             "cli_inbox_summary": "내가 보낸 메시지 중 오래 대기 중(2분 초과)이거나 실패한 것. 실패 알림은 보낸 pane이 유휴 상태일 때만 입력될 수 있어서, 한 시간 내내 쉬지 않고 일하는 agent는 하나도 받지 못해요. 그래서 이렇게 직접 찾아가서 확인해요",
             "cli_pending_incoming": "나에게 대기 중이고 아직 들어오지 않은 메시지. 메시지는 턴 사이에만 pane에 입력되므로, 계속 바쁜 agent일수록 전달받지 못해요. 결과가 비어 있지 않으면 메시지가 들어올 수 있게 턴을 마무리할 근거가 돼요"
           },
@@ -5826,7 +5838,7 @@
             "pane2": "reviewer",
             "sub1": "claude · design",
             "sub2": "codex · review",
-            "group": "Build"
+            "group": "빌드"
           }
         }
       },
@@ -6759,7 +6771,7 @@
           },
           "sample": {
             "workspace": "Agent-Team",
-            "group": "Build",
+            "group": "빌드",
             "pane1": "architect",
             "pane2": "reviewer",
             "sub1": "claude · design",
@@ -7976,6 +7988,9 @@
     "cliAgents": {
       "title": "CLI Agent",
       "hint": "새 pane 메뉴에 표시할 CLI agent를 켜고 순서를 바꿔요. 카드를 열면 해당 agent를 관리할 수 있어요. 최소 하나는 켜 두어야 해요.",
+      "acp-title": "ACP (실험적)",
+      "acp-hint": "Agent Client Protocol로 에이전트를 실행하여 CLI 자체 화면 대신 Navide가 대화를 그립니다. ＋ 메뉴에 “Claude Code (ACP)”가 추가되며, Claude Code ACP 어댑터(처음 사용할 때 설치)가 필요합니다. 실험적 기능입니다. 권한 요청은 pane 안에서 묻고, 에이전트는 아직 Navide MCP 도구를 쓸 수 없으며, ACP pane은 재시작 후 복원되지 않습니다.",
+      "acp-toggle": "＋ 메뉴에 ACP 에이전트 표시",
       "drag-hint": "드래그해서 순서 변경",
       "search": "agent 찾기…",
       "filter-label": "CLI agent 필터",
@@ -8761,6 +8776,7 @@
     "cloud-agents-plugin-hint": "클라우드 에이전트(Grok Bot, dots 등)는 Navide 마켓플레이스에서 해당 Navide 플러그인을 설치하세요.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label} (ACP)",
     "select-role": "역할 선택…",
     "waiting-backend": "백엔드를 기다리는 중…",
     "set-workspace-first": "먼저 작업 영역 경로를 설정하세요",
@@ -8803,7 +8819,7 @@
     "explorer": "탐색기",
     "git": "Git",
     "plans": "계획",
-    "cli-stage": "CLI Stage",
+    "cli-stage": "CLI 스테이지",
     "history": "기록",
     "tokens": "Token",
     "tasker": "일정",
@@ -9222,7 +9238,7 @@
     "focus-pane": "pane에 포커스",
     "manager-badge": "🎯 관리자",
     "docked": "도킹됨",
-    "pane-origin-stage": "stage {id}",
+    "pane-origin-stage": "스테이지 {id}",
     "pane-origin-manual": "수동",
     "session-id-tooltip": "CLI session ID — 재시작할 때 이 agent의 기억을 이어 가는 데 쓰여요",
     "role-system-prompt": "{role} 시스템 프롬프트",
@@ -9849,7 +9865,7 @@
       "runtime": "런타임",
       "paths": "경로",
       "open": "열기",
-      "app": "App",
+      "app": "앱",
       "backend": "백엔드",
       "started": "시작 시각",
       "shell": "셸"
@@ -10273,6 +10289,7 @@
     "failover-resume-none": "새 대화",
     "failover-unverified": "실제 계정으로 검증되지 않음",
     "failover-platform-unsupported": "이 플랫폼에서는 지원 안 함",
+    "failover-no-adapter": "계정 전환 어댑터 없음",
     "failover-audit-degraded": "전환 감사 기록을 쓰지 못했어요. 기록할 수 있을 때까지 자동 전환이 일시 중지돼요. 수동 전환은 계속 사용할 수 있어요.",
     "settings-signing-title": "Antigravity 자격 증명(관리자용)",
     "settings-signing-hint": "개발 전용이에요. ~/navide-signing/usage_secrets.py를 작성해 다음 릴리스 빌드에 Antigravity의 공개 설치형 앱 OAuth 상수가 포함되게 해요. repo에는 절대 저장되지 않아요.",
@@ -10603,7 +10620,7 @@
     "pane": "Pane",
     "pane-placeholder": "시작 안 됨",
     "no-token-usage": "token 사용량 없음",
-    "session": "Session",
+    "session": "세션",
     "summary": "턴 {turns}개 · 호출 {calls}개 · 합계 {total}",
     "rescan": "다시 검색",
     "export": "CSV 내보내기",
@@ -11151,9 +11168,9 @@
     "needs": "필요: {fields}",
     "imessage-note": "token이 필요 없어요. macOS 전용이에요.",
     "field": {
-      "token": "Bot token",
+      "token": "봇 토큰",
       "app_token": "앱 수준 token",
-      "bot_token": "Bot token",
+      "bot_token": "봇 토큰",
       "app_id": "App ID",
       "app_secret": "App Secret",
       "client_id": "Client ID",
@@ -11305,7 +11322,8 @@
       "allow": "허용",
       "allow-audit": "허용 + 기록",
       "ask": "이 컴퓨터에서 확인",
-      "deny": "거부"
+      "deny": "거부",
+      "exempt": "예외"
     },
     "source": {
       "local": "로컬",
@@ -11370,7 +11388,15 @@
         "interpreter-inline-code": "인터프리터가 인라인 코드 실행",
         "stdin-script": "인터프리터가 stdin에서 스크립트 읽기",
         "unknown-script": "Guard가 볼 수 없는 스크립트 실행",
-        "dynamic-path": "파일 경로가 고정되어 있지 않음"
+        "dynamic-path": "파일 경로가 고정되어 있지 않음",
+        "credential-pipe-upload": "~/.ssh의 파일을 네트워크 도구로 파이프",
+        "plugin-store-write": "Navide 플러그인 설치 경로나 신뢰 저장소에 쓰기, 삭제, 이동, 링크 또는 chmod",
+        "dynamic-stdin-script": "셸이 실행 시점에 계산되는 here-string을 실행",
+        "mcp-registry-write": "MCP 도구가 Windows 레지스트리 항목을 변경하거나 삭제",
+        "mcp-process-kill": "MCP 도구가 프로세스를 종료",
+        "heredoc-unparsed": "heredoc 구분자나 끝을 판단할 수 없음",
+        "untokenizable-shape": "분석기가 처리할 수 없는 셸 구문 사용",
+        "mcp-unknown-mode": "MCP 도구가 Guard가 모르는 모드로 호출됨"
       }
     },
     "branches": {
@@ -11435,6 +11461,11 @@
         "title": "허용 예외",
         "warning": "이 접두사 중 하나로 시작하는 부분은 위의 모든 기본 검사를 건너뛰어요. 완전히 신뢰하는 명령만 추가하세요. 차단 패턴은 계속 적용되며, 다운로드한 내용을 셸로 전달하는 것은 절대 허용되지 않아요. 추가할 때는 확인을 요청해요.",
         "placeholder": "정확한 명령 접두사(예: git push origin)"
+      },
+      "exempt": {
+        "title": "예외: 자격 증명을 읽어 업로드",
+        "warning": "줄 전체가 이 패턴 중 하나와 일치하면 '~/.ssh 파일을 네트워크 도구로 파이프'가 더 이상 거부되지 않습니다. 완전히 신뢰하는 명령만 추가하세요. 다른 검사와 차단 패턴은 계속 적용되며, 예외로 허용된 줄은 모두 Guard 기록에 남습니다. 추가하려면 확인이 필요합니다.",
+        "placeholder": "명령 패턴 또는 경로, 예: cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "패턴을 입력하세요.",
@@ -12252,6 +12283,8 @@
     "undeclared": {
       "heading": "선언 없이 사용함(Navide가 거부)",
       "item": "{workspace}에서 {address}({source}): {count}회, 마지막 {date}",
+      "code": "매니페스트에 선언하기 전까지 이 호출들은 Navide가 CAPABILITY_DENIED로 거부해요.",
+      "doc": "문서 보기",
       "reasons": "이유: {reasons}"
     },
     "unused": {
@@ -12328,6 +12361,109 @@
       "activity": "최근 활동",
       "undeclaredCount": "선언되지 않은 사용 {count}회 거부",
       "anomalyCount": "특이 사항 {count}개"
+    },
+    "monitor": {
+      "headless": "숨겨진 뷰 백그라운드 실행 중 ({count})",
+      "title": "Activity 개요",
+      "intro": "설치된 모든 Navide 플러그인을 한 표에 보여 주며 몇 초마다 새로 고칩니다. 기록일 뿐이며 여기서 Navide 플러그인이 할 수 있는 일은 바뀌지 않습니다. 행을 열면 전체 Activity를 볼 수 있습니다.",
+      "empty": "설치된 Navide 플러그인이 없습니다.",
+      "open": "{id}의 Activity 보기",
+      "builtin": "기본 제공",
+      "noHosts": "없음",
+      "noBackend": "백엔드 없음",
+      "hostUndeclared": "{host} (선언되지 않음)",
+      "hostRefused": "{host} (거부됨)",
+      "status": {
+        "running": "실행 중",
+        "disabled": "사용 안 함"
+      },
+      "column": {
+        "plugin": "Navide 플러그인",
+        "status": "상태",
+        "toolCalls": "도구 호출 / 분",
+        "capabilityCalls": "기능 호출 / 분",
+        "hosts": "네트워크 호스트 (7일)",
+        "failures": "연속 실패",
+        "resources": "리소스"
+      }
+    },
+    "autoPauses": {
+      "heading": "자동 일시 중지 기록",
+      "item": "{date} {rule}({reason}): {value}, 임계값 {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "중지",
+    "confirm": "지금 중지",
+    "cancel": "취소",
+    "stopping": "중지 중…",
+    "note": "{id}을(를) 바로 중지합니다. 진행 중인 호출은 끝나고, 뷰는 닫히며, 백엔드는 멈춥니다. 파일, 권한, 데이터는 남으며 설정에서 다시 켤 수 있습니다.",
+    "failed": "{id}을(를) 중지할 수 없습니다: {error}",
+    "column": "중지",
+    "via": {
+      "settings": "설정의 Activity 개요",
+      "status-bar": "상태 표시줄",
+      "telegram": "채팅 명령",
+      "mcp": "에이전트(plugins_disable)",
+      "auto": "Navide 이상 규칙"
+    },
+    "summary": {
+      "heading": "{date}에 {via}에서 중지했습니다. 그때:",
+      "inFlight": "진행 중이던 호출(종료됨): {count}",
+      "toolCalls": "최근 1분간 도구 호출: {count}",
+      "capabilityCalls": "최근 1분간 기능 호출: {count}",
+      "failures": "연속으로 실패한 도구 호출: {count}",
+      "notRead": "제때 읽지 못함",
+      "hosts": "선언되지 않았거나 거부된 호스트: {hosts}",
+      "noHosts": "선언되지 않았거나 거부된 호스트: 없음"
+    },
+    "enable": {
+      "heading": "{id}을(를) 다시 사용하시겠습니까?",
+      "confirm": "사용"
+    },
+    "all": {
+      "stop": "모두 중지",
+      "confirm": "지금 모두 중지",
+      "note": "실행 중인 서드파티 Navide 플러그인을 모두 바로 중지하고 서드파티 네이티브 백엔드와 에이전트 도구를 끕니다. 기본 제공 Navide 플러그인은 계속 실행됩니다.",
+      "heading": "서드파티 Navide 플러그인이 모두 중지되었습니다.",
+      "banner": "{date}에 {via}에서 중지: Navide 플러그인 {count}개, 서드파티 네이티브 백엔드와 에이전트 도구가 꺼져 있습니다.",
+      "resume": "모두 다시 시작",
+      "resumeConfirm": "지금 모두 다시 시작",
+      "resumeNote": "스위치를 중지 전 상태로 되돌리고 이번에 중지한 Navide 플러그인을 다시 켭니다.",
+      "stopFailed": "중지할 수 없음: {ids}",
+      "resumeFailed": "다시 켤 수 없음: {ids}"
+    },
+    "rule": {
+      "R1": "도구 또는 기능 호출이 너무 많음",
+      "R2": "선언되지 않았거나 거부된 네트워크 호스트",
+      "R3": "연속 실패 또는 재시작",
+      "R4": "리소스 임계값 초과",
+      "R5": "agent pane 알림이 너무 많음"
+    },
+    "autoPause": {
+      "label": "Navide 플러그인이 이상하게 동작하면 자동으로 일시 중지",
+      "thresholds": "R1 1분에 도구 호출 {toolCallsPerMinute}회 또는 기능 호출 {capabilityCallsPerMinute}회 초과 · R2 뷰가 선언되지 않았거나 거부된 호스트에 연결 · R3 도구 호출이 {consecutiveFailures}회 연속 실패하거나 10분 안에 백엔드가 {restartsInTenMinutes}회 다시 시작 · R4 백엔드가 리소스 임계값 초과 · R5 1분에 알림 {notificationsPerMinute}개 초과. 일시 중지는 중지와 같으며, 여기서 Navide 플러그인을 다시 켭니다.",
+      "toast": "Navide가 Navide 플러그인 {id}을(를) 일시 중지했습니다: {reason}. 설정 → Navide 플러그인에서 확인하세요.",
+      "badge": "일시 중지됨({rule})",
+      "because": "규칙 {rule}(으)로 일시 중지: {reason}"
+    },
+    "statusBar": {
+      "label": "Navide 플러그인 {running}",
+      "title": "Navide 플러그인: 하나를 바로 중지",
+      "heading": "서드파티 Navide 플러그인",
+      "openSettings": "Activity 개요 열기",
+      "allStopped": "Navide 플러그인 모두 중지됨",
+      "allStoppedTitle": "서드파티 Navide 플러그인이 모두 중지되었습니다. 설정에서 다시 시작하세요",
+      "resumeInSettings": "서드파티 Navide 플러그인이 모두 중지되었습니다. 설정의 \"모두 다시 시작\"으로 다시 켜세요."
+    }
+  },
+  "pluginNotify": {
+    "switch": "agent pane에 알림",
+    "switchNote": "이 Navide 플러그인이 프로젝트의 agent pane에 알림을 보낼 수 있게 합니다(1분에 최대 6개). 알림은 데이터로 전달되며 지시로 취급되지 않습니다. 기본값은 꺼짐입니다.",
+    "paneMenu": {
+      "refuse": "Navide 플러그인 알림 거부",
+      "accept": "Navide 플러그인 알림 받기",
+      "title": "거부하는 동안 agent pane에 알릴 수 있는 Navide 플러그인도 이 pane에는 보낼 수 없습니다"
     }
   },
   "backendResource": {
@@ -12472,6 +12608,7 @@
       "web": "모든 웹사이트를 열고 탐색할 수 있어요. 사이트 로그인 정보는 이 컴퓨터에 보관돼요. agent는 이 Navide 플러그인에서 내 로그인 정보를 사용하며(나 대신 웹사이트에 요청을 보낼 수 있어요), 여기서 여는 모든 페이지와 로그인 상태를 읽을 수 있어요. 직접 조작을 넘겨받은 뒤에도 페이지에서 이미 실행 중인 agent 스크립트는 페이지를 새로 고쳐야 멈춰요. agent에게 맡긴 페이지에서는 이 Navide 플러그인 자체도 스크립트를 실행하고 내용과 로그인 상태를 읽을 수 있어요. 여러 웹 페이지를 동시에 열 수 있으며 각 페이지가 메모리를 사용해요.",
       "agents": "이 프로젝트의 agent pane, 어떤 pane이 어떤 pane을 열었는지, 메시지 전달 기록(내용 제외), session 목록(대화 내용 제외)을 볼 수 있습니다",
       "agentMessages": "이 프로젝트의 agent 간 메시지 전체 본문을 읽습니다. 본문에는 코드, 파일 내용 또는 비밀 정보가 들어 있을 수 있습니다",
+      "agentNotify": "설정에서 켜면 이 프로젝트의 agent pane에 알림을 보낼 수 있습니다. 알림은 데이터로 전달되며 지시로 취급되지 않습니다",
       "secrets": "자체 API 키와 토큰을 이 컴퓨터에 암호화해 보관합니다. Navide는 이를 업로드하거나 표시하지 않습니다",
       "ui": "자체 보기 표시",
       "agentTools": "agent가 호출할 수 있는 도구 제공(읽기 전용 {read}개, 쓰기 {write}개)",
@@ -12519,6 +12656,15 @@
       },
       "noScan": "이 버전은 시스템 검사 도입 전에 게시되었어요. 아래 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요.",
       "noScanLocal": "Navide가 이 파일을 검사하지 않았어요. 아래 내용은 이 Navide 플러그인의 자체 선언일 뿐이에요."
+    },
+    "sites": {
+      "heading": "정적 스캔이 발견한 위치 ({count})",
+      "kind": {
+        "command": "명령 {key}",
+        "host": "호스트 {key}",
+        "capability": "기능 {key}"
+      },
+      "hidden": "비밀 값처럼 보여 발췌를 숨겼습니다"
     },
     "incompleteReason": {
       "timedOut": "검사 시간이 초과됨",
@@ -12776,6 +12922,30 @@
       "confirm": "Navide 마켓플레이스에서 {plugin} {version}을(를) 회수할까요?",
       "done": "{plugin} {version}을(를) 회수했어요"
     },
+    "members": {
+      "title": "네임스페이스 멤버",
+      "desc": "이 네임스페이스에서 버전을 게시하고 철회할 수 있는 계정입니다. 게시자를 추가하거나 제거할 수 있는 사람은 소유자뿐이며, 게시자는 멤버나 서명 키를 변경할 수 없고 네임스페이스의 키로 서명합니다.",
+      "account": "계정",
+      "role": "역할",
+      "added-at": "추가일",
+      "roles": {
+        "owner": "소유자",
+        "publisher": "게시자"
+      },
+      "add-label": "게시자 추가(Navide Cloud 계정 ID)",
+      "add": "게시자 추가",
+      "add-hint": "승인된 개발자여야 합니다. 추가된 계정은 자신의 Navide에서 게시자로 로그인하고 이 네임스페이스를 선택합니다.",
+      "add-confirm": "{member}에게 {namespace}에서 버전을 게시하고 철회하도록 허용할까요?",
+      "added": "이제 {member}이(가) 이 네임스페이스에서 게시할 수 있습니다",
+      "remove": "제거",
+      "remove-confirm": "{namespace}에서 {member}을(를) 제거할까요? 이 네임스페이스의 게시자 로그인은 즉시 작동을 멈춥니다.",
+      "removed": "{member}을(를) 이 네임스페이스에서 제거했습니다",
+      "publisher-note": "이 네임스페이스의 게시자입니다. 버전을 게시하고 철회할 수 있으며, 멤버는 소유자가 관리합니다.",
+      "error": {
+        "not-developer": "이 계정은 아직 승인된 개발자가 아닙니다. 먼저 신청해야 합니다.",
+        "owner-only": "멤버는 네임스페이스 소유자만 변경할 수 있습니다."
+      }
+    },
     "versions": {
       "title": "게시한 버전",
       "refresh": "새로 고침",
@@ -12788,9 +12958,22 @@
         "yanked": "회수됨"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "Navide 마켓플레이스 검토 전에 직접 고른 테스터에게 테스트 빌드를 전달해요. 초대받은 사람만 보고 설치할 수 있고, 자동 검사만 거치며, 게시 후 90일이 지나면 만료돼요.",
+      "channel": "testplace 채널로 테스트 빌드 게시(?channel=testplace):",
+      "invites": "초대는 테스터마다 한 번만 쓸 수 있는 참여 토큰이에요. 취소하면 그 테스터는 접근할 수 없어요.",
+      "codes": "공개 테스트 코드는 설정한 인원까지 하나의 코드로 참여할 수 있어요. 패키지마다 첫 코드는 간단한 검토를 기다려요:",
+      "promote": "테스트가 끝나면 같은 빌드를 Navide 마켓플레이스 검토로 보내요:",
+      "owner-only": "초대, 테스트 코드, 테스트 빌드 취소와 승격은 네임스페이스 소유자만 할 수 있어요. 게시 멤버는 버전을 게시할 수 있지만 Testplace는 관리할 수 없어요.",
+      "owner-only-member": "이 네임스페이스의 게시 멤버라서 Testplace 초대, 테스트 코드, 취소와 승격은 소유자가 해요.",
+      "joined": "참여한 테스트",
+      "doc": "Testplace 문서"
+    },
     "error": {
       "not-signed-in": "먼저 개발자 계정에서 로그인하세요.",
       "qualification": "먼저 개발자 신청이 승인되어야 해요.",
+      "doc": "문서 보기",
       "registry": "Navide 마켓플레이스에서 거부했어요({status} {code}): {message}"
     }
   },
@@ -13127,5 +13310,111 @@
     "trend-7d": "최근 7일 일별 최고치",
     "week-tokens": "이번 주 토큰",
     "day-tokens": "오늘 토큰"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "일정 일시 중지",
+      "resume-schedules": "일정 재개",
+      "settings": "Agent 설정…",
+      "wake": "지금 깨우기",
+      "wake-none": "활성화된 일정이 없습니다",
+      "wake-title": "다음 일정을 지금 실행 ({name})"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 닫힘, 열고 이어서 실행",
+      "create": "만들기",
+      "name-placeholder": "Agent 이름",
+      "new": "새 Agent ({vendor})…",
+      "open": "{vendor} · 열림, 전환"
+    },
+    "header": {
+      "last-done": "마지막 완료 {time}",
+      "model": "모델 {model}",
+      "model-default": "기본 모델",
+      "more-badges": "{n}개 더",
+      "never-done": "완료된 턴 없음",
+      "next-schedule": "다음 {time}",
+      "next-schedule-title": "다음 일정: {name}, {time}",
+      "turn": "이번 턴 {minutes}분",
+      "vendor-since": "{vendor} · {date}부터",
+      "vendor-today": "{vendor} · 오늘 생성"
+    },
+    "menu": {
+      "channels": "채널 설정…",
+      "close-keep": "pane 닫기 (신원 유지)",
+      "memory-folder": "메모리 폴더 열기",
+      "stop-remove": "Agent 중지 및 삭제…",
+      "stop-remove-body": "이 Agent가 Navide의 Agent 목록에서 삭제되고, 열려 있는 pane도 닫혀요. 대화와 메모리 파일은 디스크에 남지만 이름, 색상, 세션 이어 가기 링크는 남지 않아요.",
+      "stop-remove-confirm": "중지 및 삭제",
+      "stop-remove-title": "“{name}”을(를) 중지하고 삭제할까요?",
+      "toggle-panel": "제어판 표시/숨기기",
+      "wake": "지금 한 턴 깨우기"
+    },
+    "panel": {
+      "channel-unbound": "연결된 채널 없음",
+      "channel-unbound-hint": "헤더의 채널 버튼으로 연결하세요",
+      "channels": "채널",
+      "collapse": "제어판 접기",
+      "expand": "제어판 펼치기",
+      "memory": "메모리",
+      "memory-empty": "이 버전에서는 읽지 않음",
+      "memory-loading": "읽는 중…",
+      "memory-missing": "메모리 폴더를 찾을 수 없습니다",
+      "memory-none": "저장된 메모리가 아직 없습니다",
+      "memory-source": "위치: {path}",
+      "open-folder": "폴더 열기",
+      "schedule-paused": "일시 중지됨",
+      "schedules": "일정",
+      "schedules-empty": "이 Agent를 대상으로 한 일정이 없습니다",
+      "status": "상태",
+      "status-source": "출처: 터미널 출력",
+      "title": "제어판",
+      "todos": "할 일",
+      "todos-empty": "이 버전에서는 읽지 않음"
+    },
+    "settings": {
+      "channel": "채널",
+      "channel-closed": "pane이 열려 있을 때만 연결됩니다",
+      "channel-note": "봇은 설정 → 채널의 것을 사용합니다. 연결은 열린 pane에 속합니다.",
+      "closed": "닫힘",
+      "color": "색상",
+      "command": "실행 명령",
+      "empty": "아직 Agent가 없습니다. ＋ 메뉴의 Agent 영역에서 추가하세요.",
+      "flags": "모델과 플래그",
+      "flags-note": "환경 변수와 권한 스위치는 CLI Agent 페이지와 공유합니다. Agent의 키는 Agent가 직접 관리합니다.",
+      "go-channels": "설정 → 채널 열기",
+      "go-cli-agents": "설정 → CLI Agent 열기",
+      "identity": "신원",
+      "identity-note": "신원은 Navide가 보관합니다. pane을 닫아도 신원은 남고, 다시 열면 세션을 이어갑니다.",
+      "intro": "Hermes Agent, OpenClaw 같은 상주형 Agent를 신원별로 보여 줍니다.",
+      "job-on": "켜짐",
+      "list": "내 Agent",
+      "memory": "메모리 위치",
+      "memory-note": "메모리 위치는 Agent가 정합니다. Navide는 옮기거나 바꾸지 않습니다.",
+      "name": "이름 (pane 이름)",
+      "open-pane": "pane 열기",
+      "pane-closed": "pane 닫힘",
+      "pane-open": "pane 열림",
+      "rename-cancel": "취소",
+      "rename-channels": "채널 연결: {n}개",
+      "rename-channels-note": "연결은 이름이 아니라 pane에 속하므로 그대로 유지됩니다.",
+      "rename-confirm": "이름 바꾸기",
+      "rename-failed": "업데이트하지 못한 일정: {names}",
+      "rename-no-schedules": "이 이름을 대상으로 하는 일정이 없습니다.",
+      "rename-schedules": "이름 “{old}”을(를) 대상으로 하는 일정: {n}개",
+      "rename-title": "“{old}”의 이름을 “{name}”(으)로 바꿀까요?",
+      "rename-update": "이 일정들도 새 이름을 대상으로 변경",
+      "resume": "다시 열 때 세션 이어가기",
+      "resume-on": "지원",
+      "schedules": "일정",
+      "schedules-note": "Tasker에서 일정을 추가하고 이 Agent의 pane을 대상으로 지정하세요.",
+      "session": "마지막 세션",
+      "session-none": "아직 없음",
+      "stop-remove": "중지 및 삭제",
+      "switch-to": "pane으로 전환",
+      "unsupported": "지원 안 함",
+      "yolo": "위험한 명령 확인 건너뛰기",
+      "yolo-flag": "지원 ({flag}), YOLO 스위치를 따름"
+    }
   }
 }

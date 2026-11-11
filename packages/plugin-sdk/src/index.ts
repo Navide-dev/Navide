@@ -816,6 +816,21 @@ export function openContributionWindow(params: Params<'ui.openPluginWindow'>): P
   return createPluginCapabilityClient().capabilities.invoke('ui.openPluginWindow', params)
 }
 
+/** The language the Navide interface shows now, a BCP 47 tag such as `en-US`
+ * or `zh-TW` (`ui.getLocale`, Navide 0.2.40+). Needs `permissions.system: ["ui"]`. */
+export async function getHostLocale(): Promise<string> {
+  return (await createPluginCapabilityClient().capabilities.invoke('ui.getLocale', {})).locale
+}
+
+/** Calls `listener` with the new tag whenever the Navide interface switches
+ * language (`ui.localeChanged`, Navide 0.2.40+). Needs `permissions.system: ["ui"]`. */
+export function onHostLocaleChanged(listener: (locale: string) => void): Disposable {
+  if (typeof listener !== 'function') {
+    throw new PluginError('INVALID_ARGUMENT', 'Plugin locale listener is invalid.')
+  }
+  return createPluginCapabilityClient().events.subscribe('ui.localeChanged', (payload) => listener(payload.locale))
+}
+
 /** Same as `createPluginViewRuntimeClient().onOpenTarget()`. */
 export function onOpenTarget(listener: (target: Record<string, string>) => void): Disposable {
   if (typeof listener !== 'function') {
