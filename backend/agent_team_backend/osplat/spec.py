@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 import asyncio
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Callable, NamedTuple, Protocol
@@ -251,6 +252,18 @@ class Paths(Protocol):
         ``COM1`` ..., with any extension) opens the device, and a trailing dot
         or space is stripped, so two names land on one file. A caller writing
         names that arrived from elsewhere (a synced skill) asks this first.
+        """
+        ...
+
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        """An lstat of *path* whose ``st_dev``/``st_ino`` identify the file.
+
+        *scandir_stat* is ``DirEntry.stat(follow_symlinks=False)`` for the same
+        entry. On POSIX that already is an lstat and is returned as is, so a
+        directory walk costs no second syscall per file. On Windows it carries
+        FindFirstFile metadata whose device and inode fields are zero, so a
+        real ``os.lstat`` is made for a caller that compares it with an
+        opened descriptor's ``fstat``.
         """
         ...
 

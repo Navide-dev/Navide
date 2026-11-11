@@ -207,6 +207,9 @@ class DarwinLayout(DarwinPaths):
     def symlinks_available(self) -> bool:
         return _posix_paths.symlinks_available()
 
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        return _posix_paths.lstat_for_identity(path, scandir_stat)
+
     def shell_command(self, command: str) -> list[str]:
         return _posix_paths.shell_command(command)
 

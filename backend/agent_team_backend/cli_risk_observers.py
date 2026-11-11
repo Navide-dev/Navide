@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import osplat
+
 MIB100 = 100 * 1024 * 1024
 SNIFF_BYTES = 64 * 1024
 DNS_TTL = 300.0
@@ -195,11 +197,9 @@ def scan_disk(root: str, *, deadline: float | None = None) -> DiskSample:
                     if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
                         continue
                     path = Path(entry.path)
-                    # On Windows, DirEntry.stat() obtains FindFirstFile metadata
-                    # whose device/inode fields are zero.  Use a real lstat for
-                    # the identity that must match the descriptor below. On
-                    # POSIX that stat already is an lstat.
-                    path_stat = os.lstat(path) if os.name == "nt" else info
+                    # The identity that must match the descriptor below: the
+                    # scandir stat on POSIX, a real lstat on Windows (osplat).
+                    path_stat = osplat.paths.lstat_for_identity(path, info)
                     # The parent was checked canonical when it was popped and
                     # this entry is no symlink or reparse point, so the path is
                     # canonical too; a per-file resolve() made a 100k-file home
