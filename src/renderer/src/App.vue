@@ -11387,16 +11387,30 @@ const statusBarGit = ref<StatusBarGit>({ branch: '', ahead: 0, behind: 0, dirty:
 async function refreshStatusBarGit(): Promise<void> {
   if (!currentWorkspace.value || !workspaceSelected.value) return
   if (backend.status.value !== 'connected') return
-  const resp = await sendQuiet<{
-    branch: string; ahead: number; behind: number
-    staged: unknown[]; unstaged: unknown[]
-  }>('git.status', { workspace_path: currentWorkspace.value })
+  // git.summary is git.status without the file lists, which the bar never
+  // shows; on every git.changed the full lists cost a big payload per window.
+  // A backend without it refuses the type once and the bar uses git.status.
+  let resp: { branch: string; ahead: number; behind: number; dirty: boolean } | null = null
+  if (!_gitSummaryUnsupported) {
+    let refused = ''
+    resp = await sendQuiet<{ branch: string; ahead: number; behind: number; dirty: boolean }>(
+      'git.summary', { workspace_path: currentWorkspace.value }, undefined, (code) => { refused = code }
+    )
+    if (refused === 'UNKNOWN_TYPE') _gitSummaryUnsupported = true
+  }
+  if (_gitSummaryUnsupported) {
+    const full = await sendQuiet<{
+      branch: string; ahead: number; behind: number
+      staged: unknown[]; unstaged: unknown[]
+    }>('git.status', { workspace_path: currentWorkspace.value })
+    resp = full && { ...full, dirty: (full.staged?.length ?? 0) + (full.unstaged?.length ?? 0) > 0 }
+  }
   if (resp) {
     statusBarGit.value = {
       branch: resp.branch || '',
       ahead: resp.ahead ?? 0,
       behind: resp.behind ?? 0,
-      dirty: (resp.staged?.length ?? 0) + (resp.unstaged?.length ?? 0) > 0
+      dirty: resp.dirty === true
     }
     return
   }
@@ -11425,6 +11439,7 @@ let _windowVisible = true
 let _gitStale = false
 let _gitRefreshTimer: number | null = null
 let _gitRetryTimer: number | null = null
+let _gitSummaryUnsupported = false
 function scheduleStatusBarGit(): void {
   // Hidden windows do no git work; they mark themselves stale and catch up on
   // the way back in. Main reports visibility over IPC rather than the Page
@@ -11458,6 +11473,8 @@ onUnmounted(() => {
 // git.changed broadcasts sent while this window was disconnected are gone for
 // good, and without a poll nothing would ever fetch them. Resync on reconnect.
 watch(() => backend.status.value, (s) => {
+  // A reconnect may reach a different backend; ask it for git.summary again.
+  if (s === 'connected') _gitSummaryUnsupported = false
   if (s === 'connected' && workspaceSelected.value) void refreshStatusBarGit()
 })
 watch(workspaceSelected, (v) => {

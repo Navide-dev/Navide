@@ -46,7 +46,18 @@ describe('the branch pill follows the workspace', () => {
     const at = appSource.indexOf('async function refreshStatusBarGit')
     expect(at).toBeGreaterThan(-1)
     const fn = appSource.slice(at, appSource.indexOf('\n}', at))
+    expect(fn).toContain("'git.summary', { workspace_path: currentWorkspace.value }")
     expect(fn).toContain("'git.status', { workspace_path: currentWorkspace.value }")
+  })
+
+  it('asks for the summary first and falls back to the full status only on an older backend', () => {
+    // The bar shows branch, ahead/behind and a dirty mark; the file lists of
+    // a full git.status were fetched on every git.changed and thrown away.
+    const at = appSource.indexOf('async function refreshStatusBarGit')
+    const fn = appSource.slice(at, appSource.indexOf('\n}', at))
+    expect(fn.indexOf("'git.summary'")).toBeLessThan(fn.indexOf("'git.status'"))
+    expect(fn).toContain("if (refused === 'UNKNOWN_TYPE') _gitSummaryUnsupported = true")
+    expect(appSource).toContain("if (s === 'connected') _gitSummaryUnsupported = false")
   })
 
   it('offers to open the folder beside the path', () => {

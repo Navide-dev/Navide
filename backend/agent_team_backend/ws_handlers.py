@@ -1354,6 +1354,26 @@ async def git_status(session: "Session", msg_id: str, msg_type: str, payload: di
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("git.summary")
+async def git_summary(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """What a status bar shows: git.status without its file lists.
+
+    Reads the same shared status run as git.status (so it adds no git
+    process when the Git pane asks at the same moment) and, like it, starts
+    watching the workspace so git.changed keeps arriving. Every scalar field
+    is kept; the lists become ``dirty`` (anything staged or unstaged)."""
+    from . import app
+
+    ws_path = payload.get("workspace_path") or ""
+    if app._git_watcher is not None:
+        await asyncio.to_thread(app._git_watcher.watch, ws_path)
+    result = await app.git_service.get_status(ws_path)
+    summary = {key: value for key, value in result.items() if not isinstance(value, (list, dict))}
+    if result.get("ok") is not False:
+        summary["dirty"] = bool(result.get("staged") or result.get("unstaged"))
+    await session.send_json(make_response(msg_id, msg_type, summary))
+
+
 @handler("git.discover_repositories")
 async def git_discover_repositories(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
