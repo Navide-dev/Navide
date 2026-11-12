@@ -155,6 +155,12 @@ const diff = computed<DisclosureDiff | null>(() => {
   }
 })
 
+// A request may arrive while this window is behind another one, minimized or
+// not focused: bring it to the front when the dialog opens so it is seen.
+watch(() => current.value !== null, (open) => {
+  if (open) void window.agentTeam?.focusSelf?.()
+})
+
 watch(() => current.value?.approval_id, async (approvalId) => {
   error.value = ''
   stagingExpired.value = false

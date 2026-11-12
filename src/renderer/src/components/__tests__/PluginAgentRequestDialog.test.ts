@@ -5,6 +5,7 @@ import PluginAgentRequestDialog, { type PluginAgentRequest } from '../PluginAgen
 import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { computeDisclosure } from '../../../../shared/pluginDisclosure'
+import { PLUGIN_APPROVAL_REQUEST_EVENT } from '../../../../shared/pluginAgentTools'
 
 const disclosure = (version: string, permissions: Record<string, unknown>) => computeDisclosure({
   schemaVersion: 2, id: 'acme.indexer', version, publisher: 'acme', permissions,
@@ -71,6 +72,19 @@ describe('PluginAgentRequestDialog (B2)', () => {
     wrapper = await open(mock)
     expect(mock.sent.map((s) => s.type)).toContain('plugins.agent_requests.list')
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
+  it('brings its window to the front when a request opens it, not while it stays hidden', async () => {
+    const focusSelf = vi.fn(async () => ({ ok: true }))
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = { trustConfirm, plugins, focusSelf }
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [] })
+    wrapper = await open(mock)
+    expect(focusSelf).not.toHaveBeenCalled()
+    mock.emit(PLUGIN_APPROVAL_REQUEST_EVENT, request())
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(true)
+    expect(focusSelf).toHaveBeenCalledTimes(1)
   })
 
   it('shows the request, the agent-written reason as plain text, and the unverified card', async () => {

@@ -76,6 +76,19 @@ describe('SkillInstallApprovalDialog', () => {
     expect(wrapper.find('.sa-dialog').exists()).toBe(false)
   })
 
+  it('brings its window to the front when a request opens it, not while it stays hidden', async () => {
+    const focusSelf = vi.fn(async () => ({ ok: true }))
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = { trustConfirm, focusSelf }
+    const mock = createMockBackend('connected')
+    mock.setResponse('skills.install_approvals.list', { approvals: [] })
+    wrapper = await open(mock)
+    expect(focusSelf).not.toHaveBeenCalled()
+    mock.emit('skills.install_approval_request', approval())
+    await flushPromises()
+    expect(wrapper.find('.sa-dialog').exists()).toBe(true)
+    expect(focusSelf).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a request, sends the approval, and closes once resolved', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('skills.install_approvals.list', { approvals: [] })
