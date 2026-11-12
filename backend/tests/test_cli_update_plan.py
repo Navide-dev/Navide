@@ -301,3 +301,20 @@ def test_shims_are_only_followed_on_windows(monkeypatch: pytest.MonkeyPatch, tmp
     monkeypatch.setattr(ob.osplat, "platform_id", "linux")
     binary = _windows_npm_prefix(tmp_path / "npm", "codex")
     assert ob._resolved_install(str(binary)) == os.path.realpath(binary)
+
+
+#: codex.cmd / codex.ps1 / codex exactly as npm 11.20.0 wrote them into
+#: %APPDATA%\npm on the 0.2.42 Windows VM (paths only, CRLF kept).
+_REAL_SHIMS = Path(__file__).parent / "data" / "windows_npm_shims"
+
+
+@pytest.mark.parametrize("shim", ["codex.cmd", "codex.ps1", "codex"])
+def test_real_npm_11_shims_are_npm_installs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, shim: str) -> None:
+    monkeypatch.setattr(ob.osplat, "platform_id", "win32")
+    prefix = tmp_path / "AppData" / "Roaming" / "npm"
+    _windows_npm_prefix(prefix, shim)
+    (prefix / shim).write_bytes((_REAL_SHIMS / shim).read_bytes())
+    resolved = ob._resolved_install(str(prefix / shim))
+    assert Path(resolved) == prefix / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+    assert ob._install_method(resolved) == "npm"
+    assert ob.update_plan(ob.DEPS_BY_ID["codex"], str(prefix / shim), resolved)["manager"] == "npm"
