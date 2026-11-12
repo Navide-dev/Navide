@@ -446,6 +446,7 @@ import {
   quotaPeerRows,
   quotaSwitchTargets,
   runFollowSwitchBatch,
+  subtreeFixRows,
   useAccountFollowSwitchFlag,
   withFollowSwitch,
   type FollowPaneInput,
@@ -10051,10 +10052,11 @@ async function restartAgentPanes(agentKey: string): Promise<void> {
 const followSwitchFlag = useAccountFollowSwitchFlag()
 
 interface FollowDialogState {
-  mode: 'switch' | 'quota' | 'follow' | 'unpin'
+  mode: 'switch' | 'quota' | 'follow' | 'unpin' | 'fix-children'
   subject: string
   rows: FollowDialogRow[]
   targets?: QuotaTarget[]
+  parentFollows?: boolean
   settle: (choice: { paneIds: string[]; targetId: string | null } | null) => void
 }
 const followDialog = shallowRef<FollowDialogState | null>(null)
@@ -10357,6 +10359,90 @@ async function unpinAllAccountPanes(): Promise<void> {
     if (now) accountFollow.add(now)
   }
   await moveFollowPanes(ids, '', sessions)
+}
+
+/** The account a pane's sub-panes are fixed to: the one it runs on now — its
+ *  own dir when fixed, else the live login (the Default slot when none). */
+function subtreeFixTarget(p: ActivePane): string {
+  if (paneAccountFixed(p) && p.profileId) return p.profileId
+  return cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT) ?? DEFAULT_SLOT_ID
+}
+
+/** The pane menu's "Fix N sub-panes to <account>": reopen every claude
+ *  sub-pane (transitively) in the account this pane runs on now and fix it
+ *  there, resuming its conversation. A snapshot — a later switch of this pane
+ *  does not carry them along. Busy sub-panes are waited for, never
+ *  interrupted; one whose rebuild fails keeps the follow flag it had. */
+async function fixDescendantsToAccount(paneId: string): Promise<void> {
+  const parent = panes.value.find((p) => p.id === paneId)
+  if (!parent || parent.agentKey !== FOLLOW_SWITCH_AGENT || parent.isLogin) return
+  const target = subtreeFixTarget(parent)
+  if (target === DEFAULT_SLOT_ID) {
+    notifyRestore.toast(i18n.global.t('action.fix-children-account-default'), { type: 'error' })
+    return
+  }
+  const account = followAccountLabel(target)
+  if (!followDirSignedIn(target)) {
+    notifyRestore.toast(i18n.global.t('account-follow.fix-children-needs-dir-login', { account }))
+    void onCliLoginSpawn(FOLLOW_SWITCH_AGENT, undefined, { accountDirProfileId: target })
+    return
+  }
+  const childIds = new Set(descendantPaneIds(paneId))
+  const children = panes.value.filter((p) => childIds.has(p.id))
+  const rows = subtreeFixRows(
+    // A sign-in pane would reopen as an ordinary one (LOW-9); an ACP pane has no session to resume.
+    children.map((p) => ({ ...followPaneInput(p), canRebuild: !p.isLogin && !acp.owns(p.id) && paneCanRebuild(p) })),
+    {
+      targetId: target,
+      liveId: cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT),
+      dirSignedIn: followDirSignedIn,
+      fixed: (id) => children.some((p) => p.id === id && paneAccountFixed(p)),
+    },
+  )
+  if (!rows.some((r) => r.checked)) {
+    notifyRestore.toast(i18n.global.t('account-follow.fix-children-none', { account }), { type: 'info' })
+    return
+  }
+  const sessions = followSessions(rows.map((r) => r.paneId))
+  const choice = await askFollowDialog({
+    mode: 'fix-children',
+    subject: account,
+    parentFollows: !paneAccountFixed(parent),
+    rows: followDialogRows(rows),
+  })
+  if (!choice || choice.paneIds.length === 0) return
+  const ids = choice.paneIds
+  const waiting = ids.filter((id) => {
+    const now = followPaneNow(id, sessions)
+    return now !== null && followPaneBusy(now)
+  }).length
+  if (waiting > 0) {
+    notifyRestore.toast(i18n.global.t('account-follow.fix-children-waiting', { count: waiting }), { type: 'info' })
+  }
+  pipelineLog(`⟳ account-fix sub-panes (${target.slice(0, 8)}): ${ids.length} pane(s)`)
+  const failures = await runFollowSwitchBatch(ids, {
+    resolve: (id) => followPaneNow(id, sessions),
+    isBusy: followPaneBusy,
+    // The flag goes right before this pane's rebuild, as the header pin does,
+    // so a pane still waiting its turn keeps following until it moves.
+    rebuild: async (id) => {
+      const wasFollowing = accountFollow.has(id)
+      accountFollow.remove(id)
+      const failure = await rebuildPaneViaResume(id, { profileId: target, suppressBusyToast: true, freshWhenNoTranscript: true })
+      if (failure && wasFollowing) accountFollow.add(id)
+      return failure
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  })
+  for (const f of failures) {
+    pipelineLog(`⚠ account-fix rebuild pane ${f.id.slice(0, 8)} failed: ${f.reason}`)
+  }
+  notifyRestore.toast(
+    failures.length > 0
+      ? i18n.global.t('account-follow.done-partial', { failed: failures.length, total: ids.length })
+      : i18n.global.t('account-follow.fix-children-done', { count: ids.length, account, skipped: rows.length - ids.length }),
+    { type: failures.length > 0 ? 'error' : 'info' }
+  )
 }
 
 /** The badge's list on a fixed pane: reopen only that pane in `profileId`'s
@@ -24205,6 +24291,14 @@ const ctxIsBatch = computed(() => ctxTargetIds.value.length > 1)
 const ctxDescendantIds = computed<string[]>(() =>
   paneCtxMenu.value ? descendantPaneIds(paneCtxMenu.value.paneId) : []
 )
+// "Fix sub-panes to <account>": a claude pane with sub-panes, and the account
+// it runs on now (the Default slot greys the item out).
+const ctxFixChildrenTarget = computed<string | null>(() => {
+  const m = paneCtxMenu.value
+  if (!m || !ctxDescendantIds.value.length) return null
+  const p = panes.value.find((x) => x.id === m.paneId)
+  return p && p.agentKey === FOLLOW_SWITCH_AGENT && !p.isLogin ? subtreeFixTarget(p) : null
+})
 
 // "Reclaim": the per-pane release the Resource Manager already offers, on the
 // pane that was right-clicked. Greyed out under the conditions a sweep skips a
@@ -25548,6 +25642,7 @@ function paneIsCommander(p: ActivePane): boolean {
     :subject="followDialog.subject"
     :rows="followDialog.rows"
     :targets="followDialog.targets"
+    :parent-follows="followDialog.parentFollows"
     @confirm="(ids: string[], target: string | null) => followDialog?.settle({ paneIds: ids, targetId: target })"
     @cancel="followDialog?.settle(null)"
   />
@@ -26865,6 +26960,18 @@ function paneIsCommander(p: ActivePane): boolean {
           @click="reclaimPaneFromMenu(paneCtxMenu!.paneId)"
         >{{ $t('action.reclaim') }}</div>
         </template>
+        <div
+          v-if="ctxFixChildrenTarget"
+          class="pane-ctx-item"
+          data-testid="ctx-fix-children-account"
+          :class="{ muted: ctxFixChildrenTarget === DEFAULT_SLOT_ID }"
+          :title="ctxFixChildrenTarget === DEFAULT_SLOT_ID
+            ? $t('action.fix-children-account-default')
+            : $t('action.fix-children-account-title', { account: followAccountLabel(ctxFixChildrenTarget) })"
+          @click="void fixDescendantsToAccount(paneCtxMenu!.paneId); closePaneCtxMenu()"
+        >{{ ctxFixChildrenTarget === DEFAULT_SLOT_ID
+          ? $t('action.fix-children-account-mine', { count: ctxDescendantIds.length })
+          : $t('action.fix-children-account', { count: ctxDescendantIds.length, account: followAccountLabel(ctxFixChildrenTarget) }) }}</div>
         <div
           v-if="ctxDescendantIds.length"
           class="pane-ctx-item danger"
@@ -28883,6 +28990,7 @@ function paneIsCommander(p: ActivePane): boolean {
 .pane-ctx-item.danger { color: var(--danger-bright); }
 .pane-ctx-item.danger:hover { background: var(--danger-emphasis); color: var(--text-on-emphasis); }
 .pane-ctx-item.disabled { opacity: 0.4; pointer-events: none; }
+.pane-ctx-item.muted { opacity: 0.4; }
 .pane-ctx-sep { height: 1px; background: var(--border-default); margin: 4px 0; }
 .pane-rename-input {
   width: 100%;

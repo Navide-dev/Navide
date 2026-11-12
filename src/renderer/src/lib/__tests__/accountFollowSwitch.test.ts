@@ -22,6 +22,7 @@ import {
   quotaPeerRows,
   quotaSwitchTargets,
   runFollowSwitchBatch,
+  subtreeFixRows,
   setAccountFollowSwitch,
   useAccountFollowSwitchFlag,
   withFollowSwitch,
@@ -310,5 +311,49 @@ describe('withFollowSwitch', () => {
     await handler('codex', 'T')
     expect(outgoing).not.toHaveBeenCalled()
     expect(afterSwitch).not.toHaveBeenCalled()
+  })
+})
+
+describe('subtreeFixRows', () => {
+  const signed = new Set(['acct-a', 'acct-b', 'acct-c'])
+  const opts = (fixedIds: string[]) => ({
+    targetId: 'acct-b',
+    liveId: 'acct-a',
+    dirSignedIn: (id: string) => signed.has(id),
+    fixed: (id: string) => fixedIds.includes(id),
+  })
+
+  it('ticks following and fixed-elsewhere claude panes, skips the rest with a reason', () => {
+    const rows = subtreeFixRows(
+      [
+        pane({ id: 'follow' }),
+        pane({ id: 'busy', busy: true }),
+        pane({ id: 'pinned-c', profileId: 'acct-c' }),
+        pane({ id: 'pinned-b', profileId: 'acct-b' }),
+        pane({ id: 'codex', agentKey: 'codex' }),
+        pane({ id: 'no-session', canRebuild: false }),
+        pane({ id: 'placeholder', realized: false }),
+      ],
+      opts(['pinned-c', 'pinned-b']),
+    )
+    expect(rows.map((r) => [r.paneId, r.checked, r.skip ?? null, r.fixed, r.profileId, r.state])).toEqual([
+      ['follow', true, null, false, 'acct-a', 'idle'],
+      ['busy', true, null, false, 'acct-a', 'running'],
+      ['pinned-c', true, null, true, 'acct-c', 'idle'],
+      ['pinned-b', false, 'already', true, 'acct-b', 'idle'],
+      ['codex', false, 'not-claude', false, 'acct-a', 'idle'],
+      ['no-session', false, 'no-session', false, 'acct-a', 'idle'],
+      ['placeholder', false, 'no-session', false, 'acct-a', 'idle'],
+    ])
+  })
+
+  it('a following pane already on the target account is still ticked: it moves from the shared login into the dir', () => {
+    const rows = subtreeFixRows([pane({ id: 'p' })], { ...opts([]), liveId: 'acct-b' })
+    expect(rows[0]).toMatchObject({ paneId: 'p', checked: true, fixed: false, profileId: 'acct-b' })
+  })
+
+  it('reads an unknown live login as the Default slot', () => {
+    const rows = subtreeFixRows([pane({ id: 'p' })], { ...opts([]), liveId: null })
+    expect(rows[0].profileId).toBe(DEFAULT_SLOT_ID)
   })
 })
