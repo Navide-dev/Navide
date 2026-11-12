@@ -37,6 +37,15 @@ def repo(tmp_path: Path) -> Path:
 TWO = [{"agent": "claude", "model": "claude-opus-5-5"}, {"agent": "codex", "model": ""}]
 
 
+def _repoint_gitfile(worktree: Path, gitdir: object) -> None:
+    """Rewrite a worktree's `.git` file in place. Git for Windows marks it
+    hidden, and Windows refuses to recreate a hidden file (`open(..., "w")` is
+    CREATE_ALWAYS), so open the existing file and truncate it instead."""
+    with open(worktree / ".git", "r+", encoding="utf-8") as fh:
+        fh.write(f"gitdir: {gitdir}\n")
+        fh.truncate()
+
+
 async def _start(repo: Path, cands: list[dict[str, Any]] = TWO) -> dict[str, Any]:
     return await arena.start_run(str(repo), "Add a greeting", cands)
 
@@ -224,11 +233,15 @@ async def test_repo_hooks_never_run_and_a_fifo_does_not_block(repo: Path) -> Non
     marker = repo.parent / "hook-ran"
     hook.write_text(f"#!/bin/sh\ntouch {marker}\n")
     hook.chmod(0o755)
-    os.mkfifo(a / "pipe")
+    # Windows has no FIFOs; the hook half of this test still runs there.
+    fifo = hasattr(os, "mkfifo")
+    if fifo:
+        os.mkfifo(a / "pipe")
     (a / "app.py").write_text("print('A')\n")
     status = await asyncio.wait_for(arena.run_status(str(repo), run["id"], None), timeout=30)
     assert {r["id"]: r for r in status["candidates"]}["A"]["files"] >= 1
-    (a / "pipe").unlink()
+    if fifo:
+        (a / "pipe").unlink()
     result = await arena.merge(str(repo), run["id"], candidate="A", mode="squash")
     assert result["ok"], result
     assert not marker.exists()
@@ -273,14 +286,14 @@ async def test_a_worktree_pointing_at_another_repository_is_refused(repo: Path, 
     other = tmp_path / "other"
     other.mkdir()
     _git(other, "init", "-q")
-    (a / ".git").write_text(f"gitdir: {other / '.git'}\n")
+    _repoint_gitfile(a, other / ".git")
     with pytest.raises(arena.ArenaError, match="does not belong"):
         await arena.run_status(str(repo), run["id"], None)
-    (a / ".git").write_text(f"gitdir: {repo / '.git' / 'worktrees' / '..'}\n")
+    _repoint_gitfile(a, repo / ".git" / "worktrees" / "..")
     with pytest.raises(arena.ArenaError, match="does not belong"):
         await arena.run_status(str(repo), run["id"], None)
     # Another candidate's admin entry: right folder, wrong worktree.
     b_admin = (Path(run["candidates"][1]["worktree"]) / ".git").read_text().split(":", 1)[1].strip()
-    (a / ".git").write_text(f"gitdir: {b_admin}\n")
+    _repoint_gitfile(a, b_admin)
     with pytest.raises(arena.ArenaError, match="does not belong"):
         await arena.run_status(str(repo), run["id"], None)
