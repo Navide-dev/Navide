@@ -436,6 +436,7 @@ import {
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
 import { runAgentAccountSwitch, switchRequester } from './lib/agentAccountSwitch'
+import { channelAccountMenu, type ChannelAccountDeps } from './lib/channelAccountSwitch'
 import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
 import { createAccountSwitchQueue } from './lib/accountSwitchQueue'
 import { usePluginMainTab } from './lib/pluginMainTab'
@@ -13076,6 +13077,7 @@ useUiActionBus({
     signIn: agentSignIn,
     switch: (args, callerPaneId) =>
       (args.paneId ? agentPaneAccountSwitch : agentAccountSwitch)(args, callerPaneId),
+    channelMenu: (args) => channelAccountMenu(args, channelAccountDeps),
   },
 })
 
@@ -13237,6 +13239,23 @@ async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: s
   })
   toastAccountSwitch(outcome, ctx, false)
   return outcome
+}
+
+// A chat's /account menu (channels layer; plan telegram_904bcf): the rows the
+// usage badge shows. The switch is the backend's shared no-confirm path.
+const channelAccountDeps: ChannelAccountDeps = {
+  accounts: {
+    findProfile: (id) => cliProfilesApi.findProfile(id),
+    defaultProfileId: (agentKey) => cliProfilesApi.defaultProfileId(agentKey),
+    aliasFor: (agentKey, profileId) => cliProfilesApi.aliasFor(agentKey, profileId),
+    profilesForAgent: (agentKey) => cliProfilesApi.profilesForAgent(agentKey),
+    signedOut: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.signedIn === false,
+  },
+  usage: (agentKey, profileId) => {
+    const snap = accountUsageFor(agentKey, profileId)
+    return { remaining: remainingPercent(snap), stale: snap?.stale === true }
+  },
+  fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
 }
 
 async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {

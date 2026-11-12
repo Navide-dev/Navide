@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -69,7 +69,8 @@ WAKE_WORDS = {"/wake"}
 MATTERMOST_WAKE_WORD = "wake"
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
-                      WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model"}
+                      WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model",
+                      account_menu.OPEN_CALLBACK: "/account"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -299,10 +300,23 @@ class Seams:
     # (pane_id, model, effort, who) -> cli_set_model's answer: {ok, pane_id, method,
     # fallback?} or {ok: False, error, error_code, hold?}; audited as from `who`
     set_model: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_set_model()
+    # pane_id -> the window's account rows for the pane's CLI (ui.accounts.channelMenu):
+    # {status: "ok", agentKey, activeId, fixedCount, rows: [{id, label, remaining, stale,
+    # signedOut, active}]}, {status: "unsupported"} for a CLI a chat cannot switch, or
+    # {status: "no-window" | "pane-gone"}
+    account_menu: Callable[[str], Awaitable[dict[str, Any]]] = lambda _p: _no_account()
+    # (pane_id, profile_id, from_id, who) -> {status: "switched" | "switched-signed-out",
+    # from, to, fixedCount} or {status: "stale" | "needs-window" | "refused" | ..., code?};
+    # the window's own switch, audited as from `who`
+    switch_account: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_account()
 
 
 async def _no_set_model() -> dict[str, Any]:
     return {"ok": False, "error": "model switching is not available", "error_code": "unavailable"}
+
+
+async def _no_account() -> dict[str, Any]:
+    return {"status": "no-window"}
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -499,6 +513,7 @@ class ChannelManager:
         self.relay = relay.RelayTable(clock=clock, on_expired=self._relay_expired)
         self.quick = quick_menu.QuickMenus(clock=clock)
         self.models = model_menu.ModelMenus(clock=clock)
+        self.accounts = account_menu.AccountMenus(clock=clock)
         # pane id -> (its wait task, the message that asked, pane name, model shown, lang)
         self._model_waits: dict[str, tuple[asyncio.Task[Any], InboundMessage, str, str, str]] = {}
         self.share_buttons = share_cmds.RevokeButtons(clock=clock)
@@ -2091,6 +2106,9 @@ class ChannelManager:
         if model_menu.parse_callback(msg.callback_data) is not None:
             await self._model_press(msg)
             return
+        if account_menu.parse_callback(msg.callback_data) is not None:
+            await self._account_press(msg)
+            return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
         wake_pressed = msg.callback_data == WAKE_CALLBACK
@@ -2176,6 +2194,10 @@ class ChannelManager:
         model_cmd = model_menu.parse_command(command)
         if model_cmd is not None:
             await self._model_command(msg, binding, pane_id, model_cmd)
+            return
+        account_cmd = account_menu.parse_command(command)
+        if account_cmd is not False:
+            await self._account_command(msg, binding, pane_id, account_cmd)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
@@ -3354,6 +3376,9 @@ class ChannelManager:
         if adapter is None:
             return
         text, rows = self.models.render(menu)
+        if menu.step in ("pane", "model"):
+            # The two chat menus link to each other: /account is one press away.
+            rows = [*rows[:-1], [(account_menu.text(menu.lang, "open"), account_menu.OPEN_CALLBACK)], rows[-1]]
         text = redact.redact_text(body if body is not None else text)
         loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
         if menu.message_id:
@@ -3555,6 +3580,154 @@ class ChannelManager:
             held_wait = self._model_waits.get(row.pane_id)
             if held_wait is not None and held_wait[0] is me:
                 del self._model_waits[row.pane_id]
+
+    # --- /account: switch the CLI account from the chat (channels.account_menu) ------------
+
+    async def _account_command(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                               index: int | None) -> None:
+        """``/account`` opens the menu (numbered lines where there are no buttons, the list
+        only in a group chat); ``/account <n>`` switches to row n at once (direct chat)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        info = await self._seams.account_menu(pane_id)
+        status = str(info.get("status") or "")
+        if status == "unsupported":
+            agent = str(info.get("agentKey") or self._seams.pane_agent(pane_id) or "?")
+            await self._reply(msg, account_menu.text(lang, "unsupported", agent=agent))
+            return
+        if status != "ok":
+            await self._reply(msg, account_menu.text(lang, "no_window"))
+            return
+        rows = [account_menu.AccountRow.from_window(r) for r in info.get("rows") or [] if isinstance(r, dict)]
+        if len(rows) < 2:
+            await self._reply(msg, account_menu.text(lang, "no_accounts"))
+            return
+        fixed = info.get("fixedCount")
+        menu = self.accounts.create(
+            location_key=msg.location_key(), sender_id=msg.sender_id, lang=lang,
+            agent_key=str(info.get("agentKey") or ""), active_id=str(info.get("activeId") or account_menu.DEFAULT_ID),
+            rows=rows, fixed_count=fixed if isinstance(fixed, int) and not isinstance(fixed, bool) else 0,
+        )
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if self._kind_at(loc) != "direct":
+            self.accounts.close(menu)
+            await self._reply(msg, redact.redact_text(self.accounts.body(menu, group=True)))
+            return
+        if index is not None:
+            if not 1 <= index <= len(rows) or rows[index - 1].id == menu.active_id:
+                self.accounts.close(menu)
+                await self._reply(msg, redact.redact_text(self.accounts.body(menu, numbered=True)))
+                return
+            await self._account_switch(msg, pane_id, menu, rows[index - 1].id)
+            return
+        if not self._menu_buttons(msg):
+            self.accounts.close(menu)
+            await self._reply(msg, redact.redact_text(self.accounts.body(menu, numbered=True)))
+            return
+        await self._account_show(msg, menu)
+
+    async def _account_show(self, msg: InboundMessage, menu: account_menu.Menu) -> None:
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        body, rows = self.accounts.render(menu)
+        # The two chat menus link to each other: /model is one press away.
+        rows = [*rows[:-1], [(account_menu.text(menu.lang, "model_link"), model_menu.OPEN_CALLBACK)], rows[-1]]
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            menu.message_id = await adapter.send_menu(loc, redact.redact_text(body), rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the account menu on %s failed: %s", msg.platform, exc)
+            self.accounts.close(menu)
+            await self._reply(msg, quick_menu.text(menu.lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    async def _account_settle(self, msg: InboundMessage, menu: account_menu.Menu, body: str) -> bool:
+        """The menu's message as plain text, its buttons gone; False when there is none to edit."""
+        self.accounts.freeze(menu)
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not menu.message_id:
+            return False
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            await adapter.edit_menu(loc, menu.message_id, redact.redact_text(body), [])
+            return True
+        except Exception as exc:  # noqa: BLE001 — its buttons are dead anyway
+            log.warning("channels: closing the account menu on %s failed: %s", msg.platform, exc)
+            return False
+
+    async def _account_press(self, msg: InboundMessage) -> None:
+        token = account_menu.parse_callback(msg.callback_data) or ""
+        press, why = self.accounts.press(token, msg.location_key(), msg.sender_id)
+        if press is None:
+            lang = prompt_skills.language(await self._ui_settings())
+            await self._reply(msg, account_menu.text(lang, why or "expired"))
+            return
+        menu = press.menu
+        binding = self._binding_for(msg)
+        pane_id = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        # The chat must still be a bound direct chat; the account must still be one the
+        # menu offered and not the one it was opened on.
+        if (not pane_id or self._kind_at(loc) != "direct" or press.action not in ("switch", "cancel")
+                or (press.action == "switch" and (press.value == menu.active_id
+                                                  or press.value not in {r.id for r in menu.rows}))):
+            self.accounts.close(menu)
+            await self._account_settle(msg, menu, account_menu.text(menu.lang, "expired"))
+            return
+        if press.action == "cancel":
+            self.accounts.close(menu)
+            await self._account_settle(msg, menu, account_menu.text(menu.lang, "cancelled"))
+            return
+        await self._account_switch(msg, pane_id, menu, press.value)
+
+    async def _account_switch(self, msg: InboundMessage, pane_id: str, menu: account_menu.Menu,
+                              target: str) -> None:
+        """Switch to ``target`` once: the menu is closed first, so a second press is expired.
+        The window re-checks that the active account is still the one the menu showed."""
+        lang = menu.lang
+        to_label = next((r.label for r in menu.rows if r.id == target), target)
+        self.accounts.close(menu)
+        await self._account_settle(msg, menu, account_menu.text(lang, "switching", to=to_label))
+
+        async def settled(answer: dict[str, Any]) -> None:
+            # A queued switch ended: its own message, the queued one stays as it was.
+            await self._reply(msg, redact.redact_text(self._account_result(answer, menu, to_label)))
+
+        result = await self._seams.switch_account(pane_id, target, menu.active_id, self._model_who(msg), settled)
+        body = self._account_result(result, menu, to_label)
+        if not await self._account_settle(msg, menu, body):
+            await self._reply(msg, redact.redact_text(body))
+
+    @staticmethod
+    def _account_result(result: dict[str, Any], menu: account_menu.Menu, to_label: str) -> str:
+        """What the chat is told about a switch's answer, or about a queued one's end."""
+        lang = menu.lang
+        status = str(result.get("status") or "")
+        to_shown = account_menu.mask_email(str(result.get("to") or to_label))
+        if status in ("switched", "switched-signed-out"):
+            from_label = account_menu.mask_email(str(result.get("from") or menu.current_label()))
+            lines = [account_menu.text(lang, "ok", to=to_shown, **{"from": from_label}) if status == "switched"
+                     else account_menu.text(lang, "ok_signed_out", to=to_shown)]
+            if menu.fixed_count:
+                lines.append(account_menu.text(lang, "fixed", count=menu.fixed_count))
+            lines.append(account_menu.text(lang, "audited"))
+            return "\n".join(lines)
+        if status == "queued":
+            waiting = result.get("waiting")
+            count = waiting if isinstance(waiting, int) and not isinstance(waiting, bool) else "?"
+            return account_menu.text(lang, "queued", count=count, to=to_shown)
+        if status == "superseded":
+            return account_menu.text(lang, "superseded", to=to_shown)
+        if status in ("stale", "already-active", "unknown-profile"):
+            return account_menu.text(lang, "expired")
+        if status == "needs-user":
+            return account_menu.text(lang, "needs_user", code=str(result.get("code") or status))
+        if status in ("unsupported", "api-key-account"):
+            return account_menu.text(lang, "unsupported", agent=menu.agent_key or "?")
+        if status == "unavailable":
+            return account_menu.text(lang, "unavailable")
+        if status in ("no-window", "pane-gone", ""):
+            return account_menu.text(lang, "no_window")
+        return account_menu.text(lang, "failed", error=str(result.get("code") or status))
 
     def _menu_buttons(self, msg: InboundMessage) -> bool:
         """Whether this chat's quick menus come as buttons rather than numbered lines."""
@@ -4010,10 +4183,11 @@ class ChannelManager:
         if current.task is None or current.task.done():
             current.task = self._spawn(self._while_running(pane_id, current))
 
-    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> bool:
+    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str,
+                      buttons: list[tuple[str, str]] | None = None) -> bool:
         """Post ``text`` to ``loc``; False (logged) when it did not go."""
         try:
-            await self.mirror.send(loc, text)
+            await self.mirror.send(loc, text, buttons=buttons) if buttons else await self.mirror.send(loc, text)
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: notice to %s failed: %s", loc.key(), exc)
             return False
@@ -4097,7 +4271,13 @@ class ChannelManager:
         if menu:
             lines.append(MSG_USAGE_LIMIT_MENU)
         lines.append(MSG_USAGE_LIMIT_KEPT)
-        await self._notice(adapter, pending.loc, "\n".join(lines))
+        buttons = None
+        # Another account may still have quota: offer the switch where a press can make it.
+        if (agent == "Claude" and adapter.capabilities.buttons
+                and self._kind_at(pending.loc) == "direct"):
+            lang = prompt_skills.language(await self._ui_settings())
+            buttons = [(account_menu.text(lang, "open"), account_menu.OPEN_CALLBACK)]
+        await self._notice(adapter, pending.loc, "\n".join(lines), buttons=buttons)
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
         if not pending.status_id and pending.status_send is not None:

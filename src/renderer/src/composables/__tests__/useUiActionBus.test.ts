@@ -930,6 +930,17 @@ describe('useUiActionBus — account actions', () => {
     expect(other.sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
   })
 
+  // Plan telegram_904bcf: a chat's /account menu reads its rows the same way.
+  it('hands ui.accounts.channelMenu to the account actions with the caller pane', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const channelMenu = vi.fn(() => ({ status: 'ok', rows: [] }))
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn: vi.fn(), channelMenu } })
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.channelMenu', args: { agentKey: 'claude' }, caller_pane_id: 'pa', addressed: true }))
+    await flush()
+    expect(channelMenu).toHaveBeenCalledWith({ agentKey: 'claude' }, 'pa', expect.any(AbortSignal))
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: { status: 'ok' } })
+  })
+
   // Plan agent-0-2-42_3f728e: the backend switches for a chat button
   // (Telegram) with no calling pane; the request names its requester.
   it('hands a requester-named ui.accounts.switch with no pane to the switch action', async () => {

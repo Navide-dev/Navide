@@ -9,7 +9,7 @@ import unicodedata
 import pytest
 
 from agent_team_backend import prompt_skills as ps
-from agent_team_backend.channels import held, inbound, media, model_menu, quick_menu, telegram, wake
+from agent_team_backend.channels import account_menu, held, inbound, media, model_menu, quick_menu, telegram, wake
 
 _SEED = ps.load_seed()
 TABLES: dict[str, dict[str, dict[str, str]]] = {
@@ -18,6 +18,7 @@ TABLES: dict[str, dict[str, dict[str, str]]] = {
     "wake": wake.STRINGS,
     "quick_menu": quick_menu.STRINGS,
     "model_menu": model_menu.STRINGS,
+    "account_menu": account_menu.STRINGS,
     "media": media.STRINGS,
     "telegram": telegram.BOT_COMMAND_DESCRIPTIONS,
     "seed": {lang: {"name": _SEED["name"][lang], "description": _SEED["description"][lang]}
