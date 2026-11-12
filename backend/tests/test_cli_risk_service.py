@@ -390,7 +390,11 @@ async def test_sweep_cost_stays_flat_with_60_panes_and_10k_history(store):
     """One network sweep over 60 panes with 10,000 historical signals: one
     snapshot per sweep, no rewrite of history, and the snapshot carries only
     active signals. The old path deep-copied the whole table once per pane
-    (~18 s of CPU per sweep on a real 10k-signal store)."""
+    (~18 s of CPU per sweep on a real 10k-signal store).
+
+    The budget is CPU time (every thread of the process, so the worker hop
+    counts), not wall time: each pane's observation is its own SQLite commit,
+    and a slow runner disk spent 2.7 s of wall time in those fsyncs alone."""
     history = {}
     for i in range(10_000):
         owner = f"dead-{i // 10}" if i < 9_400 else f"live-{i % 60}"
@@ -412,10 +416,10 @@ async def test_sweep_cost_stays_flat_with_60_panes_and_10k_history(store):
     store._commit = lambda changes, **kw: (written.append(len(changes.get("signals", {}))),
                                            original_commit(changes, **kw))[1]
     try:
-        started = time.perf_counter()
+        started = time.process_time()
         service.request(panes)
         await settle(service)
-        elapsed = time.perf_counter() - started
+        elapsed = time.process_time() - started
     finally:
         await service.close()
 
@@ -423,7 +427,7 @@ async def test_sweep_cost_stays_flat_with_60_panes_and_10k_history(store):
     assert sum(written) == 60  # one new signal per pane; inactive history untouched
     assert len(service._snapshot["signals"]) == 60
     assert all(len(view["signals"]) == 1 for view in service.current(panes).values())
-    assert elapsed < 2.0, f"sweep took {elapsed:.2f}s"
+    assert elapsed < 2.0, f"sweep took {elapsed:.2f}s of CPU"
 
 
 async def test_sweep_skips_only_the_pane_whose_observation_fails(store, caplog):
