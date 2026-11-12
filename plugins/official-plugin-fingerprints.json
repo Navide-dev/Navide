@@ -1,5 +1,5 @@
 {
-  "baseline": "v0.2.40",
+  "baseline": "v0.2.41",
   "plugins": {
     "navide.browser": {
       "version": "1.1.2",

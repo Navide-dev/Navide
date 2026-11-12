@@ -121,6 +121,37 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.41',
+    title: {
+      'zh-TW': 'macOS 與 Linux 上的 Git 功能恢復正常',
+      'en-US': 'Git Works Again on macOS and Linux',
+      'ja-JP': 'macOS と Linux で Git 機能が元どおり動くように',
+      'zh-CN': 'macOS 与 Linux 上的 Git 功能恢复正常',
+      'ko-KR': 'macOS와 Linux에서 Git 기능이 다시 정상 작동',
+      'es-ES': 'Git vuelve a funcionar en macOS y Linux',
+      'fr-FR': 'Git fonctionne de nouveau sous macOS et Linux',
+      'de-DE': 'Git funktioniert unter macOS und Linux wieder',
+      'pt-BR': 'O Git volta a funcionar no macOS e no Linux',
+      'ru-RU': 'Git снова работает на macOS и Linux',
+      'vi-VN': 'Git hoạt động trở lại trên macOS và Linux',
+    },
+    highlights: [
+      {
+        'zh-TW': '修正：從 0.2.32 起，macOS 和 Linux 版會把正常的 repo 顯示成「Not a Git repository」，Git 外掛、git 監看、commit 訊息、gh／glab 和 shell 指令都會失敗。現在這些功能都恢復正常；Windows 不受影響。',
+        'en-US': 'Fix: since 0.2.32, the macOS and Linux versions showed a real repository as "Not a Git repository", and the Git plugin, Git watching, commit messages, gh/glab and shell commands all failed. They all work again; Windows was not affected.',
+        'ja-JP': '修正：0.2.32 以降、macOS 版と Linux 版では正常なリポジトリが「Not a Git repository」と表示され、Git プラグイン、Git の監視、コミットメッセージ、gh／glab とシェルコマンドがすべて失敗していました。これらはすべて元どおり動きます。Windows には影響ありません。',
+        'zh-CN': '修复：从 0.2.32 起，macOS 和 Linux 版会把正常的仓库显示成“Not a Git repository”，Git 插件、Git 监视、commit 信息、gh/glab 和 shell 命令都会失败。现在这些功能都恢复正常；Windows 不受影响。',
+        'ko-KR': '수정: 0.2.32부터 macOS와 Linux 버전에서 정상 저장소가 "Not a Git repository"로 표시되고, Git 플러그인, Git 감시, 커밋 메시지, gh/glab과 셸 명령이 모두 실패했습니다. 이제 모두 다시 정상 작동하며, Windows는 영향을 받지 않았습니다.',
+        'es-ES': 'Corrección: desde la 0.2.32, las versiones de macOS y Linux mostraban un repositorio real como "Not a Git repository", y fallaban el complemento Git, la vigilancia de Git, los mensajes de commit, gh/glab y los comandos de shell. Todo vuelve a funcionar; Windows no se vio afectado.',
+        'fr-FR': 'Correction : depuis la 0.2.32, les versions macOS et Linux affichaient un vrai dépôt comme « Not a Git repository », et le plugin Git, la surveillance Git, les messages de commit, gh/glab et les commandes shell échouaient tous. Tout fonctionne de nouveau ; Windows n’était pas concerné.',
+        'de-DE': 'Korrektur: Seit 0.2.32 zeigten die macOS- und Linux-Versionen ein echtes Repository als „Not a Git repository“ an, und das Git-Plug-in, die Git-Überwachung, Commit-Nachrichten, gh/glab und Shell-Befehle schlugen alle fehl. Alles funktioniert wieder; Windows war nicht betroffen.',
+        'pt-BR': 'Correção: desde a 0.2.32, as versões para macOS e Linux mostravam um repositório real como "Not a Git repository", e o plug-in Git, o monitoramento do Git, as mensagens de commit, gh/glab e os comandos de shell falhavam. Tudo volta a funcionar; o Windows não foi afetado.',
+        'ru-RU': 'Исправление: начиная с 0.2.32 версии для macOS и Linux показывали настоящий репозиторий как «Not a Git repository», а плагин Git, отслеживание Git, сообщения коммитов, gh/glab и команды оболочки не работали. Теперь всё снова работает; Windows это не затронуло.',
+        'vi-VN': 'Sửa lỗi: từ 0.2.32, bản macOS và Linux hiển thị một repository bình thường là "Not a Git repository", và plugin Git, theo dõi Git, thông điệp commit, gh/glab cùng các lệnh shell đều thất bại. Nay tất cả đã hoạt động trở lại; Windows không bị ảnh hưởng.',
+      },
+    ],
+  },
+  {
     version: '0.2.40',
     title: {
       'zh-TW': 'Hermes 與 OpenClaw 的 Agent 分格、Navide 外掛控管，以及用 MCP 切換模型',
