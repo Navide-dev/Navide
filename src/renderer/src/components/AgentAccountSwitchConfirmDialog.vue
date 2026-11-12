@@ -25,7 +25,12 @@ function onKeydown(event: KeyboardEvent): void {
   event.stopPropagation()
   emit('answer', false)
 }
-onMounted(() => window.addEventListener('keydown', onKeydown, true))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown, true)
+  // The request may arrive while this window is behind another one,
+  // minimized or not focused: bring it to the front so the question is seen.
+  void window.agentTeam?.focusSelf?.()
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true))
 
 // Focus starts on Cancel: the safe answer to a security question.
@@ -91,6 +96,19 @@ useDialogFocus(card, () => cancelButton.value)
 </template>
 
 <style scoped>
+/* semantic.css styles the scrim's look only; each dialog positions its own
+   overlay. Without this the card sat in the page flow at the window's top-left
+   and pushed the whole shell down, reading as a separate plain window. */
+.switch-confirm {
+  position: fixed;
+  inset: 0;
+  /* Above Settings, the other agent requests (141-142) and the history and
+     completion modals (151-152), so no open modal can hide the question. */
+  z-index: calc(var(--z-modal) + 160);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .switch-confirm-facts {
   display: grid;
   grid-template-columns: max-content 1fr;
