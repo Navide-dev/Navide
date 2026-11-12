@@ -187,6 +187,10 @@ class _Ctx:
     # Shell variables a bare `NAME=value` (or `export NAME=value`) set earlier
     # in the command, as written: only read to escalate (_indirect_credentials).
     vars: dict[str, str] = field(default_factory=dict)
+    # Characters held by values over SHORT_VAR_CHARS, and written out from
+    # them so far (see _record_assignments / _indirect_credentials).
+    long_vars_chars: int = 0
+    long_expansion_chars: int = 0
 
 
 # ---------------------------------------------------------------- paths
@@ -1048,32 +1052,33 @@ _CREDENTIAL_RULES = ("credential-access", "credential-exfil", "credential-pipe-u
 
 
 #: Caps on the variables followed for _indirect_credentials. `B=$A$A; C=$B$B`
-#: doubles at every step, so expansion stops at a size no path needs.
+#: doubles at every step, so nothing grows past MAX_VAR_CHARS. A value or word
+#: of at most SHORT_VAR_CHARS (any real path) is always followed; longer ones
+#: share LONG_VARS_CHARS (values held at once) and LONG_EXPANSION_CHARS (words
+#: written out over the whole command), so padding can never push a short
+#: credential path out of view.
 MAX_VAR_CHARS = 4096
-MAX_VARS = 256
+SHORT_VAR_CHARS = 256
+LONG_VARS_CHARS = 64_000
+LONG_EXPANSION_CHARS = 256_000
 
 
-def _subst_vars(word: str, values: dict[str, str]) -> str | None:
-    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept.
-    None once the result would pass MAX_VAR_CHARS."""
-    out: list[str] = []
-    size = 0
-    end = 0
-    for m in _VAR_REF_RE.finditer(word):
-        piece = word[end:m.start()] + values.get(m.group(1) or m.group(2), m.group(0))
-        size += len(piece)
-        if size > MAX_VAR_CHARS:
-            return None
-        out.append(piece)
-        end = m.end()
-    if end and size + len(word) - end > MAX_VAR_CHARS:
-        return None
-    out.append(word[end:])
-    return "".join(out)
+def _expanded_len(word: str, values: dict[str, str]) -> int:
+    """Length of `word` with its known variables written out, without building it."""
+    return len(word) + sum(
+        len(values[name]) - len(m.group(0))
+        for m in _VAR_REF_RE.finditer(word)
+        if (name := m.group(1) or m.group(2)) in values
+    )
+
+
+def _subst_vars(word: str, values: dict[str, str]) -> str:
+    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept."""
+    return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
 def _too_big_to_follow(acc: _Acc) -> None:
-    acc.opaque("dynamic-path", f"a variable is not followed past {MAX_VAR_CHARS} characters or {MAX_VARS} names")
+    acc.opaque("dynamic-path", f"a variable longer than {SHORT_VAR_CHARS} characters is not followed past Guard's limits")
 
 
 def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
@@ -1085,29 +1090,45 @@ def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
     if not words or not all(matches):
         return
     for m in matches:
-        value = _subst_vars(m.group(2), ctx.vars)
-        if value is None or (m.group(1) not in ctx.vars and len(ctx.vars) >= MAX_VARS):
-            ctx.vars.pop(m.group(1), None)
+        name = m.group(1)
+        size = _expanded_len(m.group(2), ctx.vars)
+        value = _subst_vars(m.group(2), ctx.vars) if size <= MAX_VAR_CHARS else None
+        old = ctx.vars.pop(name, None)
+        if old is not None and len(old) > SHORT_VAR_CHARS:
+            ctx.long_vars_chars -= len(old)
+        if value is None:
             _too_big_to_follow(acc)
             continue
-        ctx.vars[m.group(1)] = value
+        if size > SHORT_VAR_CHARS:
+            # Make room by dropping the longest values first; short ones stay.
+            while ctx.long_vars_chars + size > LONG_VARS_CHARS:
+                longest = max((n for n, v in ctx.vars.items() if len(v) > SHORT_VAR_CHARS), key=lambda n: len(ctx.vars[n]))
+                ctx.long_vars_chars -= len(ctx.vars.pop(longest))
+                _too_big_to_follow(acc)
+            ctx.long_vars_chars += size
+        ctx.vars[name] = value
 
 
 def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
     """Escalate only: grade the pipeline again with the variables set
     earlier in the command written out, and keep the credential rules it
-    hits. Nothing else from that pass counts, so no other verdict moves."""
-    expanded: list[_Cmd] = []
-    for c in pipeline:
-        argv = [_subst_vars(a, ctx.vars) for a in c.argv]
-        redirects = [(op, _subst_vars(t, ctx.vars)) for op, t in c.redirects]
-        if None in argv or any(t is None for _, t in redirects):
+    hits. Nothing else from that pass counts, so no other verdict moves.
+    A word too long to write out is graded as written and marks the verdict."""
+
+    def expand(word: str) -> str:
+        size = _expanded_len(word, ctx.vars)
+        if size <= SHORT_VAR_CHARS or size == len(word):
+            return _subst_vars(word, ctx.vars)
+        if size > MAX_VAR_CHARS or ctx.long_expansion_chars + size > LONG_EXPANSION_CHARS:
             _too_big_to_follow(acc)
-            return
-        expanded.append(_Cmd(argv, redirects))  # type: ignore[arg-type]
+            return word
+        ctx.long_expansion_chars += size
+        return _subst_vars(word, ctx.vars)
+
+    expanded = [_Cmd([expand(a) for a in c.argv], [(op, expand(t)) for op, t in c.redirects]) for c in pipeline]
     if all(e.argv == c.argv and e.redirects == c.redirects for e, c in zip(expanded, pipeline)):
         return
-    copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={})
+    copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={}, long_vars_chars=0)
     sub = _Acc()
     _classify_pipeline(expanded, copy, sub, sub_downloads, depth)
     for rule, reason in zip(sub.rules, sub.reasons):
