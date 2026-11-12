@@ -18,8 +18,14 @@ function handler(): string {
 }
 
 describe('claude.account_dir_notice', () => {
+  it('makes the pane adopt the new session, as a restored pane does', () => {
+    expect(handler()).toMatch(/if \(ev\.resume_fallback_session_id\) \{\s*if \(pane\) markResumeFallback\(pane, ev\.resume_fallback_session_id\)/)
+    // The restore branch of the attribution handler is what replaces the pin.
+    expect(appSource).toMatch(/if \(pane\.pinnedFromRestore\) \{\s*pane\.pinnedFromRestore = undefined\s*if \(pane\.pinnedSessionId !== attributedId\) adopt\(\)/)
+  })
+
   it('toasts the resume fallback only when the backend names one', () => {
-    expect(handler()).toMatch(/if \(ev\.resume_fallback_session_id\) \{\s*notifyRestore\.toast\(\s*i18n\.global\.t\('cli-account-dir\.resume-fallback'/)
+    expect(handler()).toMatch(/if \(ev\.resume_fallback_session_id\) \{\s*if \(pane\) markResumeFallback\(pane, ev\.resume_fallback_session_id\)\s*notifyRestore\.toast\(\s*i18n\.global\.t\('cli-account-dir\.resume-fallback'/)
   })
 
   it('toasts the Developer Mode hint only for unshared entries', () => {
