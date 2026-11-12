@@ -1260,3 +1260,20 @@ A Telegram bot has exactly one `getUpdates` consumer. Do not give the same bot
 to Claude Code `--channels` or any other program: Navide reports the conflict
 (409) and backs off, but the two will steal each other's messages. Navide also
 refuses the same token on two platforms/accounts at once.
+
+Telegram numbers a bot's updates in sequence, so Navide notices when some never
+reached it (another program confirmed them, or Navide was offline for over 24
+hours): it logs the gap and tells every chat bound through that bot how many
+messages were taken, so the sender knows to resend.
+
+### Messages are kept until they reach the pane
+
+A chat message is written to Navide's database before the bot confirms it to
+the platform, and stays there until it reaches its pane or the chat has been
+told what happened to it. A Navide restart or crash in between sends it in
+after the next start; one older than a day is reported to its chat as not sent
+instead. While a pane's CLI reports an expired login, its chat's messages are
+queued (up to 20 per pane), the chat is told so, and they are sent in, in
+order, once the CLI is signed in again. The backend log records each received
+update (its kind, a hash of the chat and the message id, never the text) and
+whether it was handed to the pane.

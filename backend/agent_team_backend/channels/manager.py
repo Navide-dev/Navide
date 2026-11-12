@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import held, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -259,6 +259,9 @@ class Seams:
     # pane_id -> {until: ms | None, buffer: str}: the pane's usage-limit reading and screen
     # tail, via the UI probe; read-only, never a quota fetch
     limit_info: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_limit()
+    # pane_id -> {login_expired: bool}: whether the pane's CLI reports an expired login, via
+    # the UI probe; {} (never held) when the window does not say
+    cli_health: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_health()
     # pane_id -> True for a CLI sign-in pane (login_panes): never bound, its screen
     # holds an authorization URL or code
     is_login_pane: Callable[[str], bool] = lambda _pane_id: False
@@ -303,6 +306,10 @@ async def _no_set_model() -> dict[str, Any]:
 
 
 async def _no_limit() -> dict[str, Any]:
+    return {}
+
+
+async def _no_health() -> dict[str, Any]:
     return {}
 
 
@@ -437,6 +444,7 @@ class _Debounce:
     first_at: float
     task: asyncio.Task[None] | None = None
     attachments: list[Any] = field(default_factory=list)
+    inbound_ids: list[int] = field(default_factory=list)
 
 
 class ChannelManager:
@@ -511,6 +519,14 @@ class ChannelManager:
         # permission prompt, sent in once the prompt clears (channels.held)
         self._prompt_held: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
         self._held_watching: set[str] = set()  # panes whose kept messages are being watched
+        # pane_id -> (kept at, message, binding): what a chat sent while the pane's CLI reported
+        # an expired login, sent in once it is signed in again (channels.inbound)
+        self._cli_held: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        self._cli_watching: set[str] = set()
+        # channel_inbound rows this backend holds: in flight (live) and, of those, kept for
+        # later (parked: debounced, or held for a prompt or a login) and so not yet settled
+        self._live_inbound: set[int] = set()
+        self._parked: set[int] = set()
         self._last_turn_text: dict[str, str] = {}  # pane_id -> its last turn's text, for /status
         self.mirror = Mirror(self)
 
@@ -678,10 +694,16 @@ class ChannelManager:
                 self._on_managed_bot(platform, account, adapter, update)
 
             adapter.on_managed_bot = on_managed_bot
+        if hasattr(adapter, "on_missed_updates"):
+            async def on_missed_updates(count: int) -> None:
+                self._on_missed_updates(bot, count)
+
+            adapter.on_missed_updates = on_missed_updates
         if hasattr(adapter, "command_language"):
             # Telegram describes its "/" menu in the language the rest of Navide speaks.
             adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
+        await self._replay_inbound(bot)
         await self._report_lost_kept(bot)
         await self._report_lost_replies(bot)
         return None
@@ -1934,8 +1956,10 @@ class ChannelManager:
         chat never stalls receiving for every platform.
         """
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            log.info("channels: %s dropped: channels off or its bot not running", _loc_log(msg))
             return
         if self._is_duplicate(msg):
+            log.info("channels: %s message %s dropped: duplicate", _loc_log(msg), msg.message_id)
             return
         # A live invite code is handled before the gate: its sender asks to be linked
         # (an approval request), so the group drop below must not swallow it.
@@ -1945,8 +1969,105 @@ class ChannelManager:
             self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code, invite.target))
             return
         if not msg.is_direct and not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            log.info("channels: %s dropped: group sender not allowed", _loc_log(msg))
             return  # group strangers are dropped silently
-        self._enqueue(msg.location_key(), lambda: self._process_inbound(msg))
+        # Kept before the adapter confirms it to the platform: a restart from here on replays it.
+        msg = await self._persist_inbound(msg)
+        self._enqueue(msg.location_key(), lambda: self._settle(msg, lambda: self._process_inbound(msg)))
+
+    # --- unsettled inbound messages (channel_inbound) ------------------------------------
+
+    async def _persist_inbound(self, msg: InboundMessage) -> InboundMessage:
+        try:
+            row_id = await run_in_db_thread(self.store.add_inbound, msg.platform, msg.account,
+                                            inbound.to_payload(msg))
+        except Exception as exc:  # noqa: BLE001 — the message still goes in, only unkept
+            log.warning("channels: keeping %s message %s failed: %s", _loc_log(msg), msg.message_id, exc)
+            return msg
+        self._live_inbound.add(row_id)
+        return dataclasses.replace(msg, inbound_ids=(row_id,))
+
+    async def _settle(self, msg: InboundMessage, run: Callable[[], Awaitable[Any]]) -> None:
+        """Run ``run`` for ``msg``; its rows are deleted unless it was kept for later (parked)
+        meanwhile. A cancel (stop) keeps them for the next start to replay."""
+        ids = msg.inbound_ids
+        self._parked.difference_update(ids)
+        try:
+            await run()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            await self._finish_inbound(ids)  # never replayed into the same failure
+            raise
+        if not self._parked.intersection(ids):
+            await self._finish_inbound(ids)
+
+    def _park(self, msg: InboundMessage) -> None:
+        self._parked.update(msg.inbound_ids)
+
+    async def _finish_inbound(self, ids: tuple[int, ...]) -> None:
+        if not ids:
+            return
+        self._parked.difference_update(ids)
+        self._live_inbound.difference_update(ids)
+        try:
+            await run_in_db_thread(self.store.delete_inbound, tuple(ids))
+        except Exception as exc:  # noqa: BLE001 — at worst replayed once after a restart
+            log.warning("channels: settling inbound rows %s failed: %s", ids, exc)
+
+    async def _replay_inbound(self, bot: BotKey) -> None:
+        """Process again what ``bot`` took off its platform but never settled (a crash or a
+        stop before it reached its pane); what is older than a day is reported instead."""
+        try:
+            rows = await run_in_db_thread(self.store.inbound, *bot)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading unsettled messages of %s failed: %s", _bot_label(bot), exc)
+            return
+        old: dict[str, list[InboundMessage]] = {}
+        replayed = 0
+        for row_id, created_at, payload in rows:
+            if row_id in self._live_inbound:
+                continue  # still in flight in this backend (a bot restarted, not Navide)
+            try:
+                msg = inbound.from_payload(payload, row_id)
+            except Exception as exc:  # noqa: BLE001 — unreadable: nothing left to send
+                log.warning("channels: unsettled message #%d of %s is unreadable: %s", row_id, _bot_label(bot), exc)
+                await self._finish_inbound((row_id,))
+                continue
+            self._live_inbound.add(row_id)
+            self._is_duplicate(msg)  # a late copy from the platform is not processed twice
+            if time.time() - created_at > inbound.REPLAY_MAX_AGE_S:
+                old.setdefault(msg.location_key(), []).append(msg)
+                continue
+            replayed += 1
+            self._enqueue(msg.location_key(), lambda m=msg: self._settle(m, lambda: self._process_inbound(m)))
+        if replayed:
+            log.info("channels: replaying %d unsettled message(s) of %s", replayed, _bot_label(bot))
+        for msgs in old.values():
+            async def tell(msgs: list[InboundMessage] = msgs) -> None:
+                lang = prompt_skills.language(await self._ui_settings())
+                previews = [_preview(m) for m in msgs]
+                await self._reply(msgs[0], wake.text(lang, "not_sent_restart", count=len(msgs),
+                                                     items=wake.quoted(previews)))
+                await self._finish_inbound(tuple(i for m in msgs for i in m.inbound_ids))
+
+            self._enqueue(msgs[0].location_key(), tell)
+
+    def _on_missed_updates(self, bot: BotKey, count: int) -> None:
+        """Updates of ``bot`` confirmed by someone else: tell each chat it drives a pane from."""
+        adapter = self._adapters.get(bot)
+        if adapter is None:
+            return
+        for b in self.store.bindings():
+            if (b.platform, b.account) != bot:
+                continue
+            loc = b.location()
+
+            async def tell(loc: Location = loc) -> None:
+                lang = prompt_skills.language(await self._ui_settings())
+                await self._notice(adapter, loc, inbound.text(lang, "updates_missed", count=count))
+
+            self._enqueue(loc.key(), tell)
 
     async def _process_inbound(self, msg: InboundMessage) -> None:
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
@@ -2258,6 +2379,8 @@ class ChannelManager:
                                       reply_to_self=buf.msg.reply_to_self)
         buf.msg, buf.binding, buf.pane_id = msg, binding, pane_id
         buf.texts.append(msg.text)
+        buf.inbound_ids.extend(msg.inbound_ids)
+        self._park(msg)
         buf.attachments.extend(msg.attachments)
         if buf.task is not None:
             buf.task.cancel()
@@ -2271,9 +2394,10 @@ class ChannelManager:
         del self._debounce[key]
         # An attachment-only line has no text: it adds a file, not a blank line.
         joined = dataclasses.replace(buf.msg, text="\n".join(t for t in buf.texts if t),
-                                     attachments=list(buf.attachments))
+                                     attachments=list(buf.attachments), inbound_ids=tuple(buf.inbound_ids))
         # Back onto the location's worker so it stays ordered with that chat's other jobs.
-        self._enqueue(joined.location_key(), lambda: self._deliver(joined, buf.binding, buf.pane_id))
+        self._enqueue(joined.location_key(),
+                      lambda: self._settle(joined, lambda: self._deliver(joined, buf.binding, buf.pane_id)))
 
     def _sole_bot(self, platform: str) -> bool:
         """At most one enabled bot on ``platform`` (the only case before several bots)."""
@@ -2334,6 +2458,7 @@ class ChannelManager:
             await self._reply(msg, held.text(lang, "held_full", max=held.HELD_MAX))
             return
         kept.append((self._clock() if since is None else since, msg, binding))
+        self._park(msg)
         if pane_id not in self._held_watching:
             self._held_watching.add(pane_id)
             self._spawn(self._watch_held(pane_id))
@@ -2386,8 +2511,8 @@ class ChannelManager:
                     continue
                 self._prompt_held.pop(pane_id, None)
                 for since, msg, binding in kept:
-                    self._enqueue(msg.location_key(),
-                                  lambda m=msg, b=binding, s=since: self._send_held(m, b, pane_id, s, lang))
+                    self._enqueue(msg.location_key(), lambda m=msg, b=binding, s=since: self._settle(
+                        m, lambda: self._send_held(m, b, pane_id, s, lang)))
         finally:
             if not self._prompt_held.get(pane_id):
                 self._prompt_held.pop(pane_id, None)
@@ -2423,6 +2548,7 @@ class ChannelManager:
         for msgs in by_loc.values():
             items = wake.quoted([_preview(m) for m in msgs])
             await self._reply(msgs[0], held.text(lang, key, count=len(msgs), items=items, **kw))
+        await self._finish_inbound(tuple(i for _s, m, _b in dropped for i in m.inbound_ids))
 
     def _drop_held(self, pane_id: str) -> None:
         """Unbind / rebind: forget what was kept for ``pane_id`` or through its binding (a
@@ -2920,8 +3046,11 @@ class ChannelManager:
         ``held_since``: a kept message sent in after a prompt, kept since then."""
         if await self._held_by_prompt(msg, pane_id, binding, held_since):
             return False
+        if await self._held_by_cli(msg, pane_id, binding):
+            return False
         queued = self._queued.setdefault(pane_id, set())
         if len(queued) >= MAX_QUEUED_PER_PANE:
+            log.info("channels: %s -> pane %s: not delivered: queue full", _loc_log(msg), pane_id)
             await self._reply(msg, MSG_QUEUE_FULL)
             return False
         now = self._clock()
@@ -2929,6 +3058,7 @@ class ChannelManager:
         self._chat_sends[(pane_id, msg.sender_id)] = sends
         if len(sends) >= CHAT_RATE_MAX:
             wait = math.ceil(sends[0] + CHAT_RATE_WINDOW_S - now)
+            log.info("channels: %s -> pane %s: not delivered: rate limit", _loc_log(msg), pane_id)
             await self._reply(msg, MSG_CHAT_RATE.format(max=CHAT_RATE_MAX, wait=wait))
             return False
         state = self._seams.pane_state(pane_id)
@@ -2949,10 +3079,13 @@ class ChannelManager:
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
         if not result.get("ok"):
+            log.warning("channels: %s -> pane %s: not delivered: %s", _loc_log(msg), pane_id,
+                        result.get("error") or "unknown")
             await self._reply(msg, f"⚠️ 無法送達 pane：{result.get('error') or 'unknown'}")
             return False
         sends.append(now)
         msg_key = str(result.get("msg_key") or "")
+        log.info("channels: %s -> pane %s: handed over (%s)", _loc_log(msg), pane_id, msg_key)
         pane_id = str(result.get("pane_id") or pane_id)
         loc = binding.location()
         pending = self._pending.get(pane_id)
@@ -2972,6 +3105,84 @@ class ChannelManager:
         self._queued_loc[msg_key] = msg.location_key()
         self._spawn(self._watch_delivery(pane_id, msg_key, pending))
         return True
+
+    async def _cli_login_expired(self, pane_id: str) -> bool:
+        try:
+            info = await asyncio.wait_for(self._seams.cli_health(pane_id), inbound.CLI_PROBE_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 — a window that does not answer never holds a message
+            return False
+        return info.get("login_expired") is True
+
+    async def _held_by_cli(self, msg: InboundMessage, pane_id: str, binding: Binding) -> bool:
+        """A pane whose CLI reports an expired login would take the text and fail it: it is
+        queued here instead, the chat told, and sent in once the login is back
+        (``_watch_cli_held``). Behind ones already queued, a new one waits its turn."""
+        kept = self._cli_held.get(pane_id)
+        if not kept and not await self._cli_login_expired(pane_id):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        kept = self._cli_held.setdefault(pane_id, [])
+        agent = self._seams.pane_agent(pane_id)
+        agent = "Claude" if agent in ("", "claude") else agent
+        if len(kept) >= inbound.CLI_HELD_MAX:
+            log.info("channels: %s -> pane %s: not kept: login expired, queue full", _loc_log(msg), pane_id)
+            await self._reply(msg, inbound.text(lang, "login_full", agent=agent, max=inbound.CLI_HELD_MAX))
+            return True
+        kept.append((self._clock(), msg, binding))
+        self._park(msg)
+        log.info("channels: %s -> pane %s: kept: its CLI reports an expired login", _loc_log(msg), pane_id)
+        if pane_id not in self._cli_watching:
+            self._cli_watching.add(pane_id)
+            self._spawn(self._watch_cli_held(pane_id))
+        await self._reply(msg, inbound.text(lang, "login_held", n=len(kept), agent=agent))
+        return True
+
+    async def _watch_cli_held(self, pane_id: str) -> None:
+        """Send in, in order and on each chat's own worker, what was queued while ``pane_id``'s
+        login was expired, once it is not; a pane that went away drops them, chats told."""
+        try:
+            while self._cli_held.get(pane_id):
+                await asyncio.sleep(inbound.CLI_PROBE_EVERY_S)
+                kept = self._cli_held.get(pane_id) or []
+                if not kept:
+                    break
+                lang = prompt_skills.language(await self._ui_settings())
+                if not self._seams.resolve_pane(pane_id):
+                    self._cli_held.pop(pane_id, None)
+                    await self._tell_cli_held(kept, lang, "gone")
+                    break
+                if await self._cli_login_expired(pane_id):
+                    continue
+                self._cli_held.pop(pane_id, None)
+                for _since, msg, binding in kept:
+                    self._enqueue(msg.location_key(), lambda m=msg, b=binding: self._settle(
+                        m, lambda: self._send_cli_held(m, b, pane_id, lang)))
+        finally:
+            if not self._cli_held.get(pane_id):
+                self._cli_held.pop(pane_id, None)
+            self._cli_watching.discard(pane_id)
+
+    async def _send_cli_held(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str) -> None:
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            log.info("channels: a message queued for %s was dropped: its bot is no longer running", pane_id)
+            return
+        current = self._binding_for(msg)
+        if current is None or current.pane_id != binding.pane_id \
+                or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            await self._tell_cli_held([(0.0, msg, binding)], lang, "revoked")
+            return
+        if await self._deliver(msg, binding, pane_id):
+            await self._reply(msg, inbound.text(lang, "sent", items=wake.quoted([_preview(msg)])))
+
+    async def _tell_cli_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str,
+                             key: str) -> None:
+        by_loc: dict[str, list[InboundMessage]] = {}
+        for _since, msg, _binding in dropped:
+            by_loc.setdefault(msg.location_key(), []).append(msg)
+        for msgs in by_loc.values():
+            items = wake.quoted([_preview(m) for m in msgs])
+            await self._reply(msgs[0], inbound.text(lang, key, count=len(msgs), items=items))
+        await self._finish_inbound(tuple(i for _s, m, _b in dropped for i in m.inbound_ids))
 
     # --- quick menu ------------------------------------------------------------
 
@@ -4177,6 +4388,11 @@ def _bot_label(bot: BotKey) -> str:
     """How errors name a bot: the bare platform for "default", as they always have."""
     platform, account = bot
     return platform if account == DEFAULT_ACCOUNT else f"{platform}/{account}"
+
+
+def _loc_log(msg: InboundMessage) -> str:
+    """A chat location in the log: its bot and a hash of the chat, never the chat id."""
+    return f"{_bot_label((msg.platform, msg.account))} chat={inbound.chat_hash(msg.location_key())}"
 
 
 def _failure_text(exc: BaseException) -> str:

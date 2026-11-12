@@ -49,6 +49,7 @@ from .base import (
     backoff_delay,
 )
 from . import redact
+from .inbound import chat_hash
 from .adapter_runtime import READY_STABLE_S, cancel_and_wait, download_to, media_client
 from .report import Caption
 from .text import TEXT_LIMITS, chunk_text, is_telegram_parse_error, markdown_to_telegram_html
@@ -273,6 +274,9 @@ class TelegramAdapter:
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
         self.on_managed_bot: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        # Told how many updates were confirmed by someone else (an update_id gap): the
+        # manager tells the bot's chats. None: only logged.
+        self.on_missed_updates: Callable[[int], Awaitable[None]] | None = None
         # Returns the Navide language (one of prompt_skills.LANGUAGES) the "/" menu is described
         # in, read at each session; set by the manager. None: zh-TW.
         self.command_language: Callable[[], str] | None = None
@@ -331,7 +335,8 @@ class TelegramAdapter:
                 self.status.reconnect_attempts = self._attempt
                 self.status.last_error = self._redact(_describe_failure(exc))
                 delay = self._backoff(self._attempt, random.random())
-                log.info("telegram: poll failed (%s); retry in %.1fs", self.status.last_error, delay)
+                log.info("telegram[%s]: poll failed (%s); retry in %.1fs", self.account,
+                         self.status.last_error, delay)
                 await asyncio.sleep(delay)
 
     async def _add_commands(self) -> None:
@@ -410,6 +415,9 @@ class TelegramAdapter:
             self.status.last_error = ""
             for update in updates or []:
                 uid = int(update.get("update_id", 0))
+                log.info("telegram[%s]: update %d %s", self.account, uid, _describe_update(update))
+                if self._offset is not None and uid > self._offset:
+                    await self._missed(uid - self._offset, self._offset, uid)
                 try:
                     await self._handle_update(update)
                 except Exception:  # noqa: BLE001 — one bad update must not stop polling
@@ -417,6 +425,18 @@ class TelegramAdapter:
                 self._offset = uid + 1
                 if self._offsets is not None:
                     self._offsets.set_offset(self.platform, self.account, self.bot_id, self._offset)
+
+    async def _missed(self, count: int, expected: int, got: int) -> None:
+        """update_ids are sequential per bot: a jump past the stored offset means ``count``
+        updates were confirmed by another consumer of this token (or expired after 24 h)."""
+        log.warning("telegram[%s]: update_id jumped from %d to %d: %d update(s) never reached Navide",
+                    self.account, expected, got, count)
+        if self.on_missed_updates is None:
+            return
+        try:
+            await self.on_missed_updates(count)
+        except Exception:  # noqa: BLE001 — telling the chats must not stop polling
+            log.exception("telegram[%s]: reporting missed updates failed", self.account)
 
     # --- inbound --------------------------------------------------------------
 
@@ -813,6 +833,22 @@ def _content_author(reply: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     if author.get("id") in SHARED_SENDER_IDS:
         return {}, False
     return author, True
+
+
+def _describe_update(update: dict[str, Any]) -> str:
+    """What an update is, for the log: its kind, a hash of its chat and the message id,
+    never its text or the chat id itself."""
+    for kind in ("message", "callback_query", "managed_bot"):
+        body = update.get(kind)
+        if body is None:
+            continue
+        msg = (body.get("message") or {}) if kind == "callback_query" else body
+        chat = (msg.get("chat") or {}).get("id") if isinstance(msg, dict) else None
+        mid = msg.get("message_id") if isinstance(msg, dict) else None
+        chat_part = f" chat={chat_hash(str(chat))}" if chat is not None else ""
+        mid_part = f" message={mid}" if mid is not None else ""
+        return f"{kind}{chat_part}{mid_part}"
+    return "other"
 
 
 def _describe_failure(exc: Exception) -> str:
