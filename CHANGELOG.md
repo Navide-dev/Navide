@@ -10,7 +10,7 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
-## [Unreleased hotfix]
+## [0.2.41] — 2026-11-12
 
 ### Fixed
 
