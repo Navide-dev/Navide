@@ -14,7 +14,7 @@ from agent_team_backend.channels import manager as mgr_mod
 from agent_team_backend.channels.base import Location
 
 from .test_manager import (  # noqa: F401 — fixtures and helpers shared with the manager suite
-    Env, _said, _until, env, fast_timers,
+    Env, _said, _until, clocked, env, fast_timers,
 )
 
 
@@ -146,3 +146,16 @@ async def test_missed_updates_are_told_to_the_bots_bound_chats(env: Env) -> None
     await env.m.wait_idle()
     assert _said(env, "有 3 則訊息沒有經過 Navide 就被取走了")
 
+
+
+async def test_a_message_queued_over_ten_minutes_for_a_login_goes_in_anyway(clocked) -> None:
+    e, clock = clocked
+    _health(e, {"login_expired": True})  # a flag that never clears
+    await e.inbound("stuck behind a login")
+    assert e.fake.delivered == []
+    clock.t += inbound.CLI_HELD_MAX_WAIT_S + 1
+    await _until(lambda: e.fake.delivered)
+    assert [d[1] for d in e.fake.delivered] == ["stuck behind a login"]
+    await _until(lambda: _said(e, "已直接送出，CLI 可能需要重新登入"))
+    await e.m.wait_idle()
+    assert _rows(e) == []

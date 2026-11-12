@@ -1263,8 +1263,11 @@ refuses the same token on two platforms/accounts at once.
 
 Telegram numbers a bot's updates in sequence, so Navide notices when some never
 reached it (another program confirmed them, or Navide was offline for over 24
-hours): it logs the gap and tells every chat bound through that bot how many
-messages were taken, so the sender knows to resend.
+hours): it logs every gap and counts it in the bot's status (`missed_updates`,
+`last_missed_at`). It tells every chat bound through that bot how many messages
+were taken, so the sender knows to resend, only when the previous update came
+within 24 hours (after a week without updates Telegram picks the next number at
+random) and at most once an hour per bot.
 
 ### Messages are kept until they reach the pane
 
@@ -1274,6 +1277,7 @@ told what happened to it. A Navide restart or crash in between sends it in
 after the next start; one older than a day is reported to its chat as not sent
 instead. While a pane's CLI reports an expired login, its chat's messages are
 queued (up to 20 per pane), the chat is told so, and they are sent in, in
-order, once the CLI is signed in again. The backend log records each received
+order, once the CLI is signed in again. A message queued for over 10 minutes is
+sent in anyway, and the chat is told the CLI may need to sign in again. The backend log records each received
 update (its kind, a hash of the chat and the message id, never the text) and
 whether it was handed to the pane.

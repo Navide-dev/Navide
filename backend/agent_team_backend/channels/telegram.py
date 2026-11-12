@@ -72,6 +72,11 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
+# An update_id gap is told to the chats only when the previous update came within this long
+# (after a week without updates Telegram picks the next id at random) ...
+MISSED_NOTICE_RECENT_S = 24 * 3600.0
+# ... and at most once per this interval per bot; every gap is still logged and counted.
+MISSED_NOTICE_EVERY_S = 3600.0
 # Added to the bot's "/" menu when missing (never replacing the user's own); every one
 # is handled by the channel manager.
 BOT_COMMANDS = [
@@ -222,6 +227,9 @@ class TelegramStatus(AdapterStatus):
     # getMe's User.can_manage_bots (Bot API 9.6): Bot Management Mode is on in BotFather,
     # so this bot can create bots through t.me/newbot links. False until getMe answered.
     can_manage_bots: bool = False
+    # update_id gaps seen this session: how many updates in all, and when the last one was
+    missed_updates: int = 0
+    last_missed_at: float | None = None
 
 
 class TelegramApiError(Exception):
@@ -277,6 +285,8 @@ class TelegramAdapter:
         # Told how many updates were confirmed by someone else (an update_id gap): the
         # manager tells the bot's chats. None: only logged.
         self.on_missed_updates: Callable[[int], Awaitable[None]] | None = None
+        self._last_update_at: float | None = None  # wall clock of the latest update since start
+        self._last_missed_notice_at: float | None = None
         # Returns the Navide language (one of prompt_skills.LANGUAGES) the "/" menu is described
         # in, read at each session; set by the manager. None: zh-TW.
         self.command_language: Callable[[], str] | None = None
@@ -418,6 +428,7 @@ class TelegramAdapter:
                 log.info("telegram[%s]: update %d %s", self.account, uid, _describe_update(update))
                 if self._offset is not None and uid > self._offset:
                     await self._missed(uid - self._offset, self._offset, uid)
+                self._last_update_at = time.time()
                 try:
                     await self._handle_update(update)
                 except Exception:  # noqa: BLE001 — one bad update must not stop polling
@@ -428,11 +439,21 @@ class TelegramAdapter:
 
     async def _missed(self, count: int, expected: int, got: int) -> None:
         """update_ids are sequential per bot: a jump past the stored offset means ``count``
-        updates were confirmed by another consumer of this token (or expired after 24 h)."""
+        updates were confirmed by another consumer of this token (or expired after 24 h).
+        Always logged and counted; the chats are told only right after a recent update (a
+        week's silence makes the next id random) and at most once per MISSED_NOTICE_EVERY_S."""
+        now = time.time()
         log.warning("telegram[%s]: update_id jumped from %d to %d: %d update(s) never reached Navide",
                     self.account, expected, got, count)
+        self.status.missed_updates += count
+        self.status.last_missed_at = now
         if self.on_missed_updates is None:
             return
+        if self._last_update_at is None or now - self._last_update_at > MISSED_NOTICE_RECENT_S:
+            return
+        if self._last_missed_notice_at is not None and now - self._last_missed_notice_at < MISSED_NOTICE_EVERY_S:
+            return
+        self._last_missed_notice_at = now
         try:
             await self.on_missed_updates(count)
         except Exception:  # noqa: BLE001 — telling the chats must not stop polling

@@ -3041,12 +3041,12 @@ class ChannelManager:
             author == msg.sender_id or self.gate.is_allowed(msg.platform, author, msg.account)))
 
     async def _deliver(self, msg: InboundMessage, binding: Binding, pane_id: str, *,
-                       held_since: float | None = None) -> bool:
+                       held_since: float | None = None, past_login: bool = False) -> bool:
         """True when the text went to the pane; every refusal has already been replied to.
         ``held_since``: a kept message sent in after a prompt, kept since then."""
         if await self._held_by_prompt(msg, pane_id, binding, held_since):
             return False
-        if await self._held_by_cli(msg, pane_id, binding):
+        if not past_login and await self._held_by_cli(msg, pane_id, binding):
             return False
         queued = self._queued.setdefault(pane_id, set())
         if len(queued) >= MAX_QUEUED_PER_PANE:
@@ -3152,6 +3152,15 @@ class ChannelManager:
                     await self._tell_cli_held(kept, lang, "gone")
                     break
                 if await self._cli_login_expired(pane_id):
+                    # Never stuck behind a login: past CLI_HELD_MAX_WAIT_S it goes in anyway
+                    # (a login flag that is wrong would otherwise hold it for good).
+                    now = self._clock()
+                    late = [k for k in kept if now - k[0] >= inbound.CLI_HELD_MAX_WAIT_S]
+                    if late:
+                        self._cli_held[pane_id] = [k for k in kept if k not in late]
+                        for _since, msg, binding in late:
+                            self._enqueue(msg.location_key(), lambda m=msg, b=binding: self._settle(
+                                m, lambda: self._send_cli_held(m, b, pane_id, lang, anyway=True)))
                     continue
                 self._cli_held.pop(pane_id, None)
                 for _since, msg, binding in kept:
@@ -3162,7 +3171,8 @@ class ChannelManager:
                 self._cli_held.pop(pane_id, None)
             self._cli_watching.discard(pane_id)
 
-    async def _send_cli_held(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str) -> None:
+    async def _send_cli_held(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str,
+                             anyway: bool = False) -> None:
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
             log.info("channels: a message queued for %s was dropped: its bot is no longer running", pane_id)
             return
@@ -3171,8 +3181,10 @@ class ChannelManager:
                 or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
             await self._tell_cli_held([(0.0, msg, binding)], lang, "revoked")
             return
-        if await self._deliver(msg, binding, pane_id):
-            await self._reply(msg, inbound.text(lang, "sent", items=wake.quoted([_preview(msg)])))
+        if await self._deliver(msg, binding, pane_id, past_login=anyway):
+            key = "sent_anyway" if anyway else "sent"
+            await self._reply(msg, inbound.text(lang, key, items=wake.quoted([_preview(msg)]),
+                                                minutes=int(inbound.CLI_HELD_MAX_WAIT_S // 60)))
 
     async def _tell_cli_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str,
                              key: str) -> None:
