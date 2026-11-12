@@ -227,10 +227,13 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // the move is the point there too. The follow
     // batch and every other rebuild keep the plain resume preflight.
     const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
-    expect(optIns).toBe(9)
+    expect(optIns).toBe(8)
     expect(functionBody('fixDescendantsToAccount').split('freshWhenNoTranscript: true').length - 1).toBe(1)
     expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
-    expect(functionBody('moveAgentPaneAccount').split('freshWhenNoTranscript: true').length - 1).toBe(2)
+    // One shared options object, used by both the fixed and the following path.
+    const moveAgent = functionBody('moveAgentPaneAccount')
+    expect(moveAgent.split('freshWhenNoTranscript: true').length - 1).toBe(1)
+    expect(moveAgent.split('rebuildPaneViaResume(paneId, rebuild)').length - 1).toBe(2)
     expect(appSource).toContain(
       'await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })'
     )

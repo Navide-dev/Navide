@@ -187,7 +187,10 @@ def test_npm_query_rejects_output_that_is_not_a_version(monkeypatch: pytest.Monk
 
 # ── the update gate ───────────────────────────────────────────────────────────
 @pytest.fixture
-def registry():
+def registry(monkeypatch: pytest.MonkeyPatch):
+    # The busy/idle rules below are the POSIX gate; on Windows every open pane
+    # blocks (test_windows_gate_waits_for_every_open_pane pins win32 itself).
+    monkeypatch.setattr(ws_handlers.osplat, "platform_id", "linux")
     agent_messaging._reset_for_test()
     ws_handlers._GATED_UPDATE_RUN.clear()
     yield
