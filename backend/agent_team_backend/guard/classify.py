@@ -1047,12 +1047,36 @@ _DECLARE_WORDS = {"export", "declare", "typeset", "local", "readonly"}
 _CREDENTIAL_RULES = ("credential-access", "credential-exfil", "credential-pipe-upload")
 
 
-def _subst_vars(word: str, values: dict[str, str]) -> str:
-    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept."""
-    return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
+#: Caps on the variables followed for _indirect_credentials. `B=$A$A; C=$B$B`
+#: doubles at every step, so expansion stops at a size no path needs.
+MAX_VAR_CHARS = 4096
+MAX_VARS = 256
 
 
-def _record_assignments(argv: list[str], ctx: _Ctx) -> None:
+def _subst_vars(word: str, values: dict[str, str]) -> str | None:
+    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept.
+    None once the result would pass MAX_VAR_CHARS."""
+    out: list[str] = []
+    size = 0
+    end = 0
+    for m in _VAR_REF_RE.finditer(word):
+        piece = word[end:m.start()] + values.get(m.group(1) or m.group(2), m.group(0))
+        size += len(piece)
+        if size > MAX_VAR_CHARS:
+            return None
+        out.append(piece)
+        end = m.end()
+    if end and size + len(word) - end > MAX_VAR_CHARS:
+        return None
+    out.append(word[end:])
+    return "".join(out)
+
+
+def _too_big_to_follow(acc: _Acc) -> None:
+    acc.opaque("dynamic-path", f"a variable is not followed past {MAX_VAR_CHARS} characters or {MAX_VARS} names")
+
+
+def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
     """Remember `F=path` and `export F=path`: a command made only of
     assignments, so a later `cat "$F"` can be graded like `cat path`."""
     declare = bool(argv) and argv[0] in _DECLARE_WORDS
@@ -1061,17 +1085,26 @@ def _record_assignments(argv: list[str], ctx: _Ctx) -> None:
     if not words or not all(matches):
         return
     for m in matches:
-        ctx.vars[m.group(1)] = _subst_vars(m.group(2), ctx.vars)
+        value = _subst_vars(m.group(2), ctx.vars)
+        if value is None or (m.group(1) not in ctx.vars and len(ctx.vars) >= MAX_VARS):
+            ctx.vars.pop(m.group(1), None)
+            _too_big_to_follow(acc)
+            continue
+        ctx.vars[m.group(1)] = value
 
 
 def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
     """Escalate only: grade the pipeline again with the variables set
     earlier in the command written out, and keep the credential rules it
     hits. Nothing else from that pass counts, so no other verdict moves."""
-    expanded = [
-        _Cmd([_subst_vars(a, ctx.vars) for a in c.argv], [(op, _subst_vars(t, ctx.vars)) for op, t in c.redirects])
-        for c in pipeline
-    ]
+    expanded: list[_Cmd] = []
+    for c in pipeline:
+        argv = [_subst_vars(a, ctx.vars) for a in c.argv]
+        redirects = [(op, _subst_vars(t, ctx.vars)) for op, t in c.redirects]
+        if None in argv or any(t is None for _, t in redirects):
+            _too_big_to_follow(acc)
+            return
+        expanded.append(_Cmd(argv, redirects))  # type: ignore[arg-type]
     if all(e.argv == c.argv and e.redirects == c.redirects for e, c in zip(expanded, pipeline)):
         return
     copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={})
@@ -1086,7 +1119,7 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
     if ctx.vars:
         _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth)
     if len(pipeline) == 1:
-        _record_assignments(pipeline[0].argv, ctx)
+        _record_assignments(pipeline[0].argv, ctx, acc)
     upstream: set[str] = set()  # kinds of producers earlier in this pipeline
     piped: list[str] = []  # heredoc bodies and here-strings flowing down the pipe
     for idx, cmd in enumerate(pipeline):

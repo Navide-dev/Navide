@@ -3,6 +3,8 @@ mandatory false-positive guards from the guard brief."""
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from agent_team_backend.guard import classify, classify_prompt_text
@@ -952,6 +954,36 @@ def test_ordinary_variable_paths_keep_their_verdict(command, expected):
     v = sh(command)
     assert v.level == expected, (command, v)
     assert not set(v.rule_ids) & {"credential-access", "credential-exfil", "credential-pipe-upload"}
+
+
+def _doubling(steps: int) -> str:
+    names = [f"V{i}" for i in range(steps + 1)]
+    lines = [f"{names[0]}=xxxxxxxx"] + [f"{b}=${a}${a}" for a, b in zip(names, names[1:])]
+    return "; ".join(lines) + f'; cat "${names[-1]}"'
+
+
+@pytest.mark.parametrize("steps", [12, 40])
+def test_a_doubling_variable_chain_stops_at_the_cap_and_is_opaque(steps):
+    start = time.monotonic()
+    v = sh(_doubling(steps))
+    assert time.monotonic() - start < 5
+    assert "dynamic-path" in v.rule_ids and v.parseable is False, v
+
+
+def test_too_many_variables_are_not_followed_and_opaque():
+    command = "; ".join(f"V{i}=x" for i in range(300)) + "; cat $V299"
+    v = sh(command)
+    assert "dynamic-path" in v.rule_ids and v.parseable is False, v
+
+
+def test_a_credential_path_set_before_the_cap_is_still_critical():
+    v = sh(_doubling(12) + f'; F={AWS}; cat "$F"')
+    assert v.level == "critical" and "credential-access" in v.rule_ids, v
+
+
+def test_variables_under_the_cap_stay_parseable():
+    v = sh('D=src; F=$D/main.py; cat "$F"')
+    assert v.level == "normal" and v.parseable and "dynamic-path" not in v.rule_ids, v
 
 
 @pytest.mark.parametrize(
