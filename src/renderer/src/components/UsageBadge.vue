@@ -29,6 +29,7 @@ import {
   accountLabel as resolveAccountLabel,
 } from '../lib/accountLabel'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
+import { useQueuedAccountSwitches } from '../composables/useQueuedAccountSwitches'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { executeCommand } from '@navide/plugin-ui/shared'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -321,9 +322,10 @@ const t = i18n.global.t
 // ── What happens when this account runs out ─────────────────────────────────
 // The failover policy lived only on Settings ▸ General, and the rows below
 // ("Quota low — switch account", "Make All Follow") read like it while being
-// manual. This row states the real policy, who would be picked next and how
-// many automatic switches the pool has left; the select writes the same
-// backend policy Settings does.
+// manual. Spread over the popover (plan 0-2-42_eb5049, placement B): the mode
+// beside the title (the same backend policy Settings writes), "next" on the
+// account an automatic switch would pick, "queued" on the account a parked
+// switch will leave, and a foot line with the queue and the switch log.
 const quotaFailover = useQuotaFailover()
 const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
 const failoverMode = computed<FailoverMode | null>(() => quotaFailover.state.value?.policy.mode ?? null)
@@ -335,16 +337,29 @@ const failoverLeft = computed(() => {
   const b = quotaFailover.budgetFor(props.agentKey)
   return b ? Math.max(0, b.limit - b.used) : null
 })
-const failoverNext = ref<string | null>(null)
-const failoverNextLoaded = ref(false)
+/** Profile id of the next account ('' = the built-in Default), or null. */
+const failoverNextId = ref<string | null>(null)
 const failoverBusy = ref(false)
 async function loadFailoverNext(): Promise<void> {
-  failoverNextLoaded.value = false
   const list = await quotaFailover.previewCandidates(props.agentKey)
   const next = list?.find((c) => c.excluded === null)
-  failoverNext.value = next ? rowLabel(next.slotId === DEFAULT_SLOT_ID ? null : next.slotId) : null
-  failoverNextLoaded.value = list !== null
+  failoverNextId.value = next ? (next.slotId === DEFAULT_SLOT_ID ? '' : next.slotId) : null
 }
+const failoverModeTitle = computed(() => {
+  if (failoverMode.value === 'notify') return t('usage.auto-switch-notify-only')
+  if (failoverMode.value === 'off') return t('usage.auto-switch-off-only')
+  return failoverLeft.value !== null ? t('usage.auto-switch-left', { n: failoverLeft.value }) : ''
+})
+function isFailoverNext(profileId: string): boolean {
+  return showFailover.value && failoverMode.value !== 'off' && failoverNextId.value === profileId && activeProfileId.value !== profileId
+}
+// A switch parked behind busy panes: the CLI-wide one, or this pane's own.
+const queuedSwitches = useQueuedAccountSwitches()
+const queuedHere = computed(() =>
+  queuedSwitches.queued.value.find((j) =>
+    j.paneName ? !!props.paneId && j.key === `pane:${props.paneId}` : j.agentKey === props.agentKey,
+  ) ?? null,
+)
 watch(open, (isOpen) => {
   if (isOpen && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
 })
@@ -356,11 +371,11 @@ async function onFailoverModeChange(raw: string): Promise<void> {
   } finally {
     failoverBusy.value = false
   }
-  if (raw !== 'off' && !failoverNextLoaded.value) void loadFailoverNext()
+  if (raw !== 'off' && failoverNextId.value === null) void loadFailoverNext()
 }
-function openAutoSwitchSettings(): void {
+function openSwitchLog(): void {
   open.value = false
-  executeCommand('workbench.action.openSettingsAccounts', { section: 'accounts-auto-switch' })
+  executeCommand('workbench.action.openSettingsAccounts', { section: 'account-switch-log' })
 }
 
 // Main window provides the quiescence-aware switch (confirm + force + pane
@@ -794,6 +809,20 @@ function acctTitle(profileId: string | null): string {
       <div class="usage-pop-head">
         <span class="usage-pop-provider">{{ agentKey }}</span>
         <span v-if="snap.planType" class="usage-pop-plan">{{ snap.planType }}</span>
+        <select
+          v-if="showFailover"
+          class="usage-failover-mode"
+          data-testid="pop-failover-mode"
+          :value="failoverMode ?? 'notify'"
+          :disabled="failoverBusy"
+          :title="failoverModeTitle"
+          :aria-label="$t('usage.auto-switch-pop-title')"
+          @change="onFailoverModeChange(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="mode in FAILOVER_MODES" :key="mode" :value="mode">
+            {{ $t(`usage.failover-mode-${mode}`) }}
+          </option>
+        </select>
       </div>
       <div v-if="paneFollow !== undefined" class="usage-pane-follow">
         <div class="usage-pane-follow-top">
@@ -812,40 +841,6 @@ function acctTitle(profileId: string | null): string {
           />
         </div>
         <div class="usage-pane-follow-hint">{{ $t('account-follow.follow-switch-hint') }}</div>
-      </div>
-      <div v-if="showFailover" class="usage-failover" data-testid="pop-failover">
-        <div class="usage-failover-top">
-          <span class="usage-failover-label">{{ $t('usage.auto-switch-pop-title') }}</span>
-          <select
-            class="usage-failover-mode"
-            data-testid="pop-failover-mode"
-            :value="failoverMode ?? 'notify'"
-            :disabled="failoverBusy"
-            :aria-label="$t('usage.auto-switch-pop-title')"
-            @change="onFailoverModeChange(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="mode in FAILOVER_MODES" :key="mode" :value="mode">
-              {{ $t(`usage.failover-mode-${mode}`) }}
-            </option>
-          </select>
-        </div>
-        <div v-if="failoverMode === 'notify'" class="usage-failover-note warn" data-testid="pop-failover-note">
-          {{ $t('usage.auto-switch-notify-only') }}
-        </div>
-        <div v-else-if="failoverMode === 'off'" class="usage-failover-note" data-testid="pop-failover-note">
-          {{ $t('usage.auto-switch-off-only') }}
-        </div>
-        <div v-if="failoverMode !== 'off' && failoverNextLoaded" class="usage-failover-note" data-testid="pop-failover-next">
-          {{ failoverNext
-            ? $t('usage.auto-switch-next', { name: failoverNext })
-            : $t('usage.auto-switch-next-none') }}
-          <template v-if="failoverMode === 'auto' && failoverLeft !== null">
-            · {{ $t('usage.auto-switch-left', { n: failoverLeft }) }}
-          </template>
-        </div>
-        <button type="button" class="usage-failover-open" data-testid="pop-failover-open" @click="openAutoSwitchSettings">
-          {{ $t('usage.auto-switch-open') }}
-        </button>
       </div>
       <div v-if="expired" class="usage-pop-expired">{{ $t('usage.expired-tooltip') }}</div>
       <div v-if="cliMissing" class="usage-pop-missing">{{ $t('usage.cli-missing-tooltip') }}</div>
@@ -949,6 +944,8 @@ function acctTitle(profileId: string | null): string {
                 <span class="usage-acct-name" v-truncate>{{ rowLabel(null, $t('usage.switch-default')) }}</span>
                 <span v-if="rowEmail(null)" class="usage-acct-email" v-truncate>{{ rowEmail(null) }}</span>
               </span>
+              <span v-if="queuedHere && activeProfileId === ''" class="usage-acct-tag queued" data-testid="pop-tag-queued">{{ $t('usage.auto-switch-tag-queued', { to: queuedHere.to }) }}</span>
+              <span v-else-if="isFailoverNext('')" class="usage-acct-tag" data-testid="pop-tag-next">{{ $t('usage.auto-switch-tag-next') }}</span>
               <span v-if="needText('')" class="usage-acct-need">{{ needText('') }}</span>
               <span v-else-if="acctSignedOut(null)" class="usage-acct-out">{{
                 $t('settings.accounts.cli.not-signed-in')
@@ -1009,6 +1006,8 @@ function acctTitle(profileId: string | null): string {
                 <span class="usage-acct-name" v-truncate>{{ rowLabel(p.id) }}</span>
                 <span v-if="rowEmail(p.id)" class="usage-acct-email" v-truncate>{{ rowEmail(p.id) }}</span>
               </span>
+              <span v-if="queuedHere && activeProfileId === p.id" class="usage-acct-tag queued" data-testid="pop-tag-queued">{{ $t('usage.auto-switch-tag-queued', { to: queuedHere.to }) }}</span>
+              <span v-else-if="isFailoverNext(p.id)" class="usage-acct-tag" data-testid="pop-tag-next">{{ $t('usage.auto-switch-tag-next') }}</span>
               <span v-if="needText(p.id)" class="usage-acct-need">{{ needText(p.id) }}</span>
               <span v-else-if="acctSignedOut(p.id)" class="usage-acct-out">{{
                 $t('settings.accounts.cli.not-signed-in')
@@ -1060,6 +1059,16 @@ function acctTitle(profileId: string | null): string {
           <span class="usage-acct-manage-icon">＋</span>
           <span>{{ $t('usage.switch-manage') }}</span>
         </button>
+        <div v-if="showFailover || queuedHere" class="usage-failover-foot" data-testid="pop-failover-foot">
+          <span v-if="queuedHere" class="usage-failover-queued" data-testid="pop-failover-queued">
+            <span class="usage-acct-spin" aria-hidden="true" />{{ queuedHere.paneName
+              ? $t('usage.auto-switch-queued-pane', { to: queuedHere.to, pane: queuedHere.paneName })
+              : $t('usage.auto-switch-queued', { to: queuedHere.to, n: Math.max(1, queuedHere.waiting) }) }}
+          </span>
+          <button type="button" class="usage-failover-open" data-testid="pop-failover-log" @click="openSwitchLog">
+            {{ $t('usage.auto-switch-log-short') }}
+          </button>
+        </div>
       </div>
       <div class="usage-pop-updated">
         {{ $t('usage.updated', { time: formatResetAbsolute(snap.fetchedAt) }) }}
@@ -1571,14 +1580,8 @@ function acctTitle(profileId: string | null): string {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
 }
-.usage-failover {
-  padding: 6px 0 8px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid var(--border-muted);
-}
-.usage-failover-top { display: flex; align-items: center; gap: 8px; }
-.usage-failover-label { flex: 1; font-weight: 600; color: var(--text-bright); }
 .usage-failover-mode {
+  margin-left: auto;
   font-size: var(--font-2xs);
   color: var(--text-bright);
   background: var(--bg-base);
@@ -1586,10 +1589,20 @@ function acctTitle(profileId: string | null): string {
   border-radius: var(--radius-xs);
   padding: 1px 4px;
 }
-.usage-failover-note { margin-top: 4px; color: var(--text-secondary); }
-.usage-failover-note.warn { color: var(--attention-fg); }
+.usage-failover-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border-muted); }
+.usage-failover-queued { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--attention-fg); }
+.usage-acct-tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
+  font-size: var(--font-2xs);
+  white-space: nowrap;
+}
+.usage-acct-tag.queued { background: var(--attention-subtle); color: var(--attention-fg); }
 .usage-failover-open {
-  margin-top: 4px;
+  margin-left: auto;
   padding: 0;
   border: 0;
   background: none;

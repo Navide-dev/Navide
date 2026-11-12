@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
-// The quota popover states what happens when this account runs out: the
-// failover policy (the same backend value Settings writes), who an automatic
-// switch would pick next and how many automatic switches are left. The rows
-// below it stay manual.
+// The quota popover states what happens when this account runs out, spread
+// over it (plan 0-2-42_eb5049, placement B): the failover mode beside the
+// title (the same backend value Settings writes), "next" on the account an
+// automatic switch would pick, a parked switch on the account it leaves and in
+// a foot line with the switch log.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick, ref } from 'vue'
 import UsageBadge from '../UsageBadge.vue'
+import { publishQueuedAccountSwitches } from '../../composables/useQueuedAccountSwitches'
 import { i18n } from '@navide/plugin-ui/foundation'
 import type { UsageSnapshot } from '../../composables/useUsage'
 import type { CliProfile, useCliProfiles } from '../../composables/useCliProfiles'
@@ -131,41 +133,42 @@ beforeEach(() => {
 })
 
 describe('UsageBadge ▸ when quota runs out', () => {
-  it('in auto mode names the next account and the automatic switches left', async () => {
+  it('puts the mode beside the title and marks the next account', async () => {
     fo.state.value = state('auto', 1)
     const w = mountBadge()
     await open(w)
-    expect((w.get('[data-testid="pop-failover-mode"]').element as HTMLSelectElement).value).toBe('auto')
-    const next = w.get('[data-testid="pop-failover-next"]').text()
-    expect(next).toContain(i18n.global.t('usage.auto-switch-next', { name: 'Account B' }))
-    expect(next).toContain(i18n.global.t('usage.auto-switch-left', { n: 2 }))
+    const select = w.get('.usage-pop-head [data-testid="pop-failover-mode"]')
+    expect((select.element as HTMLSelectElement).value).toBe('auto')
+    expect(select.attributes('title')).toBe(i18n.global.t('usage.auto-switch-left', { n: 2 }))
     expect(fo.previewCandidates).toHaveBeenCalledWith('claude')
-    expect(w.find('[data-testid="pop-failover-note"]').exists()).toBe(false)
+    const tagged = w.findAll('[data-testid="pop-tag-next"]')
+    expect(tagged).toHaveLength(1)
+    expect(tagged[0].element.closest('.usage-acct')!.textContent).toContain('Account B')
   })
 
-  it('in notify mode says nothing switches by itself, without a budget', async () => {
+  it('in notify mode says nothing switches by itself', async () => {
     fo.state.value = state('notify')
     const w = mountBadge()
     await open(w)
-    expect(w.get('[data-testid="pop-failover-note"]').text()).toBe(i18n.global.t('usage.auto-switch-notify-only'))
-    expect(w.get('[data-testid="pop-failover-next"]').text()).not.toContain(i18n.global.t('usage.auto-switch-left', { n: 2 }))
+    expect(w.get('[data-testid="pop-failover-mode"]').attributes('title')).toBe(i18n.global.t('usage.auto-switch-notify-only'))
+    expect(w.find('[data-testid="pop-tag-next"]').exists()).toBe(true)
   })
 
-  it('in off mode reads no candidates', async () => {
+  it('in off mode reads no candidates and marks nobody', async () => {
     fo.state.value = state('off')
     const w = mountBadge()
     await open(w)
-    expect(w.get('[data-testid="pop-failover-note"]').text()).toBe(i18n.global.t('usage.auto-switch-off-only'))
-    expect(w.find('[data-testid="pop-failover-next"]').exists()).toBe(false)
+    expect(w.get('[data-testid="pop-failover-mode"]').attributes('title')).toBe(i18n.global.t('usage.auto-switch-off-only'))
+    expect(w.find('[data-testid="pop-tag-next"]').exists()).toBe(false)
     expect(fo.previewCandidates).not.toHaveBeenCalled()
   })
 
-  it('says so when no other account has quota', async () => {
+  it('marks nobody when no other account has quota', async () => {
     fo.state.value = state('auto')
     fo.previewCandidates.mockResolvedValue([current, { ...candB, excluded: 'exhausted' }])
     const w = mountBadge()
     await open(w)
-    expect(w.get('[data-testid="pop-failover-next"]').text()).toContain(i18n.global.t('usage.auto-switch-next-none'))
+    expect(w.find('[data-testid="pop-tag-next"]').exists()).toBe(false)
   })
 
   it('writes a mode change through the shared failover policy', async () => {
@@ -175,7 +178,6 @@ describe('UsageBadge ▸ when quota runs out', () => {
     await w.get('[data-testid="pop-failover-mode"]').setValue('auto')
     await flushPromises()
     expect(fo.setPolicy).toHaveBeenCalledWith('auto')
-    expect(w.get('[data-testid="pop-failover-next"]').text()).toContain(i18n.global.t('usage.auto-switch-left', { n: 2 }))
   })
 
   it('ignores a value outside off/notify/auto', async () => {
@@ -188,21 +190,50 @@ describe('UsageBadge ▸ when quota runs out', () => {
     expect(fo.setPolicy).not.toHaveBeenCalled()
   })
 
-  it('opens Settings ▸ Accounts at the auto-continue card', async () => {
+  it('shows a parked switch on the account it leaves and in the foot line', async () => {
+    fo.state.value = state('auto')
+    publishQueuedAccountSwitches([{ key: 'agent:claude', agentKey: 'claude', to: 'Account B', waiting: 3 }])
+    try {
+      const w = mountBadge()
+      await open(w)
+      const tag = w.get('[data-testid="pop-tag-queued"]')
+      expect(tag.text()).toBe(i18n.global.t('usage.auto-switch-tag-queued', { to: 'Account B' }))
+      expect(tag.element.closest('.usage-acct')!.textContent).toContain('Account A')
+      expect(w.get('[data-testid="pop-failover-queued"]').text()).toBe(i18n.global.t('usage.auto-switch-queued', { to: 'Account B', n: 3 }))
+    } finally {
+      publishQueuedAccountSwitches([])
+    }
+  })
+
+  it('leaves out a switch parked for another CLI', async () => {
+    fo.state.value = state('auto')
+    publishQueuedAccountSwitches([{ key: 'agent:codex', agentKey: 'codex', to: 'X', waiting: 1 }])
+    try {
+      const w = mountBadge()
+      await open(w)
+      expect(w.find('[data-testid="pop-failover-queued"]').exists()).toBe(false)
+      expect(w.find('[data-testid="pop-tag-queued"]').exists()).toBe(false)
+    } finally {
+      publishQueuedAccountSwitches([])
+    }
+  })
+
+  it('opens the switch log under Settings ▸ Accounts', async () => {
     fo.state.value = state('auto')
     const w = mountBadge()
     await open(w)
-    await w.get('[data-testid="pop-failover-open"]').trigger('click')
-    expect(shared.executeCommand).toHaveBeenCalledWith('workbench.action.openSettingsAccounts', { section: 'accounts-auto-switch' })
+    await w.get('[data-testid="pop-failover-log"]').trigger('click')
+    expect(shared.executeCommand).toHaveBeenCalledWith('workbench.action.openSettingsAccounts', { section: 'account-switch-log' })
   })
 
   it('is absent before the backend answered, and for a CLI with a single account', async () => {
     const w = mountBadge()
     await open(w)
-    expect(w.find('[data-testid="pop-failover"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pop-failover-mode"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pop-failover-foot"]').exists()).toBe(false)
     fo.state.value = state('auto')
     const single = mountBadge(false)
     await open(single)
-    expect(single.find('[data-testid="pop-failover"]').exists()).toBe(false)
+    expect(single.find('[data-testid="pop-failover-mode"]').exists()).toBe(false)
   })
 })

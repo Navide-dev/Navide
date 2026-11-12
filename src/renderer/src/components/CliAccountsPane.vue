@@ -30,6 +30,7 @@ import { FOLLOW_SWITCH_AGENT } from '../lib/accountFollowSwitch'
 import SettingsNotice from './settings/SettingsNotice.vue'
 import AddAccountPanel from './accounts/AddAccountPanel.vue'
 import ApiKeyDetail from './accounts/ApiKeyDetail.vue'
+import AutoContinueBlock from './accounts/AutoContinueBlock.vue'
 import { apiKeyAccountCalls, isApiKeyProfile, type ApiKeyProfile } from './accounts/apiKeyAccount'
 import type { useBackend } from '../composables/useBackend'
 
@@ -840,6 +841,12 @@ onMounted(() => refreshUsage())
         }}
       </button>
     </div>
+
+    <AutoContinueBlock
+      :agent-key="effectiveSelection?.type === 'account' ? effectiveSelection.agentKey : FOLLOW_SWITCH_AGENT"
+      :accounts="api"
+      :backend="backend"
+    />
 
     <SettingsNotice v-if="error" class="cli-banner danger" tone="danger" role="alert" :message="error" />
 

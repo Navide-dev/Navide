@@ -437,6 +437,7 @@ import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from 
 import { runAgentAccountSwitch, switchRequester } from './lib/agentAccountSwitch'
 import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
 import { createAccountSwitchQueue } from './lib/accountSwitchQueue'
+import { publishQueuedAccountSwitches, setQueuedAccountSwitchCanceller } from './composables/useQueuedAccountSwitches'
 import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
@@ -13051,7 +13052,8 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
 // restarting a working pane, the switch waits in accountSwitchQueue until the
 // pane is idle and the request answers "queued" at once. The user is told
 // after the fact — a toast here, a row in the account switch log.
-const accountSwitchQueue = createAccountSwitchQueue()
+const accountSwitchQueue = createAccountSwitchQueue({ onChange: publishQueuedAccountSwitches })
+setQueuedAccountSwitchCanceller(accountSwitchQueue.cancel)
 
 interface SwitchToastContext {
   who: string
@@ -13097,7 +13099,7 @@ function toastAccountSwitch(outcome: Record<string, unknown>, ctx: SwitchToastCo
       t(outcome.paneName ? 'settings.accounts.cli.agent-switch-pane-queued' : 'settings.accounts.cli.agent-switch-queued', params),
       { type: 'info' },
     )
-  } else if (settledLater && status !== 'superseded') {
+  } else if (settledLater && status !== 'superseded' && status !== 'cancelled') {
     notifyRestore.toast(t('settings.accounts.cli.agent-switch-not-done', { ...params, status }), { type: 'info' })
   }
 }

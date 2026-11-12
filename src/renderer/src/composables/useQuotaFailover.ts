@@ -934,7 +934,7 @@ async function previewCandidates(agentKey: string): Promise<FailoverCandidate[] 
   if (hit && Date.now() - hit.at < PREVIEW_TTL_MS) return hit.list
   const res = await send<{ candidates: FailoverCandidate[] }>('quota_failover.candidates', { agent_key: agentKey })
   if (!res.ok) return null
-  const list = res.payload.candidates ?? []
+  const list = res.payload?.candidates ?? []
   previewCache.set(agentKey, { at: Date.now(), list })
   return list
 }
