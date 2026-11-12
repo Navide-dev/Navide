@@ -455,3 +455,67 @@ async def test_sweep_skips_only_the_pane_whose_observation_fails(store, caplog):
     assert views["p2"]["signals"] == []
     assert all(len(views[f"p{i}"]["signals"]) == 1 for i in (0, 1, 3, 4))
     assert "could not be applied" in caplog.text
+
+
+def _persisted_network_panes(store) -> set[str]:
+    """Panes with a network signal in the database file, read through a
+    fresh connection so only committed rows count."""
+    db = Database(store.db.path)
+    try:
+        return {signal["pane"] for signal in CliRiskStore(db).records["signals"].values()
+                if signal["kind"] == "network"}
+    finally:
+        db.close()
+
+
+async def test_sweep_of_60_panes_commits_once(store):
+    """A sweep writes every pane's observation in one transaction: one BEGIN
+    and one COMMIT (one journal sync) instead of one per pane."""
+    async def network(pids):
+        return NetworkSample("successful", tuple(Connection(pid, "198.51.100.7", 443) for pid in pids))
+
+    service = CliRiskService(store, clock=lambda: 100, network_collector=network,
+                             disk_collector=lambda root: DiskSample("successful", {}), resolver=resolver(100))
+    panes = [RiskPane(f"p{i}", "test", (3000 + i,), ("192.0.2.1",), ()) for i in range(60)]
+    statements: list[str] = []
+    store.db._conn.set_trace_callback(statements.append)
+    try:
+        service.request(panes)
+        await settle(service)
+    finally:
+        store.db._conn.set_trace_callback(None)
+        await service.close()
+
+    assert sum(statement.startswith("BEGIN") for statement in statements) == 1, statements
+    assert sum(statement == "COMMIT" for statement in statements) == 1, statements
+    assert _persisted_network_panes(store) == {pane.pane_id for pane in panes}
+
+
+async def test_a_failed_observation_rolls_back_only_its_own_writes(store, caplog):
+    """A pane whose observation fails after writing keeps none of it, in the
+    database or in memory; the rest of the sweep is committed."""
+    async def network(pids):
+        return NetworkSample("successful", tuple(Connection(pid, "198.51.100.7", 443) for pid in pids))
+
+    service = CliRiskService(store, clock=lambda: 100, network_collector=network,
+                             disk_collector=lambda root: DiskSample("successful", {}), resolver=resolver(100))
+    panes = [RiskPane(f"p{i}", "test", (4000 + i,), ("192.0.2.1",), ()) for i in range(5)]
+    original = store.apply_network
+
+    def fails_after_writing(pane_id, *args):
+        original(pane_id, *args)
+        if pane_id == "p2":
+            raise RuntimeError("failed after its write")
+
+    store.apply_network = fails_after_writing
+    try:
+        service.request(panes)
+        await settle(service)
+    finally:
+        await service.close()
+
+    views = service.current(panes)
+    assert views["p2"]["signals"] == []
+    assert all(len(views[f"p{i}"]["signals"]) == 1 for i in (0, 1, 3, 4))
+    assert _persisted_network_panes(store) == {"p0", "p1", "p3", "p4"}
+    assert "could not be applied" in caplog.text
