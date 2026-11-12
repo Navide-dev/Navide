@@ -1,0 +1,100 @@
+/**
+ * Account switches that wait for busy panes (plan agent-0-2-42_3f728e).
+ *
+ * A switch asked for by an agent (MCP cli_account_switch) or a chat button
+ * never interrupts a working pane and never asks the user: when the user's
+ * own click would ask before restarting a running pane, the switch is parked
+ * here instead and runs once the panes it would restart are idle.
+ *
+ * One job per key — `agent:<vendor>` for a CLI-wide switch, `pane:<id>` for
+ * one pane — and the newest request wins: a later request for the same key
+ * settles the parked one as "superseded".
+ */
+
+export type SwitchOutcome = Record<string, unknown> & { status: string }
+
+export interface QueuedSwitch {
+  key: string
+  /** Panes the switch still waits for; 0 = run it now. */
+  waiting: () => number
+  /** The switch itself. Answering status "queued" again (a pane got busy
+   *  between the check and the run) keeps the job parked. */
+  run: () => Promise<SwitchOutcome>
+  /** Told once how the job ended. */
+  settle: (outcome: SwitchOutcome) => void
+}
+
+export interface AccountSwitchQueueOptions {
+  intervalMs?: number
+  setTimer?: (fn: () => void, ms: number) => unknown
+  clearTimer?: (handle: unknown) => void
+}
+
+export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}) {
+  const intervalMs = options.intervalMs ?? 2000
+  const setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
+  const clearTimer = options.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>))
+  const jobs = new Map<string, QueuedSwitch>()
+  const running = new Set<QueuedSwitch>()
+  let timer: unknown = null
+
+  function arm(): void {
+    if (timer !== null || jobs.size === 0) return
+    timer = setTimer(() => {
+      timer = null
+      void tick().finally(arm)
+    }, intervalMs)
+  }
+
+  /** Settle the job parked under `key` (if any) as replaced by a newer request. */
+  function supersede(key: string): void {
+    const job = jobs.get(key)
+    if (!job) return
+    jobs.delete(key)
+    job.settle({ status: 'superseded' })
+  }
+
+  function enqueue(job: QueuedSwitch): void {
+    supersede(job.key)
+    jobs.set(job.key, job)
+    arm()
+  }
+
+  async function tick(): Promise<void> {
+    for (const job of [...jobs.values()]) {
+      if (running.has(job) || job.waiting() > 0) continue
+      running.add(job)
+      let outcome: SwitchOutcome
+      try {
+        outcome = await job.run()
+      } catch {
+        outcome = { status: 'refused', code: 'unknown' }
+      } finally {
+        running.delete(job)
+      }
+      // Replaced while it ran: the newer request owns the key now.
+      if (jobs.get(job.key) !== job) continue
+      if (outcome.status === 'queued') continue
+      jobs.delete(job.key)
+      job.settle(outcome)
+    }
+  }
+
+  function dispose(): void {
+    if (timer !== null) clearTimer(timer)
+    timer = null
+  }
+
+  return {
+    enqueue,
+    supersede,
+    tick,
+    dispose,
+    has: (key: string) => jobs.has(key),
+    get size() {
+      return jobs.size
+    },
+  }
+}
+
+export type AccountSwitchQueue = ReturnType<typeof createAccountSwitchQueue>

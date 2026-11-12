@@ -701,7 +701,13 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
 export type CliAccountSwitchHandler = (
   agentKey: string,
   profileId: string | null,
-  opts?: { restoreLive?: { liveFingerprint: string } },
+  opts?: {
+    restoreLive?: { liveFingerprint: string }
+    /** A switch nobody clicked (an agent's or a chat button's): no dialog.
+     *  `restartRunning` answers instead of the restart confirm, and a live
+     *  login only the user could vouch for is refused (LIVE_DRIFT). */
+    unattended?: { restartRunning: (count: number) => Promise<boolean> }
+  },
 ) => Promise<SetDefaultResult>
 
 export const cliAccountSwitchKey: InjectionKey<CliAccountSwitchHandler> =
@@ -764,7 +770,8 @@ export function createCliAccountSwitchHandler(
     const first = restoreLive
       ? await api.setDefault(agentKey, profileId, { restoreLive })
       : await api.setDefault(agentKey, profileId)
-    if (!first.ok && first.code === 'LIVE_DRIFT' && first.liveDrift?.verified === false) {
+    const unattended = opts?.unattended
+    if (!first.ok && first.code === 'LIVE_DRIFT' && first.liveDrift?.verified === false && !unattended) {
       // The live credential changed and the vendor stores no identity to
       // check it against: only the user can say whether it is still the
       // current account (a token refresh) or someone else's sign-in. A
@@ -805,7 +812,7 @@ export function createCliAccountSwitchHandler(
     }
     if (first.ok || first.code !== 'PANES_RUNNING') return afterSwitch(agentKey, first)
     const t = i18n.global.t
-    const confirmed = await caps.confirm(
+    const confirmed = unattended ? await unattended.restartRunning(first.count ?? 0) : await caps.confirm(
       t('cli-account.switch-restart-confirm-body', {
         count: first.count ?? 0,
         agent: caps.agentLabel(agentKey),

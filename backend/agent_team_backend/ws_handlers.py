@@ -3640,6 +3640,28 @@ async def quota_failover_set_policy(session: "Session", msg_id: str, msg_type: s
     await _failover_call(session, msg_id, msg_type, call, shape=lambda state: state)
 
 
+@handler("account_switch_log.list")
+async def account_switch_log_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Settings → Accounts' switch log: newest first, within the 90-day window."""
+    from . import app
+
+    try:
+        limit = int(payload.get("limit") or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    rows = await asyncio.to_thread(app.account_switch_log.list_recent, limit)
+    await session.send_json(make_response(msg_id, msg_type, {"entries": rows}))
+
+
+@handler("account_switch.settled")
+async def account_switch_settled(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The window finished a switch it had queued behind busy panes."""
+    from .mcp_server.server import settle_account_switch
+
+    known = await settle_account_switch(payload if isinstance(payload, dict) else {})
+    await session.send_json(make_response(msg_id, msg_type, {"recorded": known}))
+
+
 @handler("quota_failover.report")
 async def quota_failover_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
