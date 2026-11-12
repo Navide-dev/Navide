@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import re
+import sys
 import functools
 import itertools
 import threading
@@ -2484,6 +2485,29 @@ def _pane_default_profile_id(agent_key: str) -> str:
     if chosen and app.cli_profiles_store.get(chosen) is not None:
         return str(chosen)
     return ""
+
+
+#: Account dirs already told about entries they cannot share (once per run).
+_ACCOUNT_DIR_UNSHARED_NOTIFIED: set[str] = set()
+
+
+def _claude_account_dir_check(
+    vault: Any, slot: str, command: Any, workspace_path: str
+) -> tuple[Any, str, list[str]]:
+    """For a claude pane about to run on account dir ``slot``:
+    ``(command, resume_fallback_id, unshared entries)``. The command changes
+    only when it resumes a session that config dir cannot see (see
+    ``claude.resume_fallback_command``). Blocking (directory scans)."""
+    from .cli_vendors.claude import resume_fallback_command
+
+    directory = vault.account_dir_path(slot)
+    command, fallback_id = resume_fallback_command(
+        command,
+        workspace_path=workspace_path,
+        config_projects=directory / "projects",
+        real_projects=vault._real_home / ".claude" / "projects",
+    )
+    return command, fallback_id, vault.account_dir_unshared(slot)
 
 
 def _account_dir_for_spawn(
@@ -9152,6 +9176,8 @@ async def _terminal_create_impl(
     # an account switch (which swaps only the live credential) never reaches
     # it. ``account_dir_login`` is the sign-in that puts the login there.
     account_dir_slot = ""
+    resume_fallback_id = ""
+    account_dir_unshared: list[str] = []
     if agent_key == "claude" and not login_profile_id:
         account_dir_login = bool(payload.get("account_dir_login"))
         try:
@@ -9183,6 +9209,22 @@ async def _terminal_create_impl(
             if account_dir_login:
                 is_login = True
                 metadata["account_dir_login"] = True
+            else:
+                payload["command"], resume_fallback_id, account_dir_unshared = await vault_to_thread(
+                    functools.partial(
+                        _claude_account_dir_check,
+                        app.credential_vault,
+                        account_dir_slot,
+                        payload.get("command"),
+                        str(metadata.get("workspace_path") or payload.get("cwd") or ""),
+                    )
+                )
+                if resume_fallback_id:
+                    app.log.warning(
+                        "claude resume %s is not reachable from account dir %s; "
+                        "starting a new conversation with a handoff prompt",
+                        resume_fallback_id, account_dir_slot,
+                    )
         elif not metadata.get("profile_id") and _pane_default_profile_id(agent_key):
             # The chosen account has no usable dir login: this pane runs on
             # the live credential, so file it under that credential's owner.
@@ -9717,6 +9759,25 @@ async def _terminal_create_impl(
             "denied": sorted(denied_env_keys),
             # Accepted, then replaced or removed by a higher-priority source.
             "overridden": overridden_env_keys,
+        }))
+    # A Windows box without Developer Mode cannot link files into an account
+    # dir (and on some volumes not even a junction): said once per account and
+    # run. A resume that fell back to a new conversation is said every time.
+    unshared_notice = (
+        account_dir_unshared
+        if sys.platform == "win32" and account_dir_slot not in _ACCOUNT_DIR_UNSHARED_NOTIFIED
+        else []
+    )
+    if unshared_notice or resume_fallback_id:
+        if unshared_notice:
+            _ACCOUNT_DIR_UNSHARED_NOTIFIED.add(account_dir_slot)
+        dep = app.onboarding_deps.DEPS_BY_ID.get(agent_key)
+        await session.send_json(make_event("claude.account_dir_notice", {
+            "agent_key": agent_key,
+            "label": dep.label if dep else agent_key,
+            "pane_id": str(payload.get("pane_id") or ""),
+            "unshared": unshared_notice,
+            "resume_fallback_session_id": resume_fallback_id,
         }))
     if bypass_dropped_command:
         await session.send_json(make_event("cli.bypass_dropped", {

@@ -10001,6 +10001,10 @@
     "denied": "{label}: Navide gestiona {keys} por su cuenta, así que el valor que definiste nunca llegó a la CLI.",
     "overridden": "{label}: {keys} se aceptó, pero después lo sustituyó el ajuste propio de Navide, así que tu valor no está en vigor en este pane."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: Windows no permite que Navide vincule la carpeta de esta cuenta con tus otras cuentas, así que sus sesiones o ajustes se guardan por separado. Activa el modo de desarrollador (Configuración → Sistema → Para programadores) y reinicia Navide.",
+    "resume-fallback": "{label}: no se encontró la conversación guardada en la carpeta de esta cuenta, así que se inició una nueva y se le pidió que lea la transcripción anterior y continúe desde ahí."
+  },
   "install-terminal": {
     "input-lost": "Lo escrito no llegó al comando: {error}. No se ha recibido nada de lo escrito desde entonces (p. ej., una contraseña).",
     "running": "En ejecución: si pide una contraseña o una confirmación, escríbela aquí.",

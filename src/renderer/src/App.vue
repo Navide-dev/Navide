@@ -18744,6 +18744,34 @@ backend.on('cli.env_ignored', (raw) => {
   }
 })
 
+// A claude pane pinned to an account dir: Windows could not link that dir's
+// sessions/settings to the real home (no Developer Mode), and/or the saved
+// conversation was not reachable there, so the pane started a new one that
+// was asked to pick up the old transcript. Advisory; the pane is running.
+backend.on('claude.account_dir_notice', (raw) => {
+  const ev = raw as {
+    label?: string
+    pane_id?: string
+    unshared?: string[]
+    resume_fallback_session_id?: string
+  }
+  if (!ev) return
+  const pane = ev.pane_id ? panes.value.find((p) => p.id === ev.pane_id) : undefined
+  const label = pane?.agentLabel || ev.label || 'Claude Code'
+  if (ev.resume_fallback_session_id) {
+    notifyRestore.toast(
+      i18n.global.t('cli-account-dir.resume-fallback', { label }),
+      { type: 'info', duration: 10000 }
+    )
+  }
+  if ((ev.unshared ?? []).length > 0) {
+    notifyRestore.toast(
+      i18n.global.t('cli-account-dir.links-unavailable', { label }),
+      { type: 'error', duration: 12000 }
+    )
+  }
+})
+
 // CLI account login: the backend harvested a profile's isolated login home
 // the moment the browser sign-in completed. Close the disposable login pane
 // and confirm with the signed-in identity. Only the window that spawned the
