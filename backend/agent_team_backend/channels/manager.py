@@ -4088,6 +4088,49 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
 
+    async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
+                                     from_label: str, to_id: str, to_label: str,
+                                     needs_login: bool = False) -> int:
+        """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
+        chat whose pane runs that CLI or was moved by the switch. Where the chat has
+        buttons, a claude switch carries "switch back": a one-row /account menu, so the
+        press goes the /account way (owner and chat checked, the active account
+        re-checked by the window, written to account_switch_log). Returns the chats told."""
+        lang = prompt_skills.language(await self._ui_settings())
+        shown_from = account_menu.mask_email(from_label or from_id)
+        shown_to = account_menu.mask_email(to_label or to_id)
+        body = account_menu.text(lang, "failover_needs_login" if needs_login else "failover_done",
+                                 to=shown_to, **{"from": shown_from})
+        moved = set(pane_ids)
+        told = 0
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() in seen or self._chat_kind(b) != "direct":
+                continue
+            pane_id = self._seams.resolve_pane(b.pane_id)
+            if not pane_id or (pane_id not in moved and self._seams.pane_agent(pane_id) != agent_key):
+                continue
+            seen.add(loc.key())
+            adapter = self._adapters.get((loc.platform, loc.account))
+            if adapter is None:
+                continue
+            buttons = None
+            if (agent_key == account_menu.SWITCH_AGENT and not needs_login and adapter.capabilities.buttons
+                    and loc.platform == "telegram"):
+                # A Telegram direct chat's id is its one person's id: the menu's owner.
+                menu = self.accounts.create(
+                    location_key=loc.key(), sender_id=loc.chat_id, lang=lang, agent_key=agent_key,
+                    active_id=to_id,
+                    rows=[account_menu.AccountRow(id=from_id, label=shown_from),
+                          account_menu.AccountRow(id=to_id, label=shown_to, active=True)],
+                )
+                rows = self.accounts.render_single(menu, from_id, account_menu.text(lang, "switch_back", to=shown_from))
+                buttons = [row[0] for row in rows]
+            if await self._notice(adapter, loc, redact.redact_text(body), buttons=buttons):
+                told += 1
+        return told
+
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         chat_id = str(link.get("chatId") or "")
         targets = self._share_targets(str(link.get("paneId") or ""), chat_id)

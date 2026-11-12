@@ -74,6 +74,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "這個版本還沒接上從聊天室切換帳號，請到 Navide 視窗操作。",
         "needs_user": "這次切換需要你到 Navide 視窗處理（{code}），沒有切換。",
         "model_link": "🧠 切換模型",
+        "failover_done": "🔄 額度用完，已自動接續：Claude 從 {from} 換到 {to}。",
+        "failover_needs_login": "⚠️ 額度用完，Claude 已自動換到 {to}，但這個帳號沒有可用的登入，請到 Navide 視窗登入。",
+        "switch_back": "↩ 改回 {to}",
     },
     "en-US": {
         "open": "🔁 Switch account",
@@ -101,6 +104,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "This version cannot switch accounts from a chat yet; use the Navide window.",
         "needs_user": "This switch needs you in the Navide window ({code}); nothing was switched.",
         "model_link": "🧠 Switch model",
+        "failover_done": "🔄 Quota ran out, so Navide continued on another account: Claude switched from {from} to {to}.",
+        "failover_needs_login": "⚠️ Quota ran out and Claude switched to {to}, but that account has no usable sign-in; sign in from the Navide window.",
+        "switch_back": "↩ Switch back to {to}",
     },
     "ja-JP": {
         "open": "🔁 アカウント切替",
@@ -128,6 +134,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "このバージョンではまだチャットからアカウントを切り替えられません。Navide のウィンドウで操作してください。",
         "needs_user": "この切り替えは Navide のウィンドウでの操作が必要です（{code}）。切り替えていません。",
         "model_link": "🧠 モデル切替",
+        "failover_done": "🔄 クォータが切れたため自動で継続しました：Claude を {from} から {to} に切り替えました。",
+        "failover_needs_login": "⚠️ クォータが切れ、Claude は {to} に切り替わりましたが、このアカウントには使えるログインがありません。Navide のウィンドウでログインしてください。",
+        "switch_back": "↩ {to} に戻す",
     },
     "zh-CN": {
         "open": "🔁 切换账号",
@@ -155,6 +164,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "这个版本还没接上从聊天切换账号，请到 Navide 窗口操作。",
         "needs_user": "这次切换需要你到 Navide 窗口处理（{code}），没有切换。",
         "model_link": "🧠 切换模型",
+        "failover_done": "🔄 额度用完，已自动接续：Claude 从 {from} 换到 {to}。",
+        "failover_needs_login": "⚠️ 额度用完，Claude 已自动换到 {to}，但这个账号没有可用的登录，请到 Navide 窗口登录。",
+        "switch_back": "↩ 改回 {to}",
     },
     "ko-KR": {
         "open": "🔁 계정 전환",
@@ -182,6 +194,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "이 버전은 아직 채팅에서 계정을 전환할 수 없어요. Navide 창에서 해 주세요.",
         "needs_user": "이 전환은 Navide 창에서 처리해야 해요({code}). 전환하지 않았어요.",
         "model_link": "🧠 모델 전환",
+        "failover_done": "🔄 할당량이 소진되어 자동으로 이어갑니다: Claude를 {from}에서 {to}(으)로 전환했습니다.",
+        "failover_needs_login": "⚠️ 할당량이 소진되어 Claude가 {to}(으)로 전환됐지만 이 계정에 사용할 수 있는 로그인이 없습니다. Navide 창에서 로그인하세요.",
+        "switch_back": "↩ {to}(으)로 되돌리기",
     },
     "es-ES": {
         "open": "🔁 Cambiar cuenta",
@@ -209,6 +224,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Esta versión aún no puede cambiar de cuenta desde un chat; usa la ventana de Navide.",
         "needs_user": "Este cambio necesita que vayas a la ventana de Navide ({code}); no se cambió nada.",
         "model_link": "🧠 Cambiar modelo",
+        "failover_done": "🔄 Se agotó la cuota y Navide siguió con otra cuenta: Claude cambió de {from} a {to}.",
+        "failover_needs_login": "⚠️ Se agotó la cuota y Claude cambió a {to}, pero esa cuenta no tiene un inicio de sesión válido; inicia sesión en la ventana de Navide.",
+        "switch_back": "↩ Volver a {to}",
     },
     "fr-FR": {
         "open": "🔁 Changer de compte",
@@ -236,6 +254,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Cette version ne peut pas encore changer de compte depuis un chat ; utilisez la fenêtre Navide.",
         "needs_user": "Ce changement demande votre intervention dans la fenêtre Navide ({code}) ; rien n’a été changé.",
         "model_link": "🧠 Changer de modèle",
+        "failover_done": "🔄 Quota épuisé, Navide a continué sur un autre compte : Claude est passé de {from} à {to}.",
+        "failover_needs_login": "⚠️ Quota épuisé et Claude est passé à {to}, mais ce compte n'a pas de connexion utilisable ; connectez-vous depuis la fenêtre Navide.",
+        "switch_back": "↩ Revenir à {to}",
     },
     "de-DE": {
         "open": "🔁 Konto wechseln",
@@ -263,6 +284,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Diese Version kann das Konto noch nicht aus einem Chat wechseln; nutze das Navide-Fenster.",
         "needs_user": "Dieser Wechsel braucht dich im Navide-Fenster ({code}); nichts wurde gewechselt.",
         "model_link": "🧠 Modell wechseln",
+        "failover_done": "🔄 Kontingent aufgebraucht, Navide macht mit einem anderen Konto weiter: Claude wechselte von {from} zu {to}.",
+        "failover_needs_login": "⚠️ Kontingent aufgebraucht und Claude wechselte zu {to}, aber dieses Konto hat keine gültige Anmeldung; melde dich im Navide-Fenster an.",
+        "switch_back": "↩ Zurück zu {to}",
     },
     "pt-BR": {
         "open": "🔁 Trocar conta",
@@ -290,6 +314,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Esta versão ainda não troca de conta por um chat; use a janela do Navide.",
         "needs_user": "Esta troca precisa de você na janela do Navide ({code}); nada foi trocado.",
         "model_link": "🧠 Trocar modelo",
+        "failover_done": "🔄 A cota acabou e o Navide continuou em outra conta: o Claude trocou de {from} para {to}.",
+        "failover_needs_login": "⚠️ A cota acabou e o Claude trocou para {to}, mas essa conta não tem um login válido; entre pela janela do Navide.",
+        "switch_back": "↩ Voltar para {to}",
     },
     "ru-RU": {
         "open": "🔁 Сменить аккаунт",
@@ -317,6 +344,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Эта версия пока не умеет менять аккаунт из чата; используйте окно Navide.",
         "needs_user": "Для этого переключения нужно ваше действие в окне Navide ({code}); ничего не изменено.",
         "model_link": "🧠 Сменить модель",
+        "failover_done": "🔄 Квота закончилась, Navide продолжил на другом аккаунте: Claude переключён с {from} на {to}.",
+        "failover_needs_login": "⚠️ Квота закончилась, Claude переключён на {to}, но у этого аккаунта нет рабочего входа; войдите в окне Navide.",
+        "switch_back": "↩ Вернуть {to}",
     },
     "vi-VN": {
         "open": "🔁 Đổi tài khoản",
@@ -344,6 +374,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "unavailable": "Phiên bản này chưa đổi tài khoản từ chat được; hãy dùng cửa sổ Navide.",
         "needs_user": "Lần đổi này cần bạn xử lý trong cửa sổ Navide ({code}); chưa đổi gì.",
         "model_link": "🧠 Đổi mô hình",
+        "failover_done": "🔄 Hết hạn mức, Navide đã tiếp tục bằng tài khoản khác: Claude đổi từ {from} sang {to}.",
+        "failover_needs_login": "⚠️ Hết hạn mức và Claude đã đổi sang {to}, nhưng tài khoản này chưa có đăng nhập dùng được; hãy đăng nhập trong cửa sổ Navide.",
+        "switch_back": "↩ Đổi lại {to}",
     },
 }
 
