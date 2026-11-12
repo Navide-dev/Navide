@@ -124,6 +124,7 @@ from .sync_engine import SyncStore
 from .history_store import HistoryStore
 from .agent_message_log import AgentMessageLog
 from .account_switch_log import AccountSwitchLog
+from . import failover_notice
 from .preview_log import MAX_ROWS as PREVIEW_MAX_ROWS, PreviewLog
 from . import git_service
 from . import issue_service
@@ -2769,6 +2770,8 @@ async def _start_log_watcher() -> None:
     await server_link.start()
     # Chat channels (Telegram, Discord, ...): adapters start in the background.
     await channels.start()
+    # An automatic quota switch is recorded and told to the chats (failover_notice).
+    failover_notice.install()
     # Plugin `agents.*` events (metadata only); the Host routes them by grant.
     plugin_host_events.start(asyncio.get_running_loop())
 
@@ -2910,6 +2913,7 @@ async def _stop_log_watcher() -> None:
             _git_watcher.stop()
         if _credential_watcher is not None:
             _credential_watcher.stop()
+        failover_notice.uninstall()
         await channels.stop()
         await server_link.stop()
     finally:

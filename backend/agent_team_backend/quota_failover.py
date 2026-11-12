@@ -71,6 +71,29 @@ WAIT_SAFE_MAX_S = 30 * 60.0
 # After a commit: how long the incident waits for evidence that the target
 # account actually works before it says "switched, quota unconfirmed".
 SETTLE_TIMEOUT_S = 120.0
+
+# Told about every switch that moved credentials (plan agent-0-2-42_3f728e P3):
+# channels writes it to account_switch_log and posts the chat notice. A notice
+# only: each listener runs on its own task, after the commit, and can neither
+# hold nor fail the switch.
+_commit_listeners: list[Callable[[dict[str, Any]], Any]] = []
+
+
+def add_commit_listener(listener: Callable[[dict[str, Any]], Any]) -> Callable[[], None]:
+    """Call ``listener(event)`` (a coroutine function) after each committed
+    switch; returns the function that removes it."""
+    _commit_listeners.append(listener)
+
+    def remove() -> None:
+        if listener in _commit_listeners:
+            _commit_listeners.remove(listener)
+
+    return remove
+
+
+def _listener_done(task: asyncio.Task[Any]) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        log.error("quota_failover: a commit listener failed", exc_info=task.exception())
 # A reading older than this is no longer "fresh" headroom.
 FRESH_READING_MAX_AGE_S = 30 * 60.0
 # Closed incidents (and their transactions) stay in ``state()`` this long, and
@@ -2610,7 +2633,25 @@ class QuotaFailoverService:
                 for p in tx.panes.values()
             ],
         }))
+        self._notify_commit_listeners(tx, login_state)
         self._arm_timer(f"settle:{tx.id}", SETTLE_TIMEOUT_S)
+
+    def _notify_commit_listeners(self, tx: Transaction, login_state: str) -> None:
+        event = {
+            "transactionId": tx.id,
+            "agentKey": tx.agent_key,
+            "fromSlotId": tx.from_slot_id,
+            "toSlotId": tx.to_slot_id,
+            "automatic": tx.automatic,
+            "state": tx.state,
+            "needsLogin": login_state != "ok",
+            "paneIds": sorted({str(p.get("paneId") or "") for p in [*tx.panes.values(), *tx.hot_switched_panes]} - {""}),
+        }
+        for listener in list(_commit_listeners):
+            try:
+                asyncio.ensure_future(listener(dict(event))).add_done_callback(_listener_done)
+            except Exception:  # noqa: BLE001 — a notice must never reach the switch
+                log.exception("quota_failover: a commit listener could not start")
 
     # ── settling ──────────────────────────────────────────────────────────
 
