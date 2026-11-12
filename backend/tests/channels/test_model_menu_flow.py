@@ -129,7 +129,8 @@ async def test_the_pane_step_lists_the_status_tree_and_goes_back(env: Env) -> No
                    "known": ["gpt-5.5", "gpt-5.3-codex"]},
     }, _tree())
     await env.inbound("/model")
-    assert [label for label, _ in _buttons(env)] == ["main · claude · 預設", "coder · codex · gpt-5.5", "✖ 取消"]
+    # The /account link sits above cancel (the two chat menus link to each other).
+    assert [label for label, _ in _buttons(env)] == ["main · claude · 預設", "coder · codex · gpt-5.5", "🔁 切換帳號", "✖ 取消"]
     await _press(env, _data(_buttons(env), "coder"))
     labels = [label for label, _ in _edited_buttons(env)]
     assert labels[:2] == ["✓ gpt-5.5", "gpt-5.3-codex"] and "◀ 換分格" in labels

@@ -97,6 +97,9 @@ export interface UseUiActionBusOptions {
     signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
     /** ui.accounts.switch (cli_account_switch). Absent: refused. */
     switch?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+    /** ui.accounts.channelMenu: the rows of a chat's /account menu (channels
+     *  layer, never an MCP tool). Absent: refused. */
+    channelMenu?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
   }
 }
 
@@ -317,7 +320,8 @@ export async function handleUiInvokeRequest(
       } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
         const handler = req.action === 'ui.accounts.signIn'
           ? opts.accountActions?.signIn
-          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch : undefined
+          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch
+            : req.action === 'ui.accounts.channelMenu' ? opts.accountActions?.channelMenu : undefined
         if (!req.caller_pane_id) {
           ok = false
           error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`

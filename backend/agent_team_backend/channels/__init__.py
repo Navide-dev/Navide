@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -334,6 +335,47 @@ def default_seams() -> Seams:
             )
         return result
 
+    async def account_menu(pane_id: str) -> dict[str, Any]:
+        # The rows the window's usage badge shows for the pane's CLI (ui.accounts.channelMenu);
+        # read from the window's own state, nothing asks a vendor or reads a credential.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"status": "pane-gone"}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.accounts.channelMenu", args={"agentKey": pane.agent_key or ""},
+        )
+        if not reply.get("ok"):
+            return {"status": "no-window"}
+        result = reply.get("result")
+        return result if isinstance(result, dict) else {"status": "no-window"}
+
+    async def switch_account(pane_id: str, profile_id: str, from_id: str, who: str,
+                             on_settled: Any = None) -> dict[str, Any]:
+        # The shared no-confirm switch (mcp_server request_account_switch): the same as a
+        # click in the window, busy panes queued until idle, written to account_switch_log.
+        # Also put on the pane's Guard audit trail, as a chat's model switch is.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"status": "pane-gone"}
+        request = getattr(mcp, "request_account_switch", None)
+        if request is None:
+            return {"status": "unavailable"}
+
+        async def done(row: dict[str, Any]) -> None:
+            answer = _switch_answer(row)
+            await run_in_db_thread(_audit_account_switch, pane, who, from_id, profile_id, answer["status"])
+            if on_settled is not None:
+                await on_settled(answer)
+
+        answer = _switch_answer(await request(
+            agent_key=pane.agent_key or "", profile_id=profile_id, source="channel", who=who,
+            reason="", expected_from=from_id, on_done=done,
+        ))
+        if answer["status"] != "queued":
+            await run_in_db_thread(_audit_account_switch, pane, who, from_id, profile_id, answer["status"])
+        return answer
+
     def windows_open() -> bool:
         from .. import app
 
@@ -368,7 +410,40 @@ def default_seams() -> Seams:
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
         wake_target=wake_target, windows_open=windows_open, pane_live=pane_live, wake=wake, turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane, pane_model=pane_model, set_model=set_model,
+        account_menu=account_menu, switch_account=switch_account,
     )
+
+
+def _switch_answer(answer: dict[str, Any]) -> dict[str, Any]:
+    """request_account_switch's answer, or its queued request's on_done row, as the
+    channels read it: {status, from, to, waiting?, code?}."""
+    out: dict[str, Any] = {"status": str(answer.get("status") or "no-window"),
+                           "from": str(answer.get("from") or ""), "to": str(answer.get("to") or "")}
+    waiting = answer.get("waiting")
+    if isinstance(waiting, int) and not isinstance(waiting, bool):
+        out["waiting"] = waiting
+    if answer.get("code"):
+        out["code"] = str(answer["code"])
+    return out
+
+
+def _audit_account_switch(pane: Any, who: str, from_id: str, to_id: str, status: str) -> None:
+    """Record a chat's account switch in the pane's Navide Guard audit trail: who pressed,
+    from which account to which, and how it ended. Ids only, never an email."""
+    from ..guard import runtime as guard_runtime
+
+    done = status in ("switched", "switched-signed-out")
+    what = f"account {from_id} -> {to_id}"
+    try:
+        guard_runtime.store().audit_add({
+            "ts": time.time(), "pane_id": pane.pane_id, "vendor": pane.agent_key or "",
+            "source": "channel", "tool": "account_switch",
+            "excerpt": (f"account switched by {who} via chat ({status}): {what}" if done
+                        else f"account switch by {who} via chat not made ({status or 'failed'}): {what}")[:500],
+            "level": "normal", "action": "allow", "rule_ids": [], "tainted": False,
+        })
+    except Exception:  # noqa: BLE001 — the switch itself already happened (or not)
+        log.warning("channels: account switch audit write failed", exc_info=True)
 
 
 def _last_turn_text(reader: Any, path: Path, since_s: float) -> str:
