@@ -10,6 +10,12 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
+## [Unreleased hotfix]
+
+### Fixed
+
+- Git and shell (hotfix): on the macOS and Linux releases since 0.2.32, every Git, `gh`/`glab` and `shell.run` call failed (exit code 128), so the Git plugin showed a real repository as "Not a Git repository". The packaged backend runs on uvloop, which rejected the process-group option Navide passed when starting those commands; Navide now starts them in a new session, which both event loops accept and which still lets a timeout end the whole process tree. A command that fails to start is now logged with its executable name (never its arguments).
+
 ## [0.2.40] — 2026-11-11
 
 ### Added
