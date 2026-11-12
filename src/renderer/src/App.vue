@@ -435,8 +435,9 @@ import {
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
 import { createSignInConfirm, runAgentSignIn, SIGN_IN_PANE_INPUT_REFUSAL } from './lib/agentSignIn'
-import { runAgentAccountSwitch, type AgentAccountSwitchConfirmRequest } from './lib/agentAccountSwitch'
+import { runAgentAccountSwitch, switchRequester } from './lib/agentAccountSwitch'
 import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
+import { createAccountSwitchQueue } from './lib/accountSwitchQueue'
 import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
@@ -512,7 +513,6 @@ const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInst
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components/AgentSignInConfirmDialog.vue'))
-const AgentAccountSwitchConfirmDialog = defineAsyncComponent(() => import('./components/AgentAccountSwitchConfirmDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
@@ -10008,13 +10008,29 @@ provide(
  *  terminals are excluded; panes whose terminal ref has not mounted yet stay
  *  in (they may be starting on the old credentials). Failures aggregate into
  *  one summary toast. */
-async function restartAgentPanes(agentKey: string): Promise<void> {
+async function restartAgentPanes(agentKey: string, opts?: { unattended?: boolean }): Promise<void> {
   // Rebuild replaces pane ids — capture the batch up front.
-  const batch = panes.value.filter((p) => {
+  let batch = panes.value.filter((p) => {
     const paneRef = paneRefs[p.id]
     const status = (paneRef?.displayStatus ?? paneRef?.status) as string | undefined
     return paneNeedsAccountRestart(p, agentKey, status)
   })
+  // A switch nobody clicked (cli_account_switch, a chat button) never stops a
+  // turn: a pane at work is restarted once it is idle (plan agent-0-2-42_3f728e).
+  if (opts?.unattended) {
+    for (const p of batch.filter((pane) => accountSwitchBusy(pane.id))) {
+      accountSwitchQueue.enqueue({
+        key: `restart:${p.id}`,
+        waiting: () => (accountSwitchBusy(p.id) ? 1 : 0),
+        run: async () => {
+          const failure = await rebuildPaneViaResume(p.id, { suppressBusyToast: true })
+          return failure === 'busy' ? { status: 'queued' } : { status: failure ? 'refused' : 'restarted' }
+        },
+        settle: (outcome) => pipelineLog(`⟳ account-switch deferred restart ${p.id.slice(0, 8)}: ${outcome.status}`),
+      })
+    }
+    batch = batch.filter((pane) => !accountSwitchBusy(pane.id))
+  }
   const ids = batch.map((p) => p.id)
   // Diagnostics: one line per selected pane, so a partial-restart toast can be
   // traced back to which panes were eligible and what state they were in.
@@ -13058,8 +13074,8 @@ useUiActionBus({
   // without one it is the CLI-wide switch, unchanged.
   accountActions: {
     signIn: agentSignIn,
-    switch: (args, callerPaneId, signal) =>
-      (args.paneId ? agentPaneAccountSwitch : agentAccountSwitch)(args, callerPaneId, signal),
+    switch: (args, callerPaneId) =>
+      (args.paneId ? agentPaneAccountSwitch : agentAccountSwitch)(args, callerPaneId),
   },
 })
 
@@ -13106,47 +13122,126 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
   return outcome
 }
 
-// MCP cli_account_switch (ui.accounts.switch — on the bus, never in the
-// command registry; plan mcp_614482 P3): nothing switches until the user says
-// yes in AgentAccountSwitchConfirmDialog. The switch itself is the window's
-// own cliAccountSwitch, called with the vendor and the account only — no
-// force, no option — so its own restart and live-drift questions still go to
-// the user. The follow-switch offer is the user's own flow and is not made here.
-const agentAccountSwitchConfirm = createSignInConfirm<AgentAccountSwitchConfirmRequest>()
-async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-  const outcome = await runAgentAccountSwitch(args, callerPaneId, {
-    accounts: cliProfilesApi,
-    callerPane: (id) => {
-      const pane = panes.value.find((p) => p.id === id)
-      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
-    },
-    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
-    confirm: agentAccountSwitchConfirm.ask,
-    switchAccount: (agentKey, profileId) => cliAccountSwitch(agentKey, profileId),
-    now: () => Date.now(),
-  }, signal)
-  if (outcome.status !== 'switched' && outcome.status !== 'switched-signed-out') return outcome
+// ui.accounts.switch (MCP cli_account_switch, the Telegram account button;
+// plan agent-0-2-42_3f728e): the user's own switch without the questions.
+// The CLI-wide switch is the window's own cliAccountSwitch, called with the
+// vendor and the account only; a switch naming a pane is the badge's "switch
+// only this pane". Nothing asks the user: where their click would ask before
+// restarting a working pane, the switch waits in accountSwitchQueue until the
+// pane is idle and the request answers "queued" at once. The user is told
+// after the fact — a toast here, a row in the account switch log.
+const accountSwitchQueue = createAccountSwitchQueue()
+
+interface SwitchToastContext {
+  who: string
+  vendor: string
+  reason: string
+}
+
+function switchToastContext(args: Record<string, unknown>, callerPaneId: string): SwitchToastContext {
+  const requester = switchRequester(args)
   const caller = panes.value.find((p) => p.id === callerPaneId)
-  notifyRestore.toast(
-    i18n.global.t('settings.accounts.cli.agent-switch-done', {
-      // Agent-written text: invisible characters shown, as in the dialog.
-      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
-      vendor: String(args.agentKey ?? ''),
+  const who = requester?.source === 'mcp' || !requester
+    ? caller?.messagingName || caller?.customName || requester?.name || callerPaneId
+    : requester.name || requester.source
+  return {
+    // Agent- or chat-written text: invisible characters shown.
+    who: revealInvisibleText(who),
+    vendor: String(args.agentKey ?? ''),
+    reason: revealInvisibleText(String(args.reason ?? '')),
+  }
+}
+
+/** A non-modal notice for how a switch went; nothing for a refusal the
+ *  requester was told about directly, or a request a newer one replaced. */
+function toastAccountSwitch(outcome: Record<string, unknown>, ctx: SwitchToastContext, settledLater: boolean): void {
+  const t = i18n.global.t
+  const params = {
+    agent: ctx.who,
+    vendor: ctx.vendor,
+    from: String(outcome.from ?? ''),
+    to: String(outcome.to ?? ''),
+    pane: revealInvisibleText(String(outcome.paneName ?? '')),
+    count: Number(outcome.waiting ?? 0),
+    reason: ctx.reason || '—',
+    time: new Date().toLocaleTimeString(),
+  }
+  const status = String(outcome.status ?? '')
+  if (status === 'switched' || status === 'switched-signed-out') {
+    notifyRestore.toast(t('settings.accounts.cli.agent-switch-done', params), { type: 'info' })
+  } else if (status === 'switched-pane') {
+    notifyRestore.toast(t('settings.accounts.cli.agent-switch-pane-done', params), { type: 'info' })
+  } else if (status === 'queued') {
+    notifyRestore.toast(
+      t(outcome.paneName ? 'settings.accounts.cli.agent-switch-pane-queued' : 'settings.accounts.cli.agent-switch-queued', params),
+      { type: 'info' },
+    )
+  } else if (settledLater && status !== 'superseded') {
+    notifyRestore.toast(t('settings.accounts.cli.agent-switch-not-done', { ...params, status }), { type: 'info' })
+  }
+}
+
+/** A queued switch ended: tell the user, and the backend (switch log, the
+ *  requester's on_done). */
+function onQueuedAccountSwitchSettled(requestId: string, ctx: SwitchToastContext) {
+  return (outcome: Record<string, unknown>): void => {
+    toastAccountSwitch(outcome, ctx, true)
+    if (!requestId) return
+    backend.send('account_switch.settled', {
+      request_id: requestId,
+      status: String(outcome.status ?? ''),
       from: String(outcome.from ?? ''),
       to: String(outcome.to ?? ''),
-      reason: revealInvisibleText(String(args.reason ?? '')),
-    }),
-    { type: 'info' },
-  )
+      ...(outcome.code ? { code: String(outcome.code) } : {}),
+      ...(outcome.fromProfileId ? { from_profile_id: String(outcome.fromProfileId) } : {}),
+    }).catch(() => { /* the row stays "queued"; the switch itself is done */ })
+  }
+}
+
+function accountSwitchBusy(paneId: string): boolean {
+  const paneRef = paneRefs[paneId]
+  return paneBusyForRebuild(
+    paneRef?.displayStatus as string | undefined,
+    paneRef?.status as string | undefined,
+    paneRef?.startingAgeMs as number | null | undefined,
+  ) !== false
+}
+
+/** Panes of `agentKey` at work in ANY window: a forced switch restarts every
+ *  window's panes, so the backend's view (all windows) is joined with this
+ *  window's own, which also sees a pane still starting. Unreadable = still
+ *  waiting: nobody is interrupted on a guess. */
+async function accountSwitchBusyPaneCount(agentKey: string): Promise<number> {
+  const ids = new Set(panes.value.filter((p) => {
+    const paneRef = paneRefs[p.id]
+    const status = (paneRef?.displayStatus ?? paneRef?.status) as string | undefined
+    return paneNeedsAccountRestart(p, agentKey, status) && accountSwitchBusy(p.id)
+  }).map((p) => p.id))
+  try {
+    const resp = await backend.send<{ pane_ids?: string[] }>('account_switch.busy_panes', { agent_key: agentKey })
+    for (const id of resp.payload?.pane_ids ?? []) ids.add(id)
+  } catch {
+    return Math.max(1, ids.size)
+  }
+  return ids.size
+}
+
+async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+  const ctx = switchToastContext(args, callerPaneId)
+  const outcome = await runAgentAccountSwitch(args, {
+    accounts: cliProfilesApi,
+    switchAccount: (agentKey, profileId, opts) => cliAccountSwitch(agentKey, profileId, opts),
+    busyPanes: (agentKey) => accountSwitchBusyPaneCount(agentKey),
+    queue: accountSwitchQueue,
+    onSettled: onQueuedAccountSwitchSettled(String(args.requestId ?? ''), ctx),
+  })
+  toastAccountSwitch(outcome, ctx, false)
   return outcome
 }
 
-// MCP cli_account_switch with pane_id (plan mcp-pane-cli-usage_213031 P4):
-// the badge's "switch only this pane", asked through the same confirm dialog
-// (which names the pane). Only that pane is reopened in the account's own
-// folder; the live login and every other pane stay as they are.
-async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-  const outcome = await runAgentPaneAccountSwitch(args, callerPaneId, {
+async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+  const ctx = switchToastContext(args, callerPaneId)
+  const outcome = await runAgentPaneAccountSwitch(args, {
     accounts: cliProfilesApi,
     folderAgent: FOLLOW_SWITCH_AGENT,
     pane: (id) => {
@@ -13162,38 +13257,30 @@ async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneI
       }
     },
     dirSignedIn: followDirSignedIn,
-    callerPane: (id) => {
-      const pane = panes.value.find((p) => p.id === id)
-      return pane ? { workspacePath: pane.workspacePath, name: pane.messagingName || pane.customName || id } : undefined
-    },
-    accountLabel: (key, id) => accountLabel(cliProfilesApi, key, id, i18n.global.t),
-    confirm: agentAccountSwitchConfirm.ask,
-    movePane: moveAgentPaneAccount,
-    now: () => Date.now(),
-  }, signal)
-  if (outcome.status !== 'switched-pane') return outcome
-  const caller = panes.value.find((p) => p.id === callerPaneId)
-  notifyRestore.toast(
-    i18n.global.t('settings.accounts.cli.agent-switch-pane-done', {
-      agent: revealInvisibleText(caller?.messagingName || caller?.customName || callerPaneId),
-      from: String(outcome.from ?? ''),
-      to: String(outcome.to ?? ''),
-      reason: revealInvisibleText(String(args.reason ?? '')),
-    }),
-    { type: 'info' },
-  )
+    paneBusy: accountSwitchBusy,
+    movePane: (paneId, profileId) => moveAgentPaneAccount(paneId, profileId, { unattended: true }),
+    queue: accountSwitchQueue,
+    onSettled: onQueuedAccountSwitchSettled(String(args.requestId ?? ''), ctx),
+  })
+  toastAccountSwitch(outcome, ctx, false)
   return outcome
 }
 
 /** Reopen one pane in `profileId`'s own folder: a fixed pane exactly as
  *  moveFixedAccountPane does, a following one as fixing it (📌) does, with the
- *  follow flag put back when the rebuild does not happen. */
-async function moveAgentPaneAccount(paneId: string, profileId: string): Promise<string | undefined> {
+ *  follow flag put back when the rebuild does not happen. `unattended` (a
+ *  switch nobody clicked) never asks: a working pane answers 'busy'. */
+async function moveAgentPaneAccount(
+  paneId: string,
+  profileId: string,
+  opts?: { unattended?: boolean },
+): Promise<string | undefined> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return 'missing-pane'
-  if (paneAccountFixed(pane)) return rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  const rebuild = { profileId, freshWhenNoTranscript: true, ...(opts?.unattended ? { suppressBusyToast: true } : {}) }
+  if (paneAccountFixed(pane)) return rebuildPaneViaResume(paneId, rebuild)
   accountFollow.remove(paneId)
-  const failure = await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
+  const failure = await rebuildPaneViaResume(paneId, rebuild)
   if (failure) accountFollow.add(paneId)
   return failure
 }
@@ -18869,6 +18956,7 @@ backend.on('cli_profiles.changed', (raw) => {
     reason?: string
     agent_key?: string
     forced?: boolean
+    unattended?: boolean
     harvestedProfileIds?: string[]
     identities?: Record<string, Record<string, { email?: string | null }>>
     accountDirs?: Record<string, Record<string, { signedIn?: boolean }>>
@@ -18901,7 +18989,7 @@ backend.on('cli_profiles.changed', (raw) => {
   }
   const restartKey = forcedRestartAgentKey(ev)
   if (restartKey) {
-    void restartAgentPanes(restartKey)
+    void restartAgentPanes(restartKey, { unattended: ev?.unattended === true })
     return
   }
   if (ev?.reason !== 'login-harvest') return
@@ -25623,12 +25711,6 @@ function paneIsCommander(p: ActivePane): boolean {
     v-if="agentSignInConfirm.pending.value"
     :request="agentSignInConfirm.pending.value"
     @answer="agentSignInConfirm.answer"
-  />
-  <!-- An agent's cli_account_switch waits here for the user's yes. -->
-  <AgentAccountSwitchConfirmDialog
-    v-if="agentAccountSwitchConfirm.pending.value"
-    :request="agentAccountSwitchConfirm.pending.value"
-    @answer="agentAccountSwitchConfirm.answer"
   />
   <ArenaStartDialog
     v-if="arenaStartOpen"

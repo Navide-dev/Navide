@@ -6450,8 +6450,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # confirmation ends one ordinary wait before this one, leaving a pane
     # create its wait.
     "ui.accounts.signIn",
-    # Asks the user, then runs the window's own switch, which may restart
-    # panes (cli_account_switch): the same budget as the sign-in.
+    # Runs the window's own switch, which may restart idle panes
+    # (cli_account_switch, request_account_switch): the same budget as the sign-in.
     "ui.accounts.switch",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
@@ -12197,20 +12197,202 @@ def _app_store_get(profile_id: str) -> dict[str, Any] | None:
     return _app.cli_profiles_store.get(profile_id)
 
 
+# Statuses a switch can settle on; the first three are successes.
+_SWITCH_DONE = ("switched", "switched-signed-out", "switched-pane")
+# Queued switches whose requester asked to hear how they ended (request_id ->
+# callback). Process memory: a backend restart drops the queue with it.
+_switch_settled_callbacks: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
+
+
+def _account_store_name(profile_id: str) -> str | None:
+    if profile_id == "__default__":
+        return "Default"
+    profile = _app_store_get(profile_id)
+    return str(profile.get("name") or "") or None if isinstance(profile, dict) else None
+
+
+async def request_account_switch(
+    agent_key: str,
+    profile_id: str,
+    *,
+    source: str,
+    who: str,
+    reason: str = "",
+    pane_id: str = "",
+    expected_from: str | None = None,
+    caller: "_Caller | None" = None,
+    workspace_path: str = "",
+    on_done: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Switch a CLI account exactly as the user's own click in the window does.
+
+    The one entry for every switch that is not the user's own click: MCP
+    cli_account_switch and the Telegram account button both come through here.
+    Nothing asks the user. The window runs its own switch (Settings → Accounts'
+    path, or the badge's "switch only this pane" with `pane_id`); where the
+    user's click would ask before restarting a working pane, this instead
+    queues the switch until those panes are idle and returns "queued" at once.
+    A newer request for the same CLI (or the same pane) replaces a queued one.
+
+    Every request is written to account_switch_log and the window shows a
+    non-modal notice when it lands; neither waits on or holds the switch.
+
+    `expected_from` (an account id, "__default__" for Default) makes the
+    window answer "stale" without switching when the CLI's active account is
+    no longer that one. `on_done` is called once when a "queued" switch
+    settles, with {request_id, status, from, to, code?}.
+
+    Returns a dict that always carries `status` and `request_id`; `ok` is
+    true for "switched", "switched-signed-out", "switched-pane" and "queued".
+    """
+    from agent_team_backend import app as _app
+
+    agent_key = str(agent_key or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    target_pane = str(pane_id or "").strip()
+    reason = " ".join(str(reason or "").split())
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    target_name = await asyncio.to_thread(_account_store_name, profile_id) if profile_id else None
+    target_pane_name = ""
+    if target_pane:
+        from agent_team_backend import agent_messaging
+
+        registered = agent_messaging.get(target_pane)
+        target_pane_name = registered.name if registered else ""
+    row_id = await asyncio.to_thread(
+        _app.account_switch_log.record_request,
+        source=source, requester=who, agent_key=agent_key, to_profile_id=profile_id,
+        to_name=target_name, pane_name=target_pane_name or None, reason=reason,
+    )
+    request_id = str(row_id) if row_id is not None else f"x{secrets.token_hex(8)}"
+
+    async def settle(status: str, **extra: Any) -> dict[str, Any]:
+        if row_id is not None:
+            await asyncio.to_thread(
+                _app.account_switch_log.finish, row_id, status,
+                code=extra.get("code"), from_profile_id=extra.get("from_profile_id"),
+                from_name=extra.get("from"), to_name=extra.get("to"), pane_name=extra.get("pane_name"),
+            )
+        _log.info(
+            "account switch (%s, %s): agent=%s profile=%s pane=%s -> %s%s",
+            source, who, agent_key, profile_id, target_pane or "-", status,
+            f" ({extra['code']})" if extra.get("code") else "",
+        )
+        out: dict[str, Any] = {
+            "ok": status in _SWITCH_DONE or status == "queued",
+            "status": status, "request_id": request_id, "agent": agent_key, "profile_id": profile_id,
+        }
+        for key in ("from", "to", "code", "waiting"):
+            if extra.get(key) not in (None, ""):
+                out[key] = extra[key]
+        if target_pane:
+            out["pane_id"] = target_pane
+        return out
+
+    if not agent_key or not profile_id:
+        return {**await settle("bad-request"), "error": "agent and profile_id are required"}
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {
+            **await settle("api-key-account"),
+            "error": "this is an API key account; only the user chooses to spend it",
+        }
+    switch_args: dict[str, Any] = {
+        "agentKey": agent_key, "profileId": profile_id, "reason": reason,
+        "reasonTruncated": reason_truncated, "requestId": request_id,
+        "requester": {"source": source, "name": who},
+    }
+    if target_pane:
+        switch_args["paneId"] = target_pane
+    if expected_from is not None:
+        switch_args["expectedFrom"] = str(expected_from)
+    if caller is not None and caller.kind == "pane":
+        answer = await _ui_request(workspace_path, "invoke", caller=caller, action="ui.accounts.switch", args=switch_args)
+    elif target_pane:
+        answer = await _ui_request(workspace_path, "invoke", action="ui.accounts.switch", args=switch_args, route_pane_id=target_pane)
+    else:
+        answer = await _ui_request(workspace_path, "invoke", action="ui.accounts.switch", args=switch_args, is_global=True)
+    if not answer.get("ok"):
+        return {**await settle("no-window"), "error": "the Navide window did not answer"}
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "refused")
+    details = {
+        "from": str(result.get("from") or ""), "to": str(result.get("to") or ""),
+        "from_profile_id": result.get("fromProfileId"), "pane_name": result.get("paneName"),
+    }
+    if status == "queued":
+        if on_done is not None:
+            _switch_settled_callbacks[request_id] = on_done
+        waiting = result.get("waiting")
+        return await settle("queued", waiting=int(waiting) if isinstance(waiting, int) else None, **details)
+    # A pane move answers only a request that named a pane.
+    if status in _SWITCH_DONE and (status != "switched-pane" or target_pane):
+        return await settle(status, **details)
+    if status == "refused":
+        # The backend's refusal code only; its message is unreviewed text.
+        code = str(result.get("code") or "unknown")
+        return {**await settle("refused", code=code), "error": f"the switch was refused: {code}"}
+    if status in _SWITCH_DONE:
+        # A pane's answer to a CLI-wide request: not a switch of the CLI.
+        return {**await settle("refused", code="unexpected-result"), "error": "the window answered for something else"}
+    out = await settle(status)
+    out["error"] = str(result.get("message") or "the window refused the switch")
+    return out
+
+
+async def settle_account_switch(payload: dict[str, Any]) -> bool:
+    """A queued switch ended in the window: record it and tell its requester.
+
+    Called by the window (ws account_switch.settled); unknown ids are ignored.
+    """
+    request_id = str(payload.get("request_id") or "")
+    if not request_id:
+        return False
+    status = str(payload.get("status") or "refused")
+    from_name = str(payload.get("from") or "")
+    to_name = str(payload.get("to") or "")
+    code = str(payload.get("code") or "") or None
+    recorded = False
+    if request_id.isdigit():
+        from agent_team_backend import app as _app
+
+        recorded = await asyncio.to_thread(
+            _app.account_switch_log.finish, int(request_id), status, code=code,
+            from_profile_id=payload.get("from_profile_id") or None,
+            from_name=from_name or None, to_name=to_name or None,
+        )
+    _log.info("account switch %s settled: %s%s", request_id, status, f" ({code})" if code else "")
+    callback = _switch_settled_callbacks.pop(request_id, None)
+    if callback is not None:
+        done: dict[str, Any] = {"request_id": request_id, "status": status, "from": from_name, "to": to_name}
+        if code:
+            done["code"] = code
+        try:
+            await callback(done)
+        except Exception:  # noqa: BLE001 - a requester's notice never affects the switch
+            _log.exception("account switch %s: on_done callback failed", request_id)
+    return recorded or callback is not None
+
+
 @server.tool()
 async def cli_account_switch(
     ctx: Context, agent: str, profile_id: str, reason: str, pane_id: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to switch one CLI to another of its accounts — for
-    example when the active account's quota ran out and another account of
-    the same vendor still has some.
+    """Switch one CLI to another of its accounts — for example when the
+    active account's quota ran out and another account of the same vendor
+    still has some. The switch happens directly: the user is not asked. It
+    is the same switch the user's own click in Settings → Accounts makes.
 
     What it changes: the CLI's LIVE login, which every pane of that CLI not
     pinned to an account runs on. claude switches hot: no pane restarts, and
     running claude panes use the new account from their next request. Other
-    CLIs restart their running panes, after the user agrees (see below).
-    claude panes running inside an account's own folder (cli_get_status
-    `account.runs_on` "account-dir") are not moved by it.
+    CLIs restart their panes on the new login; a pane that is working, in
+    any Navide window, is never interrupted for it — the switch waits until every such pane is
+    idle, then completes on its own (status "queued", below). claude panes
+    running inside an account's own folder (cli_get_status `account.runs_on`
+    "account-dir") are not moved by it.
 
     `pane_id` (claude only) switches ONE pane instead, as the account badge's
     "switch only this pane" does: that pane reopens on its conversation inside
@@ -12218,42 +12400,39 @@ async def cli_account_switch(
     pane are left alone. The account must have signed in inside its own
     folder ("needs-user" otherwise: cli_account_sign_in with mode "folder"),
     and the built-in Default has no folder ("unsupported"). A pane that is
-    working is stopped only if the user agrees ("restart-declined"
-    otherwise); moving your own pane restarts you, so its result never
-    reaches you. A pane not in your window, or not running `agent`, is
-    "unknown-pane". On success status is "switched-pane" and the answer also
-    carries `pane_id`.
+    working is moved once its turn ends — so asking to move your OWN pane
+    always comes back "queued", and you are reopened on the new account after
+    this turn. A pane not in your window, or not running `agent`, is
+    "unknown-pane".
 
-    Your window first asks the user, naming which agent asked, the account it
-    switches from and to, and your `reason` (required; cut at 300
-    characters); nothing switches until they agree, and a no or no answer in
-    time is a refusal. If this call is cancelled or times out, the window
-    closes the question unanswered. On a yes it is the same switch Settings →
-    Accounts makes, never forced: if panes are running on that CLI, the window
-    asks the user again before restarting them, and a no there is
-    "restart-declined". Once the user says yes in time, the switch runs to
-    the end even if this call has timed out by then. If your own pane runs
-    on that CLI, the restart includes it and this call's result never
-    reaches you — after a restart, read cli_accounts_list to see where the
-    switch stands.
+    "queued": the switch is waiting for `waiting` panes to go idle and needs
+    nothing more from you. A newer switch of the same CLI (or the same pane)
+    replaces a queued one, and a queued switch is dropped ("stale") if the
+    account changed some other way meanwhile. Read cli_accounts_list later to
+    see where it landed.
+
+    `reason` is required (cut at 300 characters). The user is told afterwards
+    — a notice in the window naming which agent switched, from and to which
+    account, and your reason — and every switch is kept in the account switch
+    log (Settings → Accounts), whatever its outcome.
 
     agent is the vendor key ("claude", "codex", ...); profile_id is an
     account of that vendor as cli_accounts_list lists it, "__default__" for
-    the built-in Default. Only a CLI pane can call it.
+    the built-in Default. Only a CLI pane can call it. API key accounts are
+    the user's to choose ("api-key-account").
 
-    Returns {ok: true, status, agent, profile_id, from, to}: status
-    "switched", or "switched-signed-out" when the account switched to has no
-    usable sign-in (the window then starts one for the user); from and to are
-    the accounts' display names: the alias or name the user gave them, and an
-    account Navide added on its own is named after its email, so either can be
-    an email. Otherwise {ok: false, error,
-    error_code}: "pane-only", "bad-request", "reason-required",
-    "unknown-profile", "already-active", "unknown-caller", "declined" (the
-    user said no), "confirm-timeout" (the user did not answer in time),
-    "busy" (another agent's switch is waiting for the user),
-    "restart-declined", "refused" (Navide refused the switch; `code` says
-    why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
-    "window-unavailable". No credential or token ever comes back.
+    Returns {ok: true, status, agent, profile_id, from, to, request_id}:
+    status "switched", "switched-signed-out" (the account switched to has no
+    usable sign-in; the window starts one for the user), "switched-pane"
+    (also carries `pane_id`) or "queued" (also carries `waiting`); from and to
+    are the accounts' display names: the alias or name the user gave them,
+    and an account Navide added on its own is named after its email, so
+    either can be an email. Otherwise {ok: false, error, error_code}:
+    "pane-only", "bad-request", "reason-required", "api-key-account",
+    "unknown-profile", "already-active", "unknown-caller", "unknown-pane",
+    "needs-user", "unsupported", "refused" (Navide refused the switch; `code`
+    says why, e.g. SWITCH_RATE_LIMITED or LIVE_DRIFT) or "window-unavailable".
+    No credential or token ever comes back.
     """
     try:
         caller = _resolve_caller(ctx)
@@ -12265,22 +12444,7 @@ async def cli_account_switch(
             "error": "only a CLI pane can ask for an account switch; the user is told which pane asked",
             "error_code": "pane-only",
         }
-    agent = str(agent or "").strip().lower()
-    profile_id = str(profile_id or "").strip()
-    if not agent or not profile_id:
-        return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
-    from agent_team_backend import api_key_accounts
-
-    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
-        return {
-            "ok": False,
-            "error": "this is an API key account; only the user chooses to spend it",
-            "error_code": "api-key-account",
-        }
-    reason = " ".join(str(reason or "").split())
-    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
-    reason = reason[:_SIGN_IN_REASON_MAX]
-    if not reason:
+    if not " ".join(str(reason or "").split()):
         return {
             "ok": False,
             "error": "say why: the reason is shown to the user with the switch",
@@ -12289,70 +12453,14 @@ async def cli_account_switch(
     from agent_team_backend import agent_messaging
 
     pane = agent_messaging.get(caller.pane_id)
-    # As for the sign-in: the user's yes is due one ordinary action's wait
-    # before this action's slow wait ends, leaving the window time to switch.
-    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
-    switch_args: dict[str, Any] = {
-        "agentKey": agent, "profileId": profile_id, "reason": reason,
-        "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
-    }
-    # Only when asked for: without it the window gets exactly the CLI-wide request.
-    target_pane = str(pane_id or "").strip()
-    if target_pane:
-        switch_args["paneId"] = target_pane
-    answer = await _ui_request(
-        pane.workspace_path if pane else "",
-        "invoke",
-        caller=caller,
-        action="ui.accounts.switch",
-        args=switch_args,
+    out = await request_account_switch(
+        agent, profile_id,
+        source="mcp", who=pane.name if pane else caller.pane_id, reason=reason, pane_id=pane_id,
+        caller=caller, workspace_path=pane.workspace_path if pane else "",
     )
-    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
-    status = str(result.get("status") or "") if answer.get("ok") else ""
-    _log.info(
-        "cli_account_switch from pane %s: agent=%s profile=%s -> %s%s",
-        caller.pane_id, agent, profile_id, status or "window-unavailable",
-        f" ({result.get('code')})" if result.get("code") else "",
-    )
-    if not answer.get("ok"):
-        return {
-            "ok": False,
-            "error": "the Navide window did not answer",
-            "error_code": "window-unavailable",
-        }
-    if status in ("switched", "switched-signed-out"):
-        return {
-            "ok": True,
-            "status": status,
-            "agent": agent,
-            "profile_id": profile_id,
-            "from": str(result.get("from") or ""),
-            "to": str(result.get("to") or ""),
-        }
-    if status == "switched-pane" and target_pane:
-        return {
-            "ok": True,
-            "status": status,
-            "agent": agent,
-            "profile_id": profile_id,
-            "pane_id": target_pane,
-            "from": str(result.get("from") or ""),
-            "to": str(result.get("to") or ""),
-        }
-    if status == "refused":
-        # The backend's refusal code only; its message is unreviewed text.
-        code = str(result.get("code") or "unknown")
-        return {
-            "ok": False,
-            "error": f"the switch was refused: {code}",
-            "error_code": "refused",
-            "code": code,
-        }
-    return {
-        "ok": False,
-        "error": str(result.get("message") or "the window refused the switch"),
-        "error_code": status or "refused",
-    }
+    if not out["ok"]:
+        out["error_code"] = "window-unavailable" if out["status"] == "no-window" else out["status"]
+    return out
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 

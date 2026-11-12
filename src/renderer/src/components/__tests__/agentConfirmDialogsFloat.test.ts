@@ -4,16 +4,14 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
-import AgentAccountSwitchConfirmDialog from '../AgentAccountSwitchConfirmDialog.vue'
 import AgentSignInConfirmDialog from '../AgentSignInConfirmDialog.vue'
 
-// An agent's account switch / sign-in confirmation must float over the window
+// An agent's sign-in confirmation must float over the window
 // that asked: semantic.css gives .nv-dialog-scrim its look only, so each dialog
 // positions its own overlay. Without it the card sat in the page flow at the
 // window's top-left and pushed the shell down, reading as a separate window.
 const here = resolve(__dirname, '..')
 const dialogs = [
-  { file: 'AgentAccountSwitchConfirmDialog.vue', root: 'switch-confirm', component: AgentAccountSwitchConfirmDialog },
   { file: 'AgentSignInConfirmDialog.vue', root: 'signin-confirm', component: AgentSignInConfirmDialog },
 ] as const
 

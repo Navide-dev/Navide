@@ -23,6 +23,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 
 ### Changed
 
+- MCP (0.2.42): `cli_account_switch` switches directly, with no confirmation dialog: it is the same switch a click in Settings → Accounts makes. Where that click would ask before restarting a working pane, the agent's switch answers `queued` at once and completes by itself when those panes are idle, so a working pane is never interrupted; a newer request for the same CLI or pane replaces a queued one. Every switch shows a non-modal notice naming who switched, from and to which account, and why, and is kept for 90 days in the new account switch log at the bottom of Settings → Accounts. The Telegram account button uses the same path. Switching by hand is unchanged. New strings in all 11 interface languages.
 - Codex (0.2.42): Codex panes start with its update check off (`-c check_for_update_on_startup=false`), so the startup "Update available" menu does not open. The auto-update setting in CLI management turns the check back on. Nothing is written to `config.toml` or `~/.codex`.
 - macOS (0.2.42): the app menu's About, Hide and Quit items say Navide instead of agent-team. The data folder keeps its name.
 - Pipelines (0.2.42): under a UI language other than Chinese, the built-in pipelines' stage titles and kickoff prompts, and the protocol text a pipeline step sends its CLI, are in English. Text you edited is sent as you wrote it, and Chinese UIs are unchanged.
