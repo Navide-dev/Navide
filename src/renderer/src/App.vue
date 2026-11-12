@@ -8587,6 +8587,10 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       isResume: opts.isResume,
       restoreMode: opts.restoreMode,
       skipReattach: opts.restoreMode === 'fresh',
+      // A restore's new pane id never stored a PTY id; the former one did.
+      // Without it a fresh restore of a pane with no pinned session id (codex
+      // before its first turn, a terminal) left the old CLI running.
+      replacesKey: opts.formerPaneIds?.[0],
       replayScrollback: opts.scrollbackHandoff,
       quotaTransactionId: opts.quotaTransactionId,
       quotaOriginalPaneId: opts.quotaOriginalPaneId,
