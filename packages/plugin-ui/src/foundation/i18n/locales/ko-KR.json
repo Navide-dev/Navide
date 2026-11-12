@@ -10001,6 +10001,10 @@
     "denied": "{label}: {keys}은(는) Navide가 직접 관리하므로 설정한 값이 CLI에 전달되지 않았어요.",
     "overridden": "{label}: {keys}이(가) 적용되었다가 Navide 자체 설정으로 대체되어, 이 pane에서는 설정한 값이 적용되지 않아요."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: Windows가 Navide의 이 계정 폴더와 다른 계정 간 연결을 허용하지 않아 세션이나 설정이 따로 저장됩니다. 개발자 모드(설정 → 시스템 → 개발자용)를 켜고 Navide를 다시 시작하세요.",
+    "resume-fallback": "{label}: 저장된 대화를 이 계정 폴더에서 찾지 못해 새 대화를 시작했고, 이전 기록을 읽고 이어서 진행하도록 요청했습니다."
+  },
   "install-terminal": {
     "input-lost": "입력이 명령에 전달되지 않았어요: {error}. 그 이후 입력한 내용(예: 비밀번호)은 받지 못했어요.",
     "running": "실행 중 — 비밀번호나 확인을 요청하면 여기에 입력하세요.",

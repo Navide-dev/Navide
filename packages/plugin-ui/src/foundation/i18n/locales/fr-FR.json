@@ -10001,6 +10001,10 @@
     "denied": "{label} : Navide gère lui-même {keys}, la valeur que vous avez définie n’a donc jamais atteint la CLI.",
     "overridden": "{label} : {keys} a été accepté puis remplacé par le réglage propre à Navide, votre valeur n’est donc pas appliquée dans ce pane."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label} : Windows n'autorise pas Navide à lier le dossier de ce compte à vos autres comptes, ses sessions ou réglages sont donc conservés à part. Activez le mode développeur (Paramètres → Système → Espace développeurs) puis redémarrez Navide.",
+    "resume-fallback": "{label} : la conversation enregistrée est introuvable dans le dossier de ce compte. Une nouvelle conversation a été lancée et invitée à lire la transcription précédente pour reprendre."
+  },
   "install-terminal": {
     "input-lost": "La saisie n’a pas atteint la commande : {error}. Tout ce qui a été saisi depuis (par exemple un mot de passe) n’a pas été reçu.",
     "running": "En cours : si un mot de passe ou une confirmation est demandé, saisissez-le ici.",

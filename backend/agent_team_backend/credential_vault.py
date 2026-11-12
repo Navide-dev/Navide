@@ -52,6 +52,7 @@ from typing import Callable
 
 from .applog import app_data_dir, default_app_data_dir
 from .cloud_secrets import SECURITY_LINE_MAX_BYTES
+from . import osplat
 from .osplat import secret_files
 from .cli_vendors.registry import vendor as _cli_vendor_spec
 from .profiles_store import (
@@ -389,6 +390,27 @@ def _write_private(path: Path, text: str) -> None:
 def _write_live_file(path: Path, text: str) -> None:
     """Same guarantees, plain content: the CLI itself reads this file."""
     secret_files.write_private_plain(path, text.encode("utf-8"))
+
+
+def _is_link(path: Path) -> bool:
+    """A symlink or a Windows directory junction (``is_symlink`` is False for
+    a junction)."""
+    return path.is_symlink() or os.path.isjunction(path)
+
+
+def _create_junction(target: Path, link: Path) -> None:
+    """Directory junction at ``link`` pointing at ``target``. Windows only;
+    unlike a symlink it needs no privilege (no Developer Mode)."""
+    import _winapi  # noqa: PLC0415 — Windows-only module
+
+    _winapi.CreateJunction(os.fspath(target), os.fspath(link))
+
+
+def _make_link(link: Path, target: Path, *, is_dir: bool, method: str) -> None:
+    if method == "junction":
+        _create_junction(target, link)
+    else:
+        link.symlink_to(target, target_is_directory=is_dir)
 
 
 def _link_target(raw: str) -> str:
@@ -1869,23 +1891,71 @@ class CredentialVault:
         only if fully drained, replaced with the symlink. Every IO path is
         guarded — a failure only logs and lets the spawn proceed against the
         isolated home, never raising."""
+        method = self._link_method(is_dir=is_dir)
         try:
-            if dst.is_symlink():
+            if _is_link(dst):
                 if _link_target(os.readlink(dst)) == os.fspath(target):
                     self._ensure_target_base(target, is_dir=is_dir)
                     return
                 dst.unlink()  # stale/wrong link -> repoint
             elif dst.exists():
+                if method is None or not self._link_works_beside(dst, target, is_dir=is_dir, method=method):
+                    # Draining into the real home with no link to put back
+                    # would hide every session from the CLI on this config
+                    # dir (Windows without Developer Mode: "No conversation
+                    # found" on each resume). Leave it unshared, in place.
+                    log.warning("cannot link %s -> %s; left unshared in place", dst, target)
+                    return
                 migrated = (
                     self._migrate_dir(dst, target) if is_dir
                     else self._migrate_file(dst, target)
                 )
                 if not migrated:
                     return  # could not drain safely; leave unshared
+            if method is None:
+                log.warning("cannot link %s -> %s; left unshared", dst, target)
+                return
             self._ensure_target_base(target, is_dir=is_dir)
-            dst.symlink_to(target, target_is_directory=is_dir)
+            _make_link(dst, target, is_dir=is_dir, method=method)
         except OSError as err:
             log.warning("shared-home link %s -> %s failed: %s", dst, target, err)
+
+    def _link_works_beside(self, dst: Path, target: Path, *, is_dir: bool, method: str) -> bool:
+        """Prove a link can be made next to ``dst`` before draining it: a
+        junction can still fail on one volume (FAT, some network shares)."""
+        probe = dst.with_name(f".{dst.name}.navide-link-probe")
+        try:
+            if _is_link(probe):
+                probe.unlink()
+            self._ensure_target_base(target, is_dir=is_dir)
+            _make_link(probe, target, is_dir=is_dir, method=method)
+            probe.unlink()
+            return True
+        except OSError as err:
+            log.warning("cannot link beside %s (%s): %s", dst, method, err)
+            return False
+
+    def _symlinks_available(self) -> bool:
+        return osplat.paths.symlinks_available()
+
+    def _link_method(self, *, is_dir: bool) -> str | None:
+        """How a shared entry can be linked here: a symlink, a directory
+        junction (Windows, needs no privilege, directories only), or None."""
+        if self._symlinks_available():
+            return "symlink"
+        if is_dir and self._platform == "win32":
+            return "junction"
+        return None
+
+    def account_dir_unshared(self, slot_id: str) -> list[str]:
+        """The always-shared entries of the account dir that are not linked to
+        the real home (sessions or Navide's settings stay per account)."""
+        directory = self.account_dir_path(slot_id)
+        api_key = self.is_api_key_slot("claude", slot_id)
+        return [
+            name for name in sorted(_CLAUDE_ALWAYS_SHARED)
+            if not (api_key and name == "settings.json") and not _is_link(directory / name)
+        ]
 
     # ---- one-time promotion of legacy profile-home credentials ----
 

@@ -10001,6 +10001,10 @@
     "denied": "{label}: Navide tự quản lý {keys}, nên giá trị bạn đặt không bao giờ tới được CLI.",
     "overridden": "{label}: {keys} đã được nhận nhưng sau đó bị thay bằng cài đặt của Navide, nên giá trị của bạn không có hiệu lực trong pane này."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: Windows không cho Navide liên kết thư mục của tài khoản này với các tài khoản khác, nên phiên làm việc hoặc cài đặt được lưu riêng. Hãy bật Chế độ nhà phát triển (Cài đặt → Hệ thống → Dành cho nhà phát triển) rồi khởi động lại Navide.",
+    "resume-fallback": "{label}: không tìm thấy cuộc trò chuyện đã lưu trong thư mục của tài khoản này, nên đã mở cuộc trò chuyện mới và yêu cầu nó đọc bản ghi trước đó để tiếp tục."
+  },
   "install-terminal": {
     "input-lost": "Nội dung gõ không tới được lệnh: {error}. Những gì đã gõ từ đó (ví dụ mật khẩu) không được nhận.",
     "running": "Đang chạy — nếu lệnh hỏi mật khẩu hoặc xác nhận, hãy gõ vào đây.",

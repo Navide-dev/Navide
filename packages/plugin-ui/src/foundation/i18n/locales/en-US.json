@@ -10001,6 +10001,10 @@
     "denied": "{label}: Navide manages {keys} itself, so the value you set never reached the CLI.",
     "overridden": "{label}: {keys} was accepted but then replaced by Navide's own setting, so your value is not in effect in this pane."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: Windows does not let Navide link this account's folder to your other accounts, so its sessions or settings are kept separately. Turn on Developer Mode (Settings → System → For developers) and restart Navide.",
+    "resume-fallback": "{label}: the saved conversation was not found in this account's folder, so a new conversation was started and asked to pick up from the earlier transcript."
+  },
   "install-terminal": {
     "input-lost": "Typing did not reach the command: {error}. Anything typed since (e.g. a password) was not received.",
     "running": "Running — if it asks for a password or a confirmation, type it here.",

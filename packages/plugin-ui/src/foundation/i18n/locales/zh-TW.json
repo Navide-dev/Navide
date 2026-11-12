@@ -10001,6 +10001,10 @@
     "denied": "{label}：{keys} 由 Navide 自己管理，你設的值沒有進到 CLI。",
     "overridden": "{label}：{keys} 收下了，但被 Navide 自己的設定蓋過去，所以這個分格裡實際沒有生效。"
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}：Windows 不允許 Navide 把這個帳號資料夾連到其他帳號，所以對話或設定會分開存放。請開啟開發人員模式（設定 → 系統 → 開發人員專用），再重新啟動 Navide。",
+    "resume-fallback": "{label}：這個帳號資料夾裡找不到原本的對話，已改開新對話，並請它先讀之前的對話紀錄再接手。"
+  },
   "install-terminal": {
     "input-lost": "輸入沒有送達指令：{error}。之後輸入的內容（例如密碼）都沒有被收到。",
     "running": "執行中——如果要求輸入密碼或確認，直接在這裡輸入。",

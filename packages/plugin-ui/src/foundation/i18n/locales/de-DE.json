@@ -10001,6 +10001,10 @@
     "denied": "{label}: Navide verwaltet {keys} selbst, daher hat der von Ihnen gesetzte Wert die CLI nie erreicht.",
     "overridden": "{label}: {keys} wurde übernommen, dann aber durch die eigene Einstellung von Navide ersetzt, daher ist Ihr Wert in diesem Bereich nicht wirksam."
   },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: Windows erlaubt Navide nicht, den Ordner dieses Kontos mit deinen anderen Konten zu verknüpfen, daher werden Sitzungen oder Einstellungen getrennt gespeichert. Aktiviere den Entwicklermodus (Einstellungen → System → Für Entwickler) und starte Navide neu.",
+    "resume-fallback": "{label}: Die gespeicherte Unterhaltung wurde im Ordner dieses Kontos nicht gefunden. Es wurde eine neue Unterhaltung gestartet, die das frühere Protokoll lesen und dort weitermachen soll."
+  },
   "install-terminal": {
     "input-lost": "Die Eingabe hat den Befehl nicht erreicht: {error}. Alles seither Eingegebene (z. B. ein Passwort) wurde nicht empfangen.",
     "running": "Läuft – wenn nach einem Passwort oder einer Bestätigung gefragt wird, geben Sie es hier ein.",
