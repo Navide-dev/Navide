@@ -1077,13 +1077,19 @@ def _subst_vars(word: str, values: dict[str, str]) -> str:
     return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
+_FOLD_RE = re.compile(r"/(?:\.?/)+|/(?!\.\.?/)[^/]+/\.\./")
+
+
 def _collapse(text: str) -> str:
-    """A path-like value as Guard reads paths (_norm): `/./`, `//` and `x/..`
-    folded lexically, so padding made of them cannot make a path look long."""
+    """`//`, `/./` and `/x/../` folded to `/`, so padding made of them cannot
+    make a path look long. Only whole components between two slashes are
+    folded: `text` may be one piece of a word (a variable's value), and a
+    fold across its edges, like normpath's, would change what it joins."""
     if "/" not in text or "://" in text:
         return text
-    out = posixpath.normpath(text)
-    return out + "/" if text.endswith("/") and not out.endswith("/") else out
+    while (out := _FOLD_RE.sub("/", text)) != text:
+        text = out
+    return text
 
 
 def _too_big_to_follow(acc: _Acc) -> None:
