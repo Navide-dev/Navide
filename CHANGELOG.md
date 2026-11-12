@@ -10,6 +10,42 @@ All notable released changes to Navide will be documented in this file. The form
 Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 "- <Display name> (`<namespace.name>` <version>, by <publisher namespace>): what it does. Featured." -->
 
+### Added
+
+- Accounts (0.2.42): each quota bar on an account card is labelled with its window, and beside it shows what is left and when it resets, in local time with a countdown. A reading that is out of date opens with a warning, greys its figures and marks resets that have already passed; a current one says when it was taken. Display only: quota fetching, failover and account switching are unchanged.
+- Chat channels (0.2.42): switch a pane's model from Telegram with `/model` or the button under `/status`. Pick a pane from the bound pane's `/status` tree, then a model; "Also set effort" adds a third step. `/model <model>` and `/model <n> <model> [effort]` work typed, and a chat without buttons gets numbered lines. The switch goes through `cli_set_model`'s path, so only this session changes. A busy pane is not interrupted: "switch when idle" waits up to 15 minutes, and checks again before it switches that the sender is still allowed and the chat still bound. Buttons work once, expire after 30 minutes and answer only the person who opened the menu; every attempt is written to the Navide Guard audit trail, and a switch shows as a toast in the Navide window.
+- Windows (0.2.42): reopen a closed workspace window with every workspace it held and its size and position: Window → Reopen Closed Window, the Window → Recently Closed Windows list, Shift+Cmd+T in the main window, or Recently Closed Windows on the welcome screen (the latest 3). Up to 10 closed windows are kept, across a relaunch. Quitting records nothing (the next launch restores those windows as before), and neither does closing a detached group window. Reopening focuses a workspace already open elsewhere and says which folders no longer exist.
+- Model Arena (0.2.42, experimental, off by default): turn it on in Settings → General → Experimental features. Start Model Arena (the ＋ menu's Compare block, a pane's right-click menu, or Cmd+Alt+A) gives one task to 2 to 4 models, each in its own worktree and pane from the same base commit. The run view compares them side by side (a 1–5 rating, an adopt pick, which files each one touched, and each file's diff per model), then merges one whole (squash by default, or a merge commit), mixes files from several, or keeps the branch only. Merging refuses a dirty or switched checkout and asks for a second click; conflicts are listed for the Git panel, never resolved for you. Cleanup closes the panes and removes the worktrees and local branches. Nothing is pushed.
+- CLI agents (0.2.42): Kiro CLI (AWS) panes, a minimum version. Navide starts `kiro-cli chat --v3` (`--trust-all-tools` in YOLO), detects the install and links its installer, gives the pane the Navide MCP server, and knows when a turn ends through a `Stop` hook in the pane's own Kiro home. Your `~/.kiro` settings and hooks are not written.
+- Codex (0.2.42): CLI management and the pane header say when a Codex update is available. Update runs `codex update` in the visible install terminal, one at a time per machine, and only while every Codex pane is idle; otherwise it says why it is waiting.
+
+### Changed
+
+- Codex (0.2.42): Codex panes start with its update check off (`-c check_for_update_on_startup=false`), so the startup "Update available" menu does not open. The auto-update setting in CLI management turns the check back on. Nothing is written to `config.toml` or `~/.codex`.
+- macOS (0.2.42): the app menu's About, Hide and Quit items say Navide instead of agent-team. The data folder keeps its name.
+- Pipelines (0.2.42): under a UI language other than Chinese, the built-in pipelines' stage titles and kickoff prompts, and the protocol text a pipeline step sends its CLI, are in English. Text you edited is sent as you wrote it, and Chinese UIs are unchanged.
+- Backend (0.2.42): the backend uses much less CPU with many panes open: a CLI risk sweep no longer copies every recorded signal once per pane (about 18 s of CPU per sweep with 60 panes before).
+- Backend (0.2.42): less local traffic between the backend and its windows. Token changes send windows a small notice for the workspaces they show instead of the whole token snapshot each time (about 3.8 GB over 14 hours with 60 panes before), and the status bar asks for a Git summary instead of the full file lists (about 92% less).
+- Help (0.2.42): the in-app help reads shortcuts, counts and CLI facts from the app itself instead of copying them, so re-bound keys and the Windows and Linux keys show correctly. The Workspace, Code workflow, Settings, Cross-platform, CLI agents, Messaging and MCP topics, the icon reference and the CLI accounts hint were corrected in all 11 languages.
+- Backend dependencies (0.2.42): anthropic 2.6.0, fastapi 0.162.2, pytest-asyncio 1.4.1.post1 and ruff 0.17.4. watchdog stays at 6.0.0.
+
+### Fixed
+
+- MCP (0.2.42): `cli_set_model` reads the result of a Claude model switch on a tall pane, so the switch is no longer taken as failed and the pane is no longer restarted (most often in Linux's default window).
+- MCP (0.2.42): a message queued for a pane waits while `cli_set_model` is switching it, instead of being typed into the model picker.
+- Codex (0.2.42): when Codex's startup update menu does open, Enter after a kickoff or a message no longer accepts "Update now" (which installed the update and quit the CLI). Navide closes the menu with Esc and types the text again; a menu it does not recognise holds the pane as waiting for you.
+- Git plugin (0.2.42): the Git window shows why it could not read a repository's status (for example git's dubious ownership error), with a retry, instead of "Not a Git repository".
+- Navide Marketplace (0.2.42): dates on the Developer page and in the version list follow Navide's language instead of the system's.
+- Agent panes (0.2.42): a schedule saved in the Tasker tab shows in the agent pane's control panel at once, without a reload.
+- Release (0.2.42): `release.sh` stops before `uv lock` when the uv on `PATH` is older than 0.11.16, which would rewrite `backend/uv.lock` in an older format.
+
+### Known limitations
+
+- CLI agents (0.2.42): Kiro CLI panes were built from Kiro's documentation and tested against a stand-in, not a real `kiro-cli` and account. Kiro panes do not resume, cannot be opened with a model or effort, and have no usage, sign-in or account switching, and Navide Guard does not see their tool calls. Messages reach them through the Navide MCP tools only.
+- Model Arena (0.2.42, experimental): every candidate uses its own model's quota at the same time. A candidate is stopped at 30 minutes or US$3 by default.
+- Chat channels (0.2.42): "Also set effort" restarts the pane on the new effort and resumes the conversation; only the model switches in place.
+- Backend dependencies (0.2.42): watchdog 7 is held back, since Navide's file watcher is built on 6.0.0.
+
 ## [0.2.41] — 2026-11-12
 
 ### Fixed

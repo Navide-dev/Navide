@@ -166,8 +166,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[15].version).toBe('0.2.26')
-    expect(WHATS_NEW[16].version).toBe('0.2.25')
+    expect(WHATS_NEW[16].version).toBe('0.2.26')
+    expect(WHATS_NEW[17].version).toBe('0.2.25')
   })
 })
 
@@ -193,7 +193,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[14].version).toBe('0.2.27')
+    expect(WHATS_NEW[15].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -242,7 +242,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[12].version).toBe('0.2.29')
+    expect(WHATS_NEW[13].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -270,7 +270,7 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
   it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[11].version).toBe('0.2.30')
+    expect(WHATS_NEW[12].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
@@ -282,8 +282,8 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   const versions = ['0.2.40', '0.2.39', '0.2.38', '0.2.37'] as const
   const en = (version: string) => whatsNewFor(version)!.highlights.map((text) => text['en-US']).join('\n')
 
-  it('are the four entries under the 0.2.41 hotfix, in order', () => {
-    expect(WHATS_NEW.slice(1, 5).map((entry) => entry.version)).toEqual([...versions])
+  it('are the four entries under 0.2.42 and the 0.2.41 hotfix, in order', () => {
+    expect(WHATS_NEW.slice(2, 6).map((entry) => entry.version)).toEqual([...versions])
   })
 
   it('are authored in every UI language', () => {
@@ -317,12 +317,35 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   })
 })
 
+describe('0.2.42 — model switching from Telegram, quota bars, closed windows', () => {
+  const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
+  const entry = whatsNewFor('0.2.42')
+
+  it('is the newest entry, authored in every UI language', () => {
+    expect(WHATS_NEW[0].version).toBe('0.2.42')
+    for (const text of [entry!.title, ...entry!.highlights]) {
+      for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
+    }
+  })
+
+  it('marks Model Arena as experimental and off by default, and Kiro as untried with a real account', () => {
+    const en = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(en).toContain('Model Arena (experimental, off by default)')
+    expect(en).toContain('not yet been tried with a real Kiro account')
+  })
+
+  it('shows once to someone updating from 0.2.41', () => {
+    expect(pickWhatsNew('0.2.42', '0.2.41')?.version).toBe('0.2.42')
+    expect(pickWhatsNew('0.2.42', '0.2.42')).toBeNull()
+  })
+})
+
 describe('0.2.41 — hotfix: Git and shell calls on macOS and Linux', () => {
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.41')
 
-  it('is the newest entry, authored in every UI language', () => {
-    expect(WHATS_NEW[0].version).toBe('0.2.41')
+  it('sits under 0.2.42, authored in every UI language', () => {
+    expect(WHATS_NEW[1].version).toBe('0.2.41')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -369,7 +392,7 @@ describe('0.2.36 — API key accounts, workbench and plugin commands', () => {
   it('shows once to someone updating from 0.2.35, and not to a build still running 0.2.35', () => {
     expect(pickWhatsNew('0.2.36', '0.2.35')?.version).toBe('0.2.36')
     expect(pickWhatsNew('0.2.36', '0.2.36')).toBeNull()
-    expect(WHATS_NEW[5].version).toBe('0.2.36')
+    expect(WHATS_NEW[6].version).toBe('0.2.36')
     expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
   })
 
@@ -421,7 +444,7 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   it('shows once to someone updating from 0.2.30, and not to a build still running 0.2.30', () => {
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
-    expect(WHATS_NEW[10].version).toBe('0.2.31')
+    expect(WHATS_NEW[11].version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
   })
 })
@@ -465,7 +488,7 @@ describe('0.2.32 — secrets stay on this machine, Paste Credential removed', ()
   it('shows once to someone updating from 0.2.31, and not to a build still running 0.2.31', () => {
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.32', '0.2.32')).toBeNull()
-    expect(WHATS_NEW[9].version).toBe('0.2.32')
+    expect(WHATS_NEW[10].version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
   })
 })
@@ -503,7 +526,7 @@ describe('0.2.33 — chat wake brings back the conversation, in all 11 languages
   it('shows once to someone updating from 0.2.32, and not to a build still running 0.2.32', () => {
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.33', '0.2.33')).toBeNull()
-    expect(WHATS_NEW[8].version).toBe('0.2.33')
+    expect(WHATS_NEW[9].version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
   })
 })
@@ -538,7 +561,7 @@ describe('0.2.34 — App Lock and Import from n8n', () => {
   it('shows once to someone updating from 0.2.33, and not to a build still running 0.2.33', () => {
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.34', '0.2.34')).toBeNull()
-    expect(WHATS_NEW[7].version).toBe('0.2.34')
+    expect(WHATS_NEW[8].version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
   })
 })
@@ -586,7 +609,7 @@ describe('0.2.35 — Navide Browser built in, Plans editing, Windows Hello and T
   it('shows once to someone updating from 0.2.34, and not to a build still running 0.2.34', () => {
     expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.35', '0.2.35')).toBeNull()
-    expect(WHATS_NEW[6].version).toBe('0.2.35')
+    expect(WHATS_NEW[7].version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
   })
 })
