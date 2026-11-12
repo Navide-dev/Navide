@@ -264,6 +264,7 @@ import {
   createGhostHealGate,
   createUiStateSeqGuard,
   mapOrphanSession,
+  markResumeFallback,
   pinFreshSessionAtLaunch,
   pinsSessionAtLaunch,
   supportsGhostReconnect,
@@ -18759,6 +18760,7 @@ backend.on('claude.account_dir_notice', (raw) => {
   const pane = ev.pane_id ? panes.value.find((p) => p.id === ev.pane_id) : undefined
   const label = pane?.agentLabel || ev.label || 'Claude Code'
   if (ev.resume_fallback_session_id) {
+    if (pane) markResumeFallback(pane, ev.resume_fallback_session_id)
     notifyRestore.toast(
       i18n.global.t('cli-account-dir.resume-fallback', { label }),
       { type: 'info', duration: 10000 }

@@ -146,3 +146,20 @@ def test_spawn_check_falls_back_only_for_a_missing_resume(tmp_path: Path) -> Non
     assert fallback_id == SID
     assert "--resume" not in command and "Navide:" in command
     assert unshared == []
+
+
+def test_a_rebuild_after_the_fallback_resumes_the_new_session(tmp_path: Path) -> None:
+    """Once the pane adopted the session the fallback started (its transcript
+    is written into the account dir it runs on), the next rebuild resumes it:
+    no second fallback, no second handoff prompt."""
+    from agent_team_backend.ws_handlers import _claude_account_dir_check
+
+    vault = _account_vault(tmp_path)
+    _command, fallback_id, _ = _claude_account_dir_check(vault, "p1", f"claude --resume {SID}", WS)
+    assert fallback_id == SID
+    new_sid = "00000000-0000-4000-8000-000000000002"
+    transcript = vault.account_dir_path("p1") / "projects" / encode_claude_cwd(WS) / f"{new_sid}.jsonl"
+    transcript.parent.mkdir(parents=True, exist_ok=True)
+    transcript.write_text("{}\n", encoding="utf-8")
+    rebuild = f"claude --resume {new_sid}"
+    assert _claude_account_dir_check(vault, "p1", rebuild, WS) == (rebuild, "", [])
