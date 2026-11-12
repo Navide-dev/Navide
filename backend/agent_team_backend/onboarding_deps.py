@@ -453,6 +453,40 @@ def _install_method(resolved_path: str) -> str:
     return "unknown"
 
 
+#: npm's Windows shims (`<name>.cmd`, `.ps1`, extensionless sh) sit in the
+#: prefix root and call the package through a path relative to themselves.
+_NPM_SHIM_TARGET_RE = re.compile(r'(?:%dp0%|%~dp0|\$basedir)[\\/]+(node_modules[\\/][^"\'\s*%$]+)')
+
+
+def _resolved_install(binary_path: str) -> str:
+    """Where `binary_path` physically lives, for `_install_method` to classify.
+
+    POSIX npm links the binary into node_modules, so `realpath` lands there.
+    Windows npm writes a shim file instead, which `realpath` leaves in the
+    prefix root: follow the shim to the script it runs, but only when that
+    script exists inside `<shim dir>/node_modules`. Anything else (a scoop
+    shim, an .exe) keeps its realpath.
+    """
+    resolved = os.path.realpath(binary_path)
+    if osplat.platform_id != "win32" or "/node_modules/" in Path(resolved).as_posix():
+        return resolved
+    if Path(resolved).suffix.lower() not in ("", ".cmd", ".ps1"):
+        return resolved
+    try:
+        with open(resolved, encoding="utf-8", errors="replace") as shim:
+            text = shim.read(16384)
+    except OSError:
+        return resolved
+    match = _NPM_SHIM_TARGET_RE.search(text)
+    if not match:
+        return resolved
+    parts = re.split(r"[\\/]+", match.group(1))
+    if any(part in ("", ".", "..") for part in parts):
+        return resolved
+    target = Path(resolved).parent.joinpath(*parts)
+    return str(target) if target.is_file() else resolved
+
+
 # Identity probes are a subprocess each, so the answer is remembered for the
 # life of the process, keyed by the resolved path. A binary that changes under
 # a running Navide is what the wizard's "re-detect" is for.
@@ -660,8 +694,8 @@ def detect_dep(dep: Dep, quick: bool = False) -> dict[str, Any]:
         ],
         "docs_url": dep.docs_url,
         "binary_path": binary_path,
-        "resolved_path": os.path.realpath(binary_path) if binary_path else "",
-        "install_method": _install_method(os.path.realpath(binary_path) if binary_path else ""),
+        "resolved_path": _resolved_install(binary_path) if binary_path else "",
+        "install_method": _install_method(_resolved_install(binary_path) if binary_path else ""),
         "update_cmd": dep.update_cmd,
         "doctor_cmd": dep.doctor_cmd,
         "autoupdate_env": dep.autoupdate_env,
@@ -672,11 +706,11 @@ def detect_dep(dep: Dep, quick: bool = False) -> dict[str, Any]:
         # Newer than `version` only; '' when up to date or unknown. Read from
         # the channel that installed this binary (see _latest_source).
         "latest_version": "" if quick else _update_available(
-            dep, version, resolved_path=os.path.realpath(binary_path) if binary_path else None),
+            dep, version, resolved_path=_resolved_install(binary_path) if binary_path else None),
         # How "update" would run on the install Navide launches:
         # {manager, command, reason}. Empty on a quick probe.
         "update_plan": (
-            update_plan(dep, binary_path, os.path.realpath(binary_path))
+            update_plan(dep, binary_path, _resolved_install(binary_path))
             if binary_path and not quick and dep.group == "agent_cli" else {}
         ),
         "exit_code": exit_code,
@@ -704,7 +738,7 @@ def _distinct_executables(command: str) -> list[dict[str, Any]]:
             try:
                 stat = candidate.stat()
                 identity: tuple[int, int] | tuple[str, str] = (stat.st_dev, stat.st_ino)
-                resolved = str(candidate.resolve())
+                resolved = _resolved_install(str(candidate))
             except OSError:
                 identity = ("path", str(candidate))
                 resolved = os.path.realpath(candidate)
@@ -1174,7 +1208,7 @@ def maintenance_command(dep_id: str, action: str) -> dict[str, Any]:
     if action == "update" and dep.group == "agent_cli":
         # Update the install Navide launches, with the tool that installed it.
         binary_path = resolve_executable(dep)
-        plan = update_plan(dep, binary_path, os.path.realpath(binary_path), query=True) if binary_path else {}
+        plan = update_plan(dep, binary_path, _resolved_install(binary_path), query=True) if binary_path else {}
         if plan.get("command"):
             return {"ok": True, "needs_terminal": True, "command": plan["command"],
                     "manager": plan["manager"], "docs_url": dep.docs_url}

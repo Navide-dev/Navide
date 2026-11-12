@@ -3249,6 +3249,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // backend reaps a still-live predecessor this spawn is replacing (resume-id
     // dedup can't: the id rotates on every resume, so it never matches).
     replacesPtyId = persistedSessionId()
+    // A restore spawns under a NEW pane id, so a pane whose key is its pane id
+    // finds nothing above; its predecessor's PTY id sits under the former id.
+    if (!replacesPtyId && opts.replacesKey) {
+      try { replacesPtyId = localStorage.getItem(`terminal-pty:${opts.replacesKey}`) || '' } catch { /* ignore */ }
+    }
     // True persistence: a PTY from before a reload may still be running. Reattach
     // to it (recovering bash/build panes too, with no --resume round-trip) before
     // spawning anew. Falls through to a fresh spawn if the PTY is gone.

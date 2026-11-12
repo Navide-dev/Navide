@@ -205,6 +205,8 @@ def test_unknown_vendor_is_not_served(client, guard) -> None:
      [("write", {"path": "a.py"}), ("write", {"path": ".github/workflows/ci.yml"})]),
     ("claude", {"tool_name": "WebFetch", "tool_input": {"url": "https://x"}},
      [("WebFetch", {"url": "https://x"})]),
+    ("claude", {"tool_name": "PowerShell", "tool_input": {"command": "Get-ChildItem"}},
+     [("shell", {"command": "Get-ChildItem", "dialect": "powershell"})]),
 ])
 def test_normalise(vendor, payload, expected) -> None:
     assert guard_hooks.normalise(vendor, payload) == expected
