@@ -418,6 +418,13 @@ def _meets_min(version: str, min_version: str) -> bool:
     return _version_tuple(version) >= _version_tuple(min_version)
 
 
+#: Where Homebrew keeps what it installs: Apple silicon, Intel (formulae and
+#: casks) and Linuxbrew.
+_HOMEBREW_PREFIXES = (
+    "/opt/homebrew/", "/usr/local/Cellar/", "/usr/local/Caskroom/", "/home/linuxbrew/.linuxbrew/",
+)
+
+
 def _install_method(resolved_path: str) -> str:
     """Classify HOW a binary got installed, from where it physically lives.
 
@@ -425,7 +432,7 @@ def _install_method(resolved_path: str) -> str:
     anything unrecognised stays 'unknown' and the UI falls back to vendor docs.
 
         npm       .../node_modules/<pkg>/...   (nvm, brew-node, system npm alike)
-        homebrew  /opt/homebrew/... | /usr/local/Cellar/...
+        homebrew  /opt/homebrew/... | /usr/local/{Cellar,Caskroom}/... | Linuxbrew
         native    ~/.local/share/<tool>/...    (vendor's own installer)
         script    ~/.<tool>/bin/... | ~/.local/bin/...  (vendor install script)
     """
@@ -436,7 +443,7 @@ def _install_method(resolved_path: str) -> str:
     resolved_path = Path(resolved_path).as_posix()
     if "/node_modules/" in resolved_path:
         return "npm"
-    if resolved_path.startswith(("/opt/homebrew/", "/usr/local/Cellar/")):
+    if resolved_path.startswith(_HOMEBREW_PREFIXES):
         return "homebrew"
     home = Path.home().as_posix()
     if resolved_path.startswith(f"{home}/.local/share/"):
@@ -662,8 +669,16 @@ def detect_dep(dep: Dep, quick: bool = False) -> dict[str, Any]:
         "autoupdate_policy": (
             cli_autoupdate_policy(dep.id) if dep.autoupdate_env or dep.autoupdate_args else ""
         ),
-        # Newer than `version` only; '' when up to date or unknown.
-        "latest_version": "" if quick else _update_available(dep, version),
+        # Newer than `version` only; '' when up to date or unknown. Read from
+        # the channel that installed this binary (see _latest_source).
+        "latest_version": "" if quick else _update_available(
+            dep, version, resolved_path=os.path.realpath(binary_path) if binary_path else None),
+        # How "update" would run on the install Navide launches:
+        # {manager, command, reason}. Empty on a quick probe.
+        "update_plan": (
+            update_plan(dep, binary_path, os.path.realpath(binary_path))
+            if binary_path and not quick and dep.group == "agent_cli" else {}
+        ),
         "exit_code": exit_code,
         "signal": signal_name,
         "duration_ms": duration_ms,
@@ -908,6 +923,10 @@ def build_cli_health(dep_statuses: list[dict[str, Any]]) -> dict[str, Any]:
             # The guide's same-install check must use the package the removal
             # gate above used ("" when the vendor is not npm-installed).
             "npm_package": dep.npm_package,
+            # The active install's newer release and how it would be updated
+            # (the same answers CLI management shows).
+            "latest_version": str(dep_status.get("latest_version") or ""),
+            "update_plan": dep_status.get("update_plan") or {},
             "update_state": update_records,
             "candidates": detailed_candidates,
         }
@@ -1152,6 +1171,16 @@ def maintenance_command(dep_id: str, action: str) -> dict[str, Any]:
         "doctor": dep.doctor_cmd,
         "install": dep.install_for(osplat.platform_id).command,
     }[action]
+    if action == "update" and dep.group == "agent_cli":
+        # Update the install Navide launches, with the tool that installed it.
+        binary_path = resolve_executable(dep)
+        plan = update_plan(dep, binary_path, os.path.realpath(binary_path), query=True) if binary_path else {}
+        if plan.get("command"):
+            return {"ok": True, "needs_terminal": True, "command": plan["command"],
+                    "manager": plan["manager"], "docs_url": dep.docs_url}
+        if plan.get("reason") == "npm-prefix-not-writable":
+            return {"ok": False, "error": f"{dep.label}: npm's global folder is not writable",
+                    "reason": plan["reason"], "docs_url": dep.docs_url}
     if not command:
         return {
             "ok": False,
@@ -1624,10 +1653,14 @@ def spawn_args_for(agent_key: str) -> list[str]:
 # ── Newest release (for "update available") ──────────────────────────────────
 #: npm registry answers, by package: (monotonic time, version or '').
 _NPM_LATEST: dict[str, tuple[float, str]] = {}
+#: The other channels' answers, by source key ('pypi:…', 'github:…',
+#: 'brew:cask:…'): (monotonic time, answer or '').
+_LATEST_CACHE: dict[str, tuple[float, Any]] = {}
 _NPM_LATEST_LOCK = threading.Lock()
 _NPM_LATEST_TTL_S = 6 * 3600
 #: A failed lookup (offline, no npm) is retried sooner than a good one.
 _NPM_LATEST_RETRY_S = 1800
+_VERSION_RE = re.compile(r"\d+(\.\d+)*")
 
 
 def _cached_latest_file(dep: Dep) -> str:
@@ -1639,45 +1672,56 @@ def _cached_latest_file(dep: Dep) -> str:
         except (OSError, ValueError):
             continue
         latest = str(data.get("latest_version") or "") if isinstance(data, dict) else ""
-        if re.fullmatch(r"\d+(\.\d+)*", latest) and _version_tuple(latest) > _version_tuple(best or "0"):
+        if _VERSION_RE.fullmatch(latest) and _version_tuple(latest) > _version_tuple(best or "0"):
             best = latest
     return best
 
 
-def _npm_latest(package: str, query: bool = True) -> str:
-    """`npm view <package> version`, cached. '' when npm cannot say.
+def _cached(cache: dict[str, tuple[float, Any]], key: str, query: bool, fetch: Any) -> Any:
+    """`fetch()` behind a TTL cache. query=False only reads the cache.
 
-    Needed alongside the vendor's cache because the launch argument that keeps
-    codex from asking also keeps it from refreshing that cache. query=False
-    only reads the cache: the dependency probe never waits on the network,
-    and update_notices (asked on connect and hourly) is what fills it.
+    The dependency probe never waits on the network; update_notices (asked on
+    connect and hourly) and a click on "update" are what fill it.
     """
     now = time.monotonic()
     with _NPM_LATEST_LOCK:
-        cached = _NPM_LATEST.get(package)
+        cached = cache.get(key)
         if cached is not None:
             ttl = _NPM_LATEST_TTL_S if cached[1] else _NPM_LATEST_RETRY_S
             if not query or now - cached[0] < ttl:
                 return cached[1]
     if not query:
         return ""
-    latest = _npm_query(package)
+    answer = fetch()
     with _NPM_LATEST_LOCK:
-        _NPM_LATEST[package] = (time.monotonic(), latest)
-    return latest
+        cache[key] = (time.monotonic(), answer)
+    return answer
+
+
+def _npm_latest(package: str, query: bool = True) -> str:
+    """`npm view <package> version`, cached. '' when npm cannot say.
+
+    Needed alongside the vendor's cache because the launch argument that keeps
+    codex from asking also keeps it from refreshing that cache.
+    """
+    return _cached(_NPM_LATEST, package, query, lambda: _npm_query(package))
 
 
 def update_notices() -> dict[str, dict[str, str]]:
     """{agent_key: {version, latest_version}} for each CLI with a newer release.
 
-    Only deps that declare `latest_version_file` are checked: one `--version`
-    probe each, plus the cached npm lookup."""
+    One `--version` probe per installed agent CLI, plus the cached lookup in
+    the channel that installed it (npm, Homebrew, PyPI, GitHub)."""
     notices: dict[str, dict[str, str]] = {}
     for dep in applicable_deps():
-        if not dep.latest_version_file:
+        if dep.group != "agent_cli" or not _has_latest_source(dep):
             continue
         entry = detect_dep(dep, quick=False)
-        latest = _update_available(dep, entry["version"], query_registry=True)
+        resolved = entry.get("resolved_path")
+        latest = _update_available(dep, entry["version"], query_registry=True, resolved_path=resolved)
+        if resolved:
+            # Fills the cask's auto_updates answer the probe's plan reads.
+            _brew_info_for(resolved, query=True)
         if latest:
             notices[dep.id] = {"version": entry["version"], "latest_version": latest}
     return notices
@@ -1696,15 +1740,193 @@ def _npm_query(package: str) -> str:
     except (subprocess.SubprocessError, OSError):
         return ""
     out = (proc.stdout or "").strip()
-    return out if proc.returncode == 0 and re.fullmatch(r"\d+(\.\d+)*", out) else ""
+    return out if proc.returncode == 0 and _VERSION_RE.fullmatch(out) else ""
 
 
-def _update_available(dep: Dep, version: str, query_registry: bool = False) -> str:
-    """The newest release when it is newer than `version`, else ''."""
-    if not dep.latest_version_file or not version:
+def _http_json(url: str) -> Any:
+    """GET a public JSON document (no credentials), or None."""
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"User-Agent": "Navide", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as resp:  # noqa: S310 - fixed https hosts
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001 - offline, rate limit, bad JSON: all mean "cannot say"
+        return None
+
+
+def _source_query(source: str) -> str:
+    """The newest release a 'pypi:' or 'github:' source names, or ''."""
+    kind, _, name = source.partition(":")
+    if kind == "pypi":
+        data = _http_json(f"https://pypi.org/pypi/{name}/json")
+        version = str((data or {}).get("info", {}).get("version") or "") if isinstance(data, dict) else ""
+    elif kind == "github":
+        data = _http_json(f"https://api.github.com/repos/{name}/releases/latest")
+        version = str(data.get("tag_name") or "").removeprefix("v") if isinstance(data, dict) else ""
+    else:
         return ""
-    candidates = [_cached_latest_file(dep)]
-    if dep.npm_package:
-        candidates.append(_npm_latest(dep.npm_package, query=query_registry))
+    return version if _VERSION_RE.fullmatch(version) else ""
+
+
+def _brew_target(resolved_path: str) -> tuple[str, str, str]:
+    """(prefix, 'cask' | 'formula', token) for a Homebrew-owned path, or empty."""
+    posix = Path(resolved_path).as_posix()
+    for kind, marker in (("cask", "/Caskroom/"), ("formula", "/Cellar/")):
+        if marker in posix:
+            prefix, _, rest = posix.partition(marker)
+            token = rest.split("/", 1)[0]
+            if token:
+                return prefix, kind, token
+    return "", "", ""
+
+
+def _brew_program(prefix: str) -> str:
+    """The `brew` of the prefix that installed the binary, else the one on PATH."""
+    own = Path(prefix) / "bin" / "brew"
+    if own.is_file() and os.access(own, os.X_OK):
+        return str(own)
+    return osplat.paths.resolve_program("brew") or ""
+
+
+def _brew_query(brew: str, kind: str, token: str) -> dict[str, Any]:
+    """`brew info --json=v2` for one cask or formula: {version, auto_updates}."""
+    try:
+        proc = subprocess.run(
+            [brew, "info", "--json=v2", f"--{kind}", token],
+            capture_output=True, text=True, timeout=20,
+        )
+        data = json.loads(proc.stdout or "{}") if proc.returncode == 0 else {}
+    except (subprocess.SubprocessError, OSError, ValueError):
+        return {}
+    items = data.get("casks" if kind == "cask" else "formulae") or []
+    if not items or not isinstance(items[0], dict):
+        return {}
+    item = items[0]
+    if kind == "cask":
+        # A cask version may carry a build after a comma: '1.2.3,456'.
+        version = str(item.get("version") or "").split(",", 1)[0]
+    else:
+        version = str((item.get("versions") or {}).get("stable") or "")
+    return {
+        "version": version if _VERSION_RE.fullmatch(version) else "",
+        "auto_updates": bool(item.get("auto_updates")),
+    }
+
+
+def _brew_info_for(resolved_path: str, query: bool) -> dict[str, Any]:
+    """The cached `brew info` answer for the cask or formula owning a binary."""
+    prefix, kind, token = _brew_target(resolved_path)
+    if not token:
+        return {}
+    brew = _brew_program(prefix)
+    if not brew:
+        return {}
+    answer = _cached(_LATEST_CACHE, f"brew:{kind}:{token}", query, lambda: _brew_query(brew, kind, token))
+    return answer if isinstance(answer, dict) else {}
+
+
+def _has_latest_source(dep: Dep) -> bool:
+    return bool(dep.latest_version_file or dep.npm_package or dep.latest_source)
+
+
+def _latest_source(dep: Dep, resolved_path: str | None) -> tuple[str, str]:
+    """Which channel to ask for the newest release of this install.
+
+    ('npm', package) | ('brew', path) | ('source', 'pypi:…'/'github:…') or
+    ('', ''). Asked of the channel that installed the binary, so a version
+    the npm registry has but the Homebrew cask does not yet is never offered
+    to a Homebrew install. An install Navide cannot place has no channel.
+    resolved_path=None = the install is not known (the caller has none): the
+    dep's declared source answers.
+    """
+    declared = ("source", dep.latest_source) if dep.latest_source else (
+        ("npm", dep.npm_package) if dep.npm_package else ("", ""))
+    if resolved_path is None:
+        return declared
+    method = _install_method(resolved_path)
+    if method == "npm":
+        marker = f"/node_modules/{dep.npm_package}/"
+        own = dep.npm_package and marker in Path(resolved_path).as_posix()
+        return ("npm", dep.npm_package) if own else ("", "")
+    if method == "homebrew":
+        return ("brew", resolved_path) if _brew_target(resolved_path)[2] else ("", "")
+    if method in ("native", "script"):
+        return declared
+    return ("", "")
+
+
+def _update_available(
+    dep: Dep, version: str, query_registry: bool = False, resolved_path: str | None = None,
+) -> str:
+    """The newest release when it is newer than `version`, else ''."""
+    if not version or not _has_latest_source(dep):
+        return ""
+    kind, key = _latest_source(dep, resolved_path)
+    candidates: list[str] = []
+    if dep.latest_version_file and kind != "brew":
+        candidates.append(_cached_latest_file(dep))
+    if kind == "npm":
+        candidates.append(_npm_latest(key, query=query_registry))
+    elif kind == "brew":
+        candidates.append(str(_brew_info_for(key, query=query_registry).get("version") or ""))
+    elif kind == "source":
+        candidates.append(str(_cached(_LATEST_CACHE, key, query_registry, lambda: _source_query(key)) or ""))
     newest = max((c for c in candidates if c), key=_version_tuple, default="")
     return newest if newest and _version_tuple(newest) > _version_tuple(version) else ""
+
+
+# ── Updating the install Navide launches ─────────────────────────────────────
+def _npm_beside(binary_path: str) -> str:
+    """The npm installed next to a global npm binary (`npm` / `npm.cmd`), or ''."""
+    for filename in osplat.paths.executable_candidates("npm"):
+        entry = Path(binary_path).parent / filename
+        if entry.is_file() and osplat.paths.is_executable(entry):
+            return str(entry)
+    return ""
+
+
+def update_plan(dep: Dep, binary_path: str, resolved_path: str, query: bool = False) -> dict[str, str]:
+    """How to update the install Navide launches: {manager, command, reason}.
+
+    Picked by how that install got there, never guessed:
+
+    - npm: the npm next to the binary (the same Node installation),
+      `install -g <package>@<latest>` pinned to the release Navide shows.
+      Refused (reason 'npm-prefix-not-writable') when its global folder is
+      not writable — Navide never reaches for sudo.
+    - Homebrew: `brew upgrade [--cask] <token>`, except for a cask marked
+      auto_updates, which brew skips: the CLI's own update runs instead.
+    - native installer / install script: the CLI's own update command.
+    - anything else: no command (reason 'unknown-install'); the UI links the
+      vendor's instructions.
+    """
+    quote = osplat.paths.quote_arg
+    method = _install_method(resolved_path)
+    own = {"manager": "vendor", "command": _command_on_the_resolved_binary(dep, dep.update_cmd), "reason": ""} \
+        if dep.update_cmd else {"manager": "", "command": "", "reason": "no-update-command"}
+    if method == "npm" and dep.npm_package and f"/node_modules/{dep.npm_package}/" in Path(resolved_path).as_posix():
+        global_root = Path(resolved_path).as_posix().split(f"/node_modules/{dep.npm_package}/", 1)[0]
+        if not os.access(f"{global_root}/node_modules", os.W_OK):
+            return {"manager": "npm", "command": "", "reason": "npm-prefix-not-writable"}
+        npm = _npm_beside(binary_path) or osplat.paths.resolve_program("npm") or ""
+        if not npm:
+            return own
+        latest = _update_available(dep, "0", query_registry=query, resolved_path=resolved_path) or "latest"
+        return {
+            "manager": "npm",
+            "command": f"{quote(npm)} install -g {quote(f'{dep.npm_package}@{latest}')}",
+            "reason": "",
+        }
+    if method == "homebrew":
+        prefix, kind, token = _brew_target(resolved_path)
+        brew = _brew_program(prefix) if token else ""
+        if not brew:
+            return own
+        if kind == "cask" and _brew_info_for(resolved_path, query=query).get("auto_updates") and dep.update_cmd:
+            return own
+        flag = "--cask " if kind == "cask" else ""
+        return {"manager": "homebrew", "command": f"{quote(brew)} upgrade {flag}{quote(token)}", "reason": ""}
+    if method in ("native", "script"):
+        return own
+    return {"manager": "", "command": "", "reason": "unknown-install"}

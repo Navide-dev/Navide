@@ -407,8 +407,13 @@ describe('CliManagementPanel', () => {
     }
 
     function updateButton() {
-      return wrapper!.findAll('button').find((button) => button.text().includes('codex update'))!
+      return wrapper!.get('[data-testid="cli-update-button"]')
     }
+
+    it('names the release it updates to', async () => {
+      await mountCodex({ blocked: false, reason: '', busy_panes: [] })
+      expect(updateButton().text()).toBe(i18n.global.t('cli-manage.update-to', { version: '0.167.1' }))
+    })
 
     it('shows the newer release', async () => {
       await mountCodex({ blocked: false, reason: '', busy_panes: [] })
@@ -463,6 +468,54 @@ describe('CliManagementPanel', () => {
       expect(wrapper!.get('.cm-message').text()).toBe(
         i18n.global.t('cli-manage.update-blocked-busy', { label: 'Codex CLI (OpenAI)', panes: 'codex-b' }))
       expect(updateButton().attributes('disabled')).toBeDefined()
+    })
+  })
+
+  describe('the update of the install Navide launches (0.2.42)', () => {
+    async function mountWith(dep: OnboardDep, gate = { blocked: false, reason: '', busy_panes: [] as string[] }) {
+      stubTerminal()
+      const mock = createMockBackend('connected')
+      mock.setResponse('onboarding.status', { ...status(), deps: [dep] })
+      mock.setResponse('onboarding.update_gate', { ok: true, ...gate })
+      wrapper = mount(CliManagementPanel, {
+        props: { backend: mock.backend, onboarding: useOnboarding(mock.backend) },
+        global: { plugins: [i18n] },
+      })
+      await flushPromises()
+      return mock
+    }
+
+    const npmClaude: OnboardDep = {
+      ...claude, install_method: 'npm', latest_version: '2.2.0',
+      update_plan: { manager: 'npm', command: '/Users/test/.nvm/bin/npm install -g @anthropic-ai/claude-code@2.2.0', reason: '' },
+    }
+
+    it('shows the command the backend picked for this install', async () => {
+      await mountWith(npmClaude)
+      const button = wrapper!.get('[data-testid="cli-update-button"]')
+      expect(button.text()).toBe(i18n.global.t('cli-manage.update-to', { version: '2.2.0' }))
+      expect(button.attributes('title')).toBe(npmClaude.update_plan!.command)
+    })
+
+    it('gates every agent CLI, not only codex', async () => {
+      await mountWith(npmClaude, { blocked: true, reason: 'panes-busy', busy_panes: ['Claude 審查'] })
+      expect(wrapper!.get('[data-testid="cli-update-button"]').attributes('disabled')).toBeDefined()
+      expect(wrapper!.get('[data-testid="cli-update-gate"]').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-busy', { label: 'Claude Code', panes: 'Claude 審查' }))
+    })
+
+    it('asks for every pane closed on Windows', async () => {
+      await mountWith(npmClaude, { blocked: true, reason: 'panes-open', busy_panes: ['Claude 1'] })
+      expect(wrapper!.get('[data-testid="cli-update-gate"]').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-open', { label: 'Claude Code', panes: 'Claude 1' }))
+    })
+
+    it('offers no button, only the reason and the docs, when npm cannot write', async () => {
+      await mountWith({ ...npmClaude, update_plan: { manager: 'npm', command: '', reason: 'npm-prefix-not-writable' } })
+      expect(wrapper!.find('[data-testid="cli-update-button"]').exists()).toBe(false)
+      expect(wrapper!.get('[data-testid="cli-update-npm-not-writable"]').text()).toBe(
+        i18n.global.t('cli-manage.update-npm-not-writable'))
+      expect(wrapper!.get('a.cm-btn.link').attributes('href')).toBe(claude.docs_url)
     })
   })
 
