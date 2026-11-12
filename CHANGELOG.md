@@ -75,10 +75,10 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - Agents (0.2.40): on Hermes's very first start, its first turn is taken as finished after a quiet period; from the next run on a turn end is reported as `turn_complete`.
 - Agents (0.2.40): a custom OpenClaw or Hermes command set in Settings → CLI Agents has to be changed to `openclaw tui …` or `hermes chat …`.
 - Agents (0.2.40): an Agent pane's control panel is collapsed when the pane is narrower than 720px.
-- MCP (0.2.40): `cli_set_model` cannot read the result of a Claude model switch when the pane is tall and its conversation short (most common in Linux's default window), so it falls back to restarting the pane: the model is switched, the conversation resumes in the same session, schedules bound to the pane id and queued messages move to the new pane, but the CLI restarts once and an old pane id held by an outside caller no longer works. Planned for 0.2.41.
+- MCP (0.2.40): `cli_set_model` cannot read the result of a Claude model switch when the pane is tall and its conversation short (most common in Linux's default window), so it falls back to restarting the pane: the model is switched, the conversation resumes in the same session, schedules bound to the pane id and queued messages move to the new pane, but the CLI restarts once and an old pane id held by an outside caller no longer works. Planned for 0.2.42.
 - MCP (0.2.40): `cli_set_model` was tested only with Claude Code 2.1.286, 2.1.319 and 2.1.322, and not with Codex on a test machine; a wrong Claude model id is reported by the CLI itself; a switch with a reasoning level always restarts the pane; during the about one second the model menu is open, the message queue is not separately held.
 - MCP (0.2.40): `cli_rename_pane` has been checked by typecheck and simulated-window tests only; renaming from a child pane with the title updating live is on the manual check list. A schedule that names a pane's old name is listed in `warnings` after a rename, not changed.
-- MCP (0.2.40): a pane opened by a pipeline has no record of who opened it, so its parent pane cannot rename it, and `cli_list_sessions` does not return `opened_by` (planned for 0.2.41).
+- MCP (0.2.40): a pane opened by a pipeline has no record of who opened it, so its parent pane cannot rename it, and `cli_list_sessions` does not return `opened_by` (planned for 0.2.42).
 - Guard (0.2.40): an exemption lets through only a whole line whose paths are fully written out, with no quotes, variables or wildcards, and it lifts only the whole-line rule: each segment's own check still applies (reading a private key still needs its own allow prefix).
 - Guard (0.2.40): the credential pipe-upload rule does not catch a credential file read through a shell variable, or PowerShell's `Get-Content` piped into `Invoke-WebRequest`. This gap predates this release.
 - Navide plugins (0.2.40): the automatic pause of a misbehaving plugin was not exercised on a test machine, which had no third-party test plugin.
@@ -86,7 +86,7 @@ Featured changes (docs/en-US/marketplace-featured-policy.md), one line each:
 - Navide plugins (0.2.40): a plugin's notifications to agent panes are off by default, limited to 6 a minute, and cannot be broadcast.
 - Navide plugins (0.2.40): a view runs in the background only when its plugin opts in, and opening the panel replaces the background copy.
 - Navide plugins (0.2.40): an agent can call a plugin backend directly only in Developer Mode and only for a locally installed plugin.
-- Navide plugins (0.2.40): the Plans and Navide Browser plugin backends are still single-file builds (planned for 0.2.41).
+- Navide plugins (0.2.40): the Plans and Navide Browser plugin backends are still single-file builds (planned for 0.2.42).
 - Navide Marketplace (0.2.40): the Developer page's members section and the scanner's false-positive fix take effect once the Registry is next deployed.
 - Navide Marketplace (0.2.40): a publisher signs with the namespace owner's key, so a publisher cannot sign in to publish until the owner has set one. Removing a publisher does not withdraw the versions it published, which stay under the owner; Testplace developer endpoints are owner-only.
 - Panes (0.2.40): "STOP not applied" is shown for Claude and Codex panes only.

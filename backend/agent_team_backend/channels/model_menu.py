@@ -1,4 +1,4 @@
-"""/model in a chat: switch a bound pane's model with two presses (0.2.41).
+"""/model in a chat: switch a bound pane's model with two presses (0.2.42).
 
 Step 1 picks a pane (the bound pane and its children, the tree /status shows),
 step 2 a model; an effort is a third, optional step, because only a restart

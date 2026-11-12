@@ -13,7 +13,7 @@ import {
 } from '../ports/gitSurface'
 import type { GitTransport, GitTransportResponse } from '#git-feature'
 
-// D6 (0.2.41): a real repository showed "Not a Git repository" in the Git
+// D6 (0.2.42): a real repository showed "Not a Git repository" in the Git
 // window with nothing in the console. The window only looked at
 // gitStatus.is_git_repo, so a failed git.status (git's own error, e.g.
 // dubious ownership, or a transport error) and a read still in flight both
