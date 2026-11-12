@@ -1077,6 +1077,15 @@ def _subst_vars(word: str, values: dict[str, str]) -> str:
     return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
+def _collapse(text: str) -> str:
+    """A path-like value as Guard reads paths (_norm): `/./`, `//` and `x/..`
+    folded lexically, so padding made of them cannot make a path look long."""
+    if "/" not in text or "://" in text:
+        return text
+    out = posixpath.normpath(text)
+    return out + "/" if text.endswith("/") and not out.endswith("/") else out
+
+
 def _too_big_to_follow(acc: _Acc) -> None:
     acc.opaque("dynamic-path", f"a variable longer than {SHORT_VAR_CHARS} characters is not followed past Guard's limits")
 
@@ -1091,14 +1100,14 @@ def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
         return
     for m in matches:
         name = m.group(1)
-        size = _expanded_len(m.group(2), ctx.vars)
-        value = _subst_vars(m.group(2), ctx.vars) if size <= MAX_VAR_CHARS else None
+        value = _collapse(_subst_vars(m.group(2), ctx.vars)) if _expanded_len(m.group(2), ctx.vars) <= MAX_VAR_CHARS else None
         old = ctx.vars.pop(name, None)
         if old is not None and len(old) > SHORT_VAR_CHARS:
             ctx.long_vars_chars -= len(old)
         if value is None:
             _too_big_to_follow(acc)
             continue
+        size = len(value)
         if size > SHORT_VAR_CHARS:
             # Make room by dropping the longest values first; short ones stay.
             while ctx.long_vars_chars + size > LONG_VARS_CHARS:
@@ -1119,11 +1128,17 @@ def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downlo
         size = _expanded_len(word, ctx.vars)
         if size <= SHORT_VAR_CHARS or size == len(word):
             return _subst_vars(word, ctx.vars)
-        if size > MAX_VAR_CHARS or ctx.long_expansion_chars + size > LONG_EXPANSION_CHARS:
+        if size > MAX_VAR_CHARS:
             _too_big_to_follow(acc)
             return word
-        ctx.long_expansion_chars += size
-        return _subst_vars(word, ctx.vars)
+        out = _collapse(_subst_vars(word, ctx.vars))
+        if len(out) <= SHORT_VAR_CHARS:
+            return out
+        if ctx.long_expansion_chars + len(out) > LONG_EXPANSION_CHARS:
+            _too_big_to_follow(acc)
+            return word
+        ctx.long_expansion_chars += len(out)
+        return out
 
     expanded = [_Cmd([expand(a) for a in c.argv], [(op, expand(t)) for op, t in c.redirects]) for c in pipeline]
     if all(e.argv == c.argv and e.redirects == c.redirects for e, c in zip(expanded, pipeline)):

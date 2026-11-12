@@ -994,6 +994,10 @@ def test_many_long_words_stay_within_the_budget_and_are_opaque():
         # After long values filled the budget, and long words used up theirs.
         "; ".join(_long(f"L{i}") for i in range(20)) + f'; F={AWS}; cat "$F"',
         _long() + "; " + "; ".join([": $A"] * 80) + f'; F={AWS}; cat "$F"',
+        # Padding Guard folds away as a path, after the long-word budget ran out.
+        _long() + "; " + "; ".join([": $A"] * 80) + f'; P=/{"./" * 1500}; F={AWS[1:]}; cat "$HOME$P$F"',
+        _long() + "; " + "; ".join([": $A"] * 80)
+        + f'; P=/{"./" * 1500}; Q=/{"x/../" * 700}; F={AWS[1:]}; cat "$HOME$P$Q$F"',
     ],
 )
 def test_a_short_credential_path_is_followed_past_every_cap(command):
