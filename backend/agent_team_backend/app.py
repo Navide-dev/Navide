@@ -123,6 +123,7 @@ from .cli_risk_store import CliRiskStore
 from .sync_engine import SyncStore
 from .history_store import HistoryStore
 from .agent_message_log import AgentMessageLog
+from .account_switch_log import AccountSwitchLog
 from .preview_log import MAX_ROWS as PREVIEW_MAX_ROWS, PreviewLog
 from . import git_service
 from . import issue_service
@@ -242,6 +243,8 @@ dev_time_store = DevTimeStore(
 )
 # Cross-workspace by construction, so it lives in the global database.
 agent_message_log = AgentMessageLog(db=database)
+# Switches an agent or a chat button made without the user's click (D7).
+account_switch_log = AccountSwitchLog(db=database)
 codex_home_manager = CodexHomeManager()
 cli_profiles_store = CliProfilesStore(db=database)
 from .credential_store import CredentialStores, active_store_metadata, managed_watch_path

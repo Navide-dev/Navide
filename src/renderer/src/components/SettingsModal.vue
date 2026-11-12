@@ -113,6 +113,7 @@ import {
 import { useGitAccounts } from '../composables/useGitAccounts'
 import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
+import AccountSwitchLog from './accounts/AccountSwitchLog.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
 import OllamaSetup from './OllamaSetup.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
@@ -4924,6 +4925,9 @@ watch(activeTab, (tab) => {
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
             <CliAccountsPane :api="cliProfilesApi" :backend="backend" :workspace-open="workspaceOpen ?? false" @login="(agentKey: string, loginProfileId?: string) => emit('cli-login', agentKey, loginProfileId)" />
+          </div>
+          <div data-settings-section="account-switch-log" style="margin: 0 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
+            <AccountSwitchLog :backend="backend" />
           </div>
         </div>
 

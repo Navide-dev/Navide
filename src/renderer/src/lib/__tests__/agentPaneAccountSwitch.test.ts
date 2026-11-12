@@ -6,11 +6,13 @@ import {
   type AgentPaneAccountSwitchDeps,
   type AgentPaneAccountTarget,
 } from '../agentPaneAccountSwitch'
+import { createAccountSwitchQueue } from '../accountSwitchQueue'
 
 // Plan mcp-pane-cli-usage_213031 P4: cli_account_switch with pane_id moves one
 // claude pane to another account's own folder, the way the badge's "switch
-// only this pane" does. The user is asked first; only their yes reaches the
-// window's single-pane move, and nothing here can switch the live login.
+// only this pane" does. Nothing asks the user (plan agent-0-2-42_3f728e): an
+// idle pane moves at once, a working one once its turn ends, and nothing here
+// can switch the live login.
 function accounts(): AgentAccountSwitchAccounts {
   const profiles: Record<string, { agentKey: string; name: string }> = {
     a13: { agentKey: 'claude', name: 'Account 13' },
@@ -37,11 +39,10 @@ function deps(over: Partial<AgentPaneAccountSwitchDeps> = {}): AgentPaneAccountS
     folderAgent: 'claude',
     pane: (id) => panes[id],
     dirSignedIn: (id) => id === 'a14',
-    callerPane: () => ({ workspacePath: '/ws/alpha', name: 'lead' }),
-    accountLabel: (_key, id) => `label:${id}`,
-    confirm: vi.fn(async () => 'confirmed' as const),
+    paneBusy: () => false,
     movePane: vi.fn(async () => undefined),
-    now: () => 1000,
+    queue: createAccountSwitchQueue({ setTimer: () => 0, clearTimer: () => undefined }),
+    onSettled: vi.fn(),
     ...over,
   }
 }
@@ -71,35 +72,43 @@ describe('planAgentPaneAccountSwitch', () => {
 })
 
 describe('runAgentPaneAccountSwitch', () => {
-  it('asks the user, naming the pane, then moves only that pane', async () => {
+  const args = { agentKey: 'claude', profileId: 'a14', paneId: 'follower', reason: 'use 14' }
+
+  it('moves only that pane at once when it is idle', async () => {
     const d = deps()
-    const result = await runAgentPaneAccountSwitch(ask(), 'caller', d)
-    expect(result).toEqual({ status: 'switched-pane', from: 'Account 13', to: 'Account 14' })
-    expect(d.confirm).toHaveBeenCalledWith(expect.objectContaining({
-      agentKey: 'claude', paneName: 'follower', fromLabel: 'label:a13', toLabel: 'label:a14', callerName: 'lead',
-    }), undefined)
+    expect(await runAgentPaneAccountSwitch(args, d)).toEqual({
+      status: 'switched-pane', from: 'Account 13', to: 'Account 14', paneName: 'follower', fromProfileId: 'a13',
+    })
     expect(d.movePane).toHaveBeenCalledWith('follower', 'a14')
   })
 
-  it('moves nothing when the user says no', async () => {
-    const d = deps({ confirm: vi.fn(async () => 'declined' as const) })
-    expect(await runAgentPaneAccountSwitch(ask(), 'caller', d)).toMatchObject({ status: 'declined' })
+  it('refuses what the plan refuses, without moving', async () => {
+    const d = deps()
+    expect((await runAgentPaneAccountSwitch({ ...args, paneId: 'coder', agentKey: 'codex' }, d)).status).toBe('unsupported')
     expect(d.movePane).not.toHaveBeenCalled()
   })
 
-  it('refuses before asking when the plan refuses', async () => {
-    const d = deps()
-    expect(await runAgentPaneAccountSwitch(ask({ profileId: 'nope' }), 'caller', d)).toMatchObject({ status: 'unknown-profile' })
-    expect(d.confirm).not.toHaveBeenCalled()
+  it('queues a working pane and moves it once idle', async () => {
+    let busy = true
+    const d = deps({ paneBusy: () => busy })
+    expect(await runAgentPaneAccountSwitch(args, d)).toMatchObject({ status: 'queued', waiting: 1 })
+    expect(d.movePane).not.toHaveBeenCalled()
+    await d.queue.tick()
+    expect(d.movePane).not.toHaveBeenCalled()
+    busy = false
+    await d.queue.tick()
+    expect(d.movePane).toHaveBeenCalledWith('follower', 'a14')
+    expect(d.onSettled).toHaveBeenCalledWith(expect.objectContaining({ status: 'switched-pane' }))
   })
 
-  it('reports a pane the user kept running as restart-declined', async () => {
-    const d = deps({ movePane: vi.fn(async () => 'declined') })
-    expect(await runAgentPaneAccountSwitch(ask(), 'caller', d)).toEqual({ status: 'restart-declined', code: 'declined' })
+  it('keeps waiting when the pane got busy between the check and the move', async () => {
+    const d = deps({ movePane: vi.fn(async () => 'busy') })
+    expect((await runAgentPaneAccountSwitch(args, d)).status).toBe('queued')
+    expect(d.queue.size).toBe(1)
   })
 
   it('passes another move failure on as its code', async () => {
     const d = deps({ movePane: vi.fn(async () => 'spawn-failed') })
-    expect(await runAgentPaneAccountSwitch(ask(), 'caller', d)).toEqual({ status: 'refused', code: 'spawn-failed' })
+    expect(await runAgentPaneAccountSwitch(args, d)).toEqual({ status: 'refused', code: 'spawn-failed' })
   })
 })
