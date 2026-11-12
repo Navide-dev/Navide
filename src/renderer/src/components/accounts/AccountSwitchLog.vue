@@ -55,6 +55,7 @@ const STATUS_KEYS: Record<string, string> = {
   queued: 'queued',
   requested: 'queued',
   superseded: 'superseded',
+  cancelled: 'cancelled',
   stale: 'stale',
 }
 

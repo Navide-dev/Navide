@@ -66,6 +66,36 @@ describe('createAccountSwitchQueue', () => {
     expect(j.settle).toHaveBeenCalledWith({ status: 'refused', code: 'unknown' })
   })
 
+  it('shows the jobs that carry a view, with the pane count of the last check', async () => {
+    let waiting = 3
+    const seen: unknown[] = []
+    const q = createAccountSwitchQueue({ ...quiet, onChange: (jobs) => seen.push(jobs) })
+    q.enqueue(job('agent:claude', { waiting: () => waiting, show: { agentKey: 'claude', to: 'B', waiting: 3 } }))
+    q.enqueue(job('restart:p1', { waiting: () => 1 }))
+    expect(q.list()).toEqual([{ key: 'agent:claude', agentKey: 'claude', to: 'B', waiting: 3 }])
+    waiting = 2
+    await q.tick()
+    expect(seen.at(-1)).toEqual([{ key: 'agent:claude', agentKey: 'claude', to: 'B', waiting: 2 }])
+    waiting = 0
+    await q.tick()
+    expect(seen.at(-1)).toEqual([])
+  })
+
+  it('cancels a parked job: it never runs and settles as cancelled', async () => {
+    const seen: unknown[] = []
+    const q = createAccountSwitchQueue({ ...quiet, onChange: (jobs) => seen.push(jobs) })
+    const j = job('agent:claude', { waiting: () => 1, show: { agentKey: 'claude', to: 'B', waiting: 1 } })
+    q.enqueue(j)
+    q.cancel('agent:claude')
+    q.cancel('agent:claude')
+    await q.tick()
+    expect(j.run).not.toHaveBeenCalled()
+    expect(j.settle).toHaveBeenCalledTimes(1)
+    expect(j.settle).toHaveBeenCalledWith({ status: 'cancelled' })
+    expect(seen.at(-1)).toEqual([])
+    expect(q.size).toBe(0)
+  })
+
   it('polls on its timer while jobs wait', async () => {
     vi.useFakeTimers()
     try {

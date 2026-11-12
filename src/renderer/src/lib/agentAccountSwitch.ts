@@ -152,6 +152,7 @@ export async function runAgentAccountSwitch(
       waiting: () => deps.busyPanes(plan.agentKey),
       run: attempt,
       settle: deps.onSettled,
+      show: { agentKey: plan.agentKey, to: String(first.to ?? ''), waiting: Number(first.waiting ?? 1) },
     })
   }
   return first

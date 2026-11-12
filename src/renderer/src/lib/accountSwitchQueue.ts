@@ -22,12 +22,27 @@ export interface QueuedSwitch {
   run: () => Promise<SwitchOutcome>
   /** Told once how the job ended. */
   settle: (outcome: SwitchOutcome) => void
+  /** What the user sees of a parked switch (Settings ▸ Accounts, the quota
+   *  popover). A job without it — a deferred pane restart — is not shown. */
+  show?: { agentKey: string; to: string; paneName?: string; waiting: number }
+}
+
+/** A parked switch as the window shows it. */
+export interface QueuedSwitchView {
+  key: string
+  agentKey: string
+  to: string
+  paneName?: string
+  /** Panes it still waits for, as of the last check. */
+  waiting: number
 }
 
 export interface AccountSwitchQueueOptions {
   intervalMs?: number
   setTimer?: (fn: () => void, ms: number) => unknown
   clearTimer?: (handle: unknown) => void
+  /** Called with the shown jobs whenever one is added, ends or rechecks. */
+  onChange?: (jobs: QueuedSwitchView[]) => void
 }
 
 export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}) {
@@ -37,6 +52,13 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
   const jobs = new Map<string, QueuedSwitch>()
   const running = new Set<QueuedSwitch>()
   let timer: unknown = null
+
+  function view(): QueuedSwitchView[] {
+    const out: QueuedSwitchView[] = []
+    for (const job of jobs.values()) if (job.show) out.push({ key: job.key, ...job.show })
+    return out
+  }
+  const changed = (): void => options.onChange?.(view())
 
   function arm(): void {
     if (timer !== null || jobs.size === 0) return
@@ -52,11 +74,22 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
     if (!job) return
     jobs.delete(key)
     job.settle({ status: 'superseded' })
+    changed()
+  }
+
+  /** The user called the parked switch off: it never runs. */
+  function cancel(key: string): void {
+    const job = jobs.get(key)
+    if (!job) return
+    jobs.delete(key)
+    job.settle({ status: 'cancelled' })
+    changed()
   }
 
   function enqueue(job: QueuedSwitch): void {
     supersede(job.key)
     jobs.set(job.key, job)
+    changed()
     arm()
   }
 
@@ -69,6 +102,10 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
         waiting = await job.waiting()
       } catch {
         waiting = 1 // cannot tell: keep waiting rather than interrupt anyone
+      }
+      if (job.show && job.show.waiting !== waiting && jobs.get(job.key) === job) {
+        job.show.waiting = waiting
+        changed()
       }
       if (waiting > 0 || jobs.get(job.key) !== job) {
         running.delete(job)
@@ -87,6 +124,7 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
       if (outcome.status === 'queued') continue
       jobs.delete(job.key)
       job.settle(outcome)
+      changed()
     }
   }
 
@@ -98,6 +136,8 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
   return {
     enqueue,
     supersede,
+    cancel,
+    list: view,
     tick,
     dispose,
     has: (key: string) => jobs.has(key),

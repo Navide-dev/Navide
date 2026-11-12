@@ -100,7 +100,8 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
-import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { FOLLOW_SWITCH_AGENT, setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { accountLabel, DEFAULT_PROFILE_ID } from '../lib/accountLabel'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -1583,6 +1584,28 @@ const quotaFailover = useQuotaFailover()
 const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
 const failoverMode = computed<FailoverMode>(() => quotaFailover.state.value?.policy.mode ?? 'notify')
 const failoverBusy = ref(false)
+// One line under the policy: the account an automatic switch would pick for
+// Claude, and the way to Accounts, where the same policy sits with its queue
+// and switch log (plan 0-2-42_eb5049).
+const failoverNext = ref<{ name: string; headroom: number | null } | null>(null)
+const failoverNextLoaded = ref(false)
+async function loadFailoverNext(): Promise<void> {
+  failoverNextLoaded.value = false
+  const cap = quotaFailover.capabilityFor(FOLLOW_SWITCH_AGENT)
+  if (!cap?.supported || !cap.hasSlots || failoverMode.value === 'off') return
+  const list = await quotaFailover.previewCandidates(FOLLOW_SWITCH_AGENT)
+  const pick = list?.find((c) => c.excluded === null)
+  failoverNext.value = pick
+    ? { name: accountLabel(props.cliProfilesApi, FOLLOW_SWITCH_AGENT, pick.slotId || DEFAULT_PROFILE_ID, t), headroom: pick.headroom }
+    : null
+  failoverNextLoaded.value = list !== null
+}
+watch([failoverMode, () => !!quotaFailover.state.value], () => void loadFailoverNext(), { immediate: true })
+async function openAutoContinue(): Promise<void> {
+  activeTab.value = 'accounts'
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-settings-section="accounts-auto-continue"]')?.scrollIntoView({ block: 'start' })
+}
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true
@@ -4174,6 +4197,19 @@ watch(activeTab, (tab) => {
                 :title="$t('usage.failover-title')"
                 :description="$t('usage.failover-hint')"
               >
+                <template #description>
+                  {{ $t('usage.failover-hint') }}
+                  <span class="failover-next-line" data-testid="general-failover-next">
+                    <template v-if="failoverNextLoaded">{{ failoverNext
+                      ? (failoverNext.headroom !== null
+                        ? $t('usage.auto-switch-next-headroom', { name: failoverNext.name, pct: Math.round(failoverNext.headroom) })
+                        : $t('usage.auto-switch-next', { name: failoverNext.name }))
+                      : $t('usage.auto-switch-next-none') }}</template>
+                    <button type="button" class="failover-next-goto" data-testid="general-failover-goto" @click="openAutoContinue">
+                      {{ $t('usage.auto-switch-goto-accounts') }}
+                    </button>
+                  </span>
+                </template>
                 <template #control>
                   <select
                     data-testid="quota-failover-mode"
@@ -6533,6 +6569,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
+.failover-next-line { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.failover-next-goto { padding: 0; border: 0; background: none; color: var(--accent-fg); font: inherit; cursor: pointer; }
+.failover-next-goto:hover { text-decoration: underline; }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {

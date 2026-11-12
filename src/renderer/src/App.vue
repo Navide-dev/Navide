@@ -439,6 +439,7 @@ import { runAgentAccountSwitch, switchRequester } from './lib/agentAccountSwitch
 import { channelAccountMenu, type ChannelAccountDeps } from './lib/channelAccountSwitch'
 import { runAgentPaneAccountSwitch } from './lib/agentPaneAccountSwitch'
 import { createAccountSwitchQueue } from './lib/accountSwitchQueue'
+import { publishQueuedAccountSwitches, setQueuedAccountSwitchCanceller } from './composables/useQueuedAccountSwitches'
 import { usePluginMainTab } from './lib/pluginMainTab'
 import {
   DEFAULT_SLOT_ID,
@@ -11136,9 +11137,14 @@ function openPanePolicySettings(): void {
     void settingsModalRef.value?.setSection('cross-device', 'general-p2p-policy')
   })
 }
-function openSettingsAccounts(): void {
+function openSettingsAccounts(section?: string): void {
   settingsInitialTab.value = 'accounts'
   showSettings.value = true
+  if (section) {
+    void nextTick(() => {
+      void settingsModalRef.value?.setSection('accounts', section)
+    })
+  }
 }
 // Status-bar update indicator: shares the updater state machine with ControlPane.
 // settings comes along for the check-failure threshold; whether a downloaded
@@ -11651,7 +11657,10 @@ registerCommand('workbench.action.closeActivePane', () => {
   return closeFocusedPane(paneId)
 })
 registerCommand('workbench.action.openSettings', () => { showSettings.value = true })
-registerCommand('workbench.action.openSettingsAccounts', () => openSettingsAccounts())
+registerCommand('workbench.action.openSettingsAccounts', (args) => {
+  const section = (args as { section?: unknown } | undefined)?.section
+  openSettingsAccounts(typeof section === 'string' ? section : undefined)
+})
 registerCommand('workbench.action.openSettingsChannels', () => openSettingsAt('channels'))
 registerCommand('workbench.action.openPipelineManager', () => { openPipelineManager() })
 registerCommand('workbench.action.openDebug', () => { openDebugModal() })
@@ -13132,7 +13141,8 @@ async function agentSignIn(args: Record<string, unknown>, callerPaneId: string, 
 // restarting a working pane, the switch waits in accountSwitchQueue until the
 // pane is idle and the request answers "queued" at once. The user is told
 // after the fact — a toast here, a row in the account switch log.
-const accountSwitchQueue = createAccountSwitchQueue()
+const accountSwitchQueue = createAccountSwitchQueue({ onChange: publishQueuedAccountSwitches })
+setQueuedAccountSwitchCanceller(accountSwitchQueue.cancel)
 
 interface SwitchToastContext {
   who: string
@@ -13178,7 +13188,7 @@ function toastAccountSwitch(outcome: Record<string, unknown>, ctx: SwitchToastCo
       t(outcome.paneName ? 'settings.accounts.cli.agent-switch-pane-queued' : 'settings.accounts.cli.agent-switch-queued', params),
       { type: 'info' },
     )
-  } else if (settledLater && status !== 'superseded') {
+  } else if (settledLater && status !== 'superseded' && status !== 'cancelled') {
     notifyRestore.toast(t('settings.accounts.cli.agent-switch-not-done', { ...params, status }), { type: 'info' })
   }
 }

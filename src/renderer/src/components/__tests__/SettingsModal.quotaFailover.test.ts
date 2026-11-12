@@ -71,8 +71,9 @@ describe('Settings ▸ quota failover policy and capability table', { timeout: 1
     vi.restoreAllMocks()
   })
 
-  async function mountGeneral(state: FailoverState | null) {
+  async function mountGeneral(state: FailoverState | null, before?: (mock: ReturnType<typeof createMockBackend>) => void) {
     const mock = createMockBackend('connected')
+    before?.(mock)
     mock.setResponse('onboarding.status', {
       deps: [], models: [], model_catalog: [], complete: true,
       gate: {}, cli_health: { entries: [], findings: [], needs_attention: false },
@@ -108,7 +109,11 @@ describe('Settings ▸ quota failover policy and capability table', { timeout: 1
           analyzerSettings: ref({ backend: 'ollama' }), health: ref(null), pulling: ref(false), pullProgress: ref(null),
           pullError: ref(''), models: ref([]), benchmarking: ref(false), benchmarkProgress: ref(null), benchmarkResults: ref([]),
         } as unknown as ModalProps['analyzerApi'],
-        cliProfilesApi: { identityFor: () => null, profilesForAgent: () => [] } as unknown as ModalProps['cliProfilesApi'],
+        cliProfilesApi: {
+          identityFor: () => null,
+          profilesForAgent: () => [],
+          findProfile: (id: string | null | undefined) => (id === 'bbbb' ? { name: 'Account B' } : undefined),
+        } as unknown as ModalProps['cliProfilesApi'],
       },
       global: {
         plugins: [i18n],
@@ -116,7 +121,7 @@ describe('Settings ▸ quota failover policy and capability table', { timeout: 1
           Teleport: true,
           SettingsSection: { template: '<section><slot /></section>' },
           SettingsCard: { template: '<div><slot /></div>' },
-          SettingRow: { template: '<div><slot /><slot name="control" /></div>' },
+          SettingRow: { template: '<div><slot /><slot name="description" /><slot name="control" /></div>' },
         },
       },
     })
@@ -203,5 +208,23 @@ describe('Settings ▸ quota failover policy and capability table', { timeout: 1
     await wrapper!.get('.s-search-input').setValue('quota')
     const hit = wrapper!.findAll('.s-search-result').find((r) => r.text().includes(i18n.global.t('settings.search.item.general-quota-failover.title')))
     expect(hit).toBeDefined()
+  })
+  it('keeps the policy in place and adds one line: the next account and the way to Accounts', async () => {
+    await mountGeneral(failoverState(), (mock) => {
+      mock.setResponse('quota_failover.candidates', {
+        candidates: [
+          { slotId: '__default__', tier: 'fresh-headroom', loginState: 'ok', excluded: 'current', headroom: 3, fetchedAt: null },
+          { slotId: 'bbbb', tier: 'fresh-headroom', loginState: 'ok', excluded: null, headroom: 82, fetchedAt: null },
+        ],
+      })
+    })
+    const row = wrapper!.get('[data-settings-section="general-quota-failover"]')
+    expect(row.find('[data-testid="quota-failover-mode"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-settings-section="general-quota-failover-loop"]').exists()).toBe(true)
+    const line = row.get('[data-testid="general-failover-next"]')
+    expect(line.text()).toContain(i18n.global.t('usage.auto-switch-next-headroom', { name: 'Account B', pct: 82 }))
+    await line.get('[data-testid="general-failover-goto"]').trigger('click')
+    await flushPromises()
+    expect((wrapper!.get('[data-settings-section="accounts"]').element as HTMLElement).style.display).not.toBe('none')
   })
 })

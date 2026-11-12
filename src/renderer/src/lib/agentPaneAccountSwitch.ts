@@ -134,6 +134,7 @@ export async function runAgentPaneAccountSwitch(
       waiting: () => (deps.paneBusy(plan.paneId) ? 1 : 0),
       run: attempt,
       settle: deps.onSettled,
+      show: { agentKey: plan.agentKey, to: String(first.to ?? ''), paneName: String(first.paneName ?? ''), waiting: 1 },
     })
   }
   return first
