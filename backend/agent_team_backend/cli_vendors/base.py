@@ -165,6 +165,10 @@ class Dep:
     # (JSON with a `latest_version` key), e.g. codex's 'version.json'. Read
     # only, to show "update available".
     latest_version_file: str = ""
+    # Where a non-npm install's newest release is read, for "update to y":
+    # 'pypi:<project>' or 'github:<owner>/<repo>' (its latest release tag).
+    # Empty = the npm registry when the dep names an npm_package, else none.
+    latest_source: str = ""
     # Which platforms this dep exists for at all. Empty = every platform.
     # Homebrew is the reason this field exists: offering "install the macOS
     # package manager" on Linux is not a degraded suggestion, it is a wrong

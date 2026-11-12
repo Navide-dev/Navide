@@ -54,14 +54,24 @@ const displayedDeps = computed(() => props.agentKey
   : cliDeps.value)
 let installTrigger: HTMLElement | null = null
 
-/** Last gate answer per gated dep (Dep.autoupdate_args): its update runs one
- *  at a time per machine, and only while every pane of that CLI is idle. */
+/** Last gate answer per installed agent CLI: an update runs one at a time per
+ *  machine, and only while every pane of that CLI is idle (on Windows: closed). */
 const gates = ref<Record<string, UpdateGate>>({})
 const GATE_POLL_MS = 3_000
 let gateTimer: ReturnType<typeof setInterval> | null = null
 
 function gated(dep: OnboardDep): boolean {
-  return !!dep.autoupdate_args?.length
+  return dep.group === 'agent_cli' && dep.status !== 'missing' && !!updateCommand(dep)
+}
+
+/** What "update" runs: the backend's plan for this install, else the vendor's. */
+function updateCommand(dep: OnboardDep): string {
+  return dep.update_plan?.command || dep.update_cmd
+}
+
+/** npm's global folder is root-owned: no button, say why (Navide never sudo). */
+function npmNotWritable(dep: OnboardDep): boolean {
+  return dep.update_plan?.reason === 'npm-prefix-not-writable'
 }
 
 async function refreshGates(): Promise<void> {
@@ -77,8 +87,9 @@ function updateBlocked(dep: OnboardDep): boolean {
 
 function gateReason(dep: OnboardDep, gate: UpdateGate | undefined = gates.value[dep.id]): string {
   if (!gate?.blocked) return ''
-  return gate.reason === 'update-running'
-    ? t('cli-manage.update-blocked-running')
+  if (gate.reason === 'update-running') return t('cli-manage.update-blocked-running')
+  return gate.reason === 'panes-open'
+    ? t('cli-manage.update-blocked-open', { label: dep.label, panes: gate.busy_panes.join(', ') })
     : t('cli-manage.update-blocked-busy', { label: dep.label, panes: gate.busy_panes.join(', ') })
 }
 
@@ -265,13 +276,19 @@ function formatTime(value: string): string {
 
       <div class="cm-actions">
         <button
-          v-if="dep.update_cmd"
+          v-if="updateCommand(dep) && !npmNotWritable(dep)"
           class="cm-btn"
+          :class="{ 'cm-update-to': dep.latest_version }"
+          data-testid="cli-update-button"
           :disabled="!!maintaining || runBusy || updateBlocked(dep)"
-          :title="updateBlocked(dep) ? gateReason(dep) : dep.update_cmd"
+          :title="updateBlocked(dep) ? gateReason(dep) : updateCommand(dep)"
           @click="run(dep, 'update')"
         >
-          {{ busy(dep, 'update') ? $t('cli-manage.opening') : $t('cli-manage.update', { command: dep.update_cmd }) }}
+          {{ busy(dep, 'update')
+            ? $t('cli-manage.opening')
+            : dep.latest_version
+              ? $t('cli-manage.update-to', { version: dep.latest_version })
+              : $t('cli-manage.update', { command: updateCommand(dep) }) }}
         </button>
         <a v-else-if="dep.docs_url" class="cm-btn link" :href="dep.docs_url" target="_blank" rel="noreferrer">
           {{ $t('cli-manage.update-via-docs') }}
@@ -311,7 +328,10 @@ function formatTime(value: string): string {
           </select>
         </label>
       </div>
-      <p v-if="dep.update_cmd && updateBlocked(dep)" class="cm-gate" data-testid="cli-update-gate">{{ gateReason(dep) }}</p>
+      <p v-if="updateCommand(dep) && updateBlocked(dep)" class="cm-gate" data-testid="cli-update-gate">{{ gateReason(dep) }}</p>
+      <p v-if="npmNotWritable(dep)" class="cm-gate" data-testid="cli-update-npm-not-writable">
+        {{ $t('cli-manage.update-npm-not-writable') }}
+      </p>
     </div>
 
     <!-- The maintenance command running (or last run) from this panel. -->
@@ -353,6 +373,7 @@ function formatTime(value: string): string {
 .cm-badge.missing { color: #8b95a3; }
 .cm-badge.outdated { color: #c77400; }
 .cm-badge.update-available { color: #1c7ed6; }
+.cm-btn.cm-update-to { border-color: var(--success-emphasis); color: var(--success-fg); font-weight: 600; }
 .cm-gate { font-size: var(--font-xs); color: var(--text-muted, #8b95a3); margin: 0; }
 .cm-version, .cm-method, .cm-scope { font-size: 11.5px; color: var(--text-muted, #8b95a3); }
 .cm-method { border: 1px solid var(--border-default); border-radius: 99px; padding: 0 8px; }

@@ -149,9 +149,12 @@ def test_update_available_ignores_a_malformed_cache(monkeypatch: pytest.MonkeyPa
     assert ob._update_available(ob.DEPS_BY_ID["codex"], "0.166.0") == ""
 
 
-def test_update_available_is_only_for_deps_that_declare_a_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_update_available_needs_a_channel_to_ask(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ob, "_npm_query", lambda _package: "99.0.0")
-    assert ob._update_available(ob.DEPS_BY_ID["claude"], "1.0.0") == ""
+    # An npm package is a channel too (0.2.42: every CLI, not only codex)...
+    assert ob._update_available(ob.DEPS_BY_ID["claude"], "1.0.0", query_registry=True) == "99.0.0"
+    # ...but a CLI that names none has nothing to compare against.
+    assert ob._update_available(ob.DEPS_BY_ID["cursor"], "1.0.0", query_registry=True) == ""
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX shell shim")
@@ -287,10 +290,29 @@ async def test_only_one_gated_update_runs_at_a_time(run_session: app.Session) ->
 
 
 @pytest.mark.asyncio
-async def test_an_ungated_update_is_unaffected(run_session: app.Session) -> None:
+async def test_every_agent_cli_update_is_gated(run_session: app.Session) -> None:
     _pane("claude-a", "claude", busy=True, status="running")
     reply = await _run_update(run_session, "claude")
-    assert reply["ok"] is True
+    assert reply["ok"] is False
+    assert reply["gate"]["busy_panes"] == ["claude-a"]
+
+
+@pytest.mark.asyncio
+async def test_a_doctor_run_is_not_gated(run_session: app.Session) -> None:
+    _pane("claude-a", "claude", busy=True, status="running")
+    await app.handle_message(run_session, {
+        "id": "d1", "type": "onboarding.run",
+        "payload": {"kind": "maintenance", "agent_key": "claude", "action": "doctor"},
+    })
+    assert run_session.websocket.sent[-1]["payload"]["ok"] is True  # type: ignore[attr-defined]
+
+
+def test_windows_gate_waits_for_every_open_pane(registry: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An idle CLI still holds its binary open on Windows."""
+    monkeypatch.setattr(ws_handlers.osplat, "platform_id", "win32")
+    _pane("codex-a", "codex")
+    _pane("codex-b", "codex", status="exited")
+    assert ws_handlers._update_gate("codex") == {"blocked": True, "reason": "panes-open", "busy_panes": ["codex-a"]}
 
 
 @pytest.mark.asyncio

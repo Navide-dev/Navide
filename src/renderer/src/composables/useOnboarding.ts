@@ -40,9 +40,23 @@ export interface OnboardDep {
   /** A newer release than `version`; '' when none or unknown. Absent on an
    *  older backend. */
   latest_version?: string
+  /** How "update" runs on the install Navide launches (agent CLIs, full
+   *  probe only). Absent on an older backend. */
+  update_plan?: UpdatePlan | Record<string, never>
   /** The install the user chose for Navide to launch; '' = the PATH default.
    *  Absent on an older backend. */
   binary_override?: string
+}
+
+/**
+ * The update the backend picked for the install Navide launches, by how that
+ * install got there: the npm beside it, Homebrew, or the CLI's own command.
+ * `command` is '' when Navide cannot update it; `reason` then says why.
+ */
+export interface UpdatePlan {
+  manager: '' | 'npm' | 'homebrew' | 'vendor'
+  command: string
+  reason: '' | 'npm-prefix-not-writable' | 'no-update-command' | 'unknown-install'
 }
 
 export interface OnboardGate {
@@ -98,6 +112,10 @@ export interface CliHealthEntry {
   docs_url: string
   /** npm package the backend judges ownership by; '' when not npm-installed. */
   npm_package: string
+  /** The active install's newer release ('' = none or unknown) and how it
+   *  would be updated. Absent on an older backend. */
+  latest_version?: string
+  update_plan?: UpdatePlan | Record<string, never>
   update_state: CliUpdateRecord[]
   candidates: CliHealthCandidate[]
 }
@@ -169,13 +187,16 @@ export interface InstallResult {
   unanswered?: boolean
   /** A gated update the backend refused to start (see UpdateGate). */
   gate?: UpdateGate
+  /** Why an update has no command, e.g. 'npm-prefix-not-writable'. */
+  reason?: string
 }
 
 /** Why a gated CLI update may not start now (onboarding.update_gate). */
 export interface UpdateGate {
   blocked: boolean
-  reason: '' | 'update-running' | 'panes-busy'
-  /** Names of this CLI's panes that are not idle. */
+  /** 'panes-open': Windows, where even an idle pane holds the binary open. */
+  reason: '' | 'update-running' | 'panes-busy' | 'panes-open'
+  /** Names of this CLI's panes that are not idle (open, for 'panes-open'). */
   busy_panes: string[]
 }
 

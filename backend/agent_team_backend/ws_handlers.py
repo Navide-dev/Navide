@@ -8220,9 +8220,8 @@ async def onboarding_status_quick(session: "Session", msg_id: str, msg_type: str
 ONBOARDING_RUN_AGENT_KEY = "onboarding-run"
 
 #: The one gated update running on this machine: (session, run id), or empty.
-#: Gated = an update of a dep whose update prompt Navide took over
-#: (Dep.autoupdate_args). Two global installs at once collide, and a running
-#: CLI holds its binary open on Windows.
+#: Gated = an update of any agent CLI. Two global installs at once collide,
+#: and a running CLI holds its binary open on Windows.
 _GATED_UPDATE_RUN: list[tuple["Session", str]] = []
 
 #: Pane states in which a CLI is doing something an update would pull the
@@ -8236,13 +8235,15 @@ def _gated_update_dep(payload: dict) -> Any:
     if payload.get("kind") != "maintenance" or payload.get("action") != "update":
         return None
     dep = app.onboarding_deps.DEPS_BY_ID.get(str(payload.get("agent_key") or ""))
-    return dep if dep is not None and dep.autoupdate_args else None
+    return dep if dep is not None and dep.group == "agent_cli" else None
 
 
 def _update_gate(agent_key: str) -> dict[str, Any]:
     """Why a gated update of `agent_key` may not start now, if it may not.
 
-    {blocked, reason ('' | 'update-running' | 'panes-busy'), busy_panes}.
+    {blocked, reason ('' | 'update-running' | 'panes-busy' | 'panes-open'),
+    busy_panes}. On Windows an idle pane still holds the binary open, so
+    every open pane of that CLI blocks it ('panes-open').
     """
     running = False
     if _GATED_UPDATE_RUN:
@@ -8259,6 +8260,14 @@ def _update_gate(agent_key: str) -> dict[str, Any]:
         if entry.agent_key == agent_key and entry.realized
         and (entry.busy or entry.display_status in _UPDATE_BLOCKING_STATES)
     )
+    if osplat.platform_id == "win32":
+        open_panes = sorted(
+            entry.name or entry.pane_id
+            for entry in agent_messaging.list_panes()
+            if entry.agent_key == agent_key and entry.realized and entry.display_status != "exited"
+        )
+        if open_panes:
+            return {"blocked": True, "reason": "panes-open", "busy_panes": open_panes}
     if busy:
         return {"blocked": True, "reason": "panes-busy", "busy_panes": busy}
     return {"blocked": False, "reason": "", "busy_panes": []}
