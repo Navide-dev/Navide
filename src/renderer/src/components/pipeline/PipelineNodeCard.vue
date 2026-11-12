@@ -8,6 +8,7 @@ import type { GraphNode, NodeRunState } from '../../lib/pipelineGraph'
 import type { LaneBadge } from '../../lib/pipelineGraphEdits'
 import { elapsedOf, formatElapsed, formatTokens, nodeTitle, runStatusKey } from './pipelineEditorModel'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from '../../lib/builtinPipelineText'
 
 const props = defineProps<{
   node: GraphNode
@@ -30,7 +31,7 @@ const tokens = computed(() => formatTokens(props.run?.tokens))
 const subtitle = computed(() => {
   const n = props.node
   if (n.kind === 'trigger') return t('pipelineEditor.node.trigger-sub')
-  if (n.kind === 'gate') return n.gate?.prompt || t('pipelineEditor.node.gate-sub')
+  if (n.kind === 'gate') return builtinTextForUi(n.gate?.prompt ?? '') || t('pipelineEditor.node.gate-sub')
   if (n.kind === 'subpipeline') return t('pipelineEditor.node.subpipeline-sub', { pipeline: n.subpipeline?.pipelineId ?? '' })
   // Identifiers only: the plugin id and its contributed node id.
   if (n.kind === 'plugin') return `${n.plugin?.pluginId ?? ''} · ${n.plugin?.node ?? ''}`

@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { invokeCommand, listCommands } from '@navide/plugin-ui/shared'
 import { currentDiagnosticSeq, takeDiagnosticsSince } from '../lib/uiDiagnostics'
 import { WINDOW_INSTANCE_ID } from '../lib/windowInstanceId'
+import { switchRequester } from '../lib/agentAccountSwitch'
 
 /**
  * Bridges an external MCP client's `ui.invoke.request` broadcasts into this
@@ -95,8 +96,12 @@ export interface UseUiActionBusOptions {
    *  backend. Absent (tests, plugin hosts): refused. */
   accountActions?: {
     signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
-    /** ui.accounts.switch (cli_account_switch). Absent: refused. */
+    /** ui.accounts.switch (cli_account_switch, the Telegram account button).
+     *  `callerPaneId` is '' for a switch the backend makes for a chat. Absent: refused. */
     switch?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+    /** ui.accounts.channelMenu: the rows of a chat's /account menu (channels
+     *  layer, never an MCP tool). Absent: refused. */
+    channelMenu?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
   }
 }
 
@@ -317,15 +322,20 @@ export async function handleUiInvokeRequest(
       } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
         const handler = req.action === 'ui.accounts.signIn'
           ? opts.accountActions?.signIn
-          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch : undefined
-        if (!req.caller_pane_id) {
+          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch
+            : req.action === 'ui.accounts.channelMenu' ? opts.accountActions?.channelMenu : undefined
+        // A switch the backend makes for a chat button (Telegram) names its
+        // requester and has no calling pane; only the backend can send one,
+        // since ui_invoke refuses every ui.accounts.* action.
+        const backendSwitch = req.action === 'ui.accounts.switch' && !!switchRequester(req.args ?? {})
+        if (!req.caller_pane_id && !backendSwitch) {
           ok = false
           error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
         } else if (!handler) {
           ok = false
           error = `unknown account action: ${req.action}`
         } else {
-          result = await handler(req.args ?? {}, req.caller_pane_id, signal)
+          result = await handler(req.args ?? {}, req.caller_pane_id ?? '', signal)
         }
       } else if (req.action === 'ui.pane.reclaim' && req.caller_pane_id && reclaimNamesCaller(req)) {
         // A batch can half succeed: the caller's own pane becomes one more

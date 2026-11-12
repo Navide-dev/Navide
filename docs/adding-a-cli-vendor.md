@@ -109,6 +109,13 @@ You never need to read or modify the shared orchestration code.
     becomes a vendor, move that declaration onto its spec (the vendor spec
     wins while both exist).
 
+11. A vendor whose hooks post to `/hooks/<key>` but which ships no log reader
+    sets `hook_pane_token=True`: no session of it is ever attributed, so the
+    spawn puts a per-pane token in the pane's environment
+    (`NAVIDE_GUARD_PANE_TOKEN`), the hook command sends it as
+    `X-Navide-Pane-Token`, and `cli_hook` names the pane by it. Only vendors
+    declaring it are looked up this way (Kiro CLI is the first).
+
 ## Frontend
 
 1. Copy `src/renderer/src/platform/plugin-shell/agents/_template.ts` to `agents/<key>.ts` and

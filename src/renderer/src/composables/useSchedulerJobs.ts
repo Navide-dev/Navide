@@ -36,6 +36,15 @@ const DAY_MS = 86_400_000
 
 export type Light = 'running' | 'off' | 'err' | 'skip' | 'ok' | 'new'
 
+// One window can hold several instances (App.vue's behind the agent console,
+// TaskerPanel's), and the backend leaves the requesting window out of its
+// scheduler.changed broadcast: the window refreshes itself. So a list any
+// instance fetches goes to every mounted one, and the request number is shared
+// so an older list still in flight never overwrites a newer one.
+type ListApplier = (jobs: SchedulerJob[], limits: SchedulerLimits | null) => void
+const mountedInstances = new Set<ListApplier>()
+let listSeq = 0
+
 export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   const { t, te } = useI18n()
 
@@ -190,7 +199,11 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     return t('scheduler.when-backoff', { time: formatClock(until) })
   }
 
-  let listSeq = 0
+  const applyList: ListApplier = (list, lim) => {
+    jobs.value = list
+    limits.value = lim
+    listError.value = ''
+  }
 
   async function refresh(): Promise<void> {
     if (backend.status.value !== 'connected') return
@@ -208,9 +221,10 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
       )
       if (seq !== listSeq) return
       if (resp.ok && resp.payload && resp.payload.ok !== false) {
-        jobs.value = resp.payload.jobs ?? []
-        limits.value = resp.payload.limits ?? null
-        listError.value = ''
+        const list = resp.payload.jobs ?? []
+        const lim = resp.payload.limits ?? null
+        applyList(list, lim)
+        for (const apply of mountedInstances) if (apply !== applyList) apply(list, lim)
       } else listError.value = resp.error?.message ?? resp.payload?.error ?? 'scheduler.list failed'
     } catch (err) {
       if (seq !== listSeq) return
@@ -289,6 +303,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   let offChanged: (() => void) | null = null
 
   onMounted(() => {
+    mountedInstances.add(applyList)
     offChanged = backend.on('scheduler.changed', (p) => {
       const next = (p as { jobs?: SchedulerJob[] } | null)?.jobs
       if (Array.isArray(next)) jobs.value = next
@@ -306,6 +321,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   )
 
   onUnmounted(() => {
+    mountedInstances.delete(applyList)
     offChanged?.()
     if (tick !== null) clearInterval(tick)
     for (const timer of graceTimers.values()) clearTimeout(timer)

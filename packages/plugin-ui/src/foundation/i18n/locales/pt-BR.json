@@ -510,6 +510,7 @@
     "hold-mid-turn": "O agent de destino está no meio de um turno",
     "hold-settling": "Aguardando o destino se estabilizar",
     "hold-composer": "A caixa de entrada ainda contém o último envio",
+    "hold-model-switch": "O pane de destino está trocando de modelo",
     "hold-pty-blocked": "Gravado – aguardando o destino ler a entrada",
     "hold-remote-ack": "Enviado – aguardando o retorno da janela de destino",
     "hold-cancelling": "Retirando – aguardando a resposta da janela de destino",
@@ -1074,6 +1075,8 @@
       "stale-config-tooltip-mcp": "Os servidores MCP desta CLI mudaram depois que o painel foi aberto. Ela mantém a lista antiga até ser reconstruída. Clique para reconstruir (retomar a conversa).",
       "stale-config-tooltip-skills": "As skills entregues a esta CLI mudaram depois que o painel foi aberto. Ela pode manter as antigas até ser reconstruída. Clique para reconstruir (retomar a conversa).",
       "stale-config-tooltip-both": "Os servidores MCP e as skills desta CLI mudaram depois que o painel foi aberto. Ela mantém os antigos até ser reconstruída. Clique para reconstruir (retomar a conversa).",
+      "update-available-badge": "Atualização disponível",
+      "update-available-tooltip": "{latest} está disponível (este painel usa {version}). Clique para atualizar nas Configurações.",
       "usage-limit-badge": "⛔ volta {time}",
       "usage-limit-badge-unknown": "⛔ sem cota",
       "usage-limit-tooltip": "Esta CLI está sem cota: deve voltar às {time}. Clique para dispensar",
@@ -1251,6 +1254,10 @@
     "remove-selected": "Remover selecionados",
     "remove-children": "Remover {count} subpanes",
     "remove-children-title": "Fecha apenas os agents que este pane criou; o pane em si permanece",
+    "fix-children-account": "Fixar {count} subpanes em {account}",
+    "fix-children-account-mine": "Fixar {count} subpanes na minha conta",
+    "fix-children-account-title": "Reabre cada subpane na pasta própria de {account}, fixa-o ali e retoma a conversa. As trocas de conta não os movem mais.",
+    "fix-children-account-default": "A conta Padrão integrada não tem pasta própria; por isso, não é possível fixar subpanes nela. Mude primeiro este pane para outra conta.",
     "remove-with-children": "Remover todos os {count} panes",
     "remove-with-children-title": "Fecha este pane junto com todos os agents que ele criou",
     "run-pipeline": "▶ Executar pipeline",
@@ -1756,6 +1763,10 @@
         "settings-management": {
           "title": "Gerenciamento de configurações",
           "summary": "Exporte ou importe o pacote completo de configurações e veja onde elas ficam armazenadas."
+        },
+        "general-experimental": {
+          "title": "Recursos experimentais",
+          "summary": "A arena de modelos e outros recursos em teste"
         },
         "general-p2p": {
           "title": "Navide Cloud",
@@ -2845,7 +2856,7 @@
             }
           },
           "resource": {
-            "caption": "A janela do Resource Manager. Os números e as varreduras só são atualizados quando você clica em Atualizar.",
+            "caption": "A janela do Resource Manager. Os números de {cpu} e {memory} se atualizam sozinhos enquanto ela está aberta; a varredura do disco só roda quando você clica em {scan}.",
             "legend": {
               "totals": {
                 "label": "Os três cartões no topo",
@@ -2883,15 +2894,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "O que cada uma das dezenove guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as partes do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visualizações de uso e a manutenção de recursos.",
+        "intro": "O que cada uma das {tabCount} guias de configurações controla, como o Navide Cloud liga várias máquinas em uma rede privada e as superfícies do sistema que ficam fora da tela principal: os menus, as janelas independentes, as visões de uso e a manutenção de recursos.",
         "s1": {
           "title": "Visão geral das configurações",
-          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">⌘,</kbd>; o botão de engrenagem na barra de título é o mesmo ponto de entrada. A barra lateral esquerda é dividida em cinco grupos, com <strong>27 guias</strong> no total.",
+          "p1": "A janela de configurações abre com <kbd class=\"syh-kbd\">{settingsKey}</kbd>; o botão de engrenagem na barra de título leva ao mesmo lugar. A barra lateral esquerda é dividida em {groupCount} grupos, <strong>{tabCount} guias</strong> no total.",
           "h1": "O campo de pesquisa",
           "p2": "Abaixo do título da barra lateral há um campo de pesquisa com o texto de exemplo <code>Pesquisar configurações…</code>. Ele procura nos títulos das configurações, na seção e nas palavras-chave <strong>em todas as guias</strong> (no idioma atual da interface e com as palavras-chave indexadas) e mostra no máximo 8 resultados; clicar em um deles abre a guia correspondente e rola até a seção (com uma exceção: “Armazenamento” fecha as configurações e abre diretamente o Resource Manager). Sem resultados, aparece <code>Nenhuma configuração correspondente</code>. <kbd class=\"syh-kbd\">Esc</kbd> limpa o campo.",
           "callout": {
             "title": "O índice de pesquisa não é completo",
-            "text": "O índice é uma lista mantida à mão, e <strong>as guias {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
+            "text": "O índice é uma lista mantida à mão, e <strong>as guias {agents}, {layout}, {notifications}, {security} e {channels} não têm nenhuma entrada</strong>, então nada dentro delas pode ser pesquisado: é preciso abri-las manualmente. Uma entrada de Agents de CLI abre diretamente o painel lateral de configurações de uma CLI (veja o tópico “Agents de CLI e contas”)."
           },
           "h2": "As vinte e sete guias",
           "tabTable": {
@@ -2910,7 +2921,7 @@
               "more": "seção 2 desta página"
             },
             "language": {
-              "what": "Idioma da interface para todos os workspaces: chinês tradicional, inglês ou japonês",
+              "what": "Idioma da interface para todos os workspaces, entre {languageCount} idiomas ({betaCount} deles em Beta)",
               "more": "seção 2 desta página"
             },
             "statusBadges": {
@@ -3022,7 +3033,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "Perguntar antes que ⌘W feche um pane. Um pane no meio de um turno sempre pergunta, independentemente desta chave.",
+              "desc": "Perguntar antes que {closePaneKey} feche um pane. Um pane no meio de um turno sempre pergunta, independentemente desta chave.",
               "fallback": "Ativado"
             },
             "confirmCloseWorkspace": {
@@ -3086,16 +3097,16 @@
           "appearance": {
             "theme": "<strong>Tema</strong>: cinco integrados, Dark (GitHub), Midnight, Forest, Light e High Contrast, sendo Dark (GitHub) o padrão.",
             "colors": "<strong>Cores personalizadas</strong>: oito tokens de cor que podem ser substituídos (fundo, superfície, texto, texto secundário, borda, destaque, sucesso, perigo). As substituições ficam por cima do tema atual e <strong>são mantidas quando você troca de tema</strong>; <em>↺ Restaurar padrões</em> as desfaz.",
-            "uiScale": "<strong>Escala da interface</strong>: a primeira linha do bloco <strong>Aparência ▸ Outros</strong>, e é uma <strong>lista suspensa</strong>, não um controle deslizante: seis níveis (80%, 90%, 100%, 110%, 125%, 150%; 100% por padrão), com <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. Ela controla o zoom de página do Electron em vez de uma variável CSS, então texto, ícones, bordas e espaçamentos mudam juntos, e o processo principal a aplica a <strong>todas as janelas</strong>, inclusive as dos plug-ins do Navide. É um <strong>eixo separado</strong> do tamanho da fonte do pane: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> mudam só o tamanho da fonte do <strong>conteúdo</strong> do terminal (um valor compartilhado por todos os panes de CLI da janela), enquanto a escala da interface muda a estrutura ao redor; e as duas <strong>se multiplicam</strong>, assim como o zoom de página de um navegador se multiplica com o tamanho de fonte próprio de um site.",
+            "uiScale": "<strong>Escala da interface</strong>: a primeira linha do bloco <strong>Aparência ▸ Outros</strong>, e é uma <strong>lista suspensa</strong>, não um controle deslizante: seis níveis (80%, 90%, 100%, 110%, 125%, 150%; 100% por padrão), com <kbd class=\"syh-kbd\">{uiZoomIn}</kbd> / <kbd class=\"syh-kbd\">{uiZoomOut}</kbd> / <kbd class=\"syh-kbd\">{uiZoomReset}</kbd>. Ela controla o zoom de página do Electron em vez de uma variável CSS, então texto, ícones, bordas e espaçamentos mudam juntos, e o processo principal a aplica a <strong>todas as janelas</strong>, inclusive as dos plug-ins do Navide. É um <strong>eixo separado</strong> do tamanho da fonte do pane: <kbd class=\"syh-kbd\">{fontZoomIn}</kbd> / <kbd class=\"syh-kbd\">{fontZoomOut}</kbd> / <kbd class=\"syh-kbd\">{fontZoomReset}</kbd> mudam só o tamanho da fonte do <strong>conteúdo</strong> do terminal (um valor compartilhado por todos os panes de CLI da janela), enquanto a escala da interface muda a estrutura ao redor; e as duas <strong>se multiplicam</strong>, assim como o zoom de página de um navegador se multiplica com o tamanho de fonte próprio de um site.",
             "restore": "<strong>Restaurar janelas</strong>: reabre as janelas de workspaces que estavam abertas quando você saiu pela última vez."
           },
           "callout": {
             "title": "Notificações e som ficam na guia Notificações",
             "text": "As chaves de notificação existem, só não ficam em Aparência, e sim na <strong>guia Notificações</strong>, e são três: <em>Notificações do sistema</em> (uma notificação na área de trabalho quando uma CLI termina o turno ou precisa da sua resposta enquanto o Navide está em segundo plano; o selo do Dock continua contando de qualquer forma), <em>Som de notificação</em> (um toque curto ao terminar um turno e um bipe duplo enquanto uma CLI espera por você) e <em>Permissão de notificações</em>: o macOS não informa a autorização real ao Navide, então esta linha só pode enviar uma notificação de teste para você confirmar que ela aparece; se não aparecer, permita o Navide em Ajustes do Sistema → Notificações. Esta última linha só aparece nas plataformas em que se aplica."
           },
-          "language": "O idioma é uma guia própria, não faz parte de Aparência. <strong>Três idiomas</strong>: <code>繁體中文</code>, <code>English</code> e <code>日本語</code>. Até você escolher um, o Navide segue o idioma do sistema (chinês tradicional quando o idioma do sistema não é nenhum dos três). É uma preferência do usuário e vale para todos os workspaces.",
+          "language": "Idioma é uma guia própria, não faz parte de Aparência. São <strong>{languageCount} idiomas</strong>, cada um listado com o próprio nome — <code>繁體中文</code>, <code>English</code>, <code>日本語</code> e assim por diante; os {betaCount} marcados como Beta são traduzidos por máquina e ainda aguardam revisão de falantes nativos. Até você escolher, o Navide segue o idioma do sistema ({fallbackLanguage} quando o idioma do sistema não é nenhum deles). É uma preferência do usuário e vale para todos os workspaces.",
           "h3": "Selos de status",
-          "p1": "<strong>Renomeie e mude a cor</strong> de cada um dos nove estados de um pane. Os nomes em chinês, inglês e japonês são preenchidos separadamente (24 caracteres cada; deixe um em branco para voltar à tradução integrada). Depois da alteração, os selos dos panes, a barra lateral, a barra de reunião e o painel de recursos passam a segui-la. <strong>A configuração fica na sua conta, não no projeto.</strong>",
+          "p1": "<strong>Renomeie e mude a cor</strong> de cada um dos {stateCount} estados de um pane. Há um campo de nome por idioma da interface ({languageCount} no total, 24 caracteres cada). Um campo em branco recorre a outro valor: chinês tradicional, inglês e japonês voltam direto à tradução embutida, enquanto qualquer outro idioma usa primeiro o seu nome em inglês, depois o em chinês tradicional e só então a tradução embutida. Depois da mudança, os selos dos panes, a barra lateral, a barra de reunião e o painel de recursos acompanham. <strong>A configuração fica na sua conta, não no projeto.</strong>",
           "statusTable": {
             "state": "Estado",
             "when": "Quando um pane está nele",
@@ -3140,7 +3151,7 @@
             "title": "A raiz compartilhada",
             "text": "As skills criadas pelo Navide sempre ficam em <code>~/.agents/skills</code>. Esta página <strong>nunca move nem reescreve</strong> as skills da pasta própria de uma CLI: elas são apenas espelhadas para que você possa vê-las e atribuí-las a outras CLIs. (A única exceção explícita é <em>Mover para a biblioteca compartilhada</em>, que move os arquivos, deixa um link simbólico no lugar e pode ser desfeita.)"
           },
-          "p2": "A página tem duas visualizações, <strong>Navegar</strong> (cartões) e <strong>Distribuição</strong> (a matriz de atribuição). A matriz tem as 15 CLIs no topo e as skills na lateral; cada célula está em um de quatro estados, e cada linha tem os botões em lote <em>Todas</em> / <em>Nenhuma</em>:",
+          "p2": "A página tem duas visualizações, <strong>Navegar</strong> (cartões) e <strong>Distribuição</strong> (a matriz de atribuição). A matriz tem as {cliCount} CLIs no topo e as skills na lateral; cada célula está em um de quatro estados, e cada linha tem os botões em lote <em>Todas</em> / <em>Nenhuma</em>:",
           "matrixTable": {
             "cell": "Célula",
             "meaning": "Significado",
@@ -3160,7 +3171,7 @@
             "none": {
               "cell": "— sem mecanismo de skills",
               "meaning": "Essa CLI não tem nenhuma noção de skills, então não há nada a conectar.",
-              "who": "4: aider, droid, kilo e mcode"
+              "who": "8: aider, devin, droid, goose, hermes, kilo, mcode e openclaw"
             },
             "pending": {
               "cell": "· compatível, ainda não conectada",
@@ -3188,14 +3199,14 @@
             "notCreated": "Um arquivo que ainda não existe é marcado como <em>Não criado</em>: salvar o cria, junto com as pastas superiores que estiverem faltando.",
             "reload": "Se outro programa alterar o arquivo enquanto você o edita, o editor para e pede que você escolha primeiro <em>Recarregar do disco (descarta seu rascunho)</em>, em vez de sobrescrever o seu trabalho ou o do outro programa."
           },
-          "p6": "O bloco <strong>Cobertura das CLIs</strong>, na parte inferior, separa as 15 CLIs em três grupos:",
+          "p6": "O bloco <strong>Cobertura das CLIs</strong>, na parte inferior, separa as {cliCount} CLIs em três grupos:",
           "coverageTable": {
             "category": "Categoria",
             "meaning": "Significado"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "O Navide sabe onde esta CLI guarda suas instruções. 14 CLIs estão neste grupo."
+              "value": "O Navide sabe onde esta CLI guarda suas instruções. Todas as CLIs, exceto o aider, estão neste grupo."
             },
             "configured": {
               "value": "Só o aider. Ele não tem um nome de arquivo próprio: lê o que o campo read: do .aider.conf.yml indicar, então o que você colocar ali é o que aparece aqui (até 20). CONVENTIONS.md é apenas um nome sugerido pela documentação; o programa em si não o conhece."
@@ -3216,7 +3227,7 @@
           "shortcuts": {
             "record": "Clicar em uma caixa de tecla inicia a <strong>gravação</strong> ali mesmo; <code>+</code> adiciona uma segunda combinação; <code>✕</code> remove uma. Uma sequência tem no máximo duas etapas.",
             "instant": "As alterações são <strong>gravadas imediatamente em <code>keybindings.json</code></strong> e aplicadas a todas as janelas abertas; não há botão de salvar.",
-            "search": "O campo de pesquisa procura ao mesmo tempo nos nomes dos comandos e na notação das teclas (tanto <code>cmd+shift+p</code> quanto <kbd class=\"syh-kbd\">⌘⇧P</kbd> encontram o atalho); três filtros: <em>Todos</em> / <em>Personalizados</em> / <em>Conflitos</em>.",
+            "search": "O campo de pesquisa procura ao mesmo tempo nos nomes dos comandos e na notação das teclas (tanto <code>cmd+shift+p</code> quanto <kbd class=\"syh-kbd\">{paletteKey}</kbd> encontram o atalho); três filtros: <em>Todos</em> / <em>Personalizados</em> / <em>Conflitos</em>.",
             "conflicts": "<em>Conflitos</em> marca as combinações que se chocam e explica se uma sempre prevalece ou se <em>Ativo quando</em> as mantém separadas.",
             "reset": "<em>Restaurar padrão</em> em cada linha, <em>Redefinir tudo</em> para a página. <em>Exportar</em> / <em>Importar</em> transferem as configurações, e <strong>a importação substitui em vez de mesclar</strong>: primeiro informa quantas entradas foram descartadas e quantas foram importadas, e lista as rejeitadas."
           },
@@ -3242,7 +3253,7 @@
               "fallback": "Ativado, 3 falhas"
             },
             "autoDownload": {
-              "toggle": "Baixar atualizações automaticamente",
+              "toggle": "Baixar atualizações automaticamente (só versões de correção; atualizações menores e maiores sempre esperam por você)",
               "fallback": "Ativado"
             },
             "retryDownload": {
@@ -3356,15 +3367,18 @@
             "text": "O menu de menções <code>{'@'}</code> da entrada do pane lista apenas panes <strong>locais</strong> (inclusive os de outras janelas desta máquina) e não tem botão para inserir um endereço de outro dispositivo. Endereços de outros dispositivos são escritos na linha <code>to:</code> do agent ou enviados por uma ferramenta MCP (veja o tópico “Colaboração entre agents”). Quando a entrega falha, a resposta é <code>device-offline</code>, <code>unknown-target</code>, <code>link-offline</code> ou <code>link-unauthorized</code>; observe também que as conversas de resposta não atravessam máquinas."
           },
           "h6": "Sincronização (manter várias máquinas iguais)",
-          "p11": "O primeiro bloco de Configurações ▸ Navide Cloud se chama Sincronização. <strong>Não é uma guia separada</strong>: é a seção superior desta mesma página. Cada escopo sincronizável tem uma linha com uma chave; ative uma, e esse escopo fica igual em todos os dispositivos conectados à <strong>mesma conta</strong>. Os registros são <strong>criptografados nesta máquina</strong>, e o servidor só guarda texto cifrado para o qual não tem chave.",
+          "p11": "O primeiro bloco de Configurações ▸ Navide Cloud se chama Sincronização. Enquanto o Navide Cloud está conectado, a página tem três subguias — <strong>{sync}</strong>, <strong>{share}</strong> e <strong>{devices}</strong> — e a sincronização é a primeira; sem conexão, a página mostra só o conteúdo de sincronização. Cada escopo sincronizável tem uma linha com um interruptor; ative-o e esse escopo fica igual em todos os dispositivos conectados à <strong>mesma conta</strong>. Os dados são <strong>criptografados nesta máquina</strong>, e o servidor só guarda texto cifrado para o qual não tem a chave.",
           "sync": {
             "scopes": "<strong>Cinco linhas, uma por página de Recursos de agent e na ordem da barra lateral; três podem ser ativadas</strong>: <em>MCP</em> (os servidores que você adicionou no Navide; os segredos deles são criptografados antes de sair), <em>Skills</em> (quais skills estão ativas e para quais CLIs cada uma vai, além dos arquivos das skills criadas no Navide; as skills que você mesmo colocou na pasta sincronizam só as configurações) e <em>Prompts</em> (as skills de prompt e o prompt do Loop).",
             "credentials": "<em>Memória</em> e <em>Extensões</em> <strong>aparecem, mas em cinza</strong>, e a linha delas diz “ainda não sincronizável”. Isso não significa “desativado por padrão, esperando você ativar”: a chave não se move. Uma chave de Memória que uma versão anterior deixou ativada ainda pode ser desativada. <em>Credenciais e chaves</em> não tem linha nenhuma: as credenciais de conta e as chaves nunca saem desta máquina. Uma chave de Credenciais e chaves que uma versão anterior deixou ativada é tratada como desativada. As configurações de MCP, com a sincronização ativada, são criptografadas nesta máquina antes do envio, e o servidor não tem chave para descriptografá-las.",
             "states": "Dois estados são indicados abaixo do bloco: <em>não conectado</em> (os escopos que você ativou se atualizam quando a conexão volta) e <em>este dispositivo ainda não tem chave de sincronização</em> (nada é enviado até que tenha). Há também um botão <em>Sincronizar agora</em>, ativo apenas com conexão.",
             "key": "<strong>A chave de sincronização é exibida como os 8 primeiros caracteres do ID dela</strong>, nunca como a própria chave. <em>Trocar chave</em> exige <strong>dois cliques</strong>: o primeiro a transforma em <em>Trocar agora</em> e adiciona <em>Cancelar</em> ao lado. A troca aposenta a chave atual, sela de novo cada registro sincronizado com uma chave nova e entrega a nova chave aos seus outros dispositivos na próxima troca de chaves: é o que fazer quando você acha que uma chave vazou.",
             "legacy": "<em>Adotar para esta conta</em> só aparece quando este dispositivo tem uma chave de sincronização de antes da vinculação das contas <em>e</em> esta conta ainda não tem chave. É uma escolha única: sem adotá-la, você não consegue ler o que foi sincronizado com essa chave, e gerar uma chave nova no lugar deixaria esses registros ilegíveis para sempre.",
-            "conflicts": "Quando dois dispositivos alteram o mesmo item, <strong>nenhum dos lados é sobrescrito</strong>. Ele aparece em “Precisa da sua decisão” com as duas versões lado a lado, e você clica em <em>Manter este</em> ou <em>Manter o outro</em>. Um conflito de credenciais mostra só qual é o espaço (<code>vendor / slot</code>), nunca o conteúdo."
-          }
+            "conflicts": "Quando dois dispositivos alteram o mesmo item, <strong>nenhum dos lados é sobrescrito</strong>. Ele aparece em “Precisa da sua decisão” com as duas versões lado a lado, e você clica em <em>Manter este</em> ou <em>Manter o outro</em>. Um conflito de credenciais mostra só qual é o espaço (<code>vendor / slot</code>), nunca o conteúdo.",
+            "inventory": "<strong>{inventory}</strong>: para cada seção sincronizada, quantos itens ela tem aqui e na nuvem, quantos coincidem, quantos estão em conflito e qual dispositivo gravou nela por último."
+          },
+          "share": "A subguia <strong>{share}</strong> lista todos os links de compartilhamento que esta conta criou, em qualquer um de seus dispositivos. Para um link que ainda abre, você pode usar <em>{copyLink}</em>, somar sete dias com <em>{extend}</em>, trocá-lo com <em>{rekey}</em> (o novo link é copiado e o antigo para de abrir) ou revogá-lo com <em>{revoke}</em>; <em>{revokeAll}</em> encerra todos os links de uma vez. Antes de revogar, há uma confirmação. Os agentes criam e gerenciam os mesmos links com as ferramentas MCP <code>share_create</code>, <code>share_list</code> e <code>share_revoke</code>.",
+          "devices": "A subguia <strong>{devices}</strong> lista cada dispositivo que já gravou na nuvem desta conta, com a gravação mais recente primeiro, junto com quando gravou pela última vez e quando esteve on-line pela última vez."
         },
         "s6": {
           "title": "Menus, janelas independentes e agendamentos",
@@ -3403,7 +3417,7 @@
           "h2": "O menu Ajuda",
           "helpMenu": {
             "github": "<strong>Navide no GitHub</strong> e <strong>Relatar um problema…</strong>: abrem o projeto no GitHub e a página de issues dele.",
-            "shortcuts": "<strong>Atalhos de teclado</strong>: abre a guia Atalhos nas configurações. Este item de menu <strong>não mostra atalho</strong>; pelo teclado, é a sequência <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd>.",
+            "shortcuts": "<strong>Atalhos de teclado</strong>: abre a guia Atalhos nas configurações. Este item de menu <strong>não mostra atalho</strong>; pelo teclado, é a sequência <kbd class=\"syh-kbd\">{shortcutsKey}</kbd>.",
             "legal": "Seis páginas jurídicas, nesta ordem: <em>Privacidade</em>, <em>Política de segurança</em>, <em>Código de conduta</em>, <em>Limites</em>, <em>Licenças</em> e <em>Avisos legais</em>, cada uma abrindo a página correspondente em navide.dev. (<strong>Não há termos de serviço</strong>, e isso é proposital.)"
           },
           "callout1": {
@@ -3432,7 +3446,7 @@
             }
           },
           "p2": "O nível do sistema é somente leitura porque mexer nele exige root, e o Navide nunca pede isso; o back-end também bloqueia, não só a interface. Os daemons, em especial, geralmente só conseguem mostrar o estado como <code>Estado desconhecido (requer root)</code>. Cada linha se expande para mostrar Agendamento / Comando / Linha original, ou Rótulo / Escopo / Caminho do plist / Último código de saída / Estado. Remover fica no menu ⋯ de cada linha; remover um LaunchAgent <strong>o descarrega e exclui o plist dele permanentemente</strong>, e pede confirmação antes.",
-          "note2": "Aqui <strong>não há “executar agora” nem “mostrar no Finder”</strong>, só desativar/ativar e remover. Acima ficam <em>Verificar novamente</em> e o horário da última verificação.",
+          "note2": "Nas linhas de crontab e launchd <strong>não há “executar agora” nem “mostrar no Finder”</strong>, só desativar/ativar e remover. As tarefas do próprio Navide (criadas no Navide ou por um agente com <code>scheduler_upsert</code>) permitem mais: um interruptor, <em>{runNow}</em>, e o nome abre <em>{edit}</em>, onde também fica <em>{remove}</em>. Uma tarefa que falha mostra <em>{repair}</em>, uma cujo pane de origem foi fechado oferece <em>{adopt}</em>, a tarefa periódica de um agente prestes a se desativar oferece <em>{keep}</em>, e uma cujo pane de destino sumiu oferece <em>{retarget}</em>. Tarefas marcadas <em>{systemTag}</em> (autoevolução) ficam bloqueadas. Acima da lista ficam <em>{rescan}</em> e o horário da última verificação.",
           "h4": "As outras janelas abertas pela interface",
           "otherTable": {
             "window": "Janela",
@@ -3441,15 +3455,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "Uma nova janela principal",
-              "how": "Arquivo ▸ Nova janela (⌘N)"
+              "how": "Arquivo ▸ Nova janela ({newWindowKey})"
             },
             "editor": {
               "window": "A janela do editor (Mini-IDE)",
-              "how": "⌘⇧I, ou clique em um arquivo no explorador, nos resultados da pesquisa ou em um link de arquivo no terminal (veja o tópico “Fluxo de trabalho com código”)"
+              "how": "{miniIdeKey}, ou clique em um arquivo no explorador, nos resultados da pesquisa ou em um link de arquivo no terminal (veja o tópico “Fluxo de trabalho com código”)"
             },
             "git": {
               "window": "A janela do Git",
-              "how": "Abrir em nova janela, no cabeçalho do painel do Git, ou ⌘⇧G"
+              "how": "Abrir em nova janela, no cabeçalho do painel do Git, ou {gitWindowKey}"
             },
             "diff": {
               "window": "Uma visualização de diff",
@@ -3474,7 +3488,7 @@
           },
           "callout2": {
             "title": "Duas coisas fáceis de interpretar errado",
-            "text": "<strong>O histórico do Git não tem janela própria</strong>: “Ver histórico completo” abre a visualização do histórico dentro da janela do Git. <strong>O <kbd class=\"syh-kbd\">⌘⇧D</kbd> também não abre mais uma janela</strong>; ele só muda a barra lateral esquerda para a guia Plans. Para abrir a janela de Plans, parta de um documento de plano."
+            "text": "<strong>O histórico do Git não tem janela própria</strong>: “Ver histórico completo” abre a visualização do histórico dentro da janela do Git. <strong>O <kbd class=\"syh-kbd\">{plansKey}</kbd> também não abre mais uma janela</strong>; ele só muda a barra lateral esquerda para a guia Plans. Para abrir a janela de Plans, parta de um documento de plano."
           },
           "note3": "Quando um workspace já está aberto em outra janela, o Navide não abre uma segunda cópia: traz aquela janela para a frente."
         },
@@ -3525,7 +3539,7 @@
           "orphans": {
             "leftover": "<strong>Processos de CLI remanescentes</strong>: quando <code>⚠ N restantes</code> aparece na barra de status, clicar nele pergunta “Foram encontrados N processos de CLI restantes de uma execução anterior; eles podem esgotar a memória. Limpar?”, com <em>Limpar</em> para removê-los e <em>Dispensar</em> para pular. São processos que a execução anterior não limpou.",
             "backend": "<strong>Back-end</strong>: clicar na pílula Back-end da barra de status mostra o endereço e o PID, além de dois botões: <em>Reiniciar</em> (<em>Iniciar</em> quando desconectado) e <em>Parar</em> (só quando conectado). <strong>Reiniciar o back-end derruba todos os processos de CLI</strong>; para que as conversas sejam retomadas automaticamente quando ele voltar, ative <em>Retomar as sessions após o serviço em segundo plano do Navide reiniciar</em> na guia Geral.",
-            "timeout": "Quando o back-end dá erro por demorar demais para iniciar, aumente <em>Tempo limite de inicialização do back-end</em> (15–120 segundos) na guia Aparência."
+            "timeout": "Quando o back-end dá erro por demorar demais para iniciar, aumente <em>Tempo limite de inicialização do back-end</em> (15–120 segundos) na guia {generalTab}."
           },
           "h4": "Manutenção em resumo",
           "maintenanceTable": {
@@ -3604,7 +3618,7 @@
           "tokenMonitor": {
             "controls": "Duas listas suspensas no topo: <strong>dias</strong> (14 / 30 / 90) e <strong>modelo</strong> (todos ou um). <em>Atualizar</em> fica ao lado e fica desativado enquanto o back-end não está conectado.",
             "stats": "Cinco números: <strong>turnos, total de tokens, média por turno, mediana por turno, saída média por turno</strong>. Uma linha abaixo informa as sessions varridas / disponíveis e de quando são os dados.",
-            "comparison": "Uma comparação da saída dos <strong>últimos 7 dias com os 7 anteriores</strong>: número de amostras, médias, medianas e uma variação percentual. Ela precisa de <strong>pelo menos 10 turnos em cada período</strong> e de uma base diferente de zero; caso contrário, informa que as amostras são insuficientes. A página observa que isso só descreve uma mudança observada: <strong>o esforço e a dificuldade das tarefas são desconhecidos, e uma queda não comprova que uma cota foi reduzida</strong>.",
+            "comparison": "Uma comparação da saída dos <strong>últimos 7 dias com os 7 anteriores</strong>: número de amostras, médias, medianas e uma variação percentual. Ela só aparece quando você <strong>escolhe um único modelo conhecido</strong> no menu de modelos; em “All models”, a seção mostra apenas “Select a single known model to compare.” Ela precisa de <strong>pelo menos 10 turnos em cada período</strong> e de uma base diferente de zero; caso contrário, informa que as amostras são insuficientes. A página observa que isso só descreve uma mudança observada: <strong>o esforço e a dificuldade das tarefas são desconhecidos, e uma queda não comprova que uma cota foi reduzida</strong>.",
             "charts": "Cinco gráficos de tendência <strong>por turno</strong>. A linha de destaque é a <strong>média móvel dos últimos 10 turnos</strong>, e a cinza é cada turno; o <strong>eixo horizontal são os turnos em ordem cronológica, com espaçamento igual, e não o tempo decorrido</strong>.",
             "table": "Uma tabela de turnos locais do Claude, <strong>100 linhas por página</strong>: horário, session (8 primeiros caracteres do ID / índice do turno), modelo, cada coluna de tokens e chamadas.",
             "quota": "No final, gráficos de dispersão da cota <strong>agrupados por janela de redefinição</strong>, um gráfico por janela. As porcentagens são informadas pelo fornecedor; a página diz que o eixo horizontal são “amostras na ordem registrada” e que <strong>tokens locais não podem ser convertidos em um teto de cota</strong>. Sem amostras ainda, ela orienta você a ativar a consulta de uso do Claude nas configurações e deixar o Navide rodando: <strong>limites passados não podem ser reconstruídos a partir dos logs de tokens</strong>."
@@ -3640,7 +3654,7 @@
           "h1": "Navide Guard",
           "p2": "O Guard classifica cada ação arriscada de uma CLI como {critical}, {high} ou normal e a trata conforme <strong>a origem da solicitação</strong>: você neste computador, um aplicativo de chat, outro pane ou dispositivo, ou um pane que recebeu conteúdo externo. A tabela de decisão no topo é fixa; solicitações aprovadas por um chat são recusadas a partir de {high}.",
           "items": {
-            "builtin": "<strong>{builtin}</strong>: cada regra pode ser definida como {critical}, {high} ou “{off}”. Aumentar vale na hora; diminuir ou desativar exige confirmação, e oito regras mínimas (ler ou enviar credenciais, chaveiro, baixar e executar, excluir a raiz ou a pasta pessoal, formatar, gravações diretas em disco) não podem ficar abaixo de {high}.",
+            "builtin": "<strong>{builtin}</strong>: cada regra pode ser definida como {critical}, {high} ou “{off}”. Aumentar vale na hora; diminuir ou desativar exige confirmação, e dez regras mínimas (ler, enviar ou subir por pipe credenciais, chaveiro, baixar e executar, excluir a raiz ou a pasta pessoal, formatar, gravações diretas em disco, gravar no repositório de plugins do Navide) não podem ficar abaixo de {high}.",
             "branches": "<strong>{branches}</strong>: fazer push forçado ou excluir esses branches é {critical}; a verificação de push forçado da proteção de comandos no terminal usa a mesma lista. Remover um branch exige confirmação.",
             "rules": "<strong>{rules}</strong>: cada uma é “{deny}” ou “{allow}”. Um padrão de bloqueio eleva os comandos correspondentes ao nível que você escolher; um padrão de permissão pode reduzir {high} para normal (nunca {critical}): isso é uma exceção; não existe uma lista de exceções separada. Adicionar uma permissão ou remover um bloqueio exige confirmação.",
             "test": "<strong>{test}</strong>: digite um comando para ver como o Guard o classificaria.",
@@ -3731,17 +3745,17 @@
             "git": {
               "title": "Git (controle do código-fonte)",
               "tag": "4ª guia da barra lateral",
-              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide (⌘4)</em>; caso contrário, diz <em>Git (⌘4)</em>. Na janela principal, <kbd class=\"cwh-kbd\">⌘⇧G</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo."
+              "text": "Quando o Git é carregado como plug-in do Navide, a dica de ferramenta diz <em>Plug-in do Navide: Git · navide.git · Publicador: navide · Integrado ao Navide ({gitTab})</em>; caso contrário, diz <em>Git ({gitTab})</em>. Na janela principal, <kbd class=\"cwh-kbd\">{gitWindow}</kbd> abre direto a <strong>janela separada do Git</strong>; <em>Abrir em nova janela</em>, no cabeçalho do painel, faz o mesmo. O próprio Git também é um plug-in do Navide incluído (<code>navide.git</code>), listado em <em>Integrados</em> em <strong>Configurações ▸ Plug-ins do Navide</strong> ao lado de Plans; por isso ele é atualizado, desativado ou pode falhar ao iniciar como qualquer plug-in do Navide."
             },
             "plans": {
               "title": "Plans (documentos de plano)",
               "tag": "5ª guia da barra lateral",
-              "text": "A guia <kbd class=\"cwh-kbd\">⌘5</kbd> é só uma <strong>lista</strong>. Clicar em qualquer entrada abre uma janela separada de revisão de planos com o título <code>&lt;pasta do projeto&gt; — Plans</code>."
+              "text": "A guia <kbd class=\"cwh-kbd\">{plansTab}</kbd> é só uma <strong>lista</strong>. Clicar em qualquer entrada abre uma janela separada de revisão de planos com o título <code>&lt;pasta do projeto&gt; — Plans</code>."
             },
             "ide": {
               "title": "Mini-IDE (o editor integrado)",
               "tag": "apenas como janela separada",
-              "text": "Abra com <kbd class=\"cwh-kbd\">⌘⇧I</kbd> ou clique em um arquivo no explorador. O título é <code>&lt;nome do arquivo&gt; — Mini-IDE</code>, precedido de <code>●</code> enquanto houver alterações não salvas."
+              "text": "Abra com <kbd class=\"cwh-kbd\">{miniIde}</kbd> ou clique em um arquivo no explorador. O título é <code>&lt;nome do arquivo&gt; — Mini-IDE</code>, precedido de <code>●</code> enquanto houver alterações não salvas."
             }
           },
           "callout": {
@@ -3820,7 +3834,7 @@
           "list": {
             "create": "No topo fica o campo para criar branch, com o texto de exemplo <em>Nome do novo branch…</em> e <code>＋</code> à direita para enviar.",
             "localRow": "Cada linha de branch local tem quatro botões: <code>⇔</code> <em>Comparar</em>, <code>⇡</code> <em>Fazer rebase sobre este</em>, <code>⇣</code> <em>Mesclar no branch atual</em>, <code>↵</code> <em>Trocar</em>. O branch atual mostra só um <code>✓</code> e nenhum botão.",
-            "context": "Clique com o botão direito na linha de um branch para ver <em>Mesclar o branch atual em {'{'}branch{'}'}</em>, <em>Mesclar o branch atual em {'{'}branch{'}'} e fazer push</em> e <em>Excluir branch</em>.",
+            "context": "Clique com o botão direito na linha de um branch para ver <em>{mergeInto}</em>, <em>{mergeIntoPush}</em> e <em>{deleteBranch}</em>.",
             "remote": "<code>⇅</code> alterna entre <em>Mostrar branches remotos</em> e <em>Ocultar branches remotos</em>; cada linha de branch remoto tem um <code>⬇</code> <em>Fazer checkout local</em>."
           },
           "p2": "Clicar em <code>⇔</code> expande o resultado dentro do painel, com o cabeçalho <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>, uma linha de estatísticas e a lista de arquivos.",
@@ -3859,10 +3873,14 @@
               "behavior": "Mais opções de pull/push, veja abaixo."
             }
           },
-          "p3": "Dentro do <code>▾</code>: <em>↓ Fazer pull</em>, <em>↓ Fazer pull (rebase)</em>, <em>↑ Fazer push</em>, <em>↑ Fazer push (forçado com lease)</em>; se houver mais de um remoto configurado, um grupo <strong>Fazer push para o remoto</strong> é adicionado no fim, com uma linha por remoto.",
+          "p3": "Dentro do <code>▾</code>: <em>↓ {pull}</em>, <em>↓ {pullRebase}</em>, <em>↑ {push}</em>, <em>↑ {pushForce}</em>; se houver mais de um remoto configurado, um grupo <strong>Fazer push para o remoto</strong> é adicionado no fim, com uma linha por remoto.",
           "callout": {
             "title": "Em uma falha de autenticação, confira primeiro a conta vinculada",
             "text": "Quando um push falhar, veja a qual conta a pílula da conta está vinculada antes de começar a reconfigurar o remoto. Quando as credenciais expiram, o painel leva você direto a Configurações › Contas para renová-las. O campo de senha espera um token de acesso pessoal, não a sua senha de login."
+          },
+          "worktrees": {
+            "p1": "O cartão <strong>{worktrees}</strong> do painel Git (recolhido até você clicar no cabeçalho; mostra uma contagem quando há mais de um) lista todas as árvores de trabalho do repositório: <code>✦</code> é a principal e <code>○</code> as demais, com os selos <em>{bare}</em>, <em>{detached}</em>, <em>{locked}</em> ou <em>{stale}</em> quando se aplicam. Cada linha tem <code>⧉</code> <em>{openWindow}</em>, <code>◱</code> <em>{reveal}</em>, <code>🔒</code> <em>{lock}</em>, <code>⇄</code> <em>{move}</em> e <code>✕</code> <em>{remove}</em>; o worktree principal não pode ser bloqueado, movido nem removido. <em>{prune}</em> e <em>{repair}</em>, no topo, limpam worktrees cuja pasta foi apagada ou movida fora do Git.",
+            "p2": "Para adicionar um, digite o caminho de uma pasta (ou procure), escolha um branch — ou marque <em>{createBranch}</em> e digite um nome novo — e pressione <code>＋</code> <em>{addWorktree}</em>. É isso que torna prático ter vários panes em branches separados: dê a cada pane o próprio worktree e as edições nunca caem na mesma pasta."
           }
         },
         "s4": {
@@ -3920,14 +3938,14 @@
           "p1": "Os planos não ficam todos em uma pasta. O Navide verifica <strong>sete pastas</strong> no workspace: <code>.agent-team/plans</code>, <code>.agent-team/reports</code>, <code>.claude/loop-reports</code>, <code>.claude/plans</code>, <code>.cursor/plans</code>, <code>docs/plans</code> e <code>docs/reports</code>, além das mesmas sete dentro de qualquer repositório Git aninhado <strong>até dois níveis de profundidade</strong>. Contam três sufixos: <code>.html</code>, <code>.plan.md</code> e <code>.md</code>. Um plano HTML se chama <code>&lt;kebab-slug&gt;_&lt;6 dígitos hex&gt;.html</code>, e um plano Markdown, <code>&lt;kebab-slug&gt;.plan.md</code>. Arquivos que começam com sublinhado ou ponto (<code>_spec.md</code>, <code>_template.html</code>) são estrutura de apoio e nunca aparecem na lista.",
           "p2": "Esses arquivos são <strong>escritos e atualizados pelos agents</strong>: cada ação que você faz na janela de Plans (mudar o status de uma tarefa, deixar uma nota de revisão, aprovar) volta para o mesmo arquivo. A sua parte é pedir a um agent que “crie um plano para mim” e depois revisá-lo na janela.",
           "h2": "A lista",
-          "p3": "A guia <strong>Plans</strong> da barra lateral (<kbd class=\"cwh-kbd\">⌘5</kbd>) e a coluna esquerda da janela de Plans usam a mesma lista. A barra de ferramentas só aparece quando existe pelo menos um plano:",
+          "p3": "A guia <strong>Plans</strong> da barra lateral (<kbd class=\"cwh-kbd\">{plansTab}</kbd>) e a coluna esquerda da janela de Plans usam a mesma lista. A barra de ferramentas só aparece quando existe pelo menos um plano:",
           "listTools": {
             "search": "O campo <em>Pesquisar planos…</em>, que procura no título, no nome do arquivo e na visão geral.",
             "stage": "Filtro de fase: <em>Todas as fases</em> / Rascunho / Em revisão / Aprovado / Em andamento / Concluído / Abandonado.",
             "sort": "<em>Ordenar por</em>: <strong>Título</strong>, <strong>Última atualização</strong> ou <strong>Progresso</strong>, com <code>↑</code> / <code>↓</code> ao lado para ordem crescente ou decrescente.",
             "group": "<code>☰</code> alterna entre “agrupar por etapa” e uma única lista simples."
           },
-          "p4": "As quatro escolhas são <strong>lembradas por workspace</strong>. As seções, de cima para baixo: <strong>Recentes</strong> (no máximo 5, os fixados primeiro); depois, agrupado por etapa, uma seção <strong>Documentos</strong> e uma seção por etapa, que uma lista simples junta em uma só <strong>Todos os planos</strong>; depois <strong>Arquivados</strong>; e, no fim, uma linha de ações para os concluídos (<em>Arquivar todos os concluídos</em> / <em>Excluir todos</em>). Cada linha tem sua pílula de etapa, uma barra de progresso <em>{'{'}done{'}'}/{'{'}total{'}'} concluídas</em>, uma etiqueta de formato <code>HTML</code> / <code>Markdown</code> e <em>{'{'}count{'}'} para você</em>: os itens que só você pode resolver. <strong>Cada linha também tem um alfinete <code>📌</code> e um botão de excluir <code>✕</code> à direita</strong> (as linhas arquivadas têm só o de excluir).",
+          "p4": "As quatro escolhas são <strong>lembradas por workspace</strong>. As seções, de cima para baixo: <strong>Recentes</strong> (no máximo 5, os fixados primeiro); depois, agrupado por etapa, uma seção <strong>Documentos</strong> e uma seção por etapa, que uma lista simples junta em uma só <strong>Todos os planos</strong>; depois <strong>Arquivados</strong>; e, no fim, uma linha de ações para os concluídos (<em>Arquivar todos os concluídos</em> / <em>Excluir todos</em>). Cada linha tem sua pílula de etapa, uma barra de progresso <em>{'{'}done{'}'}/{'{'}total{'}'} concluídas</em>, uma etiqueta de formato <code>HTML</code> / <code>Markdown</code> e <em>{'{'}count{'}'} para você</em>: os itens que só você pode resolver. <strong>Cada linha também tem um alfinete <code>📌</code> e um botão de excluir <code>✕</code> à direita</strong> (as linhas arquivadas têm só o de excluir). O alfinete serve para <em>Fixar no topo dos recentes</em>.",
           "callout1": {
             "title": "Documentos sem metadados ganham uma seção própria",
             "text": "Quando a lista está agrupada por fase, <strong>documentos simples sem metadados de plano</strong> ficam em uma seção <strong>Documentos</strong>, e cada linha recebe a etiqueta <code>Documento</code>, o que não tem nada a ver com uma fase estar <em>in-progress</em>. Para transformar um arquivo assim em um plano de verdade, clique nele com o botão direito e escolha <strong>Transformar em plano</strong>: isso adiciona um envelope de plano em rascunho e <strong>não reescreve o conteúdo</strong>."
@@ -3983,7 +4001,7 @@
         },
         "s7": {
           "title": "A janela do editor",
-          "p1": "Abra com <kbd class=\"cwh-kbd\">⌘⇧I</kbd> ou clique em um arquivo no explorador. Um editor Monaco com guias, com <kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> para trocar de guia (números fora do intervalo vão para a última guia).",
+          "p1": "Abra com <kbd class=\"cwh-kbd\">{miniIde}</kbd> ou clique em um arquivo no explorador. Um editor Monaco com guias, com <kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> para trocar de guia (números fora do intervalo vão para a última guia).",
           "h1": "As quatro seções da faixa esquerda",
           "sectionTable": {
             "section": "Seção",
@@ -3995,7 +4013,7 @@
               "note": "A árvore de arquivos."
             },
             "search": {
-              "note": "Pesquisa em todos os arquivos; ⌘⇧H substitui em todos os arquivos."
+              "note": "Pesquisa em todos os arquivos; {replaceInFiles} substitui em todos os arquivos."
             },
             "scm": {
               "note": "A versão incorporada do painel do Git, com um selo do número de alterações."
@@ -4013,7 +4031,7 @@
           "editorActions": {
             "split": {
               "action": "Dividir a área do editor",
-              "note": "(troque de grupo de editores com ⌘K ⌘← / ⌘K ⌘→)"
+              "note": "(troque de grupo de editores com {prevGroup} / {nextGroup})"
             },
             "findReplace": {
               "action": "Localizar / Substituir"
@@ -4029,7 +4047,7 @@
             },
             "fold": {
               "action": "Recolher / expandir",
-              "note": "(tudo, com ⌘K ⌘0 / ⌘K ⌘J)"
+              "note": "(tudo, com {foldAll} / {unfoldAll})"
             },
             "multiCursor": {
               "action": "Vários cursores: adicionar um acima ou abaixo"
@@ -4048,7 +4066,7 @@
             },
             "aiTerminal": {
               "action": "Mostrar ou ocultar o terminal de AI",
-              "note": "(ou ⌘⇧A)"
+              "note": "(ou {aiChatAlt})"
             },
             "sendSelection": {
               "action": "Enviar o código selecionado para o terminal de AI",
@@ -4080,7 +4098,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "A imagem, com Ajustar à janela / Tamanho real."
+              "how": "A imagem, com {fitWindow} / {actualSize}."
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4129,7 +4147,7 @@
             "text": "Todos os outros tipos da tabela <strong>abrem direto na visualização</strong>; html e csv mostram primeiro o código-fonte de propósito e só mudam quando você clica em <em>Visualizar</em>. Observe também que <code>docx</code>, <code>xlsx</code>, <code>zip</code> e <code>woff</code> também estão na lista de binários, mas as verificações de fontes, arquivos compactados e Office rodam antes da de binários, então eles recebem sua exibição específica em vez de cair em um dump hexadecimal."
           },
           "h2": "O registro de alterações",
-          "p3": "A metade inferior da guia <strong>Visualização</strong> do espaço direito (<kbd class=\"cwh-kbd\">⌘⌥V</kbd>) é <strong>Alterações recentes</strong>: o que foi mexido neste workspace ultimamente. Quatro colunas por linha:",
+          "p3": "A metade inferior da guia <strong>Visualização</strong> do espaço direito (<kbd class=\"cwh-kbd\">{previewTab}</kbd>) é <strong>Alterações recentes</strong>: o que foi mexido neste workspace ultimamente. Quatro colunas por linha:",
           "trackList": {
             "time": "<strong>Horário</strong>: relativo (<em>agora</em> / <em>{'{'}n{'}'} min</em> / <em>{'{'}n{'}'} h</em> / <em>{'{'}n{'}'} d</em>).",
             "action": "<strong>Ação</strong>: <code>+</code> criado, <code>~</code> modificado, <code>−</code> excluído, <code>▸</code> exibido.",
@@ -4207,7 +4225,7 @@
               "action": "Controle do código-fonte / Problemas"
             },
             "fileTabs": {
-              "action": "Ir para a N-ésima guia de arquivo (⌘1…⌘9)"
+              "action": "Ir para a N-ésima guia de arquivo ({editorTab1}…{editorTab9})"
             },
             "split": {
               "action": "Dividir a área do editor"
@@ -4365,9 +4383,9 @@
             "signInInside": "Dentro da CLI",
             "flagNoteGoose": "Nenhuma: por padrão, o Goose aprova sozinho todas as ferramentas (GOOSE_MODE=auto); defina GOOSE_MODE como approve ou smart_approve para ser perguntado. O Navide Guard ainda não cobre o Goose."
           },
-          "note": "“Cota” = o Navide consegue ler o uso restante (capítulo 6). “Várias contas” = vários logins podem ser guardados nas Configurações e alternados (capítulo 5). As quatro CLIs sem flag de dispensa de permissões (Grok CLI, OpenCode, Pi, MiniMax Code) simplesmente não têm essa flag: não é algo que o Navide deixou de fora. “Comando de login” = o que o Navide de fato executa quando você clica em Entrar em Configurações ▸ Contas; as CLIs marcadas como “Dentro da CLI” não declaram um comando de login separado, então o botão as inicia normalmente e o login acontece na tela delas.",
+          "note": "“Cota” = o Navide consegue ler o uso restante (capítulo 6). “Várias contas” = vários logins podem ser guardados nas Configurações e alternados (capítulo 5). As {noFlagCount} CLIs sem flag de dispensa de permissões ({noFlag}) simplesmente não têm essa flag: não é algo que o Navide deixou de fora. “Comando de login” = o que o Navide de fato executa quando você clica em Entrar em Configurações ▸ Contas; as CLIs marcadas como “Dentro da CLI” não declaram um comando de login separado, então o botão as inicia normalmente e o login acontece na tela delas.",
           "callout": {
-            "title": "A 16ª entrada não é um agent",
+            "title": "A última entrada não é um agente",
             "text": "<strong>>_ Abrir terminal</strong>, no fim do menu +, é um shell simples: nenhum agent está ligado a ele e nenhum papel é injetado. Ele fica fora da lista de propósito, para que a rolagem da lista de CLIs nunca o esconda."
           }
         },
@@ -4416,7 +4434,8 @@
           "callout2": {
             "title": "A Grok CLI agora é a oficial da xAI",
             "text": "Ela é instalada pelo script próprio do fornecedor (<code>curl</code> busca <code>https://x.ai/cli/install.sh</code> e o entrega ao bash), e não pelo npm, então precisa do <code>curl</code> e de uma janela de Terminal de verdade. O comando de atualização é <code>grok update</code>, e o arquivo de configuração agora é <code>~/.grok/config.toml</code>, com o MCP escrito em TOML; o <code>user-settings.json</code> da versão da comunidade não é mais lido. Ela <strong>não tem comando de diagnóstico</strong> (o fornecedor não oferece nenhum, então as Configurações apontam para a documentação oficial), nem campo de esforço, nem flag de dispensa de permissões. A CLI da comunidade com o mesmo nome é instalada no mesmo caminho, então <code>which grok</code> não consegue diferenciá-las: só o formato da string de versão consegue."
-          }
+          },
+          "menuGroups": "O menu + tem dois títulos: as CLIs de programação ficam em <strong>{cliHeading}</strong> e os agentes de longa duração ({agents}), em <strong>{agentsHeading}</strong>."
         },
         "s3": {
           "title": "Papéis",
@@ -4450,7 +4469,7 @@
             "global": "Uma <strong>chave global</strong> no topo: <em>Ignorar solicitações de permissão por padrão (modo YOLO)</em>. O painel lateral de cada CLI mostra essa mesma chave, então alterá-la em um altera para todas.",
             "perVendor": "Abaixo dela, uma linha para esta CLI, mostrando a flag real (por exemplo <code>--yolo</code>) com uma lista suspensa de três opções à direita: <strong>Seguir a global / Sempre dispensar / Nunca dispensar</strong>."
           },
-          "p4": "Nas quatro CLIs sem flag (Grok CLI / OpenCode / Pi / MiniMax Code), esta parte do painel lateral mostra só a chave global, com uma linha abaixo dizendo que esta CLI não tem flag de dispensa e que não há nada para alternar.",
+          "p4": "Nas {noFlagCount} CLIs sem flag ({noFlag}), esta parte da gaveta mostra só a chave global, com uma linha abaixo dizendo que essa CLI não tem flag de dispensa e não há nada para alternar.",
           "callout1": {
             "title": "As alterações não chegam aos panes em execução",
             "text": "A flag é gravada na linha de comando de um pane <strong>no momento em que ele inicia</strong>. As alterações feitas aqui só afetam os panes iniciados depois; um pane em execução mantém o que tinha ao iniciar até você reconstruí-lo ou restaurá-lo."
@@ -4489,7 +4508,8 @@
           "note": "As atualizações substituem o binário; os panes que já estão em execução precisam reiniciar para usar a nova versão.",
           "callout2": {
             "title": "O que não está aqui",
-            "text": "Continua <strong>sem haver um campo de “argumentos padrão”</strong>: um comando de inicialização <em>substitui</em> a linha em vez de se somar à padrão. <strong>O binário continua não sendo escolhido digitando um caminho</strong>, e sim escolhendo um dos candidatos quando várias instalações físicas são detectadas (depois disso, a visão geral do painel lateral ganha um chip “Binário personalizado”). Já o modelo e o esforço <strong>não são mais exclusivos do MCP</strong>: as configurações de inicialização têm campos próprios para eles, assim como a caixa de diálogo Iniciar manualmente."
+            "text": "Continua <strong>sem haver um campo de “argumentos padrão”</strong>: um comando de inicialização <em>substitui</em> a linha em vez de se somar à padrão. <strong>O binário continua não sendo escolhido digitando um caminho</strong>, e sim escolhendo um dos candidatos quando várias instalações físicas são detectadas (depois disso, a visão geral do painel lateral ganha um chip “Binário personalizado”). Já o modelo e o esforço <strong>não são mais exclusivos do MCP</strong>: as configurações de inicialização têm campos próprios para eles, assim como a caixa de diálogo Iniciar manualmente.",
+            "setModel": "Um pane que já está rodando também pode trocar de modelo: um agente pede isso com <code>cli_set_model</code>. Claude Code e Codex trocam na hora (o seletor de modelo do Claude, <code>/model</code> no Codex); as outras CLIs reiniciam o pane e retomam a conversa."
           },
           "chipsIntro": "Um cartão mostra só três chips: status da instalação, login e contas, e canal de envio direto. A faixa completa fica em “{overview}”, no topo do painel lateral, e mostra como essa CLI está configurada no momento. A ordem é fixa e segue “o que ela é → com o que roda → como é alcançada”:",
           "chipsTable": {
@@ -4572,19 +4592,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "Modelo e Esforço (5)",
-              "vendors": "Claude Code, Antigravity CLI, Copilot CLI, Muse Code e Pi"
+              "group": "Modelo e Esforço ({count})",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "Só Modelo (7)",
-              "vendors": "Codex, Cursor CLI, Grok CLI, Kilo Code, Kimi Code, OpenCode e Qwen Code"
+              "group": "Só Modelo ({count})",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "Nenhum dos dois (4)",
-              "vendors": "Aider, Droid, MiniMax Code e Terminal (que não é um agent)"
+              "group": "Nenhum dos dois ({count})",
+              "vendors": "{names} (Terminal não é um agente)"
             }
           },
-          "spawnNote": "Às sete CLIs de “Só Modelo” não falta um controle de esforço; esse controle só não é um argumento de inicialização. Em algumas ele faz parte do ID do modelo (um <code>-high</code> no final, por exemplo); em outras, fica em um arquivo de configuração ou atrás de um comando dentro da session. Um valor que quebra as regras (um ID de modelo com espaço ou começando com “-”) é explicado na hora e desativa o botão de envio. E, se essa CLI tiver um comando de inicialização personalizado, os dois campos ficam desativados com o motivo explicado: essa linha roda como foi escrita e o Navide não acrescenta modelo nenhum.",
+          "spawnNote": "Às CLIs de “Só Modelo” não falta um controle de esforço; esse controle só não é um argumento de inicialização. Em algumas ele faz parte do ID do modelo (um <code>-high</code> no final, por exemplo); em outras, fica em um arquivo de configuração ou atrás de um comando dentro da session. Um valor que quebra as regras (um ID de modelo com espaço ou começando com “-”) é explicado na hora e desativa o botão de envio. E, se essa CLI tiver um comando de inicialização personalizado, os dois campos ficam desativados com o motivo explicado: essa linha roda como foi escrita e o Navide não acrescenta modelo nenhum.",
           "h5": "5 · Canais de envio direto",
           "h6": "6 · Instalação e atualizações",
           "pushAllOff": "<strong>Desativar todos é uma escolha válida</strong>; aqui não existe a regra “manter pelo menos um”. Com os quatro desativados, a parte de envio direto do painel lateral indica três consequências: as mensagens esperam o pane de destino ficar ocioso e então são digitadas na entrada dele, chegando mais tarde; o rewake do Claude Code é a única forma de acordar um agent ocioso, então sem ele você espera o agent ficar ocioso sozinho; e os panes já abertos mantêm o canal com que iniciaram até serem reiniciados."
@@ -4593,7 +4613,7 @@
           "title": "Contas",
           "p1": "Configurações ▸ <strong>Contas</strong> reúne duas coisas sem relação: contas do Git na metade superior e contas de CLI na metade inferior.",
           "h1": "Contas de CLI",
-          "p2": "Os 15 fornecedores ganham um título, mas só <strong>5 são compatíveis com várias contas</strong>: Claude Code, Codex, Kimi Code, Grok CLI e Kilo Code. Os demais mostram uma linha, “Este agent não é compatível com várias contas.”, sem nenhum botão de adicionar.",
+          "p2": "Se uma CLI pode guardar <strong>várias contas</strong> e como uma troca chega até ela — na hora, reiniciando seus panes ou manualmente — aparece para cada CLI na coluna “Várias contas” da tabela do capítulo 1; ela lê o que a própria CLI declara, não uma lista mantida na ajuda.",
           "p3": "Em cada fornecedor, o primeiro cartão é sempre o <strong>Padrão</strong> integrado (suas credenciais de login originais); em seguida vêm as contas que você adicionou. Um cartão mostra o e-mail conectado, a etiqueta <em>Padrão</em> e a cota restante dessa conta.",
           "table": {
             "action": "Ação",
@@ -4609,8 +4629,8 @@
               "detail": "Só aparece quando a conta está sem login ou as credenciais dela expiraram."
             },
             "setDefault": {
-              "action": "Definir como padrão",
-              "detail": "Troca a conta ativa. Durante a troca, o botão diz “Trocando…” e os botões de todas as contas ficam desativados temporariamente."
+              "action": "{switchLabel}",
+              "detail": "Aparece em cada conta que não é a ativa. Troca o login ativo desta CLI para essa conta, e os panes que você abrir depois passam a usá-la. Durante a troca, o botão mostra \"{switchingLabel}\" e os botões de todas as contas ficam desativados temporariamente."
             },
             "refreshQuota": {
               "action": "Atualizar cota",
@@ -4628,7 +4648,7 @@
           "p7": "Trocar com muita frequência é bloqueado (no máximo 3 vezes a cada 60 segundos por CLI); confirmar uma troca forçada não contorna esse limite.",
           "callout1": {
             "title": "Os panes abertos mantêm a conta anterior",
-            "text": "O próprio painel diz: “os panes já abertos mantêm a conta anterior até serem reabertos”. Todas as contas compartilham sua pasta pessoal real (sessions e histórico são compartilhados); trocar de conta <strong>substitui as credenciais guardadas no lugar</strong>."
+            "text": "Os panes abertos mantêm a conta com que foram iniciados até serem reabertos. Todas as contas compartilham sua pasta pessoal real (sessões e histórico compartilhados), e trocar de conta <strong>substitui no lugar as credenciais salvas</strong>. Uma conta do Claude também pode entrar na <strong>própria pasta</strong> (“Entrar na própria pasta”); assim um único pane pode passar para essa conta sem mexer no login ativo da CLI nem nos outros panes."
           },
           "apiKeys": {
             "title": "Contas com chave de API",
@@ -4648,13 +4668,14 @@
             "title": "A vinculação é feita em outro lugar",
             "text": "“Qual conta do Git este workspace usa” é escolhido com a pílula da conta no <strong>painel do Git da barra lateral</strong>. A página de configurações só adiciona, edita e exclui contas. Excluir uma conta também remove qualquer vinculação que apontava para ela."
           },
-          "switchToast": "<strong>Uma troca que falhou agora sempre aparece.</strong> Antes, só duas recusas geravam uma notificação: “há panes em execução” e “trocas frequentes demais”. Todo o resto, inclusive uma falha na troca de credenciais, ia para o banner do próprio painel Contas, que já tinha saído da tela enquanto você olhava as linhas de um fornecedor; clicar em “Definir como padrão” parecia não fazer nada. Agora qualquer tipo de falha na troca gera uma notificação."
+          "switchToast": "<strong>Uma troca que falhou agora sempre aparece.</strong> Antes, só duas recusas geravam uma notificação: “há panes em execução” e “trocas frequentes demais”. Todo o resto, inclusive uma falha na troca de credenciais, ia para o banner do próprio painel Contas, que já tinha saído da tela enquanto você olhava as linhas de um fornecedor; clicar em “{switchLabel}” parecia não fazer nada. Agora qualquer tipo de falha na troca gera uma notificação.",
+          "agentConfirm": "Um agente também pode pedir isso sozinho: abrir um login para uma conta, trocar a conta de uma CLI ou mover um único pane para outra conta. Cada pedido abre uma caixa de confirmação com a CLI, a conta, o pane que pediu e o motivo; <strong>nada acontece sem a sua aprovação</strong>, e um pedido sem resposta se fecha sozinho."
         },
         "s6": {
           "title": "Exibição da cota",
           "p1": "O selo de cota fica na <strong>barra de título do pane de CLI</strong> (não na barra de status) e mostra a porcentagem restante; passe o cursor para expandir os detalhes: cada janela de medição, os horários de redefinição e o seletor de conta. Os cartões de conta em Configurações ▸ Contas leem os mesmos dados.",
           "h1": "Quais fornecedores são cobertos",
-          "p2": "<strong>11</strong>: Claude Code, Codex, Kimi Code, Grok CLI, Antigravity CLI, OpenCode, Qwen Code, Kilo Code, Pi, Copilot CLI e Cursor CLI. Aider, Muse Code, Droid e MiniMax Code não têm uma fonte de cota legível.",
+          "p2": "<strong>{withCount}</strong>: {withQuota}. {withoutQuota} não têm nenhuma fonte de cota legível.",
           "h2": "De onde vêm os dados",
           "list": {
             "claude": "<strong>O Claude Code é um caso especial</strong>: o Navide nunca mexe nas credenciais dele; ele executa <code>claude -p /usage</code> e lê o relatório de cota que a própria CLI imprime. Por isso, cada leitura inicia um Claude Code completo e leva alguns segundos.",
@@ -4842,23 +4863,23 @@
             "tools": {
               "list": "<strong>Listar destinos</strong>: quem está online, como o endereço é escrito e se está ocupado agora.",
               "send": "<strong>Enviar uma instrução</strong>: entregar qualquer texto a um pane com nome.",
-              "spawn": "<strong>Abrir um novo agent e passar trabalho para ele</strong>: pedir ao Navide para abrir um novo pane de CLI, escolher qual CLI ele executa e dar uma tarefa. O novo pane deve responder ao chamador com uma mensagem ao terminar, mas isso é a saída do próprio subagent, não algo que o Navide garanta: a mensagem fica na fila enquanto o chamador está ocupado e nunca chega se o subagent não seguir o formato.",
+              "spawn": "<strong>Abrir um novo agente e passar trabalho a ele</strong> — peça ao Navide para abrir um novo pane de CLI, escolha qual CLI ele roda e dê uma tarefa. O novo pane deve avisar quem o chamou com uma mensagem ao terminar; esse relatório é a saída do próprio subagente e fica na fila enquanto quem chamou está ocupado. Se o primeiro turno do novo pane terminar sem relatório, o Navide encaminha uma vez a última saída desse turno a quem chamou, marcada como relatório substituto e não como do próprio pane.",
               "ack": "<strong>Uma simples confirmação de recebimento</strong>: “entendido”, “feito”, qualquer coisa sobre a qual o outro lado não precise agir. Ela é gravada no log de mensagens para você ler (com o selo “só confirmação”), mas <strong>nunca é digitada na caixa de entrada do outro agent</strong>, então não o interrompe nem o desperta — o que também significa que nada que o outro lado precise ler ou fazer pode ir por esse caminho.",
               "pending": "<strong>Verificar quem está me esperando</strong>: não é possível digitar em um pane ocupado, então o agent pode perguntar por conta própria: o que está na fila esperando que ele fique ocioso e se algo que ele enviou está travado."
             },
-            "note": "<strong>Dez</strong> das quinze CLIs estão conectadas a esse conjunto de ferramentas (veja a tabela na próxima seção). As que não estão — Aider, Droid, Muse Code e Pi — usam o protocolo de saída abaixo; o MiniMax Code ainda não tem nenhum dos dois caminhos e só pode receber."
+            "note": "<strong>{mcpCount}</strong> das {total} CLIs estão ligadas a este conjunto de ferramentas (veja a tabela da próxima seção). {protocolOnly} usam o protocolo de saída abaixo; {receiveOnly} ainda não têm nenhuma das duas vias e só podem receber."
           },
           "proto": {
             "title": "Protocolo de saída",
             "tag": "panes em um pipeline já o têm",
             "p1": "O agent escreve na resposta um bloco de texto simples como este, e o Navide o captura como mensagem:",
             "code": "---MSG-START--- to: reviewer\nRode pnpm test:run para mim e me devolva a lista de falhas\n---MSG-END---",
-            "note": "to: pode ficar na mesma linha que ---MSG-START--- ou sozinho na <strong>linha logo abaixo</strong>; qualquer to: mais abaixo conta como conteúdo. As linhas ---MSG-START--- e ---MSG-END--- precisam começar na primeira coluna, sem recuo, e não podem ficar dentro de um bloco de código Markdown; caso contrário, não são reconhecidas e nenhum erro é informado. Os slots de um pipeline aprendem esse protocolo nas instruções iniciais; os panes abertos manualmente não, mas você pode colar o bloco acima diretamente em um deles, desde que essa CLI suporte o protocolo de saída na tabela abaixo."
+            "note": "to: pode ficar na mesma linha que ---MSG-START--- ou sozinho na <strong>linha logo abaixo</strong>; qualquer to: mais abaixo conta como conteúdo. As linhas ---MSG-START--- e ---MSG-END--- precisam começar na primeira coluna, sem recuo, e não podem ficar dentro de um bloco de código Markdown; caso contrário, não são reconhecidas; quando um turno mostra ---MSG-START--- mas nenhuma mensagem sai dele, o Navide digita nesse pane um aviso “message not recognized”. Os slots de um pipeline aprendem esse protocolo nas instruções iniciais; os panes abertos manualmente não, mas você pode colar o bloco acima diretamente em um deles, desde que essa CLI suporte o protocolo de saída na tabela abaixo."
           }
         },
         "s3": {
           "title": "Quais CLIs podem enviar",
-          "p1": "<strong>Todo pane de CLI pode receber mensagens</strong>: o Navide digita o texto diretamente no terminal, o que não tem nada a ver com a CLI. <strong>Catorze das quinze também podem enviar</strong>; só muda o caminho disponível:",
+          "p1": "<strong>Todo pane de CLI pode receber mensagens</strong> — o Navide digita o texto direto no terminal, o que não depende da CLI. <strong>{sendCount} das {total} também podem enviar</strong>; só muda a via disponível:",
           "table": {
             "cli": "CLI",
             "send": "Pode enviar?"
@@ -4866,9 +4887,10 @@
           "sendModes": {
             "both": "Ferramentas MCP + protocolo de saída",
             "protocolOnly": "Só protocolo de saída",
-            "none": "Nenhum (só recebe)"
+            "none": "Nenhum (só recebe)",
+            "mcpOnly": "Só ferramentas MCP"
           },
-          "note1": "<strong>Catorze das quinze podem enviar</strong>; só muda o caminho. O protocolo de saída exige que o Navide leia o log do próprio agent: os catorze fornecedores que têm leitor de log estão cobertos, então o Navide sabe quando o agent terminou de dizer algo e o que disse. As ferramentas MCP exigem ainda que a CLI ofereça uma forma de entrada (uma flag de inicialização, uma variável de ambiente com todo o documento de configuração ou uma cópia do diretório de configuração por pane); Aider, Droid, Muse Code e Pi não oferecem nenhuma, então usam só o protocolo de saída. <strong>O MiniMax Code não tem nenhum dos dois</strong>: ele guarda as conversas em SQLite e o Navide ainda não tem leitor para esse formato, então ele pode receber mensagens, mas não enviar.",
+          "note1": "O protocolo de saída precisa que o Navide consiga ler o log do próprio agente; todos os fornecedores com leitor de log estão cobertos, então o Navide sabe quando o agente terminou de dizer algo e o que disse. As ferramentas MCP precisam ainda que a CLI ofereça uma porta de entrada (uma flag de inicialização, uma variável de ambiente com todo o documento de configuração ou um espelho da pasta de configuração por pane) e que o Navide a conecte; {protocolOnly} não estão conectadas, então usam só o protocolo de saída. <strong>{receiveOnly}</strong> não têm nenhum dos dois: o Navide ainda não tem leitor para os logs delas, então elas recebem mensagens mas não enviam.",
           "note2": "Duas ressalvas na prática: o <strong>Antigravity</strong> não consegue enviar no turno em que o agent faz uma pergunta para você (esse turno não tem texto de resposta) — turnos normais de resposta funcionam; e <strong>Qwen, Pi e Kimi</strong> não têm um sinal explícito de “turno concluído”, então o Navide o deduz após 8 segundos de silêncio e o envio sai um pouco mais tarde."
         },
         "s4": {
@@ -4913,7 +4935,7 @@
           "list": {
             "alive": "A CLI dele ainda está ativa e já passou da fase de inicialização",
             "noTyping": "Ninguém está digitando nesse pane (um rascunho na caixa ou uma tecla nos últimos quatro segundos o faz esperar)",
-            "noTurn": "Nenhum turno está em andamento",
+            "noTurn": "Nenhum turno está em andamento — exceto no {midTurn}, que coloca na fila por conta própria uma mensagem digitada no meio do turno; ali só vale a espera por digitação",
             "quiet": "Nenhuma saída nos últimos 2 segundos"
           },
           "p2": "Se as condições não forem atendidas, a mensagem fica na fila; quando forem, ela sai automaticamente. Então, enquanto o destino está em uma tarefa longa, sua mensagem espera que ele termine — isso é intencional. O painel “Mensagens entre CLIs” mostra qual condição a está segurando — “O pane de destino não está em execução”, “O pane de destino ainda está iniciando”, “Alguém está digitando no pane de destino”, “O agent de destino está no meio de um turno”, “Aguardando o destino se estabilizar” —, então “nunca saiu” sempre tem um motivo identificável. A mensagem que o destino recebe vem com a origem na frente, para que ele saiba a quem responder.",
@@ -4938,7 +4960,9 @@
             "rejected": "Uma recusa <strong>só acontece quando o pedido está errado</strong>: um nome de CLI inexistente, um nome duplicado ou inválido, uma tarefa vazia, ou um modelo ou nível de esforço que essa CLI não aceita.",
             "kickoff": "<strong>Também é informado se a tarefa inicial realmente entrou.</strong> Antes de responder, o Navide espera a CLI iniciar, o prompt dela aparecer e a tarefa ser digitada. Quando não consegue confirmar a entrega, ele diz “verifique o status primeiro” em vez de “reenvie” — reenviar às cegas encomenda o mesmo trabalho duas vezes.",
             "duplicate": "<strong>Um pedido repetido para o mesmo lançamento é bloqueado</strong>, então um agent que desiste de esperar e pede de novo não acaba com um segundo pane.",
-            "resume": "<strong>Um novo pane também pode ser aberto sobre uma conversa antiga.</strong> O agent lista as conversas de CLI que este workspace ainda guarda e escolhe uma; o novo pane começa com a memória dessa conversa intacta (inclusive uma iniciada em um terminal comum). O id é verificado primeiro no armazenamento de sessions dessa CLI, e um id sem nada por trás é recusado em vez de ser aberto vazio sem aviso."
+            "resume": "<strong>Um novo pane também pode ser aberto sobre uma conversa antiga.</strong> O agent lista as conversas de CLI que este workspace ainda guarda e escolhe uma; o novo pane começa com a memória dessa conversa intacta (inclusive uma iniciada em um terminal comum). O id é verificado primeiro no armazenamento de sessions dessa CLI, e um id sem nada por trás é recusado em vez de ser aberto vazio sem aviso.",
+            "otherProject": "<strong>O novo pane pode abrir em outro projeto</strong> — com a pasta, o CLAUDE.md, a memória, os Plans e o git dele — enquanto quem chamou continua sendo o pai e recebe o relatório. Por padrão ele entra na barra lateral desta janela; também pode abrir numa janela nova ou na janela que já tem esse projeto.",
+            "release": "<strong>Um pane filho que terminou pode ser liberado</strong> com <code>cli_reclaim_agent</code>: o processo da CLI termina e o pane fica no lugar como um cartão de “clique para retomar”, com a conversa intacta, para você ainda conferir o trabalho. Um pane também pode ser renomeado com <code>cli_rename_pane</code>."
           },
           "table": {
             "suggestion": "Orientação",
@@ -4972,7 +4996,7 @@
           "guards": {
             "rate": {
               "limit": "Frequência para um par origem → destino",
-              "value": "5 a cada 60 segundos",
+              "value": "5 a cada 60 segundos (remetente de chat: 30)",
               "why": "Dois agents respondendo um ao outro podem entrar em loop para sempre"
             },
             "queue": {
@@ -4981,9 +5005,9 @@
               "why": "Nada deve se acumular sem limite enquanto o destino está sobrecarregado"
             },
             "timeout": {
-              "limit": "Sem resultado após o envio",
+              "limit": "Sem resultado para uma mensagem a outra janela",
               "value": "Marcada como falha após 30 minutos",
-              "why": "Quando a janela de destino está fechada, uma mensagem não pode ficar “Na fila” para sempre"
+              "why": "Se a janela de destino for fechada ou a máquina dormir, uma mensagem entre espaços de trabalho não pode ficar em “Na fila” para sempre. Uma mensagem para um pane ocupado na mesma janela simplesmente espera."
             },
             "pause": {
               "limit": "Interruptor de pausa",
@@ -5023,7 +5047,7 @@
             "stuckQueued": {
               "symptom": "A mensagem fica “Na fila” para sempre",
               "cause": "O destino está em uma tarefa longa e ainda não ficou ocioso",
-              "fix": "É normal: espere que ele termine; se realmente travou, ela é marcada como falha após 30 minutos"
+              "fix": "Normal — espere terminar. Depois de 2 minutos, o remetente é avisado de que a mensagem ainda está retida, e você pode retirá-la no painel com “Retirar”; só uma mensagem para outra janela é marcada como falha, após 30 minutos."
             },
             "rateLimit": {
               "symptom": "O painel diz “Limite de taxa: no máximo 5 mensagens a cada 60 s entre os mesmos dois panes”",
@@ -5050,12 +5074,14 @@
         "s10": {
           "title": "Limites conhecidos",
           "list": {
-            "terminalPane": "<strong>Um pane de terminal comum não pode enviar nem receber</strong>: só os panes de agent de CLI têm nome.",
-            "receiveOnly": "<strong>Cinco CLIs não têm ferramentas MCP</strong>: Aider, Droid, Muse Code e Pi só podem usar o protocolo de saída por linhas, e <strong>o MiniMax Code nem isso</strong>: ele pode receber mensagens, mas não enviar. Veja “Quais CLIs podem enviar” acima.",
+            "terminalPane": "<strong>Um pane de terminal simples recebe, mas não envia.</strong> Uma mensagem para ele é digitada como está e roda como comando de shell — sem envelope nem dica de resposta. Terminais ficam fora das transmissões, são retidos por 60 segundos após sua última tecla, são marcados como falha em vez de digitados atrasados após 2 minutos na fila, e comandos destrutivos são recusados.",
+            "receiveOnly": "<strong>{noMcpCount} CLIs não têm ferramentas MCP</strong> — {protocolOnly} só podem usar o protocolo de saída de linhas soltas, e <strong>{receiveOnly}</strong> nem isso: recebem mensagens, mas não enviam. Veja “Quais CLIs podem enviar” acima.",
             "detached": "<strong>Depois que um pane é destacado para a própria janela, ou a janela é recarregada</strong>, o caminho das ferramentas MCP só volta quando o pane é reaberto; o protocolo de saída não é afetado.",
             "queueFull": "<strong>Quando a fila do destino está cheia (no máximo 10), a mensagem é descartada</strong> — mas não mais em silêncio: o painel diz “O destino já tem 10 mensagens aguardando”, a falha é digitada de volta no pane que enviou como aviso, e o agent que enviou também pode consultar o que aconteceu com a mensagem. A entrega continua assíncrona, então <strong>no instante do envio</strong> nada é conhecido.",
             "noPermission": "<strong>Não há pedido de permissão</strong>: mensagens entre workspaces não mostram nenhuma caixa de confirmação, só um aviso na chegada. É uma escolha deliberada.",
-            "ackLocal": "<strong>Uma simples confirmação não atravessa dispositivos</strong>: o relay não pode garantir que a mensagem fique fora da caixa de entrada na máquina de outra pessoa, então uma confirmação entre dispositivos é recusada de imediato; envie-a como mensagem comum se ela precisar viajar."
+            "ackLocal": "<strong>Uma simples confirmação não atravessa dispositivos</strong>: o relay não pode garantir que a mensagem fique fora da caixa de entrada na máquina de outra pessoa, então uma confirmação entre dispositivos é recusada de imediato; envie-a como mensagem comum se ela precisar viajar.",
+            "acp": "<strong>Os panes ACP</strong> (experimental; ativado em “Agents de CLI” → ACP) recebem a mensagem como um prompt ACP, em vez de digitada; “Entregue” significa que o agente aceitou o prompt, não que o leu ou respondeu.",
+            "mcpOnly": "<strong>{mcpOnly}</strong> só consegue enviar pelas ferramentas MCP: o Navide não lê o texto dos turnos dele, então uma mensagem de linha simples que ele imprima nunca sai do pane."
           }
         },
         "tip": "Dica: dê primeiro nomes de papel aos panes (“reviewer”, “architect”) — o título é o endereço, e tudo depois fica muito mais natural de ler.",
@@ -5078,7 +5104,7 @@
             "legend": {
               "actions": {
                 "label": "Barra de título",
-                "text": "“Pausar entrega” coloca as mensagens seguintes na fila em vez de enviá-las; “Limpar registro” só limpa a exibição e não mexe nas mensagens entregues."
+                "text": "“Pausar entrega” coloca as próximas mensagens na fila em vez de enviá-las; “Limpar registro” remove as linhas concluídas e mantém as que ainda estão a caminho."
               },
               "route": {
                 "label": "Origem → destino",
@@ -5149,12 +5175,13 @@
           "h3": "Responder às perguntas da CLI pelo chat",
           "answer": {
             "bare": "Pedidos de permissão e perguntas são publicados no chat um de cada vez. Quando só há um aberto, um simples <code>1</code>–<code>9</code>, <code>yes</code> ou <code>no</code> responde; com vários abertos, acrescente o id depois da resposta (por exemplo, <code>yes &lt;id&gt;</code>). Qualquer outro texto recebe uma dica imediata em vez de ficar esperando numa fila.",
-            "which": "Só Claude Code, Codex e Aider podem ser respondidos pelo chat; outras CLIs, seleção múltipla e perguntas de texto livre pedem que você responda no computador, em vez de mostrar botões que não fazem nada.",
+            "which": "Só Claude Code, Codex, Aider e Grok Build podem ser respondidos pelo chat; outras CLIs, seleção múltipla e perguntas de texto livre pedem que você responda no computador, em vez de mostrar botões que não fazem nada.",
             "never": "Escolhas permanentes como “não perguntar de novo”, “sempre permitir” ou “permitir nesta session” <strong>nunca são acionadas pelo chat</strong>.",
             "guard": "Pedidos aprovados pelo chat continuam passando pelo Navide Guard: tudo o que for classificado como crítico ou alto é recusado, assim como tudo o que o Guard não consegue avaliar; o chat é avisado de que a ação precisa ser confirmada no computador."
           },
           "h4": "O monitor da barra de título",
-          "p4": "O botão “{monitor}” da barra de título tem um ponto de status: vermelho quando um bot está bloqueado, amarelo enquanto um está reconectando, verde quando estão bem e sem ponto quando nenhum bot está ativado. Ele abre uma lista de todos os panes vinculados a um chat, de onde você pode ir até o pane ou desconectá-lo; os tópicos filhos automáticos ficam agrupados sob a vinculação principal."
+          "p4": "O botão “{monitor}” da barra de título tem um ponto de status: vermelho quando um bot está bloqueado, amarelo enquanto um está reconectando, verde quando estão bem e sem ponto quando nenhum bot está ativado. Ele abre uma lista de todos os panes vinculados a um chat, de onde você pode ir até o pane ou desconectá-lo; os tópicos filhos automáticos ficam agrupados sob a vinculação principal.",
+          "commands": "Num chat vinculado, <code>/prompts</code>, <code>/skills</code> e <code>/mcp</code> respondem com botões para suas skills de prompt, as skills da CLI do pane e os servidores MCP (somente leitura); <code>/shares</code> e <code>/revoke</code> listam e revogam links de compartilhamento; <code>/plugins status</code> e <code>/plugins stop</code> mostram plug-ins do Navide de terceiros e param um deles. Arquivos enviados ao chat são guardados para o pane, e um pane pode devolver um arquivo com uma linha <code>---ATTACH--- &lt;caminho&gt;</code> no seu bloco MSG."
         }
       },
       "workspace": {
@@ -5255,7 +5282,7 @@
             "openHome": "<strong>Início</strong>: use simplesmente a pasta pessoal.",
             "recent": "Abaixo fica a lista de abertos recentemente, onde os itens mais usados podem ser fixados. Clicar com o botão direito em um item oferece <em>Abrir no editor padrão</em>, <em>Mostrar no Finder</em> e <em>Copiar caminho</em>."
           },
-          "p2": "Depois, sempre é possível usar o menu: <strong>Arquivo ▸ Abrir workspace…</strong> (<kbd class=\"wph-kbd\">⌘O</kbd>), <strong>Arquivo ▸ Abrir recente</strong> ou <strong>Arquivo ▸ Nova janela</strong> (<kbd class=\"wph-kbd\">⌘N</kbd>) para uma nova janela.",
+          "p2": "Depois, sempre é possível usar o menu: <strong>Arquivo ▸ Abrir workspace…</strong> (<kbd class=\"wph-kbd\">{openWorkspace}</kbd>), <strong>Arquivo ▸ Abrir recente</strong> ou <strong>Arquivo ▸ Nova janela</strong> (<kbd class=\"wph-kbd\">{newWindow}</kbd>) para uma nova janela.",
           "h2": "Vários workspaces em uma janela",
           "p3": "Não é preciso uma segunda janela para um segundo projeto. Na guia Agents da barra lateral, o cabeçalho da seção de workspaces tem à direita um <strong>＋</strong> que abre o mesmo seletor; o projeto escolhido entra na <strong>mesma janela</strong> e adiciona mais uma linha de cabeçalho de workspace à barra lateral.",
           "p4": "Clique nessa linha de cabeçalho para trocar a visualização. O ponto principal: <strong>um workspace do qual você sai continua com os agents em execução</strong>, a linha dele permanece na barra lateral e só os panes dele ficam ocultos do palco por enquanto.",
@@ -5273,7 +5300,7 @@
           "p1": "O ponto de entrada é o botão <strong>＋</strong>: há um na linha de cabeçalho do workspace na barra lateral e um em cada linha de cabeçalho de grupo (a única diferença é em qual grupo o novo pane cai). Clicar nele abre um pequeno menu:",
           "addMenu": {
             "role": "No topo fica o menu suspenso <strong>Selecionar papel…</strong>: escolha um papel predefinido.",
-            "cliList": "No meio fica a lista de CLIs, com as que não estão instaladas marcadas como tal.",
+            "cliList": "Abaixo, a lista se divide em dois blocos com título. <strong>{cli}</strong> reúne as CLIs de programação, marcando as que não estão instaladas. <strong>{agents}</strong> mostra seus agentes permanentes (OpenClaw, Hermes Agent) pelo nome: escolher um que está aberto leva até ele, escolher um fechado retoma a conversa dele. Há também uma entrada <em>Novo …</em> que pede um nome primeiro, e os agentes ACP aparecem nesse bloco. Uma nota sob a lista avisa que agentes na nuvem, como Grok Bot e dots, vêm como plug-ins do Navide.",
             "terminal": "Embaixo ficam <strong>Terminal</strong> (um terminal comum sem agent) e <strong>Iniciar manualmente…</strong>."
           },
           "p2": "<em>Iniciar manualmente…</em> abre a caixa de diálogo completa, onde você pode escolher o agent e o papel, decidir se ele entra no palco e se um terminal abre ao lado, e colar um id de session para retomar diretamente uma conversa anterior.",
@@ -5286,7 +5313,7 @@
               "action": "Abrir um imediatamente"
             },
             "nthCli": {
-              "action": "Abrir a enésima CLI"
+              "action": "Escolher a N-ésima CLI para o próximo pane"
             },
             "rename": {
               "action": "Renomear",
@@ -5304,17 +5331,17 @@
           },
           "note": "Um pane com nome automático tem uma pequena marca <code>◦</code> depois do título; um que você renomeou manualmente não.",
           "h2": "O menu de contexto",
-          "p3": "Clique com o botão direito em um pane ou na linha dele na barra lateral: <em>Focar</em>, <em>Renomear</em>, <em>Enviar mensagem</em>, <em>Interromper</em>, <em>Reaplicar papel</em>, <em>Remover</em>. Desses, <em>Enviar mensagem</em> insere o endereço desse pane na caixa de entrada do pane que está em foco — o caminho mais rápido para mensagens entre panes. Um pane com subpanes (<code>▸</code>) também ganha o item <em>Remover N subpanes</em>: ele fecha só o que esse pane abriu, sem mexer no próprio pane nem nos outros.",
+          "p3": "Clique com o botão direito em um pane ou na linha dele na barra lateral. A maioria dos panes oferece <em>{focus}</em>, <em>{rename}</em>, <em>{mute}</em>, <em>{sendMessage}</em>, <em>{interrupt}</em>, <em>{reapplyRole}</em>, <em>{reclaim}</em> e <em>{remove}</em>; alguns itens só aparecem quando se aplicam: <em>{restore}</em> em um pane minimizado, <em>{fitWidth}</em> quando as colunas do pane estão limitadas, <em>{reconnect}</em> em um pane que perdeu a conversa, e os itens de agente (despertar, agendamentos, canais, pasta de memória, configurações) em um pane Agent. <em>{sendMessage}</em> insere o endereço desse pane na caixa de entrada do pane em foco — o caminho mais rápido para mensagens entre panes. <em>{reclaim}</em> encerra a CLI para liberar memória e deixa um cartão para retomar com um clique (veja abaixo). Um pane com subpanes (<code>▸</code>) também tem <em>{removeChildren}</em>, que fecha só o que ele abriu, e <em>{removeAll}</em>, que fecha o pane junto com tudo o que ele abriu.",
           "h3": "Minimizar e o cartão de espaço reservado",
           "p4": "O <code>⊟</code> no canto superior direito de um pane o minimiza. Depois de recolhido, a linha dele na barra lateral é marcada como <strong>Encaixado</strong>, e expandir essa linha oferece <em>↑ Restaurar</em> e <em>Remover</em>.",
           "p5": "Há também um terceiro estado, o <strong>cartão de espaço reservado</strong>: o espaço continua lá, mas mostra um cartão “↩ Clique para retomar”, com o título, o subtítulo e o rótulo do grupo. Depois de reiniciar o app, ou após uma liberação por ociosidade, um pane fica assim. Clique em qualquer lugar do cartão e a CLI continua a mesma conversa.",
           "h4": "Liberação automática por ociosidade",
           "p6": "Cada CLI em execução ocupa memória e GPU. Por padrão, o Navide volta para cartão de espaço reservado os panes que ficaram em silêncio por tempo demais:",
           "reclaim": {
-            "default": "<strong>Ativada por padrão</strong>, com um limite de 30 minutos que pode ser alterado nas Configurações.",
+            "default": "<strong>Ativado por padrão</strong>, com um limite de {defaultMinutes} minutos que você pode mudar nas configurações. O limite mais curto é de {minMinutes} minutos — um valor menor é elevado a esse.",
             "scan": "A verificação ocorre a cada 60 segundos, e o critério é “nenhuma saída e nada digitado por você”.",
             "notClose": "<strong>Isso não é um fechamento</strong>: o espaço, o nome, o endereço de mensagens e a session são mantidos — um clique traz o pane de volta.",
-            "exempt": "Nunca são liberados os panes que um pipeline está lendo, os que têm um rascunho na caixa de entrada, os que têm mensagens na fila de entrega e o pane em foco."
+            "exempt": "Um pane nunca é recolhido enquanto está em foco, ainda trabalhando ou esperando sua resposta, executando um loop, sendo observado por uma etapa de pipeline ou roteado por um Manager, com um rascunho na caixa de entrada ou com mensagens na fila de entrega. Um pane sem sessão para retomar também fica intacto, pois não conseguiria voltar."
           },
           "note2": "Quando ocorre uma liberação, o log de pipeline da visualização Histórico mostra <code>♻ N panes de CLI ociosos liberados — clique para retomar</code>."
         },
@@ -5380,27 +5407,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "Árvore de workspaces / grupos / panes",
-              "keys": "⌘1"
+              "content": "Árvore de workspaces / grupos / panes"
             },
             "pipeline": {
-              "content": "Fluxos automatizados com várias etapas",
-              "keys": "⌘2, ⌘⇧Y"
+              "content": "Fluxos automatizados com várias etapas"
             },
             "explorer": {
-              "content": "Explorador de arquivos",
-              "keys": "⌘3, ⌘⇧E"
+              "content": "Explorador de arquivos"
             },
             "git": {
-              "content": "Controle de versão (veja o tópico “Fluxo de trabalho com código”)",
-              "keys": "⌘4"
+              "content": "Controle de versão (veja o tópico “Fluxo de trabalho com código”)"
             },
             "plans": {
-              "content": "Lista de documentos de plano (veja o tópico “Fluxo de trabalho com código”)",
-              "keys": "⌘5, ⌘⇧D"
+              "content": "Lista de documentos de plano (veja o tópico “Fluxo de trabalho com código”)"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> recolhe a barra lateral inteira. Plug-ins do Navide instalados podem adicionar mais guias.",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> recolhe a barra lateral inteira. Plug-ins do Navide instalados podem adicionar mais guias.",
           "h2": "Os três níveis da guia Agents",
           "p1": "De cima para baixo: <strong>linha de workspace → linha de grupo → linha de pane</strong>.",
           "rows": {
@@ -5425,7 +5447,7 @@
           "foldNote": "<strong>Alt/Option + clique na seta de expansão da linha</strong> faz o mesmo que qualquer um dos botões de dobrar — a dica diz isso: Alt+clique: recolher tudo dentro. O estado de dobra é salvo <strong>por pane, junto com o projeto</strong>, então sobrevive a uma reinicialização.",
           "h4": "Seleção múltipla e arrastar em lote",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> + clique: adiciona uma linha à seleção.",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> + clique: adiciona uma linha à seleção.",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> + clique: seleciona um intervalo inteiro (na ordem mostrada na tela, não na ordem interna).",
             "batchMenu": "Clicar com o botão direito com várias linhas selecionadas transforma o menu na versão em lote: <em>Interromper selecionados</em>, <em>Reconstruir selecionados</em>, <em>Minimizar selecionados</em>, <em>Restaurar selecionados</em>, <em>Liberar selecionados</em> (mostra quantos se qualificam), <em>Silenciar notificações dos selecionados</em> (ou reativar quando todos os panes selecionados estão silenciados) e <em>Remover selecionados</em>. Liberar mantém os panes disponíveis para retomar e ignora os panes protegidos."
           },
@@ -5515,7 +5537,7 @@
               "action": "Abrir um novo pane"
             },
             "nthCli": {
-              "action": "Abrir um pane com a enésima CLI"
+              "action": "Escolher a N-ésima CLI para o próximo pane"
             },
             "closePane": {
               "action": "Fechar o pane em foco"
@@ -5599,7 +5621,7 @@
         },
         "s1": {
           "title": "Direção 1: as ferramentas que o Navide dá aos agents de CLI",
-          "p1": "Assim que um pane inicia, elas aparecem na lista de ferramentas do agent. Não é preciso ensinar nada nem configurar nada — basta dizer o que quer com palavras simples, por exemplo “marque a fase dois deste plano como concluída”. Hoje são <strong>64</strong> (57 principais, mais as 7 que o plug-in do Navide Plans registra), além de 3 recursos somente leitura e 3 modelos de prompt.",
+          "p1": "Assim que um pane inicia, elas aparecem na lista de ferramentas do agent. Não é preciso ensinar nada nem configurar nada — basta dizer o que quer com palavras simples, por exemplo “marque a fase dois deste plano como concluída”. Esta página descreve <strong>{listed}</strong> delas por grupo, além de 3 recursos somente leitura e 3 modelos de prompt. O conjunto cresce a cada versão, então a lista completa e atual é a que a visão MCP do próprio agent mostra para o servidor navide (por exemplo <code>/mcp</code> no Claude Code).",
           "h1": "Documentos de plano",
           "planTools": {
             "plan_list": "Listar todos os planos deste workspace, com a fase e o progresso das tarefas",
@@ -5682,9 +5704,9 @@
           "note4": "Um workspace pode ter dois panes com o mesmo nome, e então o nome sozinho não diz qual é, por isso as ferramentas acima recusam de imediato com <code>ambiguous-target</code> em vez de escolher um. Para indicar um pane específico, passe o <code>pane_id</code> retornado por <code>cli_list_targets</code> para <code>cli_send</code>, <code>cli_send_and_wait</code>, <code>cli_read_log</code>, <code>cli_get_status</code> ou <code>cli_wait_idle</code> e omita o argumento de endereço. Nomes são mais legíveis no dia a dia; um pane reaberto com outra CLI recebe um novo id, e diante de <code>unknown-pane-id</code> basta consultá-lo de novo. Panes em outro dispositivo não têm id local e só podem ser endereçados pelo nome.",
           "note5": "Dar a <code>cli_send</code> o endereço <code>group</code> não procura um pane chamado group: transmite para os outros panes <strong>do meu grupo de guias</strong> (mesmo workspace). Isso é diferente do <code>all</code> do protocolo por linhas: <code>all</code> é a janela inteira, independentemente do agrupamento. Panes sem grupo compartilham um grupo implícito, então alcançam uns aos outros em vez de ninguém. O formato da resposta também muda: cada destinatário em <code>recipients</code> tem a própria <code>msg_key</code> para consultar separadamente com <code>cli_check_message</code>, e um <code>recipients</code> vazio significa que não há mais ninguém no seu grupo, não uma falha. O custo é o mesmo de <code>all</code>: um pane realmente chamado group não pode mais ser endereçado pelo nome.",
           "h4": "Quais CLIs estão conectadas",
-          "p2": "Até agora, <strong>dez</strong> das quinze: Claude Code, Codex, Copilot CLI, Qwen Code, OpenCode, Kilo Code, Kimi Code, Grok CLI, Antigravity CLI e Cursor CLI. Como elas são conectadas depende da interface que cada CLI oferece — uma flag de inicialização (Claude Code, Codex, Copilot, Qwen), uma variável de ambiente com todo o documento de configuração (OpenCode, Kilo) ou uma cópia do diretório de configuração por pane (Kimi, Grok, Antigravity). Nenhuma das três <strong>mexe no seu próprio arquivo de configuração MCP</strong>.",
+          "p2": "<strong>{mcpCount}</strong> das {total} até agora: {mcpNames}. Como elas são conectadas depende da interface que cada CLI oferece — uma flag de inicialização (Claude Code, Codex, Copilot, Qwen), uma variável de ambiente com todo o documento de configuração (OpenCode, Kilo) ou uma cópia do diretório de configuração por pane (Kimi, Grok, Antigravity). Nenhuma das três <strong>mexe no seu próprio arquivo de configuração MCP</strong>.",
           "note6": "<strong>O Cursor é a única exceção</strong>: ele só lê <code>.cursor/mcp.json</code> dentro do workspace, então o Navide mescla a entrada dele nesse arquivo e o adiciona a <code>.git/info/exclude</code>, deixando seu git status limpo.",
-          "note7": "Ainda não estão conectadas <strong>Aider, Muse Code e Pi</strong> (essas três CLIs não têm interface MCP) nem <strong>Droid e MiniMax Code</strong> (o Navide não as conectou e não foi verificado se as CLIs delas oferecem uma forma de entrada). A maioria desses panes ainda pode enviar mensagens a outros panes pelo protocolo de saída por linhas; eles só não têm ferramentas MCP para chamar. O MiniMax Code é a exceção: também não tem protocolo de saída, então só pode receber.",
+          "note7": "Ainda não conectadas: <strong>{notWired}</strong>. Algumas dessas CLIs não têm interface MCP nenhuma; nas outras, o Navide ainda não fez a conexão. A maioria desses panes ainda consegue mandar mensagens a outros panes pelo protocolo de saída de linhas soltas; só não têm ferramentas MCP para chamar. {receiveOnly} são a exceção: também não têm protocolo de saída, então só podem receber.",
           "note8": "A conexão acontece <strong>no momento em que o pane inicia</strong>. Então, depois de uma atualização, os panes já abertos ainda têm a lista de ferramentas antiga — feche um e abra de novo para obter a nova.",
           "h5": "O painel Visualização",
           "previewTools": {
@@ -5693,7 +5715,8 @@
             "preview_list": "Ler de volta a trilha de alterações — o que outros agents, a pessoa usuária e o observador de arquivos fizeram, do mais recente para o mais antigo; um cursor de data e hora lê só o que é novo",
             "preview_clear": "Esvaziar a trilha de alterações; o que sai são as linhas que a pessoa usuária vê no painel Visualização, inclusive as do observador de arquivos e as dela mesma, e isso não pode ser desfeito. Também pode apagar só o que é anterior a um determinado momento"
           },
-          "note9": "<strong>Só quatro ferramentas atravessam dispositivos</strong>: enviar, enviar e esperar, consultar status e esperar ociosidade. Ler a transcrição de outro pane, enviar uma tecla de interrupção e fechar um pane exigem a máquina desse pane, então as três são recusadas. Um pane remoto também <strong>não tem id local</strong>, o que torna o nome de três partes a única referência; o status dele é o valor que a janela remota enviou por último ao Navide Cloud — quase em tempo real, não em tempo real — e também não há instantâneo de cota (o cache de cota desta máquina descreve os logins desta máquina, que é a resposta errada para um pane em execução em outro lugar)."
+          "note9": "<strong>Só quatro ferramentas atravessam dispositivos</strong>: enviar, enviar e esperar, consultar status e esperar ociosidade. Ler a transcrição de outro pane, enviar uma tecla de interrupção e fechar um pane exigem a máquina desse pane, então as três são recusadas. Um pane remoto também <strong>não tem id local</strong>, o que torna o nome de três partes a única referência; o status dele é o valor que a janela remota enviou por último ao Navide Cloud — quase em tempo real, não em tempo real — e também não há instantâneo de cota (o cache de cota desta máquina descreve os logins desta máquina, que é a resposta errada para um pane em execução em outro lugar).",
+          "note10": "Não listadas aqui, mas também incluídas: canais de chat (<code>channels_*</code>), gestão do Navide Marketplace e dos plug-ins do Navide (<code>marketplace_*</code>, <code>plugins_*</code>), janelas (<code>window_*</code>, <code>workspace_close</code>), links de compartilhamento (<code>share_*</code>), <code>evolve_report</code> / <code>evolve_retro</code> e <code>pipeline_import_n8n</code>. A descrição de cada ferramenta na lista do agente diz o que ela faz."
         },
         "s2": {
           "title": "Direção 2: o Navide consumindo MCP externos",
@@ -5709,7 +5732,8 @@
           "warn": {
             "p1": "<strong>Os servidores configurados aqui nunca aparecem na lista de ferramentas de um agent de CLI.</strong> Eles servem para uma única coisa — “ler contexto → injetar no prompt inicial” — e disparam <strong>só enquanto um pipeline está em execução</strong>; os panes que você abre manualmente nunca os usam.",
             "p2": "Para que o Claude Code ou o Codex usem um servidor MCP diretamente (para consultar o GitHub, por exemplo), configure-o na própria configuração MCP dessa CLI, não aqui."
-          }
+          },
+          "p3": "Cada linha de servidor mostra o status e a quantidade de ferramentas, e as últimas linhas que ele imprimiu se falhar ao iniciar. Um servidor iniciado pelo Node.js é marcado “Requer Node.js” quando falta o Node.js, com instalação guiada. Valores deixados em branco, como variáveis de ambiente e cabeçalhos, são preenchidos nesta máquina e nunca sincronizam entre dispositivos. “Comparar” mostra uma matriz de qual CLI tem qual servidor."
         },
         "s3": {
           "title": "Direção 3: clientes externos controlando o Navide",
@@ -5770,15 +5794,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "O agent diz que não tem ferramentas de plano nem de mensagens",
-              "detail": "Esse pane não foi conectado ao abrir (é anterior à atualização) ou executa uma das cinco CLIs ainda não conectadas ao MCP (Aider / Droid / Muse Code / Pi / MiniMax Code). No primeiro caso, feche e abra de novo; no segundo, use o protocolo de saída por linhas para enviar mensagens — o MiniMax Code nem isso tem e só pode receber."
+              "detail": "Esse pane não foi conectado ao abrir (é anterior à atualização) ou roda uma das {noMcpCount} CLIs ainda não conectadas ao MCP ({notWired}). No primeiro caso, feche e reabra; no segundo, use o protocolo de saída de linhas soltas — {receiveOnly} nem isso têm e só podem receber."
             },
             "serverUnused": {
               "symptom": "Um servidor foi adicionado em Configurações → MCP, mas o agent não consegue usá-lo",
-              "detail": "Essa é a direção 2, só para pipelines lerem documentação. Para que o agent o chame diretamente, configure-o na própria configuração MCP dessa CLI. A seção “MCP de cada CLI” na metade inferior de Configurações → MCP lista, somente leitura, quais servidores cada CLI tem configurados, para você verificar diretamente."
+              "detail": "Isso é a direção 2, só para pipelines lerem documentação. Para o agente chamá-lo por conta própria, configure-o na configuração MCP da própria CLI. Configurações → MCP lista, somente leitura, os servidores que cada CLI já tem ao lado dos do Navide; mude para “Comparar” para ver qual CLI tem qual."
             },
             "planLoadFailed": {
               "symptom": "O agent diz que o plano não pôde ser carregado",
-              "detail": "Toda ferramenta de plano recebe um caminho de workspace. Se o caminho que o agent passa for diferente do workspace real do pane, ele grava em um lugar que o Navide não vê. Peça para ele usar o caminho do workspace do pane."
+              "detail": "Sem caminho de espaço de trabalho, as ferramentas de plano usam o do próprio pane. Se o agente passar outro caminho, ele grava num projeto que o Navide talvez não esteja mostrando (a ferramenta avisa que nenhum pane o usa). Peça para ele omitir o caminho do espaço de trabalho."
             },
             "staleIdentity": {
               "symptom": "Ele informa que a identidade do pane está desatualizada",
@@ -5808,7 +5832,7 @@
               },
               "actions": {
                 "label": "Ações da barra superior",
-                "text": "“Adicionar MCP +” adiciona um do catálogo integrado, “Adicionar personalizado” adiciona um manualmente e “Atualizar” lê de novo o arquivo de configuração."
+                "text": "“+ Adicionar MCP” adiciona um do catálogo embutido, “Adicionar personalizado” adiciona um manualmente e “Abrir configuração do MCP” abre o arquivo de configuração."
               },
               "card": {
                 "label": "Cartão do catálogo",
@@ -5915,6 +5939,11 @@
               "where": "O painel suspenso da faixa colorida na extremidade esquerda da barra lateral",
               "what": "Adicionar um <strong>grupo de workspaces</strong> (a camada de agrupamento que só é necessária ao lidar com muitos projetos).",
               "name": "<code>Novo grupo</code>"
+            },
+            "agentAvatar": {
+              "name": "Avatar do agente",
+              "where": "Menu ＋, sob o título Agentes",
+              "what": "A inicial de um agente permanente sobre a cor dele. Escolher leva ao agente se estiver aberto, ou o retoma se estiver fechado."
             }
           },
           "group": {
@@ -5992,8 +6021,7 @@
               "name": "<code>Nomeado automaticamente a partir da primeira instrução desta session; se você o renomear, o nome fica sendo seu</code>"
             },
             "globalManager": {
-              "where": "Ao lado do texto do título, mostrado como <code>🎯 Gerente</code>",
-              "what": "Uma simples marca: este é o pane gerente do pipeline."
+              "where": "Ao lado do texto do título, mostrado como <code>🎯 Gerente</code>"
             },
             "loop": {
               "where": "Barra de título",
@@ -6040,6 +6068,9 @@
               "name": "<code>↻ Continuar</code> / dica <code>Esta session foi restaurada e está aguardando no prompt…</code>",
               "where": "Abaixo da visualização do terminal",
               "what": "Só aparece quando o pane foi restaurado depois de uma reinicialização e está ocioso no prompt. Clicar envia <em>continue</em> para retomar o trabalho."
+            },
+            "riskPill": {
+              "what": "O Navide viu esta CLI fazer algo fora do normal: conectar a um endereço fora do conjunto esperado ou gravar um arquivo opaco que nunca havia gravado (vermelho quando se repete). Clique para ver os detalhes, o processo envolvido e, quando houver suporte, um botão <em>{analyze}</em>."
             }
           },
           "placeholder": {
@@ -7015,7 +7046,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>O instalador não tem assinatura de código.</strong> Cada nova versão é sinalizada de novo pelo SmartScreen, e as atualizações pelo app são instaladas sem verificação de assinatura pelo mesmo motivo.",
-            "symlinks": "<strong>As pastas pessoais de CLI por pane e as skills gerenciadas são montadas com links simbólicos</strong>, que o Windows não deixa um processo comum criar. Ative o Modo de Desenvolvedor do Windows (<em>Configurações ▸ Para desenvolvedores</em>) ou execute o Navide com privilégios elevados. Sem isso, nada falha em silêncio: o pane afetado imprime, ao iniciar, uma linha amarela <code>[mcp]</code> explicando o motivo. Isso só afeta as CLIs cuja conexão MCP é um arquivo no diretório de configuração delas — Antigravity CLI, Grok CLI e Kimi Code.",
+            "symlinks": "<strong>As pastas pessoais de CLI de cada pane e as skills gerenciadas são montadas com links simbólicos</strong>, que o Windows não deixa um processo comum criar. Ative o modo de desenvolvedor do Windows (<em>Settings ▸ For developers</em>) ou execute o Navide como administrador. As pastas próprias de cada pane são usadas pelas CLIs cuja conexão MCP é um arquivo na pasta de configuração — Antigravity CLI, Grok CLI e Kimi Code; sem essa permissão, os panes delas mostram ao iniciar uma linha amarela <code>[mcp]</code> explicando o motivo. As skills gerenciadas também deixam de chegar a qualquer CLI, e isso só aparece no log do back-end.",
             "schedule": "<strong>A guia Agenda lista só os trabalhos do próprio Navide (Navide Jobs).</strong> O Navide lê o crontab do usuário e os trabalhos do launchd do macOS, e o Windows não tem nenhum dos dois; o Agendador de Tarefas (taskschd.msc) não é integrado de propósito, porque o Navide nunca cria tarefas agendadas do sistema operacional e o Agendador de Tarefas já gerencia as da máquina. A tela informa isso em vez de mostrar uma lista vazia."
           },
           "h2": "Linux",
@@ -7728,6 +7759,7 @@
       "resource-limits": "Limites de recursos",
       "session-archive": "Arquivo de logs de sessão",
       "settings-management": "Gerenciamento de configurações",
+      "experimental": "Recursos experimentais",
       "theme": "Tema",
       "other": "Outros"
     },
@@ -8268,6 +8300,7 @@
         "workbench_action_focusNextPane": "Focar próximo pane",
         "workbench_action_focusPipeline": "Focar pipeline",
         "workbench_action_focusPreview": "Focar painel de pré-visualização",
+        "workbench_action_startModelArena": "Iniciar arena de modelos",
         "workbench_action_focusPreviousGroup": "Focar grupo anterior",
         "workbench_action_focusPreviousPane": "Focar pane anterior",
         "workbench_action_focusSourceControl": "Focar controle do código-fonte",
@@ -8308,6 +8341,7 @@
         "workbench_action_rebuildFocusedPane": "Reconstruir pane em foco",
         "workbench_action_reloadWindow": "Recarregar janela",
         "workbench_action_reopenClosedEditor": "Reabrir editor fechado",
+        "workbench_action_reopenClosedWindow": "Reabrir janela fechada",
         "workbench_action_revealFileInOS": "Mostrar arquivo no sistema",
         "workbench_action_revealInExplorer": "Mostrar no explorador",
         "workbench_action_saveAll": "Salvar tudo",
@@ -8504,7 +8538,7 @@
       "delete-confirm": "Excluir esta conta?",
       "cli": {
         "title": "Contas de CLI",
-        "hint": "Clique em “Entrar” ou “+ Nova conta” para abrir um pane de login temporário; ele fecha assim que você autoriza no navegador. “Definir como padrão” escolhe a conta que os novos panes usam, e os panes abertos mantêm a deles até serem reabertos.",
+        "hint": "Clique em “Entrar” ou “+ Nova conta” para abrir um pane de login temporário; ele fecha assim que você autoriza no navegador. “Trocar para esta conta” troca o login ativo desta CLI para essa conta, e os novos panes passam a usá-la. Se houver panes rodando com o login atual, o Navide pergunta antes e depois os reinicia na nova conta, retomando as conversas.",
         "hint-detail": "Todas as contas compartilham seu diretório pessoal, então as sessions e o histórico continuam; trocar de conta substitui as credenciais armazenadas no mesmo lugar, e entrar em uma conta nunca mexe na conta ativa.",
         "hint-more": "Detalhes",
         "login-no-workspace": "Abra um workspace primeiro: entrar abre um pane de login temporário.",
@@ -8520,24 +8554,30 @@
         "agent-login-confirm-reason-truncated": "O motivo do agent tinha mais de 300 caracteres; só os 300 primeiros são mostrados.",
         "agent-login-confirm-cancel": "Cancelar",
         "agent-login-confirm-ok": "Abrir login",
-        "agent-switch-confirm-title": "Um agent pede para trocar uma conta de CLI",
-        "agent-switch-confirm-body": "Nada é trocado sem a sua concordância. A troca é a mesma que Configurações → Contas faz: a CLI passa para a outra conta e, se houver panes em execução nela, o Navide pergunta de novo antes de reiniciá-los. Se você não responder, a solicitação se encerra sozinha.",
-        "agent-switch-confirm-late": "Depois que você concordar, a troca é concluída mesmo que o agent tenha parado de esperar. Se panes forem reiniciados, isso inclui o próprio pane do agent que pediu, quando ele roda nesta CLI; ele não receberá o resultado e terá de verificar as contas de novo após a reinicialização.",
-        "agent-switch-confirm-vendor": "CLI",
-        "agent-switch-confirm-from": "Da conta",
-        "agent-switch-confirm-to": "Para a conta",
-        "agent-switch-confirm-caller": "Solicitado pelo pane",
-        "agent-switch-confirm-workspace": "Workspace do pane",
-        "agent-switch-confirm-pane": "Pane a mover",
-        "agent-switch-confirm-pane-body": "Nada muda sem a sua concordância. Só este pane é movido: ele reabre na conversa dentro da pasta própria da outra conta. O login ativo da CLI e todos os outros panes continuam como estão. Se o pane estiver trabalhando, o Navide pergunta de novo antes de pará-lo. Sem resposta, a solicitação se fecha sozinha.",
-        "agent-switch-confirm-reason": "Motivo, escrito pelo agent",
-        "agent-switch-confirm-reason-truncated": "O motivo do agent tinha mais de 300 caracteres; só os 300 primeiros são mostrados.",
-        "agent-switch-confirm-cancel": "Cancelar",
-        "agent-switch-confirm-ok": "Trocar conta",
-        "agent-switch-done": "{agent} trocou {vendor} de {from} para {to}. Motivo do agent: {reason}",
-        "agent-switch-pane-done": "{agent} moveu um pane de {from} para {to}. O login ativo e os outros panes não mudaram. Motivo do agent: {reason}",
+        "agent-switch-done": "{time}: {agent} trocou {vendor} de {from} para {to}. Motivo: {reason}",
+        "agent-switch-pane-done": "{time}: {agent} moveu o painel {pane} de {from} para {to}. O login ativo e os outros painéis não mudaram. Motivo: {reason}",
+        "agent-switch-queued": "{agent} está trocando {vendor} para {to}. Primeiro {count} painel(is) em uso terminam a vez; depois a troca se conclui sozinha. Motivo: {reason}",
+        "agent-switch-pane-queued": "{agent} vai mover o painel {pane} para {to} quando a vez atual terminar. Motivo: {reason}",
+        "agent-switch-not-done": "A troca em espera de {agent} ({vendor} → {to}) não aconteceu ({status}).",
+        "switch-log-title": "Registro de trocas de conta",
+        "switch-log-hint": "Trocas feitas por um agente (cli_account_switch) ou um botão de chat, sem um clique aqui. Mantidas por 90 dias.",
+        "switch-log-empty": "Nenhuma troca ainda.",
+        "switch-log-refresh": "Atualizar",
+        "switch-log-col-time": "Hora",
+        "switch-log-col-who": "Pedido por",
+        "switch-log-col-account": "Conta",
+        "switch-log-col-status": "Resultado",
+        "switch-log-col-reason": "Motivo",
+        "switch-log-pane": "painel {pane}",
+        "switch-log-status-switched": "Trocado",
+        "switch-log-status-queued": "Aguardando painéis ociosos",
+        "switch-log-status-superseded": "Substituído por um pedido mais recente",
+        "switch-log-status-cancelled": "Cancelada",
+        "switch-log-status-stale": "A conta mudou nesse meio-tempo; não trocado",
+        "switch-log-status-failed": "Não trocado",
         "login-complete": "Conectado como {email}. Conta salva.",
         "login-complete-no-email": "Login concluído. Conta salva.",
+        "switch-login-failed": "A conta \"{account}\" para a qual você acabou de mudar não consegue entrar (a renovação do token do Claude Code foi recusada). Execute /login uma vez em qualquer painel do Claude.",
         "login-step2": "Etapa 1 concluída: {email} foi salva. Mais uma autorização conecta esta conta na própria pasta. Conclua no navegador a partir do pane de login que acabou de abrir.",
         "login-step2-no-email": "Etapa 1 concluída: a conta foi salva. Mais uma autorização a conecta na própria pasta. Conclua no navegador a partir do pane de login que acabou de abrir.",
         "login-step2-done": "Tudo pronto: {email} está conectada, inclusive na própria pasta.",
@@ -8560,6 +8600,13 @@
         "refresh-quota-card-hint": "Lê de novo agora a cota restante desta conta, sem a espera habitual após uma leitura com falha. Só é possível ler a conta com que a CLI está conectada ou uma conectada na própria pasta.",
         "dir-sign-in": "Entrar na própria pasta",
         "dir-sign-in-hint": "Conecte esta conta uma vez dentro da própria pasta para que a cota dela possa ser lida ao vivo enquanto estiver estacionada. O navegador pede uma nova autorização; use o mesmo e-mail.",
+        "dir-new-panes": "Abrir novos painéis na pasta dela",
+        "dir-new-panes-hint": "Os novos painéis vão rodar na pasta própria desta conta. A conta atual não é trocada e os painéis abertos não são afetados.",
+        "dir-new-panes-active": "Novos painéis abrem na pasta desta conta",
+        "dir-new-panes-clear": "Voltar a seguir a conta atual",
+        "dir-new-panes-unavailable": "Esta conta ainda não entrou na própria pasta. Pressione \"Entrar na própria pasta\" primeiro.",
+        "dir-guidance": "Para usar esta conta junto com a atual, pressione \"Abrir novos painéis na pasta dela\" em vez de \"Trocar para esta conta\". Uma troca move todos os painéis da conta atual, e voltar pode exigir entrar mais uma vez.",
+        "dir-guidance-sign-in-first": "Para usar esta conta junto com a atual, pressione primeiro \"Entrar na própria pasta\" e depois abra novos painéis na pasta dela, em vez de pressionar \"Trocar para esta conta\". Uma troca move todos os painéis da conta atual, e voltar pode exigir entrar mais uma vez.",
         "dir-email-mismatch": "A própria pasta está conectada como {dirEmail}, não {expected}. A cota deste cartão é de {dirEmail}.",
         "default-hint": "Suas credenciais de login originais",
         "default-collapsed": "Login original (fora do Navide): sem login",
@@ -9819,6 +9866,11 @@
     "skipped-title": "{count} workspace não foi reaberto | {count} workspaces não foram reabertos",
     "skipped-message": "Estes workspaces falharam ao abrir 3 vezes seguidas; por isso, foram deixados fechados para manter o aplicativo utilizável. Você pode abri-los de novo quando quiser.",
     "skipped-ack": "Entendi",
+    "closed-title": "Janelas fechadas recentemente",
+    "closed-reopen": "Restaurar",
+    "closed-others": "Com {names}",
+    "reopen-missing-title": "{count} pasta não foi encontrada | {count} pastas não foram encontradas",
+    "reopen-missing-message": "Estas pastas não existem mais e foram ignoradas ao reabrir a janela:",
     "apply": "Restaurar",
     "dismiss": "Dispensar",
     "scope-title": "Retomar conversas anteriores",
@@ -9957,6 +10009,10 @@
   "cli-env": {
     "denied": "{label}: o Navide gerencia {keys} por conta própria; por isso, o valor que você definiu nunca chegou à CLI.",
     "overridden": "{label}: {keys} foi aceito, mas depois substituído pela configuração do próprio Navide; por isso, seu valor não está em vigor neste pane."
+  },
+  "cli-account-dir": {
+    "links-unavailable": "{label}: o Windows não permite que o Navide vincule a pasta desta conta às suas outras contas, então as sessões ou configurações ficam separadas. Ative o Modo de Desenvolvedor (Configurações → Sistema → Para desenvolvedores) e reinicie o Navide.",
+    "resume-fallback": "{label}: a conversa salva não foi encontrada na pasta desta conta, então uma nova conversa foi iniciada e orientada a ler a transcrição anterior e continuar a partir dela."
   },
   "install-terminal": {
     "input-lost": "O que foi digitado não chegou ao comando: {error}. Nada do que foi digitado desde então (por exemplo, uma senha) foi recebido.",
@@ -10121,6 +10177,12 @@
     "use-failed": "Não foi possível mudar {label} para esta instalação: {error}",
     "use-done": "O Navide agora vai iniciar {label} a partir de {path}.",
     "autoupdate-failed": "Não foi possível alterar a atualização automática de {label}; ela continua como estava.",
+    "update-available": "Nova versão {version}",
+    "update-to": "Atualizar para {version}",
+    "update-blocked-open": "No Windows, um painel do {label} mantém o arquivo do programa aberto: feche todos os painéis do {label} e depois atualize. Abertos: {panes}",
+    "update-npm-not-writable": "A pasta global do npm exige permissão de administrador. O Navide nunca usa sudo: mude para um Node seu (por exemplo nvm) ou defina um prefixo do npm na sua pasta pessoal e depois atualize.",
+    "update-blocked-running": "Outra atualização de CLI está em andamento. Aguarde terminar.",
+    "update-blocked-busy": "Atualize quando todos os painéis do {label} estiverem ociosos. Não ociosos: {panes}",
     "use-this": "Usar esta",
     "remove": "Remover",
     "autoupdate": "Atualização automática",
@@ -10185,6 +10247,19 @@
     "use-version-note": "Isto é seguro e reversível: altera apenas o executável que o Navide inicia. Não desinstala nada nem enfraquece a segurança do macOS.",
     "remove-installation": "Remover esta instalação…",
     "removal-blocked": "A remoção não está disponível porque nenhuma outra instalação funcional foi encontrada. Repare ou instale outra cópia primeiro e depois detecte novamente.",
+    "update-current": "Atual {version}",
+    "update-latest": "Mais recente {version}",
+    "update-to": "Atualizar para {version}",
+    "update-runs-with": "Executa em um terminal visível: {command}",
+    "update-only-active": "Só a instalação que o Navide executa é atualizada. As outras cópias não são alteradas.",
+    "update-no-command": "O Navide não consegue atualizar esta instalação para você.",
+    "update-npm-not-writable": "A pasta global do npm exige permissão de administrador. O Navide nunca usa sudo: mude para um Node seu (por exemplo nvm) ou defina um prefixo do npm na sua pasta pessoal e depois atualize.",
+    "update-docs": "Atualizar pelas instruções do fornecedor",
+    "update-verify-title": "Verificar a atualização",
+    "update-verify-desc": "A atualização terminou. O Navide detectou as versões de novo.",
+    "update-updated": "Atualizado {from} → {to}",
+    "update-unchanged": "Ainda {version}: a atualização não mudou a versão",
+    "update-failed": "A atualização não terminou: {error}",
     "confirm-remove-title": "Remover esta instalação?",
     "confirm-remove-desc": "Isso abre o Terminal para desinstalar {version} em {path}. Nada é removido até que você responda “y” no Terminal.",
     "confirm-remove-keep": "A instalação funcional em {path} permanece onde está.",
@@ -10231,7 +10306,6 @@
     "remaining": "{pct} restantes",
     "resets-in": "redefine em {time}",
     "window-left": "{label} restante",
-    "window-left-pct": "{label}: {pct} restantes",
     "window-left-used": "{label}: {pct} restantes ({used} usados)",
     "window-claude-session": "Session (5 h)",
     "window-unlimited": "Ilimitado",
@@ -10240,7 +10314,14 @@
     "window-claude-weekly-model": "Semanal ({scope})",
     "parked-not-measured-hint": "Em espera: o Claude Code só informa a conta com a qual está rodando. Entre com esta conta na própria pasta dela para ler a cota em tempo real.",
     "updated": "atualizado {time}",
+    "window-pct-left": "{pct} restantes",
+    "window-reset": "{at} · redefine em {countdown}",
+    "window-reset-passed": "o horário de redefinição {at} já passou",
+    "data-updated": "Dados atualizados {time} ({ago})",
+    "stale-title": "Dados desatualizados",
+    "stale-detail": "Última leitura bem-sucedida {time} ({ago}). Os números abaixo são daquele momento; {action} lê os atuais.",
     "switch-title": "Trocar de conta",
+    "switch-live-guidance": "Isto troca todos os painéis da conta atual. Para abrir só os novos painéis com outra conta, use \"Abrir novos painéis na pasta dela\" nas configurações de contas.",
     "switch-default": "Padrão (integrada)",
     "switch-low": "Cota baixa – trocar de conta",
     "exhausted-short": "esgotada",
@@ -10276,6 +10357,23 @@
     "failover-mode-off": "Desativado",
     "failover-mode-notify": "Avisar",
     "failover-mode-auto": "Trocar automaticamente",
+    "auto-switch-pop-title": "Quando a cota acabar",
+    "auto-switch-notify-only": "O Navide só avisa; nada troca sozinho.",
+    "auto-switch-off-only": "Nada acontece; você troca manualmente.",
+    "auto-switch-next": "Próxima: {name}",
+    "auto-switch-next-none": "Nenhuma outra conta tem cota agora",
+    "auto-switch-left": "Restam {n} trocas automáticas em 5 horas",
+    "auto-switch-block-hint": "O que o Navide faz quando a cota de uma conta acaba. É a mesma configuração de \"Troca de conta quando a cota acaba\" em Geral; mudar em um lugar muda nos dois.",
+    "auto-switch-next-headroom": "Próxima: {name} ({pct}% restante)",
+    "auto-switch-order": "Ordem: primeiro a conta com leitura atual e mais cota restante",
+    "auto-switch-log": "Registro de trocas ({n}) ›",
+    "auto-switch-log-short": "Registro ›",
+    "auto-switch-queued": "Troca para {to} na fila: aguardando {n} painel(is) ficarem ociosos",
+    "auto-switch-queued-pane": "Troca do painel {pane} para {to} na fila: aguardando ficar ocioso",
+    "auto-switch-cancel": "Cancelar",
+    "auto-switch-tag-queued": "Na fila → {to}",
+    "auto-switch-tag-next": "Próxima",
+    "auto-switch-goto-accounts": "Ver o status e o registro de trocas em Contas ›",
     "failover-col-cli": "CLI",
     "failover-col-switch": "Troca",
     "failover-col-resume": "Conversa",
@@ -11005,6 +11103,7 @@
     "token-linked": "Vinculado com um token"
   },
   "channels": {
+    "model-switched": "{who} trocou {pane} para {model} por um chat ({method})",
     "agent": {
       "title": "Solicitações de agents",
       "from": "Solicitado por {requester}",
@@ -12222,7 +12321,18 @@
     "unpin-title": "{count} pane que vai passar a acompanhar está trabalhando | {count} panes que vão passar a acompanhar estão trabalhando",
     "unpin-body": "Fazer um pane acompanhar o reabre no login atual e retoma a conversa. Aguarde estes terminarem ou ignore-os desta vez. Os panes ociosos trocam agora.",
     "pin-default-refused": "A conta Padrão integrada não tem pasta própria; por isso, não é possível fixar um pane nela. Mude primeiro para outra conta.",
-    "pin-needs-dir-login": "Para fixar este pane em {account}, entre uma vez na própria pasta dela. O login foi aberto."
+    "pin-needs-dir-login": "Para fixar este pane em {account}, entre uma vez na própria pasta dela. O login foi aberto.",
+    "fix-children-title": "Fixar os subpanes em {account}?",
+    "fix-children-body": "Os subpanes do Claude marcados reabrem na pasta própria de {account} e retomam a conversa. As trocas de conta não os movem mais. Os livres reabrem agora; os ocupados esperam o turno terminar e nunca são interrompidos.",
+    "fix-children-parent-follows": "Este pane continua seguindo as trocas de conta.",
+    "fix-children-confirm": "Fixar {count} subpanes",
+    "skip-not-claude": "Não é um pane do Claude, ignorado",
+    "skip-no-session": "Nenhuma conversa para retomar, ignorado",
+    "skip-already": "Já fixado em {account}, ignorado",
+    "fix-children-done": "{count} subpanes fixados em {account} ({skipped} ignorados).",
+    "fix-children-waiting": "{count} subpanes ocupados reabrem quando o turno terminar.",
+    "fix-children-none": "Nenhum subpane pode ser fixado em {account}.",
+    "fix-children-needs-dir-login": "Para fixar os subpanes em {account}, entre uma vez na pasta própria dela. O login foi aberto; depois, escolha esta opção de novo."
   },
   "pluginActivity": {
     "title": "Atividade",
@@ -13415,6 +13525,140 @@
       "unsupported": "Não compatível",
       "yolo": "Pular confirmação de comandos perigosos",
       "yolo-flag": "Compatível ({flag}), segue a chave YOLO"
+    }
+  },
+  "arena": {
+    "experimental": "Experimental (beta)",
+    "menu": {
+      "section": "Comparar",
+      "start": "Arena de modelos…",
+      "runs": "Execuções da arena ({n})",
+      "hint": "Envie uma tarefa para 2–4 modelos, cada um no seu worktree, e compare lado a lado"
+    },
+    "ctx": {
+      "compare": "Comparar esta tarefa entre modelos…"
+    },
+    "settings": {
+      "title": "Arena de modelos",
+      "hint": "Envie uma tarefa para 2–4 modelos ao mesmo tempo, cada um no seu próprio worktree git e painel; depois compare os resultados e mescle o escolhido. Desativado por padrão."
+    },
+    "start": {
+      "title": "Iniciar uma comparação",
+      "subtitle": "Todos os modelos trabalham na mesma tarefa a partir do mesmo commit, cada um no seu worktree. Sua pasta de trabalho não muda até você mesclar.",
+      "task": "Tarefa",
+      "task-placeholder": "Descreva a mudança que cada modelo deve fazer…",
+      "base": "Ponto de partida",
+      "check": "Comando de aceitação",
+      "check-placeholder": "ex.: pnpm test:run",
+      "models": "Modelos ({min}–{max})",
+      "cli": "Ferramenta CLI",
+      "model-default": "Modelo padrão do {cli}",
+      "remove": "Remover",
+      "add": "Adicionar modelo",
+      "time-limit": "Limite de tempo por painel (minutos)",
+      "budget": "Teto de custo por painel (US$)",
+      "estimate": "Abre {panes} painéis e {panes} worktrees.",
+      "estimate-branches": "Branches: arena/EXECUÇÃO/MODELO, em .agent-team/worktrees/arena-EXECUÇÃO/.",
+      "estimate-budget": "Pior caso: US$ {total} no total no teto.",
+      "starting": "Iniciando…",
+      "go": "Iniciar comparação",
+      "failed": "Não foi possível iniciar a comparação."
+    },
+    "kickoff": {
+      "check": "Quando terminar, execute `{cmd}` e informe se passou."
+    },
+    "panel": {
+      "title": "Arena de modelos",
+      "run": "Execução",
+      "base": "A partir de {branch} em {sha}",
+      "elapsed": "Decorrido {t}",
+      "limits": "Limites: {min} min, US$ {usd} por painel",
+      "dirty-base": "A pasta principal tinha alterações não confirmadas no início; elas não estão no ponto de partida dos candidatos.",
+      "check-note": "Comando de aceitação: {cmd}. Cada painel o executa e informa o resultado.",
+      "empty": "Ainda não há execuções da arena neste espaço de trabalho."
+    },
+    "run-state": {
+      "running": "Em andamento",
+      "merged": "Mesclada",
+      "kept": "Branch mantido",
+      "closed": "Encerrada"
+    },
+    "state": {
+      "running": "Executando",
+      "no-pane": "Sem painel",
+      "pane-closed": "Painel fechado",
+      "stopped-user": "Parado por você",
+      "stopped-time": "Parado: limite de tempo",
+      "stopped-budget": "Parado: teto de custo"
+    },
+    "col": {
+      "model": "Modelo",
+      "state": "Situação",
+      "changes": "Alterações",
+      "tokens": "Tokens usados",
+      "cost": "Custo",
+      "default-model": "{cli} padrão",
+      "files": "{n} arquivos",
+      "protected": "{n} arquivos sensíveis alterados",
+      "cost-unavailable": "Sem dados de custo",
+      "rating": "Avaliação",
+      "adopt": "Adotar"
+    },
+    "action": {
+      "show": "Mostrar",
+      "stop": "Parar",
+      "stop-all": "Parar todos"
+    },
+    "tab": {
+      "run": "Progresso",
+      "compare": "Comparação",
+      "merge": "Mesclar"
+    },
+    "compare": {
+      "rate": "{n} estrelas",
+      "adopt": "Adotar este",
+      "no-changes": "Nenhum candidato alterou nada ainda.",
+      "protected-hint": "Lockfile, manifesto de pacotes, ambiente, CI ou configuração: confira antes de adotar",
+      "unchanged": "Sem alterações aqui",
+      "truncated": "Diff cortado: longo demais para mostrar inteiro",
+      "refresh": "Atualizar"
+    },
+    "workspace-alias": "Arena de modelos {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "Adotar um inteiro",
+      "mode-mix": "Combinar arquivos",
+      "mode-branch": "Manter só o branch",
+      "candidate": "Candidato",
+      "squash": "Compactar em um commit (squash)",
+      "file": "Arquivo",
+      "take-from": "Pegar de",
+      "skip": "Deixar de fora",
+      "mix-hint": "Cada arquivo vem inteiro do candidato escolhido, num branch novo arena/EXECUÇÃO/mix; confira se as partes combinam.",
+      "into": "Mescla em {branch} da sua pasta principal.",
+      "new-commits": "Desde o início chegaram {n} commits novos ao branch; não é feito rebase.",
+      "already": "Esta execução já foi mesclada.",
+      "dirty": "Sua pasta principal tem alterações não confirmadas. Confirme ou descarte primeiro.",
+      "wrong-branch": "Sua pasta principal não está em {branch}, o branch de partida.",
+      "empty-mix": "Escolha ao menos um arquivo.",
+      "confirm-check": "Confirme primeiro o comando de aceitação.",
+      "check-confirm": "Executei {cmd} neste resultado e passou",
+      "branch-hint": "Nada é mesclado; o branch do candidato fica para depois.",
+      "go": "Mesclar",
+      "merging": "Mesclando…",
+      "confirm": "Confirmar: mesclar em {branch}",
+      "done": "Mesclado como {sha}.",
+      "kept": "Branch {branch} mantido.",
+      "failed": "Mesclagem interrompida.",
+      "conflicts": "Conflitos para resolver no painel Git (nada foi resolvido por você):"
+    },
+    "cleanup": {
+      "title": "Limpeza",
+      "panes": "Fechar os painéis da arena",
+      "worktrees": "Remover os worktrees",
+      "branches": "Excluir os branches locais",
+      "remote": "Nada foi enviado, então não há branch remoto para excluir.",
+      "go": "Limpar",
+      "done": "{n} itens removidos."
     }
   }
 }

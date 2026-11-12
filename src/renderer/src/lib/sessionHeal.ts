@@ -299,3 +299,18 @@ export function confirmGhostAdoption(args: {
     args.verifiedPinnedId !== args.attributedId
   )
 }
+
+/** A pinned resume the backend turned into a new conversation (the transcript
+ *  was not reachable from the pane's account dir). The pin now names the OLD
+ *  conversation, exactly like a restore-pinned placeholder, so mark it the
+ *  same way: the attribution handler then adopts the new session directly and
+ *  the next Rebuild resumes it instead of falling back again. Only a pane
+ *  still pinned to the id that fell back is touched. */
+export function markResumeFallback(
+  pane: { pinnedSessionId?: string; pinnedFromRestore?: boolean },
+  fallbackSessionId: string,
+): boolean {
+  if (!fallbackSessionId || pane.pinnedSessionId !== fallbackSessionId) return false
+  pane.pinnedFromRestore = true
+  return true
+}

@@ -40,6 +40,10 @@ def capture_popen(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
     monkeypatch.setattr(terminals_mod.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(terminals_mod.pty_registry, "register", lambda *_a, **_k: None)
+    # Run inside a Navide pane (the release gate does), the backend inherits
+    # that pane's own marker; every spawn replaces it with a fresh one, so the
+    # byte-compatible expectations would carry a key the spawn env never has.
+    monkeypatch.delenv(detached_servers.MARK_ENV, raising=False)
     return captured
 
 

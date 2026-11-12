@@ -56,8 +56,9 @@ def test_every_vendor_has_a_verified_version() -> None:
     # Goose has no account switching, so its version is CLI-wide only.
     # OpenClaw and Hermes Agent were wired from their docs with no install to
     # run, so they declare no verified version rather than an invented one;
-    # Devin CLI likewise (docs read 2026-11-07, no binary installed).
-    assert {key for key, _ in _VERIFIED} == set(VENDORS) - {"openclaw", "hermes", "devin"}
+    # Devin CLI and Kiro CLI likewise (docs read 2026-11-07 and 2026-11-12,
+    # no binary installed).
+    assert {key for key, _ in _VERIFIED} == set(VENDORS) - {"openclaw", "hermes", "devin", "kiro"}
     assert len(_VERIFIED) == 16
 
 

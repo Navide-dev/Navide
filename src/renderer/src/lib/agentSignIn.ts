@@ -107,8 +107,7 @@ export type AgentSignInConfirmAnswer = 'confirmed' | 'declined' | 'expired' | 'b
 /** One agent sign-in waiting for the user at a time: `pending` is what the
  *  dialog shows, `answer` is the user's click. The request closes itself at
  *  its deadline, or when `signal` aborts (the backend withdrew it or the
- *  window lost the backend), and an answer after that changes nothing.
- *  Also holds an agent's account switch (lib/agentAccountSwitch). */
+ *  window lost the backend), and an answer after that changes nothing. */
 export function createSignInConfirm<T extends { confirmBy: number } = AgentSignInConfirmRequest>(): {
   pending: Readonly<ShallowRef<T | null>>
   ask: (request: T, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>

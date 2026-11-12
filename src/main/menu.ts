@@ -55,6 +55,12 @@ import { getTerminalSelection } from './terminal-selection-cache'
  * Installing a menu without them is the only way to drop them: Electron has no
  * API to edit the default menu in place.
  */
+// Electron labels the about, hide and quit roles with app.name, which is the
+// package name ("agent-team"). app.name is not renamed: it keys the userData
+// directory, the single-instance lock and the updater cache. The menu names
+// the product instead, worded the way Electron words those roles.
+const PRODUCT_NAME = 'Navide'
+
 const DEVELOPER_DOCS = Object.keys(DEVELOPER_DOC_URLS) as DeveloperDoc[]
 const DEVELOPER_PAGES: readonly DeveloperPage[] = ['developer-settings', 'testplace']
 
@@ -63,6 +69,16 @@ export interface RecentMenuEntry {
   path: string
   name: string
   exists: boolean
+}
+
+/** One entry in the Window > Recently Closed Windows submenu. */
+export interface ClosedWindowMenuEntry {
+  /** Name of the window's own workspace (folder basename). */
+  name: string
+  /** Names of the other workspaces the window held, in sidebar order. */
+  others: string[]
+  /** When it was closed, epoch milliseconds. */
+  closedAt: number
 }
 
 export interface AppMenuHooks {
@@ -90,6 +106,10 @@ export interface AppMenuHooks {
   onOpenTurnStats?: () => void
   /** Window menu: open the standalone machine-wide token monitor. */
   onOpenTokenMonitor?: () => void
+  /** Window menu: closed windows that can be reopened, newest first. */
+  recentlyClosedWindows?: () => ClosedWindowMenuEntry[]
+  /** Window menu: reopen a closed window by its index in that list. */
+  onReopenClosedWindow?: (index: number) => void
   /** Window menu: open the account window (sign in / create an account). */
   onOpenAccount?: () => void
   /** Help menu: open the Navide GitHub repo. */
@@ -256,13 +276,44 @@ export function installApplicationMenu(
     click: () => hooks.onLockNow?.()
   }
 
+  // ⇧⌘T is shown but NOT registered (option A of plan 0-2-41_bbfee9): a native
+  // accelerator fires before any renderer and the menu bar is shared by every
+  // window, so registering it would take ⌘⇧T (Reopen Closed Tab) away from the
+  // Mini IDE and the editor window. The main window's keybinding rule
+  // (`paneStage`) answers the key instead. Shown on macOS only: off macOS the
+  // rule's `cmd` is the Super key, which a Ctrl+Shift+T label would misstate.
+  const closedWindows = hooks.recentlyClosedWindows?.() ?? []
+  const closedLabel = (w: ClosedWindowMenuEntry): string => {
+    const name = w.others.length ? s.windowWithOthers(w.name, w.others.length) : w.name
+    return `${name} — ${closedTime(w.closedAt, locale)}`
+  }
+  const reopenClosedItems: MenuItemConstructorOptions[] = [
+    {
+      label: s.reopenClosedWindow,
+      ...(mac ? { accelerator: 'CmdOrCtrl+Shift+T', registerAccelerator: false } : {}),
+      enabled: closedWindows.length > 0,
+      click: () => hooks.onReopenClosedWindow?.(0)
+    },
+    {
+      label: s.recentlyClosedWindows,
+      enabled: closedWindows.length > 0,
+      submenu: closedWindows.length
+        ? closedWindows.map((w, index): MenuItemConstructorOptions => ({
+            label: closedLabel(w),
+            ...(w.others.length ? { sublabel: w.others.join(', ') } : {}),
+            click: () => hooks.onReopenClosedWindow?.(index)
+          }))
+        : [{ label: s.noRecentlyClosedWindows, enabled: false }]
+    },
+  ]
+
   const template: MenuItemConstructorOptions[] = [
     ...(mac
       ? [
           {
             label: app.name,
             submenu: [
-              { role: 'about' },
+              { role: 'about', label: `About ${PRODUCT_NAME}` },
               { type: 'separator' },
               settingsItem,
               checkUpdatesItem,
@@ -270,11 +321,11 @@ export function installApplicationMenu(
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
-              { role: 'hide' },
+              { role: 'hide', label: `Hide ${PRODUCT_NAME}` },
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' },
-              { role: 'quit' }
+              { role: 'quit', label: `Quit ${PRODUCT_NAME}` }
             ]
           } as MenuItemConstructorOptions
         ]
@@ -369,6 +420,8 @@ export function installApplicationMenu(
         { label: s.turnStats, click: () => hooks.onOpenTurnStats?.() },
         { label: s.tokenMonitor, click: () => hooks.onOpenTokenMonitor?.() },
         { type: 'separator' },
+        ...reopenClosedItems,
+        { type: 'separator' },
         { role: 'minimize' },
         // macOS "zoom" = maximize the window frame. Unrelated to content zoom,
         // has no accelerator, and is part of the standard Window menu.
@@ -444,6 +497,15 @@ export function installApplicationMenu(
 
   if (hooks.appLocked?.()) disableWhileLocked(template)
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/** When a window was closed: the time alone today, the date and time before. */
+export function closedTime(closedAt: number, locale: string, now: number = Date.now()): string {
+  const at = new Date(closedAt)
+  const sameDay = at.toDateString() === new Date(now).toDateString()
+  return sameDay
+    ? at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    : at.toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 /**

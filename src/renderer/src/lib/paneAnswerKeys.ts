@@ -285,6 +285,14 @@ export function modelConfirmKeys(screen: string, label: string): string[] | null
 // composer and status lines, never an older switch further up the screen.
 const MODEL_SWITCH_RESULT_LINES = 10
 
+/** How many screen rows cli_set_model reads when it looks for that line. Not
+ *  the 25-row tail the boxes are read from: claude's full-screen TUI pins the
+ *  composer to the bottom of a tall pane, and a short transcript (the result
+ *  line with it) stays at the top. Blank rows are skipped by
+ *  modelSwitchResult, and an alternate screen has no scrollback, so this is
+ *  the whole screen there. */
+export const MODEL_RESULT_SCREEN_LINES = 200
+
 /** What the screen says after the picker's keys: 'session' for claude's "Set
  *  model to …" line, 'default' when that line says it was saved as the
  *  default, null while the picker or its confirmation is still up or no fresh

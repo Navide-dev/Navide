@@ -132,6 +132,19 @@ export interface AgentSpec {
     pattern: RegExp
     keys: string
   }
+  /** The vendor's own "a new version is available" menu, when one stops the
+   *  pane at startup and takes Enter as "update now" (codex: Enter runs a
+   *  global `npm install -g`). Navide never presses Enter into it: a typed
+   *  prompt waits, `skipKeys` (the menu's own one-time skip) is sent, and the
+   *  prompt is typed again (lib/updatePrompt.ts). Both patterns are tested on
+   *  the RENDERED, whitespace-collapsed visible screen. `pattern` is the exact
+   *  menu; `suspect` is anything that looks like it but is not — a changed
+   *  wording — on which the pane is only held as awaiting, no key sent. */
+  updatePrompt?: {
+    pattern: RegExp
+    suspect: RegExp
+    skipKeys: string
+  }
   /** This vendor's TUI keeps bracketed paste on. Enables chunked clipboard
    *  paste wrapping AND serves as the default Shift+Enter encoding (bracketed
    *  LF inserts a literal newline without submitting). */

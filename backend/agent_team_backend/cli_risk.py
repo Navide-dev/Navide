@@ -126,18 +126,41 @@ class CliRiskService:
         return frozenset((ip, port) for ip in LOOPBACK for port in ports)
 
     async def _apply(self, operation, *args):
+        # Single operations (actions, disk samples) raise to their caller.
         async with self._apply_lock:
             def apply():
                 operation(*args)
                 return self.store.snapshot()
             self._snapshot = await asyncio.to_thread(apply)
 
+    async def _apply_all(self, calls: list[tuple]):
+        """Apply one sweep's observations in a single worker hop with a single
+        snapshot and a single commit, so a sweep costs one snapshot and one
+        journal sync however many panes it covers. Each operation runs in its
+        own savepoint: one that fails is logged and rolled back alone, and the
+        rest of the sweep is still recorded."""
+        async with self._apply_lock:
+            def apply():
+                try:
+                    with self.store.sweep():
+                        for operation, *args in calls:
+                            try:
+                                with self.store.observation():
+                                    operation(*args)
+                            except Exception:
+                                log.exception("CLI risk observation could not be applied")
+                except Exception:
+                    log.exception("CLI risk sweep could not be committed")
+                return self.store.snapshot()
+            self._snapshot = await asyncio.to_thread(apply)
+
     async def _network(self, panes: list[RiskPane]):
         try:
             if self.network_collector is osplat.cli_network.unsupported:
-                for pane in panes:
-                    await self._apply(self.store.apply_network, pane.pane_id, pane.vendor,
-                                      "unsupported", {}, ExpectedAddresses("unsupported"), self.clock())
+                now = self.clock()
+                await self._apply_all([(self.store.apply_network, pane.pane_id, pane.vendor,
+                                        "unsupported", {}, ExpectedAddresses("unsupported"), now)
+                                       for pane in panes])
                 return
             supported = [pane for pane in panes if pane.hosts]
             expected_by_profile = {}
@@ -170,17 +193,20 @@ class CliRiskService:
                                        and (c.ip, c.port) not in internal]
                 observed[pane.pane_id] = (expected, status, connections)
             details = await self._attribute([c for _, _, found in observed.values() for c in found])
+            calls = []
             for pane in panes:
                 expected, status, connections = observed[pane.pane_id]
                 endpoints = Counter((c.ip, c.port) for c in connections)
-                await self._apply(self.store.apply_network, pane.pane_id, pane.vendor,
-                                  status, endpoints, expected, now,
-                                  {key: details(key, connections) for key in endpoints})
+                calls.append((self.store.apply_network, pane.pane_id, pane.vendor,
+                              status, endpoints, expected, now,
+                              {key: details(key, connections) for key in endpoints}))
+            await self._apply_all(calls)
         except Exception:  # A failed background observation must not break resource responses.
             log.exception("CLI network observation failed")
-            for pane in panes:
-                await self._apply(self.store.apply_network, pane.pane_id, pane.vendor,
-                                  "unknown", {}, ExpectedAddresses("unknown"), self.clock())
+            now = self.clock()
+            await self._apply_all([(self.store.apply_network, pane.pane_id, pane.vendor,
+                                    "unknown", {}, ExpectedAddresses("unknown"), now)
+                                   for pane in panes])
 
     async def _attribute(self, connections: list):
         """Who is on each end, captured now because either process can exit

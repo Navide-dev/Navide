@@ -123,6 +123,8 @@ from .cli_risk_store import CliRiskStore
 from .sync_engine import SyncStore
 from .history_store import HistoryStore
 from .agent_message_log import AgentMessageLog
+from .account_switch_log import AccountSwitchLog
+from . import failover_notice
 from .preview_log import MAX_ROWS as PREVIEW_MAX_ROWS, PreviewLog
 from . import git_service
 from . import issue_service
@@ -242,6 +244,8 @@ dev_time_store = DevTimeStore(
 )
 # Cross-workspace by construction, so it lives in the global database.
 agent_message_log = AgentMessageLog(db=database)
+# Switches an agent or a chat button made without the user's click (D7).
+account_switch_log = AccountSwitchLog(db=database)
 codex_home_manager = CodexHomeManager()
 cli_profiles_store = CliProfilesStore(db=database)
 from .credential_store import CredentialStores, active_store_metadata, managed_watch_path
@@ -391,6 +395,40 @@ async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) 
         except Exception as err:  # noqa: BLE001
             # send_json already marks dead + discards on send failure; this is
             # a defensive net for anything unexpected it re-raised.
+            log.warning("broadcast send failed: %s", err)
+            _SESSIONS.discard(session)
+
+
+_tokens_version = 0
+
+
+async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[str, Any] | None = None) -> None:
+    """Tell windows that a workspace's token statistics changed.
+
+    A session that declared its workspaces with `tokens.watch` gets a small
+    `tokens.notice` only for those (or every workspace with "*") and fetches
+    `tokens.snapshot` itself. A session that never declared (an older renderer)
+    still gets the full snapshot as `tokens.changed`, which is built only when
+    such a session is connected."""
+    global _tokens_version
+    _tokens_version += 1
+    path = workspace_path or ""
+    notice = make_event("tokens.notice", {"workspace_path": path, "version": _tokens_version})
+    full: dict[str, Any] | None = None
+    for session in list(_SESSIONS):
+        watch = session.tokens_watch
+        if watch is None:
+            if full is None:
+                full = make_event("tokens.changed",
+                                  snapshot if snapshot is not None else tokens_store.snapshot(path or None))
+            event = full
+        elif "*" in watch or path in watch:
+            event = notice
+        else:
+            continue
+        try:
+            await session.send_json(event)
+        except Exception as err:  # noqa: BLE001
             log.warning("broadcast send failed: %s", err)
             _SESSIONS.discard(session)
 
@@ -680,6 +718,10 @@ class Session:
         # count a window holding the caller's workspace as the caller's own
         # even when none of that workspace's panes sit in it.
         self.held_workspaces: tuple[str, ...] = ()
+        # Workspaces whose token changes this connection wants (`tokens.watch`).
+        # None until declared: such a connection gets the full legacy
+        # `tokens.changed` snapshot. See broadcast_tokens_changed.
+        self.tokens_watch: frozenset[str] | None = None
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -1762,9 +1804,7 @@ def _schedule_tokens_broadcast(workspace_path: str) -> None:
             await asyncio.sleep(_TOKENS_BROADCAST_DEBOUNCE_SEC)
         finally:
             _pending_tokens_broadcast.discard(workspace_path)
-        await broadcast(
-            make_event("tokens.changed", tokens_store.snapshot(workspace_path))
-        )
+        await broadcast_tokens_changed(workspace_path)
         changed = await asyncio.to_thread(quota_ledger.reconcile_pending, tokens_store)
         for agent, profile, kind in changed:
             await broadcast(make_event("tokens.quota_cycles_changed", {
@@ -2730,6 +2770,8 @@ async def _start_log_watcher() -> None:
     await server_link.start()
     # Chat channels (Telegram, Discord, ...): adapters start in the background.
     await channels.start()
+    # An automatic quota switch is recorded and told to the chats (failover_notice).
+    failover_notice.install()
     # Plugin `agents.*` events (metadata only); the Host routes them by grant.
     plugin_host_events.start(asyncio.get_running_loop())
 
@@ -2871,6 +2913,7 @@ async def _stop_log_watcher() -> None:
             _git_watcher.stop()
         if _credential_watcher is not None:
             _credential_watcher.stop()
+        failover_notice.uninstall()
         await channels.stop()
         await server_link.stop()
     finally:
@@ -3081,6 +3124,12 @@ async def fs_page(cap: str, ws_b64: str, rel: str) -> FileResponse:
 # cannot end up installing hooks the endpoint then rejects.
 _HOOK_VENDORS = frozenset(
     key for key, spec in _CLI_VENDORS.items() if spec.install_hooks is not None
+)
+
+# Hook vendors whose events name their pane by the spawn token instead of a
+# session id (VendorSpec.hook_pane_token).
+_HOOK_PANE_TOKEN_VENDORS = frozenset(
+    key for key in _HOOK_VENDORS if _CLI_VENDORS[key].hook_pane_token
 )
 
 # Vendors whose hooks report BOTH halves of a subagent's life — the Task going
@@ -3319,6 +3368,13 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # lookup bypasses it. Race (stop before JSONL claimed the session) → empty
     # pane_id, and the JSONL path's matching event supplies it shortly.
     pane_id, ws_path, stage_id = attribution.pane_for_session(session_id)
+    if not pane_id and vendor in _HOOK_PANE_TOKEN_VENDORS:
+        # No log reader attributes this vendor's sessions, so the session id
+        # never names a pane: the pane's spawn token does (Kiro). Other
+        # vendors keep waiting for their log path, as above.
+        pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
+        pane = agent_messaging.current(pane_id) if pane_id else None
+        ws_path = pane.workspace_path if pane is not None else ws_path
     # Background-subagent bookkeeping: Task in on PreToolUse, out on
     # SubagentStop. The frontend loop reads the resulting count to tell a turn
     # that ended DONE from one that ended to WAIT — see subagent_tracker.
@@ -3768,9 +3824,7 @@ def _record_analyzer_tokens(result: dict[str, Any], payload: dict[str, Any]) -> 
         input_tokens=pev,
         output_tokens=ev,
     )
-    asyncio.create_task(
-        broadcast(make_event("tokens.changed", tokens_store.snapshot(workspace_path)))
-    )
+    asyncio.create_task(broadcast_tokens_changed(workspace_path))
 
 
 # Agent-CLI spawns inherit the backend's PATH (terminals.py copies os.environ),

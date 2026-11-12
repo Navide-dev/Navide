@@ -9,7 +9,7 @@ import { expectNoChineseText } from './helpLocaleAssertions'
 const HTML_ADVISORY = '[intlify] Detected HTML in '
 
 // Row counts per table, in document order.
-const TABLE_ROWS = [7, 8, 11, 13, 3, 4, 7, 3, 6, 7, 7, 8, 8, 13, 11, 9, 6, 7, 4, 8, 4, 3, 24]
+const TABLE_ROWS = [7, 9, 11, 21, 3, 4, 7, 3, 6, 7, 7, 8, 8, 13, 11, 9, 6, 7, 4, 8, 4, 3, 24]
 
 function unexpectedWarnings(warn: ReturnType<typeof vi.spyOn>): unknown[][] {
   return warn.mock.calls.filter(([first]) => !String(first).startsWith(HTML_ADVISORY))

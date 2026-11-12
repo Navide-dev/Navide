@@ -61,6 +61,19 @@ const messageButtons: TextButtonRow[] = [
 
 const { t } = useI18n()
 
+// Title-bar badges that are labelled in the product itself: the name and the
+// explanation are the badge's own label and tooltip, so they cannot drift.
+const titleBarBadges = computed(() => [
+  { key: 'usageLimit', glyph: '⛔', name: `${t('pane.terminal.usage-limit-badge', { time: '…' })} / ${t('pane.terminal.usage-limit-badge-unknown')}`, what: t('pane.terminal.usage-limit-tooltip', { time: '…' }) },
+  { key: 'switchAccount', glyph: '›', name: t('account-follow.quota-button'), what: t('account-follow.quota-button-tooltip') },
+  { key: 'staleConfig', glyph: '⟳', name: t('pane.terminal.stale-config-badge'), what: t('pane.terminal.stale-config-tooltip-both') },
+  { key: 'stopIneffective', glyph: '■', name: t('pane.terminal.stop-ineffective'), what: t('pane.terminal.stop-ineffective-tooltip') },
+  { key: 'muted', glyph: '🔕', name: t('action.mute'), what: t('pane.terminal.muted-tooltip') },
+  { key: 'readback', glyph: '🔊', name: t('pane.terminal.readback-speaking'), what: t('pane.terminal.readback-on-tooltip') },
+  { key: 'guard', glyph: '🛡', name: t('guard.pane.badge'), what: t('guard.pane.explain') },
+  { key: 'risk', glyph: '!', name: `${t('cli-risk.network-title')} / ${t('cli-risk.disk-title')}`, what: t('settings.help.icons.s2.titleBar.riskPill.what', { analyze: t('cli-risk.analyze') }) },
+])
+
 // ── Chapter locator ─────────────────────────────────────────────────────────
 // The one picture this topic needs. Every table row already DRAWS its icon, so
 // re-drawing the icons would add nothing; what a table cannot give is where a
@@ -280,6 +293,12 @@ const locatorStatusRight = computed(() => [sample('clock')])
               <td>{{ $t('settings.help.icons.s1.ws.subtree.what') }}</td>
             </tr>
             <tr>
+              <td class="irh-icocell"><span class="irh-avatar" aria-hidden="true">A</span></td>
+              <td>{{ $t('settings.help.icons.s1.ws.agentAvatar.name') }}</td>
+              <td>{{ $t('settings.help.icons.s1.ws.agentAvatar.where') }}</td>
+              <td>{{ $t('settings.help.icons.s1.ws.agentAvatar.what') }}</td>
+            </tr>
+            <tr>
               <td class="irh-icocell">
                 <svg class="irh-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 3.5v4h-4M2.5 12.5v-4h4M12.7 7A5 5 0 0 0 4 4.5L2.5 6M3.3 9A5 5 0 0 0 12 11.5l1.5-1.5"/></svg>
               </td>
@@ -441,7 +460,7 @@ const locatorStatusRight = computed(() => [sample('clock')])
               <td class="irh-icocell"><span class="irh-glyph">🎯</span></td>
               <td><code>{{ $t('pane.terminal.commander-tooltip') }}</code></td>
               <td v-html="$t('settings.help.icons.s2.titleBar.globalManager.where')"></td>
-              <td>{{ $t('settings.help.icons.s2.titleBar.globalManager.what') }}</td>
+              <td>{{ $t('pane.terminal.commander-tooltip') }}</td>
             </tr>
             <tr>
               <td class="irh-icocell"><span class="irh-glyph">∞</span></td>
@@ -496,6 +515,12 @@ const locatorStatusRight = computed(() => [sample('clock')])
               <td v-html="$t('settings.help.icons.s2.titleBar.continue.name')"></td>
               <td>{{ $t('settings.help.icons.s2.titleBar.continue.where') }}</td>
               <td v-html="$t('settings.help.icons.s2.titleBar.continue.what')"></td>
+            </tr>
+            <tr v-for="row in titleBarBadges" :key="row.key">
+              <td class="irh-icocell"><span class="irh-glyph">{{ row.glyph }}</span></td>
+              <td><code>{{ row.name }}</code></td>
+              <td>{{ $t('settings.help.icons.s2.titleBar.loop.where') }}</td>
+              <td v-html="row.what"></td>
             </tr>
           </tbody>
         </table>
@@ -1865,6 +1890,19 @@ const locatorStatusRight = computed(() => [sample('clock')])
 .irh-glyph {
   font-size: 15px;
   color: var(--text-primary);
+}
+/* Mirrors ControlPane's .ws-add-avatar (the + menu's agent avatar). */
+.irh-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-emphasis);
+  color: var(--text-on-emphasis);
+  font-size: var(--font-3xs);
+  font-weight: 700;
 }
 .irh-plain {
   font-size: var(--font-2xs);

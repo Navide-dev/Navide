@@ -94,6 +94,14 @@ interface Props {
   /** What this pane's CLI loaded at start that has changed since (MCP
    *  servers, skills); empty when nothing has. Clicking asks for a rebuild. */
   staleConfig?: StaleConfigPart[]
+  /** This pane's CLI has a newer release (onboarding.update_notices); null
+   *  when it has none. */
+  updateAvailable?: { version: string; latest: string } | null
+  /** The "update available" badge's click: App.vue opens this CLI's update
+   *  in Settings, where it runs in a terminal the user can see. A callback,
+   *  not an emit: one more emit overload is past what Vue's emit typing
+   *  resolves, and every listener type on this component degrades to any. */
+  openCliUpdate?: () => void
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
@@ -911,6 +919,14 @@ onMounted(() => {
               : 'pane.terminal.stale-config-tooltip-skills')"
           @click.stop="emit('rebuild')"
         >{{ $t('pane.terminal.stale-config-badge') }}</span>
+        <span
+          v-if="updateAvailable && !agentView"
+          class="update-available-inline"
+          role="button"
+          data-testid="update-available-badge"
+          :title="$t('pane.terminal.update-available-tooltip', { latest: updateAvailable.latest, version: updateAvailable.version })"
+          @click.stop="openCliUpdate?.()"
+        >{{ $t('pane.terminal.update-available-badge') }}</span>
         <template v-if="!agentView">
         <span
           v-if="usageLimitHit"
@@ -1345,7 +1361,9 @@ onMounted(() => {
   flex-shrink: 0;
 }
 /* Started before an MCP or skills change: a quiet notice, clickable to rebuild. */
-.stale-config-inline {
+/* A newer CLI release exists. Same quiet look as the stale-config badge. */
+.stale-config-inline,
+.update-available-inline {
   font-size: var(--font-3xs);
   font-weight: 600;
   color: var(--text-secondary);

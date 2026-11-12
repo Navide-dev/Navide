@@ -56,7 +56,8 @@ describe('follow switch wiring: off means unchanged', () => {
     // definition + offerFollowSwitch + onQuotaSwitchAccount + planAccountFollow
     // (scheme B's running-pane confirm, asked only when the list is used)
     // + unpinAllAccountPanes (scheme A's "make all follow", asked only on click)
-    expect(asks).toBe(5)
+    // + fixDescendantsToAccount (the pane menu's "fix sub-panes", asked only on click)
+    expect(asks).toBe(6)
     expect(functionBody('offerFollowSwitch')).toContain('askFollowDialog(')
     expect(functionBody('onQuotaSwitchAccount')).toContain('askFollowDialog(')
     expect(functionBody('planAccountFollow')).toContain('askFollowDialog(')
@@ -221,12 +222,18 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // and a pane with no transcript has nothing to lose. The API key takeover
     // (reopenOnKey) moves one pane at a time for the same reason. So does
     // cli_set_model's restart fallback (ui.pane.setModel): it rebuilds one
-    // pane, never a batch. The follow
+    // pane, never a batch. The pane menu's "fix sub-panes to my account"
+    // (fixDescendantsToAccount) moves only the sub-panes the user ticked, so
+    // the move is the point there too. The follow
     // batch and every other rebuild keep the plain resume preflight.
     const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
     expect(optIns).toBe(8)
+    expect(functionBody('fixDescendantsToAccount').split('freshWhenNoTranscript: true').length - 1).toBe(1)
     expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
-    expect(functionBody('moveAgentPaneAccount').split('freshWhenNoTranscript: true').length - 1).toBe(2)
+    // One shared options object, used by both the fixed and the following path.
+    const moveAgent = functionBody('moveAgentPaneAccount')
+    expect(moveAgent.split('freshWhenNoTranscript: true').length - 1).toBe(1)
+    expect(moveAgent.split('rebuildPaneViaResume(paneId, rebuild)').length - 1).toBe(2)
     expect(appSource).toContain(
       'await rebuildPaneViaResume(paneId, { profileId, forceWhenRunning: true, freshWhenNoTranscript: true })'
     )

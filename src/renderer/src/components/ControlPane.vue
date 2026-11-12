@@ -10,6 +10,7 @@ import { setBatchDragImage } from '../lib/batchDragImage'
 import { paneStatusLabelText, type PaneStatusValue } from '../lib/paneStatusLabel'
 import { rollupPaneStatus } from '../lib/paneStatusRollup'
 import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
@@ -79,6 +80,7 @@ import {
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
+import { useArenaPrefs } from '../composables/useArenaPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -460,6 +462,9 @@ interface Props {
   /** Agent identities with their pane state (App's agentPaneSummaries); the ＋
    *  menu's Agents block lists them. Absent = none. */
   agentIdentities?: AgentIdentitySummary[]
+  /** Model arena runs recorded for the workspace on screen (experimental);
+   *  the ＋ menu's Compare block offers to reopen them when there are any. */
+  arenaRuns?: number
 }
 
 const props = defineProps<Props>()
@@ -1212,6 +1217,9 @@ const emit = defineEmits<{
    *  and restores the folder name. */
   (e: 'rename-workspace', workspacePath: string, name: string): void
   (e: 'install-cli', payload: { agentKey: string; label: string }): void
+  /** Model arena (experimental): open the start dialog / the run view for a workspace. */
+  (e: 'arena-start', workspacePath: string): void
+  (e: 'arena-panel', workspacePath: string): void
   (e: 'update:collapsed', v: boolean): void
   /** The header's mode switch. App owns the value so it can persist it and so
    *  the stage agrees with the list about which panes are on screen. */
@@ -2701,14 +2709,14 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 // would clip a menu positioned inside it.
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  522px: the rows plus the CLI and Agents headings) plus the fixed
+ *  546px: the rows plus the CLI and Agents headings) plus the fixed
  *  furniture around it — role picker, two dividers,
  *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 692
+const ADD_MENU_MAX_H = 716
 /** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
  *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
  *  ~276px of bold system-font text plus 36px of check mark and padding); at
@@ -2858,6 +2866,17 @@ function openTerminalFromMenu(): void {
   addMenuOpen.value = false
   if (!canSpawn.value) return
   emit('spawn', { agentKey: 'terminal', roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
+}
+
+// ── ＋ menu, Compare block (Settings → General → Experimental features) ──────
+const { arenaEnabled } = useArenaPrefs()
+const arenaShortcut = formatKeySpec('cmd+alt+a')
+
+function openArenaFromMenu(panel: boolean): void {
+  const ws = addMenuWorkspace.value || workspacePath.value
+  addMenuOpen.value = false
+  if (panel) emit('arena-panel', ws)
+  else emit('arena-start', ws)
 }
 
 function openSpawnCardFromMenu(): void {
@@ -3687,7 +3706,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
-            <span v-if="pipelineCurrentStage" class="muted">· {{ pipelineCurrentStage.shortTitle }}</span>
+            <span v-if="pipelineCurrentStage" class="muted">· {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}</span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
             <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
@@ -3715,7 +3734,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
@@ -4612,6 +4631,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
              ship as Navide plugins, so the menu points there. -->
         <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
+        <!-- Model arena (experimental): its own block, styled exactly like the
+             CLI / Agents headings and entries; absent while the switch is off. -->
+        <template v-if="arenaEnabled">
+          <div class="ws-add-sec" data-section="compare">{{ $t('arena.menu.section') }}</div>
+          <button class="ws-add-opt ws-add-more ws-add-arena" data-testid="add-menu-arena" @click="openArenaFromMenu(false)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.start') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+            <span class="ws-add-kbd">{{ arenaShortcut }}</span>
+          </button>
+          <button v-if="arenaRuns" class="ws-add-opt ws-add-more" data-testid="add-menu-arena-runs" @click="openArenaFromMenu(true)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.runs', { n: arenaRuns }) }}</span>
+          </button>
+          <div class="ws-add-hint">{{ $t('arena.menu.hint') }}</div>
+        </template>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -4875,7 +4907,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
             <span v-if="pipelineCurrentStage" class="muted">
-              · {{ pipelineCurrentStage.shortTitle }}
+              · {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}
             </span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
@@ -4904,7 +4936,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ $t('pipelineEditor.controlPane.next-stage', { stage: pipelineNextStage.shortTitle }) }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
             <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
@@ -6746,12 +6778,12 @@ button.icon-btn.muted:hover {
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 456px carries nineteen, and 522px adds the
+ * 3px padding either side), so 480px carries twenty, and 546px adds the
  * two section headings (~24px, and ~31px with the divider above Agents). The
  * viewport cap is no longer a guessed 45vh: the menu's own max-height is the
  * room it has, and this box shrinks into it (never below three rows). */
 .ws-add-scroll {
-  max-height: min(522px, 100vh);
+  max-height: min(546px, 100vh);
   flex-shrink: 1;
   min-height: 72px;
   overflow-y: auto;
@@ -6806,6 +6838,8 @@ button.icon-btn.muted:hover {
 .ws-add-newagent-go { font: inherit; font-size: var(--font-xs); padding: 2px 8px; border: none; border-radius: var(--radius-xs); background: var(--accent-emphasis); color: var(--text-on-emphasis); cursor: pointer; }
 .ws-add-newagent-go:disabled { opacity: 0.5; cursor: default; }
 .ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
+.ws-add-exp { color: var(--text-secondary); font-size: var(--font-3xs); }
+.ws-add-kbd { margin-left: auto; padding-left: 8px; color: var(--text-secondary); font-size: var(--font-3xs); }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */

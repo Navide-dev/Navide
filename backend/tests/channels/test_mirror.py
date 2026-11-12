@@ -63,7 +63,7 @@ def test_store_v4_gives_old_bindings_the_pre_mirror_replies_level(tmp_path) -> N
     with db.transaction() as cur:
         cur.execute("INSERT INTO channel_bindings VALUES ('p1','telegram','default','-1','5','t',9)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 7
+    assert db.schema_version("channels") == 8
     assert s.bindings()[0].public() == {
         "pane_id": "p1", "platform": "telegram", "account": "default", "chat_id": "-1", "thread_id": "5",
         "title": "t", "verbosity": "replies", "parent_pane_id": "", "auto": False}
@@ -598,7 +598,9 @@ async def test_status_shows_the_parent_child_tree(env: Env) -> None:
     _use_directory(env, [_pane("pane-1", "main", status="running"),
                          _pane("pane-2", "tester", "pane-1", "awaiting"), _pane("pane-3", "docs", "pane-1")])
     await env.inbound("/status")
-    assert env.tg.texts()[-1] == "📋 main　🔄 執行中\n├─ ↳ docs　💤 閒置\n└─ ↳ tester　⚠️ 等確認"
+    # Without buttons the /model button is offered as the command to type.
+    assert env.tg.texts()[-1] == ("📋 main　🔄 執行中\n├─ ↳ docs　💤 閒置\n└─ ↳ tester　⚠️ 等確認"
+                                  "\n可直接輸入：/model 切換模型")
     assert env.fake.delivered == []
 
 

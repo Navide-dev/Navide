@@ -952,6 +952,55 @@ describe('PipelineExecutions', () => {
     }
   })
 
+  it('renders a tokens.notice refetch exactly as it rendered the tokens.changed snapshot', async () => {
+    const snap = {
+      workspace_path: '/ws',
+      workspace: {
+        current_run: { run_id: 'live', task: 'now', pipeline_id: 'p1', started_at: '2026-10-08T01:00:00Z', ended_at: null },
+        runs: [
+          { run_id: 'a', task: 'first', pipeline_id: 'p1', outcome: 'completed', started_at: '2026-10-06T01:00:00Z', ended_at: '2026-10-06T01:10:00Z', totals: { input: 5, output: 7 } },
+          { run_id: 'c', task: 'second', pipeline_id: 'p1', outcome: 'aborted', node_states: { plan: { status: 'done' } } },
+          { run_id: 'd', task: 'legacy' },
+        ],
+      },
+    }
+    const empty = { workspace_path: '/ws', workspace: { current_run: null, runs: [] } }
+    const live: RunSnapshot = { pipelineId: 'p1', state: 'running', gate: null, nodes: {} }
+
+    const server = graphServer()
+    const scope = effectScope()
+    const mountWith = () => scope.run(() => mount(PipelineExecutions, {
+      props: { backend: server.mock.backend, workspacePath: '/ws', pipelineId: 'p1', graph: seedGraph(), run: live, roleLabels: {}, agentLabels: {}, now: 0 },
+      global: { plugins: [i18n], stubs: { teleport: true, PipelineCanvas: { props: ['runNodes'], template: '<div class="canvas-stub">{{ JSON.stringify(runNodes) }}</div>' } } },
+    }))!
+    // Old path: the event carries the snapshot.
+    tokens = empty
+    const viaEvent = mountWith()
+    await flushPromises()
+    server.mock.emit('tokens.changed', snap)
+    await flushPromises()
+    const expected = viaEvent.html()
+    viaEvent.unmount()
+
+    tokens = empty
+    const viaNotice = mountWith()
+    await flushPromises()
+    expect(server.mock.tokenWatches).toContain('/ws')
+    tokens = snap
+    const before = server.mock.sent.filter((s) => s.type === 'tokens.snapshot').length
+    server.mock.emit('tokens.notice', { workspace_path: '/other', version: 1 })
+    server.mock.emit('tokens.notice', { workspace_path: '/ws', version: 2 })
+    server.mock.emit('tokens.notice', { workspace_path: '/ws', version: 3 })
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    await flushPromises()
+    const refetches = server.mock.sent.filter((s) => s.type === 'tokens.snapshot').slice(before)
+    expect(refetches).toEqual([{ type: 'tokens.snapshot', payload: { workspace_path: '/ws' }, timeoutMs: undefined }])
+    expect(viaNotice.html()).toBe(expected)
+    viaNotice.unmount()
+    expect(server.mock.tokenWatches).not.toContain('/ws')
+    scope.stop()
+  })
+
   it('says in the header which step failed and why', async () => {
     tokens = {
       workspace_path: '/ws',

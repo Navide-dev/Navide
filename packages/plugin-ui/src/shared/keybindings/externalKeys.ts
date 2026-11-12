@@ -78,6 +78,16 @@ export const MENU_LITERAL_ACCELERATORS = [
 ] as const
 
 /**
+ * Accelerators the menu SHOWS but does not register (`registerAccelerator:
+ * false`), so the renderer's own rule answers the key. Not menu-owned: binding
+ * them in Settings works. Listed so the drift guard still accounts for every
+ * accelerator string in src/main/menu.ts.
+ *   - ⇧⌘T, Window → Reopen Closed Window: the main window's `paneStage` rule
+ *     answers it, and the Mini IDE keeps it for Reopen Closed Editor.
+ */
+export const MENU_DISPLAY_ONLY_ACCELERATORS = ['CmdOrCtrl+Shift+T'] as const
+
+/**
  * Every Electron role `src/main/menu.ts` installs, and the accelerator that role
  * carries. `null` means the role ships no accelerator at all — listed anyway, so
  * that a role appearing in the menu with no entry here is a missing transcription

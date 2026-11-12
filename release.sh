@@ -25,6 +25,26 @@ warn_missing_announcement() {
   fi
 }
 
+# `uv lock` rewrites backend/uv.lock in the format of the uv that runs it, so
+# an older uv silently downgrades the lock CI reads (0.2.41: a uv 0.5.9 first
+# on PATH dropped `revision = 3` and every upload time). CI installs the latest
+# uv; 0.11.16 is the oldest version known to write the current lock format.
+MIN_UV_VERSION="0.11.16"
+require_uv_version() {
+  local minimum="$1" output
+  output="$(uv --version 2>/dev/null)" || fail "uv not found on PATH; install uv ${minimum} or newer."
+  [[ "$output" =~ ^uv\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] || fail "cannot read the uv version from: ${output}"
+  local -a have=("${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+  local -a need
+  IFS=. read -r -a need <<<"$minimum"
+  local i
+  for i in 0 1 2; do
+    ((10#${have[i]} > 10#${need[i]})) && return 0
+    ((10#${have[i]} < 10#${need[i]})) && fail "uv ${have[0]}.${have[1]}.${have[2]} at $(command -v uv) is older than ${minimum}; it would rewrite backend/uv.lock in an older format. Upgrade it (or put a newer uv first on PATH) and run again."
+  done
+  return 0
+}
+
 # Runs the command before `--`, then the one after it. By default they run one
 # after the other: measured on a loaded host, overlapping them saved no time
 # and raised the 1-minute load by about 10 while both ran.
@@ -124,6 +144,7 @@ fi
 
 pnpm release:check
 warn_missing_announcement "$VERSION"
+require_uv_version "$MIN_UV_VERSION"
 
 CURRENT="$(node -p "require('./package.json').version")"
 echo ""

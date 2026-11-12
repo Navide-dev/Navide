@@ -68,6 +68,7 @@ import {
   usePushChannelPrefs,
 } from '../composables/usePushChannelPrefs'
 import { setAcpEnabled, useAcpPrefs } from '../composables/useAcpPrefs'
+import { setArenaEnabled, useArenaPrefs } from '../composables/useArenaPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
@@ -99,7 +100,8 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
-import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { FOLLOW_SWITCH_AGENT, setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { accountLabel, DEFAULT_PROFILE_ID } from '../lib/accountLabel'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -112,6 +114,7 @@ import {
 import { useGitAccounts } from '../composables/useGitAccounts'
 import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
+import AccountSwitchLog from './accounts/AccountSwitchLog.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
 import OllamaSetup from './OllamaSetup.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
@@ -477,11 +480,12 @@ defineExpose({
   // Same two steps the search results take, for a caller outside this window
   // that knows which section it means — the account view pointing at the rules,
   // for one, which it used to do in prose and with nowhere to click.
-  setSection: async (tab: Tab, section: string): Promise<void> => {
+  // `query` names the CLI a cliAgents section opens on (see openCliSection).
+  setSection: async (tab: Tab, section: string, query = ''): Promise<void> => {
     activeTab.value = tab
     if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'extensions' && PLUGINS_SECTION_PAGE[section]) pluginsPage.value = PLUGINS_SECTION_PAGE[section]
-    if (tab === 'cliAgents') await openCliSection(section)
+    if (tab === 'cliAgents') await openCliSection(section, query)
     await nextTick()
     requestAnimationFrame(() => {
       document
@@ -741,6 +745,11 @@ function toggleCliAgent(k: string): void {
 // stale copy until reload.
 const { pushDisabled } = usePushChannelPrefs()
 const { acpEnabled } = useAcpPrefs()
+const { arenaEnabled } = useArenaPrefs()
+const arenaEnabledModel = computed<boolean>({
+  get: () => arenaEnabled.value,
+  set: (v) => setArenaEnabled(v),
+})
 const pushChannelRows = computed(() =>
   CLI_AGENT_SPECS.filter((s) => s.pushChannel)
 )
@@ -1111,6 +1120,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.general'),
     summary: t('settings.search.item.settings-management.summary'),
     keywords: 'settings management export import bundle config path location scope user workspace 設定管理 匯出 匯入 全集 位置 路徑 層級',
+  },
+  {
+    id: 'general-experimental',
+    tab: 'general',
+    section: 'general-experimental',
+    title: t('settings.search.item.general-experimental.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-experimental.summary'),
+    keywords: 'experimental features model arena compare models worktree 實驗功能 模型擂台 比較 模型',
   },
   {
     id: 'general-p2p',
@@ -1566,6 +1584,28 @@ const quotaFailover = useQuotaFailover()
 const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
 const failoverMode = computed<FailoverMode>(() => quotaFailover.state.value?.policy.mode ?? 'notify')
 const failoverBusy = ref(false)
+// One line under the policy: the account an automatic switch would pick for
+// Claude, and the way to Accounts, where the same policy sits with its queue
+// and switch log (plan 0-2-42_eb5049).
+const failoverNext = ref<{ name: string; headroom: number | null } | null>(null)
+const failoverNextLoaded = ref(false)
+async function loadFailoverNext(): Promise<void> {
+  failoverNextLoaded.value = false
+  const cap = quotaFailover.capabilityFor(FOLLOW_SWITCH_AGENT)
+  if (!cap?.supported || !cap.hasSlots || failoverMode.value === 'off') return
+  const list = await quotaFailover.previewCandidates(FOLLOW_SWITCH_AGENT)
+  const pick = list?.find((c) => c.excluded === null)
+  failoverNext.value = pick
+    ? { name: accountLabel(props.cliProfilesApi, FOLLOW_SWITCH_AGENT, pick.slotId || DEFAULT_PROFILE_ID, t), headroom: pick.headroom }
+    : null
+  failoverNextLoaded.value = list !== null
+}
+watch([failoverMode, () => !!quotaFailover.state.value], () => void loadFailoverNext(), { immediate: true })
+async function openAutoContinue(): Promise<void> {
+  activeTab.value = 'accounts'
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-settings-section="accounts-auto-continue"]')?.scrollIntoView({ block: 'start' })
+}
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true
@@ -4157,6 +4197,19 @@ watch(activeTab, (tab) => {
                 :title="$t('usage.failover-title')"
                 :description="$t('usage.failover-hint')"
               >
+                <template #description>
+                  {{ $t('usage.failover-hint') }}
+                  <span class="failover-next-line" data-testid="general-failover-next">
+                    <template v-if="failoverNextLoaded">{{ failoverNext
+                      ? (failoverNext.headroom !== null
+                        ? $t('usage.auto-switch-next-headroom', { name: failoverNext.name, pct: Math.round(failoverNext.headroom) })
+                        : $t('usage.auto-switch-next', { name: failoverNext.name }))
+                      : $t('usage.auto-switch-next-none') }}</template>
+                    <button type="button" class="failover-next-goto" data-testid="general-failover-goto" @click="openAutoContinue">
+                      {{ $t('usage.auto-switch-goto-accounts') }}
+                    </button>
+                  </span>
+                </template>
                 <template #control>
                   <select
                     data-testid="quota-failover-mode"
@@ -4314,6 +4367,22 @@ watch(activeTab, (tab) => {
                 <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
                 <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
               </div>
+            </SettingsCard>
+          </SettingsSection>
+
+          <!-- Experimental features, off by default. Model arena: the ＋ menu's
+               Compare block, the pane right-click entry and ⌥⌘A
+               (composables/useArenaPrefs.ts). -->
+          <SettingsSection :label="$t('settings.section.experimental')">
+            <SettingsCard data-settings-section="general-experimental">
+              <SettingRow
+                :title="$t('arena.settings.title')"
+                :description="$t('arena.settings.hint')"
+              >
+                <template #control>
+                  <ToggleSwitch v-model="arenaEnabledModel" data-testid="arena-experimental" :aria-label="$t('arena.settings.title')" />
+                </template>
+              </SettingRow>
             </SettingsCard>
           </SettingsSection>
         </div>
@@ -4867,6 +4936,9 @@ watch(activeTab, (tab) => {
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
             <CliAccountsPane :api="cliProfilesApi" :backend="backend" :workspace-open="workspaceOpen ?? false" @login="(agentKey: string, loginProfileId?: string) => emit('cli-login', agentKey, loginProfileId)" />
+          </div>
+          <div data-settings-section="account-switch-log" style="margin: 0 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
+            <AccountSwitchLog :backend="backend" />
           </div>
         </div>
 
@@ -6497,6 +6569,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
+.failover-next-line { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.failover-next-goto { padding: 0; border: 0; background: none; color: var(--accent-fg); font: inherit; cursor: pointer; }
+.failover-next-goto:hover { text-decoration: underline; }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {

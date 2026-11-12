@@ -461,3 +461,42 @@ describe('pane health watcher – a dead login on an account\'s own config dir',
     expect(handlerBody()).toContain("'pane.terminal.login-expired-account-dir-notify-body'")
   })
 })
+
+describe('a lit login-expired badge lets go once the pane is signed in again', () => {
+  function clearBody(): string {
+    const start = appSource.indexOf('function clearPaneLoginExpired(')
+    expect(start).toBeGreaterThan(-1)
+    return appSource.slice(start, appSource.indexOf('\n}\n', start))
+  }
+
+  it('stamps the moment the badge lit', () => {
+    const body = paneHealthWatcherBody()
+    expect(body.indexOf('watcher.loginExpiredAt = Date.now()')).toBeGreaterThan(body.indexOf('pane.loginExpired = true'))
+  })
+
+  it('consumes the old error text before lowering the flag, without sending /login', () => {
+    const body = clearBody()
+    expect(body).toContain('w.baseline = paneCleanBytes(pane.id)')
+    expect(body).toContain('w.loginExpiredAt = null')
+    expect(body).toContain('pane.loginExpired = false')
+    expect(body).not.toContain('injectPane')
+  })
+
+  it('clears on a real turn that ended after the badge lit', () => {
+    const start = appSource.indexOf('judgeTurnText(ev.pane_id, ev.text')
+    const block = appSource.slice(start, start + 800)
+    expect(block).toContain('turnClearsLoginExpired(')
+    expect(block).toContain('.loginExpiredAt')
+    expect(block).toContain('!ev.superseded')
+    expect(block).toContain('clearPaneLoginExpired(turnPane)')
+  })
+
+  it('clears the panes a set_default switch verifiably moved onto the new login', () => {
+    const start = appSource.indexOf("if (ev?.reason === 'set_default' && ev.agent_key)")
+    expect(start).toBeGreaterThan(-1)
+    const block = appSource.slice(start, appSource.indexOf('const restartKey', start))
+    const loop = block.indexOf('for (const proof of hotSwitched ?? [])')
+    expect(loop).toBeGreaterThan(-1)
+    expect(block.indexOf('clearPaneLoginExpired(pane)')).toBeGreaterThan(loop)
+  })
+})

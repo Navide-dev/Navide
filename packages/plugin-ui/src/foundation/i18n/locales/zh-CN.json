@@ -510,6 +510,7 @@
     "hold-mid-turn": "目标 agent 正在运行中",
     "hold-settling": "等待目标静置",
     "hold-composer": "输入框仍握着上一次推送的文字",
+    "hold-model-switch": "目标分格正在切换模型",
     "hold-pty-blocked": "已写入，等待目标读取输入",
     "hold-remote-ack": "已送出，等待对方窗口回报",
     "hold-cancelling": "撤回中，等待对方窗口回应",
@@ -1074,6 +1075,8 @@
       "stale-config-tooltip-mcp": "这个分格打开后，此 CLI 的 MCP server 有变动。重建前它会沿用旧列表。点一下重建（接续对话）。",
       "stale-config-tooltip-skills": "这个分格打开后，发给此 CLI 的 skills 有变动。重建前它可能沿用旧的。点一下重建（接续对话）。",
       "stale-config-tooltip-both": "这个分格打开后，此 CLI 的 MCP server 和 skills 都有变动。重建前它会沿用旧的。点一下重建（接续对话）。",
+      "update-available-badge": "有新版本",
+      "update-available-tooltip": "有新版本 {latest}（此窗格为 {version}）。点击到设置中更新。",
       "usage-limit-badge": "⛔ {time} 恢复",
       "usage-limit-badge-unknown": "⛔ 额度用完",
       "usage-limit-tooltip": "此 CLI 的额度已用完 — 预计 {time} 恢复。点击可清除",
@@ -1251,6 +1254,10 @@
     "remove-selected": "移除所选",
     "remove-children": "移除旗下 {count} 个子分格",
     "remove-children-title": "只关闭这个分格派生出的子分格，本身保留",
+    "fix-children-account": "旗下 {count} 个子分格固定到 {account}",
+    "fix-children-account-mine": "旗下 {count} 个子分格固定到我的账号",
+    "fix-children-account-title": "把旗下每个子分格移到 {account} 自己的账号文件夹重开并固定，接回原本的对话。之后切换账号不会再带着它们换。",
+    "fix-children-account-default": "内置的 Default 账号没有自己的文件夹，子分格无法固定到它。请先把这个分格切到其他账号。",
     "remove-with-children": "移除全部 {count} 个分格",
     "remove-with-children-title": "连同这个分格派生出的所有子分格一起关闭",
     "run-pipeline": "▶ 运行流程",
@@ -1756,6 +1763,10 @@
         "settings-management": {
           "title": "设置管理",
           "summary": "导出／导入完整设置包，并查看设置实际存放的位置。"
+        },
+        "general-experimental": {
+          "title": "实验功能",
+          "summary": "模型擂台等仍在试验中的功能"
         },
         "general-p2p": {
           "title": "跨设备传讯",
@@ -2845,7 +2856,7 @@
             }
           },
           "resource": {
-            "caption": "资源控管窗口。扫描与数字只在你按下刷新时才更新。",
+            "caption": "资源控管窗口。打开期间 {cpu} 与 {memory} 数字会自动更新；磁盘扫描只在你按下“{scan}”时才运行。",
             "legend": {
               "totals": {
                 "label": "上方三张卡",
@@ -2883,15 +2894,15 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "设置窗口的十九个标签页分别管什么、Navide Cloud 怎么把几台机器接成一个私有网络，以及菜单、独立窗口、用量统计与资源维护这些散在主画面之外的系统面。",
+        "intro": "设置窗口的 {tabCount} 个标签页分别管什么、Navide Cloud 怎么把几台机器连成一个私有网络，以及菜单、独立窗口、用量统计与资源维护这些散在主界面之外的系统功能。",
         "s1": {
           "title": "设置总览",
-          "p1": "设置窗口用 <kbd class=\"syh-kbd\">⌘,</kbd> 打开，标题栏的齿轮钮是同一个入口。左侧侧栏分五组，共 <strong>27 个标签页</strong>。",
+          "p1": "设置窗口用 <kbd class=\"syh-kbd\">{settingsKey}</kbd> 打开，标题栏的齿轮按钮是同一个入口。左侧边栏分 {groupCount} 组，共 <strong>{tabCount} 个标签页</strong>。",
           "h1": "搜索框",
           "p2": "侧栏标题底下有一个搜索框，提示字是 <code>搜索设置…</code>。它<strong>跨标签页</strong>比对设置项的标题、所属区块与关键字（使用目前界面语言与已收录的关键字），最多行 8 笔；点一笔会切到那个标签页并卷到对应区块（“保存空间”那笔例外：它会关掉设置、直接开“资源控管”），没命中时显示 <code>找不到相符设置</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜索索引不是全覆盖",
-            "text": "索引是一份人工维护的清单，<strong>{layout}、{notifications}、{security}、{channels} 这四个标签页没有任何条目</strong>，搜索不到它们里面的东西，得自己点进去。CLI Agents 的条目点下去会直接打开某一家的设置抽屉（见“CLI Agent 与账号”标签页）。"
+            "text": "索引是一份人工维护的清单，<strong>{agents}、{layout}、{notifications}、{security}、{channels} 这五个标签页没有任何条目</strong>，搜索不到它们里面的东西，得自己点进去。CLI Agents 的条目点下去会直接打开某一家的设置抽屉（见“CLI Agent 与账号”标签页）。"
           },
           "h2": "二十七个标签页",
           "tabTable": {
@@ -2910,7 +2921,7 @@
               "more": "本页第 2 章"
             },
             "language": {
-              "what": "所有工作区共用的界面语言：繁体中文、English 或日本语",
+              "what": "所有工作区共用的界面语言，共 {languageCount} 种可选（其中 {betaCount} 种为 Beta）",
               "more": "本页第 2 章"
             },
             "statusBadges": {
@@ -3022,7 +3033,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "按 ⌘W 关分格前先问。正在跑一个 turn 的分格一定会问，不受这个开关影响。",
+              "desc": "按 {closePaneKey} 关分格前先问。正在跑一个 turn 的分格一定会问，不受这个开关影响。",
               "fallback": "开"
             },
             "confirmCloseWorkspace": {
@@ -3086,16 +3097,16 @@
           "appearance": {
             "theme": "<strong>主题</strong> — 五种内置：Dark (GitHub)、Midnight、Forest、Light、High Contrast，默认是 Dark (GitHub)。",
             "colors": "<strong>自订颜色</strong> — 八个可覆写的色彩 token（背景、表面、文字、次要文字、边框、强调、成功、危险）。覆写叠在目前主题之上，<strong>换主题时保留</strong>；<em>↺ 重设为默认值</em> 还原。",
-            "uiScale": "<strong>界面缩放</strong> — 在 <strong>外观 ▸ 其他</strong> 区块的第一行，控制项是<strong>下拉菜单</strong>而不是滑杆，六段 80%／90%／100%／110%／125%／150%，默认 100%，快捷键 <kbd class=\"syh-kbd\">⇧⌘=</kbd>／<kbd class=\"syh-kbd\">⇧⌘-</kbd>／<kbd class=\"syh-kbd\">⇧⌘0</kbd>。它走的是 Electron 的页面缩放而不是 CSS 变量，所以文字、图标、边框、间距会一起变，而且由主进程应用到<strong>每一个窗口</strong>，Navide 插件窗口也算。它和分格字级是<strong>两条独立的轴</strong>：<kbd class=\"syh-kbd\">⌘=</kbd>／<kbd class=\"syh-kbd\">⌘-</kbd>／<kbd class=\"syh-kbd\">⌘0</kbd> 只改终端<strong>内容</strong>的字级（整个窗口的 CLI 分格共用同一个值），界面缩放改的是外面那层壳；两者是<strong>相乘</strong>的，就像浏览器的页面缩放叠在网站自己的字级上。",
+            "uiScale": "<strong>界面缩放</strong> — 在 <strong>外观 ▸ 其他</strong> 区块的第一行，控制项是<strong>下拉菜单</strong>而不是滑杆，六段 80%／90%／100%／110%／125%／150%，默认 100%，快捷键 <kbd class=\"syh-kbd\">{uiZoomIn}</kbd>／<kbd class=\"syh-kbd\">{uiZoomOut}</kbd>／<kbd class=\"syh-kbd\">{uiZoomReset}</kbd>。它走的是 Electron 的页面缩放而不是 CSS 变量，所以文字、图标、边框、间距会一起变，而且由主进程应用到<strong>每一个窗口</strong>，Navide 插件窗口也算。它和分格字级是<strong>两条独立的轴</strong>：<kbd class=\"syh-kbd\">{fontZoomIn}</kbd>／<kbd class=\"syh-kbd\">{fontZoomOut}</kbd>／<kbd class=\"syh-kbd\">{fontZoomReset}</kbd> 只改终端<strong>内容</strong>的字级（整个窗口的 CLI 分格共用同一个值），界面缩放改的是外面那层壳；两者是<strong>相乘</strong>的，就像浏览器的页面缩放叠在网站自己的字级上。",
             "restore": "<strong>还原窗口</strong> — 下次启动时重开上次结束时开着的工作区窗口。"
           },
           "callout": {
             "title": "通知与音效在通知标签页",
             "text": "通知开关是有的，只是不在外观，而在 <strong>通知标签页</strong>，共三项：<em>系统通知</em>（Navide 在背景时，CLI 完成回合或需要你输入会送出桌面通知；Dock 徽章的计数不受这个开关影响）、<em>提示音</em>（回合完成播一声短提示音，CLI 等你回复时播两声），以及 <em>通知权限</em>——macOS 不会把真实授权状态回报给 Navide，所以这一项只能送一则测试通知、由你确认它有没有出现；没出现就到“系统设置 → 通知”允许 Navide。最后这一项只在适用的平台上才出现。"
           },
-          "language": "语言是独立的标签页，不在外观底下。<strong>三种语言</strong>：<code>繁体中文</code>、<code>English</code> 与 <code>日本语</code>。没选过之前，Navide 跟随系统语言（系统语言不是这三种时用繁体中文）。这是用户层级偏好，应用到所有工作区。",
+          "language": "语言是独立的标签页，不在外观下面。共有 <strong>{languageCount} 种语言</strong>，每一种都用它自己的名称列出，例如 <code>繁體中文</code>、<code>English</code>、<code>日本語</code>；标着 Beta 的 {betaCount} 种是机器翻译，还在等母语者校对。没选过之前，Navide 跟随系统语言（系统语言都不符合时用 {fallbackLanguage}）。这是用户级偏好，应用到所有工作区。",
           "h3": "状态徽章",
-          "p1": "把九种分格状态各自<strong>改名并选颜色</strong>。中文、英文与日文名称可以分开填（各限 24 字，留空就退回内置翻译）。改完之后分格徽章、侧栏、会议条与资源面板全部跟着变。<strong>设置存在你的账号上，不跟着项目走。</strong>",
+          "p1": "把 {stateCount} 种分格状态各自<strong>改名并选颜色</strong>。每种界面语言各有一栏名称（共 {languageCount} 栏，各限 24 字）。留空时：繁体中文、英文、日文直接退回内置翻译；其他语言先借用你填的英文名称，再是繁体中文名称，最后才是内置翻译。改完之后分格徽章、侧栏、会议条与资源面板全部跟着变。<strong>设置存在你的账号上，不跟着项目走。</strong>",
           "statusTable": {
             "state": "状态",
             "when": "什么时候是这个状态",
@@ -3140,7 +3151,7 @@
             "title": "共用根目录",
             "text": "Navide 创建的技能一律放在 <code>~/.agents/skills</code>。这一页<strong>不会搬动或改写</strong>各家 CLI 自己文件夹里的技能——那些只是被反射出来让你看见，并且可以投递给别家。（有一个明确的 <em>移入共用库</em> 动作是例外，它会搬档并留下 symlink，可以还原。）"
           },
-          "p2": "页面有 <strong>浏览</strong>（卡片浏览）与 <strong>投递</strong>（投递矩阵）两种查看。矩阵横轴是 15 家 CLI，直轴是技能，每格四种状态，每一行还有 <em>全选</em>／<em>全不选</em> 两颗批量钮：",
+          "p2": "页面有 <strong>浏览</strong>（卡片浏览）与 <strong>投递</strong>（投递矩阵）两种查看。矩阵横轴是 {cliCount} 家 CLI，直轴是技能，每格四种状态，每一行还有 <em>全选</em>／<em>全不选</em> 两颗批量钮：",
           "matrixTable": {
             "cell": "格子",
             "meaning": "意思",
@@ -3160,7 +3171,7 @@
             "none": {
               "cell": "— 无 skills 机制",
               "meaning": "那家 CLI 根本没有技能这回事，接不上。",
-              "who": "4 家：aider、droid、kilo、mcode"
+              "who": "8 家：aider、devin、droid、goose、hermes、kilo、mcode、openclaw"
             },
             "pending": {
               "cell": "· 支持但尚未接线",
@@ -3188,14 +3199,14 @@
             "notCreated": "还不存在的文件标 <em>尚未创建</em>——按存盘就会创建它，连同上层缺的文件夹。",
             "reload": "编辑中若文件被别的程序改掉，会挡下来要你先 <em>重新加载（会放弃你的草稿）</em>，不会直接覆盖你或对方的内容。"
           },
-          "p6": "底部的 <strong>CLI 涵盖范围</strong> 把 15 家分成三类：",
+          "p6": "底部的 <strong>CLI 涵盖范围</strong> 把 {cliCount} 家分成三类：",
           "coverageTable": {
             "category": "分类",
             "meaning": "意思"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide 知道这家 CLI 把指示放哪。14 家属于这类。"
+              "value": "Navide 知道这家 CLI 把指示放哪。除了 aider 以外的 CLI 都属于这类。"
             },
             "configured": {
               "value": "只有 aider。它没有自己的文件名——它读的是 .aider.conf.yml 里 read: 那一栏指名的文件，所以你在那里写了什么，这里就列什么（最多 20 个）。CONVENTIONS.md 只是官方文档的建议名称，程序本身并不认得它。"
@@ -3216,7 +3227,7 @@
           "shortcuts": {
             "record": "点一颗按键方块就地开始<strong>录制</strong>；<code>+</code> 加第二组绑定；<code>✕</code> 移除一组。和弦最多两段。",
             "instant": "改动<strong>立即写进 <code>keybindings.json</code></strong> 并应用到每一个开着的窗口，没有存盘钮。",
-            "search": "搜索框同时比对命令名称与按键写法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">⌘⇧P</kbd> 都找得到）；三个筛选器 <em>全部</em>／<em>已自订</em>／<em>冲突</em>。",
+            "search": "搜索框同时比对命令名称与按键写法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">{paletteKey}</kbd> 都找得到）；三个筛选器 <em>全部</em>／<em>已自订</em>／<em>冲突</em>。",
             "conflicts": "<em>冲突</em> 会标出互相打架的绑定，并说明是谁永远赢、还是靠 <em>生效条件</em> 分开的。",
             "reset": "单行 <em>还原成默认</em>，整页 <em>全部还原</em>。<em>导出</em>／<em>导入</em> 搬设置，<strong>导入是取代不是合并</strong>，会先告诉你几条被丢弃、几条被导入，被拒绝的条目也会列出来。"
           },
@@ -3242,7 +3253,7 @@
               "fallback": "开，3 次"
             },
             "autoDownload": {
-              "toggle": "自动下载更新",
+              "toggle": "自动下载更新（只限补丁版；次版本与主版本更新一律等你决定）",
               "fallback": "开"
             },
             "retryDownload": {
@@ -3356,15 +3367,18 @@
             "text": "分格输入框的 <code>{'@'}</code> 提及菜单只列<strong>本机</strong>的分格（含同一台机器上其他窗口的），没有插入跨设备地址的按钮。跨设备地址是写在 agent 的 <code>to:</code> 那一行、或由 MCP 工具送出的（见本面板的“Agent 协作”标签页）。送不到时的回复是 <code>device-offline</code>、<code>unknown-target</code>、<code>link-offline</code> 或 <code>link-unauthorized</code>；另外，回复串接不跨机器。"
           },
           "h6": "同步（让几台机器的设置一致）",
-          "p11": "设置 ▸ Navide Cloud 最上面那一块叫“同步”。<strong>它不是独立标签页</strong>，就是这一页的第一个区块。每个可同步的范围一行一个开关；打开之后那一块会在登录<strong>同一个账号</strong>的每台设备上保持一致，内容<strong>在本机加密</strong>，服务器只存它没有密钥的密文。",
+          "p11": "设置 ▸ Navide Cloud 最上面那一块叫“同步”。连上 Navide Cloud 时，这一页有 <strong>{sync}</strong>、<strong>{share}</strong>、<strong>{devices}</strong> 三个子标签页，同步是第一个；没连上时，整页只显示同步的内容。每个可同步的范围一行一个开关；打开之后那一块会在登录<strong>同一个账号</strong>的每台设备上保持一致，内容<strong>在本机加密</strong>，服务器只存它没有密钥的密文。",
           "sync": {
             "scopes": "<strong>共五行，跟侧栏“Agent 资产”一页一行、顺序相同；可以打开的有三个</strong>：<em>MCP</em>（你在 Navide 加的 server，其中的秘密加密后才离开这台机器）、<em>技能</em>（哪些技能开着、各自送给哪几家 CLI，以及在 Navide 创建的技能的文件；你自己放进文件夹的技能只同步设置）、<em>Prompt 技能</em>（提示技能与 Loop 提示词）。",
             "credentials": "<em>记忆</em>、<em>扩展</em>这两行<strong>列出来但呈灰色禁用</strong>，说明写的是“尚未支持同步”。它们不是“默认关闭、等你去打开”——现在按不动。旧版留下开着的记忆开关，仍可以关掉。<em>凭据与密钥</em>完全没有这一行：账号凭据与密钥不会离开这台机器。旧版留下开着的凭据开关一律视为关闭。MCP 设置若打开同步，会先在这台机器加密才上传，服务器没有解密密钥。",
             "states": "两种状态会写在区块底下：<em>未连接</em>（已开的范围会在连接恢复后自动补上）与<em>这台设备还没有同步密钥</em>（拿到之前不会上传任何东西）。另有一颗<em>立即同步</em>，只有连接时能按。",
             "key": "<strong>同步密钥只显示 id 的前 8 码</strong>，密钥本身永远不出现。<em>更换密钥</em>是<strong>两段式</strong>：按第一次会变成<em>立即更换</em>，旁边多一颗<em>取消</em>。更换会让现有密钥退役、所有同步记录改用新密钥重新加密，其他设备在下次交换密钥时取得新的——怀疑密钥外泄时才用它。",
             "legacy": "只有在“这台设备上有一把账号绑定之前的旧密钥、而这个账号还没有密钥”时，才会出现<em>采用为此账号的密钥</em>。它是一次性的：不采用就读不到当初用那把密钥同步过的内容，而直接发一把新的会让那些记录永久解不开。",
-            "conflicts": "两台设备改了同一项时<strong>没有任何一边被覆盖</strong>，而是行成“需要你决定”，两边内容并排、由你按<em>保留这边</em>或<em>保留那边</em>。凭据类的冲突只显示是哪个槽位（<code>厂商 / 槽位</code>），不显示内容。"
-          }
+            "conflicts": "两台设备改了同一项时<strong>没有任何一边被覆盖</strong>，而是行成“需要你决定”，两边内容并排、由你按<em>保留这边</em>或<em>保留那边</em>。凭据类的冲突只显示是哪个槽位（<code>厂商 / 槽位</code>），不显示内容。",
+            "inventory": "<strong>{inventory}</strong>：每个同步中的区块在本机与云端各有几条、几条一致、几条冲突，以及最后是哪台设备写入的。"
+          },
+          "share": "<strong>{share}</strong> 子标签页列出这个账号从任何一台设备创建的所有分享链接。还能打开的链接可以 <em>{copyLink}</em>、用 <em>{extend}</em> 延长七天、用 <em>{rekey}</em> 换成新链接（新链接会复制下来，旧的就打不开了），或 <em>{revoke}</em>；<em>{revokeAll}</em> 一次撤销全部。撤销前会再确认一次。Agent 用 MCP 工具 <code>share_create</code>、<code>share_list</code>、<code>share_revoke</code> 创建与管理同一批链接。",
+          "devices": "<strong>{devices}</strong> 子标签页列出写入过这个账号云端的每一台设备，最近写入的排在最前面，并标出最后写入与最后在线的时间。"
         },
         "s6": {
           "title": "菜单、独立窗口与调度",
@@ -3403,7 +3417,7 @@
           "h2": "Help 菜单",
           "helpMenu": {
             "github": "<strong>在 GitHub 上的 Navide</strong>、<strong>回报问题…</strong> — 开到 GitHub 项目与 issue 页。",
-            "shortcuts": "<strong>键盘快捷键</strong> — 开设置的快捷键标签页。这个菜单项<strong>不带快捷键标示</strong>，键盘走的是 <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd> 这组和弦。",
+            "shortcuts": "<strong>键盘快捷键</strong> — 开设置的快捷键标签页。这个菜单项<strong>不带快捷键标示</strong>，键盘走的是 <kbd class=\"syh-kbd\">{shortcutsKey}</kbd> 这组和弦。",
             "legal": "法律页面六条，依序 <em>隐私权</em>、<em>安全性政策</em>、<em>行为准则</em>、<em>使用界线</em>、<em>授权条款</em>、<em>法律信息</em>，都开到 navide.dev 上对应的页。（<strong>没有服务条款</strong>，这是刻意的。）"
           },
           "callout1": {
@@ -3432,7 +3446,7 @@
             }
           },
           "p2": "系统层唯读是因为动它们需要 root，而 Navide 从不要求——后端也挡着，不只是界面不给按。尤其 daemon 的状态多半只能显示成 <code>状态未知（需 root）</code>。每一行可展开看 调度／指令／原始内容，或 Label／层级／plist 路径／上次结束码／状态。移除放在每一行的 ⋯ 菜单里；移除 LaunchAgent 会<strong>卸载并永久删除它的 plist</strong>，会先跳确认。",
-          "note2": "这里<strong>没有“立刻运行”也没有“在 Finder 显示”</strong>，只有禁用／激活与移除两种动作。上方有 <em>重新扫描</em> 与上次扫描时间。",
+          "note2": "crontab 与 launchd 的行<strong>没有“立刻运行”也没有“在 Finder 显示”</strong>，只有禁用／启用与移除两种动作。Navide 自己的定时任务（在 Navide 里创建，或由 Agent 用 <code>scheduler_upsert</code> 创建）能做的更多：有开关、有 <em>{runNow}</em>，点名称会打开 <em>{edit}</em>，<em>{remove}</em> 也在那里。运行失败的任务会出现 <em>{repair}</em>；创建它的分格关掉了，会出现 <em>{adopt}</em>；Agent 的周期任务快要自动停用时，会出现 <em>{keep}</em>；目标分格不见了，会出现 <em>{retarget}</em>。标着 <em>{systemTag}</em> 的任务（自我进化）锁定不能改。列表上方有 <em>{rescan}</em> 与上次扫描时间。",
           "h4": "其他从 UI 开的窗口",
           "otherTable": {
             "window": "窗口",
@@ -3441,15 +3455,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "新的主窗口",
-              "how": "文件 ▸ 开新窗口（⌘N）"
+              "how": "文件 ▸ 开新窗口（{newWindowKey}）"
             },
             "editor": {
               "window": "编辑器（Mini-IDE）窗口",
-              "how": "⌘⇧I，或点文件总管／搜索结果／终端里的文件链接（见本面板的“代码工作流”标签页）"
+              "how": "{miniIdeKey}，或点文件总管／搜索结果／终端里的文件链接（见本面板的“代码工作流”标签页）"
             },
             "git": {
               "window": "Git 窗口",
-              "how": "Git 面板标题栏的 在新窗口打开，或 ⌘⇧G"
+              "how": "Git 面板标题栏的 在新窗口打开，或 {gitWindowKey}"
             },
             "diff": {
               "window": "差异查看",
@@ -3474,7 +3488,7 @@
           },
           "callout2": {
             "title": "两个容易误会的地方",
-            "text": "<strong>Git History 没有自己的窗口</strong>——“查看完整历史”开的是 Git 窗口里的历史查看。<strong><kbd class=\"syh-kbd\">⌘⇧D</kbd> 也不再开窗口</strong>，它只是把左侧侧栏切到 Plans 标签页；要开 Plan 窗口得从计划文档本身开。"
+            "text": "<strong>Git History 没有自己的窗口</strong>——“查看完整历史”开的是 Git 窗口里的历史查看。<strong><kbd class=\"syh-kbd\">{plansKey}</kbd> 也不再开窗口</strong>，它只是把左侧侧栏切到 Plans 标签页；要开 Plan 窗口得从计划文档本身开。"
           },
           "note3": "同一个工作区已经在别的窗口开着时，Navide 不会再开一份，而是把那个窗口叫到前面。"
         },
@@ -3525,7 +3539,7 @@
           "orphans": {
             "leftover": "<strong>残留的 CLI 进程</strong> — 状态栏出现 <code>⚠ N 残留</code> 时点开，会问“侦测到 N 个先前残留的 CLI 进程 — 可能耗尽内存。要清理吗？”，按 <em>清理</em> 清掉、<em>关闭</em> 略过。这些是上一轮运行没收干净的进程。",
             "backend": "<strong>Backend</strong> — 状态栏的 Backend 药丸点开有地址、PID，以及两颗钮：<em>Restart</em>（没连上时显示 <em>Start</em>）与 <em>Stop</em>（只有连上时能按）。<strong>重启 Backend 会一并带走所有 CLI 进程</strong>；想让它回来之后自动接续对话，就把一般标签页的 <em>Navide 后台服务重启后自动接回工作阶段</em> 打开。",
-            "timeout": "Backend 起太慢而报错时，调一般标签页的 <em>后端启动超时</em>（15–120 秒）。"
+            "timeout": "Backend 起太慢而报错时，调{generalTab}标签页的 <em>后端启动超时</em>（15–120 秒）。"
           },
           "h4": "维护动作速查",
           "maintenanceTable": {
@@ -3604,7 +3618,7 @@
           "tokenMonitor": {
             "controls": "上方两个下拉：<strong>天数</strong> 14／30／90，以及<strong>模型</strong>（可选全部）。旁边是<em>刷新</em>，后端没连上时按不动。",
             "stats": "五个数字：<strong>轮数、总 Token、每轮平均、中位数、每轮平均输出</strong>。底下一行写已扫描／可用 session 数与数据时间。",
-            "comparison": "<strong>最近 7 天与前 7 天</strong>的输出比较：样本数、平均、中位数与变化百分比。两期各<strong>至少 10 轮</strong>、且前期不为零才算得出来，否则写“样本不足”。画面自己注明这只是描述观察到的变化——<strong>Effort 与任务难度未知，下降不能证明额度被缩减</strong>。",
+            "comparison": "<strong>最近 7 天与前 7 天</strong>的输出比较：样本数、平均、中位数与变化百分比。要先在模型菜单<strong>选一个已知的单一模型</strong>才会出现；停在“All models”时，这一区只显示“Select a single known model to compare.”两期各<strong>至少 10 轮</strong>、且前期不为零才算得出来，否则写“样本不足”。画面自己注明这只是描述观察到的变化——<strong>Effort 与任务难度未知，下降不能证明额度被缩减</strong>。",
             "charts": "五张<strong>每回合</strong>趋势图。强调色那条是<strong>最近 10 轮的移动平均</strong>，灰色是各轮原值；<strong>横轴是依时间排序的轮次、等距，不是经过时间</strong>。",
             "table": "本机 Claude 回合历史表，<strong>每页 100 行</strong>，字段是时间、session（id 前 8 码／轮次）、模型、各项 token 与调用次数。",
             "quota": "最下面是额度散点图，<strong>按 reset window 分群</strong>、一个周期一张。百分比来自供应商，图上写明横轴是“依记录顺序排列的快照”，也写明<strong>不能把本机 token 换算成账号额度上限</strong>。还没有样本时它会告诉你要在设置里开 Claude 额度轮询并让 Navide 持续运行——<strong>历史上限无法从 token 记录反推</strong>。"
@@ -3640,7 +3654,7 @@
           "h1": "Navide Guard",
           "p2": "Guard 把 CLI 每一个有风险的动作分成 {critical}、{high}、一般三级，再依请求<strong>从哪里来</strong>决定怎么处理：你在这台电脑前、聊天软件、别的分格或设备，或是一个吃进过外部内容的分格。上方的决策表固定不变；从聊天核准的请求，高以上一律拒绝。",
           "items": {
-            "builtin": "<strong>{builtin}</strong>：每一条可设成 {critical}、{high} 或“{off}”。调高立即生效，调低或关闭要确认；八条安全底线（凭据读取与外送、Keychain、下载后直接运行、删除根目录或家目录、格式化、直接写磁盘）最低只能到 {high}。",
+            "builtin": "<strong>{builtin}</strong>：每一条可设成 {critical}、{high} 或“{off}”。调高立即生效，调低或关闭要确认；十条安全底线（凭据读取、外送与通过管道上传、Keychain、下载后直接运行、删除根目录或家目录、格式化、直接写磁盘、写入 Navide 插件存放区）最低只能到 {high}。",
             "branches": "<strong>{branches}</strong>：对这些分支 force-push 或删除属于 {critical}；终端指令防护的 force-push 检查用的也是这份清单。移除分支要确认。",
             "rules": "<strong>{rules}</strong>：种类是“{deny}”或“{allow}”。拒绝样式把符合的指令提升到你选的等级；允许样式可以把 {high} 降为一般（动不了 {critical}）——这就是例外，没有另一份例外清单。添加允许或移除拒绝要确认。",
             "test": "<strong>{test}</strong>：输入一条指令，看 Guard 会怎么判。",
@@ -3731,17 +3745,17 @@
             "git": {
               "title": "Git（源代码控制）",
               "tag": "侧栏第 4 个标签页",
-              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 (⌘4)</em>；没有加载时写着 <em>Git (⌘4)</em>。在主窗口按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。"
+              "text": "Git 以 Navide 插件加载时，工具提示写着 <em>Navide 插件：Git · navide.git · 发布者：navide · Navide 内置 ({gitTab})</em>；没有加载时写着 <em>Git ({gitTab})</em>。在主窗口按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 会直接开<strong>独立的 Git 窗口</strong>；面板标题栏的 <em>在新窗口打开</em> 也一样。Git 本身也是随附的 Navide 插件（<code>navide.git</code>），和 Plans 一起列在<strong>设置 ▸ Navide 插件</strong>的 <em>内置</em> 区，所以它的更新、停用或启动失败，都和其他 Navide 插件一样。"
             },
             "plans": {
               "title": "Plans（计划文档）",
               "tag": "侧栏第 5 个标签页",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> 那个标签页只是一份<strong>清单</strong>。点任一份会弹出独立的 Plan Review 窗口，标题是 <code>&lt;项目文件夹&gt; — Plans</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> 那个标签页只是一份<strong>清单</strong>。点任一份会弹出独立的 Plan Review 窗口，标题是 <code>&lt;项目文件夹&gt; — Plans</code>。"
             },
             "ide": {
               "title": "Mini-IDE（内置编辑器）",
               "tag": "只以独立窗口存在",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 打开，或在 文件总管 点一下文件。标题是 <code>&lt;文件名&gt; — Mini-IDE</code>，有未存盘时前面加 <code>●</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 打开，或在 文件总管 点一下文件。标题是 <code>&lt;文件名&gt; — Mini-IDE</code>，有未存盘时前面加 <code>●</code>。"
             }
           },
           "callout": {
@@ -3820,7 +3834,7 @@
           "list": {
             "create": "最上面是创建分支的输入框，提示 <em>新分支名称…</em>，右边 <code>＋</code> 送出。",
             "localRow": "本地分支每一行有四颗钮：<code>⇔</code> <em>比较</em>、<code>⇡</code> <em>Rebase 到此分支</em>、<code>⇣</code> <em>合并到目前分支</em>、<code>↵</code> <em>切换</em>。目前分支只显示 <code>✓</code>，没有按钮。",
-            "context": "在分支行按右键：<em>将目前分支合并到 {'{'}branch{'}'}</em>、<em>将目前分支合并到 {'{'}branch{'}'} 并推送</em>、<em>删除分支</em>。",
+            "context": "在分支行按右键：<em>{mergeInto}</em>、<em>{mergeIntoPush}</em>、<em>{deleteBranch}</em>。",
             "remote": "<code>⇅</code> 切换 <em>显示远程分支</em> / <em>隐藏远程分支</em>；远程分支每行一颗 <code>⬇</code> <em>在本地检出</em>。"
           },
           "p2": "按 <code>⇔</code> 之后结果直接展在面板里，标成 <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>，附统计行与文件清单。",
@@ -3859,10 +3873,14 @@
               "behavior": "更多拉取／推送选项，见下。"
             }
           },
-          "p3": "<code>▾</code> 里是 <em>↓ 拉取</em>、<em>↓ 拉取（Rebase）</em>、<em>↑ 推送</em>、<em>↑ 推送（Force with lease）</em>；设了不只一个 remote 时，最后还会多一组 <strong>推送到远程</strong>，每个 remote 一行。",
+          "p3": "<code>▾</code> 里是 <em>↓ {pull}</em>、<em>↓ {pullRebase}</em>、<em>↑ {push}</em>、<em>↑ {pushForce}</em>；设了不只一个 remote 时，最后还会多一组 <strong>推送到远程</strong>，每个 remote 一行。",
           "callout": {
             "title": "认证失败先查账号绑定",
             "text": "推不上去时，优先看账号药丸绑的是不是对的账号，而不是重设远程。凭据失效时面板会直接提示到“设置 › 账号”更新。密码字段要贴的是 Personal Access Token，不是登录密码。"
+          },
+          "worktrees": {
+            "p1": "Git 面板里的 <strong>{worktrees}</strong> 卡片（默认收起，点标题展开；超过一个时会显示数量）列出这个仓库的所有工作树：<code>✦</code> 是主工作树，<code>○</code> 是其他的，适用时会带上 <em>{bare}</em>、<em>{detached}</em>、<em>{locked}</em>、<em>{stale}</em> 徽章。每一行有 <code>⧉</code> <em>{openWindow}</em>、<code>◱</code> <em>{reveal}</em>、<code>🔒</code> <em>{lock}</em>、<code>⇄</code> <em>{move}</em>、<code>✕</code> <em>{remove}</em>；主工作树不能锁定、移动或移除。上方的 <em>{prune}</em> 与 <em>{repair}</em> 用来整理文件夹已被删除、或在 Git 之外被移走的工作树。",
+            "p2": "要新增时，输入文件夹路径（或用浏览选择），选一个分支——或勾选 <em>{createBranch}</em> 再输入新名字——然后按 <code>＋</code> <em>{addWorktree}</em>。好几个分格同时在不同分支上工作，靠的就是这个：每个分格各用一个工作树，改动就不会落在同一个文件夹。"
           }
         },
         "s4": {
@@ -3920,14 +3938,14 @@
           "p1": "计划不只放在一个文件夹。Navide 会扫工作区底下这<strong>七个目录</strong>：<code>.agent-team/plans</code>、<code>.agent-team/reports</code>、<code>.claude/loop-reports</code>、<code>.claude/plans</code>、<code>.cursor/plans</code>、<code>docs/plans</code>、<code>docs/reports</code>；工作区里<strong>最多两层深</strong>的嵌套 Git 仓库，同样这七个目录也会被扫到。收三种扩展名 <code>.html</code>、<code>.plan.md</code>、<code>.md</code>：HTML 计划用 <code>&lt;kebab-slug&gt;_&lt;6 位十六进位&gt;.html</code>，Markdown 计划用 <code>&lt;kebab-slug&gt;.plan.md</code>。以底线或点开头的文件（像 <code>_spec.md</code>、<code>_template.html</code>）是基础建设，清单不会列。",
           "p2": "这些文件<strong>由 agent 写、也由 agent 更新</strong>——你在计划窗口里按的每一个动作（改 todo 状态、留审查意见、核准），最后都落回同一个文件。你要做的是叫 agent“帮我建一份计划”，然后在窗口里审。",
           "h2": "清单",
-          "p3": "侧栏 <strong>计划</strong> 标签页（<kbd class=\"cwh-kbd\">⌘5</kbd>）与 Plan 窗口左栏用的是同一份清单。至少有一份计划时才会出现工具栏：",
+          "p3": "侧栏 <strong>计划</strong> 标签页（<kbd class=\"cwh-kbd\">{plansTab}</kbd>）与 Plan 窗口左栏用的是同一份清单。至少有一份计划时才会出现工具栏：",
           "listTools": {
             "search": "搜索框 <em>搜索计划…</em>，比对标题、文件名与 overview。",
             "stage": "依阶段筛选：<em>全部阶段</em> / 草稿 / 审查中 / 已核准 / 进行中 / 已完成 / 已放弃。",
             "sort": "排序 <em>排序方式</em>：<strong>标题</strong>、<strong>最后更新</strong>、<strong>进度</strong> 三种，旁边 <code>↑</code>／<code>↓</code> 换升幂降幂。",
             "group": "<code>☰</code> 在“依 stage 分群”与“单一清单”之间切换。"
           },
-          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。",
+          "p4": "这四个选择会<strong>按工作区各自记住</strong>。分区由上而下是 <strong>最近</strong>（最多 5 笔，钉选的排最前）、依阶段分组时的 <strong>文档</strong> 区与各个 stage 群组（单一清单模式下合并成一个 <strong>全部计划</strong>）、<strong>已归档</strong>，以及底部的完成操作栏（<em>归档所有已完成</em> / <em>全部删除</em>）。每一行会显示 stage 药丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 进度条、格式标签 <code>HTML</code> / <code>Markdown</code>，还有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的项目数。<strong>每一行右侧都有钉选钮 <code>📌</code> 与删除钮 <code>✕</code></strong>（已归档那一区只有删除）。钉选钮的作用是<em>钉选到“最近”最上方</em>。",
           "callout1": {
             "title": "没有 metadata 的文档自成一区",
             "text": "依阶段分组时，<strong>没有计划 metadata 的纯文档</strong>收在 <strong>文档</strong> 这一区，每一行都带 <code>文档</code> 药丸——跟 stage 是不是 <em>进行中</em> 无关。要把这种文件升级成真正的计划，在它上面按右键选 <strong>升级为计划</strong>；升级只是补上一层草稿信封，<strong>不会改写原本的内文</strong>。"
@@ -3983,7 +4001,7 @@
         },
         "s7": {
           "title": "编辑器窗口",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 打开，或在 文件总管 点一下文件。标签页式的 Monaco 编辑器，<kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> 切标签页（超出范围会落到最后一个标签页）。",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 打开，或在 文件总管 点一下文件。标签页式的 Monaco 编辑器，<kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> 切标签页（超出范围会落到最后一个标签页）。",
           "h1": "左侧四个区块",
           "sectionTable": {
             "section": "区块",
@@ -3995,7 +4013,7 @@
               "note": "文件树。"
             },
             "search": {
-              "note": "跨档搜索；⌘⇧H 跨档取代。"
+              "note": "跨档搜索；{replaceInFiles} 跨档取代。"
             },
             "scm": {
               "note": "就是 Git 面板的嵌入版，带变更数徽章。"
@@ -4013,7 +4031,7 @@
           "editorActions": {
             "split": {
               "action": "分割编辑区",
-              "note": "（切换编辑群组 ⌘K ⌘← / ⌘K ⌘→）"
+              "note": "（切换编辑群组 {prevGroup} / {nextGroup}）"
             },
             "findReplace": {
               "action": "寻找 / 取代"
@@ -4029,7 +4047,7 @@
             },
             "fold": {
               "action": "折叠 / 展开",
-              "note": "（全部 ⌘K ⌘0 / ⌘K ⌘J）"
+              "note": "（全部 {foldAll} / {unfoldAll}）"
             },
             "multiCursor": {
               "action": "多光标：上下加一个"
@@ -4048,7 +4066,7 @@
             },
             "aiTerminal": {
               "action": "开关 AI 终端",
-              "note": "（或 ⌘⇧A）"
+              "note": "（或 {aiChatAlt}）"
             },
             "sendSelection": {
               "action": "把选取的代码丢给 AI 终端",
@@ -4080,7 +4098,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "图片，可 符合窗口大小 / 实际大小。"
+              "how": "图片，可切换 {fitWindow} / {actualSize}。"
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4129,7 +4147,7 @@
             "text": "上表其他类型点开<strong>直接是预览</strong>；html 与 csv 刻意先给你源代码，要按 <em>预览</em> 才切过去。另外 <code>docx</code>、<code>xlsx</code>、<code>zip</code>、<code>woff</code> 这些同时也在二进位清单里，但字体、压缩档、Office 的判断排在二进位前面，所以会拿到专属的呈现，不会退成 hex dump。"
           },
           "h2": "变更记录轨",
-          "p3": "右槽 <strong>预览</strong> 标签页（<kbd class=\"cwh-kbd\">⌘⌥V</kbd>）的下半部是 <strong>最近的变更</strong>——这个工作区最近被动过什么。每一行四栏：",
+          "p3": "右槽 <strong>预览</strong> 标签页（<kbd class=\"cwh-kbd\">{previewTab}</kbd>）的下半部是 <strong>最近的变更</strong>——这个工作区最近被动过什么。每一行四栏：",
           "trackList": {
             "time": "<strong>时间</strong>——相对值（<em>刚刚</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>）。",
             "action": "<strong>动作</strong>——<code>+</code> 添加、<code>~</code> 修改、<code>−</code> 删除、<code>▸</code> 显示。",
@@ -4207,7 +4225,7 @@
               "action": "源代码控制 / 问题"
             },
             "fileTabs": {
-              "action": "切到第 N 个文件标签页（⌘1…⌘9）"
+              "action": "切到第 N 个文件标签页（{editorTab1}…{editorTab9}）"
             },
             "split": {
               "action": "分割编辑区"
@@ -4365,9 +4383,9 @@
             "signInInside": "在 CLI 内登录",
             "flagNoteGoose": "无——Goose 默认会自己核准所有工具（GOOSE_MODE=auto）；要先询问，请把 GOOSE_MODE 设成 approve 或 smart_approve。Navide 的 Guard 目前还不涵盖 Goose。"
           },
-          "note": "“额度”＝ Navide 读得到剩余用量（第 6 章）。“多账号”＝ 可以在设置里挂多组登录并切换（第 5 章）。四家没有略过权限旗标的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因为它们本身就没有这个旗标，不是 Navide 没接。“登录指令”＝ 在设置 ▸ 账号按“登录”时，Navide 实际会运行的指令；标示“在 CLI 内登录”的那几家没有独立的登录指令，按下去就是照常启动该 CLI，登录在它自己的画面里完成。",
+          "note": "“额度”＝ Navide 读得到剩余用量（第 6 章）。“多账号”＝ 可以在设置里挂多组登录并切换（第 5 章）。没有略过权限旗标的 {noFlagCount} 家 CLI（{noFlag}）是因为它们本身就没有这个旗标，不是 Navide 没接。“登录指令”＝ 在设置 ▸ 账号按“登录”时，Navide 实际会运行的指令；标示“在 CLI 内登录”的那几家没有独立的登录指令，按下去就是照常启动该 CLI，登录在它自己的画面里完成。",
           "callout": {
-            "title": "第 16 个选项不是 agent",
+            "title": "最后一项不是 agent",
             "text": "＋ 菜单最下方的 <strong>>_ 打开终端</strong> 是一般 shell，不挂任何 agent，也不会注入角色。它刻意独立放在清单外，不会被 CLI 清单的卷动吃掉。"
           }
         },
@@ -4416,7 +4434,8 @@
           "callout2": {
             "title": "Grok CLI 换成官方的 xAI CLI",
             "text": "安装方式改成官方的安装脚本（用 <code>curl</code> 抓 <code>https://x.ai/cli/install.sh</code> 交给 bash 运行），不再是 npm 套件——所以它需要 <code>curl</code>，也需要一个真正的终端窗口；更新指令是 <code>grok update</code>；设置档换成 <code>~/.grok/config.toml</code>，MCP 以 TOML 写入，旧社区版的 <code>user-settings.json</code> 不再读。它<strong>没有诊断指令</strong>（官方没提供，设置页改成指向官方文档），也没有 effort 栏与权限略过旗标。同名的社区版 CLI 会装在同一个路径，<code>which grok</code> 分不出来，只能靠版本字符串的形状分辨。"
-          }
+          },
+          "menuGroups": "+ 菜单分成两个标题：写代码的 CLI 在 <strong>{cliHeading}</strong> 下面，长驻型的 agent（{agents}）在 <strong>{agentsHeading}</strong> 下面。"
         },
         "s3": {
           "title": "角色",
@@ -4450,7 +4469,7 @@
             "global": "最上面一颗<strong>全域开关</strong>：<em>默认略过权限提示（YOLO 模式）</em>。每一家的抽屉都看得到同一颗，在哪一家改，影响的都是全部。",
             "perVendor": "下面是这一家的一行，显示它的实际旗标（例如 <code>--yolo</code>），右边一个三态下拉：<strong>跟随全域 / 一律略过 / 一律不略过</strong>。"
           },
-          "p4": "没有旗标的四家（Grok CLI / OpenCode / Pi / MiniMax Code）在抽屉的这一段只有那颗全域开关，下面一行写明这家 CLI 没有权限略过旗标、没有东西可切换。",
+          "p4": "没有旗标的 {noFlagCount} 家 CLI（{noFlag}），抽屉这一区只会显示全局开关，下方加一行说明这家 CLI 没有略过权限旗标、没有东西可切。",
           "callout1": {
             "title": "改了不会影响正在跑的分格",
             "text": "旗标是在分格<strong>启动的那一刻</strong>就写进它的命令行的。这里的变更只影响之后开的分格；已经在跑的会保留它启动时的设置，直到你重建或还原它。"
@@ -4489,7 +4508,8 @@
           "note": "更新会替换可执行文件；已经在运行中的分格要重新启动才会用到新版本。",
           "callout2": {
             "title": "这里没有的东西",
-            "text": "仍然<strong>没有“默认参数”字段</strong>——启动指令是<em>整条取代</em>，不是在默认命令后面追加。<strong>可执行文件的指定也不是打路径</strong>，而是在侦测到多套实体安装时从候选里挑一套（挑过之后抽屉“总览”会出现“自订可执行文件”chip）。模型与 reasoning effort 则<strong>不再只有 MCP 那一条路</strong>：现在启动覆写就有正式的字段，手动开面板的对话框也有。"
+            "text": "仍然<strong>没有“默认参数”字段</strong>——启动指令是<em>整条取代</em>，不是在默认命令后面追加。<strong>可执行文件的指定也不是打路径</strong>，而是在侦测到多套实体安装时从候选里挑一套（挑过之后抽屉“总览”会出现“自订可执行文件”chip）。模型与 reasoning effort 则<strong>不再只有 MCP 那一条路</strong>：现在启动覆写就有正式的字段，手动开面板的对话框也有。",
+            "setModel": "已经在跑的分格也能换模型：由 agent 调用 <code>cli_set_model</code>。Claude Code 和 Codex 当场切换（Claude 用它的模型选单、Codex 用 <code>/model</code>）；其他 CLI 会重启该分格并接回原本的对话。"
           },
           "chipsIntro": "卡片上只放三个 chip：安装状态、登录与账号数、推送通道。完整的一排 chip 在抽屉最上面的“{overview}”，把那家 CLI 目前的设置现况直接读回来。顺序是固定的，照着“它是什么 → 它会用什么跑 → 怎么找得到它”排：",
           "chipsTable": {
@@ -4572,19 +4592,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "模型与推理强度都有（5 家）",
-              "vendors": "Claude Code、Antigravity CLI、Copilot CLI、Muse Code、Pi"
+              "group": "模型与推理强度都有（{count} 家）",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "只有模型（7 家）",
-              "vendors": "Codex、Cursor CLI、Grok CLI、Kilo Code、Kimi Code、OpenCode、Qwen Code"
+              "group": "只有模型（{count} 家）",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "两栏都没有（4 项）",
-              "vendors": "Aider、Droid、MiniMax Code，以及 Terminal（它不是 agent）"
+              "group": "两栏都没有（{count} 项）",
+              "vendors": "{names}（Terminal 不是 agent）"
             }
           },
-          "spawnNote": "“只有模型”的那七家并不是没有思考强度可调，而是那个旋钮不在启动参数上：有的写在模型 id 里（例如结尾的 <code>-high</code>），有的在设置档，有的要进 CLI 后用它自己的指令切。打的值不合规矩时（模型 id 带空白、或以“-”开头）对话框会当场说明原因并把送出钮禁用。如果那家 CLI 设了自订启动指令，这两栏会直接禁用并写上原因——那条命令照原样运行，Navide 不会往里面加模型。",
+          "spawnNote": "“只有模型”的那几家并不是没有思考强度可调，而是那个旋钮不在启动参数上：有的写在模型 id 里（例如结尾的 <code>-high</code>），有的在设置档，有的要进 CLI 后用它自己的指令切。打的值不合规矩时（模型 id 带空白、或以“-”开头）对话框会当场说明原因并把送出钮禁用。如果那家 CLI 设了自订启动指令，这两栏会直接禁用并写上原因——那条命令照原样运行，Navide 不会往里面加模型。",
           "h5": "5 · 推送通道",
           "h6": "6 · 安装与更新",
           "pushAllOff": "<strong>全部关掉是合法的选择</strong>，这里没有“至少留一家”的规则。四家都关掉时，抽屉的推送段会直接列出三项代价：消息改成等对方分格闲置之后再打进输入框，所以比较慢才会到；Claude Code 的 rewake 是唯一能叫醒闲置 agent 的手段，关掉之后只能等它自己回到闲置；已经开着的分格会保留它启动时的通道，直到重新启动为止。"
@@ -4593,7 +4613,7 @@
           "title": "账号",
           "p1": "设置 ▸ <strong>账号</strong> 一页装了两块互不相干的东西：上半是 Git 账号，下半是 CLI 账号。",
           "h1": "CLI 账号",
-          "p2": "15 家都会列出标题，但只有 <strong>5 家支持多账号</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Kilo Code。其余只印一行“此 agent 不支持多账号。”，连添加按钮都没有。",
+          "p2": "一家 CLI 能不能挂<strong>多个账号</strong>、切换时怎么生效（当场切换、重启它的分格，或要你手动处理），看第 1 章表格的“多账号”栏：那栏照该 CLI 自己的声明显示，不是说明页另外维护的清单。",
           "p3": "每家底下第一张卡片永远是内置的 <strong>默认</strong>（你原本的登录凭据），后面才是你自己加的账号。卡片上显示登录身分的 email、<em>默认</em> 标签，以及该账号的剩余额度。",
           "table": {
             "action": "操作",
@@ -4609,8 +4629,8 @@
               "detail": "该账号尚未登录或凭据过期时才出现。"
             },
             "setDefault": {
-              "action": "设为默认",
-              "detail": "切换使用中的账号。切换期间按钮变成“切换中…”，且全部账号的按钮都暂时禁用。"
+              "action": "{switchLabel}",
+              "detail": "出现在每一个不是使用中的账号上。按下后把这个 CLI 的当前登录切到该账号，之后打开的分格就用它。切换期间按钮变成“{switchingLabel}”，且全部账号的按钮都暂时停用。"
             },
             "refreshQuota": {
               "action": "重新侦测额度",
@@ -4628,7 +4648,7 @@
           "p7": "切换太频繁会被挡（每家 CLI 60 秒最多 3 次），确认强制切换也绕不过去。",
           "callout1": {
             "title": "已开着的分格保留原账号",
-            "text": "面板上的说明就写着：“已打开的分格在重开前仍使用原账号”。所有账号共用你真实的家目录（session 与历史是共通的），切换账号是<strong>就地替换保存的凭据</strong>。"
+            "text": "已开着的分格会沿用它开启时的账号，直到重开为止。所有账号共用你真正的家目录（session 与历史共用），切换账号是<strong>就地替换存好的凭证</strong>。Claude 账号另外可以登录到<strong>自己的文件夹</strong>（“登录到账号文件夹”）；之后可以只把某一个分格搬到那个账号，不动 CLI 当前的登录，也不影响其他分格。"
           },
           "apiKeys": {
             "title": "API 密钥账号",
@@ -4648,13 +4668,14 @@
             "title": "绑定不在这里做",
             "text": "“这个工作区要用哪个 Git 账号”是在<strong>侧栏的 Git 面板</strong>上那颗账号胶囊选的。设置页只负责账号本身的增删改。删掉一个账号时，指向它的绑定会一起清掉。"
           },
-          "switchToast": "<strong>切换失败现在一定看得到。</strong>以前只有“有分格在跑”和“切太频繁”这两种拒绝会跳提示，其他失败（例如凭据交换本身失败）只写进账号面板自己的横幅——而你在看某一家的行时，那条横幅早就卷出画面了，按下“设为默认”看起来像什么都没发生。现在每一种切换失败都会跳提示。"
+          "switchToast": "<strong>切换失败现在一定看得到。</strong>以前只有“有分格在跑”和“切太频繁”这两种拒绝会跳提示，其他失败（例如凭据交换本身失败）只写进账号面板自己的横幅——而你在看某一家的行时，那条横幅早就卷出画面了，按下“{switchLabel}”看起来像什么都没发生。现在每一种切换失败都会跳提示。",
+          "agentConfirm": "agent 也可以自己提出这些请求——为某个账号开登录、切换某家 CLI 的账号，或把单一分格搬到另一个账号。每个请求都会弹出确认框，写明是哪家 CLI、哪个账号、哪个分格提出的、理由是什么；<strong>你不同意就什么都不会发生</strong>，没回应的请求会自己关掉。"
         },
         "s6": {
           "title": "额度显示",
           "p1": "额度徽章长在 <strong>CLI 分格的标题栏</strong>上（不是状态栏），显示剩余百分比；鼠标停留展开详细窗口，里面有各个计量窗口、重置时间，以及账号切换入口。“设置 ▸ 账号”的账号卡片读的是同一份数据。",
           "h1": "涵盖哪几家",
-          "p2": "<strong>11 家</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Antigravity CLI、OpenCode、Qwen Code、Kilo Code、Pi、Copilot CLI、Cursor CLI。Aider、Muse Code、Droid、MiniMax Code 没有可读的额度来源。",
+          "p2": "<strong>{withCount} 家</strong>：{withQuota}。{withoutQuota} 没有可读的额度来源。",
           "h2": "数据从哪来",
           "list": {
             "claude": "<strong>Claude Code 是特例</strong>：Navide 完全不碰它的凭据，而是去跑 <code>claude -p /usage</code>，读 CLI 自己印出来的额度报表。因此读一次要启动一整个 Claude Code，需要几秒。",
@@ -4842,23 +4863,23 @@
             "tools": {
               "list": "<strong>查找对象</strong> — 有谁在在线、地址怎么写、对方现在是不是忙碌中。",
               "send": "<strong>送出指令</strong> — 把任意文字送给指定的分格。",
-              "spawn": "<strong>开新 agent 并派工</strong> — 请 Navide 开一个新的 CLI 分格、指定用哪家 CLI、给它任务。新分格完成后应该会用消息回报给调用者，但那是子 agent 自己输出的，不是 Navide 的保证：调用者忙碌时会排队，子 agent 没照格式输出时则不会送达。",
+              "spawn": "<strong>开一个新 agent 并交派工作</strong>——请 Navide 开一个新的 CLI 分格、指定它跑哪个 CLI、交给它一项任务。新分格做完后应该发消息回报给调用者；那份回报是子 agent 自己的输出，调用者忙的时候会排队等。如果新分格的第一个 turn 结束时没有回报，Navide 会把那个 turn 的最后输出转交给调用者一次，并标明是代为转交的备援回报，不是它自己写的。",
               "ack": "<strong>纯确认回复</strong> — “收到”“做完了”这种不需要对方动作的回信。它会写进消息记录给你看（面板上标成“仅记录”），但<strong>不会打进对方的输入框</strong>，所以不打断、也不吵醒对方；反过来说，需要对方看到或处理的事就不能用这种。",
               "pending": "<strong>查有没有人在等我</strong> — 忙碌中的分格收不到注入，所以 agent 可以自己回头查：有哪些消息正排队等我闲下来、以及自己寄出去的消息是不是卡住了。"
             },
-            "note": "十五家里有 <strong>十家</strong>接上了这组工具（见下一节的表）。没接上的是 Aider、Droid、Muse Code、Pi，它们改走下面的输出协定；MiniMax Code 两条路都还没有，只收得到消息。"
+            "note": "{total} 家 CLI 里有 <strong>{mcpCount} 家</strong>接上了这套工具（见下一节的表格）。{protocolOnly} 改用下面的输出协定；{receiveOnly} 两条路都还没有，只能收消息。"
           },
           "proto": {
             "title": "输出协定",
             "tag": "流程（pipeline）的分格自动具备",
             "p1": "agent 在回复里输出这种裸文字区块，Navide 会拦下来当作消息：",
             "code": "---MSG-START--- to: reviewer\n帮我跑一下 pnpm test:run，把失败清单回报给我\n---MSG-END---",
-            "note": "to: 可以跟 ---MSG-START--- 写在同一行，也可以单独写在它<strong>正下方那一行</strong>；再往下的 to: 就会被当成内容。---MSG-START--- 与 ---MSG-END--- 这两行必须顶格、不可缩进，也不可以放在 markdown 的代码区块里，否则不会被辨识，而且不会有任何错误提示。流程的 slot 在开场时就会被告知这个协定；手动开的分格不会，但你可以把上面这段直接贴给它——前提是那个 CLI 在下表里支持输出协定。"
+            "note": "to: 可以跟 ---MSG-START--- 写在同一行，也可以单独写在它<strong>正下方那一行</strong>；再往下的 to: 就会被当成内容。---MSG-START--- 与 ---MSG-END--- 这两行必须顶格、不可缩进，也不可以放在 markdown 的代码区块里，否则不会被辨识；一个 turn 出现了 ---MSG-START--- 却没解析出任何消息时，Navide 会在那个分格打一则“message not recognized”提示。流程的 slot 在开场时就会被告知这个协定；手动开的分格不会，但你可以把上面这段直接贴给它——前提是那个 CLI 在下表里支持输出协定。"
           }
         },
         "s3": {
           "title": "哪些 CLI 送得出消息",
-          "p1": "<strong>所有 CLI 分格都收得到消息</strong>——那是 Navide 直接把文字打进终端，跟 CLI 种类无关。<strong>主动送出的是十五家里的十四家</strong>，差别只在它手上有哪条路：",
+          "p1": "<strong>每个 CLI 分格都收得到消息</strong>——Navide 直接把文字打进终端，跟 CLI 本身无关。<strong>{total} 家里有 {sendCount} 家也送得出去</strong>，差别只在能走哪条路：",
           "table": {
             "cli": "CLI",
             "send": "能主动送讯吗"
@@ -4866,9 +4887,10 @@
           "sendModes": {
             "both": "MCP 工具 ＋ 输出协定",
             "protocolOnly": "仅输出协定",
-            "none": "两条都没有（只收得到）"
+            "none": "两条都没有（只收得到）",
+            "mcpOnly": "仅 MCP 工具"
           },
-          "note1": "<strong>十五家里有十四家送得出消息</strong>，差别只在走哪条路。输出协定要 Navide 读得懂那家 agent 的记录档——有记录读取器的十四家都通，Navide 因此知道它“讲完一段话”以及它讲了什么。MCP 工具则要那家 CLI 提供接入点（启动参数、一个带整份设置的环境变量，或一份只给这个分格用的设置目录镜像），Aider、Droid、Muse Code、Pi 目前没有，所以它们只走输出协定。<strong>MiniMax Code 两条都还没有</strong>：它把对话存在 SQLite 里，Navide 还没有读得懂那个格式的记录读取器，所以它收得到消息、但送不出来。",
+          "note1": "输出协定要靠 Navide 读得到那个 agent 自己的记录；有记录读取器的厂商全都涵盖，所以 Navide 知道 agent 何时讲完一段话、讲了什么。MCP 工具另外需要 CLI 提供接入的方式（启动参数、一个带着整份设置的环境变量，或一份只给这个分格用的设置目录镜像），而且要 Navide 接上；{protocolOnly} 没有接上，所以只走输出协定。<strong>{receiveOnly}</strong> 两条都没有：Navide 还没有读它们记录的读取器，所以收得到消息、送不出去。",
           "note2": "两个实务上的但书：<strong>Antigravity</strong> 在“agent 反问你”的那个回合送不出消息（那个回合不带回复文字），一般回答的回合正常；<strong>Qwen、Pi、Kimi</strong> 没有明确的“回合结束”信号，Navide 靠 8 秒静默推断，所以送出时机会晚一些。"
         },
         "s4": {
@@ -4913,7 +4935,7 @@
           "list": {
             "alive": "对方的 CLI 还活着，而且已经过了启动阶段",
             "noTyping": "没有人正在那个分格里打字（输入框有草稿、或四秒内按过键，就先等）",
-            "noTurn": "没有正在跑的回合",
+            "noTurn": "目前没有 turn 在跑——{midTurn} 例外：它自己会把 turn 中途打进来的消息排进队列，所以只需要等没人在打字",
             "quiet": "最近 2 秒没有任何输出"
           },
           "p2": "条件不满足就先排队，满足了自动送出。所以对方正在跑长任务时，你的消息会等它做完 — 这是刻意的。“CLI 互传消息”面板会直接写出是哪一个条件挡着：“目标分格未在运行”“目标分格仍在启动中”“用户正在该分格输入中”“目标 agent 正在运行中”“等待目标静置”，所以“一直没送出去”永远查得到原因。对方收到的消息开头会标明来源，它才知道要回复给谁。",
@@ -4938,7 +4960,9 @@
             "rejected": "被拒绝的原因<strong>只跟写错有关</strong>：CLI 名称不存在、名称重复或不合法、任务空白、指定了那家 CLI 无法接受的模型或思考强度。",
             "kickoff": "<strong>第一段任务有没有真的送进去，会一并回报。</strong>Navide 会等到 CLI 开机、出现提示字符、把任务打进去为止才回答。没能确认送达时，它会说“先查状态再决定”而不是叫你重送——盲目重送等于把同一份工作派两次。",
             "duplicate": "<strong>同一个请求重复开分格会被挡下来</strong>，所以 agent 因为等太久而再送一次时，不会多出一个分格。",
-            "resume": "<strong>也可以接续旧对话开新分格。</strong>agent 先列出这个工作区还留着的 CLI 对话，再指定其中一个开起来，新分格带着那段对话的记忆开始（连在一般终端里开的也算）。对话 id 会先对那家 CLI 的记录档查证，查不到就直接拒绝，不会默默开成一个空的。"
+            "resume": "<strong>也可以接续旧对话开新分格。</strong>agent 先列出这个工作区还留着的 CLI 对话，再指定其中一个开起来，新分格带着那段对话的记忆开始（连在一般终端里开的也算）。对话 id 会先对那家 CLI 的记录档查证，查不到就直接拒绝，不会默默开成一个空的。",
+            "otherProject": "<strong>新分格可以开在别的项目</strong>——用那个项目自己的文件夹、CLAUDE.md、记忆、Plans 与 git——调用者仍是它的上层、照样收到回报。默认放进当前窗口的侧栏，也可以开在新窗口，或开在已经开着那个项目的窗口。",
+            "release": "<strong>做完的子分格可以用 <code>cli_reclaim_agent</code> 释放</strong>：它的 CLI 进程会结束，分格留在原处变成“点一下接回”的卡片、对话完整保留，你还是看得到它做了什么。分格也可以用 <code>cli_rename_pane</code> 改名。"
           },
           "table": {
             "suggestion": "建议值",
@@ -4972,7 +4996,7 @@
           "guards": {
             "rate": {
               "limit": "同一组“来源 → 目标”的频率",
-              "value": "每 60 秒最多 5 则",
+              "value": "每 60 秒 5 条（聊天发送者：30 条）",
               "why": "两个 agent 互相回复可能无限往返"
             },
             "queue": {
@@ -4981,9 +5005,9 @@
               "why": "对方忙不过来时不要无限堆积"
             },
             "timeout": {
-              "limit": "送出后等不到结果",
+              "limit": "发往其他窗口的消息一直没有结果",
               "value": "30 分钟后标为失败",
-              "why": "对方窗口被关掉时，消息不会永远卡在“队列中”"
+              "why": "接收的窗口被关掉或电脑睡眠时，跨工作区的消息不能永远卡在“队列中”。发给同一窗口里忙碌分格的消息只会继续等。"
             },
             "pause": {
               "limit": "暂停开关",
@@ -5023,7 +5047,7 @@
             "stuckQueued": {
               "symptom": "消息一直停在“队列中”",
               "cause": "对方正在跑长任务，还没闲下来",
-              "fix": "正常现象，等它做完；真的卡住 30 分钟会自动标为失败"
+              "fix": "正常——等它做完。排超过 2 分钟时发送方会收到“还在等”的通知，你也可以在面板上按“撤回”收回；只有发往其他窗口的消息会在 30 分钟后标成失败。"
             },
             "rateLimit": {
               "symptom": "面板写出“频率上限：同两个分格之间每 60 秒最多 5 则”",
@@ -5050,12 +5074,14 @@
         "s10": {
           "title": "已知限制",
           "list": {
-            "terminalPane": "<strong>纯终端分格不能当收发对象</strong> — 只有 CLI agent 分格才有名称。",
-            "receiveOnly": "<strong>五家没有 MCP 工具</strong> — Aider、Droid、Muse Code、Pi 只能走裸行输出协定；<strong>MiniMax Code 连输出协定都还没有</strong>，它只收得到消息、送不出去。见上方“哪些 CLI 送得出消息”。",
+            "terminalPane": "<strong>纯终端分格收得到、送不出。</strong>发给它的消息会原样打进去、当成 shell 指令运行——没有信封、也没有回复提示。终端不会收到广播；你最后一次按键后会先挡 60 秒；排队超过 2 分钟就直接标成失败、不会晚打进去；具破坏性的指令一律拒绝。",
+            "receiveOnly": "<strong>有 {noMcpCount} 家 CLI 没有 MCP 工具</strong>——{protocolOnly} 只能用裸行输出协定，<strong>{receiveOnly}</strong> 连这个都没有：收得到消息、送不出去。见上面“哪些 CLI 送得出消息”。",
             "detached": "<strong>分格被拆到独立窗口、或窗口重新加载后</strong>，MCP 工具那条路要重开分格才恢复；输出协定不受影响。",
             "queueFull": "<strong>对方队列满的时候（最多 10 则）消息会被丢弃</strong>，但不再是无声的：面板会写出“目标已有 10 则消息在排队”，失败也会以通知的形式打回寄件的那个分格，寄件的 agent 同样查得到自己那则的下场。只是递送是异步的，<strong>送出的那一瞬间</strong>仍然不知道结果。",
             "noPermission": "<strong>没有权限确认</strong> — 跨工作区传讯不会跳确认框，只会在收到时提示。这是刻意的取舍。",
-            "ackLocal": "<strong>纯确认（ack）不跨设备</strong> — 中继不保证消息在别人的机器上不会进到输入框，所以跨设备的 ack 直接被拒绝，要传就当一般消息传。"
+            "ackLocal": "<strong>纯确认（ack）不跨设备</strong> — 中继不保证消息在别人的机器上不会进到输入框，所以跨设备的 ack 直接被拒绝，要传就当一般消息传。",
+            "acp": "<strong>ACP 分格</strong>（实验功能，在“CLI 代理” → ACP 开启）收到的消息是以 ACP prompt 交给它，而不是打字进去；“已投递”代表 agent 接受了这个 prompt，不代表它已经读过或回复。",
+            "mcpOnly": "<strong>{mcpOnly}</strong> 只能通过 MCP 工具发消息：Navide 不读它每一轮的输出，所以它打印的裸行消息不会送出分格。"
           }
         },
         "tip": "小诀窍：先帮分格改个角色名（“reviewer”“架构师”），标题就是地址，之后交代事情会顺很多。",
@@ -5078,7 +5104,7 @@
             "legend": {
               "actions": {
                 "label": "标题栏",
-                "text": "“暂停投递”会让之后的消息排队但不送出；“清除记录”只清画面，不影响已送达的消息。"
+                "text": "“暂停投递”会让之后的消息先排队、不送出；“清除记录”清掉已结束的行，还在路上的会留着。"
               },
               "route": {
                 "label": "来源 → 目标",
@@ -5149,12 +5175,13 @@
           "h3": "从聊天回答 CLI 的提问",
           "answer": {
             "bare": "权限提示与问题会一则一则贴到聊天。只有一则还没回答时，直接回 <code>1</code>–<code>9</code>、<code>yes</code> 或 <code>no</code> 就行；有好几则时，在答案后面加上编号（例如 <code>yes &lt;id&gt;</code>）。其他文字会立刻收到提示，不会排队。",
-            "which": "能从聊天代答的只有 Claude Code、Codex 与 Aider；其他 CLI、多选题与自由输入的问题，会请你回到电脑前回答，而不是显示按了也没用的按钮。",
+            "which": "能从聊天代答的只有 Claude Code、Codex、Aider 与 Grok Build；其他 CLI、多选题与自由输入的问题，会请你回到电脑前回答，而不是显示按了也没用的按钮。",
             "never": "“不要再问”“一律允许”“这个 session 都允许”这类永久选项，<strong>从聊天永远不会被按下</strong>。",
             "guard": "从聊天核准的请求仍要经过 Navide Guard：被判为严重或高的一律拒绝，Guard 判断不了的也拒绝，聊天会收到“这个动作需要在电脑前确认”。"
           },
           "h4": "标题栏的监控按钮",
-          "p4": "标题栏的“{monitor}”按钮带一个状态点：有 bot 被挡是红、重新连接中是黄、正常是绿，没有激活的 bot 就没有点。点开列出每个绑了聊天的分格，可以跳到那个分格或直接断开；自动开出的子主题收在它的父绑定底下。"
+          "p4": "标题栏的“{monitor}”按钮带一个状态点：有 bot 被挡是红、重新连接中是黄、正常是绿，没有激活的 bot 就没有点。点开列出每个绑了聊天的分格，可以跳到那个分格或直接断开；自动开出的子主题收在它的父绑定底下。",
+          "commands": "在已绑定的聊天里，<code>/prompts</code>、<code>/skills</code>、<code>/mcp</code> 会回一排按钮，分别是你的提示技能、该分格 CLI 的技能，以及 MCP server（只读）；<code>/shares</code> 与 <code>/revoke</code> 列出与撤销分享链接；<code>/plugins status</code> 与 <code>/plugins stop</code> 显示第三方 Navide 插件并停掉其中一个。发到聊天的文件会存给该分格；分格也能在 MSG 区块里加一行 <code>---ATTACH--- &lt;路径&gt;</code> 把文件传回聊天。"
         }
       },
       "workspace": {
@@ -5255,7 +5282,7 @@
             "openHome": "<strong>家目录</strong>——直接用家目录。",
             "recent": "下方是最近开过的清单，可以把常用的固定起来。在清单项目上按右键有 <em>用默认编辑器打开</em>、<em>在 Finder 中显示</em>、<em>复制路径</em>。"
           },
-          "p2": "之后随时可以从菜单 <strong>文件 ▸ 打开工作区…</strong>（<kbd class=\"wph-kbd\">⌘O</kbd>）、<strong>文件 ▸ 打开最近使用</strong>，或 <strong>文件 ▸ 开新窗口</strong>（<kbd class=\"wph-kbd\">⌘N</kbd>）开新窗口。",
+          "p2": "之后随时可以从菜单 <strong>文件 ▸ 打开工作区…</strong>（<kbd class=\"wph-kbd\">{openWorkspace}</kbd>）、<strong>文件 ▸ 打开最近使用</strong>，或 <strong>文件 ▸ 开新窗口</strong>（<kbd class=\"wph-kbd\">{newWindow}</kbd>）开新窗口。",
           "h2": "同一个窗口摆多个工作区",
           "p3": "不必为第二个项目另开窗口。在侧栏“代理”标签页里，工作区区段标题右边有一颗 <strong>＋</strong>，按下去会把同一个选择器叫回来；选中的项目会被收进<strong>同一个窗口</strong>，侧栏多出一行工作区标题。",
           "p4": "点该行标题即切换视野。关键在于：<strong>被切走的工作区，它的 agent 继续在跑</strong>，那一行也还在侧栏上，只是舞台上暂时不显示它的分格。",
@@ -5273,7 +5300,7 @@
           "p1": "入口是 <strong>＋</strong> 按钮，侧栏的工作区标题栏和每个群组标题栏上各有一颗（差别只在新分格落在哪个群组）。按下去会开一个小菜单：",
           "addMenu": {
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
-            "cliList": "中间是 CLI 清单，没安装的会标示出来。",
+            "cliList": "下面的列表分成两个带标题的区块。<strong>{cli}</strong> 是写代码用的 CLI，未安装的会标示出来。<strong>{agents}</strong> 按名字列出你的常驻 Agent（OpenClaw、Hermes Agent）：已打开的点击后切换过去，已关闭的点击后接续原来的对话；另有一个<em>新建 …</em>，会先请你起名字。ACP Agent 也列在这一区。列表下方有一行提示：Grok Bot、dots 这类云端 Agent 以 Navide 插件的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。"
           },
           "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
@@ -5286,7 +5313,7 @@
               "action": "直接开一个"
             },
             "nthCli": {
-              "action": "指定第 N 种 CLI"
+              "action": "把下一个分格的 CLI 选为第 N 个"
             },
             "rename": {
               "action": "改名",
@@ -5304,17 +5331,17 @@
           },
           "note": "自动取名的分格，标题后面会有一个小小的 <code>◦</code> 记号；手动改过名字的就没有。",
           "h2": "右键菜单",
-          "p3": "在分格上或侧栏那一行按右键：<em>聚焦</em>、<em>重命名</em>、<em>发送消息</em>、<em>中断</em>、<em>重新应用角色</em>、<em>移除</em>。其中 <em>发送消息</em> 会把那个分格的地址插进你目前焦点分格的输入框——这是跨分格传讯最快的入口。底下有子分格（<code>▸</code>）的分格还会多一项 <em>移除旗下 N 个子分格</em>：只关掉它派生出来的子分格，它自己和其他分格都不动。",
+          "p3": "在分格或它的侧栏行上右键。大部分分格都有 <em>{focus}</em>、<em>{rename}</em>、<em>{mute}</em>、<em>{sendMessage}</em>、<em>{interrupt}</em>、<em>{reapplyRole}</em>、<em>{reclaim}</em>、<em>{remove}</em>；有些项目只在适用时出现：最小化的分格有 <em>{restore}</em>，列宽被限制时有 <em>{fitWidth}</em>，对话断开的分格有 <em>{reconnect}</em>，Agent 分格则多了唤醒、计划任务、频道、记忆文件夹、设置等项目。<em>{sendMessage}</em> 会把那个分格的地址插入你当前焦点分格的输入框，是跨分格传消息最快的入口。<em>{reclaim}</em> 会结束 CLI 以释放内存，留下一张点一下就能接续的卡片（见下文）。下面有子分格（<code>▸</code>）的分格还会多出 <em>{removeChildren}</em>（只关闭它派生出的分格）和 <em>{removeAll}</em>（连同它派生出的分格一起关闭）。",
           "h3": "收合与占位卡",
           "p4": "分格右上角的 <code>⊟</code> 是最小化。收起来之后侧栏那一行会标上 <strong>已收合</strong>，展开后有 <em>↑ 还原</em> 与 <em>移除</em>。",
           "p5": "另外有一种状态叫<strong>占位卡</strong>：位子还在，但显示一张“↩ 点击以续接”的卡片，标题、副标、群组标签全部保留。重开 app、或被闲置回收之后，分格就是这个样子。点卡片任一处，CLI 会接着原本的对话继续。",
           "h4": "闲置自动回收",
           "p6": "每个跑着的 CLI 都占着内存与 GPU。Navide 默认会把太久没动静的分格降级回占位卡：",
           "reclaim": {
-            "default": "<strong>默认打开</strong>，门槛 30 分钟，可在设置里调。",
+            "default": "<strong>默认开启</strong>，阈值 {defaultMinutes} 分钟，可在设置里调整。阈值最短 {minMinutes} 分钟，设得更短会自动调回 {minMinutes} 分钟。",
             "scan": "每 60 秒扫一次，判准是“既没有输出、你也没有打字”。",
             "notClose": "<strong>这不是关闭</strong>：座位、名字、消息地址、session 全部留着，点一下就回来。",
-            "exempt": "正在被 pipeline 读取、输入框里有草稿、有消息排队等着送进来、或正在焦点上的分格，都不会被回收。"
+            "exempt": "以下分格不会被回收：正在焦点上、还在工作或等你回答、正在运行循环、被 pipeline 阶段监视或由 Manager 转派中、输入框里有草稿、有消息排队等着送进来。没有可接续 session 的分格也不会被回收，因为回收后就回不来了。"
           },
           "note2": "回收发生时，历史记录分格的 pipeline log 会出现 <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>。"
         },
@@ -5380,27 +5407,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "工作区 / 群组 / 分格的树状清单",
-              "keys": "⌘1"
+              "content": "工作区 / 群组 / 分格的树状清单"
             },
             "pipeline": {
-              "content": "多阶段自动流程",
-              "keys": "⌘2、⌘⇧Y"
+              "content": "多阶段自动流程"
             },
             "explorer": {
-              "content": "文件总管",
-              "keys": "⌘3、⌘⇧E"
+              "content": "文件总管"
             },
             "git": {
-              "content": "版本控制（见“代码工作流”标签页）",
-              "keys": "⌘4"
+              "content": "版本控制（见“代码工作流”标签页）"
             },
             "plans": {
-              "content": "计划文档清单（见“代码工作流”标签页）",
-              "keys": "⌘5、⌘⇧D"
+              "content": "计划文档清单（见“代码工作流”标签页）"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> 收合整条侧栏。安装的 Navide 插件可能再增加标签页。",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> 收合整条侧栏。安装的 Navide 插件可能再增加标签页。",
           "h2": "“代理”标签页的三层结构",
           "p1": "由上而下是<strong>工作区行 → 群组行 → 分格行</strong>。",
           "rows": {
@@ -5425,7 +5447,7 @@
           "foldNote": "两颗折叠钮的位置上，<strong>Alt／Option＋点击那一行的展开箭号</strong>也做同一件事（提示写着“Alt+点击：收合底下全部”）。收合状态是<strong>逐分格记在项目里</strong>的，重开 Navide 之后还在。",
           "h4": "多选与批量拖曳",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> 点：加菜单一行。",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> 点：加选单独一行。",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> 点：选整段区间（依画面上实际显示的顺序，不是内部顺序）。",
             "batchMenu": "多选之后按右键，菜单会变成批量版：<em>中断所选</em>、<em>重建所选</em>、<em>最小化所选</em>、<em>还原所选</em>、<em>回收所选</em>（显示可回收数量）、<em>静音所选通知</em>（全部已静音时改为取消静音）及<em>移除所选</em>。回收会保留可接续的分格，并略过受保护的分格。"
           },
@@ -5515,7 +5537,7 @@
               "action": "开一个新分格"
             },
             "nthCli": {
-              "action": "指定第 N 种 CLI 开分格"
+              "action": "把下一个分格的 CLI 选为第 N 个"
             },
             "closePane": {
               "action": "关闭焦点分格"
@@ -5599,7 +5621,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供给 CLI agent 的工具",
-          "p1": "分格一启动，agent 的工具清单里就会多出这些。你不需要教它，也不用设置——直接用中文交代就好，例如“帮我把这份计划的第二阶段标成完成”。目前一共 <strong>64 个</strong>（内核 57 个，加上 Navide 插件“Plans”注册的 7 个），另外还有 3 份唯读资源与 3 个提示样板。",
+          "p1": "分格一启动，agent 的工具清单里就会多出这些。你不需要教它，也不用设置——直接用中文交代就好，例如“帮我把这份计划的第二阶段标成完成”。这一页按用途分组介绍其中 <strong>{listed} 个</strong>，另外还有 3 份只读资源与 3 个提示样板。工具每一版都会增加，最完整、最新的清单以 agent 自己的 MCP 画面里 navide 这个 server 所列为准（例如 Claude Code 的 <code>/mcp</code>）。",
           "h1": "计划文档",
           "planTools": {
             "plan_list": "列出这个工作区的所有计划，含阶段与待办进度",
@@ -5682,9 +5704,9 @@
           "note4": "同一个工作区里可以有两个分格同名，这时候光靠名字说不清要找谁，上面几个工具会直接以 <code>ambiguous-target</code> 拒绝，而不是随便挑一个。要指定其中一个，就把 <code>cli_list_targets</code> 回传的 <code>pane_id</code> 当参数传给 <code>cli_send</code>、<code>cli_send_and_wait</code>、<code>cli_read_log</code>、<code>cli_get_status</code> 或 <code>cli_wait_idle</code>，这时候地址参数就不用填了。平常还是用名字比较好读；分格换了新的 CLI 重开之后 id 会换一个，遇到 <code>unknown-pane-id</code> 重新查一次即可。跨设备的分格没有本机 id，只能用名字寻址。",
           "note5": "<code>cli_send</code> 的地址填 <code>group</code>，不是去找名叫 group 的分格，而是广播给<strong>自己所在标签页群组</strong>里的其他分格（同工作区）。这跟裸行协定的 <code>all</code> 不一样：<code>all</code> 是整个窗口、不分群组。没有分到任何群组的分格共用同一个隐含群组，所以它们彼此送得到，而不是谁也送不到。回传的形状也不一样：<code>recipients</code> 里每个收件者各有一个 <code>msg_key</code>，要分别拿去 <code>cli_check_message</code> 查；空的 <code>recipients</code> 代表你的群组里没有别人，不是失败。代价与 <code>all</code> 相同：真的取名叫 group 的分格从此无法用名字寻址。",
           "h4": "哪些 CLI 接得到",
-          "p2": "十五家里目前有 <strong>十家</strong>：Claude Code、Codex、Copilot CLI、Qwen Code、OpenCode、Kilo Code、Kimi Code、Grok CLI、Antigravity CLI、Cursor CLI。接法看那家 CLI 自己提供什么界面——启动参数（Claude Code、Codex、Copilot、Qwen）、一个带着整份设置的环境变量（OpenCode、Kilo），或一份只给这个分格用的设置目录镜像（Kimi、Grok、Antigravity）。这三种都<strong>不会动到你自己的 MCP 设置档</strong>。",
+          "p2": "{total} 家里目前有 <strong>{mcpCount} 家</strong>：{mcpNames}。接法看那家 CLI 自己提供什么界面——启动参数（Claude Code、Codex、Copilot、Qwen）、一个带着整份设置的环境变量（OpenCode、Kilo），或一份只给这个分格用的设置目录镜像（Kimi、Grok、Antigravity）。这三种都<strong>不会动到你自己的 MCP 设置档</strong>。",
           "note6": "<strong>Cursor 是唯一的例外</strong>：它只读工作区里的 <code>.cursor/mcp.json</code>，所以 Navide 会合并写入那个档，并把它加进 <code>.git/info/exclude</code>，不会弄脏你的 git 状态。",
-          "note7": "还没接上的是 <strong>Aider、Muse Code、Pi</strong>（这三家的 CLI 没有 MCP 界面）与 <strong>Droid、MiniMax Code</strong>（Navide 尚未接，它们的 CLI 有没有界面也还没查证）。这些分格大多仍然可以用裸行输出协定跟其他分格传讯，只是没有 MCP 工具可以调用；MiniMax Code 是例外，它连输出协定都还没有，只收得到消息。",
+          "note7": "还没接上的是 <strong>{notWired}</strong>。其中有些 CLI 本身没有 MCP 界面，其他的是 Navide 还没接。这些分格大多仍能用裸行输出协定传消息给其他分格，只是没有 MCP 工具可调用。{receiveOnly} 是例外：连输出协定也没有，只能收消息。",
           "note8": "接线是 <strong>分格启动当下</strong>做的。所以功能更新后，已经开着的分格还是旧的工具清单——关掉重开才会拿到新的。",
           "h5": "“预览”面板",
           "previewTools": {
@@ -5693,7 +5715,8 @@
             "preview_list": "读回这个工作区的变更记录轨——别的 agent、用户、以及文件监看各自做了什么，最新的在前；可以带时间光标只读添加的部分",
             "preview_clear": "清空变更记录轨；删掉的是用户在“预览”面板上看到的那些行，含文件监看与用户自己的操作，无法恢复。可以只清某个时间点以前的"
           },
-          "note9": "<strong>跨设备只有四个工具走得通</strong>：传讯、传讯并等待、查状态、等对方闲下来。读对方的对话记录、送中断键、关掉对方的分格都需要那台机器自己来，所以一律拒绝。而且远程分格 <strong>没有本机 id</strong>，三段式名称是唯一的把手；它的状态是对方窗口最后一次上传给 Navide Cloud 的字，接近实时但不是实时，也没有额度快照（本机的额度快照讲的是本机的登录，对别台机器上的分格是错的答案）。"
+          "note9": "<strong>跨设备只有四个工具走得通</strong>：传讯、传讯并等待、查状态、等对方闲下来。读对方的对话记录、送中断键、关掉对方的分格都需要那台机器自己来，所以一律拒绝。而且远程分格 <strong>没有本机 id</strong>，三段式名称是唯一的把手；它的状态是对方窗口最后一次上传给 Navide Cloud 的字，接近实时但不是实时，也没有额度快照（本机的额度快照讲的是本机的登录，对别台机器上的分格是错的答案）。",
+          "note10": "这里没列出、但一样有内建的还有：聊天频道（<code>channels_*</code>）、Navide Marketplace 与 Navide 插件管理（<code>marketplace_*</code>、<code>plugins_*</code>）、窗口（<code>window_*</code>、<code>workspace_close</code>）、分享链接（<code>share_*</code>）、<code>evolve_report</code> / <code>evolve_retro</code>，以及 <code>pipeline_import_n8n</code>。每个工具在 agent 工具清单里都有自己的说明。"
         },
         "s2": {
           "title": "方向二：Navide 取用外部 MCP",
@@ -5709,7 +5732,8 @@
           "warn": {
             "p1": "<strong>这里设置的 server 不会出现在 CLI agent 的工具清单里。</strong>它们只服务“读取上下文 → 注入开场提示”这一件事，而且<strong>只在跑流程时</strong>触发，你手动开的分格完全不会用到。",
             "p2": "想让 Claude Code 或 Codex 自己能用某个 MCP server（例如让它直接查 GitHub），请用那个 CLI 自己的 MCP 设置，不是这里。"
-          }
+          },
+          "p3": "每一行 server 都会显示状态与工具数，启动失败时还有它最后打印的几行。通过 Node.js 启动的 server 在找不到 Node.js 时会标“需要 Node.js”，并提供引导安装。留空的值（例如环境变量与 header）要在这台电脑上填，永远不会在设备之间同步。“对照”会用矩阵列出哪家 CLI 有哪个 server。"
         },
         "s3": {
           "title": "方向三：外部 client 控制 Navide",
@@ -5770,15 +5794,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "agent 说它没有计划或传讯的工具",
-              "detail": "那个分格打开时还没接上（功能更新前开的），或用的 CLI 属于尚未接上 MCP 的五家（Aider／Droid／Muse Code／Pi／MiniMax Code）。前者关掉重开即可；后者请改用裸行输出协定传讯——MiniMax Code 连这条也没有，只收得到消息。"
+              "detail": "那个分格开启时还没接上（比更新还早开），或它跑的是还没接上 MCP 的 {noMcpCount} 家 CLI 之一（{notWired}）。前者关掉重开即可；后者改用裸行输出协定传消息——{receiveOnly} 连这个都没有，只能收消息。"
             },
             "serverUnused": {
               "symptom": "设置 → MCP 加了 server，但 agent 用不到",
-              "detail": "那是方向二，只给流程读文档用。要让 agent 自己能调用，得设置在那个 CLI 自己的 MCP 设置里。设置 → MCP 下半部的“各 CLI 的 MCP”会唯读列出每家 CLI 自己设了哪些 server，可以直接对照确认。"
+              "detail": "那是方向二，纯粹给流程读文档用。要让 agent 自己调用，得设置在那家 CLI 自己的 MCP 设置里。“设置 → MCP”会把每家 CLI 已有的 server 和 Navide 自己的列在一起（只读）；切到“对照”就能看哪家 CLI 有哪个。"
             },
             "planLoadFailed": {
               "symptom": "agent 说计划加载失败",
-              "detail": "计划工具都要指定工作区路径。若 agent 传的路径跟分格实际的工作区不同，就会写到 Navide 看不见的地方。请它改用分格的工作区路径。"
+              "detail": "没有传工作区路径时，plan 工具就用分格自己的工作区。如果 agent 传了别的路径，就会写到 Navide 可能没在显示的项目（工具这时会警告没有分格在用它）。请它不要带工作区路径。"
             },
             "staleIdentity": {
               "symptom": "提示分格身分已失效",
@@ -5808,7 +5832,7 @@
               },
               "actions": {
                 "label": "顶行动作",
-                "text": "“添加 MCP +”从内置目录加、“添加自订”手动加一个 server、“刷新”重新读取设置档。"
+                "text": "“+ 添加 MCP”从内建目录添加、“添加自订”手动添加，“打开 MCP 设置”则打开设置档。"
               },
               "card": {
                 "label": "目录卡片",
@@ -5915,6 +5939,11 @@
               "where": "侧栏最左缘色轨的飞出菜单",
               "what": "添加一个<strong>工作区群组</strong>（管很多项目时才用得到的分类层）。",
               "name": "<code>添加群组</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent 头像",
+              "where": "＋ 菜单的 Agent 标题下",
+              "what": "常驻 Agent 名字的第一个字，底色是它自己的颜色。点击后切换到已打开的 Agent，已关闭的则接续原来的对话。"
             }
           },
           "group": {
@@ -5992,8 +6021,7 @@
               "name": "<code>此名称由系统依这个 session 的第一句指令自动产生 — 只要你改过名，就不会再被自动命名</code>"
             },
             "globalManager": {
-              "where": "标题文字旁，显示 <code>🎯 管理</code>",
-              "what": "纯记号：这是 pipeline 的总管分格。"
+              "where": "标题文字旁，显示 <code>🎯 管理</code>"
             },
             "loop": {
               "where": "标题栏",
@@ -6040,6 +6068,9 @@
               "name": "<code>↻ 继续</code> ／ 提示 <code>This session was restored and is waiting at the prompt…</code>",
               "where": "终端画面下方",
               "what": "分格是重启后还原的、停在提示符不动时才出现。按下去送出 <em>continue</em>，把工作接回去。"
+            },
+            "riskPill": {
+              "what": "Navide 观察到这个 CLI 做了平常不会做的事：连到预期集合以外的地址，或写出以前没写过的未知格式文件（再次发生时变红）。点它可看细节、相关进程，支持的话还有<em>{analyze}</em>按钮。"
             }
           },
           "placeholder": {
@@ -7015,7 +7046,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>安装档没有代码签章。</strong>每一个新版本都会再被 SmartScreen 警告一次，而且 App 内更新也是在不验证签章的情况下装上去的。",
-            "symlinks": "<strong>每个分格一份的 CLI 家目录、以及受管技能，是用符号链接做出来的</strong>，而 Windows 默认不让一般程序创建符号链接。要嘛打开 Windows 的开发人员模式（<em>Settings ▸ For developers</em>），要嘛用系统管理员身分运行 Navide。没开也不会无声失败：受影响的分格会在启动后印一行黄色的 <code>[mcp]</code> 说明告诉你原因。会碰到这件事的是靠设置档接 MCP 的那几家——Antigravity CLI、Grok CLI、Kimi Code。",
+            "symlinks": "<strong>每个分格一份的 CLI 主目录、以及受管技能，是用符号链接做出来的</strong>，而 Windows 默认不让普通程序创建符号链接。要么打开 Windows 的开发人员模式（<em>Settings ▸ For developers</em>），要么用管理员身份运行 Navide。分格专属主目录是靠配置文件接 MCP 的那几家在用——Antigravity CLI、Grok CLI、Kimi Code；没有权限时，它们的分格启动后会打印一行黄色的 <code>[mcp]</code> 说明原因。受管技能这时也送不到任何一家 CLI，这一点只会记在 Backend 日志里。",
             "schedule": "<strong>Schedule 标签页只会列出 Navide 自己的调度（Navide Jobs）。</strong>Navide 读的是用户的 crontab 与 macOS 的 launchd，Windows 两者都没有；工作调度器（taskschd.msc）是刻意没有接进来的，因为 Navide 从不创建操作系统的调度工作，而工作调度器本来就在管这台机器上的工作。画面会直接把这件事写出来，而不是给你一份空清单。"
           },
           "h2": "Linux",
@@ -7728,6 +7759,7 @@
       "resource-limits": "资源限制",
       "session-archive": "会话记录归档",
       "settings-management": "设置管理",
+      "experimental": "实验功能",
       "theme": "主题",
       "other": "其他"
     },
@@ -8268,6 +8300,7 @@
         "workbench_action_focusNextPane": "聚焦下一个分格",
         "workbench_action_focusPipeline": "聚焦 Pipeline",
         "workbench_action_focusPreview": "聚焦预览面板",
+        "workbench_action_startModelArena": "发起模型擂台",
         "workbench_action_focusPreviousGroup": "聚焦上一个编辑器群组",
         "workbench_action_focusPreviousPane": "聚焦上一个分格",
         "workbench_action_focusSourceControl": "聚焦源代码控制",
@@ -8308,6 +8341,7 @@
         "workbench_action_rebuildFocusedPane": "重建目前分格",
         "workbench_action_reloadWindow": "重新加载窗口",
         "workbench_action_reopenClosedEditor": "重开刚关闭的编辑器",
+        "workbench_action_reopenClosedWindow": "重新打开刚关闭的窗口",
         "workbench_action_revealFileInOS": "在系统文件总管中显示",
         "workbench_action_revealInExplorer": "在 Explorer 中显示",
         "workbench_action_saveAll": "全部存盘",
@@ -8504,7 +8538,7 @@
       "delete-confirm": "确定删除此账号？",
       "cli": {
         "title": "CLI 账号",
-        "hint": "按“登录”或“＋ 添加账号”会开一个暂时的登录分格，在浏览器授权后自动关闭。“设为默认”决定新分格用哪个账号，已开的分格重开前维持原账号。",
+        "hint": "按“登录”或“＋ 添加账号”会开一个暂时的登录分格，在浏览器授权后自动关闭。“切换到此账号”会把这个 CLI 的当前登录换成该账号，新开的分格就用它。若有分格正在用当前的登录运行，Navide 会先询问，同意后把它们重启到新账号并接回原来的对话。",
         "hint-detail": "所有账号共用你的家目录，session 与历史互通；切换时就地替换保存的凭据，登录也不会动到使用中的账号。",
         "hint-more": "详细说明",
         "login-no-workspace": "请先打开工作区 — 登录需要启动暂时的登录分格。",
@@ -8520,24 +8554,30 @@
         "agent-login-confirm-reason-truncated": "agent 的理由超过 300 字，只显示前 300 字。",
         "agent-login-confirm-cancel": "取消",
         "agent-login-confirm-ok": "打开登录",
-        "agent-switch-confirm-title": "有 agent 要求切换 CLI 账号",
-        "agent-switch-confirm-body": "你同意之前什么都不会切换。这和 Settings → Accounts 的切换是同一个：CLI 会改用另一个账号；如果有分格正在用它，重启分格之前会再问你一次。没有回答的话，这个要求会自动关闭。",
-        "agent-switch-confirm-late": "你同意之后，就算 agent 已经不再等待，切换仍会完成。如果要重启分格，而提出要求的 agent 也跑在这个 CLI 上，它自己的分格也会被重启；它收不到结果，重启后要再查一次账号状态。",
-        "agent-switch-confirm-vendor": "CLI",
-        "agent-switch-confirm-from": "切换前账号",
-        "agent-switch-confirm-to": "切换后账号",
-        "agent-switch-confirm-caller": "提出要求的分格",
-        "agent-switch-confirm-workspace": "分格所在的工作区",
-        "agent-switch-confirm-pane": "要移动的分格",
-        "agent-switch-confirm-pane-body": "你同意之前什么都不会切换。只有这个分格会移动：它会在另一个账号自己的文件夹里接着原来的对话重新打开。CLI 当前登录的账号和其他分格都保持不变。如果这个分格正在工作，停止它之前会再问你一次。没有回答的话，这个请求会自动关闭。",
-        "agent-switch-confirm-reason": "理由（由 agent 提供）",
-        "agent-switch-confirm-reason-truncated": "agent 的理由超过 300 字，只显示前 300 字。",
-        "agent-switch-confirm-cancel": "取消",
-        "agent-switch-confirm-ok": "切换账号",
-        "agent-switch-done": "{agent} 把 {vendor} 从 {from} 切换到 {to}。agent 给的理由：{reason}",
-        "agent-switch-pane-done": "{agent} 把一个分格从 {from} 移到了 {to}。当前登录的账号和其他分格都没有变。agent 给的理由：{reason}",
+        "agent-switch-done": "{time}：{agent} 把 {vendor} 从 {from} 切换到 {to}。理由：{reason}",
+        "agent-switch-pane-done": "{time}：{agent} 把窗格 {pane} 从 {from} 移到 {to}。当前登录的账号和其他窗格都没有改变。理由：{reason}",
+        "agent-switch-queued": "{agent} 正在把 {vendor} 切换到 {to}。会先等 {count} 个正在工作的窗格完成这一轮，之后自动完成切换。理由：{reason}",
+        "agent-switch-pane-queued": "{agent} 会在窗格 {pane} 这一轮结束后，把它移到 {to}。理由：{reason}",
+        "agent-switch-not-done": "{agent} 排队中的切换（{vendor} → {to}）没有执行（{status}）。",
+        "switch-log-title": "账号切换记录",
+        "switch-log-hint": "由 agent（cli_account_switch）或聊天按钮发起、未经此处点击的切换。保存 90 天。",
+        "switch-log-empty": "目前没有切换记录。",
+        "switch-log-refresh": "刷新",
+        "switch-log-col-time": "时间",
+        "switch-log-col-who": "发起者",
+        "switch-log-col-account": "账号",
+        "switch-log-col-status": "结果",
+        "switch-log-col-reason": "理由",
+        "switch-log-pane": "窗格 {pane}",
+        "switch-log-status-switched": "已切换",
+        "switch-log-status-queued": "等待窗格空闲",
+        "switch-log-status-superseded": "被更新的请求取代",
+        "switch-log-status-cancelled": "已取消",
+        "switch-log-status-stale": "期间账号已变更，未切换",
+        "switch-log-status-failed": "未切换",
         "login-complete": "已登录 {email}，账号已保存。",
         "login-complete-no-email": "登录完成，账号已保存。",
+        "switch-login-failed": "刚切换到的账号“{account}”无法登录（Claude Code 的 token 更新被拒绝）。请在任意一个 Claude 分格输入 /login 重新登录一次。",
         "login-step2": "第 1 步完成：{email} 已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录分格里完成浏览器授权。",
         "login-step2-no-email": "第 1 步完成：账号已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录分格里完成浏览器授权。",
         "login-step2-done": "两步都完成：{email} 已登录，也已登录到自己的文件夹。",
@@ -8560,6 +8600,13 @@
         "refresh-quota-card-hint": "立即重新读取这个账号的剩余额度，略过读取失败后的等待时间。只有 CLI 目前登录的账号，或已登录账号文件夹的账号才读得到。",
         "dir-sign-in": "登录到账号文件夹",
         "dir-sign-in-hint": "在这个账号自己的文件夹登录一次，停放时也能实时读取额度。浏览器会再请你授权一次，请使用同一个 email。",
+        "dir-new-panes": "新分格用这个账号的文件夹",
+        "dir-new-panes-hint": "之后开的新分格会在这个账号自己的文件夹运行。不会切换当前账号，已开的分格也不受影响。",
+        "dir-new-panes-active": "新分格当前开在这个账号的文件夹",
+        "dir-new-panes-clear": "改回跟随当前账号",
+        "dir-new-panes-unavailable": "这个账号还没在自己的文件夹登录，请先点“登录到账号文件夹”。",
+        "dir-guidance": "想同时用这个账号，建议点“新分格用这个账号的文件夹”，不要点“切换到此账号”。切换会让所有跟随当前账号的分格一起换账号，之后切回来可能要重新登录一次。",
+        "dir-guidance-sign-in-first": "想同时用这个账号，建议先点“登录到账号文件夹”，再让新分格用这个账号的文件夹，不要点“切换到此账号”。切换会让所有跟随当前账号的分格一起换账号，之后切回来可能要重新登录一次。",
         "dir-email-mismatch": "账号文件夹登录的是 {dirEmail}，不是 {expected}。这张卡片上的额度属于 {dirEmail}。",
         "default-hint": "你原本的登录凭据",
         "default-collapsed": "原始登录（Navide 外）：尚未登录",
@@ -9819,6 +9866,11 @@
     "skipped-title": "有 {count} 个工作区未重新打开",
     "skipped-message": "这些工作区连续 3 次无法打开，为维持程序可用而暂不打开。你随时可以自行重新打开它们。",
     "skipped-ack": "我知道了",
+    "closed-title": "最近关闭的窗口",
+    "closed-reopen": "还原",
+    "closed-others": "还有 {names}",
+    "reopen-missing-title": "找不到 {count} 个文件夹",
+    "reopen-missing-message": "这些文件夹已不存在，重新打开窗口时已跳过：",
     "apply": "恢复",
     "dismiss": "忽略",
     "scope-title": "恢复先前的对话",
@@ -9957,6 +10009,10 @@
   "cli-env": {
     "denied": "{label}：{keys} 由 Navide 自己管理，你设的值没有进到 CLI。",
     "overridden": "{label}：{keys} 收下了，但被 Navide 自己的设置盖过去，所以这个分格里实际没有生效。"
+  },
+  "cli-account-dir": {
+    "links-unavailable": "{label}：Windows 不允许 Navide 把这个账号文件夹链接到其他账号，所以对话或设置会分开存放。请开启开发者模式（设置 → 系统 → 开发者选项），再重新启动 Navide。",
+    "resume-fallback": "{label}：这个账号文件夹里找不到原来的对话，已改开新对话，并请它先读之前的对话记录再接手。"
   },
   "install-terminal": {
     "input-lost": "输入没有送达指令：{error}。之后输入的内容（例如密码）都没有被收到。",
@@ -10121,6 +10177,12 @@
     "use-failed": "无法让 {label} 改用这个安装：{error}",
     "use-done": "Navide 之后会从 {path} 启动 {label}。",
     "autoupdate-failed": "无法变更 {label} 的自动更新设置，设置维持不变。",
+    "update-available": "有新版本 {version}",
+    "update-to": "升级到 {version}",
+    "update-blocked-open": "Windows 上 {label} 窗格会一直占用程序文件：请先关闭所有 {label} 窗格再升级。打开的：{panes}",
+    "update-npm-not-writable": "npm 的全局文件夹需要管理员权限。Navide 不会使用 sudo：请改用自己账号的 Node（例如 nvm），或把 npm prefix 设到主目录，再升级。",
+    "update-blocked-running": "已有其他 CLI 更新在运行，请等它完成。",
+    "update-blocked-busy": "所有 {label} 窗格空闲后才能更新。未空闲：{panes}",
     "use-this": "改用这个",
     "remove": "移除",
     "autoupdate": "自动更新",
@@ -10185,6 +10247,19 @@
     "use-version-note": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 macOS 安全性。",
     "remove-installation": "移除此安装…",
     "removal-blocked": "目前无法移除：找不到另一套可用的安装。请先修复或安装另一套，再重新侦测。",
+    "update-current": "当前 {version}",
+    "update-latest": "最新 {version}",
+    "update-to": "升级到 {version}",
+    "update-runs-with": "会在可见的终端里执行：{command}",
+    "update-only-active": "只升级 Navide 正在使用的那一份，其他安装不会改动。",
+    "update-no-command": "Navide 无法替这份安装升级。",
+    "update-npm-not-writable": "npm 的全局文件夹需要管理员权限。Navide 不会使用 sudo：请改用自己账号的 Node（例如 nvm），或把 npm prefix 设到主目录，再升级。",
+    "update-docs": "按官方说明更新",
+    "update-verify-title": "验证升级结果",
+    "update-verify-desc": "升级已结束，Navide 已重新检测版本。",
+    "update-updated": "已升级 {from} → {to}",
+    "update-unchanged": "仍是 {version}：这次升级没有改变版本",
+    "update-failed": "升级没有完成：{error}",
     "confirm-remove-title": "确定要移除此安装吗？",
     "confirm-remove-desc": "将打开终端卸载位于 {path} 的 {version}。在终端输入“y”确认前，不会移除任何东西。",
     "confirm-remove-keep": "位于 {path} 的可用安装会保留。",
@@ -10231,7 +10306,6 @@
     "remaining": "剩余 {pct}",
     "resets-in": "{time} 后重置",
     "window-left": "{label} 剩余",
-    "window-left-pct": "{label} 剩 {pct}",
     "window-left-used": "{label}：剩 {pct}（已用 {used}）",
     "window-claude-session": "工作阶段（5 小时）",
     "window-unlimited": "无限",
@@ -10240,7 +10314,14 @@
     "window-claude-weekly-model": "每周（{scope}）",
     "parked-not-measured-hint": "停放中：Claude Code 只回报目前使用的账号。把这个账号登录到自己的文件夹，就能实时读取额度。",
     "updated": "更新于 {time}",
+    "window-pct-left": "剩 {pct}",
+    "window-reset": "{at} 重置 · {countdown} 后",
+    "window-reset-passed": "{at} 已过重置时间",
+    "data-updated": "数据更新于 {time}（{ago}）",
+    "stale-title": "数据已过期",
+    "stale-detail": "上次成功读取 {time}（{ago}），下面是当时的数字。按“{action}”获取最新值。",
     "switch-title": "切换账号",
+    "switch-live-guidance": "这里会切换所有跟随当前账号的分格。只想让新分格用另一个账号，请到账号设置，用“新分格用这个账号的文件夹”。",
     "switch-default": "Default（内置）",
     "switch-low": "额度不足，可切换账号",
     "exhausted-short": "已用完",
@@ -10276,6 +10357,23 @@
     "failover-mode-off": "关闭",
     "failover-mode-notify": "通知我",
     "failover-mode-auto": "自动切换",
+    "auto-switch-pop-title": "额度用完时",
+    "auto-switch-notify-only": "额度用完只会通知，不会自动换账号。",
+    "auto-switch-off-only": "不做任何处理，需要自己手动切换。",
+    "auto-switch-next": "下一个：{name}",
+    "auto-switch-next-none": "目前没有其他账号还有额度",
+    "auto-switch-left": "5 小时内还能自动切换 {n} 次",
+    "auto-switch-block-hint": "账号额度用完时 Navide 的做法。和“一般”页的“额度耗尽时的账号切换”是同一个设置，改哪一边都会同步。",
+    "auto-switch-next-headroom": "下一个：{name}（剩 {pct}%）",
+    "auto-switch-order": "接续顺序：有最新读数、剩余额度最多的账号优先",
+    "auto-switch-log": "切换记录（{n}）›",
+    "auto-switch-log-short": "记录 ›",
+    "auto-switch-queued": "切换到 {to} 排队中：等 {n} 个分格空闲",
+    "auto-switch-queued-pane": "分格 {pane} 切换到 {to} 排队中：等它空闲",
+    "auto-switch-cancel": "取消排队",
+    "auto-switch-tag-queued": "排队→{to}",
+    "auto-switch-tag-next": "下一个",
+    "auto-switch-goto-accounts": "在“账号”页查看状态与切换记录 ›",
     "failover-col-cli": "CLI",
     "failover-col-switch": "切换方式",
     "failover-col-resume": "对话",
@@ -11005,6 +11103,7 @@
     "token-linked": "已用令牌链接"
   },
   "channels": {
+    "model-switched": "{who} 从聊天室把 {pane} 切到 {model}（{method}）",
     "agent": {
       "title": "agent 的请求",
       "from": "由 {requester} 提出",
@@ -12222,7 +12321,18 @@
     "unpin-title": "有 {count} 个要改为跟随的分格正在运行",
     "unpin-body": "改为跟随会用目前的登录重开分格，并接续对话。可以等它们跑完再改，或这次先跳过。闲置的分格会立即改。",
     "pin-default-refused": "内置的 Default 账号没有自己的文件夹，无法固定。请先切换到其他账号。",
-    "pin-needs-dir-login": "要把这个分格固定在 {account}，需要先在它的账号文件夹登录一次。已打开登录窗口。"
+    "pin-needs-dir-login": "要把这个分格固定在 {account}，需要先在它的账号文件夹登录一次。已打开登录窗口。",
+    "fix-children-title": "把旗下子分格固定到 {account}？",
+    "fix-children-body": "勾选的 Claude 子分格会在 {account} 自己的账号文件夹重新打开并接回对话，之后切换账号时不会跟着换。空闲的立即重开；忙碌中的等这一轮跑完才重开，不会中断。",
+    "fix-children-parent-follows": "母分格本身仍跟随账号切换。",
+    "fix-children-confirm": "固定 {count} 个子分格",
+    "skip-not-claude": "不是 Claude 分格，跳过",
+    "skip-no-session": "没有可接回的对话，跳过",
+    "skip-already": "已固定在 {account}，跳过",
+    "fix-children-done": "已把 {count} 个子分格固定到 {account}（{skipped} 个跳过）。",
+    "fix-children-waiting": "{count} 个忙碌中的子分格会在这一轮结束后重开。",
+    "fix-children-none": "没有可以固定到 {account} 的子分格。",
+    "fix-children-needs-dir-login": "要把子分格固定在 {account}，需要先在它的账号文件夹登录一次。已打开登录窗口；登录后再点一次。"
   },
   "pluginActivity": {
     "title": "活动",
@@ -13415,6 +13525,140 @@
       "unsupported": "不支持",
       "yolo": "跳过危险命令确认",
       "yolo-flag": "支持（{flag}），跟随 YOLO 开关"
+    }
+  },
+  "arena": {
+    "experimental": "实验",
+    "menu": {
+      "section": "比较",
+      "start": "模型擂台…",
+      "runs": "擂台记录（{n}）",
+      "hint": "同一个需求派给 2–4 个模型，各自 worktree 并排比较"
+    },
+    "ctx": {
+      "compare": "用多个模型比较这个需求…"
+    },
+    "settings": {
+      "title": "模型擂台",
+      "hint": "同一个需求同时派给 2–4 个模型，各自在自己的 git worktree 和窗格里完成，做完后并排比较，再合并你选中的那一份。默认关闭。"
+    },
+    "start": {
+      "title": "发起比较",
+      "subtitle": "每个模型从同一个 commit 开始做同一个需求，各自在独立的 worktree 里修改；合并之前不会动到你的工作目录。",
+      "task": "需求",
+      "task-placeholder": "描述要每个模型完成的修改…",
+      "base": "起点",
+      "check": "验收命令",
+      "check-placeholder": "例如 pnpm test:run",
+      "models": "参赛模型（{min}–{max} 个）",
+      "cli": "命令行工具",
+      "model-default": "{cli} 默认模型",
+      "remove": "移除",
+      "add": "添加一个模型",
+      "time-limit": "每格时限（分钟）",
+      "budget": "每格费用上限（US$）",
+      "estimate": "将打开 {panes} 个窗格、{panes} 个 worktree。",
+      "estimate-branches": "分支：arena/场次/模型，位于 .agent-team/worktrees/arena-场次/ 下。",
+      "estimate-budget": "最多花费：全部到上限共 US$ {total}。",
+      "starting": "启动中…",
+      "go": "开始比较",
+      "failed": "无法发起比较。"
+    },
+    "kickoff": {
+      "check": "完成后请运行 `{cmd}`，并报告是否通过。"
+    },
+    "panel": {
+      "title": "模型擂台",
+      "run": "场次",
+      "base": "起点 {branch}＠{sha}",
+      "elapsed": "已用时 {t}",
+      "limits": "上限：每格 {min} 分钟、US$ {usd}",
+      "dirty-base": "发起时主工作目录有未提交的修改，这些修改不在各格的起点里。",
+      "check-note": "验收命令：{cmd}。由各格自行运行并报告结果。",
+      "empty": "这个工作区还没有擂台记录。"
+    },
+    "run-state": {
+      "running": "进行中",
+      "merged": "已合并",
+      "kept": "保留分支",
+      "closed": "已结束"
+    },
+    "state": {
+      "running": "运行中",
+      "no-pane": "没有窗格",
+      "pane-closed": "窗格已关闭",
+      "stopped-user": "你已停止",
+      "stopped-time": "已停止：到达时限",
+      "stopped-budget": "已停止：到达费用上限"
+    },
+    "col": {
+      "model": "模型",
+      "state": "状态",
+      "changes": "改动",
+      "tokens": "令牌",
+      "cost": "成本",
+      "default-model": "{cli} 默认",
+      "files": "{n} 个文件",
+      "protected": "涉及 {n} 个敏感文件",
+      "cost-unavailable": "没有成本数据",
+      "rating": "评价",
+      "adopt": "采用"
+    },
+    "action": {
+      "show": "显示",
+      "stop": "停止",
+      "stop-all": "全部停止"
+    },
+    "tab": {
+      "run": "进度",
+      "compare": "比较",
+      "merge": "合并"
+    },
+    "compare": {
+      "rate": "{n} 星",
+      "adopt": "采用这份",
+      "no-changes": "还没有任何一格修改了文件。",
+      "protected-hint": "lockfile、包清单、环境变量、CI 或配置文件：采用前请先确认",
+      "unchanged": "这格未修改",
+      "truncated": "差异太长，只显示前面部分",
+      "refresh": "刷新"
+    },
+    "workspace-alias": "擂台 {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "整份采用",
+      "mode-mix": "混搭文件",
+      "mode-branch": "只保留分支",
+      "candidate": "采用哪一格",
+      "squash": "压成一个 commit（squash）",
+      "file": "文件",
+      "take-from": "取自",
+      "skip": "不要",
+      "mix-hint": "每个文件整份取自你选的那一格，组合在新分支 arena/场次/mix 上；请确认拼起来仍然兼容。",
+      "into": "合并到主工作目录的 {branch}。",
+      "new-commits": "发起后这个分支又多了 {n} 个 commit；不会自动 rebase。",
+      "already": "这场已经合并过了。",
+      "dirty": "主工作目录有未提交的修改，请先提交或丢弃。",
+      "wrong-branch": "主工作目录当前不在这场的起点分支 {branch}。",
+      "empty-mix": "至少选择一个文件。",
+      "confirm-check": "请先确认验收命令。",
+      "check-confirm": "我已在这个结果上运行 {cmd}，并且通过",
+      "branch-hint": "不合并，保留这格的分支以后再决定。",
+      "go": "合并",
+      "merging": "合并中…",
+      "confirm": "确认：合并到 {branch}",
+      "done": "已合并为 {sha}。",
+      "kept": "已保留分支 {branch}。",
+      "failed": "合并已停止。",
+      "conflicts": "需要你在 Git 面板处理的冲突（不会自动解决）："
+    },
+    "cleanup": {
+      "title": "清理",
+      "panes": "关闭擂台窗格",
+      "worktrees": "移除 worktree",
+      "branches": "删除本地分支",
+      "remote": "没有推送任何分支，所以不用删除远程分支。",
+      "go": "清理",
+      "done": "已移除 {n} 项。"
     }
   }
 }

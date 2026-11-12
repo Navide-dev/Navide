@@ -1,4 +1,5 @@
 import { computed, ref, watch, type InjectionKey } from 'vue'
+import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import type { useBackend } from './useBackend'
 import type { ChannelPlatform } from '../platform/channels'
 
@@ -450,6 +451,16 @@ function createChannelsStore(backend: Backend) {
   backend.on('channels.link_failed', (raw) => {
     const msg = raw as ChannelLinkFailedEvent | null
     if (msg?.platform) lastLinkFailed.value = msg
+  })
+  // A chat's /model switched a pane: shown here too, so whoever sits at this window
+  // sees who changed which pane's model (channels.model_menu).
+  backend.on('channels.model_switched', (raw) => {
+    const ev = raw as { who?: string; pane_name?: string; model?: string; effort?: string; method?: string } | null
+    if (!ev?.model) return
+    const model = ev.effort ? `${ev.model} · ${ev.effort}` : ev.model
+    useNotify().toast(i18n.global.t('channels.model-switched', {
+      who: ev.who ?? '', pane: ev.pane_name ?? '', model, method: ev.method ?? '',
+    }), { type: 'info', duration: 8000 })
   })
   backend.on('channels.managed_created', (raw) => {
     const msg = raw as ChannelManagedCreatedEvent | null

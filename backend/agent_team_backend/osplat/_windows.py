@@ -1551,6 +1551,10 @@ class WindowsDiscoveryLayout(WindowsLayout):
     def file_name_refused(self, name: str) -> bool:
         return windows_refused_file_name(name) or windows_short_name(name)
 
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        # DirEntry.stat() here is FindFirstFile metadata: st_dev/st_ino are 0.
+        return os.lstat(path)
+
     def symlinks_available(self) -> bool:
         global _symlinks_available
         if _symlinks_available is None:

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { findConsecutiveQuestionBlocks } from '../buffer'
-import { INTERACTION_PROTOCOL, PROTOCOL_EXAMPLE_PROMPTS } from '../../../../data/stages'
+import { INTERACTION_PROTOCOL, INTERACTION_PROTOCOL_EN, PROTOCOL_EXAMPLE_PROMPTS } from '../../../../data/stages'
 
 // Issue #733: a Codex slot in an allow_questions stage. Codex does not collapse
 // the kickoff into "[Pasted text +N lines]" the way Claude does, so the echoed
@@ -65,7 +65,7 @@ describe('issue #733 — Codex QUESTION parse with kickoff echo in the scan wind
 
   it('every skipped prompt is a real prompt line of the protocol examples', () => {
     for (const p of PROTOCOL_EXAMPLE_PROMPTS) {
-      expect(INTERACTION_PROTOCOL).toContain(`\nprompt: ${p}\n`)
+      expect(INTERACTION_PROTOCOL + INTERACTION_PROTOCOL_EN).toContain(`\nprompt: ${p}\n`)
     }
   })
 

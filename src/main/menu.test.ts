@@ -175,14 +175,68 @@ describe('installApplicationMenu', () => {
     expect(hooks.calls).toEqual(['lock-now'])
   })
 
+  it('Window menu: Reopen Closed Window and its list are greyed out while nothing was closed', () => {
+    installOn('darwin')
+    const window = submenuOf('Window')
+    expect(itemIn(window, 'Reopen Closed Window').enabled).toBe(false)
+    const list = itemIn(window, 'Recently Closed Windows')
+    expect(list.enabled).toBe(false)
+    expect((list.submenu as MenuItemConstructorOptions[]).map((i) => i.label)).toEqual(['No Recently Closed Windows'])
+  })
+
+  it.each(['darwin', 'linux', 'win32'] as const)('on %s, the Window menu reopens the newest or a picked closed window', (platform) => {
+    setPlatformId(platform)
+    const now = Date.now()
+    installApplicationMenu({
+      ...hooks,
+      recentlyClosedWindows: () => [
+        { name: 'alpha', others: ['beta', 'gamma'], closedAt: now },
+        { name: 'delta', others: [], closedAt: now },
+      ],
+      onReopenClosedWindow: (index) => hooks.calls.push(`reopen:${index}`),
+    }, [], 'en-US')
+    const window = submenuOf('Window')
+    const reopen = itemIn(window, 'Reopen Closed Window')
+    // Shown on macOS but never registered: a native accelerator would take
+    // ⌘⇧T from the Mini IDE's Reopen Closed Editor in every window.
+    if (platform === 'darwin') {
+      expect(reopen.accelerator).toBe('CmdOrCtrl+Shift+T')
+      expect(reopen.registerAccelerator).toBe(false)
+    } else {
+      expect(reopen.accelerator).toBeUndefined()
+    }
+    const items = itemIn(window, 'Recently Closed Windows').submenu as MenuItemConstructorOptions[]
+    expect(items).toHaveLength(2)
+    expect(items[0].label).toMatch(/^alpha \+ 2 more — /)
+    expect(items[0].sublabel).toBe('beta, gamma')
+    expect(items[1].label).toMatch(/^delta — /)
+    expect(items[1].sublabel).toBeUndefined()
+    fire(reopen)
+    fire(items[1])
+    expect(hooks.calls).toEqual(['reopen:0', 'reopen:1'])
+  })
+
+  it('names a closed window in the menu language', () => {
+    installApplicationMenu({
+      ...hooks,
+      recentlyClosedWindows: () => [{ name: 'alpha', others: ['beta'], closedAt: Date.now() }],
+    }, [], 'zh-TW')
+    const window = submenuOf('視窗')
+    const items = itemIn(window, '最近關閉的視窗').submenu as MenuItemConstructorOptions[]
+    expect(items[0].label).toMatch(/^alpha 與其他 1 個工作區 — /)
+    expect(itemIn(window, '重新打開剛關閉的視窗').enabled).toBe(true)
+  })
+
   it.each(['darwin', 'linux', 'win32'] as const)('on %s, while App Lock is up, every Navide item is greyed out and only system roles stay', (platform) => {
     setPlatformId(platform)
     const leaves = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
       items.flatMap((item) => (Array.isArray(item.submenu) ? leaves(item.submenu) : item.type === 'separator' ? [] : [item]))
-    installApplicationMenu({ ...hooks, lockNowEnabled: () => true, appLocked: () => false }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    // A closed window to reopen, so the unlocked menu has nothing greyed out.
+    const closed = { recentlyClosedWindows: () => [{ name: 'c', others: [], closedAt: 0 }] }
+    installApplicationMenu({ ...hooks, ...closed, lockNowEnabled: () => true, appLocked: () => false }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
     const unlocked = leaves(h.template)
     expect(unlocked.filter((item) => item.enabled === false)).toEqual([])
-    installApplicationMenu({ ...hooks, appLocked: () => true }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    installApplicationMenu({ ...hooks, ...closed, appLocked: () => true }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
     const locked = leaves(h.template)
     expect(locked).toHaveLength(unlocked.length)
     const usable = locked.filter((item) => item.enabled !== false)
@@ -194,6 +248,17 @@ describe('installApplicationMenu', () => {
     for (const label of ['Settings…', 'Open Workspace…', 'New Window', 'Copy', 'Reload Window', 'w']) {
       expect(locked.find((item) => item.label === label)?.enabled).toBe(false)
     }
+  })
+
+  it('on darwin the app menu names Navide, not the package name, in About, Hide and Quit', () => {
+    installOn('darwin')
+    const menu = submenuOf('Agent-Team')
+    const byRole = (role: string) => menu.find((item) => item.role === role)
+    // app.name is the package name ("agent-team"), which Electron's role
+    // labels would show; the menu must say the product name instead.
+    expect(byRole('about')?.label).toBe('About Navide')
+    expect(byRole('hide')?.label).toBe('Hide Navide')
+    expect(byRole('quit')?.label).toBe('Quit Navide')
   })
 
   it('File has Open Workspace… with ⌘O that invokes its hook', () => {
@@ -609,7 +674,11 @@ describe('application menu — locale', () => {
 
   // Chromium labels a `role` item in the SYSTEM locale, and Electron cannot
   // re-localize it. Supplying our own label would silently take those items
-  // out of the OS's hands, so no role may carry one.
+  // out of the OS's hands, so no role may carry one. The one exception is the
+  // macOS about, hide and quit roles: Electron words those itself, in English,
+  // around app.name (the package name), so they carry the same English wording
+  // around the product name.
+  const PRODUCT_NAMED = new Set(['darwin:about', 'darwin:hide', 'darwin:quit'])
   it('leaves every role item unlabeled so the OS keeps wording them', () => {
     for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
       for (const platform of ['darwin', 'linux'] as const) {
@@ -618,7 +687,7 @@ describe('application menu — locale', () => {
         const labeledRoles: string[] = []
         const walk = (items: MenuItemConstructorOptions[]): void => {
           for (const item of items) {
-            if (item.role && item.label) labeledRoles.push(`${locale}/${platform}:${item.role}`)
+            if (item.role && item.label && !PRODUCT_NAMED.has(`${platform}:${item.role}`)) labeledRoles.push(`${locale}/${platform}:${item.role}`)
             if (Array.isArray(item.submenu)) walk(item.submenu as MenuItemConstructorOptions[])
           }
         }

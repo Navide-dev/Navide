@@ -212,6 +212,9 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
     app.note_host_disabled_plugins(session.disabled_plugins)
+    # The plugin broker forwards no tokens.* event to plugins: keep the
+    # token-statistics broadcast off this session.
+    session.tokens_watch = frozenset()
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
     # A Host that connects again (its session dropped, this backend did not)
     # starts from idle: tell it the result helper's state when there is one.
@@ -1351,6 +1354,26 @@ async def git_status(session: "Session", msg_id: str, msg_type: str, payload: di
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("git.summary")
+async def git_summary(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """What a status bar shows: git.status without its file lists.
+
+    Reads the same shared status run as git.status (so it adds no git
+    process when the Git pane asks at the same moment) and, like it, starts
+    watching the workspace so git.changed keeps arriving. Every scalar field
+    is kept; the lists become ``dirty`` (anything staged or unstaged)."""
+    from . import app
+
+    ws_path = payload.get("workspace_path") or ""
+    if app._git_watcher is not None:
+        await asyncio.to_thread(app._git_watcher.watch, ws_path)
+    result = await app.git_service.get_status(ws_path)
+    summary = {key: value for key, value in result.items() if not isinstance(value, (list, dict))}
+    if result.get("ok") is not False:
+        summary["dirty"] = bool(result.get("staged") or result.get("unstaged"))
+    await session.send_json(make_response(msg_id, msg_type, summary))
+
+
 @handler("git.discover_repositories")
 async def git_discover_repositories(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -2463,6 +2486,29 @@ def _pane_default_profile_id(agent_key: str) -> str:
     return ""
 
 
+#: Account dirs already told about entries they cannot share (once per run).
+_ACCOUNT_DIR_UNSHARED_NOTIFIED: set[str] = set()
+
+
+def _claude_account_dir_check(
+    vault: Any, slot: str, command: Any, workspace_path: str
+) -> tuple[Any, str, list[str]]:
+    """For a claude pane about to run on account dir ``slot``:
+    ``(command, resume_fallback_id, unshared entries)``. The command changes
+    only when it resumes a session that config dir cannot see (see
+    ``claude.resume_fallback_command``). Blocking (directory scans)."""
+    from .cli_vendors.claude import resume_fallback_command
+
+    directory = vault.account_dir_path(slot)
+    command, fallback_id = resume_fallback_command(
+        command,
+        workspace_path=workspace_path,
+        config_projects=directory / "projects",
+        real_projects=vault._real_home / ".claude" / "projects",
+    )
+    return command, fallback_id, vault.account_dir_unshared(slot)
+
+
 def _account_dir_for_spawn(
     agent_key: str, payload_profile_id: object, *, login: bool
 ) -> str:
@@ -2522,6 +2568,7 @@ async def _broadcast_profiles_changed(
     agent_key: str | None = None,
     forced: bool | None = None,
     hot_switched_panes: list[dict[str, Any]] | None = None,
+    unattended: bool = False,
 ) -> None:
     from . import app
 
@@ -2552,6 +2599,10 @@ async def _broadcast_profiles_changed(
         # its own panes of that agent onto the new credentials.
         payload["agent_key"] = agent_key
         payload["forced"] = bool(forced)
+        if forced and unattended:
+            # A switch nobody clicked (cli_account_switch, a chat button):
+            # windows restart only idle panes and wait for working ones.
+            payload["unattended"] = True
     if hot_switched_panes is not None:
         # Another window can switch again while the account views are read.
         # Never pair rows from that earlier switch with the newer default.
@@ -3058,6 +3109,26 @@ async def cli_profiles_set_pane_default(
     await _broadcast_profiles_changed("set_pane_default")
 
 
+def _start_switch_login_check(agent_key: str, profile_id: str) -> None:
+    """Start account_switch_verify for a switch that just landed. Strict reads,
+    so a keychain hiccup ends the check instead of reading as signed out.
+    Never raises into the switch."""
+    from . import account_switch_verify, app
+
+    async def read_live() -> str | None:
+        return await vault_to_thread(
+            lambda: app.credential_vault.read_live(agent_key, strict=True).secret
+        )
+
+    async def notify(agent: str, slot: str, reason: str) -> None:
+        await account_switch_verify.notify_windows_and_chats(agent, slot, reason, app=app)
+
+    try:
+        account_switch_verify.start(agent_key, profile_id, read_live, notify)
+    except Exception:  # noqa: BLE001 — the switch already succeeded
+        app.log.exception("could not start the post-switch login check")
+
+
 def _record_switch_back(agent_key: str, failure: str) -> None:
     """The audit row of an account prompt's "switch back" (credentials.auto-repair)."""
     from .convenience_wiring import gate as convenience_gate
@@ -3528,7 +3599,13 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
         agent_key=agent_key,
         forced=agent_key not in HOT_SWAP_AGENTS and bool(payload.get("force")),
         hot_switched_panes=hot_switched_panes,
+        unattended=bool(payload.get("unattended")),
     )
+    # Read-only post-switch check (account_switch_verify): tell the user when
+    # the restored login turns out unable to sign in. Skipped when the reply
+    # already asked for a sign-in or the live login was adopted as-is.
+    if agent_key == "claude" and login_reason is None and not adopted:
+        _start_switch_login_check(agent_key, profile_id or DEFAULT_SLOT_ID)
     # The usage badges read the active account's credentials — force the poller
     # to re-fetch now so the badge reflects the switch immediately.
     from .usage_service import service
@@ -3590,6 +3667,56 @@ async def quota_failover_set_policy(session: "Session", msg_id: str, msg_type: s
         return app.quota_failover.state()
 
     await _failover_call(session, msg_id, msg_type, call, shape=lambda state: state)
+
+
+@handler("account_switch_log.list")
+async def account_switch_log_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Settings → Accounts' switch log: newest first, within the 90-day window."""
+    from . import app
+
+    try:
+        limit = int(payload.get("limit") or 100)
+    except (TypeError, ValueError):
+        limit = 100
+    rows = await asyncio.to_thread(app.account_switch_log.list_recent, limit)
+    await session.send_json(make_response(msg_id, msg_type, {"entries": rows}))
+
+
+# What a pane's sidebar badge shows while its CLI is at work; an older window
+# that reports no word falls back to `busy`.
+_SWITCH_BUSY_STATUSES = frozenset({"running", "starting"})
+
+
+def account_switch_busy_pane_ids(agent_key: str) -> list[str]:
+    """Panes of `agent_key` working right now, in every window.
+
+    An unattended switch (cli_account_switch, a chat button) waits until this
+    is empty before it restarts that CLI's panes, so a working pane in another
+    window is waited for too (plan agent-0-2-42_3f728e R6).
+    """
+    from . import agent_messaging
+
+    return [
+        pane.pane_id
+        for pane in agent_messaging.list_panes()
+        if pane.agent_key == agent_key and pane.realized and pane.offline_since is None
+        and (pane.display_status in _SWITCH_BUSY_STATUSES if pane.display_status else pane.busy)
+    ]
+
+
+@handler("account_switch.busy_panes")
+async def account_switch_busy_panes(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    agent_key = str(payload.get("agent_key") or "")
+    await session.send_json(make_response(msg_id, msg_type, {"pane_ids": account_switch_busy_pane_ids(agent_key)}))
+
+
+@handler("account_switch.settled")
+async def account_switch_settled(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The window finished a switch it had queued behind busy panes."""
+    from .mcp_server.server import settle_account_switch
+
+    known = await settle_account_switch(payload if isinstance(payload, dict) else {})
+    await session.send_json(make_response(msg_id, msg_type, {"recorded": known}))
 
 
 @handler("quota_failover.report")
@@ -7636,7 +7763,24 @@ async def tokens_snapshot(session: "Session", msg_id: str, msg_type: str, payloa
     # `tokens.changed` broadcast.
     app.refresh_live_scans(workspace_path or "")
     snap = app.tokens_store.snapshot(workspace_path)
+    if payload.get("global") == "all_time":
+        # The token panel shows only the all-time total; leave the per-day,
+        # per-account and per-version history out of its frequent refetches.
+        snap = {**snap, "global": {"all_time": snap["global"]["all_time"]}}
     await session.send_json(make_response(msg_id, msg_type, snap))
+
+
+@handler("tokens.watch")
+async def tokens_watch(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Declare which workspaces' token changes this connection wants ("*" for
+    all; [] for none). Replaces the previous declaration. From then on the
+    connection gets `tokens.notice` instead of the full `tokens.changed`."""
+    paths = payload.get("paths")
+    if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "paths must be a list of strings"))
+        return
+    session.tokens_watch = frozenset(paths)
+    await session.send_json(make_response(msg_id, msg_type, {"paths": sorted(session.tokens_watch)}))
 
 
 @handler("tokens.turns")
@@ -7662,7 +7806,7 @@ async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: 
     scope = payload.get("scope", "run")
     snap = await run_in_db_thread(app.tokens_store.reset, scope, payload.get("workspace_path") or None)
     await session.send_json(make_response(msg_id, msg_type, snap))
-    await app.broadcast(make_event("tokens.changed", snap))
+    await app.broadcast_tokens_changed(snap.get("workspace_path"), snap)
 
 
 @handler("tokens.quota_cycles")
@@ -8154,6 +8298,76 @@ async def onboarding_status_quick(session: "Session", msg_id: str, msg_type: str
 #: refuses it, so no renderer can open a pane that passes as an install run.
 ONBOARDING_RUN_AGENT_KEY = "onboarding-run"
 
+#: The one gated update running on this machine: (session, run id), or empty.
+#: Gated = an update of any agent CLI. Two global installs at once collide,
+#: and a running CLI holds its binary open on Windows.
+_GATED_UPDATE_RUN: list[tuple["Session", str]] = []
+
+#: Pane states in which a CLI is doing something an update would pull the
+#: binary out from under.
+_UPDATE_BLOCKING_STATES = frozenset({"starting", "running", "awaiting"})
+
+
+def _gated_update_dep(payload: dict) -> Any:
+    from . import app
+
+    if payload.get("kind") != "maintenance" or payload.get("action") != "update":
+        return None
+    dep = app.onboarding_deps.DEPS_BY_ID.get(str(payload.get("agent_key") or ""))
+    return dep if dep is not None and dep.group == "agent_cli" else None
+
+
+def _update_gate(agent_key: str) -> dict[str, Any]:
+    """Why a gated update of `agent_key` may not start now, if it may not.
+
+    {blocked, reason ('' | 'update-running' | 'panes-busy' | 'panes-open'),
+    busy_panes}. On Windows an idle pane still holds the binary open, so
+    every open pane of that CLI blocks it ('panes-open').
+    """
+    running = False
+    if _GATED_UPDATE_RUN:
+        owner, run_id = _GATED_UPDATE_RUN[0]
+        term = owner.terminals.get(run_id)
+        running = term is not None and not term.closed
+        if not running:
+            _GATED_UPDATE_RUN.clear()
+    if running:
+        return {"blocked": True, "reason": "update-running", "busy_panes": []}
+    busy = sorted(
+        entry.name or entry.pane_id
+        for entry in agent_messaging.list_panes()
+        if entry.agent_key == agent_key and entry.realized
+        and (entry.busy or entry.display_status in _UPDATE_BLOCKING_STATES)
+    )
+    if osplat.platform_id == "win32":
+        open_panes = sorted(
+            entry.name or entry.pane_id
+            for entry in agent_messaging.list_panes()
+            if entry.agent_key == agent_key and entry.realized and entry.display_status != "exited"
+        )
+        if open_panes:
+            return {"blocked": True, "reason": "panes-open", "busy_panes": open_panes}
+    if busy:
+        return {"blocked": True, "reason": "panes-busy", "busy_panes": busy}
+    return {"blocked": False, "reason": "", "busy_panes": []}
+
+
+@handler("onboarding.update_notices")
+async def onboarding_update_notices(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """CLIs with a newer release, for the pane header's "update available"."""
+    from . import app
+
+    notices = await asyncio.to_thread(app.onboarding_deps.update_notices)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "notices": notices}))
+
+
+@handler("onboarding.update_gate")
+async def onboarding_update_gate(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Whether the one-click update of a gated CLI may run right now."""
+    await session.send_json(make_response(
+        msg_id, msg_type, {"ok": True, **_update_gate(str(payload.get("agent_key") or ""))},
+    ))
+
 
 @handler("onboarding.run")
 async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
@@ -8183,6 +8397,16 @@ async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload
         await session.send_json(make_response(msg_id, msg_type, resolved))
         return
     command = str(resolved["command"])
+    # Checked after the last await: nothing can start another update between
+    # this check and the create below.
+    gated = _gated_update_dep(payload)
+    if gated is not None:
+        gate = _update_gate(gated.id)
+        if gate["blocked"]:
+            await session.send_json(make_response(msg_id, msg_type, {
+                **resolved, "ok": False, "error": f"update blocked: {gate['reason']}", "gate": gate,
+            }))
+            return
     try:
         term = session.terminals.create(
             pane_id=f"{ONBOARDING_RUN_AGENT_KEY}-{__import__('uuid').uuid4().hex}",
@@ -8202,6 +8426,8 @@ async def onboarding_run(session: "Session", msg_id: str, msg_type: str, payload
         return
     app._PTY_OWNERS[term.id] = session
     session._onboarding_runs.add(term.id)
+    if gated is not None:
+        _GATED_UPDATE_RUN[:] = [(session, term.id)]
     log.info("onboarding.run %s started: %s", term.id, command)
     await session.send_json(make_response(msg_id, msg_type, {**resolved, "run_id": term.id}))
 
@@ -9014,6 +9240,8 @@ async def _terminal_create_impl(
     # an account switch (which swaps only the live credential) never reaches
     # it. ``account_dir_login`` is the sign-in that puts the login there.
     account_dir_slot = ""
+    resume_fallback_id = ""
+    account_dir_unshared: list[str] = []
     if agent_key == "claude" and not login_profile_id:
         account_dir_login = bool(payload.get("account_dir_login"))
         try:
@@ -9045,6 +9273,22 @@ async def _terminal_create_impl(
             if account_dir_login:
                 is_login = True
                 metadata["account_dir_login"] = True
+            else:
+                payload["command"], resume_fallback_id, account_dir_unshared = await vault_to_thread(
+                    functools.partial(
+                        _claude_account_dir_check,
+                        app.credential_vault,
+                        account_dir_slot,
+                        payload.get("command"),
+                        str(metadata.get("workspace_path") or payload.get("cwd") or ""),
+                    )
+                )
+                if resume_fallback_id:
+                    app.log.warning(
+                        "claude resume %s is not reachable from account dir %s; "
+                        "starting a new conversation with a handoff prompt",
+                        resume_fallback_id, account_dir_slot,
+                    )
         elif not metadata.get("profile_id") and _pane_default_profile_id(agent_key):
             # The chosen account has no usable dir login: this pane runs on
             # the live credential, so file it under that credential's owner.
@@ -9143,9 +9387,12 @@ async def _terminal_create_impl(
                 raise webhook_service.LaunchRefused("codex has not trusted Navide's hooks, so no Guard would run")
     from . import guard_hooks
 
-    if agent_key in guard_hooks.PANE_TOKEN_VENDORS:
+    if agent_key in guard_hooks.PANE_TOKEN_VENDORS or (
+        vendor_spec is not None and vendor_spec.hook_pane_token
+    ):
         # Navide Guard: names this pane to its PreToolUse hook when the hook's
         # session id is not attributed yet. Only this pane's processes see it.
+        # A hook_pane_token vendor's turn hooks name their pane the same way.
         import secrets
 
         guard_token = secrets.token_urlsafe(24)
@@ -9257,6 +9504,17 @@ async def _terminal_create_impl(
             )
             if seeded:
                 app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
+    # The vendor's own update check, switched off for this launch when its
+    # opt-out is a launch argument (codex `-c check_for_update_on_startup=false`)
+    # and the user left updates to Navide. Never written to the vendor's config.
+    autoupdate_args = app.onboarding_deps.spawn_args_for(agent_key) if agent_key else []
+    if autoupdate_args and not login_subcommand:
+        command = payload["command"]
+        flag = "".join(" " + osplat.paths.quote_arg(arg) for arg in autoupdate_args)
+        payload["command"] = (
+            [*command[:-1], f"{command[-1]}{flag}"] if isinstance(command, list) and command
+            else f"{command}{flag}"
+        )
     if transaction["cancelled"]:
         raise _TerminalCreateCancelled
     # The pane's previous PTY, when this create replaces it (restore/rebuild).
@@ -9565,6 +9823,25 @@ async def _terminal_create_impl(
             "denied": sorted(denied_env_keys),
             # Accepted, then replaced or removed by a higher-priority source.
             "overridden": overridden_env_keys,
+        }))
+    # A Windows box without Developer Mode cannot link files into an account
+    # dir (and on some volumes not even a junction): said once per account and
+    # run. A resume that fell back to a new conversation is said every time.
+    unshared_notice = (
+        account_dir_unshared
+        if osplat.platform_id == "win32" and account_dir_slot not in _ACCOUNT_DIR_UNSHARED_NOTIFIED
+        else []
+    )
+    if unshared_notice or resume_fallback_id:
+        if unshared_notice:
+            _ACCOUNT_DIR_UNSHARED_NOTIFIED.add(account_dir_slot)
+        dep = app.onboarding_deps.DEPS_BY_ID.get(agent_key)
+        await session.send_json(make_event("claude.account_dir_notice", {
+            "agent_key": agent_key,
+            "label": dep.label if dep else agent_key,
+            "pane_id": str(payload.get("pane_id") or ""),
+            "unshared": unshared_notice,
+            "resume_fallback_session_id": resume_fallback_id,
         }))
     if bypass_dropped_command:
         await session.send_json(make_event("cli.bypass_dropped", {
@@ -11621,7 +11898,7 @@ async def pipeline_start(session: "Session", msg_id: str, msg_type: str, payload
         parent_run_id=_token_run_id(frame["run"].get("log_file_name", ""), project.id) if child_of and frame else "",
     )
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11812,7 +12089,7 @@ async def pipeline_complete(session: "Session", msg_id: str, msg_type: str, payl
     _mirror_pipeline_state(project)
     await run_in_db_thread(app.tokens_store.end_run, project.workspace_path, outcome="completed", node_states=project.node_states)
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -11843,7 +12120,7 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
         node_states=project.node_states,
     )
     asyncio.create_task(
-        app.broadcast(make_event("tokens.changed", app.tokens_store.snapshot(project.workspace_path)))
+        app.broadcast_tokens_changed(project.workspace_path)
     )
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
@@ -13937,3 +14214,11 @@ from . import api_key_accounts  # noqa: E402
 
 for _api_key_type, _api_key_fn in api_key_accounts.MESSAGE_HANDLERS.items():
     handler(_api_key_type)(_api_key_fn)
+
+# ── Model arena (arena.*), experimental ──
+# Renderer-only. Worktrees, diff stats, ledger reads and merges for one task
+# run by several models side by side; logic in arena.
+from . import arena  # noqa: E402
+
+for _arena_type, _arena_fn in arena.MESSAGE_HANDLERS.items():
+    handler(_arena_type)(_arena_fn)

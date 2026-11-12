@@ -1201,6 +1201,7 @@ SPEC = VendorSpec(
         install_cmds={"win32": PlatformInstall(
             "npm install -g opencode-ai", ("npm",), needs_terminal=True)},
         update_cmd="opencode upgrade",
+        latest_source="github:sst/opencode",
         npm_package="opencode-ai",
         config_home_env="OPENCODE_CONFIG_DIR",
         autoupdate_env="OPENCODE_DISABLE_AUTOUPDATE"),
