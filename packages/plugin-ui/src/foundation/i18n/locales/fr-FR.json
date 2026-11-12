@@ -8568,6 +8568,7 @@
         "agent-switch-pane-done": "{agent} a déplacé un pane de {from} à {to}. La connexion active et les autres panes n’ont pas changé. Motif de l’agent : {reason}",
         "login-complete": "Connecté en tant que {email}. Compte enregistré.",
         "login-complete-no-email": "Connexion terminée. Compte enregistré.",
+        "switch-login-failed": "Le compte « {account} » que vous venez d’activer ne peut pas se connecter (le renouvellement du jeton de Claude Code a été refusé). Lancez /login une fois dans n’importe quel panneau Claude.",
         "login-step2": "Étape 1 terminée : {email} est enregistré. Une autorisation supplémentaire connecte ce compte dans son propre dossier. Terminez-la dans le navigateur depuis le pane de connexion qui vient de s’ouvrir.",
         "login-step2-no-email": "Étape 1 terminée : le compte est enregistré. Une autorisation supplémentaire le connecte dans son propre dossier. Terminez-la dans le navigateur depuis le pane de connexion qui vient de s’ouvrir.",
         "login-step2-done": "Tout est prêt : {email} est connecté, y compris dans son propre dossier.",

@@ -18791,6 +18791,21 @@ backend.on('cli_profiles.changed', (raw) => {
   }
 })
 
+// Post-switch login check (backend account_switch_verify): the claude account
+// just switched in cannot sign in. Tell the user once; nothing is retried or
+// switched back — the fix is one /login in any pane on the live login.
+backend.on('cli_profiles.switch_login_failed', (raw) => {
+  const ev = raw as { agentKey?: string; profileId?: string }
+  if (!ev?.agentKey || !ev.profileId) return
+  const slot = ev.profileId === '__default__' ? null : ev.profileId
+  notifyRestore.toast(
+    i18n.global.t('settings.accounts.cli.switch-login-failed', {
+      account: accountLabel(cliProfilesApi, ev.agentKey, slot, i18n.global.t),
+    }),
+    { type: 'error' }
+  )
+})
+
 // Step two of a Claude Settings sign-in: the same own-folder login pane the
 // account badge opens. Only once it is open is the user told to authorize
 // once more and the one-time reminder spent; a pane that does not open says

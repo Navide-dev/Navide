@@ -3676,6 +3676,22 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
 
+    async def notify_account_needs_login(self, account: str) -> None:
+        """Every bound direct chat once, in the user's language: the claude
+        account just switched in cannot sign in (account_switch_verify)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "account_needs_login", account=account)
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
+
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         chat_id = str(link.get("chatId") or "")
         targets = self._share_targets(str(link.get("paneId") or ""), chat_id)
