@@ -18,7 +18,6 @@ import logging
 import math
 import os
 import re
-import sys
 import functools
 import itertools
 import threading
@@ -9830,7 +9829,7 @@ async def _terminal_create_impl(
     # run. A resume that fell back to a new conversation is said every time.
     unshared_notice = (
         account_dir_unshared
-        if sys.platform == "win32" and account_dir_slot not in _ACCOUNT_DIR_UNSHARED_NOTIFIED
+        if osplat.platform_id == "win32" and account_dir_slot not in _ACCOUNT_DIR_UNSHARED_NOTIFIED
         else []
     )
     if unshared_notice or resume_fallback_id:
