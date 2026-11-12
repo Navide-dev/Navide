@@ -592,6 +592,28 @@ async def test_set_default_broadcast_carries_agent_key_and_forced(
     assert "forced" not in renamed
 
 
+async def test_set_default_broadcast_marks_an_unattended_forced_switch(
+    store: CliProfilesStore, events: list[dict[str, Any]], vault: FakeVault
+) -> None:
+    """A forced switch nobody clicked (cli_account_switch, plan
+    agent-0-2-42_3f728e R6) says so, and windows then restart only idle panes.
+    The flag rides on forced switches only; the user's own forced switch has none."""
+    session = _session()
+    profile = store.create(agent_key="kimi", name="Work")
+
+    for msg_id, payload in (
+        ("u1", {"agent_key": "kimi", "profile_id": profile["id"], "force": True, "unattended": True}),
+        ("u2", {"agent_key": "kimi", "profile_id": None, "force": True}),
+        ("u3", {"agent_key": "kimi", "profile_id": profile["id"], "unattended": True}),
+    ):
+        await app.handle_message(session, {"id": msg_id, "type": "cli_profiles.set_default", "payload": payload})
+
+    unattended, manual, plain = (e["payload"] for e in events if e["type"] == "cli_profiles.changed")
+    assert (unattended["forced"], unattended.get("unattended")) == (True, True)
+    assert (manual["forced"], "unattended" in manual) == (True, False)
+    assert (plain["forced"], "unattended" in plain) == (False, False)
+
+
 async def test_concurrent_switches_serialize_no_slot_clobber(
     store: CliProfilesStore,
     events: list[dict[str, Any]],

@@ -2545,6 +2545,7 @@ async def _broadcast_profiles_changed(
     agent_key: str | None = None,
     forced: bool | None = None,
     hot_switched_panes: list[dict[str, Any]] | None = None,
+    unattended: bool = False,
 ) -> None:
     from . import app
 
@@ -2575,6 +2576,10 @@ async def _broadcast_profiles_changed(
         # its own panes of that agent onto the new credentials.
         payload["agent_key"] = agent_key
         payload["forced"] = bool(forced)
+        if forced and unattended:
+            # A switch nobody clicked (cli_account_switch, a chat button):
+            # windows restart only idle panes and wait for working ones.
+            payload["unattended"] = True
     if hot_switched_panes is not None:
         # Another window can switch again while the account views are read.
         # Never pair rows from that earlier switch with the newer default.
@@ -3571,6 +3576,7 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
         agent_key=agent_key,
         forced=agent_key not in HOT_SWAP_AGENTS and bool(payload.get("force")),
         hot_switched_panes=hot_switched_panes,
+        unattended=bool(payload.get("unattended")),
     )
     # Read-only post-switch check (account_switch_verify): tell the user when
     # the restored login turns out unable to sign in. Skipped when the reply
@@ -3651,6 +3657,34 @@ async def account_switch_log_list(session: "Session", msg_id: str, msg_type: str
         limit = 100
     rows = await asyncio.to_thread(app.account_switch_log.list_recent, limit)
     await session.send_json(make_response(msg_id, msg_type, {"entries": rows}))
+
+
+# What a pane's sidebar badge shows while its CLI is at work; an older window
+# that reports no word falls back to `busy`.
+_SWITCH_BUSY_STATUSES = frozenset({"running", "starting"})
+
+
+def account_switch_busy_pane_ids(agent_key: str) -> list[str]:
+    """Panes of `agent_key` working right now, in every window.
+
+    An unattended switch (cli_account_switch, a chat button) waits until this
+    is empty before it restarts that CLI's panes, so a working pane in another
+    window is waited for too (plan agent-0-2-42_3f728e R6).
+    """
+    from . import agent_messaging
+
+    return [
+        pane.pane_id
+        for pane in agent_messaging.list_panes()
+        if pane.agent_key == agent_key and pane.realized and pane.offline_since is None
+        and (pane.display_status in _SWITCH_BUSY_STATUSES if pane.display_status else pane.busy)
+    ]
+
+
+@handler("account_switch.busy_panes")
+async def account_switch_busy_panes(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    agent_key = str(payload.get("agent_key") or "")
+    await session.send_json(make_response(msg_id, msg_type, {"pane_ids": account_switch_busy_pane_ids(agent_key)}))
 
 
 @handler("account_switch.settled")

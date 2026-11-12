@@ -10006,13 +10006,29 @@ provide(
  *  terminals are excluded; panes whose terminal ref has not mounted yet stay
  *  in (they may be starting on the old credentials). Failures aggregate into
  *  one summary toast. */
-async function restartAgentPanes(agentKey: string): Promise<void> {
+async function restartAgentPanes(agentKey: string, opts?: { unattended?: boolean }): Promise<void> {
   // Rebuild replaces pane ids — capture the batch up front.
-  const batch = panes.value.filter((p) => {
+  let batch = panes.value.filter((p) => {
     const paneRef = paneRefs[p.id]
     const status = (paneRef?.displayStatus ?? paneRef?.status) as string | undefined
     return paneNeedsAccountRestart(p, agentKey, status)
   })
+  // A switch nobody clicked (cli_account_switch, a chat button) never stops a
+  // turn: a pane at work is restarted once it is idle (plan agent-0-2-42_3f728e).
+  if (opts?.unattended) {
+    for (const p of batch.filter((pane) => accountSwitchBusy(pane.id))) {
+      accountSwitchQueue.enqueue({
+        key: `restart:${p.id}`,
+        waiting: () => (accountSwitchBusy(p.id) ? 1 : 0),
+        run: async () => {
+          const failure = await rebuildPaneViaResume(p.id, { suppressBusyToast: true })
+          return failure === 'busy' ? { status: 'queued' } : { status: failure ? 'refused' : 'restarted' }
+        },
+        settle: (outcome) => pipelineLog(`⟳ account-switch deferred restart ${p.id.slice(0, 8)}: ${outcome.status}`),
+      })
+    }
+    batch = batch.filter((pane) => !accountSwitchBusy(pane.id))
+  }
   const ids = batch.map((p) => p.id)
   // Diagnostics: one line per selected pane, so a partial-restart toast can be
   // traced back to which panes were eligible and what state they were in.
@@ -13104,18 +13120,31 @@ function accountSwitchBusy(paneId: string): boolean {
   ) !== false
 }
 
+/** Panes of `agentKey` at work in ANY window: a forced switch restarts every
+ *  window's panes, so the backend's view (all windows) is joined with this
+ *  window's own, which also sees a pane still starting. Unreadable = still
+ *  waiting: nobody is interrupted on a guess. */
+async function accountSwitchBusyPaneCount(agentKey: string): Promise<number> {
+  const ids = new Set(panes.value.filter((p) => {
+    const paneRef = paneRefs[p.id]
+    const status = (paneRef?.displayStatus ?? paneRef?.status) as string | undefined
+    return paneNeedsAccountRestart(p, agentKey, status) && accountSwitchBusy(p.id)
+  }).map((p) => p.id))
+  try {
+    const resp = await backend.send<{ pane_ids?: string[] }>('account_switch.busy_panes', { agent_key: agentKey })
+    for (const id of resp.payload?.pane_ids ?? []) ids.add(id)
+  } catch {
+    return Math.max(1, ids.size)
+  }
+  return ids.size
+}
+
 async function agentAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
   const ctx = switchToastContext(args, callerPaneId)
   const outcome = await runAgentAccountSwitch(args, {
     accounts: cliProfilesApi,
     switchAccount: (agentKey, profileId, opts) => cliAccountSwitch(agentKey, profileId, opts),
-    // The panes restartAgentPanes would rebuild after a forced switch, while
-    // they are working.
-    busyPanes: (agentKey) => panes.value.filter((p) => {
-      const paneRef = paneRefs[p.id]
-      const status = (paneRef?.displayStatus ?? paneRef?.status) as string | undefined
-      return paneNeedsAccountRestart(p, agentKey, status) && accountSwitchBusy(p.id)
-    }).length,
+    busyPanes: (agentKey) => accountSwitchBusyPaneCount(agentKey),
     queue: accountSwitchQueue,
     onSettled: onQueuedAccountSwitchSettled(String(args.requestId ?? ''), ctx),
   })
@@ -18811,6 +18840,7 @@ backend.on('cli_profiles.changed', (raw) => {
     reason?: string
     agent_key?: string
     forced?: boolean
+    unattended?: boolean
     harvestedProfileIds?: string[]
     identities?: Record<string, Record<string, { email?: string | null }>>
     accountDirs?: Record<string, Record<string, { signedIn?: boolean }>>
@@ -18843,7 +18873,7 @@ backend.on('cli_profiles.changed', (raw) => {
   }
   const restartKey = forcedRestartAgentKey(ev)
   if (restartKey) {
-    void restartAgentPanes(restartKey)
+    void restartAgentPanes(restartKey, { unattended: ev?.unattended === true })
     return
   }
   if (ev?.reason !== 'login-harvest') return

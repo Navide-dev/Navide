@@ -386,3 +386,21 @@ async def test_an_api_key_account_is_left_to_the_user(ui: _UiRequests, monkeypat
     result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="k-1", reason="x")
     assert result["error_code"] == "api-key-account"
     assert ui.calls == []
+
+
+def test_the_busy_pane_view_covers_every_window() -> None:
+    """R6: what an unattended switch waits for is read from the registry,
+    which every main window mirrors its panes into."""
+    from agent_team_backend import ws_handlers
+
+    agent_messaging.register("w1-run", "a", "/ws/alpha", agent_key="codex")
+    agent_messaging.register("w2-run", "b", "/ws/beta", agent_key="codex")
+    agent_messaging.register("w2-idle", "c", "/ws/beta", agent_key="codex")
+    agent_messaging.register("w2-claude", "d", "/ws/beta", agent_key="claude")
+    agent_messaging.register("w2-old", "e", "/ws/beta", agent_key="codex")
+    agent_messaging.set_busy("w1-run", True, "running")
+    agent_messaging.set_busy("w2-run", True, "starting")
+    agent_messaging.set_busy("w2-idle", True, "idle")  # a draft in the prompt: not at work
+    agent_messaging.set_busy("w2-claude", True, "running")
+    agent_messaging.set_busy("w2-old", True)  # an older window: no status word, `busy` decides
+    assert sorted(ws_handlers.account_switch_busy_pane_ids("codex")) == ["w1-run", "w2-old", "w2-run"]

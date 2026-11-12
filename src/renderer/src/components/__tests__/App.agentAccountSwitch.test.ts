@@ -21,7 +21,8 @@ const source = parse(readFileSync(resolve(process.cwd(), 'src/renderer/src/App.v
 const ast = ts.createSourceFile('App.ts', source, ts.ScriptTarget.Latest, true)
 const NAMES = [
   'switchToastContext', 'toastAccountSwitch', 'onQueuedAccountSwitchSettled', 'accountSwitchBusy',
-  'agentAccountSwitch', 'agentPaneAccountSwitch', 'moveAgentPaneAccount',
+  'accountSwitchBusyPaneCount', 'agentAccountSwitch', 'agentPaneAccountSwitch', 'moveAgentPaneAccount',
+  'restartAgentPanes',
 ]
 const js = NAMES.map((name) => {
   const decl = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name)
@@ -48,6 +49,8 @@ function harness(opts: { panesRunning?: boolean } = {}) {
   })
   const confirm = vi.fn(async () => true)
   const status: Record<string, Status> = { w1: 'idle', pa: 'running' }
+  // Panes of OTHER windows the backend's registry reports at work.
+  const otherWindowBusy: string[] = []
   const cliProfilesApi = {
     findProfile: (id: string | null) => (id ? profiles[id] : undefined),
     defaultProfileId: (agentKey: string) => (agentKey === 'codex' ? active : 'c-0'),
@@ -88,14 +91,25 @@ function harness(opts: { panesRunning?: boolean } = {}) {
     FOLLOW_SWITCH_AGENT: 'claude',
     rebuildPaneViaResume,
     accountFollow: { add: vi.fn(), remove: vi.fn() },
-    backend: { send: vi.fn(async () => ({ payload: { recorded: true } })) },
+    backend: {
+      send: vi.fn(async (type: string, payload: Record<string, unknown>) =>
+        type === 'account_switch.busy_panes'
+          ? { payload: { pane_ids: payload.agent_key === 'codex' ? [...otherWindowBusy] : [] } }
+          : { payload: { recorded: true } }),
+    },
+    runAccountRestartBatch: vi.fn(async (ids: string[], rebuild: (id: string) => Promise<unknown>) => {
+      for (const id of ids) await rebuild(id)
+    }),
+    paneResumeSessionId: () => 'sess',
+    pipelineLog: vi.fn(),
     notifyRestore: { toast: vi.fn(), confirm },
     i18n: { global: { t: (key: string, params?: Record<string, unknown>) => `${key} ${JSON.stringify(params ?? {})}` } },
   }
-  const fns = new Function(...Object.keys(scope), `${js}\nreturn { agentAccountSwitch, agentPaneAccountSwitch }`)(
+  const fns = new Function(...Object.keys(scope), `${js}\nreturn { agentAccountSwitch, agentPaneAccountSwitch, restartAgentPanes }`)(
     ...Object.values(scope),
   ) as Record<'agentAccountSwitch' | 'agentPaneAccountSwitch', (args: Record<string, unknown>, callerPaneId: string) => Promise<Record<string, unknown>>>
-  return { scope, status, queue, confirm, setDefault, cliAccountSwitch, ...fns }
+    & { restartAgentPanes: (agentKey: string, opts?: { unattended?: boolean }) => Promise<void> }
+  return { scope, status, otherWindowBusy, queue, confirm, setDefault, cliAccountSwitch, ...fns }
 }
 
 const args = (over: Record<string, unknown> = {}) => ({
@@ -124,7 +138,7 @@ describe('App.vue ui.accounts.switch: the user\'s switch without the questions',
     expect(h.setDefault).toHaveBeenCalledTimes(1) // still working: nothing more
     h.status.w1 = 'idle'
     await h.queue.tick()
-    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-b', { force: true }])
+    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-b', { force: true, unattended: true }])
     expect(h.queue.size).toBe(0)
     expect(h.confirm).not.toHaveBeenCalled()
     expect(h.scope.backend.send).toHaveBeenCalledWith('account_switch.settled', expect.objectContaining({
@@ -138,7 +152,7 @@ describe('App.vue ui.accounts.switch: the user\'s switch without the questions',
   it('restarts idle panes at once (the forced switch) without asking', async () => {
     const h = harness({ panesRunning: true })
     expect(await h.agentAccountSwitch(args(), 'pa')).toMatchObject({ status: 'switched' })
-    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-b', { force: true }])
+    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-b', { force: true, unattended: true }])
     expect(h.confirm).not.toHaveBeenCalled()
   })
 
@@ -157,7 +171,7 @@ describe('App.vue ui.accounts.switch: the user\'s switch without the questions',
     expect(h.scope.backend.send).toHaveBeenCalledWith('account_switch.settled', expect.objectContaining({ request_id: '1', status: 'superseded' }))
     h.status.w1 = 'idle'
     await h.queue.tick()
-    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-c', { force: true }])
+    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-c', { force: true, unattended: true }])
     expect(h.scope.backend.send).toHaveBeenCalledWith('account_switch.settled', expect.objectContaining({ request_id: '2', status: 'switched', to: 'Account 3' }))
   })
 
@@ -199,5 +213,52 @@ describe('App.vue ui.accounts.switch: the user\'s switch without the questions',
     await h.agentAccountSwitch(args(), 'pa')
     const text = String(h.scope.notifyRestore.toast.mock.calls[0][0])
     expect(text).toContain('builder\\\\u{200b}')
+  })
+
+  // R6: a forced switch restarts the panes of EVERY window, so a working pane
+  // in another window is waited for too, through the backend's registry.
+  it('waits for a working pane in another window before switching', async () => {
+    const h = harness({ panesRunning: true })
+    h.otherWindowBusy.push('other-window-pane')
+    expect(await h.agentAccountSwitch(args(), 'pa')).toMatchObject({ status: 'queued', waiting: 1 })
+    expect(h.setDefault.mock.calls).toEqual([['codex', 'p-b']])
+    await h.queue.tick()
+    expect(h.setDefault).toHaveBeenCalledTimes(1)
+    h.otherWindowBusy.length = 0
+    await h.queue.tick()
+    expect(h.setDefault.mock.calls.at(-1)).toEqual(['codex', 'p-b', { force: true, unattended: true }])
+    expect(h.confirm).not.toHaveBeenCalled()
+  })
+
+  it('keeps waiting when the backend cannot say who is working', async () => {
+    const h = harness({ panesRunning: true })
+    h.scope.backend.send.mockImplementation(async (type: string) => {
+      if (type === 'account_switch.busy_panes') throw new Error('offline')
+      return { payload: { recorded: true } }
+    })
+    expect((await h.agentAccountSwitch(args(), 'pa')).status).toBe('queued')
+    expect(h.setDefault).toHaveBeenCalledTimes(1)
+  })
+
+  // Every window restarts its own panes from the forced broadcast. An
+  // unattended one restarts idle panes now and a working one after its turn,
+  // so a pane that started working after the check is not interrupted either.
+  it('an unattended restart broadcast never stops a working pane', async () => {
+    const h = harness()
+    h.status.w1 = 'running'
+    await h.restartAgentPanes('codex', { unattended: true })
+    expect(h.scope.rebuildPaneViaResume).not.toHaveBeenCalled()
+    expect(h.queue.has('restart:w1')).toBe(true)
+    h.status.w1 = 'idle'
+    await h.queue.tick()
+    expect(h.scope.rebuildPaneViaResume).toHaveBeenCalledWith('w1', { suppressBusyToast: true })
+    expect(h.confirm).not.toHaveBeenCalled()
+  })
+
+  it('the user\'s own forced restart is unchanged', async () => {
+    const h = harness()
+    h.status.w1 = 'running'
+    await h.restartAgentPanes('codex')
+    expect(h.scope.rebuildPaneViaResume).toHaveBeenCalledWith('w1', { suppressBusyToast: true, forceWhenRunning: true })
   })
 })

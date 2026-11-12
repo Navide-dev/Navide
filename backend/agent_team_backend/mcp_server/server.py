@@ -12388,8 +12388,8 @@ async def cli_account_switch(
     What it changes: the CLI's LIVE login, which every pane of that CLI not
     pinned to an account runs on. claude switches hot: no pane restarts, and
     running claude panes use the new account from their next request. Other
-    CLIs restart their panes on the new login; a pane that is working is
-    never interrupted for it — the switch waits until every such pane is
+    CLIs restart their panes on the new login; a pane that is working, in
+    any Navide window, is never interrupted for it — the switch waits until every such pane is
     idle, then completes on its own (status "queued", below). claude panes
     running inside an account's own folder (cli_get_status `account.runs_on`
     "account-dir") are not moved by it.

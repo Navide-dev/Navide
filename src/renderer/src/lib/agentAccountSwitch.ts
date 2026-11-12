@@ -92,8 +92,9 @@ export interface AgentAccountSwitchDeps {
     profileId: string | null,
     opts: { unattended: { restartRunning: (count: number) => Promise<boolean> } },
   ) => Promise<SetDefaultResult>
-  /** Panes of `agentKey` a forced switch would restart that are working now. */
-  busyPanes: (agentKey: string) => number
+  /** Panes of `agentKey` working now, in EVERY window (the backend's view
+   *  joined with this window's): a forced switch restarts them all. */
+  busyPanes: (agentKey: string) => Promise<number>
   queue: AccountSwitchQueue
   /** A switch that answered "queued" ended (or was superseded). */
   onSettled: (outcome: SwitchOutcome) => void
@@ -128,7 +129,7 @@ export async function runAgentAccountSwitch(
         // The user's click would ask before restarting these; this restarts
         // them only once none of them is working, and otherwise waits.
         restartRunning: async () => {
-          if (deps.busyPanes(now.agentKey) === 0) return true
+          if ((await deps.busyPanes(now.agentKey)) === 0) return true
           deferred = true
           return false
         },
@@ -138,7 +139,7 @@ export async function runAgentAccountSwitch(
       return { status: res.needsLogin ? 'switched-signed-out' : 'switched', from, to, fromProfileId: fromAtRequest }
     }
     if (deferred && res.code === 'PANES_RUNNING') {
-      return { status: 'queued', waiting: deps.busyPanes(now.agentKey), from, to, fromProfileId: fromAtRequest }
+      return { status: 'queued', waiting: Math.max(1, await deps.busyPanes(now.agentKey)), from, to, fromProfileId: fromAtRequest }
     }
     // The code only: a backend message is unreviewed text.
     return { status: 'refused', code: res.code ?? 'unknown' }
