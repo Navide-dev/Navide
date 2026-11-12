@@ -8568,6 +8568,7 @@
         "agent-switch-pane-done": "{agent} 把一個分格從 {from} 移到 {to}。目前登入的帳號和其他分格都沒有改變。agent 給的理由：{reason}",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
+        "switch-login-failed": "剛切換到的帳號「{account}」無法登入（Claude Code 的 token 更新被拒絕）。請在任一個 Claude 分格輸入 /login 重新登入一次。",
         "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入分格裡完成瀏覽器授權。",
         "login-step2-no-email": "第 1 步完成：帳號已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入分格裡完成瀏覽器授權。",
         "login-step2-done": "兩步都完成：{email} 已登入，也已登入到自己的資料夾。",

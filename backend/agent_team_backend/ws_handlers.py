@@ -3081,6 +3081,26 @@ async def cli_profiles_set_pane_default(
     await _broadcast_profiles_changed("set_pane_default")
 
 
+def _start_switch_login_check(agent_key: str, profile_id: str) -> None:
+    """Start account_switch_verify for a switch that just landed. Strict reads,
+    so a keychain hiccup ends the check instead of reading as signed out.
+    Never raises into the switch."""
+    from . import account_switch_verify, app
+
+    async def read_live() -> str | None:
+        return await vault_to_thread(
+            lambda: app.credential_vault.read_live(agent_key, strict=True).secret
+        )
+
+    async def notify(agent: str, slot: str, reason: str) -> None:
+        await account_switch_verify.notify_windows_and_chats(agent, slot, reason, app=app)
+
+    try:
+        account_switch_verify.start(agent_key, profile_id, read_live, notify)
+    except Exception:  # noqa: BLE001 — the switch already succeeded
+        app.log.exception("could not start the post-switch login check")
+
+
 def _record_switch_back(agent_key: str, failure: str) -> None:
     """The audit row of an account prompt's "switch back" (credentials.auto-repair)."""
     from .convenience_wiring import gate as convenience_gate
@@ -3552,6 +3572,11 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
         forced=agent_key not in HOT_SWAP_AGENTS and bool(payload.get("force")),
         hot_switched_panes=hot_switched_panes,
     )
+    # Read-only post-switch check (account_switch_verify): tell the user when
+    # the restored login turns out unable to sign in. Skipped when the reply
+    # already asked for a sign-in or the live login was adopted as-is.
+    if agent_key == "claude" and login_reason is None and not adopted:
+        _start_switch_login_check(agent_key, profile_id or DEFAULT_SLOT_ID)
     # The usage badges read the active account's credentials — force the poller
     # to re-fetch now so the badge reflects the switch immediately.
     from .usage_service import service
