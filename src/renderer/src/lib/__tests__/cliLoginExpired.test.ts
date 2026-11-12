@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchLoginExpired, loginCommandFor } from '../cliLoginExpired'
+import { matchLoginExpired, loginCommandFor, turnClearsLoginExpired } from '../cliLoginExpired'
 
 // matchLoginExpired detects a CLI's expired-login error in a pane's buffer
 // tail so App.vue can light the re-login badge. Only `claude` has a spec for
@@ -62,5 +62,30 @@ describe('lib/cliLoginExpired loginCommandFor', () => {
   it('returns null for agentKeys without a spec', () => {
     expect(loginCommandFor('codex')).toBeNull()
     expect(loginCommandFor('unknown-cli')).toBeNull()
+  })
+})
+
+describe('lib/cliLoginExpired turnClearsLoginExpired', () => {
+  const lit = 1_000_000
+
+  it('clears on a real reply that ended after the badge lit', () => {
+    expect(turnClearsLoginExpired('claude', 'Done, the report is ready.', lit + 1, lit)).toBe(true)
+  })
+
+  it('keeps the badge for the failed turn that printed the error', () => {
+    expect(turnClearsLoginExpired('claude', 'Login expired · Please run /login', lit + 1, lit)).toBe(false)
+  })
+
+  it('keeps the badge for an empty-text turn end', () => {
+    expect(turnClearsLoginExpired('claude', '   ', lit + 1, lit)).toBe(false)
+  })
+
+  it('keeps the badge for a turn that ended before it lit (replay)', () => {
+    expect(turnClearsLoginExpired('claude', 'old reply', lit - 1, lit)).toBe(false)
+    expect(turnClearsLoginExpired('claude', 'same instant', lit, lit)).toBe(false)
+  })
+
+  it('never clears without a recorded lit time', () => {
+    expect(turnClearsLoginExpired('claude', 'reply', lit + 1, null)).toBe(false)
   })
 })

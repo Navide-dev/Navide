@@ -368,7 +368,7 @@ import {
 } from './lib/loopFailoverResume'
 import { isLoopSkill, resolvePromptSkill } from './lib/promptSkills'
 import { usePromptSkills } from './composables/usePromptSkills'
-import { loginCommandFor, matchLoginExpired } from './lib/cliLoginExpired'
+import { loginCommandFor, matchLoginExpired, turnClearsLoginExpired } from './lib/cliLoginExpired'
 import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, loopEstimate, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
 import {
   applyScreenWatch,
@@ -6495,6 +6495,9 @@ interface PaneHealthWatcher {
    *  has settled; matching is suppressed while false so stale historical text
    *  can't spuriously light a badge. */
   warmedUp: boolean
+  /** Wall-clock ms the login-expired badge last lit; null while unlit. A turn
+   *  that ends after it with real text clears the badge (turnClearsLoginExpired). */
+  loginExpiredAt: number | null
 }
 const paneHealthWatchers = new Map<string, PaneHealthWatcher>()
 // Panes with an in-flight fix-login injection, so a second badge click can't
@@ -6863,6 +6866,7 @@ function startPaneHealthWatcher(paneId: string): void {
     dismissedReadingAt: null,
     limitProfileId: null,
     warmedUp: false,
+    loginExpiredAt: null,
   }
   watcher.timer = window.setInterval(() => {
     const pane = panes.value.find((p) => p.id === paneId)
@@ -6908,6 +6912,7 @@ function startPaneHealthWatcher(paneId: string): void {
     // Consume the matched region so a later poll can't re-match the same text.
     watcher.baseline = bytes
     pane.loginExpired = true
+    watcher.loginExpiredAt = Date.now()
     if (onAccountDirLoginExpired(pane)) return
     sysNotify.notifyPaneState(
       paneId,
@@ -6965,6 +6970,20 @@ async function fixPaneLogin(paneId: string): Promise<void> {
   } finally {
     loginFixInFlight.delete(paneId)
   }
+}
+
+/** Clear a lit login-expired badge without sending /login: the pane proved
+ *  it is signed in again (a real turn ended after the badge lit) or an account
+ *  switch moved it onto another login. The consumed baseline advances so the
+ *  old error text still on screen cannot re-light it on the next poll. */
+function clearPaneLoginExpired(pane: ActivePane): void {
+  if (!pane.loginExpired) return
+  const w = paneHealthWatchers.get(pane.id)
+  if (w) {
+    w.baseline = paneCleanBytes(pane.id)
+    w.loginExpiredAt = null
+  }
+  pane.loginExpired = false
 }
 
 // Panes with an in-flight continue injection, so a second click during the
@@ -17698,6 +17717,16 @@ backend.on('agent.activity', (raw) => {
       paneSignalTurn.set(ev.pane_id, ownTurn)
     }
     judgeTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
+    // A real reply after the login-expired badge lit means the pane is signed
+    // in again (another pane's /login, or an account switch it picked up).
+    if (turnPane?.loginExpired && !markerReply && !ev.superseded) {
+      const parsed = ev.timestamp ? Date.parse(ev.timestamp) : NaN
+      const turnAt = Number.isNaN(parsed) ? Date.now() : parsed
+      if (turnClearsLoginExpired(turnPane.agentKey, ev.text ?? '', turnAt,
+        paneHealthWatchers.get(turnPane.id)?.loginExpiredAt ?? null)) {
+        clearPaneLoginExpired(turnPane)
+      }
+    }
     if (ownTurn) paneLastReply.set(ev.pane_id, ownTurn)
     if (!markerReply) void routeManagerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
     if (!markerReply) void routeWorkerTurnText(ev.pane_id, ev.text ?? '', ev.timestamp ?? '')
@@ -18749,6 +18778,9 @@ backend.on('cli_profiles.changed', (raw) => {
     for (const proof of hotSwitched ?? []) {
       const pane = panes.value.find((p) => p.id === proof.paneId)!
       pane.profileId = proof.profileId ?? '__default__'
+      // The pane now runs on the incoming login; the old login's expiry no
+      // longer describes it. A dead incoming login prints the error again.
+      clearPaneLoginExpired(pane)
     }
   }
   const restartKey = forcedRestartAgentKey(ev)
