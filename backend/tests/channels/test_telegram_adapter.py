@@ -373,9 +373,11 @@ async def test_stop_ends_polling_even_if_a_cancel_is_swallowed(api: FakeBotApi, 
     ad = _adapter(api)
     real_call = ad._call
     swallowed: list[str] = []
+    polling = asyncio.Event()
 
     async def call(method, params=None):
         if method == "getUpdates" and not swallowed:
+            polling.set()
             try:
                 await asyncio.sleep(3600)
             except asyncio.CancelledError:
@@ -390,8 +392,9 @@ async def test_stop_ends_polling_even_if_a_cancel_is_swallowed(api: FakeBotApi, 
         pass
 
     await ad.start(emit)
-    await _until(lambda: api.calls_of("deleteWebhook"))
-    await asyncio.sleep(0.05)
+    # Stop only once the poll is parked inside getUpdates, so the cancel always
+    # lands where it is swallowed (a fixed sleep raced it on a loaded machine).
+    await asyncio.wait_for(polling.wait(), timeout=5)
     started = time.monotonic()
     # Not wait_for: a stop that swallows wait_for's own cancel returns normally.
     done, _ = await asyncio.wait({asyncio.ensure_future(ad.stop())}, timeout=3)
