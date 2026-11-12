@@ -493,6 +493,15 @@ function unpinAll(): void {
 // with no dir login yet starts that sign-in instead; the built-in Default has
 // no dir, so it is refused.
 const paneOnlyMode = computed(() => liveMode.value && props.paneFollow === 'fixed' && !!props.paneId)
+// The list swaps the live claude login (not a new-pane choice, not this pane
+// alone, not the follow prompt): the case the per-account folder guidance is for.
+const swapsLiveLogin = computed(
+  () =>
+    props.agentKey === FOLLOW_SWITCH_AGENT &&
+    !followMode.value &&
+    !paneOnlyMode.value &&
+    !(anyAccountDir.value && !liveMode.value)
+)
 
 function moveThisPane(id: string): void {
   if (!pins || !props.paneId || switching.value !== null) return
@@ -809,6 +818,11 @@ function acctTitle(profileId: string | null): string {
             : followMode
               ? $t('usage.follow-default-title')
               : anyAccountDir && !liveMode ? $t('usage.pane-default-title') : $t('usage.switch-title') }}
+        </div>
+        <!-- A row here swaps the live claude login under every pane on it;
+             point at the per-account folder for a second account instead. -->
+        <div v-if="canSwitch && swapsLiveLogin" class="usage-acct-live-guidance">
+          {{ $t('usage.switch-live-guidance') }}
         </div>
         <div v-if="canSwitch && liveMode && pins?.fixedCount()" class="usage-acct-pin-hint">
           <span>{{ $t('usage.pinned-hint', { count: pins.fixedCount() }) }}</span>
@@ -1272,7 +1286,8 @@ function acctTitle(profileId: string | null): string {
 .usage-acct-unpin:hover {
   border-color: var(--accent-fg);
 }
-.usage-acct-follow-hint {
+.usage-acct-follow-hint,
+.usage-acct-live-guidance {
   font-size: var(--font-3xs);
   color: var(--text-tertiary, var(--text-secondary));
   margin: -2px 0 4px;

@@ -26,6 +26,7 @@ import {
 } from '../composables/useUsage'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { relativeTime } from '../lib/relativeTime'
+import { FOLLOW_SWITCH_AGENT } from '../lib/accountFollowSwitch'
 import SettingsNotice from './settings/SettingsNotice.vue'
 import AddAccountPanel from './accounts/AddAccountPanel.vue'
 import ApiKeyDetail from './accounts/ApiKeyDetail.vue'
@@ -418,6 +419,37 @@ const dirActions = inject(cliAccountDirActionsKey, null)
 
 function accountDirSignedIn(agentKey: string, profileId: string | null): boolean {
   return !!props.api.accountDirFor?.(agentKey, profileId)?.signedIn
+}
+
+// ── New panes in the account's own folder (Claude) ──────────────────────────
+// The recommended way to use a second claude account: new panes start in its
+// own config dir (set_pane_default) while the live login and every open pane
+// stay where they are. A live switch moves every pane on the current account,
+// and switching back restores a snapshot that may need one more sign-in.
+function isNewPaneDir(agentKey: string, profileId: string): boolean {
+  return props.api.paneDefaults?.value?.[agentKey] === profileId
+}
+
+function showsDirGuidance(agentKey: string, profileId: string | null): boolean {
+  return (
+    agentKey === FOLLOW_SWITCH_AGENT &&
+    profileId !== null &&
+    props.api.defaultProfileId(agentKey) !== profileId &&
+    !isNewPaneDir(agentKey, profileId)
+  )
+}
+
+async function setNewPaneDir(agentKey: string, profileId: string | null): Promise<void> {
+  if (switching.value !== null) return
+  switching.value = switchRowKey(agentKey, profileId)
+  try {
+    const res = await props.api.setPaneDefault(agentKey, profileId)
+    if (res.ok) return
+    if (res.code === 'ACCOUNT_DIR_SIGNED_OUT') toast(t('settings.accounts.cli.dir-new-panes-unavailable'), { type: 'error' })
+    else if (res.message) toast(res.message, { type: 'error' })
+  } finally {
+    switching.value = null
+  }
 }
 
 function canSignInDir(agentKey: string, profileId: string | null): boolean {
@@ -1118,6 +1150,17 @@ onMounted(() => refreshUsage())
             </div>
           </template>
 
+          <div v-if="p && isNewPaneDir(spec.agentKey, p.id)" class="cli-card-reason cli-card-dir-guidance">
+            {{ $t('settings.accounts.cli.dir-new-panes-active') }}
+          </div>
+          <div v-else-if="showsDirGuidance(spec.agentKey, p?.id ?? null)" class="cli-card-reason cli-card-dir-guidance">
+            {{
+              accountDirSignedIn(spec.agentKey, p?.id ?? null)
+                ? $t('settings.accounts.cli.dir-guidance')
+                : $t('settings.accounts.cli.dir-guidance-sign-in-first')
+            }}
+          </div>
+
           <div class="cli-card-actions">
             <template v-if="confirmRemoveId === (p?.id ?? '__default__')">
               <span class="cli-confirm-text">{{ $t('settings.accounts.cli.delete-confirm') }}</span>
@@ -1174,6 +1217,19 @@ onMounted(() => refreshUsage())
                 @click="signInDir(spec.agentKey, p.id)"
               >
                 {{ $t('settings.accounts.cli.dir-sign-in') }}
+              </button>
+              <button
+                v-if="p && spec.agentKey === FOLLOW_SWITCH_AGENT && accountDirSignedIn(spec.agentKey, p.id)"
+                class="cli-btn ghost sm cli-card-new-pane-dir-btn"
+                :disabled="switching !== null"
+                :title="$t('settings.accounts.cli.dir-new-panes-hint')"
+                @click="setNewPaneDir(spec.agentKey, isNewPaneDir(spec.agentKey, p.id) ? null : p.id)"
+              >
+                {{
+                  isNewPaneDir(spec.agentKey, p.id)
+                    ? $t('settings.accounts.cli.dir-new-panes-clear')
+                    : $t('settings.accounts.cli.dir-new-panes')
+                }}
               </button>
               <button
                 v-if="p || rowIdentity(spec.agentKey, null)?.signedIn"
