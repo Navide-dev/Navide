@@ -1019,6 +1019,21 @@ def test_a_variable_piece_keeps_its_meaning_where_it_joins(command):
     assert v.level == "critical" and "credential-access" in v.rule_ids, (command, v)
 
 
+_NESTED = "P=/" + "a/" * 600 + "; Q=" + "../" * 600
+
+
+def test_nested_padding_folds_in_linear_time():
+    start = time.monotonic()
+    sh(_NESTED + "; cat $P$Q")
+    assert time.monotonic() - start < 1
+
+
+def test_many_nested_padding_words_return_in_reasonable_time():
+    start = time.monotonic()
+    sh(_NESTED + "; " + "; ".join(["cat $P$Q"] * 600))
+    assert time.monotonic() - start < 2
+
+
 def test_variables_under_the_cap_stay_parseable():
     v = sh('D=src; F=$D/main.py; cat "$F"')
     assert v.level == "normal" and v.parseable and "dynamic-path" not in v.rule_ids, v

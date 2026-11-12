@@ -1077,19 +1077,24 @@ def _subst_vars(word: str, values: dict[str, str]) -> str:
     return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
-_FOLD_RE = re.compile(r"/(?:\.?/)+|/(?!\.\.?/)[^/]+/\.\./")
-
-
 def _collapse(text: str) -> str:
     """`//`, `/./` and `/x/../` folded to `/`, so padding made of them cannot
     make a path look long. Only whole components between two slashes are
     folded: `text` may be one piece of a word (a variable's value), and a
-    fold across its edges, like normpath's, would change what it joins."""
+    fold across its edges, like normpath's, would change what it joins.
+    One pass over the components, so nesting costs nothing extra."""
     if "/" not in text or "://" in text:
         return text
-    while (out := _FOLD_RE.sub("/", text)) != text:
-        text = out
-    return text
+    head, *inner, tail = text.split("/")
+    stack: list[str] = []
+    for part in inner:
+        if part in ("", "."):
+            continue
+        if part == ".." and stack and stack[-1] != "..":
+            stack.pop()
+        else:
+            stack.append(part)
+    return "/".join([head, *stack, tail])
 
 
 def _too_big_to_follow(acc: _Acc) -> None:
