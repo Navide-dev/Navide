@@ -369,7 +369,8 @@ def default_seams() -> Seams:
                 await on_settled(answer)
 
         answer = _switch_answer(await request(
-            agent_key=pane.agent_key or "", profile_id=profile_id, source="channel", who=who,
+            # The chat platform names the source ("telegram"); `who` is "<platform>:<sender>".
+            agent_key=pane.agent_key or "", profile_id=profile_id, source=who.split(":", 1)[0] or "channel", who=who,
             reason="", expected_from=from_id, on_done=done,
         ))
         if answer["status"] != "queued":
