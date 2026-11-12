@@ -970,14 +970,34 @@ def test_a_doubling_variable_chain_stops_at_the_cap_and_is_opaque(steps):
     assert "dynamic-path" in v.rule_ids and v.parseable is False, v
 
 
-def test_too_many_variables_are_not_followed_and_opaque():
-    command = "; ".join(f"V{i}=x" for i in range(300)) + "; cat $V299"
-    v = sh(command)
+def _long(name: str = "A") -> str:
+    """`name` set to 4096 characters (9 doublings of 8)."""
+    return _doubling(9).rsplit("; cat", 1)[0] + f"; {name}=$V9"
+
+
+def test_many_long_words_stay_within_the_budget_and_are_opaque():
+    start = time.monotonic()
+    v = sh(_long() + "; cat " + " ".join(["$A"] * 200))
+    assert time.monotonic() - start < 5
     assert "dynamic-path" in v.rule_ids and v.parseable is False, v
 
 
-def test_a_credential_path_set_before_the_cap_is_still_critical():
-    v = sh(_doubling(12) + f'; F={AWS}; cat "$F"')
+@pytest.mark.parametrize(
+    "command",
+    [
+        # Set after a doubling chain that hit the cap.
+        _doubling(12) + f'; F={AWS}; cat "$F"',
+        # Beside a word too long to write out: the rest is still graded.
+        _long() + f'; F={AWS}; cat "$A$A" "$F"',
+        # After many names: short values are never dropped.
+        "; ".join(f"V{i}=x" for i in range(300)) + f'; F={AWS}; cat "$F"',
+        # After long values filled the budget, and long words used up theirs.
+        "; ".join(_long(f"L{i}") for i in range(20)) + f'; F={AWS}; cat "$F"',
+        _long() + "; " + "; ".join([": $A"] * 80) + f'; F={AWS}; cat "$F"',
+    ],
+)
+def test_a_short_credential_path_is_followed_past_every_cap(command):
+    v = sh(command)
     assert v.level == "critical" and "credential-access" in v.rule_ids, v
 
 
