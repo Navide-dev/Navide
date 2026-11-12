@@ -11032,9 +11032,14 @@ function openPanePolicySettings(): void {
     void settingsModalRef.value?.setSection('cross-device', 'general-p2p-policy')
   })
 }
-function openSettingsAccounts(): void {
+function openSettingsAccounts(section?: string): void {
   settingsInitialTab.value = 'accounts'
   showSettings.value = true
+  if (section) {
+    void nextTick(() => {
+      void settingsModalRef.value?.setSection('accounts', section)
+    })
+  }
 }
 // Status-bar update indicator: shares the updater state machine with ControlPane.
 // settings comes along for the check-failure threshold; whether a downloaded
@@ -11547,7 +11552,10 @@ registerCommand('workbench.action.closeActivePane', () => {
   return closeFocusedPane(paneId)
 })
 registerCommand('workbench.action.openSettings', () => { showSettings.value = true })
-registerCommand('workbench.action.openSettingsAccounts', () => openSettingsAccounts())
+registerCommand('workbench.action.openSettingsAccounts', (args) => {
+  const section = (args as { section?: unknown } | undefined)?.section
+  openSettingsAccounts(typeof section === 'string' ? section : undefined)
+})
 registerCommand('workbench.action.openSettingsChannels', () => openSettingsAt('channels'))
 registerCommand('workbench.action.openPipelineManager', () => { openPipelineManager() })
 registerCommand('workbench.action.openDebug', () => { openDebugModal() })

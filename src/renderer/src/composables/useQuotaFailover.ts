@@ -917,6 +917,28 @@ function capabilityFor(agentKey: string): FailoverCapability | undefined {
   return state.value?.capabilities[agentKey]
 }
 
+/** The automatic-switch budget of this agent's own credential pool. */
+function budgetFor(agentKey: string): FailoverBudget | undefined {
+  const scope = state.value?.capabilities[agentKey]?.authScope
+  const rows = Object.values(state.value?.budget ?? {}).filter((b) => b.agentKey === agentKey)
+  return rows.find((b) => b.authScope === scope) ?? rows[0]
+}
+
+/** Who an automatic switch would pick next, for the quota popover. Read on
+ *  demand only — the backend checks each slot's login state to rank them —
+ *  and kept for a minute so reopening the popover does not read again. */
+const PREVIEW_TTL_MS = 60_000
+const previewCache = new Map<string, { at: number; list: FailoverCandidate[] }>()
+async function previewCandidates(agentKey: string): Promise<FailoverCandidate[] | null> {
+  const hit = previewCache.get(agentKey)
+  if (hit && Date.now() - hit.at < PREVIEW_TTL_MS) return hit.list
+  const res = await send<{ candidates: FailoverCandidate[] }>('quota_failover.candidates', { agent_key: agentKey })
+  if (!res.ok) return null
+  const list = res.payload.candidates ?? []
+  previewCache.set(agentKey, { at: Date.now(), list })
+  return list
+}
+
 /** True while a failover transaction for this agent is open or has moved
  *  credentials but not settled — the window in which a `cli_profiles.changed`
  *  for the agent is the transaction's own, not a manual switch. */
@@ -973,6 +995,7 @@ function __resetQuotaFailoverForTest(): void {
   knownIncidents.clear()
   knownTransactions.clear()
   candidateCache.clear()
+  previewCache.clear()
   restarted.clear()
   pendingRestarts.clear()
   commitNotified.clear()
@@ -991,6 +1014,8 @@ export function useQuotaFailover() {
     cancel,
     noteTurnComplete,
     capabilityFor,
+    budgetFor,
+    previewCandidates,
     agentHasActiveTransaction,
     __resetQuotaFailoverForTest,
   }

@@ -1256,19 +1256,19 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
   },
   {
     id: 'general-quota-failover',
-    tab: 'general',
+    tab: 'accounts',
     section: 'general-quota-failover',
     title: t('settings.search.item.general-quota-failover.title'),
-    group: t('settings.nav.group.general'),
+    group: t('settings.nav.accounts'),
     summary: t('settings.search.item.general-quota-failover.summary'),
     keywords: 'quota exhausted account switch failover auto notify off hot restart resume 額度 耗盡 切換 帳號 自動 通知 關閉 熱切 重啟 接續',
   },
   {
     id: 'general-quota-failover-loop',
-    tab: 'general',
+    tab: 'accounts',
     section: 'general-quota-failover-loop',
     title: t('settings.search.item.general-quota-failover-loop.title'),
-    group: t('settings.nav.group.general'),
+    group: t('settings.nav.accounts'),
     summary: t('settings.search.item.general-quota-failover-loop.summary'),
     keywords: 'loop quota exhausted account switch failover auto resume continue 迴圈 額度 耗盡 切換 帳號 自動 繼續 接續',
   },
@@ -1582,6 +1582,13 @@ const quotaFailover = useQuotaFailover()
 const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
 const failoverMode = computed<FailoverMode>(() => quotaFailover.state.value?.policy.mode ?? 'notify')
 const failoverBusy = ref(false)
+// The policy used to sit only on General, where nobody looking for it under
+// Accounts found it; General keeps a row that jumps here.
+async function openAutoSwitchSection(): Promise<void> {
+  activeTab.value = 'accounts'
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-settings-section="accounts-auto-switch"]')?.scrollIntoView({ block: 'start' })
+}
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true
@@ -4169,36 +4176,14 @@ watch(activeTab, (tab) => {
               </SettingRow>
 
               <SettingRow
-                data-settings-section="general-quota-failover"
+                data-settings-section="general-quota-failover-link"
                 :title="$t('usage.failover-title')"
-                :description="$t('usage.failover-hint')"
+                :description="$t('usage.failover-moved-hint')"
               >
                 <template #control>
-                  <select
-                    data-testid="quota-failover-mode"
-                    :value="failoverMode"
-                    :disabled="failoverBusy || !quotaFailover.state.value"
-                    @change="onFailoverModeChange(($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="mode in FAILOVER_MODES" :key="mode" :value="mode">
-                      {{ $t(`usage.failover-mode-${mode}`) }}
-                    </option>
-                  </select>
-                </template>
-              </SettingRow>
-              <SettingRow
-                data-settings-section="general-quota-failover-loop"
-                :title="$t('usage.failover-loop-title')"
-                :description="$t('usage.failover-loop-hint')"
-              >
-                <template #control>
-                  <ToggleSwitch
-                    v-model="loopFailoverResumeModel"
-                    data-testid="quota-failover-loop"
-                    :disabled="failoverMode !== 'auto'"
-                    :aria-label="$t('usage.failover-loop-title')"
-                    @update:modelValue="onLoopFailoverResumeChange"
-                  />
+                  <button type="button" class="nv-btn" data-testid="quota-failover-goto" @click="openAutoSwitchSection">
+                    {{ $t('usage.failover-moved-open') }}
+                  </button>
                 </template>
               </SettingRow>
               <SettingRow
@@ -4215,33 +4200,6 @@ watch(activeTab, (tab) => {
                   />
                 </template>
               </SettingRow>
-              <div v-if="quotaFailover.state.value" class="failover-caps" data-settings-section="general-quota-failover-caps">
-                <p v-if="quotaFailover.state.value.auditDegraded" class="failover-warn">
-                  {{ $t('usage.failover-audit-degraded') }}
-                </p>
-                <table class="az-table failover-table">
-                  <thead>
-                    <tr>
-                      <th>{{ $t('usage.failover-col-cli') }}</th>
-                      <th>{{ $t('usage.failover-col-switch') }}</th>
-                      <th>{{ $t('usage.failover-col-resume') }}</th>
-                      <th>{{ $t('usage.failover-col-notes') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in failoverRows" :key="row.agentKey" :data-failover-agent="row.agentKey">
-                      <td>{{ row.label }}</td>
-                      <td>{{ $t(`usage.failover-switch-${row.switchMode}`) }}</td>
-                      <td>{{ $t(`usage.failover-resume-${row.resume}`) }}</td>
-                      <td class="failover-notes">
-                        <span v-if="row.platformUnsupported" class="failover-tag">{{ $t('usage.failover-platform-unsupported') }}</span>
-                        <span v-if="row.unverified" class="failover-tag">{{ $t('usage.failover-unverified') }}</span>
-                        <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo === NO_SWITCH_ADAPTER ? $t('usage.failover-no-adapter') : row.todo }}</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
 
               <SettingRow
                 v-if="isDev"
@@ -4896,6 +4854,73 @@ watch(activeTab, (tab) => {
             <span v-truncate class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
             <span class="settings-path" :class="{ 'settings-path--prose': storageIsProse(settingsScopeNotes.accounts.storage) }" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
+          <SettingsSection class="auto-switch-section" :label="$t('usage.auto-switch-card-title')" data-settings-section="accounts-auto-switch">
+            <SettingsCard>
+            <div class="auto-switch-head">
+              <span class="auto-switch-status" :class="`is-${failoverMode}`" data-testid="auto-switch-status">{{ $t(`usage.auto-switch-status-${failoverMode}`) }}</span>
+            </div>
+          <SettingRow
+            data-settings-section="general-quota-failover"
+            :title="$t('usage.failover-title')"
+            :description="$t('usage.failover-hint')"
+          >
+            <template #control>
+              <select
+                data-testid="quota-failover-mode"
+                :value="failoverMode"
+                :disabled="failoverBusy || !quotaFailover.state.value"
+                @change="onFailoverModeChange(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="mode in FAILOVER_MODES" :key="mode" :value="mode">
+                  {{ $t(`usage.failover-mode-${mode}`) }}
+                </option>
+              </select>
+            </template>
+          </SettingRow>
+          <SettingRow
+            data-settings-section="general-quota-failover-loop"
+            :title="$t('usage.failover-loop-title')"
+            :description="$t('usage.failover-loop-hint')"
+          >
+            <template #control>
+              <ToggleSwitch
+                v-model="loopFailoverResumeModel"
+                data-testid="quota-failover-loop"
+                :disabled="failoverMode !== 'auto'"
+                :aria-label="$t('usage.failover-loop-title')"
+                @update:modelValue="onLoopFailoverResumeChange"
+              />
+            </template>
+          </SettingRow>
+          <div v-if="quotaFailover.state.value" class="failover-caps" data-settings-section="general-quota-failover-caps">
+            <p v-if="quotaFailover.state.value.auditDegraded" class="failover-warn">
+              {{ $t('usage.failover-audit-degraded') }}
+            </p>
+            <table class="az-table failover-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('usage.failover-col-cli') }}</th>
+                  <th>{{ $t('usage.failover-col-switch') }}</th>
+                  <th>{{ $t('usage.failover-col-resume') }}</th>
+                  <th>{{ $t('usage.failover-col-notes') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in failoverRows" :key="row.agentKey" :data-failover-agent="row.agentKey">
+                  <td>{{ row.label }}</td>
+                  <td>{{ $t(`usage.failover-switch-${row.switchMode}`) }}</td>
+                  <td>{{ $t(`usage.failover-resume-${row.resume}`) }}</td>
+                  <td class="failover-notes">
+                    <span v-if="row.platformUnsupported" class="failover-tag">{{ $t('usage.failover-platform-unsupported') }}</span>
+                    <span v-if="row.unverified" class="failover-tag">{{ $t('usage.failover-unverified') }}</span>
+                    <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo === NO_SWITCH_ADAPTER ? $t('usage.failover-no-adapter') : row.todo }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+            </SettingsCard>
+          </SettingsSection>
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
             <CliAccountsPane :api="cliProfilesApi" :backend="backend" :workspace-open="workspaceOpen ?? false" @login="(agentKey: string, loginProfileId?: string) => emit('cli-login', agentKey, loginProfileId)" />
@@ -6529,6 +6554,11 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
+.auto-switch-section { margin: 4px 22px 18px; }
+.auto-switch-head { display: flex; align-items: center; padding: var(--space-row-y) var(--space-row-x); }
+.auto-switch-status { font-size: var(--font-2xs); padding: 1px 8px; border-radius: 99px; background: var(--bg-hover); color: var(--text-muted); }
+.auto-switch-status.is-auto { color: var(--success-fg); }
+.auto-switch-status.is-notify { color: var(--attention-fg); }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {

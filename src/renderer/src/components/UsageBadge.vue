@@ -28,6 +28,7 @@ import {
   accountChipLabel,
   accountLabel as resolveAccountLabel,
 } from '../lib/accountLabel'
+import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { executeCommand } from '@navide/plugin-ui/shared'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -316,6 +317,51 @@ watch(open, (isOpen) => {
 
 const { alert: notifyAlert } = useNotify()
 const t = i18n.global.t
+
+// ── What happens when this account runs out ─────────────────────────────────
+// The failover policy lived only on Settings ▸ General, and the rows below
+// ("Quota low — switch account", "Make All Follow") read like it while being
+// manual. This row states the real policy, who would be picked next and how
+// many automatic switches the pool has left; the select writes the same
+// backend policy Settings does.
+const quotaFailover = useQuotaFailover()
+const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
+const failoverMode = computed<FailoverMode | null>(() => quotaFailover.state.value?.policy.mode ?? null)
+const showFailover = computed(() => {
+  const cap = quotaFailover.capabilityFor(props.agentKey)
+  return !!(failoverMode.value && cap?.supported && cap.hasSlots && props.cliProfiles.hasProfiles(props.agentKey))
+})
+const failoverLeft = computed(() => {
+  const b = quotaFailover.budgetFor(props.agentKey)
+  return b ? Math.max(0, b.limit - b.used) : null
+})
+const failoverNext = ref<string | null>(null)
+const failoverNextLoaded = ref(false)
+const failoverBusy = ref(false)
+async function loadFailoverNext(): Promise<void> {
+  failoverNextLoaded.value = false
+  const list = await quotaFailover.previewCandidates(props.agentKey)
+  const next = list?.find((c) => c.excluded === null)
+  failoverNext.value = next ? rowLabel(next.slotId === DEFAULT_SLOT_ID ? null : next.slotId) : null
+  failoverNextLoaded.value = list !== null
+}
+watch(open, (isOpen) => {
+  if (isOpen && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
+})
+async function onFailoverModeChange(raw: string): Promise<void> {
+  if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
+  failoverBusy.value = true
+  try {
+    await quotaFailover.setPolicy(raw as FailoverMode)
+  } finally {
+    failoverBusy.value = false
+  }
+  if (raw !== 'off' && !failoverNextLoaded.value) void loadFailoverNext()
+}
+function openAutoSwitchSettings(): void {
+  open.value = false
+  executeCommand('workbench.action.openSettingsAccounts', { section: 'accounts-auto-switch' })
+}
 
 // Main window provides the quiescence-aware switch (confirm + force + pane
 // restart). Other windows fall back to plain setDefault, whose expected
@@ -766,6 +812,40 @@ function acctTitle(profileId: string | null): string {
           />
         </div>
         <div class="usage-pane-follow-hint">{{ $t('account-follow.follow-switch-hint') }}</div>
+      </div>
+      <div v-if="showFailover" class="usage-failover" data-testid="pop-failover">
+        <div class="usage-failover-top">
+          <span class="usage-failover-label">{{ $t('usage.auto-switch-pop-title') }}</span>
+          <select
+            class="usage-failover-mode"
+            data-testid="pop-failover-mode"
+            :value="failoverMode ?? 'notify'"
+            :disabled="failoverBusy"
+            :aria-label="$t('usage.auto-switch-pop-title')"
+            @change="onFailoverModeChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="mode in FAILOVER_MODES" :key="mode" :value="mode">
+              {{ $t(`usage.failover-mode-${mode}`) }}
+            </option>
+          </select>
+        </div>
+        <div v-if="failoverMode === 'notify'" class="usage-failover-note warn" data-testid="pop-failover-note">
+          {{ $t('usage.auto-switch-notify-only') }}
+        </div>
+        <div v-else-if="failoverMode === 'off'" class="usage-failover-note" data-testid="pop-failover-note">
+          {{ $t('usage.auto-switch-off-only') }}
+        </div>
+        <div v-if="failoverMode !== 'off' && failoverNextLoaded" class="usage-failover-note" data-testid="pop-failover-next">
+          {{ failoverNext
+            ? $t('usage.auto-switch-next', { name: failoverNext })
+            : $t('usage.auto-switch-next-none') }}
+          <template v-if="failoverMode === 'auto' && failoverLeft !== null">
+            · {{ $t('usage.auto-switch-left', { n: failoverLeft }) }}
+          </template>
+        </div>
+        <button type="button" class="usage-failover-open" data-testid="pop-failover-open" @click="openAutoSwitchSettings">
+          {{ $t('usage.auto-switch-open') }}
+        </button>
       </div>
       <div v-if="expired" class="usage-pop-expired">{{ $t('usage.expired-tooltip') }}</div>
       <div v-if="cliMissing" class="usage-pop-missing">{{ $t('usage.cli-missing-tooltip') }}</div>
@@ -1491,6 +1571,33 @@ function acctTitle(profileId: string | null): string {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
 }
+.usage-failover {
+  padding: 6px 0 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-muted);
+}
+.usage-failover-top { display: flex; align-items: center; gap: 8px; }
+.usage-failover-label { flex: 1; font-weight: 600; color: var(--text-bright); }
+.usage-failover-mode {
+  font-size: var(--font-2xs);
+  color: var(--text-bright);
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+}
+.usage-failover-note { margin-top: 4px; color: var(--text-secondary); }
+.usage-failover-note.warn { color: var(--attention-fg); }
+.usage-failover-open {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-fg);
+  font-size: inherit;
+  cursor: pointer;
+}
+.usage-failover-open:hover { text-decoration: underline; }
 .usage-acct-manage {
   display: flex;
   align-items: center;
