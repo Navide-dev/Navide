@@ -178,7 +178,12 @@ class PosixProcessTree:
         os.killpg(gid, _signal_for(force))
 
     def own_group_spawn_kwargs(self) -> dict[str, int]:
-        return {"process_group": 0}
+        # start_new_session, not process_group=0: uvloop (the loop uvicorn
+        # picks whenever it is installed, the packaged backend included)
+        # rejects process_group as an unexpected kwarg, which failed every
+        # host_shell run on macOS and Linux. setsid() also makes the child
+        # lead a process group of its own, so end_own_group still reaches it.
+        return {"start_new_session": True}
 
     def end_own_group(self, pid: int) -> None:
         try:
