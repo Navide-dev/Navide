@@ -38,7 +38,9 @@ function collectGitTypes(pattern: RegExp): string[] {
   return [...matches].sort()
 }
 
-const requestCallPattern = /\b(?:send|runWrite)\s*(?:<[\s\S]*?>\s*)?\(\s*['"](git\.[a-z_]+)['"]/g
+// The type-argument group stops at a parenthesis so one call's generic cannot
+// run on into a later, unrelated call (e.g. a `sendQuiet<…>('git.summary'`).
+const requestCallPattern = /\b(?:send|runWrite)\s*(?:<[^()]*?>\s*)?\(\s*['"](git\.[a-z_]+)['"]/g
 const eventSubscriptionPattern = /\bon\s*\(\s*['"](git\.[a-z_]+)['"]/g
 
 describe('Git transport inventory', () => {
