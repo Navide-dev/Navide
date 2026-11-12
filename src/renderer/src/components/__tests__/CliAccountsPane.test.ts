@@ -1594,4 +1594,46 @@ describe('CliAccountsPane', () => {
     })
     expect(section(same, 0).find('.cli-card-dir-mismatch').exists()).toBe(false)
   })
+
+  // ── a second Claude account: new panes in its own folder ───────────────────
+
+  function withPaneDefaults(api: ReturnType<typeof useCliProfiles>, chosen: Record<string, string> = {}) {
+    const loose = api as unknown as Record<string, unknown>
+    loose.paneDefaults = ref<Record<string, string>>(chosen)
+    loose.setPaneDefault = vi.fn(async () => ({ ok: true as const }))
+    return api
+  }
+
+  it('steers a parked Claude account to its own folder before a live switch', () => {
+    const w = mountPane(withPaneDefaults(parkedApi()), { dirActions: dirActions() })
+    const cards = section(w, 0).findAll('.cli-card')
+    // The live account needs no guidance; the parked one is told to sign in first.
+    expect(cards[0].find('.cli-card-dir-guidance').exists()).toBe(false)
+    expect(cards[1].get('.cli-card-dir-guidance').text()).toContain('Sign In to Its Own Folder')
+    expect(cards[1].find('.cli-card-new-pane-dir-btn').exists()).toBe(false)
+  })
+
+  it('opens new panes in a signed-in folder without switching the live login', async () => {
+    const api = withPaneDefaults(parkedApi({ claude: { p1: { signedIn: true, email: 'parked@x.com' } } }))
+    const w = mountPane(api, { dirActions: dirActions() })
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.get('.cli-card-dir-guidance').text()).toContain('Open New Panes in Its Folder')
+    await card.get('.cli-card-new-pane-dir-btn').trigger('click')
+    expect(api.setPaneDefault).toHaveBeenCalledWith('claude', 'p1')
+    expect(api.setDefault).not.toHaveBeenCalled()
+  })
+
+  it('offers to follow the current account again once new panes use the folder', async () => {
+    const api = withPaneDefaults(
+      parkedApi({ claude: { p1: { signedIn: true, email: 'parked@x.com' } } }),
+      { claude: 'p1' },
+    )
+    const w = mountPane(api, { dirActions: dirActions() })
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.get('.cli-card-dir-guidance').text()).toContain('New panes open in this account')
+    const btn = card.get('.cli-card-new-pane-dir-btn')
+    expect(btn.text()).toContain('Follow the Current Account Again')
+    await btn.trigger('click')
+    expect(api.setPaneDefault).toHaveBeenCalledWith('claude', null)
+  })
 })

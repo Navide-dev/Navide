@@ -400,6 +400,20 @@ describe('UsageBadge – badge rendering', () => {
 })
 
 describe('UsageBadge – popover account list', () => {
+  it('says a row swaps every pane on the live login and points at the per-account folder', async () => {
+    usage.usageFor.mockReturnValue(snapshot())
+    wrapper = mountBadge(makeCliProfiles({ profiles: [profile('p1', 'Account 2')] }).fake)
+    await openPopover(wrapper)
+    expect(wrapper.get('.usage-acct-live-guidance').text()).toBe(i18n.global.t('usage.switch-live-guidance'))
+  })
+
+  it('shows no live-switch guidance without a second account', async () => {
+    usage.usageFor.mockReturnValue(snapshot())
+    wrapper = mountBadge(makeCliProfiles().fake)
+    await openPopover(wrapper)
+    expect(wrapper.find('.usage-acct-live-guidance').exists()).toBe(false)
+  })
+
   it('hides the switch section when the agent has no extra profiles', async () => {
     usage.usageFor.mockReturnValue(snapshot())
     wrapper = mountBadge(makeCliProfiles().fake)
