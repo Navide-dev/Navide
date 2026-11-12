@@ -135,16 +135,22 @@ class CliRiskService:
 
     async def _apply_all(self, calls: list[tuple]):
         """Apply one sweep's observations in a single worker hop with a single
-        snapshot, so a sweep costs one snapshot however many panes it covers.
-        Each operation commits on its own: one that fails is logged and
-        skipped, and the rest of the sweep is still recorded."""
+        snapshot and a single commit, so a sweep costs one snapshot and one
+        journal sync however many panes it covers. Each operation runs in its
+        own savepoint: one that fails is logged and rolled back alone, and the
+        rest of the sweep is still recorded."""
         async with self._apply_lock:
             def apply():
-                for operation, *args in calls:
-                    try:
-                        operation(*args)
-                    except Exception:
-                        log.exception("CLI risk observation could not be applied")
+                try:
+                    with self.store.sweep():
+                        for operation, *args in calls:
+                            try:
+                                with self.store.observation():
+                                    operation(*args)
+                            except Exception:
+                                log.exception("CLI risk observation could not be applied")
+                except Exception:
+                    log.exception("CLI risk sweep could not be committed")
                 return self.store.snapshot()
             self._snapshot = await asyncio.to_thread(apply)
 
