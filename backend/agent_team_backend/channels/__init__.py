@@ -162,6 +162,18 @@ def default_seams() -> Seams:
         result = reply.get("result") or {}
         return {"until": result.get("usageLimitUntil"), "buffer": str(result.get("buffer") or "")}
 
+    async def cli_health(pane_id: str) -> dict[str, Any]:
+        # The renderer's loginExpired reading, as cli_get_status reports it; read-only.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.pane.getStatus", args={"paneId": pane.pane_id},
+        )
+        result = reply.get("result") or {}
+        return {"login_expired": result.get("loginExpired") is True}
+
     async def answer(pane_id: str, answer_payload: dict[str, Any],
                      expected: dict[str, Any] | None = None) -> dict[str, Any]:
         pane = agent_messaging.current(pane_id)
@@ -349,7 +361,7 @@ def default_seams() -> Seams:
 
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
-        awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
+        awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, cli_health=cli_health, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,

@@ -713,3 +713,116 @@ async def test_send_text_replies_to_a_message_on_its_first_chunk(api: FakeBotApi
     await ad.send_text(Location("telegram", "default", "42"), "plain")
     assert "reply_parameters" not in api.calls_of("sendMessage")[-1]
     assert ad.capabilities.reply_to
+
+
+async def test_update_id_gap_reports_updates_another_consumer_took(api: FakeBotApi, caplog) -> None:
+    offsets = MemOffsets()
+    got: list[InboundMessage] = []
+    missed: list[int] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    async def on_missed(count: int) -> None:
+        missed.append(count)
+
+    ad = _adapter(api, offsets)
+    ad.on_missed_updates = on_missed
+    api.push_message(chat_id=42, text="first")
+    caplog.set_level("INFO", logger="agent_team_backend.channels.telegram")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) == 1)
+        with api.lock:
+            api._next_update_id += 2  # confirmed by someone else holding the same token
+        api.push_message(chat_id=42, text="second secret text")
+        await _until(lambda: len(got) == 2)
+        assert missed == [2]
+        assert "2 update(s) never reached Navide" in caplog.text
+    finally:
+        await ad.stop()
+    # Each update is logged by kind, a hash of its chat and its message id: never text or chat id.
+    assert "telegram[default]: update 100 message chat=" in caplog.text
+    assert "second secret text" not in caplog.text and "chat=42" not in caplog.text
+
+
+async def test_sequential_updates_report_no_gap(api: FakeBotApi) -> None:
+    offsets = MemOffsets()
+    got: list[InboundMessage] = []
+    missed: list[int] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    async def on_missed(count: int) -> None:
+        missed.append(count)
+
+    ad = _adapter(api, offsets)
+    ad.on_missed_updates = on_missed
+    api.push_message(chat_id=42, text="a")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) == 1)
+        api.push_message(chat_id=42, text="b")
+        api.push_message(chat_id=42, text="c")
+        await _until(lambda: len(got) == 3)
+    finally:
+        await ad.stop()
+    assert missed == []
+
+
+async def _gap(api: FakeBotApi, got: list[InboundMessage], skip: int, text: str) -> None:
+    n = len(got)
+    with api.lock:
+        api._next_update_id += skip
+    api.push_message(chat_id=42, text=text)
+    await _until(lambda: len(got) == n + 1)
+
+
+async def test_a_gap_after_a_week_without_updates_is_logged_but_not_told(api: FakeBotApi, caplog) -> None:
+    got: list[InboundMessage] = []
+    missed: list[int] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    async def on_missed(count: int) -> None:
+        missed.append(count)
+
+    ad = _adapter(api, MemOffsets())
+    ad.on_missed_updates = on_missed
+    api.push_message(chat_id=42, text="first")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) == 1)
+        ad._last_update_at = time.time() - 8 * 86400  # Telegram picks the next id at random now
+        await _gap(api, got, 5, "after a quiet week")
+    finally:
+        await ad.stop()
+    assert missed == []
+    assert ad.status.missed_updates == 5 and ad.status.last_missed_at is not None
+    assert "5 update(s) never reached Navide" in caplog.text
+
+
+async def test_a_second_gap_within_an_hour_is_not_told_again(api: FakeBotApi) -> None:
+    got: list[InboundMessage] = []
+    missed: list[int] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    async def on_missed(count: int) -> None:
+        missed.append(count)
+
+    ad = _adapter(api, MemOffsets())
+    ad.on_missed_updates = on_missed
+    api.push_message(chat_id=42, text="first")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) == 1)
+        await _gap(api, got, 2, "gap one")
+        await _gap(api, got, 3, "gap two")
+    finally:
+        await ad.stop()
+    assert missed == [2]
+    assert ad.status.missed_updates == 5
