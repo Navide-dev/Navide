@@ -941,6 +941,28 @@ describe('useUiActionBus — account actions', () => {
     expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: { status: 'ok' } })
   })
 
+  // Plan agent-0-2-42_3f728e: the backend switches for a chat button
+  // (Telegram) with no calling pane; the request names its requester.
+  it('hands a requester-named ui.accounts.switch with no pane to the switch action', async () => {
+    const { backend, emit, sent } = createMockBackend()
+    const signIn = vi.fn()
+    const switchAccount = vi.fn(async () => ({ status: 'queued', waiting: 1 }))
+    useUiActionBus({ backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), accountActions: { signIn, switch: switchAccount } })
+    const args = { agentKey: 'claude', profileId: 'p-2', requester: { source: 'telegram', name: 'telegram:me' } }
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.switch', args, global: true }))
+    await flush()
+    expect(switchAccount).toHaveBeenCalledWith(args, '', expect.any(AbortSignal))
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: { status: 'queued' } })
+  })
+
+  it('still refuses a pane-less sign-in, requester or not', async () => {
+    const { signIn, sent, emit } = setup()
+    emit('ui.invoke.request', baseRequest({ action: 'ui.accounts.signIn', args: { requester: { source: 'telegram', name: 'x' } }, global: true }))
+    await flush()
+    expect(signIn).not.toHaveBeenCalled()
+    expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: false })
+  })
+
   it('acts only on the project the window is showing', async () => {
     const { backend, emit, sent } = createMockBackend()
     const signIn = vi.fn()
