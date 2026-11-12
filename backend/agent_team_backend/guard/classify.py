@@ -1851,6 +1851,10 @@ def classify(
             _classify_script(command, ctx, acc)
             if name == "powershell":
                 _ps_credential_reads(command, _ctx(cwd, workspace, protected_branches), acc)
+            elif tool_input.get("dialect") == "powershell":
+                # A built-in PowerShell tool (guard_hooks.normalise): the shell
+                # grading above stands and the PowerShell read/send rules are added.
+                _ps_credential_reads(command.replace("\\", "/"), ctx, acc)
     elif name in WRITE_TOOLS or name in READ_TOOLS:
         for raw in _tool_paths(tool_input):
             path = _resolve(raw, ctx)
