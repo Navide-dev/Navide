@@ -1005,6 +1005,20 @@ def test_a_short_credential_path_is_followed_past_every_cap(command):
     assert v.level == "critical" and "credential-access" in v.rule_ids, v
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        # Folding a value must not cross its edges: `y` + `x/../.aws/...` is `.aws`.
+        f'P=x/../.{AWS[3:]}; cat "$HOME/y$P"',
+        f'P=../.{AWS[3:]}; cat "$HOME/y/$P"',
+        f'P=/x/..; cat "$HOME$P/.{AWS[3:]}"',
+    ],
+)
+def test_a_variable_piece_keeps_its_meaning_where_it_joins(command):
+    v = sh(command)
+    assert v.level == "critical" and "credential-access" in v.rule_ids, (command, v)
+
+
 def test_variables_under_the_cap_stay_parseable():
     v = sh('D=src; F=$D/main.py; cat "$F"')
     assert v.level == "normal" and v.parseable and "dynamic-path" not in v.rule_ids, v
