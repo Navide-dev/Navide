@@ -392,6 +392,9 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
        *  the prompt's live-login fingerprint; the backend refuses the switch
        *  (LIVE_CHANGED) once another login is live. */
       restoreLive?: { liveFingerprint: string }
+      /** A forced switch nobody clicked: windows restart only idle panes and
+       *  wait for working ones (cli_profiles.changed `unattended`). */
+      unattended?: boolean
     },
   ): Promise<SetDefaultResult> {
     try {
@@ -400,6 +403,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
         profile_id: profileId,
       }
       if (opts?.force) payload.force = true
+      if (opts?.force && opts.unattended) payload.unattended = true
       if (opts?.restoreLive) {
         payload.restore_live = true
         payload.restore_live_fingerprint = opts.restoreLive.liveFingerprint
@@ -824,7 +828,11 @@ export function createCliAccountSwitchHandler(
       },
     )
     if (!confirmed) return { ok: false, code: 'PANES_RUNNING' }
-    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, { force: true, ...(restoreLive ? { restoreLive } : {}) }))
+    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, {
+      force: true,
+      ...(restoreLive ? { restoreLive } : {}),
+      ...(unattended ? { unattended: true } : {}),
+    }))
   }
 }
 
@@ -835,6 +843,8 @@ export interface CliProfilesChangedEvent {
   reason?: string
   agent_key?: string
   forced?: boolean
+  /** The forced switch was nobody's click: restart idle panes only. */
+  unattended?: boolean
 }
 
 /**

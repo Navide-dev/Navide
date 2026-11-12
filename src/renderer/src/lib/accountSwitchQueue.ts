@@ -16,7 +16,7 @@ export type SwitchOutcome = Record<string, unknown> & { status: string }
 export interface QueuedSwitch {
   key: string
   /** Panes the switch still waits for; 0 = run it now. */
-  waiting: () => number
+  waiting: () => number | Promise<number>
   /** The switch itself. Answering status "queued" again (a pane got busy
    *  between the check and the run) keeps the job parked. */
   run: () => Promise<SwitchOutcome>
@@ -62,8 +62,18 @@ export function createAccountSwitchQueue(options: AccountSwitchQueueOptions = {}
 
   async function tick(): Promise<void> {
     for (const job of [...jobs.values()]) {
-      if (running.has(job) || job.waiting() > 0) continue
+      if (running.has(job)) continue
       running.add(job)
+      let waiting: number
+      try {
+        waiting = await job.waiting()
+      } catch {
+        waiting = 1 // cannot tell: keep waiting rather than interrupt anyone
+      }
+      if (waiting > 0 || jobs.get(job.key) !== job) {
+        running.delete(job)
+        continue
+      }
       let outcome: SwitchOutcome
       try {
         outcome = await job.run()

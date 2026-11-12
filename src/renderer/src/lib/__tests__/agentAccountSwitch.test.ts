@@ -97,7 +97,7 @@ describe('runAgentAccountSwitch', () => {
         // The handler's PANES_RUNNING branch: the unattended hook answers.
         return (await opts.unattended.restartRunning(1)) ? { ok: true } : { ok: false, code: 'PANES_RUNNING' }
       },
-      busyPanes: () => busy,
+      busyPanes: async () => busy,
       queue,
       onSettled: (outcome) => settled.push(outcome),
     }
