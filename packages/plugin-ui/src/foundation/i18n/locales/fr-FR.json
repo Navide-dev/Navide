@@ -13528,7 +13528,7 @@
     }
   },
   "arena": {
-    "experimental": "Expérimental",
+    "experimental": "Beta",
     "menu": {
       "section": "Comparer",
       "start": "Arène de modèles…",

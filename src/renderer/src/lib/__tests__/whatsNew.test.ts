@@ -328,9 +328,9 @@ describe('0.2.42 — model switching from Telegram, quota bars, closed windows',
     }
   })
 
-  it('marks Model Arena as experimental and off by default, and Kiro as untried with a real account', () => {
+  it('marks Model Arena as Beta and off by default, and Kiro as untried with a real account', () => {
     const en = entry!.highlights.map((text) => text['en-US']).join('\n')
-    expect(en).toContain('Model Arena (experimental, off by default)')
+    expect(en).toContain('Model Arena (Beta, off by default)')
     expect(en).toContain('not yet been tried with a real Kiro account')
   })
 
