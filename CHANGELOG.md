@@ -4,6 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.43] — 2026-11-14
+
+### Security
+
+- Backend dependencies (hotfix): opentelemetry-api 1.45.2 (was 1.45.1), which fixes CVE-2026-126360 (GHSA-mf5v-w3w3-f6cg, moderate): `TraceContextTextMapPropagator.extract()` could spend quadratic time on a crafted `traceparent` value carrying a long whitespace run and an embedded newline. Navide does not reach that path: opentelemetry-api comes in only through anthropic and fastapi, Navide configures no OpenTelemetry tracer provider, so FastAPI's telemetry never extracts trace context, and HTTP header values cannot carry a newline. No other dependency changed.
+
+## [0.2.42] — 2026-11-14
+
 ### New on Navide Marketplace
 
 <!-- Listings first published on Navide Marketplace in this release, and

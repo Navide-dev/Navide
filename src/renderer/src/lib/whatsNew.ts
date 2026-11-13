@@ -121,6 +121,37 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.43',
+    title: {
+      'zh-TW': '安全性更新：後端相依套件',
+      'en-US': 'Security Update: Backend Dependency',
+      'ja-JP': 'セキュリティ更新：バックエンドの依存パッケージ',
+      'zh-CN': '安全更新：后端依赖包',
+      'ko-KR': '보안 업데이트: 백엔드 의존 패키지',
+      'es-ES': 'Actualización de seguridad: dependencia del backend',
+      'fr-FR': 'Mise à jour de sécurité : dépendance du backend',
+      'de-DE': 'Sicherheitsupdate: Backend-Abhängigkeit',
+      'pt-BR': 'Atualização de segurança: dependência do backend',
+      'ru-RU': 'Обновление безопасности: зависимость бэкенда',
+      'vi-VN': 'Cập nhật bảo mật: gói phụ thuộc của backend',
+    },
+    highlights: [
+      {
+        'zh-TW': '安全性：後端的 opentelemetry-api 升到 1.45.2，修正 CVE-2026-126360（特製的 traceparent 值會讓解析耗用大量 CPU）。Navide 不會走到這段程式，這次只是預防性更新，其他功能沒有變動。',
+        'en-US': 'Security: the backend\'s opentelemetry-api is now 1.45.2, which fixes CVE-2026-126360 (a crafted traceparent value could make parsing use a lot of CPU). Navide does not reach that code, so this is a precautionary update; nothing else changed.',
+        'ja-JP': 'セキュリティ：バックエンドの opentelemetry-api を 1.45.2 に更新し、CVE-2026-126360（細工した traceparent 値で解析が CPU を大量に消費する問題）を修正しました。Navide はこのコードを通らないため予防的な更新で、ほかの機能に変更はありません。',
+        'zh-CN': '安全：后端的 opentelemetry-api 升到 1.45.2，修复 CVE-2026-126360（特制的 traceparent 值会让解析占用大量 CPU）。Navide 不会走到这段代码，这次只是预防性更新，其他功能没有变化。',
+        'ko-KR': '보안: 백엔드의 opentelemetry-api를 1.45.2로 올려 CVE-2026-126360(조작된 traceparent 값이 파싱에 CPU를 과도하게 쓰게 하는 문제)을 수정했습니다. Navide는 이 코드를 거치지 않으므로 예방 차원의 업데이트이며, 다른 기능은 바뀌지 않았습니다.',
+        'es-ES': 'Seguridad: el opentelemetry-api del backend pasa a la 1.45.2, que corrige CVE-2026-126360 (un valor traceparent manipulado podía hacer que el análisis consumiera mucha CPU). Navide no llega a ese código, así que es una actualización preventiva; nada más cambia.',
+        'fr-FR': 'Sécurité : l’opentelemetry-api du backend passe en 1.45.2, qui corrige CVE-2026-126360 (une valeur traceparent forgée pouvait faire consommer beaucoup de CPU à l’analyse). Navide n’atteint pas ce code : c’est une mise à jour préventive, rien d’autre ne change.',
+        'de-DE': 'Sicherheit: opentelemetry-api im Backend ist jetzt 1.45.2 und behebt CVE-2026-126360 (ein präparierter traceparent-Wert konnte beim Parsen viel CPU verbrauchen). Navide erreicht diesen Code nicht, es ist also ein vorsorgliches Update; sonst ändert sich nichts.',
+        'pt-BR': 'Segurança: o opentelemetry-api do backend agora é 1.45.2, que corrige a CVE-2026-126360 (um valor traceparent forjado podia fazer a análise consumir muita CPU). O Navide não chega a esse código, então é uma atualização preventiva; nada mais mudou.',
+        'ru-RU': 'Безопасность: opentelemetry-api в бэкенде обновлён до 1.45.2, где исправлена CVE-2026-126360 (специально составленное значение traceparent могло заставить разбор тратить много CPU). Navide не доходит до этого кода, поэтому обновление профилактическое; больше ничего не изменилось.',
+        'vi-VN': 'Bảo mật: opentelemetry-api của backend được nâng lên 1.45.2, sửa CVE-2026-126360 (một giá trị traceparent được tạo đặc biệt có thể khiến việc phân tích tốn nhiều CPU). Navide không đi tới đoạn mã này nên đây là bản cập nhật phòng ngừa; không có thay đổi nào khác.',
+      },
+    ],
+  },
+  {
     version: '0.2.42',
     title: {
       'zh-TW': '在 Telegram 切換模型、看得懂的額度條，以及重新打開關閉的視窗',
