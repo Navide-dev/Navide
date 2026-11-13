@@ -3927,9 +3927,9 @@ frontendPluginManager.setHostShellHandlers({
       revealMainWindow(existing)
       return { ok: true }
     }
-    // duplicate=1: same semantics as window:openMain — skip pane restore for a
-    // window cloned while its source's CLI sessions are still running.
-    void createWindow({ workspace_path: ws, duplicate: '1' })
+    // Same boot as window:openMain: no window holds the workspace, so its panes
+    // are restored (live PTYs reattach); skip_recent keeps Recent untouched.
+    void createWindow({ workspace_path: ws, skip_recent: '1' })
     return { ok: true }
   },
   pickFolder: async (defaultPath) => {
@@ -4082,11 +4082,12 @@ function openMainWindow(workspacePath = '', background = false): void {
       return
     }
     params.workspace_path = ws
-    // duplicate=1 marks a window cloned from a live one (its source's CLI
-    // sessions are still running), so the renderer skips pane restore once.
-    // Externally-opened workspaces (openWorkspaceFromPath) must NOT carry
-    // this — their previous sessions are dead and restore should run.
-    params.duplicate = '1'
+    // No duplicate=1: the check above means no window holds this workspace,
+    // so nothing else shows its sessions. The renderer restores its panes,
+    // reattaching the PTYs a closed window left running; skipping restore here
+    // left those CLIs running with no pane. skip_recent keeps the boot out of
+    // Recent, as duplicate=1 did (callers that mean it touch Recent themselves).
+    params.skip_recent = '1'
   }
   void createWindow(params, background ? { background: true } : undefined)
 }
@@ -4327,8 +4328,10 @@ async function reopenClosedWindow(index = 0): Promise<{ opened: number; focused:
   let fresh = false
   if (plan.open) {
     const { workspace_path, bounds, adopted_workspaces } = plan.open
-    // Same boot as a crash restore: the closed window's CLIs are gone, so the
-    // renderer runs pane restore and offers each session as a resume card.
+    // Same boot as a crash restore: the renderer runs pane restore. A closed
+    // window's PTYs outlive it, so a pane with a pinned session reattaches,
+    // and one without (a terminal, codex before its first turn) restores
+    // fresh and reaps the old PTY through its replaces key.
     const win = await createWindow({ workspace_path, restore: '1' }, bounds ? { bounds } : undefined)
     if (adopted_workspaces?.length) pendingAdoptedWorkspaces.set(win.id, adopted_workspaces)
     target = win
