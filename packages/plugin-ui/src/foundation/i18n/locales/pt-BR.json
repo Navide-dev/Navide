@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "Não trocado",
         "login-complete": "Conectado como {email}. Conta salva.",
         "login-complete-no-email": "Login concluído. Conta salva.",
+        "login-pane-done": "{cli} está conectado. Pressione + para abrir um novo pane do {cli}.",
         "switch-login-failed": "A conta \"{account}\" para a qual você acabou de mudar não consegue entrar (a renovação do token do Claude Code foi recusada). Execute /login uma vez em qualquer painel do Claude.",
         "login-step2": "Etapa 1 concluída: {email} foi salva. Mais uma autorização conecta esta conta na própria pasta. Conclua no navegador a partir do pane de login que acabou de abrir.",
         "login-step2-no-email": "Etapa 1 concluída: a conta foi salva. Mais uma autorização a conecta na própria pasta. Conclua no navegador a partir do pane de login que acabou de abrir.",

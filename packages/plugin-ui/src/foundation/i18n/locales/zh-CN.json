@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "未切换",
         "login-complete": "已登录 {email}，账号已保存。",
         "login-complete-no-email": "登录完成，账号已保存。",
+        "login-pane-done": "{cli} 已登录。按 + 开一个新的 {cli} 分格。",
         "switch-login-failed": "刚切换到的账号“{account}”无法登录（Claude Code 的 token 更新被拒绝）。请在任意一个 Claude 分格输入 /login 重新登录一次。",
         "login-step2": "第 1 步完成：{email} 已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录分格里完成浏览器授权。",
         "login-step2-no-email": "第 1 步完成：账号已保存。还要再授权一次，让这个账号登录到自己的文件夹，请在新开的登录分格里完成浏览器授权。",

@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "Not switched",
         "login-complete": "Signed in as {email}. Account saved.",
         "login-complete-no-email": "Sign-in complete. Account saved.",
+        "login-pane-done": "{cli} is signed in. Press + to open a new {cli} pane.",
         "switch-login-failed": "The account \"{account}\" you just switched to cannot sign in (Claude Code's token refresh was rejected). Run /login once in any Claude pane.",
         "login-step2": "Step 1 done: {email} is saved. One more authorization signs this account in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
         "login-step2-no-email": "Step 1 done: the account is saved. One more authorization signs it in to its own folder. Finish it in the browser from the sign-in pane that just opened.",
