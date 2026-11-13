@@ -10,7 +10,7 @@ Navide 是一套開源、AI-native 的軟體工程環境，專為一個人調度
 
 [English](README.md) | 繁體中文 | [日本語](README.ja-JP.md)
 
-[下載 v0.2.41](https://github.com/Navide-dev/Navide/releases/tag/v0.2.41) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
+[下載 v0.2.42](https://github.com/Navide-dev/Navide/releases/tag/v0.2.42) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -115,7 +115,7 @@ Navide 已經是創辦人持續開發這個專案時使用的主要工程環境�
 | 2 週前 | █████████████ | 293 |
 | 上週 | █████████ | 204 |
 
-計數時間為 2026-10-27（v0.2.41）；頁首徽章顯示的是即時數字。
+計數時間為 2026-10-27（v0.2.42）；頁首徽章顯示的是即時數字。
 
 ## 目前已具備
 
@@ -153,13 +153,13 @@ Local-first 不代表所有情況都完全離線。使用外部 Agent CLI、雲�
 
 ## 試用 Navide
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.41 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.42 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
 
-- [下載 DMG](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-arm64.dmg))
-- [下載 ZIP](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-arm64.zip))
-- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-win-x64.exe))
-- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-win-arm64.exe))
-- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.41/Navide-0.2.41-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.41/Navide-0.2.41-amd64.deb))
+- [下載 DMG](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.dmg))
+- [下載 ZIP](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.zip))
+- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-x64.exe))
+- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-arm64.exe))
+- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-amd64.deb))
 
 連結指向 dl.navide.dev，與 App 自動更新用的是同一個載點；旁邊的「GitHub」連結是 GitHub Release 上同一個檔案、逐位元相同（發版流程同時發佈兩邊並比對 checksum）。
 
@@ -190,7 +190,7 @@ Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS �
 
 ## 為 Navide 開發外掛
 
-自己做一個 Navide 外掛，上架到 [Navide Marketplace](https://marketplace.navide.dev/)。`npx navide-plugin init --template vue` 五分鐘就有一個可以建置的外掛（Navide 0.2.41 起），用 Developer Mode 不必上架就能載入試用；在 [developers.navide.dev](https://developers.navide.dev/developer) 實名申請一次，通過審核後即可發佈。
+自己做一個 Navide 外掛，上架到 [Navide Marketplace](https://marketplace.navide.dev/)。`npx navide-plugin init --template vue` 五分鐘就有一個可以建置的外掛（Navide 0.2.42 起），用 Developer Mode 不必上架就能載入試用；在 [developers.navide.dev](https://developers.navide.dev/developer) 實名申請一次，通過審核後即可發佈。
 從英文版 [Build for Navide](docs/en-US/build-for-navide.md) 開始，一頁講完整個流程；問題請到 [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)。
 
 ## 文件與深入閱讀
