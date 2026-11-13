@@ -8,6 +8,17 @@ import { createWsClient, type TerminalOutputFrame } from '../../src/shared/wsCli
 
 const python = resolve('backend', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
 
+// The driver's BackendProcess enforces its own startup budget
+// (_STARTUP_TIMEOUT_S in backend/tests/cli_regression/support/backend_process.py,
+// which mirrors the app's health-check default) and exits non-zero with the
+// backend log when it is exceeded. This outer wait is only a backstop on top of
+// it, so it must never be the stricter of the two: a fixed 35s here failed a
+// healthy Windows backend that the harness and the app would both accept.
+const HARNESS_STARTUP_BUDGET_MS = (process.platform === 'linux' ? 120 : 45) * 1000
+// Interpreter start and harness imports before BackendProcess starts timing.
+const DRIVER_STARTUP_MARGIN_MS = 15_000
+const READY_TIMEOUT_MS = HARNESS_STARTUP_BUDGET_MS + DRIVER_STARTUP_MARGIN_MS
+
 // Reuse the backend suite's isolation, fake CLI, readiness and process-tree
 // cleanup. Only the external wire client differs: this is Navide's real TS
 // client and binary decoder talking to the real Python dispatch/PTY service.
@@ -60,7 +71,7 @@ describe('frontend/backend CLI wire regression', () => {
       await until(() => {
         if (exitCode !== undefined) throw new Error(`backend driver exited: ${driverLog}`)
         return existsSync(join(root, 'wire.json'))
-      }, 'isolated backend did not become ready', 35_000)
+      }, 'isolated backend did not become ready', READY_TIMEOUT_MS)
       // The driver publishes this readiness file by rename only after the
       // entire JSON document is closed; existence must never expose a prefix.
       expect(existsSync(join(root, 'wire.pending.json'))).toBe(false)
@@ -110,5 +121,5 @@ describe('frontend/backend CLI wire regression', () => {
         rmSync(root, { recursive: true, force: true })
       }
     }
-  }, 90_000)
+  }, READY_TIMEOUT_MS + 55_000)
 })
