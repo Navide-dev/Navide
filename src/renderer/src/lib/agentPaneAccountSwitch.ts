@@ -107,7 +107,12 @@ export async function runAgentPaneAccountSwitch(
     profileId: String(args.profileId ?? ''),
     paneId: String(args.paneId ?? ''),
   }
-  const plan = planAgentPaneAccountSwitch(request, deps)
+  let plan = planAgentPaneAccountSwitch(request, deps)
+  // As for the CLI-wide switch: re-read a cache that may lag a new account.
+  if (plan.kind === 'refused' && plan.code === 'unknown-profile' && deps.accounts.refresh) {
+    await deps.accounts.refresh()
+    plan = planAgentPaneAccountSwitch(request, deps)
+  }
   if (plan.kind === 'refused') return { status: plan.code, message: plan.message }
   const key = `pane:${plan.paneId}`
   deps.queue.supersede(key)
