@@ -9310,6 +9310,11 @@ async def _terminal_create_impl(
         login_spec = cli_vendor(agent_key)
         login_subcommand = bool(login_spec is not None and login_spec.login_command_args)
         payload["command"] = app._login_spawn_command(agent_key, payload["command"])
+        if login_subcommand:
+            # The card shows what the pane runs: the auth subcommand, not the
+            # command the window asked for (cli.bypass_dropped carries it).
+            bypass_dropped_command = app._command_text(payload["command"]).strip()
+            metadata[BYPASS_DROPPED_METADATA_KEY] = bypass_dropped_command
     elif not account_dir_slot and app._agent_signed_out(agent_key):
         # Installed, but with no credentials to run on — the counterpart to
         # cli.missing, which only ever fires for a CLI that is not there at

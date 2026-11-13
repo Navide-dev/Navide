@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "전환되지 않음",
         "login-complete": "{email}(으)로 로그인했어요. 계정을 저장했어요.",
         "login-complete-no-email": "로그인을 완료했어요. 계정을 저장했어요.",
+        "login-pane-done": "{cli}에 로그인했어요. +를 눌러 새 {cli} pane을 여세요.",
         "switch-login-failed": "방금 전환한 계정 \"{account}\"에 로그인할 수 없습니다(Claude Code의 토큰 갱신이 거부됨). 아무 Claude 창에서나 /login을 한 번 실행하세요.",
         "login-step2": "1단계 완료: {email}을(를) 저장했어요. 한 번 더 승인하면 이 계정이 자체 폴더에 로그인돼요. 방금 열린 로그인 pane에서 브라우저로 마무리하세요.",
         "login-step2-no-email": "1단계 완료: 계정을 저장했어요. 한 번 더 승인하면 자체 폴더에 로그인돼요. 방금 열린 로그인 pane에서 브라우저로 마무리하세요.",

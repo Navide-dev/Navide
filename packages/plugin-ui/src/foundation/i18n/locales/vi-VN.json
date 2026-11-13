@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "Không chuyển",
         "login-complete": "Đã đăng nhập với {email}. Đã lưu tài khoản.",
         "login-complete-no-email": "Đã đăng nhập xong. Đã lưu tài khoản.",
+        "login-pane-done": "{cli} đã đăng nhập. Nhấn + để mở một pane {cli} mới.",
         "switch-login-failed": "Tài khoản \"{account}\" vừa chuyển sang không đăng nhập được (Claude Code bị từ chối khi làm mới token). Hãy chạy /login một lần trong bất kỳ khung Claude nào.",
         "login-step2": "Xong bước 1: đã lưu {email}. Thêm một lần ủy quyền nữa để đăng nhập tài khoản này vào thư mục riêng của nó. Hãy hoàn tất trong trình duyệt từ pane đăng nhập vừa mở.",
         "login-step2-no-email": "Xong bước 1: đã lưu tài khoản. Thêm một lần ủy quyền nữa để đăng nhập nó vào thư mục riêng. Hãy hoàn tất trong trình duyệt từ pane đăng nhập vừa mở.",

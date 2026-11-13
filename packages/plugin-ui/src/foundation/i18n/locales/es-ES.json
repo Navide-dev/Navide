@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "No cambiado",
         "login-complete": "Sesión iniciada como {email}. Cuenta guardada.",
         "login-complete-no-email": "Inicio de sesión completado. Cuenta guardada.",
+        "login-pane-done": "{cli} ya tiene la sesión iniciada. Pulsa + para abrir un nuevo pane de {cli}.",
         "switch-login-failed": "La cuenta «{account}» a la que acabas de cambiar no puede iniciar sesión (se rechazó la renovación del token de Claude Code). Ejecuta /login una vez en cualquier panel de Claude.",
         "login-step2": "Paso 1 completado: {email} está guardada. Una autorización más inicia la sesión de esta cuenta en su propia carpeta. Termínala en el navegador desde el pane de inicio de sesión que se acaba de abrir.",
         "login-step2-no-email": "Paso 1 completado: la cuenta está guardada. Una autorización más inicia su sesión en su propia carpeta. Termínala en el navegador desde el pane de inicio de sesión que se acaba de abrir.",
