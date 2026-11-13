@@ -6,7 +6,7 @@ cli_open_agent(workspace_path=...) then broadcast agent_spawn.request while the
 new window was still loading: every live window saw a workspace it does not
 hold and stayed silent, the event was never replayed, and the call waited out
 the whole spawn deadline. workspace_list did not show the new workspace either,
-because the window is opened with duplicate=1 and so never touches Recent.
+because the window is opened with skip_recent=1 and so never touches Recent.
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ async def test_workspace_list_lists_the_workspace_right_after_workspace_open(
 
 @pytest.mark.asyncio
 async def test_workspace_open_leaves_the_users_recent_list_alone(windows: _Windows, tmp_path: Path) -> None:
-    """The window opens with duplicate=1, which keeps it out of Recent on
+    """The window opens with skip_recent=1, which keeps it out of Recent on
     purpose; an MCP call must not reorder the user's list either."""
     older = tmp_path / "older"
     older.mkdir()

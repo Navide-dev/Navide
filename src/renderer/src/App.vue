@@ -370,6 +370,7 @@ import {
 import { isLoopSkill, resolvePromptSkill } from './lib/promptSkills'
 import { usePromptSkills } from './composables/usePromptSkills'
 import { loginCommandFor, matchLoginExpired, turnClearsLoginExpired } from './lib/cliLoginExpired'
+import { loginPaneExitAction, loginPaneRestartable } from './lib/loginPaneLifecycle'
 import { QUOTA_READING_VETO, detectUsageLimit, isDismissedUsageLimit, loopEstimate, quotaExhaustedPayload, usageLimitDue } from './lib/cliUsageLimit'
 import {
   applyScreenWatch,
@@ -4822,7 +4823,7 @@ function syncViews(): void {
       loopActive: p.loopActive,
       loopWaitUntil: p.loopWaitUntil,
       rebuildVisible: p.realized && paneRebuildVisible(p),
-      canRebuild: p.realized && paneCanRebuild(p),
+      canRebuild: p.realized && (paneCanRebuild(p) || loginPaneRestartable(p, ref?.status as string | undefined)),
       rebuilding: p.realized && paneRebuilding(p),
       usageLimitAt: p.usageLimitAt ?? null,
       usageLimitUntil: p.usageLimitUntil ?? null,
@@ -8782,6 +8783,10 @@ async function onManualSpawn(payload: SpawnPayload, quota?: { transactionId: str
 // `step` tells a vault-slot sign-in from the own-folder one that follows it
 // for a Claude account (lib/accountDirLoginChain.ts).
 const pendingLoginPanes = new Map<string, PendingLogin>()
+// Sign-in panes opened with no account slot, which no harvest broadcast can
+// name: pane id → agent key. The terminal.exit handler closes one whose
+// sign-in subcommand exited 0 (lib/loginPaneLifecycle.ts).
+const slotlessLoginPanes = new Map<string, string>()
 
 async function onCliLoginSpawn(
   agentKey: string,
@@ -8819,6 +8824,11 @@ async function onCliLoginSpawn(
   const pendingProfileId = dirProfileId ?? loginProfileId
   if (pendingProfileId) {
     pendingLoginPanes.set(pendingProfileId, { paneId, agentKey, step: dirProfileId ? 'dir' : 'slot' })
+  } else if (cliProfilesApi.capabilityFor(agentKey)?.loginCommand === true) {
+    // Only a vendor whose sign-in is an auth subcommand: that one exits once
+    // the sign-in landed. The others run their ordinary CLI here, where an
+    // exit 0 is the user quitting it, not a sign-in.
+    slotlessLoginPanes.set(paneId, agentKey)
   }
   // The user must see the pane that is waiting for the browser authorization.
   noteViewJump('account login spawn', { paneId })
@@ -9607,6 +9617,12 @@ async function rebuildPaneViaResume(
   if (!pane?.realized) return 'missing-pane'
   // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
   if (acp.owns(paneId)) return 'no-session'
+  // A sign-in pane has no session to resume. Restarting one whose CLI ended
+  // opens the ordinary CLI in its place; rebuildPaneClean carries no sign-in.
+  if (loginPaneRestartable(pane, paneRefs[paneId]?.status as string | undefined)) {
+    await rebuildPaneClean(paneId)
+    return undefined
+  }
   // If the CLI is actively working, skip rebuild so we don't kill in-flight work.
   // The PTY is alive and the pane is already bound — nothing to reattach, just leave it.
   // displayStatus detects active work from CLEANED output bursts. Raw status
@@ -18849,6 +18865,17 @@ backend.on('terminal.exit', (raw) => {
       paneId: pane.id,
     })
   }
+  // A slot-less sign-in pane is done once its auth subcommand exits 0: close
+  // it and say how to start working. A failed sign-in keeps its pane open.
+  const tracked = slotlessLoginPanes.has(pane.id)
+  slotlessLoginPanes.delete(pane.id)
+  if (loginPaneExitAction({ tracked, exitCode: ev.exit_code }) === 'close') {
+    void onKill(pane.id)
+    notifyRestore.toast(
+      i18n.global.t('settings.accounts.cli.login-pane-done', { cli: pane.agentLabel }),
+      { type: 'success' }
+    )
+  }
 })
 
 // The PTY stopped taking input and the backend is holding what we wrote. Keyed
@@ -26504,7 +26531,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :is-selected="selectedPaneIds.has(p.id)"
           :selection-batch-ids="selectionBatchIds"
           :rebuild-visible="paneRebuildVisible(p)"
-          :can-rebuild="paneCanRebuild(p)"
+          :can-rebuild="paneCanRebuild(p) || loginPaneRestartable(p, paneRefs[p.id]?.status as string | undefined)"
           :rebuilding="paneRebuilding(p)"
           :is-preparing="paneShowsPrepOverlay(p)"
           :preparing-label="panePreparationLabel(p)"

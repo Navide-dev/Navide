@@ -8577,6 +8577,7 @@
         "switch-log-status-failed": "Nicht gewechselt",
         "login-complete": "Angemeldet als {email}. Konto gespeichert.",
         "login-complete-no-email": "Anmeldung abgeschlossen. Konto gespeichert.",
+        "login-pane-done": "{cli} ist angemeldet. Mit + öffnest du einen neuen {cli}-Bereich.",
         "switch-login-failed": "Das Konto „{account}“, zu dem du gerade gewechselt hast, kann sich nicht anmelden (die Token-Erneuerung von Claude Code wurde abgelehnt). Führe in einem beliebigen Claude-Bereich einmal /login aus.",
         "login-step2": "Schritt 1 erledigt: {email} ist gespeichert. Eine weitere Autorisierung meldet dieses Konto in seinem eigenen Ordner an. Schließen Sie sie im Browser über den gerade geöffneten Anmeldebereich ab.",
         "login-step2-no-email": "Schritt 1 erledigt: Das Konto ist gespeichert. Eine weitere Autorisierung meldet es in seinem eigenen Ordner an. Schließen Sie sie im Browser über den gerade geöffneten Anmeldebereich ab.",

@@ -5,6 +5,7 @@ import { parse } from 'vue/compiler-sfc'
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
+import { loginPaneRestartable } from '../../lib/loginPaneLifecycle'
 
 // Execute the real rebuildPaneViaResume with IO replaced at its boundaries.
 // A claude pane pins `--session-id` at spawn but writes its transcript only on
@@ -29,6 +30,8 @@ function harness(sessionOnDisk: boolean | undefined) {
     panes,
     paneRefs: {},
     acp: { owns: () => false },
+    loginPaneRestartable,
+    rebuildPaneClean: vi.fn(async () => {}),
     paneBusyForRebuild: () => false,
     notifyRestore: { toast: vi.fn(), confirm: vi.fn() },
     i18n: { global: { t: (key: string) => key } },
@@ -69,6 +72,7 @@ describe('rebuildPaneViaResume on a pane with no transcript yet', () => {
     const result = await rebuild('old', { profileId: 'acct-b', freshWhenNoTranscript: true })
     expect(result).toBeUndefined()
     expect(scope.canResumeSession).toHaveBeenCalledWith('claude', '/ws', 'sid-old')
+    expect(scope.rebuildPaneClean).not.toHaveBeenCalled()
     expect(scope.notifyRestore.toast).not.toHaveBeenCalled()
     expect(scope.spawnPane).toHaveBeenCalledWith(expect.objectContaining({
       commandOverride: '',
