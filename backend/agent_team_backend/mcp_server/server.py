@@ -7619,8 +7619,8 @@ def _recent_workspace_rows() -> dict[str, Any]:
         for entry in _app.recent_workspaces_store.list()
     ]
     # Opened through workspace_open but never recorded in Recent: such a
-    # window boots with duplicate=1, which (on purpose, for cloned windows)
-    # keeps it out of Recent. Listed here instead, so the path a caller just
+    # window boots with skip_recent=1, which (on purpose) keeps it out of
+    # Recent. Listed here instead, so the path a caller just
     # opened is one it can find again, without the MCP call reordering the
     # user's Recent list.
     listed = {_norm_workspace(str(entry.get("path") or "")) for entry in workspaces}
@@ -7723,7 +7723,7 @@ async def workspace_open(path: str, ctx: Context) -> dict[str, Any]:
     )
     if not result.get("ok"):
         return result
-    # The window opens with duplicate=1 and so stays out of Recent; this is
+    # The window opens with skip_recent=1 and so stays out of Recent; this is
     # what puts the path in workspace_list (see _recent_workspace_rows).
     _mcp_opened_workspaces.pop(path, None)
     _mcp_opened_workspaces[path] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
