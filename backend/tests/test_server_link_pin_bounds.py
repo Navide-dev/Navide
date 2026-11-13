@@ -21,7 +21,7 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store, ws_
 from agent_team_backend.credential_vault import CredentialVault
 from agent_team_backend.server_link import ServerLink
 from tests.keychain_fake import security_g_output
-from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
+from tests.test_server_link import CONFIG, CONNECT_TIMEOUT_S, FakeServer, TokenServer, _until
 from tests.test_trust_store_capacity import KEY, _device
 
 URL = CONFIG.url
@@ -206,14 +206,14 @@ async def test_unanswered_confirm_then_settle_drop_forgets_pin(kc):
     link = real_link(server)
     assert await link.start()
     try:
-        await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[0].sent))
+        await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[0].sent), timeout=CONNECT_TIMEOUT_S)
         await link.stop()
         assert server_link.next_access_token().startswith("nvd_rotated")
         ts.rotate_code = "UNKNOWN_TYPE"
         ts.pending.clear()
         link = real_link(server)
         assert await link.start()
-        await _until(lambda: server_link.next_access_token() == "" and len(server.opened) >= 2 and bool(server.opened[-1].syncs))
+        await _until(lambda: server_link.next_access_token() == "" and len(server.opened) >= 2 and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
     finally:
         await link.stop()
     assert server_link.access_token() == CONFIG.token
@@ -263,7 +263,7 @@ async def test_dropping_next_never_forgets_the_current_tokens_pin(kc):
     link = real_link(server)
     assert await link.start()
     try:
-        await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[0].sent))
+        await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.confirm" for m in server.opened[0].sent), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
     finally:
         await link.stop()
