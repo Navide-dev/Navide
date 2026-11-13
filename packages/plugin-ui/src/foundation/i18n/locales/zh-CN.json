@@ -13528,7 +13528,7 @@
     }
   },
   "arena": {
-    "experimental": "实验",
+    "experimental": "Beta",
     "menu": {
       "section": "比较",
       "start": "模型擂台…",

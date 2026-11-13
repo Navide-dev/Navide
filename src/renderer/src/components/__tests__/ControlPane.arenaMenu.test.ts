@@ -4,6 +4,8 @@ import { shallowMount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ControlPane from '../ControlPane.vue'
 import { setArenaEnabled, useArenaPrefs } from '../../composables/useArenaPrefs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 // Settings → General → Experimental features → Model arena. Off (the default)
 // the ＋ menu has no Compare block; on, it offers "Model arena…", which asks
@@ -98,5 +100,18 @@ describe('ControlPane – the ＋ menu Compare block (model arena)', () => {
     await openMenu(wrapper)
     await wrapper.find('[data-testid="add-menu-arena-runs"]').trigger('click')
     expect(wrapper.emitted('arena-panel')?.[0]).toEqual(['/Users/me/Desktop/Agent-Team'])
+  })
+
+  it('labels the entry with the Beta badge, kept as "Beta" in every locale', async () => {
+    setArenaEnabled(true)
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    expect(wrapper.find('[data-testid="add-menu-arena"] .ws-add-exp').text()).toBe('arena.experimental')
+    const dir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json'))
+    expect(files).toHaveLength(11)
+    for (const f of files) {
+      expect(JSON.parse(readFileSync(resolve(dir, f), 'utf8')).arena.experimental, f).toBe('Beta')
+    }
   })
 })

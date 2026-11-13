@@ -13528,7 +13528,7 @@
     }
   },
   "arena": {
-    "experimental": "실험",
+    "experimental": "Beta",
     "menu": {
       "section": "비교",
       "start": "모델 아레나…",
