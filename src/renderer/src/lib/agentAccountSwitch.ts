@@ -21,6 +21,10 @@ export interface AgentAccountSwitchAccounts {
   findProfile: (id: string | null | undefined) => { agentKey: string; name: string } | undefined
   defaultProfileId: (agentKey: string) => string | null
   aliasFor: (agentKey: string, profileId: string | null | undefined) => string | undefined
+  /** Re-reads the list from the backend. Called once before refusing an
+   *  account as unknown: an account added while the window was open can be
+   *  missing from its cache until then (2026-11-13 Linux VM). */
+  refresh?: () => Promise<void>
 }
 
 export type AgentAccountSwitchPlan =
@@ -110,7 +114,11 @@ export async function runAgentAccountSwitch(
     profileId: String(args.profileId ?? ''),
     expectedFrom: typeof args.expectedFrom === 'string' ? args.expectedFrom : null,
   }
-  const plan = planAgentAccountSwitch(request, deps.accounts)
+  let plan = planAgentAccountSwitch(request, deps.accounts)
+  if (plan.kind === 'refused' && plan.code === 'unknown-profile' && deps.accounts.refresh) {
+    await deps.accounts.refresh()
+    plan = planAgentAccountSwitch(request, deps.accounts)
+  }
   if (plan.kind === 'refused') return { status: plan.code, message: plan.message }
   const key = `agent:${plan.agentKey}`
   // The newest request wins: whatever was parked for this CLI is replaced.
