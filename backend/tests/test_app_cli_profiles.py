@@ -310,6 +310,12 @@ async def test_cli_profiles_create_and_list(
     assert listing["payload"]["defaults"] == {key: None for key in SUPPORTED_AGENT_KEYS}
     assert listing["payload"]["supported_agents"] == list(SUPPORTED_AGENT_KEYS)
     assert listing["payload"]["supported_agents"][:4] == ["claude", "codex", "kimi", "grok"]
+    # The window keys slot-less sign-in pane auto-close on this field
+    # (App.vue onCliLoginSpawn); quota_failover's own capability drops it.
+    caps = listing["payload"]["account_capabilities"]
+    assert caps["codex"]["loginCommand"] is True
+    assert caps["claude"]["loginCommand"] is True
+    assert all(isinstance(c["loginCommand"], bool) for c in caps.values())
 
 
 async def test_cli_profiles_list_includes_identities(

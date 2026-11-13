@@ -2634,7 +2634,13 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
                 "supported_agents": list(PROFILE_AGENT_KEYS),
                 # Per vendor: hot/restart/manual, the credential pool, the
                 # provider scopes a new profile may bind to, resume ability.
-                "account_capabilities": quota_failover.capabilities(),
+                # loginCommand rides along from the vendor spec: the window
+                # closes a slot-less sign-in pane on exit 0 only when the
+                # vendor signs in through an auth subcommand.
+                "account_capabilities": {
+                    key: {**cap, "loginCommand": bool(cli_vendor(key) and cli_vendor(key).login_command_args)}
+                    for key, cap in quota_failover.capabilities().items()
+                },
             },
         )
     )
