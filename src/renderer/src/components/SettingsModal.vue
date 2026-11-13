@@ -4376,7 +4376,7 @@ watch(activeTab, (tab) => {
           <SettingsSection :label="$t('settings.section.experimental')">
             <SettingsCard data-settings-section="general-experimental">
               <SettingRow
-                :title="$t('arena.settings.title')"
+                :title="`${$t('arena.settings.title')} ${$t('arena.experimental')}`"
                 :description="$t('arena.settings.hint')"
               >
                 <template #control>

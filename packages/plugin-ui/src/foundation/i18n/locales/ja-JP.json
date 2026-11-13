@@ -13528,7 +13528,7 @@
     }
   },
   "arena": {
-    "experimental": "実験的",
+    "experimental": "Beta",
     "menu": {
       "section": "比較",
       "start": "モデルアリーナ…",
