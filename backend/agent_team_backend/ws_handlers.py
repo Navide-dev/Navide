@@ -5191,7 +5191,8 @@ async def p2p_link_status(session: "Session", msg_id: str, msg_type: str, payloa
     # Reported alongside the link's own state rather than folded into it: paused
     # is a thing the *user* did, and showing it as "unconfigured" or
     # "unreachable" would blame the network for a switch they flipped.
-    status["paused"] = _link_paused()
+    # A SQLite read: off the loop, which a restore storm already starves.
+    status["paused"] = await asyncio.to_thread(_link_paused)
     await session.send_json(make_response(msg_id, msg_type, {"status": status}))
 
 

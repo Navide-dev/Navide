@@ -764,6 +764,15 @@ class LogReader(ABC):
         files sit outside any fixed root (Aider's per-workspace history
         file) override with their own match. `path` arrives resolved.
         """
+        return self.under_project_dirs(path)
+
+    def under_project_dirs(self, path: Path) -> bool:
+        """True when the resolved `path` lives under one of project_dirs().
+
+        A reader whose project_dirs() is expensive to enumerate overrides
+        this with an equivalent test on the path itself; the watcher asks it
+        on the event loop for every routed file and every Stop hook.
+        """
         for d in self.project_dirs():
             try:
                 if path.is_relative_to(d.resolve()):
