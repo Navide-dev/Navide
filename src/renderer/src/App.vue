@@ -289,6 +289,7 @@ import {
   resolveReadySpawnGroupId,
   runGroupCreatedAt,
   groupPeers,
+  initialRunGroups,
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
@@ -22272,7 +22273,7 @@ function _loadRunGroups(path: string, project: NonNullable<ProjectPayload['proje
     let legacyRaw: string | null = null
     try { legacyRaw = localStorage.getItem(legacyKey) } catch { legacyRaw = null }
     const parsed = parseLegacyRunGroups(legacyRaw)
-    runGroups.value = parsed ?? [{ id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() }]
+    runGroups.value = initialRunGroups(parsed, project.panes?.length ?? 0, { id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() })
     if (!isDetachedWindow) {
       void sendQuiet<{ ok: boolean }>('project.set_ui_state', {
         workspace_path: path,
