@@ -6,9 +6,41 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [0.2.43] — 2026-11-14
 
+### Added
+
+- MCP (0.2.43): Navide notices a Claude pane whose CLI never connected to Navide's tool server. A pane that has been up (idle, running or waiting) for three minutes without connecting gets a badge in its title bar, a toast and a system notification, and every bound direct chat is told once in your language; `cli_get_status` and `cli_list_targets` report it as `mcp: "never-connected"`. The toast's Reconnect action and a click on the badge rebuild the pane on the same conversation, so the new CLI connects again. Reconnect runs only while the pane is idle (a rebuild ends the CLI's background processes); a busy pane gets a toast saying so. Nothing is typed into the pane. The badge clears when the pane connects after all.
+- MCP (0.2.43): a message sent to a pane that has not been opened yet (a placeholder left by a restore) now says so: `cli_send` answers `delivered: false` and `parked: "placeholder"` alongside `ok: true`, and `cli_check_message` reports the hold as `not-opened`. A message still waiting after 10 minutes is reported once to the window holding that pane, which offers to open it. Nothing opens by itself, since opening a pane starts its CLI.
+
+### Changed
+
+- Navide Marketplace (0.2.43): the developer account reuses your Navide Cloud sign-in instead of asking you to sign in again in the browser. Opening the Developer page signs the account in with no click; publishing rights need a confirmation in a native Navide dialog that no agent or page can press. The Registry still checks that you are an approved developer, the same as the browser sign-in, and your Cloud token never leaves the Navide backend. This needs the next Registry and Navide-Server deployments: until both are live, and with no Cloud sign-in or a self-hosted server, the developer sign-in falls back to the browser as before.
+- Restore (0.2.43): a cold restore starts at most four panes at a time and waits for each to be ready (at most 120 s per pane) before starting the next, instead of booting every CLI at once. A restore you start from the window is unchanged.
+- Claude panes (0.2.43): the first connection to Navide's MCP server gets 120 s instead of Claude Code's 30 s (`MCP_TIMEOUT`); a value you set yourself still wins.
+- Backend (0.2.43): routing a Codex transcript, each Stop hook and the link status no longer read the disk on the backend's event loop, which stalled it for seconds while many panes restored.
+- Navide Registry (0.2.43): a plugin upload is written to a temporary file as it arrives and checked from there, instead of being held whole in memory; a 32 MiB package peaked at 66.3 MiB of heap before and 4.3 MiB now. Validation, signature checks and scan results are unchanged. Takes effect with the next Registry deployment.
+- CI (0.2.43): the Dependency audit job blocks on high and critical Python advisories only, rated from OSV; low and moderate ones are printed as warnings. An advisory with no rating, a failed lookup or a failed pip-audit still blocks.
+- Dependencies (0.2.43): setup-uv 10.3.3, pywinpty 3.1.2, pytest 9.2.0, tzdata 2026.6, websockets 17.4, @playwright/test 1.65.0, koffi 3.3.7, mermaid 12.3.0 and ws 8.22.1 (dependabot #841, #847, #848, #849, #851, #857, #859, #860, #861).
+
+### Fixed
+
+- MCP (0.2.43): when many Claude panes restored at once, some gave up their connection to Navide's tools and stayed without them until `/mcp` was run by hand (13 panes on 2026-11-12). The longer connect budget, the batched cold restore and the event-loop fix above address it, and the new notice and Reconnect cover a pane that still does not connect.
+- Windows (0.2.43): reopening a workspace no longer adds an empty "Default 0/0" tab beside the tab holding its restored panes.
+- Accounts (0.2.43): adding, renaming or removing an account and closing the window that asked right away no longer leaves other windows' account lists and quota badges on old data; the change notice now always reaches every window.
+- Grok (0.2.43): a Grok pane in a deeply nested workspace (whose encoded folder name is over 255 bytes, often with CJK characters) could not scope or resume its sessions. Navide now finds the session group through Grok's `.cwd` marker; short paths are found as before.
+
 ### Security
 
 - Backend dependencies (hotfix): opentelemetry-api 1.45.2 (was 1.45.1), which fixes CVE-2026-126360 (GHSA-mf5v-w3w3-f6cg, moderate): `TraceContextTextMapPropagator.extract()` could spend quadratic time on a crafted `traceparent` value carrying a long whitespace run and an embedded newline. Navide does not reach that path: opentelemetry-api comes in only through anthropic and fastapi, Navide configures no OpenTelemetry tracer provider, so FastAPI's telemetry never extracts trace context, and HTTP header values cannot carry a newline. No other dependency changed.
+- Navide Guard (0.2.43): a variable too long for Guard to follow, used by a command that reads or sends a file (`cat`, `head`, `cp`, `scp`, `curl -T`, `<` and others), now asks first under the new rule `dynamic-path-read` (critical by default, named in all 11 interface languages). The same variable used anywhere else keeps its verdict.
+- Navide Guard (0.2.43): on Windows and in PowerShell, backslash padding in a path (`\.\.\`, `\x\..\`) is folded before matching, like `/./` and `/x/../`.
+- Navide Guard (0.2.43): in PowerShell, a credential read that meets a command sending its standard input (`curl.exe` with `@-`, `-d@-`, `--data-binary=@-`, `-F f=@-`, `@/dev/stdin`, `-T -` or `--upload-file -`; `Invoke-WebRequest`/`Invoke-RestMethod -InFile -`) anywhere in the command is marked `credential-exfil`. Checking a 64K-character PowerShell command took 6–9 s before and is under 1 s now.
+
+### Known limitations
+
+- Navide Marketplace (0.2.43): reusing the Cloud sign-in for the developer account works only after the Registry and Navide-Server are deployed with it; until then the browser sign-in is used. The three parts have been tested separately, not end to end.
+- Navide Guard (0.2.43): some forms are not covered yet: `${#P}` and `${P:-x}` expansions, commands passed on through `xargs`, read commands matched by an allowlist, and bash `curl --data-binary @- < file` is not marked as a credential upload.
+- MCP (0.2.43): a pane that never connected is not rebuilt automatically; use Reconnect.
+- Backend dependencies (0.2.43): watchdog 7, electron-vite 6 and Electron 45 are held back for later releases.
 
 ## [0.2.42] — 2026-11-14
 
