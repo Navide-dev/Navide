@@ -1794,7 +1794,7 @@ _PS_IWR = {"invoke-webrequest", "iwr", "invoke-restmethod", "irm"}
 
 
 def _ps_stdin_send(command: str) -> bool:
-    """curl.exe sending its stdin (`@-`, `-T -`, `--upload-file -`) or
+    """curl.exe sending its stdin (`@-` in any form, `@/dev/stdin`, `-T -`, `--upload-file -`) or
     iwr / irm `-InFile -`, anywhere in the command: a function or script
     block defined first sends whatever is later piped into it."""
     for seg in _PS_SEGMENT_RE.findall(command):
@@ -1805,7 +1805,8 @@ def _ps_stdin_send(command: str) -> bool:
             if sender is None:
                 if posixpath.basename(w) in _PS_CURL | _PS_IWR:
                     sender = posixpath.basename(w)
-            elif sender in _PS_CURL and (w == "@-" or (w == "-" and prev in {"-t", "--upload-file"})):
+            elif sender in _PS_CURL and (w.endswith(("@-", "@/dev/stdin")) or w == "-t-"
+                                         or (w == "-" and prev in {"-t", "--upload-file"})):
                 return True
             elif sender in _PS_IWR and (w == "-infile:-" or (w == "-" and prev == "-infile")):
                 return True

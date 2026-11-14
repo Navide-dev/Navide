@@ -11490,6 +11490,7 @@
         "unknown-script": "Guard가 볼 수 없는 스크립트 실행",
         "dynamic-path": "파일 경로가 고정되어 있지 않음",
         "credential-pipe-upload": "~/.ssh의 파일을 네트워크 도구로 파이프",
+        "dynamic-path-read": "Guard가 추적할 수 없을 만큼 긴 변수에 담긴 경로를 읽거나 업로드",
         "plugin-store-write": "Navide 플러그인 설치 경로나 신뢰 저장소에 쓰기, 삭제, 이동, 링크 또는 chmod",
         "dynamic-stdin-script": "셸이 실행 시점에 계산되는 here-string을 실행",
         "mcp-registry-write": "MCP 도구가 Windows 레지스트리 항목을 변경하거나 삭제",

@@ -11490,6 +11490,7 @@
         "unknown-script": "Ejecuta un script que Guard no puede ver",
         "dynamic-path": "La ruta del archivo no es estática",
         "credential-pipe-upload": "Canaliza un archivo de ~/.ssh a una herramienta de red",
+        "dynamic-path-read": "Lee o sube una ruta guardada en una variable demasiado larga para que Guard la siga",
         "plugin-store-write": "Escribe, elimina, mueve, enlaza o cambia con chmod la carpeta de instalación de plugins de Navide o sus almacenes de confianza",
         "dynamic-stdin-script": "El shell ejecuta un here-string calculado en tiempo de ejecución",
         "mcp-registry-write": "Una herramienta MCP cambia o elimina una entrada del registro de Windows",

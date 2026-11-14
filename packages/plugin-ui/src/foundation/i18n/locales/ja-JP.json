@@ -11490,6 +11490,7 @@
         "unknown-script": "Guard が中身を見られないスクリプトを実行",
         "dynamic-path": "ファイルパスが静的でない",
         "credential-pipe-upload": "~/.ssh のファイルをネットワークツールにパイプ",
+        "dynamic-path-read": "Guard が追跡できないほど長い変数に入ったパスを読み取り、またはアップロード",
         "plugin-store-write": "Navide プラグインのインストール先や信頼ストアへの書き込み・削除・移動・リンク・chmod",
         "dynamic-stdin-script": "実行時に計算される here-string をシェルが実行",
         "mcp-registry-write": "MCP ツールが Windows レジストリのエントリを変更または削除",
