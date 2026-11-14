@@ -224,10 +224,13 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     // cli_set_model's restart fallback (ui.pane.setModel): it rebuilds one
     // pane, never a batch. The pane menu's "fix sub-panes to my account"
     // (fixDescendantsToAccount) moves only the sub-panes the user ticked, so
-    // the move is the point there too. The follow
+    // the move is the point there too. Reconnecting a pane whose Navide tools
+    // never connected (reconnectPaneMcp) rebuilds that one pane on the user's
+    // click, and a pane nobody typed in has no conversation to lose. The follow
     // batch and every other rebuild keep the plain resume preflight.
     const optIns = appSource.split('freshWhenNoTranscript: true').length - 1
-    expect(optIns).toBe(8)
+    expect(optIns).toBe(9)
+    expect(functionBody('reconnectPaneMcp').split('freshWhenNoTranscript: true').length - 1).toBe(1)
     expect(functionBody('fixDescendantsToAccount').split('freshWhenNoTranscript: true').length - 1).toBe(1)
     expect(functionBody('toggleAccountPin').split('freshWhenNoTranscript: true').length - 1).toBe(2)
     // One shared options object, used by both the fixed and the following path.
