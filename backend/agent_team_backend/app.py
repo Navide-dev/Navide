@@ -1212,6 +1212,7 @@ _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
 _session_archive_task: "asyncio.Task[None] | None" = None
 _frozen_keepalive_task: "asyncio.Task[None] | None" = None
+_mcp_connect_watch_task: "asyncio.Task[None] | None" = None
 
 _SESSION_ARCHIVE_FIRST_S = 600
 _SESSION_ARCHIVE_EVERY_S = 86_400
@@ -1236,6 +1237,33 @@ async def _session_archive_loop() -> None:
             except Exception as err:  # noqa: BLE001 — the loop must survive
                 log.warning("session archive pass failed: %s", err)
         await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
+
+
+@app.on_event("shutdown")
+async def _stop_mcp_connect_watch() -> None:
+    if _mcp_connect_watch_task is not None:
+        _mcp_connect_watch_task.cancel()
+
+
+async def _notify_mcp_connected(pane_id: str) -> None:
+    """A pane reported never-connected has connected after all: drop its badge."""
+    await broadcast(make_event("mcp.connected", {"pane_id": pane_id}))
+
+
+async def _notify_mcp_never_connected(entry: Any) -> None:
+    """A pane's CLI has been up for minutes without reaching /plan-mcp: the
+    windows badge it and toast, the bound chats get one notice."""
+    await broadcast(make_event("mcp.never_connected", {
+        "pane_id": entry.pane_id,
+        "name": entry.name,
+        "workspace_path": entry.workspace_path,
+        "agent_key": entry.agent_key,
+    }))
+    from .channels import get_manager
+
+    manager = get_manager()
+    if manager is not None:
+        await manager.notify_mcp_never_connected(entry.name)
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -2678,6 +2706,15 @@ async def _start_log_watcher() -> None:
     # Opt-in session-log archive (off by default; see session_archive.py).
     global _session_archive_task
     _session_archive_task = asyncio.create_task(_session_archive_loop())
+
+    # Panes whose CLI never reached /plan-mcp (2026-11-12 mass restore): tell
+    # the windows and the bound chats once per pane.
+    from . import mcp_connect_watch
+
+    global _mcp_connect_watch_task
+    _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
+        _notify_mcp_never_connected, _notify_mcp_connected,
+    ))
 
     # Frozen onefile build only: keep the extraction directory from being
     # purged as idle temp while the backend stays up (see frozen_env).

@@ -2044,6 +2044,9 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the backend saw this pane's CLI up for minutes without it
+   *  ever reaching Navide's tool server (mcp_connect_watch). Not persisted. */
+  mcpNeverConnected?: boolean
   /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
    *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
    *  Not persisted. */
@@ -18589,6 +18592,28 @@ backend.on('agent_msg.push_state', (raw) => {
   }
 })
 
+// A pane's CLI has been up for minutes without ever reaching Navide's tool
+// server (backend mcp_connect_watch; 2026-11-12 mass restore). Broadcast to
+// every window: only the one holding the pane badges it and tells the user.
+backend.on('mcp.never_connected', (raw) => {
+  const ev = raw as { pane_id?: string; name?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane) return
+  pane.mcpNeverConnected = true
+  const name = ev.name || pane.messagingName || pane.agentLabel
+  const title = i18n.global.t('pane.terminal.mcp-never-connected-title', { name })
+  const body = i18n.global.t('pane.terminal.mcp-never-connected-body', { name })
+  notifyRestore.toast(body, { type: 'error', title, duration: 15000 })
+  sysNotify.notifyPaneState(pane.id, 'attention', title, body)
+})
+
+// That pane reached the server after all (a manual /mcp, a rebuild).
+backend.on('mcp.connected', (raw) => {
+  const ev = raw as { pane_id?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (pane) pane.mcpNeverConnected = false
+})
+
 // A sending window withdrew a message before it went in. Every window sees the
 // request; only the one holding that message in a queue has anything to drop,
 // and it reports the cancellation back over the ordinary delivery-report path.
@@ -26575,6 +26600,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
+          :mcp-never-connected="p.mcpNeverConnected"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"

@@ -565,6 +565,9 @@ def _credential(request: Any) -> _Caller:
         raise CallerUnknown(_STALE)
     if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_connect_watch.record_connect(pane_id)
     return _Caller(kind="pane", pane_id=pane_id)
 
 
@@ -594,6 +597,13 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
     hold_reason = _hold_reason_for(entry.qualified_name)
     if hold_reason:
         view["hold_reason"] = hold_reason
+    # Absent unless the pane's CLI has been up for minutes without ever
+    # reaching this server: its Navide tools are missing (mcp_connect_watch).
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(entry.pane_id)
+    if mcp_state:
+        view["mcp"] = mcp_state
     # Only an embedded AI panel carries these (which window hosts it); a window
     # pane never sets them, so its view keeps exactly the keys it always had.
     if entry.surface:
@@ -734,6 +744,10 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     "behind", …). It is the same reason the Messages panel shows, and it is
     what makes `busy` explainable — but it exists only while a message sent
     from here is queued for that pane, so its absence says nothing.
+
+    `mcp: "never-connected"` appears on a pane whose CLI has been up for three
+    minutes without once reaching Navide's tool server: its Navide tools are
+    missing, so a message it is asked to answer through them will not come.
 
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
@@ -4258,6 +4272,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
+    `mcp: "never-connected"` appears when the pane's CLI has been up for
+    three minutes without once reaching Navide's tool server, so its Navide
+    tools are missing; absent otherwise.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -4379,6 +4396,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         "agent_key": pane.agent_key,
         "busy": pane.busy,
     }
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(pane.pane_id)
+    if mcp_state:
+        status["mcp"] = mcp_state
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
