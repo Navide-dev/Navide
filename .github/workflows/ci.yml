@@ -455,6 +455,9 @@ jobs:
         run: |
           uv tool install py-spy==0.4.2
           "NAVIDE_CI_PY_SPY=$(Join-Path $env:UV_TOOL_BIN_DIR 'py-spy.exe')" >> $env:GITHUB_ENV
+          # The image's Windows SDK debugger, for native stacks py-spy cannot list.
+          $cdb = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
+          if (Test-Path $cdb) { "NAVIDE_CI_CDB=$cdb" >> $env:GITHUB_ENV } else { Write-Host "cdb not found at $cdb" }
       - name: Start detached Windows tests
         if: runner.os == 'Windows'
         shell: pwsh
