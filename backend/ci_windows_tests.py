@@ -54,6 +54,15 @@ RESULT_RE = re.compile(r" (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)")
 POLL_EVERY = 5
 STALL_SECONDS = 45
 TIMEOUT_RE = re.compile(r"\+{3,} Timeout \+{3,}")
+# Diagnosis, not a fix. On 2026-11-14 a shard stopped between two tests for
+# 25 minutes with neither watchdog writing a line: pytest-timeout's thread
+# needs the GIL, and faulthandler is armed only inside a test's protocol. A
+# stall therefore also gets py-spy's native stacks of every python in the job,
+# read from outside without the GIL. The workflow installs a pinned py-spy and
+# names it here; without it this part is skipped.
+PY_SPY_ENV = "NAVIDE_CI_PY_SPY"
+STACK_DIR = os.path.join("test-results", "ci")
+STACK_SECONDS = 60
 CREATE_NO_WINDOW = 0x08000000
 PROBE_SECONDS = 60
 PROBE_REAP_SECONDS = 5
@@ -217,10 +226,9 @@ def _progress() -> str:
 def _stall_diagnostics(job) -> str:
     """What the host is doing while a test is stuck: the job's processes with
     their handle and thread counts, Defender's CPU and state, the disk queue."""
-    rows = []
-    for pid in _job_pids(job):
-        if pid == os.getpid():
-            continue
+    pids = [pid for pid in _job_pids(job) if pid != os.getpid()]
+    rows = _stack_dumps(pids)
+    for pid in pids:
         try:
             proc = psutil.Process(pid)
             rows.append(f"    {proc.name()}({pid}) handles={proc.num_handles()} threads={proc.num_threads()}")
@@ -234,6 +242,40 @@ def _stall_diagnostics(job) -> str:
                 pass
     rows.extend("    " + line for line in _host_probe().splitlines() if line.strip())
     return "\n".join(rows)
+
+
+def _stack_dumps(pids: list[int]) -> list[str]:
+    """`py-spy dump --native` of each python in the job, saved under STACK_DIR
+    (uploaded with the diagnostics); one row per process names the file."""
+    py_spy = os.environ.get(PY_SPY_ENV)
+    if not py_spy:
+        return []
+    rows = []
+    for pid in pids:
+        try:
+            if not psutil.Process(pid).name().lower().startswith("python"):
+                continue
+        except psutil.Error:
+            continue
+        path = os.path.join(STACK_DIR, f"py-spy-{pid}-{int(time.time())}.txt")
+        try:
+            os.makedirs(STACK_DIR, exist_ok=True)
+            with open(path, "wb") as out:
+                proc = subprocess.Popen(
+                    [py_spy, "dump", "--pid", str(pid), "--native"],
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                try:
+                    rc = proc.wait(timeout=STACK_SECONDS)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    rc = f"killed after {STACK_SECONDS}s"
+        except OSError as exc:
+            rows.append(f"    py-spy {pid}: {type(exc).__name__}: {exc}")
+            continue
+        rows.append(f"    py-spy {pid}: exit {rc}, stacks in {path}")
+    return rows
 
 
 def _host_probe() -> str:
