@@ -40,9 +40,19 @@ describe('a pane whose Navide tools never connected', () => {
     const fn = appSource.slice(at, appSource.indexOf('\n}\n', at))
     expect(fn).toContain("if (paneRefs[paneId]?.displayStatus !== 'idle')")
     expect(fn).toContain("'pane.terminal.mcp-reconnect-busy'")
-    expect(fn).toContain('await rebuildPaneViaResume(paneId, { suppressBusyToast: true })')
+    expect(fn).toContain('await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })')
     // Never types into the pane: /mcp is an interactive menu.
     expect(fn).not.toMatch(/sendInput|\/mcp/)
+  })
+
+  it('reopens a pane nobody typed in fresh and still reports a failed rebuild', () => {
+    // 2026-11-14: a never-prompted claude pane has no jsonl, so the resume
+    // preflight misses; with suppressBusyToast the not-resumable / probe-failed
+    // toasts were silenced too and Reconnect did nothing visible.
+    const at = appSource.indexOf('async function reconnectPaneMcp(')
+    const fn = appSource.slice(at, appSource.indexOf('\n}\n', at))
+    expect(fn).toContain('freshWhenNoTranscript: true')
+    expect(fn).not.toContain('suppressBusyToast')
   })
 })
 
