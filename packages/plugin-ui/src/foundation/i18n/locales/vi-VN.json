@@ -12963,6 +12963,7 @@
       "expires": "Phiên đăng nhập hết hạn",
       "sign-in": "Đăng nhập bằng Navide Cloud",
       "sign-in-publish": "Đăng nhập với tư cách nhà phát hành",
+      "via-cloud": "Đã đăng nhập bằng tài khoản Navide Cloud của bạn; không cần đăng nhập riêng trên trình duyệt.",
       "sign-out": "Đăng xuất",
       "waiting": "Đang chờ trình duyệt…"
     },

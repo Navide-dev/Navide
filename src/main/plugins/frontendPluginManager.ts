@@ -10652,6 +10652,42 @@ export class FrontendPluginManager {
     return response.payload
   }
 
+  /** 0.2.43 #2b: the Navide Cloud account the backend's server link is signed
+   *  in as (member id and name only), or null. Asked over this Host's
+   *  authenticated session; null too when that session is not ready. */
+  async requestCloudIdentity(): Promise<{ memberId: string; name: string } | null> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return null
+    const response = await client.send('host.cloud.identity', {}, 15_000)
+    const identity = response.ok ? (response.payload as { identity?: unknown } | undefined)?.identity : null
+    const record = identity && typeof identity === 'object' ? identity as Record<string, unknown> : null
+    if (!record || typeof record.memberId !== 'string' || !record.memberId) return null
+    return { memberId: record.memberId, name: typeof record.name === 'string' ? record.name : '' }
+  }
+
+  /** 0.2.43 #2b: a short-lived Registry assertion for the signed-in Cloud
+   *  account, bound to `challenge`. The backend keeps the Cloud token; only
+   *  the assertion crosses. Errors carry the server's code (AUTH_REQUIRED,
+   *  ASSERTION_DISABLED, ...) so the caller can fall back to the browser. */
+  async requestCloudRegistryAssertion(request: {
+    scope: 'account' | 'publish'
+    namespace: string | null
+    challenge: string
+  }): Promise<{ ok: true; assertion: string; memberId: string } | { ok: false; code: string; message: string }> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return { ok: false, code: 'HOST_NOT_READY', message: 'Navide Host session is not ready' }
+    const response = await client.send('host.cloud.registry_assertion', { ...request }, 20_000)
+    const payload = response.ok ? response.payload as { assertion?: unknown; memberId?: unknown } | undefined : undefined
+    if (typeof payload?.assertion === 'string' && typeof payload.memberId === 'string') {
+      return { ok: true, assertion: payload.assertion, memberId: payload.memberId }
+    }
+    return {
+      ok: false,
+      code: response.error?.code ?? 'ASSERTION_UNAVAILABLE',
+      message: response.error?.message ?? 'the backend issued no assertion',
+    }
+  }
+
   /** Install the function that carries out an agent's plugins_disable /
    *  plugins_enable (plan B, B2-c): the Extensions Disabled switch for an
    *  installed Marketplace package, then a notice naming the caller. */

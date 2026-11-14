@@ -12963,6 +12963,7 @@
       "expires": "Sign-in expires",
       "sign-in": "Sign In with Navide Cloud",
       "sign-in-publish": "Sign In as a Publisher",
+      "via-cloud": "Signed in through your Navide Cloud account; no separate browser sign-in needed.",
       "sign-out": "Sign Out",
       "waiting": "Waiting for the browser…"
     },

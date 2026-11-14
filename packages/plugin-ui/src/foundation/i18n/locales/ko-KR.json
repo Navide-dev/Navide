@@ -12963,6 +12963,7 @@
       "expires": "로그인 만료",
       "sign-in": "Navide Cloud로 로그인",
       "sign-in-publish": "게시자로 로그인",
+      "via-cloud": "Navide Cloud 계정으로 로그인되었습니다. 브라우저에서 따로 로그인할 필요가 없습니다.",
       "sign-out": "로그아웃",
       "waiting": "브라우저를 기다리는 중…"
     },

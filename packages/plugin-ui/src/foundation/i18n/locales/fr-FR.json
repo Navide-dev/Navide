@@ -12963,6 +12963,7 @@
       "expires": "La connexion expire",
       "sign-in": "Se connecter avec Navide Cloud",
       "sign-in-publish": "Se connecter en tant qu’éditeur",
+      "via-cloud": "Connecté via votre compte Navide Cloud ; aucune connexion séparée dans le navigateur n'est nécessaire.",
       "sign-out": "Se déconnecter",
       "waiting": "En attente du navigateur…"
     },

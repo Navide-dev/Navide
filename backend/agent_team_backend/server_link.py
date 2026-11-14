@@ -5221,6 +5221,32 @@ async def links_request(verb: str, payload: dict[str, Any]) -> dict[str, Any] | 
     return await _link.links_request(verb, payload)
 
 
+def cloud_identity() -> dict[str, str] | None:
+    """The signed-in Navide Cloud account this link authenticated as, or None
+    when no server is configured or the link is not authenticated right now.
+    The member id and display name only: never the server token."""
+    link = _link
+    if link is None or link._ws is None or not link._authenticated or not link.member_id:
+        return None
+    return {"memberId": link.member_id, "name": link.display_name}
+
+
+async def registry_assertion(
+    *, scope: str, namespace: str | None, challenge: str
+) -> dict[str, Any] | None:
+    """Ask the server for a short-lived, single-use assertion naming this
+    account to the Marketplace Registry (``auth.assertion.issue``), bound to
+    the caller's PKCE challenge. The reply frame as it came, or None with no
+    server configured. The server token never leaves this module; only the
+    assertion, which is useless without the caller's verifier, goes back."""
+    if _link is None:
+        return None
+    return await _link._carry(
+        "auth.assertion.issue",
+        {"aud": "registry", "scope": scope, "namespace": namespace, "challenge": challenge},
+    )
+
+
 def roster_changed() -> None:
     """Tell the link a pane was added, renamed, removed or changed state.
 

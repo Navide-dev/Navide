@@ -12963,6 +12963,7 @@
       "expires": "O login expira em",
       "sign-in": "Entrar com o Navide Cloud",
       "sign-in-publish": "Entrar como publicador",
+      "via-cloud": "Conectado pela sua conta Navide Cloud; não é preciso entrar separadamente no navegador.",
       "sign-out": "Sair",
       "waiting": "Aguardando o navegador…"
     },

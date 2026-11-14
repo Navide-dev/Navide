@@ -12963,6 +12963,7 @@
       "expires": "El inicio de sesión caduca",
       "sign-in": "Iniciar sesión con Navide Cloud",
       "sign-in-publish": "Iniciar sesión como editor",
+      "via-cloud": "Sesión iniciada con tu cuenta de Navide Cloud; no hace falta iniciar sesión aparte en el navegador.",
       "sign-out": "Cerrar sesión",
       "waiting": "Esperando al navegador…"
     },

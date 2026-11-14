@@ -12963,6 +12963,7 @@
       "expires": "Anmeldung läuft ab",
       "sign-in": "Mit Navide Cloud anmelden",
       "sign-in-publish": "Als Herausgeber anmelden",
+      "via-cloud": "Über dein Navide-Cloud-Konto angemeldet; eine separate Anmeldung im Browser ist nicht nötig.",
       "sign-out": "Abmelden",
       "waiting": "Warten auf den Browser …"
     },

@@ -600,6 +600,21 @@ def _namespace_members(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE cli_auth_code ADD COLUMN navide_member_id VARCHAR")
 
 
+def _used_cloud_assertions(connection: sqlite3.Connection) -> None:
+    """The single-use table for Navide-Server sign-in assertions."""
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS used_cloud_assertion ("
+        "jti VARCHAR NOT NULL PRIMARY KEY, "
+        "navide_member_id VARCHAR NOT NULL, "
+        "expires_at DATETIME NOT NULL, "
+        "used_at DATETIME NOT NULL)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_used_cloud_assertion_expires_at "
+        "ON used_cloud_assertion (expires_at)"
+    )
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -615,6 +630,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (12, "testplace", _testplace),
     (13, "grandfather-block-reason", _grandfather_block_reason),
     (14, "namespace-members", _namespace_members),
+    (15, "used-cloud-assertions", _used_cloud_assertions),
 )
 
 

@@ -381,8 +381,15 @@ function versionStatus(row: DeveloperVersionRow): string {
   return t(`marketplace-developer.versions.status.${row.status ?? 'pending'}`)
 }
 
+// 0.2.43 #2b: a Navide Cloud sign-in doubles as the developer account sign-in
+// (no browser). Only on opening the page, so a Sign Out here stays signed out.
+async function syncCloudAccount(): Promise<void> {
+  if (typeof api().syncCloudAccount !== 'function') return
+  await run('refresh', () => api().syncCloudAccount())
+}
+
 onMounted(() => {
-  void refresh()
+  void syncCloudAccount().then(refresh)
   if (developerTestplaceFocus.value) void nextTick(() => testplaceSection.value?.scrollIntoView?.({ block: 'start' }))
 })
 </script>
@@ -407,6 +414,7 @@ onMounted(() => {
       <h2 class="dev-title">{{ $t('marketplace-developer.account.title') }}</h2>
       <p class="dev-muted">{{ $t('marketplace-developer.account.desc') }}</p>
       <template v-if="state && (state.signedIn.account || state.signedIn.publisher)">
+        <p v-if="state.cloudMemberId" class="dev-muted" data-testid="developer-via-cloud">{{ $t('marketplace-developer.account.via-cloud') }}</p>
         <dl class="dev-facts">
           <dt>{{ $t('marketplace-developer.account.namespace') }}</dt>
           <dd>{{ state.namespace ?? $t('marketplace-developer.account.no-namespace') }}</dd>

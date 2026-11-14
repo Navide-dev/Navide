@@ -41,6 +41,9 @@ interface StoredDeveloper {
   registeredFingerprint?: string | null
   /** L1d: the fingerprint of a different key the Registry already holds. */
   conflictingFingerprint?: string | null
+  /** 0.2.43 #2b: the Navide Cloud member the tokens were exchanged for through
+   *  the Cloud sign-in; null after a browser sign-in (the member is not known). */
+  cloudMemberId?: string | null
 }
 
 interface VaultDoc {
@@ -98,6 +101,7 @@ export class DeveloperVault {
       keyFingerprint: fingerprint,
       keyRegistered: fingerprint !== null && entry.registeredFingerprint === fingerprint,
       keyConflictFingerprint: entry.conflictingFingerprint ?? null,
+      cloudMemberId: entry.account || entry.publisher ? entry.cloudMemberId ?? null : null,
     }
   }
 
@@ -121,6 +125,17 @@ export class DeveloperVault {
     this.update(registry, (entry) => {
       entry[scope] = { tokenEnc: this.crypto.encrypt(token), expiresAt }
       if (scope === 'publisher') entry.namespace = namespace
+    })
+  }
+
+  /** 0.2.43 #2b: which Cloud member the kept tokens belong to (null: unknown). */
+  cloudMember(registry: string): string | null {
+    return this.read().registries[normalizeRegistry(registry)]?.cloudMemberId ?? null
+  }
+
+  setCloudMember(registry: string, memberId: string | null): void {
+    this.update(registry, (entry) => {
+      entry.cloudMemberId = memberId
     })
   }
 
@@ -162,6 +177,7 @@ export class DeveloperVault {
       delete entry.account
       delete entry.publisher
       entry.namespace = null
+      entry.cloudMemberId = null
     })
   }
 

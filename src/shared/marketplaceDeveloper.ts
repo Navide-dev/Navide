@@ -13,6 +13,9 @@ export interface DeveloperPublicState {
    *  this Navide's key was not registered; publishing from here needs the
    *  user's explicit replacement, while the other key keeps working. */
   keyConflictFingerprint: string | null
+  /** 0.2.43 #2b: the Navide Cloud member these tokens came from through the
+   *  Cloud sign-in (no browser); null after a browser sign-in or when signed out. */
+  cloudMemberId: string | null
 }
 
 /** A Registry call's outcome as the renderer sees it. */
@@ -62,6 +65,8 @@ export type DeveloperApplicationStatus = 'none' | 'pending' | 'approved' | 'reje
 export interface DeveloperApi {
   state(): Promise<DeveloperPublicState>
   signIn(scope: 'account' | 'publish'): Promise<DeveloperPublicState>
+  /** 0.2.43 #2b: account-scope sign-in through the Navide Cloud account, no browser; unchanged state when unavailable. */
+  syncCloudAccount(): Promise<DeveloperPublicState>
   signOut(): Promise<DeveloperPublicState>
   registerKey(options?: { replace?: boolean }): Promise<DeveloperPublicState>
   application(): Promise<DeveloperCallResult>

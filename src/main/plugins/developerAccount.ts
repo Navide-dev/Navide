@@ -9,6 +9,16 @@
 // (enough to apply and to read one's own versions); `scope=publish` needs an
 // approved developer and returns a publisher token for its namespace, after
 // which Navide registers its public key so the Registry can check signatures.
+//
+// 0.2.43 #2b: when this Navide is signed in to Navide Cloud, the same account
+// is reused instead of a second browser sign-in. The backend asks the Cloud
+// server for a 60-second, single-use assertion bound to a PKCE challenge made
+// here, and only that assertion crosses to this process (the Cloud token stays
+// in the backend); the Registry exchanges assertion + verifier for the same
+// tokens (`/api/cli/cloud-exchange`). Publishing rights still take one step:
+// a native confirm dialog from this process, which no renderer or agent can
+// click. Anything missing (no Cloud sign-in, a self-hosted server, a Registry
+// or server without the endpoint) falls back to the browser flow unchanged.
 import { createHash, createPrivateKey, randomBytes, sign as signDigest, timingSafeEqual } from 'crypto'
 import { createServer } from 'http'
 import type { DeveloperPublicState, DeveloperTokenScope, DeveloperVault } from './developerVault'
@@ -33,13 +43,38 @@ export interface DeveloperRegistryResponse<T = unknown> {
   body: T
 }
 
+export type CloudAssertionResult =
+  | { ok: true; assertion: string; memberId: string }
+  | { ok: false; code: string; message: string }
+
+/** The backend's Navide Cloud link as the developer sign-in sees it: who is
+ *  signed in, and an assertion for the Registry. Never the Cloud token. */
+export interface DeveloperCloudBridge {
+  identity(): Promise<{ memberId: string; name: string } | null>
+  assertion(request: { scope: DeveloperSignInScope; namespace: string | null; challenge: string }): Promise<CloudAssertionResult>
+}
+
+/** What the publish-rights confirmation shows; resolves the namespace the user granted, or null. */
+export interface PublishConfirmRequest {
+  accountName: string
+  memberId: string
+  namespaces: string[]
+}
+
 export interface DeveloperAccountDeps {
   vault: DeveloperVault
   registryUrl: () => string
   openExternal: (url: string) => Promise<void> | void
   fetch?: typeof fetch
   loginTimeoutMs?: number
+  /** Absent: browser sign-in only. */
+  cloud?: DeveloperCloudBridge
+  /** A main-process native dialog; absent: publishing rights always go through the browser. */
+  confirmPublish?: (request: PublishConfirmRequest) => Promise<string | null>
 }
+
+/** The Cloud path cannot be used here; the caller falls back to the browser. */
+class CloudUnavailable extends Error {}
 
 const NOT_SIGNED_IN = { detail: { code: 'NOT_SIGNED_IN', message: 'sign in as a developer under Settings > Navide Marketplace > Developer' } }
 // Registry tokens and PEM keys: never echoed in an error a caller can show or log.
@@ -150,13 +185,121 @@ export class DeveloperAccount {
     return this.state()
   }
 
-  /** PKCE sign-in in the user's browser. One at a time. */
+  /** Sign in: through the Navide Cloud account when it can be used, else
+   *  PKCE in the user's browser. One at a time. */
   signIn(scope: DeveloperSignInScope): Promise<DeveloperPublicState> {
     if (this.signingIn) return this.signingIn
-    this.signingIn = this.runSignIn(scope).finally(() => {
+    this.signingIn = this.runCloudSignIn(scope)
+      .catch((error: unknown) => {
+        if (error instanceof CloudUnavailable) return this.runSignIn(scope)
+        throw error
+      })
+      .finally(() => {
+        this.signingIn = null
+      })
+    return this.signingIn
+  }
+
+  /** The account-scope sign-in through Navide Cloud, without a browser or a
+   *  click (an account token proves only who it is). Never opens a browser:
+   *  when the Cloud path is unavailable it returns the state unchanged. Also
+   *  forgets tokens left by a different Cloud member. */
+  syncCloudAccount(): Promise<DeveloperPublicState> {
+    if (this.signingIn) return this.signingIn
+    this.signingIn = this.runCloudAccountSync().finally(() => {
       this.signingIn = null
     })
     return this.signingIn
+  }
+
+  private async runCloudAccountSync(): Promise<DeveloperPublicState> {
+    try {
+      const identity = await this.cloudIdentity()
+      const state = this.state()
+      if (state.signedIn.account || state.signedIn.publisher) return state
+      await this.cloudExchange('account', null, identity.memberId)
+    } catch (error) {
+      if (!(error instanceof CloudUnavailable)) throw error
+    }
+    return this.state()
+  }
+
+  private async cloudIdentity(): Promise<{ memberId: string; name: string }> {
+    const identity = this.deps.cloud ? await this.deps.cloud.identity().catch(() => null) : null
+    if (!identity) throw new CloudUnavailable('not signed in to Navide Cloud')
+    const base = this.base()
+    const kept = this.deps.vault.cloudMember(base)
+    // Tokens exchanged for another Cloud account are not this account's.
+    if (kept && kept !== identity.memberId) this.deps.vault.signOut(base)
+    return identity
+  }
+
+  private async runCloudSignIn(scope: DeveloperSignInScope): Promise<DeveloperPublicState> {
+    const identity = await this.cloudIdentity()
+    if (scope === 'account') {
+      await this.cloudExchange('account', null, identity.memberId)
+      return this.state()
+    }
+    if (!this.deps.confirmPublish) throw new CloudUnavailable('no publish confirmation available')
+    const state = this.state()
+    if (!state.signedIn.account && !state.signedIn.publisher) await this.cloudExchange('account', null, identity.memberId)
+    const list = await this.registryFetch<{ namespaces?: unknown }>('/api/developer/me/namespaces', {}, 'account')
+    // A Registry from before the Cloud sign-in: the browser page lists the namespaces.
+    if (list.status === 404) throw new CloudUnavailable('the Registry cannot list namespaces')
+    if (list.status !== 200) {
+      const { code, message } = registryError(list.body)
+      throw new Error(`the namespaces could not be read (${list.status}${code ? ` ${code}` : ''}): ${message}`)
+    }
+    const raw = list.body?.namespaces
+    const namespaces = (Array.isArray(raw) ? raw : []).filter((item): item is string => typeof item === 'string')
+    if (namespaces.length === 0) {
+      throw new Error('this Navide Cloud account has no namespace it may publish to yet: apply for developer qualification first, then create or join a namespace')
+    }
+    const namespace = await this.deps.confirmPublish({ accountName: identity.name, memberId: identity.memberId, namespaces })
+    if (!namespace) throw new Error('publishing rights were not granted')
+    if (!namespaces.includes(namespace)) throw new Error('that namespace was not offered')
+    await this.cloudExchange('publish', namespace, identity.memberId)
+    return this.state()
+  }
+
+  /** Assertion from the backend, then `/api/cli/cloud-exchange` with the verifier. */
+  private async cloudExchange(scope: DeveloperSignInScope, namespace: string | null, memberId: string): Promise<void> {
+    const cloud = this.deps.cloud
+    if (!cloud) throw new CloudUnavailable('no Navide Cloud link')
+    const base = this.base()
+    const verifier = base64Url(randomBytes(48))
+    const challenge = base64Url(createHash('sha256').update(verifier).digest())
+    const issued = await cloud.assertion({ scope, namespace, challenge }).catch(
+      (error: unknown): CloudAssertionResult => ({ ok: false, code: 'HOST_ERROR', message: String(error) }),
+    )
+    if (!issued.ok) throw new CloudUnavailable(`no Cloud assertion (${issued.code})`)
+    if (issued.memberId !== memberId) throw new CloudUnavailable('the Cloud account changed during sign-in')
+    const response = await this.fetchImpl(`${base}/api/cli/cloud-exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assertion: issued.assertion, code_verifier: verifier, scope, namespace, label: DEVELOPER_LOGIN_LABEL }),
+    })
+    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
+    const { code, message } = registryError(body)
+    // No endpoint (an older Registry) or an assertion it cannot trust (a
+    // self-hosted Cloud server, a rotated key): the browser still works.
+    if (response.status === 404 && scope === 'account') throw new CloudUnavailable('the Registry has no Cloud sign-in')
+    if (response.status === 401 && code?.startsWith('ASSERTION_')) throw new CloudUnavailable(`the Registry refused the assertion (${code})`)
+    if (response.status !== 200 || typeof body.token !== 'string') {
+      throw new Error(`sign-in failed (${response.status}${code ? ` ${code}` : ''}): ${message}`)
+    }
+    await this.keepSignIn(base, body)
+    this.deps.vault.setCloudMember(base, memberId)
+  }
+
+  /** Store a `/api/cli/token`-shaped answer; a publisher token also registers the key. */
+  private async keepSignIn(base: string, body: Record<string, unknown>): Promise<void> {
+    if (typeof body.token !== 'string') throw new Error('the Navide Marketplace returned no token')
+    const tokenScope: DeveloperTokenScope = body.scope === 'publisher' ? 'publisher' : 'account'
+    const namespace = typeof body.namespace === 'string' ? body.namespace : null
+    const expiresAt = typeof body.expires_at === 'string' ? body.expires_at : null
+    this.deps.vault.saveToken(base, tokenScope, body.token, expiresAt, namespace)
+    if (tokenScope === 'publisher') await this.registerKey()
   }
 
   private async runSignIn(scope: DeveloperSignInScope): Promise<DeveloperPublicState> {
@@ -190,11 +333,9 @@ export class DeveloperAccount {
       const { code, message } = registryError(body)
       throw new Error(`sign-in failed (${response.status}${code ? ` ${code}` : ''}): ${message}`)
     }
-    const tokenScope: DeveloperTokenScope = body.scope === 'publisher' ? 'publisher' : 'account'
-    const namespace = typeof body.namespace === 'string' ? body.namespace : null
-    const expiresAt = typeof body.expires_at === 'string' ? body.expires_at : null
-    this.deps.vault.saveToken(base, tokenScope, body.token, expiresAt, namespace)
-    if (tokenScope === 'publisher') await this.registerKey()
+    // A browser sign-in names no Cloud member this Navide can check.
+    this.deps.vault.setCloudMember(base, null)
+    await this.keepSignIn(base, body)
     return this.state()
   }
 
