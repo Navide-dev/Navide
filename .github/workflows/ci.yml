@@ -67,12 +67,21 @@ jobs:
         run: bun audit --audit-level=high
       - name: Set up uv
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-      - name: pip-audit (backend lock)
+      # pip-audit has no severity threshold (bun audit's --audit-level=high
+      # above has one), so every advisory used to block — a moderate ReDoS
+      # included. The gate script rates each advisory from OSV and blocks on
+      # high/critical only, warning below; it fails closed on an unknown rating
+      # or a failed lookup. Design notes are in the script's docstring.
+      - name: pip-audit (backend lock, high and above)
         id: pip-audit
         continue-on-error: true
         run: |
           uv --project backend export --format requirements-txt --no-hashes --no-emit-project > /tmp/backend-requirements.txt
-          uv --project backend run --with pip-audit pip-audit -r /tmp/backend-requirements.txt
+          set +e
+          uv --project backend run --with pip-audit pip-audit -r /tmp/backend-requirements.txt --format json --output /tmp/pip-audit.json
+          rc=$?
+          set -e
+          python3 scripts/pip-audit-severity-gate.py /tmp/pip-audit.json "$rc"
       - name: pip-audit (backend lock, Windows on Arm)
         # The scan above resolves the lock on THIS runner, so every pin behind
         # a `sys_platform == 'win32' and platform_machine == 'ARM64'` marker
