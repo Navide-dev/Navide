@@ -2562,6 +2562,10 @@ def _account_pin_for_history(pin: str) -> str:
     return pin or DEFAULT_SLOT_ID
 
 
+#: In-flight profile broadcasts, held so a shielded task is not garbage-collected.
+_PROFILE_BROADCASTS: set[asyncio.Task[None]] = set()
+
+
 async def _broadcast_profiles_changed(
     reason: str,
     harvested_profile_ids: list[str] | None = None,
@@ -2569,6 +2573,26 @@ async def _broadcast_profiles_changed(
     forced: bool | None = None,
     hot_switched_panes: list[dict[str, Any]] | None = None,
     unattended: bool = False,
+) -> None:
+    """Every window's account cache depends on this event, so it must not die
+    with the requester: a client that hangs up right after its response gets
+    its handler task cancelled, and the broadcast with it (0.2.42 VM r1). The
+    work runs in its own task; the caller still sees the cancellation."""
+    task = asyncio.create_task(_send_profiles_changed(
+        reason, harvested_profile_ids, agent_key, forced, hot_switched_panes, unattended,
+    ))
+    _PROFILE_BROADCASTS.add(task)
+    task.add_done_callback(_PROFILE_BROADCASTS.discard)
+    await asyncio.shield(task)
+
+
+async def _send_profiles_changed(
+    reason: str,
+    harvested_profile_ids: list[str] | None,
+    agent_key: str | None,
+    forced: bool | None,
+    hot_switched_panes: list[dict[str, Any]] | None,
+    unattended: bool,
 ) -> None:
     from . import app
 
