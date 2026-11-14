@@ -20,6 +20,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Navide Registry (0.2.43): a plugin upload is written to a temporary file as it arrives and checked from there, instead of being held whole in memory; a 32 MiB package peaked at 66.3 MiB of heap before and 4.3 MiB now. Validation, signature checks and scan results are unchanged. Takes effect with the next Registry deployment.
 - CI (0.2.43): the Dependency audit job blocks on high and critical Python advisories only, rated from OSV; low and moderate ones are printed as warnings. An advisory with no rating, a failed lookup or a failed pip-audit still blocks.
 - Dependencies (0.2.43): setup-uv 10.3.3, pywinpty 3.1.2, pytest 9.2.0, tzdata 2026.6, websockets 17.4, @playwright/test 1.65.0, koffi 3.3.7, mermaid 12.3.0 and ws 8.22.1 (dependabot #841, #847, #848, #849, #851, #857, #859, #860, #861).
+- Plugins (0.2.43): the shared plugin UI strings changed for the Tools-not-connected notice, the Guard `dynamic-path-read` rule and the Marketplace Cloud sign-in, so the official plugins move to Navide Browser 1.1.4, Git 1.0.7, Mini-IDE 1.0.6, Plans 1.1.6.
 
 ### Fixed
 

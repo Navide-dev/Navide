@@ -1226,9 +1226,13 @@ def test_windows_backslash_ordinary_paths_keep_their_verdict(command, windows):
     assert v.level == "normal", (command, v)
 
 
-def test_posix_backslash_is_not_a_separator():
+def test_posix_backslash_is_not_a_separator(monkeypatch):
     # Outside Windows and PowerShell a backslash is a filename character.
     # `\x\..` is one directory name there, so this path is not the AWS credentials file.
+    # Pin POSIX semantics: on a Windows host the backslash is a separator.
+    import importlib
+
+    monkeypatch.setattr(importlib.import_module("agent_team_backend.guard.classify"), "_WINDOWS", False)
     v = sh(f"P='\\x\\..'; cat \"$HOME/$P/.{AWS[3:]}\"")
     assert "credential-access" not in v.rule_ids, v
     assert sh("F='a\\..\\b.txt'; cat \"$F\"").level == "normal"

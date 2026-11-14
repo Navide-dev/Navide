@@ -171,7 +171,7 @@ DEEP_WS = "/Users/dev/" + "很深的專案目錄/" * 6 + "proj"
 def test_a_deep_workspace_is_scoped_by_its_cwd_marker(_grok_home: Path) -> None:
     """Building the encoded name for DEEP_WS raised ENAMETOOLONG from is_dir()."""
     path = _write(_grok_home, [_turn(1)], group="proj-a1b2c3d4")
-    (path.parent.parent / ".cwd").write_text(DEEP_WS + "\n")
+    (path.parent.parent / ".cwd").write_text(DEEP_WS + "\n", encoding="utf-8")
     _write(_grok_home, [_turn(1)], session="short-sid")  # an ordinary group beside it
     reader = GrokLogReader()
 
@@ -191,7 +191,7 @@ def test_resume_preflight_names_a_deep_workspace_transcript(_grok_home: Path) ->
 
     assert _session_path(DEEP_WS, SID) is None  # no group yet: assume resumable
     path = _write(_grok_home, [_turn(1)], group="proj-a1b2c3d4")
-    (path.parent.parent / ".cwd").write_text(DEEP_WS)
+    (path.parent.parent / ".cwd").write_text(DEEP_WS, encoding="utf-8")
     assert _session_path(DEEP_WS, SID) == path
     assert _session_path(DEEP_WS, "missing-sid").is_file() is False
     # Short names behave as before.
