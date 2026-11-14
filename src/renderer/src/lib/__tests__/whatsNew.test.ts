@@ -317,7 +317,7 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   })
 })
 
-describe('0.2.43 — hotfix: opentelemetry-api security update', () => {
+describe('0.2.43 — MCP connection fixes, Cloud developer sign-in, Guard edges, opentelemetry-api', () => {
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.43')
 
@@ -334,6 +334,34 @@ describe('0.2.43 — hotfix: opentelemetry-api security update', () => {
     expect(en).toContain('1.45.2')
   })
 
+  it('is not marked major', () => {
+    expect(entry!.major).toBeFalsy()
+    expect(entry!.spotlight).toBeUndefined()
+  })
+
+  it('covers the MCP connection fixes and the parked-message notice', () => {
+    const en = entry!.highlights.map((text) => text['en-US']).join('\n')
+    const zh = entry!.highlights.map((text) => text['zh-TW']).join('\n')
+    expect(en).toContain('120 seconds')
+    expect(en).toContain('at most 4 at a time')
+    expect(en).toContain('Reconnect')
+    expect(en).toContain('10 minutes')
+    expect(zh).toContain('重連')
+  })
+
+  it('says the Cloud developer sign-in waits for the server update and falls back to the browser', () => {
+    const en = entry!.highlights.map((text) => text['en-US']).join('\n')
+    const zh = entry!.highlights.map((text) => text['zh-TW']).join('\n')
+    expect(en).toContain('once the server update goes live')
+    expect(en).toContain('the browser sign-in is used as before')
+    expect(zh).toContain('伺服器端更新上線')
+    expect(zh).toContain('瀏覽器登入')
+  })
+
+  it('names the new Guard rule', () => {
+    expect(entry!.highlights.map((text) => text['en-US']).join('\n')).toContain('dynamic-path-read')
+  })
+
   it('shows once to someone updating from 0.2.42', () => {
     expect(pickWhatsNew('0.2.43', '0.2.42')?.version).toBe('0.2.43')
     expect(pickWhatsNew('0.2.43', '0.2.43')).toBeNull()
@@ -344,7 +372,7 @@ describe('0.2.42 — model switching from Telegram, quota bars, closed windows',
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.42')
 
-  it('sits under the 0.2.43 hotfix, authored in every UI language', () => {
+  it('sits under 0.2.43, authored in every UI language', () => {
     expect(WHATS_NEW[1].version).toBe('0.2.42')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
