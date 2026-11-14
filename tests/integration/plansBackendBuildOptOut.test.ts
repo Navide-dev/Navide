@@ -93,7 +93,7 @@ describe('packaged Plans backend build opt-out', () => {
   })
 
   it('refuses the opt-out on the production build path', () => {
-    // `pnpm dev` passes --if-needed; build:plans:backend — reached by
+    // `bun run dev` passes --if-needed; build:plans:backend — reached by
     // build:plans ← build:official-plugins ← build ← dist, and by the CI gates —
     // does not. Honouring the variable there ships a signed release with an
     // empty dist-plugins/navide-plans/backend, i.e. Plans legacy recovery for

@@ -204,33 +204,39 @@ it does not replace them with a parallel lifecycle implementation.
 
 ## Local commands and diagnostics
 
-Use Node 22, the pinned pnpm version, Python 3.12 and the locked environments:
+Use Bun (the version pinned in `.bun-version`), Python 3.12 and the locked environments:
 
 ```sh
-pnpm install --frozen-lockfile
+bun install --frozen-lockfile
 uv --project backend sync --locked
-pnpm typecheck
+bun run typecheck
 uv --project backend run --locked ruff check backend
-pnpm test:infrastructure
-pnpm test:frontend
-pnpm build
-pnpm test:artifacts:ci
+bun run test:infrastructure
+bun run test:frontend
+bun run build
+bun run test:artifacts:ci
 uv --project backend run --locked pytest backend/tests --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --durations=30 --collection-report=test-results/ci/backend-collection.json
 ```
 
-`pnpm test:run` remains the complete Vitest entrypoint. For a focused contract
-loop, use `pnpm test:cli` (frontend plus all marked backend historical/shared/
-vendor cases) or `pnpm test:cli:frontend`. The CLI entrypoint enables the
+`bun run test:run` remains the complete Vitest entrypoint. Never run bare
+`bun test`: it starts Bun's own test runner instead of Vitest and ignores
+`vitest.config.ts`. For a focused contract
+loop, use `bun run test:cli` (frontend plus all marked backend historical/shared/
+vendor cases) or `bun run test:cli:frontend`. The CLI entrypoint enables the
 execution reporter: every vendor must finish its contract assertions. For a
-single local case, use `pnpm test:run --project cli <file>` or
+single local case, use `bun run test:run --project cli <file>` or
 `uv --project backend run --locked pytest <backend-test-nodeid>`; focused runs
 intentionally do not claim complete roster execution.
 
-`pnpm test:artifacts:ci` consumes a preceding `pnpm build`; use
-`pnpm test:artifacts` for standalone artifact preparation. On macOS the CI
-entrypoint also needs Go for the packaged fixture. `pnpm test:packaged-plans`
-remains the standalone packaged Plans check. These commands exercise backend
-and package composition without driving Electron windows.
+`bun run test:artifacts:ci` consumes a preceding `bun run build`; use
+`bun run test:artifacts` for standalone artifact preparation. On macOS the CI
+entrypoint also needs Go for the packaged fixture. `bun run test:packaged-plans`
+remains the standalone packaged Plans check. The artifact project includes
+`pluginExternalWorkspace.test.ts`, which plays an external plugin author who
+uses pnpm and needs a real `pnpm` (10.x) on `PATH`; without one it fails with
+`Executable not found in $PATH: "pnpm"`. CI installs pnpm for that test only.
+These commands exercise backend and package composition without driving
+Electron windows.
 
 Other required checks:
 

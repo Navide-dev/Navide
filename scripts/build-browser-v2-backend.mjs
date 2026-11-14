@@ -23,7 +23,7 @@ const executable = join(backendDirectory, executableName)
 const cacheFile = resolve(repositoryRoot, 'node_modules/.cache/navide/browser-v2-backend.json')
 const artifactFileList = resolve(repositoryRoot, 'dist-plugins/navide-browser/artifact-files.json')
 
-// `--if-needed` is how `pnpm dev` invokes this script, and only `pnpm dev`:
+// `--if-needed` is how `bun run dev` invokes this script, and only `bun run dev`:
 // every production path (build:browser:backend and the official plugin build)
 // and the CI gates invoke it bare. So
 // the flag is the repository's existing signal for "this is a development
@@ -43,7 +43,7 @@ if (process.env['NAVIDE_SKIP_BROWSER_BACKEND_BUILD'] === '1') {
       'NAVIDE_SKIP_BROWSER_BACKEND_BUILD=1 is set, but this is a production or CI build ' +
         '(invoked without --if-needed). Refusing to skip: the release would ship no ' +
         'packaged Navide Browser backend and its agent tools would be unavailable. ' +
-        'Unset the variable for this build; it applies to `pnpm dev` only.',
+        'Unset the variable for this build; it applies to `bun run dev` only.',
     )
     process.exit(1)
   }
