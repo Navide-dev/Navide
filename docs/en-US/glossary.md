@@ -10,7 +10,7 @@ The rule behind every term: **name a thing by who owns its files.**
 
 | Concept | zh-TW | en | ja | Covers |
 |---|---|---|---|---|
-| A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
+| A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.browser`, `navide.git`, `navide.mini-ide` and `navide.plans` |
 | Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `marketplace.navide.dev` |
 | A Host-drawn button the user adds to run actions | 動作按鈕 | Action button | アクションボタン | The bar at the right end of the stage tabs, Settings → Layout |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
@@ -27,8 +27,7 @@ The rule behind every term: **name a thing by who owns its files.**
   or name the vendor. `packages/plugin-ui/src/foundation/i18n/__tests__/glossary.test.ts`
   enforces this for every locale string.
 - **One exception, the CLI extensions page.** The Settings page that lists
-  CLI extensions is shown as **Extensions / 擴充 / 拡張機能** (the user's call,
-  2026-10-11): its nav label, page title and search title, and prose that
+  CLI extensions is shown as **Extensions / 擴充 / 拡張機能**: its nav label, page title and search title, and prose that
   points at it ("Settings → Extensions", 「設定 → 擴充」, 「設定 → 拡張機能」,
   or help prose quoting the label as `<em>Extensions</em>`).
   The guard test allows the bare name there and nowhere else. Navide's own
@@ -60,8 +59,7 @@ no-break space before `: ; ? !`.
 
 ## Page names under Agent Assets
 
-The Settings sidebar is the source of truth for these page names (the
-user's call, 2026-10-26: 「命名統一，選單的名稱是對的」). A page's title, its
+The Settings sidebar is the source of truth for these page names. A page's title, its
 in-page heading, its search title, its row in Navide Cloud › Sync and any
 prose or doc that names the page use the sidebar label of that locale,
 word for word: **MCP, Skills, Prompts, Memory, Credentials & Keys,
@@ -73,8 +71,7 @@ skills, instruction files, CLI extensions.
 
 ## Capitalization (en-US)
 
-Commands and menus use Title Case; everything else uses sentence case (the
-user's call, 2026-10-21). Other locales never copy English Title Case.
+Commands and menus use Title Case; everything else uses sentence case. Other locales never copy English Title Case.
 
 **Title Case:** command names (keybindings list, command picker), menu-bar,
 context-menu and overflow-menu items that run an action (checkable items
@@ -110,8 +107,7 @@ identifiers (Navide, GitHub, macOS, CLI, MCP, `git push`); "API key" becomes
 
 ## Terms in Chinese and Japanese UI text
 
-Follow the wording the existing zh-TW and ja-JP files already use most
-(the user's call, 2026-10-21: "按照現有的習慣為主"). Translators do not coin
+Follow the wording the existing zh-TW and ja-JP files already use most. Translators do not coin
 new renderings; a term written two ways is unified to its majority form.
 New locales have no existing usage and follow the per-locale research, but a
 term kept in English here stays English in zh-CN too.
@@ -125,7 +121,7 @@ hook, bot, pipeline, worktree, repo); acronyms and feature names keep
 their form. Put a half-width space between the English word and Chinese
 text.
 
-**Layout terms in zh-TW and zh-CN (the user's call, 2026-11-05):** pane 分格,
+**Layout terms in zh-TW and zh-CN:** pane 分格,
 window 視窗 (zh-CN 窗口), panel 面板, dialog 對話框 (zh-CN 对话框),
 workspace 工作區 (zh-CN 工作区), group 群組 (zh-CN 群组), tab 分頁
 (zh-CN keeps its existing 标签页). 視窗／窗口 means a real Navide or
@@ -163,12 +159,12 @@ ordinary words: Resource Manager is de-DE "Ressourcenverwaltung", ja-JP
 "リソースマネージャー"; Memory (the CLI instruction files) is de-DE
 "Gedächtnis", ja-JP "メモリ".
 
-**de-DE renderings (the user's call, 2026-10-29):** pane "Bereich" (der
+**de-DE renderings:** pane "Bereich" (der
 Bereich; "Claude-Bereich", "Terminalbereich"), turn "Runde" ("Rundenerkennung",
 "Rundenende"). The feature name Turn Stats and its table's columns stay
 English. Otherwise de-DE keeps in English the words zh-TW and zh-CN keep.
 
-**ru-RU renderings (the user's call, 2026-10-29):** agent "агент", pane
+**ru-RU renderings:** agent "агент", pane
 "панель", session "сеанс" (never "сессия"), skill "навык", workspace "рабочая
 область", turn "ход", declined like any Russian noun. hook, token,
 worktree, prompt and the feature names above stay English.

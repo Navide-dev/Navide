@@ -279,7 +279,7 @@ packaged build honors those settings only while Developer Mode is on
 (Settings → Navide Plugins); with it off it uses the Navide Marketplace.
 
 This is one way to try a package inside Navide before publishing; the others are
-Settings → Navide Plugins → **Install from .vsix file…**, which works in any
+Settings → Navide Plugins → **Install from File…**, which works in any
 build and installs the file you pick as an unreviewed local package (it never
 updates automatically), and Developer Mode → **Load from folder…**, which runs
 your working folder with its view and backend and reloads it as you edit. There
@@ -560,7 +560,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | 預覽版 | Testplace | 本機安裝 |
 |---|---|---|---|
-| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（每個 Navide 外掛最多 100 位） | 你把 `.vsix` 檔案寄給的任何人 |
+| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（人數沒有上限） | 你把 `.vsix` 檔案寄給的任何人 |
 | 審核 | 和正式版相同的審核 | 受邀測試者只跑自動掃描；公開測試碼另有輕量人工審核 | 沒有；Navide 不會掃描 |
 | Navide 市集簽章 | 有 | 有 | 沒有（最多只有發佈者自己的簽章） |
 | Navide 裡的標記 | 「預覽版（已審核）」 | 「測試版，沒有人工審核，*日期* 到期」 | 「本機檔案」，並註明未經 Navide 審核 |
@@ -571,7 +571,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | プレリリース版 | Testplace | ローカルインストール |
 |---|---|---|---|
-| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（Navide プラグインごとに最大 100 人） | `.vsix` ファイルを受け取った人なら誰でも |
+| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（人数の上限なし） | `.vsix` ファイルを受け取った人なら誰でも |
 | 審査 | 正式版と同じ審査 | 招待テスターは自動スキャンのみ。公開テストコードには簡易な人による審査が加わります | なし。Navide はスキャンしません |
 | Navide マーケットプレイスの署名 | あり | あり | なし（あっても発行者自身の署名のみ） |
 | Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
@@ -692,7 +692,7 @@ undone, only yanked (see [8. Yank a version](#8-yank-a-version)).
 
 ```bash
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh [--only git|mini-ide|plans|browser]
 ```

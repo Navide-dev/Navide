@@ -1117,7 +1117,8 @@ Platforms that need a public webhook (LINE, Teams, WhatsApp Cloud, SMS) are out 
 
 1. **Settings → Channels**: enter the platform's credentials (a Telegram bot
    token, a Discord bot token, Slack app + bot tokens, …). Secrets go to the OS
-   keychain as one single-line entry (`channel-<platform>`); only non-secret
+   keychain as one single-line entry (`channel-<platform>-<account>`; the
+   default account's earlier `channel-<platform>` entry is still read); only non-secret
    settings are stored in `navide.db`. The card shows the connection lifecycle
    (`starting` / `ready` / `recovering` / `blocked` / `stopped`) and the last error.
 2. **Pane quick-connect**: on a pane, choose *Connect chat* → a configured

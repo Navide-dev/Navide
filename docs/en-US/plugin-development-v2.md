@@ -2,9 +2,10 @@
 
 > **Status: implemented for third-party publishing.** Manifest v2 is the format
 > the Navide Marketplace accepts; the legacy manifest v1 runtime is documented in
-> [Plugin development guide](plugin-development.md). The bundled `navide.git`,
-> `navide.plans` and `navide.mini-ide` packages run on this contract, and so do
-> third-party packages installed from a Registry.
+> [Plugin development guide](plugin-development.md). The bundled
+> `navide.browser`, `navide.git`, `navide.mini-ide` and `navide.plans` packages
+> run on this contract, and so do third-party packages installed from a
+> Registry.
 >
 > Installing a v2 package from a Registry writes, as soon as the user
 > approves it, an exact package-version grant for the declared `permissions` plus
@@ -42,10 +43,9 @@
 ## Design principle: disclose, don't restrict
 
 This is the governing rule for every plugin, permission, capability and
-Marketplace decision. The product owner set it on 2026-10-04 and restated it on
-2026-10-17: "disclose every permission absolutely; don't restrict", and
-"disclosure means more than restriction". Effective disclosure is the core
-value of the Navide Marketplace.
+Marketplace decision: disclose every permission fully, and do not restrict;
+disclosure does more than restriction. Effective disclosure is the core value
+of the Navide Marketplace.
 
 - **A plugin is a full program.** Each plugin has its own frontend and backend.
   The platform does not cap what a plugin may do with framework limits,
@@ -68,7 +68,7 @@ value of the Navide Marketplace.
   do. Each such rule must state why it is protection rather than restriction.
 
 When a new design would add a restriction, turn it into a declaration plus
-disclosure instead, or bring it to the product owner as an explicit decision.
+disclosure instead, or record it as an explicit decision.
 Some existing rules in this spec predate the principle and are under review:
 a third-party method is callable by MCP agents only as a declared agent tool,
 behind a switch that is off by default (see
@@ -99,14 +99,13 @@ diagnostics stores, window state, or filesystem authority. See
 [Shared editor composition](editor-design.md#shared-editor-composition) for
 its peer dependency, effect adapter, and restricted-preflight contract. Raw
 terminal and vendor-shell modules remain Host-owned; Plugins use the public
-safe AI CLI controller instead. The user reaffirmed this graph for miniIDE
-migration on 2026-09-11, superseding the earlier private-feature proposal.
+safe AI CLI controller instead.
 
 The package manifests declare public npm publication metadata and use normal
 SemVer 2.0.0 versions. The package implementations live under
 `packages/plugin-{contracts,sdk,ui}/` and have no dependency on Host
 renderer sources. Third-party projects must use registry versions in a
-published workflow, never `workspace:` dependencies. The Issue 06 release
+published workflow, never `workspace:` dependencies. The release
 gate packs those public packages and installs the tarballs in a directory
 outside the Navide workspace; publication to npm is a separate release step,
 `scripts/publish-public-packages.sh` (a dry run until `--publish`; see
@@ -220,7 +219,7 @@ project with its own tests (see [Build for Navide](build-for-navide.md));
 rules, the CLI has no Host transport, process execution, or development
 server.
 
-## Issue 06 external workspace workflow
+## External workspace workflow
 
 The repository example at `examples/third-party-files/` is the fixture of the
 release smoke test, not the starting point for a third party (that is
@@ -343,8 +342,9 @@ Manifest validation rejects recognizable source or script suffixes. Package
 validation also rejects empty backend entries, POSIX entries without executable
 metadata, and extensionless executable files whose contents begin with a
 shebang. The installer writes the declared backend entry with owner-only `0700`
-mode. These checks prove archive executable intent; binary-format and exact
-OS/architecture validation remain part of the canonical artifact work in B8.
+mode. These checks prove archive executable intent. `navide-plugin package` also
+checks the backend binary's format (ELF, PE or Mach-O) and CPU architecture
+against the declared target.
 
 The same publish rule applies to every implementation language: Go or Rust may
 compile directly; Node.js requires a distributable executable that does not
@@ -385,7 +385,7 @@ not be exposed to third-party v2 packages.
 Cross-language backend support is not considered available merely because the
 manifest has `backend.entry`. It becomes a public capability only after the
 backend protocol, development launcher, packager, platform validation, and
-cross-language conformance fixtures pass the B5/B8 release gates.
+cross-language conformance fixtures pass the release gates.
 
 ### Third-party backends: sandbox, consent, and publishing
 
@@ -474,8 +474,7 @@ MCP agents.
 
 #### Shell commands from a backend
 
-A backend package may declare `permissions.shell: "allowlist"` (DB5 of plan B:
-disclosed, not refused). The consent dialog then states it as **high risk**,
+A backend package may declare `permissions.shell: "allowlist"`. The consent dialog then states it as **high risk**,
 the disclosure data lists `shell.allowlist` as a high risk reason (see
 [plugin-agent-tools-contract.md](plugin-agent-tools-contract.md), section 3.3),
 and the consent binds to it: `shell` is part of the consented permission set,
@@ -528,7 +527,7 @@ being revisited separately. The broker rules are exactly those of a view's
 #### Declared executables (`permissions.shell.executables`)
 
 `shell: "allowlist"` admits the Host's `git`, `gh` and `glab`. A package that
-needs more names them (C2, per [TA-2](security/ta-2-declared-executables.md)):
+needs more names them (per [TA-2](security/ta-2-declared-executables.md)):
 
 ```json
 "permissions": { "system": ["fs", "ui"], "shell": { "mode": "allowlist", "executables": ["npm", "terraform"] } }
@@ -548,8 +547,7 @@ bound workspace, with the same lexical resolution as before (a wrapper such as
 and the executable it runs must be too; a path, a `$` expansion or a leading
 assignment is refused). The Git family keeps its
 subcommand policy and isolated environment; a declared executable has no
-subcommand policy — what a plugin may run is disclosed, not curated (ruling of
-2026-10-17) — and runs as the user runs it from a terminal: the user's own
+subcommand policy — what a plugin may run is disclosed, not curated — and runs as the user runs it from a terminal: the user's own
 environment and PATH, the workspace as the working directory, the broker's
 30 s limit. On Windows a declared name that resolves to a `.cmd`/`.bat` shim
 (every npm-family command) runs through `cmd.exe`, which re-reads its
@@ -596,7 +594,7 @@ recorded (Settings → Navide Plugins → Activity, as `network.<host>`), and a
 request to a host the manifest does not declare is marked there as **not
 declared**. Whether such a request is also *refused* is the user's per-package
 switch **Only allow declared network hosts** (Settings → Navide Plugins, on the
-package's row; the user's decision of 2026-11-07, "disclose, don't restrict"):
+package's row; "disclose, don't restrict"):
 
 - **Off (the default).** The view reaches any host. A composed frame
   (`navide-plugin-frame://`) carries `connect-src *`; a surface — a
@@ -701,7 +699,7 @@ the manifest side is:
 }
 ```
 
-Allowing the package is what lets agents call these tools (C3, 0.2.39): the
+Allowing the package is what lets agents call these tools (0.2.39): the
 install consent card and the native-backend prompt list every declared tool
 with its read/write claim, and the user's "Allow" turns on Settings → Navide
 Plugins → "Let agents call tools from third-party Navide plugins" while that
@@ -1012,10 +1010,10 @@ may retain an existing event fallback until its package owns the equivalent
 event source, and must dispose the returned subscription when its view is
 destroyed. `settled` rejects if an accepted subscription ends because the
 backend becomes unavailable, so the view can restore that fallback event
-route. Issue 22 supplies the package-owned watcher and makes the accepted
+route. The package-owned watcher makes the accepted
 package subscription authoritative. Legacy watcher fallback remains available
 only when the package subscription cannot be accepted or later becomes
-unavailable. Issue 23E uses this package-owned watcher in production Plans;
+unavailable. Production Plans uses this package-owned watcher;
 the legacy watcher remains the bounded fallback when the combined package is
 unavailable.
 
@@ -1093,11 +1091,10 @@ and Host routes never cross the SDK Interface.
 The normative Backend Wire v1 schema and accepted/rejected fixture corpus are
 published under `docs/plugin-contracts/` and validated together with the
 Manifest v2 corpus. This contract enables backend-only and combined package
-description and installation. Issues 07 and 08 add the private Electron-main
-supervisor/stdio and subscription lifecycle seams; Issue 21 connects one
-bundled Plans operation and event through the public SDK and Host router. Issue
-22's bridge ports and child lifecycle are Host-private implementation seams.
-Issue 23E consumes them for the first-party Plans package and exposes an
+description and installation. The Electron-main supervisor/stdio and
+subscription lifecycle seams, the bridge ports and the child lifecycle are
+Host-private implementation seams. The first-party Plans package consumes them
+through the public SDK and Host router, and the Host exposes an
 explicit Host-owned allowlist of Plans methods to the MCP adapter; no package
 method is AI-callable by default, and adopting this wire profile does not
 itself create a tool catalog. Installed third-party backends use the same wire
@@ -1114,10 +1111,6 @@ including rollback. A competing operation for the same Plugin is rejected;
 operations for different Plugins remain independent. An install consumes its
 prepared package only after the required confirmations pass. If that attempt
 fails, prepare the package again before retrying.
-
-The exact OS/architecture identifiers, archive size limits, and deterministic
-ZIP metadata are B8 decisions. Until they are published, examples must not be
-treated as accepted enum values.
 
 ## Manifest
 
@@ -1560,10 +1553,9 @@ path. If the directory cannot be inspected or safely repaired, the store treats
 it as unavailable, fails closed, and leaves recovery to explicit or manual
 handling rather than interpreting it as a corrupt revision sidecar.
 
-The global-policy portion of Issue 23A defines the durable contract and Host
-persistence seam. Repository source selection, UI/IPC exposure, and runtime
-enforcement are specified by the relevant follow-up issues; this contract does
-not add rules for plugins, Plans, Git, miniIDE, methods, paths, subcommands,
+The global policy defines the durable contract and Host persistence seam.
+Repository source selection, UI/IPC exposure, and runtime enforcement are
+specified separately; this contract does not add rules for plugins, Plans, Git, miniIDE, methods, paths, subcommands,
 arguments, globs, or regular expressions.
 
 ## Repository Policy Recommendations
@@ -1636,10 +1628,9 @@ user policy exists.
 An explicit Host-only full reset can clear all source selections when the
 durable source high-water mark is trustworthy. The snapshot also exposes
 opaque revision-aware `effectivePolicyKey` and canonical-policy
-`effectivePolicyHash` identities for later Host consumers; Issue 23B does not
+`effectivePolicyHash` identities for later Host consumers; the snapshot does not
 implement caching or enforcement. This Host source service is intentionally
-not exposed through preload, IPC, renderer APIs, or Settings UI in Issue 23B;
-those surfaces belong to Issue 23D.
+not exposed through preload, IPC, renderer APIs, or Settings UI.
 
 ### Runtime enforcement
 
@@ -2648,9 +2639,7 @@ carried across a change of source. The
 first-party `navide.git` migration is an explicit Host-owned exception: before
 its current package version is promoted, the Host may clone the prior active
 Git snapshot into the current candidate, then retain the prior snapshot for
-rollback. Plugin code cannot select or read the old tier. Issue 28 still owns
-the general Host-only clone, promotion, rollback, retention, and
-garbage-collection orchestration. Actual uninstall removes all storage for
+rollback. Plugin code cannot select or read the old tier. Actual uninstall removes all storage for
 that plugin after cleanup succeeds; a later reinstall does not restore the
 deleted data.
 
@@ -2694,7 +2683,7 @@ repository-controlled behavior such as ordinary Git hooks. Treat
 `shell: "allowlist"` as a high-trust grant and request it only when the public
 catalog methods are insufficient.
 
-### First-party production Git package (Issue 19)
+### First-party production Git package
 
 The removable factory-installed `navide.git` package is the first production consumer of the
 Manifest v2 custom-view and Host-owned storage seams. Its `left` contribution
@@ -2728,8 +2717,8 @@ Trust, signature, revocation, grant, and capability denials fail closed and
 never raise that notice. An invalid installed package is also not hidden by the
 factory copy.
 
-The bundled first-party plugins (`navide.git`, `navide.mini-ide`,
-`navide.plans`) version independently of the App: each keeps the version in
+The bundled first-party plugins (`navide.browser`, `navide.git`,
+`navide.mini-ide`, `navide.plans`) version independently of the App: each keeps the version in
 its own `manifest.json`, which changes only when that plugin changes, and the
 App records the versions it bundles in `src/main/plugins/officialPluginVersions.ts`
 to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
@@ -2756,15 +2745,14 @@ PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
 
 ### First-party production Plans package
 
-Issue 23E makes `navide.plans` the first combined production package that
+`navide.plans` is the first combined production package that
 consumes the shared agent Execution Policy. One active Manifest v2 package
 version supplies both custom Plans contributions (`left` and `window`) and the
 self-contained Backend Wire executable. The package imports only the public SDK
 and UI packages; the Host selects its exact package/version, grant, workspace
 binding, backend methods, events, and private Bridge ports.
 
-MCP integration uses the current core backend architecture introduced by
-`4a6cc02a`. The core owns the single server and endpoint, authentication, caller
+MCP integration uses the core backend architecture. The core owns the single server and endpoint, authentication, caller
 identity, tool registration lifecycle, and authenticated Host handoff. The
 builtin Plans adapter registers its existing `plan_*` tools on that server
 before the session manager starts. The production package does not own an MCP
@@ -2806,6 +2794,17 @@ or unreadable recovery state is reported as unavailable rather than replaced
 with an empty snapshot. A genuinely missing migration source retains the
 first-install initialization behavior.
 
+The Plans MCP adapter retries an operation on the legacy path only when the
+Host's response carries `recoveryDisposition: "legacy-safe-before-dispatch"`.
+The Host sets it only for a call that failed before reaching the child, and only
+after it has checked the exact descriptor and activation, the package-version
+Grant, the Execution Policy, the method allowlist and the stopping state.
+Timeouts, lost responses, errors after dispatch, `PLUGIN_STOPPING`, Grant
+revocation and policy denial never carry it, so they are never retried on the
+legacy path. Read operations need the same disposition. A fallback re-registers
+the backend with `plans_backend_v2: false`; a later successful v2 bind
+advertises `true` again.
+
 Nested repository discovery uses the same deterministic limits in the Host,
 core index, and packaged backend: two levels, 50 found roots, 2,000 directory
 candidates per directory, and 2,000 candidate probes across the entire walk.
@@ -2815,6 +2814,78 @@ Plans directories remain available without a nested scan.
 Issues 25 and 26 must reuse this Execution Policy contract, its Policy Sources,
 Host-minted Initiators, and the shared Host broker for miniIDE composition.
 They must not introduce an IDE-specific policy, permission, or Initiator model.
+
+#### Checking that a worktree Plans build is the one loaded
+
+Rebuilding `dist-plugins/navide-plans` does not prove that a running app loaded
+it. A verified installed copy of the same or a newer version is used instead of
+the factory bundle (see the version rule above), so a profile that has ever
+installed Plans can keep running an older build. Do not remove or overwrite an
+installed package to diagnose this. Start a fresh named development profile
+with its own state instead, and read what the Host selected before trusting any
+manual check.
+
+```sh
+pnpm run build:plans
+AGENT_TEAM_PLUGIN_DEV=1 \
+NAVIDE_PLANS_DEV_PROFILE=plans-check \
+AGENT_TEAM_DATA_DIR="$(mktemp -d)" \
+pnpm dev
+```
+
+`NAVIDE_PLANS_DEV_PROFILE` (1 to 64 characters, starting with an ASCII letter or
+digit; later characters may also be `_` or `-`) gives the run its own user-data
+folder when `AGENT_TEAM_PLUGIN_DEV=1` in an unpackaged build.
+`AGENT_TEAM_DATA_DIR` independently gives the Python backend its own state. Pick
+a new profile name for each check so no earlier state is reused. The
+Host then prints a `navide.plans dev provenance` line (to the terminal and
+`main.log`) at startup and whenever Plans opens. Compare:
+
+- `selectionOrigin` and `descriptorSource` are `factory-bundle`. An installed
+  package that was originally acquired from a factory bundle still shows
+  `installed-catalog`; `acquisitionProvenance` records that separately.
+- `packageDirectory` is this checkout's `dist-plugins/navide-plans`, and
+  `packageVersion` matches its built manifest.
+- `frontendEntries["navide.plans.window"]` is the built window entry, and
+  `backendExecutable` is the executable inside the same package directory.
+- In the Plans window's developer console, `window.__NAVIDE_PLANS_PROVENANCE__`
+  has `packageSource: "factory-bundled"` (the renderer's spelling of the Host's
+  `factory-bundle`), the same `packageVersion`, and a `buildId`. These
+  diagnostics are opt-in; a normal launch does not publish them.
+
+The automated artifact test compares the loaded `buildId` with the one computed
+from the current sources, so it fails on a stale build. It needs the production
+backend that `pnpm run build:plans` produces. No script prints the current
+`buildId` by itself; the test is the supported comparison.
+
+```sh
+NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 pnpm test:run tests/integration/plansPackagedRoundtrip.test.ts -t 'loads the Host-selected worktree frontend artifact'
+```
+
+`src/main/plugins/plansProvenance.test.ts` covers the Host's provenance record.
+The legacy recovery seam is covered by two focused tests: the Host test binds
+the production legacy adapter to the lifecycle-selected previous snapshot and
+asserts that recovery only reads storage, and the retained-pane test mounts the
+actual `PlansPane` with the Host's preference projection and asserts that
+current storage is not rewritten.
+
+```sh
+pnpm test:run src/main/plugins/plansStorageMigration.test.ts -t 'runs the production legacy adapter'
+pnpm test:run src/renderer/src/editor/__tests__/PlansPane.test.ts -t 'uses the Host-bound previous snapshot'
+```
+
+Component and artifact tests do not do Chromium hit-testing, so these stay
+manual, in a disposable fixture workspace holding a plan with unresolved and
+resolved notes, replies and section anchors. Compare the retained view and the
+plugin view at wide and narrow widths: stage and progress, toolbar order and
+overflow, panel placement, spacing, clipping and scrolling; the Notes controls
+(Edit, Save, Delete cancel and confirm), including real input focus; Review
+Notes appearing in the toolbar or the overflow, never both; the section Comment
+action with the panel closed and open; IME Enter, plain Enter and Escape, where
+each Escape closes one state only; and switching plans mid-edit without any
+draft or delayed operation leaking into the next plan. The package's
+[v1 test coverage matrix](../../plugins/navide-plans/tests/parity-coverage.md)
+lists what each automated test does and does not prove.
 
 ### Independent plugin windows and editor capability adapters
 
@@ -2838,7 +2909,7 @@ Host editor or the operating system's default editor. Explicit external-editor
 preferences remain separate. Recovery for an installed plugin version is
 distinct from treating an uninstalled or disabled plugin as present.
 The miniIDE package declares `navide.mini-ide.window`; its complete activation
-and parity verification remain part of Issue 26, not implied by this API.
+and parity verification are not implied by this API.
 
 Typed Git methods under `shell` use a Host-fixed Git operation mapping.
 `aiCli.generateCommitMessage` retains AI authority. The Git package's public
@@ -3024,7 +3095,7 @@ the fixed Host renderer can reuse it without loading terminal or IDE code.
 Runtime focus, IME, placement and outside-click behavior remain part of the
 consolidated manual migration verification.
 
-### Issue 15 runtime boundary
+### Runtime boundary
 
 The raw v1 `terminal` PTY namespace is not a Manifest v2 permission and is not
 part of the public v2 catalog. Public AI CLI sessions remain Host-mediated
@@ -3312,8 +3383,8 @@ inside a running view. An install or update is staged at an immutable
 target-specific package directory and receives current trust verification
 plus restricted frontend and backend preflight. A first install is then
 activated as soon as it is approved. An approved update, and an agent's
-automatic update whose disclosure is identical to the running version's
-(O1), switches right away through the same per-plugin switch as
+automatic update whose disclosure is identical to the running version's,
+switches right away through the same per-plugin switch as
 **Restart Plugin**: the consent dialog says beforehand that the plugin's open
 views reload, that a view saving its state through the SDK comes back where it
 was, and that anything else not saved in them is lost. Right before the switch,
@@ -3476,8 +3547,8 @@ and agent tools; it cannot be removed.
   keeps its data recorded as local, and no later install of the id (another
   folder, a file or the Marketplace) takes it over. Kept data is reused only by
   a Registry-verified id (Marketplace or pre-release).
-- **Install from a file** (Settings → Navide Plugins → **Install from .vsix
-  file…**) works in packaged builds too, without Developer Mode. The main
+- **Install from a file** (Settings → Navide Plugins → **Install from
+  File…**) works in packaged builds too, without Developer Mode. The main
   process opens its own file dialog over the main window and reads the picked
   file once; every later step uses those bytes, never the path again. Plugin
   frames, agents (MCP) and environment variables cannot start or name a file
@@ -3551,7 +3622,7 @@ and agent tools; it cannot be removed.
   does not protect against other processes of the same user. A plugin's own
   backend (inside its sandbox) and plugin frames cannot write it. It is
   evidence of consent, not a verification by Navide.
-- **Blocked digests** (decision d5): the root-signed local-install trust
+- **Blocked digests**: the root-signed local-install trust
   document (`GET /api/trust/local-install`) lists the SHA-256 of `.vsix` files
   Navide took down as `blockedDigests: [{digest, reason}]`; a bare digest, sent
   by a Registry before 0.2.27, reads as having no reason, and so does a reason
@@ -3622,8 +3693,9 @@ and their digests. Each OS/architecture artifact is signed independently.
 Public packages and `apiVersion` share a major version. A major accepts additive
 optional fields, methods, and events only. Navide supports the current and
 previous public API major; the previous major remains supported for at least 12
-months. Public deprecations are announced for at least 6 months and span at
-least two Navide minor releases before removal.
+months. A public deprecation keeps working for at least 12 months after the
+release that deprecated it and spans at least two Navide minor releases before
+removal (see the 1.x promise above).
 
 The Host provides one API version, `PLUGIN_API_VERSION` in
 `@navide/plugin-contracts`, and a plugin reads it at run time with
@@ -3646,12 +3718,12 @@ package, so a Host update does not change them. What a Host update can change is
 what runs behind a capability, so the behavior a plugin may rely on is stated
 in the catalog entry's `description`.
 
-The migration plan's one-minor compatibility window applies only to Navide's
-internal v1 loader/adapter. It is not the third-party API support policy.
+Navide's internal v1 loader/adapter keeps a one-minor compatibility window. That
+window is not the third-party API support policy, which is the one above.
 
 ## Development and publishing flow
 
-Issue 06 supports the following external frontend workflow:
+An external frontend plugin follows this workflow:
 
 1. Install the three public packages from their SemVer registry ranges.
 2. Declare the smallest permissions and run `navide-plugin validate <directory>`.
@@ -3676,21 +3748,9 @@ here that it describes.
 There is no `navide-plugin dev` command; the in-app loop is Developer Mode's
 folder load, which reloads by itself when the folder's files change (see
 "Local testing" in [Backend source, development, and publish contract](#backend-source-development-and-publish-contract)). Test a
-backend alone with `navide-plugin dev-backend`, whose Host bridge refuses every
-request, and test the complete package inside Navide by loading its folder
+backend alone with `navide-plugin dev-backend`, whose Host bridge serves only the ports the
+manifest declares and denies the rest, and test the complete package inside Navide by loading its folder
 with Settings → Navide Plugins → Developer Mode, installing it from a file, or
 installing it from a local Registry; only the environment-variable Developer
 Mode of a development build (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a v2
 view (see [Backend trust](#backend-trust)).
-
-## Appendix: migration history
-
-**Migration decision:** Plan B (the B0-B9 checkpoint path) was approved on
-2026-08-13. Plans A and C are not active implementation alternatives.
-
-**Issue 19 production first-party package:** The approved Plan B Git
-migration is implemented as the bundled `navide.git` production case. It is
-one Manifest v2 package with two isolated `custom` views (`left` and
-`window`), and both views use the same active package version. It did not by
-itself open third-party publishing or complete the later Skills migration,
-marketplace lifecycle, or legacy-removal work.

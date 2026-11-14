@@ -79,8 +79,7 @@ Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 
 - Codex 的原始 Rollout 檔案位於分格隔離的 `~/.codex-panes/<session_home_id>/sessions` 目錄，與 Navide 的歷史中繼資料分開保存。History 沒有列出，不代表原始對話檔案已被刪除。
 - History 搜尋涵蓋已載入的項目。即使目前搜尋沒有結果，仍可載入更多項目以繼續搜尋較早的對話；內容搜尋會重新搜尋新載入的項目。
 - 若要在 Navide 外恢復已知對話，請使用原本的 `CODEX_HOME` 與確切的 Session ID。同一個 Home 有多段對話時，不要直接選擇最新的 Session。
-- 偵測到的 Session ID 現在由 Backend 在通知 UI 前保存，後續 Snapshot 未帶入 ID 時也會保留既有值。這不會自動找回先前已遺失 Session Identity 的舊項目。
-- 已移除的 Codex 項目若沒有 **Session** 列，代表沒有 resume id，History 就不會顯示 **Resume** 按鈕。常見原因是啟動時的 **Hooks need review** 畫面吃掉了 session marker，或重啟後分格以全新對話重開而沒有補打 marker；兩者皆已修正。原始 rollout 仍在——依時間與 `cwd` 在 `sessions/` 下找到它，用同一個 `CODEX_HOME` 執行 `codex resume <id>`。
+- 已移除的 Codex 項目若沒有 **Session** 列，代表沒有 resume id，History 就不會顯示 **Resume** 按鈕。常見原因是啟動時的 **Hooks need review** 畫面吃掉了 session marker，或重啟後分格以全新對話重開而沒有補打 marker。原始 rollout 仍在——依時間與 `cwd` 在 `sessions/` 下找到它，用同一個 `CODEX_HOME` 執行 `codex resume <id>`。
 
 ## Token Stats 空白或重複
 
@@ -118,12 +117,34 @@ Windows 安裝程式尚未程式碼簽章，SmartScreen 會顯示「Windows 已�
 
 Documentation Injection 採用 Best-effort。檢查 MCP Configuration、Package Runtime 與 Network Access。Fetch 失敗不應阻擋手動任務；如果 Workspace 必須保持離線，請停用整合。
 
+### MCP 伺服器一直停在「starting」或啟動失敗
+
+透過 `npx` 或 `uvx` 啟動的本機（stdio）MCP 伺服器，第一次執行時要先下載套件，才能回應 Navide 的握手（`initialize`）。只要伺服器的程序仍在執行，Navide 就會繼續等待，所以第一次下載較慢不會被當成失敗：
+
+- **Settings → MCP** 會把伺服器顯示為 **starting**。等待 15 秒後（`backend/agent_team_backend/mcp_manager.py` 中的 `SLOW_START_NOTE_AFTER`），會加上一則備註，說明已等了多久，以及第一次執行 `npx`/`uvx` 時可能正在下載套件。頁面會自動重新整理，直到伺服器連線或失敗。
+- 如果程序在回應之前就結束，啟動會立刻失敗，原因會附上它的結束碼。
+- 如果程序一直執行卻始終沒有回應，Navide 會在 **300 秒**後放棄（同一個檔案中的 `STDIO_INIT_HARD_CAP`）。這個上限只是安全網，並不限制速度慢的伺服器。遠端（`http`/`sse`）伺服器的握手時限維持 15 秒。
+- 伺服器是平行啟動的，所以一個很慢的伺服器不會拖住其他伺服器。
+
+啟動失敗的伺服器會顯示 **Failed to start:** 與原因。下次重新載入 MCP 設定時（例如你在 Settings → MCP 儲存變更），會再試一次。
+
+stdio 伺服器輸出到 stderr 的內容（npm 的下載訊息、當機訊息）會寫入 Navide 資料夾中的 `logs/mcp-<name>.log`。這個檔案只留在這台電腦上，且只有你的使用者帳號可以讀取（0600）。只保留最近一次啟動：每次啟動都會清空它，同一次執行期間只要伺服器持續輸出，檔案就會一直成長，沒有大小上限。名稱含有字母、數字、`_`、`.`、`-` 以外的字元，或含有大寫字母時，會轉成安全的檔名，並附上名稱的簡短雜湊，因此兩個伺服器絕不會共用同一個檔案。從 Settings → MCP 移除伺服器會刪除它的檔案；把它關閉則會保留。Settings → MCP 會把最後幾行顯示為 **Last lines the server printed**。那段文字是伺服器自己的輸出，可能包含伺服器選擇印出的任何內容。Navide 本身不會把伺服器的設定寫進去，也不會寫入任何 `env` 或 `headers` 的值。agent 透過 `mcp_list` 工具讀到的啟動錯誤，其中的 URL 會被遮蔽，與設定的 URL 相同。
+
 ## Git Authentication Prompt 無法完成
 
 - 使用 `git remote -v` 確認 Remote。
 - 在一般 Terminal 測試相同 Fetch 或 Push。
 - 優先使用現有 SSH Agent 或 Credential Manager 設定。
 - 絕對不要將 Access Token 貼到 Issue Report 或 Terminal Screenshot。
+
+## Plans 退回舊版檢視
+
+如果 Plans 視窗無法啟動它的套件 Backend，或 Backend 一再結束，Navide 會改為顯示該工作區的舊版 Plans 檢視，並標示 **舊版復原**，同時以一行文字說明原因，例如 `forced`、`storage-migration-failure`，或 Backend 自己的啟動錯誤。你的計畫是工作區 `.agent-team/plans/` 資料夾裡的一般檔案；退回舊版不會轉換或刪除它們。Plans 面板的 **重試** 會再嘗試新版檢視，每個 Session 最多兩次。
+
+- **強制使用舊版檢視**，可確認問題是否來自新版 Plans Backend。結束 Navide，以環境變數 `NAVIDE_PLANS_RECOVERY=legacy` 重新啟動（macOS 可用 `open --env NAVIDE_PLANS_RECOVERY=legacy -a Navide`），再重現問題。只有 Plans 檢視會改變。強制期間 **重試** 會直接拒絕並說明原因。要再試新版檢視時，結束 Navide，不帶該變數重新啟動。
+- **不要編輯 Plans 狀態。** Plans 的篩選、排序與收合偏好存放在應用程式的 user-data 資料夾下的 `plugin-storage-v2/`；其中的 `plans-lifecycle.json` 記錄舊版檢視要退回哪個套件版本。請不要動這些檔案；舊版檢視只會讀取先前的偏好，不會覆寫目前的偏好。
+- **回報 Bug 時**，請附上 Plans 外掛版本（Settings → Navide Plugins）、**舊版復原** 的原因文字、`main.log` 中與 Plans 有關的行，以及重新啟動前後的 `plans-lifecycle.json`。不要附上憑證、Token 或其他儲存資料。
+- **驗收檢查。** 強制舊版檢視時，它會開啟同一個工作區，並能列出與開啟其中的計畫。移除變數並重新啟動後，Plans 分頁應顯示一般檢視，不再有 **舊版復原** 標示。如果計畫資料夾缺少 `_template.html`，建立計畫會回傳明確的 `BACKEND_UNAVAILABLE` 錯誤，直到 Navide 補回計畫檔案；絕不會寫出簡化版的計畫文件。
 
 ## 提交有用的 Bug
 

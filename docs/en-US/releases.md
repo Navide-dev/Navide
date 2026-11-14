@@ -1,6 +1,6 @@
 # Versioning and In-App Releases
 
-> **Current distribution status:** v0.2.3 is the current stable release. It ships a signed and notarized macOS arm64 DMG/ZIP, unsigned Windows x64 and Arm64 NSIS installers, and a Linux x64 AppImage and `.deb`, all built and published by GitHub Actions and mirrored to `dl.navide.dev`; the macOS, Windows and AppImage builds are eligible for the in-app updater. Linux arm64 is built only on a manual workflow dispatch and is not published yet. Every stable release from v0.1.50 onward goes through the signed workflow described below (v0.1.49 was a one-off manual unsigned preview published while the signing key was being set up; v0.1.26–v0.1.48 were unsigned previews).
+> **Current distribution status:** The current stable release ships a signed and notarized macOS arm64 DMG/ZIP, unsigned Windows x64 and Arm64 NSIS installers, and a Linux x64 AppImage and `.deb`, all built and published by GitHub Actions and mirrored to `dl.navide.dev`; the macOS, Windows and AppImage builds are eligible for the in-app updater. Linux arm64 is built only on a manual workflow dispatch and is not published yet. Every stable release from v0.1.50 onward goes through the signed workflow described below (v0.1.49 was a one-off manual unsigned preview published while the signing key was being set up; v0.1.26–v0.1.48 were unsigned previews).
 
 Navide uses semantic versions (`MAJOR.MINOR.PATCH`) and Git tags prefixed with
 `v`. `package.json` is the application version source of truth. The local build
@@ -93,10 +93,8 @@ The workflow reads these secrets (matching `.github/workflows/release.yml`):
 
 The first two sign the app; the last three notarize it (`mac.notarize: true` in
 `package.json`). The certificate, private key, password, and the exact commands
-to (re)generate the `.p12` and (re)apply the secrets live **outside the repo**
-in `~/navide-signing/` — see that folder's `README.md`, and run its
-`./set-secrets.sh` to reset `CSC_LINK` / `CSC_KEY_PASSWORD` (add `--dry-run` to
-also trigger a signing test run). The `.p12` must use OpenSSL's `-legacy`
+to (re)generate the `.p12` and (re)apply the secrets live **outside the repo**,
+kept by the release maintainers. The `.p12` must use OpenSSL's `-legacy`
 format or CI's `security import` fails with a misleading "MAC verification
 failed … (wrong password?)".
 
@@ -140,8 +138,6 @@ local development and must never be committed.
    refuses a version that is already on the registry; `release.sh` does not
    run it. The compatibility commitment the publication carries is in
    [Plugin development v2](plugin-development-v2.md#compatibility-commitment-1x).
-
-For the first public release, also verify the documented clean-machine install path, onboarding flow, privacy statements, and supported-agent matrix. Add the actual release entry to `CHANGELOG.md` only after the GitHub Release and assets exist.
 
 Never move an existing version tag or replace assets on an existing release.
 Clients and caches may already trust its metadata. Fix a bad release with a new

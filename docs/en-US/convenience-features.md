@@ -2,8 +2,7 @@
 
 Navide writes outside its own data directory only for a named **convenience
 feature** the user has allowed. Every such write goes through one gate, is
-announced, is logged, and can be turned off with one click. Decided on
-2026-10-10 (plan `.agent-team/plans/navide-no-silent-writes-audit_54f155.html`):
+announced, is logged, and can be turned off with one click. The rules are:
 
 - Writing user settings is allowed when a feature needs it, but the user is
   always told. Disclosure is required; asking first is not.
@@ -157,7 +156,7 @@ on its next spawn. This is a known trade-off.
 Grok Build records the folders you trusted in `~/.grok/trusted_folders.toml`.
 A Grok pane runs in its own home shim, and a trust decision it saves lands in
 that shim, where no other pane can see it — so every new or rebuilt pane
-asked again (issue #402). Each Grok pane now has its own copy of the file,
+asked again. Each Grok pane has its own copy of the file,
 seeded with your decisions. Before each Grok pane starts, Navide appends the
 folders the panes trusted in their copies to your file:
 
@@ -235,7 +234,7 @@ built by the skills wiring), and while `copilot.hooks` is allowed the shim's
 
 - `agent-team.json`: a link to Navide's file in
   `<app data>/runtime/copilot/hooks/agent-team.json` (0600, written
-  atomically at startup and on re-allow), the same document Phase 2 wrote
+  atomically at startup and on re-allow), the same document an earlier version wrote
   into `~/.copilot/hooks`. A link, not a copy, so no pane keeps a stale one.
 - a link to every entry of `~/.copilot/hooks`, rebuilt on each spawn (fresh
   or `--resume`), so a hook file the user adds later is seen and both sets
@@ -248,7 +247,7 @@ built by the skills wiring), and while `copilot.hooks` is allowed the shim's
   never hide Navide's hooks (Navide Guard included).
 
 Nothing is written under `~/.copilot`, and the shim's `hooks` folder is
-never moved into it. At startup a Phase 2 `~/.copilot/hooks/agent-team.json`
+never moved into it. At startup an earlier version's `~/.copilot/hooks/agent-team.json`
 is taken back (`retract`, backed up first); one another backend wrote is left
 alone. If it cannot be taken back (`retract-failed`), or Navide's file cannot
 be written, the shared file stays in use and panes keep today's link to
@@ -258,7 +257,7 @@ would fire twice. With the feature off a pane's `hooks` is that same link.
 The panes carry the hooks only where every pane gets a shim: the skills
 plugin (`navide.skills`) must be running, and the backend's `COPILOT_HOME`,
 if set, must be the `~/.copilot` the shims mirror. Otherwise the shared file
-stays in use, as in Phase 2. The CLI hooks pass therefore runs after the
+stays in use, as in earlier versions. The CLI hooks pass therefore runs after the
 plugins start, and a plugin starting later re-runs it. A plugin stops only at
 quit; that only stops the panes carrying the hooks, without writing the
 shared file back.

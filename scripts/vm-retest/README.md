@@ -56,23 +56,13 @@ opens an ssh tunnel for each `vncdo` call (it needs `vncdo` on this machine only
 Install VMware Fusion there from the official installer (Broadcom's Fusion dmg; drag it to Applications, open it
 once, enter the administrator password and accept the license, quit it). That is all the host needs: copy the
 `.vmwarevm` bundles into `VM_DIR` (rsync -a; the disks are not sparse) and `vmrun ... nogui` runs them over ssh.
-Checked on the Mac mini on 2026-11-05 with Fusion 26.0.1: the vmx log says "Services_Init: Successfully opened the
-services", `vmnet-dhcpd`, `vmnet-natd` and `vmnet-bridge` run from
-`/Library/Application Support/VMware/VMware Fusion/Services`, and the Linux guest gets 192.168.22.129 with working
-HTTPS out.
-
 Do not copy `VMware Fusion.app` itself to the other Mac. A copy made by a non-root user loses its set-UID root
-helpers, and even after an administrator repaired those (opening Fusion, `Initialize VMware Fusion.tool set`,
-the network settings and `/var/db/vmware` lease files by hand), Fusion kept failing to locate itself
-("LocationGetRoot: ... never been run on this machine", "Services_Init: Failed to open the services") and rebuilt
-its Services copy without `Contents/Frameworks`, so `vmnet-dhcpd` / `vmnet-natd` crashed at launch ("Library not
-loaded: @loader_path/../Frameworks/libvnetlib.dylib" in `~/Library/Logs/DiagnosticReports`) and guests got no
-address or no Internet. The official installer fixed all of it.
+helpers, Fusion then cannot locate itself or start its network services, and `vmnet-dhcpd` / `vmnet-natd` crash at
+launch, so guests get no address or no Internet. Only the official installer sets this up correctly.
 
 A copied VM also gets a new `uuid.bios` on its first start (Fusion treats it as copied), so its MAC address
-changes; the guest still gets 192.168.22.129 from DHCP there, but set `LINUX_GUEST` / `WINDOWS_GUEST` (the guests
-have no VMware Tools answering `getGuestIPAddress`). `vm.sh start` over ssh returns only when the VM stops: run it
-in the background, as on a local host.
+changes: set `LINUX_GUEST` / `WINDOWS_GUEST` (the guests have no VMware Tools answering `getGuestIPAddress`).
+`vm.sh start` over ssh returns only when the VM stops: run it in the background, as on a local host.
 
 The scripts never create or change credentials, with one exception: the Windows auto-logon password. Windows
 needs a password for the test account to log on to the desktop by itself, so `windows-up.sh` makes a new random one

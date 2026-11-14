@@ -15,6 +15,8 @@ Navide は **Local-first** ですが、常に完全オフラインという意�
 - Local の `navide.db` 内の、サードパーティ Navide Plugin の Activity Log（`plugin_activity`）：Plugin、`namespace.method`、時刻、Workspace、許可／拒否／失敗、Workspace 相対の File Path（Workspace 外の Path は `<outside-workspace>` のみ。File の内容は保存しません）、Shell 呼び出しは実行ファイルと Subcommand のみ。詳細は 7 日間、その後は日ごとの件数のみ 90 日間保持します。同梱の Plans、Git、Mini-IDE は記録しません。この端末の外へは送信されません
 - Local の `navide.db` 内の、pane がオフラインの間に届いたチャットメッセージのプレビュー（`channels.wake_kept`、再起動をまたぐ場合は `channels.wake_lost`）：バインドされたチャットから pane がオフラインの間に届いた各メッセージの先頭 40 文字で、送られなかったメッセージをチャットに伝えるために使います。マスクせずにそのまま保存するため、メッセージの先頭に機密があればそれも保存されます。メッセージが pane に送られた時、またはチャットに伝えた時点で削除し、チャットのバインド解除や bot の削除時にも削除します。bot が無効の間は、再び起動するまで保持します。この端末の外へは送信されません
 - 任意の AI Provider API Key。制限された File Permission（対応 System では `0600`）で保護された Local Settings File に保存
+- Claude Code と Codex の API キーアカウント：キー本体と、各アカウントのローカル記録（アカウント名、キーの末尾 4 文字、月間予算メモ、自動切り替えの選択）。キーの保存先は [認証情報](#認証情報) を参照
+- アプリのデータフォルダー内の `workbench.json` にあるアクションボタンと、あなたが承認した Repository の `.navide/workbench.json` のバージョン。どちらも Repository には書き込まれません
 
 Navide は Project Telemetry Service を運営せず、Navide Account を必要としません。
 
@@ -44,6 +46,31 @@ Navide は Project Telemetry Service を運営せず、Navide Account を必要�
 | チャットチャンネル | pane を紐付けたチャットプラットフォーム（Telegram、Slack、Discord など）とそのチャットの全メンバー | チャットから送られたメッセージへの返信。ミラーの詳細度が「チャットへの返信のみ」より上なら、ローカル入力、各ターンの結果、委任内容、子 pane も含む。マスクされるのはそのチャンネル自身のボット認証情報だけで、プロンプトや結果に含まれる API キーなどの秘密情報はそのまま送信される |
 
 Private Code や規制対象 Data を送信する前に、各 Provider の Policy を確認してください。
+
+### デバイス間メッセージ
+
+Navide アカウントにサインインして別のデバイス上の pane 宛にメッセージを送ると、
+メッセージ本文は送信前にそのデバイスの公開鍵で封印されます。Navide の Relay は
+それを保存して転送するだけで、読み取ることはできません。対応する秘密鍵を持って
+いないためです。
+
+Relay が*見える*のは、メッセージの周辺にある Metadata です。送信側と受信側の
+Device id、両端の Workspace ラベルと pane 名、配信状態、タイムスタンプです。
+Session Directory も保持しており、これによってデバイス同士が互いを見つけます。
+
+Workspace の絶対ファイルシステムパスは公開**されません**。以前は公開されていました。
+Session Directory が `workspacePath` をそのまま持っており、実際にはアカウント名を
+含むローカルパス全体でした。現在、デバイスは代わりに Salt 付きの Digest を公開
+します。Salt はインストールごとに生成され、ローカルの Credential Vault に保存され、
+マシンの外へ出ることはありません。そのため Digest は同じ Workspace の pane を
+まとめるには十分安定していながら、Relay や他のデバイスがそれをパスに戻すことは
+できません。Salt なしの Digest では不十分です。パスは短く構造が非常に規則的なので、
+辞書攻撃で破られてしまうためです。
+
+Workspace の*ラベル*（フォルダーの basename）と pane 名は引き続き読めます。これらは、
+リモートの agent が入力する必要のある `<device>/<workspace>/<pane>` アドレスの
+2 つの部分であり、隠すと名前によるデバイス間のアドレス指定そのものがなくなって
+しまい、保護にはなりません。さらに減らすには、ユーザーが選ぶ別名が必要です。
 
 Production Git Package は Host 所有の argv Allowlist を通して `git`、`gh`、`glab`
 をローカルで実行します。Navide がこれらの Service を Proxy したり、Repository
@@ -76,12 +103,11 @@ Installation とともにローカルに保持します。Registry 自身の Req
 インストール済みの marketplace plugin をすべて削除すると、この Data Flow は停止
 します。その他の外部 Service の Data Flow は、それぞれの設定に従います。
 
-Issue 16 の Production Storage Integration が有効な場合、Plugin の Uninstall は
-Cleanup が成功した後に、その Plugin の Local Storage を削除します。後で再インストール
-しても、削除された Storage は復元されません。First-party `navide.git` の Migration
-は Host 所有の明示的な Consumer であり、Git Preference は認証済みの Package と
-Workspace Storage Partition を使用します。Upgrade 時には、以前の Active Snapshot
-を新しい Candidate に複製し、Rollback 用に旧 Snapshot を保持する場合があります。
+Navide Plugin の Uninstall は、Cleanup が成功した後にその Plugin の Local Storage
+を削除します。後で再インストールしても復元されません。同梱の Git Plugin の
+Preference も、認証済みの Package と Workspace Storage Partition を使用します。
+Upgrade 時には、以前の Active Snapshot を新しい Candidate に複製し、Rollback 用に
+旧 Snapshot を保持する場合があります。
 
 ## CLI risk observation data
 
@@ -128,6 +154,18 @@ Local File Permission は、同じ Machine 上の他 User による偶発的 Acc
 External CLI が独自 Sandbox を提供して有効化しない限り、Agent は現在のユーザーの OS 権限で実行されます。Navide は現在、完全な Workspace Sandbox を提供していません。
 
 YOLO Mode は CLI の Confirmation または Sandbox Protection を回避する場合があります。信頼でき、Version Control された Workspace でのみ使用し、後から Command と Diff を確認してください。
+
+## Agent CLI のために開くローカルポートとファイル
+
+一部の CLI は、ターミナル入力とは別の経路で CLI 間メッセージを受け取ります。Navide は起動時に、その経路に必要なものをそれらの pane に渡します。すべてこのマシン上のものです。CLI 自身が提供する loopback 限定の HTTP ポート（`opencode`、`kilo`）、または CLI が監視する、Navide のアプリケーションデータディレクトリ内の pane ごとのファイルです。ここにあるものは何もマシンの外へ出ません。
+
+`opencode` pane のポートにはパスワードがありません。その CLI 自身のインターフェースが、自身のサーバーに対して認証できないためです。そのため、あなたの権限で動いている任意のプロセスがその pane を操作できます。`kilo` pane のポートは、その環境変数で渡される pane ごとの秘密情報で保護されます。
+
+`qwen` pane のファイルには、送られた各メッセージのテキストが平文で保存されます。pane を閉じると削除され、バックエンドが中断されて残ったファイルは、次回の Navide 起動時に削除されます。
+
+`claude` pane の経路は、代わりにその CLI 自身の設定ファイルにある hook です。この hook には、Navide がアプリケーションデータディレクトリ内の所有者のみ読めるファイルに保管している秘密情報が含まれ、これがその hook をこのマシンがインストールしたものと示します。ほかのユーザーは読めず、マシンの外へ出ることもありません。
+
+これらはすべて CLI ごとで、Settings → CLI Agents → Push channels でオフにできます。オフにすると、それらの pane へのメッセージは従来どおりターミナルに入力されます。トレードオフの全体は [CLI 間メッセージ](inter-cli-messaging.md) を参照してください。
 
 ## Context Handoff
 

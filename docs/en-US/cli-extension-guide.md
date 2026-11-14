@@ -205,7 +205,7 @@ menu's Agents block, Manual spawn and "Handle Issue As…".
 Read from the official docs on 2026-11-07. The Hermes column was measured on
 2026-11-10 against Hermes Agent v0.23.0 on Ubuntu 24.04 arm64 with a local
 stub provider, and the OpenClaw column against OpenClaw 2026.11.2 the same
-way (plan openclaw-hermes-0-2-40_a50148). The VM re-run the same day (Hermes
+way. The VM re-run the same day (Hermes
 v0.23.1, OpenClaw 2026.11.2) captured OpenClaw's session tables and Hermes's
 refusal of model flags on `--continue`; see the Log and Not wired rows.
 
@@ -451,14 +451,7 @@ against installed v1.15.12.
 | Update / doctor | `opencode upgrade`; no doctor subcommand |
 | Env vars | `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` (both scrubbed from inherited spawn env), `OPENCODE_DISABLE_AUTOUPDATE`, `OPENCODE_PERMISSION` |
 
-### Batch of six — added 2026-07-28
-
-Six CLIs were integrated in one pass (easy → hard), each via a parallel
-frontend + backend agent pair with full test-suite gates between rounds.
-MiniMax CLI (`mmx`, a media-generation CLI, not a coding agent) and Z.ai
-(no first-party CLI; GLM Coding Plan is a model subscription that plugs
-into third-party CLIs) were researched and rejected as agent types — if
-supported later, they belong as provider/env profiles on existing CLIs.
+### Qwen, Kilo, Pi, Copilot, Cursor and Aider
 
 | Key | Resume | YOLO | Session storage / reader notes |
 |---|---|---|---|
@@ -484,7 +477,7 @@ fails silently rather than loudly.
 | Session storage | `~/.factory/sessions/<encoded-cwd>/<uuid>.jsonl`, **not** the `projects/` path the docs describe. Also falls back to a flat `sessions/` and `sessions/btw/` for forks — `session_exists` checks all three, or a forked pane is reported missing and replaced. |
 | cwd encoding | Replaces **only path separators** (`realpath` → strip trailing seps → strip leading `/` → each `/` run → `-`, then one leading `-`). `encode_claude_cwd` flattens every non-alphanumeric character and therefore **cannot** be reused: it would miss the directory for any path holding a dot, underscore or hyphen. |
 | Turn end | A separate `agent_turn_outcome` record (`{turnId, reason, resultKind}`) with 17 `reason` values. There is no `stop_reason` field in the JSONL at all — that name appears in the binary only inside the bundled Anthropic SDK and in OTel attributes. Every outcome emits `turn_complete` whatever the reason: a cancelled turn has still stopped, and withholding the event parks the pane mid-turn forever. |
-| Tokens | Absent per message (only an opaque `tokens` integer). The breakdown lives in the sidecar `<uuid>.settings.json` as a **running total**, so the reader differences it and keeps one replace-in-place marker rather than a key per line (GitHub #23). `thinkingTokens` is deliberately not added to output pending a real session. |
+| Tokens | Absent per message (only an opaque `tokens` integer). The breakdown lives in the sidecar `<uuid>.settings.json` as a **running total**, so the reader differences it and keeps one replace-in-place marker rather than a key per line. `thinkingTokens` is deliberately not added to output pending a real session. |
 | Env | `DROID_PARENT_SESSION_ID` is droid's `CLAUDE_CODE_CHILD_SESSION`: inherited, a spawned pane becomes a child of the parent's session and silently writes no transcript of its own. Stripped via `home_env_vars`, along with `FACTORY_HOME_OVERRIDE` and `FACTORY_RUNTIME_SETTINGS_PATH`. |
 | Terminal | Emits `ESC[?2004h` during startup (`bracketedPaste: true`) and never `ESC[?1049h` — it repaints the normal buffer, so `fullScreenTui` stays unset. |
 

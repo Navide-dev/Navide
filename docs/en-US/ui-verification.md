@@ -11,7 +11,7 @@ before/after pair for a PR, or a design review loop.
   (ports 9223/9224).
 - **Never** use `electron-vite dev --rendererOnly`. It still launches
   Electron, a real window on the dev data dir, after the renderer server.
-- The one allowed path is **dev web mode** (#287): the renderer served to a
+- The one allowed path is **dev web mode**: the renderer served to a
   browser against an **isolated** backend. It covers the main window, Settings
   included. Plugin windows (Git, Plans) are out of scope; hand the user manual
   steps for those.

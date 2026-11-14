@@ -18,7 +18,7 @@ See [`FORMAT.md`](./FORMAT.md) for the `.vsix`-style package format.
 > (`LocalStorageBackend`). Schema changes go through
 > [migrations](#schema-migrations); a version may carry one artifact per
 > platform target (see [Per-target artifacts](#per-target-artifacts)).
-> Third-party publishing is not open — see
+> Third-party publishing is open; see
 > [the plugin development guide](../../docs/en-US/plugin-development.md).
 
 ## Run locally
@@ -66,7 +66,7 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | POST | `/api/testplace/join` | `{ "token": "tpi_…" \| "tpc_…" }`: redeem a single-use invite token or an open public test code for the calling account. Every failure is the same 404; 409 `CODE_FULL` when a code has no seats left. |
 | POST | `/api/testplace/{namespace}/{name}/leave` | Give up the caller's seat. |
 | GET | `/api/testplace/{namespace}/{name}/withdrawn` | `{withdrawn: [{version, target}]}`: the test builds taken back (yanked or revoked; all of them when the publisher is frozen or disqualified). For any account that ever held a seat, revoked or not; anyone else gets the 404 of a missing extension. The App's kill switch for installed test builds. |
-| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. At most 100 live invites per extension (409 `INVITE_LIMIT`). |
+| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. |
 | POST | `/api/testplace/{namespace}/{name}/invites/{id}/revoke` | Developer: revoke an invite; a tester who joined through it loses access. |
 | GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
 | POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |
@@ -126,12 +126,11 @@ after `create_all` creates any missing tables. Each step checks the live
 schema before changing it (so a fresh database records every step without
 work) and runs with its record in one `BEGIN IMMEDIATE` transaction, so a
 failed step leaves nothing behind and concurrent starters apply it once.
-Steps so far: `1` discovery counter columns, `2` registry-signing columns,
-`3` rebuild `extension_version` unique on (extension, version, target).
+The steps are listed in `MIGRATIONS` in `registry/migrations.py`.
 Add a step by appending to `MIGRATIONS` with explicit SQL; never edit an
 applied one.
 
-## Discovery website (p3-discovery)
+## Discovery website
 
 A dependency-light, server-rendered marketplace site is mounted on the **same**
 FastAPI app (Jinja2 templates + self-hosted CSS in `registry/web_templates/`
@@ -162,7 +161,7 @@ dismiss or act (yank / block) at `/admin/reports`, every event lands in
 `report_audit`, and publishers see reports on their dashboard without the
 reporter's identity. Ratings and reports are rate-limited per member.
 
-## Security model (p3-security + p3-publish)
+## Security model
 
 **Signing.** Publisher Ed25519 signatures authenticate strict-mode submissions,
 but publisher keys are not part of the Client trust contract. After validating
@@ -389,7 +388,7 @@ body = {
     "name": "navide",
     "display_name": "Navide",
     "public_key": pathlib.Path(os.path.expanduser(
-        "~/navide-signing/plugin_publisher.pub.pem")).read_text(),
+        "<path-to>/plugin_publisher.pub.pem")).read_text(),
     "token": os.environ["NAVIDE_PLUGIN_TOKEN"],
 }
 req = urllib.request.Request(
@@ -405,7 +404,7 @@ Then, from the repository root:
 
 ```bash
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh
 ```
@@ -439,7 +438,7 @@ gh workflow run plugin-packages.yml -f ref=<commit or tag> [-f artifact_version=
 gh run list --workflow plugin-packages.yml --limit 1   # note the run id
 
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
   --target "linux-x64 linux-arm64" --yes
@@ -466,7 +465,7 @@ takes the extension in place of the POSIX exec bit, exactly as the Host's
 `backendEntryOnDisk` does. `navide-plugin pack --target <target>` applies the
 same rule, so a Windows build packs and publishes like any other target.
 
-## Third-party publishing (Phase 2)
+## Third-party publishing
 
 Self-service publishing is on when the four `REGISTRY_AUTH_*`/session
 settings below are set; without them the registry behaves exactly as before
@@ -642,21 +641,5 @@ approved by default.
 | `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
 | `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
 | `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` | _(unset)_ | Path to Navide-Server's assertion public keys, `{"keys": [{"kid": "20261114", "public_key": "<Ed25519 SPKI PEM>"}]}`; list two during a rotation. Unset or missing turns `/api/cli/cloud-exchange` off (`404`); a malformed file, a bad `kid` (`[A-Za-z0-9_-]{1,64}`) or a non-Ed25519 key stops startup. Not secret, but kept out of Git. |
-
-## Seams left for later Phase 3 todos
-
-- **Discovery frontend** (`p3-discovery`): ✅ built — the server-rendered
-  website above. Consumes the same repository layer as `GET /api/extensions`
-  (search/category/sort) and `GET /api/extensions/{ns}/{name}`.
-- **Extensions view** (`p3-lifecycle`): the in-app view install/update/remove
-  drives off the version list + `download` endpoint. It needs, per version:
-  `download` URL (streams the blob) and the `X-Package-Digest` response header
-  for integrity verification; `latest_version` (summary/detail) resolves
-  updates; and the trust fields already exposed — `trust_tier`, `capabilities`,
-  `sensitive_capabilities`, `signed` — to gate/warn on install. Download counts
-  and ratings are now also available for in-app display.
-- **CDN storage** (real storage): `registry/storage.py` — `StorageBackend`
-  protocol; only `LocalStorageBackend` is implemented. Drop in S3/CDN behind
-  the same protocol.
 
 [uv]: https://docs.astral.sh/uv/

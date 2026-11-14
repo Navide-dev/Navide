@@ -81,8 +81,9 @@ reference is [Plugin development v2](plugin-development-v2.md).
 Not available yet, and tracked: a backend reaching the network directly
 ([TA-1](security/ta-1-backend-network.md)), third-party backends on Windows
 ([TA-3](security/ta-3-windows-unsandboxed-backend.md)), chat-channel adapters
-([TA-4](security/ta-4-channel-adapter-contribution.md)), pipeline nodes and
-plugin-to-plugin calls (0.2.39 batch 3).
+([TA-4](security/ta-4-channel-adapter-contribution.md)). Pipeline nodes and
+plugin-to-plugin calls are available; see
+[Plugin Developer Spec v2](plugin-development-v2.md).
 
 ## 3. Check it yourself before anyone else does
 

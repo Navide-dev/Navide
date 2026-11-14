@@ -52,7 +52,7 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 
 **Reclaim selected (N)** shows how many selected 分格 are eligible, releases their CLI processes, and keeps click-to-resume placeholders. It skips protected 分格, including running 分格, the focused 分格, 分格 awaiting an answer or holding unsent text, and 分格 without a resumable session. The action stays visible but is disabled when none of the selected 分格 can be reclaimed. **Mute selected notifications** mutes the entire selection, including a mix of muted and unmuted 分格; when every selected 分格 is muted, **Unmute selected notifications** restores notifications for all of them. These batch actions affect only the selected 分格.
 
-受支援的內建 Agent Key 涵蓋 14 種 coding CLI：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code。實際 CLI 行為與 Provider Billing 仍由各外部工具控制。
+受支援的內建 Agent Key 涵蓋這些 coding CLI：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code。實際 CLI 行為與 Provider Billing 仍由各外部工具控制。
 
 對 Kimi Code 分格，Navide 會提供 100 ms 的 Escape Sequence 重組時間，讓方向鍵在內嵌 Terminal 中仍能可靠導覽；若環境已有 `PI_TUI_ESC_TIMEOUT`，則仍以既有值為準。
 
@@ -150,11 +150,11 @@ Token Stats 解析相容的本機 CLI Log，將 Usage 歸屬到 Workspace、分�
 
 ### Token Monitor
 
-Open **Window → Token Monitor** for a separate window showing local Claude turn history over 14, 30, or 90 days. Reopening the command focuses the existing monitor. The existing **Turn Stats** modal remains available for inspecting one 分格. Model filters, per-turn trends, and per-turn averages and medians summarize the selected local records.
+開啟 **Window → Token Monitor**，會有一個獨立視窗顯示過去 14、30 或 90 天的本機 Claude 回合歷史。再次執行該指令會聚焦到已開啟的監看視窗。既有的 **Turn Stats** 對話框仍可用來檢視單一分格。模型篩選、每回合趨勢，以及每回合的平均值與中位數，會彙整所選的本機記錄。
 
-Transcript records have **unknown account attribution**: a shared local Claude history cannot establish which signed-in account produced a turn. Other devices, web conversations, and subagent logs are outside this view. Missing history is not zero usage; partial scan coverage and errors are shown. Large histories are bounded, and refresh can reuse a scan for 60 seconds.
+Transcript 記錄的**帳號歸屬未知**：共用的本機 Claude 歷史無法確定某個回合是由哪個已登入帳號產生的。其他裝置、網頁對話與 subagent 的 Log 不在此檢視範圍內。缺少歷史不等於零用量；部分掃描覆蓋與錯誤都會顯示。大型歷史有上限，重新整理最多可重用掃描結果 60 秒。
 
-Quota history records successful observations for the active Claude account slot through the existing usage polling service. It starts accumulating when those observations are available; it cannot reconstruct earlier quota windows. Disabled polling and an empty history are displayed explicitly. Opening the monitor does not make extra provider requests. Observed tokens and quota percentages do not establish an official token allowance, throttling, effort level, or separate thinking-token usage.
+額度歷史會透過既有的用量輪詢服務，記錄使用中 Claude 帳號槽位每次成功的觀測。它從這些觀測可用時才開始累積，無法重建更早的額度視窗。輪詢已停用與歷史為空都會明確顯示。開啟監看視窗不會額外向供應商發出請求。觀測到的 token 與額度百分比，不能用來判定官方的 token 配額、節流、effort 等級，或獨立的 thinking-token 用量。
 
 ### Turn Stats 的帳號額度
 
@@ -170,7 +170,7 @@ session；**帳號額度**顯示此 Navide 安裝歸屬到帳號的所有分格�
 
 週期預設最近 30 天，可選 90 天或自訂 UTC 日期。依半開範圍內的重設時間
 選取週期；範圍到達現在時包含進行中週期。表格與圖表每頁最多 50 筆，摘要
-與符合／排除平均條件的筆數涵蓋整個範圍。使用週期按鈕或圖表查看證據来源、
+與符合／排除平均條件的筆數涵蓋整個範圍。使用週期按鈕或圖表查看證據來源、
 完整本機及 UTC 時間、用量明細、變動讀值與重新核算時間。每觀測百分點的
 本機 token 是總量除以非零觀測峰值，不代表供應商容量或價格。
 
@@ -182,13 +182,12 @@ session；**帳號額度**顯示此 Navide 安裝歸屬到帳號的所有分格�
 
 月／年維持 **UTC 曆期**。日期範圍選取有交集的完整曆期，並顯示展開後邊界。
 token 依事件時間，週期數依開始時間（未知時用重設時間）歸期。視窗篩選只
-影響週期統計，不加總互相重疊的額度視窗。本機活动占比採同一曆期的資料，
+影響週期統計，不加總互相重疊的額度視窗。本機活動占比採同一曆期的資料，
 覆蓋不完整時不捏造完整比例。
 
 「匯出選取範圍」以單次一致回應匯出全部選取記錄，最多 10,000 筆，超過時
 須縮小日期範圍。CSV 包含帳號身份、證據、覆蓋、平均資格、UTC 時間與時區。
-部分／不可用的 token 數值留空，修正舊版缺值當零的行為；已知零值維持 `0`。
-實際鍵盤、主題、語言及額度重設驗收與自動化 fixture 檢查分開進行。
+部分／不可用的 token 數值留空；已知零值維持 `0`。
 
 ## Git 與 Review
 
@@ -241,7 +240,7 @@ Extensions 會將 Plugin 的 Manifest Permissions、精確 package-version Grant
 
 ### 從檔案安裝
 
-**從檔案安裝 .vsix…** 可以安裝你自己選的 Navide 外掛套件檔。這種套件沒有經過 Navide 審核，也沒有簽章，無法確認作者：對話框會寫明這一點，把發佈者標成「自稱」、掃描標成「未掃描」，你必須先勾選「了解風險」才能同意。從檔案安裝的 Navide 外掛不會自動更新。核准的內容會立即生效，不用按**重新啟動**、也不用重開 Navide：首次安裝核准後就啟用；核准的更新（以及 agent 觸發、揭露內容和目前版本完全相同的自動更新）會立刻切換。核准前對話框會先說明：這個外掛開著的畫面會重新載入；用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。真正切換前，Navide 會再確認一次新版的畫面能正常啟動；不能的話，原本的版本照常執行。切換進行中，外掛的面板會顯示正在切換，不會變成一片空白。每次切換都會記錄在公告中心，附**退回**上一版的按鈕。從檔案更新時會保留被取代的檔案版本，退回到它需要你重新同意。切換失敗時會繼續執行原本的版本，更新保留暫存：如果是你核准的更新，「設定 → Navide 外掛」會當下顯示原因，並保留**重新啟動**和**捨棄**，下次啟動 Navide 時公告中心會列出它並附**立即套用**；如果是 agent 觸發的自動更新，公告中心會立即常駐一列說明原因，附**立即套用**。用同一個 id 取代已安裝的 Navide 外掛時（不論哪個方向）都會先詢問；取代後不沿用原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權；來源改變時，它存的資料（原生後端資料和 view 儲存）會保留在一旁、不交給新版本，換回 Navide 市集版本時會詢問要不要接回（預設不接回）。該列的**換回 Navide 市集版本**可以反向換回。
+**從檔案安裝…** 可以安裝你自己選的 Navide 外掛套件檔。這種套件沒有經過 Navide 審核，也沒有簽章，無法確認作者：對話框會寫明這一點，把發佈者標成「自稱」、掃描標成「未掃描」，你必須先勾選「了解風險」才能同意。從檔案安裝的 Navide 外掛不會自動更新。核准的內容會立即生效，不用按**重新啟動**、也不用重開 Navide：首次安裝核准後就啟用；核准的更新（以及 agent 觸發、揭露內容和目前版本完全相同的自動更新）會立刻切換。核准前對話框會先說明：這個外掛開著的畫面會重新載入；用 Navide SDK 保存狀態的畫面會回到原來的位置，其他沒存的內容會遺失。真正切換前，Navide 會再確認一次新版的畫面能正常啟動；不能的話，原本的版本照常執行。切換進行中，外掛的面板會顯示正在切換，不會變成一片空白。每次切換都會記錄在公告中心，附**退回**上一版的按鈕。從檔案更新時會保留被取代的檔案版本，退回到它需要你重新同意。切換失敗時會繼續執行原本的版本，更新保留暫存：如果是你核准的更新，「設定 → Navide 外掛」會當下顯示原因，並保留**重新啟動**和**捨棄**，下次啟動 Navide 時公告中心會列出它並附**立即套用**；如果是 agent 觸發的自動更新，公告中心會立即常駐一列說明原因，附**立即套用**。用同一個 id 取代已安裝的 Navide 外掛時（不論哪個方向）都會先詢問；取代後不沿用原本給的權限、原生後端同意、允許改檔的工作區和 agent 工具授權；來源改變時，它存的資料（原生後端資料和 view 儲存）會保留在一旁、不交給新版本，換回 Navide 市集版本時會詢問要不要接回（預設不接回）。該列的**換回 Navide 市集版本**可以反向換回。
 
 ### 開發者模式
 

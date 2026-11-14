@@ -15,16 +15,15 @@ Navide 採用 **Local-first**，但不代表所有情況都完全離線。Electr
 - 本機 `navide.db` 裡的第三方 Navide 外掛活動紀錄（`plugin_activity`）：哪個外掛、哪個 `namespace.method`、時間、workspace、被允許／拒絕／失敗、workspace 內的相對路徑（workspace 外的路徑只記 `<outside-workspace>`，從不存檔案內容），shell 呼叫只記執行檔與子指令。明細保留 7 天，之後只留每日計數 90 天。內建的 Plans、Git、Mini-IDE 不記錄。這些資料不會離開這台電腦
 - 本機 `navide.db` 裡，分格離線時聊天室訊息的預覽（`channels.wake_kept`，重啟後改存 `channels.wake_lost`）：綁定的聊天室在分格不在線上時傳來的每則訊息，前 40 個字，用來告訴聊天室哪幾則沒有送進去。照原樣存放、不做遮罩，所以訊息開頭若是機密也會一併存下。訊息送進分格或聊天室已被告知後刪除；聊天室解除綁定或 bot 被移除時也會刪除；bot 停用期間會保留到它再次啟動。這些資料不會離開這台電腦
 - 選用的 AI Provider API Key；它會儲存在受限制檔案權限保護的本機設定檔中（受支援系統上為 `0600`）
+- Claude Code 與 Codex 的 API key 帳號：金鑰本身，以及每個帳號的本機紀錄（帳號名稱、金鑰末四碼、每月預算備註與自動切換的選擇）。各金鑰存放在哪裡，見[憑證](#憑證)
+- 應用程式資料夾中 `workbench.json` 裡的動作按鈕，以及你接受過的 Repository `.navide/workbench.json` 版本。兩者都不會寫入 Repository
 
 Navide 不營運專案 Telemetry 服務，也不要求建立 Navide 帳號。
 
-當 Issue 16 的 Production Storage Integration 啟用後，解除安裝 Plugin 會在
-Cleanup 成功後刪除該 Plugin 的本機 Storage；之後重新安裝不會還原已刪除的
-資料。一般第三方 Production Plugin 在後續 Grant／Context Integration 完成
-前仍會被拒絕。First-party `navide.git` Migration 是明確的 Host-owned
-Consumer：Git Preference 使用驗證過的 Package／Workspace Storage Partition；
-升級時可以將前一個 Active Snapshot 複製到新的 Candidate，並保留舊 Snapshot
-作為 Rollback。
+解除安裝 Navide 外掛會在 Cleanup 成功後刪除該外掛的本機 Storage；之後重新
+安裝不會還原。內建 Git 外掛的 Preference 使用同樣驗證過的 Package／Workspace
+Storage Partition；升級時可以將前一個 Active Snapshot 複製到新的 Candidate，
+並保留舊 Snapshot 作為 Rollback。
 
 ## 私有專案智慧
 
@@ -52,6 +51,27 @@ Consumer：Git Preference 使用驗證過的 Package／Workspace Storage Partiti
 | 聊天頻道 | 分格綁定的聊天平台（Telegram、Slack、Discord 等）與該聊天室的所有成員 | 對聊天室傳來訊息的回覆；鏡像詳細度高於「只回覆聊天室」時，另含本機輸入、每回合結果、委派內容與子視窗。遮蔽只涵蓋該頻道自己的機器人憑證，指令或結果中的 API 金鑰等其他機密會原樣送出 |
 
 傳送私人程式碼或受規範資料前，請先閱讀各 Provider 政策。
+
+### 跨裝置訊息
+
+登入 Navide 帳號並對另一台裝置上的分格發送訊息時，訊息本文在離開本機前，會
+先用該裝置的公開金鑰封裝。Navide 的中繼（relay）只負責儲存與轉送，無法讀取
+內容——它沒有對應的私密金鑰。
+
+中繼*看得到*的是訊息周邊的 Metadata：發送端與接收端的裝置 id、兩端的
+workspace 標籤與分格名稱、投遞狀態與時間戳記。它也保存 Session 目錄，裝置
+才能因此找到彼此。
+
+Workspace 的絕對檔案系統路徑**不會**公開。過去曾經會：Session 目錄原樣帶著
+`workspacePath`，實際上就是包含你帳號名稱的完整本機路徑。現在裝置改為公佈加鹽
+（salted）的摘要。鹽值每次安裝各自產生，存放在本機的憑證保險庫，絕不離開這台
+機器——因此摘要足以把同一個 workspace 的分格歸在一起，中繼或其他裝置卻無法
+把它還原成路徑。這裡只用不加鹽的摘要並不夠，因為路徑很短、結構又高度固定，
+會被字典攻擊攻破。
+
+Workspace 的*標籤*（資料夾的 basename）與分格名稱仍然看得到。它們是遠端
+agent 必須輸入的 `<device>/<workspace>/<pane>` 位址的兩個部分，隱藏它們等於
+取消以名稱進行的跨裝置定址，而不是保護它。要再縮減，需要使用者自訂的別名。
 
 Production Git Package 透過 Host-owned argv Allowlist 在本機執行 `git`、`gh`
 與 `glab`。Navide 不會代理這些服務，也不會將 Repository 上傳到 Navide。
@@ -126,6 +146,18 @@ Navide 的本機帳號紀錄只有名稱、金鑰最後四碼、每月預算備�
 除非外部 CLI 提供並啟用自己的 Sandbox，Agent 會以目前使用者的作業系統權限執行。Navide 目前尚未提供完整 Workspace Sandbox。
 
 YOLO Mode 可能略過 CLI Confirmation 或 Sandbox 保護。只應在可信任、已使用版本控制的 Workspace 中使用，並於執行後檢查 Command 與 Diff。
+
+## 為 Agent CLI 開啟的本機連接埠與檔案
+
+有些 CLI 會透過終端機輸入以外的管道接收 CLI 之間的訊息。Navide 在啟動時，會給這些分格該管道所需的東西，全都在這台機器上：由 CLI 自己提供服務、僅限 loopback 的 HTTP 連接埠（`opencode`、`kilo`），或是 Navide 應用程式資料目錄中、由 CLI 監看的每分格檔案。這裡的任何東西都不會離開這台機器。
+
+`opencode` 分格的連接埠沒有密碼，因為該 CLI 自己的介面無法對它自己的伺服器進行驗證。因此任何以你的身分執行的程序，都能操控那個分格。`kilo` 分格的連接埠則由放在其環境變數中的每分格密鑰保護。
+
+`qwen` 分格的檔案會以明文保存傳給它的每則訊息。分格關閉時該檔案會被移除，後端若被中斷而留下檔案，下次啟動 Navide 時也會一併移除。
+
+`claude` 分格的管道則改為該 CLI 自己設定檔中的一個 hook。它帶有 Navide 保存在應用程式資料目錄、僅限本人讀取的單一檔案中的密鑰，用來標示這個 hook 是這台機器安裝的；其他使用者讀不到，也絕不離開這台機器。
+
+這些管道都是逐 CLI 的，可在 Settings → CLI Agents → Push channels 關閉，關閉後傳給那些分格的訊息會像以前一樣打進終端機。完整的取捨請見 [CLI 之間的訊息](inter-cli-messaging.md)。
 
 ## Context Handoff
 

@@ -12,9 +12,10 @@ Mattermost, iMessage) are backend Python modules under
 manager owns the pipeline — sender gate and pairing, allowlists, pane
 bindings, two-way mirroring, delivery, secret redaction, taint marking — and
 an adapter only speaks its platform's wire protocol. Bot tokens live in the
-credential vault (`credential_vault.write_app_secret("channel-<platform>-<account>")`:
-Keychain on macOS, DPAPI on Windows), are handed to the adapter constructor,
-and are registered with `redact.add_secret` so they never reach logs.
+credential vault (Keychain on macOS, DPAPI on Windows; the entry name is
+described in [Chat channels → Setting up](../inter-cli-messaging.md#setting-up)),
+are handed to the adapter constructor, and are registered with
+`redact.add_secret` so they never reach logs.
 
 This assessment covers letting a **plugin** provide an adapter (LINE,
 WhatsApp, Teams, a company's own chat) through a contribution point, with:
@@ -87,8 +88,9 @@ installed) that sits on the one path where outside text enters a pane
 | **B. Plugin-held in sandbox memory** | Delivered to the plugin over the Backend Wire at start. | Any network the plugin has (TA-1), plus any channel back to the user (tool results, pane messages, its own view). | Everything | Not recommended: the token becomes plugin data |
 | **C. Host performs the whole protocol** | The adapter is declarative only (URL templates). | None | Only trivial HTTP bots; no WebSocket state machines, no media | Too narrow |
 
-Option A needs TA-1's bridge (option B there) and extends it with a
-credential slot; the two are one design.
+Option A is the only custody model for third-party adapters. It needs TA-1's
+bridge (option B there) and extends it with a credential slot; the two are one
+design.
 
 ## Taint and identity
 
@@ -102,11 +104,13 @@ credential slot; the two are one design.
   a sender the user already allowed.
 - **Approval relay**: the one place where "disclose" is not enough, because
   the thing being approved is a CLI agent's `critical`-graded command. Two
-  shapes to choose from (user decision below): (1) a prompt mirrored through
-  a plugin adapter shows the prompt but the answer is accepted only from a
-  Navide window or a built-in adapter — the card says "approvals cannot be
-  answered from this chat"; (2) relay allowed, disclosed as highest, with a
-  per-adapter switch in Settings → Channels, off by default.
+  shapes are possible: (1) a prompt mirrored through a plugin adapter shows
+  the prompt but the answer is accepted only from a Navide window or a
+  built-in adapter — the card says "approvals cannot be answered from this
+  chat"; (2) relay allowed, disclosed as highest, with a per-adapter switch
+  in Settings → Channels, off by default. The first version uses (1): it
+  withholds one convenience from one channel type and removes the one path
+  where a plugin could approve a `critical` command by itself.
 - **Outbound**: the manager's redaction runs before the text reaches the
   plugin (as today); the plugin receives already-redacted text.
 
@@ -131,19 +135,6 @@ credential slot; the two are one design.
 - CLI credentials: untouched; a plugin adapter never has a path to them that
   a plugin backend does not already have (none, under the sandbox).
 
-## Decisions for the user
-
-1. Confirm option A (Host-held token, per-request injection to declared
-   hosts) as the only custody model for third-party adapters.
-2. Approval relay for plugin adapters: not answerable from that chat (1), or
-   allowed behind a per-adapter switch disclosed as highest (2). The
-   recommendation is (1) for the first version; it withholds one convenience
-   from one channel type and removes the one path where a plugin could approve
-   a `critical` command by itself.
-3. Whether the first external adapter (LINE for NT-Notify, per the pilot) is
-   built against this contract in 0.2.40, which would pull TA-1 option B into
-   that version.
-
 ## Did we do enough (acceptance when implemented)
 
 - A plugin adapter's process memory never contains the token: a test runs a
@@ -155,9 +146,9 @@ credential slot; the two are one design.
   allowlisted it (documented behaviour), and the inbound event records the
   adapter plugin id.
 - A permission prompt mirrored through a plugin adapter cannot be approved
-  from that chat (decision 1 above) or requires the switch (decision 2).
-- The manager's existing tests (`backend/tests/test_channels_*.py`) pass
-  unchanged with a proxy adapter substituted for a built-in one.
-- Tests: `backend/tests/test_channels_*`, `src/main/plugins` (bridge port,
+  from that chat (shape 1 above).
+- The manager's existing tests (`backend/tests/channels/`) pass unchanged with
+  a proxy adapter substituted for a built-in one.
+- Tests: `backend/tests/channels/`, `src/main/plugins` (bridge port,
   contribution catalog), `packages/plugin-contracts` (schema),
   `marketplace/registry/tests`.
