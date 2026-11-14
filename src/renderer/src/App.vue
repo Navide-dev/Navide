@@ -9578,13 +9578,15 @@ async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction)
 /** Reconnect a pane whose Navide tools never connected: the same-session
  *  rebuild (a fresh CLI on the same conversation dials the tool server anew).
  *  Only while the pane is idle — a rebuild ends the CLI's background
- *  processes — and nothing is typed into it: /mcp is an interactive menu. */
+ *  processes — and nothing is typed into it: /mcp is an interactive menu.
+ *  A pane nobody typed in has no transcript to resume, so it reopens fresh;
+ *  the busy case is answered here, and every other failure keeps its toast. */
 async function reconnectPaneMcp(paneId: string): Promise<void> {
   if (paneRefs[paneId]?.displayStatus !== 'idle') {
     notifyRestore.toast(i18n.global.t('pane.terminal.mcp-reconnect-busy'), { type: 'info' })
     return
   }
-  await rebuildPaneViaResume(paneId, { suppressBusyToast: true })
+  await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })
 }
 
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
