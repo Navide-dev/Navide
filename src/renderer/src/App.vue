@@ -297,6 +297,8 @@ import { stopFailedRunPanes as stopFailedRunPanesFor } from './lib/failedRunStop
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
+  COLD_RESTORE_SETTLE_TIMEOUT_MS,
+  COLD_RESTORE_STARTING_LIMIT,
   INTERRUPTED_RESUME_LIMIT,
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
@@ -314,6 +316,7 @@ import {
   stripPinnedSessionId,
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
+  waitUntil,
   wasInterruptedAtLaunch,
   wasLiveAtLastLaunch,
   type RestoreScope,
@@ -14883,6 +14886,8 @@ function deferredPaneStillCurrent(
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
 /** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
 const scheduledRestoreIds = new Set<string>()
+/** Placeholder id → the pane id it was realized as, read once by realizeRestoredPaneSettled. */
+const realizedPaneIds = new Map<string, string>()
 /** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
 const wakeClaims = new WakeClaims()
 
@@ -14990,19 +14995,27 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // Only this batch. A resume under 'single'/'page'/'tab' is already capped by
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
+  //
+  // Every batch below holds its slot until the pane's prep settles, not just
+  // until the spawn ack: an ack-only ceiling still let twenty CLIs boot — and
+  // dial /plan-mcp — together (2026-11-12). This schedules our own restore
+  // only; a restore the user triggers from the UI is left as it was.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   try {
     if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (decision === 'resume' && session.scope === 'auto') {
       // Auto brings back every pane live at the last close: same ceiling as 'all'.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (interrupted.length > 0) {
       // The interrupted panes ride on top of the scope's pick: same ceiling as
-      // an 'all' restore, so a relaunch never starts more than two at once.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-    } else {
+      // an 'all' restore.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
+    } else if (trigger !== 'cold') {
       await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    } else {
+      // A cold restore under 'single'/'page'/'tab': a big tab is still a batch.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     }
   } finally {
     for (const id of ids) scheduledRestoreIds.delete(id)
@@ -15012,6 +15025,20 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     notifyRestore.toast(i18n.global.t('reconnect.auto-toast', { count: reconnected }), { type: 'success' })
   }
   if (interruptedKids.length > 0) notifyInterruptedParents(interruptedKids)
+}
+
+/** Realize one placeholder of a restore batch and hold the batch slot until the
+ *  new pane's prep settles (ready, failed or gone), at most
+ *  COLD_RESTORE_SETTLE_TIMEOUT_MS. */
+async function realizeRestoredPaneSettled(paneId: string): Promise<void> {
+  const outcome = await realizeRestoredPane(paneId, true)
+  const newId = realizedPaneIds.get(paneId)
+  realizedPaneIds.delete(paneId)
+  if ((outcome !== 'opened' && outcome !== 'fresh') || !newId) return
+  await waitUntil(() => {
+    const pane = panes.value.find((p) => p.id === newId)
+    return !pane || pane.preparationStatus === 'ready' || pane.preparationStatus === 'failed'
+  }, COLD_RESTORE_SETTLE_TIMEOUT_MS)
 }
 
 /** The placeholders a relaunch resumes by itself in one workspace: the
@@ -15308,6 +15335,7 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    realizedPaneIds.set(paneId, newId)
     const launched = panes.value.find((p) => p.id === newId)
     if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the

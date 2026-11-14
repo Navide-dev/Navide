@@ -85,9 +85,9 @@ describe('resuming the interrupted panes on a relaunch', () => {
     expect(body).toContain('interruptedLaunchTargets(session.workspacePath)')
   })
 
-  it('starts them two at a time with the existing concurrency helper', () => {
+  it('starts them under the cold restore ceiling with the existing concurrency helper', () => {
     const body = fn('advanceRestoreSession')
-    expect(body).toMatch(/interrupted\.length > 0[\s\S]*runWithConcurrency\(ids, ALL_SCOPE_RESTORE_CONCURRENCY/)
+    expect(body).toMatch(/interrupted\.length > 0[\s\S]*runWithConcurrency\(ids, COLD_RESTORE_STARTING_LIMIT/)
   })
 
   it('is gated by its own setting and capped', () => {

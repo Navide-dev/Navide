@@ -215,6 +215,26 @@ export function restoreScopeTargetIds(opts: {
  *  waits for a prior spawn to complete (backend spawn ack). */
 export const ALL_SCOPE_RESTORE_CONCURRENCY = 2
 
+/** A cold restore keeps at most this many CLIs starting at once; each slot is
+ *  held until that pane's prep settles, not just until the spawn ack. Twenty
+ *  claude panes booting together slowed /plan-mcp past Claude Code's connect
+ *  budget and left them without Navide tools (2026-11-12). */
+export const COLD_RESTORE_STARTING_LIMIT = 4
+/** Upper bound on holding a slot for one pane, so a pane stuck in prep (a
+ *  dialog nobody answers) cannot stall the rest of the batch. */
+export const COLD_RESTORE_SETTLE_TIMEOUT_MS = 120_000
+
+/** Poll `check` until it is true (resolves true) or `timeoutMs` passes
+ *  (resolves false). */
+export async function waitUntil(check: () => boolean, timeoutMs: number, intervalMs = 250): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (!check()) {
+    if (Date.now() >= deadline) return false
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  return true
+}
+
 /** Run task over ids with a fixed worker count, preserving start order. */
 export async function runWithConcurrency(
   ids: readonly string[],
