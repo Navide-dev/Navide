@@ -16,7 +16,6 @@ import time
 import zipfile
 from collections.abc import Callable
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Any
 
 from ..plugin_contract.disclosure_scan_contract import (
@@ -26,7 +25,7 @@ from ..plugin_contract.disclosure_scan_contract import (
     ScanReport,
 )
 from ..secret_scan import RULES as SECRET_RULES
-from ..package import backend_entry_for_target
+from ..package import PackageSource, backend_entry_for_target, entry_buffer, open_source
 from .js_scan import MAX_SITES_PER_FINDING, ScriptFacts, scan_script
 from .limits import Deadline, ScanTimeout, TooComplex
 from .native import NativeFacts, summarize_executable
@@ -77,7 +76,7 @@ def _redacted(value: str) -> bool:
 
 
 def scan_package(
-    data: bytes,
+    data: PackageSource,
     *,
     artifact_digest: str,
     target: str,
@@ -113,7 +112,7 @@ def scan_package(
     def skip(reason: str, count: int = 1) -> None:
         skipped[reason] = skipped.get(reason, 0) + count
 
-    with zipfile.ZipFile(BytesIO(data)) as archive:
+    with zipfile.ZipFile(open_source(data)) as archive:
         members = sorted((info for info in archive.infolist() if not info.is_dir()), key=lambda i: i.filename)
         for info in members:
             if info.filename == "manifest.json":
@@ -124,25 +123,24 @@ def scan_package(
                     timed_out = True
                     skip("unsupported")
                     continue
-                with archive.open(info) as stream:
-                    binary = stream.read(SCAN_LIMITS["maxNativeBytes"] + 1)
-                if len(binary) > SCAN_LIMITS["maxNativeBytes"]:
-                    binary = binary[:SCAN_LIMITS["maxNativeBytes"]]
-                    truncated = True
-                try:
-                    native = summarize_executable(info.filename, binary, deadline)
-                except ScanTimeout:
-                    timed_out = True
-                    continue
-                except Exception:  # noqa: BLE001 - M1: one file's failure never drops the report
-                    _log.exception("native scan failed for %s", info.filename)
-                    skip("scannerError")
-                    continue
+                # Mapped from a spool file rather than read onto the heap.
+                with entry_buffer(archive, info, SCAN_LIMITS["maxNativeBytes"]) as (binary, cut):
+                    truncated = truncated or cut
+                    binary_size = len(binary)
+                    try:
+                        native = summarize_executable(info.filename, binary, deadline)
+                    except ScanTimeout:
+                        timed_out = True
+                        continue
+                    except Exception:  # noqa: BLE001 - M1: one file's failure never drops the report
+                        _log.exception("native scan failed for %s", info.filename)
+                        skip("scannerError")
+                        continue
                 if native.too_complex:
                     skip("tooComplex")
                 natives.append(native)
                 files_scanned += 1
-                bytes_scanned += len(binary)
+                bytes_scanned += binary_size
                 for executable, subcommand, category in native.commands:
                     key = (executable, subcommand, category, "commandLikeString", "backend")
                     call_files[key] = call_files.get(key, 0) + 1
