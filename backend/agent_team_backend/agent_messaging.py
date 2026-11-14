@@ -95,6 +95,12 @@ class RegisteredPane:
     #: this is a fact about yourself, which is the one lineage question you are
     #: entitled to ask.
     spawned_by: str = ""
+    #: Pane id of the pane that opened this one (cli_open_agent or a SPAWN
+    #: block), set once at the spawn. Unlike spawned_by it is never moved by a
+    #: re-parent (cli_place_pane, a sidebar drag), which is why cli_rename_pane
+    #: grants permission from it. Empty for a pane the user opened, and for one
+    #: recorded before this field existed.
+    opened_by: str = ""
     #: Which window surface hosts this pane, for an embedded AI panel
     #: (AiCliDock): "pm" for the Pipeline Manager modal, "plans" / "git" /
     #: "editor" for those windows. Empty for an ordinary window pane — which is
@@ -314,6 +320,7 @@ def register(
     surface: str = "",
     window_kind: str = "",
     deliverable: bool = False,
+    opened_by: str = "",
 ) -> RegisteredPane:
     """Mirror one window's pane handle. Re-registering the same pane replaces
     its entry, which is how renames propagate."""
@@ -336,6 +343,7 @@ def register(
         # such a re-register — carrying the old value over would pin the pane to
         # an id nothing answers to any more.
         spawned_by=spawned_by,
+        opened_by=opened_by,
         surface=surface,
         window_kind=window_kind,
         deliverable=deliverable,

@@ -56,6 +56,9 @@ describe('CodeWorkflowHelp', () => {
     expect(text).toContain('Shortcut cheat sheet')
     expect(wrapper.findAll('.cwh-h2')).toHaveLength(10)
     expect(rowCounts(wrapper)).toEqual(TABLE_ROWS)
+    // Appended sentences once appeared twice; each must read exactly once.
+    expect(text.split('Git itself is a bundled Navide plugin')).toHaveLength(2)
+    expect(text.split('The pin is Pin to the Top of Recent.')).toHaveLength(2)
 
     // Placeholder prose, not interpolations — the escapes must survive.
     expect(text).toContain('{done}/{total} done')

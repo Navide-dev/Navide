@@ -1,6 +1,6 @@
 {
   "name": "agent-team",
-  "version": "0.2.39",
+  "version": "0.2.42",
   "private": true,
   "author": "Navide Team",
   "description": "Navide: the AI-native engineering environment for one engineer directing multiple coding agents",
@@ -216,8 +216,8 @@
       "icon": "resources/icon.png",
       "extraResources": [
         {
-          "from": "backend/dist/agent_team_backend.exe",
-          "to": "bin/agent_team_backend.exe"
+          "from": "backend/dist/agent_team_backend",
+          "to": "bin/agent_team_backend"
         },
         {
           "from": "build/stt",

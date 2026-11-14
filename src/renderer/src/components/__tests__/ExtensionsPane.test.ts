@@ -51,6 +51,37 @@ describe('ExtensionsPane', () => {
     delete (window as unknown as Record<string, unknown>).agentTeam
   })
 
+  it('P2: shows what a stopped plugin was doing before it is enabled again', async () => {
+    const stopRecord = {
+      at: 1_792_108_800_000, via: 'telegram',
+      summary: { inFlightCalls: 2, toolCallsLastMinute: 61, capabilityCallsLastMinute: null, consecutiveFailures: 3, undeclaredHosts: ['evil.io'] },
+    }
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.2.0', provenance: 'official-registry', disabled: true, stopRecord },
+      ]),
+    })
+    i18n.global.locale.value = 'en-US'
+    wrapper = mountExtensions()
+    await flushPromises()
+    const row = wrapper.get('[data-id="acme.demo"]')
+    await row.get('.ext-enable').trigger('click')
+    // The first press only opens the summary.
+    expect(api.setDisabled).not.toHaveBeenCalled()
+    const summary = row.get('.ext-stop-enable').text()
+    expect(summary).toContain('from a chat command')
+    expect(summary).toContain('Calls in flight, ended: 2')
+    expect(summary).toContain('Tool calls in the last minute: 61')
+    expect(summary).toContain('Capability calls in the last minute: not read in time')
+    expect(summary).toContain('Undeclared or refused hosts: evil.io')
+    await row.get('.ext-stop-enable-cancel').trigger('click')
+    expect(row.find('.ext-stop-enable').exists()).toBe(false)
+    await row.get('.ext-enable').trigger('click')
+    await row.get('.ext-stop-enable-confirm').trigger('click')
+    await flushPromises()
+    expect(api.setDisabled).toHaveBeenCalledWith('acme.demo', false)
+  })
+
   it('offers a per-extension pre-release switch for Registry installs, off by default', async () => {
     const listInstalled = vi
       .fn()

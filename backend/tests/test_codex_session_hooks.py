@@ -186,9 +186,11 @@ def test_native_hook_posts_unicode_payload_and_launch_header(tmp_path, monkeypat
             self.end_headers()
         def log_message(self, *_): pass
     server = HTTPServer(('127.0.0.1',0),Handler)
-    # The same room test_claude_hooks gives powershell.exe to start on a busy
-    # Windows runner; a passing run returns long before it.
-    server.timeout = 45
+    # Room for powershell.exe to cold-start on a busy Windows arm64 release
+    # runner (45 s overran there on 2026-11-13, run 43455435235); a passing run
+    # returns long before it, so the budget asserts nothing about speed. Kept
+    # under the suite's 120 s pytest-timeout so a hang still reports here.
+    server.timeout = 90
     port = tmp_path/'backend.port'
     port.write_text(str(server.server_address[1]))
     auth = tmp_path/'auth'
@@ -200,8 +202,8 @@ def test_native_hook_posts_unicode_payload_and_launch_header(tmp_path, monkeypat
     thread=threading.Thread(target=server.handle_request,daemon=True)
     thread.start()
     try:
-        result = _run_to_completion(argv,json.dumps(payload,ensure_ascii=False),timeout=45)
-        thread.join(timeout=46)
+        result = _run_to_completion(argv,json.dumps(payload,ensure_ascii=False),timeout=90)
+        thread.join(timeout=91)
     finally:
         server.server_close()
     assert result.returncode == 0

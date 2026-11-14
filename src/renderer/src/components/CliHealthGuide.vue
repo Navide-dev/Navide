@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
-import { hasRepairableFinding, STATUS_TIMEOUT_MS } from '../composables/useOnboarding'
-import type { CliHealthCandidate, CliHealthEntry, CliHealthStatus, OnboardStatus } from '../composables/useOnboarding'
+import { hasRepairableFinding, STATUS_TIMEOUT_MS, useOnboarding } from '../composables/useOnboarding'
+import type {
+  CliHealthCandidate, CliHealthEntry, CliHealthStatus, OnboardStatus, UpdateGate,
+} from '../composables/useOnboarding'
+import InstallTerminal from './InstallTerminal.vue'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -192,8 +195,106 @@ async function recheck(): Promise<void> {
   }
 }
 
+// ── Update the install Navide launches (0.2.42) ──────────────────────────────
+// The same run as CLI management's update: the backend picks the command for
+// how this install got there, runs it in the visible terminal below, one at a
+// time per machine and only while that CLI's panes are idle.
+const onboarding = useOnboarding(props.backend)
+const { maintaining, run: activeRun, runFallback } = onboarding
+const gates = ref<Record<string, UpdateGate>>({})
+const GATE_POLL_MS = 3_000
+let gateTimer: ReturnType<typeof setInterval> | null = null
+/** Per CLI updated from this guide: what Verify reports. */
+const updateResults = ref<Record<string, { label: string; from: string; to: string; error: string }>>({})
+
+function updatable(entry: CliHealthEntry): boolean {
+  return !!entry.latest_version && !!entry.update_plan?.command
+}
+
+function primaryOf(entry: CliHealthEntry | undefined): CliHealthCandidate | undefined {
+  return entry?.candidates.find((candidate) => candidate.is_primary) ?? entry?.candidates[0]
+}
+
+async function refreshGates(): Promise<void> {
+  for (const entry of affectedEntries.value.filter(updatable)) {
+    const gate = await onboarding.updateGate(entry.agent_key)
+    if (gate) gates.value = { ...gates.value, [entry.agent_key]: gate }
+  }
+}
+
+function updateBlocked(entry: CliHealthEntry): boolean {
+  return gates.value[entry.agent_key]?.blocked === true
+}
+
+function gateReason(entry: CliHealthEntry, gate: UpdateGate | undefined = gates.value[entry.agent_key]): string {
+  if (!gate?.blocked) return ''
+  if (gate.reason === 'update-running') return t('cli-manage.update-blocked-running')
+  const params = { label: entry.label, panes: gate.busy_panes.join(', ') }
+  return gate.reason === 'panes-open'
+    ? t('cli-manage.update-blocked-open', params)
+    : t('cli-manage.update-blocked-busy', params)
+}
+
+onMounted(() => {
+  void refreshGates()
+  gateTimer = setInterval(() => void refreshGates(), GATE_POLL_MS)
+})
+onUnmounted(() => {
+  if (gateTimer) clearInterval(gateTimer)
+  onboarding.dispose()
+})
+
+async function updateEntry(entry: CliHealthEntry): Promise<void> {
+  message.value = ''
+  const from = primaryOf(entry)?.version || ''
+  // Resolves once the command has exited in the terminal (or was refused).
+  const result = await onboarding.runMaintenance(entry.agent_key, 'update')
+  if (!result) return
+  if (result.gate) {
+    gates.value = { ...gates.value, [entry.agent_key]: result.gate }
+    message.value = gateReason(entry, result.gate)
+    return
+  }
+  // A PTY that could not start shows its external-terminal fallback instead.
+  if (result.spawn_failed) return
+  if (!result.run_id && !result.ok) {
+    message.value = t('cli-health.update-failed', { error: result.error || 'unknown' })
+    return
+  }
+  await verifyUpdate(entry, from, result.ok ? '' : result.error || 'unknown')
+}
+
+/** Go to Verify and detect again; report the version before and after. */
+async function verifyUpdate(entry: CliHealthEntry, from: string, error: string): Promise<void> {
+  stepIndex.value = steps.indexOf('verify')
+  checking.value = true
+  try {
+    const resp = await props.backend.send<OnboardStatus>('onboarding.status', { fresh: true }, STATUS_TIMEOUT_MS)
+    if (resp.payload?.cli_health) {
+      pendingRemoval.value = null
+      removedPaths.value = new Set()
+      health.value = resp.payload.cli_health
+    }
+    const after = health.value.entries.find((item) => item.agent_key === entry.agent_key)
+    updateResults.value = {
+      ...updateResults.value,
+      [entry.agent_key]: { label: entry.label, from, to: primaryOf(after)?.version || '', error },
+    }
+  } catch (e) {
+    message.value = t('cli-health.recheck-failed', { error: e instanceof Error ? e.message : String(e) })
+  } finally {
+    checking.value = false
+  }
+}
+
 async function dismiss(): Promise<void> {
   message.value = ''
+  // An update can leave nothing to repair: there is no finding set to
+  // dismiss then, only a guide to close.
+  if (!health.value.fingerprint) {
+    emit('resolved')
+    return
+  }
   const error = await saveError('onboarding.cli_health.dismiss', {
     fingerprint: health.value.fingerprint,
   })
@@ -238,6 +339,36 @@ async function dismiss(): Promise<void> {
                 <span v-if="candidate.signal" class="ch-signal">{{ candidate.signal }}</span>
               </div>
               <code class="ch-path">{{ candidate.path }}</code>
+              <div v-if="candidate.is_primary && entry.latest_version" class="ch-update" data-testid="cli-health-update">
+                <div class="ch-update-line">
+                  <span>{{ $t('cli-health.update-current', { version: candidate.version || $t('cli-health.unknown-version') }) }}</span>
+                  <span class="ch-arrow" aria-hidden="true">→</span>
+                  <span>{{ $t('cli-health.update-latest', { version: entry.latest_version }) }}</span>
+                  <span class="ch-update-spacer" />
+                  <button
+                    v-if="updatable(entry)"
+                    class="ch-btn update ch-update-btn"
+                    :disabled="!!maintaining || updateBlocked(entry)"
+                    :title="updateBlocked(entry) ? gateReason(entry) : entry.update_plan?.command"
+                    @click="updateEntry(entry)"
+                  >
+                    {{ $t('cli-health.update-to', { version: entry.latest_version }) }}
+                  </button>
+                  <a v-else-if="entry.docs_url" class="ch-docs" :href="entry.docs_url" target="_blank" rel="noreferrer">
+                    {{ $t('cli-health.update-docs') }} ↗
+                  </a>
+                </div>
+                <p v-if="updatable(entry)" class="ch-update-note">
+                  {{ $t('cli-health.update-runs-with', { command: entry.update_plan?.command }) }}
+                </p>
+                <p v-else-if="entry.update_plan?.reason === 'npm-prefix-not-writable'" class="ch-update-note">
+                  {{ $t('cli-health.update-npm-not-writable') }}
+                </p>
+                <p v-else class="ch-update-note">{{ $t('cli-health.update-no-command') }}</p>
+                <p v-if="updatable(entry) && updateBlocked(entry)" class="ch-gate" data-testid="cli-health-update-gate">
+                  {{ gateReason(entry) }}
+                </p>
+              </div>
               <div class="ch-candidate-actions">
                 <button
                   v-if="candidate.status === 'ok' && !candidate.is_primary"
@@ -270,6 +401,9 @@ async function dismiss(): Promise<void> {
               </p>
             </div>
             <div class="ch-actions-note">{{ $t('cli-health.use-version-note') }}</div>
+            <div v-if="entry.latest_version && entry.candidates.length > 1" class="ch-actions-note">
+              {{ $t('cli-health.update-only-active') }}
+            </div>
           </section>
         </template>
 
@@ -302,23 +436,45 @@ async function dismiss(): Promise<void> {
         <template v-else>
           <div class="ch-verify">
             <div class="ch-check">✓</div>
-            <h2>{{ $t('cli-health.verify-title') }}</h2>
-            <p class="ch-lead">{{ $t('cli-health.verify-desc') }}</p>
+            <template v-if="Object.keys(updateResults).length">
+              <h2>{{ $t('cli-health.update-verify-title') }}</h2>
+              <p class="ch-lead">{{ $t('cli-health.update-verify-desc') }}</p>
+              <section
+                v-for="(result, key) in updateResults"
+                :key="key"
+                class="ch-card ch-update-result"
+                data-testid="cli-health-update-result"
+              >
+                <strong>{{ result.label }}</strong>
+                <span v-if="result.error" class="ch-warning">{{ $t('cli-health.update-failed', { error: result.error }) }}</span>
+                <span v-else-if="result.to && result.to !== result.from" class="ch-updated">
+                  ✓ {{ $t('cli-health.update-updated', { from: result.from || $t('cli-health.unknown-version'), to: result.to }) }}
+                </span>
+                <span v-else class="ch-warning">
+                  {{ $t('cli-health.update-unchanged', { version: result.to || result.from || $t('cli-health.unknown-version') }) }}
+                </span>
+              </section>
+            </template>
+            <template v-else>
+              <h2>{{ $t('cli-health.verify-title') }}</h2>
+              <p class="ch-lead">{{ $t('cli-health.verify-desc') }}</p>
+            </template>
             <button class="ch-btn primary" :disabled="checking" @click="recheck">
               {{ checking ? $t('label.detecting') : $t('action.re-detect') }}
             </button>
           </div>
         </template>
 
+        <InstallTerminal v-if="activeRun || runFallback" class="ch-terminal" :onboarding="onboarding" />
         <p v-if="message" class="ch-message">{{ message }}</p>
       </main>
 
       <footer class="ch-footer">
-        <button class="ch-btn ghost" @click="dismiss">{{ $t('action.skip-for-now') }}</button>
+        <button class="ch-btn ghost" :disabled="!!maintaining" @click="dismiss">{{ $t('action.skip-for-now') }}</button>
         <span />
         <button v-if="stepIndex > 0" class="ch-btn ghost" @click="stepIndex--">{{ $t('action.back') }}</button>
         <button v-if="stepIndex < steps.length - 1" class="ch-btn primary" @click="stepIndex++">{{ $t('action.next') }}</button>
-        <button v-else class="ch-btn ghost" @click="dismiss">{{ $t('cli-health.close') }}</button>
+        <button v-else class="ch-btn ghost" :disabled="!!maintaining" @click="dismiss">{{ $t('cli-health.close') }}</button>
       </footer>
     </section>
   </div>
@@ -395,9 +551,21 @@ h2 { margin: 0 0 8px; color: var(--text-bright); font-size: 22px; }
 .ch-btn.primary { border-color: var(--accent-emphasis); background: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ch-btn.danger { border-color: var(--danger-fg); color: var(--danger-fg); background: transparent; }
 .ch-btn.ghost { background: transparent; }
+.ch-btn.update { border-color: var(--success-emphasis); background: var(--success-emphasis); color: var(--text-on-emphasis); font-weight: 600; }
+.ch-update { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--accent-emphasis); border-radius: 8px; background: var(--bg-subtle); }
+.ch-update-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: var(--font-sm); color: var(--text-bright); }
+.ch-update-spacer { flex: 1; }
+.ch-arrow { color: var(--accent-bright); }
+.ch-update-note { margin: 6px 0 0; color: var(--text-muted); font-size: var(--font-2xs); overflow-wrap: anywhere; }
+.ch-gate { margin: 6px 0 0; color: var(--attention-fg); font-size: var(--font-xs); }
+.ch-docs { color: var(--accent-bright); font-size: var(--font-xs); }
+.ch-update-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.ch-updated { color: var(--success-fg); font-size: var(--font-xs); }
+.ch-terminal { margin-top: 14px; }
 /* Hover feedback: the variants restate their own resting colour so the base
  * rule cannot recolour them. Transition and focus ring come from semantic.css. */
 .ch-btn:hover:not(:disabled) { background: var(--bg-hover-strong); border-color: var(--border-strong); color: var(--text-bright); }
+.ch-btn.update:hover:not(:disabled) { background: var(--success-strong); border-color: var(--success-strong); color: var(--text-on-emphasis); }
 .ch-btn.primary:hover:not(:disabled) { background: var(--accent-focus); border-color: var(--accent-focus); color: var(--text-on-emphasis); }
 .ch-btn.danger:hover:not(:disabled) { background: var(--bg-hover-strong); border-color: var(--danger-fg); color: var(--danger-fg); }
 .ch-btn.ghost:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text-bright); }

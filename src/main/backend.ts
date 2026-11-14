@@ -12,6 +12,7 @@ import {
   loginShellFlags,
   needsLoginShellPath,
 } from '../shared/osplat'
+import { packagedBackendBinary } from './backend-binary'
 import { registerPendingBackend, releasePendingBackend } from './backend-pending'
 import { persistentBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
 import { defaultHealthCheckTimeoutSec } from './health-timeout'
@@ -429,18 +430,22 @@ export async function startBackend(
     // PyInstaller names the frozen backend after the spec, plus the platform's
     // executable suffix. Without `.exe` the packaged Windows app looks for a
     // file that is not there and never starts its backend at all.
-    const binaryPath = join(
-      process.resourcesPath,
-      'bin',
-      isWindows() ? 'agent_team_backend.exe' : 'agent_team_backend'
-    )
-    // The onefile backend unpacks into, and keeps reading from, its temp
-    // directory; the OS temp cleaner removed parts of it under a running
-    // backend (see backend-tmpdir.ts). Give it one under the data dir instead.
+    const binaryPath = packagedBackendBinary(process.resourcesPath, isWindows())
+    // A temp directory under the data dir, which no OS temp cleaner sweeps
+    // (see backend-tmpdir.ts): the onedir backend unpacks nothing, but its own
+    // temp files and any single-file build still land here.
     // TMPDIR is what POSIX and the Python tempfile module read, TMP/TEMP what
     // Windows (GetTempPath) does; the two unused ones are harmless.
     const tmpDir = prepareBackendTmpDir(persistentBackendTmpDir(backendDataDir(env)))
     if (tmpDir) {
+      // Panes the backend opens get the user's own values back from this
+      // (frozen_env.restore_user_temp_env); a missing key means it was unset.
+      const original: Record<string, string> = {}
+      for (const key of ['TMPDIR', 'TMP', 'TEMP'] as const) {
+        const value = env[key]
+        if (value !== undefined) original[key] = value
+      }
+      env.AGENT_TEAM_ORIG_TEMP_ENV = JSON.stringify(original)
       env.TMPDIR = tmpDir
       env.TMP = tmpDir
       env.TEMP = tmpDir

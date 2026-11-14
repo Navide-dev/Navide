@@ -30,6 +30,8 @@ MARKETPLACE_TOOLS = ["marketplace_search", "marketplace_detail", "plugins_list_i
 MARKETPLACE_REQUEST_TOOLS = [
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
     "plugins_request_remove", "marketplace_request_status", "plugins_disable", "plugins_enable",
+    # Plan P3 (plugin-comms-security): stop every third-party plugin at once.
+    "plugins_disable_all",
 ]
 #: Core tools registered after those: plan mcp_614482's read-only failover state and accounts (P1)
 #: and account sign-in (P2).
@@ -80,6 +82,15 @@ CHANNEL_TOOLS = [
     "channels_bot_remove_request",
     "channels_request_status",
 ]
+#: Core tools registered after those: 0.2.40's pane rename
+#: (mcp_server/pane_rename_tool.py, imported after channel_tools).
+RENAME_TOOLS = ["cli_rename_pane"]
+#: Registered after it: 0.2.40's Developer Mode backend call
+#: (mcp_server/developer_backend_tool.py).
+DEVELOPER_BACKEND_TOOLS = ["plugins_developer_backend_call"]
+#: Registered after it: 0.2.40's running-pane model switch
+#: (mcp_server/pane_model_tool.py).
+SET_MODEL_TOOLS = ["cli_set_model"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
 PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
@@ -99,7 +110,7 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS + EVOLVE_RETRO_TOOLS + CHANNEL_TOOLS
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS + EVOLVE_RETRO_TOOLS + CHANNEL_TOOLS + RENAME_TOOLS + DEVELOPER_BACKEND_TOOLS + SET_MODEL_TOOLS
     existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-len(added):]] == added

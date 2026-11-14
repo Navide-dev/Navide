@@ -12,6 +12,7 @@ import type { Stage } from '../../data/stages'
 import PipelineNodeCard from './PipelineNodeCard.vue'
 import { DND_NODE, DND_PALETTE, stagesByLayer, type PaletteItem } from './pipelineEditorModel'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from '../../lib/builtinPipelineText'
 
 export interface LaneTarget {
   mode: 'into' | 'newLayer'
@@ -68,7 +69,7 @@ function flowState(col: { nodes: GraphNode[] }): '' | 'live' | 'done' {
 
 function columnTitle(col: { index: number; stage?: Stage; gateOnly: boolean }): string {
   if (col.gateOnly) return t('pipelineEditor.lane.checkpoint')
-  return col.stage?.shortTitle || col.stage?.title || t('pipelineEditor.lane.layer', { n: col.index + 1 })
+  return builtinTextForUi(col.stage?.shortTitle || col.stage?.title || '') || t('pipelineEditor.lane.layer', { n: col.index + 1 })
 }
 
 function roleOf(n: GraphNode): string {

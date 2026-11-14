@@ -13,7 +13,7 @@ import type { useBackend } from '../composables/useBackend'
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import type { useOnboarding } from '../composables/useOnboarding'
 import type {
-  AutoupdatePolicy, CliHealthEntry, CliUpdateRecord, MaintenanceAction, OnboardDep,
+  AutoupdatePolicy, CliHealthEntry, CliUpdateRecord, MaintenanceAction, OnboardDep, UpdateGate,
 } from '../composables/useOnboarding'
 import InstallTerminal from './InstallTerminal.vue'
 
@@ -54,8 +54,57 @@ const displayedDeps = computed(() => props.agentKey
   : cliDeps.value)
 let installTrigger: HTMLElement | null = null
 
-onMounted(() => { if (!props.agentKey) void onboarding.refresh() })
-onUnmounted(() => emit('install-open-change', false))
+/** Last gate answer per installed agent CLI: an update runs one at a time per
+ *  machine, and only while every pane of that CLI is idle (on Windows: closed). */
+const gates = ref<Record<string, UpdateGate>>({})
+const GATE_POLL_MS = 3_000
+let gateTimer: ReturnType<typeof setInterval> | null = null
+
+function gated(dep: OnboardDep): boolean {
+  return dep.group === 'agent_cli' && dep.status !== 'missing' && !!updateCommand(dep)
+}
+
+/** What "update" runs: the backend's plan for this install, else the vendor's. */
+function updateCommand(dep: OnboardDep): string {
+  return dep.update_plan?.command || dep.update_cmd
+}
+
+/** npm's global folder is root-owned: no button, say why (Navide never sudo). */
+function npmNotWritable(dep: OnboardDep): boolean {
+  return dep.update_plan?.reason === 'npm-prefix-not-writable'
+}
+
+async function refreshGates(): Promise<void> {
+  for (const dep of displayedDeps.value.filter(gated)) {
+    const gate = await onboarding.updateGate(dep.id)
+    if (gate) gates.value = { ...gates.value, [dep.id]: gate }
+  }
+}
+
+function updateBlocked(dep: OnboardDep): boolean {
+  return gated(dep) && gates.value[dep.id]?.blocked === true
+}
+
+function gateReason(dep: OnboardDep, gate: UpdateGate | undefined = gates.value[dep.id]): string {
+  if (!gate?.blocked) return ''
+  if (gate.reason === 'update-running') return t('cli-manage.update-blocked-running')
+  return gate.reason === 'panes-open'
+    ? t('cli-manage.update-blocked-open', { label: dep.label, panes: gate.busy_panes.join(', ') })
+    : t('cli-manage.update-blocked-busy', { label: dep.label, panes: gate.busy_panes.join(', ') })
+}
+
+// The probe often lands after mount: ask as soon as a gated CLI is listed.
+watch(() => displayedDeps.value.filter(gated).map((dep) => dep.id).join(','), () => void refreshGates())
+
+onMounted(() => {
+  if (!props.agentKey) void onboarding.refresh()
+  void refreshGates()
+  gateTimer = setInterval(() => void refreshGates(), GATE_POLL_MS)
+})
+onUnmounted(() => {
+  if (gateTimer) clearInterval(gateTimer)
+  emit('install-open-change', false)
+})
 watch(() => props.agentKey, () => { installTarget.value = ''; message.value = '' })
 watch(installTarget, async (target) => {
   emit('install-open-change', !!target)
@@ -102,6 +151,11 @@ async function run(dep: OnboardDep, action: MaintenanceAction): Promise<void> {
   // Resolves once the command has exited in the terminal below (or was refused).
   const result = await onboarding.runMaintenance(dep.id, action)
   if (!result) return
+  if (result.gate) {
+    gates.value = { ...gates.value, [dep.id]: result.gate }
+    message.value = gateReason(dep, result.gate)
+    return
+  }
   if (result.ok) message.value = t('cli-manage.run-finished', { command: result.command })
   else if (result.run_id) message.value = t('cli-manage.run-failed', { command: result.command, error: result.error })
   // An install refusal carries the reason (e.g. a missing prerequisite); the
@@ -182,6 +236,9 @@ function formatTime(value: string): string {
         <span class="cm-name">{{ dep.label }}</span>
         <span :class="['cm-badge', dep.status]">{{ $t(`cli-manage.status.${dep.status}`) }}</span>
         <span v-if="dep.version" class="cm-version">{{ dep.version }}</span>
+        <span v-if="dep.latest_version" class="cm-badge update-available" data-testid="cli-update-available">
+          {{ $t('cli-manage.update-available', { version: dep.latest_version }) }}
+        </span>
         <span v-if="dep.install_method" class="cm-method">
           {{ $t(`cli-manage.method.${dep.install_method}`) }}
         </span>
@@ -219,13 +276,19 @@ function formatTime(value: string): string {
 
       <div class="cm-actions">
         <button
-          v-if="dep.update_cmd"
+          v-if="updateCommand(dep) && !npmNotWritable(dep)"
           class="cm-btn"
-          :disabled="!!maintaining || runBusy"
-          :title="dep.update_cmd"
+          :class="{ 'cm-update-to': dep.latest_version }"
+          data-testid="cli-update-button"
+          :disabled="!!maintaining || runBusy || updateBlocked(dep)"
+          :title="updateBlocked(dep) ? gateReason(dep) : updateCommand(dep)"
           @click="run(dep, 'update')"
         >
-          {{ busy(dep, 'update') ? $t('cli-manage.opening') : $t('cli-manage.update', { command: dep.update_cmd }) }}
+          {{ busy(dep, 'update')
+            ? $t('cli-manage.opening')
+            : dep.latest_version
+              ? $t('cli-manage.update-to', { version: dep.latest_version })
+              : $t('cli-manage.update', { command: updateCommand(dep) }) }}
         </button>
         <a v-else-if="dep.docs_url" class="cm-btn link" :href="dep.docs_url" target="_blank" rel="noreferrer">
           {{ $t('cli-manage.update-via-docs') }}
@@ -257,7 +320,7 @@ function formatTime(value: string): string {
           {{ busy(dep, 'install') ? $t('cli-manage.opening') : $t('cli-manage.reinstall', { command: dep.install_cmd }) }}
         </button>
 
-        <label v-if="dep.autoupdate_env" class="cm-policy">
+        <label v-if="dep.autoupdate_env || gated(dep)" class="cm-policy">
           {{ $t('cli-manage.autoupdate') }}
           <select :value="dep.autoupdate_policy" @change="setPolicy(dep, $event)">
             <option value="vendor">{{ $t('cli-manage.policy.vendor') }}</option>
@@ -265,6 +328,10 @@ function formatTime(value: string): string {
           </select>
         </label>
       </div>
+      <p v-if="updateCommand(dep) && updateBlocked(dep)" class="cm-gate" data-testid="cli-update-gate">{{ gateReason(dep) }}</p>
+      <p v-if="npmNotWritable(dep)" class="cm-gate" data-testid="cli-update-npm-not-writable">
+        {{ $t('cli-manage.update-npm-not-writable') }}
+      </p>
     </div>
 
     <!-- The maintenance command running (or last run) from this panel. -->
@@ -305,6 +372,9 @@ function formatTime(value: string): string {
 .cm-badge.ok { color: #2b8a3e; }
 .cm-badge.missing { color: #8b95a3; }
 .cm-badge.outdated { color: #c77400; }
+.cm-badge.update-available { color: #1c7ed6; }
+.cm-btn.cm-update-to { border-color: var(--success-emphasis); color: var(--success-fg); font-weight: 600; }
+.cm-gate { font-size: var(--font-xs); color: var(--text-muted, #8b95a3); margin: 0; }
 .cm-version, .cm-method, .cm-scope { font-size: 11.5px; color: var(--text-muted, #8b95a3); }
 .cm-method { border: 1px solid var(--border-default); border-radius: 99px; padding: 0 8px; }
 .cm-path {

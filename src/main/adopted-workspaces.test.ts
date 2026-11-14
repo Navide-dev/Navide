@@ -102,7 +102,8 @@ describe('adopted workspaces', () => {
     expect(at).toBeGreaterThan(-1)
     const handler = mainSource.slice(at, mainSource.indexOf('\n})', at))
     expect(handler).toContain('pendingAdoptedWorkspaces.delete(win.id)')
-    // Both restore paths — the crash prompt and the clean-exit snapshot.
-    expect(mainSource.match(/pendingAdoptedWorkspaces\.set\(/g)).toHaveLength(2)
+    // Every restore path — the crash prompt, the clean-exit snapshot, and
+    // Reopen Closed Window.
+    expect(mainSource.match(/pendingAdoptedWorkspaces\.set\(/g)).toHaveLength(3)
   })
 })

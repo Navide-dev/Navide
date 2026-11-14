@@ -67,6 +67,8 @@ import {
   togglePushChannel,
   usePushChannelPrefs,
 } from '../composables/usePushChannelPrefs'
+import { setAcpEnabled, useAcpPrefs } from '../composables/useAcpPrefs'
+import { setArenaEnabled, useArenaPrefs } from '../composables/useArenaPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
@@ -98,7 +100,8 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
-import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { FOLLOW_SWITCH_AGENT, setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
+import { accountLabel, DEFAULT_PROFILE_ID } from '../lib/accountLabel'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -111,6 +114,7 @@ import {
 import { useGitAccounts } from '../composables/useGitAccounts'
 import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
+import AccountSwitchLog from './accounts/AccountSwitchLog.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
 import OllamaSetup from './OllamaSetup.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
@@ -132,6 +136,7 @@ import MarketplaceDeveloperPanel from './MarketplaceDeveloperPanel.vue'
 import TestplacePane from './TestplacePane.vue'
 import { marketplaceView, setMarketplaceView } from '../composables/useMarketplaceForms'
 import PluginDisclosureOverview from './PluginDisclosureOverview.vue'
+import PluginActivityMonitor from './PluginActivityMonitor.vue'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
 import McpPane from './McpPane.vue'
@@ -148,6 +153,8 @@ import { forgetSyncInventory } from '../composables/useSyncInventory'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
+import AgentsSettingsPane from './settings/AgentsSettingsPane.vue'
+import type { AgentIdentitySummary } from '../lib/agentIdentity'
 import SecurityPane from './settings/SecurityPane.vue'
 import AppLockPane from './settings/AppLockPane.vue'
 import WebhooksPane from './settings/WebhooksPane.vue'
@@ -202,8 +209,15 @@ const props = defineProps<{
   reclaimableNowCount?: number
   /** Rough bytes those panes are holding. Estimated, not measured. */
   reclaimableNowBytes?: number
+  /** Settings → Agents: every agent identity with its pane state, and the one
+   *  to select when the page opens. */
+  agentPanes?: AgentIdentitySummary[]
+  agentFocusId?: string
 }>()
 const emit = defineEmits<{
+  (e: 'agent-open', identityId: string): void
+  (e: 'agent-stop', identityId: string): void
+  (e: 'agent-rename', identityId: string, name: string): void
   (e: 'close'): void
   (e: 'reopen-onboarding'): void
   (e: 'cli-login', agentKey: string, loginProfileId?: string): void
@@ -255,7 +269,7 @@ const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0
 /** Active high-risk credential findings, shown as the nav badge. */
 const credentialsHighCount = ref(0)
 
-type Tab = 'webhooks' | 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help'
+type Tab = 'webhooks' | 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'appLock' | 'accounts' | 'extensions' | 'marketplace' | 'disclosureOverview' | 'keybindings' | 'channels' | 'security' | 'help' | 'agents'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -419,6 +433,8 @@ onBeforeUnmount(() => { sidebarHeadObserver?.disconnect() })
 // first time its page is shown (opening Settings, or another page, reads
 // nothing), and it polls only while that page is shown.
 const disclosurePageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'disclosure')
+// Plan P1: the activity monitor at the top of the Installed page polls only while shown.
+const installedPageShown = computed(() => activeTab.value === 'extensions' && pluginsPage.value === 'plugins')
 const visitedDisclosureOverview = ref(false)
 watch(disclosurePageShown, (shown) => { if (shown) visitedDisclosureOverview.value = true }, { immediate: true })
 // A plugin card's link: the Disclosure page, then that plugin's entry once the
@@ -464,11 +480,12 @@ defineExpose({
   // Same two steps the search results take, for a caller outside this window
   // that knows which section it means — the account view pointing at the rules,
   // for one, which it used to do in prose and with nowhere to click.
-  setSection: async (tab: Tab, section: string): Promise<void> => {
+  // `query` names the CLI a cliAgents section opens on (see openCliSection).
+  setSection: async (tab: Tab, section: string, query = ''): Promise<void> => {
     activeTab.value = tab
     if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'extensions' && PLUGINS_SECTION_PAGE[section]) pluginsPage.value = PLUGINS_SECTION_PAGE[section]
-    if (tab === 'cliAgents') await openCliSection(section)
+    if (tab === 'cliAgents') await openCliSection(section, query)
     await nextTick()
     requestAnimationFrame(() => {
       document
@@ -727,6 +744,12 @@ function toggleCliAgent(k: string): void {
 // second window editing this page repaints this one instead of leaving it on a
 // stale copy until reload.
 const { pushDisabled } = usePushChannelPrefs()
+const { acpEnabled } = useAcpPrefs()
+const { arenaEnabled } = useArenaPrefs()
+const arenaEnabledModel = computed<boolean>({
+  get: () => arenaEnabled.value,
+  set: (v) => setArenaEnabled(v),
+})
 const pushChannelRows = computed(() =>
   CLI_AGENT_SPECS.filter((s) => s.pushChannel)
 )
@@ -1097,6 +1120,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.general'),
     summary: t('settings.search.item.settings-management.summary'),
     keywords: 'settings management export import bundle config path location scope user workspace 設定管理 匯出 匯入 全集 位置 路徑 層級',
+  },
+  {
+    id: 'general-experimental',
+    tab: 'general',
+    section: 'general-experimental',
+    title: t('settings.search.item.general-experimental.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-experimental.summary'),
+    keywords: 'experimental features model arena compare models worktree 實驗功能 模型擂台 比較 模型',
   },
   {
     id: 'general-p2p',
@@ -1552,6 +1584,28 @@ const quotaFailover = useQuotaFailover()
 const FAILOVER_MODES: readonly FailoverMode[] = ['off', 'notify', 'auto']
 const failoverMode = computed<FailoverMode>(() => quotaFailover.state.value?.policy.mode ?? 'notify')
 const failoverBusy = ref(false)
+// One line under the policy: the account an automatic switch would pick for
+// Claude, and the way to Accounts, where the same policy sits with its queue
+// and switch log (plan 0-2-42_eb5049).
+const failoverNext = ref<{ name: string; headroom: number | null } | null>(null)
+const failoverNextLoaded = ref(false)
+async function loadFailoverNext(): Promise<void> {
+  failoverNextLoaded.value = false
+  const cap = quotaFailover.capabilityFor(FOLLOW_SWITCH_AGENT)
+  if (!cap?.supported || !cap.hasSlots || failoverMode.value === 'off') return
+  const list = await quotaFailover.previewCandidates(FOLLOW_SWITCH_AGENT)
+  const pick = list?.find((c) => c.excluded === null)
+  failoverNext.value = pick
+    ? { name: accountLabel(props.cliProfilesApi, FOLLOW_SWITCH_AGENT, pick.slotId || DEFAULT_PROFILE_ID, t), headroom: pick.headroom }
+    : null
+  failoverNextLoaded.value = list !== null
+}
+watch([failoverMode, () => !!quotaFailover.state.value], () => void loadFailoverNext(), { immediate: true })
+async function openAutoContinue(): Promise<void> {
+  activeTab.value = 'accounts'
+  await nextTick()
+  document.querySelector<HTMLElement>('[data-settings-section="accounts-auto-continue"]')?.scrollIntoView({ block: 'start' })
+}
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true
@@ -1584,6 +1638,10 @@ interface FailoverCapabilityRow {
   platformUnsupported: boolean
   todo: string
 }
+// The backend's fixed note for a CLI with no account switch
+// (cli_vendors/registry.py account_capability); shown translated. Any other
+// reason is the backend's own text and is shown as is.
+const NO_SWITCH_ADAPTER = 'no account-switch adapter'
 const failoverRows = computed<FailoverCapabilityRow[]>(() => {
   const caps = quotaFailover.state.value?.capabilities
   if (!caps) return []
@@ -1797,6 +1855,8 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   // Order and the disabled list are persisted per workspace (project.json),
   // with the global KV as the fallback default — so this page is both.
   cliAgents: { scope: 'userWorkspace', storage: 'localStorage' },
+  // Agent identities (name, colour, last session) in the ui settings store.
+  agents: { scope: 'user', storage: 'localStorage' },
   // Each CLI's own files, read in place; the cards show their paths.
   cliExtensions: { scope: 'user', storage: 'cliFiles' },
   general: { scope: 'user', storage: 'localStorage' },
@@ -2888,6 +2948,11 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.3" y="5" width="9.4" height="7" rx="1.6"/><path d="M8 2.3V5"/><circle cx="8" cy="2.1" r="0.6"/><path d="M6 8.3v0.01M10 8.3v0.01"/></svg>
                 </template>
               </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.agents')" :active="activeTab === 'agents'" data-testid="settings-nav-agents" @select="activeTab = 'agents'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="6" r="3"/><path d="M3 13.5c.8-2.2 2.7-3.3 5-3.3s4.2 1.1 5 3.3"/><path d="M12.2 2.2l.5 1 1 .5-1 .5-.5 1-.5-1-1-.5 1-.5Z"/></svg>
+                </template>
+              </SettingsNavItem>
               <SettingsNavItem :label="$t('settings.nav.analyzer')" :active="activeTab === 'analyzer'" @select="activeTab = 'analyzer'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2C6.6 2.2 4.2 2.8 4.2 4.8 2.7 5.1 2.7 7.3 4.2 7.8c0 2 1.9 2.6 3.8 2.1"/><path d="M8 3.2c1.4-1 3.8-.4 3.8 1.6 1.5.3 1.5 2.5 0 3 0 2-1.9 2.6-3.8 2.1"/><path d="M8 3.2v9.6"/></svg>
@@ -2970,7 +3035,7 @@ watch(activeTab, (tab) => {
                   @select="openPluginsPage(page.id)"
                 />
               </template>
-              <SettingsNavItem :label="$t('settings.nav.marketplace')" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
+              <SettingsNavItem :label="$t('settings.nav.marketplace')" class="settings-nav-item--marketplace" :active="activeTab === 'marketplace'" @select="activeTab = 'marketplace'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
                 </template>
@@ -3625,6 +3690,16 @@ watch(activeTab, (tab) => {
             </ul>
             <SettingsEmptyState v-if="!filteredCliRows.length" class="cli-agent-empty" :message="$t('settings.cliAgents.no-results')" />
           </section>
+          <!-- Off by default; on, the ＋ menu also offers agents run over the
+               Agent Client Protocol (composables/useAcpPrefs.ts). -->
+          <section class="ap-section" data-settings-section="cli-agents-acp">
+            <h3 class="ap-title">{{ $t('settings.cliAgents.acp-title') }}</h3>
+            <p class="ap-hint">{{ $t('settings.cliAgents.acp-hint') }}</p>
+            <label class="cli-agent-toggle">
+              <input type="checkbox" data-testid="acp-experimental" :checked="acpEnabled" @change="setAcpEnabled(($event.target as HTMLInputElement).checked)" />
+              <span>{{ $t('settings.cliAgents.acp-toggle') }}</span>
+            </label>
+          </section>
           <CliRiskRangesPane v-if="activeTab === 'cliAgents'" :backend="props.backend" />
           </div>
           <Transition name="cli-drawer">
@@ -4122,6 +4197,19 @@ watch(activeTab, (tab) => {
                 :title="$t('usage.failover-title')"
                 :description="$t('usage.failover-hint')"
               >
+                <template #description>
+                  {{ $t('usage.failover-hint') }}
+                  <span class="failover-next-line" data-testid="general-failover-next">
+                    <template v-if="failoverNextLoaded">{{ failoverNext
+                      ? (failoverNext.headroom !== null
+                        ? $t('usage.auto-switch-next-headroom', { name: failoverNext.name, pct: Math.round(failoverNext.headroom) })
+                        : $t('usage.auto-switch-next', { name: failoverNext.name }))
+                      : $t('usage.auto-switch-next-none') }}</template>
+                    <button type="button" class="failover-next-goto" data-testid="general-failover-goto" @click="openAutoContinue">
+                      {{ $t('usage.auto-switch-goto-accounts') }}
+                    </button>
+                  </span>
+                </template>
                 <template #control>
                   <select
                     data-testid="quota-failover-mode"
@@ -4185,7 +4273,7 @@ watch(activeTab, (tab) => {
                       <td class="failover-notes">
                         <span v-if="row.platformUnsupported" class="failover-tag">{{ $t('usage.failover-platform-unsupported') }}</span>
                         <span v-if="row.unverified" class="failover-tag">{{ $t('usage.failover-unverified') }}</span>
-                        <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo }}</span>
+                        <span v-if="row.switchMode === 'unsupported' && row.todo" class="failover-todo">{{ row.todo === NO_SWITCH_ADAPTER ? $t('usage.failover-no-adapter') : row.todo }}</span>
                       </td>
                     </tr>
                   </tbody>
@@ -4279,6 +4367,22 @@ watch(activeTab, (tab) => {
                 <p v-if="settingsBundleSummary.length" class="summary-ok">{{ settingsBundleSummary.map(bundleMessageText).join(' ') }}</p>
                 <p v-if="settingsBundleError" class="err-msg">{{ bundleMessageText(settingsBundleError) }}</p>
               </div>
+            </SettingsCard>
+          </SettingsSection>
+
+          <!-- Experimental features, off by default. Model arena: the ＋ menu's
+               Compare block, the pane right-click entry and ⌥⌘A
+               (composables/useArenaPrefs.ts). -->
+          <SettingsSection :label="$t('settings.section.experimental')">
+            <SettingsCard data-settings-section="general-experimental">
+              <SettingRow
+                :title="`${$t('arena.settings.title')} ${$t('arena.experimental')}`"
+                :description="$t('arena.settings.hint')"
+              >
+                <template #control>
+                  <ToggleSwitch v-model="arenaEnabledModel" data-testid="arena-experimental" :aria-label="$t('arena.settings.title')" />
+                </template>
+              </SettingRow>
             </SettingsCard>
           </SettingsSection>
         </div>
@@ -4833,6 +4937,9 @@ watch(activeTab, (tab) => {
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
             <CliAccountsPane :api="cliProfilesApi" :backend="backend" :workspace-open="workspaceOpen ?? false" @login="(agentKey: string, loginProfileId?: string) => emit('cli-login', agentKey, loginProfileId)" />
           </div>
+          <div data-settings-section="account-switch-log" style="margin: 0 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
+            <AccountSwitchLog :backend="backend" />
+          </div>
         </div>
 
         <!-- ── KEYBOARD SHORTCUTS TAB ────────────────────────────────────── -->
@@ -4914,6 +5021,8 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" @attention="(reasons) => (policyAttention = reasons)" />
             </section>
+            <!-- Plan P1: records only, it changes nothing a Navide plugin may do. -->
+            <PluginActivityMonitor v-show="pluginsPage === 'plugins'" :paused="!installedPageShown" />
             <ExtensionsPane
               v-show="pluginsPage === 'plugins' || pluginsPage === 'developer'"
               :page="pluginsPage === 'developer' ? 'developer' : 'plugins'"
@@ -4973,6 +5082,19 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.layout') }}</h1>
           <p class="s-page-intro">{{ $t('layout.settings-intro') }}</p>
           <LayoutSettingsPane />
+        </div>
+
+        <div v-show="activeTab === 'agents'" class="s-body s-body--wide agents-body" data-settings-section="agents">
+          <h1 class="s-page-title">{{ $t('settings.nav.agents') }}</h1>
+          <AgentsSettingsPane
+            v-if="activeTab === 'agents'"
+            :agents="props.agentPanes ?? []"
+            :focus-id="props.agentFocusId"
+            @open="(id) => { emit('agent-open', id); emit('close') }"
+            @stop="(id) => emit('agent-stop', id)"
+            @rename="(id, name) => emit('agent-rename', id, name)"
+            @go-tab="(tab) => (activeTab = tab)"
+          />
         </div>
 
         <div v-show="activeTab === 'channels'" class="s-body channels-body" data-settings-section="channels">
@@ -5713,6 +5835,7 @@ watch(activeTab, (tab) => {
 .notifications-body { overflow-y: auto; padding: 18px 22px; }
 .voice-body { overflow-y: auto; padding: 18px 22px; }
 .channels-body { overflow-y: auto; padding: 18px 22px; }
+.agents-body { overflow-y: auto; padding: 18px 22px; }
 .security-body { overflow-y: auto; padding: 18px 22px; }
 .webhooks-body { overflow-y: auto; padding: 18px 22px; }
 /* Same reason: a scrolling list of status rows needs the gutter and its own
@@ -6446,6 +6569,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
+.failover-next-line { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 4px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.failover-next-goto { padding: 0; border: 0; background: none; color: var(--accent-fg); font: inherit; cursor: pointer; }
+.failover-next-goto:hover { text-decoration: underline; }
 .failover-table td { font-size: var(--font-2xs); }
 .failover-notes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .failover-tag {

@@ -50,13 +50,25 @@ watch(
 )
 // The ledger grows with every call; follow it at most every 15 seconds.
 let lastChange = 0
-const unsub = props.backend.on('tokens.changed', () => {
+function onTokensChanged(): void {
   const now = Date.now()
   if (now - lastChange < 15_000) return
   lastChange = now
   void load()
+}
+// `tokens.notice` replaces `tokens.changed` on a backend that knows tokens.watch.
+const unsub = props.backend.on('tokens.changed', onTokensChanged)
+const unsubNotice = props.backend.on('tokens.notice', onTokensChanged)
+let releaseWatch: (() => void) | undefined
+watch(() => props.workspacePath, (path) => {
+  releaseWatch?.()
+  releaseWatch = path ? props.backend.watchTokens?.(path) : undefined
+}, { immediate: true })
+onBeforeUnmount(() => {
+  unsub()
+  unsubNotice()
+  releaseWatch?.()
 })
-onBeforeUnmount(unsub)
 
 const modelRows = computed(() => {
   const byModel = new Map<string, CostGroup>()

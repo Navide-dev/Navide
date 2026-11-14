@@ -1,4 +1,4 @@
-"""The one-file build recipe must keep naming things that still exist.
+"""The backend build recipe must keep naming things that still exist.
 
 PyInstaller only warns about a hiddenimport it cannot resolve and about a
 datas entry it cannot find, so a rename on this side of the tree breaks the
@@ -238,3 +238,25 @@ def test_helper_collects_openconsole_on_windows():
         "collect_winpty() is missing OpenConsole.exe — ConPTY panes would die "
         f"with STATUS_CONTROL_C_EXIT; collected: {sorted(names)}"
     )
+
+
+def _call(name: str) -> ast.Call:
+    tree = ast.parse(SPEC_PATH.read_text(encoding="utf-8"), filename=str(SPEC_PATH))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name:
+            return node
+    raise AssertionError(f"no {name}(...) call in agent_team_backend.spec")
+
+
+def test_backend_is_a_onedir_build():
+    # A onefile build unpacks into the OS temp directory on every start and
+    # keeps reading from there; the temp cleaner removed parts of it under a
+    # running backend (2026-11-08). Onedir runs from the installed files. The
+    # app (src/main/backend-binary.ts), package.json extraResources and the
+    # release.yml checks all expect dist/agent_team_backend/ to be a directory.
+    exe = _call("EXE")
+    kwargs = {k.arg: k.value for k in exe.keywords}
+    assert isinstance(kwargs.get("exclude_binaries"), ast.Constant) and kwargs["exclude_binaries"].value is True
+    collect = _call("COLLECT")
+    names = {k.arg: k.value for k in collect.keywords}
+    assert isinstance(names.get("name"), ast.Constant) and names["name"].value == "agent_team_backend"

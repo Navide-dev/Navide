@@ -39,14 +39,16 @@ export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
   pi: true,
   qwen: true,
   goose: true,
+  // Read the user row their SQLite stores gain when a turn starts.
+  hermes: true,
+  openclaw: true,
   // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
   mcode: false,
   // No log reader yet: Devin's session store is undocumented.
   devin: false,
-  // No log readers yet (general agents; their sessions live in their own
-  // runtime).
-  openclaw: false,
-  hermes: false,
+  // No log reader: Kiro's sessions sit in an undocumented SQLite store. Its
+  // Stop hook reports turn ends, not turn starts.
+  kiro: false,
   // A plain shell takes its own submit path and never reaches the watch.
   terminal: false,
 }

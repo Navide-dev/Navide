@@ -35,6 +35,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginGlobalStopStore } from './pluginGlobalStopStore'
 import { PluginDisableSourceStore } from './pluginDisableSource'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
@@ -1846,6 +1847,419 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('P1: asks the backend for every installed plugin\'s monitor row and marks the declared hosts', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { network: { hosts: ['*.acme.dev'] } }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-overview-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const row = {
+        pluginId: 'acme.demo', toolCallsLastMinute: 61, capabilityCallsLastMinute: 8, consecutiveFailures: 3,
+        hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2 }, { host: 'evil.io', refused: true, lastAt: 1 }],
+      }
+      const ask = vi.spyOn(manager, 'requestPluginActivityOverview').mockResolvedValue({ schemaVersion: 1, generatedAt: 5, plugins: [row] })
+      const overview = handlers.get('plugins:activityOverview')!
+      await expect(overview(null)).resolves.toEqual({
+        ok: true,
+        overview: {
+          schemaVersion: 1, generatedAt: 5,
+          plugins: [{
+            ...row,
+            // An older backend sends neither P5 field.
+            lastToolCallAt: null,
+            backendRestartsLast10Minutes: 0,
+            hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2, declared: true }, { host: 'evil.io', refused: true, lastAt: 1, declared: false }],
+          }],
+        },
+      })
+      expect(ask).toHaveBeenCalledWith(expect.arrayContaining(['acme.demo']))
+
+      ask.mockResolvedValue({ schemaVersion: 1, generatedAt: 5, plugins: [{ ...row, consecutiveFailures: -1 }] })
+      await expect(overview(null)).resolves.toEqual({ ok: false, error: 'the activity overview was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(overview(null)).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('P4: the "Notify agent panes" switch is off by default, only for a package that declares agentNotify', async () => {
+    const declares = buildPkg('acme.demo', 'acme', { system: ['agentNotify'] }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-notify-'))
+    const manager = new FrontendPluginManager()
+    let allowed: ((pluginId: string) => boolean) | null = null
+    vi.spyOn(manager, 'setAgentNotifyAllowedResolver').mockImplementation((resolver) => { allowed = resolver })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(declares.digest, 'acme.demo', 'acme', '1.0.0'), declares.bytes, declares.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const row = () => (handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>).find((entry) => entry.id === 'acme.demo')!
+      expect(row().notifyAgents).toBe(false)
+      expect(allowed!('acme.demo')).toBe(false)
+      expect(handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.demo', allowed: true })).toEqual({ id: 'acme.demo', notifyAgents: true })
+      expect(row().notifyAgents).toBe(true)
+      expect(allowed!('acme.demo')).toBe(true)
+      await handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.demo', allowed: false })
+      expect(allowed!('acme.demo')).toBe(false)
+      await expect(Promise.resolve().then(() => handlers.get('plugins:setNotifyAgents')!(null, { id: 'acme.other', allowed: true }))).rejects.toThrow()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  describe('P5: pausing a plugin on an anomaly rule', () => {
+    const quiet = { pluginId: 'acme.demo', toolCallsLastMinute: 0, capabilityCallsLastMinute: 0, consecutiveFailures: 0, lastToolCallAt: null, backendRestartsLast10Minutes: 0, hosts: [] as unknown[] }
+
+    async function watched(row: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      const pkg = buildPkg('acme.demo', 'acme', { network: { hosts: ['api.acme.dev'] } }, '1.0.0')
+      const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-auto-'))
+      const manager = new FrontendPluginManager()
+      let limit: ((pluginId: string) => void) | null = null
+      let agentAction: ((request: unknown) => Promise<unknown>) | undefined
+      vi.spyOn(manager, 'setAgentNotifyLimitHandler').mockImplementation((handler) => { limit = handler })
+      vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+      const overview = vi.spyOn(manager, 'requestPluginActivityOverview').mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet }] })
+      const reported = vi.spyOn(manager, 'reportPluginAutoPause').mockImplementation(() => {})
+      manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const onPluginAutoPaused = vi.fn()
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS, autoPauseIntervalMs: 30_000, onPluginAutoPaused, ...extra,
+      })
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, ...row }] })
+      const tick = async () => { await vi.advanceTimersByTimeAsync(30_000) }
+      const record = () => (handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>)[0]!.stopRecord as Record<string, unknown> | undefined
+      const cleanup = async () => {
+        vi.useRealTimers()
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+      return { manager, tick, record, reported, onPluginAutoPaused, overview, limit: () => limit!, agentAction: () => agentAction!, cleanup }
+    }
+
+    it('R1: too many tool calls pause it as a stop the user owns, recorded and told', async () => {
+      const t = await watched({ toolCallsLastMinute: 61 })
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(t.record()).toMatchObject({ via: 'auto', rule: 'R1' })
+        expect(t.reported).toHaveBeenCalledWith({ plugin_id: 'acme.demo', plugin_version: '1.0.0', rule: 'R1', value: 61, threshold: 60, detail: 'toolCalls' })
+        expect(t.onPluginAutoPaused).toHaveBeenCalledWith({ pluginId: 'acme.demo', rule: 'R1', value: 61, threshold: 60, detail: 'toolCalls' })
+        await expect(t.agentAction()({ request_id: 'pa:1', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R2: a new undeclared host pauses it; a declared one does not', async () => {
+      const t = await watched({ hosts: [{ host: 'api.acme.dev', refused: false, lastAt: Date.now() + 1 }] })
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        t.overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, hosts: [{ host: 'evil.io', refused: false, lastAt: Date.now() + 1 }] }] })
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R2', detail: 'evil.io' }))
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R3: only failures since the last check count; restarts count in their own window', async () => {
+      const t = await watched({ consecutiveFailures: 12, lastToolCallAt: 1 })
+      try {
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        t.overview.mockResolvedValue({ schemaVersion: 1, generatedAt: 1, plugins: [{ ...quiet, backendRestartsLast10Minutes: 3 }] })
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R3', value: 3, threshold: 3, detail: 'restarts' }))
+      } finally {
+        await t.cleanup()
+      }
+    })
+
+    it('R4 and R5: a watchdog notice, and going over the notification limit', async () => {
+      const notices = [{ pluginId: 'acme.demo', item: 'memory', usage: 600, threshold: 512 }]
+      const t = await watched({}, { resourceNotices: () => notices })
+      try {
+        await t.tick()
+        expect(t.reported).toHaveBeenCalledWith(expect.objectContaining({ rule: 'R4', value: 600, threshold: 512, detail: 'memory' }))
+      } finally {
+        await t.cleanup()
+      }
+      const u = await watched({})
+      try {
+        u.limit()('acme.demo')
+        await vi.waitFor(() => expect(u.record()).toMatchObject({ via: 'auto', rule: 'R5' }))
+        expect(u.manager.isPluginDisabled('acme.demo')).toBe(true)
+      } finally {
+        await u.cleanup()
+      }
+    })
+
+    it('pauses nothing while the user turned it off, and nothing during a global stop', async () => {
+      const t = await watched({ toolCallsLastMinute: 100 })
+      try {
+        expect(handlers.get('plugins:autoPauseState')!(null)).toMatchObject({ enabled: true, thresholds: { toolCallsPerMinute: 60 } })
+        expect(handlers.get('plugins:setAutoPause')!(null, { enabled: false })).toMatchObject({ enabled: false })
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(false)
+        expect(handlers.get('plugins:setAutoPause')!(null, { enabled: true })).toMatchObject({ enabled: true })
+        await t.tick()
+        expect(t.manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(t.reported).toHaveBeenCalledTimes(1)
+      } finally {
+        await t.cleanup()
+      }
+    })
+  })
+
+  describe('P3: stopping every third-party plugin at once', () => {
+    const previous = { nativeBackends: true, agentTools: true, externalCallers: false }
+
+    async function installedWithSwitches() {
+      const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+      const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-stop-all-'))
+      const manager = new FrontendPluginManager()
+      let stopRequest: ((request: unknown) => Promise<Record<string, unknown>>) | undefined
+      let agentAction: ((request: unknown) => Promise<unknown>) | undefined
+      vi.spyOn(manager, 'setPluginStopHandler').mockImplementation((handler) => { stopRequest = handler })
+      vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+      vi.spyOn(manager, 'requestPluginActivityOverview').mockRejectedValue(new Error('no backend in this test'))
+      manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const switches = { read: vi.fn(() => previous), turnOff: vi.fn(async () => {}), restore: vi.fn(async () => {}) }
+      const onPluginAgentAction = vi.fn()
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS, globalStopSwitches: switches, onPluginAgentAction,
+      })
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      return { root, manager, switches, onPluginAgentAction, stopRequest: () => stopRequest!, agentAction: () => agentAction! }
+    }
+
+    it('turns the third-party switches off, stops every running plugin, and remembers it across a restart', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await expect(handlers.get('plugins:stopAll')!(null, { via: 'settings' })).resolves.toEqual({ stopped: ['acme.demo'], failed: [] })
+        expect(switches.turnOff).toHaveBeenCalledTimes(1)
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+        const state = handlers.get('plugins:globalStopState')!(null)
+        expect(state).toEqual({ at: expect.any(Number), via: 'settings', by: 'user', stopped: ['acme.demo'], previous })
+        // A restart reads the same record from disk.
+        expect(new PluginGlobalStopStore(root).get()).toEqual(state)
+        expect((handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>)[0]).toMatchObject({ stopRecord: { via: 'settings' } })
+        await expect(Promise.resolve().then(() => handlers.get('plugins:stopAll')!(null, { via: 'mcp' }))).rejects.toThrow(/invalid plugin stop/)
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('"Resume all" puts the switches back and enables what the stop disabled, then forgets it', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await handlers.get('plugins:stopAll')!(null, { via: 'status-bar' })
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: ['acme.demo'], failed: [] })
+        expect(switches.restore).toHaveBeenCalledWith(previous)
+        expect(manager.isPluginDisabled('acme.demo')).toBe(false)
+        expect(handlers.get('plugins:globalStopState')!(null)).toBeNull()
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: [], failed: [] })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('"Resume all" leaves a plugin disabled again since for another reason', async () => {
+      const { root, manager, switches } = await installedWithSwitches()
+      try {
+        await handlers.get('plugins:stopAll')!(null, { via: 'settings' })
+        // The user enables it, then disables it with the plain switch.
+        await handlers.get('plugins:setDisabled')!(null, { id: 'acme.demo', disabled: false })
+        await handlers.get('plugins:setDisabled')!(null, { id: 'acme.demo', disabled: true })
+        await expect(handlers.get('plugins:resumeAll')!(null)).resolves.toEqual({ resumed: [], failed: [] })
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(switches.restore).toHaveBeenCalledWith(previous)
+        expect(handlers.get('plugins:globalStopState')!(null)).toBeNull()
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('plugins_disable_all stops them as the agent, told to the user; a chat stop-all after it makes them the user\'s', async () => {
+      const { root, manager, stopRequest, agentAction, onPluginAgentAction } = await installedWithSwitches()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await expect(stopRequest()({ action: 'stop-all', requester: { callerKind: 'robot' } })).resolves.toMatchObject({ ok: false, error_code: 'BAD_REQUEST' })
+        await expect(stopRequest()({ action: 'stop-all', requester })).resolves.toEqual({ ok: true, stopped: ['acme.demo'], failed: [] })
+        expect(handlers.get('plugins:globalStopState')!(null)).toMatchObject({ via: 'mcp', by: 'agent' })
+        expect(onPluginAgentAction).toHaveBeenCalledWith({ action: 'disable', pluginId: 'acme.demo', pluginVersion: '1.0.0', requester })
+        // The user's chat stop afterwards makes the global stop the user's.
+        await expect(stopRequest()({ action: 'stop-all' })).resolves.toMatchObject({ ok: true, failed: [] })
+        expect(handlers.get('plugins:globalStopState')!(null)).toMatchObject({ via: 'mcp', by: 'user', stopped: ['acme.demo'] })
+        // The user's stop took the agent's over: the agent cannot enable it now.
+        await expect(agentAction()({ request_id: 'pa:1', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('P2: stopping one third-party plugin', () => {
+    const overviewRow = {
+      pluginId: 'acme.demo', toolCallsLastMinute: 61, capabilityCallsLastMinute: 8, consecutiveFailures: 3,
+      hosts: [{ host: 'api.acme.dev', refused: false, lastAt: 2 }, { host: 'evil.io', refused: false, lastAt: 1 }],
+    }
+
+    async function installed(options: Record<string, unknown> = {}) {
+      const pkg = buildPkg('acme.demo', 'acme', { network: { hosts: ['*.acme.dev'] } }, '1.0.0')
+      const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-stop-'))
+      const manager = new FrontendPluginManager()
+      let agentAction: ((request: unknown) => Promise<unknown>) | undefined
+      let stopRequest: ((request: unknown) => Promise<Record<string, unknown>>) | undefined
+      vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+      vi.spyOn(manager, 'setPluginStopHandler').mockImplementation((handler) => { stopRequest = handler })
+      const ask = vi.spyOn(manager, 'requestPluginActivityOverview').mockResolvedValue({ schemaVersion: 1, generatedAt: 5, plugins: [overviewRow] })
+      // The Host installs this resolver before its first package load.
+      manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        backendCallConcurrency: () => [{ pluginId: 'acme.demo', current: 2, peak: 3, droppedNotifications: 0 }],
+        ...options,
+      })
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const row = () => (handlers.get('plugins:listInstalled')!(null) as Array<Record<string, unknown>>).find((entry) => entry.id === 'acme.demo')!
+      return { root, manager, ask, row, agentAction: () => agentAction!, stopRequest: () => stopRequest! }
+    }
+
+    const summary = { inFlightCalls: 2, toolCallsLastMinute: 61, capabilityCallsLastMinute: 8, consecutiveFailures: 3, undeclaredHosts: ['evil.io'] }
+
+    it('a Settings stop disables the package through the Disabled switch and records where from and what it was doing', async () => {
+      const { root, manager, row } = await installed()
+      try {
+        await expect(handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'settings' }))
+          .resolves.toEqual({ id: 'acme.demo', disabled: true, changed: true, summary })
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+        expect(row()).toMatchObject({ disabled: true, stopRecord: { via: 'settings', summary, at: expect.any(Number) } })
+        // Stopping again changes nothing and keeps the first record.
+        await expect(handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'status-bar' })).resolves.toMatchObject({ changed: false })
+        expect(row()).toMatchObject({ stopRecord: { via: 'settings' } })
+        // Enabling clears the record.
+        await handlers.get('plugins:setDisabled')!(null, { id: 'acme.demo', disabled: false })
+        expect(row()).toMatchObject({ disabled: false })
+        expect(row().stopRecord).toBeUndefined()
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('never waits on the activity summary: an unanswered backend leaves its counts null', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      const { root, manager, ask } = await installed()
+      try {
+        ask.mockReturnValue(new Promise(() => {}))
+        const stopped = handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'status-bar' }) as Promise<unknown>
+        await vi.advanceTimersByTimeAsync(2_000)
+        await expect(stopped).resolves.toMatchObject({
+          changed: true,
+          summary: { inFlightCalls: 2, toolCallsLastMinute: null, capabilityCallsLastMinute: null, consecutiveFailures: null, undeclaredHosts: [] },
+        })
+        expect(manager.isPluginDisabled('acme.demo')).toBe(true)
+      } finally {
+        vi.useRealTimers()
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('refuses an unknown origin and a bundled Navide plugin', async () => {
+      const { root, manager } = await installed()
+      try {
+        await expect(Promise.resolve().then(() => handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'mcp' }))).rejects.toThrow(/invalid plugin stop/)
+        await expect(Promise.resolve().then(() => handlers.get('plugins:stop')!(null, { id: 'navide.plans', via: 'settings' }))).rejects.toThrow(/own Disabled switch/)
+        expect(manager.isPluginDisabled('acme.demo')).toBe(false)
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('an agent\'s plugins_disable is a stop from MCP, and the agent may still enable what it stopped', async () => {
+      const { root, manager, row, agentAction } = await installed()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await expect(agentAction()({ request_id: 'pa:1', action: 'disable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: true, disabled: true, changed: true })
+        expect(row()).toMatchObject({ disabled: true, stopRecord: { via: 'mcp', summary } })
+        await expect(agentAction()({ request_id: 'pa:2', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('a user stop of a package an agent already disabled takes the disable over, so the agent cannot enable it', async () => {
+      const { root, manager, row, agentAction } = await installed()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await agentAction()({ request_id: 'pa:1', action: 'disable', plugin_id: 'acme.demo', requester })
+        await expect(handlers.get('plugins:stop')!(null, { id: 'acme.demo', via: 'status-bar' })).resolves.toMatchObject({ changed: false })
+        expect(row()).toMatchObject({ disabled: true, stopRecord: { via: 'status-bar' } })
+        await expect(agentAction()({ request_id: 'pa:2', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
+
+    it('a chat command lists the stoppable plugins and stops one as the user, which an agent cannot undo', async () => {
+      const { root, manager, row, agentAction, stopRequest } = await installed()
+      const requester = { paneId: 'p-7', paneName: 'dev', workspace: '/w', callerKind: 'pane' as const }
+      try {
+        await expect(stopRequest()({ action: 'status' })).resolves.toEqual({
+          ok: true, plugins: [{ id: 'acme.demo', version: '1.0.0', disabled: false }],
+        })
+        await expect(stopRequest()({ action: 'stop', plugin_id: 'navide.plans' })).resolves.toMatchObject({ ok: false, error_code: 'NOT_INSTALLED' })
+        await expect(stopRequest()({ action: 'start', plugin_id: 'acme.demo' })).resolves.toMatchObject({ ok: false, error_code: 'BAD_REQUEST' })
+        await expect(stopRequest()({ action: 'stop', plugin_id: 'acme.demo' })).resolves.toEqual({ ok: true, pluginId: 'acme.demo', changed: true })
+        expect(row()).toMatchObject({ disabled: true, stopRecord: { via: 'telegram', summary } })
+        await expect(agentAction()({ request_id: 'pa:3', action: 'enable', plugin_id: 'acme.demo', requester }))
+          .resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+        await expect(stopRequest()({ action: 'status' })).resolves.toEqual({
+          ok: true, plugins: [{ id: 'acme.demo', version: '1.0.0', disabled: true }],
+        })
+      } finally {
+        await manager.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      }
+    })
   })
 
   // A frontend's calls to its own backend (plugin:backend:call) are recorded

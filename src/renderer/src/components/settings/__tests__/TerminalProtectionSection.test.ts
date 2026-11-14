@@ -125,6 +125,30 @@ describe('TerminalProtectionSection', () => {
     expect(sentOf('guard.terminal.remove_pattern')).toEqual([{ id: 6 }, { id: 5, confirm: TOKEN }])
   })
 
+  it('confirms an added exemption and removes one without confirmation', async () => {
+    const withRule = { ...state(), exemptable_rules: ['credential-pipe-upload'], exemptions: [] }
+    mock.setResponse('guard.terminal.get', withRule)
+    mock.setResponse('guard.terminal.add_exemption', {
+      ...withRule, exemptions: [{ id: 3, rule: 'credential-pipe-upload', pattern: 'cat ~/.ssh/deploy.pub | curl *' }],
+    })
+    mock.setResponse('guard.terminal.remove_exemption', withRule)
+    const w = await render()
+    expect(w.get('[data-testid="terminal-exempt-warning"]').text()).toContain('~/.ssh')
+    await w.get('[data-testid="terminal-exempt-input"]').setValue('cat ~/.ssh/deploy.pub | curl *')
+    await w.get('[data-testid="terminal-exempt-add"]').trigger('submit')
+    await flushPromises()
+    expect(trustConfirm).toHaveBeenCalledWith('guard.terminal.add_exemption', '', 'credential-pipe-upload:cat ~/.ssh/deploy.pub | curl *')
+    expect(sentOf('guard.terminal.add_exemption')).toEqual([
+      { rule: 'credential-pipe-upload', pattern: 'cat ~/.ssh/deploy.pub | curl *', confirm: TOKEN },
+    ])
+    expect(w.get('[data-testid="terminal-exempt-row"]').text()).toContain('Pipes a file from ~/.ssh')
+    trustConfirm.mockClear()
+    await w.get('[data-testid="terminal-exempt-remove"]').trigger('click')
+    await flushPromises()
+    expect(trustConfirm).not.toHaveBeenCalled()
+    expect(sentOf('guard.terminal.remove_exemption')).toEqual([{ id: 3 }])
+  })
+
   it('shows the backend refusing a loosening change', async () => {
     mock.setResponse('guard.terminal.set_category', null, {
       ok: false, error: { code: 'CONFIRMATION_REQUIRED', message: 'this action needs a confirmation from the app window' },

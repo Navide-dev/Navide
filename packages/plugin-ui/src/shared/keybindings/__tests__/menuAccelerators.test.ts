@@ -17,6 +17,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  MENU_DISPLAY_ONLY_ACCELERATORS,
   MENU_LITERAL_ACCELERATORS,
   MENU_OMITTED_ROLES,
   MENU_ROLE_ACCELERATORS,
@@ -68,7 +69,7 @@ describe('the menu tables match src/main/menu.ts', () => {
   })
 
   it('lists exactly the accelerators the menu writes by hand', () => {
-    expect(literalAccelerators()).toEqual([...MENU_LITERAL_ACCELERATORS].sort())
+    expect(literalAccelerators()).toEqual([...MENU_LITERAL_ACCELERATORS, ...MENU_DISPLAY_ONLY_ACCELERATORS].sort())
   })
 })
 

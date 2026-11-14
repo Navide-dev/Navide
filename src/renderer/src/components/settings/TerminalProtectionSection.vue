@@ -5,6 +5,7 @@ import type { useBackend } from '../../composables/useBackend'
 import {
   patternProblem,
   useTerminalProtection,
+  type TerminalExemption,
   type TerminalPattern,
   type TerminalRefusal,
 } from '../../composables/useTerminalProtection'
@@ -62,6 +63,25 @@ async function add(kind: 'block' | 'allow'): Promise<void> {
 
 async function remove(p: TerminalPattern): Promise<void> {
   await run(() => store.removePattern(p))
+}
+
+// ── exemptions (credential-pipe-upload only) ────────────────────────────────
+const exemptInput = ref('')
+const exemptProblem = computed(() => (exemptInput.value ? patternProblem(exemptInput.value) : null))
+
+async function addExemption(): Promise<void> {
+  const rule = store.exemptableRules.value[0]
+  if (!rule || !exemptInput.value.trim() || patternProblem(exemptInput.value)) return
+  if (await run(() => store.addExemption(rule, exemptInput.value))) exemptInput.value = ''
+}
+
+async function removeExemption(e: TerminalExemption): Promise<void> {
+  await run(() => store.removeExemption(e))
+}
+
+function exemptRuleLabel(rule: string): string {
+  const key = `guard.builtin.rule.${rule}`
+  return te(key) ? t(key) : rule
 }
 
 // ── test a command ───────────────────────────────────────────────────────────
@@ -149,6 +169,25 @@ function ruleLabel(rule: string): string {
       </form>
       <p v-if="allowProblem" class="tp-error tp-inset" role="alert" data-testid="terminal-allow-problem">{{ t(`guard.terminal.problem.${allowProblem}`) }}</p>
     </SettingsCard>
+
+    <template v-if="store.exemptableRules.value.length">
+    <h4 class="tp-sub">{{ t('guard.terminal.exempt.title') }}</h4>
+    <p class="tp-warning" role="note" data-testid="terminal-exempt-warning">{{ t('guard.terminal.exempt.warning') }}</p>
+    <SettingsCard>
+      <div v-for="e in store.exemptions.value" :key="e.id" class="tp-item" data-testid="terminal-exempt-row">
+        <div class="tp-item-text">
+          <code class="tp-code">{{ e.pattern }}</code>
+          <span class="tp-item-meta">{{ exemptRuleLabel(e.rule) }}</span>
+        </div>
+        <button type="button" class="tp-btn ghost sm" :disabled="busy" data-testid="terminal-exempt-remove" @click="removeExemption(e)">{{ t('guard.rules.remove') }}</button>
+      </div>
+      <form class="tp-form" @submit.prevent="addExemption">
+        <input v-model="exemptInput" class="tp-input grow mono" name="exempt-pattern" autocomplete="off" spellcheck="false" :placeholder="t('guard.terminal.exempt.placeholder')" data-testid="terminal-exempt-input" />
+        <button type="submit" class="tp-btn primary sm" :disabled="busy || !exemptInput.trim() || !!exemptProblem" data-testid="terminal-exempt-add">{{ t('guard.rules.add') }}</button>
+      </form>
+      <p v-if="exemptProblem" class="tp-error tp-inset" role="alert" data-testid="terminal-exempt-problem">{{ t(`guard.terminal.problem.${exemptProblem}`) }}</p>
+    </SettingsCard>
+    </template>
 
     <h4 class="tp-sub">{{ t('guard.terminal.test.title') }}</h4>
     <SettingsCard>

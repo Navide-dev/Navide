@@ -67,6 +67,9 @@ export const PLANS_BRIDGE_PORTS = [
   // Third-party package backends only: the package's own secrets, when the
   // manifest declares `secrets`. Plans never declares it.
   'secrets',
+  // Third-party package backends only (plan P4): a notification to one agent
+  // pane, when the manifest declares `agentNotify`. Plans never declares it.
+  'agent-notify',
 ] as const
 
 export type PlansBridgePort = (typeof PLANS_BRIDGE_PORTS)[number]
@@ -269,6 +272,7 @@ const PORT_OPERATIONS: PortOperation = {
   agents: ['list_panes', 'lineage', 'list_messages', 'list_sessions'],
   'agent-message-bodies': ['read_message'],
   secrets: ['set', 'get', 'delete', 'list'],
+  'agent-notify': ['send'],
 }
 
 export function isPlansBridgePort(value: unknown): value is PlansBridgePort {
@@ -954,6 +958,8 @@ export function createPlansBridgeDispatcher(ports: PlansCorePorts): BackendBridg
         case 'secrets':
           // Only third-party package bridges serve a package's own secrets.
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no secrets port.')
+        case 'agent-notify':
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no agent-notify port.')
       }
     },
   })

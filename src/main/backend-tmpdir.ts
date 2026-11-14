@@ -1,18 +1,21 @@
-import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
  * Where the packaged backend keeps its temporary files: a directory of its
  * own under the data dir, not the OS temp directory.
  *
- * The frozen backend is a PyInstaller onefile binary. It unpacks itself into
+ * The frozen backend used to be a PyInstaller onefile binary (it is a onedir
+ * build now, which unpacks nothing; bundled plugin backends still are). A
+ * onefile binary unpacks itself into
  * the temp directory at start and keeps reading from there for as long as it
  * runs -- package metadata, data files and rarely imported extensions are
  * only read on first use. The OS temp cleaners do not know that: macOS removes
  * files under $TMPDIR that have not been accessed for three days, and on
  * 2026-11-08 that took every bundled package's METADATA out from under a
  * backend that had been up since 11-04, after which no MCP session could
- * initialize until the app was restarted. Nothing sweeps the data dir.
+ * initialize until the app was restarted. Nothing sweeps the data dir. The
+ * sweep below still clears `_MEI*` an earlier onefile version left behind.
  */
 export function persistentBackendTmpDir(dataDir: string): string {
   return join(dataDir, 'backend-tmp')
@@ -49,7 +52,11 @@ export function pluginBackendTmpDir(dataDir: string, pluginId: string): string |
  */
 export function prepareBackendTmpDir(dir: string, sweep = true): string | null {
   try {
-    mkdirSync(dir, { recursive: true })
+    // Owner-only, like any temp directory: what a backend unpacks and writes
+    // here is its own. The chmod covers a directory an earlier build created
+    // with the default mode; Windows has no mode bits to set.
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    if (process.platform !== 'win32') chmodSync(dir, 0o700)
   } catch {
     return null
   }

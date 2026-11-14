@@ -19,6 +19,10 @@ type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDi
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
+type PluginActivityOverview = import('../../shared/pluginActivity').PluginActivityOverview
+type PluginStopSummary = import('../../shared/pluginStop').PluginStopSummary
+type PluginStopRecord = import('../../shared/pluginStop').PluginStopRecord
+type PluginGlobalStopRecord = import('../../shared/pluginStop').PluginGlobalStopRecord
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -360,6 +364,13 @@ declare global {
         dismiss: () => Promise<{ ok: boolean }>
         getAutoRestore: () => Promise<boolean>
         setAutoRestore: (value: boolean) => Promise<{ ok: boolean }>
+        /** Windows closed while the app kept running, newest first. */
+        listRecentlyClosed?: () => Promise<{ workspace_path: string; adopted_workspaces: string[]; closed_at: number }[]>
+        /** Reopen one closed window whole; no path = the newest. */
+        reopenClosed?: (workspacePath?: string) => Promise<{ ok: boolean; opened: number; focused: number; missing: string[] }>
+        onRecentlyClosedChanged?: (cb: () => void) => () => void
+        /** A reopen skipped these folders because they no longer exist. */
+        onReopenMissing?: (cb: (missing: string[]) => void) => () => void
       }
       updater?: {
         getState: () => Promise<UpdateState>
@@ -407,6 +418,8 @@ declare global {
         endBackgroundAiSession?: (id: string, sessionId: string) => Promise<{ ok: boolean }>
         /** D-f: one installed plugin's activity report (read only). */
         activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+        activityOverview?: () => Promise<{ ok: true; overview: PluginActivityOverview } | { ok: false; error: string }>
         /** D-f: installed Registry packages' disclosures and install-time scans. */
         installedDisclosures?: () => Promise<Array<{
           id: string
@@ -590,6 +603,21 @@ declare global {
         >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
+        /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+        stop?: (id: string, via: 'settings' | 'status-bar') => Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }>
+        /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+        stopAll?: (via: 'settings' | 'status-bar') => Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the user's "Resume all". */
+        resumeAll?: () => Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the global stop in effect, or null. */
+        globalStopState?: () => Promise<PluginGlobalStopRecord | null>
+        /** Plan P4: the user's "Notify agent panes" switch. */
+        setNotifyAgents?: (id: string, allowed: boolean) => Promise<{ id: string; notifyAgents: boolean }>
+        /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+        autoPauseState?: () => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        setAutoPause?: (enabled: boolean) => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        /** Plan P5: Navide paused a plugin on an anomaly rule. */
+        onAutoPaused?: (handler: (notice: import('../../shared/pluginStop').PluginAutoPauseNotice) => void) => () => void
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
         setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
@@ -673,6 +701,10 @@ declare global {
     disabled?: boolean
     /** C1: the user's "Only allow declared network hosts" switch (present with `disabled`). */
     networkStrict?: boolean
+    /** P2: present while the package is disabled by a stop. */
+    stopRecord?: PluginStopRecord
+    /** P4: present when the manifest declares agentNotify: the "Notify agent panes" switch (off by default). */
+    notifyAgents?: boolean
   }
 
   interface FactoryPluginSummary {

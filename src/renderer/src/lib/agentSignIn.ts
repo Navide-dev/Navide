@@ -31,6 +31,9 @@ export interface AgentSignInAccounts {
   findProfile: (id: string | null | undefined) => { agentKey: string } | undefined
   defaultProfileId: (agentKey: string) => string | null
   loginIsGlobal: (agentKey: string) => boolean
+  /** Re-reads the list once before refusing an account as unknown (see
+   *  AgentAccountSwitchAccounts.refresh). */
+  refresh?: () => Promise<void>
 }
 
 export type AgentSignInPlan =
@@ -107,8 +110,7 @@ export type AgentSignInConfirmAnswer = 'confirmed' | 'declined' | 'expired' | 'b
 /** One agent sign-in waiting for the user at a time: `pending` is what the
  *  dialog shows, `answer` is the user's click. The request closes itself at
  *  its deadline, or when `signal` aborts (the backend withdrew it or the
- *  window lost the backend), and an answer after that changes nothing.
- *  Also holds an agent's account switch (lib/agentAccountSwitch). */
+ *  window lost the backend), and an answer after that changes nothing. */
 export function createSignInConfirm<T extends { confirmBy: number } = AgentSignInConfirmRequest>(): {
   pending: Readonly<ShallowRef<T | null>>
   ask: (request: T, signal?: AbortSignal) => Promise<AgentSignInConfirmAnswer>
@@ -178,7 +180,11 @@ export async function runAgentSignIn(
   const profileId = String(args.profileId ?? '')
   const mode = args.mode as AgentSignInMode
   const request = { agentKey, profileId, mode }
-  const plan = planAgentSignIn(request, deps.accounts)
+  let plan = planAgentSignIn(request, deps.accounts)
+  if (plan.kind === 'refused' && plan.code === 'unknown-profile' && deps.accounts.refresh) {
+    await deps.accounts.refresh()
+    plan = planAgentSignIn(request, deps.accounts)
+  }
   if (plan.kind === 'refused') return { status: plan.code, message: plan.message }
   const confirmBy = typeof args.confirmBy === 'number' ? args.confirmBy : NaN
   if (!Number.isFinite(confirmBy) || confirmBy <= deps.now()) {

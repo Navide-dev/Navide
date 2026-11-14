@@ -903,8 +903,10 @@ describe('CliAccountsPane', () => {
     expect(cards[1].classes()).toContain('active')
     expect(cards[1].get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('70% Session left')
     expect(cards[1].findAll('.cli-mini-bar')).toHaveLength(2)
-    // Footer carries the non-headline window (Weekly at 15% left).
-    expect(cards[1].get('.cli-card-foot').text()).toBe('Weekly 15% left')
+    // Every window carries its own figure beside its bar; no footer repeats them.
+    expect(cards[1].findAll('.cli-win-name').map((e) => e.text())).toEqual(['Session', 'Weekly'])
+    expect(cards[1].findAll('.cli-win-pct').map((e) => e.text())).toEqual(['70% left', '15% left'])
+    expect(cards[1].find('.cli-card-foot').exists()).toBe(false)
   })
 
   it('says a confirmed account has no 5H limit, without inventing a bar', () => {
@@ -1062,7 +1064,7 @@ describe('CliAccountsPane', () => {
 
     const cards = section(w, 0).findAll('.cli-card')
     expect(cards[0].get('.cli-card-big').text()).toContain('70%')
-    expect(cards[0].get('.cli-card-cache').text()).toContain('Cached')
+    expect(cards[0].get('.cli-card-cache').text()).toContain('Data is stale')
     expect(cards[0].get('.cli-card-refresh').text()).toContain('rate limited')
   })
 
@@ -1102,7 +1104,7 @@ describe('CliAccountsPane', () => {
     const card = section(w, 0).findAll('.cli-card')[0]
     expect(card.find('.cli-card-big').exists()).toBe(false)
     expect(card.get('.cli-card-none').text()).toContain('Cached quota reset has passed')
-    expect(card.get('.cli-card-cache').text()).toContain('Cached')
+    expect(card.get('.cli-card-cache').text()).toContain('Data is stale')
   })
 
   it('says a read is in flight instead of labelling the old figure stale', () => {
@@ -1127,7 +1129,7 @@ describe('CliAccountsPane', () => {
     expect(card.get('.cli-card-refresh').text()).toContain('Reading this account')
     // The age of what is on screen still belongs there — it is why the number
     // has not moved.
-    expect(card.get('.cli-card-cache').text()).toContain('Cached')
+    expect(card.get('.cli-card-cache').text()).toContain('Last successful read')
     // ...but not alongside the refresh state it replaces.
     expect(card.text()).not.toContain('Not measured')
   })
@@ -1334,9 +1336,16 @@ describe('CliAccountsPane', () => {
 
     const card = section(w, 0).findAll('.cli-card')[0]
     expect(card.get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('72% Session (5h) left')
-    expect(card.get('.cli-card-foot').text()).toBe(
-      'Weekly (all models) 7% left · Weekly (Fable) 100% left',
-    )
+    expect(card.findAll('.cli-win-name').map((e) => e.text())).toEqual([
+      'Session (5h)',
+      'Weekly (all models)',
+      'Weekly (Fable)',
+    ])
+    expect(card.findAll('.cli-win-pct').map((e) => e.text())).toEqual([
+      '72% left',
+      '7% left',
+      '100% left',
+    ])
     const titles = card.findAll('.cli-mini-bar').map((b) => b.attributes('title'))
     expect(titles[2]).toBe('Weekly (Fable): 100% left (0% used)')
   })
@@ -1358,7 +1367,11 @@ describe('CliAccountsPane', () => {
       )
       const card = section(w, 0).findAll('.cli-card')[0]
       expect(card.get('.cli-card-big').text()).toContain('工作階段（5 小時） 剩餘')
-      expect(card.get('.cli-card-foot').text()).toBe('每週（Fable） 剩 100%')
+      expect(card.findAll('.cli-win-name').map((e) => e.text())).toEqual([
+        '工作階段（5 小時）',
+        '每週（Fable）',
+      ])
+      expect(card.findAll('.cli-win-pct').map((e) => e.text())).toEqual(['剩 72%', '剩 100%'])
     } finally {
       i18n.global.locale.value = previous
     }
@@ -1368,12 +1381,122 @@ describe('CliAccountsPane', () => {
     // The stamp is shown in local time, so build the reading from a local
     // wall-clock time; a fixed UTC instant lands on 7/25 west of UTC-4.
     const fetchedAt = new Date(2026, 6, 26, 4, 0).toISOString()
-    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt }))
-    const w = mountPane(
-      makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
-    )
-    const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
-    expect(updated).toBe('updated 7/26 04:00')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 6, 26, 4, 8))
+    try {
+      usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt }))
+      const w = mountPane(
+        makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
+      )
+      const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
+      expect(updated).toBe('Data updated 7/26 04:00 (8 minutes ago)')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // ── each window's reset time and a stale reading ──────────────────────────
+
+  describe('window reset times', () => {
+    // Local wall-clock times, so the expected strings hold in any time zone.
+    const NOW = new Date(2026, 10, 11, 11, 18)
+    const at = (d: number, h: number, m: number): string =>
+      new Date(2026, 10, d, h, m).toISOString()
+    const windows = [
+      { kind: 'session', label: 'Session (5h)', usedPercent: 0, resetsAt: at(11, 16, 10) },
+      { kind: 'weekly', label: 'Weekly (all models)', usedPercent: 84, resetsAt: at(14, 19, 59) },
+      { kind: 'weekly-model', label: 'Weekly (Fable)', usedPercent: 92, resetsAt: at(12, 19, 59) },
+    ]
+    const mountCard = () => {
+      const w = mountPane(
+        makeApi({
+          identities: { claude: { __default__: { email: 'demo@example.com', signedIn: true } } },
+        }),
+      )
+      return section(w, 0).findAll('.cli-card')[0]
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('gives every bar its window, what is left and when it resets', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(NOW)
+      usage.accountUsageFor.mockReturnValue(usageSnapshot({ windows }))
+      const card = mountCard()
+
+      const rows = card.findAll('.cli-win')
+      expect(rows).toHaveLength(3)
+      expect(card.findAll('.cli-mini-bar')).toHaveLength(3)
+      expect(rows.map((r) => r.get('.cli-win-pct').text())).toEqual([
+        '100% left',
+        '16% left',
+        '8% left',
+      ])
+      expect(rows.map((r) => r.get('.cli-win-pct').classes())).toEqual([
+        expect.arrayContaining(['ok']),
+        expect.arrayContaining(['warn']),
+        expect.arrayContaining(['crit']),
+      ])
+      expect(rows.map((r) => r.get('.cli-win-reset').text())).toEqual([
+        '11/11 16:10 · resets in 4h 52m',
+        '11/14 19:59 · resets in 3d 8h',
+        '11/12 19:59 · resets in 1d 8h',
+      ])
+    })
+
+    it('words the reset time in the UI language', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(NOW)
+      usage.accountUsageFor.mockReturnValue(usageSnapshot({ windows }))
+      const previous = i18n.global.locale.value
+      i18n.global.locale.value = 'zh-TW'
+      try {
+        const card = mountCard()
+        expect(card.findAll('.cli-win-reset')[2].text()).toBe('11/12 19:59 重置 · 1d 8h 後')
+        expect(card.findAll('.cli-win-pct')[2].text()).toBe('剩 8%')
+      } finally {
+        i18n.global.locale.value = previous
+      }
+    })
+
+    it('leaves the reset out for a window the CLI sent none for', () => {
+      usage.accountUsageFor.mockReturnValue(usageSnapshot())
+      const card = mountCard()
+      expect(card.findAll('.cli-win')).toHaveLength(2)
+      expect(card.find('.cli-win-reset').exists()).toBe(false)
+    })
+
+    it('flags a stale reading before its figures and greys them', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(NOW)
+      usage.accountUsageFor.mockReturnValue(
+        usageSnapshot({
+          windows: [{ ...windows[0], resetsAt: at(11, 3, 40) }, windows[1], windows[2]],
+          stale: true,
+          lastSuccessAt: at(10, 22, 40),
+          refreshStatus: 'unavailable',
+        }),
+      )
+      const card = mountCard()
+
+      const banner = card.get('.cli-card-cache')
+      expect(banner.text()).toContain('Data is stale')
+      expect(banner.text()).toContain('11/10 22:40 (12 hours ago)')
+      expect(banner.text()).toContain('Refresh Quota')
+      // The warning comes before any figure it qualifies.
+      const html = card.html()
+      expect(html.indexOf('cli-card-cache')).toBeLessThan(html.indexOf('cli-card-big'))
+      expect(card.get('.cli-card-big').classes()).toContain('stale')
+      expect(card.get('.cli-card-bars').classes()).toContain('stale')
+      // A reset that passed since the reading says so rather than counting down.
+      const passed = card.findAll('.cli-win-reset')[0]
+      expect(passed.text()).toBe('reset time 11/11 03:40 has passed')
+      expect(passed.classes()).toContain('passed')
+      // A stale card does not also claim a current "Data updated" time.
+      expect(card.find('.cli-card-updated').exists()).toBe(false)
+    })
   })
 
   it('stops promising a read once the backend is gone', () => {
@@ -1470,5 +1593,47 @@ describe('CliAccountsPane', () => {
       dirActions: dirActions(),
     })
     expect(section(same, 0).find('.cli-card-dir-mismatch').exists()).toBe(false)
+  })
+
+  // ── a second Claude account: new panes in its own folder ───────────────────
+
+  function withPaneDefaults(api: ReturnType<typeof useCliProfiles>, chosen: Record<string, string> = {}) {
+    const loose = api as unknown as Record<string, unknown>
+    loose.paneDefaults = ref<Record<string, string>>(chosen)
+    loose.setPaneDefault = vi.fn(async () => ({ ok: true as const }))
+    return api
+  }
+
+  it('steers a parked Claude account to its own folder before a live switch', () => {
+    const w = mountPane(withPaneDefaults(parkedApi()), { dirActions: dirActions() })
+    const cards = section(w, 0).findAll('.cli-card')
+    // The live account needs no guidance; the parked one is told to sign in first.
+    expect(cards[0].find('.cli-card-dir-guidance').exists()).toBe(false)
+    expect(cards[1].get('.cli-card-dir-guidance').text()).toContain('Sign In to Its Own Folder')
+    expect(cards[1].find('.cli-card-new-pane-dir-btn').exists()).toBe(false)
+  })
+
+  it('opens new panes in a signed-in folder without switching the live login', async () => {
+    const api = withPaneDefaults(parkedApi({ claude: { p1: { signedIn: true, email: 'parked@x.com' } } }))
+    const w = mountPane(api, { dirActions: dirActions() })
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.get('.cli-card-dir-guidance').text()).toContain('Open New Panes in Its Folder')
+    await card.get('.cli-card-new-pane-dir-btn').trigger('click')
+    expect(api.setPaneDefault).toHaveBeenCalledWith('claude', 'p1')
+    expect(api.setDefault).not.toHaveBeenCalled()
+  })
+
+  it('offers to follow the current account again once new panes use the folder', async () => {
+    const api = withPaneDefaults(
+      parkedApi({ claude: { p1: { signedIn: true, email: 'parked@x.com' } } }),
+      { claude: 'p1' },
+    )
+    const w = mountPane(api, { dirActions: dirActions() })
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.get('.cli-card-dir-guidance').text()).toContain('New panes open in this account')
+    const btn = card.get('.cli-card-new-pane-dir-btn')
+    expect(btn.text()).toContain('Follow the Current Account Again')
+    await btn.trigger('click')
+    expect(api.setPaneDefault).toHaveBeenCalledWith('claude', null)
   })
 })

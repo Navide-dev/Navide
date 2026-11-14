@@ -115,6 +115,28 @@ def _asks_user_question(msg: dict) -> bool:
 # line, because an end record can name several tasks at once.
 BACKGROUND_START_DETAIL = "background:start"
 BACKGROUND_END_DETAIL = "background:end"
+# A STOP the CLI acted on: Claude writes this user record (as a text block, as
+# the cut-off tool's result, or as a plain string) when a turn is interrupted.
+# The frontend keeps the STOP badge on it; with no such record the badge reads
+# "STOP not applied" (Ctrl-C only cleared the input box).
+INTERRUPT_DETAIL = "user:interrupted"
+_INTERRUPT_PREFIX = "[Request interrupted by user"
+
+
+def _is_interrupt_record(content: Any) -> bool:
+    if isinstance(content, str):
+        return content.startswith(_INTERRUPT_PREFIX)
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        text = block.get("text") if block.get("type") == "text" else block.get("content")
+        if _is_interrupt_record(text):
+            return True
+    return False
+
+
 # Tools the agent uses to stop a background task itself. Such a stop writes no
 # <task-notification>, so the tool call is the only end record it leaves.
 _TASK_STOP_TOOLS = frozenset({"TaskStop", "KillShell", "KillBash"})
@@ -751,6 +773,15 @@ class ClaudeLogReader(LogReader):
                             dedup_key=key, timestamp=ts,
                             detail=str(rtype), text=text,
                         ))
+                        msg = rec.get("message")
+                        if rtype == "user" and isinstance(msg, dict) and _is_interrupt_record(msg.get("content")):
+                            out.append(ActivityEvent(
+                                vendor="claude",
+                                event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"int:{line_no}", timestamp=ts,
+                                detail=INTERRUPT_DETAIL,
+                            ))
                         started = _background_task_started(rec) if rtype == "user" else ""
                         if started:
                             out.append(ActivityEvent(
@@ -1475,12 +1506,77 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
     root = claude_projects_root()
     if root is None:
         return False
+    return session_exists_in(root, session_id)
+
+
+def session_exists_in(projects_root: Path, session_id: str) -> bool:
+    """True when ``<projects_root>/<any project>/<id>.jsonl`` exists — what
+    `claude --resume <id>` finds from the config dir owning that root."""
+    if not session_id or "/" in session_id or "\\" in session_id or session_id.startswith("."):
+        return False
     name = f"{session_id}.jsonl"
     try:
-        return any((d / name).is_file() for d in root.iterdir() if d.is_dir())
+        return any((d / name).is_file() for d in projects_root.iterdir() if d.is_dir())
     except OSError as err:
-        log.debug("scan %s for %s failed: %s", root, name, err)
+        log.debug("scan %s for %s failed: %s", projects_root, name, err)
         return False
+
+
+# A resume id we are willing to put into a handoff prompt (claude ids are UUIDs).
+_FALLBACK_ID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z-]{7,63}$")
+_RESUME_FLAG_RE = re.compile(r"\s--resume\s+\S+")
+# Never inside the prompt argument: cmd.exe expands %/! even in quotes, and a
+# line break would end the command.
+_PROMPT_UNSAFE = frozenset('"%!^\r\n')
+
+
+def resume_fallback_command(
+    command: Any,
+    *,
+    workspace_path: str,
+    config_projects: Path,
+    real_projects: Path,
+) -> tuple[Any, str]:
+    """``(command, '')`` unchanged unless it is `claude ... --resume <id>` and
+    the transcript is not reachable from ``config_projects`` (the projects
+    root of the config dir the pane runs on). Then the resume would only print
+    "No conversation found" and exit, so return a fresh launch whose first
+    message asks the agent to pick up the old transcript, plus the id."""
+    text = command_text(command)
+    session_id = _resume_id_from_command(text)
+    if not session_id or not _FALLBACK_ID_RE.match(session_id):
+        return command, ""
+    if session_exists_in(config_projects, session_id):
+        return command, ""
+    fresh = _RESUME_FLAG_RE.sub("", text, count=1)
+    prompt = _handoff_prompt(session_id, [
+        real_projects / encode_claude_cwd(workspace_path) / f"{session_id}.jsonl",
+        config_projects,
+    ])
+    rewritten = f"{fresh} {osplat.paths.quote_arg(prompt)}"
+    if isinstance(command, list):
+        return [*command[:-1], rewritten], session_id
+    return rewritten, session_id
+
+
+def _handoff_prompt(session_id: str, places: list[Path]) -> str:
+    """The first message of a resume that fell back to a new conversation.
+    English: it is read by the agent, not shown as UI. Paths and the id only —
+    nothing from any credential."""
+    shown = [os.fspath(p) for p in places if not _PROMPT_UNSAFE.intersection(os.fspath(p))]
+    where = (
+        f" Its transcript may be at {' or under '.join(shown)}, or in another folder"
+        " under the same projects directory."
+        if shown else ""
+    )
+    return (
+        f"Navide: this pane was meant to resume Claude Code session {session_id},"
+        " but that conversation was not found in this account's config folder,"
+        f" so a new conversation was started.{where} Please read that earlier"
+        " transcript if you can, summarize its key points and open tasks, and"
+        " continue from there. If you cannot find or read it, say so briefly and"
+        " start normally."
+    )
 
 
 # ---- vendor spec -----------------------------------------------------------

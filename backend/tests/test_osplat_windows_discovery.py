@@ -5,6 +5,7 @@ module imports everywhere and nothing here touches Win32.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -97,3 +98,16 @@ class TestWindowsScheduler:
             await sched.remove("launchagent", "com.x")
         with pytest.raises(ValueError):
             await sched.list_jobs("systemd")
+
+
+def test_lstat_for_identity_restats_on_windows_and_reuses_the_scandir_stat_on_posix(tmp_path: Path) -> None:
+    """scan_disk compares this identity with an opened file's fstat. Windows'
+    DirEntry.stat() has st_dev/st_ino 0, so it is replaced by a real lstat;
+    on POSIX the scandir stat already is one and is returned unchanged."""
+    target = tmp_path / "f"
+    target.write_text("x")
+    zeroed = os.stat_result((0,) * 10)
+
+    restat = _windows.WindowsDiscoveryLayout().lstat_for_identity(target, zeroed)
+    assert (restat.st_dev, restat.st_ino) == (os.lstat(target).st_dev, os.lstat(target).st_ino)
+    assert _posix_paths.lstat_for_identity(target, zeroed) is zeroed

@@ -9,7 +9,7 @@ describe('parseRegistryDoc', () => {
     for (const text of [null, '', 'not json', '[]', '{"windows": "nope"}']) {
       expect(parseRegistryDoc(text)).toEqual({
         version: 1, cleanExit: true, windows: [], snapshot: [], aux: [], auxSnapshot: [],
-        restoreOnLaunch: true, restoreFailures: {},
+        restoreOnLaunch: true, restoreFailures: {}, recentlyClosed: [],
       })
     }
   })
@@ -64,7 +64,7 @@ describe('parseRegistryDoc', () => {
 })
 
 describe('pendingFromDoc', () => {
-  const base = { snapshot: [], aux: [], auxSnapshot: [], restoreOnLaunch: true, restoreFailures: {} }
+  const base = { snapshot: [], aux: [], auxSnapshot: [], restoreOnLaunch: true, restoreFailures: {}, recentlyClosed: [] }
 
   it('offers nothing after a clean exit', () => {
     expect(pendingFromDoc({ version: 1, cleanExit: true, windows: [{ workspace_path: '/a' }], ...base })).toBeNull()

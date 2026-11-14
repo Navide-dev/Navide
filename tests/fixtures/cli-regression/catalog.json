@@ -229,15 +229,19 @@
     "hermes": {
       "capabilities": [
         "launch",
-        "unsupported_session"
+        "reader",
+        "resume"
       ],
       "fixture": "hermes.json",
       "cases": {
         "launch": {
           "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[hermes]"
         },
-        "unsupported_session": {
-          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[hermes]"
+        "reader": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_reader[hermes]"
+        },
+        "resume": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_resume[hermes]"
         }
       }
     },
@@ -291,6 +295,25 @@
         }
       }
     },
+    "kiro": {
+      "capabilities": [
+        "launch",
+        "unsupported_session",
+        "hooks"
+      ],
+      "fixture": "kiro.json",
+      "cases": {
+        "launch": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kiro]"
+        },
+        "unsupported_session": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[kiro]"
+        },
+        "hooks": {
+          "nodeid": "tests/test_cli_hook_endpoint.py::test_kiro_stop_hook_names_its_pane_by_the_spawn_token"
+        }
+      }
+    },
     "mcode": {
       "capabilities": [
         "launch",
@@ -336,15 +359,19 @@
     "openclaw": {
       "capabilities": [
         "launch",
-        "unsupported_session"
+        "reader",
+        "resume"
       ],
       "fixture": "openclaw.json",
       "cases": {
         "launch": {
           "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[openclaw]"
         },
-        "unsupported_session": {
-          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_unsupported_session[openclaw]"
+        "reader": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_reader[openclaw]"
+        },
+        "resume": {
+          "nodeid": "tests/cli_regression/test_vendor_contracts.py::test_vendor_resume[openclaw]"
         }
       }
     },

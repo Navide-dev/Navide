@@ -14,7 +14,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .. import proc_rusage
+from .. import frozen_env, proc_rusage
 from ._posix import PosixTerminalBackend, PosixTerminalHandle, process_tree
 
 
@@ -66,7 +66,7 @@ def find_pane_helper(env: dict[str, str] | None = None) -> str | None:
             return None
         return override if os.access(override, os.X_OK) else None
     if getattr(sys, "frozen", False):
-        candidate = Path(sys.executable).resolve().parent / _PANE_HELPER_EXE
+        candidate = Path(frozen_env.packaged_bin_dir()) / _PANE_HELPER_EXE
     else:
         candidate = Path(__file__).resolve().parents[3] / "build" / "pane-helper" / _PANE_HELPER_EXE
     return str(candidate) if os.access(candidate, os.X_OK) else None
@@ -206,6 +206,9 @@ class DarwinLayout(DarwinPaths):
 
     def symlinks_available(self) -> bool:
         return _posix_paths.symlinks_available()
+
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        return _posix_paths.lstat_for_identity(path, scandir_stat)
 
     def shell_command(self, command: str) -> list[str]:
         return _posix_paths.shell_command(command)

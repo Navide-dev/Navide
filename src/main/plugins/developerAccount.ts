@@ -14,6 +14,7 @@ import { createServer } from 'http'
 import type { DeveloperPublicState, DeveloperTokenScope, DeveloperVault } from './developerVault'
 import { publicKeyFingerprint } from './developerVault'
 import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
+import { CAPABILITY_DENIED_DOC_URL, trustedDocUrl } from '../../shared/marketplaceDeveloper'
 
 export const DEVELOPER_LOGIN_TIMEOUT_MS = 5 * 60_000
 export const DEVELOPER_LOGIN_LABEL = 'Navide app'
@@ -61,17 +62,22 @@ export function packageDigest(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-/** The Registry's error code and message from a response body, if it has one. */
-export function registryError(body: unknown): { code: string | null; message: string } {
-  const detail = (body as { detail?: unknown } | null)?.detail
+/** The Registry's error code, message and documentation page (c3: the body's
+ *  `doc`, kept only when it is Navide's own) from a response body, if it has them. */
+export function registryError(body: unknown): { code: string | null; message: string; doc: string | null } {
+  const record = body as { detail?: unknown; code?: unknown; doc?: unknown } | null
+  const detail = record?.detail
+  let code: string | null = typeof record?.code === 'string' ? record.code : null
+  let message: string
   if (detail && typeof detail === 'object') {
-    const { code, message } = detail as { code?: unknown; message?: unknown }
-    return {
-      code: typeof code === 'string' ? code : null,
-      message: redactDeveloperSecrets(typeof message === 'string' ? message : JSON.stringify(detail)),
-    }
+    const inner = detail as { code?: unknown; message?: unknown }
+    if (typeof inner.code === 'string') code = inner.code
+    message = redactDeveloperSecrets(typeof inner.message === 'string' ? inner.message : JSON.stringify(detail))
+  } else {
+    message = redactDeveloperSecrets(typeof detail === 'string' ? detail : '')
   }
-  return { code: null, message: redactDeveloperSecrets(typeof detail === 'string' ? detail : '') }
+  const doc = trustedDocUrl(record?.doc) ?? (code === 'CAPABILITY_DENIED' ? CAPABILITY_DENIED_DOC_URL : null)
+  return { code, message, doc }
 }
 
 interface CallbackServer {
@@ -323,6 +329,21 @@ export class DeveloperAccount {
     const query = new URLSearchParams({ target, signature })
     const res = await this.registryFetch(`/api/publish?${query}`, { method: 'POST', body: form }, 'publisher')
     return { ...res, digest }
+  }
+
+  /** The signed-in namespace's owner and publisher members (0.2.40), with the caller's role. */
+  members(): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch('/api/publisher/me/members', {}, 'publisher')
+  }
+
+  /** Owner only (the Registry refuses anyone else): add a publisher member. */
+  addMember(memberId: string): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch('/api/publisher/me/members', { method: 'POST', json: { member_id: memberId, role: 'publisher' } }, 'publisher')
+  }
+
+  /** Owner only: remove a publisher member; the Registry revokes its tokens for the namespace. */
+  removeMember(memberId: string): Promise<DeveloperRegistryResponse> {
+    return this.registryFetch(`/api/publisher/me/members/${encodeURIComponent(memberId)}`, { method: 'DELETE' }, 'publisher')
   }
 
   yank(namespace: string, name: string, version: string): Promise<DeveloperRegistryResponse> {

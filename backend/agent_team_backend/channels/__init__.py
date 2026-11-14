@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from ..db_executor import run_in_db_thread
 from ..pane_account_history import parse_event_time
 from . import relay, wake
 from .manager import ChannelManager, Seams
@@ -97,7 +99,7 @@ def default_seams() -> Seams:
         pane = agent_messaging.current(pane_id)
         if pane is None:
             return {"ok": False, "error": "pane is gone"}
-        app.project_store.set_pane_stopped(pane.workspace_path, pane_id=pane.pane_id, stopped=False)
+        await run_in_db_thread(app.project_store.set_pane_stopped, pane.workspace_path, pane_id=pane.pane_id, stopped=False)
         await app.broadcast(make_event("pane.stopped", {
             "workspace_path": pane.workspace_path, "pane_id": pane.pane_id, "stopped": False,
         }))
@@ -160,6 +162,18 @@ def default_seams() -> Seams:
         )
         result = reply.get("result") or {}
         return {"until": result.get("usageLimitUntil"), "buffer": str(result.get("buffer") or "")}
+
+    async def cli_health(pane_id: str) -> dict[str, Any]:
+        # The renderer's loginExpired reading, as cli_get_status reports it; read-only.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.pane.getStatus", args={"paneId": pane.pane_id},
+        )
+        result = reply.get("result") or {}
+        return {"login_expired": result.get("loginExpired") is True}
 
     async def answer(pane_id: str, answer_payload: dict[str, Any],
                      expected: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -276,6 +290,93 @@ def default_seams() -> Seams:
         return {"workspace_path": pane.workspace_path,
                 "session_id": (getattr(record, "session_id", "") or "").strip()}
 
+    def pane_model(pane_id: str) -> dict[str, Any]:
+        from .. import app
+        from ..cli_vendors import registry
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        spec = registry.VENDORS.get(pane.agent_key or "")
+        project = app.project_store.peek(pane.workspace_path)
+        records = list(project.panes) if project else []
+        me = next((r for r in records if r.pane_id == pane.pane_id), None)
+        known: list[str] = []
+        for r in reversed(records):  # newest records last: most recent first
+            model = (r.model or "").strip()
+            if r.agent == pane.agent_key and model and model not in known:
+                known.append(model)
+        return {
+            "agent_key": pane.agent_key or "",
+            "model": (me.model if me else "") or "",
+            "effort": (me.effort if me else "") or "",
+            "supports_model": bool(spec and spec.supports_model),
+            "efforts": list(spec.known_efforts) if spec and spec.supports_effort else [],
+            "known": known,
+        }
+
+    async def set_model(pane_id: str, model: str, effort: str, who: str) -> dict[str, Any]:
+        from ..mcp_server import pane_model_tool
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"ok": False, "error": "pane is gone", "error_code": "pane-gone"}
+        if pane.agent_key == mcp._TERMINAL_AGENT:
+            return {"ok": False, "error": "a terminal pane has no model", "error_code": "not-agent-pane"}
+        # No caller: a chat sender is not a pane, so the window sees a host request.
+        result = await pane_model_tool.switch_pane_model(
+            pane, model, effort, caller=None, who=who, source="channel",
+        )
+        if not result.get("ok"):
+            # A chat's refused attempt is on the record too (a switch is audited on its own).
+            await run_in_db_thread(
+                pane_model_tool._audit, pane, who, model, effort, "",
+                source="channel", refused=str(result.get("error_code") or "failed"),
+            )
+        return result
+
+    async def account_menu(pane_id: str) -> dict[str, Any]:
+        # The rows the window's usage badge shows for the pane's CLI (ui.accounts.channelMenu);
+        # read from the window's own state, nothing asks a vendor or reads a credential.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"status": "pane-gone"}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.accounts.channelMenu", args={"agentKey": pane.agent_key or ""},
+        )
+        if not reply.get("ok"):
+            return {"status": "no-window"}
+        result = reply.get("result")
+        return result if isinstance(result, dict) else {"status": "no-window"}
+
+    async def switch_account(pane_id: str, profile_id: str, from_id: str, who: str,
+                             on_settled: Any = None) -> dict[str, Any]:
+        # The shared no-confirm switch (mcp_server request_account_switch): the same as a
+        # click in the window, busy panes queued until idle, written to account_switch_log.
+        # Also put on the pane's Guard audit trail, as a chat's model switch is.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"status": "pane-gone"}
+        request = getattr(mcp, "request_account_switch", None)
+        if request is None:
+            return {"status": "unavailable"}
+
+        async def done(row: dict[str, Any]) -> None:
+            answer = _switch_answer(row)
+            await run_in_db_thread(_audit_account_switch, pane, who, from_id, profile_id, answer["status"])
+            if on_settled is not None:
+                await on_settled(answer)
+
+        answer = _switch_answer(await request(
+            # The chat platform names the source ("telegram"); `who` is "<platform>:<sender>".
+            agent_key=pane.agent_key or "", profile_id=profile_id, source=who.split(":", 1)[0] or "channel", who=who,
+            reason="", expected_from=from_id, on_done=done,
+        ))
+        if answer["status"] != "queued":
+            await run_in_db_thread(_audit_account_switch, pane, who, from_id, profile_id, answer["status"])
+        return answer
+
     def windows_open() -> bool:
         from .. import app
 
@@ -303,14 +404,47 @@ def default_seams() -> Seams:
 
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
-        awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
+        awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, cli_health=cli_health, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
         agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
         wake_target=wake_target, windows_open=windows_open, pane_live=pane_live, wake=wake, turn_text=turn_text,
-        is_login_pane=login_panes.is_login_pane,
+        is_login_pane=login_panes.is_login_pane, pane_model=pane_model, set_model=set_model,
+        account_menu=account_menu, switch_account=switch_account,
     )
+
+
+def _switch_answer(answer: dict[str, Any]) -> dict[str, Any]:
+    """request_account_switch's answer, or its queued request's on_done row, as the
+    channels read it: {status, from, to, waiting?, code?}."""
+    out: dict[str, Any] = {"status": str(answer.get("status") or "no-window"),
+                           "from": str(answer.get("from") or ""), "to": str(answer.get("to") or "")}
+    waiting = answer.get("waiting")
+    if isinstance(waiting, int) and not isinstance(waiting, bool):
+        out["waiting"] = waiting
+    if answer.get("code"):
+        out["code"] = str(answer["code"])
+    return out
+
+
+def _audit_account_switch(pane: Any, who: str, from_id: str, to_id: str, status: str) -> None:
+    """Record a chat's account switch in the pane's Navide Guard audit trail: who pressed,
+    from which account to which, and how it ended. Ids only, never an email."""
+    from ..guard import runtime as guard_runtime
+
+    done = status in ("switched", "switched-signed-out")
+    what = f"account {from_id} -> {to_id}"
+    try:
+        guard_runtime.store().audit_add({
+            "ts": time.time(), "pane_id": pane.pane_id, "vendor": pane.agent_key or "",
+            "source": "channel", "tool": "account_switch",
+            "excerpt": (f"account switched by {who} via chat ({status}): {what}" if done
+                        else f"account switch by {who} via chat not made ({status or 'failed'}): {what}")[:500],
+            "level": "normal", "action": "allow", "rule_ids": [], "tainted": False,
+        })
+    except Exception:  # noqa: BLE001 — the switch itself already happened (or not)
+        log.warning("channels: account switch audit write failed", exc_info=True)
 
 
 def _last_turn_text(reader: Any, path: Path, since_s: float) -> str:

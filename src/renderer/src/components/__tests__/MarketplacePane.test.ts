@@ -1717,6 +1717,22 @@ describe('MarketplacePane', () => {
       ])
     })
 
+    it('formats version dates in the Navide language, not the system one', async () => {
+      const previous = i18n.global.locale.value
+      i18n.global.locale.value = 'zh-TW'
+      try {
+        mockPlugins()
+        wrapper = mountMarketplace()
+        await flushPromises()
+        await wrapper.get('[data-id="acme.demo"]').trigger('click')
+        await flushPromises()
+        const firstRow = wrapper.findAll('.mkt-versions tbody tr')[0]
+        expect(firstRow.findAll('td')[1].text()).toBe(new Date('2026-09-01T00:00:00Z').toLocaleDateString('zh-TW'))
+      } finally {
+        i18n.global.locale.value = previous
+      }
+    })
+
     it('translates category chips in zh-TW', async () => {
       const previous = i18n.global.locale.value
       i18n.global.locale.value = 'zh-TW'

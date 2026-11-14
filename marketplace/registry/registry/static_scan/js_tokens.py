@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .limits import NO_DEADLINE, Deadline, TooComplex
 
@@ -53,6 +53,8 @@ class Token:
     dynamic: bool = False
     escapes: int = 0
     """Number of ``\\x``/``\\u`` escapes in a string or template (an obfuscation signal)."""
+    start: int = field(default=0, compare=False)
+    """Offset of the token's first character in the scanned text (scanner 1.2.0 sites)."""
 
 
 def _decode_escape(text: str, index: int) -> tuple[str, int, bool]:
@@ -247,6 +249,7 @@ def iter_tokens(text: str, deadline: Deadline = NO_DEADLINE) -> Iterator[Token]:
             index = length if end == -1 else end + 2
             continue
         token: Token | None
+        begin = index
         if char in "'\"":
             token, index = _read_string(text, index, deadline)
         elif char == "`":
@@ -272,5 +275,6 @@ def iter_tokens(text: str, deadline: Deadline = NO_DEADLINE) -> Iterator[Token]:
             else:
                 token, index = None, index + 1
         if token is not None:
+            object.__setattr__(token, "start", begin)
             yield token
             previous = token

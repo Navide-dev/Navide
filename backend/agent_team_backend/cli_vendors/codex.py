@@ -2046,5 +2046,10 @@ SPEC = VendorSpec(
         requires_binaries=("npm",),
         optional=True, docs_url="https://learn.chatgpt.com/docs/codex/cli",
         update_cmd="codex update", doctor_cmd="codex doctor",
-        npm_package="@openai/codex"),
+        npm_package="@openai/codex",
+        # Codex's "Update available" menu takes Enter as "Update now", so a
+        # pane that is typed into while it shows would run a global install.
+        autoupdate_args=("-c", "check_for_update_on_startup=false"),
+        latest_version_file="version.json",
+        config_home_env="CODEX_HOME", config_home_default=".codex"),
 )

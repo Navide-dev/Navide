@@ -42,7 +42,7 @@ def test_migration_is_idempotent(tmp_path) -> None:
     db = Database(tmp_path / "n.db")
     ChannelStore(db)
     ChannelStore(db)
-    assert db.schema_version("channels") == 7
+    assert db.schema_version("channels") == 8
     db.close()
 
 
@@ -131,7 +131,7 @@ def test_v2_seen_chats_survive_the_bot_migration_and_go_to_the_next_bot(tmp_path
         cur.execute("INSERT INTO channel_chats (platform, chat_id, title, kind, supports_topics, last_seen)"
                     " VALUES ('telegram', '-200', 'team', 'group', 1, 5)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 7
+    assert db.schema_version("channels") == 8
     assert s.chats("telegram", "bot-a") == []
     assert s.adopt_chats("telegram", "bot-a") == 1
     assert s.chats("telegram", "bot-a") == [
@@ -174,7 +174,7 @@ def test_v5_keeps_every_v4_account_and_binding_as_default(tmp_path) -> None:
         cur.execute("INSERT INTO channel_allow VALUES ('telegram', '7', 'alice', 3)")
         cur.execute("INSERT INTO channel_pairing_requests VALUES ('telegram', 'K7Q2M9XA', '42', 'neil', '42', 4)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 7
+    assert db.schema_version("channels") == 8
     assert s.accounts() == {("telegram", "default"): {"enabled": False, "config": {"group": "-100"}}}
     [b] = s.bindings()
     assert (b.pane_id, b.location().key(), b.verbosity) == ("p1", "telegram:default:-100:5", "full")
@@ -241,7 +241,7 @@ def test_v7_keeps_v6_allowlist_rows_with_no_source(tmp_path) -> None:
     with db.transaction() as cur:
         cur.execute("INSERT INTO channel_allow VALUES ('telegram', 'default', '7', 'alice', 3)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 7
+    assert db.schema_version("channels") == 8
     assert s.list_allow("telegram") == [{"platform": "telegram", "account": "default", "sender_id": "7",
                                          "sender_name": "alice", "added_at": 3, "source": None}]
     assert s.is_allowed("telegram", "7")

@@ -155,6 +155,20 @@ class Dep:
     config_home_env: str = ""        # env var overriding the config home, e.g. 'CLAUDE_CONFIG_DIR'
     config_home_default: str = ""    # default config home relative to $HOME, e.g. '.claude'
     autoupdate_env: str = ""         # vendor's own opt-out env var, e.g. 'DISABLE_AUTOUPDATER'
+    # The same opt-out for a vendor that only offers it as launch arguments,
+    # e.g. codex's ('-c', 'check_for_update_on_startup=false'). Appended to the
+    # spawn for this launch only — Navide never writes the vendor's config. A
+    # dep with these arguments defaults to 'manual': its own update prompt
+    # stops a pane nobody is watching, so Navide tells the user instead.
+    autoupdate_args: tuple[str, ...] = ()
+    # The vendor's own cache of its newest release, relative to a config home
+    # (JSON with a `latest_version` key), e.g. codex's 'version.json'. Read
+    # only, to show "update available".
+    latest_version_file: str = ""
+    # Where a non-npm install's newest release is read, for "update to y":
+    # 'pypi:<project>' or 'github:<owner>/<repo>' (its latest release tag).
+    # Empty = the npm registry when the dep names an npm_package, else none.
+    latest_source: str = ""
     # Which platforms this dep exists for at all. Empty = every platform.
     # Homebrew is the reason this field exists: offering "install the macOS
     # package manager" on Linux is not a degraded suggestion, it is a wrong
@@ -1063,6 +1077,11 @@ class VendorSpec:
     # the hooks at startup and admits the vendor to that endpoint, so a vendor
     # cannot be one without the other. None = no hook mechanism.
     install_hooks: Callable[[str], Any] | None = None
+    # The hooks name their pane by a per-pane spawn token rather than by a
+    # session id: a vendor with no log reader never has its sessions
+    # attributed, so /hooks/<key> would otherwise drop every event. The spawn
+    # puts the token in the pane's environment and the hook command sends it.
+    hook_pane_token: bool = False
 
     # --- shutdown ---
     # How a kill treats this CLI. None = the shared kill path runs unchanged,

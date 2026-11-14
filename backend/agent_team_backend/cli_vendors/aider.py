@@ -716,5 +716,6 @@ SPEC = VendorSpec(
         # the update pane waits on the user, and writing into uv's venv with
         # pip leaves uv's own tool metadata stating the old version.
         update_cmd="aider --upgrade",
+        latest_source="pypi:aider-chat",
         autoupdate_env="AIDER_CHECK_UPDATE"),
 )

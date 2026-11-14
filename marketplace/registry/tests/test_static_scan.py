@@ -16,7 +16,7 @@ from registry.static_scan import js_tokens, scan_package
 from registry.static_scan.limits import TooComplex
 from registry.static_scan.js_scan import parse_command, scan_script
 from tests.conftest import SignedEnv
-from tests.fixtures import build_v2_package, contract_manifest
+from tests.fixtures import build_v2_package, contract_manifest, without_sites
 
 NOW = datetime(2026, 10, 17, tzinfo=timezone.utc)
 MANIFEST = {"schemaVersion": 2, "id": "acme.scoped", "version": "1.0.0", "publisher": "acme"}
@@ -124,6 +124,48 @@ def test_hosts_only_never_paths_or_credentials() -> None:
     assert facts.hosts == {"api.example.com": 1, "github.com": 1, "live.example.org": 1}
 
 
+def test_framework_error_reference_links_are_not_hosts_but_real_requests_are() -> None:
+    # Vue's production runtime builds this link for its error messages; it is never fetched.
+    vue_runtime = "const errorInfo = `https://vuejs.org/error-reference/#runtime-${type}`;"
+    vue_minified = 's=`https://vuejs.org/error-reference/#runtime-${n}`;'
+    assert scan_script(vue_runtime, max_path_length=200).hosts == {}
+    assert scan_script(vue_minified, max_path_length=200).hosts == {}
+    assert scan_script("const u = 'https://vuejs.org/error-reference/#compiler-1'", max_path_length=200).hosts == {}
+    # The same host reached any other way is still a host.
+    facts = scan_script(
+        "fetch('https://vuejs.org/api/');"
+        "fetch('https://vuejs.org/error-reference/');"
+        "fetch('https://vuejs.org/error-reference/#x/../../api');"
+        "const u = 'https://vuejs.org/error-reference/#https://evil.example.com/x'",
+        max_path_length=200,
+    )
+    assert facts.hosts == {"vuejs.org": 4, "evil.example.com": 1}
+
+
+def test_only_catalog_addresses_count_as_capabilities() -> None:
+    facts = scan_script(
+        "t('ui.title'); const k = 'ui.sidebarWidth'; css('fs.hidden');"
+        "invoke('ui.openExternal', {url}); invoke('fs.readFile', {path: 'a.txt'});"
+        "on('ui.localeChanged', f)",
+        max_path_length=200,
+    )
+    assert facts.capabilities == {"ui.openExternal", "fs.readFile", "ui.localeChanged"}
+
+
+def test_the_address_list_equals_the_public_catalog() -> None:
+    from pathlib import Path
+
+    from registry.static_scan.catalog_addresses import CATALOG_ADDRESSES
+    from registry.static_scan.js_scan import CAPABILITY_ADDRESS_RE
+
+    catalog = json.loads(
+        (Path(__file__).resolve().parents[3] / "docs" / "plugin-contracts" / "capabilities-v1.json")
+        .read_text(encoding="utf-8")
+    )
+    addresses = {entry["address"] for entry in catalog["methods"] + catalog["events"]}
+    assert CATALOG_ADDRESSES == {a for a in addresses if CAPABILITY_ADDRESS_RE.fullmatch(a)}
+
+
 def test_fs_paths_are_read_from_their_call_and_otherwise_counted_as_dynamic() -> None:
     facts = scan_script(
         "invoke('fs.readFile', { path: 'README.md' }); invoke('fs.writeFile', { path: '.navide/devmap.json', data });"
@@ -160,17 +202,17 @@ def test_report_shape_and_digest_follow_the_contract() -> None:
         "frontend/main/logo.png": b"\x89PNG",
     })
     assert report is not None
-    assert report["scanner"] == {"id": disclosure_scan_contract.SCANNER_ID, "version": "1.0.0"}
+    assert report["scanner"] == {"id": disclosure_scan_contract.SCANNER_ID, "version": "1.2.0"}
     assert report["scannedAt"] == "2026-10-17T00:00:00Z"
     assert report["coverage"] == {
         "filesTotal": 3, "filesScanned": 1, "bytesScanned": report["coverage"]["bytesScanned"],
         "skipped": [{"reason": "binaryAsset", "count": 2}], "truncated": False, "timedOut": False,
     }
-    assert report["shell"]["calls"] == [{
+    assert without_sites(report["shell"]["calls"]) == [{
         "executable": "git", "subcommand": "push", "category": "remoteWrite",
         "source": "frontend", "evidence": "callSite", "files": 1,
     }]
-    assert report["network"]["hosts"] == [{"host": "github.com", "source": "frontend", "count": 1}]
+    assert without_sites(report["network"]["hosts"]) == [{"host": "github.com", "source": "frontend", "count": 1}]
     assert report["files"] == {"readPaths": ["README.md"], "writePaths": [], "dynamicPaths": 0}
     assert report["native"] == [] and report["code"]["backend"] is None
     # The report spells canonically and derives the contract's sentences.

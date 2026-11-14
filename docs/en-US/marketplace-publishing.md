@@ -344,6 +344,17 @@ deadline and warns in the last seven days.
    account holds at most three, not counting frozen ones. The namespace must equal the first segment of
    your plugin id and its `publisher` field.
 
+### Namespace members
+
+The owner of a namespace (the account that claimed it) can let other approved
+developers publish under it (0.2.40). In Navide, sign in as a publisher in
+Settings → Navide Marketplace → Developer and add the other account's Navide
+Cloud account id under **Namespace members**. A publisher member signs in as a
+publisher in its own Navide, or with `navide-plugin login`, and picks the
+namespace; it can then publish and yank versions, but cannot change the
+members or the signing key. It signs with the namespace's key, the owner's.
+Removing a member stops its publish tokens for the namespace at once.
+
 ### Create and register your signing key
 
 ```bash

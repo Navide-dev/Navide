@@ -141,6 +141,16 @@ def _v7(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE channel_allow ADD COLUMN source TEXT")
 
 
+def _v8(cur: sqlite3.Cursor) -> None:
+    # Chat messages taken off a platform (its offset already advanced) but not yet in a pane
+    # or answered: what a restart would otherwise lose. Deleted once each one is settled.
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS channel_inbound ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL, account TEXT NOT NULL,"
+        " payload TEXT NOT NULL, created_at REAL NOT NULL)"
+    )
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -199,6 +209,7 @@ class ChannelStore:
         db.migrate(COMPONENT, 5, _v5)
         db.migrate(COMPONENT, 6, _v6)
         db.migrate(COMPONENT, 7, _v7)
+        db.migrate(COMPONENT, 8, _v8)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -471,3 +482,21 @@ class ChannelStore:
         self._exec("INSERT INTO channel_offsets VALUES (?, ?, ?, ?) ON CONFLICT(platform, account)"
                    " DO UPDATE SET bot_id = excluded.bot_id, offset = excluded.offset",
                    (platform, account, bot_id, int(offset)))
+
+    # --- inbound messages not yet settled (survive a restart) -------------------------
+
+    def add_inbound(self, platform: str, account: str, payload: dict[str, Any]) -> int:
+        with self._db.transaction() as cur:
+            cur.execute("INSERT INTO channel_inbound (platform, account, payload, created_at)"
+                        " VALUES (?, ?, ?, ?)", (platform, account, json.dumps(payload), time.time()))
+            return int(cur.lastrowid or 0)
+
+    def delete_inbound(self, ids: tuple[int, ...]) -> None:
+        if ids:
+            self._exec(f"DELETE FROM channel_inbound WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+
+    def inbound(self, platform: str, account: str) -> list[tuple[int, float, dict[str, Any]]]:
+        """(id, created_at, payload) of one bot's unsettled messages, oldest first."""
+        rows = self._rows("SELECT id, created_at, payload FROM channel_inbound"
+                          " WHERE platform = ? AND account = ? ORDER BY id", (platform, account))
+        return [(int(r["id"]), float(r["created_at"]), json.loads(r["payload"])) for r in rows]

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.viewer",
+  "name": "Viewer",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {},
+  "engines": {
+    "navide": ">=0.2.40"
+  },
+  "marketplace": {
+    "description": "A window view cannot be mounted headless.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "window",
+        "kind": "custom",
+        "location": "window",
+        "title": "Viewer Window",
+        "entry": "frontend/window/index.html",
+        "headless": true
+      }
+    ]
+  }
+}

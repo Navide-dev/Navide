@@ -141,6 +141,22 @@ def test_frozen_backend_finds_the_packaged_helper(tmp_path, monkeypatch):
     assert _darwin.find_pane_helper({}) is None
 
 
+def test_onedir_backend_finds_the_packaged_helper(tmp_path, monkeypatch):
+    # A onedir backend runs from bin/agent_team_backend/, one level below the
+    # helper bundle it still has to find.
+    bin_dir = tmp_path / "Navide.app" / "Contents" / "Resources" / "bin"
+    exe = bin_dir / "Navide Pane.app" / "Contents" / "MacOS" / "navide-pane"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    (bin_dir / "agent_team_backend" / "_internal").mkdir(parents=True)
+    backend = bin_dir / "agent_team_backend" / "agent_team_backend"
+    backend.write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(backend))
+    assert _darwin.find_pane_helper({}) == str(exe)
+
+
 @needs_helper
 def test_registering_pane_child_is_a_ui_element_not_navide():
     # Control first: run the same registering child bare. Whatever app this

@@ -341,6 +341,25 @@ describe('Issue 03/04 public Host planner', () => {
     })
   })
 
+  it('answers ui.getLocale to any package with a ui grant and to no other', () => {
+    const localeBinding = { ...binding, pluginId: 'acme.ui' }
+    const localeCall = call({ pluginId: 'acme.ui', ns: 'ui', method: 'getLocale', args: {} })
+    expect(planPublicCapabilityCall(localeCall, manifestV2CapabilityPolicy({ system: ['ui'] }), context({
+      runtimeBinding: localeBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+      publisherEligible: false,
+    }))).toMatchObject({ kind: 'allow', plan: { address: 'ui.getLocale', scope: 'plugin' } })
+    expect(planPublicCapabilityCall(localeCall, manifestV2CapabilityPolicy({ system: ['fs'] }), context({
+      runtimeBinding: localeBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['fs'] },
+      publisherEligible: false,
+    }))).toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+    expect(planPublicCapabilityCall({ ...localeCall, args: { extra: true } }, manifestV2CapabilityPolicy({ system: ['ui'] }), context({
+      runtimeBinding: localeBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+    }))).toMatchObject({ kind: 'deny', response: { error: { code: 'INVALID_ARGUMENT' } } })
+  })
+
   it('opens Plans window navigation to any package with a ui grant (batch 4)', () => {
     const plansBinding = { ...binding, pluginId: 'acme.ui' }
     const plansPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })

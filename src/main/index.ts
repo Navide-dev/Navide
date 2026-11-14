@@ -21,8 +21,10 @@ import {
 import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
-import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
+import { installApplicationMenu, type AppMenuHooks, type ClosedWindowMenuEntry, type RecentMenuEntry } from './menu'
+import { planReopen } from './reopen-closed-window'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS } from '../shared/marketplaceDeveloper'
 import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
@@ -805,6 +807,7 @@ async function createWindow(
       mainWindow = remaining.length ? remaining[remaining.length - 1] : null
     }
     broadcastOpenWorkspacesChanged()
+    recentlyClosedChanged()
   })
 
   const mainBootParams: Record<string, string> = {
@@ -1339,6 +1342,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
   secretsPort: () => frontendPluginManager.createThirdPartySecretsPort(),
+  agentNotifyPort: () => frontendPluginManager.createThirdPartyAgentNotifyPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
@@ -2136,6 +2140,19 @@ frontendPluginManager.setAgentToolWorkspaceResolver((root) => {
   ]
   return open.some((path) => canonicalExistingDirectory(path) === root)
 })
+// 0.2.40: a view that declares `headless: true` mounts hidden on a Navide
+// window of the target workspace, with the query a user's open there gets.
+frontendPluginManager.setHeadlessViewHost((root) => {
+  const windows: Array<[BrowserWindow, string]> = [
+    ...[...mainWindowWorkspaces].filter(([win]) => !win.isDestroyed()),
+    ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed())
+      .flatMap(([win, paths]) => paths.map((path): [BrowserWindow, string] => [win, path])),
+  ]
+  const match = windows.find(([, path]) => canonicalExistingDirectory(path) === root)
+  if (!match) return null
+  const [hostWindow, workspacePath] = match
+  return { hostWindow, query: (contributionKey) => catalogContributionQuery(contributionKey, workspacePath) }
+})
 const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
   (channel, listener) => ipcMain.handle(channel, listener),
@@ -2161,6 +2178,34 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    // Plan P5: the anomaly rules run every 30 s; R4 reads the watchdog's
+    // notices, and the main windows hear each automatic pause.
+    autoPauseIntervalMs: 30_000,
+    resourceNotices: () => thirdPartyBackends.resourceNotices(),
+    onPluginAutoPaused: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:autoPaused', notice)
+      }
+    },
+    // Plan P3: a global stop turns the third-party switches off (native
+    // backends, DB8, DB4) and "Resume all" puts them back as they were. A
+    // choice made this way counts as the user's own (C3).
+    globalStopSwitches: {
+      read: () => {
+        const switches = nativeBackendStore.agentToolSwitches()
+        return { nativeBackends: nativeBackendStore.isEnabled(), agentTools: switches.enabled, externalCallers: switches.externalCallers }
+      },
+      turnOff: async () => {
+        await thirdPartyBackends.setEnabled(false)
+        await agentToolsControls.setSwitches({ enabled: false, enabledSetByUser: true })
+      },
+      restore: async (previous) => {
+        await thirdPartyBackends.setEnabled(previous.nativeBackends)
+        await agentToolsControls.setSwitches({ enabled: previous.agentTools, enabledSetByUser: true })
+        if (previous.agentTools) await agentToolsControls.setSwitches({ externalCallers: previous.externalCallers })
+      },
+    },
     onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
     // H1: a switch drains the plugin's views now, or has settled; only
     // Navide's own main windows hear it, never a plugin guest or window.
@@ -3882,9 +3927,9 @@ frontendPluginManager.setHostShellHandlers({
       revealMainWindow(existing)
       return { ok: true }
     }
-    // duplicate=1: same semantics as window:openMain — skip pane restore for a
-    // window cloned while its source's CLI sessions are still running.
-    void createWindow({ workspace_path: ws, duplicate: '1' })
+    // Same boot as window:openMain: no window holds the workspace, so its panes
+    // are restored (live PTYs reattach); skip_recent keeps Recent untouched.
+    void createWindow({ workspace_path: ws, skip_recent: '1' })
     return { ok: true }
   },
   pickFolder: async (defaultPath) => {
@@ -4037,11 +4082,12 @@ function openMainWindow(workspacePath = '', background = false): void {
       return
     }
     params.workspace_path = ws
-    // duplicate=1 marks a window cloned from a live one (its source's CLI
-    // sessions are still running), so the renderer skips pane restore once.
-    // Externally-opened workspaces (openWorkspaceFromPath) must NOT carry
-    // this — their previous sessions are dead and restore should run.
-    params.duplicate = '1'
+    // No duplicate=1: the check above means no window holds this workspace,
+    // so nothing else shows its sessions. The renderer restores its panes,
+    // reattaching the PTYs a closed window left running; skipping restore here
+    // left those CLIs running with no pane. skip_recent keeps the boot out of
+    // Recent, as duplicate=1 did (callers that mean it touch Recent themselves).
+    params.skip_recent = '1'
   }
   void createWindow(params, background ? { background: true } : undefined)
 }
@@ -4227,6 +4273,113 @@ ipcMain.handle('restore:getSkipped', () => {
   const claimed = skippedRestores
   skippedRestores = []
   return claimed
+})
+
+// ── Reopen Closed Window (plan 0-2-41_bbfee9) ────────────────────────────────
+// A workspace window closed while the app kept running is remembered by the
+// registry (remove()) and can be brought back whole: its own workspace, the
+// ones its sidebar adopted, and its bounds. Panes come back the way a restore
+// brings them back — from each workspace's project.json, as resume cards.
+
+function workspaceName(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+}
+
+/** The menu and every Welcome screen show the list; tell both it changed. */
+function recentlyClosedChanged(): void {
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (win.isDestroyed() || detachedWindowIds.has(win.id)) continue
+    win.webContents.send('restore:recentlyClosedChanged')
+  }
+}
+
+function recentlyClosedMenuEntries(): ClosedWindowMenuEntry[] {
+  return windowRegistry.recentlyClosedWindows().map((w) => ({
+    name: workspaceName(w.workspace_path),
+    // The sidebar's list includes the window's own workspace; count the rest.
+    others: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path).map(workspaceName),
+    closedAt: w.closed_at,
+  }))
+}
+
+/** Tell a window which folders a reopen skipped because they are gone. */
+function sendReopenMissing(win: BrowserWindow, missing: string[], fresh: boolean): void {
+  if (!missing.length || win.isDestroyed()) return
+  const send = (): void => { if (!win.isDestroyed()) win.webContents.send('restore:reopenMissing', missing) }
+  if (fresh) win.webContents.once('did-finish-load', send)
+  else send()
+}
+
+/** Reopen one closed window, the newest when no index is given. Returns how
+ *  many workspaces came back in a new window, were focused, or were skipped. */
+async function reopenClosedWindow(index = 0): Promise<{ opened: number; focused: number; missing: string[] }> {
+  const entry = windowRegistry.takeRecentlyClosed(index)
+  if (!entry) return { opened: 0, focused: 0, missing: [] }
+  const plan = planReopen(entry, {
+    exists: (path) => existsSync(path),
+    isOpen: (path) => findMainWindowForWorkspace(path) !== null,
+  })
+  let target: BrowserWindow | null = null
+  for (const path of plan.focus) {
+    const existing = findMainWindowForWorkspace(path)
+    if (existing) { revealMainWindow(existing); target = existing }
+  }
+  let fresh = false
+  if (plan.open) {
+    const { workspace_path, bounds, adopted_workspaces } = plan.open
+    // Same boot as a crash restore: the renderer runs pane restore. A closed
+    // window's PTYs outlive it, so a pane with a pinned session reattaches,
+    // and one without (a terminal, codex before its first turn) restores
+    // fresh and reaps the old PTY through its replaces key.
+    const win = await createWindow({ workspace_path, restore: '1' }, bounds ? { bounds } : undefined)
+    if (adopted_workspaces?.length) pendingAdoptedWorkspaces.set(win.id, adopted_workspaces)
+    target = win
+    fresh = true
+  }
+  if (plan.missing.length) {
+    warnMain(`[main] reopen closed window skipped ${plan.missing.length} missing folder(s)`)
+    if (!target) {
+      // Nothing opened or focused, and possibly no window at all (macOS keeps
+      // running windowless): a Welcome window is where the notice can land.
+      const focused = BrowserWindow.getFocusedWindow()
+      target = focused && mainWindows.has(focused) ? focused : mainWindow
+      if (!target || target.isDestroyed()) { target = await createWindow(); fresh = true }
+    }
+    sendReopenMissing(target, plan.missing, fresh)
+  }
+  recentlyClosedChanged()
+  return {
+    opened: plan.open ? 1 + (plan.open.adopted_workspaces?.length ?? 0) : 0,
+    focused: plan.focus.length,
+    missing: plan.missing,
+  }
+}
+
+ipcMain.handle('restore:listRecentlyClosed', () =>
+  windowRegistry.recentlyClosedWindows().map((w) => ({
+    workspace_path: w.workspace_path,
+    adopted_workspaces: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path),
+    closed_at: w.closed_at,
+  })))
+
+// No path: the newest (⇧⌘T). A path picks that entry (the Welcome list), so a
+// list that changed since the renderer last read it cannot reopen the wrong one.
+ipcMain.handle('restore:reopenClosed', async (event, workspacePath?: unknown) => {
+  const list = windowRegistry.recentlyClosedWindows()
+  const index = typeof workspacePath === 'string' && workspacePath
+    ? list.findIndex((w) => w.workspace_path === workspacePath)
+    : 0
+  if (index < 0 || !list.length) return { ok: false, opened: 0, focused: 0, missing: [] }
+  const result = await reopenClosedWindow(index)
+  // Asked from a startup Welcome screen that holds no workspace: the restored
+  // window replaces it, rather than leaving an empty window behind.
+  const sender = BrowserWindow.fromWebContents(event.sender)
+  if (result.opened && sender && mainWindows.has(sender) && !detachedWindowIds.has(sender.id)
+    && !mainWindowWorkspaces.has(sender) && !adoptedWorkspaces.has(sender)) {
+    sender.close()
+  }
+  return { ok: true, ...result }
 })
 
 ipcMain.handle('restore:getAutoRestore', () => windowRegistry.getRestoreOnLaunch())
@@ -5498,6 +5651,8 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'guard.terminal.set_category',
   'guard.terminal.add_pattern',
   'guard.terminal.remove_pattern',
+  // Exempting a line from the credential pipe-upload rule (M4).
+  'guard.terminal.add_exemption',
   // Loosening Navide Guard's grading (lowering a built-in rule, adding an
   // allow pattern, removing a deny pattern or a protected branch).
   'guard.builtin.set_level',
@@ -5720,6 +5875,7 @@ ipcMain.on('settings:language-changed', (_event, locale: string) => {
     frontendPluginManager.dispatchHostSettingsChanged({
       settings: { 'agent-team:language': normalizedLocale },
     })
+    frontendPluginManager.notifyHostLocaleChanged(normalizedLocale)
     // The native menu is built once at startup; Electron has no API to
     // re-label it in place, so a language change has to install a new one.
     rebuildAppMenu()
@@ -6227,11 +6383,15 @@ app.whenReady().then(async () => {
     onOpenTurnStats: () => requestTurnStats(),
     onOpenTokenMonitor: () => requestTokenMonitor(),
     onOpenAccount: () => sendMenuAction('open-account'),
+    recentlyClosedWindows: () => recentlyClosedMenuEntries(),
+    onReopenClosedWindow: (index) => void reopenClosedWindow(index),
     onOpenRepo: () => void shell.openExternal('https://github.com/Navide-dev/Navide'),
     onReportIssue: () => void shell.openExternal('https://github.com/Navide-dev/Navide/issues'),
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
     onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
+    onOpenDeveloperDoc: (doc) => void shell.openExternal(DEVELOPER_DOC_URLS[doc]),
+    onOpenDeveloperPage: (page) => sendMenuAction(`open-developer:${page}`),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onLockNow: () => void appLock.lock(),
     lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),

@@ -16,6 +16,11 @@ export interface TerminalSpawnOptions {
   isResume?: boolean
   restoreMode?: 'memory-resume' | 'fresh'
   skipReattach?: boolean
+  /** The persistence key the pane's previous PTY id was stored under, when
+   *  it is not this spawn's own key — a restore regenerates the pane id, and a
+   *  vendor with no launch-pinned session id has no resumeKey to carry over.
+   *  Read only to name that PTY in replaces_terminal_id. */
+  replacesKey?: string
   /** Serialized scrollback (from another pane's `serializeScrollback()`) to
    *  write into this pane's xterm before its PTY starts — the handoff a
    *  quota-failover restart uses so the conversation's history stays in the

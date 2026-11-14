@@ -64,7 +64,7 @@ CORE_TOOL_NAMES = (
     "cli_failover_state",
     "cli_get_status", "cli_inbox_summary", "cli_interrupt", "cli_list_sessions", "cli_list_targets",
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
-    "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
+    "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_rename_pane", "cli_send", "cli_send_and_wait", "cli_set_model", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami",
     "channels_bind", "channels_bindings", "channels_bot_add_fill", "channels_bot_add_open", "channels_bot_remove_request",
     "channels_bot_rename", "channels_bot_set_enabled", "channels_chats", "channels_link_code", "channels_managed_bot_create",
@@ -82,8 +82,8 @@ CORE_TOOL_NAMES = (
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
     "plan_list", "plan_read", "plan_update_stage", "plan_update_todo",
-    "plugins_developer_mode_open",
-    "plugins_disable", "plugins_enable",
+    "plugins_developer_backend_call", "plugins_developer_mode_open",
+    "plugins_disable", "plugins_disable_all", "plugins_enable",
     "plugins_install_file_fill", "plugins_install_file_open",
     "plugins_list_installed",
     "plugins_package",
@@ -641,6 +641,9 @@ PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
 #: Host-authenticated: ``{plugin_id, declared?: [{kind, key}]}`` → a
 #: ``PluginActivityReport`` (contract 5.1, ``src/shared/pluginActivity.ts``).
 PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
+#: Host-authenticated: ``{plugin_ids: [string]}`` → a ``PluginActivityOverview``,
+#: one row per id (plan P1, the Settings monitor; ``src/shared/pluginActivity.ts``).
+PLUGIN_ACTIVITY_OVERVIEW_MESSAGE = "plugins.activity.overview"
 #: Host-authenticated: ``{plugin_id}``, sent when a plugin is removed: its
 #: first-seen rows go, so a reinstalled plugin's first writes are new again.
 PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"
@@ -773,6 +776,11 @@ class PluginApprovalDecision(TypedDict):
 # ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
 
 PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
+#: Plan P2, backend → Host: ``{request_id, action: "status" | "stop", plugin_id?}``
+#: from a chat's ``/plugins status`` or ``/plugins stop <id>``; it can stop, never start.
+PLUGIN_STOP_REQUEST_EVENT = "plugins.stop.request"
+#: Host → backend: ``{request_id, ok, ...}``, the answer to one stop request.
+PLUGIN_STOP_RESULT_MESSAGE = "plugins.stop.result"
 PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
 #: ``update``: marketplace_request_update when the disclosure is unchanged (O1).
 PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable", "update")
@@ -973,6 +981,29 @@ PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES = (
 #: The same retention as plugin_tool_calls.
 PLUGIN_AGENT_ACTIONS_RETENTION_DAYS = PLUGIN_TOOL_CALLS_RETENTION_DAYS
 PLUGIN_AGENT_ACTIONS_MAX_ROWS = PLUGIN_TOOL_CALLS_MAX_ROWS
+
+#: Plan P5: each automatic pause, with the rule, the number that tripped it,
+#: its threshold and a short detail (a host for R2, a resource item for R4);
+#: never a path or a command line. Its own schema component: if it cannot be
+#: created only this record is off.
+PLUGIN_AUTO_PAUSES_DDL = (
+    "CREATE TABLE IF NOT EXISTS plugin_auto_pauses ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL DEFAULT '',"
+    " rule TEXT NOT NULL,"
+    " value REAL NOT NULL,"
+    " threshold REAL NOT NULL,"
+    " detail TEXT NOT NULL DEFAULT '')",
+    "CREATE INDEX IF NOT EXISTS plugin_auto_pauses_plugin_at ON plugin_auto_pauses (plugin_id, at)",
+)
+#: The anomaly rules (plan P5, section 4.2): R1 frequency, R2 undeclared host,
+#: R3 failures in a row or restarts, R4 resources, R5 notification flood.
+PLUGIN_AUTO_PAUSE_RULES = ("R1", "R2", "R3", "R4", "R5")
+#: Host-authenticated: ``{plugin_id, plugin_version, rule, value, threshold, detail}``
+#: after the Host paused a plugin on its own; recorded, and told to the bound chats.
+PLUGIN_AUTO_PAUSED_MESSAGE = "plugins.auto_paused"
 
 PLUGIN_AGENT_ACTIONS_DDL = (
     "CREATE TABLE IF NOT EXISTS plugin_agent_actions ("

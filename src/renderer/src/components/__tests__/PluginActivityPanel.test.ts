@@ -63,6 +63,12 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(text).toContain('Arguments 16 B and results 2.0 KB in total; 2 sizes are unknown and not counted')
   })
 
+  it('P5: lists each automatic pause with its rule, number, threshold and detail', async () => {
+    mockPlugins()
+    const text = (await render()).get('.nv-activity-auto-pauses').text()
+    expect(text).toContain('R2 (an undeclared or refused network host): 1, threshold 0 · evil.example · 0.2.0')
+  })
+
   it('shows paths and commands as plain text, never as links or HTML', async () => {
     mockPlugins()
     const panel = await render()
@@ -251,5 +257,19 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(panel.get('.nv-activity-files').text()).toContain('docs/devmap.md')
     expect(panel.get('.nv-activity-commands').text()).toContain('git status')
     expect(panel.get('.nv-activity-unused').text()).toContain('aiCli')
+  })
+})
+
+describe('PluginActivityPanel undeclared uses (0.2.40 c3)', () => {
+  it('names CAPABILITY_DENIED and links to its documentation section', async () => {
+    mockPlugins()
+    const openExternal = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as unknown as { agentTeam: Record<string, unknown> }).agentTeam.openExternal = openExternal
+    const panel = await render()
+    const block = panel.get('.nv-activity-undeclared')
+    expect(block.text()).toContain('CAPABILITY_DENIED')
+    await block.get('[data-testid="activity-undeclared-doc"]').trigger('click')
+    expect(openExternal).toHaveBeenCalledWith(
+      'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/plugin-development-v2.md#capability_denied')
   })
 })

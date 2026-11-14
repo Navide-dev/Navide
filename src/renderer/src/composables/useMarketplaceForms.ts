@@ -60,6 +60,15 @@ export function setMarketplaceView(view: 'browse' | 'developer' | 'testplace'): 
   marketplaceView.value = view
 }
 
+/** Bumped by each Help → Developers → Testplace…: the Developer page scrolls to its Testplace section. */
+export const developerTestplaceFocus = shallowRef(0)
+
+/** Help → Developers: show the Developer page, at the top or at its Testplace section. */
+export function showDeveloperPage(section: 'top' | 'testplace'): void {
+  marketplaceView.value = 'developer'
+  if (section === 'testplace') developerTestplaceFocus.value++
+}
+
 export function showMarketplaceForm(form: Omit<OpenMarketplaceForm, 'seq'>): void {
   openMarketplaceForm.value = { ...form, seq: ++seq }
   marketplaceView.value = 'developer'

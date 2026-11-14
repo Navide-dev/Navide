@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 import asyncio
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Callable, NamedTuple, Protocol
@@ -254,6 +255,18 @@ class Paths(Protocol):
         """
         ...
 
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        """An lstat of *path* whose ``st_dev``/``st_ino`` identify the file.
+
+        *scandir_stat* is ``DirEntry.stat(follow_symlinks=False)`` for the same
+        entry. On POSIX that already is an lstat and is returned as is, so a
+        directory walk costs no second syscall per file. On Windows it carries
+        FindFirstFile metadata whose device and inode fields are zero, so a
+        real ``os.lstat`` is made for a caller that compares it with an
+        opened descriptor's ``fstat``.
+        """
+        ...
+
     def symlinks_available(self) -> bool:
         """Whether this process may create symbolic links.
 
@@ -481,9 +494,11 @@ class ProcessTree(Protocol):
     def own_group_spawn_kwargs(self) -> dict[str, int]:
         """Spawn keyword arguments that make the child lead a group of its own.
 
-        POSIX: a new process group (not a new session: the controlling
-        terminal stays), so `end_own_group` also reaches a grandchild forked
-        after any snapshot. Windows has no process groups and adds nothing:
+        Every key must be one both asyncio and uvloop accept: uvicorn runs the
+        backend on uvloop wherever it is installed. POSIX: a new session, and
+        with it a new process group (the child leaves the controlling
+        terminal; credentials go through askpass), so `end_own_group` also
+        reaches a grandchild forked after any snapshot. Windows has no process groups and adds nothing:
         not suspended, no job (each git.exe started suspended in a job left a
         kernel Token object behind), so a timeout ends the tree from a
         snapshot of it."""

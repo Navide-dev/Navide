@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { MCP_CATALOG } from '../data/mcpCatalog'
+import { cliFacts } from '../lib/helpCliFacts'
 import MockCardRow from './helpMocks/MockCardRow.vue'
 import MockFigure from './helpMocks/MockFigure.vue'
 import MockPaneCard from './helpMocks/MockPaneCard.vue'
@@ -48,6 +49,8 @@ const cliTools = [
   'cli_close_agent',
   'cli_reclaim_agent',
   'cli_place_pane',
+  'cli_rename_pane',
+  'cli_set_model',
   'cli_message_log',
   'cli_usage',
   'cli_failover_state',
@@ -89,6 +92,7 @@ const workspaceTools = [
   'scheduler_run_now',
   'scheduler_runs',
   'cli_permission_settings',
+  'plugins_developer_backend_call',
 ] as const
 
 // The Preview panel's four verbs: record adds to the feed, show pushes to it,
@@ -107,7 +111,15 @@ const uiTools = ['ui_list_actions', 'ui_invoke', 'ui_snapshot', 'ui_diagnostics'
 // row is looked up under `settings.help.mcp.<section>.<table>.<key>`.
 const comparison = ['server', 'caller', 'config', 'when', 'what'] as const
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+// Counts and name lists the prose quotes. The CLI facts come from the vendor
+// specs; `listed` is how many tools this page documents. The renderer has no
+// copy of the backend's full tools/list, so the prose quotes no grand total.
+const facts = computed(() => ({
+  ...cliFacts(locale.value),
+  listed: planTools.length + workspaceTools.length + previewTools.length + cliTools.length + uiTools.length,
+}))
 
 // ── Mock screenshots ────────────────────────────────────────────────────────
 // Two HTML pictures, drawn from the components they depict rather than
@@ -146,10 +158,11 @@ const settingsNav = computed(() => [
   { label: t('settings.nav.memory') },
 ])
 
+// The page's toolbar: the two plain actions, then the primary one.
 const settingsActions = computed(() => [
-  t('action.add-mcp'),
   t('settings.mcp.add-custom'),
-  t('action.refresh'),
+  t('action.open-mcp-config'),
+  t('action.add-mcp'),
 ])
 
 // Straight off MCP_CATALOG, so the picture cannot drift from the real list.
@@ -197,7 +210,7 @@ const troubleshooting = [
     <!-- ── Direction 1 ──────────────────────────────────────────────── -->
     <section class="mh-section">
       <h2 class="mh-h2">{{ $t('settings.help.mcp.s1.title') }}</h2>
-      <p class="mh-p">{{ $t('settings.help.mcp.s1.p1') }}</p>
+      <p class="mh-p" v-html="$t('settings.help.mcp.s1.p1', facts)"></p>
 
       <h3 class="mh-h3">{{ $t('settings.help.mcp.s1.h1') }}</h3>
       <div class="mh-tablewrap">
@@ -252,6 +265,7 @@ const troubleshooting = [
       <p class="mh-note" v-html="$t('settings.help.mcp.s1.note4')"></p>
       <p class="mh-note" v-html="$t('settings.help.mcp.s1.note5')"></p>
       <p class="mh-note" v-html="$t('settings.help.mcp.s1.note9')"></p>
+      <p class="mh-note" v-html="$t('settings.help.mcp.s1.note10')"></p>
 
       <!-- Who a name reaches. Two windows side by side is the only way to show
            that a bare name never leaves its own one. -->
@@ -311,9 +325,9 @@ const troubleshooting = [
       </MockFigure>
 
       <h3 class="mh-h3">{{ $t('settings.help.mcp.s1.h4') }}</h3>
-      <p class="mh-p" v-html="$t('settings.help.mcp.s1.p2')"></p>
+      <p class="mh-p" v-html="$t('settings.help.mcp.s1.p2', facts)"></p>
       <p class="mh-note" v-html="$t('settings.help.mcp.s1.note6')"></p>
-      <p class="mh-note" v-html="$t('settings.help.mcp.s1.note7')"></p>
+      <p class="mh-note" v-html="$t('settings.help.mcp.s1.note7', facts)"></p>
       <p class="mh-note" v-html="$t('settings.help.mcp.s1.note8')"></p>
     </section>
 
@@ -355,6 +369,8 @@ const troubleshooting = [
           />
         </MockSettings>
       </MockFigure>
+
+      <p class="mh-p" v-html="$t('settings.help.mcp.s2.p3')"></p>
 
       <div class="mh-warn">
         <p v-html="$t('settings.help.mcp.s2.warn.p1')"></p>
@@ -423,7 +439,7 @@ const troubleshooting = [
           <tbody>
             <tr v-for="key in troubleshooting" :key="key">
               <td>{{ $t(`settings.help.mcp.s5.troubleshooting.${key}.symptom`) }}</td>
-              <td>{{ $t(`settings.help.mcp.s5.troubleshooting.${key}.detail`) }}</td>
+              <td>{{ $t(`settings.help.mcp.s5.troubleshooting.${key}.detail`, facts) }}</td>
             </tr>
           </tbody>
         </table>

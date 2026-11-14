@@ -21,7 +21,7 @@ import os
 import posixpath
 import re
 import shlex
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .. import osplat
 
@@ -184,6 +184,13 @@ class _Ctx:
     # A heredoc whose delimiter could not be parsed or whose terminator line
     # never came: its text was left in place and read as shell lines.
     heredoc_unparsed: bool = False
+    # Shell variables a bare `NAME=value` (or `export NAME=value`) set earlier
+    # in the command, as written: only read to escalate (_indirect_credentials).
+    vars: dict[str, str] = field(default_factory=dict)
+    # Characters held by values over SHORT_VAR_CHARS, and written out from
+    # them so far (see _record_assignments / _indirect_credentials).
+    long_vars_chars: int = 0
+    long_expansion_chars: int = 0
 
 
 # ---------------------------------------------------------------- paths
@@ -1037,7 +1044,129 @@ def _sub_index(arg: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+_ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$", re.S)
+_VAR_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+_DECLARE_WORDS = {"export", "declare", "typeset", "local", "readonly"}
+#: The rules a path held in a variable is graded by, as if written literally.
+_CREDENTIAL_RULES = ("credential-access", "credential-exfil", "credential-pipe-upload")
+
+
+#: Caps on the variables followed for _indirect_credentials. `B=$A$A; C=$B$B`
+#: doubles at every step, so nothing grows past MAX_VAR_CHARS. A value or word
+#: of at most SHORT_VAR_CHARS (any real path) is always followed; longer ones
+#: share LONG_VARS_CHARS (values held at once) and LONG_EXPANSION_CHARS (words
+#: written out over the whole command), so padding can never push a short
+#: credential path out of view.
+MAX_VAR_CHARS = 4096
+SHORT_VAR_CHARS = 256
+LONG_VARS_CHARS = 64_000
+LONG_EXPANSION_CHARS = 256_000
+
+
+def _expanded_len(word: str, values: dict[str, str]) -> int:
+    """Length of `word` with its known variables written out, without building it."""
+    return len(word) + sum(
+        len(values[name]) - len(m.group(0))
+        for m in _VAR_REF_RE.finditer(word)
+        if (name := m.group(1) or m.group(2)) in values
+    )
+
+
+def _subst_vars(word: str, values: dict[str, str]) -> str:
+    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept."""
+    return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
+
+
+def _collapse(text: str) -> str:
+    """`//`, `/./` and `/x/../` folded to `/`, so padding made of them cannot
+    make a path look long. Only whole components between two slashes are
+    folded: `text` may be one piece of a word (a variable's value), and a
+    fold across its edges, like normpath's, would change what it joins.
+    One pass over the components, so nesting costs nothing extra."""
+    if "/" not in text or "://" in text:
+        return text
+    head, *inner, tail = text.split("/")
+    stack: list[str] = []
+    for part in inner:
+        if part in ("", "."):
+            continue
+        if part == ".." and stack and stack[-1] != "..":
+            stack.pop()
+        else:
+            stack.append(part)
+    return "/".join([head, *stack, tail])
+
+
+def _too_big_to_follow(acc: _Acc) -> None:
+    acc.opaque("dynamic-path", f"a variable longer than {SHORT_VAR_CHARS} characters is not followed past Guard's limits")
+
+
+def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
+    """Remember `F=path` and `export F=path`: a command made only of
+    assignments, so a later `cat "$F"` can be graded like `cat path`."""
+    declare = bool(argv) and argv[0] in _DECLARE_WORDS
+    words = [w for w in argv[1:] if not w.startswith("-")] if declare else argv
+    matches = [_ASSIGN_RE.match(w) for w in words]
+    if not words or not all(matches):
+        return
+    for m in matches:
+        name = m.group(1)
+        value = _collapse(_subst_vars(m.group(2), ctx.vars)) if _expanded_len(m.group(2), ctx.vars) <= MAX_VAR_CHARS else None
+        old = ctx.vars.pop(name, None)
+        if old is not None and len(old) > SHORT_VAR_CHARS:
+            ctx.long_vars_chars -= len(old)
+        if value is None:
+            _too_big_to_follow(acc)
+            continue
+        size = len(value)
+        if size > SHORT_VAR_CHARS:
+            # Make room by dropping the longest values first; short ones stay.
+            while ctx.long_vars_chars + size > LONG_VARS_CHARS:
+                longest = max((n for n, v in ctx.vars.items() if len(v) > SHORT_VAR_CHARS), key=lambda n: len(ctx.vars[n]))
+                ctx.long_vars_chars -= len(ctx.vars.pop(longest))
+                _too_big_to_follow(acc)
+            ctx.long_vars_chars += size
+        ctx.vars[name] = value
+
+
+def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
+    """Escalate only: grade the pipeline again with the variables set
+    earlier in the command written out, and keep the credential rules it
+    hits. Nothing else from that pass counts, so no other verdict moves.
+    A word too long to write out is graded as written and marks the verdict."""
+
+    def expand(word: str) -> str:
+        size = _expanded_len(word, ctx.vars)
+        if size <= SHORT_VAR_CHARS or size == len(word):
+            return _subst_vars(word, ctx.vars)
+        if size > MAX_VAR_CHARS:
+            _too_big_to_follow(acc)
+            return word
+        out = _collapse(_subst_vars(word, ctx.vars))
+        if len(out) <= SHORT_VAR_CHARS:
+            return out
+        if ctx.long_expansion_chars + len(out) > LONG_EXPANSION_CHARS:
+            _too_big_to_follow(acc)
+            return word
+        ctx.long_expansion_chars += len(out)
+        return out
+
+    expanded = [_Cmd([expand(a) for a in c.argv], [(op, expand(t)) for op, t in c.redirects]) for c in pipeline]
+    if all(e.argv == c.argv and e.redirects == c.redirects for e, c in zip(expanded, pipeline)):
+        return
+    copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={}, long_vars_chars=0)
+    sub = _Acc()
+    _classify_pipeline(expanded, copy, sub, sub_downloads, depth)
+    for rule, reason in zip(sub.rules, sub.reasons):
+        if rule in _CREDENTIAL_RULES and (level := sub.levels.get(rule)):
+            acc.hit(level, rule, reason)
+
+
 def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
+    if ctx.vars:
+        _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth)
+    if len(pipeline) == 1:
+        _record_assignments(pipeline[0].argv, ctx, acc)
     upstream: set[str] = set()  # kinds of producers earlier in this pipeline
     piped: list[str] = []  # heredoc bodies and here-strings flowing down the pipe
     for idx, cmd in enumerate(pipeline):
@@ -1594,6 +1723,51 @@ def _classify_upload(word: str, args: list[str], ctx: _Ctx, acc: _Acc) -> None:
             acc.hit("high", "http-upload-file", f"uploads a local file with {word}")
 
 
+#: PowerShell reads a file with a cmdlet (or alias) or a .NET call, and sends
+#: one with these; matched on the command text, since `(`, `::` and `$x = …`
+#: do not split as shell words.
+_PS_WORD = r"\"[^\"]*\"|'[^']*'|[^\s|;()]+"
+_PS_READER_RE = re.compile(r"(?i)(?<![\w.$-])(?:get-content|gc|cat|type)(?![\w.-])([^|;\n)]*)")
+_PS_DOTNET_READ_RE = re.compile(r"(?i)\[(?:system\.)?io\.file\]::read\w*\(\s*(" + _PS_WORD + ")")
+_PS_SENDER_RE = re.compile(
+    r"(?i)(?<![\w.$-])(?:invoke-webrequest|iwr|invoke-restmethod|irm|curl(?:\.exe)?|wget(?:\.exe)?)(?![\w-])")
+_PS_INFILE_RE = re.compile(r"(?i)(?<![\w-])-infile(?:\s+|:)(" + _PS_WORD + ")")
+_PS_ASSIGN_RE = re.compile(r"(?i)\$((?:env:)?[A-Za-z_]\w*)\s*=\s*(" + _PS_WORD + ")")
+_PS_VAR_RE = re.compile(r"(?i)\$\{?((?:env:)?[A-Za-z_]\w*)\}?")
+
+
+def _ps_credential_reads(command: str, ctx: _Ctx, acc: _Acc) -> None:
+    """PowerShell: a credential file read by Get-Content / gc / cat / type
+    or [IO.File]::Read*(), directly or through a `$var` set earlier, is
+    graded like `cat` of it (credential-access); followed by a send
+    (Invoke-WebRequest / iwr / Invoke-RestMethod / irm / curl.exe), through
+    a pipe or a variable, like curl uploading it (credential-exfil). Only
+    credential and .env paths count, so every other read and send is unchanged."""
+    assigns = [(m.start(), m.group(1).lower(), m.group(2).strip("\"'")) for m in _PS_ASSIGN_RE.finditer(command)]
+
+    def secret(word: str, at: int) -> str | None:
+        values = {name: value for pos, name, value in assigns if pos < at}
+        word = _PS_VAR_RE.sub(lambda m: values.get(m.group(1).lower(), m.group(0)), word.strip("\"'"))
+        path = _resolve(word, ctx)
+        return path if path and (_credential_kind(path, ctx) or _is_dotenv(path)) else None
+
+    reads: list[tuple[int, str]] = []
+    for m in _PS_READER_RE.finditer(command):
+        reads += [(m.end(), p) for w in re.finditer(_PS_WORD, m.group(1)) if (p := secret(w.group(0), m.start()))]
+    for m in _PS_DOTNET_READ_RE.finditer(command):
+        if path := secret(m.group(1), m.start()):
+            reads.append((m.end(), path))
+    sends = [m.start() for m in _PS_SENDER_RE.finditer(command)]
+    for end, path in reads:
+        if _credential_kind(path, ctx) and not _ssh_public_key(path, ctx):
+            acc.hit("critical", "credential-access", f"touches a credential store: {path}")
+        if any(start >= end for start in sends):
+            acc.hit("critical", "credential-exfil", f"uploads a secret file: {path}")
+    for m in _PS_INFILE_RE.finditer(command):
+        if path := secret(m.group(1), m.start()):
+            acc.hit("critical", "credential-exfil", f"uploads a secret file: {path}")
+
+
 # ---------------------------------------------------------------- entry points
 
 
@@ -1675,6 +1849,12 @@ def classify(
                 # The rules below still run, so a level they find is never lowered.
                 acc.opaque("untokenizable-shape", "command uses shell syntax the analyser cannot model")
             _classify_script(command, ctx, acc)
+            if name == "powershell":
+                _ps_credential_reads(command, _ctx(cwd, workspace, protected_branches), acc)
+            elif tool_input.get("dialect") == "powershell":
+                # A built-in PowerShell tool (guard_hooks.normalise): the shell
+                # grading above stands and the PowerShell read/send rules are added.
+                _ps_credential_reads(command.replace("\\", "/"), ctx, acc)
     elif name in WRITE_TOOLS or name in READ_TOOLS:
         for raw in _tool_paths(tool_input):
             path = _resolve(raw, ctx)

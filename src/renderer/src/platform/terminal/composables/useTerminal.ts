@@ -495,6 +495,12 @@ interface UseTerminalOptions {
   workspacePath?: string
   onClear?: () => void
   onUserResume?: () => void
+  /** Whether this pane's CLI leaves evidence when an interrupt takes effect
+   *  (Claude's "[Request interrupted by user]" record, a turn end such as
+   *  Codex's turn_aborted). Only then does a STOP with no evidence within
+   *  STOP_EVIDENCE_MS read as "STOP not applied": a CLI that reports nothing
+   *  would read that way after every interrupt. Defaults to false. */
+  reportsInterrupt?: () => boolean
   /** Getter for the OTHER CLI panes' addresses (already excluding self), with
    *  the pre-translated group and status words the menu draws beside them.
    *  Feeds the @-mention autocomplete menu. Read lazily at trigger time so the
@@ -954,7 +960,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  messaging gate reads through only an agent's STOP: a person who pressed
    *  STOP wants that agent to stay stopped until they type. */
   const stoppedBy = ref<'agent' | 'user' | null>(null)
-  watch(isStopped, (stopped) => { if (!stopped) stoppedBy.value = null }, { flush: 'sync' })
+  watch(isStopped, (stopped) => {
+    if (stopped) return
+    stoppedBy.value = null
+    stopIneffective.value = false
+    clearStopEvidenceTimer()
+  }, { flush: 'sync' })
   /** A STOP that was not an agent's whose badge the agent's own next turn has
    *  since cleared (markAgentTurnStart). The badge is gone, but the messaging
    *  gate keeps holding queued messages until a person types: see stoppedBy. */
@@ -965,6 +976,39 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // Activity stamped this soon after an interrupt still belongs to the turn it
   // cut off (its last log records, Claude's "[Request interrupted by user]").
   const STOP_SETTLE_MS = 3_000
+  // How long a STOP waits for evidence that the CLI acted on it. Ctrl-C at a
+  // Claude prompt with queued text clears the text and leaves the turn running.
+  const STOP_EVIDENCE_MS = 5_000
+  /** A STOP with no interrupt evidence while the CLI kept working: the badge
+   *  shows the live status (so Interrupt can be pressed again) marked "STOP
+   *  not applied". The STOP itself stays recorded: isStopped is still true,
+   *  and a person's STOP keeps holding the messaging gate. Cleared by the same
+   *  rules as the STOP badge, and by late evidence that the interrupt landed. */
+  const stopIneffective = ref(false)
+  let interruptConfirmed = false
+  let stopEvidenceTimer: ReturnType<typeof setTimeout> | null = null
+  function clearStopEvidenceTimer(): void {
+    if (stopEvidenceTimer) clearTimeout(stopEvidenceTimer)
+    stopEvidenceTimer = null
+  }
+  function judgeStopEvidence(): void {
+    stopEvidenceTimer = null
+    if (!isStopped.value || interruptConfirmed || liveStatus.value !== 'running') return
+    if (stoppedBy.value !== 'agent') stopHeldForUser.value = true
+    stopIneffective.value = true
+  }
+
+  /** The CLI acted on the interrupt: its transcript says so (Claude's
+   *  "[Request interrupted by user]"). Arrives late under a lagging log
+   *  reader, so it also takes back a "STOP not applied". */
+  function noteInterruptEvidence(): void {
+    if (!isStopped.value) return
+    interruptConfirmed = true
+    clearStopEvidenceTimer()
+    if (!stopIneffective.value) return
+    stopIneffective.value = false
+    stopHeldForUser.value = false
+  }
 
   /** The agent began a turn of its own after a STOP: Stop hook feedback, a
    *  schedule, a delivered message. The badge records the interrupt and must
@@ -989,7 +1033,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
 
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
-    if (isStopped.value) return 'stopped'
+    if (isStopped.value && !stopIneffective.value) return 'stopped'
     return liveStatus.value
   })
 
@@ -1180,6 +1224,9 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     flushPendingClean()
     turnCompleteAt.value = Date.now()
     runningLatched.value = false
+    // The turn ended inside the evidence window: the interrupt took (Codex's
+    // turn_aborted). After it, a turn end is the un-interrupted turn finishing.
+    if (stopEvidenceTimer) noteInterruptEvidence()
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
@@ -3202,6 +3249,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // backend reaps a still-live predecessor this spawn is replacing (resume-id
     // dedup can't: the id rotates on every resume, so it never matches).
     replacesPtyId = persistedSessionId()
+    // A restore spawns under a NEW pane id, so a pane whose key is its pane id
+    // finds nothing above; its predecessor's PTY id sits under the former id.
+    if (!replacesPtyId && opts.replacesKey) {
+      try { replacesPtyId = localStorage.getItem(`terminal-pty:${opts.replacesKey}`) || '' } catch { /* ignore */ }
+    }
     // True persistence: a PTY from before a reload may still be running. Reattach
     // to it (recovering bash/build panes too, with no --resume round-trip) before
     // spawning anew. Falls through to a fresh spawn if the PTY is gone.
@@ -3438,6 +3490,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     stoppedAt = Date.now()
     stopHeldForUser.value = false
     isStopped.value = true
+    stopIneffective.value = false
+    interruptConfirmed = false
+    clearStopEvidenceTimer()
+    if (opts?.reportsInterrupt?.()) stopEvidenceTimer = setTimeout(judgeStopEvidence, STOP_EVIDENCE_MS)
     const reply = await terminalPort.interrupt(sessionId.value)
     // wsClient resolves an `ok: false` rather than rejecting it, so a refusal
     // has to be read off the reply the way _sendPasteChunk reads it.
@@ -3567,6 +3623,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     clearInterval(reconcileInterval)
     detachWebgl()
     stopStartingWatchdog()
+    clearStopEvidenceTimer()
     if (freshSpawnRefitTimer) clearTimeout(freshSpawnRefitTimer)
     if (_hintTimer) clearTimeout(_hintTimer)
     resizeCtrl.dispose()
@@ -3634,6 +3691,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     displayStatus,
     liveStatus,
     stoppedBy,
+    stopIneffective,
+    noteInterruptEvidence,
     stopHeldForUser,
     markAgentTurnStart,
     awaitingKind,

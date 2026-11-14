@@ -254,9 +254,13 @@ async def marketplace_developer_status(ctx: Context) -> dict[str, Any]:
 
     Read-only. Returns {ok, signed_in: {account, publisher}, namespace,
     key_registered, application: {status, fields, field_sources, source,
-    reason, submitted_at, decided_at} | null}. status is none, pending,
+    reason, submitted_at, decided_at} | null, members: {your_role, items:
+    [{member_id, role, added_at}]} | null}. status is none, pending,
     approved, rejected or revoked; reason is the reviewer's when rejected or
-    revoked. Never carries a token or key. NOT_SIGNED_IN means the user has
+    revoked. members lists who may publish under the signed-in namespace
+    (role owner or publisher; null without a publisher sign-in); only the
+    user changes it, in Settings > Navide Marketplace > Developer. Never
+    carries a token or key. NOT_SIGNED_IN means the user has
     not signed in under Settings > Navide Marketplace > Developer.
 
     next_step says what the user does next: "sign-in" (with NOT_SIGNED_IN),

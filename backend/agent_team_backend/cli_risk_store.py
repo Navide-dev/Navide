@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Iterator
 
 from .cli_risk_observers import DNS_TTL, MIB100, DiskSample, ExpectedAddresses
 from .cli_risk_ranges import SharedRangeStore
@@ -75,15 +77,63 @@ class CliRiskStore:
             cur.execute("CREATE TABLE IF NOT EXISTS cli_risk_records ("
                         "category TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, "
                         "PRIMARY KEY(category, key))")
+        # In-memory changes of the observation in progress, applied when its
+        # savepoint is released (None outside an observation).
+        self._staged: list[dict[str, dict[str, dict]]] | None = None
+        self._load()
+        # A new backend has no current observation, even if the last run did.
+        for value in self.records["availability"].values():
+            value["status"] = "unknown"
+
+    def _load(self):
+        with self.db.transaction() as cur:
             rows = cur.execute("SELECT category, key, data FROM cli_risk_records").fetchall()
         self.records: dict[str, dict[str, dict]] = {
             "roots": {}, "signals": {}, "availability": {}, "decisions": {}, "attempts": {}, "aliases": {}
         }
         for row in rows:
             self.records[row["category"]][row["key"]] = json.loads(row["data"])
-        # A new backend has no current observation, even if the last run did.
-        for value in self.records["availability"].values():
-            value["status"] = "unknown"
+        # Signals are never deleted, so the table only grows. These indexes keep
+        # per-observation work proportional to one pane's or root's signals and
+        # snapshots proportional to the active ones, not to the whole history.
+        self._active: dict[str, dict] = {}
+        self._by_owner: dict[tuple[str, str], set[str]] = {}
+        self._index_signals(self.records["signals"])
+
+    @contextmanager
+    def sweep(self) -> Iterator[None]:
+        """One transaction for a whole sweep: one COMMIT (one journal sync)
+        however many panes it covers. Run each observation inside
+        ``observation()``. If the COMMIT fails, the database still holds the
+        state before the sweep and the in-memory records are reloaded from it."""
+        try:
+            with self.db.transaction():
+                yield
+        except BaseException:
+            self._load()
+            raise
+
+    @contextmanager
+    def observation(self) -> Iterator[None]:
+        """One observation inside ``sweep()``, in its own savepoint: if it
+        fails, only its writes are rolled back and the rest of the sweep is
+        still recorded. Its in-memory changes apply once the savepoint is
+        released, so a failed observation leaves the records untouched."""
+        with self.db.transaction() as cur:
+            cur.execute("SAVEPOINT cli_risk_observation")
+            self._staged = []
+            try:
+                yield
+            except BaseException:
+                cur.execute("ROLLBACK TO cli_risk_observation")
+                cur.execute("RELEASE cli_risk_observation")
+                raise
+            else:
+                cur.execute("RELEASE cli_risk_observation")
+                for changes in self._staged:
+                    self._remember(changes)
+            finally:
+                self._staged = None
 
     def _commit(self, changes: dict[str, dict[str, dict]], *, allowed=None, now=0.0):
         with self.db.transaction() as cur:
@@ -104,8 +154,33 @@ class CliRiskStore:
                 values = sorted(set(value for value in values if isinstance(value, str)) | {ip})
                 if not self.settings.set({key: values}):
                     raise ValueError("allowed-address settings exceed storage limit")
+        if self._staged is not None:
+            self._staged.append(changes)
+        else:
+            self._remember(changes)
+
+    def _remember(self, changes: dict[str, dict[str, dict]]):
         for category, entries in changes.items():
             self.records[category].update(entries)
+        self._index_signals(changes.get("signals", {}))
+
+    @staticmethod
+    def _owner(value: dict) -> tuple[str, str]:
+        return ("network", value["pane"]) if value["kind"] == "network" else ("disk", value["root"])
+
+    def _index_signals(self, entries: dict[str, dict]):
+        for key, value in entries.items():
+            self._by_owner.setdefault(self._owner(value), set()).add(key)
+            if value["active"]:
+                self._active[key] = value
+            else:
+                self._active.pop(key, None)
+
+    def _deactivate(self, owner: tuple[str, str]) -> dict[str, dict]:
+        """Inactive copies of an owner's currently active signals; signals that
+        are already inactive are left as they are rather than rewritten."""
+        return {key: {**self._active[key], "active": False}
+                for key in self._by_owner.get(owner, ()) if key in self._active}
 
     def allowed_hosts(self, vendor: str) -> tuple[str, ...]:
         settings = self.db.kv_get("ui_settings", {})
@@ -129,9 +204,7 @@ class CliRiskStore:
         changes: dict[str, dict] = {}
         if status == "successful":
             availability["expectedSetObservedAt"] = iso(expected.observed_at)
-            for key, old in self.records["signals"].items():
-                if old["kind"] == "network" and old["pane"] == pane:
-                    changes[key] = {**old, "active": False}
+            changes.update(self._deactivate(("network", pane)))
             for (ip, port), count in endpoints.items():
                 key = identity("network", vendor, pane, ip, str(port))
                 old = self.records["signals"].get(key, {})
@@ -167,12 +240,12 @@ class CliRiskStore:
             self._commit(updates)
             return
         previous = self.records["roots"].get(root_key)
-        inventory = copy.deepcopy(previous["files"]) if previous else {}
+        # Entries are updated below; copy the two levels that change instead of
+        # deep-copying the whole inventory.
+        inventory = {path: {**entry, "flagged": {size: dict(history) for size, history in entry["flagged"].items()}}
+                     for path, entry in previous["files"].items()} if previous else {}
         current = sample.files or {}
-        signals: dict[str, dict] = {}
-        for key, old in self.records["signals"].items():
-            if old["kind"] == "disk" and old["root"] == root_key:
-                signals[key] = {**old, "active": False}
+        signals: dict[str, dict] = self._deactivate(("disk", root_key))
         for path, entry in inventory.items():
             if path not in current and entry["present"]:
                 entry["present"] = False
@@ -225,10 +298,13 @@ class CliRiskStore:
                      allowed=(vendor, signal["target"]) if action == "allow" else None, now=now)
 
     def snapshot(self) -> dict:
-        # Inventories stay in the worker/store; request projection only copies
-        # findings and small availability records.
-        return copy.deepcopy({category: self.records[category]
-                              for category in ("signals", "availability", "decisions", "aliases")})
+        # Inventories stay in the worker/store; request projection only reads
+        # active findings and small availability records. Committed values are
+        # replaced, never mutated in place, so a shallow copy is a stable view;
+        # projection copies whatever it hands out.
+        return {"signals": dict(self._active),
+                **{category: dict(self.records[category])
+                   for category in ("availability", "decisions", "aliases")}}
 
 
 def project(snapshot: dict, panes: list, now: float) -> dict[str, dict]:

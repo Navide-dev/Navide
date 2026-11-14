@@ -30,6 +30,21 @@ describe('PluginDisableSourceStore', () => {
     expect(store.get('acme.b')).toEqual({ by: 'user', at: 5, agent: null })
   })
 
+  it('P2: keeps where a stop came from and the activity summary taken at that moment', () => {
+    const dir = root()
+    const stop = {
+      at: 7, via: 'status-bar' as const,
+      summary: { inFlightCalls: 2, toolCallsLastMinute: 61, capabilityCallsLastMinute: null, consecutiveFailures: 3, undeclaredHosts: ['evil.io'] },
+    }
+    new PluginDisableSourceStore(dir).set('acme.a', { by: 'user', at: 7, agent: null, stop })
+    expect(new PluginDisableSourceStore(dir).get('acme.a')).toEqual({ by: 'user', at: 7, agent: null, stop })
+    // A malformed stop record makes the whole entry unreadable: it reads as the user, with no time.
+    writeFileSync(join(dir, DISABLE_SOURCES_FILE), JSON.stringify({
+      schemaVersion: 1, sources: { 'acme.a': { by: 'user', at: 7, agent: null, stop: { ...stop, via: 'web' } } },
+    }))
+    expect(new PluginDisableSourceStore(dir).get('acme.a')).toEqual(UNKNOWN_DISABLE_SOURCE)
+  })
+
   it('reads a missing, unreadable or malformed entry as the user, with no time', () => {
     const dir = root()
     expect(new PluginDisableSourceStore(dir).get('acme.a')).toEqual({ by: 'user', at: null, agent: null })

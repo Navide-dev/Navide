@@ -163,7 +163,7 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
     system_namespaces: set[str] = set()
     shell_entries = 0
     shell_addresses: set[str] = set()
-    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"}
+    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"}
     for item in [*catalog["methods"], *catalog["events"]]:
         if item["visibility"] != "public":
             continue

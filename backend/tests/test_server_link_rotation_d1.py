@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from agent_team_backend import server_link, trust_store
-from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
+from tests.test_server_link import CONFIG, CONNECT_TIMEOUT_S, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc and store_mode are fixtures
     CUR_S, KEYCHAIN_ONLY, NXT_S, kc, owners, real_link, store_mode,
 )
@@ -37,7 +37,7 @@ async def _restart_ok(server, ts):
     n = len(server.opened)
     assert await link.start() is True
     try:
-        await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs), timeout=5)
+        await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
         cred = [h for c in server.opened[n:] for h in c.hellos][-1]["credential"]
         assert cred in ts.live
@@ -68,7 +68,8 @@ async def test_D1_real_chain(kc, scenario):
     server = FakeServer(responder=ts.responder, count=16)
     link = real_link(server)
     assert await link.start() is True
-    await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.rotate" for m in server.opened[0].sent))
+    await _until(lambda: bool(server.opened) and any(m.get("type") == "auth.token.rotate" for m in server.opened[0].sent),
+                 timeout=CONNECT_TIMEOUT_S)
     await asyncio.sleep(0.2)
     await link.stop()
     after_quit = (server_link.access_token()[:20], server_link.next_access_token()[:20])
@@ -95,11 +96,15 @@ async def test_old_server_no_rotation_no_writes(kc):
     link = real_link(server)
     assert await link.start()
     try:
-        await _until(lambda: bool(server.opened) and bool(server.opened[-1].syncs))
+        # Connection waits, not what this test asserts: each one makes trust
+        # record writes through worker threads (DPAPI on Windows) and every
+        # reconnect sits out the 1s backoff, which a loaded runner stretched
+        # past _until's 3s (run 43384023635). See CONNECT_TIMEOUT_S.
+        await _until(lambda: bool(server.opened) and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
         for _ in range(3):
             n = len(server.opened)
             await server.opened[-1].close()
-            await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs))
+            await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
     finally:
         await link.stop()

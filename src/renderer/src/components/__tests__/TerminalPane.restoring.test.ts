@@ -24,6 +24,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
       mockTerminal.onFirstOutput = options?.onFirstOutput
       return {
         mount: vi.fn(),
+        stopIneffective: { value: false },
         updateXtermTheme: vi.fn(),
         setDisableStdin: vi.fn(),
         displayStatus: mockTerminal.displayStatus,

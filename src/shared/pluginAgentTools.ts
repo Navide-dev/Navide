@@ -80,7 +80,7 @@ export const CORE_TOOL_NAMES = [
   'cli_failover_state',
   'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
-  'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
+  'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_rename_pane', 'cli_send', 'cli_send_and_wait', 'cli_set_model', 'cli_token_stats',
   'cli_usage', 'cli_wait_idle', 'cli_whoami',
   'channels_bind', 'channels_bindings', 'channels_bot_add_fill', 'channels_bot_add_open', 'channels_bot_remove_request',
   'channels_bot_rename', 'channels_bot_set_enabled', 'channels_chats', 'channels_link_code', 'channels_managed_bot_create',
@@ -98,8 +98,8 @@ export const CORE_TOOL_NAMES = [
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
   'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',
-  'plugins_developer_mode_open',
-  'plugins_disable', 'plugins_enable',
+  'plugins_developer_backend_call', 'plugins_developer_mode_open',
+  'plugins_disable', 'plugins_disable_all', 'plugins_enable',
   'plugins_install_file_fill', 'plugins_install_file_open',
   'plugins_list_installed',
   'plugins_package',
@@ -760,6 +760,8 @@ export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
 /** Host-authenticated: `{plugin_id, declared?}` → a `PluginActivityReport` (contract 5.1). */
 export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
+/** Host-authenticated: `{plugin_ids}` → a `PluginActivityOverview`, one row per id (plan P1). */
+export const PLUGIN_ACTIVITY_OVERVIEW_MESSAGE = 'plugins.activity.overview'
 /** Host-authenticated: `{plugin_id}`, sent when a plugin is removed. */
 export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 

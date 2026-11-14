@@ -433,6 +433,8 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'read_message'
     case 'secrets':
       return 'list'
+    case 'agent-notify':
+      return 'send'
   }
   const exhaustive: never = port
   return exhaustive
@@ -924,9 +926,9 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  // `web`, `agents`, `agent-message-bodies` and `secrets` are mapped to their
-  // own policy namespaces, like filesystem and shell.
-  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies', 'secrets']
+  // `web`, `agents`, `agent-message-bodies`, `secrets` and `agent-notify` are
+  // mapped to their own policy namespaces, like filesystem and shell.
+  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies', 'secrets', 'agent-notify']
   it.each(PLANS_BRIDGE_PORTS.filter((port) => !POLICY_MAPPED_PORTS.includes(port)))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
@@ -1046,6 +1048,11 @@ describe('PluginBackendSupervisor', () => {
     // A denylist written before secrets existed never names it.
     ['secrets', 'get', 'denylist', [], false],
     ['secrets', 'get', 'full', [], true],
+    // Plan P4: a notification into an agent pane, never admitted by omission.
+    ['agent-notify', 'send', 'allowlist', ['agentNotify'], true],
+    ['agent-notify', 'send', 'allowlist', ['agents'], false],
+    ['agent-notify', 'send', 'denylist', [], false],
+    ['agent-notify', 'send', 'full', [], true],
   ] as const)(
     'checks agent use of the %s Bridge port (%s) against the agent Execution Policy (%s %j)',
     async (port, operation, mode, system, allowed) => {
@@ -1465,13 +1472,33 @@ describe('PluginBackendSupervisor', () => {
     supervisors.push(supervisor)
     await supervisor.start()
 
-    const subscription = supervisor.clientFor(authenticatedRuntime).subscribe(
-      ['fixture.changed'],
-      () => undefined,
-      { timeoutMs: 20 }
-    )
+    // The timeout timer starts at subscribe(), before the child acknowledges.
+    // Capture that one timer while subscribe() runs synchronously and fire it
+    // only after the acknowledgment, so a slow child can never lose the race.
+    const realSetTimeout = globalThis.setTimeout
+    let fireTimeout: (() => void) | undefined
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => void,
+      ms?: number,
+    ) => {
+      if (ms !== 20) return realSetTimeout(callback, ms)
+      fireTimeout = callback
+      return realSetTimeout(() => undefined, 60_000)  // cleared when the subscription settles
+    }) as typeof setTimeout)
+    let subscription: ReturnType<ReturnType<typeof supervisor.clientFor>['subscribe']>
+    try {
+      subscription = supervisor.clientFor(authenticatedRuntime).subscribe(
+        ['fixture.changed'],
+        () => undefined,
+        { timeoutMs: 20 }
+      )
+    } finally {
+      setTimeoutSpy.mockRestore()
+    }
+    if (fireTimeout === undefined) throw new Error('Expected the subscription timeout timer.')
     await subscription.acknowledged
 
+    fireTimeout()
     await expect(subscription.settled).resolves.toMatchObject({ reason: 'timeout' })
     await new Promise((resolve) => setTimeout(resolve, 10))
     await expect(

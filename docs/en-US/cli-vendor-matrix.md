@@ -3,10 +3,14 @@
 A snapshot of every CLI agent Navide ships with, what each one declares it can
 do, and where those facts live in the tree.
 
-OpenClaw (`openclaw`), Hermes Agent (`hermes`) and Devin CLI (`devin`) appear in
-the roster only: they have no reader, resume, model flag, usage or account
-switching to tabulate. Each was wired from the vendor's docs with no binary
-installed (see the [integration record](cli-extension-guide.md)).
+OpenClaw (`openclaw`), Hermes Agent (`hermes`), Devin CLI (`devin`) and Kiro
+CLI (`kiro`) appear in the roster only. OpenClaw and Hermes Agent have a SQLite
+reader and resume but no model flag; their record in `cli-extension-guide.md`
+has them, the matrices below do not. Devin CLI and Kiro CLI have no reader,
+resume, model flag, usage or account switching to tabulate; Kiro CLI has the
+navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook. Both
+were wired from the vendor's docs with no binary installed (see the
+[integration records](cli-extension-guide.md)).
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -42,9 +46,9 @@ Storage and data flow per platform are in
 
 | Side | Count | Source of truth |
 |---|---|---|
-| Backend vendor modules | 19 | `backend/agent_team_backend/cli_vendors/<key>.py` |
-| Backend registry | 19 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
-| Frontend specs | 19 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
+| Backend vendor modules | 20 | `backend/agent_team_backend/cli_vendors/<key>.py` |
+| Backend registry | 20 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
+| Frontend specs | 20 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
 
 Runtime registries derive from `VENDORS` or `ORDERED`: install detection
 (`onboarding_deps.py`), quota polling
@@ -98,8 +102,9 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
 | `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
 | `devin` | Devin CLI (Cognition) | `devin` (`--permission-mode dangerous`) | install script (docs.devin.ai/cli) — user runs it |
-| `openclaw` | OpenClaw | `openclaw` | install script (docs.openclaw.ai) — user runs it |
-| `hermes` | Hermes Agent | `hermes` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
+| `kiro` | Kiro CLI (AWS) | `kiro-cli chat --v3` (`--trust-all-tools`) | install script (kiro.dev/docs/cli) — user runs it |
+| `openclaw` | OpenClaw | `openclaw tui --local` | install script (docs.openclaw.ai) — user runs it |
+| `hermes` | Hermes Agent | `hermes chat` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
 
 Two keys do not match their binary: `antigravity` runs `agy`, and `cursor` runs
 `agent` (`cursor-agent` is an older symlink the installer leaves behind, and is
@@ -190,9 +195,9 @@ How to read the columns:
   2.x's `session_v2` / `session_message` when they exist (`opencode.py:26-31`,
   `_V2_TABLES` at `opencode.py:160`). The 2.x path was built from the
   upstream source; it has not been run against a real 2.x binary.
-- **Account switching is declared for 15 of the 19 vendors.** Every spec but
-  `goose`, `devin`, `hermes` and `openclaw` carries an `AccountSwitchSpec`;
-  those four read no credential at all. Switching does not separate the tiers.
+- **Account switching is declared for 15 of the 20 vendors.** Every spec but
+  `goose`, `devin`, `hermes`, `kiro` and `openclaw` carries an
+  `AccountSwitchSpec`; those five read no credential at all. Switching does not separate the tiers.
 
 ### ACP
 

@@ -42,6 +42,7 @@ from threading import RLock
 from typing import Any, Callable, Coroutine
 
 from .db import WorkspaceDatabases
+from .db_executor import run_in_db_thread
 
 log = logging.getLogger("agent_team_backend.dev_time")
 
@@ -485,7 +486,7 @@ class DevTimeStore:
         while True:
             await asyncio.sleep(interval_s)
             try:
-                for label in self.sweep_stale():
+                for label in await run_in_db_thread(self.sweep_stale):
                     self.should_broadcast(label, True)
                     await on_change(label)
             except Exception as err:  # noqa: BLE001 — the sweeper must survive

@@ -197,5 +197,6 @@
         "cancelled": 2
       }
     ]
-  }
+  },
+  "autoPauses": []
 }

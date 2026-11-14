@@ -33,6 +33,11 @@ const inviteesText = ref('')
 const agentLines = ref<string[]>([])
 const busy = ref(false)
 const error = ref('')
+/** The documentation page the Registry named for the error shown (c3). */
+const errorDoc = ref<string | null>(null)
+watch(error, (text) => {
+  if (!text) errorDoc.value = null
+}, { flush: 'sync' })
 const created = ref<Array<{ id: string; label: string; joinToken: string }>>([])
 
 const request = computed(() => props.form.request)
@@ -61,8 +66,13 @@ const validId = computed(() => /^[a-z0-9][a-z0-9-]*\.[a-z0-9][a-z0-9-]*$/.test(p
 const canSend = computed(() =>
   validId.value && labels.value.length >= 1 && labels.value.every((label) => label.length <= MAX_LABEL))
 
+function openDoc(url: string): void {
+  void window.agentTeam?.openExternal?.(url)
+}
+
 function message(result: DeveloperCallResult): string {
   if (result.ok) return ''
+  errorDoc.value = result.doc ?? null
   if (result.code === 'NOT_SIGNED_IN' || result.status === 401) return t('testplace.error.notSignedIn')
   if (result.code === 'QUALIFICATION_REQUIRED' || result.code === 'NAMESPACE_FROZEN') return t('marketplace-developer.error.qualification')
   return t('marketplace-developer.error.registry', { status: result.status, code: result.code ?? '', message: result.message })
@@ -162,7 +172,10 @@ async function discard(): Promise<void> {
       </div>
     </template>
 
-    <p v-if="error" class="dev-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="dev-error" role="alert">
+      {{ error }}
+      <button v-if="errorDoc" class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="testplace-invite-error-doc" @click="openDoc(errorDoc)">{{ $t('marketplace-developer.error.doc') }}</button>
+    </p>
   </section>
 </template>
 

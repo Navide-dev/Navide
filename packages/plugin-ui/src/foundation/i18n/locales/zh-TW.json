@@ -510,6 +510,7 @@
     "hold-mid-turn": "目標 agent 正在執行中",
     "hold-settling": "等待目標靜置",
     "hold-composer": "輸入框仍握著上一次推送的文字",
+    "hold-model-switch": "目標分格正在切換模型",
     "hold-pty-blocked": "已寫入，等待目標讀取輸入",
     "hold-remote-ack": "已送出，等待對方視窗回報",
     "hold-cancelling": "撤回中，等待對方視窗回應",
@@ -1031,6 +1032,8 @@
       "idle-status-tooltip": "程序仍在執行，但 Agent 已完成最後一個回合，正停在輸入提示等待指令",
       "awaiting-status-tooltip": "Agent 停在權限確認上等你選，在你回應前不會有任何進展",
       "question-status-tooltip": "Agent 問了你一個問題，正在等你選，在你回應前不會有任何進展",
+      "stop-ineffective": "STOP 未生效",
+      "stop-ineffective-tooltip": "中斷已送到 CLI，但回合仍在執行（Ctrl-C 可能只清掉了排隊的輸入）。再按一次 Interrupt 才能停止。",
       "rename-title-tooltip": "雙擊可重新命名此分格",
       "auto-named-tooltip": "此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名",
       "loop-tag-tooltip": "此分格正在執行 Loop",
@@ -1045,7 +1048,7 @@
       "loop-start-failed": "無法在此分格以「{name}」啟動 Loop",
       "loop-badge-tooltip": "已對此分格送出 Loop 提示詞 — 點擊標籤可關閉 Loop",
       "loop-waiting-tooltip": "Loop 暫停 — 已達工作階段上限；將於 {time} 自動續跑，點擊標籤可立即續跑",
-      "loop-badge-estimate": "∞ Loop · ~{time}",
+      "loop-badge-estimate": "∞ Loop · 約 {time}",
       "loop-badge-resume": "∞ {time} 續跑",
       "loop-estimate-tooltip": "額度重置時間估計約 {time}（依 5 小時工作階段視窗推算）；若撞到上限訊息會換成準確時間。點擊標籤可關閉 Loop",
       "loop-estimate-weekly-tooltip": "週額度於 {time} 重置；此帳號沒有 5 小時窗口。點擊標籤可關閉 Loop",
@@ -1072,6 +1075,8 @@
       "stale-config-tooltip-mcp": "這個分格開啟後，此 CLI 的 MCP server 有變動。重建前它會沿用舊清單。點一下重建（接續對話）。",
       "stale-config-tooltip-skills": "這個分格開啟後，送給此 CLI 的 skills 有變動。重建前它可能沿用舊的。點一下重建（接續對話）。",
       "stale-config-tooltip-both": "這個分格開啟後，此 CLI 的 MCP server 與 skills 都有變動。重建前它會沿用舊的。點一下重建（接續對話）。",
+      "update-available-badge": "有新版",
+      "update-available-tooltip": "有新版 {latest}（這個分格是 {version}）。點一下到設定裡更新。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -1249,6 +1254,10 @@
     "remove-selected": "移除所選",
     "remove-children": "移除旗下 {count} 個子分格",
     "remove-children-title": "只關閉這個分格派生出的子分格，本身保留",
+    "fix-children-account": "旗下 {count} 個子分格固定到 {account}",
+    "fix-children-account-mine": "旗下 {count} 個子分格固定到我的帳號",
+    "fix-children-account-title": "把旗下每個子分格移到 {account} 自己的帳號資料夾重開並固定，接回原本的對話。之後切換帳號不會再帶著它們換。",
+    "fix-children-account-default": "內建的 Default 帳號沒有自己的資料夾，子分格無法固定到它。請先把這個分格切到其他帳號。",
     "remove-with-children": "移除全部 {count} 個分格",
     "remove-with-children-title": "連同這個分格派生出的所有子分格一起關閉",
     "run-pipeline": "▶ 執行流程",
@@ -1755,6 +1764,10 @@
           "title": "設定管理",
           "summary": "匯出／匯入完整設定包，並查看設定實際存放的位置。"
         },
+        "general-experimental": {
+          "title": "實驗功能",
+          "summary": "模型擂台等仍在試驗中的功能"
+        },
         "general-p2p": {
           "title": "跨裝置傳訊",
           "summary": "把這台機器加入 Navide Cloud，讓這裡的 agent 可以傳訊息給你其他裝置上的 agent。"
@@ -1978,6 +1991,7 @@
         "web": "瀏覽網頁",
         "agents": "agent 分格",
         "agentMessages": "agent 訊息",
+        "agentNotify": "Agent 通知",
         "secrets": "Navide 外掛金鑰"
       },
       "shellLabel": "Shell 可執行檔",
@@ -2434,6 +2448,7 @@
           "web": "可開啟並瀏覽任何網站；網站登入資料會儲存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；交給 agent 操作的網頁，此 Navide 外掛本身也能在其中執行腳本並讀取內容與登入狀態；可同時開啟多個網頁，每個網頁都會占用記憶體。",
           "agents": "查看你的 agent 分格、哪個分格開了哪個，以及它們何時互傳訊息——但看不到訊息內容。",
           "agentMessages": "讀取 agent 之間訊息的完整內文；內文可能包含程式碼、檔案內容或機密。",
+          "agentNotify": "在你允許後通知你的 agent 分格；通知是資料，不會當成指令。",
           "secrets": "Navide 外掛會在本機加密保存它自己的金鑰與 token；Navide 不會上傳、不會顯示。",
           "shell": "在你的電腦上執行指令。",
           "terminal": "開啟並操作 Navide 終端機。"
@@ -2798,6 +2813,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "帳號",
       "cliAgents": "CLI 代理",
+      "agents": "Agent",
       "cliExtensions": "擴充",
       "roles": "角色",
       "pipelines": "流程",
@@ -2840,7 +2856,7 @@
             }
           },
           "resource": {
-            "caption": "資源控管視窗。掃描與數字只在你按下重新整理時才更新。",
+            "caption": "資源控管視窗。開著的時候 {cpu} 與 {memory} 數字會自己更新；磁碟掃描只在你按下「{scan}」時才跑。",
             "legend": {
               "totals": {
                 "label": "上方三張卡",
@@ -2878,17 +2894,17 @@
             "autoReclaim": "30"
           }
         },
-        "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
+        "intro": "設定視窗的 {tabCount} 個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>26 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">{settingsKey}</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分 {groupCount} 組，共 <strong>{tabCount} 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
-            "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
+            "text": "索引是一份人工維護的清單，<strong>{agents}、{layout}、{notifications}、{security}、{channels} 這五個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接開啟某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十六個分頁",
+          "h2": "二十七個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2905,7 +2921,7 @@
               "more": "本頁第 2 章"
             },
             "language": {
-              "what": "所有工作區共用的介面語言：繁體中文、English 或日本語",
+              "what": "所有工作區共用的介面語言，共 {languageCount} 種可選（其中 {betaCount} 種為 Beta）",
               "more": "本頁第 2 章"
             },
             "statusBadges": {
@@ -2964,6 +2980,10 @@
               "what": "把 Telegram、Slack 等聊天軟體的 bot 接到 CLI 分格：bot、配對、允許名單、帳號連結",
               "more": "本面板的「{messaging}」分頁"
             },
+            "agents": {
+              "what": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出：頻道、排程、記憶位置、啟動旗標",
+              "more": "也可從 Agent 分格的「Agent 設定…」開啟"
+            },
             "mcp": {
               "what": "MCP server 的新增、啟用與檢視",
               "more": "本面板的「{mcp}」分頁"
@@ -3013,7 +3033,7 @@
           },
           "generalSettings": {
             "confirmClose": {
-              "desc": "按 ⌘W 關分格前先問。正在跑一個 turn 的分格一定會問，不受這個開關影響。",
+              "desc": "按 {closePaneKey} 關分格前先問。正在跑一個 turn 的分格一定會問，不受這個開關影響。",
               "fallback": "開"
             },
             "confirmCloseWorkspace": {
@@ -3077,16 +3097,16 @@
           "appearance": {
             "theme": "<strong>主題</strong> — 五種內建：Dark (GitHub)、Midnight、Forest、Light、High Contrast，預設是 Dark (GitHub)。",
             "colors": "<strong>自訂顏色</strong> — 八個可覆寫的色彩 token（背景、表面、文字、次要文字、邊框、強調、成功、危險）。覆寫疊在目前主題之上，<strong>換主題時保留</strong>；<em>↺ 重設為預設值</em> 還原。",
-            "uiScale": "<strong>介面縮放</strong> — 在 <strong>外觀 ▸ 其他</strong> 區塊的第一列，控制項是<strong>下拉選單</strong>而不是滑桿，六段 80%／90%／100%／110%／125%／150%，預設 100%，快捷鍵 <kbd class=\"syh-kbd\">⇧⌘=</kbd>／<kbd class=\"syh-kbd\">⇧⌘-</kbd>／<kbd class=\"syh-kbd\">⇧⌘0</kbd>。它走的是 Electron 的頁面縮放而不是 CSS 變數，所以文字、圖示、邊框、間距會一起變，而且由主行程套用到<strong>每一個視窗</strong>，Navide 外掛視窗也算。它和分格字級是<strong>兩條獨立的軸</strong>：<kbd class=\"syh-kbd\">⌘=</kbd>／<kbd class=\"syh-kbd\">⌘-</kbd>／<kbd class=\"syh-kbd\">⌘0</kbd> 只改終端機<strong>內容</strong>的字級（整個視窗的 CLI 分格共用同一個值），介面縮放改的是外面那層殼；兩者是<strong>相乘</strong>的，就像瀏覽器的頁面縮放疊在網站自己的字級上。",
+            "uiScale": "<strong>介面縮放</strong> — 在 <strong>外觀 ▸ 其他</strong> 區塊的第一列，控制項是<strong>下拉選單</strong>而不是滑桿，六段 80%／90%／100%／110%／125%／150%，預設 100%，快捷鍵 <kbd class=\"syh-kbd\">{uiZoomIn}</kbd>／<kbd class=\"syh-kbd\">{uiZoomOut}</kbd>／<kbd class=\"syh-kbd\">{uiZoomReset}</kbd>。它走的是 Electron 的頁面縮放而不是 CSS 變數，所以文字、圖示、邊框、間距會一起變，而且由主行程套用到<strong>每一個視窗</strong>，Navide 外掛視窗也算。它和分格字級是<strong>兩條獨立的軸</strong>：<kbd class=\"syh-kbd\">{fontZoomIn}</kbd>／<kbd class=\"syh-kbd\">{fontZoomOut}</kbd>／<kbd class=\"syh-kbd\">{fontZoomReset}</kbd> 只改終端機<strong>內容</strong>的字級（整個視窗的 CLI 分格共用同一個值），介面縮放改的是外面那層殼；兩者是<strong>相乘</strong>的，就像瀏覽器的頁面縮放疊在網站自己的字級上。",
             "restore": "<strong>還原視窗</strong> — 下次啟動時重開上次結束時開著的工作區視窗。"
           },
           "callout": {
             "title": "通知與音效在通知分頁",
             "text": "通知開關是有的，只是不在外觀，而在 <strong>通知分頁</strong>，共三項：<em>系統通知</em>（Navide 在背景時，CLI 完成回合或需要你輸入會送出桌面通知；Dock 徽章的計數不受這個開關影響）、<em>提示音</em>（回合完成播一聲短提示音，CLI 等你回覆時播兩聲），以及 <em>通知權限</em>——macOS 不會把真實授權狀態回報給 Navide，所以這一項只能送一則測試通知、由你確認它有沒有出現；沒出現就到「系統設定 → 通知」允許 Navide。最後這一項只在適用的平台上才出現。"
           },
-          "language": "語言是獨立的分頁，不在外觀底下。<strong>三種語言</strong>：<code>繁體中文</code>、<code>English</code> 與 <code>日本語</code>。沒選過之前，Navide 跟隨系統語言（系統語言不是這三種時用繁體中文）。這是使用者層級偏好，套用到所有工作區。",
+          "language": "語言是獨立的分頁，不在外觀底下。共有 <strong>{languageCount} 種語言</strong>，每一種都用它自己的名稱列出，例如 <code>繁體中文</code>、<code>English</code>、<code>日本語</code>；標著 Beta 的 {betaCount} 種是機器翻譯，還在等母語者校對。沒選過之前，Navide 跟隨系統語言（系統語言都不符合時用 {fallbackLanguage}）。這是使用者層級偏好，套用到所有工作區。",
           "h3": "狀態徽章",
-          "p1": "把九種分格狀態各自<strong>改名並選顏色</strong>。中文、英文與日文名稱可以分開填（各限 24 字，留空就退回內建翻譯）。改完之後分格徽章、側欄、會議條與資源面板全部跟著變。<strong>設定存在你的帳號上，不跟著專案走。</strong>",
+          "p1": "把 {stateCount} 種分格狀態各自<strong>改名並選顏色</strong>。每種介面語言各有一欄名稱（共 {languageCount} 欄，各限 24 字）。留空時：繁體中文、英文、日文直接退回內建翻譯；其他語言先借用你填的英文名稱，再來是繁體中文名稱，最後才是內建翻譯。改完之後分格徽章、側欄、會議條與資源面板全部跟著變。<strong>設定存在你的帳號上，不跟著專案走。</strong>",
           "statusTable": {
             "state": "狀態",
             "when": "什麼時候是這個狀態",
@@ -3131,7 +3151,7 @@
             "title": "共用根目錄",
             "text": "Navide 建立的技能一律放在 <code>~/.agents/skills</code>。這一頁<strong>不會搬動或改寫</strong>各家 CLI 自己資料夾裡的技能——那些只是被反射出來讓你看見，並且可以投遞給別家。（有一個明確的 <em>移入共用庫</em> 動作是例外，它會搬檔並留下 symlink，可以還原。）"
           },
-          "p2": "頁面有 <strong>瀏覽</strong>（卡片瀏覽）與 <strong>投遞</strong>（投遞矩陣）兩種檢視。矩陣橫軸是 15 家 CLI，直軸是技能，每格四種狀態，每一列還有 <em>全選</em>／<em>全不選</em> 兩顆批次鈕：",
+          "p2": "頁面有 <strong>瀏覽</strong>（卡片瀏覽）與 <strong>投遞</strong>（投遞矩陣）兩種檢視。矩陣橫軸是 {cliCount} 家 CLI，直軸是技能，每格四種狀態，每一列還有 <em>全選</em>／<em>全不選</em> 兩顆批次鈕：",
           "matrixTable": {
             "cell": "格子",
             "meaning": "意思",
@@ -3151,7 +3171,7 @@
             "none": {
               "cell": "— 無 skills 機制",
               "meaning": "那家 CLI 根本沒有技能這回事，接不上。",
-              "who": "4 家：aider、droid、kilo、mcode"
+              "who": "8 家：aider、devin、droid、goose、hermes、kilo、mcode、openclaw"
             },
             "pending": {
               "cell": "· 支援但尚未接線",
@@ -3179,14 +3199,14 @@
             "notCreated": "還不存在的檔案標 <em>尚未建立</em>——按存檔就會建立它，連同上層缺的資料夾。",
             "reload": "編輯中若檔案被別的程式改掉，會擋下來要你先 <em>重新載入（會捨棄你的草稿）</em>，不會直接覆蓋你或對方的內容。"
           },
-          "p6": "底部的 <strong>CLI 涵蓋範圍</strong> 把 15 家分成三類：",
+          "p6": "底部的 <strong>CLI 涵蓋範圍</strong> 把 {cliCount} 家分成三類：",
           "coverageTable": {
             "category": "分類",
             "meaning": "意思"
           },
           "memoryCoverage": {
             "mapped": {
-              "value": "Navide 知道這家 CLI 把指示放哪。14 家屬於這類。"
+              "value": "Navide 知道這家 CLI 把指示放哪。除了 aider 以外的 CLI 都屬於這類。"
             },
             "configured": {
               "value": "只有 aider。它沒有自己的檔名——它讀的是 .aider.conf.yml 裡 read: 那一欄指名的檔案，所以你在那裡寫了什麼，這裡就列什麼（最多 20 個）。CONVENTIONS.md 只是官方文件的建議名稱，程式本身並不認得它。"
@@ -3207,7 +3227,7 @@
           "shortcuts": {
             "record": "點一顆按鍵方塊就地開始<strong>錄製</strong>；<code>+</code> 加第二組綁定；<code>✕</code> 移除一組。和弦最多兩段。",
             "instant": "改動<strong>立即寫進 <code>keybindings.json</code></strong> 並套用到每一個開著的視窗，沒有存檔鈕。",
-            "search": "搜尋框同時比對命令名稱與按鍵寫法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">⌘⇧P</kbd> 都找得到）；三個篩選器 <em>全部</em>／<em>已自訂</em>／<em>衝突</em>。",
+            "search": "搜尋框同時比對命令名稱與按鍵寫法（<code>cmd+shift+p</code> 和 <kbd class=\"syh-kbd\">{paletteKey}</kbd> 都找得到）；三個篩選器 <em>全部</em>／<em>已自訂</em>／<em>衝突</em>。",
             "conflicts": "<em>衝突</em> 會標出互相打架的綁定，並說明是誰永遠贏、還是靠 <em>生效條件</em> 分開的。",
             "reset": "單列 <em>還原成預設</em>，整頁 <em>全部還原</em>。<em>匯出</em>／<em>匯入</em> 搬設定，<strong>匯入是取代不是合併</strong>，會先告訴你幾條被丟棄、幾條被匯入，被拒絕的條目也會列出來。"
           },
@@ -3233,7 +3253,7 @@
               "fallback": "開，3 次"
             },
             "autoDownload": {
-              "toggle": "自動下載更新",
+              "toggle": "自動下載更新（只限修補版；次版與主版更新一律等你決定）",
               "fallback": "開"
             },
             "retryDownload": {
@@ -3347,15 +3367,18 @@
             "text": "分格輸入框的 <code>{'@'}</code> 提及選單只列<strong>本機</strong>的分格（含同一台機器上其他視窗的），沒有插入跨裝置位址的按鈕。跨裝置位址是寫在 agent 的 <code>to:</code> 那一行、或由 MCP 工具送出的（見本面板的「Agent 協作」分頁）。送不到時的回覆是 <code>device-offline</code>、<code>unknown-target</code>、<code>link-offline</code> 或 <code>link-unauthorized</code>；另外，回覆串接不跨機器。"
           },
           "h6": "同步（讓幾台機器的設定一致）",
-          "p11": "設定 ▸ Navide Cloud 最上面那一塊叫「同步」。<strong>它不是獨立分頁</strong>，就是這一頁的第一個區塊。每個可同步的範圍一列一個開關；開啟之後那一塊會在登入<strong>同一個帳號</strong>的每台裝置上保持一致，內容<strong>在本機加密</strong>，伺服器只存它沒有金鑰的密文。",
+          "p11": "設定 ▸ Navide Cloud 最上面那一塊叫「同步」。連上 Navide Cloud 時，這一頁有 <strong>{sync}</strong>、<strong>{share}</strong>、<strong>{devices}</strong> 三個子分頁，同步是第一個；沒連上時，整頁只顯示同步的內容。每個可同步的範圍一列一個開關；開啟之後那一塊會在登入<strong>同一個帳號</strong>的每台裝置上保持一致，內容<strong>在本機加密</strong>，伺服器只存它沒有金鑰的密文。",
           "sync": {
             "scopes": "<strong>共五列，跟側欄「Agent 資產」一頁一列、順序相同；可以開啟的有三個</strong>：<em>MCP</em>（你在 Navide 加的 server，其中的秘密加密後才離開這台機器）、<em>技能</em>（哪些技能開著、各自送給哪幾家 CLI，以及在 Navide 建立的技能的檔案；你自己放進資料夾的技能只同步設定）、<em>Prompt 技能</em>（提示技能與 Loop 提示詞）。",
             "credentials": "<em>記憶</em>、<em>擴充</em>這兩列<strong>列出來但呈灰色停用</strong>，說明寫的是「尚未支援同步」。它們不是「預設關閉、等你去開啟」——現在按不動。舊版留下開著的記憶開關，仍可以關掉。<em>憑證與金鑰</em>完全沒有這一列：帳號憑證與金鑰不會離開這台機器。舊版留下開著的憑證開關一律視為關閉。MCP 設定若開啟同步，會先在這台機器加密才上傳，伺服器沒有解密金鑰。",
             "states": "兩種狀態會寫在區塊底下：<em>未連線</em>（已開的範圍會在連線恢復後自動補上）與<em>這台裝置還沒有同步金鑰</em>（拿到之前不會上傳任何東西）。另有一顆<em>立即同步</em>，只有連線時能按。",
             "key": "<strong>同步金鑰只顯示 id 的前 8 碼</strong>，金鑰本身永遠不出現。<em>更換金鑰</em>是<strong>兩段式</strong>：按第一次會變成<em>立即更換</em>，旁邊多一顆<em>取消</em>。更換會讓現有金鑰退役、所有同步記錄改用新金鑰重新加密，其他裝置在下次交換金鑰時取得新的——懷疑金鑰外洩時才用它。",
             "legacy": "只有在「這台裝置上有一把帳號綁定之前的舊金鑰、而這個帳號還沒有金鑰」時，才會出現<em>採用為此帳號的金鑰</em>。它是一次性的：不採用就讀不到當初用那把金鑰同步過的內容，而直接發一把新的會讓那些記錄永久解不開。",
-            "conflicts": "兩台裝置改了同一項時<strong>沒有任何一邊被覆蓋</strong>，而是列成「需要你決定」，兩邊內容並排、由你按<em>保留這邊</em>或<em>保留那邊</em>。憑證類的衝突只顯示是哪個槽位（<code>廠商 / 槽位</code>），不顯示內容。"
-          }
+            "conflicts": "兩台裝置改了同一項時<strong>沒有任何一邊被覆蓋</strong>，而是列成「需要你決定」，兩邊內容並排、由你按<em>保留這邊</em>或<em>保留那邊</em>。憑證類的衝突只顯示是哪個槽位（<code>廠商 / 槽位</code>），不顯示內容。",
+            "inventory": "<strong>{inventory}</strong>：每個同步中的區塊在本機與雲端各有幾筆、幾筆一致、幾筆衝突，以及最後是哪台裝置寫入的。"
+          },
+          "share": "<strong>{share}</strong> 子分頁列出這個帳號從任何一台裝置建立的所有分享連結。還能開的連結可以 <em>{copyLink}</em>、用 <em>{extend}</em> 延長七天、用 <em>{rekey}</em> 換成新連結（新連結會複製起來，舊的就打不開了），或 <em>{revoke}</em>；<em>{revokeAll}</em> 一次撤銷全部。撤銷前會再問一次。Agent 用 MCP 工具 <code>share_create</code>、<code>share_list</code>、<code>share_revoke</code> 建立與管理同一批連結。",
+          "devices": "<strong>{devices}</strong> 子分頁列出寫入過這個帳號雲端的每一台裝置，最近寫入的排最前面，並標出最後寫入與最後上線的時間。"
         },
         "s6": {
           "title": "選單、獨立視窗與排程",
@@ -3394,7 +3417,7 @@
           "h2": "Help 選單",
           "helpMenu": {
             "github": "<strong>在 GitHub 上的 Navide</strong>、<strong>回報問題…</strong> — 開到 GitHub 專案與 issue 頁。",
-            "shortcuts": "<strong>鍵盤快捷鍵</strong> — 開設定的快捷鍵分頁。這個選單項<strong>不帶快捷鍵標示</strong>，鍵盤走的是 <kbd class=\"syh-kbd\">⌘K</kbd> <kbd class=\"syh-kbd\">⌘S</kbd> 這組和弦。",
+            "shortcuts": "<strong>鍵盤快捷鍵</strong> — 開設定的快捷鍵分頁。這個選單項<strong>不帶快捷鍵標示</strong>，鍵盤走的是 <kbd class=\"syh-kbd\">{shortcutsKey}</kbd> 這組和弦。",
             "legal": "法律頁面六條，依序 <em>隱私權</em>、<em>安全性政策</em>、<em>行為準則</em>、<em>使用界線</em>、<em>授權條款</em>、<em>法律資訊</em>，都開到 navide.dev 上對應的頁。（<strong>沒有服務條款</strong>，這是刻意的。）"
           },
           "callout1": {
@@ -3423,7 +3446,7 @@
             }
           },
           "p2": "系統層唯讀是因為動它們需要 root，而 Navide 從不要求——後端也擋著，不只是介面不給按。尤其 daemon 的狀態多半只能顯示成 <code>狀態未知（需 root）</code>。每一列可展開看 排程／指令／原始內容，或 Label／層級／plist 路徑／上次結束碼／狀態。移除放在每一列的 ⋯ 選單裡；移除 LaunchAgent 會<strong>卸載並永久刪除它的 plist</strong>，會先跳確認。",
-          "note2": "這裡<strong>沒有「立刻執行」也沒有「在 Finder 顯示」</strong>，只有停用／啟用與移除兩種動作。上方有 <em>重新掃描</em> 與上次掃描時間。",
+          "note2": "crontab 與 launchd 的列<strong>沒有「立刻執行」也沒有「在 Finder 顯示」</strong>，只有停用／啟用與移除兩種動作。Navide 自己的排程（在 Navide 裡建立，或由 Agent 用 <code>scheduler_upsert</code> 建立）能做的更多：有開關、有 <em>{runNow}</em>，點名稱會開 <em>{edit}</em>，<em>{remove}</em> 也在那裡。執行失敗的排程會出現 <em>{repair}</em>；建立它的分格關掉了，會出現 <em>{adopt}</em>；Agent 的週期排程快要自動停用時，會出現 <em>{keep}</em>；目標分格不見了，會出現 <em>{retarget}</em>。標著 <em>{systemTag}</em> 的排程（自我進化）鎖定不能改。清單上方有 <em>{rescan}</em> 與上次掃描時間。",
           "h4": "其他從 UI 開的視窗",
           "otherTable": {
             "window": "視窗",
@@ -3432,15 +3455,15 @@
           "otherWindows": {
             "mainWindow": {
               "window": "新的主視窗",
-              "how": "檔案 ▸ 開新視窗（⌘N）"
+              "how": "檔案 ▸ 開新視窗（{newWindowKey}）"
             },
             "editor": {
               "window": "編輯器（Mini-IDE）視窗",
-              "how": "⌘⇧I，或點檔案總管／搜尋結果／終端機裡的檔案連結（見本面板的「程式碼工作流」分頁）"
+              "how": "{miniIdeKey}，或點檔案總管／搜尋結果／終端機裡的檔案連結（見本面板的「程式碼工作流」分頁）"
             },
             "git": {
               "window": "Git 視窗",
-              "how": "Git 面板標題列的 在新視窗開啟，或 ⌘⇧G"
+              "how": "Git 面板標題列的 在新視窗開啟，或 {gitWindowKey}"
             },
             "diff": {
               "window": "差異檢視",
@@ -3465,7 +3488,7 @@
           },
           "callout2": {
             "title": "兩個容易誤會的地方",
-            "text": "<strong>Git History 沒有自己的視窗</strong>——「查看完整歷史」開的是 Git 視窗裡的歷史檢視。<strong><kbd class=\"syh-kbd\">⌘⇧D</kbd> 也不再開視窗</strong>，它只是把左側側欄切到 Plans 分頁；要開 Plan 視窗得從計畫文件本身開。"
+            "text": "<strong>Git History 沒有自己的視窗</strong>——「查看完整歷史」開的是 Git 視窗裡的歷史檢視。<strong><kbd class=\"syh-kbd\">{plansKey}</kbd> 也不再開視窗</strong>，它只是把左側側欄切到 Plans 分頁；要開 Plan 視窗得從計畫文件本身開。"
           },
           "note3": "同一個工作區已經在別的視窗開著時，Navide 不會再開一份，而是把那個視窗叫到前面。"
         },
@@ -3516,7 +3539,7 @@
           "orphans": {
             "leftover": "<strong>殘留的 CLI 行程</strong> — 狀態列出現 <code>⚠ N 殘留</code> 時點開，會問「偵測到 N 個先前殘留的 CLI 程序 — 可能耗盡記憶體。要清理嗎？」，按 <em>清理</em> 清掉、<em>關閉</em> 略過。這些是上一輪執行沒收乾淨的行程。",
             "backend": "<strong>Backend</strong> — 狀態列的 Backend 藥丸點開有位址、PID，以及兩顆鈕：<em>Restart</em>（沒連上時顯示 <em>Start</em>）與 <em>Stop</em>（只有連上時能按）。<strong>重啟 Backend 會一併帶走所有 CLI 行程</strong>；想讓它回來之後自動接續對話，就把一般分頁的 <em>Navide 背景服務重啟後自動接回工作階段</em> 開啟。",
-            "timeout": "Backend 起太慢而報錯時，調一般分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
+            "timeout": "Backend 起太慢而報錯時，調{generalTab}分頁的 <em>後端啟動逾時</em>（15–120 秒）。"
           },
           "h4": "維護動作速查",
           "maintenanceTable": {
@@ -3595,7 +3618,7 @@
           "tokenMonitor": {
             "controls": "上方兩個下拉：<strong>天數</strong> 14／30／90，以及<strong>模型</strong>（可選全部）。旁邊是<em>重新整理</em>，後端沒連上時按不動。",
             "stats": "五個數字：<strong>輪數、總 Token、每輪平均、中位數、每輪平均輸出</strong>。底下一行寫已掃描／可用 session 數與資料時間。",
-            "comparison": "<strong>最近 7 天與前 7 天</strong>的輸出比較：樣本數、平均、中位數與變化百分比。兩期各<strong>至少 10 輪</strong>、且前期不為零才算得出來，否則寫「樣本不足」。畫面自己註明這只是描述觀察到的變化——<strong>Effort 與任務難度未知，下降不能證明額度被縮減</strong>。",
+            "comparison": "<strong>最近 7 天與前 7 天</strong>的輸出比較：樣本數、平均、中位數與變化百分比。要先在模型選單<strong>選一個已知的單一模型</strong>才會出現；停在「全部模型」時，這一區只寫「請選擇單一已知模型以比較。」兩期各<strong>至少 10 輪</strong>、且前期不為零才算得出來，否則寫「樣本不足」。畫面自己註明這只是描述觀察到的變化——<strong>Effort 與任務難度未知，下降不能證明額度被縮減</strong>。",
             "charts": "五張<strong>每回合</strong>趨勢圖。強調色那條是<strong>最近 10 輪的移動平均</strong>，灰色是各輪原值；<strong>橫軸是依時間排序的輪次、等距，不是經過時間</strong>。",
             "table": "本機 Claude 回合歷史表，<strong>每頁 100 列</strong>，欄位是時間、session（id 前 8 碼／輪次）、模型、各項 token 與呼叫次數。",
             "quota": "最下面是額度散點圖，<strong>按 reset window 分群</strong>、一個週期一張。百分比來自供應商，圖上寫明橫軸是「依記錄順序排列的快照」，也寫明<strong>不能把本機 token 換算成帳號額度上限</strong>。還沒有樣本時它會告訴你要在設定裡開 Claude 額度輪詢並讓 Navide 持續執行——<strong>歷史上限無法從 token 記錄反推</strong>。"
@@ -3631,7 +3654,7 @@
           "h1": "Navide Guard",
           "p2": "Guard 把 CLI 每一個有風險的動作分成 {critical}、{high}、一般三級，再依請求<strong>從哪裡來</strong>決定怎麼處理：你在這台電腦前、聊天軟體、別的分格或裝置，或是一個吃進過外部內容的分格。上方的決策表固定不變；從聊天核准的請求，高以上一律拒絕。",
           "items": {
-            "builtin": "<strong>{builtin}</strong>：每一條可設成 {critical}、{high} 或「{off}」。調高立即生效，調低或關閉要確認；八條安全底線（憑證讀取與外送、Keychain、下載後直接執行、刪除根目錄或家目錄、格式化、直接寫磁碟）最低只能到 {high}。",
+            "builtin": "<strong>{builtin}</strong>：每一條可設成 {critical}、{high} 或「{off}」。調高立即生效，調低或關閉要確認；十條安全底線（憑證讀取、外送與透過管線上傳、Keychain、下載後直接執行、刪除根目錄或家目錄、格式化、直接寫磁碟、寫入 Navide 外掛存放區）最低只能到 {high}。",
             "branches": "<strong>{branches}</strong>：對這些分支 force-push 或刪除屬於 {critical}；終端機指令防護的 force-push 檢查用的也是這份清單。移除分支要確認。",
             "rules": "<strong>{rules}</strong>：種類是「{deny}」或「{allow}」。拒絕樣式把符合的指令提升到你選的等級；允許樣式可以把 {high} 降為一般（動不了 {critical}）——這就是例外，沒有另一份例外清單。新增允許或移除拒絕要確認。",
             "test": "<strong>{test}</strong>：輸入一條指令，看 Guard 會怎麼判。",
@@ -3722,17 +3745,17 @@
             "git": {
               "title": "Git（原始碼控制）",
               "tag": "側欄第 4 個分頁",
-              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 (⌘4)</em>；沒有載入時寫著 <em>Git (⌘4)</em>。在主視窗按 <kbd class=\"cwh-kbd\">⌘⇧G</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。"
+              "text": "Git 以 Navide 外掛載入時，工具提示寫著 <em>Navide 外掛：Git · navide.git · 發佈者：navide · Navide 內建 ({gitTab})</em>；沒有載入時寫著 <em>Git ({gitTab})</em>。在主視窗按 <kbd class=\"cwh-kbd\">{gitWindow}</kbd> 會直接開<strong>獨立的 Git 視窗</strong>；面板標題列的 <em>在新視窗開啟</em> 也一樣。Git 本身也是隨附的 Navide 外掛（<code>navide.git</code>），和 Plans 一起列在<strong>設定 ▸ Navide 外掛</strong>的 <em>內建</em> 區，所以它的更新、停用或啟動失敗，都和其他 Navide 外掛一樣。"
             },
             "plans": {
               "title": "Plans（計畫文件）",
               "tag": "側欄第 5 個分頁",
-              "text": "<kbd class=\"cwh-kbd\">⌘5</kbd> 那個分頁只是一份<strong>清單</strong>。點任一份會彈出獨立的 Plan Review 視窗，標題是 <code>&lt;專案資料夾&gt; — Plans</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{plansTab}</kbd> 那個分頁只是一份<strong>清單</strong>。點任一份會彈出獨立的 Plan Review 視窗，標題是 <code>&lt;專案資料夾&gt; — Plans</code>。"
             },
             "ide": {
               "title": "Mini-IDE（內建編輯器）",
               "tag": "只以獨立視窗存在",
-              "text": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 開啟，或在 檔案總管 點一下檔案。標題是 <code>&lt;檔名&gt; — Mini-IDE</code>，有未存檔時前面加 <code>●</code>。"
+              "text": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 開啟，或在 檔案總管 點一下檔案。標題是 <code>&lt;檔名&gt; — Mini-IDE</code>，有未存檔時前面加 <code>●</code>。"
             }
           },
           "callout": {
@@ -3811,7 +3834,7 @@
           "list": {
             "create": "最上面是建立分支的輸入框，提示 <em>新分支名稱…</em>，右邊 <code>＋</code> 送出。",
             "localRow": "本地分支每一列有四顆鈕：<code>⇔</code> <em>比較</em>、<code>⇡</code> <em>Rebase 到此分支</em>、<code>⇣</code> <em>合併到目前分支</em>、<code>↵</code> <em>切換</em>。目前分支只顯示 <code>✓</code>，沒有按鈕。",
-            "context": "在分支列按右鍵：<em>將目前分支合併到 {'{'}branch{'}'}</em>、<em>將目前分支合併到 {'{'}branch{'}'} 並推送</em>、<em>刪除分支</em>。",
+            "context": "在分支列按右鍵：<em>{mergeInto}</em>、<em>{mergeIntoPush}</em>、<em>{deleteBranch}</em>。",
             "remote": "<code>⇅</code> 切換 <em>顯示遠端分支</em> / <em>隱藏遠端分支</em>；遠端分支每列一顆 <code>⬇</code> <em>在本地檢出</em>。"
           },
           "p2": "按 <code>⇔</code> 之後結果直接展在面板裡，標成 <code>{'{'}branch{'}'} ↔ {'{'}current{'}'}</code>，附統計行與檔案清單。",
@@ -3850,10 +3873,14 @@
               "behavior": "更多拉取／推送選項，見下。"
             }
           },
-          "p3": "<code>▾</code> 裡是 <em>↓ 拉取</em>、<em>↓ 拉取（Rebase）</em>、<em>↑ 推送</em>、<em>↑ 推送（Force with lease）</em>；設了不只一個 remote 時，最後還會多一組 <strong>推送到遠端</strong>，每個 remote 一列。",
+          "p3": "<code>▾</code> 裡是 <em>↓ {pull}</em>、<em>↓ {pullRebase}</em>、<em>↑ {push}</em>、<em>↑ {pushForce}</em>；設了不只一個 remote 時，最後還會多一組 <strong>推送到遠端</strong>，每個 remote 一列。",
           "callout": {
             "title": "認證失敗先查帳號綁定",
             "text": "推不上去時，優先看帳號藥丸綁的是不是對的帳號，而不是重設遠端。憑證失效時面板會直接提示到「設定 › 帳號」更新。密碼欄位要貼的是 Personal Access Token，不是登入密碼。"
+          },
+          "worktrees": {
+            "p1": "Git 面板裡的 <strong>{worktrees}</strong> 卡片（預設收合，點標題展開；超過一個時會顯示數量）列出這個 repository 的所有工作樹：<code>✦</code> 是主工作樹，<code>○</code> 是其他的，適用時會掛上 <em>{bare}</em>、<em>{detached}</em>、<em>{locked}</em>、<em>{stale}</em> 徽章。每一列有 <code>⧉</code> <em>{openWindow}</em>、<code>◱</code> <em>{reveal}</em>、<code>🔒</code> <em>{lock}</em>、<code>⇄</code> <em>{move}</em>、<code>✕</code> <em>{remove}</em>；主工作樹不能鎖定、搬移或移除。上方的 <em>{prune}</em> 與 <em>{repair}</em> 用來整理資料夾已被刪掉、或在 Git 之外被搬走的工作樹。",
+            "p2": "要新增時，輸入資料夾路徑（或用瀏覽選），選一個分支——或勾 <em>{createBranch}</em> 再輸入新名字——然後按 <code>＋</code> <em>{addWorktree}</em>。好幾個分格同時在不同分支上工作，靠的就是這個：每個分格各用一個工作樹，改動就不會落在同一個資料夾。"
           }
         },
         "s4": {
@@ -3911,14 +3938,14 @@
           "p1": "計畫不只放在一個資料夾。Navide 會掃工作區底下這<strong>七個目錄</strong>：<code>.agent-team/plans</code>、<code>.agent-team/reports</code>、<code>.claude/loop-reports</code>、<code>.claude/plans</code>、<code>.cursor/plans</code>、<code>docs/plans</code>、<code>docs/reports</code>；工作區裡<strong>最多兩層深</strong>的巢狀 Git 儲存庫，同樣這七個目錄也會被掃到。收三種副檔名 <code>.html</code>、<code>.plan.md</code>、<code>.md</code>：HTML 計畫用 <code>&lt;kebab-slug&gt;_&lt;6 位十六進位&gt;.html</code>，Markdown 計畫用 <code>&lt;kebab-slug&gt;.plan.md</code>。以底線或點開頭的檔案（像 <code>_spec.md</code>、<code>_template.html</code>）是基礎建設，清單不會列。",
           "p2": "這些檔案<strong>由 agent 寫、也由 agent 更新</strong>——你在計畫視窗裡按的每一個動作（改 todo 狀態、留審查意見、核准），最後都落回同一個檔案。你要做的是叫 agent「幫我建一份計畫」，然後在視窗裡審。",
           "h2": "清單",
-          "p3": "側欄 <strong>計畫</strong> 分頁（<kbd class=\"cwh-kbd\">⌘5</kbd>）與 Plan 視窗左欄用的是同一份清單。至少有一份計畫時才會出現工具列：",
+          "p3": "側欄 <strong>計畫</strong> 分頁（<kbd class=\"cwh-kbd\">{plansTab}</kbd>）與 Plan 視窗左欄用的是同一份清單。至少有一份計畫時才會出現工具列：",
           "listTools": {
             "search": "搜尋框 <em>搜尋計畫…</em>，比對標題、檔名與 overview。",
             "stage": "依階段篩選：<em>全部階段</em> / 草稿 / 審查中 / 已核准 / 進行中 / 已完成 / 已放棄。",
             "sort": "排序 <em>排序方式</em>：<strong>標題</strong>、<strong>最後更新</strong>、<strong>進度</strong> 三種，旁邊 <code>↑</code>／<code>↓</code> 換升冪降冪。",
             "group": "<code>☰</code> 在「依 stage 分群」與「單一清單」之間切換。"
           },
-          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。",
+          "p4": "這四個選擇會<strong>按工作區各自記住</strong>。分區由上而下是 <strong>最近</strong>（最多 5 筆，釘選的排最前）、依階段分組時的 <strong>文件</strong> 區與各個 stage 群組（單一清單模式下合併成一個 <strong>全部計畫</strong>）、<strong>已封存</strong>，以及底部的完成動作列（<em>封存所有已完成</em> / <em>全部刪除</em>）。每一列會顯示 stage 藥丸、<em>{'{'}done{'}'}/{'{'}total{'}'} 已完成</em> 進度條、格式標籤 <code>HTML</code> / <code>Markdown</code>，還有 <em>{'{'}count{'}'} 件待你</em>——只有你能清掉的項目數。<strong>每一列右側都有釘選鈕 <code>📌</code> 與刪除鈕 <code>✕</code></strong>（已封存那一區只有刪除）。釘選鈕的作用是<em>釘選到「最近」最上方</em>。",
           "callout1": {
             "title": "沒有 metadata 的文件自成一區",
             "text": "依階段分組時，<strong>沒有計畫 metadata 的純文件</strong>收在 <strong>文件</strong> 這一區，每一列都帶 <code>文件</code> 藥丸——跟 stage 是不是 <em>進行中</em> 無關。要把這種檔案升級成真正的計畫，在它上面按右鍵選 <strong>升級為計畫</strong>；升級只是補上一層草稿信封，<strong>不會改寫原本的內文</strong>。"
@@ -3974,7 +4001,7 @@
         },
         "s7": {
           "title": "編輯器視窗",
-          "p1": "<kbd class=\"cwh-kbd\">⌘⇧I</kbd> 開啟，或在 檔案總管 點一下檔案。分頁式的 Monaco 編輯器，<kbd class=\"cwh-kbd\">⌘1</kbd>…<kbd class=\"cwh-kbd\">⌘9</kbd> 切分頁（超出範圍會落到最後一個分頁）。",
+          "p1": "<kbd class=\"cwh-kbd\">{miniIde}</kbd> 開啟，或在 檔案總管 點一下檔案。分頁式的 Monaco 編輯器，<kbd class=\"cwh-kbd\">{editorTab1}</kbd>…<kbd class=\"cwh-kbd\">{editorTab9}</kbd> 切分頁（超出範圍會落到最後一個分頁）。",
           "h1": "左側四個區塊",
           "sectionTable": {
             "section": "區塊",
@@ -3986,7 +4013,7 @@
               "note": "檔案樹。"
             },
             "search": {
-              "note": "跨檔搜尋；⌘⇧H 跨檔取代。"
+              "note": "跨檔搜尋；{replaceInFiles} 跨檔取代。"
             },
             "scm": {
               "note": "就是 Git 面板的嵌入版，帶變更數徽章。"
@@ -4004,7 +4031,7 @@
           "editorActions": {
             "split": {
               "action": "分割編輯區",
-              "note": "（切換編輯群組 ⌘K ⌘← / ⌘K ⌘→）"
+              "note": "（切換編輯群組 {prevGroup} / {nextGroup}）"
             },
             "findReplace": {
               "action": "尋找 / 取代"
@@ -4020,7 +4047,7 @@
             },
             "fold": {
               "action": "摺疊 / 展開",
-              "note": "（全部 ⌘K ⌘0 / ⌘K ⌘J）"
+              "note": "（全部 {foldAll} / {unfoldAll}）"
             },
             "multiCursor": {
               "action": "多游標：上下加一個"
@@ -4039,7 +4066,7 @@
             },
             "aiTerminal": {
               "action": "開關 AI 終端機",
-              "note": "（或 ⌘⇧A）"
+              "note": "（或 {aiChatAlt}）"
             },
             "sendSelection": {
               "action": "把選取的程式碼丟給 AI 終端機",
@@ -4071,7 +4098,7 @@
           "previewTypes": {
             "image": {
               "ext": "png jpg jpeg gif bmp webp ico svg avif apng",
-              "how": "圖片，可 符合視窗大小 / 實際大小。"
+              "how": "圖片，可切換 {fitWindow} / {actualSize}。"
             },
             "video": {
               "ext": "mp4 webm mov m4v mkv ogv",
@@ -4120,7 +4147,7 @@
             "text": "上表其他類型點開<strong>直接是預覽</strong>；html 與 csv 刻意先給你原始碼，要按 <em>預覽</em> 才切過去。另外 <code>docx</code>、<code>xlsx</code>、<code>zip</code>、<code>woff</code> 這些同時也在二進位清單裡，但字型、壓縮檔、Office 的判斷排在二進位前面，所以會拿到專屬的呈現，不會退成 hex dump。"
           },
           "h2": "變更記錄軌",
-          "p3": "右槽 <strong>預覽</strong> 分頁（<kbd class=\"cwh-kbd\">⌘⌥V</kbd>）的下半部是 <strong>最近的變更</strong>——這個工作區最近被動過什麼。每一列四欄：",
+          "p3": "右槽 <strong>預覽</strong> 分頁（<kbd class=\"cwh-kbd\">{previewTab}</kbd>）的下半部是 <strong>最近的變更</strong>——這個工作區最近被動過什麼。每一列四欄：",
           "trackList": {
             "time": "<strong>時間</strong>——相對值（<em>剛剛</em> / <em>{'{'}n{'}'}m</em> / <em>{'{'}n{'}'}h</em> / <em>{'{'}n{'}'}d</em>）。",
             "action": "<strong>動作</strong>——<code>+</code> 新增、<code>~</code> 修改、<code>−</code> 刪除、<code>▸</code> 顯示。",
@@ -4198,7 +4225,7 @@
               "action": "原始碼控制 / 問題"
             },
             "fileTabs": {
-              "action": "切到第 N 個檔案分頁（⌘1…⌘9）"
+              "action": "切到第 N 個檔案分頁（{editorTab1}…{editorTab9}）"
             },
             "split": {
               "action": "分割編輯區"
@@ -4356,9 +4383,9 @@
             "signInInside": "在 CLI 內登入",
             "flagNoteGoose": "無——Goose 預設會自己核准所有工具（GOOSE_MODE=auto）；要先詢問，請把 GOOSE_MODE 設成 approve 或 smart_approve。Navide 的 Guard 目前還不涵蓋 Goose。"
           },
-          "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。四家沒有略過權限旗標的 CLI（Grok CLI、OpenCode、Pi、MiniMax Code）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
+          "note": "「額度」＝ Navide 讀得到剩餘用量（第 6 章）。「多帳號」＝ 可以在設定裡掛多組登入並切換（第 5 章）。沒有略過權限旗標的 {noFlagCount} 家 CLI（{noFlag}）是因為它們本身就沒有這個旗標，不是 Navide 沒接。「登入指令」＝ 在設定 ▸ 帳號按「登入」時，Navide 實際會執行的指令；標示「在 CLI 內登入」的那幾家沒有獨立的登入指令，按下去就是照常啟動該 CLI，登入在它自己的畫面裡完成。",
           "callout": {
-            "title": "第 16 個選項不是 agent",
+            "title": "最後一項不是 agent",
             "text": "＋ 選單最下方的 <strong>>_ 開啟終端機</strong> 是一般 shell，不掛任何 agent，也不會注入角色。它刻意獨立放在清單外，不會被 CLI 清單的捲動吃掉。"
           }
         },
@@ -4407,7 +4434,8 @@
           "callout2": {
             "title": "Grok CLI 換成官方的 xAI CLI",
             "text": "安裝方式改成官方的安裝腳本（用 <code>curl</code> 抓 <code>https://x.ai/cli/install.sh</code> 交給 bash 執行），不再是 npm 套件——所以它需要 <code>curl</code>，也需要一個真正的終端機視窗；更新指令是 <code>grok update</code>；設定檔換成 <code>~/.grok/config.toml</code>，MCP 以 TOML 寫入，舊社群版的 <code>user-settings.json</code> 不再讀。它<strong>沒有診斷指令</strong>（官方沒提供，設定頁改成指向官方文件），也沒有 effort 欄與權限略過旗標。同名的社群版 CLI 會裝在同一個路徑，<code>which grok</code> 分不出來，只能靠版本字串的形狀分辨。"
-          }
+          },
+          "menuGroups": "+ 選單分成兩個標題：寫程式的 CLI 在 <strong>{cliHeading}</strong> 底下，長駐型的 agent（{agents}）在 <strong>{agentsHeading}</strong> 底下。"
         },
         "s3": {
           "title": "角色",
@@ -4441,7 +4469,7 @@
             "global": "最上面一顆<strong>全域開關</strong>：<em>預設略過權限提示（YOLO 模式）</em>。每一家的抽屜都看得到同一顆，在哪一家改，影響的都是全部。",
             "perVendor": "下面是這一家的一列，顯示它的實際旗標（例如 <code>--yolo</code>），右邊一個三態下拉：<strong>跟隨全域 / 一律略過 / 一律不略過</strong>。"
           },
-          "p4": "沒有旗標的四家（Grok CLI / OpenCode / Pi / MiniMax Code）在抽屜的這一段只有那顆全域開關，下面一行寫明這家 CLI 沒有權限略過旗標、沒有東西可切換。",
+          "p4": "沒有旗標的 {noFlagCount} 家 CLI（{noFlag}），抽屜這一區只會顯示全域開關，下方加一行說明這家 CLI 沒有略過權限旗標、沒有東西可切。",
           "callout1": {
             "title": "改了不會影響正在跑的分格",
             "text": "旗標是在分格<strong>啟動的那一刻</strong>就寫進它的命令列的。這裡的變更只影響之後開的分格；已經在跑的會保留它啟動時的設定，直到你重建或還原它。"
@@ -4480,11 +4508,12 @@
           "note": "更新會替換執行檔；已經在執行中的分格要重新啟動才會用到新版本。",
           "callout2": {
             "title": "這裡沒有的東西",
-            "text": "仍然<strong>沒有「預設參數」欄位</strong>——啟動指令是<em>整條取代</em>，不是在預設命令後面追加。<strong>執行檔的指定也不是打路徑</strong>，而是在偵測到多套實體安裝時從候選裡挑一套（挑過之後抽屜「總覽」會出現「自訂執行檔」chip）。模型與 reasoning effort 則<strong>不再只有 MCP 那一條路</strong>：現在啟動覆寫就有正式的欄位，手動開面板的對話框也有。"
+            "text": "仍然<strong>沒有「預設參數」欄位</strong>——啟動指令是<em>整條取代</em>，不是在預設命令後面追加。<strong>執行檔的指定也不是打路徑</strong>，而是在偵測到多套實體安裝時從候選裡挑一套（挑過之後抽屜「總覽」會出現「自訂執行檔」chip）。模型與 reasoning effort 則<strong>不再只有 MCP 那一條路</strong>：現在啟動覆寫就有正式的欄位，手動開面板的對話框也有。",
+            "setModel": "已經在跑的分格也能換模型：由 agent 呼叫 <code>cli_set_model</code>。Claude Code 和 Codex 當場切換（Claude 用它的模型選單、Codex 用 <code>/model</code>）；其他 CLI 會重啟該分格並接回原本的對話。"
           },
           "chipsIntro": "卡片上只放三個 chip：安裝狀態、登入與帳號數、推送通道。完整的一排 chip 在抽屜最上面的「{overview}」，把那家 CLI 目前的設定現況直接讀回來。順序是固定的，照著「它是什麼 → 它會用什麼跑 → 怎麼找得到它」排：",
           "chipsTable": {
-            "chip": "Chip",
+            "chip": "標籤",
             "shows": "顯示什麼"
           },
           "chips": {
@@ -4563,19 +4592,19 @@
           },
           "spawnGroups": {
             "both": {
-              "group": "模型與推理強度都有（5 家）",
-              "vendors": "Claude Code、Antigravity CLI、Copilot CLI、Muse Code、Pi"
+              "group": "模型與推理強度都有（{count} 家）",
+              "vendors": "{names}"
             },
             "modelOnly": {
-              "group": "只有模型（7 家）",
-              "vendors": "Codex、Cursor CLI、Grok CLI、Kilo Code、Kimi Code、OpenCode、Qwen Code"
+              "group": "只有模型（{count} 家）",
+              "vendors": "{names}"
             },
             "neither": {
-              "group": "兩欄都沒有（4 項）",
-              "vendors": "Aider、Droid、MiniMax Code，以及 Terminal（它不是 agent）"
+              "group": "兩欄都沒有（{count} 項）",
+              "vendors": "{names}（Terminal 不是 agent）"
             }
           },
-          "spawnNote": "「只有模型」的那七家並不是沒有思考強度可調，而是那個旋鈕不在啟動參數上：有的寫在模型 id 裡（例如結尾的 <code>-high</code>），有的在設定檔，有的要進 CLI 後用它自己的指令切。打的值不合規矩時（模型 id 帶空白、或以「-」開頭）對話框會當場說明原因並把送出鈕停用。如果那家 CLI 設了自訂啟動指令，這兩欄會直接停用並寫上原因——那條命令照原樣執行，Navide 不會往裡面加模型。",
+          "spawnNote": "「只有模型」的那幾家並不是沒有思考強度可調，而是那個旋鈕不在啟動參數上：有的寫在模型 id 裡（例如結尾的 <code>-high</code>），有的在設定檔，有的要進 CLI 後用它自己的指令切。打的值不合規矩時（模型 id 帶空白、或以「-」開頭）對話框會當場說明原因並把送出鈕停用。如果那家 CLI 設了自訂啟動指令，這兩欄會直接停用並寫上原因——那條命令照原樣執行，Navide 不會往裡面加模型。",
           "h5": "5 · 推送通道",
           "h6": "6 · 安裝與更新",
           "pushAllOff": "<strong>全部關掉是合法的選擇</strong>，這裡沒有「至少留一家」的規則。四家都關掉時，抽屜的推送段會直接列出三項代價：訊息改成等對方分格閒置之後再打進輸入框，所以比較慢才會到；Claude Code 的 rewake 是唯一能叫醒閒置 agent 的手段，關掉之後只能等它自己回到閒置；已經開著的分格會保留它啟動時的通道，直到重新啟動為止。"
@@ -4584,7 +4613,7 @@
           "title": "帳號",
           "p1": "設定 ▸ <strong>帳號</strong> 一頁裝了兩塊互不相干的東西：上半是 Git 帳號，下半是 CLI 帳號。",
           "h1": "CLI 帳號",
-          "p2": "15 家都會列出標題，但只有 <strong>5 家支援多帳號</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Kilo Code。其餘只印一行「此 agent 不支援多帳號。」，連新增按鈕都沒有。",
+          "p2": "一家 CLI 能不能掛<strong>多個帳號</strong>、切換時怎麼生效（當場切換、重啟它的分格，或要你手動處理），看第 1 章表格的「多帳號」欄：那欄照該 CLI 自己的宣告顯示，不是說明頁另外維護的清單。",
           "p3": "每家底下第一張卡片永遠是內建的 <strong>預設</strong>（你原本的登入憑證），後面才是你自己加的帳號。卡片上顯示登入身分的 email、<em>預設</em> 標籤，以及該帳號的剩餘額度。",
           "table": {
             "action": "操作",
@@ -4600,8 +4629,8 @@
               "detail": "該帳號尚未登入或憑證過期時才出現。"
             },
             "setDefault": {
-              "action": "設為預設",
-              "detail": "切換使用中的帳號。切換期間按鈕變成「切換中…」，且全部帳號的按鈕都暫時停用。"
+              "action": "{switchLabel}",
+              "detail": "出現在每一個不是使用中的帳號上。按下後把這個 CLI 的現用登入切到該帳號，之後開的分格就用它。切換期間按鈕變成「{switchingLabel}」，且全部帳號的按鈕都暫時停用。"
             },
             "refreshQuota": {
               "action": "重新偵測額度",
@@ -4619,7 +4648,7 @@
           "p7": "切換太頻繁會被擋（每家 CLI 60 秒最多 3 次），確認強制切換也繞不過去。",
           "callout1": {
             "title": "已開著的分格保留原帳號",
-            "text": "面板上的說明就寫著：「已開啟的分格在重開前仍使用原帳號」。所有帳號共用你真實的家目錄（session 與歷史是共通的），切換帳號是<strong>就地替換儲存的憑證</strong>。"
+            "text": "已開著的分格會沿用它開啟時的帳號，直到重開為止。所有帳號共用你真正的家目錄（session 與歷史共用），切換帳號是<strong>就地替換存好的憑證</strong>。Claude 帳號另外可以登入到<strong>自己的資料夾</strong>（「登入到帳號資料夾」）；之後可以只把某一個分格搬到那個帳號，不動 CLI 目前的登入，也不影響其他分格。"
           },
           "apiKeys": {
             "title": "API key 帳號",
@@ -4639,13 +4668,14 @@
             "title": "綁定不在這裡做",
             "text": "「這個工作區要用哪個 Git 帳號」是在<strong>側欄的 Git 面板</strong>上那顆帳號膠囊選的。設定頁只負責帳號本身的增刪改。刪掉一個帳號時，指向它的綁定會一起清掉。"
           },
-          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「設為預設」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。"
+          "switchToast": "<strong>切換失敗現在一定看得到。</strong>以前只有「有分格在跑」和「切太頻繁」這兩種拒絕會跳提示，其他失敗（例如憑證交換本身失敗）只寫進帳號面板自己的橫幅——而你在看某一家的列時，那條橫幅早就捲出畫面了，按下「{switchLabel}」看起來像什麼都沒發生。現在每一種切換失敗都會跳提示。",
+          "agentConfirm": "agent 也可以自己提出這些要求——為某個帳號開登入、切換某家 CLI 的帳號，或把單一分格搬到另一個帳號。每個要求都會跳出確認框，寫明是哪家 CLI、哪個帳號、哪個分格提出的、理由是什麼；<strong>你不同意就什麼都不會發生</strong>，沒回應的要求會自己關掉。"
         },
         "s6": {
           "title": "額度顯示",
           "p1": "額度徽章長在 <strong>CLI 分格的標題列</strong>上（不是狀態列），顯示剩餘百分比；滑鼠停留展開詳細視窗，裡面有各個計量窗口、重置時間，以及帳號切換入口。「設定 ▸ 帳號」的帳號卡片讀的是同一份資料。",
           "h1": "涵蓋哪幾家",
-          "p2": "<strong>11 家</strong>：Claude Code、Codex、Kimi Code、Grok CLI、Antigravity CLI、OpenCode、Qwen Code、Kilo Code、Pi、Copilot CLI、Cursor CLI。Aider、Muse Code、Droid、MiniMax Code 沒有可讀的額度來源。",
+          "p2": "<strong>{withCount} 家</strong>：{withQuota}。{withoutQuota} 沒有可讀的額度來源。",
           "h2": "資料從哪來",
           "list": {
             "claude": "<strong>Claude Code 是特例</strong>：Navide 完全不碰它的憑證，而是去跑 <code>claude -p /usage</code>，讀 CLI 自己印出來的額度報表。因此讀一次要啟動一整個 Claude Code，需要幾秒。",
@@ -4833,23 +4863,23 @@
             "tools": {
               "list": "<strong>查詢對象</strong> — 有誰在線上、位址怎麼寫、對方現在是不是忙碌中。",
               "send": "<strong>送出指令</strong> — 把任意文字送給指定的分格。",
-              "spawn": "<strong>開新 agent 並派工</strong> — 請 Navide 開一個新的 CLI 分格、指定用哪家 CLI、給它任務。新分格完成後應該會用訊息回報給呼叫者，但那是子 agent 自己輸出的，不是 Navide 的保證：呼叫者忙碌時會排隊，子 agent 沒照格式輸出時則不會送達。",
+              "spawn": "<strong>開一個新 agent 並交派工作</strong>——請 Navide 開一個新的 CLI 分格、指定它跑哪個 CLI、交給它一項任務。新分格做完後應該發訊息回報給呼叫者；那份回報是子 agent 自己的輸出，呼叫者忙的時候會排隊等。如果新分格的第一個 turn 結束時沒有回報，Navide 會把那個 turn 的最後輸出轉交給呼叫者一次，並標明是代為轉交的備援回報，不是它自己寫的。",
               "ack": "<strong>純確認回覆</strong> — 「收到」「做完了」這種不需要對方動作的回信。它會寫進訊息記錄給你看（面板上標成「僅記錄」），但<strong>不會打進對方的輸入框</strong>，所以不打斷、也不吵醒對方；反過來說，需要對方看到或處理的事就不能用這種。",
               "pending": "<strong>查有沒有人在等我</strong> — 忙碌中的分格收不到注入，所以 agent 可以自己回頭查：有哪些訊息正排隊等我閒下來、以及自己寄出去的訊息是不是卡住了。"
             },
-            "note": "十五家裡有 <strong>十家</strong>接上了這組工具（見下一節的表）。沒接上的是 Aider、Droid、Muse Code、Pi，它們改走下面的輸出協定；MiniMax Code 兩條路都還沒有，只收得到訊息。"
+            "note": "{total} 家 CLI 裡有 <strong>{mcpCount} 家</strong>接上了這套工具（見下一節的表格）。{protocolOnly} 改用下面的輸出協定；{receiveOnly} 兩條路都還沒有，只能收訊息。"
           },
           "proto": {
             "title": "輸出協定",
             "tag": "流程（pipeline）的分格自動具備",
             "p1": "agent 在回覆裡輸出這種裸文字區塊，Navide 會攔下來當作訊息：",
             "code": "---MSG-START--- to: reviewer\n幫我跑一下 pnpm test:run，把失敗清單回報給我\n---MSG-END---",
-            "note": "to: 可以跟 ---MSG-START--- 寫在同一行，也可以單獨寫在它<strong>正下方那一行</strong>；再往下的 to: 就會被當成內容。---MSG-START--- 與 ---MSG-END--- 這兩行必須頂格、不可縮排，也不可以放在 markdown 的程式碼區塊裡，否則不會被辨識，而且不會有任何錯誤提示。流程的 slot 在開場時就會被告知這個協定；手動開的分格不會，但你可以把上面這段直接貼給它——前提是那個 CLI 在下表裡支援輸出協定。"
+            "note": "to: 可以跟 ---MSG-START--- 寫在同一行，也可以單獨寫在它<strong>正下方那一行</strong>；再往下的 to: 就會被當成內容。---MSG-START--- 與 ---MSG-END--- 這兩行必須頂格、不可縮排，也不可以放在 markdown 的程式碼區塊裡，否則不會被辨識；一個 turn 出現了 ---MSG-START--- 卻沒解析出任何訊息時，Navide 會在那個分格打一則「message not recognized」提示。流程的 slot 在開場時就會被告知這個協定；手動開的分格不會，但你可以把上面這段直接貼給它——前提是那個 CLI 在下表裡支援輸出協定。"
           }
         },
         "s3": {
           "title": "哪些 CLI 送得出訊息",
-          "p1": "<strong>所有 CLI 分格都收得到訊息</strong>——那是 Navide 直接把文字打進終端機，跟 CLI 種類無關。<strong>主動送出的是十五家裡的十四家</strong>，差別只在它手上有哪條路：",
+          "p1": "<strong>每個 CLI 分格都收得到訊息</strong>——Navide 直接把文字打進終端機，跟 CLI 本身無關。<strong>{total} 家裡有 {sendCount} 家也送得出去</strong>，差別只在能走哪條路：",
           "table": {
             "cli": "CLI",
             "send": "能主動送訊嗎"
@@ -4857,9 +4887,10 @@
           "sendModes": {
             "both": "MCP 工具 ＋ 輸出協定",
             "protocolOnly": "僅輸出協定",
-          "none": "兩條都沒有（只收得到）"
+          "none": "兩條都沒有（只收得到）",
+            "mcpOnly": "僅 MCP 工具"
           },
-          "note1": "<strong>十五家裡有十四家送得出訊息</strong>，差別只在走哪條路。輸出協定要 Navide 讀得懂那家 agent 的記錄檔——有記錄讀取器的十四家都通，Navide 因此知道它「講完一段話」以及它講了什麼。MCP 工具則要那家 CLI 提供接入點（啟動參數、一個帶整份設定的環境變數，或一份只給這個分格用的設定目錄鏡像），Aider、Droid、Muse Code、Pi 目前沒有，所以它們只走輸出協定。<strong>MiniMax Code 兩條都還沒有</strong>：它把對話存在 SQLite 裡，Navide 還沒有讀得懂那個格式的記錄讀取器，所以它收得到訊息、但送不出來。",
+          "note1": "輸出協定要靠 Navide 讀得到那個 agent 自己的記錄；有記錄讀取器的廠商全都涵蓋，所以 Navide 知道 agent 何時講完一段話、講了什麼。MCP 工具另外需要 CLI 提供接入的方式（啟動參數、一個帶著整份設定的環境變數，或一份只給這個分格用的設定目錄鏡像），而且要 Navide 接上；{protocolOnly} 沒有接上，所以只走輸出協定。<strong>{receiveOnly}</strong> 兩條都沒有：Navide 還沒有讀它們記錄的讀取器，所以收得到訊息、送不出去。",
           "note2": "兩個實務上的但書：<strong>Antigravity</strong> 在「agent 反問你」的那個回合送不出訊息（那個回合不帶回覆文字），一般回答的回合正常；<strong>Qwen、Pi、Kimi</strong> 沒有明確的「回合結束」訊號，Navide 靠 8 秒靜默推斷，所以送出時機會晚一些。"
         },
         "s4": {
@@ -4904,7 +4935,7 @@
           "list": {
             "alive": "對方的 CLI 還活著，而且已經過了啟動階段",
             "noTyping": "沒有人正在那個分格裡打字（輸入框有草稿、或四秒內按過鍵，就先等）",
-            "noTurn": "沒有正在跑的回合",
+            "noTurn": "目前沒有 turn 在跑——{midTurn} 例外：它自己會把 turn 中途打進來的訊息排進佇列，所以只需要等沒人在打字",
             "quiet": "最近 2 秒沒有任何輸出"
           },
           "p2": "條件不滿足就先排隊，滿足了自動送出。所以對方正在跑長任務時，你的訊息會等它做完 — 這是刻意的。「CLI 互傳訊息」面板會直接寫出是哪一個條件擋著：「目標分格未在執行」「目標分格仍在啟動中」「使用者正在該分格輸入中」「目標 agent 正在執行中」「等待目標靜置」，所以「一直沒送出去」永遠查得到原因。對方收到的訊息開頭會標明來源，它才知道要回覆給誰。",
@@ -4929,7 +4960,9 @@
             "rejected": "被拒絕的原因<strong>只跟寫錯有關</strong>：CLI 名稱不存在、名稱重複或不合法、任務空白、指定了那家 CLI 無法接受的模型或思考強度。",
             "kickoff": "<strong>第一段任務有沒有真的送進去，會一併回報。</strong>Navide 會等到 CLI 開機、出現提示字元、把任務打進去為止才回答。沒能確認送達時，它會說「先查狀態再決定」而不是叫你重送——盲目重送等於把同一份工作派兩次。",
             "duplicate": "<strong>同一個請求重複開分格會被擋下來</strong>，所以 agent 因為等太久而再送一次時，不會多出一個分格。",
-            "resume": "<strong>也可以接續舊對話開新分格。</strong>agent 先列出這個工作區還留著的 CLI 對話，再指定其中一個開起來，新分格帶著那段對話的記憶開始（連在一般終端機裡開的也算）。對話 id 會先對那家 CLI 的紀錄檔查證，查不到就直接拒絕，不會默默開成一個空的。"
+            "resume": "<strong>也可以接續舊對話開新分格。</strong>agent 先列出這個工作區還留著的 CLI 對話，再指定其中一個開起來，新分格帶著那段對話的記憶開始（連在一般終端機裡開的也算）。對話 id 會先對那家 CLI 的紀錄檔查證，查不到就直接拒絕，不會默默開成一個空的。",
+            "otherProject": "<strong>新分格可以開在別的專案</strong>——用那個專案自己的資料夾、CLAUDE.md、記憶、Plans 與 git——呼叫者仍是它的上層、照樣收到回報。預設放進目前視窗的側欄，也可以開在新視窗，或開在已經開著那個專案的視窗。",
+            "release": "<strong>做完的子分格可以用 <code>cli_reclaim_agent</code> 釋放</strong>：它的 CLI 程序會結束，分格留在原處變成「點一下接回」的卡片、對話完整保留，你還是看得到它做了什麼。分格也可以用 <code>cli_rename_pane</code> 改名。"
           },
           "table": {
             "suggestion": "建議值",
@@ -4963,7 +4996,7 @@
           "guards": {
             "rate": {
               "limit": "同一組「來源 → 目標」的頻率",
-              "value": "每 60 秒最多 5 則",
+              "value": "每 60 秒 5 則（聊天傳送者：30 則）",
               "why": "兩個 agent 互相回覆可能無限往返"
             },
             "queue": {
@@ -4972,9 +5005,9 @@
               "why": "對方忙不過來時不要無限堆積"
             },
             "timeout": {
-              "limit": "送出後等不到結果",
+              "limit": "送往其他視窗的訊息一直沒有結果",
               "value": "30 分鐘後標為失敗",
-              "why": "對方視窗被關掉時，訊息不會永遠卡在「佇列中」"
+              "why": "接收的視窗被關掉或電腦睡眠時，跨工作區的訊息不能永遠卡在「佇列中」。送給同一視窗裡忙碌分格的訊息只會繼續等。"
             },
             "pause": {
               "limit": "暫停開關",
@@ -5014,7 +5047,7 @@
             "stuckQueued": {
               "symptom": "訊息一直停在「佇列中」",
               "cause": "對方正在跑長任務，還沒閒下來",
-              "fix": "正常現象，等它做完；真的卡住 30 分鐘會自動標為失敗"
+              "fix": "正常——等它做完。排超過 2 分鐘時寄件方會收到「還在等」的通知，你也可以在面板上按「撤回」收回；只有送往其他視窗的訊息會在 30 分鐘後標成失敗。"
             },
             "rateLimit": {
               "symptom": "面板寫出「頻率上限：同兩個分格之間每 60 秒最多 5 則」",
@@ -5041,12 +5074,14 @@
         "s10": {
           "title": "已知限制",
           "list": {
-            "terminalPane": "<strong>純終端機分格不能當收發對象</strong> — 只有 CLI agent 分格才有名稱。",
-            "receiveOnly": "<strong>五家沒有 MCP 工具</strong> — Aider、Droid、Muse Code、Pi 只能走裸行輸出協定；<strong>MiniMax Code 連輸出協定都還沒有</strong>，它只收得到訊息、送不出去。見上方「哪些 CLI 送得出訊息」。",
+            "terminalPane": "<strong>純終端機分格收得到、送不出。</strong>送給它的訊息會原樣打進去、當成 shell 指令執行——沒有信封、也沒有回覆提示。終端機不會收到廣播；你最後一次按鍵後會先擋 60 秒；排隊超過 2 分鐘就直接標成失敗、不會晚打進去；具破壞性的指令一律拒絕。",
+            "receiveOnly": "<strong>有 {noMcpCount} 家 CLI 沒有 MCP 工具</strong>——{protocolOnly} 只能用裸行輸出協定，<strong>{receiveOnly}</strong> 連這個都沒有：收得到訊息、送不出去。見上面「哪些 CLI 送得出訊息」。",
             "detached": "<strong>分格被拆到獨立視窗、或視窗重新載入後</strong>，MCP 工具那條路要重開分格才恢復；輸出協定不受影響。",
             "queueFull": "<strong>對方佇列滿的時候（最多 10 則）訊息會被丟棄</strong>，但不再是無聲的：面板會寫出「目標已有 10 則訊息在排隊」，失敗也會以通知的形式打回寄件的那個分格，寄件的 agent 同樣查得到自己那則的下場。只是遞送是非同步的，<strong>送出的那一瞬間</strong>仍然不知道結果。",
             "noPermission": "<strong>沒有權限確認</strong> — 跨工作區傳訊不會跳確認框，只會在收到時提示。這是刻意的取捨。",
-            "ackLocal": "<strong>純確認（ack）不跨裝置</strong> — 中繼不保證訊息在別人的機器上不會進到輸入框，所以跨裝置的 ack 直接被拒絕，要傳就當一般訊息傳。"
+            "ackLocal": "<strong>純確認（ack）不跨裝置</strong> — 中繼不保證訊息在別人的機器上不會進到輸入框，所以跨裝置的 ack 直接被拒絕，要傳就當一般訊息傳。",
+            "acp": "<strong>ACP 分格</strong>（實驗功能，在「CLI 代理」 → ACP 開啟）收到的訊息是以 ACP prompt 交給它，而不是打字進去；「已投遞」代表 agent 接受了這個 prompt，不代表它已經讀過或回覆。",
+            "mcpOnly": "<strong>{mcpOnly}</strong> 只能透過 MCP 工具送訊息：Navide 不讀它每一輪的輸出，所以它印出的裸行訊息不會送出分格。"
           }
         },
         "tip": "小訣竅：先幫分格改個角色名（「reviewer」「架構師」），標題就是位址，之後交代事情會順很多。",
@@ -5069,7 +5104,7 @@
             "legend": {
               "actions": {
                 "label": "標題列",
-                "text": "「暫停投遞」會讓之後的訊息排隊但不送出；「清除記錄」只清畫面，不影響已送達的訊息。"
+                "text": "「暫停投遞」會讓之後的訊息先排隊、不送出；「清除記錄」清掉已結束的列，還在路上的會留著。"
               },
               "route": {
                 "label": "來源 → 目標",
@@ -5140,12 +5175,13 @@
           "h3": "從聊天回答 CLI 的提問",
           "answer": {
             "bare": "權限提示與問題會一則一則貼到聊天。只有一則還沒回答時，直接回 <code>1</code>–<code>9</code>、<code>yes</code> 或 <code>no</code> 就行；有好幾則時，在答案後面加上編號（例如 <code>yes &lt;id&gt;</code>）。其他文字會立刻收到提示，不會排隊。",
-            "which": "能從聊天代答的只有 Claude Code、Codex 與 Aider；其他 CLI、多選題與自由輸入的問題，會請你回到電腦前回答，而不是顯示按了也沒用的按鈕。",
+            "which": "能從聊天代答的只有 Claude Code、Codex、Aider 與 Grok Build；其他 CLI、多選題與自由輸入的問題，會請你回到電腦前回答，而不是顯示按了也沒用的按鈕。",
             "never": "「不要再問」「一律允許」「這個 session 都允許」這類永久選項，<strong>從聊天永遠不會被按下</strong>。",
             "guard": "從聊天核准的請求仍要經過 Navide Guard：被判為嚴重或高的一律拒絕，Guard 判斷不了的也拒絕，聊天會收到「這個動作需要在電腦前確認」。"
           },
           "h4": "標題列的監控按鈕",
-          "p4": "標題列的「{monitor}」按鈕帶一個狀態點：有 bot 被擋是紅、重新連線中是黃、正常是綠，沒有啟用的 bot 就沒有點。點開列出每個綁了聊天的分格，可以跳到那個分格或直接斷開；自動開出的子主題收在它的父綁定底下。"
+          "p4": "標題列的「{monitor}」按鈕帶一個狀態點：有 bot 被擋是紅、重新連線中是黃、正常是綠，沒有啟用的 bot 就沒有點。點開列出每個綁了聊天的分格，可以跳到那個分格或直接斷開；自動開出的子主題收在它的父綁定底下。",
+          "commands": "在已綁定的聊天裡，<code>/prompts</code>、<code>/skills</code>、<code>/mcp</code> 會回一排按鈕，分別是你的提示技能、該分格 CLI 的技能，以及 MCP server（唯讀）；<code>/shares</code> 與 <code>/revoke</code> 列出與撤銷分享連結；<code>/plugins status</code> 與 <code>/plugins stop</code> 顯示第三方 Navide 外掛並停掉其中一個。傳到聊天的檔案會存給該分格；分格也能在 MSG 區塊裡加一行 <code>---ATTACH--- &lt;路徑&gt;</code> 把檔案傳回聊天。"
         }
       },
       "workspace": {
@@ -5246,7 +5282,7 @@
             "openHome": "<strong>家目錄</strong>——直接用家目錄。",
             "recent": "下方是最近開過的清單，可以把常用的固定起來。在清單項目上按右鍵有 <em>用預設編輯器開啟</em>、<em>在 Finder 中顯示</em>、<em>複製路徑</em>。"
           },
-          "p2": "之後隨時可以從選單 <strong>檔案 ▸ 開啟工作區…</strong>（<kbd class=\"wph-kbd\">⌘O</kbd>）、<strong>檔案 ▸ 開啟最近使用</strong>，或 <strong>檔案 ▸ 開新視窗</strong>（<kbd class=\"wph-kbd\">⌘N</kbd>）開新視窗。",
+          "p2": "之後隨時可以從選單 <strong>檔案 ▸ 開啟工作區…</strong>（<kbd class=\"wph-kbd\">{openWorkspace}</kbd>）、<strong>檔案 ▸ 開啟最近使用</strong>，或 <strong>檔案 ▸ 開新視窗</strong>（<kbd class=\"wph-kbd\">{newWindow}</kbd>）開新視窗。",
           "h2": "同一個視窗擺多個工作區",
           "p3": "不必為第二個專案另開視窗。在側欄「代理」分頁裡，工作區區段標題右邊有一顆 <strong>＋</strong>，按下去會把同一個選擇器叫回來；選中的專案會被收進<strong>同一個視窗</strong>，側欄多出一列工作區標題。",
           "p4": "點該列標題即切換視野。關鍵在於：<strong>被切走的工作區，它的 agent 繼續在跑</strong>，那一列也還在側欄上，只是舞台上暫時不顯示它的分格。",
@@ -5264,7 +5300,7 @@
           "p1": "入口是 <strong>＋</strong> 按鈕，側欄的工作區標題列和每個群組標題列上各有一顆（差別只在新分格落在哪個群組）。按下去會開一個小選單：",
           "addMenu": {
             "role": "最上面是 <strong>選擇角色…</strong> 下拉——選一個預設角色。",
-            "cliList": "中間是 CLI 清單，沒安裝的會標示出來。",
+            "cliList": "下面的清單分成兩個有標題的區塊。<strong>{cli}</strong> 是寫程式用的 CLI，沒安裝的會標示出來。<strong>{agents}</strong> 依名字列出你的常駐 Agent（OpenClaw、Hermes Agent）：已開啟的點了會切過去，已關閉的點了會接續原本的對話；另有一個<em>新增 …</em>，會先請你取名字。ACP Agent 也列在這一區。清單下方有一行提示：Grok Bot、dots 這類雲端 Agent 是以 Navide 外掛的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（開一般終端機，不掛 agent）與 <strong>啟動 Agent…</strong>。"
           },
           "p2": "<em>啟動 Agent…</em> 開的是完整對話框，可以指定 agent 與角色、決定要不要加進舞台、要不要同時開終端機，也可以貼一個 session id 直接接續舊對話。",
@@ -5277,7 +5313,7 @@
               "action": "直接開一個"
             },
             "nthCli": {
-              "action": "指定第 N 種 CLI"
+              "action": "把下一個分格的 CLI 選成第 N 個"
             },
             "rename": {
               "action": "改名",
@@ -5295,17 +5331,17 @@
           },
           "note": "自動取名的分格，標題後面會有一個小小的 <code>◦</code> 記號；手動改過名字的就沒有。",
           "h2": "右鍵選單",
-          "p3": "在分格上或側欄那一列按右鍵：<em>聚焦</em>、<em>重新命名</em>、<em>傳送訊息</em>、<em>中斷</em>、<em>重新套用角色</em>、<em>移除</em>。其中 <em>傳送訊息</em> 會把那個分格的位址插進你目前焦點分格的輸入框——這是跨分格傳訊最快的入口。底下有子分格（<code>▸</code>）的分格還會多一項 <em>移除旗下 N 個子分格</em>：只關掉它派生出來的子分格，它自己和其他分格都不動。",
+          "p3": "在分格或它的側欄列上按右鍵。大部分分格都有 <em>{focus}</em>、<em>{rename}</em>、<em>{mute}</em>、<em>{sendMessage}</em>、<em>{interrupt}</em>、<em>{reapplyRole}</em>、<em>{reclaim}</em>、<em>{remove}</em>；有些項目只在適用時出現：最小化的分格有 <em>{restore}</em>，欄寬被限制時有 <em>{fitWidth}</em>，對話斷掉的分格有 <em>{reconnect}</em>，Agent 分格則多了喚醒、排程、頻道、記憶資料夾、設定等項目。<em>{sendMessage}</em> 會把那個分格的位址插進你目前焦點分格的輸入框，是跨分格傳訊最快的入口。<em>{reclaim}</em> 會結束 CLI 以釋放記憶體，留下一張點一下就能接續的卡片（見下文）。底下有子分格（<code>▸</code>）的分格還會多出 <em>{removeChildren}</em>（只關掉它派生出的分格）和 <em>{removeAll}</em>（連同它派生出的分格一起關掉）。",
           "h3": "收合與佔位卡",
           "p4": "分格右上角的 <code>⊟</code> 是最小化。收起來之後側欄那一列會標上 <strong>已收合</strong>，展開後有 <em>↑ 還原</em> 與 <em>移除</em>。",
           "p5": "另外有一種狀態叫<strong>佔位卡</strong>：位子還在，但顯示一張「↩ 點擊以續接」的卡片，標題、副標、群組標籤全部保留。重開 app、或被閒置回收之後，分格就是這個樣子。點卡片任一處，CLI 會接著原本的對話繼續。",
           "h4": "閒置自動回收",
           "p6": "每個跑著的 CLI 都佔著記憶體與 GPU。Navide 預設會把太久沒動靜的分格降級回佔位卡：",
           "reclaim": {
-            "default": "<strong>預設開啟</strong>，門檻 30 分鐘，可在設定裡調。",
+            "default": "<strong>預設開啟</strong>，門檻 {defaultMinutes} 分鐘，可在設定裡調。門檻最短 {minMinutes} 分鐘，設得更短會自動拉回 {minMinutes} 分鐘。",
             "scan": "每 60 秒掃一次，判準是「既沒有輸出、你也沒有打字」。",
             "notClose": "<strong>這不是關閉</strong>：座位、名字、訊息位址、session 全部留著，點一下就回來。",
-            "exempt": "正在被 pipeline 讀取、輸入框裡有草稿、有訊息排隊等著送進來、或正在焦點上的分格，都不會被回收。"
+            "exempt": "以下分格不會被回收：正在焦點上、還在工作或等你回答、正在跑循環、被 pipeline 階段監看或由 Manager 轉派中、輸入框裡有草稿、有訊息排隊等著送進來。沒有可接續 session 的分格也不會被回收，因為回收後就回不來了。"
           },
           "note2": "回收發生時，歷史記錄分格的 pipeline log 會出現 <code>♻ reclaimed N idle CLI pane(s) — click to resume</code>。"
         },
@@ -5371,27 +5407,22 @@
           },
           "sidebarTabs": {
             "agents": {
-              "content": "工作區 / 群組 / 分格的樹狀清單",
-              "keys": "⌘1"
+              "content": "工作區 / 群組 / 分格的樹狀清單"
             },
             "pipeline": {
-              "content": "多階段自動流程",
-              "keys": "⌘2、⌘⇧Y"
+              "content": "多階段自動流程"
             },
             "explorer": {
-              "content": "檔案總管",
-              "keys": "⌘3、⌘⇧E"
+              "content": "檔案總管"
             },
             "git": {
-              "content": "版本控制（見「程式碼工作流」分頁）",
-              "keys": "⌘4"
+              "content": "版本控制（見「程式碼工作流」分頁）"
             },
             "plans": {
-              "content": "計畫文件清單（見「程式碼工作流」分頁）",
-              "keys": "⌘5、⌘⇧D"
+              "content": "計畫文件清單（見「程式碼工作流」分頁）"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> 收合整條側欄。安裝的 Navide 外掛可能再增加分頁。",
+          "note": "<kbd class=\"wph-kbd\">{toggleSidebar}</kbd> 收合整條側欄。安裝的 Navide 外掛可能再增加分頁。",
           "h2": "「代理」分頁的三層結構",
           "p1": "由上而下是<strong>工作區列 → 群組列 → 分格列</strong>。",
           "rows": {
@@ -5416,7 +5447,7 @@
           "foldNote": "兩顆摺疊鈕的位置上，<strong>Alt／Option＋點擊那一列的展開箭號</strong>也做同一件事（提示寫著「Alt+點擊：收合底下全部」）。收合狀態是<strong>逐分格記在專案裡</strong>的，重開 Navide 之後還在。",
           "h4": "多選與批次拖曳",
           "multiselect": {
-            "cmdClick": "<kbd class=\"wph-kbd\">⌘</kbd> 點：加選單一列。",
+            "cmdClick": "<kbd class=\"wph-kbd\">{mod}</kbd> 點：加選單一列。",
             "shiftClick": "<kbd class=\"wph-kbd\">⇧</kbd> 點：選整段區間（依畫面上實際顯示的順序，不是內部順序）。",
             "batchMenu": "多選之後按右鍵，選單會變成批次版：<em>中斷所選</em>、<em>重建所選</em>、<em>最小化所選</em>、<em>還原所選</em>、<em>回收所選</em>（顯示可回收數量）、<em>靜音所選通知</em>（全部已靜音時改為取消靜音）及<em>移除所選</em>。回收會保留可接續的分格，並略過受保護的分格。"
           },
@@ -5506,7 +5537,7 @@
               "action": "開一個新分格"
             },
             "nthCli": {
-              "action": "指定第 N 種 CLI 開分格"
+              "action": "把下一個分格的 CLI 選成第 N 個"
             },
             "closePane": {
               "action": "關閉焦點分格"
@@ -5590,7 +5621,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供給 CLI agent 的工具",
-          "p1": "分格一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>64 個</strong>（核心 57 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
+          "p1": "分格一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。這一頁依用途分組介紹其中 <strong>{listed} 個</strong>，另外還有 3 份唯讀資源與 3 個提示樣板。工具每一版都會增加，最完整、最新的清單以 agent 自己的 MCP 畫面裡 navide 這個 server 所列為準（例如 Claude Code 的 <code>/mcp</code>）。",
           "h1": "計畫文件",
           "planTools": {
             "plan_list": "列出這個工作區的所有計畫，含階段與待辦進度",
@@ -5628,6 +5659,7 @@
             "scheduler_run_now": "不照時間表、立刻跑一次自己建的 job；執行一開始就回覆，會清除失敗退避，不會移動下次排定的時段，並計入 agent 每天合計 300 次",
             "scheduler_runs": "某個 job 的執行紀錄，新的在前：ok、error 或 skipped 加原因——略過（無視窗、忙碌、每日上限或額度、agent 每日總量、agent job 到期、目標不存在）不算錯誤。任何 job 的紀錄都能讀",
             "cli_permission_settings": "讀寫 CLI 權限略過旗標（yolo）。這是全域設定，不是 pipeline 專屬，只影響之後開的分格；某家 CLI 實際會不會帶旗標要看回傳的 agents[].skipFlag，不是只看全域值",
+            "plugins_developer_backend_call": "僅限開發者模式：呼叫「從資料夾載入」的 Navide 外掛的後端方法，不必先宣告 agent 工具。其餘一律拒絕；每次呼叫都列在它的活動紀錄，也計入自動暫停規則",
             "workspace_open": "在 Navide 裡開啟一個專案；要開成新視窗還是併進已經開著它的視窗，由 Navide 決定",
             "workspace_switch": "把自己所在的視窗切到它本來就持有的另一個專案；被切走的專案，它的分格會繼續跑。視窗裡有 pipeline 正在跑時會拒絕，因為切換會中止它",
             "prompt_list": "使用者在「設定 → Prompt 技能」存的提示技能有哪些；唯讀，新增與編輯是使用者的事",
@@ -5663,6 +5695,8 @@
             "cli_token_stats": "這個工作區目前的 token 用量",
             "cli_list_sessions": "這個工作區還留得住、可以接續的 CLI 對話有哪些——對話比分格活得久，分格關掉、App 重開、分格重建過，紀錄都還在磁碟上。每一列會說它還接不接得起來，以及當初擁有它的分格是不是還開著：還開著的別去接，那會分岔或弄壞它，直接傳訊給那個分格就好",
             "cli_place_pane": "搬動一個分格：換分頁群組、或改掛在另一個分格底下（等同你在側欄拖放，走同一組寫入路徑，所以重開也還在原位）。兩半各自獨立，回傳會說哪一半成功了。不會動到那個分格的 CLI——不送訊息、不中斷、不重啟。只能搬本機的分格",
+            "cli_rename_pane": "幫 CLI 分格改名：同時改標題和其他分格用來定址它的名稱，走與手動改標題相同的檢查和寫入路徑。名稱已被其他分格使用會被拒絕。只能改自己的分格，以及同工作區裡自己開出來的分格。仍指向舊名的排程不會被改寫，只會列在警告裡。只能改本機的分格",
+            "cli_set_model": "切換執行中 CLI 分格的模型。Claude 會打開自己的 /model 選單、選到該模型那一列並按 s（只用於這次 session）；Codex 會輸入 /model 加模型 id。兩者都只改這次 session，對話不中斷，新 session 的預設模型不變。其他 CLI、有指定 effort，或 Claude 選單對不到的模型，會帶新模型重開分格並接回原對話。只切換閒置的分格，不能切換自己的分格。只能切換本機的分格",
             "cli_inbox_summary": "我寄出去的訊息裡，卡住（排隊超過兩分鐘）或已經失敗的有哪些。失敗通知要等寄件的分格閒下來才打得進去，所以連續忙一小時的 agent 一則也收不到——這是它自己回頭查的方式",
             "cli_pending_incoming": "正在排隊等著送進我這裡、還沒進來的訊息有哪些。訊息只在回合之間才會被打進分格，所以一直忙的 agent 正好就是最無從得知的那個；答案不是空的，就是該收個尾讓訊息進來"
           },
@@ -5670,9 +5704,9 @@
           "note4": "同一個工作區裡可以有兩個分格同名，這時候光靠名字說不清要找誰，上面幾個工具會直接以 <code>ambiguous-target</code> 拒絕，而不是隨便挑一個。要指定其中一個，就把 <code>cli_list_targets</code> 回傳的 <code>pane_id</code> 當參數傳給 <code>cli_send</code>、<code>cli_send_and_wait</code>、<code>cli_read_log</code>、<code>cli_get_status</code> 或 <code>cli_wait_idle</code>，這時候位址參數就不用填了。平常還是用名字比較好讀；分格換了新的 CLI 重開之後 id 會換一個，遇到 <code>unknown-pane-id</code> 重新查一次即可。跨裝置的分格沒有本機 id，只能用名字定址。",
           "note5": "<code>cli_send</code> 的位址填 <code>group</code>，不是去找名叫 group 的分格，而是廣播給<strong>自己所在分頁群組</strong>裡的其他分格（同工作區）。這跟裸行協定的 <code>all</code> 不一樣：<code>all</code> 是整個視窗、不分群組。沒有分到任何群組的分格共用同一個隱含群組，所以它們彼此送得到，而不是誰也送不到。回傳的形狀也不一樣：<code>recipients</code> 裡每個收件者各有一個 <code>msg_key</code>，要分別拿去 <code>cli_check_message</code> 查；空的 <code>recipients</code> 代表你的群組裡沒有別人，不是失敗。代價與 <code>all</code> 相同：真的取名叫 group 的分格從此無法用名字定址。",
           "h4": "哪些 CLI 接得到",
-          "p2": "十五家裡目前有 <strong>十家</strong>：Claude Code、Codex、Copilot CLI、Qwen Code、OpenCode、Kilo Code、Kimi Code、Grok CLI、Antigravity CLI、Cursor CLI。接法看那家 CLI 自己提供什麼介面——啟動參數（Claude Code、Codex、Copilot、Qwen）、一個帶著整份設定的環境變數（OpenCode、Kilo），或一份只給這個分格用的設定目錄鏡像（Kimi、Grok、Antigravity）。這三種都<strong>不會動到你自己的 MCP 設定檔</strong>。",
+          "p2": "{total} 家裡目前有 <strong>{mcpCount} 家</strong>：{mcpNames}。接法看那家 CLI 自己提供什麼介面——啟動參數（Claude Code、Codex、Copilot、Qwen）、一個帶著整份設定的環境變數（OpenCode、Kilo），或一份只給這個分格用的設定目錄鏡像（Kimi、Grok、Antigravity）。這三種都<strong>不會動到你自己的 MCP 設定檔</strong>。",
           "note6": "<strong>Cursor 是唯一的例外</strong>：它只讀工作區裡的 <code>.cursor/mcp.json</code>，所以 Navide 會合併寫入那個檔，並把它加進 <code>.git/info/exclude</code>，不會弄髒你的 git 狀態。",
-          "note7": "還沒接上的是 <strong>Aider、Muse Code、Pi</strong>（這三家的 CLI 沒有 MCP 介面）與 <strong>Droid、MiniMax Code</strong>（Navide 尚未接，它們的 CLI 有沒有介面也還沒查證）。這些分格大多仍然可以用裸行輸出協定跟其他分格傳訊，只是沒有 MCP 工具可以呼叫；MiniMax Code 是例外，它連輸出協定都還沒有，只收得到訊息。",
+          "note7": "還沒接上的是 <strong>{notWired}</strong>。其中有些 CLI 本身沒有 MCP 介面，其他的是 Navide 還沒接。這些分格大多仍能用裸行輸出協定傳訊息給其他分格，只是沒有 MCP 工具可呼叫。{receiveOnly} 是例外：連輸出協定也沒有，只能收訊息。",
           "note8": "接線是 <strong>分格啟動當下</strong>做的。所以功能更新後，已經開著的分格還是舊的工具清單——關掉重開才會拿到新的。",
           "h5": "「預覽」面板",
           "previewTools": {
@@ -5681,7 +5715,8 @@
             "preview_list": "讀回這個工作區的變更記錄軌——別的 agent、使用者、以及檔案監看各自做了什麼，最新的在前；可以帶時間游標只讀新增的部分",
             "preview_clear": "清空變更記錄軌；刪掉的是使用者在「預覽」面板上看到的那些行，含檔案監看與使用者自己的操作，無法復原。可以只清某個時間點以前的"
           },
-          "note9": "<strong>跨裝置只有四個工具走得通</strong>：傳訊、傳訊並等待、查狀態、等對方閒下來。讀對方的對話紀錄、送中斷鍵、關掉對方的分格都需要那台機器自己來，所以一律拒絕。而且遠端分格 <strong>沒有本機 id</strong>，三段式名稱是唯一的把手；它的狀態是對方視窗最後一次上傳給 Navide Cloud 的字，接近即時但不是即時，也沒有額度快照（本機的額度快照講的是本機的登入，對別台機器上的分格是錯的答案）。"
+          "note9": "<strong>跨裝置只有四個工具走得通</strong>：傳訊、傳訊並等待、查狀態、等對方閒下來。讀對方的對話紀錄、送中斷鍵、關掉對方的分格都需要那台機器自己來，所以一律拒絕。而且遠端分格 <strong>沒有本機 id</strong>，三段式名稱是唯一的把手；它的狀態是對方視窗最後一次上傳給 Navide Cloud 的字，接近即時但不是即時，也沒有額度快照（本機的額度快照講的是本機的登入，對別台機器上的分格是錯的答案）。",
+          "note10": "這裡沒列出、但一樣有內建的還有：聊天頻道（<code>channels_*</code>）、Navide Marketplace 與 Navide 外掛管理（<code>marketplace_*</code>、<code>plugins_*</code>）、視窗（<code>window_*</code>、<code>workspace_close</code>）、分享連結（<code>share_*</code>）、<code>evolve_report</code> / <code>evolve_retro</code>，以及 <code>pipeline_import_n8n</code>。每個工具在 agent 工具清單裡都有自己的說明。"
         },
         "s2": {
           "title": "方向二：Navide 取用外部 MCP",
@@ -5697,7 +5732,8 @@
           "warn": {
             "p1": "<strong>這裡設定的 server 不會出現在 CLI agent 的工具清單裡。</strong>它們只服務「讀取上下文 → 注入開場提示」這一件事，而且<strong>只在跑流程時</strong>觸發，你手動開的分格完全不會用到。",
             "p2": "想讓 Claude Code 或 Codex 自己能用某個 MCP server（例如讓它直接查 GitHub），請用那個 CLI 自己的 MCP 設定，不是這裡。"
-          }
+          },
+          "p3": "每一列 server 都會顯示狀態與工具數，啟動失敗時還有它最後印出的幾行。透過 Node.js 啟動的 server 在找不到 Node.js 時會標「需要 Node.js」，並提供引導安裝。留空的值（例如環境變數與 header）要在這台電腦上填，永遠不會在裝置之間同步。「對照」會用矩陣列出哪家 CLI 有哪個 server。"
         },
         "s3": {
           "title": "方向三：外部 client 控制 Navide",
@@ -5758,15 +5794,15 @@
           "troubleshooting": {
             "noTools": {
               "symptom": "agent 說它沒有計畫或傳訊的工具",
-              "detail": "那個分格開啟時還沒接上（功能更新前開的），或用的 CLI 屬於尚未接上 MCP 的五家（Aider／Droid／Muse Code／Pi／MiniMax Code）。前者關掉重開即可；後者請改用裸行輸出協定傳訊——MiniMax Code 連這條也沒有，只收得到訊息。"
+              "detail": "那個分格開啟時還沒接上（比更新還早開），或它跑的是還沒接上 MCP 的 {noMcpCount} 家 CLI 之一（{notWired}）。前者關掉重開即可；後者改用裸行輸出協定傳訊息——{receiveOnly} 連這個都沒有，只能收訊息。"
             },
             "serverUnused": {
               "symptom": "設定 → MCP 加了 server，但 agent 用不到",
-              "detail": "那是方向二，只給流程讀文件用。要讓 agent 自己能呼叫，得設定在那個 CLI 自己的 MCP 設定裡。設定 → MCP 下半部的「各 CLI 的 MCP」會唯讀列出每家 CLI 自己設了哪些 server，可以直接對照確認。"
+              "detail": "那是方向二，純粹給流程讀文件用。要讓 agent 自己呼叫，得設定在那家 CLI 自己的 MCP 設定裡。「設定 → MCP」會把每家 CLI 已有的 server 和 Navide 自己的列在一起（唯讀）；切到「對照」就能看哪家 CLI 有哪個。"
             },
             "planLoadFailed": {
               "symptom": "agent 說計畫載入失敗",
-              "detail": "計畫工具都要指定工作區路徑。若 agent 傳的路徑跟分格實際的工作區不同，就會寫到 Navide 看不見的地方。請它改用分格的工作區路徑。"
+              "detail": "沒有傳工作區路徑時，plan 工具就用分格自己的工作區。如果 agent 傳了別的路徑，就會寫到 Navide 可能沒在顯示的專案（工具這時會警告沒有分格在用它）。請它不要帶工作區路徑。"
             },
             "staleIdentity": {
               "symptom": "提示分格身分已失效",
@@ -5796,7 +5832,7 @@
               },
               "actions": {
                 "label": "頂列動作",
-                "text": "「新增 MCP +」從內建目錄加、「新增自訂」手動加一個 server、「重新整理」重新讀取設定檔。"
+                "text": "「+ 新增 MCP」從內建目錄新增、「新增自訂」手動新增，「開啟 MCP 設定」則開啟設定檔。"
               },
               "card": {
                 "label": "目錄卡片",
@@ -5903,6 +5939,11 @@
               "where": "側欄最左緣色軌的飛出選單",
               "what": "新增一個<strong>工作區群組</strong>（管很多專案時才用得到的分類層）。",
               "name": "<code>新增群組</code>"
+            },
+            "agentAvatar": {
+              "name": "Agent 頭像",
+              "where": "＋ 選單的 Agent 標題下",
+              "what": "常駐 Agent 名字的第一個字，底色是它自己的顏色。點了會切到已開啟的 Agent，已關閉的則接續原本的對話。"
             }
           },
           "group": {
@@ -5980,8 +6021,7 @@
               "name": "<code>此名稱由系統依這個 session 的第一句指令自動產生 — 只要你改過名，就不會再被自動命名</code>"
             },
             "globalManager": {
-              "where": "標題文字旁，顯示 <code>🎯 管理</code>",
-              "what": "純記號：這是 pipeline 的總管分格。"
+              "where": "標題文字旁，顯示 <code>🎯 管理</code>"
             },
             "loop": {
               "where": "標題列",
@@ -6028,6 +6068,9 @@
               "name": "<code>↻ 繼續</code> ／ 提示 <code>This session was restored and is waiting at the prompt…</code>",
               "where": "終端機畫面下方",
               "what": "分格是重啟後還原的、停在提示符不動時才出現。按下去送出 <em>continue</em>，把工作接回去。"
+            },
+            "riskPill": {
+              "what": "Navide 觀察到這個 CLI 做了平常不會做的事：連到預期集合以外的位址，或寫出以前沒寫過的未知格式檔案（再次發生時變紅）。點它可看細節、相關程序，支援的話還有<em>{analyze}</em>按鈕。"
             }
           },
           "placeholder": {
@@ -7003,7 +7046,7 @@
           "h1": "Windows",
           "win": {
             "signing": "<strong>安裝檔沒有程式碼簽章。</strong>每一個新版本都會再被 SmartScreen 警告一次，而且 App 內更新也是在不驗證簽章的情況下裝上去的。",
-            "symlinks": "<strong>每個分格一份的 CLI 家目錄、以及受管技能，是用符號連結做出來的</strong>，而 Windows 預設不讓一般程式建立符號連結。要嘛開啟 Windows 的開發人員模式（<em>Settings ▸ For developers</em>），要嘛用系統管理員身分執行 Navide。沒開也不會無聲失敗：受影響的分格會在啟動後印一行黃色的 <code>[mcp]</code> 說明告訴你原因。會碰到這件事的是靠設定檔接 MCP 的那幾家——Antigravity CLI、Grok CLI、Kimi Code。",
+            "symlinks": "<strong>每個分格一份的 CLI 家目錄、以及受管技能，是用符號連結做出來的</strong>，而 Windows 預設不讓一般程式建立符號連結。要嘛開啟 Windows 的開發人員模式（<em>Settings ▸ For developers</em>），要嘛用系統管理員身分執行 Navide。分格專屬家目錄是靠設定檔接 MCP 的那幾家在用——Antigravity CLI、Grok CLI、Kimi Code；沒有權限時，它們的分格啟動後會印一行黃色的 <code>[mcp]</code> 說明原因。受管技能這時也送不到任何一家 CLI，這一點只會記在 Backend 記錄裡。",
             "schedule": "<strong>Schedule 分頁只會列出 Navide 自己的排程（Navide Jobs）。</strong>Navide 讀的是使用者的 crontab 與 macOS 的 launchd，Windows 兩者都沒有；工作排程器（taskschd.msc）是刻意沒有接進來的，因為 Navide 從不建立作業系統的排程工作，而工作排程器本來就在管這台機器上的工作。畫面會直接把這件事寫出來，而不是給你一份空清單。"
           },
           "h2": "Linux",
@@ -7716,6 +7759,7 @@
       "resource-limits": "資源限制",
       "session-archive": "Session 紀錄歸檔",
       "settings-management": "設定管理",
+      "experimental": "實驗功能",
       "theme": "主題",
       "other": "其他"
     },
@@ -7842,7 +7886,7 @@
         "tab-login": "登入",
         "tab-register": "建立帳號",
         "tab-token": "使用 Token",
-        "email": "Email",
+        "email": "電子郵件",
         "password": "密碼",
         "password-placeholder": "至少 8 個字元",
         "display-name": "顯示名稱",
@@ -7976,6 +8020,9 @@
     "cliAgents": {
       "title": "CLI Agents",
       "hint": "啟用並排序新增分格選單中的 CLI agent；順序也會套用到 Ctrl+數字快捷鍵。開啟卡片即可管理該 agent，至少須保留一個啟用。",
+      "acp-title": "ACP（實驗）",
+      "acp-hint": "以 Agent Client Protocol 執行 agent，由 Navide 繪製對話，不顯示 CLI 自己的畫面。＋ 選單會多出「Claude Code（ACP）」，需要 Claude Code ACP adapter（第一次使用時安裝）。實驗功能：權限請求在分格內詢問、agent 暫時沒有 Navide MCP 工具、ACP 分格在重新啟動後不會還原。",
+      "acp-toggle": "在 ＋ 選單提供 ACP agent",
       "drag-hint": "拖曳以排序",
       "search": "搜尋 agent…",
       "filter-label": "篩選 CLI agent",
@@ -8224,7 +8271,7 @@
         "editor_unfoldRecursively": "遞迴展開",
         "git_amend": "修改上一次 commit",
         "git_commit": "Commit",
-        "git_fetch": "Fetch",
+        "git_fetch": "擷取（Fetch）",
         "git_focusAgent": "聚焦 AI 面板",
         "git_generateMessage": "產生 commit 訊息",
         "git_pull": "Pull",
@@ -8253,6 +8300,7 @@
         "workbench_action_focusNextPane": "聚焦下一個分格",
         "workbench_action_focusPipeline": "聚焦 Pipeline",
         "workbench_action_focusPreview": "聚焦預覽面板",
+        "workbench_action_startModelArena": "發起模型擂台",
         "workbench_action_focusPreviousGroup": "聚焦上一個編輯器群組",
         "workbench_action_focusPreviousPane": "聚焦上一個分格",
         "workbench_action_focusSourceControl": "聚焦原始碼控制",
@@ -8293,6 +8341,7 @@
         "workbench_action_rebuildFocusedPane": "重建目前分格",
         "workbench_action_reloadWindow": "重新載入視窗",
         "workbench_action_reopenClosedEditor": "重開剛關閉的編輯器",
+        "workbench_action_reopenClosedWindow": "重新打開剛關閉的視窗",
         "workbench_action_revealFileInOS": "在系統檔案總管中顯示",
         "workbench_action_revealInExplorer": "在 Explorer 中顯示",
         "workbench_action_saveAll": "全部存檔",
@@ -8397,7 +8446,7 @@
           "back-unknown": "重置時間不明",
           "wait": "等待重置"
         },
-        "kind": "API key",
+        "kind": "API 金鑰",
         "list": {
           "aria": "帳號",
           "search": "搜尋帳號",
@@ -8423,7 +8472,7 @@
           "title": "貼上 API key",
           "billing": "這個帳號依用量計費，不會使用訂閱額度。",
           "name": "名稱",
-          "key": "API key",
+          "key": "API 金鑰",
           "key-new": "新的 API key",
           "key-hint": "儲存後不會再顯示。",
           "reminder": "每月預算備註（USD）",
@@ -8489,7 +8538,7 @@
       "delete-confirm": "確定刪除此帳號？",
       "cli": {
         "title": "CLI 帳號",
-        "hint": "按「登入」或「＋ 新增帳號」會開一個暫時的登入分格，在瀏覽器授權後自動關閉。「設為預設」決定新分格用哪個帳號，已開的分格重開前維持原帳號。",
+        "hint": "按「登入」或「＋ 新增帳號」會開一個暫時的登入分格，在瀏覽器授權後自動關閉。「切換到此帳號」會把這個 CLI 的現用登入換成該帳號，新開的分格就用它。若有分格正在用目前的登入執行，Navide 會先詢問，同意後把它們重啟到新帳號並接回原本的對話。",
         "hint-detail": "所有帳號共用你的家目錄，session 與歷史互通；切換時就地替換儲存的憑證，登入也不會動到使用中的帳號。",
         "hint-more": "詳細說明",
         "login-no-workspace": "請先開啟工作區 — 登入需要啟動暫時的登入分格。",
@@ -8505,24 +8554,31 @@
         "agent-login-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
         "agent-login-confirm-cancel": "取消",
         "agent-login-confirm-ok": "開啟登入",
-        "agent-switch-confirm-title": "有 agent 要求切換 CLI 帳號",
-        "agent-switch-confirm-body": "你同意之前什麼都不會切換。這和 Settings → Accounts 的切換是同一個：CLI 會改用另一個帳號；如果有分格正在用它，重啟分格之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
-        "agent-switch-confirm-late": "你同意之後，就算 agent 已經不再等待，切換仍會完成。如果要重啟分格，而提出要求的 agent 也跑在這個 CLI 上，它自己的分格也會被重啟；它收不到結果，重啟後要再查一次帳號狀態。",
-        "agent-switch-confirm-vendor": "CLI",
-        "agent-switch-confirm-from": "切換前帳號",
-        "agent-switch-confirm-to": "切換後帳號",
-        "agent-switch-confirm-caller": "提出要求的分格",
-        "agent-switch-confirm-workspace": "分格所在的工作區",
-        "agent-switch-confirm-pane": "要移動的分格",
-        "agent-switch-confirm-pane-body": "你同意之前什麼都不會切換。只有這個分格會移動：它會在另一個帳號自己的資料夾裡接著原本的對話重新開啟。CLI 目前登入的帳號和其他分格都維持不變。如果這個分格正在工作，停止它之前會再問你一次。沒有回答的話，這個要求會自動關閉。",
-        "agent-switch-confirm-reason": "理由（由 agent 提供）",
-        "agent-switch-confirm-reason-truncated": "agent 的理由超過 300 字，只顯示前 300 字。",
-        "agent-switch-confirm-cancel": "取消",
-        "agent-switch-confirm-ok": "切換帳號",
-        "agent-switch-done": "{agent} 把 {vendor} 從 {from} 切換到 {to}。agent 給的理由：{reason}",
-        "agent-switch-pane-done": "{agent} 把一個分格從 {from} 移到 {to}。目前登入的帳號和其他分格都沒有改變。agent 給的理由：{reason}",
+        "agent-switch-done": "{time}：{agent} 把 {vendor} 從 {from} 切換到 {to}。理由：{reason}",
+        "agent-switch-pane-done": "{time}：{agent} 把分格 {pane} 從 {from} 移到 {to}。目前登入的帳號和其他分格都沒有改變。理由：{reason}",
+        "agent-switch-queued": "{agent} 正在把 {vendor} 切換到 {to}。會先等 {count} 個正在工作的分格做完這一輪，之後自動完成切換。理由：{reason}",
+        "agent-switch-pane-queued": "{agent} 會在分格 {pane} 這一輪結束後，把它移到 {to}。理由：{reason}",
+        "agent-switch-not-done": "{agent} 排隊中的切換（{vendor} → {to}）沒有執行（{status}）。",
+        "switch-log-title": "帳號切換紀錄",
+        "switch-log-hint": "由 agent（cli_account_switch）或聊天室按鈕發起、不經這裡點選的切換。保存 90 天。",
+        "switch-log-empty": "目前沒有切換紀錄。",
+        "switch-log-refresh": "重新整理",
+        "switch-log-col-time": "時間",
+        "switch-log-col-who": "發起者",
+        "switch-log-col-account": "帳號",
+        "switch-log-col-status": "結果",
+        "switch-log-col-reason": "理由",
+        "switch-log-pane": "分格 {pane}",
+        "switch-log-status-switched": "已切換",
+        "switch-log-status-queued": "等待分格閒置",
+        "switch-log-status-superseded": "被較新的要求取代",
+        "switch-log-status-cancelled": "已取消",
+        "switch-log-status-stale": "期間帳號已變更，未切換",
+        "switch-log-status-failed": "未切換",
         "login-complete": "已登入 {email}，帳號已儲存。",
         "login-complete-no-email": "登入完成，帳號已儲存。",
+        "login-pane-done": "{cli} 已登入。按 + 開一個新的 {cli} 分格。",
+        "switch-login-failed": "剛切換到的帳號「{account}」無法登入（Claude Code 的 token 更新被拒絕）。請在任一個 Claude 分格輸入 /login 重新登入一次。",
         "login-step2": "第 1 步完成：{email} 已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入分格裡完成瀏覽器授權。",
         "login-step2-no-email": "第 1 步完成：帳號已儲存。還要再授權一次，讓這個帳號登入到自己的資料夾，請在新開的登入分格裡完成瀏覽器授權。",
         "login-step2-done": "兩步都完成：{email} 已登入，也已登入到自己的資料夾。",
@@ -8545,6 +8601,13 @@
         "refresh-quota-card-hint": "立即重新讀取這個帳號的剩餘額度，略過讀取失敗後的等待時間。只有 CLI 目前登入的帳號，或已登入帳號資料夾的帳號才讀得到。",
         "dir-sign-in": "登入到帳號資料夾",
         "dir-sign-in-hint": "在這個帳號自己的資料夾登入一次，停放時也能即時讀取額度。瀏覽器會再請你授權一次，請使用同一個 email。",
+        "dir-new-panes": "新分格用這個帳號的資料夾",
+        "dir-new-panes-hint": "之後開的新分格會在這個帳號自己的資料夾執行。不會切換目前帳號，已開的分格也不受影響。",
+        "dir-new-panes-active": "新分格目前開在這個帳號的資料夾",
+        "dir-new-panes-clear": "改回跟著目前帳號",
+        "dir-new-panes-unavailable": "這個帳號還沒在自己的資料夾登入，請先按「登入到帳號資料夾」。",
+        "dir-guidance": "想同時用這個帳號，建議按「新分格用這個帳號的資料夾」，不要按「切換到此帳號」。切換會讓所有跟著目前帳號的分格一起換帳號，之後切回來可能要重新登入一次。",
+        "dir-guidance-sign-in-first": "想同時用這個帳號，建議先按「登入到帳號資料夾」，再讓新分格用這個帳號的資料夾，不要按「切換到此帳號」。切換會讓所有跟著目前帳號的分格一起換帳號，之後切回來可能要重新登入一次。",
         "dir-email-mismatch": "帳號資料夾登入的是 {dirEmail}，不是 {expected}。這張卡片上的額度屬於 {dirEmail}。",
         "default-hint": "你原本的登入憑證",
         "default-collapsed": "原始登入（Navide 外）：尚未登入",
@@ -8761,6 +8824,7 @@
     "cloud-agents-plugin-hint": "雲端代理（Grok Bot、dots 等）請到 Navide 市集安裝對應的 Navide 外掛。",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
+    "add-menu-acp": "{label}（ACP）",
     "select-role": "選擇角色…",
     "waiting-backend": "等待後端…",
     "set-workspace-first": "請先設定工作區路徑",
@@ -9803,6 +9867,11 @@
     "skipped-title": "有 {count} 個工作區未重新開啟",
     "skipped-message": "這些工作區連續 3 次無法開啟，為維持程式可用而暫不開啟。你隨時可以自行重新開啟它們。",
     "skipped-ack": "我知道了",
+    "closed-title": "最近關閉的視窗",
+    "closed-reopen": "還原",
+    "closed-others": "還有 {names}",
+    "reopen-missing-title": "找不到 {count} 個資料夾",
+    "reopen-missing-message": "這些資料夾已不存在，重新打開視窗時已略過：",
     "apply": "恢復",
     "dismiss": "忽略",
     "scope-title": "恢復先前的對話",
@@ -9941,6 +10010,10 @@
   "cli-env": {
     "denied": "{label}：{keys} 由 Navide 自己管理，你設的值沒有進到 CLI。",
     "overridden": "{label}：{keys} 收下了，但被 Navide 自己的設定蓋過去，所以這個分格裡實際沒有生效。"
+  },
+  "cli-account-dir": {
+    "links-unavailable": "{label}：Windows 不允許 Navide 把這個帳號資料夾連到其他帳號，所以對話或設定會分開存放。請開啟開發人員模式（設定 → 系統 → 開發人員專用），再重新啟動 Navide。",
+    "resume-fallback": "{label}：這個帳號資料夾裡找不到原本的對話，已改開新對話，並請它先讀之前的對話紀錄再接手。"
   },
   "install-terminal": {
     "input-lost": "輸入沒有送達指令：{error}。之後輸入的內容（例如密碼）都沒有被收到。",
@@ -10105,6 +10178,12 @@
     "use-failed": "無法讓 {label} 改用這個安裝：{error}",
     "use-done": "Navide 之後會從 {path} 啟動 {label}。",
     "autoupdate-failed": "無法變更 {label} 的自動更新設定，設定維持不變。",
+    "update-available": "有新版 {version}",
+    "update-to": "升級到 {version}",
+    "update-blocked-open": "Windows 上 {label} 分格會一直開著程式檔：請先關閉所有 {label} 分格再升級。開著的：{panes}",
+    "update-npm-not-writable": "npm 的全域資料夾需要系統管理員權限。Navide 不會使用 sudo：請改用自己帳號的 Node（例如 nvm），或把 npm prefix 設到家目錄，再升級。",
+    "update-blocked-running": "已有其他 CLI 更新在執行，請等它跑完。",
+    "update-blocked-busy": "所有 {label} 分格閒置後才能更新。未閒置：{panes}",
     "use-this": "改用這個",
     "remove": "移除",
     "autoupdate": "自動更新",
@@ -10169,6 +10248,19 @@
     "use-version-note": "這個動作安全且可還原：只會變更 Navide 啟動的執行檔，不會解除安裝任何套件，也不會降低 macOS 安全性。",
     "remove-installation": "移除此安裝…",
     "removal-blocked": "目前無法移除：找不到另一套可用的安裝。請先修復或安裝另一套，再重新偵測。",
+    "update-current": "目前 {version}",
+    "update-latest": "最新 {version}",
+    "update-to": "升級到 {version}",
+    "update-runs-with": "會在看得到的終端機裡執行：{command}",
+    "update-only-active": "只升級 Navide 正在用的那一份，其他安裝不會動。",
+    "update-no-command": "Navide 無法替這份安裝升級。",
+    "update-npm-not-writable": "npm 的全域資料夾需要系統管理員權限。Navide 不會使用 sudo：請改用自己帳號的 Node（例如 nvm），或把 npm prefix 設到家目錄，再升級。",
+    "update-docs": "照官方說明更新",
+    "update-verify-title": "驗證升級結果",
+    "update-verify-desc": "升級已結束，Navide 已重新偵測版本。",
+    "update-updated": "已升級 {from} → {to}",
+    "update-unchanged": "仍是 {version}：這次升級沒有改變版本",
+    "update-failed": "升級沒有完成：{error}",
     "confirm-remove-title": "確定要移除此安裝嗎？",
     "confirm-remove-desc": "將開啟終端機解除安裝位於 {path} 的 {version}。在終端機輸入「y」確認前，不會移除任何東西。",
     "confirm-remove-keep": "位於 {path} 的可用安裝會保留。",
@@ -10215,7 +10307,6 @@
     "remaining": "剩餘 {pct}",
     "resets-in": "{time} 後重置",
     "window-left": "{label} 剩餘",
-    "window-left-pct": "{label} 剩 {pct}",
     "window-left-used": "{label}：剩 {pct}（已用 {used}）",
     "window-claude-session": "工作階段（5 小時）",
     "window-unlimited": "無限",
@@ -10224,7 +10315,14 @@
     "window-claude-weekly-model": "每週（{scope}）",
     "parked-not-measured-hint": "停放中：Claude Code 只回報目前使用的帳號。把這個帳號登入到自己的資料夾，就能即時讀取額度。",
     "updated": "更新於 {time}",
+    "window-pct-left": "剩 {pct}",
+    "window-reset": "{at} 重置 · {countdown} 後",
+    "window-reset-passed": "{at} 已過重置時間",
+    "data-updated": "資料更新於 {time}（{ago}）",
+    "stale-title": "資料已過期",
+    "stale-detail": "上次成功讀取 {time}（{ago}），下面是當時的數字。按「{action}」取得最新值。",
     "switch-title": "切換帳號",
+    "switch-live-guidance": "這裡會切換所有跟著目前帳號的分格。只想讓新分格用另一個帳號，請到帳號設定，用「新分格用這個帳號的資料夾」。",
     "switch-default": "Default（內建）",
     "switch-low": "額度不足，可切換帳號",
     "exhausted-short": "已用完",
@@ -10260,6 +10358,23 @@
     "failover-mode-off": "關閉",
     "failover-mode-notify": "通知我",
     "failover-mode-auto": "自動切換",
+    "auto-switch-pop-title": "額度用完時",
+    "auto-switch-notify-only": "額度用完只會通知，不會自動換帳號。",
+    "auto-switch-off-only": "不做任何處理，要自己手動換。",
+    "auto-switch-next": "下一個：{name}",
+    "auto-switch-next-none": "目前沒有其他帳號還有額度",
+    "auto-switch-left": "5 小時內還能自動換 {n} 次",
+    "auto-switch-block-hint": "帳號額度用完時 Navide 的做法。和「一般」頁的「額度耗盡時的帳號切換」是同一個設定，改哪一邊都會同步。",
+    "auto-switch-next-headroom": "下一個：{name}（剩 {pct}%）",
+    "auto-switch-order": "接續順序：有最新讀數、剩餘額度最多的帳號優先",
+    "auto-switch-log": "切換紀錄（{n}）›",
+    "auto-switch-log-short": "紀錄 ›",
+    "auto-switch-queued": "切換到 {to} 排隊中：等 {n} 個分格閒置",
+    "auto-switch-queued-pane": "分格 {pane} 切換到 {to} 排隊中：等它閒置",
+    "auto-switch-cancel": "取消排隊",
+    "auto-switch-tag-queued": "排隊→{to}",
+    "auto-switch-tag-next": "下一個",
+    "auto-switch-goto-accounts": "在「帳號」頁查看狀態與切換紀錄 ›",
     "failover-col-cli": "CLI",
     "failover-col-switch": "切換方式",
     "failover-col-resume": "對話",
@@ -10273,6 +10388,7 @@
     "failover-resume-none": "另開新對話",
     "failover-unverified": "尚未以真實帳號驗證",
     "failover-platform-unsupported": "不支援此平台",
+    "failover-no-adapter": "尚無帳號切換轉接器",
     "failover-audit-degraded": "切換稽核紀錄無法寫入；自動切換暫停，直到可以寫入為止。手動切換不受影響。",
     "settings-signing-title": "Antigravity 憑證（maintainer）",
     "settings-signing-hint": "僅開發模式顯示。寫入 ~/navide-signing/usage_secrets.py，讓下次 release build 打包 Antigravity 的公開 installed-app OAuth 常數。不會存進 repo。",
@@ -10988,6 +11104,7 @@
     "token-linked": "已用權杖連結"
   },
   "channels": {
+    "model-switched": "{who} 從聊天室把 {pane} 切到 {model}（{method}）",
     "agent": {
       "title": "agent 的請求",
       "from": "由 {requester} 提出",
@@ -11160,9 +11277,9 @@
       "client_secret": "Client Secret",
       "access_token": "存取權杖",
       "server_url": "伺服器 URL",
-      "homeserver": "Homeserver URL",
+      "homeserver": "主伺服器（Homeserver）URL",
       "domain": "區域",
-      "robot_code": "Robot code"
+      "robot_code": "機器人代碼"
     },
     "secret-stored": "已儲存 ••••••••（留空則保留原值）",
     "remove": "移除",
@@ -11268,7 +11385,7 @@
       "auto-child-hint": "為子分格自動建立的話題；關閉父分格的連線時會一併關閉。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已關閉",
-      "chat-id": "chat {id}"
+      "chat-id": "聊天 {id}"
     }
   },
   "guard": {
@@ -11305,7 +11422,8 @@
       "allow": "放行",
       "allow-audit": "放行並記錄",
       "ask": "要求本機確認",
-      "deny": "拒絕"
+      "deny": "拒絕",
+      "exempt": "豁免"
     },
     "source": {
       "local": "本機",
@@ -11370,7 +11488,15 @@
         "interpreter-inline-code": "直譯器執行內嵌程式碼",
         "stdin-script": "直譯器從 stdin 讀取腳本",
         "unknown-script": "執行 Guard 看不到內容的腳本",
-        "dynamic-path": "檔案路徑不是靜態的"
+        "dynamic-path": "檔案路徑不是靜態的",
+        "credential-pipe-upload": "把 ~/.ssh 裡的檔案 pipe 給網路工具",
+        "plugin-store-write": "寫入、刪除、移動、連結或 chmod Navide 外掛的安裝目錄或信任存放區",
+        "dynamic-stdin-script": "Shell 執行執行時才算出的 here-string",
+        "mcp-registry-write": "MCP 工具修改或刪除 Windows 登錄檔項目",
+        "mcp-process-kill": "MCP 工具結束程序",
+        "heredoc-unparsed": "無法判斷 heredoc 的分隔字或結尾",
+        "untokenizable-shape": "使用分析器無法處理的 shell 語法",
+        "mcp-unknown-mode": "MCP 工具以 Guard 不認得的模式呼叫"
       }
     },
     "branches": {
@@ -11435,6 +11561,11 @@
         "title": "允許例外",
         "warning": "以這些前綴開頭的片段會跳過上面所有內建檢查 —— 只加入你完全信任的指令。封鎖樣式仍然適用，把下載內容 pipe 給 shell 永遠不會被允許。新增時需要確認。",
         "placeholder": "完整的指令前綴，例如 git push origin"
+      },
+      "exempt": {
+        "title": "豁免：讀取憑證再上傳",
+        "warning": "整行符合這些樣式時，「把 ~/.ssh 的檔案 pipe 給網路工具」不再被拒絕 —— 只加入你完全信任的指令。其他檢查與封鎖樣式仍然適用，每次豁免都會記在 Guard 紀錄。新增時需要確認。",
+        "placeholder": "指令樣式或路徑，例如 cat ~/.ssh/deploy.pub {'|'} curl -d {'@'}- https://example.com/*"
       },
       "problem": {
         "empty": "請輸入樣式。",
@@ -12191,7 +12322,18 @@
     "unpin-title": "有 {count} 個要改為跟隨的分格正在執行",
     "unpin-body": "改為跟隨會用目前的登入重開分格，並接續對話。可以等它們跑完再改，或這次先跳過。閒置的分格會立即改。",
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
-    "pin-needs-dir-login": "要把這個分格固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
+    "pin-needs-dir-login": "要把這個分格固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。",
+    "fix-children-title": "把旗下子分格固定到 {account}？",
+    "fix-children-body": "勾選的 Claude 子分格會在 {account} 自己的帳號資料夾重新開啟並接回對話，之後切換帳號時不會跟著換。閒置的立即重開；忙碌中的等這一輪跑完才重開，不會中斷。",
+    "fix-children-parent-follows": "母分格本身仍跟隨帳號切換。",
+    "fix-children-confirm": "固定 {count} 個子分格",
+    "skip-not-claude": "不是 Claude 分格，略過",
+    "skip-no-session": "沒有可接回的對話，略過",
+    "skip-already": "已固定在 {account}，略過",
+    "fix-children-done": "已把 {count} 個子分格固定到 {account}（{skipped} 個略過）。",
+    "fix-children-waiting": "{count} 個忙碌中的子分格會在這一輪結束後重開。",
+    "fix-children-none": "沒有可以固定到 {account} 的子分格。",
+    "fix-children-needs-dir-login": "要把子分格固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗；登入後再按一次。"
   },
   "pluginActivity": {
     "title": "活動",
@@ -12252,6 +12394,8 @@
     "undeclared": {
       "heading": "用了但沒宣告（被 Navide 拒絕）",
       "item": "{address}（{source}）在 {workspace}：{count} 次，最近一次 {date}",
+      "code": "這些呼叫會被 Navide 以 CAPABILITY_DENIED 拒絕，直到 manifest 宣告為止。",
+      "doc": "查看文件",
       "reasons": "原因：{reasons}"
     },
     "unused": {
@@ -12328,6 +12472,109 @@
       "activity": "最近活動",
       "undeclaredCount": "{count} 次沒宣告的使用被拒絕",
       "anomalyCount": "{count} 項異常"
+    },
+    "monitor": {
+      "headless": "隱藏 view 背景執行中（{count}）",
+      "title": "Activity 總覽",
+      "intro": "所有已安裝的 Navide 外掛列在同一張表，每幾秒更新一次。只是紀錄，這裡不會改變 Navide 外掛能做什麼。點開任一列可看完整 Activity。",
+      "empty": "尚未安裝任何 Navide 外掛。",
+      "open": "顯示 {id} 的 Activity",
+      "builtin": "內建",
+      "noHosts": "無",
+      "noBackend": "沒有後端",
+      "hostUndeclared": "{host}（未宣告）",
+      "hostRefused": "{host}（已拒絕）",
+      "status": {
+        "running": "運作中",
+        "disabled": "已停用"
+      },
+      "column": {
+        "plugin": "Navide 外掛",
+        "status": "狀態",
+        "toolCalls": "工具呼叫／分",
+        "capabilityCalls": "能力呼叫／分",
+        "hosts": "網路主機（7 天）",
+        "failures": "連續失敗",
+        "resources": "資源"
+      }
+    },
+    "autoPauses": {
+      "heading": "自動暫停紀錄",
+      "item": "{date} {rule}（{reason}）：{value}，門檻 {threshold} · {detail} · {version}"
+    }
+  },
+  "pluginStop": {
+    "stop": "停止",
+    "confirm": "立即停止",
+    "cancel": "取消",
+    "stopping": "停止中…",
+    "note": "立即停止 {id}：進行中的呼叫會被結束、視圖關閉、後端停止。檔案、授權與資料都保留；要重新啟用請到設定。",
+    "failed": "無法停止 {id}：{error}",
+    "column": "停止",
+    "via": {
+      "settings": "設定的 Activity 總覽",
+      "status-bar": "狀態列",
+      "telegram": "聊天室指令",
+      "mcp": "agent（plugins_disable）",
+      "auto": "Navide 異常規則"
+    },
+    "summary": {
+      "heading": "{date} 從{via}停止。當時：",
+      "inFlight": "進行中的呼叫（已結束）：{count}",
+      "toolCalls": "最近一分鐘工具呼叫：{count}",
+      "capabilityCalls": "最近一分鐘能力呼叫：{count}",
+      "failures": "連續失敗的工具呼叫：{count}",
+      "notRead": "未及時讀到",
+      "hosts": "未宣告或被拒絕的主機：{hosts}",
+      "noHosts": "未宣告或被拒絕的主機：無"
+    },
+    "enable": {
+      "heading": "要重新啟用 {id} 嗎？",
+      "confirm": "啟用"
+    },
+    "all": {
+      "stop": "全部停止",
+      "confirm": "立即全部停止",
+      "note": "立即停止所有運作中的第三方 Navide 外掛，並關閉第三方原生後端與 agent 工具。內建 Navide 外掛照常運作。",
+      "heading": "所有第三方 Navide 外掛都已停止。",
+      "banner": "{date} 從{via}停止：共 {count} 個 Navide 外掛，第三方原生後端與 agent 工具已關閉。",
+      "resume": "全部恢復",
+      "resumeConfirm": "立即全部恢復",
+      "resumeNote": "把各開關恢復成停止前的狀態，並重新啟用這次停止的 Navide 外掛。",
+      "stopFailed": "無法停止：{ids}",
+      "resumeFailed": "無法重新啟用：{ids}"
+    },
+    "rule": {
+      "R1": "工具或能力呼叫過於頻繁",
+      "R2": "未宣告或被拒絕的網路主機",
+      "R3": "連續失敗或反覆重啟",
+      "R4": "資源超過門檻",
+      "R5": "通知分格過於頻繁"
+    },
+    "autoPause": {
+      "label": "Navide 外掛行為異常時自動暫停",
+      "thresholds": "R1 每分鐘超過 {toolCallsPerMinute} 次工具呼叫或 {capabilityCallsPerMinute} 次能力呼叫 · R2 視圖連到未宣告或被拒絕的主機 · R3 連續 {consecutiveFailures} 次工具呼叫失敗，或 10 分鐘內後端重啟 {restartsInTenMinutes} 次 · R4 後端超過資源門檻 · R5 每分鐘超過 {notificationsPerMinute} 則通知。暫停就是停止；要恢復請在這裡重新啟用 Navide 外掛。",
+      "toast": "Navide 自動暫停了 Navide 外掛 {id}：{reason}。請到 設定 → Navide 外掛 查看。",
+      "badge": "已暫停（{rule}）",
+      "because": "因規則 {rule} 暫停：{reason}"
+    },
+    "statusBar": {
+      "label": "Navide 外掛 {running}",
+      "title": "Navide 外掛：立即停止其中一個",
+      "heading": "第三方 Navide 外掛",
+      "openSettings": "開啟 Activity 總覽",
+      "allStopped": "Navide 外掛已全部停止",
+      "allStoppedTitle": "所有第三方 Navide 外掛都已停止；請到設定恢復",
+      "resumeInSettings": "所有第三方 Navide 外掛都已停止。請到設定按「全部恢復」。"
+    }
+  },
+  "pluginNotify": {
+    "switch": "通知 agent 分格",
+    "switchNote": "允許這個 Navide 外掛通知它所在專案的 agent 分格，每分鐘最多 6 則。通知是資料，不會當成指令。預設關閉。",
+    "paneMenu": {
+      "refuse": "拒收 Navide 外掛通知",
+      "accept": "接收 Navide 外掛通知",
+      "title": "拒收期間，可通知 agent 分格的 Navide 外掛無法通知這個分格"
     }
   },
   "backendResource": {
@@ -12472,6 +12719,7 @@
       "web": "可開啟並瀏覽任何網站；網站登入資料會儲存在本機；agent 會使用你在此 Navide 外掛中的登入身分（可代你在網頁上發送請求），並可讀取它開啟的所有網頁內容與登入狀態；你接手後，頁面內已經在跑的 agent 腳本要重新載入才會停止；交給 agent 操作的網頁，此 Navide 外掛本身也能在其中執行腳本並讀取內容與登入狀態；可同時開啟多個網頁，每個網頁都會占用記憶體。",
       "agents": "可看到這個專案裡的 agent 分格、哪個分格開了哪個、訊息的送達紀錄（不含內容）與 session 清單（不含對話內容）",
       "agentMessages": "可讀取這個專案裡 agent 之間訊息的完整內文，內文可能包含程式碼、檔案內容或機密",
+      "agentNotify": "在你於設定開啟後，可以通知這個專案的 agent 分格；通知是資料，不會當成指令",
       "secrets": "Navide 外掛會在本機加密保存它自己的金鑰，Navide 不會上傳、不會顯示",
       "ui": "顯示自己的畫面",
       "agentTools": "提供 agent 可呼叫的工具（唯讀 {read} 個、寫入 {write} 個）",
@@ -12519,6 +12767,15 @@
       },
       "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。",
       "noScanLocal": "Navide 沒有掃描這個檔案，以下只有這個 Navide 外掛自己的宣告。"
+    },
+    "sites": {
+      "heading": "靜態掃描看到這些項目的位置（{count}）",
+      "kind": {
+        "command": "指令 {key}",
+        "host": "主機 {key}",
+        "capability": "能力 {key}"
+      },
+      "hidden": "節錄看起來像金鑰，已隱藏"
     },
     "incompleteReason": {
       "timedOut": "超過掃描時間",
@@ -12776,6 +13033,30 @@
       "confirm": "要從 Navide 市集下架 {plugin} {version} 嗎？",
       "done": "{plugin} {version} 已下架"
     },
+    "members": {
+      "title": "命名空間成員",
+      "desc": "可以在這個命名空間發佈與撤回版本的帳號。只有擁有者能新增或移除發佈者；發佈者不能變更成員或簽章金鑰，並使用命名空間的金鑰簽章。",
+      "account": "帳號",
+      "role": "角色",
+      "added-at": "加入時間",
+      "roles": {
+        "owner": "擁有者",
+        "publisher": "發佈者"
+      },
+      "add-label": "新增發佈者（Navide Cloud 帳號 ID）",
+      "add": "新增發佈者",
+      "add-hint": "對方必須是已核准的開發者。加入後，對方在自己的 Navide 以發佈者身分登入並選擇這個命名空間。",
+      "add-confirm": "讓 {member} 在 {namespace} 發佈與撤回版本？",
+      "added": "{member} 現在可以在這個命名空間發佈",
+      "remove": "移除",
+      "remove-confirm": "把 {member} 從 {namespace} 移除？對方在這個命名空間的發佈者登入會立即失效。",
+      "removed": "已將 {member} 從這個命名空間移除",
+      "publisher-note": "你是這個命名空間的發佈者：可以發佈與撤回它的版本。成員由擁有者管理。",
+      "error": {
+        "not-developer": "這個帳號還不是已核准的開發者，需要先提出申請。",
+        "owner-only": "只有命名空間的擁有者能變更成員。"
+      }
+    },
     "versions": {
       "title": "你上架的版本",
       "refresh": "重新整理",
@@ -12788,9 +13069,22 @@
         "yanked": "已下架"
       }
     },
+    "testplace": {
+      "title": "Testplace",
+      "desc": "在 Navide 市集審核之前，先把測試版交給你挑選的測試者。只有受邀的人看得到、裝得到；只經過自動掃描，發佈後 90 天到期。",
+      "channel": "用 testplace 頻道發佈測試版（?channel=testplace）：",
+      "invites": "邀請是一次性的加入代碼，一位測試者一組；撤銷後該測試者就失去存取權。",
+      "codes": "公開測試代碼讓你設定人數內的測試者用同一組代碼加入；每個套件的第一組代碼要先經過簡易審核：",
+      "promote": "測試完成後，把同一個版本送進 Navide 市集審核：",
+      "owner-only": "邀請、測試代碼、撤銷與升級測試版只限命名空間擁有者；發佈成員可以發佈版本，但不能管理 Testplace。",
+      "owner-only-member": "你是這個命名空間的發佈成員，Testplace 的邀請、測試代碼、撤銷與升級由擁有者操作。",
+      "joined": "我加入的測試",
+      "doc": "Testplace 文件"
+    },
     "error": {
       "not-signed-in": "請先在「開發者帳號」登入。",
       "qualification": "開發者申請需要先通過審核。",
+      "doc": "查看文件",
       "registry": "Navide 市集拒絕了這個動作（{status} {code}）：{message}"
     }
   },
@@ -13127,5 +13421,245 @@
     "trend-7d": "近 7 天每日最高",
     "week-tokens": "本週 Token",
     "day-tokens": "今日 Token"
+  },
+  "agentPane": {
+    "action": {
+      "pause-schedules": "暫停排程",
+      "resume-schedules": "恢復排程",
+      "settings": "Agent 設定…",
+      "wake": "立即喚醒",
+      "wake-none": "沒有啟用中的排程可以喚醒",
+      "wake-title": "立即執行下一個排程（{name}）"
+    },
+    "addMenu": {
+      "closed": "{vendor} · 已關，開分格並接回",
+      "create": "建立",
+      "name-placeholder": "Agent 名稱",
+      "new": "新 Agent（{vendor}）…",
+      "open": "{vendor} · 分格開著，切過去"
+    },
+    "header": {
+      "last-done": "上次完成 {time}",
+      "model": "模型 {model}",
+      "model-default": "預設模型",
+      "more-badges": "還有 {n} 個",
+      "never-done": "尚未完成回合",
+      "next-schedule": "下次 {time}",
+      "next-schedule-title": "下一個排程：{name}，{time}",
+      "turn": "本回合 {minutes} 分",
+      "vendor-since": "{vendor} · 自 {date} 起",
+      "vendor-today": "{vendor} · 今天建立"
+    },
+    "menu": {
+      "channels": "頻道設定…",
+      "close-keep": "關閉分格（身分保留）",
+      "memory-folder": "開啟記憶資料夾",
+      "stop-remove": "停止並移除 Agent…",
+      "stop-remove-body": "這個 Agent 會從 Navide 的 Agent 清單移除，開著的分格也會關閉。對話紀錄與記憶檔仍留在磁碟上，但名稱、顏色與接續 session 的連結不會保留。",
+      "stop-remove-confirm": "停止並移除",
+      "stop-remove-title": "停止並移除「{name}」？",
+      "toggle-panel": "展開／收合控制面板",
+      "wake": "立即喚醒一回合"
+    },
+    "panel": {
+      "channel-unbound": "尚未綁定頻道",
+      "channel-unbound-hint": "用標題列的頻道按鈕綁定",
+      "channels": "頻道",
+      "collapse": "收合控制面板",
+      "expand": "展開控制面板",
+      "memory": "記憶",
+      "memory-empty": "這一版還讀不到",
+      "memory-loading": "讀取中…",
+      "memory-missing": "找不到記憶資料夾",
+      "memory-none": "還沒有記憶",
+      "memory-source": "來源：{path}",
+      "open-folder": "開啟資料夾",
+      "schedule-paused": "暫停",
+      "schedules": "排程",
+      "schedules-empty": "沒有排程指向這個 Agent",
+      "status": "狀態",
+      "status-source": "來源：終端機輸出",
+      "title": "控制面板",
+      "todos": "待辦",
+      "todos-empty": "這一版還讀不到"
+    },
+    "settings": {
+      "channel": "頻道",
+      "channel-closed": "分格開著時才有綁定",
+      "channel-note": "bot 沿用「設定 → 聊天室」；綁定屬於開著的分格。",
+      "closed": "已關",
+      "color": "代表色",
+      "command": "啟動指令",
+      "empty": "還沒有 Agent。從＋選單的 Agent 區新增。",
+      "flags": "模型與旗標",
+      "flags-note": "環境變數與權限開關和「CLI 代理」頁共用；Agent 的金鑰由它自己保管。",
+      "go-channels": "前往「設定 → 聊天室」",
+      "go-cli-agents": "前往「設定 → CLI 代理」",
+      "identity": "身分",
+      "identity-note": "身分存在 Navide；關分格不會刪身分，重開時接回原 session。",
+      "intro": "長駐型 Agent（Hermes Agent、OpenClaw），依身分列出。",
+      "job-on": "開",
+      "list": "我的 Agent",
+      "memory": "記憶位置",
+      "memory-note": "記憶位置由 Agent 自己決定，Navide 不搬不改。",
+      "name": "名稱（＝分格名稱）",
+      "open-pane": "開分格",
+      "pane-closed": "分格已關",
+      "pane-open": "分格開著",
+      "rename-cancel": "取消",
+      "rename-channels": "頻道綁定：{n} 個",
+      "rename-channels-note": "綁定跟著分格、不跟名稱，所以維持不變。",
+      "rename-confirm": "改名",
+      "rename-failed": "這些排程沒有更新：{names}",
+      "rename-no-schedules": "沒有排程用這個名稱。",
+      "rename-schedules": "用名稱「{old}」指向的排程：{n} 個",
+      "rename-title": "把「{old}」改名為「{name}」？",
+      "rename-update": "一併把這些排程改指向新名稱",
+      "resume": "重開時接回 session",
+      "resume-on": "支援",
+      "schedules": "排程",
+      "schedules-note": "在 Tasker 新增排程，對象選這個 Agent 的分格。",
+      "session": "上次 session",
+      "session-none": "尚未取得",
+      "stop-remove": "停止並移除",
+      "switch-to": "切到分格",
+      "unsupported": "不支援",
+      "yolo": "跳過危險指令確認",
+      "yolo-flag": "支援（{flag}），跟隨 YOLO 開關"
+    }
+  },
+  "arena": {
+    "experimental": "Beta",
+    "menu": {
+      "section": "比較",
+      "start": "模型擂台…",
+      "runs": "擂台紀錄（{n}）",
+      "hint": "同一個需求派給 2–4 個模型，各自 worktree 並排比較"
+    },
+    "ctx": {
+      "compare": "用多個模型比較這個需求…"
+    },
+    "settings": {
+      "title": "模型擂台",
+      "hint": "同一個需求同時派給 2–4 個模型，各自在自己的 git worktree 與分格裡做，做完並排比較，再合併你選的那一份。預設關閉。"
+    },
+    "start": {
+      "title": "發起比較",
+      "subtitle": "每個模型從同一個 commit 開始做同一個需求，各自在獨立的 worktree 裡改；合併之前不會動到你的工作目錄。",
+      "task": "需求",
+      "task-placeholder": "描述要每個模型完成的改動…",
+      "base": "起點",
+      "check": "驗收指令",
+      "check-placeholder": "例如 pnpm test:run",
+      "models": "參賽模型（{min}–{max} 個）",
+      "cli": "CLI",
+      "model-default": "{cli} 預設模型",
+      "remove": "移除",
+      "add": "加一個模型",
+      "time-limit": "每格時限（分鐘）",
+      "budget": "每格費用上限（US$）",
+      "estimate": "會開 {panes} 個分格、{panes} 個 worktree。",
+      "estimate-branches": "分支：arena/場次/模型，放在 .agent-team/worktrees/arena-場次/ 下。",
+      "estimate-budget": "最多花費：全部到上限共 US$ {total}。",
+      "starting": "啟動中…",
+      "go": "開始比較",
+      "failed": "無法發起比較。"
+    },
+    "kickoff": {
+      "check": "完成後請執行 `{cmd}`，並回報是否通過。"
+    },
+    "panel": {
+      "title": "模型擂台",
+      "run": "場次",
+      "base": "起點 {branch}＠{sha}",
+      "elapsed": "已經過 {t}",
+      "limits": "上限：每格 {min} 分鐘、US$ {usd}",
+      "dirty-base": "發起時主工作目錄有未提交的改動，這些改動不在各格的起點裡。",
+      "check-note": "驗收指令：{cmd}。由各格自己執行並回報結果。",
+      "empty": "這個工作區還沒有擂台紀錄。"
+    },
+    "run-state": {
+      "running": "進行中",
+      "merged": "已合併",
+      "kept": "保留分支",
+      "closed": "已結束"
+    },
+    "state": {
+      "running": "執行中",
+      "no-pane": "沒有分格",
+      "pane-closed": "分格已關閉",
+      "stopped-user": "你已停止",
+      "stopped-time": "已停止：到時限",
+      "stopped-budget": "已停止：到費用上限"
+    },
+    "col": {
+      "model": "模型",
+      "state": "狀態",
+      "changes": "改動",
+      "tokens": "Token",
+      "cost": "成本",
+      "default-model": "{cli} 預設",
+      "files": "{n} 個檔案",
+      "protected": "動到 {n} 個敏感檔",
+      "cost-unavailable": "沒有成本資料",
+      "rating": "評價",
+      "adopt": "採用"
+    },
+    "action": {
+      "show": "顯示",
+      "stop": "停止",
+      "stop-all": "全部停止"
+    },
+    "tab": {
+      "run": "進度",
+      "compare": "比較",
+      "merge": "合併"
+    },
+    "compare": {
+      "rate": "{n} 星",
+      "adopt": "採用這份",
+      "no-changes": "還沒有任何一格改了檔案。",
+      "protected-hint": "lockfile、套件清單、環境變數、CI 或設定檔：採用前先確認",
+      "unchanged": "這格沒改",
+      "truncated": "差異太長，只顯示前段",
+      "refresh": "重新整理"
+    },
+    "workspace-alias": "擂台 {run}·{id} {model}",
+    "merge": {
+      "mode-whole": "整份採用",
+      "mode-mix": "混搭檔案",
+      "mode-branch": "只留分支",
+      "candidate": "採用哪一格",
+      "squash": "壓成一個 commit（squash）",
+      "file": "檔案",
+      "take-from": "取自",
+      "skip": "不要",
+      "mix-hint": "每個檔案整份取自你選的那一格，組在新分支 arena/場次/mix 上；請確認拼起來仍然相容。",
+      "into": "合併進主工作目錄的 {branch}。",
+      "new-commits": "發起後這個分支又多了 {n} 個 commit；不會自動 rebase。",
+      "already": "這場已經合併過了。",
+      "dirty": "主工作目錄有未提交的改動，請先提交或捨棄。",
+      "wrong-branch": "主工作目錄目前不在這場的起點分支 {branch}。",
+      "empty-mix": "至少選一個檔案。",
+      "confirm-check": "請先確認驗收指令。",
+      "check-confirm": "我已在這個結果上執行 {cmd}，而且通過",
+      "branch-hint": "不合併，保留這格的分支之後再決定。",
+      "go": "合併",
+      "merging": "合併中…",
+      "confirm": "確認：合併進 {branch}",
+      "done": "已合併為 {sha}。",
+      "kept": "已保留分支 {branch}。",
+      "failed": "合併已停止。",
+      "conflicts": "需要你在 Git 面板處理的衝突（不會自動解）："
+    },
+    "cleanup": {
+      "title": "清理",
+      "panes": "關閉擂台分格",
+      "worktrees": "移除 worktree",
+      "branches": "刪除本機分支",
+      "remote": "沒有推送任何分支，所以不用刪遠端分支。",
+      "go": "清理",
+      "done": "已移除 {n} 項。"
+    }
   }
 }

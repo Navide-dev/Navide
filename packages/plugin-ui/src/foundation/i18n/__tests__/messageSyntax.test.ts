@@ -95,6 +95,7 @@ const PLURAL_KEYS = [
   'announce.quota.not-switched',
   'restore.dialog-message',
   'restore.skipped-title',
+  'restore.reopen-missing-title',
   'restore.scope-message',
   'backfill.tidying',
   'reconnect.banner',

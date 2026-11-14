@@ -26,6 +26,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+from ..db_executor import run_in_db_thread
 from . import redact
 from .base import Location
 from .registry import PLATFORMS
@@ -677,7 +678,7 @@ class Mirror:
                     continue
                 parent_id = str(child.get("spawned_by") or b.pane_id)
                 try:
-                    self.m._seams.inherit_taint(cid, parent_id)
+                    await run_in_db_thread(self.m._seams.inherit_taint, cid, parent_id)
                 except Exception:  # noqa: BLE001
                     log.warning("channels: could not inherit taint for %s", cid)
                 if not shows(b.verbosity, "minimal"):
@@ -705,7 +706,7 @@ class Mirror:
                 and not any(b.pane_id == cid for b in self.m.store.bindings()):
             try:
                 loc = await adapter.create_location(root.chat_id, f"↳ {cname}")
-                self.m.store.bind(cid, loc, verbosity=root.verbosity,
+                await run_in_db_thread(self.m.store.bind, cid, loc, verbosity=root.verbosity,
                                   parent_pane_id=str(parent.get("pane_id") or root.pane_id), auto=True)
             except Exception as exc:  # noqa: BLE001 — falls back to prefixed messages in the parent chat
                 self._topic_failed.add(cid)
@@ -780,7 +781,9 @@ class Mirror:
         kids = [p for _, p in self.descendants(pane_id, directory)]
         if cmd == "status":
             root = directory.get(pane_id) or {"name": binding.title or pane_id, "display_status": ""}
-            await self.m._reply(msg, format_tree(root, self.descendants(pane_id, directory)))
+            tree = format_tree(root, self.descendants(pane_id, directory))
+            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id)]),
+                                buttons=await self.m.model_buttons())
             return True
         if cmd == "stop":
             target = match_name(arg, kids + ([directory[pane_id]] if pane_id in directory else []))
@@ -807,8 +810,8 @@ class Mirror:
         import dataclasses
 
         forwarded = dataclasses.replace(msg, text=text)
-        if await self.m._held_by_prompt(forwarded, str(child["pane_id"])):
-            return  # not routed: the chat was told how to answer the child's prompt
+        if await self.m._held_by_prompt(forwarded, str(child["pane_id"]), binding):
+            return  # not routed yet: kept until the child's prompt clears, and the chat told
         await self.m._deliver(forwarded, binding, str(child["pane_id"]))
         await self.m._reply(msg, MSG_ROUTED.format(child=child["name"]))
 

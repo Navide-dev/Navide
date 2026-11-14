@@ -1,7 +1,8 @@
-"""The 「⚠️ pane 正在等確認」 warning a chat gets when it writes to a pane that is
-waiting on a prompt: it carries the prompt's options and buttons itself and
-replies to the original prompt message, so a busy chat that scrolled past the
-prompt can still answer, and jump back to it, from the newest message."""
+"""The 「📥 已收下」 notice a chat gets when it writes to a pane that is waiting on a
+prompt (the text is kept, see test_held_queue): it carries the prompt's options and
+buttons itself and replies to the original prompt message, so a busy chat that
+scrolled past the prompt can still answer, and jump back to it, from the newest
+message."""
 
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ async def _question(env: Env, options: list[str], prompt: str = "Pick one") -> s
 
 
 def _held(calls: list[dict[str, Any]]) -> dict[str, Any]:
-    return next(c for c in reversed(calls) if c["text"].startswith("⚠️ pane 正在等確認"))
+    return next(c for c in reversed(calls) if c["text"].startswith("📥"))
 
 
 async def test_the_warning_lists_the_options_with_buttons_and_quotes_the_prompt(env: Env) -> None:
@@ -53,7 +54,8 @@ async def test_the_warning_lists_the_options_with_buttons_and_quotes_the_prompt(
     assert "Pick one" in held["text"]
     assert "1. Keep" in held["text"] and "2. Discard" in held["text"]
     assert f"回覆 <選項編號> {rid}" in held["text"]
-    assert held["buttons"] == [("1. Keep", f"nv1:{rid}:1"), ("2. Discard", f"nv1:{rid}:2")]
+    assert held["buttons"] == [("1. Keep", f"nv1:{rid}:1"), ("2. Discard", f"nv1:{rid}:2"),
+                               mgr_mod.BUSY_BUTTONS[0]]
     assert held["reply_to"] == mid
     assert env.fake.delivered[-1][1] == "go"  # the held text itself was not delivered
 
@@ -66,7 +68,7 @@ async def test_a_permission_warning_carries_allow_and_deny(env: Env) -> None:
     await env.inbound("hello?")
     held = _held(calls)
     assert "Allow Bash(npm run build)?" in held["text"]
-    assert held["buttons"] == [("允許", f"nv1:{rid}:y"), ("拒絕", f"nv1:{rid}:n")]
+    assert held["buttons"] == [("允許", f"nv1:{rid}:y"), ("拒絕", f"nv1:{rid}:n"), mgr_mod.BUSY_BUTTONS[0]]
 
 
 async def test_a_button_on_the_warning_answers_the_prompt(env: Env) -> None:
@@ -104,8 +106,8 @@ async def test_a_warning_in_another_chat_keeps_the_old_hint(env: Env) -> None:
     req.loc = dataclasses.replace(req.loc, thread_id="99")
     await env.inbound("are you there?")
     held = _held(calls)
-    assert held["text"] == mgr_mod.MSG_HELD_BY_PROMPT.format(how=f"回覆 <選項編號> {rid}")
-    assert not held["buttons"] and "reply_to" not in held
+    assert held["text"].endswith(f"\n回覆 <選項編號> {rid}")
+    assert held["buttons"] == [mgr_mod.BUSY_BUTTONS[0]] and "reply_to" not in held
 
 
 def test_held_text_clips_a_long_prompt() -> None:

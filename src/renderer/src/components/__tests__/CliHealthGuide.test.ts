@@ -1,10 +1,31 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import CliHealthGuide from '../CliHealthGuide.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
-import type { CliHealthStatus } from '../../composables/useOnboarding'
+import type { CliHealthEntry, CliHealthStatus, OnboardStatus } from '../../composables/useOnboarding'
+
+// The update runs in an embedded xterm; happy-dom has no canvas for it.
+vi.mock('@xterm/xterm', () => ({
+  Terminal: class {
+    cols = 100
+    rows = 24
+    loadAddon(): void {}
+    open(): void {}
+    onData(): { dispose(): void } { return { dispose(): void {} } }
+    write(): void {}
+    reset(): void {}
+    focus(): void {}
+    dispose(): void {}
+  },
+}))
+vi.mock('@xterm/addon-fit', () => ({
+  FitAddon: class {
+    fit(): void {}
+    dispose(): void {}
+  },
+}))
 
 const health: CliHealthStatus = {
   entries: [{
@@ -532,6 +553,109 @@ describe('CliHealthGuide', () => {
       expect(wrapper.emitted('resolved')).toBeUndefined()
       // The button is usable again for another try.
       expect(wrapper.get('.ch-verify button').attributes('disabled')).toBeUndefined()
+    })
+  })
+
+  describe('updating the install Navide runs (0.2.42)', () => {
+    const plan = { manager: 'npm' as const, command: '/Users/test/.nvm/bin/npm install -g @anthropic-ai/claude-code@2.2.0', reason: '' as const }
+
+    function withUpdate(entry: Partial<CliHealthEntry>): CliHealthStatus {
+      return { ...health, entries: [{ ...health.entries[0], latest_version: '2.2.0', update_plan: plan, ...entry }] }
+    }
+
+    function afterStatus(version: string): OnboardStatus {
+      const updated = withUpdate({ latest_version: '' })
+      updated.entries[0].candidates = updated.entries[0].candidates.map((candidate) =>
+        candidate.is_primary ? { ...candidate, version } : candidate)
+      return {
+        deps: [], models: [], model_catalog: [], complete: true,
+        gate: {
+          foundation_ready: true, has_any_cli: true, analyzer_ready: false, ollama_ok: false,
+          ollama_service_up: false, has_model: false, all_required_ready: true, suggested_model: '',
+        },
+        cli_health: updated,
+      }
+    }
+
+    function mountGuide(initialHealth: CliHealthStatus, gate = { blocked: false, reason: '', busy_panes: [] as string[] }) {
+      const mock = createMockBackend('connected')
+      mock.setResponse('onboarding.update_gate', { ok: true, ...gate })
+      mock.setResponse('onboarding.run', { ok: true, run_id: 'run-1', command: plan.command })
+      wrapper = mount(CliHealthGuide, {
+        props: { backend: mock.backend, initialHealth },
+        global: { plugins: [i18n] },
+      })
+      return mock
+    }
+
+    it('shows current → latest and the update on the active binary only', async () => {
+      mountGuide(withUpdate({}))
+      await flushPromises()
+      const blocks = wrapper!.findAll('[data-testid="cli-health-update"]')
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].text()).toContain(i18n.global.t('cli-health.update-current', { version: '2.1.210' }))
+      expect(blocks[0].text()).toContain(i18n.global.t('cli-health.update-latest', { version: '2.2.0' }))
+      expect(blocks[0].text()).toContain(plan.command)
+      expect(wrapper!.get('.ch-update-btn').text()).toBe(i18n.global.t('cli-health.update-to', { version: '2.2.0' }))
+    })
+
+    it('runs the update, then verifies the version it left behind', async () => {
+      const mock = mountGuide(withUpdate({}))
+      await flushPromises()
+      mock.setResponse('onboarding.status', afterStatus('2.2.0'))
+      await wrapper!.get('.ch-update-btn').trigger('click')
+      await flushPromises()
+      expect(mock.sent).toContainEqual(expect.objectContaining({
+        type: 'onboarding.run',
+        payload: expect.objectContaining({ kind: 'maintenance', agent_key: 'claude', action: 'update' }),
+      }))
+      mock.emit('terminal.exit', { terminal_session_id: 'run-1', exit_code: 0 })
+      await flushPromises()
+      expect(wrapper!.get('.ch-steps li.active').text()).toContain(i18n.global.t('cli-health.step.verify'))
+      expect(wrapper!.get('[data-testid="cli-health-update-result"]').text()).toContain(
+        i18n.global.t('cli-health.update-updated', { from: '2.1.210', to: '2.2.0' }))
+      expect(mock.sent).toContainEqual(expect.objectContaining({ type: 'onboarding.status', payload: { fresh: true } }))
+    })
+
+    it('says so when the update left the version unchanged', async () => {
+      const mock = mountGuide(withUpdate({}))
+      await flushPromises()
+      mock.setResponse('onboarding.status', afterStatus('2.1.210'))
+      await wrapper!.get('.ch-update-btn').trigger('click')
+      await flushPromises()
+      mock.emit('terminal.exit', { terminal_session_id: 'run-1', exit_code: 0 })
+      await flushPromises()
+      expect(wrapper!.get('[data-testid="cli-health-update-result"]').text()).toContain(
+        i18n.global.t('cli-health.update-unchanged', { version: '2.1.210' }))
+    })
+
+    it('cannot be pressed while that CLI has a busy pane, and says which', async () => {
+      mountGuide(withUpdate({}), { blocked: true, reason: 'panes-busy', busy_panes: ['Claude 審查'] })
+      await flushPromises()
+      expect(wrapper!.get('.ch-update-btn').attributes('disabled')).toBeDefined()
+      expect(wrapper!.get('[data-testid="cli-health-update-gate"]').text()).toBe(
+        i18n.global.t('cli-manage.update-blocked-busy', { label: 'Claude Code', panes: 'Claude 審查' }))
+    })
+
+    it('links the vendor docs when Navide has no command for this install', async () => {
+      mountGuide(withUpdate({ docs_url: 'https://example.invalid/docs', update_plan: { manager: '', command: '', reason: 'unknown-install' } }))
+      await flushPromises()
+      expect(wrapper!.find('.ch-update-btn').exists()).toBe(false)
+      expect(wrapper!.get('.ch-docs').attributes('href')).toBe('https://example.invalid/docs')
+      expect(wrapper!.text()).toContain(i18n.global.t('cli-health.update-no-command'))
+    })
+
+    it('explains a root-owned npm folder instead of offering sudo', async () => {
+      mountGuide(withUpdate({ update_plan: { manager: 'npm', command: '', reason: 'npm-prefix-not-writable' } }))
+      await flushPromises()
+      expect(wrapper!.find('.ch-update-btn').exists()).toBe(false)
+      expect(wrapper!.text()).toContain(i18n.global.t('cli-health.update-npm-not-writable'))
+    })
+
+    it('shows nothing about updates when no newer release is known', async () => {
+      mountGuide(health)
+      await flushPromises()
+      expect(wrapper!.find('[data-testid="cli-health-update"]').exists()).toBe(false)
     })
   })
 })

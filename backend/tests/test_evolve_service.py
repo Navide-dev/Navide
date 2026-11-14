@@ -1757,6 +1757,24 @@ def quick_retro(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ev, "RETRO_POLL_S", 0.01)
 
 
+@pytest.fixture
+def patient_retro(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A limit no slow runner reaches, for tests that answer before it."""
+    monkeypatch.setattr(ev, "RETRO_WAIT_S", 60.0)
+    monkeypatch.setattr(ev, "RETRO_POLL_S", 0.01)
+
+
+async def _until_asked(env, task: asyncio.Task, pane_id: str = "w1") -> str:
+    """Wait for the ask itself rather than a fixed number of ticks: the store
+    hops before it take as long as the runner's thread pool takes."""
+    async def asked() -> None:
+        while not any(p == pane_id for p, _t in env.host.sent):
+            assert not task.done(), task.result()
+            await asyncio.sleep(0.01)
+    await asyncio.wait_for(asked(), 30)
+    return _retro_token(env, pane_id)
+
+
 def test_reclaim_retro_settings_default_off() -> None:
     assert ev.DEFAULTS["reclaim_retro"] is False and ev.DEFAULTS["reclaim_retro_max_per_day"] == 3
     old = {k: v for k, v in ev.DEFAULTS.items() if not k.startswith("reclaim_")}
@@ -1780,15 +1798,11 @@ async def test_switched_off_nothing_is_asked(env, quick_retro) -> None:
     assert answer == {"ok": True, "asked": False, "reason": "off"} and env.host.sent == []
 
 
-async def test_a_long_dispatched_pane_writes_three_masked_lines(env, quick_retro) -> None:
+async def test_a_long_dispatched_pane_writes_three_masked_lines(env, patient_retro) -> None:
     await enable(env, env.a, reclaim_retro=True)
     _worker(env)
     task = asyncio.create_task(env.service.retro_request(env.a, "w1"))
-    for _ in range(50):
-        await asyncio.sleep(0.01)
-        if env.host.sent:
-            break
-    token = _retro_token(env)
+    token = await _until_asked(env, task)
     assert "evolve_retro" in env.host.sent[-1][1] and "three lines" in env.host.sent[-1][1]
     refused = await env.service.retro_submit("w1", "0" * 32, ["x"])
     assert refused["ok"] is False
@@ -1841,20 +1855,17 @@ async def test_no_answer_times_out_and_the_daily_limit_holds(env, quick_retro) -
     assert (await env.service.retro_request(env.a, "w3"))["asked"] is True
 
 
-async def test_a_busy_pane_is_waited_for_until_idle_or_the_limit(env, quick_retro) -> None:
+async def test_a_busy_pane_is_waited_for_until_idle_or_the_limit(env, patient_retro) -> None:
+    # The limit half is test_no_answer_times_out_and_the_daily_limit_holds.
     await enable(env, env.a, reclaim_retro=True)
     _worker(env)
     env.host.panes["w1"].busy = True
     task = asyncio.create_task(env.service.retro_request(env.a, "w1"))
-    for _ in range(50):
-        await asyncio.sleep(0.01)
-        if env.host.sent:
-            break
-    await env.service.retro_submit("w1", _retro_token(env), ["a", "b", "c"])
+    assert (await env.service.retro_submit("w1", await _until_asked(env, task), ["a", "b", "c"]))["ok"] is True
     await asyncio.sleep(0.05)
     assert not task.done()  # written, but the turn has not ended
     env.host.panes["w1"].busy = False
-    answer = await asyncio.wait_for(task, 1)
+    answer = await asyncio.wait_for(task, 30)
     assert answer["collected"] is True and answer["idle"] is True
 
 

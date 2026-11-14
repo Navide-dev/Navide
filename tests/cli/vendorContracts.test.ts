@@ -32,9 +32,12 @@ const contracts = [
   { key: 'muse', binary: 'muse', permission: '--disable-approval', resume: 'muse resume session-123', model: true, effort: '--reasoning-effort high', paste: false, fullScreen: false, silence: false },
   { key: 'mcode', binary: 'mcode', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'goose', binary: 'goose', permission: '', resume: 'goose session -r --session-id session-123', model: false, effort: null, paste: true, fullScreen: false, silence: false },
+  // `--trust-all-tools` is a flag of the `chat` subcommand, and `--v3` pins
+  // the harness Navide's Stop hook is written for.
+  { key: 'kiro', binary: 'kiro-cli', command: 'kiro-cli chat --v3', permission: '--trust-all-tools', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'devin', binary: 'devin', permission: '--permission-mode dangerous', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
-  { key: 'openclaw', binary: 'openclaw', permission: '', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
-  { key: 'hermes', binary: 'hermes', permission: '--yolo', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'openclaw', binary: 'openclaw tui --local', permission: '', resume: 'openclaw tui --local --session session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'hermes', binary: 'hermes chat', permission: '--yolo', resume: 'hermes chat --continue session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },
 ] as const
 
 describe('frontend CLI contract inventory', () => {
@@ -49,7 +52,7 @@ describe('frontend CLI contract inventory', () => {
     it(`frontend contract ${contract.key}`, ({ task }) => {
       expect.hasAssertions()
       const spec = CLI_AGENT_SPECS.find((candidate) => candidate.agentKey === contract.key)!
-      expect(spec.defaultCommand).toBe(contract.binary)
+      expect(spec.defaultCommand).toBe('command' in contract ? contract.command : contract.binary)
       expect(spec.skipPermissionFlag ?? '').toBe(contract.permission)
       expect(modelArgsFor({ spec, request: { model: 'provider/model-1', effort: '' } })).toEqual(
         contract.model ? { ok: true, args: '--model provider/model-1' } : { ok: false, refusal: { kind: 'model-unsupported' } },

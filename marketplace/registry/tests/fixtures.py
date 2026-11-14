@@ -141,3 +141,9 @@ def build_v2_package(
         for path, data in (extra_files or {}).items():
             zf.writestr(path, data)
     return buffer.getvalue()
+
+
+def without_sites(entries: list[dict]) -> list[dict]:
+    """Scanner 1.2.0 report entries without their additive ``sites``, so an
+    assertion written for a 1.1.0 report keeps its expected value."""
+    return [{key: value for key, value in entry.items() if key != "sites"} for entry in entries]

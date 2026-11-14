@@ -1,5 +1,6 @@
 import { LEGAL_LABELS } from '../shared/legalLinks'
 import type { LegalRoute } from '../shared/legalLinks'
+import type { DeveloperMenuItem } from '../shared/marketplaceDeveloper'
 import { hostStrings, type HostStringTable } from './hostLocale'
 
 /**
@@ -50,11 +51,17 @@ export interface MenuStrings {
   resourceManager: string
   turnStats: string
   tokenMonitor: string
+  reopenClosedWindow: string
+  recentlyClosedWindows: string
+  noRecentlyClosedWindows: string
+  /** A closed window's menu label: its workspace and how many more it held. */
+  windowWithOthers: (name: string, count: number) => string
   repo: string
   reportIssue: string
   shortcuts: string
   whatsNew: string
   welcomeTour: string
+  developers: Record<DeveloperMenuItem, string>
   legal: Record<LegalRoute, string>
 }
 
@@ -82,11 +89,24 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: 'Resource Manager',
     turnStats: 'Turn Stats',
     tokenMonitor: 'Token Monitor',
+    reopenClosedWindow: 'Reopen Closed Window',
+    recentlyClosedWindows: 'Recently Closed Windows',
+    noRecentlyClosedWindows: 'No Recently Closed Windows',
+    windowWithOthers: (name, count) => `${name} + ${count} more`,
     repo: 'Navide on GitHub',
     reportIssue: 'Report an Issue…',
     shortcuts: 'Keyboard Shortcuts',
     whatsNew: 'What’s New…',
     welcomeTour: 'First-Run Tour…',
+    developers: {
+      title: 'Developers',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': 'Navide Plugin Development Guide',
+      'plugin-development-v2': 'Navide Plugin API v2 Reference',
+      'marketplace-publishing': 'Publishing to the Navide Marketplace',
+      'developer-settings': 'Developer Settings…',
+      testplace: 'Testplace…'
+    },
     // The legal table is the one place those titles are written; English reads
     // them straight from it rather than keeping a second copy in step.
     legal: LEGAL_LABELS
@@ -114,11 +134,24 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: 'リソース管理',
     turnStats: 'ターン別使用量',
     tokenMonitor: 'トークンモニター',
+    reopenClosedWindow: '閉じたウィンドウを開き直す',
+    recentlyClosedWindows: '最近閉じたウィンドウ',
+    noRecentlyClosedWindows: '最近閉じたウィンドウはありません',
+    windowWithOthers: (name, count) => `${name} ほか ${count} 件`,
     repo: 'GitHub で Navide を見る',
     reportIssue: '問題を報告…',
     shortcuts: 'キーボードショートカット',
     whatsNew: '新機能…',
     welcomeTour: 'はじめてのツアー…',
+    developers: {
+      title: '開発者',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': 'Navide プラグイン開発ガイド',
+      'plugin-development-v2': 'Navide プラグイン API v2 リファレンス',
+      'marketplace-publishing': 'Navide マーケットプレイスへの公開',
+      'developer-settings': '開発者設定…',
+      testplace: 'Testplace…'
+    },
     legal: {
       privacy: 'プライバシー',
       security: 'セキュリティポリシー',
@@ -151,11 +184,24 @@ export const MENU_STRINGS: HostStringTable<MenuStrings> = {
     resourceManager: '資源控管',
     turnStats: '每輪消耗',
     tokenMonitor: 'Token 監看',
+    reopenClosedWindow: '重新打開剛關閉的視窗',
+    recentlyClosedWindows: '最近關閉的視窗',
+    noRecentlyClosedWindows: '沒有最近關閉的視窗',
+    windowWithOthers: (name, count) => `${name} 與其他 ${count} 個工作區`,
     repo: '在 GitHub 上的 Navide',
     reportIssue: '回報問題…',
     shortcuts: '鍵盤快捷鍵',
     whatsNew: '新版更新…',
     welcomeTour: '首次使用導覽…',
+    developers: {
+      title: '開發者',
+      'build-for-navide': 'Build for Navide',
+      'plugin-development': 'Navide 外掛開發指南',
+      'plugin-development-v2': 'Navide 外掛 API v2 參考',
+      'marketplace-publishing': '發佈到 Navide 市集',
+      'developer-settings': '開發者設定…',
+      testplace: 'Testplace…'
+    },
     // The pages themselves are served in English; these label the entrance,
     // not the destination's language, and Settings already says 隱私權 for the
     // same link — a menu reading "Privacy" next to it is the real mismatch.

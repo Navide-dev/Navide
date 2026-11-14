@@ -114,6 +114,12 @@ const expiresLabel = computed(() =>
   current.value ? new Date(current.value.expires_at * 1000).toLocaleTimeString() : '',
 )
 
+// A request may arrive while this window is behind another one, minimized or
+// not focused: bring it to the front when the dialog opens so it is seen.
+watch(() => current.value !== null, (open) => {
+  if (open) void window.agentTeam?.focusSelf?.()
+})
+
 watch(() => current.value?.approval_id, () => {
   error.value = ''
   failed.value = false

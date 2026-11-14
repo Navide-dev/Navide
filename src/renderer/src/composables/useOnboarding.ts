@@ -32,10 +32,31 @@ export interface OnboardDep {
   update_cmd: string
   doctor_cmd: string
   autoupdate_env: string
+  /** The same switch as launch arguments (codex's `-c …`). A dep with these
+   *  has its update gated: one at a time, its panes idle. Absent on an older
+   *  backend. */
+  autoupdate_args?: string[]
   autoupdate_policy: AutoupdatePolicy
+  /** A newer release than `version`; '' when none or unknown. Absent on an
+   *  older backend. */
+  latest_version?: string
+  /** How "update" runs on the install Navide launches (agent CLIs, full
+   *  probe only). Absent on an older backend. */
+  update_plan?: UpdatePlan | Record<string, never>
   /** The install the user chose for Navide to launch; '' = the PATH default.
    *  Absent on an older backend. */
   binary_override?: string
+}
+
+/**
+ * The update the backend picked for the install Navide launches, by how that
+ * install got there: the npm beside it, Homebrew, or the CLI's own command.
+ * `command` is '' when Navide cannot update it; `reason` then says why.
+ */
+export interface UpdatePlan {
+  manager: '' | 'npm' | 'homebrew' | 'vendor'
+  command: string
+  reason: '' | 'npm-prefix-not-writable' | 'no-update-command' | 'unknown-install'
 }
 
 export interface OnboardGate {
@@ -91,6 +112,10 @@ export interface CliHealthEntry {
   docs_url: string
   /** npm package the backend judges ownership by; '' when not npm-installed. */
   npm_package: string
+  /** The active install's newer release ('' = none or unknown) and how it
+   *  would be updated. Absent on an older backend. */
+  latest_version?: string
+  update_plan?: UpdatePlan | Record<string, never>
   update_state: CliUpdateRecord[]
   candidates: CliHealthCandidate[]
 }
@@ -160,6 +185,19 @@ export interface InstallResult {
   cancelled?: boolean
   /** The request itself failed (timeout, lost connection): `error` says why. */
   unanswered?: boolean
+  /** A gated update the backend refused to start (see UpdateGate). */
+  gate?: UpdateGate
+  /** Why an update has no command, e.g. 'npm-prefix-not-writable'. */
+  reason?: string
+}
+
+/** Why a gated CLI update may not start now (onboarding.update_gate). */
+export interface UpdateGate {
+  blocked: boolean
+  /** 'panes-open': Windows, where even an idle pane holds the binary open. */
+  reason: '' | 'update-running' | 'panes-busy' | 'panes-open'
+  /** Names of this CLI's panes that are not idle (open, for 'panes-open'). */
+  busy_panes: string[]
 }
 
 /** The command running (or just finished) in this surface's install terminal. */
@@ -705,6 +743,16 @@ export function useOnboarding(backend: ReturnType<typeof useBackend>) {
     return true
   }
 
+  /** Whether a gated update may start now; null when the backend did not say. */
+  async function updateGate(agentKey: string): Promise<UpdateGate | null> {
+    try {
+      const resp = await backend.send<UpdateGate & { ok: boolean }>('onboarding.update_gate', { agent_key: agentKey })
+      return resp.payload?.ok ? resp.payload : null
+    } catch {
+      return null
+    }
+  }
+
   /**
    * Stop (or resume) raising the guided-install prompt for one CLI. Declining
    * a prompt is deliberately NOT the same as this: the prompt keeps coming
@@ -757,7 +805,7 @@ export function useOnboarding(backend: ReturnType<typeof useBackend>) {
     run, runBusy, runFallback, attachRunOutput, cancelRun, runInput, runResize,
     dismissRun, openFallbackInTerminal,
     refresh, install, pullModel, startOllamaService, runMaintenance,
-    setAutoupdatePolicy, dismissInstallPrompt, dispose,
+    setAutoupdatePolicy, updateGate, dismissInstallPrompt, dispose,
     deps, foundationDeps, cliDeps, analyzerDeps, models, modelCatalog, gate,
     foundationReady, hasAnyCli, analyzerReady, allRequiredReady, ollamaServiceUp,
     cliHealth, installPromptDismissed,

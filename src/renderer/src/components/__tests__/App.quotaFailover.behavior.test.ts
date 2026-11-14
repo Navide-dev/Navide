@@ -469,7 +469,7 @@ describe('manual hot account change consumed by the next health tick', () => {
       forcedRestartAgentKey: () => null, fireLoopResume: vi.fn(),
       loopFailoverResumeArmed: new Map(), loopResumesAfterFailover: () => false,
     }
-    const fns = appFunctions(['verifiedHotSwitchedPanes', 'paneQuotaReading', 'clearPaneUsageLimits', 'clearPaneUsageLimit', 'checkPaneUsageLimit', 'raiseFromQuotaReading'], scope)
+    const fns = appFunctions(['verifiedHotSwitchedPanes', 'paneQuotaReading', 'clearPaneUsageLimits', 'clearPaneUsageLimit', 'checkPaneUsageLimit', 'raiseFromQuotaReading', 'clearPaneLoginExpired'], scope)
     const changed = backendHandler('cli_profiles.changed', { ...scope, ...fns })
     const commit = quotaCommitHandler({ ...scope, ...fns })
     return { panes, readings, watcher, report, fns, changed, commit, snap }

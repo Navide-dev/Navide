@@ -218,3 +218,22 @@ def test_projection_walks_the_signal_table_once_however_many_panes(store):
     result = project(snap, panes, 160)
     assert len(result["pane"]["signals"]) == 1
     assert result["other"]["signals"] == []
+
+
+def test_a_sweep_that_does_not_commit_leaves_no_trace(store):
+    """Observations wait in one transaction until the sweep commits; a sweep
+    that fails at the end keeps nothing, in the database or in memory."""
+    network(store, pane_id="before")
+    with pytest.raises(RuntimeError):
+        with store.sweep():
+            with store.observation():
+                network(store, pane_id="lost")
+            raise RuntimeError("the commit failed")
+    panes = {value["pane"] for value in store.records["signals"].values()}
+    assert panes == {"before"}
+    assert {value["pane"] for value in store.snapshot()["signals"].values()} == {"before"}
+    reopened = Database(store.db.path)
+    try:
+        assert {value["pane"] for value in CliRiskStore(reopened).records["signals"].values()} == {"before"}
+    finally:
+        reopened.close()

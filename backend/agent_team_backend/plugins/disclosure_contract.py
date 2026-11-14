@@ -42,6 +42,7 @@ DISCLOSURE_RISK_RULES = (
     ("system.agents", "medium"),
     ("system.agentMessages", "high"),
     ("system.secrets", "high"),
+    ("system.agentNotify", "high"),
     ("shell.allowlist", "high"),
     ("shell.executables", "high"),
     ("nativeBackend", "high"),
@@ -244,6 +245,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         present.add("system.agentMessages")
     if "secrets" in system:
         present.add("system.secrets")
+    if "agentNotify" in system:
+        present.add("system.agentNotify")
     if shell and shell["mode"] == "allowlist":
         present.add("shell.allowlist")
     if declared_executables:
@@ -283,6 +286,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         clauses.append({"key": "agentMessages", "params": {}})
     if "secrets" in system:
         clauses.append({"key": "secrets", "params": {}})
+    if "agentNotify" in system:
+        clauses.append({"key": "agentNotify", "params": {}})
     if "ui" in system:
         clauses.append({"key": "ui", "params": {}})
     if tools:

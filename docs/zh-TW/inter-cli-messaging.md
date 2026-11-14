@@ -917,3 +917,9 @@ resume 的 CLI，但它還沒顯示收到。Messages 面板那一列顯示為 `d
 ### 同一個 bot token 只能一個消費者
 
 Telegram bot 的 `getUpdates` 只允許一個收訊者。不要把同一個 bot 同時給 Claude Code `--channels` 或其他程式使用：Navide 會回報衝突（409）並退避，但兩邊會互搶訊息。Navide 也會拒絕兩個平台／帳號同時使用同一個 token。
+
+Telegram 為每個 bot 的 update 依序編號，所以有訊息沒送到 Navide 時（被其他程式確認走，或 Navide 離線超過 24 小時），Navide 會發現跳號，每次都寫進 log，並計入 bot 的狀態（`missed_updates`、`last_missed_at`）。只有在上一則 update 是 24 小時內收到的（超過一週沒有 update 時，Telegram 會隨機挑下一個編號），而且同一個 bot 一小時內還沒提醒過時，才會告訴這個 bot 綁定的每個聊天室有幾則被取走，讓傳送者知道要重傳。
+
+### 訊息送進 pane 之前都會保留
+
+聊天訊息在 bot 向平台確認之前就先寫進 Navide 的資料庫，直到送進 pane，或已經告訴聊天室它的結果，才會刪除。中途 Navide 重啟或當掉，下次啟動後會補送；超過一天的則改為告訴聊天室沒有送出。pane 的 CLI 回報登入過期時，聊天室的訊息會排隊（每個 pane 最多 20 則），並告訴聊天室；CLI 重新登入後依序送進去。排隊超過 10 分鐘的訊息會直接送出，並告訴聊天室 CLI 可能需要重新登入。後端 log 會記錄每一則收到的 update（種類、聊天室的雜湊值與訊息編號，不含內容）以及是否交給了 pane。

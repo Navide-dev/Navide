@@ -65,6 +65,52 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onCtxKeydown)
 })
 
+// Windows closed while the app kept running (main's registry), newest first.
+// Welcome shows the latest few; the Window menu lists all of them.
+const CLOSED_SHOWN = 3
+type ClosedWindow = { workspace_path: string; adopted_workspaces: string[]; closed_at: number }
+const closedWindows = ref<ClosedWindow[]>([])
+const reopening = ref('')
+let disposeClosedChanged: (() => void) | null = null
+
+async function refreshClosedWindows(): Promise<void> {
+  const list = (await window.agentTeam?.restore?.listRecentlyClosed?.()) ?? []
+  closedWindows.value = list.slice(0, CLOSED_SHOWN)
+}
+
+onMounted(() => {
+  void refreshClosedWindows()
+  disposeClosedChanged = window.agentTeam?.restore?.onRecentlyClosedChanged?.(() => {
+    void refreshClosedWindows()
+  }) ?? null
+})
+onBeforeUnmount(() => {
+  disposeClosedChanged?.()
+  disposeClosedChanged = null
+})
+
+function baseName(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+}
+
+function closedTimeAgo(closedAt: number): string {
+  if (!closedAt) return ''
+  const { unit, count } = relativeTime(closedAt, Date.now())
+  return t(`time.ago-${unit}`, { count })
+}
+
+async function reopenClosed(item: ClosedWindow): Promise<void> {
+  if (reopening.value) return
+  reopening.value = item.workspace_path
+  try {
+    const result = await window.agentTeam?.restore?.reopenClosed?.(item.workspace_path)
+    // Over a working window the picker has done its job once the window is back.
+    if (result?.ok) dismiss()
+  } finally {
+    reopening.value = ''
+  }
+}
+
 function isOpenElsewhere(path: string): boolean {
   const norm = (p: string): string => p.replace(/\/+$/, '')
   const target = norm(path)
@@ -281,6 +327,37 @@ function ctxCopyPath(): void {
         <p v-if="createError" class="w-error" role="alert">{{ createError }}</p>
       </section>
 
+      <section v-if="closedWindows.length" class="w-closed">
+        <h2>{{ $t('restore.closed-title') }}</h2>
+        <ul class="recent-list">
+          <li
+            v-for="item in closedWindows"
+            :key="item.workspace_path"
+            class="recent-item closed-item"
+            tabindex="0"
+            @click="reopenClosed(item)"
+            @keydown.enter.self="reopenClosed(item)"
+          >
+            <div class="r-body">
+              <div class="r-top">
+                <span class="r-name">{{ baseName(item.workspace_path) }}</span>
+                <span v-if="item.adopted_workspaces.length" class="r-count">+{{ item.adopted_workspaces.length }}</span>
+                <span class="r-time">{{ closedTimeAgo(item.closed_at) }}</span>
+              </div>
+              <div v-if="item.adopted_workspaces.length" class="r-path" v-truncate>
+                {{ $t('restore.closed-others', { names: item.adopted_workspaces.map(baseName).join(', ') }) }}
+              </div>
+              <div v-else class="r-path" v-truncate>{{ item.workspace_path }}</div>
+            </div>
+            <button
+              class="ghost r-reopen"
+              :disabled="!!reopening"
+              @click.stop="reopenClosed(item)"
+            >{{ reopening === item.workspace_path ? '…' : $t('restore.closed-reopen') }}</button>
+          </li>
+        </ul>
+      </section>
+
       <section class="w-recent">
         <h2>{{ $t('label.recent') }}</h2>
 
@@ -472,10 +549,12 @@ button.link:focus-visible,
   font-size: var(--font-xs);
 }
 .w-open,
+.w-closed,
 .w-recent {
   margin-top: 24px;
 }
 .w-open h2,
+.w-closed h2,
 .w-recent h2 {
   font-size: var(--font-sm);
   color: var(--text-secondary);
@@ -651,6 +730,18 @@ button:disabled {
   border-radius: 10px;
   color: var(--success-fg);
   background: var(--success-subtle);
+}
+.r-count {
+  font-size: var(--font-3xs);
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+}
+.r-reopen {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 4px 12px;
 }
 .r-time {
   margin-left: auto;

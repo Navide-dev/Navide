@@ -33,9 +33,9 @@
         "system": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 7,
+          "maxItems": 8,
           "uniqueItems": true,
-          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets"] },
+          "items": { "enum": ["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"] },
           "if": { "contains": { "const": "agentMessages" } },
           "then": { "contains": { "const": "agents" } }
         },
@@ -381,12 +381,14 @@
         "entry": { "$ref": "#/$defs/htmlPath" },
         "detailView": { "$ref": "#/$defs/viewId" },
         "targetSchema": { "$ref": "#/$defs/jsonPath" },
-        "receives": { "$ref": "#/$defs/receives" }
+        "receives": { "$ref": "#/$defs/receives" },
+        "headless": { "type": "boolean" }
       },
       "allOf": [
         { "if": { "required": ["detailView"] }, "then": { "properties": { "location": { "const": "left" } } } },
         { "if": { "required": ["targetSchema"] }, "then": { "properties": { "location": { "const": "detail" } } } },
-        { "if": { "required": ["receives"] }, "then": { "properties": { "location": { "const": "window" } } } }
+        { "if": { "required": ["receives"] }, "then": { "properties": { "location": { "const": "window" } } } },
+        { "if": { "required": ["headless"], "properties": { "headless": { "const": true } } }, "then": { "properties": { "location": { "enum": ["top", "bottom", "right", "left", "main"] } } } }
       ]
     },
     "receives": {

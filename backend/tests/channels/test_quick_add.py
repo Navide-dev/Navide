@@ -265,6 +265,7 @@ async def test_a_bot_that_did_not_start_is_not_reported_added(env: Env, monkeypa
 
 
 async def test_a_held_channels_lock_ends_in_a_timeout_before_the_window_gives_up(env: Env, monkeypatch) -> None:
+    deadline = mgr_mod.QUICK_ADD_DEADLINE_S
     monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", 0.3)
     _login_as(env, "ready")
     await env.m._lock.acquire()  # another channels operation that never finishes
@@ -273,10 +274,18 @@ async def test_a_held_channels_lock_ends_in_a_timeout_before_the_window_gives_up
     finally:
         env.m._lock.release()
     assert not res["ok"] and res["reason"] == "timeout"
-    await asyncio.sleep(0.05)
+    bot = ("telegram", ACCOUNT)
+    undo = env.m._quick_add_undos.get(bot)
+    if undo is not None:
+        await undo
+    assert bot not in env.m._quick_adding
     _no_trace(env)
-    # Nothing is left half-added: the same bot can be added again.
-    assert (await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT))["ok"]
+    # Nothing is left half-added: the same bot can be added again. The re-add gets the
+    # real deadline: 0.3 s only had to outlast the held lock, and a loaded runner's
+    # configure alone can take longer than that (a "timeout" here, not a leftover).
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", deadline)
+    again = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
+    assert again["ok"], again
 
 
 async def test_a_login_past_the_deadline_is_undone(env: Env, monkeypatch) -> None:

@@ -167,10 +167,12 @@ describe('a Navide plugin command on the bus', () => {
 
 describe('DESTRUCTIVE_ACTIONS', () => {
   /** Reviewed and left out: closing a dialog or an editor tab loses nothing the
-   *  editor would not ask about itself. */
+   *  editor would not ask about itself, and reopening a closed window ends
+   *  nothing. */
   const HARMLESS = new Set([
     'ui.settings.close',
     'workbench.action.closeModal',
+    'workbench.action.reopenClosedWindow',
     'workbench.action.zoomUiReset',
   ])
   const RISKY = /close|reset|abort|restart|remove|delete|kill|rebuild|reclaim|quit|discard/i

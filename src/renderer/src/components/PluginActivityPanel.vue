@@ -19,6 +19,7 @@ import {
   type PluginActivityToolCall,
 } from '../../../shared/pluginActivity'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
+import { CAPABILITY_DENIED_DOC_URL } from '../../../shared/marketplaceDeveloper'
 import { formatBytes } from '../lib/formatBytes'
 import { disclosureList } from '../lib/disclosureText'
 import { createQueueTrend, pluginBackendUsage, type PluginBackendUsage } from '../lib/backendQueueTrend'
@@ -30,6 +31,10 @@ const { t, te, locale } = useI18n()
 const report = ref<PluginActivityReport | null>(null)
 const error = ref('')
 const loading = ref(true)
+/** Undeclared uses are refused with CAPABILITY_DENIED; its section in plugin-development-v2.md says why and how to declare. */
+function openCapabilityDeniedDoc(): void {
+  void window.agentTeam?.openExternal?.(CAPABILITY_DENIED_DOC_URL)
+}
 const live = ref<{ current: number; peak: number; droppedNotifications: number } | null>(null)
 const backend = ref<PluginBackendUsage | null>(null)
 const queueGrowing = ref(false)
@@ -195,6 +200,10 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
 
       <div v-if="report.undeclared.length" class="nv-activity-undeclared">
         <h5>{{ $t('pluginActivity.undeclared.heading') }}</h5>
+        <p class="nv-activity-muted">
+          {{ $t('pluginActivity.undeclared.code') }}
+          <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="activity-undeclared-doc" @click="openCapabilityDeniedDoc">{{ $t('pluginActivity.undeclared.doc') }}</button>
+        </p>
         <ul>
           <li
             v-for="entry in report.undeclared"
@@ -296,6 +305,18 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
+
+      <template v-if="report.autoPauses.length">
+        <h5>{{ $t('pluginActivity.autoPauses.heading') }}</h5>
+        <ul class="nv-activity-auto-pauses">
+          <li v-for="(entry, index) in report.autoPauses" :key="`auto-${index}`">
+            {{ $t('pluginActivity.autoPauses.item', {
+              date: date(entry.at), rule: entry.rule, reason: $t(`pluginStop.rule.${entry.rule}`),
+              value: entry.value, threshold: entry.threshold, detail: reveal(entry.detail), version: reveal(entry.pluginVersion),
+            }) }}
+          </li>
+        </ul>
+      </template>
 
       <h5>{{ $t('pluginActivity.agentActions.heading') }}</h5>
       <p v-if="report.agentActions === null" class="nv-activity-muted">{{ $t('pluginActivity.agentActions.notRecorded') }}</p>

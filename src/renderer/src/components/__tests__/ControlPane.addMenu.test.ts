@@ -122,10 +122,59 @@ describe('ControlPane – the ＋ menu', () => {
       'cli: Claude Code',
       'cli: Devin CLI',
       '# label.add-menu-agents',
-      // ✓ is the default pick, which falls on the first spec.
-      'agents: ✓Hermes Agent',
-      'agents: OpenClaw'
+      // Agents are named before they open: each vendor offers "new agent"
+      // (plan agent-0-2-40_78e071, figure 3); there are no identities yet.
+      'agents: agentPane.addMenu.new',
+      'agents: agentPane.addMenu.new'
     ])
+  })
+
+  const agentSpecs = [
+    { agentKey: 'claude', label: 'Claude Code' },
+    { agentKey: 'hermes', label: 'Hermes Agent', kind: 'agent' },
+    { agentKey: 'terminal', label: 'Terminal' }
+  ]
+  const identity = (over: Record<string, unknown>) => ({
+    identity: {
+      id: 'id-1', name: 'Secretary', color: 'teal', agentKey: 'hermes',
+      workspacePath: '/Users/me/Desktop/Agent-Team', paneId: null, sessionId: null, createdAt: 1, ...over
+    },
+    open: false,
+    status: ''
+  })
+
+  it('lists agent identities of the menu workspace and opens the one clicked', async () => {
+    wrapper = mountWith({
+      agentSpecs,
+      agentIdentities: [identity({}), identity({ id: 'id-2', name: 'Elsewhere', workspacePath: '/other' })]
+    })
+    await openMenu(wrapper)
+    const rows = wrapper.findAll('[data-testid="add-menu-agent-identity"]')
+    expect(rows.map((r) => r.text())).toEqual(['SSecretaryagentPane.addMenu.closed'])
+    await rows[0].trigger('click')
+    expect(wrapper.emitted('agent-open')?.[0]).toEqual(['id-1'])
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
+  it('asks a new agent for its name and spawns it under that name', async () => {
+    wrapper = mountWith({ agentSpecs })
+    await openMenu(wrapper)
+    const newRow = wrapper.findAll('.ws-add-opt[data-section="agents"]').at(-1)!
+    await newRow.trigger('click')
+    expect(wrapper.emitted('spawn')).toBeUndefined()
+    const form = wrapper.find('[data-testid="add-menu-new-agent-form"]')
+    expect(form.exists()).toBe(true)
+    await form.find('input').setValue('  Secretary ')
+    await form.trigger('submit')
+    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({ agentKey: 'hermes', customName: 'Secretary' })
+  })
+
+  it('does not spawn a new agent without a name', async () => {
+    wrapper = mountWith({ agentSpecs })
+    await openMenu(wrapper)
+    await wrapper.findAll('.ws-add-opt[data-section="agents"]').at(-1)!.trigger('click')
+    await wrapper.find('[data-testid="add-menu-new-agent-form"]').trigger('submit')
+    expect(wrapper.emitted('spawn')).toBeUndefined()
   })
 
   it('files exactly OpenClaw and Hermes Agent under Agents in the real roster', () => {
@@ -419,6 +468,19 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
   })
 
+  it('stays open while its own list scrolls', async () => {
+    // A short window caps the list, so reaching the Agents block takes a
+    // scroll inside the menu; that must not count as the page moving.
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    wrapper.find('.ws-add-scroll').element.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(true)
+    document.body.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
   it('closes after a spawn', async () => {
     wrapper = mountWith()
     await openMenu(wrapper)
@@ -519,8 +581,10 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
-/** A `.ws-add-sec` heading (CLI, Agents): ~14px text plus 8px padding. */
-const HEADING_PX = 22
+/** A `.ws-add-sec` heading (CLI, Agents): ~15px text plus 9px padding, and the
+ *  second one adds a divider with 9px more space above it — 24 + 31, rounded up
+ *  to 28 each. */
+const HEADING_PX = 28
 
 /** Everything in the menu that is not the scroller: its own padding, the role
  *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
