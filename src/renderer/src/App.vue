@@ -289,6 +289,7 @@ import {
   resolveReadySpawnGroupId,
   runGroupCreatedAt,
   groupPeers,
+  initialRunGroups,
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
@@ -296,6 +297,8 @@ import { stopFailedRunPanes as stopFailedRunPanesFor } from './lib/failedRunStop
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
+  COLD_RESTORE_SETTLE_TIMEOUT_MS,
+  COLD_RESTORE_STARTING_LIMIT,
   INTERRUPTED_RESUME_LIMIT,
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
@@ -313,6 +316,7 @@ import {
   stripPinnedSessionId,
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
+  waitUntil,
   wasInterruptedAtLaunch,
   wasLiveAtLastLaunch,
   type RestoreScope,
@@ -2040,6 +2044,9 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the backend saw this pane's CLI up for minutes without it
+   *  ever reaching Navide's tool server (mcp_connect_watch). Not persisted. */
+  mcpNeverConnected?: boolean
   /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
    *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
    *  Not persisted. */
@@ -9568,6 +9575,18 @@ async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction)
   announcements.dropBackendRestartPane(action.paneId)
 }
 
+/** Reconnect a pane whose Navide tools never connected: the same-session
+ *  rebuild (a fresh CLI on the same conversation dials the tool server anew).
+ *  Only while the pane is idle — a rebuild ends the CLI's background
+ *  processes — and nothing is typed into it: /mcp is an interactive menu. */
+async function reconnectPaneMcp(paneId: string): Promise<void> {
+  if (paneRefs[paneId]?.displayStatus !== 'idle') {
+    notifyRestore.toast(i18n.global.t('pane.terminal.mcp-reconnect-busy'), { type: 'info' })
+    return
+  }
+  await rebuildPaneViaResume(paneId, { suppressBusyToast: true })
+}
+
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
  *  the account-switch restart aggregate silent failures into one toast. */
@@ -14882,6 +14901,8 @@ function deferredPaneStillCurrent(
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
 /** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
 const scheduledRestoreIds = new Set<string>()
+/** Placeholder id → the pane id it was realized as, read once by realizeRestoredPaneSettled. */
+const realizedPaneIds = new Map<string, string>()
 /** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
 const wakeClaims = new WakeClaims()
 
@@ -14989,19 +15010,27 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // Only this batch. A resume under 'single'/'page'/'tab' is already capped by
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
+  //
+  // Every batch below holds its slot until the pane's prep settles, not just
+  // until the spawn ack: an ack-only ceiling still let twenty CLIs boot — and
+  // dial /plan-mcp — together (2026-11-12). This schedules our own restore
+  // only; a restore the user triggers from the UI is left as it was.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   try {
     if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (decision === 'resume' && session.scope === 'auto') {
       // Auto brings back every pane live at the last close: same ceiling as 'all'.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (interrupted.length > 0) {
       // The interrupted panes ride on top of the scope's pick: same ceiling as
-      // an 'all' restore, so a relaunch never starts more than two at once.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-    } else {
+      // an 'all' restore.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
+    } else if (trigger !== 'cold') {
       await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    } else {
+      // A cold restore under 'single'/'page'/'tab': a big tab is still a batch.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     }
   } finally {
     for (const id of ids) scheduledRestoreIds.delete(id)
@@ -15011,6 +15040,20 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     notifyRestore.toast(i18n.global.t('reconnect.auto-toast', { count: reconnected }), { type: 'success' })
   }
   if (interruptedKids.length > 0) notifyInterruptedParents(interruptedKids)
+}
+
+/** Realize one placeholder of a restore batch and hold the batch slot until the
+ *  new pane's prep settles (ready, failed or gone), at most
+ *  COLD_RESTORE_SETTLE_TIMEOUT_MS. */
+async function realizeRestoredPaneSettled(paneId: string): Promise<void> {
+  const outcome = await realizeRestoredPane(paneId, true)
+  const newId = realizedPaneIds.get(paneId)
+  realizedPaneIds.delete(paneId)
+  if ((outcome !== 'opened' && outcome !== 'fresh') || !newId) return
+  await waitUntil(() => {
+    const pane = panes.value.find((p) => p.id === newId)
+    return !pane || pane.preparationStatus === 'ready' || pane.preparationStatus === 'failed'
+  }, COLD_RESTORE_SETTLE_TIMEOUT_MS)
 }
 
 /** The placeholders a relaunch resumes by itself in one workspace: the
@@ -15307,6 +15350,7 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    realizedPaneIds.set(paneId, newId)
     const launched = panes.value.find((p) => p.id === newId)
     if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the
@@ -18558,6 +18602,50 @@ backend.on('agent_msg.push_state', (raw) => {
   } else {
     pushReadyPanes.delete(ev.pane_id)
   }
+})
+
+// A pane's CLI has been up for minutes without ever reaching Navide's tool
+// server (backend mcp_connect_watch; 2026-11-12 mass restore). Broadcast to
+// every window: only the one holding the pane badges it and tells the user.
+backend.on('mcp.never_connected', (raw) => {
+  const ev = raw as { pane_id?: string; name?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane) return
+  pane.mcpNeverConnected = true
+  const paneId = pane.id
+  const name = ev.name || pane.messagingName || pane.agentLabel
+  const title = i18n.global.t('pane.terminal.mcp-never-connected-title', { name })
+  const body = i18n.global.t('pane.terminal.mcp-never-connected-body', { name })
+  notifyRestore.toast(body, {
+    type: 'error',
+    title,
+    duration: 15000,
+    action: { label: i18n.global.t('pane.terminal.mcp-reconnect'), run: () => { void reconnectPaneMcp(paneId) } },
+  })
+  sysNotify.notifyPaneState(pane.id, 'attention', title, body)
+})
+
+// A cli_send has sat parked on a restore placeholder for 10 minutes (backend
+// take_overdue_parked). The window holding that unopened pane tells the user
+// and offers to open it; nothing opens by itself.
+backend.on('agent_msg.parked_overdue', (raw) => {
+  const ev = raw as { target?: string; excerpt?: string }
+  const name = (ev?.target ?? '').split('/').pop() ?? ''
+  const pane = panes.value.find((p) => !p.realized && p.messagingName === name)
+  if (!name || !pane) return
+  const paneId = pane.id
+  notifyRestore.toast(i18n.global.t('pane.terminal.parked-overdue-body', { name, excerpt: ev.excerpt ?? '' }), {
+    type: 'info',
+    duration: 20000,
+    action: { label: i18n.global.t('pane.terminal.parked-overdue-open'), run: () => { void realizeRestoredPane(paneId, false, { explicit: true }) } },
+  })
+})
+
+// That pane reached the server after all (a manual /mcp, a rebuild).
+backend.on('mcp.connected', (raw) => {
+  const ev = raw as { pane_id?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (pane) pane.mcpNeverConnected = false
 })
 
 // A sending window withdrew a message before it went in. Every window sees the
@@ -22272,7 +22360,7 @@ function _loadRunGroups(path: string, project: NonNullable<ProjectPayload['proje
     let legacyRaw: string | null = null
     try { legacyRaw = localStorage.getItem(legacyKey) } catch { legacyRaw = null }
     const parsed = parseLegacyRunGroups(legacyRaw)
-    runGroups.value = parsed ?? [{ id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() }]
+    runGroups.value = initialRunGroups(parsed, project.panes?.length ?? 0, { id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() })
     if (!isDetachedWindow) {
       void sendQuiet<{ ok: boolean }>('project.set_ui_state', {
         workspace_path: path,
@@ -26546,6 +26634,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
+          :mcp-never-connected="p.mcpNeverConnected"
+          :reconnect-mcp="() => reconnectPaneMcp(p.id)"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"

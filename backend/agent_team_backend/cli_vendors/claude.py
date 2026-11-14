@@ -1732,6 +1732,11 @@ SPEC = VendorSpec(
     resume_id_from_command=_resume_id_from_command,
     session_path=_session_path,
     session_exists=_session_exists,
+    # Claude Code gives the first MCP connect 30s (MCP_TIMEOUT) and stops
+    # after three retries; a mass restore slowed /plan-mcp past that and left
+    # panes without Navide tools until a manual /mcp (2026-11-12). Verified on
+    # 2.1.325 that HTTP servers honor it.
+    spawn_env_defaults=(("MCP_TIMEOUT", "120000"),),
     home_env_vars=(
         "CLAUDE_CONFIG_DIR",
         # Claude Code stamps its own subprocesses with this; inherited, a

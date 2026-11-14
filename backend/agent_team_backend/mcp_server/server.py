@@ -565,6 +565,9 @@ def _credential(request: Any) -> _Caller:
         raise CallerUnknown(_STALE)
     if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_connect_watch.record_connect(pane_id)
     return _Caller(kind="pane", pane_id=pane_id)
 
 
@@ -594,6 +597,13 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
     hold_reason = _hold_reason_for(entry.qualified_name)
     if hold_reason:
         view["hold_reason"] = hold_reason
+    # Absent unless the pane's CLI has been up for minutes without ever
+    # reaching this server: its Navide tools are missing (mcp_connect_watch).
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(entry.pane_id)
+    if mcp_state:
+        view["mcp"] = mcp_state
     # Only an embedded AI panel carries these (which window hosts it); a window
     # pane never sets them, so its view keeps exactly the keys it always had.
     if entry.surface:
@@ -734,6 +744,10 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     "behind", …). It is the same reason the Messages panel shows, and it is
     what makes `busy` explainable — but it exists only while a message sent
     from here is queued for that pane, so its absence says nothing.
+
+    `mcp: "never-connected"` appears on a pane whose CLI has been up for three
+    minutes without once reaching Navide's tool server: its Navide tools are
+    missing, so a message it is asked to answer through them will not come.
 
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
@@ -2740,7 +2754,9 @@ async def cli_send(
     placeholder: the window holds the saved pane but no CLI is running behind
     it, so it is busy forever and the message parks until someone opens it.
     The send still succeeds, and the answer says so with
-    `target_state: "not-opened"` and a `warning`. `open_target: true` opens it
+    `target_state: "not-opened"`, `delivered: false`, `parked: "placeholder"`
+    and a `warning`; cli_check_message reports its hold as "not-opened", and
+    the user is told if it is still parked after 10 minutes. `open_target: true` opens it
     first — the same restore the user's click would do, without the "resume
     which?" modal — and only then delivers; the answer then carries
     `opened: {realized: true, reason}`. `reason: "fresh"` means the pane came
@@ -2959,6 +2975,11 @@ async def _send(
         answer["opened"] = opened
     elif not target.realized:
         answer["target_state"] = "not-opened"
+        # Stated in the fields a sender reads first: `ok` alone read as "it
+        # went in" (2026-11-12), while the message sits until someone opens it.
+        answer["delivered"] = False
+        answer["parked"] = "placeholder"
+        _mark_parked(msg_key)
         answer["warning"] = (
             "the target is a restore placeholder with no CLI running; the message "
             "waits until someone opens it (ui.pane.open, or open_target=True)"
@@ -3084,6 +3105,38 @@ def record_message_hold(msg_key: str, hold: dict[str, Any] | None) -> bool:
     # the two agree to within one round trip.
     entry["hold_since"] = time.monotonic()
     return True
+
+
+#: How long a message may sit parked on a restore placeholder before the user
+#: is told (mcp_connect_watch's loop asks take_overdue_parked).
+_PARKED_NOTICE_S = 600.0
+
+
+def _mark_parked(msg_key: str) -> None:
+    """A cli_send to a restore placeholder: its hold is "not-opened" from the
+    start, until the window that opens the pane reports something else."""
+    entry = _mcp_message_status.get(msg_key)
+    if entry is None:
+        return
+    entry["parked"] = "placeholder"
+    record_message_hold(msg_key, {"key": "not-opened"})
+
+
+def take_overdue_parked(now: float | None = None) -> list[dict[str, Any]]:
+    """Messages still parked on a placeholder after _PARKED_NOTICE_S, each
+    returned once: {msg_key, target, origin, excerpt}."""
+    now = time.monotonic() if now is None else now
+    out: list[dict[str, Any]] = []
+    for key, entry in _mcp_message_status.items():
+        if (
+            entry.get("parked") != "placeholder" or entry.get("parked_noticed")
+            or entry["status"] != "queued" or now - entry["created_at"] < _PARKED_NOTICE_S
+        ):
+            continue
+        entry["parked_noticed"] = True
+        out.append({"msg_key": key, "target": entry["target"], "origin": entry["origin"],
+                    "excerpt": entry["excerpt"]})
+    return out
 
 
 def _hold_view(entry: dict[str, Any], now: float) -> dict[str, Any]:
@@ -3318,7 +3371,8 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     "composer" (text from an earlier push may still sit in that pane's input
     box, so nothing is typed until the pane shows activity) or "pty-blocked"
     (it is being typed in, but the pane's terminal has stopped reading
-    input). Both keys are absent once the message settles, and while no window has reported
+    input), or "not-opened" (sent to a restore placeholder: nothing runs
+    behind it until someone opens it). Both keys are absent once the message settles, and while no window has reported
     a hold at all — a message queued with no hold is simply on its way in.
 
     A message to another device that has gone a minute without an answer is
@@ -4258,6 +4312,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
+    `mcp: "never-connected"` appears when the pane's CLI has been up for
+    three minutes without once reaching Navide's tool server, so its Navide
+    tools are missing; absent otherwise.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -4379,6 +4436,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         "agent_key": pane.agent_key,
         "busy": pane.busy,
     }
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(pane.pane_id)
+    if mcp_state:
+        status["mcp"] = mcp_state
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last

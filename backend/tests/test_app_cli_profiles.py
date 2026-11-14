@@ -181,8 +181,12 @@ class FakeVault:
 
 def _env_without_guard_token(env: dict[str, str] | None) -> dict[str, str] | None:
     """The spawn env minus Navide Guard's per-pane token, which every claude,
-    copilot and qwen pane gets (guard_hooks.PANE_TOKEN_ENV)."""
-    rest = {k: v for k, v in (env or {}).items() if k != guard_hooks.PANE_TOKEN_ENV}
+    copilot and qwen pane gets (guard_hooks.PANE_TOKEN_ENV), and claude's
+    MCP_TIMEOUT vendor default — neither is profile env."""
+    rest = {
+        k: v for k, v in (env or {}).items()
+        if k not in (guard_hooks.PANE_TOKEN_ENV, "MCP_TIMEOUT")
+    }
     return rest or None
 
 
