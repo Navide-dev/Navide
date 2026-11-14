@@ -45,7 +45,14 @@ dependencies = [
     # ConPTY bindings for osplat/_windows.py's terminal backend. Windows-only
     # wheels, so the marker keeps macOS/Linux resolution and PyInstaller
     # builds from ever looking for it.
-    "pywinpty>=3.0; sys_platform == 'win32'",
+    # Below 3.1.1: 3.1.1/3.1.2 build winpty-rs 1.0.7/1.0.8, whose PTY drop
+    # closes reader_exit_event while the detached alive_thread still waits on
+    # that handle value. Windows hands the value to a new Python lock (a
+    # semaphore), the stray wait eats its release, and a thread join hangs for
+    # good (0.2.43 Windows CI: 4 stalls in 115 loop rounds on 3.1.2, none in
+    # 117 on 3.1.0). 3.1.0 builds winpty-rs 1.0.6, which joins alive_thread
+    # before closing the handle.
+    "pywinpty>=3.0,<3.1.1; sys_platform == 'win32'",
     "pyyaml>=6.0",
     "send2trash>=2.1.0",
     # TOML serialisation for the pane shims. tomllib reads (stdlib since 3.11)
