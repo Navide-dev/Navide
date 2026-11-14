@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass
 
 from . import policy, runtime
-from .classify import classify
+from .classify import LEVEL_ORDER, classify
 from .taint import is_tainted
 
 log = logging.getLogger(__name__)
@@ -73,6 +73,15 @@ def excerpt_of(tool: str, tool_input: dict) -> str:
                 raw = str(tool_input)
     text = redact(raw)
     return text if len(text) <= EXCERPT_MAX else text[: EXCERPT_MAX - 1] + "…"
+
+
+def _by_severity(verdict, overrides: dict[str, str]) -> tuple[str, ...]:
+    """The verdict's reasons, most severe rule first (ties keep their order):
+    the answer names only three, and an opaque note found first must not
+    push out the reason the call is asked about."""
+    ranked = sorted(zip(verdict.rule_ids, verdict.reasons),
+                    key=lambda p: -LEVEL_ORDER[policy.rule_level(p[0], overrides, verdict.level)[1]])
+    return tuple(reason for _, reason in ranked)
 
 
 def _reason(action: str, level: str, reasons: tuple[str, ...], source: str, tainted: bool, parseable: bool) -> str:
@@ -144,7 +153,7 @@ def _evaluate(*, pane_id, vendor, tool, tool_input, cwd, workspace, source, reco
     level, rule_ids = policy.apply_taint_allow(graded, level, raised, rule_ids, subject, rules, source)
     enforced = policy.enforced(store.enabled(), source)
     action = policy.decide(level, source, tainted=tainted) if enforced else "allow"
-    reason = _reason(action, level, verdict.reasons, source, tainted, verdict.parseable)
+    reason = _reason(action, level, _by_severity(verdict, overrides), source, tainted, verdict.parseable)
     if not enforced and level != "normal":
         reason = f"guard disabled; {reason}"
     decision = Decision(action, level, rule_ids, reason, tainted)
