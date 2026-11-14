@@ -540,6 +540,22 @@ approved by default.
   issues an `nva_` token that names the Cloud account only. It can read and
   submit the account's developer application and list its versions; it never
   publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
+- **App sign-in through Navide Cloud**: `POST /api/cli/cloud-exchange`
+  takes `{assertion, code_verifier, scope, namespace, label}`, where
+  `assertion` is a short-lived (≤ 60 s) Ed25519 assertion Navide-Server signs
+  for the signed-in member (`nvsa1.<kid>.<payload_b64>.<sig_b64>`, at most
+  4096 bytes), bound to the App's PKCE challenge. It answers exactly like
+  `/api/cli/token` and applies the same publish checks as `/cli/authorize`
+  (`404` unknown namespace, `403 QUALIFICATION_REQUIRED`). Failures are `401`
+  `ASSERTION_INVALID`, `ASSERTION_EXPIRED` (30 s clock skew allowed) or
+  `ASSERTION_REPLAYED` (each `jti` is single-use, kept in
+  `used_cloud_assertion`); repeated failures from one address get `429
+  RATE_LIMITED` for a while. Without `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` the
+  route answers `404` and the App falls back to the browser sign-in. The
+  exchange is audited as `cloud-assertion.exchange` (member, scope,
+  namespace, jti, kid; never the assertion). `GET /api/developer/me/namespaces`
+  (account token) lists the namespaces `/cli/authorize` would offer, as
+  `{namespaces: [...]}`.
 - **Application**: `GET|POST /api/developer/me/application` (account or
   publisher token) or the website form `/developer/apply`. Real-name fields;
   `field_sources` marks each field `user` or `agent-draft`. The GET answer
@@ -625,6 +641,7 @@ approved by default.
 | `REGISTRY_LEGACY_HOSTS` | _(empty)_ | Comma-separated hosts that keep the API under `REGISTRY_ROOT_PATH`, e.g. `server.navide.dev`; the first one is the API address the website shows. |
 | `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
 | `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
+| `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` | _(unset)_ | Path to Navide-Server's assertion public keys, `{"keys": [{"kid": "20261114", "public_key": "<Ed25519 SPKI PEM>"}]}`; list two during a rotation. Unset or missing turns `/api/cli/cloud-exchange` off (`404`); a malformed file, a bad `kid` (`[A-Za-z0-9_-]{1,64}`) or a non-Ed25519 key stops startup. Not secret, but kept out of Git. |
 
 ## Seams left for later Phase 3 todos
 

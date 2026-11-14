@@ -12963,6 +12963,7 @@
       "expires": "登入到期",
       "sign-in": "用 Navide Cloud 登入",
       "sign-in-publish": "以發佈者身分登入",
+      "via-cloud": "已沿用你的 Navide Cloud 帳號登入，不必另外用瀏覽器登入。",
       "sign-out": "登出",
       "waiting": "等待瀏覽器完成…"
     },

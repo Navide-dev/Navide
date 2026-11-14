@@ -12963,6 +12963,7 @@
       "expires": "登录到期",
       "sign-in": "用 Navide Cloud 登录",
       "sign-in-publish": "以发布者身分登录",
+      "via-cloud": "已沿用你的 Navide Cloud 账号登录，无需另外用浏览器登录。",
       "sign-out": "退出登录",
       "waiting": "等待浏览器完成…"
     },

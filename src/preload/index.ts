@@ -1423,6 +1423,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
   developer: {
     state: () => ipcRenderer.invoke('developer:state'),
     signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
+    syncCloudAccount: () => ipcRenderer.invoke('developer:syncCloudAccount'),
     signOut: () => ipcRenderer.invoke('developer:signOut'),
     registerKey: (options) => ipcRenderer.invoke('developer:registerKey', options ?? {}),
     application: () => ipcRenderer.invoke('developer:application'),

@@ -12963,6 +12963,7 @@
       "expires": "サインインの期限",
       "sign-in": "Navide Cloud でサインイン",
       "sign-in-publish": "公開者としてサインイン",
+      "via-cloud": "Navide Cloud アカウントでサインイン済みです。ブラウザーで別途サインインする必要はありません。",
       "sign-out": "サインアウト",
       "waiting": "ブラウザーでの操作を待っています…"
     },

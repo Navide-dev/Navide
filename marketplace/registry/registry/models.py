@@ -365,6 +365,19 @@ class AccountAuthCode(SQLModel, table=True):
     used_at: datetime | None = None
 
 
+class UsedCloudAssertion(SQLModel, table=True):
+    """One row per redeemed Navide-Server sign-in assertion (cloud_assertion.py):
+    the primary key on `jti` makes each assertion single-use. Rows are pruned
+    once their assertion could no longer pass the expiry check anyway."""
+
+    __tablename__ = "used_cloud_assertion"
+
+    jti: str = Field(primary_key=True)
+    navide_member_id: str
+    expires_at: datetime = Field(index=True)
+    used_at: datetime = Field(default_factory=_now)
+
+
 class PublisherKey(SQLModel, table=True):
     """Every Ed25519 key a publisher has registered; a replaced or revoked
     key keeps its row so a client can tell a revoked signature from none."""

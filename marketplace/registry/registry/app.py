@@ -52,6 +52,7 @@ from .native_backend import local_native_backend_notices, native_backend_publish
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
 from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
 from .packs import pack_conflict
+from .cloud_assertion import CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS, CLOUD_EXCHANGE_FAILURES_PER_WINDOW
 from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
@@ -108,6 +109,12 @@ class RegistryState:
     report_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(REPORT_LIMIT_PER_HOUR, 3600)
     )
+    cloud_exchange_limiter: SlidingWindowLimiter = field(
+        default_factory=lambda: SlidingWindowLimiter(
+            CLOUD_EXCHANGE_FAILURES_PER_WINDOW, CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS
+        )
+    )
+    """Failed `/api/cli/cloud-exchange` verifications per client address."""
     grandfather_swept_at: float | None = None
     """Monotonic time of the last grandfather sweep (sweep_grandfather)."""
 

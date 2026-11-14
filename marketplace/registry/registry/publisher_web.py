@@ -21,8 +21,16 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from . import cloud_auth, host_routing, qualification, ratings, reports, review
-from .account_auth import exchange_account_code, find_account_code, issue_account_code
+from . import audit, cloud_assertion, cloud_auth, host_routing, qualification, ratings, reports, review
+from .account_auth import (
+    SCOPE_ACCOUNT as TOKEN_SCOPE_ACCOUNT,
+    BearerError,
+    create_account_token,
+    exchange_account_code,
+    find_account_code,
+    issue_account_code,
+    require_bearer,
+)
 from .developer_web import register_developer_routes
 from .app import _require_admin_token as require_admin_token
 from .blocklist import BlocklistError, add_entry, db_entries, remove_entry, removed_list
@@ -31,6 +39,7 @@ from .models import Extension, ExtensionVersion, Publisher
 from .native_backend import self_service_publishers, set_native_backend_allowed
 from .repository import RegistryRepository
 from .self_service import (
+    CLI_TOKEN_DAYS,
     MAX_NAMESPACES_PER_ACCOUNT,
     MAX_TOKEN_DAYS,
     QualificationRequired,
@@ -73,6 +82,16 @@ _CLI_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
 class CliTokenRequest(BaseModel):
     code: str
     code_verifier: str
+
+
+class CloudExchangeRequest(BaseModel):
+    # No length limits here: an oversized assertion must fail as
+    # ASSERTION_INVALID in the contract's order, not as a 422.
+    assertion: str
+    code_verifier: str
+    scope: str
+    namespace: str | None = None
+    label: str = "Navide app"
 
 
 class ApproveRequest(BaseModel):
@@ -155,6 +174,22 @@ def _check_csrf(request: Request, viewer: cloud_auth.Viewer, token: str) -> None
 
 def _require_admin_token(request: Request, presented: str | None) -> None:
     require_admin_token(_settings(request), presented, honor_open_admin=False)
+
+
+def _publishable_namespaces(session: Session, member_id: str) -> list[str]:
+    """Namespaces the CLI login offers: owned or joined, and vetted
+    (qualification.py). `/cli/authorize` and `/api/developer/me/namespaces`
+    list the same set."""
+    return [p.name for p in member_publishers(session, member_id) if qualification.publisher_vetted(session, p)]
+
+
+def _publish_namespace(session: Session, member_id: str, namespace: str) -> Publisher:
+    """The namespace a publish-scope login names, when the account owns it or
+    is a publisher member of it (the token issue then checks it is vetted)."""
+    publisher = member_publisher(session, member_id, namespace)
+    if publisher is None:
+        raise HTTPException(status_code=404, detail="namespace not found")
+    return publisher
 
 
 def _session(request: Request) -> Session:
@@ -731,9 +766,7 @@ def create_publisher_router() -> APIRouter:
         viewer = _require_viewer(request)
         with _session(request) as session:
             # Only a namespace that may publish is offered (qualification.py).
-            namespaces = [
-                p.name for p in member_publishers(session, viewer.member_id) if qualification.publisher_vetted(session, p)
-            ]
+            namespaces = _publishable_namespaces(session, viewer.member_id)
             qualification_status = qualification.status_of(session, viewer.member_id)
         return page(
             request,
@@ -773,9 +806,7 @@ def create_publisher_router() -> APIRouter:
                     )
                 else:
                     # The owner or a publisher member (namespace members).
-                    publisher = member_publisher(session, viewer.member_id, namespace)
-                    if publisher is None:
-                        raise HTTPException(status_code=404, detail="namespace not found")
+                    publisher = _publish_namespace(session, viewer.member_id, namespace)
                     code = issue_cli_code(
                         session, publisher, code_challenge=code_challenge, label=label, member_id=viewer.member_id
                     )
@@ -836,6 +867,88 @@ def create_publisher_router() -> APIRouter:
                 },
                 headers=_NO_STORE,
             )
+
+    # -- App sign-in through a Navide-Server assertion -------------------
+    def _assertion_error(status: int, code: str, message: str) -> HTTPException:
+        return HTTPException(status_code=status, detail={"code": code, "message": message}, headers=_NO_STORE)
+
+    @router.post("/api/cli/cloud-exchange")
+    def cli_cloud_exchange(request: Request, body: CloudExchangeRequest) -> JSONResponse:
+        """Exchange a Navide-Server assertion + PKCE verifier for the token
+        `/api/cli/token` would give after a browser sign-in (cloud_assertion.py
+        holds the format and checks). Same tokens, same publish checks as
+        `/cli/authorize`; the assertion itself is never stored or logged."""
+        keys = _settings(request).cloud_assertion_keys
+        if not keys:  # Step 1: off; the App falls back to the browser sign-in.
+            raise HTTPException(status_code=404, detail="Not Found")
+        limiter = request.app.state.registry.cloud_exchange_limiter
+        client_key = request.client.host if request.client else "unknown"
+        now = time.time()
+        if limiter.exceeded(client_key, now):
+            raise _assertion_error(429, "RATE_LIMITED", "too many failed sign-in attempts; try again later")
+        try:
+            claims = cloud_assertion.verify(body.assertion, keys, now=int(now))
+            cloud_assertion.check_binding(
+                claims, code_verifier=body.code_verifier, scope=body.scope, namespace=body.namespace
+            )
+        except cloud_assertion.AssertionRejected as exc:
+            limiter.allow(client_key, now)
+            raise _assertion_error(401, exc.code, exc.message) from exc
+        with _session(request) as session:
+            try:
+                cloud_assertion.burn(session, claims)
+            except cloud_assertion.AssertionRejected as exc:
+                raise _assertion_error(401, exc.code, exc.message) from exc
+            try:
+                if claims.scope == cloud_assertion.SCOPE_ACCOUNT:
+                    plain, row = create_account_token(session, claims.sub, label=body.label)
+                    namespace, token_scope = None, TOKEN_SCOPE_ACCOUNT
+                else:
+                    publisher = _publish_namespace(session, claims.sub, claims.namespace)
+                    plain, row = create_token(
+                        session, publisher, label=body.label, days=CLI_TOKEN_DAYS, member_id=claims.sub
+                    )
+                    namespace, token_scope = publisher.name, "publisher"
+            except QualificationRequired as exc:
+                raise HTTPException(
+                    status_code=403, detail={"code": exc.code, "message": str(exc)}, headers=_NO_STORE
+                ) from exc
+            except SelfServiceError as exc:
+                raise HTTPException(status_code=400, detail=str(exc), headers=_NO_STORE) from exc
+            audit.record(
+                session,
+                actor=audit.member_actor(claims.sub),
+                action="cloud-assertion.exchange",
+                target=f"publisher:{namespace}" if namespace else f"member:{claims.sub}",
+                detail={
+                    "scope": claims.scope,
+                    "namespace": namespace,
+                    "jti": claims.jti,
+                    "kid": claims.kid,
+                    "token_id": row.id,
+                },
+            )
+            session.commit()
+            return JSONResponse(
+                {"token": plain, "scope": token_scope, "namespace": namespace, "expires_at": row.expires_at.isoformat()},
+                headers=_NO_STORE,
+            )
+
+    @router.get("/api/developer/me/namespaces")
+    def my_publishable_namespaces(request: Request, authorization: str | None = Header(default=None)) -> JSONResponse:
+        """The namespaces `/cli/authorize` would offer this account, for the
+        App's namespace picker before a publish-scope cloud exchange."""
+        with _session(request) as session:
+            try:
+                bearer = require_bearer(session, authorization)
+            except BearerError as exc:
+                raise exc.http() from exc
+            if bearer.scope != TOKEN_SCOPE_ACCOUNT or bearer.member_id is None:
+                raise HTTPException(
+                    status_code=403, detail={"code": "TOKEN_SCOPE", "message": "this endpoint needs an account token"}
+                )
+            namespaces = _publishable_namespaces(session, bearer.member_id)
+        return JSONResponse({"namespaces": namespaces}, headers=_NO_STORE)
 
     # -- admin review queue (card 10) -----------------------------------
     def _queue_view(session: Session) -> list[dict]:
