@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import {
   cliAccountDirActionsKey,
@@ -11,6 +11,7 @@ import {
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   accountUsageFor,
+  absentSessionNote,
   formatRemaining,
   formatResetAbsolute,
   formatResetCountdown,
@@ -24,6 +25,14 @@ import {
   type UsageWindow,
 } from '../composables/useUsage'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { relativeTime } from '../lib/relativeTime'
+import { FOLLOW_SWITCH_AGENT } from '../lib/accountFollowSwitch'
+import SettingsNotice from './settings/SettingsNotice.vue'
+import AddAccountPanel from './accounts/AddAccountPanel.vue'
+import ApiKeyDetail from './accounts/ApiKeyDetail.vue'
+import AutoContinueBlock from './accounts/AutoContinueBlock.vue'
+import { apiKeyAccountCalls, isApiKeyProfile, type ApiKeyProfile } from './accounts/apiKeyAccount'
+import type { useBackend } from '../composables/useBackend'
 
 const props = defineProps<{
   api: ReturnType<typeof useCliProfiles>
@@ -31,6 +40,8 @@ const props = defineProps<{
    *  workspace, so without one the flow dead-ends — block it up front
    *  (before the profile row is created) instead of leaving an orphan row. */
   workspaceOpen?: boolean
+  /** Carries the API key messages. Without it the page cannot add accounts. */
+  backend?: ReturnType<typeof useBackend>
 }>()
 
 // Asks the app shell to open a terminal pane running the agent's CLI so the
@@ -42,6 +53,135 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'login', agentKey: string, loginProfileId?: string): void }>()
 
 const { error } = props.api
+
+// ── Two columns: the list on the left, the selected account on the right ─────
+// Every login card stays mounted and the unselected ones are hidden, so the
+// cards and everything they do are the same as before. An API key account is
+// a row like any other; only its right column differs.
+type AccountSelection =
+  | { type: 'account'; agentKey: string; profileId: string | null }
+  | { type: 'add' }
+
+const apiKeyCalls = props.backend ? apiKeyAccountCalls(props.backend) : null
+const selection = ref<AccountSelection | null>(null)
+const listQuery = ref('')
+const addAgent = ref('')
+
+const listAgents = computed(() => CLI_AGENT_SPECS.filter((s) => supported(s.agentKey)))
+
+function agentLabel(agentKey: string): string {
+  return CLI_AGENT_SPECS.find((s) => s.agentKey === agentKey)?.label ?? agentKey
+}
+
+function firstAccount(): AccountSelection | null {
+  const agent = listAgents.value[0]
+  return agent ? { type: 'account', agentKey: agent.agentKey, profileId: props.api.defaultProfileId(agent.agentKey) } : null
+}
+
+// With nothing chosen yet, or the chosen account gone, the first CLI's active
+// account is showing. A new account is chosen before its broadcast arrives.
+const effectiveSelection = computed<AccountSelection | null>(() => {
+  const chosen = selection.value
+  if (chosen?.type === 'account' && chosen.profileId && !props.api.findProfile(chosen.profileId)) return firstAccount()
+  return chosen ?? firstAccount()
+})
+
+function isSelectedAccount(agentKey: string, profileId: string | null): boolean {
+  const chosen = effectiveSelection.value
+  return chosen?.type === 'account' && chosen.agentKey === agentKey && chosen.profileId === profileId
+}
+
+const selectedApiKey = computed<ApiKeyProfile | null>(() => {
+  const chosen = effectiveSelection.value
+  if (chosen?.type !== 'account' || !chosen.profileId) return null
+  const profile = props.api.findProfile(chosen.profileId)
+  return isApiKeyProfile(profile) ? profile : null
+})
+
+function agentSelected(agentKey: string): boolean {
+  const chosen = effectiveSelection.value
+  return chosen?.type === 'account' && chosen.agentKey === agentKey && !selectedApiKey.value
+}
+
+// A CLI nobody has signed in to is one line under a shared heading, after the
+// CLIs that have accounts.
+function agentIsBare(agentKey: string): boolean {
+  return props.api.profilesForAgent(agentKey).length === 0 && cardSaysSignedOut(agentKey, null)
+}
+
+const rowAgents = computed(() => [
+  ...listAgents.value.filter((s) => !agentIsBare(s.agentKey)),
+  ...listAgents.value.filter((s) => agentIsBare(s.agentKey)),
+])
+
+function firstBareAgent(agentKey: string): boolean {
+  return rowAgents.value.find((s) => agentIsBare(s.agentKey) && listProfiles(s.agentKey).length > 0)?.agentKey === agentKey
+}
+
+function rowTitle(agentKey: string, profile: CliProfile | null): string {
+  if (agentIsBare(agentKey)) return agentLabel(agentKey)
+  return isApiKeyProfile(profile) ? profile.name : cardTitle(agentKey, profile)
+}
+
+function rowKind(agentKey: string, profile: CliProfile | null): string {
+  if (isApiKeyProfile(profile)) return `${t('settings.accounts.api-keys.kind')} · ${profile.last4}`
+  return cardSaysSignedOut(agentKey, profile) ? t('settings.accounts.cli.not-signed-in') : t('settings.accounts.api-keys.list.login')
+}
+
+function listProfiles(agentKey: string): (CliProfile | null)[] {
+  const query = listQuery.value.trim().toLowerCase()
+  return [null, ...props.api.profilesForAgent(agentKey)].filter(
+    (p) => !query || [rowTitle(agentKey, p), agentLabel(agentKey)].some((part) => part.toLowerCase().includes(query)),
+  )
+}
+
+// The figure on a row is quota left. An API key account has none to show.
+function rowValue(agentKey: string, profile: CliProfile | null): { text: string; tier: string } {
+  if (isApiKeyProfile(profile)) return { text: '', tier: '' }
+  const usage = cardUsage(agentKey, profile?.id ?? null)
+  return usage && !usage.noData ? { text: usage.big, tier: usage.tier } : { text: '', tier: '' }
+}
+
+function rowInUse(agentKey: string, profile: CliProfile | null): boolean {
+  if (!isApiKeyProfile(profile) && cardSaysSignedOut(agentKey, profile)) return false
+  return (props.api.newPaneProfileId?.(agentKey) ?? props.api.defaultProfileId(agentKey)) === (profile?.id ?? null)
+}
+
+function startAdd(): void {
+  const chosen = effectiveSelection.value
+  addAgent.value = (chosen?.type === 'account' ? chosen.agentKey : addAgent.value) || (listAgents.value[0]?.agentKey ?? '')
+  selection.value = { type: 'add' }
+}
+
+function apiKeySaved(profile: ApiKeyProfile): void {
+  selection.value = { type: 'account', agentKey: profile.agentKey, profileId: profile.id }
+}
+
+// A claude API key account has no login to swap in: it is chosen for new panes
+// and set_default refuses it. Any other CLI switches as usual.
+function apiKeyInUse(profile: ApiKeyProfile): boolean {
+  return profile.agentKey === 'claude'
+    ? props.api.paneDefaults.value[profile.agentKey] === profile.id
+    : props.api.defaultProfileId(profile.agentKey) === profile.id
+}
+
+async function setApiKeyPaneDefault(profile: ApiKeyProfile, profileId: string | null): Promise<void> {
+  if (switching.value !== null) return
+  switching.value = switchRowKey(profile.agentKey, profile.id)
+  try {
+    const res = await props.api.setPaneDefault(profile.agentKey, profileId)
+    if (res.ok) return
+    if (res.code === 'ACCOUNT_DIR_SIGNED_OUT') toast(t('settings.accounts.api-keys.detail.pane-unavailable'), { type: 'error' })
+    else if (res.message) toast(res.message, { type: 'error' })
+  } finally {
+    switching.value = null
+  }
+}
+
+async function switchToApiKey(profile: ApiKeyProfile): Promise<void> {
+  if (profile.agentKey === 'claude') await setApiKeyPaneDefault(profile, profile.id)
+  else await requestSetDefault(profile.agentKey, profile.id)
+}
 
 function supported(agentKey: string): boolean {
   return props.api.supportedAgents.value.includes(agentKey)
@@ -74,6 +214,20 @@ function cardTitle(agentKey: string, profile: CliProfile | null): string {
 
 function cardSubtitle(agentKey: string, profile: CliProfile | null): string {
   return cardAlias(agentKey, profile) ? rowName(agentKey, profile) : ''
+}
+
+// A signed-out card (the same test that disables Refresh Quota) says so once
+// ("Not signed in") and offers Sign In: no quota placeholder, no "can't
+// refresh" line and no Refresh Quota beside it.
+function cardSignedOut(agentKey: string, profile: CliProfile | null): boolean {
+  const profileId = profile?.id ?? null
+  return rowIdentity(agentKey, profileId)?.signedIn === false || cardUsage(agentKey, profileId)?.cantRefresh === true
+}
+
+// The title, subtitle or Default's meta line already reads "Not signed in".
+function cardSaysSignedOut(agentKey: string, profile: CliProfile | null): boolean {
+  if (!profile) return rowIdentity(agentKey, null)?.signedIn !== true
+  return rowName(agentKey, profile) === t('settings.accounts.cli.not-signed-in')
 }
 
 // ── Renaming a card ──────────────────────────────────────────────────────────
@@ -268,6 +422,37 @@ function accountDirSignedIn(agentKey: string, profileId: string | null): boolean
   return !!props.api.accountDirFor?.(agentKey, profileId)?.signedIn
 }
 
+// ── New panes in the account's own folder (Claude) ──────────────────────────
+// The recommended way to use a second claude account: new panes start in its
+// own config dir (set_pane_default) while the live login and every open pane
+// stay where they are. A live switch moves every pane on the current account,
+// and switching back restores a snapshot that may need one more sign-in.
+function isNewPaneDir(agentKey: string, profileId: string): boolean {
+  return props.api.paneDefaults?.value?.[agentKey] === profileId
+}
+
+function showsDirGuidance(agentKey: string, profileId: string | null): boolean {
+  return (
+    agentKey === FOLLOW_SWITCH_AGENT &&
+    profileId !== null &&
+    props.api.defaultProfileId(agentKey) !== profileId &&
+    !isNewPaneDir(agentKey, profileId)
+  )
+}
+
+async function setNewPaneDir(agentKey: string, profileId: string | null): Promise<void> {
+  if (switching.value !== null) return
+  switching.value = switchRowKey(agentKey, profileId)
+  try {
+    const res = await props.api.setPaneDefault(agentKey, profileId)
+    if (res.ok) return
+    if (res.code === 'ACCOUNT_DIR_SIGNED_OUT') toast(t('settings.accounts.cli.dir-new-panes-unavailable'), { type: 'error' })
+    else if (res.message) toast(res.message, { type: 'error' })
+  } finally {
+    switching.value = null
+  }
+}
+
 function canSignInDir(agentKey: string, profileId: string | null): boolean {
   return (
     !!dirActions &&
@@ -396,8 +581,18 @@ interface CardUsage {
   windows: UsageWindow[]
   foot: string
   lastSuccess: string
+  /** How long ago the last good read was ("12 hours ago"). */
+  lastSuccessAgo: string
   updated: string
+  /** How long ago the current reading was taken ("8 minutes ago"). */
+  updatedAgo: string
   refreshStatus: string
+  /** The whole refresh line: a status label after "Refresh:", or a sentence
+   *  of its own when the status alone would read as jargon. */
+  refreshLine: string
+  /** The refresh line says the account is not signed in, so a refresh
+   *  cannot read anything: the card's Refresh Quota is shown disabled. */
+  cantRefresh: boolean
   refreshError: string
   notMeasuredHint: boolean
 }
@@ -413,6 +608,10 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
   const currentSnap = { ...snap, windows }
   const head = headlineWindow(currentSnap)
   const refreshStatus = refreshStatusLabel(snap.refreshStatus ?? snap.status)
+  const cantRefresh = (snap.refreshStatus ?? snap.status) === 'no-credentials'
+  const refreshLine = cantRefresh
+    ? t('usage.refresh-not-signed-in')
+    : t('usage.refresh-status', { status: refreshStatus })
   const base = {
     expired: snap.status === 'expired' || snap.refreshStatus === 'expired',
     cached,
@@ -422,9 +621,13 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     pending: snap.refreshPending === true && usageBackendConnected(),
     resetExpired: cached && windows.length === 0 && snap.windows.length > 0,
     lastSuccess: formatResetAbsolute(snap.lastSuccessAt ?? snap.fetchedAt),
+    lastSuccessAgo: agoText(snap.lastSuccessAt ?? snap.fetchedAt),
     // When a current figure was read; a cached one says so on its own line.
     updated: !cached && snap.status === 'ok' ? formatResetAbsolute(snap.fetchedAt) : '',
+    updatedAgo: agoText(snap.fetchedAt),
     refreshStatus,
+    refreshLine,
+    cantRefresh,
     notMeasuredHint:
       (snap.refreshStatus ?? snap.status) === 'not-measured' && canSignInDir(agentKey, profileId),
     // The backend's sentence for why the last read failed. `refreshStatus`
@@ -450,7 +653,7 @@ function cardUsage(agentKey: string, profileId: string | null): CardUsage | unde
     tier: remainingTier(rem),
     headLabel: t('usage.window-left', { label: windowLabel(head) }),
     windows,
-    foot: cardFoot(currentSnap, head),
+    foot: cardFoot(currentSnap),
   }
 }
 
@@ -468,18 +671,36 @@ function windowLabel(w: UsageWindow): string {
   return w.label
 }
 
-/** Card footer: the non-headline windows plus the headline reset countdown.
- *  Every figure on the card is what is LEFT — the CLI's own panel prints
- *  what is used, so the word is spelled out rather than implied. */
-function cardFoot(snap: UsageSnapshot, head: UsageWindow): string {
-  const parts = snap.windows
-    .filter((w) => w !== head)
-    .map((w) =>
-      t('usage.window-left-pct', { label: windowLabel(w), pct: formatRemaining(windowRemaining(w)) }),
-    )
-  const countdown = formatResetCountdown(head.resetsAt)
-  if (countdown) parts.push(t('usage.resets-in', { time: countdown }))
-  return parts.join(' · ')
+/** Card footer: only what no bar can show — a session window the reading
+ *  lacks. Every window's figure and reset time sit beside its own bar. */
+function cardFoot(snap: UsageSnapshot): string {
+  const note = absentSessionNote(snap)
+  return note ? `${t('usage.window-claude-session')} ${t(`usage.window-${note}`)}` : ''
+}
+
+/** Beside a bar: what is LEFT — the CLI's own panel prints what is used, so
+ *  the word is spelled out rather than implied. */
+function windowPctLeft(w: UsageWindow): string {
+  return t('usage.window-pct-left', { pct: formatRemaining(windowRemaining(w)) })
+}
+
+/** Beside a bar: the reset in local time plus how long until then, or that
+ *  it has already passed (a cached reading). Empty when the CLI sent none. */
+function windowReset(w: UsageWindow): string {
+  const at = formatResetAbsolute(w.resetsAt)
+  if (!at) return ''
+  const countdown = formatResetCountdown(w.resetsAt)
+  return countdown
+    ? t('usage.window-reset', { at, countdown })
+    : t('usage.window-reset-passed', { at })
+}
+
+/** "8 minutes ago" in the UI language; empty for a missing timestamp. */
+function agoText(at: string | null | undefined): string {
+  const ms = at ? Date.parse(at) : NaN
+  if (!Number.isFinite(ms)) return ''
+  const { unit, count } = relativeTime(ms, Date.now())
+  return t(`time.ago-${unit}`, { count })
 }
 
 function barTitle(w: UsageWindow): string {
@@ -602,7 +823,7 @@ onMounted(() => refreshUsage())
       <div class="cli-head-text">
         <h3 class="cli-title">{{ $t('settings.accounts.cli.title') }}</h3>
         <p class="cli-hint">{{ $t('settings.accounts.cli.hint') }}</p>
-        <details class="cli-more">
+        <details class="cli-more settings-more">
           <summary>{{ $t('settings.accounts.cli.hint-more') }}</summary>
           <p>{{ $t('settings.accounts.cli.hint-detail') }}</p>
         </details>
@@ -621,13 +842,93 @@ onMounted(() => refreshUsage())
       </button>
     </div>
 
-    <div v-if="error" class="cli-banner danger">{{ error }}</div>
+    <AutoContinueBlock
+      :agent-key="effectiveSelection?.type === 'account' ? effectiveSelection.agentKey : FOLLOW_SWITCH_AGENT"
+      :accounts="api"
+      :backend="backend"
+    />
+
+    <SettingsNotice v-if="error" class="cli-banner danger" tone="danger" role="alert" :message="error" />
+
+    <div class="acct-md">
+      <nav class="acct-list" :aria-label="$t('settings.accounts.api-keys.list.aria')">
+        <input
+          v-model="listQuery"
+          class="acct-search"
+          type="search"
+          :placeholder="$t('settings.accounts.api-keys.list.search')"
+          :aria-label="$t('settings.accounts.api-keys.list.search')"
+        />
+        <div class="acct-rows">
+          <template v-for="spec in rowAgents" :key="spec.agentKey">
+            <template v-if="listProfiles(spec.agentKey).length > 0">
+              <div v-if="!agentIsBare(spec.agentKey)" class="acct-group">{{ spec.label }}</div>
+              <div v-else-if="firstBareAgent(spec.agentKey)" class="acct-group">{{ $t('settings.accounts.cli.not-signed-in') }}</div>
+              <button
+                v-for="p in listProfiles(spec.agentKey)"
+                :key="p?.id ?? '__default__'"
+                type="button"
+                class="acct-row"
+                :class="{ on: isSelectedAccount(spec.agentKey, p?.id ?? null), dim: !isApiKeyProfile(p) && cardSaysSignedOut(spec.agentKey, p) }"
+                :aria-current="isSelectedAccount(spec.agentKey, p?.id ?? null) ? 'true' : undefined"
+                :data-account="slotKey(spec.agentKey, p)"
+                @click="selection = { type: 'account', agentKey: spec.agentKey, profileId: p?.id ?? null }"
+              >
+                <span class="acct-row-text">
+                  <b v-truncate>{{ rowTitle(spec.agentKey, p) }}</b>
+                  <span v-if="!agentIsBare(spec.agentKey)" class="acct-row-kind">
+                    <i v-if="rowInUse(spec.agentKey, p)" class="acct-row-dot" :title="$t('settings.accounts.cli.is-default')"></i>{{ rowKind(spec.agentKey, p) }}
+                  </span>
+                </span>
+                <span class="acct-row-value" :class="rowValue(spec.agentKey, p).tier">{{ rowValue(spec.agentKey, p).text }}</span>
+              </button>
+            </template>
+          </template>
+          <p v-if="listAgents.every((s) => listProfiles(s.agentKey).length === 0)" class="acct-empty">
+            {{ $t('settings.accounts.api-keys.list.empty') }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="cli-btn ghost sm acct-add"
+          :aria-current="effectiveSelection?.type === 'add' ? 'true' : undefined"
+          :disabled="!apiKeyCalls"
+          @click="startAdd"
+        >
+          {{ $t('settings.accounts.api-keys.list.add') }}
+        </button>
+      </nav>
+
+      <div class="acct-detail">
+        <AddAccountPanel
+          v-if="apiKeyCalls && effectiveSelection?.type === 'add'"
+          v-model:agent-key="addAgent"
+          :calls="apiKeyCalls"
+          :agents="listAgents.map((s) => ({ agentKey: s.agentKey, label: s.label }))"
+          :scopes="scopeChoices(addAgent)"
+          :scope="newAccountScope[addAgent] ?? ''"
+          @update:scope="newAccountScope[addAgent] = $event"
+          @subscribe="addAccount"
+          @saved="apiKeySaved"
+          @cancel="selection = null"
+        />
+        <ApiKeyDetail
+          v-else-if="apiKeyCalls && selectedApiKey"
+          :calls="apiKeyCalls"
+          :row="selectedApiKey"
+          :agent-label="agentLabel(selectedApiKey.agentKey)"
+          :in-use="apiKeyInUse(selectedApiKey)"
+          :switching="switching !== null"
+          @switch="switchToApiKey(selectedApiKey!)"
+          @stop-using="setApiKeyPaneDefault(selectedApiKey!, null)"
+          @deleted="selection = null"
+        />
 
     <!-- Multi-account CLIs first; the rest share one line at the end
          instead of repeating the same sentence under each name. -->
-    <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" :key="spec.agentKey" class="cli-agent">
+    <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" v-show="agentSelected(spec.agentKey)" :key="spec.agentKey" class="cli-agent">
       <div class="cli-agent-head">
-        <span class="cli-agent-name">{{ spec.label }}</span>
+        <span class="cli-agent-name cli-group-label">{{ spec.label }}</span>
         <select
           v-if="supported(spec.agentKey) && scopeChoices(spec.agentKey).length > 0"
           class="cli-scope-select"
@@ -640,7 +941,7 @@ onMounted(() => refreshUsage())
         </select>
         <button
           v-if="supported(spec.agentKey)"
-          class="cli-btn ghost sm"
+          class="cli-btn ghost sm cli-agent-add"
           :disabled="saving"
           @click="addAccount(spec.agentKey)"
         >
@@ -651,7 +952,7 @@ onMounted(() => refreshUsage())
       <div class="cli-card-grid">
         <!-- First card is the built-in Default (the user's real home). -->
         <template v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]" :key="p?.id ?? '__default__'">
-        <div v-if="!p && defaultCollapsed(spec.agentKey)" class="cli-card cli-card-collapsed">
+        <div v-if="!p && defaultCollapsed(spec.agentKey)" v-show="isSelectedAccount(spec.agentKey, null)" class="cli-card cli-card-collapsed">
           <span class="cli-card-collapsed-text" v-truncate>{{
             $t('settings.accounts.cli.default-collapsed')
           }}</span>
@@ -665,6 +966,7 @@ onMounted(() => refreshUsage())
         </div>
         <div
           v-else
+          v-show="isSelectedAccount(spec.agentKey, p?.id ?? null)"
           class="cli-card"
           :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
         >
@@ -708,8 +1010,10 @@ onMounted(() => refreshUsage())
             >
               ✎
             </button>
+            <!-- "Active" beside "Not signed in" reads as a contradiction, so a
+                 signed-out card carries no pill at all. -->
             <span
-              v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null)"
+              v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null) && rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
               class="cli-badge"
             >
               {{ $t('settings.accounts.cli.is-default') }}
@@ -751,42 +1055,60 @@ onMounted(() => refreshUsage())
             :key="'usage'"
           >
             <template v-if="u && !u.noData">
+              <!-- An old reading must not pass for a current one: say so
+                   before any figure, and grey the figures below. -->
+              <div v-if="u.cached" class="cli-card-cache" role="status">
+                <span class="cli-card-cache-title">⚠ {{ $t('usage.stale-title') }}</span>
+                <span>{{
+                  $t('usage.stale-detail', {
+                    time: u.lastSuccess,
+                    ago: u.lastSuccessAgo,
+                    action: $t('settings.accounts.cli.refresh-quota'),
+                  })
+                }}</span>
+              </div>
               <div v-if="u.resetExpired" class="cli-card-none">
-                <span class="cli-card-dash">—</span>
                 <span class="cli-card-foot">{{ $t('usage.cached-reset-expired') }}</span>
               </div>
               <template v-else>
-                <div class="cli-card-big" :class="u.tier">
+                <div class="cli-card-big" :class="[u.tier, { stale: u.cached }]">
                   {{ u.big }}
                   <small>{{ u.headLabel }}</small>
                 </div>
-                <div class="cli-card-bars">
-                  <div
-                    v-for="w in u.windows"
-                    :key="w.kind + w.label"
-                    class="cli-mini-bar"
-                    :title="barTitle(w)"
-                  >
-                    <div
-                      class="cli-mini-fill"
-                      :class="remainingTier(windowRemaining(w))"
-                      :style="{ width: windowRemaining(w) + '%' }"
-                    ></div>
+                <!-- One window per entry: its name above, its bar, and beside
+                     the bar what is left and when it resets. -->
+                <div class="cli-card-bars" :class="{ stale: u.cached }">
+                  <div v-for="w in u.windows" :key="w.kind + w.label" class="cli-win">
+                    <div class="cli-win-name">{{ windowLabel(w) }}</div>
+                    <div class="cli-mini-bar" :title="barTitle(w)">
+                      <div
+                        class="cli-mini-fill"
+                        :class="remainingTier(windowRemaining(w))"
+                        :style="{ width: windowRemaining(w) + '%' }"
+                      ></div>
+                    </div>
+                    <div class="cli-win-val">
+                      <span class="cli-win-pct" :class="remainingTier(windowRemaining(w))">{{
+                        windowPctLeft(w)
+                      }}</span>
+                      <span
+                        v-if="windowReset(w)"
+                        class="cli-win-reset"
+                        :class="{ passed: !formatResetCountdown(w.resetsAt) }"
+                      >{{ windowReset(w) }}</span>
+                    </div>
                   </div>
                 </div>
                 <div v-if="u.foot" class="cli-card-foot">{{ u.foot }}</div>
               </template>
-              <div v-if="u.cached" class="cli-card-cache">
-                {{ $t('usage.cached-at', { time: u.lastSuccess }) }}
-              </div>
               <div v-if="u.pending" class="cli-card-refresh pending">
                 {{ $t('usage.reading-now') }}
               </div>
-              <div v-else-if="u.cached" class="cli-card-refresh">
-                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+              <div v-else-if="u.cached && !u.cantRefresh" class="cli-card-refresh">
+                {{ u.refreshLine }}
               </div>
               <div v-else-if="u.updated" class="cli-card-refresh cli-card-updated">
-                {{ $t('usage.updated', { time: u.updated }) }}
+                {{ $t('usage.data-updated', { time: u.updated, ago: u.updatedAgo }) }}
               </div>
               <div v-if="u.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
                 {{ $t('usage.parked-not-measured-hint') }}
@@ -796,10 +1118,15 @@ onMounted(() => refreshUsage())
               </div>
             </template>
             <div
-              v-else-if="u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
+              v-else-if="cardSignedOut(spec.agentKey, p) && !cardSaysSignedOut(spec.agentKey, p)"
               class="cli-card-none"
             >
-              <span class="cli-card-dash">—</span>
+              <span class="cli-card-foot">{{ $t('settings.accounts.cli.not-signed-in') }}</span>
+            </div>
+            <div
+              v-else-if="(u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn) && !cardSignedOut(spec.agentKey, p)"
+              class="cli-card-none"
+            >
               <span class="cli-card-foot">{{ $t('usage.no-data') }}</span>
               <span v-if="u?.expired" class="cli-card-expired">
                 ⚠ {{ $t('usage.expired-tooltip') }}
@@ -808,7 +1135,7 @@ onMounted(() => refreshUsage())
                 {{ $t('usage.reading-now') }}
               </span>
               <span v-else-if="u?.refreshStatus" class="cli-card-refresh">
-                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+                {{ u.refreshLine }}
               </span>
               <span v-if="u?.notMeasuredHint" class="cli-card-reason cli-card-dir-hint">
                 {{ $t('usage.parked-not-measured-hint') }}
@@ -830,6 +1157,17 @@ onMounted(() => refreshUsage())
             </div>
           </template>
 
+          <div v-if="p && isNewPaneDir(spec.agentKey, p.id)" class="cli-card-reason cli-card-dir-guidance">
+            {{ $t('settings.accounts.cli.dir-new-panes-active') }}
+          </div>
+          <div v-else-if="showsDirGuidance(spec.agentKey, p?.id ?? null)" class="cli-card-reason cli-card-dir-guidance">
+            {{
+              accountDirSignedIn(spec.agentKey, p?.id ?? null)
+                ? $t('settings.accounts.cli.dir-guidance')
+                : $t('settings.accounts.cli.dir-guidance-sign-in-first')
+            }}
+          </div>
+
           <div class="cli-card-actions">
             <template v-if="confirmRemoveId === (p?.id ?? '__default__')">
               <span class="cli-confirm-text">{{ $t('settings.accounts.cli.delete-confirm') }}</span>
@@ -842,9 +1180,9 @@ onMounted(() => refreshUsage())
             </template>
             <template v-else>
               <button
-                v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
+                v-if="canRefreshCard(spec.agentKey, p?.id ?? null) && !cardSignedOut(spec.agentKey, p)"
                 class="cli-btn ghost sm cli-card-refresh-btn"
-                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))"
+                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null)) || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn === false || cardUsage(spec.agentKey, p?.id ?? null)?.cantRefresh === true"
                 :title="$t('settings.accounts.cli.refresh-quota-card-hint')"
                 @click="refreshCardQuota(spec.agentKey, p?.id ?? null)"
               >
@@ -888,6 +1226,19 @@ onMounted(() => refreshUsage())
                 {{ $t('settings.accounts.cli.dir-sign-in') }}
               </button>
               <button
+                v-if="p && spec.agentKey === FOLLOW_SWITCH_AGENT && accountDirSignedIn(spec.agentKey, p.id)"
+                class="cli-btn ghost sm cli-card-new-pane-dir-btn"
+                :disabled="switching !== null"
+                :title="$t('settings.accounts.cli.dir-new-panes-hint')"
+                @click="setNewPaneDir(spec.agentKey, isNewPaneDir(spec.agentKey, p.id) ? null : p.id)"
+              >
+                {{
+                  isNewPaneDir(spec.agentKey, p.id)
+                    ? $t('settings.accounts.cli.dir-new-panes-clear')
+                    : $t('settings.accounts.cli.dir-new-panes')
+                }}
+              </button>
+              <button
                 v-if="p || rowIdentity(spec.agentKey, null)?.signedIn"
                 class="cli-btn ghost sm"
                 @click="confirmRemoveId = (p?.id ?? '__default__')"
@@ -901,6 +1252,8 @@ onMounted(() => refreshUsage())
 
       </div>
     </section>
+      </div>
+    </div>
 
     <!-- Agents that cannot isolate multiple accounts (e.g. antigravity). -->
     <section v-if="CLI_AGENT_SPECS.some((s) => !supported(s.agentKey))" class="cli-agent cli-unsupported-group">
@@ -913,45 +1266,77 @@ onMounted(() => refreshUsage())
 </template>
 
 <style scoped>
-.cli-pane { display: flex; flex-direction: column; }
+.cli-pane { display: flex; flex-direction: column; container-type: inline-size; }
+.acct-md {
+  display: grid;
+  grid-template-columns: minmax(200px, 268px) minmax(0, 1fr);
+  min-height: 460px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.acct-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-height: 620px; padding: 8px; background: var(--bg-subtle); border-right: 1px solid var(--border-muted); }
+.acct-search { box-sizing: border-box; width: 100%; min-height: var(--control-h-md); padding: 3px 8px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-canvas); color: var(--text-primary); font-size: var(--font-2xs); }
+.acct-search:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -1px; }
+.acct-rows { flex: 1; min-height: 0; overflow-y: auto; }
+.acct-group { padding: 8px 6px 3px; font-size: var(--font-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.acct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 5px 7px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.acct-row:hover { background: var(--bg-hover); }
+.acct-row.on { background: var(--accent-subtle, var(--bg-hover)); }
+.acct-row:focus-visible, .acct-add:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -2px; }
+.acct-row.dim .acct-row-text b { color: var(--text-secondary); font-weight: 500; }
+.acct-row-text { min-width: 0; }
+.acct-row-text b { display: block; font-size: var(--font-xs); font-weight: 600; line-height: 1.35; }
+.acct-row-kind { display: flex; align-items: center; gap: 5px; font-size: var(--font-2xs); line-height: 1.3; color: var(--text-secondary); }
+.acct-row-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--success-fg); }
+.acct-row-value { font-size: var(--font-xs); font-weight: 700; white-space: nowrap; }
+.acct-row-value.ok { color: var(--success-fg); }
+.acct-row-value.warn { color: var(--attention-fg); }
+.acct-row-value.crit { color: var(--danger-fg); }
+.acct-empty { margin: 12px 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
+.acct-add { width: 100%; }
+.acct-add[aria-current] { border-color: var(--accent-fg); color: var(--text-primary); }
+.acct-detail { min-width: 0; padding: 14px 16px; }
+.acct-detail .cli-agent { margin-bottom: 0; }
+/* Adding moved to the list: its panel offers the same action next to the others. */
+.acct-detail .cli-btn.cli-agent-add { display: none; }
+.acct-detail .cli-scope-select { display: none; }
+@container (max-width: 620px) {
+  .acct-md { grid-template-columns: minmax(0, 1fr); }
+  .acct-list { max-height: 260px; border-right: none; border-bottom: 1px solid var(--border-muted); }
+}
 .cli-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 14px;
 }
-.cli-head-text { min-width: 0; }
+.cli-head-text { flex: 1 1 16em; min-width: 0; }
 .cli-refresh { flex: none; }
 /* Edge cases fold away under the one-sentence summary. */
 .cli-more { margin: 4px 0 0; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
 .cli-more summary { width: fit-content; cursor: pointer; color: var(--accent-fg); }
 .cli-more p { margin: 4px 0 0; max-width: 72ch; text-wrap: pretty; word-break: auto-phrase; }
-.cli-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+/* Section headings share SettingsSection's small uppercase label. */
+.cli-title { margin: 0 0 4px; font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cli-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 72ch; line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 
-.cli-banner {
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  margin-bottom: 12px;
-}
-.cli-banner.danger {
-  background: var(--danger-subtle, var(--bg-muted));
-  border: 1px solid var(--danger-muted, var(--border-default));
-  color: var(--danger-fg, var(--text-primary));
-}
 
 .cli-agent { margin-bottom: 18px; }
 .cli-agent-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   margin-bottom: 8px;
 }
-.cli-agent-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+/* A provider names a group of account cards: the page's one section-label
+   style (SettingsSection), not a third heading size. */
+.cli-agent-name { font-size: var(--font-row-desc); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
 .cli-unsupported-group { padding-top: 12px; border-top: 1px solid var(--border-muted); }
 .cli-unsupported { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
 .cli-unsupported-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -966,21 +1351,26 @@ onMounted(() => refreshUsage())
 
 .cli-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* One account per row, across the page's width: half-width cards left an
+     empty column beside every vendor with a single account. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 .cli-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* Its quota rows fold by the card's own width (see .cli-card-bars). */
+  container-type: inline-size;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-subtle);
 }
+/* The account in use is marked by its neutral "Default" pill, not a blue
+   ring: blue is reserved for selection, focus and the primary action. */
 .cli-card.active {
-  border-color: var(--accent-emphasis);
-  box-shadow: 0 0 0 1px var(--accent-emphasis);
+  border-color: var(--border-strong);
 }
 /* The empty, inactive built-in Default: one line across the grid. */
 .cli-card.cli-card-collapsed {
@@ -994,7 +1384,7 @@ onMounted(() => refreshUsage())
 .cli-card-collapsed-text {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--font-xs);
   color: var(--text-secondary);
 }
 .cli-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -1019,9 +1409,14 @@ onMounted(() => refreshUsage())
   font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-primary);
+  /* Long localized names ("Ursprüngliche Anmeldung …") wrap to a second line
+     instead of losing their ending to an ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .cli-card-id.dim { font-weight: 400; color: var(--text-muted); }
 .cli-card-rename-btn {
@@ -1054,19 +1449,19 @@ onMounted(() => refreshUsage())
   font-size: var(--font-xs);
   font-family: inherit;
 }
-.cli-card-meta { font-size: 10.5px; color: var(--text-secondary); }
+.cli-card-meta { font-size: var(--font-xs); color: var(--text-secondary); }
 .cli-card-dup {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 3px 6px;
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   line-height: 1.4;
   color: var(--attention-fg);
 }
 .cli-card-dup-flag {
   flex: none;
-  font-size: 9px;
+  font-size: var(--font-2xs);
   font-weight: 600;
   padding: 1px 5px;
   border-radius: 999px;
@@ -1082,16 +1477,51 @@ onMounted(() => refreshUsage())
   color: var(--text-primary);
 }
 .cli-card-big small {
-  font-size: 10.5px;
+  font-size: var(--font-xs);
   font-weight: 600;
   color: var(--text-secondary);
   margin-left: 4px;
 }
 .cli-card-big.warn { color: var(--attention-fg); }
 .cli-card-big.crit { color: var(--danger-fg); }
-.cli-card-bars { display: flex; flex-direction: column; gap: 3px; }
+.cli-card-big.stale { color: var(--text-secondary); }
+/* Bars share one column so they line up whatever the text beside them says;
+   a narrow pane moves that text under its bar. */
+.cli-card-bars {
+  display: grid;
+  grid-template-columns: minmax(64px, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+.cli-win { display: contents; }
+.cli-win-name {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cli-win-val {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+.cli-win-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cli-win-pct.ok { color: var(--success-fg); }
+.cli-win-pct.warn { color: var(--attention-fg); }
+.cli-win-pct.crit { color: var(--danger-fg); }
+.cli-win-reset { font-variant-numeric: tabular-nums; }
+.cli-win-reset.passed { color: var(--attention-fg); font-weight: 600; }
+.cli-card-bars.stale .cli-mini-fill { opacity: 0.45; }
+.cli-card-bars.stale .cli-win-pct { color: var(--text-secondary); }
+@container (max-width: 440px) {
+  .cli-card-bars { grid-template-columns: minmax(0, 1fr); }
+}
 .cli-mini-bar {
-  height: 3px;
+  height: 6px;
   border-radius: 999px;
   background: var(--bg-muted);
   overflow: hidden;
@@ -1099,27 +1529,34 @@ onMounted(() => refreshUsage())
 .cli-mini-fill { height: 100%; border-radius: 999px; background: var(--success-fg); }
 .cli-mini-fill.warn { background: var(--attention-fg); }
 .cli-mini-fill.crit { background: var(--danger-fg); }
-.cli-card-foot { font-size: var(--font-3xs); color: var(--text-muted); }
-.cli-card-cache { font-size: var(--font-3xs); font-weight: 600; color: var(--attention-fg); }
-.cli-card-refresh { font-size: var(--font-3xs); color: var(--text-muted); }
+.cli-card-foot { font-size: var(--font-xs); color: var(--text-muted); }
+.cli-card-cache {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--attention-muted, var(--border-default));
+  border-radius: 6px;
+  background: var(--attention-subtle, var(--bg-muted));
+  font-size: var(--font-xs);
+  line-height: 1.45;
+  color: var(--attention-fg);
+}
+.cli-card-cache-title { font-weight: 600; }
+.cli-card-refresh { font-size: var(--font-xs); color: var(--text-muted); }
 /* A read is in flight — the only line on the card that is about right now,
    so it must not read as quietly as the historical ones around it. */
 .cli-card-refresh.pending { color: var(--accent-fg); font-weight: 600; }
 /* The backend's own sentence; cards are narrow, so let it wrap instead of
    clipping the half that names the failure. */
 .cli-card-reason {
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
 .cli-card-expired { font-size: var(--font-2xs); font-weight: 600; color: var(--danger-fg); }
 .cli-card-none { display: flex; flex-direction: column; gap: 2px; }
-.cli-card-dash {
-  font-size: var(--font-xl);
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--text-muted);
-}
 
 .cli-card-actions {
   display: flex;
@@ -1131,16 +1568,17 @@ onMounted(() => refreshUsage())
 .cli-confirm-text { font-size: var(--font-2xs); color: var(--text-secondary); }
 .cli-badge {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
-  color: var(--accent-fg);
-  background: var(--accent-subtle, var(--bg-muted));
-  border: 1px solid var(--accent-muted, var(--border-default));
+  color: var(--text-primary);
+  background: var(--bg-muted);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   padding: 1px 8px;
 }
 
 .cli-btn {
+  white-space: nowrap;
   border-radius: 5px;
   font-size: var(--font-xs);
   padding: 5px 10px;
@@ -1149,7 +1587,9 @@ onMounted(() => refreshUsage())
   background: transparent;
   color: var(--text-primary);
 }
-.cli-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
+/* Small in type, not in reach: Refresh Quota, Sign In and the rest keep a
+   28px target. */
+.cli-btn.sm { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control-h-md); font-size: var(--font-2xs); padding: 3px 8px; }
 .cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .cli-btn.primary {
   background: var(--accent-emphasis);

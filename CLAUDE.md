@@ -17,6 +17,7 @@ This file is a router — read the referenced file BEFORE doing the matching wor
 | Inter-CLI messaging: the bare-line protocol, handles, delivery rules | `docs/en-US/inter-cli-messaging.md` |
 | Editor, diff, or plan surfaces | `docs/en-US/editor-design.md` |
 | Keyboard shortcuts and the key resolver | `docs/en-US/keybindings.md` |
+| Any UI check or screenshot: layout fixes, before/after pairs, design reviews | `docs/en-US/ui-verification.md` |
 
 Read routed files on demand, not all up front.
 
@@ -41,7 +42,8 @@ in-repo docs above.
 3. **No self-initiated commits** — the user decides when to commit, unless
    they explicitly authorized committing for the task.
 4. **No UI automation** (cliclick/screencapture/AppleScript) — the user tests
-   UI manually.
+   UI manually. Agents may check the main window only through dev web mode
+   against its isolated backend (`docs/en-US/ui-verification.md`).
 5. **Giant files** — any file over ~2K lines: Grep tool to locate → Read with
    offset/limit → batch edits through one subagent. Never whole-file Read,
    never bash/python inline search. The largest are `src/renderer/src/App.vue`
@@ -49,13 +51,21 @@ in-repo docs above.
    `src/renderer/src/components/ControlPane.vue` (~6.8K),
    `src/renderer/src/components/SettingsModal.vue` (~5.2K),
    `src/renderer/src/platform/terminal/composables/useTerminal.ts` (~4.7K),
-   `src/renderer/src/components/GitPane.vue` (~3.6K, and a second copy at
-   `plugins/navide-git/src/components/GitPane.vue`),
+   `plugins/navide-git/src/components/GitPane.vue` (~3.6K; the Host keeps no
+   Git interface of its own),
    `backend/agent_team_backend/git_service.py` (~3.2K), and
-   `src/renderer/src/EditorWindowApp.vue` (~2.9K). Check with `wc -l`
+   `src/renderer/src/EditorWindowApp.vue` (~2.8K). Check with `wc -l`
    rather than trusting this list — it drifts. Per-vendor CLI code lives in
    `backend/agent_team_backend/cli_vendors/` (one file per vendor; see
    `docs/adding-a-cli-vendor.md`).
+6. **One release, one CI** — every version is developed on one
+   `integration/<version>` branch, and CI runs once, after all development is
+   done and the user agrees. Do not open a PR per change: an open PR runs CI on
+   every push. Each change gets its own branch; run its affected tests locally,
+   push the branch and report it for review, and the reviewer merges it into
+   the integration branch. Then one PR, one CI, main, the release dry run, and
+   the user's go. Bug fixes go in the current version, never the next one.
+7. **Secrets never leave the machine**: no cloud sync, no git history, no fixtures, no logs; tests build fakes at runtime.
 
 ## Workflow (Plan Documents)
 

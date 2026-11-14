@@ -11,7 +11,9 @@ const STAGES = [
   { id: '02', title: 'Review', shortTitle: 'Review', slots: [] },
 ]
 
-function mountCard(awaitingGate: { gateId: string; label: string } | null): VueWrapper {
+type Gate = { gateId: string; label: string; prompt?: string; rejectEndsRun?: false | 'no-edge' | 'exhausted' }
+
+function mountCard(awaitingGate: Gate | null): VueWrapper {
   i18n.global.locale.value = 'en-US'
   sessionStorage.setItem('agentTeam.sidebarTab', 'pipeline')
   return shallowMount(ControlPane as never, {
@@ -52,7 +54,30 @@ describe('ControlPane – run paused on a gate', () => {
     await wrapper.find('.pipeline-gate-approve').trigger('click')
     await wrapper.find('.pipeline-gate-reject').trigger('click')
     expect(wrapper.emitted('pipeline-gate-approve')).toEqual([['g1']])
-    expect(wrapper.emitted('pipeline-gate-reject')).toEqual([['g1']])
+    expect(wrapper.emitted('pipeline-gate-reject')).toEqual([['g1', '']])
+  })
+
+  it('shows what the gate asks to check, or the default ask without one (B4)', () => {
+    wrapper = mountCard({ gateId: 'g1', label: 'Design OK?', prompt: 'Check both mockups' })
+    expect(wrapper.find('.pipeline-gate-prompt').text()).toBe('Check both mockups')
+    wrapper.unmount()
+    wrapper = mountCard({ gateId: 'g1', label: 'Design OK?' })
+    expect(wrapper.find('.pipeline-gate-prompt').text()).toBe('Check the work above before the pipeline continues.')
+  })
+
+  it('sends the typed reason with Send Back (B4)', async () => {
+    wrapper = mountCard({ gateId: 'g1', label: 'Design OK?' })
+    await wrapper.find('.pipeline-gate-comment').setValue('  colours are off  ')
+    await wrapper.find('.pipeline-gate-reject').trigger('click')
+    expect(wrapper.emitted('pipeline-gate-reject')).toEqual([['g1', 'colours are off']])
+  })
+
+  it('warns when Send Back would end the run (B4)', () => {
+    wrapper = mountCard({ gateId: 'g1', label: 'Design OK?', rejectEndsRun: false })
+    expect(wrapper.find('.pipeline-gate-ends').exists()).toBe(false)
+    wrapper.unmount()
+    wrapper = mountCard({ gateId: 'g1', label: 'Design OK?', rejectEndsRun: 'no-edge' })
+    expect(wrapper.find('.pipeline-gate-ends').text()).toBe('Sending back here ends the run.')
   })
 
   it('without a gate the card has no gate row and Next is enabled', () => {

@@ -11,17 +11,19 @@ other filesystem bridge read.
 from __future__ import annotations
 
 import base64
+import gzip
 import hashlib
 import json
 import os
 import re
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
 
 import pytest
-from agent_team_backend import osplat
+from agent_team_backend import osplat, plan_versions
 
 from tests.test_navide_plans_backend_wire import (  # noqa: F401 - backend_process is a fixture
     CLIENT_META,
@@ -501,7 +503,8 @@ def test_write_is_atomic_and_rejects_stale_mtime(backend_process: subprocess.Pop
     assert after.st_ino != before.st_ino
     if osplat.paths.enforces_posix_modes():
         assert after.st_mode & 0o777 == 0o640
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    # No temporary file is left behind (.history holds the write's version).
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
 
     # A document sent in parts swaps in the same way, with the same check.
     data = _plan_html("Chunked", padding=300 * 1024).encode("utf-8")
@@ -522,11 +525,356 @@ def test_write_is_atomic_and_rejects_stale_mtime(backend_process: subprocess.Pop
 
     assert upload(expected_mtime=1.0) == {"ok": False, "conflict": True}
     assert target.read_text(encoding="utf-8") == _plan_html("Updated")
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
     committed = upload(expected_mtime=target.stat().st_mtime)
     assert committed["ok"] is True
     assert target.read_bytes() == data
-    assert sorted(path.name for path in plans.iterdir()) == ["doc_aaaaaa.html"]
+    assert sorted(path.name for path in plans.iterdir() if path.name != ".history") == ["doc_aaaaaa.html"]
+
+
+def test_a_read_reports_the_content_hash_a_write_can_expect(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    target = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    target.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    read = _value(_call(backend_process, host, "plans.read_document", {"rel_path": rel_path}))
+    assert read["sha256"] == hashlib.sha256(target.read_bytes()).hexdigest()
+
+    # Another writer changes the bytes and puts the mtime back.
+    before = target.stat()
+    target.write_text(_plan_html("Theirs"), encoding="utf-8")
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    stale = _value(_write(
+        backend_process, host, rel_path, _plan_html("Mine"), expected_mtime=read["mtime"], expected_sha256=read["sha256"],
+    ))
+    assert stale == {"ok": False, "conflict": True}
+    assert "Theirs" in target.read_text(encoding="utf-8")
+
+    fresh = _value(_call(backend_process, host, "plans.read_document", {"rel_path": rel_path}))
+    assert _value(_write(
+        backend_process, host, rel_path, _plan_html("Mine"), expected_sha256=fresh["sha256"],
+    )) == {"ok": True}
+    assert "Mine" in target.read_text(encoding="utf-8")
+
+    for bad in ("ABC", "0" * 63, 7):
+        assert _error_code(_write(backend_process, host, rel_path, "x", expected_sha256=bad)) == "INVALID_ARGUMENT"
+
+
+def _history_entries(plan: Path) -> dict[str, dict[str, Any]]:
+    # Version lines only; the backend also announces each write before it.
+    history = plan.parent / ".history" / plan.name.removesuffix(".html")
+    entries: dict[str, dict[str, Any]] = {}
+    for line in (history / "index.jsonl").read_text(encoding="utf-8").splitlines():
+        entry = json.loads(line)
+        if "file" in entry:
+            entries[entry["file"]] = entry
+    return entries
+
+
+def test_the_manual_write_paths_never_write_into_history(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    host = _RootOnlyHost({"instance-1": mine})
+    history = ".agent-team/plans/.history/doc_aaaaaa/20260101T000000_draft.html"
+
+    assert _error_code(_write(backend_process, host, history, _plan_html("Planted"))) == "WORKSPACE_SCOPE_VIOLATION"
+    upload_id = "0123456789abcdef0123456789abcdef"
+    for name, extra in (
+        ("plans.write_document_part", {"upload_id": upload_id, "offset": 0, "data_base64": "eA=="}),
+        ("plans.write_document_commit", {"upload_id": upload_id, "total_size": 1}),
+        ("plans.history_preserve", {}),
+    ):
+        response = _call(backend_process, host, name, {"rel_path": history, **extra})
+        assert _error_code(response) == "WORKSPACE_SCOPE_VIOLATION", name
+    assert not (mine / ".agent-team" / "plans" / ".history").exists()
+
+
+def test_writes_record_versions_with_their_author(backend_process: subprocess.Popen[bytes], tmp_path: Path) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    # The default runtime is an agent's MCP call.
+    assert _value(_write(backend_process, host, rel_path, _plan_html("By agent"))) == {"ok": True}
+    entries = _history_entries(plan)
+    [first] = entries.values()
+    assert first["author"] == {"kind": "agent"}
+    assert first["sha256"] == hashlib.sha256(plan.read_bytes()).hexdigest()
+    snapshot = plan.parent / ".history" / "doc_aaaaaa" / first["file"]
+    assert plan_versions.read_version(snapshot.parent, snapshot.name) == plan.read_bytes()
+
+    # A document without a stage keeps no versions, and other plan
+    # directories keep none either.
+    assert _value(_write(backend_process, host, ".agent-team/plans/plain_bbbbbb.html", "<p>no meta</p>")) == {"ok": True}
+    assert _value(_write(backend_process, host, "docs/plans/elsewhere_cccccc.html", _plan_html("Docs"))) == {"ok": True}
+    assert sorted(p.name for p in (plan.parent / ".history").iterdir()) == ["doc_aaaaaa"]
+    assert not (mine / "docs" / "plans" / ".history").exists()
+
+
+def _write_as(
+    process: subprocess.Popen[bytes], host: _RootOnlyHost, rel_path: str, content: str, initiator: dict[str, Any]
+) -> dict[str, Any]:
+    global _counter
+    _counter += 1
+    request_id = f"initiator-{_counter}"
+    _send(process, {
+        "jsonrpc": "2.0", "id": request_id, "method": "navide/call",
+        "params": {
+            "_meta": CLIENT_META, "name": "plans.write_document",
+            "arguments": {"rel_path": rel_path, "content": content},
+            "runtime": {**_runtime("instance-1"), "initiator": initiator},
+        },
+    })
+    while True:
+        frame = _read(process, timeout=30)
+        if frame.get("id") == request_id:
+            return frame
+        assert frame.get("method") == "navide/host/call", frame
+        host(process, frame, "instance-1")
+
+
+def test_a_version_names_the_agent_pane_the_host_reports(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Original"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    agent = {"kind": "agent", "source": "mcp", "id": "agent-1"}
+
+    # A Host from 0.2.35 on names the pane; the version keeps that name.
+    named = _write_as(backend_process, host, rel_path, _plan_html("By reviewer"), {**agent, "pane": "Reviewer"})
+    assert _value(named) == {"ok": True}
+    # An older Host sends the three agent keys only: the version has no pane.
+    unnamed = _write_as(backend_process, host, rel_path, _plan_html("By an agent"), agent)
+    assert _value(unnamed) == {"ok": True}
+    authors = [entry["author"] for _, entry in sorted(_history_entries(plan).items())]
+    assert authors == [{"kind": "agent", "pane": "Reviewer"}, {"kind": "agent"}]
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    assert [version["author"] for version in listed["versions"]] == [{"kind": "agent"}, {"kind": "agent", "pane": "Reviewer"}]
+
+    # Anything else in the initiator is still a malformed runtime, written nowhere.
+    before = plan.read_bytes()
+    for bad in (
+        {**agent, "pane": ""},
+        {**agent, "pane": "   "},
+        {**agent, "pane": 7},
+        {**agent, "pane": "x" * 201},
+        {**agent, "pane": "Reviewer", "token": "t"},
+        {"kind": "user", "id": "user-1", "pane": "Reviewer"},
+    ):
+        frame = _write_as(backend_process, host, rel_path, _plan_html("Rejected"), bad)
+        assert "error" in frame, bad
+    assert plan.read_bytes() == before
+
+
+def test_a_version_with_embedded_images_lists_reads_and_restores_whole(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    image = base64.b64encode(bytes(range(256)) * 40).decode("ascii")
+    with_image = _plan_with("draft", f'Shot <img src="data:image/png;base64,{image}">')
+    plan.write_text(with_image, encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    assert _value(_write(backend_process, host, rel_path, with_image + " ")) == {"ok": True}
+    assert _value(_write(backend_process, host, rel_path, _plan_with("approved", "Text only"))) == {"ok": True}
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    files = [version["file"] for version in listed["versions"]]
+    assert files[-1].endswith(".html.parts.gz") and files[0].endswith(".html.gz")
+    read = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": files[-1]}))
+    assert read["ok"] is True and read["content"] == with_image + " "
+
+    restored = _value(_call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": files[-1]}))
+    assert restored == {"ok": True}
+    assert f"data:image/png;base64,{image}" in plan.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="creating symbolic links needs a privilege on Windows")
+@pytest.mark.parametrize("linked", [".history", ".history/doc_aaaaaa"])
+def test_history_list_read_and_restore_refuse_a_history_directory_behind_a_link(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path, linked: str
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plans = mine / ".agent-team" / "plans"
+    plan = plans / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "Mine"), encoding="utf-8")
+    # A planted history elsewhere, with a version the link would expose.
+    outside = tmp_path / "outside"
+    outside_history = outside / "doc_aaaaaa" if linked == ".history" else outside
+    outside_history.mkdir(parents=True)
+    version = "20260601T080000_draft.html.gz"
+    (outside_history / version).write_bytes(gzip.compress(_plan_with("draft", "Planted").encode("utf-8"), mtime=0))
+    (plans / ".history").mkdir(exist_ok=True) if linked != ".history" else None
+    (plans / linked).symlink_to(outside if linked == ".history" else outside_history, target_is_directory=True)
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    listed = _call(backend_process, host, "plans.history_list", {"rel_path": rel_path})
+    assert _error_code(listed) == "WORKSPACE_SCOPE_VIOLATION"
+    read = _call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": version})
+    assert _error_code(read) == "WORKSPACE_SCOPE_VIOLATION"
+    restore = _call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": version})
+    assert _error_code(restore) == "WORKSPACE_SCOPE_VIOLATION"
+    assert "Planted" not in plan.read_text(encoding="utf-8")
+    assert sorted(p.name for p in outside_history.iterdir()) == [version]
+
+
+def test_history_preserve_pins_disk_bytes_or_stores_the_users_side_without_scripts(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_html("Theirs"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+
+    pinned = _value(_call(backend_process, host, "plans.history_preserve", {"rel_path": rel_path}))
+    assert pinned["ok"] is True and isinstance(pinned["version"], str)
+    entry = _history_entries(plan)[pinned["version"]]
+    assert entry["reason"] == "conflict"
+    assert entry["sha256"] == hashlib.sha256(plan.read_bytes()).hexdigest()
+
+    planted = _plan_html("Mine").replace("</body>", "<script>alert(1)</script><SCRIPT src=x></SCRIPT ></body>")
+    kept = _value(_call(backend_process, host, "plans.history_preserve", {"rel_path": rel_path, "content": planted}))
+    stored = plan_versions.read_version(plan.parent / ".history" / "doc_aaaaaa", kept["version"]).decode("utf-8")
+    assert "Mine" in stored and "alert(1)" not in stored and "<SCRIPT" not in stored
+    assert 'id="plan-meta"' in stored  # the JSON island is data and stays
+    assert _history_entries(plan)[kept["version"]]["detached"] is True
+    # The plan itself was never written.
+    assert "Theirs" in plan.read_text(encoding="utf-8")
+
+    for bad in ({"rel_path": rel_path, "content": 7}, {"rel_path": rel_path, "extra": 1}, {}):
+        assert _error_code(_call(backend_process, host, "plans.history_preserve", bad)) == "INVALID_ARGUMENT"
+
+
+def _plan_with(stage: str, body: str, todos: list[dict[str, str]] | None = None, notes: int = 0) -> str:
+    meta = {
+        "schemaVersion": 1, "name": "Doc", "overview": "", "stage": stage, "approvedAt": None,
+        "todos": todos or [], "reviewNotes": [
+            {"id": f"n{i}", "author": "user", "text": "t", "resolved": False, "reply": ""} for i in range(notes)
+        ],
+    }
+    todo_rows = "".join(
+        f'<li data-todo-id="{t["id"]}" data-status="{t["status"]}">{t["id"]}</li>' for t in (todos or [])
+    )
+    return (
+        '<!doctype html><html><head></head><body>\n'
+        f'<script type="application/json" id="plan-meta">\n{json.dumps(meta)}\n</script>\n'
+        f'<header><h1>Doc<span class="pill {stage}">{stage}</span></h1></header>\n'
+        f'<section><h2>Body</h2><p>{body}</p></section>\n'
+        f'<ul class="todos">{todo_rows}</ul>\n</body></html>\n'
+    )
+
+
+def test_versions_are_listed_read_and_restored_through_the_backend(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "First text", [{"id": "t1", "status": "pending"}]), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    # Two versions written by the backend: the old text, then the new one.
+    assert _value(_write(backend_process, host, rel_path, _plan_with("draft", "First text", [{"id": "t1", "status": "pending"}]) + " ")) == {"ok": True}
+    plan_versions_dir = plan.parent / ".history" / "doc_aaaaaa"
+    later = _plan_with("approved", "Second text", [{"id": "t1", "status": "done"}], notes=2)
+    assert _value(_write(backend_process, host, rel_path, later)) == {"ok": True}
+
+    listed = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))
+    assert listed["ok"] is True
+    files = [version["file"] for version in listed["versions"]]
+    assert len(files) == 2 and all(name.endswith(".html.gz") for name in files)
+    assert files == sorted(files, reverse=True)
+    first = listed["versions"][-1]
+    assert first["author"] == {"kind": "agent"} and first["stage"] == "draft"
+
+    read = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": first["file"]}))
+    assert read["ok"] is True and "First text" in read["content"]
+
+    # Restore brings back the text under the current meta (approved, t1 done,
+    # two notes), and is itself a new version.
+    restored = _value(_call(backend_process, host, "plans.history_restore", {"rel_path": rel_path, "file": first["file"]}))
+    assert restored == {"ok": True}
+    text = plan.read_text(encoding="utf-8")
+    assert "First text" in text and "Second text" not in text
+    meta = json.loads(re.search(r'id="plan-meta">([\s\S]*?)</script>', text).group(1))
+    assert meta["stage"] == "approved" and len(meta["reviewNotes"]) == 2
+    assert meta["todos"] == [{"id": "t1", "status": "done"}]
+    assert '<span class="pill approved">approved</span>' in text
+    assert 'data-status="done"' in text
+    newest = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"][0]
+    assert newest["reason"] == "restore" and newest["restoredFrom"] == first["file"]
+    assert len(list(plan_versions_dir.glob("*.gz"))) == 3
+
+
+def test_a_large_version_is_read_back_in_pages_byte_for_byte(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    body = "".join(f"<p>line {i} ✓ 計畫</p>" for i in range(60_000))
+    content = _plan_with("draft", body)
+    plan.write_text("seed", encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    data = content.encode("utf-8")
+    upload_id = "0123456789abcdef0123456789abcdef"
+    offset = 0
+    while offset < len(data):
+        part = data[offset : offset + 96 * 1024]
+        assert _value(_call(backend_process, host, "plans.write_document_part", {
+            "rel_path": rel_path, "upload_id": upload_id, "offset": offset,
+            "data_base64": base64.b64encode(part).decode("ascii"),
+        }))["ok"] is True
+        offset += len(part)
+    assert _value(_call(backend_process, host, "plans.write_document_commit", {
+        "rel_path": rel_path, "upload_id": upload_id, "total_size": len(data),
+    }))["ok"] is True
+    [version] = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"]
+    parts, offset = [], 0
+    while True:
+        page = _value(_call(backend_process, host, "plans.history_read", {"rel_path": rel_path, "file": version["file"], "offset": offset}))
+        parts.append(page["content"])
+        if page.get("eof", True):
+            break
+        offset = page["next_offset"]
+    assert len(parts) > 1
+    assert "".join(parts) == content
+
+
+def test_history_operations_refuse_paths_other_formats_and_stale_restores(
+    backend_process: subprocess.Popen[bytes], tmp_path: Path
+) -> None:
+    mine = _workspace(tmp_path, "mine")
+    plan = mine / ".agent-team" / "plans" / "doc_aaaaaa.html"
+    plan.write_text(_plan_with("draft", "Text"), encoding="utf-8")
+    host = _RootOnlyHost({"instance-1": mine})
+    rel_path = ".agent-team/plans/doc_aaaaaa.html"
+    assert _value(_write(backend_process, host, rel_path, _plan_with("draft", "Text 2"))) == {"ok": True}
+    [version] = _value(_call(backend_process, host, "plans.history_list", {"rel_path": rel_path}))["versions"]
+
+    for bad in ("../doc_aaaaaa.html", "20260101T000000_draft.plan.md.gz", "index.jsonl", "x/20260101T000000_draft.html"):
+        for name in ("plans.history_read", "plans.history_restore"):
+            assert _error_code(_call(backend_process, host, name, {"rel_path": rel_path, "file": bad})) == "INVALID_ARGUMENT", (name, bad)
+    stale = _value(_call(backend_process, host, "plans.history_restore", {
+        "rel_path": rel_path, "file": version["file"], "expected_sha256": "0" * 64,
+    }))
+    assert stale == {"ok": False, "conflict": True}
+    assert "Text 2" in plan.read_text(encoding="utf-8")
+    # A document that keeps no history lists none.
+    assert _value(_call(backend_process, host, "plans.history_list", {"rel_path": "docs/plans/other_bbbbbb.html"})) == {"ok": True, "versions": []}
 
 
 def test_agent_changes_refuse_a_document_without_valid_plan_meta_and_leave_it_untouched(

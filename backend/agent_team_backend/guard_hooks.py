@@ -145,7 +145,11 @@ def normalise(vendor: str, payload: dict[str, Any]) -> list[tuple[str, dict[str,
         paths = _PATCH_FILE.findall(text) + _PATCH_MOVE.findall(text)
         return [(_WRITE, {"path": p.strip()}) for p in paths] or [(name, args)]
     if lower in _SHELL_TOOLS:
-        return [(_SHELL, {"command": _command_text(args.get("command"))})]
+        shell_input = {"command": _command_text(args.get("command"))}
+        if lower == "powershell":
+            # Still graded as "shell"; the dialect only adds the PowerShell rules.
+            shell_input["dialect"] = "powershell"
+        return [(_SHELL, shell_input)]
     # Every path field, and every item of a list-valued one, is graded on its own.
     paths = [
         str(p) for k in (*_PATH_KEYS, "paths") if args.get(k)

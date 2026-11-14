@@ -49,7 +49,9 @@ export interface StatusColorSpec {
 
 export const STATUS_COLOR_PALETTE: Record<StatusColorKey, StatusColorSpec> = {
   green: { bg: 'var(--success-muted)', fg: 'var(--success-fg)' },
-  yellow: { bg: 'var(--attention-muted)', fg: 'var(--attention-fg)' },
+  // The subtle tier with its on-subtle text: attention-fg on attention-muted
+  // fell below 4.5:1 in both light and dark.
+  yellow: { bg: 'var(--attention-subtle)', fg: 'var(--attention-on-subtle)' },
   orange: {
     bg: 'color-mix(in srgb, var(--warning-fg) 20%, transparent)',
     fg: 'var(--warning-fg)',

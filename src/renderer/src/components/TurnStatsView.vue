@@ -15,7 +15,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import { useTokenTurns, type TokenTurn, type TurnMethod } from '../composables/useTokenTurns'
-import { accountUsageFor, exhaustedWindow, formatResetAbsolute, type UsageSnapshot } from '../composables/useUsage'
+import { absentSessionNote, accountUsageFor, exhaustedWindow, formatResetAbsolute, type UsageSnapshot } from '../composables/useUsage'
 import {
   DEFAULT_PROFILE_ID,
   UNKNOWN_PROFILE_ID,
@@ -574,6 +574,9 @@ defineExpose({ buildCsv })
         </span>
         <span v-if="row.unknown" class="ts-quota-unknown" data-part="quota-unknown">{{ t('turn-stats.quota-unknown-account') }}</span>
         <template v-else-if="row.windows.length">
+          <span v-if="absentSessionNote(row.snapshot)" class="ts-quota-window" data-part="quota-session-note">
+            {{ t('usage.window-claude-session') }} {{ t(`usage.window-${absentSessionNote(row.snapshot)}`) }}
+          </span>
           <span
             v-for="w in row.windows"
             :key="`${w.kind}:${w.label}`"

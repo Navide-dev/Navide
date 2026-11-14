@@ -3,18 +3,16 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useBackend } from './composables/useBackend'
 import { createHostEditorPort } from './composables/hostEditorPort'
 import { createHostGitTransport } from './composables/hostGitTransport'
-import { createHostGitSettingsPort, createHostGitSurfacePorts, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostFileAccessPort } from './composables/hostFileAccess'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { revealPath } from './composables/hostShell'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import ExplorerPane from './components/ExplorerPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import SearchPane from './components/SearchPane.vue'
-import GitPane from './components/GitPane.vue'
 import { EditorPane } from '@navide/plugin-ui/editor'
 import DiffPane from './editor/DiffPane.vue'
-import BranchDiffPane from './editor/BranchDiffPane.vue'
-import ConflictPane from './editor/ConflictPane.vue'
-import ReviewPane from './components/ReviewPane.vue'
 import NotificationHost from './components/NotificationHost.vue'
 // Shared right-side AI CLI terminal shell (rail toggle + resize + embedded
 // PTY terminal), same panel the Git/Plan windows embed.
@@ -31,8 +29,6 @@ import { initSettingsBackend, settingsGet, settingsSet, onSettingsChanged } from
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { allDiagnosticsSorted, setDiagnostics, diagnosticsKey } from './editor/diagnostics'
 import type { Diagnostic } from './editor/diagnostics'
-// Type-only — erased at build time, no useGit in this window's bundle.
-import type { ListConflictsResult } from './composables/useGit'
 
 // ── window params (Electron appends ?window=editor&workspace_path=…&filepath=…) ──
 const params = new URLSearchParams(window.location.search)
@@ -79,19 +75,16 @@ const initialDiffFile = params.get('diff_filepath') ?? ''
 const initialDiffStaged = params.get('diff_staged') === 'true'
 const initialDiffName = params.get('diff_name') ?? (initialDiffFile.split('/').pop() || initialDiffFile)
 const initialDiffCommit = params.get('diff_commit') ?? ''
-// branch-diff pre-load: when opened via openBranchDiffWindow with no existing editor window
-const initialBranchDiffBase = params.get('branch_diff_base') ?? ''
-const initialBranchDiffCompare = params.get('branch_diff_compare') ?? ''
 
 const backend = useBackend()
 const editorPort = createHostEditorPort(backend)
 const gitTransport = createHostGitTransport(backend)
-const surfacePorts = createHostGitSurfacePorts(backend, gitTransport)
+const fileAccess = createHostFileAccessPort(backend)
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to this window's own ws connection: flushes writes
 // (sidebar/panel widths) and receives ui.settings_changed broadcasts from the
 // main window (theme changes — see the onSettingsChanged subscription below).
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 const { confirm, toast } = useNotify()
 
@@ -137,7 +130,7 @@ function buildEditorContext(): string {
   const files = openFiles.value.filter((f) => f.kind === 'file').map(tabDisplayPath)
   if (files.length) lines.push(`Open files: ${files.join(', ')}`)
   const active = activeFile.value
-  // Synthetic tabs (diff/conflict/branch-diff) have no readable file content.
+  // Synthetic diff tabs have no readable file content.
   if (active?.kind === 'file') {
     lines.push(`Active file: ${tabDisplayPath(active)}`)
     const selection = String(activeEditor()?.getSelection?.() ?? '')
@@ -214,14 +207,12 @@ function askSelectionWithAi(file: OpenFile, payload: unknown): void {
 // ── Open files (VS Code-style tabs); each EditorPane stays mounted (v-show) so
 //    edits/undo survive tab switches. ──────────────────────────────────────────
 // kind='diff': relPath is a synthetic key (\x00diff:<staged-or-commit>:<filepath>), filepath/staged/commit hold the real values.
-// kind='conflict': relPath is a synthetic key (\x00conflict:<filepath>), filepath holds the real path.
-// kind='branch-diff': relPath is a synthetic key (\x00branch-diff:<base>), base holds the base branch.
 // wsPath: workspace root this tab's relPath is resolved against. Undefined for
 // the ordinary case (the window's own workspace); set when the file lives
 // outside it, in which case it is the file's parent directory — the backend
 // only checks that the target stays inside the given root, so an external file
 // passes every existing guard with its own root and no backend change.
-interface OpenFile { kind: 'file' | 'diff' | 'conflict' | 'branch-diff'; id: number; relPath: string; wsPath?: string; name: string; line: number; dirty: boolean; revealAt?: number; revealSeq: number; filepath?: string; staged?: boolean; commit?: string; base?: string; compare?: string }
+interface OpenFile { kind: 'file' | 'diff'; id: number; relPath: string; wsPath?: string; name: string; line: number; dirty: boolean; revealAt?: number; revealSeq: number; filepath?: string; staged?: boolean; commit?: string }
 // Stable tab identity for template keys: relPath is mutable (tabs follow
 // explorer renames/moves), and keying panes by it would remount EditorPane on
 // rename — losing the Monaco undo stack and any unsaved buffer.
@@ -298,18 +289,16 @@ function togglePreview(key: string): void {
   previewFiles.value = s
 }
 
-const initialSidebar = (['explorer', 'search', 'git', 'problems'] as const).find(
+const initialSidebar = (['explorer', 'search', 'problems'] as const).find(
   (v) => v === params.get('sidebar'),
 ) ?? 'explorer'
-const sidebarView = ref<'explorer' | 'search' | 'git' | 'problems'>(initialSidebar)
+const sidebarView = ref<'explorer' | 'search' | 'problems'>(initialSidebar)
 const sidebarHidden = ref(false)
 const zenMode = ref(false)
-const changesCount = ref(0)
 const activePath = computed(() => {
   const f = findTab(activeKey.value)
   if (!f) return []
-  if (f.kind === 'branch-diff') return [f.name]
-  const displayPath = (f.kind === 'diff' || f.kind === 'conflict') ? (f.filepath ?? '') : f.relPath
+  const displayPath = f.kind === 'diff' ? (f.filepath ?? '') : f.relPath
   return displayPath.split('/').filter(Boolean)
 })
 
@@ -520,60 +509,6 @@ function openDiff(p: { filepath: string; staged: boolean; name?: string; commit?
   activeKey.value = key
 }
 
-function openConflict(p: { filepath: string; name?: string }): void {
-  const relPath = `\x00conflict:${p.filepath}`
-  const name = p.name ?? (p.filepath.split('/').pop() || p.filepath)
-  const key = tabKeyOf(undefined, relPath)
-  if (!findTab(key)) {
-    openFiles.value.push({ kind: 'conflict', id: nextTabId(), relPath, filepath: p.filepath, name, line: 0, dirty: false, revealSeq: 0 })
-  }
-  activeKey.value = key
-  void loadConflictPaths()
-}
-
-// ── Conflict tabs: is the merge that produced them still in progress? ────────
-// ConflictPane refuses to write once its file is no longer an unmerged path
-// (`merge --abort` run in the Git window or a terminal), but that guard only
-// works if this host feeds it. GitPane keeps its useGit instance private, so
-// the unmerged paths are read straight from the index here and re-read on the
-// backend's git.changed broadcast. `null` = never read; only a successful read
-// is allowed to declare a file no longer conflicted.
-const conflictPaths = ref<Set<string> | null>(null)
-
-async function loadConflictPaths(): Promise<void> {
-  if (!workspacePath) return
-  try {
-    const resp = await backend.send<ListConflictsResult>(
-      'git.list_conflicts', { workspace_path: workspacePath },
-    )
-    if (resp.ok && resp.payload?.ok) {
-      conflictPaths.value = new Set(resp.payload.conflicts.map((c) => c.path))
-    }
-  } catch { /* keep the last known list rather than falsely aborting a merge */ }
-}
-
-function mergeAbortedFor(filepath: string): boolean {
-  return conflictPaths.value !== null && !conflictPaths.value.has(filepath)
-}
-
-let offGitChanged: (() => void) | null = null
-let gitChangedTimer: ReturnType<typeof setTimeout> | null = null
-
-function openBranchDiff(p: { base: string; compare?: string; workspacePath?: string }): void {
-  const base = p.base || 'main'
-  const relPath = `\x00branch-diff:${base}`
-  const name = `Diff with ${base}`
-  // A branch diff carries its own repo root like any other tab (this used to
-  // live in `filepath`); the root is part of the tab identity, so a diff of
-  // another repo gets its own tab instead of overwriting this one.
-  const wsPath = normWs(p.workspacePath)
-  const key = tabKeyOf(wsPath, relPath)
-  if (!findTab(key)) {
-    openFiles.value.push({ kind: 'branch-diff', id: nextTabId(), relPath, wsPath, base, compare: p.compare ?? '', name, line: 0, dirty: false, revealSeq: 0 })
-  }
-  activeKey.value = key
-}
-
 // ── Tab rebinding on explorer rename/move ─────────────────────────────────────
 // Keeps open tabs bound to their files after fs.rename (inline rename and
 // drag-to-move, file or folder). Tabs are keyed by stable id, so rewriting
@@ -634,7 +569,7 @@ async function closeFile(key: string): Promise<void> {
 // ── Tab right-click context menu ──────────────────────────────────────────────
 const tabCtxMenu = ref<{ key: string; x: number; y: number } | null>(null)
 
-// Path actions only apply to real file tabs (diff/conflict/branch-diff are synthetic).
+// Path actions only apply to real file tabs (diff tabs are synthetic).
 const tabCtxIsFile = computed(() => findTab(tabCtxMenu.value?.key ?? '')?.kind === 'file')
 
 function openTabCtxMenu(e: MouseEvent, key: string): void {
@@ -774,7 +709,6 @@ registerCommand('workbench.action.focusExplorer', () => {
   sidebarView.value = 'explorer'
   void nextTick(() => explorerRef.value?.focusTree())
 })
-registerCommand('workbench.action.focusSourceControl', () => { sidebarHidden.value = false; sidebarView.value = 'git' })
 registerCommand('workbench.action.toggleAIChat', () => { aiPanelOpen.value = !aiPanelOpen.value })
 registerCommand('workbench.action.addSelectionToChat', () => {
   const sel = activeEditor()?.getSelection() || activeEditor()?.getWordAtCursor?.() || ''
@@ -1252,7 +1186,6 @@ const PALETTE_COMMANDS: PaletteCmd[] = [
   { id: 'editor.action.triggerGhost',    label: 'AI Completion (Cmd+I)',keys: '⌘I' },
   { id: 'workbench.action.toggleSidebar',label: 'Toggle Sidebar',     keys: '⌘B' },
   { id: 'workbench.action.focusExplorer',label: 'Show Explorer',   keys: '⌘⇧E' },
-  { id: 'workbench.action.focusSourceControl', label: 'Show Source Control', keys: '⌘⇧G' },
   { id: 'workbench.action.focusActiveEditorGroup', label: 'Focus Editor', keys: '⌘K ⌘E' },
   { id: 'workbench.action.findInFiles',  label: 'Find in Files',   keys: '⌘⇧F' },
   { id: 'workbench.action.openMiniIDE', label: 'Open Mini-IDE',   keys: '⌘⇧I' },
@@ -1830,14 +1763,14 @@ let offThemeSettingsChange: (() => void) | null = null
 // ── Incremental opens pushed by the host (plugin view only) ──────────────────
 // The host delivers a new open target (entry-query-shaped params) to the
 // already-running view instead of reloading it — mirroring the legacy
-// `editor:openFile` / `editor:openDiff` / `editor:openBranchDiff` channels:
+// `editor:openFile` / `editor:openDiff` channels:
 // add/reveal the tab in place so open tabs and unsaved buffers survive.
 let offOpenTarget: (() => void) | null = null
 
 function applyOpenTarget(p: Record<string, string>): void {
   applyEditorLocale(p.locale)
   const sidebar = p.sidebar
-  if (sidebar === 'explorer' || sidebar === 'search' || sidebar === 'git') {
+  if (sidebar === 'explorer' || sidebar === 'search') {
     sidebarView.value = sidebar
     sidebarHidden.value = false
   }
@@ -1848,10 +1781,6 @@ function applyOpenTarget(p: Record<string, string>): void {
       name: p.diff_name || undefined,
       commit: p.diff_commit || undefined,
     })
-    return
-  }
-  if (p.branch_diff_base) {
-    openBranchDiff({ base: p.branch_diff_base, compare: p.branch_diff_compare ?? '' })
     return
   }
   if (p.filepath) {
@@ -1884,11 +1813,10 @@ onMounted(() => {
       onSwitchEditorSidebar?: (cb: (s: string) => void) => void
       onOpenEditorFile?: (cb: (params: Record<string, string>) => void) => void
       onOpenEditorDiff?: (cb: (params: Record<string, string>) => void) => void
-      onOpenEditorBranchDiff?: (cb: (params: Record<string, string>) => void) => void
     }
   }).agentTeam
   api?.onSwitchEditorSidebar?.((sidebar) => {
-    if (sidebar === 'explorer' || sidebar === 'search' || sidebar === 'git') {
+    if (sidebar === 'explorer' || sidebar === 'search') {
       sidebarView.value = sidebar
       sidebarHidden.value = false
     }
@@ -1910,33 +1838,16 @@ onMounted(() => {
       commit: params.commit || undefined,
     })
   })
-  api?.onOpenEditorBranchDiff?.((params) => {
-    openBranchDiff({ base: params.branch_diff_base ?? 'main', compare: params.branch_diff_compare ?? '', workspacePath: params.workspace_path })
-  })
   const navBridge = (window as unknown as {
     nav?: { onOpenTarget?: (cb: (params: Record<string, string>) => void) => () => void }
   }).nav
   offOpenTarget = navBridge?.onOpenTarget?.(applyOpenTarget) ?? null
-  if (initialBranchDiffBase) openBranchDiff({ base: initialBranchDiffBase, compare: initialBranchDiffCompare })
-  // Debounced at 300 ms like useGit's own listener: one git operation reaches
-  // us twice (GitWatcher plus app.py's own broadcast).
-  offGitChanged = backend.on('git.changed', () => {
-    if (!openFiles.value.some((f) => f.kind === 'conflict')) return
-    if (gitChangedTimer !== null) clearTimeout(gitChangedTimer)
-    gitChangedTimer = setTimeout(() => {
-      gitChangedTimer = null
-      void loadConflictPaths()
-    }, 300)
-  })
 })
 onUnmounted(() => {
   offThemeSettingsChange?.()
   offThemeSettingsChange = null
   offOpenTarget?.()
   offOpenTarget = null
-  offGitChanged?.()
-  offGitChanged = null
-  if (gitChangedTimer !== null) { clearTimeout(gitChangedTimer); gitChangedTimer = null }
   window.removeEventListener('keydown', onAppKeydown)
   window.removeEventListener('keydown', onBcCaptureKeydown, { capture: true })
   document.removeEventListener('click', closeBcDropdown)
@@ -1991,15 +1902,6 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
       </button>
       <button
         class="ide-act-btn"
-        :class="{ active: sidebarView === 'git' }"
-        :title="$t('pane.git.tab')"
-        @click="sidebarView = 'git'"
-      >
-        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM3.75 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm0-9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/></svg>
-        <span v-if="changesCount" class="ide-act-badge">{{ changesCount > 99 ? '99+' : changesCount }}</span>
-      </button>
-      <button
-        class="ide-act-btn"
         :class="{ active: sidebarView === 'problems' }"
         :title="$t('pane.problems.tab-shortcut')"
         @click="sidebarView = 'problems'; sidebarHidden = false"
@@ -2031,22 +1933,6 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
         :active="sidebarView === 'search'"
         @open-file="openFile"
       />
-      <GitPane
-        v-show="sidebarView === 'git'"
-        :workspace-path="workspacePath"
-        :git-transport="gitTransport"
-        :file-access="surfacePorts.fileAccess"
-        :ui="surfacePorts.paneUi"
-        :issue-port="surfacePorts.issues"
-        :credentials="surfacePorts.credentials"
-        :accounts="surfacePorts.accounts"
-        embedded
-        @open-file="openFile"
-        @open-diff="openDiff"
-        @open-conflict="openConflict"
-        @open-branch-diff="openBranchDiff"
-        @changes-count="changesCount = $event"
-      />
       <ProblemsPane
         v-show="sidebarView === 'problems'"
         :workspace-path="workspacePath"
@@ -2069,13 +1955,11 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
             :key="f.id"
             class="ide-tab"
             :class="{ active: tabKey(f) === activeKey }"
-            :title="(f.kind === 'diff' || f.kind === 'conflict') ? f.filepath : tabDisplayPath(f)"
+            :title="f.kind === 'diff' ? f.filepath : tabDisplayPath(f)"
             @click="activeKey = tabKey(f)"
             @contextmenu.prevent="openTabCtxMenu($event, tabKey(f))"
           >
             <span v-if="f.kind === 'diff'" class="ide-tab-diff-badge" :class="f.commit ? 'commit' : f.staged ? 'staged' : 'unstaged'">{{ f.commit ? 'C' : f.staged ? 'S' : 'U' }}</span>
-            <span v-else-if="f.kind === 'conflict'" class="ide-tab-diff-badge conflict-badge">!</span>
-            <span v-else-if="f.kind === 'branch-diff'" class="ide-tab-diff-badge branch-diff-badge">±</span>
             <span class="ide-tab-name">{{ f.name }}</span>
             <span v-if="f.dirty" class="ide-tab-dirty" :title="$t('label.unsaved')">●</span>
             <button class="ide-tab-close" :title="$t('action.close')" @click.stop="closeFile(tabKey(f))">✕</button>
@@ -2171,45 +2055,9 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
             :commit="f.commit"
             :name="f.name"
             :git-transport="gitTransport"
-            :file-access="surfacePorts.fileAccess"
+            :file-access="fileAccess"
             @open-file="openFile"
           />
-          <ConflictPane
-            v-else-if="f.kind === 'conflict'"
-            v-show="tabKey(f) === activeKey"
-            :workspace-path="workspacePath"
-            :filepath="f.filepath!"
-            :name="f.name"
-            :git-transport="gitTransport"
-            :file-access="surfacePorts.fileAccess"
-            :merge-aborted="mergeAbortedFor(f.filepath!)"
-            @resolved="closeFile(tabKey(f))"
-          />
-          <BranchDiffPane
-            v-else-if="f.kind === 'branch-diff'"
-            v-show="tabKey(f) === activeKey"
-            :workspace-path="fileWs(f)"
-            :base="f.base!"
-            :compare="f.compare ?? ''"
-            :git-transport="gitTransport"
-            :branch-diff="surfacePorts.branchDiff"
-            :credentials="surfacePorts.credentials"
-            @open-file="(p) => openFile({ ...p, wsPath: f.wsPath })"
-            @ask-ai-fix="(text) => pasteToCli(text)"
-          >
-            <template #review="{ workspacePath: reviewWorkspacePath, gitStatus: reviewGitStatus, gitBranches: reviewGitBranches, close, openFile: reviewOpenFile, askAiFix }">
-              <ReviewPane
-                :workspace-path="reviewWorkspacePath"
-                :backend="backend"
-                :git-status="reviewGitStatus"
-                :git-branches="reviewGitBranches"
-                :hide-header="true"
-                @close="close"
-                @open-file="reviewOpenFile"
-                @ask-ai-fix="askAiFix"
-              />
-            </template>
-          </BranchDiffPane>
         </template>
         <div v-if="!openFiles.length" class="ide-empty">
           {{ $t('editorWindow.app.empty-hint') }}
@@ -2718,9 +2566,7 @@ if (workspacePath && initialDiffFile) openDiff({ filepath: initialDiffFile, stag
 }
 .ide-tab-diff-badge.staged { background: color-mix(in srgb, var(--success-fg) 18%, transparent); color: var(--success-bright); }
 .ide-tab-diff-badge.unstaged { background: color-mix(in srgb, var(--attention-fg) 18%, transparent); color: var(--attention-bright); }
-.ide-tab-diff-badge.conflict-badge { background: color-mix(in srgb, var(--danger-fg) 18%, transparent); color: var(--danger-fg); }
 .ide-tab-diff-badge.commit { background: var(--accent-subtle); color: var(--accent-fg); }
-.ide-tab-diff-badge.branch-diff-badge { background: var(--accent-subtle); color: var(--accent-fg); }
 .ide-tab-close {
   border: none;
   background: transparent;

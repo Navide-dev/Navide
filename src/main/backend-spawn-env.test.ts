@@ -80,3 +80,50 @@ describe('backend spawn environment (R3-M2)', () => {
     })
   }
 })
+
+// The packaged backend's temp directory lives under the data dir (see
+// backend-tmpdir.ts); a dev backend keeps the OS default.
+describe('backend spawn environment: temp directory', () => {
+  beforeEach(() => {
+    spawned.length = 0
+    ;(process as { resourcesPath?: string }).resourcesPath = '/fake/resources'
+  })
+
+  for (const isPackaged of [true, false]) {
+    it(`${isPackaged ? 'points the packaged backend at <data dir>/backend-tmp' : 'leaves a dev backend on the OS temp dir'}`, async () => {
+      const { mkdtempSync, existsSync, rmSync } = await import('node:fs')
+      const { tmpdir } = await import('node:os')
+      const { join } = await import('node:path')
+      const dataDir = mkdtempSync(join(tmpdir(), 'navide-spawn-env-'))
+      electron.isPackaged = isPackaged
+      const before = process.env.AGENT_TEAM_DATA_DIR
+      process.env.AGENT_TEAM_DATA_DIR = dataDir
+      try {
+        await expect(startBackend(0, CATALOG)).rejects.toThrow(/did not become healthy/)
+        expect(spawned).toHaveLength(1)
+        const { env } = spawned[0]
+        if (isPackaged) {
+          const expected = join(dataDir, 'backend-tmp')
+          expect(env.TMPDIR).toBe(expected)
+          expect(env.TMP).toBe(expected)
+          expect(env.TEMP).toBe(expected)
+          expect(existsSync(expected)).toBe(true)
+          // Panes the backend opens get the user's own temp dir back from this.
+          const original: Record<string, string> = {}
+          for (const key of ['TMPDIR', 'TMP', 'TEMP']) {
+            if (process.env[key] !== undefined) original[key] = process.env[key] as string
+          }
+          expect(JSON.parse(env.AGENT_TEAM_ORIG_TEMP_ENV as string)).toEqual(original)
+        } else {
+          expect(env.TMPDIR).toBe(process.env.TMPDIR)
+          expect(existsSync(join(dataDir, 'backend-tmp'))).toBe(false)
+          expect(env.AGENT_TEAM_ORIG_TEMP_ENV).toBeUndefined()
+        }
+      } finally {
+        if (before === undefined) delete process.env.AGENT_TEAM_DATA_DIR
+        else process.env.AGENT_TEAM_DATA_DIR = before
+        rmSync(dataDir, { recursive: true, force: true })
+      }
+    })
+  }
+})

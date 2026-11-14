@@ -1,7 +1,14 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { backendEntryOnDisk } from './installedPlugins'
+
+vi.mock('electron', () => ({
+  app: { isPackaged: false, getVersion: () => '0.2.35' },
+  BrowserWindow: { fromWebContents: vi.fn() },
+  ipcMain: { handle: vi.fn() },
+}))
 import {
   FIRST_PARTY_BACKEND_PLUGINS,
   firstPartyBridgePorts,
@@ -14,7 +21,8 @@ import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
 } from './pluginThirdPartyBackends'
-import type { PluginActivationCatalogEntry } from './installedPlugins'
+import { loadPluginDir, type PluginActivationCatalogEntry } from './installedPlugins'
+import { FrontendPluginManager } from './frontendPluginManager'
 
 const BROWSER_TOOLS = [
   {
@@ -62,7 +70,8 @@ function writePackage(id: string, system: string[] = ['ui', 'web']): PluginActiv
   const entry = `backend/${id.replace('.', '-')}`
   mkdirSync(join(packageDir, 'backend'), { recursive: true })
   writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify(manifest(id, system)))
-  writeFileSync(join(packageDir, entry), 'binary', { mode: 0o700 })
+  // On Windows a bare manifest entry names the `.exe` beside it.
+  writeFileSync(join(packageDir, backendEntryOnDisk(entry)), 'binary', { mode: 0o700 })
   return {
     pluginId: id,
     packageVersion: '1.0.0',
@@ -137,5 +146,39 @@ describe('firstPartyAgentToolSpec', () => {
     // The catalog entry never grants agent methods by itself.
     expect(catalog!.agentMethods).toEqual([])
     expect(catalog!.approvedBridgePorts).toEqual(['web'])
+  })
+})
+
+describe('the App-bundled navide.browser', () => {
+  function writeBundledPackage(): string {
+    const activation = writePackage('navide.browser')
+    mkdirSync(join(activation.packageDir, 'frontend/window'), { recursive: true })
+    writeFileSync(join(activation.packageDir, 'frontend/window/index.html'), '<!doctype html>')
+    return activation.packageDir
+  }
+
+  it('gets the first-party backend when the Host loads it from the factory resources', () => {
+    const packageDir = writeBundledPackage()
+    const loaded = new FrontendPluginManager().loadFactoryPlugin(packageDir, 'navide.browser')
+    expect(loaded.loaded).toBe(true)
+    if (!loaded.loaded) return
+    expect(loaded.activation.provenance).toBe('factory-bundled')
+    const spec = firstPartyBackendLaunchSpec(loaded.activation)
+    expect(spec).toMatchObject({ pluginId: 'navide.browser', approvedBridgePorts: ['web'], agentMethods: [] })
+    expect(isThirdPartyLaunchSpec(spec!)).toBe(false)
+    expect(firstPartyAgentToolSpec(loaded.activation)).not.toBeNull()
+  })
+
+  it('gets no first-party backend when the same package is loaded from a local or developer folder', () => {
+    const scanned = loadPluginDir(writeBundledPackage())
+    expect(scanned.activation).toBeDefined()
+    for (const activation of [
+      scanned.activation!,
+      { ...scanned.activation!, provenance: 'developer-local-unpacked' as const },
+      { ...scanned.activation!, provenance: 'factory-bundled' as const, source: 'local-unsigned' as const },
+    ]) {
+      expect(firstPartyBackendLaunchSpec(activation)).toBeNull()
+      expect(firstPartyAgentToolSpec(activation)).toBeNull()
+    }
   })
 })

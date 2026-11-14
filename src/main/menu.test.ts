@@ -103,7 +103,9 @@ function makeHooks(): AppMenuHooks & { calls: string[] } {
     onShowShortcuts: () => calls.push('show-shortcuts'),
     onShowWhatsNew: () => calls.push('show-whats-new'),
     onShowWelcomeTour: () => calls.push('show-welcome-tour'),
-    onOpenLegal: (route) => calls.push('legal:' + route)
+    onOpenLegal: (route) => calls.push('legal:' + route),
+    onOpenDeveloperDoc: (doc) => calls.push('developer-doc:' + doc),
+    onOpenDeveloperPage: (page) => calls.push('developer-page:' + page)
   }
 }
 
@@ -155,6 +157,108 @@ describe('installApplicationMenu', () => {
     fire(settings)
     fire(updates)
     expect(hooks.calls).toEqual(['settings', 'check-updates'])
+  })
+
+  it.each([
+    ['darwin', 'Agent-Team'],
+    ['linux', 'File'],
+    ['win32', 'File'],
+  ] as const)('on %s the %s menu has Lock Now with ⌘⌥L, enabled only while App Lock can lock', (platform, top) => {
+    setPlatformId(platform)
+    installApplicationMenu({ ...hooks, onLockNow: () => hooks.calls.push('lock-now'), lockNowEnabled: () => false }, [], 'en-US')
+    expect(itemIn(submenuOf(top), 'Lock Now').enabled).toBe(false)
+    installApplicationMenu({ ...hooks, onLockNow: () => hooks.calls.push('lock-now'), lockNowEnabled: () => true }, [], 'en-US')
+    const lock = itemIn(submenuOf(top), 'Lock Now')
+    expect(lock.accelerator).toBe('CmdOrCtrl+Alt+L')
+    expect(lock.enabled).toBe(true)
+    fire(lock)
+    expect(hooks.calls).toEqual(['lock-now'])
+  })
+
+  it('Window menu: Reopen Closed Window and its list are greyed out while nothing was closed', () => {
+    installOn('darwin')
+    const window = submenuOf('Window')
+    expect(itemIn(window, 'Reopen Closed Window').enabled).toBe(false)
+    const list = itemIn(window, 'Recently Closed Windows')
+    expect(list.enabled).toBe(false)
+    expect((list.submenu as MenuItemConstructorOptions[]).map((i) => i.label)).toEqual(['No Recently Closed Windows'])
+  })
+
+  it.each(['darwin', 'linux', 'win32'] as const)('on %s, the Window menu reopens the newest or a picked closed window', (platform) => {
+    setPlatformId(platform)
+    const now = Date.now()
+    installApplicationMenu({
+      ...hooks,
+      recentlyClosedWindows: () => [
+        { name: 'alpha', others: ['beta', 'gamma'], closedAt: now },
+        { name: 'delta', others: [], closedAt: now },
+      ],
+      onReopenClosedWindow: (index) => hooks.calls.push(`reopen:${index}`),
+    }, [], 'en-US')
+    const window = submenuOf('Window')
+    const reopen = itemIn(window, 'Reopen Closed Window')
+    // Shown on macOS but never registered: a native accelerator would take
+    // ⌘⇧T from the Mini IDE's Reopen Closed Editor in every window.
+    if (platform === 'darwin') {
+      expect(reopen.accelerator).toBe('CmdOrCtrl+Shift+T')
+      expect(reopen.registerAccelerator).toBe(false)
+    } else {
+      expect(reopen.accelerator).toBeUndefined()
+    }
+    const items = itemIn(window, 'Recently Closed Windows').submenu as MenuItemConstructorOptions[]
+    expect(items).toHaveLength(2)
+    expect(items[0].label).toMatch(/^alpha \+ 2 more — /)
+    expect(items[0].sublabel).toBe('beta, gamma')
+    expect(items[1].label).toMatch(/^delta — /)
+    expect(items[1].sublabel).toBeUndefined()
+    fire(reopen)
+    fire(items[1])
+    expect(hooks.calls).toEqual(['reopen:0', 'reopen:1'])
+  })
+
+  it('names a closed window in the menu language', () => {
+    installApplicationMenu({
+      ...hooks,
+      recentlyClosedWindows: () => [{ name: 'alpha', others: ['beta'], closedAt: Date.now() }],
+    }, [], 'zh-TW')
+    const window = submenuOf('視窗')
+    const items = itemIn(window, '最近關閉的視窗').submenu as MenuItemConstructorOptions[]
+    expect(items[0].label).toMatch(/^alpha 與其他 1 個工作區 — /)
+    expect(itemIn(window, '重新打開剛關閉的視窗').enabled).toBe(true)
+  })
+
+  it.each(['darwin', 'linux', 'win32'] as const)('on %s, while App Lock is up, every Navide item is greyed out and only system roles stay', (platform) => {
+    setPlatformId(platform)
+    const leaves = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
+      items.flatMap((item) => (Array.isArray(item.submenu) ? leaves(item.submenu) : item.type === 'separator' ? [] : [item]))
+    // A closed window to reopen, so the unlocked menu has nothing greyed out.
+    const closed = { recentlyClosedWindows: () => [{ name: 'c', others: [], closedAt: 0 }] }
+    installApplicationMenu({ ...hooks, ...closed, lockNowEnabled: () => true, appLocked: () => false }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    const unlocked = leaves(h.template)
+    expect(unlocked.filter((item) => item.enabled === false)).toEqual([])
+    installApplicationMenu({ ...hooks, ...closed, appLocked: () => true }, [{ path: '/w', name: 'w', exists: true }], 'en-US')
+    const locked = leaves(h.template)
+    expect(locked).toHaveLength(unlocked.length)
+    const usable = locked.filter((item) => item.enabled !== false)
+    expect(usable.every((item) => typeof item.role === 'string' && !item.click)).toBe(true)
+    expect(usable.map((item) => item.role)).toEqual(expect.arrayContaining(['quit', 'paste', 'selectAll']))
+    // DevTools cannot be opened (menu or ⌥⌘I / Ctrl+Shift+I) onto the window under the lock screen.
+    expect(locked.find((item) => item.role === 'toggleDevTools')?.enabled).toBe(false)
+    expect(unlocked.find((item) => item.role === 'toggleDevTools')?.enabled).not.toBe(false)
+    for (const label of ['Settings…', 'Open Workspace…', 'New Window', 'Copy', 'Reload Window', 'w']) {
+      expect(locked.find((item) => item.label === label)?.enabled).toBe(false)
+    }
+  })
+
+  it('on darwin the app menu names Navide, not the package name, in About, Hide and Quit', () => {
+    installOn('darwin')
+    const menu = submenuOf('Agent-Team')
+    const byRole = (role: string) => menu.find((item) => item.role === role)
+    // app.name is the package name ("agent-team"), which Electron's role
+    // labels would show; the menu must say the product name instead.
+    expect(byRole('about')?.label).toBe('About Navide')
+    expect(byRole('hide')?.label).toBe('Hide Navide')
+    expect(byRole('quit')?.label).toBe('Quit Navide')
   })
 
   it('File has Open Workspace… with ⌘O that invokes its hook', () => {
@@ -237,6 +341,38 @@ describe('installApplicationMenu', () => {
     const labels = menu.map((i) => i.label ?? (i.type === 'separator' ? '—' : '?'))
     expect(labels.indexOf('Keyboard Shortcuts')).toBeLessThan(labels.indexOf('Privacy'))
     expect(labels[labels.indexOf('Privacy') - 1]).toBe('—')
+  })
+
+  it('Help menu has a Developers submenu above the legal block: four documents, then the Developer page and Testplace', () => {
+    const help = h.template.find((i) => i.role === 'help')
+    if (!help || !Array.isArray(help.submenu)) throw new Error('no Help menu with submenu')
+    const menu = help.submenu as MenuItemConstructorOptions[]
+    const labels = menu.map((i) => i.label ?? (i.type === 'separator' ? '—' : '?'))
+    expect(labels.indexOf('Developers')).toBeGreaterThan(labels.indexOf('First-Run Tour…'))
+    expect(labels.indexOf('Developers')).toBeLessThan(labels.indexOf('Privacy'))
+    const sub = itemIn(menu, 'Developers').submenu as MenuItemConstructorOptions[]
+    expect(sub.map((i) => i.label ?? '—')).toEqual([
+      'Build for Navide', 'Navide Plugin Development Guide', 'Navide Plugin API v2 Reference', 'Publishing to the Navide Marketplace',
+      '—', 'Developer Settings…', 'Testplace…',
+    ])
+    for (const item of sub) if (item.label) fire(item)
+    expect(hooks.calls).toEqual([
+      'developer-doc:build-for-navide', 'developer-doc:plugin-development', 'developer-doc:plugin-development-v2',
+      'developer-doc:marketplace-publishing', 'developer-page:developer-settings', 'developer-page:testplace',
+    ])
+  })
+
+  it('translates the Developers submenu with every item in each table', () => {
+    for (const locale of ['ja-JP', 'zh-TW'] as const) {
+      expect(Object.keys(MENU_STRINGS[locale].developers).sort()).toEqual(Object.keys(MENU_STRINGS['en-US'].developers).sort())
+    }
+    setPlatformId('linux')
+    installApplicationMenu(hooks, [], 'zh-TW')
+    const help = h.template.find((i) => i.role === 'help')
+    const menu = (help?.submenu ?? []) as MenuItemConstructorOptions[]
+    const sub = itemIn(menu, '開發者').submenu as MenuItemConstructorOptions[]
+    fire(itemIn(sub, '開發者設定…'))
+    expect(hooks.calls).toEqual(['developer-page:developer-settings'])
   })
 
   it('Window has Pipeline Manager wired to its hook', () => {
@@ -538,7 +674,11 @@ describe('application menu — locale', () => {
 
   // Chromium labels a `role` item in the SYSTEM locale, and Electron cannot
   // re-localize it. Supplying our own label would silently take those items
-  // out of the OS's hands, so no role may carry one.
+  // out of the OS's hands, so no role may carry one. The one exception is the
+  // macOS about, hide and quit roles: Electron words those itself, in English,
+  // around app.name (the package name), so they carry the same English wording
+  // around the product name.
+  const PRODUCT_NAMED = new Set(['darwin:about', 'darwin:hide', 'darwin:quit'])
   it('leaves every role item unlabeled so the OS keeps wording them', () => {
     for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
       for (const platform of ['darwin', 'linux'] as const) {
@@ -547,7 +687,7 @@ describe('application menu — locale', () => {
         const labeledRoles: string[] = []
         const walk = (items: MenuItemConstructorOptions[]): void => {
           for (const item of items) {
-            if (item.role && item.label) labeledRoles.push(`${locale}/${platform}:${item.role}`)
+            if (item.role && item.label && !PRODUCT_NAMED.has(`${platform}:${item.role}`)) labeledRoles.push(`${locale}/${platform}:${item.role}`)
             if (Array.isArray(item.submenu)) walk(item.submenu as MenuItemConstructorOptions[])
           }
         }

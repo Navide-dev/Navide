@@ -55,6 +55,7 @@ import SettingsReadinessNotice from './components/SettingsReadinessNotice.vue'
 import NotificationHost from './components/NotificationHost.vue'
 import DiffPane from './editor/DiffPane.vue'
 import BranchDiffPane from './editor/BranchDiffPane.vue'
+import ReviewPane from './components/ReviewPane.vue'
 // Hand-rolled three-way merge view (plain Vue, no Monaco — keeps it out of the
 // git plugin bundle); the same component the mini-IDE opens conflicts in.
 import ConflictPane from './editor/ConflictPane.vue'
@@ -101,6 +102,7 @@ const {
   gitTags,
   logScope,
   logOrder,
+  statusError,
   isLoadingStatus,
   isLoadingLog,
   canLoadMoreLog,
@@ -1428,6 +1430,12 @@ registerCommand('git.focusAgent', () => {
     <div v-if="gitError" class="err-bar">{{ gitError }}</div>
 
     <div v-if="!hasWorkspace" class="empty">{{ $t('label.no-workspace-path') }}</div>
+    <!-- A failed git.status is not "not a repository": show git's own error
+         (dubious ownership, git not runnable, timeout) like the Git pane does. -->
+    <div v-else-if="statusError && !gitStatus.is_git_repo" class="empty status-error">
+      <p class="init-sub">{{ statusError }}</p>
+      <button class="pbtn" :disabled="isLoadingStatus" @click="loadStatus">{{ $t('action.retry') }}</button>
+    </div>
     <div v-else-if="!isRepo && !isLoadingStatus" class="empty">
       <div class="init-card">
         <h2 class="init-title">{{ $t('error.not-git-repo') }}</h2>
@@ -1866,7 +1874,21 @@ registerCommand('git.focusAgent', () => {
               :branch-diff="branchDiff"
               :git-status="gitStatus"
               :git-branches="gitBranches"
-            />
+              @open-file="(p) => openInEditor(p.filepath)"
+              @ask-ai-fix="(text) => void aiCliPanelRef?.submitPrompt(text)"
+            >
+              <template #review="{ workspacePath: reviewWorkspacePath, gitStatus: reviewGitStatus, gitBranches: reviewGitBranches, close, openFile: reviewOpenFile, askAiFix }">
+                <ReviewPane
+                  :workspace-path="reviewWorkspacePath"
+                  :git-status="reviewGitStatus"
+                  :git-branches="reviewGitBranches"
+                  :hide-header="true"
+                  @close="close"
+                  @open-file="reviewOpenFile"
+                  @ask-ai-fix="askAiFix"
+                />
+              </template>
+            </BranchDiffPane>
             <div v-else class="empty-hint">{{ $t('hint.pick-two-branches') }}</div>
           </div>
         </div>

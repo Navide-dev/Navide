@@ -25,6 +25,26 @@ warn_missing_announcement() {
   fi
 }
 
+# `uv lock` rewrites backend/uv.lock in the format of the uv that runs it, so
+# an older uv silently downgrades the lock CI reads (0.2.41: a uv 0.5.9 first
+# on PATH dropped `revision = 3` and every upload time). CI installs the latest
+# uv; 0.11.16 is the oldest version known to write the current lock format.
+MIN_UV_VERSION="0.11.16"
+require_uv_version() {
+  local minimum="$1" output
+  output="$(uv --version 2>/dev/null)" || fail "uv not found on PATH; install uv ${minimum} or newer."
+  [[ "$output" =~ ^uv\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]] || fail "cannot read the uv version from: ${output}"
+  local -a have=("${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+  local -a need
+  IFS=. read -r -a need <<<"$minimum"
+  local i
+  for i in 0 1 2; do
+    ((10#${have[i]} > 10#${need[i]})) && return 0
+    ((10#${have[i]} < 10#${need[i]})) && fail "uv ${have[0]}.${have[1]}.${have[2]} at $(command -v uv) is older than ${minimum}; it would rewrite backend/uv.lock in an older format. Upgrade it (or put a newer uv first on PATH) and run again."
+  done
+  return 0
+}
+
 # Runs the command before `--`, then the one after it. By default they run one
 # after the other: measured on a loaded host, overlapping them saved no time
 # and raised the 1-minute load by about 10 while both ran.
@@ -97,6 +117,7 @@ VERSION_FILES=(
   README.md
   README.zh-TW.md
   README.ja-JP.md
+  plugins/official-plugin-fingerprints.json
 )
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -123,6 +144,7 @@ fi
 
 pnpm release:check
 warn_missing_announcement "$VERSION"
+require_uv_version "$MIN_UV_VERSION"
 
 CURRENT="$(node -p "require('./package.json').version")"
 echo ""
@@ -152,6 +174,9 @@ node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
+# Record what each bundled first-party plugin ships in this release; refuses
+# when a plugin's content changed since the last release without a bump.
+node scripts/official-plugin-fingerprints.mjs --write --baseline "$TAG"
 uv --project backend lock
 pnpm release:check "$TAG"
 
@@ -178,7 +203,7 @@ node scripts/check-no-dev-web.mjs out
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \
     | sed -E 's/^.. //' \
-    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md)$' \
+    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|plugins/official-plugin-fingerprints\.json)$' \
     || true
 )"
 [[ -z "$unexpected_changes" ]] || \

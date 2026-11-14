@@ -166,6 +166,38 @@ def _has_zip64_end_of_central_directory(data: bytes) -> bool:
     )
 
 
+def _check_archive_layout(data: bytes, infos: list[zipfile.ZipInfo]) -> None:
+    """Refuse archives the Host reader would parse differently.
+
+    The Host (src/main/plugins/pluginPackage.ts) walks the central directory by
+    the EOCD entry count from the raw EOCD offset, while zipfile walks it by
+    size and shifts every offset by any data placed before the archive. Both
+    agree only when the directory ends exactly at the EOCD record and holds the
+    counted entries. zipfile compares a local header's name with the central
+    one only for entries it reads, so every local name is checked here.
+    """
+    eocd = data.rfind(b"PK\x05\x06")
+    entry_count = int.from_bytes(data[eocd + 10 : eocd + 12], "little")
+    central_directory_size = int.from_bytes(data[eocd + 12 : eocd + 16], "little")
+    central_directory_offset = int.from_bytes(data[eocd + 16 : eocd + 20], "little")
+    if central_directory_offset + central_directory_size != eocd or entry_count != len(infos):
+        raise PackageError(
+            "central directory does not end at the end-of-central-directory record"
+        )
+    for info in infos:
+        offset = info.header_offset
+        name_length = int.from_bytes(data[offset + 26 : offset + 28], "little")
+        local_name = data[offset + 30 : offset + 30 + name_length]
+        encoding = "utf-8" if info.flag_bits & 0x800 else "cp437"
+        if (
+            data[offset : offset + 4] != b"PK\x03\x04"
+            or local_name != info.orig_filename.encode(encoding)
+        ):
+            raise PackageError(
+                f"local header name does not match central directory: {info.filename}"
+            )
+
+
 @dataclass(frozen=True)
 class AssetRef:
     """A non-manifest file inside the package."""
@@ -251,6 +283,7 @@ def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
 
     with zipfile.ZipFile(BytesIO(data)) as zf:
         infos = zf.infolist()
+        _check_archive_layout(data, infos)
         total_size = 0
         for info in infos:
             if info.file_size > MAX_ENTRY_SIZE:

@@ -130,9 +130,10 @@ export const SPEC = {
   },
   hint: 'planner + reviewer',
   // Quota failover (lib/quotaFailover.ts). Windows from the backend's
-  // normalize_claude: five_hour → session, seven_day → weekly, both always
-  // present; per-model seven_day_* / weekly_scoped → weekly-model, which is
-  // never a veto (a spent promotional bucket does not block the account).
+  // normalize_claude: five_hour → session, seven_day → weekly; per-model
+  // seven_day_* / weekly_scoped → weekly-model, which is never a veto (a spent
+  // promotional bucket does not block the account). A verified Ultra account
+  // has no session window; the reader then says so in `absentWindows`.
   quotaSemantics: { hard: ['session', 'weekly'], required: ['session', 'weekly'], scoped: ['weekly-model'] },
   // Claude Code's own limit banner, with the reset clock that names WHICH
   // window ran out (loopPrompt.SESSION_LIMIT_RE parses it). The clockless

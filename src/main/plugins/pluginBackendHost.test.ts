@@ -821,7 +821,7 @@ describe('first-party backend restart after a child failure', () => {
     await Promise.all(hosts.splice(0).map((host) => host.close()))
   })
 
-  async function bindFailingView(): Promise<{
+  async function bindFailingView(observers: { onBackendGaveUp?: () => void } = {}): Promise<{
     host: PluginBackendHost
     restart: ReturnType<typeof vi.fn>
     fail: () => void
@@ -840,6 +840,7 @@ describe('first-party backend restart after a child failure', () => {
         return supervisor as unknown as PluginBackendSupervisor
       },
       resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+      ...observers,
     })
     hosts.push(host)
     host.register(activation)
@@ -850,6 +851,19 @@ describe('first-party backend restart after a child failure', () => {
       fail: () => notifyFailure?.(new BackendPluginError('BACKEND_UNAVAILABLE')),
     }
   }
+
+  it('tells the Host once when it gives up on a child (C4)', async () => {
+    vi.useFakeTimers()
+    const onBackendGaveUp = vi.fn()
+    const { fail } = await bindFailingView({ onBackendGaveUp })
+    for (const delay of BACKEND_RESTART_DELAYS_MS) {
+      fail()
+      await vi.advanceTimersByTimeAsync(delay)
+    }
+    expect(onBackendGaveUp).not.toHaveBeenCalled()
+    fail()
+    expect(onBackendGaveUp).toHaveBeenCalledTimes(1)
+  })
 
   it('restarts a failed child after the shared backoff delay', async () => {
     vi.useFakeTimers()

@@ -113,6 +113,8 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** C2: executables declared beyond the Host's `git`, `gh`, `glab`. */
+    shellExecutables?: readonly string[]
     /** The package's declared agent tools as the disclosure spells them
      *  (defaulted timeouts, sorted by name); absent when it declares none. */
     agentTools?: readonly DisclosureAgentTool[]
@@ -201,6 +203,10 @@ export interface BackendPluginCallOptions {
    *  value. A result longer than one piece is then never joined or parsed on
    *  this thread (agent tools, contract 4.4, R1 to R2). */
   resultText?: boolean
+  /** Host-only: a plugins_developer_backend_call call (0.2.40). An agent
+   *  initiator may then reach any declared method, not only the consented
+   *  agent methods; only the Host's developer gate sets it. */
+  developerCall?: boolean
 }
 
 /** A call's result as its compact JSON spelling in pieces, never parsed by the Host. */
@@ -806,6 +812,10 @@ function executionPolicyNamespaceForBridgePort(
       return 'agents'
     case 'agent-message-bodies':
       return 'agentMessages'
+    case 'secrets':
+      return 'secrets'
+    case 'agent-notify':
+      return 'agentNotify'
     case 'shell':
       // The agent shell policy is judged on the command itself, like shell.run.
       return 'shell'
@@ -1150,6 +1160,7 @@ export function createAuthenticatedBackendRuntime(
         source: 'mcp' as const,
         id: runtime.initiator.id,
         ...(runtime.initiator.caller ? { caller: Object.freeze({ ...runtime.initiator.caller }) } : {}),
+        ...(runtime.initiator.pane !== undefined ? { pane: runtime.initiator.pane } : {}),
       })
     : Object.freeze({
         kind: 'user' as const,

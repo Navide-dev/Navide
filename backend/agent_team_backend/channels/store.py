@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..db import Database
-from .base import Location
+from .base import Location, is_shared_sender
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
@@ -22,6 +22,10 @@ KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
 KV_WAKE_KEPT = "channels.wake_kept"
 # the same, carried over from before a restart until each chat's bot is running to be told
 KV_WAKE_LOST = "channels.wake_lost"
+# location key -> how many replies its chat is still waiting on from the conversation log
+KV_AWAITING_REPLIES = "channels.awaiting_replies"
+# the same, carried over from before a restart until each chat's bot is running to be told
+KV_LOST_REPLIES = "channels.lost_replies"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -131,6 +135,22 @@ def _v6(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE channel_bindings ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
 
 
+def _v7(cur: sqlite3.Cursor) -> None:
+    # How a sender got on the allowlist: "pairing" (a pairing code) or "invite" (a link
+    # code), shown in Settings. Rows from v6 keep NULL: nothing recorded how they came.
+    cur.execute("ALTER TABLE channel_allow ADD COLUMN source TEXT")
+
+
+def _v8(cur: sqlite3.Cursor) -> None:
+    # Chat messages taken off a platform (its offset already advanced) but not yet in a pane
+    # or answered: what a restart would otherwise lose. Deleted once each one is settled.
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS channel_inbound ("
+        " id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL, account TEXT NOT NULL,"
+        " payload TEXT NOT NULL, created_at REAL NOT NULL)"
+    )
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -188,6 +208,8 @@ class ChannelStore:
         db.migrate(COMPONENT, 4, _v4)
         db.migrate(COMPONENT, 5, _v5)
         db.migrate(COMPONENT, 6, _v6)
+        db.migrate(COMPONENT, 7, _v7)
+        db.migrate(COMPONENT, 8, _v8)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -228,6 +250,23 @@ class ChannelStore:
 
     def set_lost_previews(self, lost: dict[str, list[str]]) -> None:
         self._db.kv_set(KV_WAKE_LOST, lost, now=int(time.time()))
+
+    def awaiting_replies(self) -> dict[str, int]:
+        return self._counts(KV_AWAITING_REPLIES)
+
+    def set_awaiting_replies(self, awaiting: dict[str, int]) -> None:
+        self._db.kv_set(KV_AWAITING_REPLIES, awaiting, now=int(time.time()))
+
+    def lost_replies(self) -> dict[str, int]:
+        return self._counts(KV_LOST_REPLIES)
+
+    def set_lost_replies(self, lost: dict[str, int]) -> None:
+        self._db.kv_set(KV_LOST_REPLIES, lost, now=int(time.time()))
+
+    def _counts(self, key: str) -> dict[str, int]:
+        raw = self._db.kv_get(key, {})
+        return {str(k): int(v) for k, v in raw.items() if isinstance(v, int) and v > 0} \
+            if isinstance(raw, dict) else {}
 
     # --- accounts -------------------------------------------------------------
 
@@ -307,6 +346,12 @@ class ChannelStore:
                 for r in self._rows("SELECT * FROM channel_chats WHERE platform = ? AND bot = ?"
                                     " ORDER BY last_seen DESC", (platform, bot))]
 
+    def chats_last_seen(self, platform: str, bot: str) -> int | None:
+        """When ``bot`` last saw any chat (None if it never did)."""
+        rows = self._rows("SELECT MAX(last_seen) AS t FROM channel_chats WHERE platform = ? AND bot = ?",
+                          (platform, bot))
+        return int(rows[0]["t"]) if rows and rows[0]["t"] is not None else None
+
     # --- pairing --------------------------------------------------------------
 
     @staticmethod
@@ -351,11 +396,13 @@ class ChannelStore:
                                (platform, account, sender_id)))
 
     def add_allow(self, platform: str, sender_id: str, sender_name: str, added_at: int,
-                  account: str = DEFAULT_ACCOUNT) -> None:
-        self._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at)"
-                   " VALUES (?, ?, ?, ?, ?) ON CONFLICT(platform, account, sender_id)"
+                  account: str = DEFAULT_ACCOUNT, source: str | None = None) -> None:
+        if is_shared_sender(platform, sender_id):
+            raise ValueError(f"{platform} sender {sender_id} is shared by many people and cannot be allowed")
+        self._exec("INSERT INTO channel_allow (platform, account, sender_id, sender_name, added_at, source)"
+                   " VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(platform, account, sender_id)"
                    " DO UPDATE SET sender_name = excluded.sender_name",
-                   (platform, account, sender_id, sender_name, added_at))
+                   (platform, account, sender_id, sender_name, added_at, source))
 
     def list_allow(self, platform: str | None) -> list[dict[str, Any]]:
         if platform:
@@ -365,8 +412,11 @@ class ChannelStore:
         return [dict(r) for r in rows]
 
     def remove_allow(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> bool:
-        return self._exec("DELETE FROM channel_allow WHERE platform = ? AND account = ? AND sender_id = ?",
-                          (platform, account, sender_id)) > 0
+        # Nothing writes a blank account now, but Settings files such a row under the default
+        # bot, so removing it there has to reach it.
+        accounts = (account, "") if account == DEFAULT_ACCOUNT else (account, account)
+        return self._exec("DELETE FROM channel_allow WHERE platform = ? AND account IN (?, ?) AND sender_id = ?",
+                          (platform, *accounts, sender_id)) > 0
 
     # --- bindings -------------------------------------------------------------
 
@@ -432,3 +482,21 @@ class ChannelStore:
         self._exec("INSERT INTO channel_offsets VALUES (?, ?, ?, ?) ON CONFLICT(platform, account)"
                    " DO UPDATE SET bot_id = excluded.bot_id, offset = excluded.offset",
                    (platform, account, bot_id, int(offset)))
+
+    # --- inbound messages not yet settled (survive a restart) -------------------------
+
+    def add_inbound(self, platform: str, account: str, payload: dict[str, Any]) -> int:
+        with self._db.transaction() as cur:
+            cur.execute("INSERT INTO channel_inbound (platform, account, payload, created_at)"
+                        " VALUES (?, ?, ?, ?)", (platform, account, json.dumps(payload), time.time()))
+            return int(cur.lastrowid or 0)
+
+    def delete_inbound(self, ids: tuple[int, ...]) -> None:
+        if ids:
+            self._exec(f"DELETE FROM channel_inbound WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+
+    def inbound(self, platform: str, account: str) -> list[tuple[int, float, dict[str, Any]]]:
+        """(id, created_at, payload) of one bot's unsettled messages, oldest first."""
+        rows = self._rows("SELECT id, created_at, payload FROM channel_inbound"
+                          " WHERE platform = ? AND account = ? ORDER BY id", (platform, account))
+        return [(int(r["id"]), float(r["created_at"]), json.loads(r["payload"])) for r in rows]

@@ -335,9 +335,7 @@ async def test_the_scan_runs_on_the_dedicated_pool_not_the_loop(
         return real(path, session_id, checkpoint, **kwargs)
 
     monkeypatch.setattr(reader, "usage_since_for_session", naming)
-    monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})
-
-    with patch.object(app, "broadcast", new_callable=AsyncMock) as mock_broadcast:
+    with patch.object(app, "broadcast_tokens_changed", new_callable=AsyncMock) as mock_broadcast:
         app.track_live_session(
             workspace_path="/ws/a", pane_id="pane-a",
             vendor="claude", session_id="sess-abc",
@@ -348,8 +346,7 @@ async def test_the_scan_runs_on_the_dedicated_pool_not_the_loop(
         await asyncio.sleep(0.05)
 
     assert threads and all(n.startswith("tokens-live-scan") for n in threads)
-    mock_broadcast.assert_called_once()
-    assert mock_broadcast.call_args.args[0]["type"] == "tokens.changed"
+    mock_broadcast.assert_called_once_with("/ws/a")
 
 
 @pytest.mark.asyncio

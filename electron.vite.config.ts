@@ -1,10 +1,9 @@
 import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
-import { resolve, join } from 'node:path'
+import { resolve } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { writeFileSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { devWebPlugins } from './scripts/dev-web/devWebPlugin'
+import { devTokenFile, devWebPlugins } from './scripts/dev-web/devWebPlugin'
 
 // ── App version — single source of truth is package.json ─────────────────────
 const APP_VERSION: string = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')).version
@@ -25,7 +24,7 @@ const APP_BUILD = buildTag()
 // The Electron main process reads this file and injects the token into every
 // renderer request via session.webRequest — browsers can't guess the token.
 const DEV_TOKEN = randomBytes(32).toString('hex')
-writeFileSync(join(tmpdir(), 'agent-team-dev-token'), DEV_TOKEN)
+writeFileSync(devTokenFile(), DEV_TOKEN)
 
 export default defineConfig({
   main: {
@@ -54,7 +53,8 @@ export default defineConfig({
           // Dedicated minimal preload for plugin WebContentsViews (Phase 2 M1).
           'plugin-preload': resolve(__dirname, 'src/preload/plugin-preload.ts'),
           'terminal-owner-preload': resolve(__dirname, 'src/preload/terminal-owner-preload.ts'),
-          'file-picker-preload': resolve(__dirname, 'src/preload/file-picker-preload.ts')
+          'file-picker-preload': resolve(__dirname, 'src/preload/file-picker-preload.ts'),
+          'app-lock-preload': resolve(__dirname, 'src/preload/app-lock-preload.ts')
         }
       }
     },

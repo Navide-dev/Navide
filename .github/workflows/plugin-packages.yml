@@ -27,7 +27,7 @@ on:
         required: true
         type: string
       artifact_version:
-        description: Optional MAJOR.MINOR.PATCH to stamp on the packages instead of the ref's package.json version, so a plugin release need not wait for an App version
+        description: Optional MAJOR.MINOR.PATCH to stamp on the packages instead of the plugin's own manifest version
         required: false
         type: string
         default: ''
@@ -45,7 +45,7 @@ jobs:
       matrix:
         include:
           - target: darwin-arm64
-            runner: macos-14
+            runner: macos-15
             timeout: 45
             arch: 'Mach-O 64-bit executable arm64'
           - target: linux-x64
@@ -117,7 +117,7 @@ jobs:
         # The same package scripts scripts/publish-first-party-plugins.sh runs,
         # run through Bun here (the publish script still uses pnpm).
         # The input reaches the build through env, never the script text; empty
-        # keeps the ref's package.json version (the vite configs' default).
+        # keeps the plugin's own manifest version (the vite configs' default).
         env:
           ARTIFACT_VERSION: ${{ inputs.artifact_version }}
         run: |

@@ -28,9 +28,8 @@ const repoRoot = resolve(import.meta.dirname, '../../../..')
 const SURFACES = [
   'plugins/navide-git/src/GitLeftApp.vue',
   'plugins/navide-git/src/GitWindowApp.vue',
-  // The retained legacy Git window and the Plans window are separate files
-  // from the v2 package but the same kind of surface, with the same store.
-  'src/renderer/src/GitWindowApp.vue',
+  // The Plans window is a separate file from the v2 package but the same kind
+  // of surface, with the same store.
   'src/renderer/src/PlanWindowApp.vue',
 ]
 

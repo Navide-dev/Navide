@@ -3,9 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DeveloperAccount, packageDigest, redactDeveloperSecrets } from './developerAccount'
+import { DeveloperAccount, packageDigest, redactDeveloperSecrets, registryError } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
-import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl } from './developerIpc'
+import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl, membersView } from './developerIpc'
 
 // Built by concatenation so no scanner mistakes a fixture for a credential.
 const ACCOUNT_TOKEN = 'nva' + '_' + 'acc0unt' + 'Q'.repeat(24)
@@ -248,5 +248,141 @@ describe('reclaimed namespaces in the application (W2)', () => {
     const { account: dev } = account(() => ({ status: 200, body }))
     const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
     expect(answer).toMatchObject({ ok: true, result: { application: { namespaces: expected } } })
+  })
+})
+
+describe('Registry calls that carry the kept credential', () => {
+  it('stops reading a package download past the size cap instead of buffering it whole', async () => {
+    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
+    const chunk = new Uint8Array(1024 * 1024)
+    let pulled = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1
+        if (pulled > 300) controller.close()
+        else controller.enqueue(chunk)
+      },
+    })
+    const impl = vi.fn(async () => new Response(stream, { status: 200 }))
+    const acct = new DeveloperAccount({ vault, registryUrl: () => REGISTRY, openExternal: vi.fn(), fetch: impl as unknown as typeof fetch })
+    await expect(acct.registryDownload('/api/testplace/a/b/1.0.0/download', 'account')).rejects.toThrow(/larger than/)
+    expect(pulled).toBeLessThan(300)
+  })
+})
+
+describe('L1d: a key the Registry already holds is never replaced by itself', () => {
+  it('records the conflict instead of failing, keeps the CLI key publishing, and replaces only on request', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    let registered: string | null = 'sha256:cli-key'
+    const { account: dev, calls } = account((call) => {
+      if (call.url.endsWith('/api/publisher/me/key')) {
+        const body = JSON.parse(String(call.body)) as { public_key: string; replace?: boolean }
+        if (registered && !body.replace) {
+          return { status: 409, body: { detail: { code: 'KEY_EXISTS', message: 'another key', public_key_fingerprint: registered } } }
+        }
+        registered = null
+        return { status: 200, body: { public_key_fingerprint: 'sha256:navide-key' } }
+      }
+      if (new URL(call.url).pathname.endsWith('/api/publish')) return { status: 201, body: { ok: true } }
+      return { status: 404, body: {} }
+    })
+    // Sign-in's automatic registration meets the dashboard key: no throw, the conflict is state.
+    const state = await dev.registerKey()
+    expect(state).toMatchObject({ keyRegistered: false, keyConflictFingerprint: 'sha256:cli-key' })
+    expect(JSON.parse(String(calls.at(-1)!.body))).not.toHaveProperty('replace')
+    // Publishing from here says what is going on instead of letting the Registry answer 403.
+    const refused = await dev.publish(new TextEncoder().encode('PK'), 'x.vsix', 'universal')
+    expect(refused.status).toBe(409)
+    expect(JSON.stringify(refused.body)).toContain('sha256:cli-key')
+    expect(calls.some((call) => new URL(call.url).pathname.endsWith('/api/publish'))).toBe(false)
+    // The user's explicit replacement is the only thing that changes the key.
+    const replaced = await dev.registerKey({ replace: true })
+    expect(JSON.parse(String(calls.at(-1)!.body)).replace).toBe(true)
+    expect(replaced).toMatchObject({ keyRegistered: true, keyConflictFingerprint: null })
+    expect((await dev.publish(new TextEncoder().encode('PK'), 'x.vsix', 'universal')).status).toBe(201)
+  })
+})
+
+describe('namespace members (0.2.40)', () => {
+  const registryMembers = {
+    namespace: 'nerdtechnic',
+    your_role: 'owner',
+    members: [
+      { member_id: 'mem-owner', role: 'owner', added_by: null, added_at: null },
+      { member_id: 'mem-pub', role: 'publisher', added_by: 'member:mem-owner', added_at: '2026-11-10T05:00:00+00:00' },
+    ],
+  }
+  const view = {
+    your_role: 'owner',
+    items: [
+      { member_id: 'mem-owner', role: 'owner', added_at: null },
+      { member_id: 'mem-pub', role: 'publisher', added_at: '2026-11-10T05:00:00+00:00' },
+    ],
+  }
+
+  it('membersView keeps ids, roles and dates only', () => {
+    expect(membersView(registryMembers)).toEqual(view)
+    expect(membersView({ your_role: 'admin', members: [{ member_id: 'x', role: 'maintainer' }] }))
+      .toEqual({ your_role: null, items: [{ member_id: 'x', role: 'publisher', added_at: null }] })
+  })
+
+  it('adds and removes a member with the publisher token', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    const { account: dev, calls } = account(() => ({ status: 200, body: registryMembers }))
+    await dev.addMember('mem-new')
+    await dev.removeMember('mem/../x')
+    expect(calls.map((call) => [call.method, new URL(call.url).pathname])).toEqual([
+      ['POST', '/registry/api/publisher/me/members'],
+      ['DELETE', '/registry/api/publisher/me/members/mem%2F..%2Fx'],
+    ])
+    expect(JSON.parse(String(calls[0].body))).toEqual({ member_id: 'mem-new', role: 'publisher' })
+    expect(calls[0].headers.Authorization).toBe(`Bearer ${PUBLISHER_TOKEN}`)
+  })
+
+  it('the agent reads members, read-only, in marketplace_developer_status', async () => {
+    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    const { account: dev, calls } = account((call) =>
+      call.url.endsWith('/api/publisher/me/members')
+        ? { status: 200, body: registryMembers }
+        : { status: 200, body: { status: 'approved', fields: {}, field_sources: {} } })
+    const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
+    expect(answer).toMatchObject({ ok: true, result: { members: view } })
+    expect(calls.every((call) => call.method === 'GET')).toBe(true)
+    expect(JSON.stringify(answer)).not.toContain(PUBLISHER_TOKEN)
+  })
+
+  it('has no members without a publisher sign-in', async () => {
+    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    const { account: dev, calls } = account(() => ({ status: 200, body: { status: 'none' } }))
+    const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
+    expect(answer).toMatchObject({ ok: true, result: { members: null } })
+    expect(calls.some((call) => call.url.endsWith('/members'))).toBe(false)
+  })
+})
+
+describe('registryError (0.2.40 c3)', () => {
+  const doc = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md#testplace'
+
+  it('reads the code and message as before and keeps a Navide doc link', () => {
+    expect(registryError({ detail: { code: 'OWNER_ONLY', message: 'owner only' }, doc }))
+      .toEqual({ code: 'OWNER_ONLY', message: 'owner only', doc })
+    expect(registryError({ detail: 'extension not found' })).toEqual({ code: null, message: 'extension not found', doc: null })
+  })
+
+  it('takes a top-level CAPABILITY_DENIED and links its section when the body has no doc', () => {
+    expect(registryError({ detail: 'static scan found network hosts the manifest does not declare: x.net', code: 'CAPABILITY_DENIED' }))
+      .toEqual({
+        code: 'CAPABILITY_DENIED',
+        message: 'static scan found network hosts the manifest does not declare: x.net',
+        doc: 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/plugin-development-v2.md#capability_denied',
+      })
+  })
+
+  it('drops a doc that is not Navide documentation', () => {
+    for (const bad of ['http://github.com/Navide-dev/Navide/x', 'https://evil.example/doc', 'https://github.com/other/repo', 'javascript:alert(1)', 42]) {
+      expect(registryError({ detail: 'x', doc: bad }).doc).toBeNull()
+    }
+    expect(registryError({ detail: 'x', doc: 'https://developers.navide.dev/developer' }).doc).toBe('https://developers.navide.dev/developer')
+    expect(registryError({ detail: 'x', doc: 'https://navide.dev.evil.example/' }).doc).toBeNull()
   })
 })

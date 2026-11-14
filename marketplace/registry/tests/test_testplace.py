@@ -911,3 +911,18 @@ def test_a_yanked_public_version_is_not_listed_as_testplace_withdrawn(client: Te
     assert _publish(client, "2.0.0", channel="stable").status_code == 201
     assert client.post("/api/extensions/acme/files/2.0.0/yank", headers=_publisher()).status_code == 200
     assert _local_install_document(client)["blockedDigests"] == []
+
+
+def test_testplace_rows_are_in_semver_order_not_text_order(client: TestClient) -> None:
+    # Text order puts 1.10.0 before 1.9.0; first-party plugins now version
+    # independently, so double-digit minor versions are expected.
+    for version in ("1.10.0", "1.9.0", "1.2.0"):
+        assert _publish(client, version).status_code == 201
+    from registry import testplace
+    from registry.models import Extension
+
+    with _session(client) as session:
+        extension = session.exec(select(Extension).where(Extension.identity == "acme.files")).one()
+        assert [row.version for row in testplace.testplace_rows(session, extension)] == [
+            "1.2.0", "1.9.0", "1.10.0",
+        ]

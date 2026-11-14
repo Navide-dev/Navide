@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "navide.commands",
+  "name": "Commands",
+  "version": "1.0.0",
+  "publisher": "navide",
+  "engines": {
+    "navide": ">=0.2.36"
+  },
+  "permissions": {},
+  "marketplace": {
+    "description": "Declare commands.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "window",
+        "title": "Main",
+        "entry": "frontend/index.html"
+      }
+    ],
+    "commands": [
+      {
+        "id": "navide.commands.open",
+        "title": "Open",
+        "run": {
+          "view": "main",
+          "target": {
+            "tab": "tests"
+          }
+        },
+        "suggestedKey": "cmd+alt+t"
+      }
+    ]
+  }
+}

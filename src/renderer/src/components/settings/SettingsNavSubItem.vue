@@ -23,6 +23,7 @@ const emit = defineEmits<{
     type="button"
     class="settings-nav-subitem"
     :class="{ active }"
+    :title="label"
     :aria-current="active ? 'page' : undefined"
     @click="emit('select')"
   >
@@ -50,10 +51,9 @@ const emit = defineEmits<{
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-row-title);
   text-align: left;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
 }
 /* A guide line ties the pages to the entry they belong to. */
 .settings-nav-subitem::before {
@@ -69,9 +69,11 @@ const emit = defineEmits<{
   width: 2px;
   background: var(--accent-emphasis);
 }
+/* Only the hover eases in; losing the selection clears at once. */
 .settings-nav-subitem:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 .settings-nav-subitem:focus-visible {
   outline: 2px solid var(--accent-focus);
@@ -99,12 +101,21 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   color: var(--text-primary);
 }
+/* Up to two lines per row: a long page name ("Developer and native code",
+   de-DE "Entwickler und nativer Code") wraps under its own first letter;
+   only a third line ends in an ellipsis, with the full name in the tooltip.
+   The marker after it keeps its own width at the row's right edge. */
 .settings-nav-subitem-label {
+  flex: 1 1 auto;
   min-width: 0;
   margin-right: 6px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: break-word;
+  line-height: 1.3;
 }
 @media (max-width: 720px) {
   .settings-nav-subitem {

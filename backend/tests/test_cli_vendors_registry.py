@@ -31,9 +31,9 @@ CLI_AGENTS_HELP = (
 )
 
 EXPECTED_KEYS = {
-    "aider", "antigravity", "claude", "codex", "copilot", "cursor",
-    "droid", "goose", "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi",
-    "qwen",
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "kiro",
+    "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
+    "opencode", "openclaw", "pi", "qwen",
 }
 
 # DEPS entries that are infrastructure, not CLI vendors.
@@ -373,7 +373,9 @@ def test_help_panel_sign_in_column_matches_login_command_args() -> None:
         key = re.search(r"agentKey: '([a-z]+)'", spec_source)
         command = re.search(r"defaultCommand: '([^']+)'", spec_source)
         assert key and command, f"{path.name} declares no agentKey/defaultCommand"
-        bin_to_key[command.group(1)] = key.group(1)
+        # The binary is the first word: a default command may carry a
+        # subcommand (`hermes chat`).
+        bin_to_key[command.group(1).split()[0]] = key.group(1)
 
     help_panel = {}
     for binary, sign_in in rows:
@@ -477,6 +479,10 @@ LAZY_BACKREFS: dict[tuple[str, str, str], str] = {
     ),
     ("copilot", "copilot_hooks", "install_hooks"): (
         "spec.install_hooks delegates to the app-side hook installer; "
+        "vendor→app edge kept lazy"
+    ),
+    ("kiro", "kiro_hooks", "install_hooks"): (
+        "spec.install_hooks delegates to the app-side hook module; "
         "vendor→app edge kept lazy"
     ),
     ("qwen", "qwen_hooks", "install_hooks"): (
@@ -656,7 +662,11 @@ def test_vendors_without_session_ids() -> None:
     others = {
         k for k, s in registry.VENDORS.items() if not s.supports_session_resume
     }
-    assert others == {"aider", "mcode"}, (
+    # devin: sessions exist (-c / -r <id>) but their store is undocumented
+    # and no reader is written yet.
+    # kiro: sessions exist (--resume-id) in an undocumented SQLite store and
+    # no reader is written yet.
+    assert others == {"aider", "mcode", "devin", "kiro"}, (
         f"unexpected vendors without session ids: {sorted(others)}"
     )
 
@@ -688,3 +698,23 @@ def test_effort_vocabulary_requires_effort_support() -> None:
     for key, spec in registry.VENDORS.items():
         if spec.known_efforts:
             assert spec.supports_effort, f"{key} lists efforts but takes none"
+
+
+HELP_CLI_FACTS = REPO_ROOT / "src" / "renderer" / "src" / "lib" / "helpCliFacts.ts"
+
+
+def _ts_key_set(source: str, name: str) -> set[str]:
+    match = re.search(rf"export const {name}\b[^=]*= new Set\(\[(.*?)\]\)", source, re.S)
+    assert match, f"{HELP_CLI_FACTS.name} no longer declares {name}"
+    return set(re.findall(r"'([^']+)'", match.group(1)))
+
+
+def test_help_cli_facts_mirror_the_registry():
+    # The Help pages say which CLIs can send through MCP and which have no
+    # output protocol. The renderer cannot ask the backend, so helpCliFacts.ts
+    # mirrors two registry facts; a vendor added here must be added there.
+    source = HELP_CLI_FACTS.read_text(encoding="utf-8")
+    wired = {key for key, spec in registry.VENDORS.items() if spec.mcp_wiring is not None}
+    no_reader = {key for key, spec in registry.VENDORS.items() if spec.make_log_reader is None}
+    assert _ts_key_set(source, "MCP_WIRED") == wired
+    assert _ts_key_set(source, "NO_LOG_READER") == no_reader

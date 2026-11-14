@@ -13,7 +13,7 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   prepareInstall,
@@ -29,6 +29,7 @@ import {
   type InstallerTrustConfig,
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
+import { readBodyCapped } from './readBodyCapped'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
 import {
@@ -112,9 +113,22 @@ import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManage
 import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
+import {
+  type PluginStopRecord,
+  type PluginStopSummary,
+  PLUGIN_AUTO_PAUSE_THRESHOLDS,
+  type PluginAutoPauseNotice,
+  type PluginAutoPauseRule,
+  type PluginGlobalStopRecord,
+  type PluginGlobalStopSwitches,
+  type PluginStopVia,
+} from '../../shared/pluginStop'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
+import { PluginNetworkStrictStore } from './pluginNetworkStrictStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
-import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
+import { PluginDisableSourceStore, type DisableSource, type DisablingAgent } from './pluginDisableSource'
+import { PluginGlobalStopStore } from './pluginGlobalStopStore'
+import { PluginNotifySwitchStore } from './agentNotify'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
@@ -125,7 +139,9 @@ import {
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
 import {
+  parsePluginActivityOverview,
   parsePluginActivityReport,
+  type PluginActivityOverview,
   type PluginActivityReport,
   type PluginActivityReportRequest,
 } from '../../shared/pluginActivity'
@@ -138,13 +154,14 @@ import {
   type DisclosureRiskLevel,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
-import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { cardRiskLevel, networkHostMatches, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import type { LocalPackageQueryReport } from '../../shared/pluginAgentTools'
 import { pluginSourceFromLegacyProvenance, type LocalInstallDetails, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
 import { createLocalTrustRecord, localTakedownDecision, readLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { secretsIdentity } from './pluginSecrets'
 import { PackageStagingStore } from './pluginStagingStore'
 import {
   agentPackagePath,
@@ -288,6 +305,15 @@ interface InstalledSummary {
   getsPrereleases?: boolean
   /** The user's "Disabled" switch; present only on rows it applies to. */
   disabled?: boolean
+  /** C1: the user's "Only allow declared network hosts" switch (default off:
+   *  an undeclared host is allowed and recorded); present with `disabled`. */
+  networkStrict?: boolean
+  /** P2: present while the package is disabled by a stop: where the stop came
+   *  from and its activity then, shown before it is enabled again. */
+  stopRecord?: PluginStopRecord
+  /** P4: present when the installed manifest declares `agentNotify`: the
+   *  user's "Notify agent panes" switch (off by default). */
+  notifyAgents?: boolean
 }
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
@@ -418,7 +444,7 @@ const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'hi
 export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
-    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool' || item.kind === 'networkHost') {
       out.push({ kind: item.kind, key: item.key })
     } else if (item.kind === 'backendMethod') {
       out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
@@ -469,37 +495,6 @@ function httpsLink(value: unknown): string | null {
  *  letter placeholder. */
 export const MARKETPLACE_ICON_MAX_BYTES = 256 * 1024
 const ICON_PATH_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/
-
-/** Read a response body, giving up (and cancelling the stream) as soon as it
- *  passes `cap` bytes, so a chunked or lying response never lands in memory
- *  whole. A response without a stream (a test double) is read directly. */
-async function readBodyCapped(res: Response, cap: number): Promise<Uint8Array | null> {
-  const body = res.body
-  if (!body) {
-    const bytes = new Uint8Array(await res.arrayBuffer())
-    return bytes.byteLength <= cap ? bytes : null
-  }
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > cap) {
-      await reader.cancel().catch(() => undefined)
-      return null
-    }
-    chunks.push(value)
-  }
-  const bytes = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return bytes
-}
 
 /** Raster type by magic bytes; the Registry's Content-Type is not trusted. */
 function sniffIconMime(bytes: Uint8Array): string | null {
@@ -623,6 +618,15 @@ export interface PluginIpcOptions {
     /** Set when an agent's automatic update (O1) drove the switch. */
     agent?: PluginAgentRequester
   }) => void
+  /** H1: a switch between installed versions (Restart, an update taking
+   *  effect, Back to) passed its readiness check and is about to drain the
+   *  running views ('start'), then settled, switched or not ('end'). Lets the
+   *  main window show the plugin's views as switching. */
+  onPackageSwitching?: (notice: {
+    pluginId: string
+    toVersion: string
+    phase: 'start' | 'end'
+  }) => void
   /** O1: an agent's automatic update was staged but its switch failed; the
    *  old version runs again and the main window keeps a row to apply it. */
   onPackageSwitchFailed?: (notice: {
@@ -639,6 +643,20 @@ export interface PluginIpcOptions {
   listFactoryPackages?: () => FactoryPackageSummary[]
   /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
   backendCallConcurrency?: () => BackendCallConcurrency[]
+  /** Plan P5: how often the anomaly rules are checked; none (the default in
+   *  tests) checks only on demand. The Host passes 30 s. */
+  autoPauseIntervalMs?: number
+  /** Plan P5's R4: the watchdog's unanswered resource notices. */
+  resourceNotices?: () => Array<{ pluginId: string; item: string; usage: number; threshold: number }>
+  /** Plan P5: a plugin was paused on an anomaly rule (the main windows are told). */
+  onPluginAutoPaused?: (notice: PluginAutoPauseNotice) => void
+  /** Plan P3: the third-party switches a global stop turns off (native
+   *  backends, DB8, DB4) and "Resume all" puts back. */
+  globalStopSwitches?: {
+    read: () => PluginGlobalStopSwitches
+    turnOff: () => Promise<void>
+    restore: (previous: PluginGlobalStopSwitches) => Promise<void>
+  }
   /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most; none are capped. */
   backendResourceUsage?: () => BackendResourceUsage
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
@@ -678,6 +696,10 @@ export interface PluginIpcOptions {
   /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
    * backend data when a package's source changes (card K3, D7). */
   pluginStorageRoot?: string
+  /** H1: copy only the SDK view state (`view-state:` keys) of one version's
+   * storage over the same keys of another's. Called for a switch within one
+   * source only; a failure is logged and never fails the switch. */
+  carryPluginViewState?: (pluginId: string, fromVersion: string, toVersion: string) => Promise<void>
   /** Card K4: the Host's own folder dialog, parented to the window that
    * asked. Absent, loading from a folder is unavailable. */
   pickDeveloperFolder?: (event: IpcMainInvokeEvent) => Promise<string | null>
@@ -819,6 +841,20 @@ export function isTrustedPluginManagementSender(
 
 /** Register every `plugins:*` handler exactly once. `pluginsRoot` is where
  *  verified packages are written (`userData/plugins`). */
+/** Plan P3: the agent a `stop-all` from plugins_disable_all names (the
+ *  backend resolved it from the MCP credential), or null when malformed. */
+function requestingAgent(value: unknown): DisablingAgent | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const text = (v: unknown): v is string | null => v === null || typeof v === 'string'
+  if (record.callerKind !== 'pane' && record.callerKind !== 'external' && record.callerKind !== 'host') return null
+  if (!text(record.paneId) || !text(record.paneName) || !text(record.workspace)) return null
+  return { callerKind: record.callerKind, paneId: record.paneId, paneName: record.paneName }
+}
+
+/** Plan P5: present while the user has turned automatic pauses off. */
+export const AUTO_PAUSE_OFF_FILE = '.navide-plugins-auto-pause-off'
+
 export function registerPluginIpc(
   manager: FrontendPluginManager,
   pluginsRoot: string,
@@ -929,6 +965,33 @@ export function registerPluginIpc(
       return undefined
     }
   }
+  // The trust identity a package's own secrets (`secrets`) are bound to: its
+  // installed source; for a local file the publisher key that signed it, or
+  // its exact content when unsigned; for a developer folder, the folder
+  // (MED-4: neither id is vouched for). A Registry install whose channel this
+  // release does not know still comes through the Registry. Null (refused)
+  // when nothing says where it came from.
+  manager.setPluginSecretIdentityResolver?.((pluginId) => {
+    const summary = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+    if (!summary) return null
+    const source = installedSource(summary, activeRegistryChannel(summary))
+    if (source === 'developer-unpacked') {
+      return secretsIdentity(source, { folderPath: developerMode.folder(pluginId)?.path })
+    }
+    if (source === 'local-unsigned' || source === 'local-signed') {
+      const path = summary.packageVersion ? localTrustRecordFor(pluginsRoot, pluginId, summary.packageVersion) : null
+      if (!path) return null
+      try {
+        const record = readLocalTrustRecord(path)
+        return record.signer
+          ? secretsIdentity('local-signed', { signer: record.signer })
+          : secretsIdentity('local-unsigned', { contentDigest: record.contentDigest })
+      } catch {
+        return null
+      }
+    }
+    return secretsIdentity(source) ?? (summary.provenance === 'official-registry' ? secretsIdentity('marketplace') : null)
+  })
   // Decision d5 (W6): the block on the `.vsix` a local install came from.
   const localDigestBlockFor = (summary: { id: string; packageVersion?: string }): LocalDigestBlock | null => {
     if (!summary.packageVersion) return null
@@ -1086,10 +1149,22 @@ export function registerPluginIpc(
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // C1: the per-package network switch; the manager reads it on every request.
+  const networkStrictPlugins = new PluginNetworkStrictStore(pluginsRoot)
+  // Optional call: the tests' partial managers do not implement it.
+  manager.setNetworkStrictResolver?.((pluginId) => networkStrictPlugins.has(pluginId))
   // Who disabled each Marketplace package (B2-c option B). A write that fails
   // leaves an older entry behind, but the Disabled list changed since, so an
   // agent's entry then reads as the user: the conservative side.
   const disableSources = new PluginDisableSourceStore(pluginsRoot)
+  // Plan P3: the global stop in effect, kept across restarts.
+  const globalStops = new PluginGlobalStopStore(pluginsRoot)
+  // Plan P5: automatic pauses are on unless the user turned them off.
+  const autoPauseOff = join(pluginsRoot, AUTO_PAUSE_OFF_FILE)
+  const autoPauseOn = (): boolean => !existsSync(autoPauseOff)
+  // Plan P4: the user's per-plugin "Notify agent panes" switch, off by default.
+  const notifySwitches = new PluginNotifySwitchStore(pluginsRoot)
+  manager.setAgentNotifyAllowedResolver?.((pluginId) => notifySwitches.has(pluginId))
   const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
     try {
       if (disabled && source) disableSources.set(id, source)
@@ -1270,6 +1345,7 @@ export function registerPluginIpc(
                     packageVersion: grant.packageVersion,
                     system: [...grant.system],
                     ...(grant.shell ? { shell: grant.shell } : {}),
+                    ...(grant.shellExecutables ? { shellExecutables: [...grant.shellExecutables] } : {}),
                     ...(grant.highRiskShellConfirmed !== undefined
                       ? { highRiskShellConfirmed: grant.highRiskShellConfirmed }
                       : {}),
@@ -1293,11 +1369,21 @@ export function registerPluginIpc(
       ...(summary.provenance === 'official-registry'
         ? { getsPrereleases: optedIn.has(summary.id) }
         : {}),
+      ...(activeDisclosure(summary.id)?.permissions.system.includes('agentNotify')
+        ? { notifyAgents: notifySwitches.has(summary.id) }
+        : {}),
       // d5: a blocked local install gets the switch too, so a user who chose
       // "Disable" in its warning can enable it again.
       ...((summary.provenance === 'official-registry' || localDigestBlockFor(summary) !== null) &&
         manager.canDisablePlugin(summary.id)
-        ? { disabled: disabledPlugins.has(summary.id) }
+        ? {
+            disabled: disabledPlugins.has(summary.id),
+            networkStrict: networkStrictPlugins.has(summary.id),
+            ...(() => {
+              const stop = disabledPlugins.has(summary.id) ? disableSources.get(summary.id).stop : undefined
+              return stop ? { stopRecord: stop } : {}
+            })(),
+          }
         : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
@@ -1317,6 +1403,27 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:listInstalled', (event): InstalledSummary[] => {
     assertAuthorized(event)
     return listInstalledSummaries()
+  })
+
+  ipcMain.handle('plugins:listCommands', (event) => {
+    assertAuthorized(event)
+    return manager.listCommandCatalog()
+  })
+
+  ipcMain.handle('plugins:listSlots', (event) => {
+    assertAuthorized(event)
+    return manager.listSlotCatalog()
+  })
+
+  // Settings → Navide Plugins: a package's declared settings (contributes.settings).
+  ipcMain.handle('plugins:settings:read', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return typeof args?.id === 'string' ? manager.readPluginSettings(args.id) : null
+  })
+  ipcMain.handle('plugins:settings:write', async (event, args: { id?: unknown; key?: unknown; value?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.id !== 'string' || typeof args.key !== 'string') return false
+    return manager.writePluginSetting(args.id, args.key, args.value)
   })
 
   ipcMain.handle('plugins:listContributions', (event) => {
@@ -1392,6 +1499,41 @@ export function registerPluginIpc(
         ...(installedAt !== null ? { installedAt } : {}),
       }))
       return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  // Plan P1: the Settings monitor, one row per installed package. The backend
+  // counts; the Host marks each host its manifest declares (null when there
+  // is no Manifest v2 disclosure to compare against). Read only.
+  ipcMain.handle('plugins:activityOverview', async (event): Promise<
+    { ok: true; overview: PluginActivityOverview } | { ok: false; error: string }
+  > => {
+    assertAuthorized(event)
+    const ids = manager.listInstalledPackages().map((pkg) => pkg.id)
+    try {
+      const parsed = parsePluginActivityOverview(await manager.requestPluginActivityOverview(ids))
+      if (!parsed) return { ok: false, error: 'the activity overview was malformed' }
+      return {
+        ok: true,
+        overview: {
+          ...parsed,
+          plugins: parsed.plugins.map((row) => {
+            const disclosure = activeDisclosure(row.pluginId)
+            const declared = disclosure?.networkHosts ?? []
+            const headlessViews = manager.headlessViewCount?.(row.pluginId) ?? 0
+            return {
+              ...row,
+              ...(headlessViews > 0 ? { headlessViews } : {}),
+              hosts: row.hosts.map((entry) => ({
+                ...entry,
+                declared: disclosure ? declared.some((pattern) => networkHostMatches(pattern, entry.host)) : null,
+              })),
+            }
+          }),
+        },
+      }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
@@ -2236,8 +2378,8 @@ export function registerPluginIpc(
         'account',
       )
       if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
-      const { code, message } = registryError(res.body)
-      return { ok: false, status: res.status, code, message }
+      const { code, message, doc } = registryError(res.body)
+      return { ok: false, status: res.status, code, message, doc }
     }
   )
 
@@ -2634,6 +2776,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' && args.riskConfirmed === true
               ? { highRiskShellConfirmed: true as const }
               : {}),
@@ -2942,6 +3085,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
             ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
             storage: true,
           }
@@ -3209,9 +3353,38 @@ export function registerPluginIpc(
    * backend is not started here, so two versions of it never run at once: it
    * still stops and starts with the switch. */
   const preflightDeveloperFolder = async (dir: string): Promise<void> => {
-    const descriptor = loadPluginDir(dir).descriptor
+    await preflightViews(loadPluginDir(dir).descriptor)
+  }
+
+  /** The hidden-view readiness check of a package about to become active:
+   * a developer folder before its reload, and (H1) an installed version right
+   * before a switch drains the running one. A package without views has
+   * nothing to check; its backend is never started early. */
+  const preflightViews = async (descriptor: PluginLaunchDescriptor | undefined): Promise<void> => {
     if (descriptor?.views?.length && options.preflightCandidateFrontend) {
       await options.preflightCandidateFrontend(descriptor)
+    }
+  }
+
+  /** H1: tell the main window a switch drains views now, or has settled. A
+   * failure to tell never affects the switch. */
+  const reportSwitching = (pluginId: string, toVersion: string, phase: 'start' | 'end'): void => {
+    try {
+      options.onPackageSwitching?.({ pluginId, toVersion, phase })
+    } catch (error) {
+      console.warn(`[plugins] switching notice of ${pluginId} was not sent: ${errorText(error)}`)
+    }
+  }
+
+  /** H1: within one source, a switch hands the SDK view state of the version
+   * that ran to the one that runs next, so remounted views restore it. A
+   * failed copy is logged; the switch goes on. */
+  const carryViewState = async (pluginId: string, fromVersion: string, toVersion: string): Promise<void> => {
+    if (!options.carryPluginViewState || fromVersion === toVersion) return
+    try {
+      await options.carryPluginViewState(pluginId, fromVersion, toVersion)
+    } catch (error) {
+      console.warn(`[plugins] view state of ${pluginId} was not carried to ${toVersion}: ${errorText(error)}`)
     }
   }
 
@@ -3245,6 +3418,7 @@ export function registerPluginIpc(
         packageVersion: scanned.descriptor.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       })
@@ -4021,6 +4195,7 @@ export function registerPluginIpc(
         packageVersion: selectedBeforeRestart.candidate.packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(fullShellConfirmed ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }
@@ -4044,6 +4219,7 @@ export function registerPluginIpc(
     let restartTransaction: PluginPackageRestartTransaction | undefined
     let drainedBackendOnly = false
     let promoted = false
+    let switching = false
     try {
       if (!selectedBeforeRestart.active && previousVersion && previousGrant &&
           (previousDescriptor?.packageDir === legacyDir || legacyBackendOnly)) {
@@ -4061,6 +4237,14 @@ export function registerPluginIpc(
           artifactDigest: legacyTrust.artifactDigest,
           layout: 'legacy-mutable',
         }, previousGrant)
+      }
+      // H1: the version about to run proves its views report ready before
+      // anything of the running one is drained; a failure here leaves it
+      // running and the update staged. The backend is never started early.
+      await preflightViews(scanned.descriptor)
+      if (previousVersion) {
+        switching = true
+        reportSwitching(id, selectedBeforeRestart.candidate.packageVersion, 'start')
       }
       lifecycleSelector.beginActivation(id, previousGrant && !isFactory ? { previousGrant } : {})
       if (previousVersion) {
@@ -4143,6 +4327,11 @@ export function registerPluginIpc(
         })
       }
       options.onActivationChange?.({ pluginId: id, activation })
+      // H1: within one source, the remounted views restore the view state the
+      // replaced version left; a change of source hands over nothing (D7).
+      if (previousVersion && scanned.descriptor && !sourceReplaced && !isFactory) {
+        await carryViewState(id, previousVersion, selected.active!.packageVersion)
+      }
       if (restartTransaction && !scanned.descriptor) {
         manager.completePackageRestartWithoutFrontend(restartTransaction)
         restartTransaction = undefined
@@ -4328,6 +4517,7 @@ export function registerPluginIpc(
       throw error
     } finally {
       activeTransactions.delete(id)
+      if (switching) reportSwitching(id, selectedBeforeRestart.candidate.packageVersion, 'end')
     }
   }
 
@@ -4521,6 +4711,7 @@ export function registerPluginIpc(
         packageVersion,
         system: [...policy.system],
         ...(policy.shell ? { shell: policy.shell } : {}),
+        ...(policy.shellExecutables ? { shellExecutables: [...policy.shellExecutables] } : {}),
         ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
         storage: true,
       }
@@ -4637,11 +4828,21 @@ export function registerPluginIpc(
     // A backend-only activation has no descriptor, but its exact active
     // selector identity still owns a live runtime that must drain first.
     const currentVersion = currentDescriptor?.packageVersion ?? selectedBeforeRollback.active.packageVersion
+    // H1: going back within one source carries the view state; a kept file
+    // version never takes another file's data (MED-4).
+    const sameSource = !previousIsLocal &&
+      dataSourceOf(manager.listInstalledPackages().find((pkg) => pkg.id === id)) === 'marketplace'
     activeTransactions.add(id)
     let restartTransaction: PluginPackageRestartTransaction | undefined
     let drainedBackendOnly = false
     let promoted = false
+    let switching = false
     try {
+      // H1: the version gone back to proves its views report ready before the
+      // running one is drained; a failure here leaves the running one as is.
+      await preflightViews(previousScanned.descriptor)
+      switching = true
+      reportSwitching(id, previous.packageVersion, 'start')
       lifecycleSelector.beginRollback(id)
       if (currentDescriptor) {
         restartTransaction = await manager.beginPackageRestart(id, currentVersion)
@@ -4678,6 +4879,9 @@ export function registerPluginIpc(
           artifactDigest: currentPreviousTrust.artifactDigest,
         },
       })
+      if (sameSource && previousScanned.descriptor) {
+        await carryViewState(id, currentVersion, selected.active!.packageVersion)
+      }
       if (restartTransaction && previousScanned.descriptor) {
         const report = await manager.restorePackageRestart(restartTransaction, selected.active!.packageVersion)
         manager.completePackageRestart(restartTransaction)
@@ -4732,16 +4936,17 @@ export function registerPluginIpc(
       throw error
     } finally {
       activeTransactions.delete(id)
+      if (switching) reportSwitching(id, previous.packageVersion, 'end')
     }
   })
 
-  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
+  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown, rawSecretsChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
-    // Plans, Git and Mini-IDE ship with Navide and can only be disabled; no
-    // other `navide.` package is removable, so its storage and grant always
-    // stay. A Marketplace first-party package (navide.browser) is the one
-    // exception: it installs from the Official Registry and is removed like
-    // any Marketplace package.
+    // Plans, Git, Mini-IDE and Browser ship with Navide and can only be
+    // disabled; no other `navide.` package is removable, so its storage and
+    // grant always stay. A Marketplace first-party package that is not bundled
+    // is the one exception: it installs from the Official Registry and is
+    // removed like any Marketplace package.
     if (isReservedPluginId(id) && !manager.isMarketplaceFirstPartyPackage(id)) {
       throw new Error(`first-party plugin ${id} cannot be removed or restored`)
     }
@@ -4750,6 +4955,11 @@ export function registerPluginIpc(
       throw new Error('invalid native backend data choice')
     }
     const deleteNativeBackendData = rawDataChoice === 'delete'
+    // The plugin's own secrets (`secrets`) are kept unless the user chose to
+    // delete them too, so a reinstall finds them again.
+    if (rawSecretsChoice !== undefined && rawSecretsChoice !== 'keep' && rawSecretsChoice !== 'delete') {
+      throw new Error('invalid plugin secrets choice')
+    }
     const nativeBackendDataRoot = options.nativeBackendDataRoot
     if (deleteNativeBackendData && !nativeBackendDataRoot) {
       throw new Error('native backend data cleanup is unavailable')
@@ -4783,6 +4993,7 @@ export function registerPluginIpc(
         // data here keeps a refused deletion on the same fail-closed path:
         // the package stays installed and its backend registration returns.
         if (deleteNativeBackendData) removeNativeBackendData(nativeBackendDataRoot!, id)
+        if (rawSecretsChoice === 'delete') manager.clearPluginSecrets(id)
       } catch (error) {
         if (previousBackend) {
           try {
@@ -4822,6 +5033,12 @@ export function registerPluginIpc(
       disabledPlugins.remove(id)
       // A reinstalled package starts with no record of who disabled it.
       recordDisableSource(id, null)
+      // P4: and with "Notify agent panes" off again.
+      try {
+        notifySwitches.remove(id)
+      } catch (error) {
+        console.warn(`[plugins] notification switch of ${id} not cleared: ${errorText(error)}`)
+      }
       try {
         installScans.removePlugin(id)
       } catch (error) {
@@ -4848,11 +5065,26 @@ export function registerPluginIpc(
 
   ipcMain.handle(
     'plugins:remove',
-    async (event, args: { id?: unknown; nativeBackendData?: unknown } | null) => {
+    async (event, args: { id?: unknown; nativeBackendData?: unknown; secrets?: unknown } | null) => {
       assertAuthorized(event)
-      return uninstallPlugin(args?.id, args?.nativeBackendData)
+      return uninstallPlugin(args?.id, args?.nativeBackendData, args?.secrets)
     },
   )
+
+  // An agent's plugin-clear-secrets request the user approved in this main
+  // window: delete the package's own secrets (the Host tells the user).
+  ipcMain.handle('plugins:clearSecrets', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    manager.clearPluginSecrets(assertPluginRemovalTarget(pluginsRoot, args?.id))
+    return { ok: true }
+  })
+
+  // What the remove dialog asks about: how many secrets (`secrets`) the plugin
+  // keeps on this device. Never their names or values.
+  ipcMain.handle('plugins:secretCount', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return { count: manager.pluginSecretCount(assertPluginRemovalTarget(pluginsRoot, args?.id)) }
+  })
 
   // What the remove dialog discloses: whether this plugin's native backend left
   // private data on this device, how large it is and where.
@@ -4870,6 +5102,12 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
+  })
+
+  // A pipeline run in a Navide window reached a plugin node (contributes.pipelineNodes).
+  ipcMain.handle('plugins:runPipelineNode', async (event, args: unknown) => {
+    assertAuthorized(event)
+    return manager.runPipelineNode(args)
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
@@ -4910,6 +5148,41 @@ export function registerPluginIpc(
 
   // Which built-ins are disabled, for the main window's tabs, commands and
   // "open in editor" entries.
+  // C1: the user's "Only allow declared network hosts" switch for one package.
+  // It takes effect on the next request a view makes (the session hook) and on
+  // the next load of a composed frame (its CSP).
+  ipcMain.handle(
+    'plugins:setNetworkStrict',
+    (event, args: { id?: unknown; strict?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const strict = args?.strict
+      if (typeof strict !== 'boolean') throw new Error('invalid plugin network setting')
+      if (strict) networkStrictPlugins.add(id)
+      else networkStrictPlugins.remove(id)
+      return { id, networkStrict: networkStrictPlugins.has(id) }
+    },
+  )
+
+  // Plan P4: the user's "Notify agent panes" switch for a package that
+  // declares `agentNotify`. Turning it on lets the plugin notify the agent
+  // panes of its workspace; off (the default), every notification is refused.
+  ipcMain.handle(
+    'plugins:setNotifyAgents',
+    (event, args: { id?: unknown; allowed?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const allowed = args?.allowed
+      if (typeof allowed !== 'boolean') throw new Error('invalid plugin notification setting')
+      if (allowed && !activeDisclosure(id)?.permissions.system.includes('agentNotify')) {
+        throw new Error(`${id} does not declare agentNotify`)
+      }
+      if (allowed) notifySwitches.add(id)
+      else notifySwitches.remove(id)
+      return { id, notifyAgents: notifySwitches.has(id) }
+    },
+  )
+
   ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
     assertAuthorized(event)
     return manager.listDisabledBuiltinPlugins()
@@ -5034,6 +5307,318 @@ export function registerPluginIpc(
       }
   }
 
+  // Plan P2: what a plugin was doing when it was stopped. Read beside the
+  // stop, never before it: the activity counts wait at most
+  // STOP_SUMMARY_WAIT_MS and are null when the backend did not answer in time.
+  const STOP_SUMMARY_WAIT_MS = 2_000
+  const stopSummary = async (id: string, inFlightCalls: number): Promise<PluginStopSummary> => {
+    const empty: PluginStopSummary = {
+      inFlightCalls, toolCallsLastMinute: null, capabilityCallsLastMinute: null, consecutiveFailures: null, undeclaredHosts: [],
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const answer = await Promise.race([
+        manager.requestPluginActivityOverview([id]),
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), STOP_SUMMARY_WAIT_MS) }),
+      ])
+      const row = answer === null ? undefined : parsePluginActivityOverview(answer)?.plugins.find((entry) => entry.pluginId === id)
+      if (!row) return empty
+      const declared = activeDisclosure(id)?.networkHosts ?? []
+      return {
+        inFlightCalls,
+        toolCallsLastMinute: row.toolCallsLastMinute,
+        capabilityCallsLastMinute: row.capabilityCallsLastMinute,
+        consecutiveFailures: row.consecutiveFailures,
+        undeclaredHosts: row.hosts
+          .filter((entry) => entry.refused || !declared.some((pattern) => networkHostMatches(pattern, entry.host)))
+          .map((entry) => entry.host),
+      }
+    } catch {
+      return empty
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  // Plan P2: stop one third-party plugin at once. The stop is the Disabled
+  // switch (the drain settles calls in flight with PLUGIN_STOPPING, stops its
+  // event routes, closes its views and stops its backend), recorded with where
+  // it came from and the activity summary taken as it happened. Bundled
+  // Navide plugins keep their own switch and are never stopped here.
+  const stopPlugin = async (
+    id: string,
+    via: PluginStopVia,
+    who: Pick<DisableSource, 'by' | 'agent'>,
+    // P3: a global stop stamps each plugin's record with its own time, which
+    // is how Resume all tells its stops from any later disable.
+    at = Date.now(),
+    // P5: the anomaly rule an automatic pause names.
+    rule?: PluginAutoPauseRule,
+  ): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> => {
+    if (BUILTIN_PLUGIN_NAMES.has(id) || isReservedPluginId(id)) {
+      throw new Error(`the bundled Navide plugin ${id} is turned off with its own Disabled switch`)
+    }
+    const inFlightCalls = options.backendCallConcurrency?.().find((row) => row.pluginId === id)?.current ?? 0
+    const [summary, result] = await Promise.all([stopSummary(id, inFlightCalls), setInstalledPackageDisabled(id, true)])
+    // A user's stop of a package an agent had disabled takes that disable over:
+    // otherwise the agent could enable what the user meant to stop. A package
+    // the user already disabled keeps its first record.
+    const takesOver = !result.changed && who.by === 'user' && disableSources.get(id).by !== 'user'
+    if (result.changed || takesOver) recordDisableSource(id, true, { ...who, at, stop: { at, via, summary, ...(rule ? { rule } : {}) } })
+    return { id: result.id, disabled: true, changed: result.changed, summary }
+  }
+
+  // The Settings Activity monitor's and the status bar's Stop: the user's own.
+  ipcMain.handle('plugins:stop', async (event, args: { id?: unknown; via?: unknown } | null) => {
+    assertAuthorized(event)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const via = args?.via
+    if (via !== 'settings' && via !== 'status-bar') throw new Error('invalid plugin stop request')
+    return stopPlugin(id, via, { by: 'user', agent: null })
+  })
+
+  // Plan P3: stop every running third-party plugin at once. The third-party
+  // switches go off first (native backends, DB8 and DB4), so nothing starts
+  // again while the plugins drain; each plugin is then stopped as in P2. The
+  // switches' earlier state and the stopped ids are kept on disk until the
+  // user chooses "Resume all" in Settings. Bundled Navide plugins, and the
+  // switch for agents calling their tools, are not touched.
+  const stoppableRows = () => listInstalledSummaries()
+    .filter((row) => row.disabled !== undefined && !BUILTIN_PLUGIN_NAMES.has(row.id) && !isReservedPluginId(row.id))
+  const stopAllPlugins = async (
+    via: PluginStopVia,
+    who: Pick<DisableSource, 'by' | 'agent'>,
+  ): Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }>; record: PluginGlobalStopRecord }> => {
+    const existing = globalStops.get()
+    const switches = options.globalStopSwitches
+    const previous = existing?.previous ?? switches?.read() ?? { nativeBackends: false, agentTools: false, externalCallers: false }
+    const at = Date.now()
+    // Recorded before anything changes, so a crash mid-way still restarts as stopped.
+    const pending: PluginGlobalStopRecord = existing
+      ? { ...existing, ...(who.by === 'user' ? { by: 'user' as const } : {}) }
+      : { at, via, by: who.by, stopped: [], previous }
+    globalStops.set(pending)
+    const failed: Array<{ id: string; error: string }> = []
+    try {
+      await switches?.turnOff()
+    } catch (error) {
+      failed.push({ id: '', error: error instanceof Error ? error.message : String(error) })
+    }
+    // A user's stop takes over what an agent's global stop disabled (as a
+    // single stop does), so the agent cannot enable it again by itself.
+    const targets = stoppableRows()
+      .filter((row) => row.disabled === false || (who.by === 'user' && pending.stopped.includes(row.id)))
+      .map((row) => row.id)
+    const results = await Promise.allSettled(targets.map((id) => stopPlugin(id, pending.via, who, pending.at)))
+    const stopped: string[] = []
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') stopped.push(targets[index]!)
+      else failed.push({ id: targets[index]!, error: result.reason instanceof Error ? result.reason.message : String(result.reason) })
+    })
+    const record: PluginGlobalStopRecord = { ...pending, stopped: [...new Set([...pending.stopped, ...stopped])] }
+    globalStops.set(record)
+    return { stopped, failed, record }
+  }
+
+  // "Resume all": the user's own, in Settings only. The plugins the global
+  // stop disabled are enabled again, then the switches are put back as they
+  // were. Only a plugin whose disable is still this global stop's own record
+  // is enabled: one removed, enabled meanwhile, or disabled again since for
+  // any other reason (a block, the user's or an agent's own disable) is left.
+  const resumeAllPlugins = async (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> => {
+    const record = globalStops.get()
+    if (!record) return { resumed: [], failed: [] }
+    const resumed: string[] = []
+    const failed: Array<{ id: string; error: string }> = []
+    try {
+      await options.globalStopSwitches?.restore(record.previous)
+    } catch (error) {
+      failed.push({ id: '', error: error instanceof Error ? error.message : String(error) })
+    }
+    const installed = new Set(stoppableRows().map((row) => row.id))
+    for (const id of record.stopped) {
+      const stop = disableSources.get(id).stop
+      if (!installed.has(id) || !disabledPlugins.has(id) || stop?.at !== record.at || stop.via !== record.via) continue
+      try {
+        const result = await setInstalledPackageDisabled(id, false)
+        if (result.changed) {
+          recordDisableSource(id, false)
+          resumed.push(id)
+        }
+      } catch (error) {
+        failed.push({ id, error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    globalStops.clear()
+    return { resumed, failed }
+  }
+
+  ipcMain.handle('plugins:stopAll', async (event, args: { via?: unknown } | null) => {
+    assertAuthorized(event)
+    const via = args?.via
+    if (via !== 'settings' && via !== 'status-bar') throw new Error('invalid plugin stop request')
+    const { stopped, failed } = await stopAllPlugins(via, { by: 'user', agent: null })
+    return { stopped, failed }
+  })
+
+  ipcMain.handle('plugins:resumeAll', async (event) => {
+    assertAuthorized(event)
+    return resumeAllPlugins()
+  })
+
+  ipcMain.handle('plugins:globalStopState', (event): PluginGlobalStopRecord | null => {
+    assertAuthorized(event)
+    return globalStops.get()
+  })
+
+  // Plan P5: the anomaly rules (section 4.2), with the fixed thresholds of
+  // 0.2.40. An automatic pause is a P2 stop (`via: 'auto'`, the rule kept in
+  // its record, the user's own so an agent cannot enable it again), recorded
+  // in Activity with the number that tripped it, and told to the main windows
+  // and the bound chats. Nothing pauses while a global stop is in effect or
+  // while the user has turned automatic pauses off; R1 to R3 read only what
+  // happened since the previous check, so old records never pause a plugin.
+  const pausing = new Set<string>()
+  const autoPause = async (id: string, rule: PluginAutoPauseRule, value: number, threshold: number, detail: string): Promise<void> => {
+    if (!autoPauseOn() || globalStops.get() || pausing.has(id)) return
+    const row = stoppableRows().find((entry) => entry.id === id && entry.disabled === false)
+    if (!row) return
+    pausing.add(id)
+    try {
+      const result = await stopPlugin(id, 'auto', { by: 'user', agent: null }, Date.now(), rule)
+      if (!result.changed) return
+      manager.reportPluginAutoPause?.({ plugin_id: id, plugin_version: row.packageVersion ?? '', rule, value, threshold, detail })
+      options.onPluginAutoPaused?.({ pluginId: id, rule, value, threshold, detail })
+    } catch (error) {
+      console.warn(`[plugins] automatic pause of ${id} (${rule}) failed: ${errorText(error)}`)
+    } finally {
+      pausing.delete(id)
+    }
+  }
+  manager.setAgentNotifyLimitHandler?.((pluginId) => {
+    void autoPause(pluginId, 'R5', PLUGIN_AUTO_PAUSE_THRESHOLDS.notificationsPerMinute + 1,
+      PLUGIN_AUTO_PAUSE_THRESHOLDS.notificationsPerMinute, 'notifications')
+  })
+  let lastAutoPauseCheck = Date.now()
+  const checkAutoPause = async (): Promise<void> => {
+    const since = lastAutoPauseCheck
+    lastAutoPauseCheck = Date.now()
+    if (!autoPauseOn() || globalStops.get()) return
+    const running = stoppableRows().filter((row) => row.disabled === false)
+    if (running.length === 0) return
+    const ids = new Set(running.map((row) => row.id))
+    const T = PLUGIN_AUTO_PAUSE_THRESHOLDS
+    for (const notice of options.resourceNotices?.() ?? []) {
+      if (ids.has(notice.pluginId)) await autoPause(notice.pluginId, 'R4', notice.usage, notice.threshold, notice.item)
+    }
+    let overview: ReturnType<typeof parsePluginActivityOverview>
+    try {
+      overview = parsePluginActivityOverview(await manager.requestPluginActivityOverview([...ids]))
+    } catch {
+      return
+    }
+    for (const row of overview?.plugins ?? []) {
+      if (!ids.has(row.pluginId)) continue
+      const declared = activeDisclosure(row.pluginId)?.networkHosts ?? []
+      const host = row.hosts.find((entry) => entry.lastAt > since &&
+        (entry.refused || !declared.some((pattern) => networkHostMatches(pattern, entry.host))))
+      if (row.toolCallsLastMinute > T.toolCallsPerMinute) {
+        await autoPause(row.pluginId, 'R1', row.toolCallsLastMinute, T.toolCallsPerMinute, 'toolCalls')
+      } else if (row.capabilityCallsLastMinute > T.capabilityCallsPerMinute) {
+        await autoPause(row.pluginId, 'R1', row.capabilityCallsLastMinute, T.capabilityCallsPerMinute, 'capabilityCalls')
+      } else if (host) {
+        await autoPause(row.pluginId, 'R2', 1, 0, host.host)
+      } else if (row.consecutiveFailures >= T.consecutiveFailures && (row.lastToolCallAt ?? 0) > since) {
+        await autoPause(row.pluginId, 'R3', row.consecutiveFailures, T.consecutiveFailures, 'failures')
+      } else if (row.backendRestartsLast10Minutes >= T.restartsInTenMinutes) {
+        await autoPause(row.pluginId, 'R3', row.backendRestartsLast10Minutes, T.restartsInTenMinutes, 'restarts')
+      }
+    }
+  }
+  if (options.autoPauseIntervalMs && options.autoPauseIntervalMs > 0) {
+    let running = false
+    const timer = setInterval(() => {
+      if (running) return
+      running = true
+      void checkAutoPause().finally(() => { running = false })
+    }, options.autoPauseIntervalMs)
+    timer.unref?.()
+  }
+
+  // The Settings switch, and what the monitor discloses.
+  ipcMain.handle('plugins:autoPauseState', (event) => {
+    assertAuthorized(event)
+    return { enabled: autoPauseOn(), thresholds: { ...PLUGIN_AUTO_PAUSE_THRESHOLDS } }
+  })
+  ipcMain.handle('plugins:setAutoPause', (event, args: { enabled?: unknown } | null) => {
+    assertAuthorized(event)
+    if (typeof args?.enabled !== 'boolean') throw new Error('invalid automatic pause setting')
+    if (args.enabled) rmSync(autoPauseOff, { force: true })
+    else {
+      mkdirSync(pluginsRoot, { recursive: true, mode: 0o700 })
+      writeFileSync(autoPauseOff, 'off\n', { mode: 0o600 })
+    }
+    return { enabled: autoPauseOn(), thresholds: { ...PLUGIN_AUTO_PAUSE_THRESHOLDS } }
+  })
+  // plugins_developer_backend_call (0.2.40): only a plugin the user loaded
+  // from a folder, only while Developer Mode is on and nothing stopped it. An
+  // installed plugin (any other source) is refused, so its behaviour is unchanged.
+  manager.setDeveloperBackendGate?.((pluginId) => {
+    if (!developerModeOn()) return 'developer-mode-off'
+    const row = listInstalledSummaries().find((summary) => summary.id === pluginId)
+    if (!row || installedSource(row) !== 'developer-unpacked') return 'not-developer-plugin'
+    if (globalStops.get() || row.disabled === true) return 'plugin-stopped'
+    return 'ok'
+  })
+  // A chat command (`/plugins status`, `/plugins stop <id>`), relayed by the
+  // backend over the Host session. It can stop, never start: enabling stays
+  // in this window.
+  manager.setPluginStopHandler?.(async (request) => {
+    const record = typeof request === 'object' && request !== null && !Array.isArray(request)
+      ? request as Record<string, unknown>
+      : {}
+    const stoppable = listInstalledSummaries().filter((row) => row.disabled !== undefined && !BUILTIN_PLUGIN_NAMES.has(row.id) && !isReservedPluginId(row.id))
+    if (record.action === 'status' && Object.keys(record).length === 1) {
+      return { ok: true, plugins: stoppable.map((row) => ({ id: row.id, version: row.packageVersion ?? '', disabled: row.disabled === true })) }
+    }
+    if (record.action === 'stop-all') {
+      // From a chat: the user's own. From MCP (plugins_disable_all): the agent
+      // the backend resolved from its credential, recorded as an agent's stop.
+      const agent = record.requester === undefined ? null : requestingAgent(record.requester)
+      if (Object.keys(record).length !== (record.requester === undefined ? 1 : 2) || (record.requester !== undefined && !agent)) {
+        return { ok: false, error: 'plugin stop request is malformed', error_code: 'BAD_REQUEST' }
+      }
+      try {
+        const { stopped, failed } = await stopAllPlugins(agent ? 'mcp' : 'telegram', agent ? { by: 'agent', agent } : { by: 'user', agent: null })
+        if (agent) {
+          for (const id of stopped) {
+            const pluginVersion = stoppable.find((row) => row.id === id)?.packageVersion ?? ''
+            options.onPluginAgentAction?.({
+              action: 'disable', pluginId: id, pluginVersion,
+              requester: record.requester as PluginAgentActionNotice['requester'],
+            })
+          }
+        }
+        return { ok: true, stopped, failed: failed.map((entry) => entry.id).filter((id) => id !== '') }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+      }
+    }
+    const id = record.plugin_id
+    if (record.action !== 'stop' || typeof id !== 'string' || Object.keys(record).length !== 2) {
+      return { ok: false, error: 'plugin stop request is malformed', error_code: 'BAD_REQUEST' }
+    }
+    if (!stoppable.some((row) => row.id === id)) {
+      return { ok: false, error: `${id} is not an installed third-party Navide plugin`, error_code: 'NOT_INSTALLED' }
+    }
+    try {
+      const result = await stopPlugin(id, 'telegram', { by: 'user', agent: null })
+      return { ok: true, pluginId: id, changed: result.changed }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+    }
+  })
+
   manager.setPluginAgentActionHandler?.((request) =>
     answerPluginAgentAction(request, {
       isBuiltin: (pluginId) => BUILTIN_PLUGIN_NAMES.has(pluginId) || isReservedPluginId(pluginId),
@@ -5042,10 +5627,10 @@ export function registerPluginIpc(
         return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
       },
       setDisabled: async (pluginId, disabled, source) => {
+        // P2: an agent's plugins_disable is a stop from MCP, recorded with its summary.
+        if (disabled) return stopPlugin(pluginId, 'mcp', source ?? { by: 'agent', agent: null })
         const result = await setInstalledPackageDisabled(pluginId, disabled)
-        if (result.changed) {
-          recordDisableSource(pluginId, disabled, source ?? { by: 'agent', at: Date.now(), agent: null })
-        }
+        if (result.changed) recordDisableSource(pluginId, disabled)
         return result
       },
       notify: (notice) => options.onPluginAgentAction?.(notice),
@@ -5123,8 +5708,11 @@ export function registerPluginIpc(
         if (choice === 'remove') {
           await uninstallPlugin(ask.pluginId)
         } else if (choice === 'disable') {
-          const result = await setInstalledPackageDisabled(ask.pluginId, true)
-          if (result.changed) recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
+          await setInstalledPackageDisabled(ask.pluginId, true)
+          // Recorded even when it was already disabled (a stop, a global stop):
+          // the disable is now the user's own answer to the block, so a later
+          // Resume all or an agent's enable leaves it alone.
+          recordDisableSource(ask.pluginId, true, { by: 'user', at: Date.now(), agent: null })
         }
       } catch (error) {
         console.warn(`[plugins] ${choice} of blocked ${ask.pluginId} failed: ${errorText(error)}`)

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import type { EchoEvidence } from '../../lib/injectEcho'
 
 // The shared retry contract is in tests/cli/coordination.test.ts. Execute both
@@ -27,11 +27,19 @@ async function runKickoffSite(site: string, echo: EchoEvidence | null) {
   )
   const run = new Function(
     'runPipelineKickoff', 'injectPane', 'sleep', 'paneAlive', 'pipelineLog',
-    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', code,
+    'pane', 'stage', 'kickoff', 'tag', 'MAX_KICKOFF_ATTEMPTS', 'heldKickoffCopy', 'kickoffCopyInBox', 'paneParkedOnPrompt',
+    'slotStillWanted', 'pipeline', 'roleParked', 'kickoffAttempt', 'logInjectEvidence', 'watchKickoffAfterFailure', 'runPaneSentAt', 'kickoffPacing', 'KICKOFF_ECHO_WAIT_MS', code,
   )(
     runPipelineKickoff, injectPane, sleep, () => true, () => {},
     { id: 'pane', stageId: 'stage', kickoffPrompt: 'kickoff' }, { id: 'stage' },
     'kickoff', 'test', MAX_KICKOFF_ATTEMPTS, () => undefined,
+    // An empty box: retries type again, as before.
+    () => ({ holds: () => false, submit: async () => false }), () => false,
+    // The run is running: both sites check it before each attempt.
+    () => true, { state: 'running' }, false, 0, () => {}, () => {}, new Map(),
+    // No pacing: the attempts stop at MAX_KICKOFF_ATTEMPTS, as before.
+    () => ({}),
+    KICKOFF_ECHO_WAIT_MS,
   ) as () => ReturnType<typeof runPipelineKickoff>
   const result = await run()
   return { result, injectPane, sleep }
@@ -67,7 +75,7 @@ describe('App uses the executable CLI coordination seams', () => {
     })
 
     it.each([
-      ['missing evidence out-parameter', ', undefined, evidence)', ', undefined)'],
+      ['missing evidence out-parameter', ', undefined, evidence, undefined,', ', undefined, undefined, undefined,'],
       ['missing returned echo', 'echo: evidence.echo', 'echo: undefined'],
     ])('detects a %s regression', async (_name, before, after) => {
       const mutant = kickoffSites[index].replace(before, after)
@@ -79,7 +87,7 @@ describe('App uses the executable CLI coordination seams', () => {
   it('accepts turn text before dispatch and releases deduplication state on teardown', () => {
     const start = source.indexOf('function onTurnCompleteForMessaging(')
     const body = source.slice(start, source.indexOf('\n}\n', start))
-    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp)')).toBeGreaterThan(-1)
+    expect(body.indexOf('turnTextGate.accept(paneId, text, timestamp, TURN_TEXT_REPLAY_TOLERANCE_MS)')).toBeGreaterThan(-1)
     expect(body.indexOf('turnTextGate.accept(')).toBeLessThan(body.indexOf('const parsed = parseMessages(text)'))
     expect(source).toContain('turnTextGate.delete(paneId)')
   })

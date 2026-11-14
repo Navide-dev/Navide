@@ -254,6 +254,10 @@ def symlinks_available() -> bool:
     return True
 
 
+def lstat_for_identity(path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+    return scandir_stat
+
+
 def shell_command(command: str) -> list[str]:
     return ["/bin/sh", "-c", command]
 

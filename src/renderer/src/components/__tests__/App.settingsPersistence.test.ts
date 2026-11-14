@@ -10,24 +10,24 @@ import {
   SETTINGS_FLUSH_DEBOUNCE_MS,
 } from '@navide/plugin-ui/shared'
 import { __resetSettingsForTest } from '@navide/plugin-ui/shared/testing'
-import { createHostGitSettingsPort } from '../../composables/hostSurfacePorts'
+import { createHostSettingsPort } from '../../composables/hostSettingsPort'
 import type { useBackend } from '../../composables/useBackend'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
 describe('App.vue host settings backend initialization and language persistence wiring', () => {
-  it('imports createHostGitSettingsPort from hostSurfacePorts and initSettingsBackend from shared', () => {
-    expect(appSource).toContain('createHostGitSettingsPort')
+  it('imports createHostSettingsPort from hostSettingsPort and initSettingsBackend from shared', () => {
+    expect(appSource).toContain('createHostSettingsPort')
     expect(appSource).toContain('initSettingsBackend')
   })
 
-  it('initializes shared settings backend with createHostGitSettingsPort(backend) using its useBackend() instance', () => {
+  it('initializes shared settings backend with createHostSettingsPort(backend) using its useBackend() instance', () => {
     // App.vue source assertion for the canonical composition pattern matching EditorWindowApp and PlanWindowApp
     const initWiring = appSource.slice(
       appSource.indexOf('const backend = useBackend()'),
       appSource.indexOf('const settingsApi = useSettings()')
     )
-    expect(initWiring).toContain('initSettingsBackend(createHostGitSettingsPort(backend))')
+    expect(initWiring).toContain('initSettingsBackend(createHostSettingsPort(backend))')
   })
 })
 
@@ -66,7 +66,7 @@ describe('Host settings port and language write persistence', () => {
       }),
     } as unknown as ReturnType<typeof useBackend>
 
-    const settingsPort = createHostGitSettingsPort(backendMock)
+    const settingsPort = createHostSettingsPort(backendMock)
     initSettingsBackend(settingsPort)
 
     // Wait for initial reconcile

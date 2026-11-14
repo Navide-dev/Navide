@@ -50,6 +50,12 @@ export interface AgentSpec {
    *  error. */
   knownEfforts?: readonly string[]
   hint?: string
+  /** Which of the two vendor kinds this is (docs/en-US/cli-extension-guide.md,
+   *  "Two kinds of vendors"): a coding CLI that works in the repo for one
+   *  session, or a long-lived agent with its own identity, memory, schedules
+   *  and channels that Navide is a console for. Sorts the ＋ menu into its CLI
+   *  and Agents blocks. Undefined = 'cli'. */
+  kind?: 'cli' | 'agent'
   /** Vendor resume arguments WITHOUT the binary (the binary comes from
    *  `defaultCommand`, or the caller's custom command override) — e.g.
    *  `resume <id>` (codex subcommand) or `--resume=<id>`. Undefined = the
@@ -125,6 +131,19 @@ export interface AgentSpec {
   startupTrust?: {
     pattern: RegExp
     keys: string
+  }
+  /** The vendor's own "a new version is available" menu, when one stops the
+   *  pane at startup and takes Enter as "update now" (codex: Enter runs a
+   *  global `npm install -g`). Navide never presses Enter into it: a typed
+   *  prompt waits, `skipKeys` (the menu's own one-time skip) is sent, and the
+   *  prompt is typed again (lib/updatePrompt.ts). Both patterns are tested on
+   *  the RENDERED, whitespace-collapsed visible screen. `pattern` is the exact
+   *  menu; `suspect` is anything that looks like it but is not — a changed
+   *  wording — on which the pane is only held as awaiting, no key sent. */
+  updatePrompt?: {
+    pattern: RegExp
+    suspect: RegExp
+    skipKeys: string
   }
   /** This vendor's TUI keeps bracketed paste on. Enables chunked clipboard
    *  paste wrapping AND serves as the default Shift+Enter encoding (bracketed

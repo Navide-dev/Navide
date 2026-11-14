@@ -87,8 +87,10 @@ describe('SettingsModal Navide Cloud page', () => {
 
   // The modal teleports to <body>, outside the wrapper's own element.
   const body = () => new DOMWrapper(document.querySelector('.cross-device-body') as Element)
-  /** The page's top-level elements, as main renders them: title, sync settings, rules. */
-  const MAIN_PAGE = ['H1', 'SYNC-SETTINGS-STUB', 'SETTINGS-SECTION-STUB']
+  /** The page's top-level elements, as main renders them: title, the sync
+   *  intro (moved from under the sync card to the page's one intro spot under
+   *  the title), sync settings, rules. */
+  const MAIN_PAGE = ['H1', 'P', 'SYNC-SETTINGS-STUB', 'SETTINGS-SECTION-STUB']
   const topLevel = () => Array.from(body().element.children).map((el) => el.tagName)
   const subtabs = () => wrapper!.findComponent(CloudSubtabs)
   const count = (b: ReturnType<typeof backend>, type: string) => b.send.mock.calls.filter(([t]) => t === type).length

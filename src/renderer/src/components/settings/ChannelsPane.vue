@@ -9,29 +9,41 @@ import {
   newAccountId,
   useChannels,
   type ChannelAccountState,
+  type ChannelAgentRequest,
+  type ChannelAllowEntry,
   type ChannelLinkInvite,
   type ChannelManagedCreatedEvent,
   type ChannelOverviewChat,
+  type ChannelPairingRequest,
   type ChannelPlatform,
 } from '../../composables/useChannels'
 import {
   CHANNEL_PLATFORM_SPECS,
-  channelPlatform,
   clipboardTokenField,
   type RegisteredChannelPlatform,
 } from '../../platform/channels'
-import { channelBotLabel } from '../../lib/channelIdentity'
+import { channelBotLabel, channelBotTag } from '../../lib/channelIdentity'
+import { relativeTime } from '../../lib/relativeTime'
+import { channelBotSearchFields } from '../../lib/channelSearch'
+import { channelsBotRequest, takeChannelsBotRequest, type ChannelsBotTarget } from '../../channelsBotRequest'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
+import ChannelAccessRows from './ChannelAccessRows.vue'
+import ChannelAgentRequests from './ChannelAgentRequests.vue'
+import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
-import SettingsSection from './SettingsSection.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
+import SettingsNotice from './SettingsNotice.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 /**
  * Settings → Channels: connect chat platforms, watch their connection state,
  * approve pairing requests and manage who may talk to panes. A platform can run
  * several bots, each with its own credential, connection and linked chats.
+ * The left column lists the bots; the right one shows the picked bot whole: its
+ * connection, pending requests, people and chats. Every bot stays mounted (only
+ * shown or hidden), so a form, a link guide or ticked rows survive picking another.
+ * Requests and senders whose bot does not exist here have a row of their own.
  * Secrets go to the backend once and are never shown again — a stored secret
  * only shows as masked. A new bot is added with "quick add": the backend keeps it
  * only once the platform accepted its credential, then the bot's link guide opens
@@ -63,6 +75,14 @@ interface BotRow extends ChannelAccountState {
   key: string
   isNew: boolean
 }
+
+// What the right column shows: a bot's key, or one of these two views.
+const ADD_VIEW = 'add'
+const ORPHAN_VIEW = 'orphans'
+// Null until the first load picks; a bot that goes away falls back to `defaultView`.
+const picked = ref<string | null>(null)
+// In a narrow window only one column shows: this one says the right column.
+const detailOpen = ref(false)
 
 // The bot being added, per platform: its form is open under the platform's bots.
 const adding = reactive<Partial<Record<ChannelPlatform, string>>>({})
@@ -120,17 +140,11 @@ function botLabel(bot: BotRow | ChannelAccountState): string {
   return channelBotLabel(bot, bot.account, t)
 }
 
-/** Which bot a pairing request or allowed sender belongs to, named only when
- *  its platform runs several bots (one bot reads exactly as before). */
+/** Names the bot of a pairing request or allowed sender that has none here. */
 function entryBot(platform: ChannelPlatform, account: string | undefined): string {
   const bots = store.platformState(platform)?.accounts ?? []
-  if (bots.length < 2) return ''
-  const id = account ?? DEFAULT_ACCOUNT
+  const id = account || DEFAULT_ACCOUNT
   return channelBotLabel(bots.find((b) => b.account === id), id, t)
-}
-
-function badgeOf(platform: string): string {
-  return channelPlatform(platform)?.badge ?? platform.slice(0, 2).toUpperCase()
 }
 
 function platformName(platform: string): string {
@@ -184,18 +198,42 @@ function openForm(spec: RegisteredChannelPlatform, bot: BotRow): void {
 function toggleExpanded(spec: RegisteredChannelPlatform, bot: BotRow): void {
   if (expanded.value === bot.key) {
     expanded.value = null
+    if (!bot.configured) show(ADD_VIEW)
     return
   }
   openForm(spec, bot)
+  show(bot.key)
   if (usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
 }
 
-function startAdding(spec: RegisteredChannelPlatform): void {
+function startAdding(spec: RegisteredChannelPlatform, readClipboard = true): string {
   const account = newAccountId()
   adding[spec.id] = account
   const bot = emptyBot(spec.id, account, true)
   openForm(spec, bot)
-  if (usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
+  show(bot.key)
+  if (readClipboard && usesQuickAdd(spec, bot)) void prefillFromClipboard(spec, bot.key)
+  return bot.key
+}
+
+// An add-a-bot form an agent opened (channels_bot_add_open / _fill), by the new bot's key:
+// its request, if it filed one, and who asked. The clipboard is never read for these.
+const agentAdd = reactive<Record<string, { requestId: string; requester: string }>>({})
+
+function openAgentAdd(add: NonNullable<ChannelsBotTarget['add']>, platform: string): void {
+  const spec = specs.value.find((s) => s.id === platform)
+  if (!spec) return
+  const key = startAdding(spec, false)
+  if (add.name && drafts[key]) drafts[key].name = add.name
+  agentAdd[key] = { requestId: add.requestId, requester: add.requester }
+}
+
+function fillAgentRequest(req: ChannelAgentRequest): void {
+  openAgentAdd({
+    name: req.draft.name ?? '',
+    requestId: req.id,
+    requester: req.requester.address || req.requester.pane_id || '',
+  }, req.target.platform ?? '')
 }
 
 /** A bot not set up yet, on a platform with a credential to verify (not iMessage). */
@@ -221,6 +259,12 @@ async function prefillFromClipboard(spec: RegisteredChannelPlatform, key: string
 function closeForm(spec: RegisteredChannelPlatform, bot: BotRow): void {
   expanded.value = null
   if (bot.isNew) delete adding[spec.id]
+}
+
+/** Cancel on a form: a bot not set up yet has nothing else to show. */
+function cancelForm(spec: RegisteredChannelPlatform, bot: BotRow): void {
+  closeForm(spec, bot)
+  if (!bot.configured) show(ADD_VIEW)
 }
 
 async function run(key: string | null, op: () => Promise<{ ok: boolean; error?: string }>): Promise<boolean> {
@@ -302,6 +346,11 @@ async function quickAdd(spec: RegisteredChannelPlatform, bot: BotRow): Promise<v
       return
     }
     closeForm(spec, bot)
+    const agent = agentAdd[bot.key]
+    if (agent) {
+      delete agentAdd[bot.key]
+      if (agent.requestId) void store.finishAgentRequest(agent.requestId, true, bot.account)
+    }
     // The link guide only shows on a connected bot: hand it the invite only then.
     const added = botsOf(spec.id).find((b) => b.account === bot.account)
     if (res.data.link && added && isConnected(added)) {
@@ -396,6 +445,7 @@ async function managedCreated(ev: ChannelManagedCreatedEvent): Promise<void> {
   }
   await store.refresh()
   const key = botKey('telegram', ev.account)
+  show(key)
   const added = botsOf('telegram').find((b) => b.account === ev.account)
   if (ev.link && added && isConnected(added)) {
     quickStep[key] = 'opening'
@@ -534,15 +584,234 @@ function botsWithoutManageMode(platform: ChannelPlatform): number {
   return botsOf(platform).filter((b) => isConnected(b) && !b.status.can_manage_bots).length
 }
 
-function formatTime(ts: number | null | undefined): string {
-  if (!ts) return ''
-  const ms = ts < 1e12 ? ts * 1000 : ts
-  return new Date(ms).toLocaleString()
+function ownedBy(entry: { platform: string; account?: string }, platform: string, account: string): boolean {
+  return entry.platform === platform && (entry.account || DEFAULT_ACCOUNT) === account
+}
+
+function pendingOf(platform: ChannelPlatform, bot: BotRow): ChannelPairingRequest[] {
+  return store.pairing.value.filter((r) => ownedBy(r, platform, bot.account))
+}
+
+function allowedOf(platform: ChannelPlatform, bot: BotRow): ChannelAllowEntry[] {
+  return store.allow.value.filter((e) => ownedBy(e, platform, bot.account))
+}
+
+// A request or sender is listed under its bot, so one whose bot is not set up here (or
+// whose platform is not shown on this computer) would otherwise be out of reach.
+const botKeys = computed(() => new Set(specs.value.flatMap((s) => botsOf(s.id).filter((b) => b.configured).map((b) => b.key))))
+const hasBot = (entry: { platform: string; account?: string }) => botKeys.value.has(botKey(entry.platform, entry.account || DEFAULT_ACCOUNT))
+const orphanRequests = computed(() => store.pairing.value.filter((r) => !hasBot(r)))
+const orphanEntries = computed(() => store.allow.value.filter((e) => !hasBot(e)))
+const hasOrphans = computed(() => orphanRequests.value.length + orphanEntries.value.length > 0)
+
+/** Where a bot is bound ("workspace / pane", or how many) and when it was last active. */
+function bindingText(bot: BotRow): string {
+  const bindings = bot.bindings
+  if (!bindings) return ''
+  let where: string
+  if (!bindings.length) where = t('channels.bot.bound-none')
+  else if (bindings.length === 1) where = [bindings[0].workspace_name, bindings[0].pane_name].filter(Boolean).join(' / ')
+  else {
+    const workspaces = [...new Set(bindings.map((b) => b.workspace_name).filter(Boolean))]
+    where = t('channels.bot.bound-many', { n: bindings.length, workspaces: workspaces.join(', ') })
+  }
+  if (!bot.last_activity_at) return where
+  const { unit, count } = relativeTime(bot.last_activity_at * 1000, Date.now())
+  return `${where} · ${t(`time.ago-${unit}`, { count })}`
+}
+
+const BAD_TOKEN = /\b401\b|unauthori[sz]ed/i
+
+/** Running / not linked / pane closed for a connected bot; token invalid / failed for a blocked one. */
+function botFlag(bot: BotRow): ChannelNavItem['flag'] {
+  if (!bot.configured || !bot.enabled) return undefined
+  const { lifecycle, last_error: error } = bot.status
+  if (lifecycle === 'blocked') {
+    return BAD_TOKEN.test(error) ? { kind: 'bad', text: t('channels.bot.flag-token') } : { kind: 'bad', text: t('channels.bot.flag-failed') }
+  }
+  if (lifecycle !== 'ready' || !bot.bindings) return undefined
+  if (!bot.bindings.length) return { kind: 'off', text: t('channels.bot.flag-unbound') }
+  return bot.bindings.some((b) => b.pane_exists)
+    ? { kind: 'ok', text: t('channels.bot.flag-running') }
+    : { kind: 'warn', text: t('channels.bot.flag-pane-closed') }
+}
+
+function navItem(spec: RegisteredChannelPlatform, bot: BotRow): ChannelNavItem {
+  const tone = statusTone(bot)
+  const counts = t('channels.bot.summary', { people: allowedOf(spec.id, bot).length, chats: chatsOf(spec.id, bot).length })
+  const status = bot.configured ? statusText(bot) : t('channels.status.not-configured')
+  // The live handle names the bot; a stored name is only the user's label beside it.
+  const name = bot.configured ? bot.status.identity || botLabel(bot) : bot.isNew ? t('channels.bot.new') : platformName(spec.id)
+  return {
+    key: bot.key,
+    badge: spec.badge,
+    name,
+    tone,
+    status,
+    // Connected is the usual case: only the other states take room on the line.
+    summary: !bot.configured ? status : tone === 'ok' ? counts : `${status} · ${counts}`,
+    pending: pendingOf(spec.id, bot).length,
+    ...(bot.configured ? {
+      tag: channelBotTag(bot, name),
+      ids: [bot.account, bot.bot_id ? `id ${bot.bot_id}` : ''].filter(Boolean).join(' · '),
+      binding: bindingText(bot),
+      flag: botFlag(bot),
+      search: channelBotSearchFields(bot),
+      botId: bot.bot_id ?? '',
+    } : {}),
+  }
+}
+
+/** A handful of bots is read at a glance; from this many on, the list gets a search box. */
+const SEARCH_FROM = 6
+const searchable = computed(() => navGroups.value.reduce((n, g) => n + g.items.length, 0) >= SEARCH_FROM)
+const botNav = ref<InstanceType<typeof ChannelBotNav> | null>(null)
+
+// "/" jumps to the search box from anywhere on the page but a text field.
+function onPaneKey(e: KeyboardEvent): void {
+  if (e.key !== '/' || !searchable.value || e.metaKey || e.ctrlKey || e.altKey) return
+  const el = e.target as HTMLElement | null
+  if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return
+  e.preventDefault()
+  botNav.value?.focusSearch()
+}
+
+// How the list is ordered and grouped, remembered on this machine.
+const NAV_SORT_KEY = 'navide.channels.navSort'
+const NAV_GROUP_KEY = 'navide.channels.navGroup'
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+const navSort = ref<ChannelNavSort>(readPref(NAV_SORT_KEY, ['recent', 'name'] as const, 'recent'))
+const navGrouping = ref<ChannelNavGrouping>(readPref(NAV_GROUP_KEY, ['none', 'workspace'] as const, 'none'))
+watch(navSort, (v) => { try { localStorage.setItem(NAV_SORT_KEY, v) } catch { /* this session only */ } })
+watch(navGrouping, (v) => { try { localStorage.setItem(NAV_GROUP_KEY, v) } catch { /* this session only */ } })
+
+/** Most recently active first (never active last), or by name; a bot being added stays last. */
+function sortBots(bots: BotRow[], items: Map<string, ChannelNavItem>): BotRow[] {
+  const byRecent = (a: BotRow, b: BotRow) => (b.last_activity_at ?? 0) - (a.last_activity_at ?? 0)
+  const byName = (a: BotRow, b: BotRow) => (items.get(a.key)?.name ?? '').localeCompare(items.get(b.key)?.name ?? '')
+  const set = bots.filter((b) => !b.isNew)
+  return [...set.sort(navSort.value === 'name' ? byName : byRecent), ...bots.filter((b) => b.isNew)]
+}
+
+/** The workspace a bot is listed under: that of its newest binding; '' when unbound. */
+function botWorkspace(bot: BotRow): string {
+  const newest = [...(bot.bindings ?? [])].sort((a, b) => b.created_at - a.created_at)[0]
+  return newest ? newest.workspace_name || newest.workspace_path : ''
+}
+
+const navGroups = computed<ChannelNavGroup[]>(() => {
+  const groups = specs.value
+    .map((spec) => ({
+      spec,
+      bots: botsOf(spec.id).filter((b) => b.configured || b.isNew || b.key === picked.value),
+    }))
+    .filter((g) => g.bots.length)
+  const named = groups.length > 1
+  const list: ChannelNavGroup[] = groups.flatMap(({ spec, bots }) => {
+    const items = new Map(bots.map((b) => [b.key, navItem(spec, b)]))
+    const sorted = sortBots(bots, items)
+    const platformLabel = named ? platformName(spec.id) : ''
+    if (navGrouping.value !== 'workspace') {
+      return [{ id: spec.id, label: platformLabel, items: sorted.map((b) => items.get(b.key)!) }]
+    }
+    // Platform outside, workspace inside; the unbound ones last.
+    const byWorkspace = new Map<string, BotRow[]>()
+    for (const b of sorted) byWorkspace.set(botWorkspace(b), [...(byWorkspace.get(botWorkspace(b)) ?? []), b])
+    const names = [...byWorkspace.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))
+    if (byWorkspace.has('')) names.push('')
+    return names.map((ws) => ({
+      id: `${spec.id}:${ws}`,
+      label: [platformLabel, ws || t('channels.bot.flag-unbound')].filter(Boolean).join(' · '),
+      items: byWorkspace.get(ws)!.map((b) => items.get(b.key)!),
+    }))
+  })
+  if (hasOrphans.value) {
+    list.push({
+      id: ORPHAN_VIEW,
+      label: '',
+      items: [{
+        key: ORPHAN_VIEW,
+        badge: '?',
+        name: t('channels.bot.orphans'),
+        tone: '',
+        status: '',
+        summary: t('channels.bot.people', { n: orphanEntries.value.length }),
+        pending: orphanRequests.value.length,
+      }],
+    })
+  }
+  return list
+})
+
+/** The first row with a request waiting, else the first row, else the platforms. */
+const defaultView = computed(() => {
+  const items = navGroups.value.flatMap((g) => g.items)
+  return (items.find((i) => i.pending) ?? items[0])?.key ?? ADD_VIEW
+})
+
+function viewExists(key: string): boolean {
+  if (key === ADD_VIEW) return true
+  if (key === ORPHAN_VIEW) return hasOrphans.value
+  return specs.value.some((s) => botsOf(s.id).some((b) => b.key === key))
+}
+
+const activeView = computed(() => (picked.value && viewExists(picked.value) ? picked.value : defaultView.value))
+const narrowPane = computed(() => (detailOpen.value || !navGroups.value.length ? 'detail' : 'list'))
+
+function show(key: string): void {
+  picked.value = key
+  detailOpen.value = true
+}
+
+// Once the page has data it stays on its row: a request arriving later only shows a count.
+watch(() => store.loaded.value, (loaded) => {
+  if (loaded && !picked.value && navGroups.value.length) picked.value = defaultView.value
+}, { immediate: true })
+
+// ui.settings.open {tab: "channels", platform, account}: show that bot once the page
+// has data. A bot this page does not have is dropped and the page stays where it was.
+watch(() => [channelsBotRequest.value, store.loaded.value] as const, ([request, loaded]) => {
+  if (!request || !loaded) return
+  takeChannelsBotRequest()
+  if (request.add) {
+    openAgentAdd(request.add, request.platform)
+    return
+  }
+  const key = botKey(request.platform, request.account || DEFAULT_ACCOUNT)
+  if (viewExists(key)) show(key)
+}, { immediate: true })
+
+function platformShown(spec: RegisteredChannelPlatform): boolean {
+  return activeView.value === ADD_VIEW || activeView.value.startsWith(`${spec.id}:`)
+}
+
+/** The platform's own line: on the list of platforms, and above a bot not set up yet. */
+function platformHeadShown(spec: RegisteredChannelPlatform): boolean {
+  return activeView.value === ADD_VIEW || botsOf(spec.id).some((b) => !b.isNew && !b.configured && b.key === activeView.value)
+}
+
+function approve(req: ChannelPairingRequest): void {
+  void run(null, () => store.approvePairing(req.platform, req.code))
+}
+
+function reject(req: ChannelPairingRequest): void {
+  void run(null, () => store.rejectPairing(req.platform, req.code))
+}
+
+function removeEntry(entry: ChannelAllowEntry): void {
+  void run(null, () => store.removeAllow(entry.platform, entry.sender_id, entry.account))
 }
 </script>
 
 <template>
-  <section class="channels-pane" data-settings-section="channels">
+  <section class="channels-pane" data-settings-section="channels" @keydown="onPaneKey">
     <SettingsCard>
       <SettingRow :title="t('channels.global.title')" :description="t('channels.global.desc')">
         <template #control>
@@ -572,17 +841,40 @@ function formatTime(ts: number | null | undefined): string {
       </SettingRow>
     </SettingsCard>
     <p v-if="listError || store.error.value" class="ch-error ch-list-error" role="alert">{{ listError || store.error.value }}</p>
+    <ChannelAgentRequests :store="store" @fill="fillAgentRequest" />
 
-    <SettingsSection :label="t('channels.section.platforms')">
+    <div class="ch-layout" :class="{ 'ch-layout--solo': !navGroups.length }" :data-narrow-pane="narrowPane" data-testid="channel-layout">
+      <ChannelBotNav
+        v-if="navGroups.length"
+        ref="botNav"
+        class="ch-layout-nav"
+        :groups="navGroups"
+        v-model:sort="navSort"
+        v-model:grouping="navGrouping"
+        :searchable="searchable"
+        :active="activeView"
+        :add-active="activeView === ADD_VIEW"
+        @select="show"
+        @add="show(ADD_VIEW)"
+      />
+      <div class="ch-layout-detail" :class="{ 'ch-one': activeView !== ADD_VIEW }">
+        <button
+          v-if="navGroups.length"
+          type="button"
+          class="ch-back"
+          data-testid="channel-nav-back"
+          @click="detailOpen = false"
+        >‹ {{ t('channels.bot.list') }}</button>
+        <p v-if="activeView === ADD_VIEW" class="ch-section-hint" data-testid="channel-choose-platform">{{ t('channels.bot.choose-platform') }}</p>
       <SettingsCard>
         <div
           v-for="spec in specs"
+          v-show="platformShown(spec)"
           :key="spec.id"
           class="ch-row"
-          :class="{ open: !!expanded?.startsWith(`${spec.id}:`) }"
           :data-platform="spec.id"
         >
-          <div class="ch-row-head">
+          <div v-show="platformHeadShown(spec)" class="ch-row-head">
             <span class="ch-mark" :class="{ on: isConfigured(spec.id) }" aria-hidden="true">{{ spec.badge }}</span>
             <div class="ch-row-text">
               <div class="ch-row-title">
@@ -596,7 +888,15 @@ function formatTime(ts: number | null | undefined): string {
               <div class="ch-row-desc">{{ t(`channels.desc.${spec.id}`) }}</div>
               <div v-if="isConfigured(spec.id) && store.overviewLoaded.value" class="ch-row-summary" data-testid="channel-platform-summary">{{ platformSummary(spec.id) }}</div>
             </div>
+            <!-- A platform with no bot yet: its status and Connect sit on the
+                 platform's own line, right of the name and description. -->
             <div class="ch-row-actions">
+              <template v-for="bot in botsOf(spec.id).filter((b) => !b.isNew && !b.configured)" :key="`head-${bot.key}`">
+                <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
+                <button type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
+                  {{ t('channels.connect') }}
+                </button>
+              </template>
               <button
                 v-if="isConfigured(spec.id) && !adding[spec.id]"
                 type="button"
@@ -608,20 +908,35 @@ function formatTime(ts: number | null | undefined): string {
             </div>
           </div>
 
-          <p v-if="botsWithoutManageMode(spec.id) && !managedHintDismissed" class="ch-platform-hint" data-testid="channel-managed-enable">
-            <span aria-hidden="true">ⓘ</span>
-            <span>{{ t('channels.managed.enable-hint', { n: botsWithoutManageMode(spec.id) }) }}</span>
-            <a
-              class="ch-setup-link"
-              :href="BOTFATHER_APP_URL"
-              data-testid="channel-managed-botfather"
-              @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
-            >{{ t('channels.managed.open-botfather') }}</a>
-            <button type="button" class="ch-link-btn" data-testid="channel-managed-dismiss" @click="dismissManagedHint">{{ t('channels.managed.dismiss') }}</button>
-          </p>
+          <SettingsNotice
+            v-if="botsWithoutManageMode(spec.id) && !managedHintDismissed"
+            class="ch-platform-hint"
+            tone="info"
+            data-testid="channel-managed-enable"
+            :message="t('channels.managed.enable-hint', { n: botsWithoutManageMode(spec.id) })"
+          >
+            <template #action>
+              <a
+                class="ch-setup-link"
+                :href="BOTFATHER_APP_URL"
+                data-testid="channel-managed-botfather"
+                @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
+              >{{ t('channels.managed.open-botfather') }}</a>
+              <button type="button" class="ch-link-btn" data-testid="channel-managed-dismiss" @click="dismissManagedHint">{{ t('channels.managed.dismiss') }}</button>
+            </template>
+          </SettingsNotice>
 
-          <div v-for="bot in botsOf(spec.id)" :key="bot.key" class="ch-bot" :data-account="bot.account" data-testid="channel-bot">
-            <div class="ch-bot-head">
+          <div
+            v-for="bot in botsOf(spec.id)"
+            v-show="activeView === bot.key"
+            :key="bot.key"
+            class="ch-bot"
+            :class="{ 'ch-bot--bare': !bot.isNew && !bot.configured }"
+            :data-account="bot.account"
+            data-testid="channel-bot"
+          >
+            <div v-if="bot.isNew || bot.configured" class="ch-bot-head">
+              <span class="ch-mark" :class="{ on: isConnected(bot) }" aria-hidden="true">{{ spec.badge }}</span>
               <div class="ch-row-text">
                 <div class="ch-row-title">
                   <template v-if="bot.configured">
@@ -641,8 +956,9 @@ function formatTime(ts: number | null | undefined): string {
                     <span v-else class="ch-bot-name" data-testid="channel-bot-name">{{ botLabel(bot) }}</span>
                   </template>
                   <span v-else-if="bot.isNew" class="ch-bot-name">{{ t('channels.bot.new') }}</span>
-                  <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
+                  <span v-if="bot.isNew || bot.configured" class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
                 </div>
+                <div class="ch-row-desc">{{ platformName(spec.id) }}</div>
                 <div
                   v-if="bot.status.last_error"
                   class="ch-row-error"
@@ -659,9 +975,6 @@ function formatTime(ts: number | null | undefined): string {
                   :aria-label="t('channels.enable-platform', { platform: `${platformName(spec.id)} ${botLabel(bot)}` })"
                   @update:model-value="(v: boolean) => run(bot.key, () => store.setEnabled(spec.id, v, bot.account))"
                 />
-                <button v-if="!bot.isNew && !bot.configured" type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
-                  {{ t('channels.connect') }}
-                </button>
                 <div v-if="bot.configured" class="ch-menu-wrap">
                   <button
                     type="button"
@@ -710,47 +1023,28 @@ function formatTime(ts: number | null | undefined): string {
             <p v-else-if="quickAdded[bot.key]" class="ch-form-hint" data-testid="channel-quick-added">{{ t('channels.quick.added') }}</p>
 
             <div
-              v-if="spec.id === 'telegram' && isConnected(bot) && (managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"
+              v-if="spec.id === 'telegram' && isConnected(bot) && (bot.status.can_manage_bots || managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"
               class="ch-managed"
             >
               <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
               <template v-else-if="managedAsk === bot.key && bot.status.can_manage_bots">
                 <p class="ch-managed-title" data-testid="channel-managed-title">{{ t('channels.managed.title', { manager: bot.status.identity }) }}</p>
-                <p class="ch-managed-warn" role="note" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
+                <SettingsNotice class="ch-managed-warn" tone="warning" role="note" data-testid="channel-managed-disclose" :message="t('channels.managed.disclose', { manager: bot.status.identity })" />
                 <div class="ch-form-actions">
                   <button type="button" class="ch-btn ghost sm" data-testid="channel-managed-cancel" @click="managedAsk = null">{{ t('channels.cancel') }}</button>
                   <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.confirm') }}</button>
                 </div>
               </template>
+              <!-- Kept in sight on a bot that can create bots; the ⋯ menu keeps its entry too. -->
+              <button
+                v-else-if="bot.status.can_manage_bots"
+                type="button"
+                class="ch-btn ghost sm"
+                :disabled="busy"
+                data-testid="channel-managed-start"
+                @click="managedAsk = bot.key"
+              >{{ t('channels.managed.create') }}</button>
               <p v-if="managedError[bot.key]" class="ch-error" role="alert" data-testid="channel-managed-error">{{ managedError[bot.key] }}</p>
-            </div>
-
-            <div v-if="isConnected(bot) && store.overviewError.value" class="ch-link" data-testid="channel-link-block">
-              <div class="ch-link-summary">
-                <span class="ch-link-error" role="alert">{{ t('channels.link.count-failed', { error: store.overviewError.value }) }}</span>
-                <button type="button" class="ch-btn ghost sm" data-testid="channel-link-retry" @click="loadOverview">{{ t('action.retry') }}</button>
-              </div>
-            </div>
-            <div
-              v-else-if="isConnected(bot) && store.overviewLoaded.value
-                && (!chatsOf(spec.id, bot).length || (quickStep[bot.key] && quickStep[bot.key] !== 'done'))"
-              class="ch-link next"
-              data-testid="channel-link-block"
-            >
-              <div class="ch-link-title" data-testid="channel-next-step">{{ t('channels.link.next-step') }}</div>
-              <p class="ch-link-desc">{{ t('channels.link.next-step-desc', { platform: platformName(spec.id) }) }}</p>
-              <ChannelLinkGuide
-                :store="store"
-                :platform="spec.id"
-                :account="bot.account"
-                :initial-invite="quickInvite[bot.key] ?? null"
-                @opened="(copied) => quickOpened(bot.key, copied)"
-                @linked="botLinked(bot.key)"
-              />
-            </div>
-            <div v-else-if="chatsOf(spec.id, bot).length" class="ch-link" data-testid="channel-link-block">
-              <ChannelChatBindings :store="store" :chats="chatsOf(spec.id, bot)" :busy="busy" />
-              <ChannelLinkGuide v-if="linkOpen === bot.key && isConnected(bot)" :store="store" :platform="spec.id" :account="bot.account" @linked="loadOverview" />
             </div>
 
             <form v-if="expanded === bot.key" class="ch-form" @submit.prevent="usesQuickAdd(spec, bot) ? quickAdd(spec, bot) : save(spec, bot)">
@@ -788,7 +1082,10 @@ function formatTime(ts: number | null | undefined): string {
                   :placeholder="f.secret && bot.configured ? t('channels.secret-stored') : ''"
                 />
               </label>
-              <details v-if="bot.isNew && usesQuickAdd(spec, bot)" class="ch-advanced" data-testid="channel-advanced">
+              <p v-if="agentAdd[bot.key]" class="ch-form-hint" data-testid="channel-agent-add-note">
+                {{ t('channels.agent.add-note', { requester: agentAdd[bot.key]!.requester || '?' }) }}
+              </p>
+              <details v-if="bot.isNew && usesQuickAdd(spec, bot)" class="ch-advanced" data-testid="channel-advanced" :open="!!agentAdd[bot.key]">
                 <summary>{{ t('channels.quick.advanced') }}</summary>
                 <label class="ch-field">
                   <span class="ch-field-label">{{ t('channels.bot.name') }} {{ t('channels.optional') }}</span>
@@ -815,62 +1112,137 @@ function formatTime(ts: number | null | undefined): string {
                   </template>
                 </template>
                 <span class="ch-spacer"></span>
-                <button type="button" class="ch-btn ghost sm" :disabled="busy" @click="closeForm(spec, bot)">{{ t('channels.cancel') }}</button>
+                <button type="button" class="ch-btn ghost sm" :disabled="busy" @click="cancelForm(spec, bot)">{{ t('channels.cancel') }}</button>
                 <button v-if="usesQuickAdd(spec, bot)" type="submit" class="ch-btn primary sm" :disabled="busy" data-testid="channel-quick-add">
                   {{ quickStep[bot.key] === 'verifying' ? t('channels.quick.verifying') : t('channels.quick.add') }}
                 </button>
                 <button v-else type="submit" class="ch-btn primary sm" :disabled="busy" data-testid="channel-save">{{ t('channels.save') }}</button>
               </div>
             </form>
-          </div>
-        </div>
-      </SettingsCard>
-    </SettingsSection>
 
-    <SettingsSection v-if="store.pairing.value.length" :label="t('channels.pairing.title')">
-      <p class="ch-section-hint">{{ t('channels.pairing.hint') }}</p>
-      <SettingsCard>
-        <div v-for="req in store.pairing.value" :key="`${req.platform}:${req.code}`" class="ch-item" data-testid="pairing-row">
-          <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(req.platform) }}</span>
-          <div class="ch-item-text">
-            <span class="ch-item-name" v-truncate>{{ req.sender_name || req.sender_id }}</span>
-            <span class="ch-item-meta" v-truncate>{{ platformName(req.platform) }}<template v-if="entryBot(req.platform, req.account)"> · <span data-testid="pairing-bot">{{ entryBot(req.platform, req.account) }}</span></template> · {{ formatTime(req.created_at) }}</span>
+            <template v-if="bot.configured">
+              <div v-if="pendingOf(spec.id, bot).length" class="ch-block" data-testid="channel-bot-pending">
+                <div class="ch-block-label">{{ t('channels.bot.section-pending') }}</div>
+                <p class="ch-section-hint">{{ t('channels.pairing.hint') }}</p>
+                <ChannelAccessRows :requests="pendingOf(spec.id, bot)" :busy="busy" @approve="approve" @reject="reject" />
+              </div>
+              <div class="ch-block" data-testid="channel-bot-people">
+                <div class="ch-block-label">{{ t('channels.bot.section-people') }}</div>
+                <ChannelAccessRows v-if="allowedOf(spec.id, bot).length" :entries="allowedOf(spec.id, bot)" :busy="busy" @remove="removeEntry" />
+                <p v-else class="ch-section-hint" data-testid="allow-empty">{{ t('channels.allow.empty') }}</p>
+              </div>
+            </template>
+            <div v-if="bot.configured || chatsOf(spec.id, bot).length" class="ch-block" data-testid="channel-bot-chats">
+              <div class="ch-block-label">{{ t('channels.bot.section-chats') }}</div>
+              <div v-if="isConnected(bot) && store.overviewError.value" class="ch-link" data-testid="channel-link-block">
+                <div class="ch-link-summary">
+                  <span class="ch-link-error" role="alert">{{ t('channels.link.count-failed', { error: store.overviewError.value }) }}</span>
+                  <button type="button" class="ch-btn ghost sm" data-testid="channel-link-retry" @click="loadOverview">{{ t('action.retry') }}</button>
+                </div>
+              </div>
+              <div
+                v-else-if="isConnected(bot) && store.overviewLoaded.value
+                  && (!chatsOf(spec.id, bot).length || (quickStep[bot.key] && quickStep[bot.key] !== 'done'))"
+                class="ch-link next"
+                data-testid="channel-link-block"
+              >
+                <div class="ch-link-title" data-testid="channel-next-step">{{ t('channels.link.next-step') }}</div>
+                <p class="ch-link-desc">{{ t('channels.link.next-step-desc', { platform: platformName(spec.id) }) }}</p>
+                <ChannelLinkGuide
+                  :store="store"
+                  :platform="spec.id"
+                  :account="bot.account"
+                  :initial-invite="quickInvite[bot.key] ?? null"
+                hide-pending
+                  @opened="(copied) => quickOpened(bot.key, copied)"
+                  @linked="botLinked(bot.key)"
+                />
+              </div>
+              <div v-else-if="chatsOf(spec.id, bot).length" class="ch-link" data-testid="channel-link-block">
+                <ChannelChatBindings :store="store" :chats="chatsOf(spec.id, bot)" :busy="busy" />
+                <ChannelLinkGuide v-if="linkOpen === bot.key && isConnected(bot)" :store="store" :platform="spec.id" :account="bot.account" hide-pending @linked="loadOverview" />
+              </div>
+              <p
+                v-if="!isConnected(bot) && !chatsOf(spec.id, bot).length"
+                class="ch-section-hint"
+                data-testid="channel-chats-empty"
+              >{{ t('channels.bot.chats-empty') }}</p>
+            </div>
           </div>
-          <code class="ch-code">{{ req.code }}</code>
-          <div class="ch-row-actions">
-            <button type="button" class="ch-btn ghost sm" :disabled="busy" data-testid="pairing-reject" @click="run(null, () => store.rejectPairing(req.platform, req.code))">{{ t('channels.pairing.reject') }}</button>
-            <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="pairing-approve" @click="run(null, () => store.approvePairing(req.platform, req.code))">{{ t('channels.pairing.approve') }}</button>
+        </div>
+        <div v-if="hasOrphans" v-show="activeView === ORPHAN_VIEW" class="ch-orphans" data-testid="channel-orphans">
+          <div class="ch-bot-head">
+            <span class="ch-mark" aria-hidden="true">?</span>
+            <div class="ch-row-text">
+              <span class="ch-bot-name">{{ t('channels.bot.orphans') }}</span>
+              <div class="ch-row-desc">{{ t('channels.bot.orphans-hint') }}</div>
+            </div>
+          </div>
+          <div class="ch-block">
+            <ChannelAccessRows
+              :requests="orphanRequests"
+              :entries="orphanEntries"
+              :busy="busy"
+              :where-of="entryBot"
+              @approve="approve"
+              @reject="reject"
+              @remove="removeEntry"
+            />
           </div>
         </div>
       </SettingsCard>
-    </SettingsSection>
+      </div>
+    </div>
 
-    <SettingsSection v-if="store.allow.value.length" :label="t('channels.allow.title')">
-      <SettingsCard>
-        <div v-for="entry in store.allow.value" :key="`${entry.platform}:${entry.account}:${entry.sender_id}`" class="ch-item" data-testid="allow-row">
-          <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(entry.platform) }}</span>
-          <div class="ch-item-text">
-            <span class="ch-item-name" v-truncate>{{ entry.sender_name || entry.sender_id }}</span>
-            <span class="ch-item-meta" v-truncate>{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }}</span>
-          </div>
-          <div class="ch-row-actions">
-            <button type="button" class="ch-btn ghost sm" :disabled="busy" data-testid="allow-remove" @click="run(null, () => store.removeAllow(entry.platform, entry.sender_id, entry.account))">{{ t('channels.allow.remove') }}</button>
-          </div>
-        </div>
-      </SettingsCard>
-    </SettingsSection>
   </section>
 </template>
 
 <style scoped>
-.channels-pane { display: flex; flex-direction: column; }
+.channels-pane { display: flex; flex-direction: column; container: channels-pane / inline-size; }
+
+/* Bots on the left, the picked one on the right. */
+.ch-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: var(--space-group);
+}
+/* No bot yet: nothing to list, the platforms take the width. */
+.ch-layout--solo { grid-template-columns: minmax(0, 1fr); }
+.ch-layout-nav { position: sticky; top: 0; max-height: max(280px, calc(100vh - 300px)); }
+.ch-layout-detail { min-width: 0; display: flex; flex-direction: column; }
+/* The ⋯ menu may be taller than a short bot. */
+.ch-layout-detail :deep(.settings-card) { overflow: visible; }
+/* One bot shows at a time: the card's dividers between platforms have nothing to divide. */
+.ch-layout-detail.ch-one :deep(.settings-card > *) { border-top: none; }
+.ch-back { display: none; }
+/* Too narrow for two columns: the list, or the picked bot with a way back. */
+@container channels-pane (max-width: 600px) {
+  .ch-layout { grid-template-columns: minmax(0, 1fr); }
+  .ch-layout-nav { position: static; max-height: none; }
+  .ch-layout[data-narrow-pane='list'] .ch-layout-detail { display: none; }
+  .ch-layout[data-narrow-pane='detail'] .ch-layout-nav { display: none; }
+  .ch-back {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    min-height: var(--control-h-md);
+    margin-bottom: 6px;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    color: var(--accent-fg);
+    font: inherit;
+    font-size: var(--font-xs);
+    cursor: pointer;
+  }
+}
 .ch-list-error { margin-top: 8px; }
-.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.ch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 
 /* Platform rows: same inset and type scale as SettingRow. */
-.ch-row { padding: var(--space-row-y) var(--space-row-x); }
-.ch-row.open { background: var(--bg-base); }
-.ch-row-head { display: flex; align-items: center; gap: 12px; }
+.ch-row-head { display: flex; align-items: center; gap: 12px; padding: var(--space-row-y) var(--space-row-x); }
 .ch-mark {
   flex-shrink: 0;
   width: 28px;
@@ -882,7 +1254,7 @@ function formatTime(ts: number | null | undefined): string {
   border: 1px solid var(--border-default);
   background: var(--bg-muted);
   color: var(--text-secondary);
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -893,19 +1265,8 @@ function formatTime(ts: number | null | undefined): string {
 .ch-row-name { font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ch-row-desc { font-size: var(--font-row-desc); color: var(--text-secondary); }
 .ch-row-summary { font-size: var(--font-2xs); color: var(--text-muted); }
-.ch-platform-hint {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0 40px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  background: var(--bg-muted);
-  font-size: var(--font-row-desc);
-  color: var(--text-secondary);
-}
+/* The managed-bots hint is SettingsNotice. */
+.ch-platform-hint { margin: var(--space-row-y) var(--space-row-x) 0; }
 .ch-platform-hint .ch-setup-link { align-self: auto; }
 
 /* A bot's ⋯ menu: the actions used less often than its switch. */
@@ -943,7 +1304,7 @@ function formatTime(ts: number | null | undefined): string {
 .ch-menu > button:hover:not(:disabled) { background: var(--bg-muted); }
 .ch-menu > button:disabled { opacity: 0.55; cursor: not-allowed; }
 .ch-menu > button.danger { color: var(--danger-fg); }
-.ch-menu-note { font-size: var(--font-3xs); color: var(--text-secondary); }
+.ch-menu-note { font-size: var(--font-2xs); color: var(--text-secondary); }
 .ch-row-error {
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
@@ -951,36 +1312,52 @@ function formatTime(ts: number | null | undefined): string {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ch-row-error.warn { color: var(--attention-fg); }
 .ch-row-error.bad { color: var(--danger-fg); }
 .ch-row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-/* Bots under a platform, aligned with the platform's text. */
-.ch-bot { margin: 8px 0 0 40px; }
-.ch-bot + .ch-bot { padding-top: 8px; border-top: 1px solid var(--border-muted); }
+/* The picked bot: its line, then one block each for requests, people and chats. */
+.ch-bot, .ch-orphans { padding: var(--space-row-y) var(--space-row-x); }
+/* A bot not set up yet has no line of its own (its status and Connect are on
+   the platform line); only its connection form, once opened, shows here. */
+.ch-bot--bare { padding-top: 0; }
+.ch-block { margin: 12px calc(-1 * var(--space-row-x)) 0; padding: 12px var(--space-row-x) 0; border-top: 1px solid var(--border-muted); }
+.ch-block-label {
+  margin-bottom: 6px;
+  font-size: var(--font-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
 .ch-bot-head { display: flex; align-items: center; gap: 12px; }
-.ch-bot-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
+.ch-bot-name { font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ch-link-btn { font: inherit; font-size: var(--font-2xs); color: var(--accent-fg); background: transparent; border: none; padding: 0; cursor: pointer; }
 .ch-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ch-rename { display: flex; align-items: center; gap: 6px; }
 .ch-remove-ask { color: var(--danger-fg); }
 
 /* Status pill: same shape as the account badges on the Accounts page. */
+/* As tall as the Connect button beside it (28px), so the two read as one row. */
 .ch-pill {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--control-h-md);
+  font-size: var(--font-xs);
   font-weight: 600;
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 0 10px;
   color: var(--text-secondary);
   background: var(--bg-muted);
   border: 1px solid var(--border-default);
   white-space: nowrap;
 }
 .ch-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }
-.ch-pill.warn { color: var(--attention-fg); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.ch-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .ch-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
 .ch-pill.pending { color: var(--accent-fg); background: var(--accent-subtle); border-color: var(--accent-muted); }
 
@@ -1000,7 +1377,8 @@ function formatTime(ts: number | null | undefined): string {
   padding: 5px 8px;
 }
 .ch-input:hover { border-color: var(--border-strong); }
-.ch-input:focus { outline: none; border-color: var(--accent-focus); }
+.ch-input:focus { border-color: var(--accent-focus); }
+.ch-input:focus:not(:focus-visible) { outline: none; }
 .ch-form-actions { display: flex; align-items: center; gap: 8px; }
 .ch-setup-link { align-self: flex-start; font-size: var(--font-row-desc); color: var(--accent-fg); }
 .ch-advanced > summary { cursor: pointer; font-size: var(--font-2xs); color: var(--text-secondary); }
@@ -1015,16 +1393,7 @@ function formatTime(ts: number | null | undefined): string {
 /* Creating a bot through a managing Telegram bot. */
 .ch-managed { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 8px 0 0; }
 .ch-managed-title { margin: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
-.ch-managed-warn {
-  margin: 0;
-  padding: 6px 10px;
-  font-size: var(--font-row-desc);
-  line-height: 1.4;
-  color: var(--text-primary);
-  background: var(--attention-subtle);
-  border: 1px solid var(--attention-muted);
-  border-radius: var(--radius-sm);
-}
+.ch-managed-warn { margin: 0; }
 
 /* Buttons: the Accounts page's button set. */
 .ch-btn {
@@ -1037,7 +1406,8 @@ function formatTime(ts: number | null | undefined): string {
   color: var(--text-primary);
   white-space: nowrap;
 }
-.ch-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
+/* Small in type, not in reach: Connect and the row actions keep a 28px target. */
+.ch-btn.sm { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: var(--control-h-md); font-size: var(--font-xs); padding: 0 10px; }
 .ch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ch-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .ch-btn.primary:hover:not(:disabled) { background: var(--accent-fg); border-color: var(--accent-fg); }
@@ -1047,18 +1417,12 @@ function formatTime(ts: number | null | undefined): string {
 .ch-btn.danger-ghost:hover:not(:disabled) { border-color: var(--danger-fg); }
 
 /* Linking guide under a connected platform, aligned with the row text. */
-.ch-link { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 2px; }
+.ch-link { display: flex; flex-direction: column; gap: 6px; margin: 0 0 2px; }
 .ch-link.next { padding: 10px 12px; border: 1px solid var(--accent-muted); border-radius: var(--radius-sm); background: var(--accent-subtle); }
 .ch-link-title { font-size: var(--font-row-desc); font-weight: 600; color: var(--text-bright); }
 .ch-link-desc { margin: 0; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.4; }
 .ch-link-summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--font-row-desc); color: var(--text-secondary); }
-.ch-link-error { color: var(--danger-fg); word-break: break-word; }
+.ch-link-error { color: var(--danger-fg); overflow-wrap: anywhere; }
 
-/* Pairing / allowlist rows. */
 .ch-section-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); }
-.ch-item { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-row-x); }
-.ch-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.ch-item-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ch-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ch-code { font-family: var(--font-mono, monospace); font-size: var(--font-xs); letter-spacing: 0.08em; color: var(--text-bright); }
 </style>

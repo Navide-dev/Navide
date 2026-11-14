@@ -27,7 +27,7 @@ x64 提供兩種套件：
 - uv 0.11+
 - 至少一個受支援的 Coding CLI（共 14 種：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code），清單見[使用手冊](user-guide.md)
 - 選用：用於本機分析的 Ollama 或本機 GGUF 模型
-- Windows 專屬：開發人員模式（**設定 → 開發人員專用**）或以系統管理員身分執行 Navide，Navide 才能建立每個 Pane 的 CLI Home 與受管理 Skills 所需的符號連結
+- Windows 專屬：開發人員模式（**設定 → 開發人員專用**）或以系統管理員身分執行 Navide，Navide 才能建立每個分格（分格＝視窗裡的一格，通常跑一個 agent）的 CLI Home 與受管理 Skills 所需的符號連結
 
 每個 Coding CLI 都有自己的安裝、驗證、訂閱與資料政策。Navide 不會取代這些需求。
 

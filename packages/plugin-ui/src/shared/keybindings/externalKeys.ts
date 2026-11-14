@@ -67,14 +67,25 @@ export const NATIVE_MENU_KEYS: ExternalKeyRow[] = [
  *
  * Pinned here rather than derived, because they are the entries with nothing
  * else pointing at them: Copy (the app re-implements `role: 'copy'` to read a
- * terminal selection), Settings…, New Window and Open Workspace….
+ * terminal selection), Settings…, New Window, Open Workspace… and Lock Now.
  */
 export const MENU_LITERAL_ACCELERATORS = [
   'CmdOrCtrl+C',
   'CmdOrCtrl+,',
   'CmdOrCtrl+N',
   'CmdOrCtrl+O',
+  'CmdOrCtrl+Alt+L',
 ] as const
+
+/**
+ * Accelerators the menu SHOWS but does not register (`registerAccelerator:
+ * false`), so the renderer's own rule answers the key. Not menu-owned: binding
+ * them in Settings works. Listed so the drift guard still accounts for every
+ * accelerator string in src/main/menu.ts.
+ *   - ⇧⌘T, Window → Reopen Closed Window: the main window's `paneStage` rule
+ *     answers it, and the Mini IDE keeps it for Reopen Closed Editor.
+ */
+export const MENU_DISPLAY_ONLY_ACCELERATORS = ['CmdOrCtrl+Shift+T'] as const
 
 /**
  * Every Electron role `src/main/menu.ts` installs, and the accelerator that role

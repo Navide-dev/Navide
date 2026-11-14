@@ -42,7 +42,7 @@ describe('navide.plans production package boundary', () => {
 
     expect(manifest.schemaVersion).toBe(2)
     expect(manifest.id).toBe('navide.plans')
-    expect(manifest.version).toBe('0.1.0')
+    expect(manifest.version).toBe('1.1.5')
     expect(manifest.permissions.system).toEqual(['fs', 'ui', 'aiCli'])
     expect(manifest.permissions).not.toHaveProperty('plans')
     expect(manifest.permissions.shell).toBeUndefined()
@@ -137,12 +137,9 @@ describe('navide.plans production package boundary', () => {
     expect(backend).not.toContain('"shell"')
     expect(backend).not.toContain('"network"')
     expect(backend).not.toContain('agentMethods')
-    // The core modules it may bundle are the standard-library-only path guard
-    // and write path.
-    expect(backend.match(/^.*agent_team_backend.*$/gm)).toEqual([
-      'from agent_team_backend.fs_write import (',
-      'from agent_team_backend.path_guard import FsError, _resolve_safe',
-    ])
+    // It reaches the core backend's sources only through the public SDK.
+    expect(backend).not.toContain('agent_team_backend')
+    expect(backend).toContain('from navide_plugin_sdk import (')
   })
 
   it.each(supportedLocales)('%s owns Plans messages while preserving the legacy recovery shadow', (locale) => {
@@ -156,7 +153,15 @@ describe('navide.plans production package boundary', () => {
       ),
     ) as { pane?: { plans?: Record<string, unknown> } }
 
-    expect(pluginMessages).toEqual({ pane: { plans: shadowMessages.pane?.plans } })
+    // Every message the legacy recovery UI reads stays identical in the
+    // package. Messages only the package uses (new in 1.1.0) are not copied
+    // into the shared plugin-ui shadow: that package is a fingerprint input of
+    // every first-party plugin, and legacy recovery never shows them.
+    expect(Object.keys(pluginMessages)).toEqual(['pane'])
+    const plans = (pluginMessages as { pane: { plans: Record<string, unknown> } }).pane.plans
+    const shadow = shadowMessages.pane?.plans ?? {}
+    expect(Object.keys(shadow).length).toBeGreaterThan(0)
+    expect(Object.fromEntries(Object.keys(shadow).map((key) => [key, plans[key]]))).toEqual(shadow)
   })
 
   it('ships versioned factory artifacts alongside explicit legacy recovery resources', () => {

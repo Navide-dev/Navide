@@ -48,7 +48,7 @@ function harness() {
     panes, loopLimitWatchers, loopGen,
     acquireInjectionSlot: acquire, releaseInjectionSlot: vi.fn(), injectPane: inject,
     withLoopDoneInstruction: (s: string) => s, loopResumeTextFor: () => '繼續',
-    stopLoopComplete: vi.fn(), loopBackoffMs, LOOP_ESTIMATE_WINDOW_MS: 18_000_000,
+    stopLoopComplete: vi.fn(), loopBackoffMs, setLoopEstimate: vi.fn(),
     loopInjectFailures, LOOP_INJECT_FAIL_LIMIT,
     bumpLoopGen: (id: string) => { const g = (loopGen.get(id) ?? 0) + 1; loopGen.set(id, g); return g },
     stopLoopLimitWatcher: (id: string) => { loopLimitWatchers.delete(id) },
@@ -160,10 +160,10 @@ describe('F1: interrupting a pane stops its loop', () => {
   })
 
   it('an explicit interrupt from an agent (ui.pane.interrupt) stops the loop', async () => {
-    // ui.pane.interrupt calls onInterrupt(paneId) with no options.
-    expect(source).toContain('const sent = await onInterrupt(paneId)\n')
+    // ui.pane.interrupt calls onInterrupt with no keepLoop, only the stop origin.
+    expect(source).toContain("const sent = await onInterrupt(paneId, { by: 'agent' })\n")
     const h = harness()
-    await h.fns.onInterrupt('p1')
+    await h.fns.onInterrupt('p1', { by: 'agent' })
     expect(h.pane.loopActive).toBe(false)
   })
 

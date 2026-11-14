@@ -1,0 +1,238 @@
+# n238.py <root> <phase> [arg]: the 0.2.38 additions, on top of newtests.py (run "newtests.py <root> setup" first:
+# window "wn" with panes qa and qb).
+#   stopagent : qa runs a long turn, cli_interrupt qa (agent STOP), then a cli_send starts a new 40 s turn: during it
+#               ui.status must leave "stopped" and the pane menu's Interrupt must be enabled
+#   stopuser  : qa launches a background Bash (sleep 45) and stays busy; a person's STOP (menu Interrupt); a PING is sent;
+#               when the background job ends Claude starts its own turn -> the badge clears, the PING stays queued;
+#               then a person types (space + Backspace) -> the PING goes in. qa must be idle first and the STOP waits
+#               for the background Bash to run, else the RESULT says INVALID; the own turn is a new assistant record
+#               in qa's transcript, not busy alone
+#   kick <n>  : <n> busy processes (PIDs recorded, ended by PID), the window minimized; 3x external cli_open_agent with a
+#               task -> the kickoff answer (sent / failed), attempts in the log, and what is left in each input box
+#   reclaim   : qb opens a child (as qb, through qb's pane MCP URL); while the child's 40 s turn runs, the child
+#               cli_sends its report to qb (through the child's pane MCP URL); once the child is idle qb reclaims it
+#   browser   : Navide Browser on a local http page (no Browser window opened): innerWidth, snapshot default and
+#               filter=interactive with @refs, root and act diff on a ref, screenshot (image within seconds); qa
+#               handoff (need-action + note); qb take_over / finish on its own Space of the same name (names are per pane).
+#               Run host/browser-allow.sh in the background first: the workspace's first write call asks for permission
+#   browsernoanswer : the workspace's first write call with nobody answering the permission dialog: it must end
+#               with PLUGIN_TOOL_TIMEOUT within about 30 s (run it before "browser", without browser-allow.sh)
+import glob, json, os, pathlib, re, signal, subprocess, sys, time
+ROOTP, PH = sys.argv[1:3]; ARG = sys.argv[3] if len(sys.argv) > 3 else ""
+sys.argv = [sys.argv[0], ROOTP, "status"]
+_src = open(ROOTP + "/newtests.py", encoding="utf-8").read().split('\nif phase == "setup":')[0]
+exec(_src)
+phase = PH
+def pid_of(nm): return st[nm]
+def menu(nm, click=None):
+    """Open the pane's context menu, list its items (text|disabled), click one by its text, or close the menu."""
+    c = Cdp(main_page(ws)); pid = pid_of(nm)
+    js = f"""(async()=>{{const host=document.querySelector('.xterm-host[data-pane-id="{pid}"]'); if(!host) return 'no-host';
+      let el=host; let hm=null; while(el && !hm){{ el=el.parentElement; hm=el && el.querySelector('.header-main'); }}
+      const hdr=hm.parentElement; const r=hdr.getBoundingClientRect();
+      hdr.dispatchEvent(new MouseEvent('contextmenu',{{bubbles:true,cancelable:true,clientX:r.left+20,clientY:r.top+5}}));
+      await new Promise(f=>setTimeout(f,400));
+      const items=[...document.querySelectorAll('.pane-ctx-item')];
+      const desc=items.map(i=>i.innerText.trim().split('\\n')[0]+((i.disabled||i.classList.contains('disabled')||i.getAttribute('aria-disabled')==='true')?' [disabled]':''));
+      const want={json.dumps(click)};
+      if(want){{ const it=items.find(i=>new RegExp(want,'i').test(i.innerText.trim().split('\\n')[0]) && !i.disabled && !i.classList.contains('disabled')); if(!it) return 'no-item '+JSON.stringify(desc); it.click(); return 'clicked '+JSON.stringify(desc); }}
+      document.dispatchEvent(new KeyboardEvent('keydown',{{key:'Escape',bubbles:true}})); document.body.click();
+      return JSON.stringify(desc);}})()"""
+    return c.ev(js)
+def interrupt_item(desc): return [d for d in re.findall(r'"([^"]*)"', desc or "") if re.match(r"(Interrupt|中斷)", d)]
+def ui(nm):
+    r = ext("cli_get_status", {"target": f"wn/{nm}", "workspace_path": ws})
+    u = r.get("ui") or {}
+    return {"busy": r.get("busy"), "status": r.get("status"), "ui.status": u.get("status"), "stopped": u.get("stopped", r.get("stopped"))}
+def transcript():
+    """The newest Claude transcript of window "wn"'s workspace, or ""."""
+    t = sorted(glob.glob(str(pathlib.Path.home() / ".claude/projects/*wn*/*.jsonl")), key=os.path.getmtime)
+    return t[-1] if t else ""
+def assistant_since(path, off):
+    """True when `path` gained an assistant record after byte `off`."""
+    if not path: return False
+    with open(path, "rb") as f:
+        f.seek(off)
+        for line in f:
+            try:
+                if json.loads(line).get("type") == "assistant": return True
+            except ValueError:
+                pass
+    return False
+def wait_busy(nm, s=40):
+    for _ in range(s):
+        time.sleep(1)
+        if status(f"wn/{nm}").get("busy"): return True
+    return False
+if phase == "stopagent":
+    nm = "qa"; n = _s.token_hex(4)
+    rules([{"match": "LONGTURN", "sleep": 300, "text": "long done"}, {"match": f"NEWTURN-{n}", "sleep": 40, "text": "new turn done"}])
+    say("send LONGTURN", json.dumps(ext("cli_send", {"to": f"wn/{nm}", "text": "LONGTURN: start the long task"}))[:160])
+    say("busy", wait_busy(nm)); time.sleep(3)
+    say("cli_interrupt", json.dumps(ext("cli_interrupt", {"target": f"wn/{nm}", "workspace_path": ws}))[:200])
+    time.sleep(5); say("after interrupt", ui(nm))
+    r = ext("cli_send", {"to": f"wn/{nm}", "text": f"NEWTURN-{n} take 40 seconds"}); k = r.get("msg_key"); t0 = time.time()
+    say("sent NEWTURN", json.dumps(r)[:160])
+    for _ in range(40):
+        time.sleep(3)
+        if check(k).get("status") == "delivered": break
+    say("delivery", check(k), f"+{round(time.time()-t0,1)}s")
+    seen = []
+    for i in range(6):
+        time.sleep(4); u = ui(nm); d = menu(nm); seen.append((u, interrupt_item(d)))
+        say(f"during new turn #{i}", u, "menu:", d)
+    hits, _ = stub_hits(f"NEWTURN-{n}", t0)
+    ok = any(u.get("ui.status") == "running" and it and "[disabled]" not in it[0] for u, it in seen)
+    say("RESULT stopagent", f"delivered={check(k).get('status')} stub_hits={hits} running+interrupt-enabled-seen={ok}")
+    RULES.unlink(); time.sleep(40); say("status end", ui(nm))
+elif phase == "stopuser":
+    nm = "qa"; n = _s.token_hex(4)
+    # An earlier phase's turn still running makes this one meaningless: the STOP lands on that turn, BGTURN only
+    # queues, and "busy" afterwards is the old turn, not one Claude started (0.2.39 Linux run on 46786b8e6).
+    for _ in range(60):
+        if not ui(nm).get("busy"): break
+        time.sleep(2)
+    else:
+        say("RESULT stopuser INVALID: qa still busy from an earlier turn"); sys.exit(0)
+    rules([{"match": f"BGTURN-{n}", "sleep": 0, "text": "", "bg": "sleep 45; echo bg-done"}])
+    tail = ROOT / "stub.log.tailsleep"; tail.write_text("300")
+    say("send BGTURN", json.dumps(ext("cli_send", {"to": f"wn/{nm}", "text": f"BGTURN-{n} run it in the background"}))[:160])
+    say("busy", wait_busy(nm))
+    # The stub consumes tailsleep when the background Bash's tool result reaches it: the job runs, the request is held.
+    for _ in range(40):
+        if not tail.exists(): break
+        time.sleep(1)
+    else:
+        say("RESULT stopuser INVALID: the background Bash never ran (tailsleep not consumed)")
+        RULES.unlink(missing_ok=True); tail.unlink(missing_ok=True); sys.exit(0)
+    time.sleep(3); t0 = time.time()
+    tr = transcript(); tr_off = os.path.getsize(tr) if tr else 0
+    say("person STOP via menu:", menu(nm, "^(Interrupt|中斷)$"))
+    time.sleep(4); say("after STOP", ui(nm))
+    p = _s.token_hex(4); r = ext("cli_send", {"to": f"wn/{nm}", "text": f"PING-{p} reply with ok"}); k = r.get("msg_key")
+    say("sent PING", json.dumps(r)[:160])
+    # Claude's own turn is a new assistant record in qa's transcript after the STOP. busy alone is not one: it is
+    # also the interrupted turn still running.
+    own = None
+    for _ in range(40):
+        time.sleep(3); u = ui(nm)
+        if own is None and assistant_since(tr, tr_off):
+            own = time.time() - t0; say(f"agent's own turn (assistant record) at +{round(own,1)}s", u)
+        if own and not u.get("busy"): break
+    if own is None: say("no assistant record after STOP: no own turn to judge")
+    time.sleep(5); u_after = ui(nm); c_after = check(k)
+    say("after the agent's own turn", u_after, "PING", c_after, "menu:", menu(nm))
+    hits_before, _ = stub_hits(f"PING-{p}", t0)
+    say("person types (space + Backspace)")
+    c = Cdp(main_page(ws)); pid = pid_of(nm)
+    c.ev(f"""(()=>{{const h=document.querySelector('.xterm-host[data-pane-id="{pid}"]'); const t=h&&h.querySelector('textarea'); if(t) t.focus(); return !!t;}})()""")
+    for key, code, vk, txt in ((" ", "Space", 32, " "), ("Backspace", "Backspace", 8, "")):
+        for typ in ("keyDown", "keyUp"):
+            q = {"type": typ, "key": key, "code": code, "windowsVirtualKeyCode": vk}
+            if typ == "keyDown" and txt: q["text"] = txt
+            c.call("Input.dispatchKeyEvent", **q)
+        time.sleep(0.5)
+    t1 = time.time()
+    for _ in range(24):
+        time.sleep(5)
+        if check(k).get("status") != "queued": break
+    hits_after, _ = stub_hits(f"PING-{p}", t0)
+    say("RESULT stopuser", f"own_turn_at={own and round(own,1)}s badge_after_own_turn={u_after} ping_while_held={c_after} "
+        f"stub_ping_before_typing={hits_before} after_typing={check(k)} (+{round(time.time()-t1,1)}s) stub_ping={hits_after}")
+    RULES.unlink(missing_ok=True); (ROOT / "stub.log.tailsleep").unlink(missing_ok=True)
+elif phase == "kick":
+    k = int(ARG or 12); pids = []
+    for _ in range(k):
+        q = subprocess.Popen([sys.executable, "-c", "while True: pass"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); pids.append(q.pid)
+    (ROOT / "kick.pids").write_text(" ".join(map(str, pids))); say("busy pids", pids, "load", gload())
+    c = Cdp(main_page(ws))
+    try:
+        time.sleep(60); say("warmed up, load", gload())
+        for i in range(1, 4):
+            w = c.call("Browser.getWindowForTarget"); wid = w.get("windowId")
+            c.call("Browser.setWindowBounds", windowId=wid, bounds={"windowState": "minimized"})
+            time.sleep(2); say(f"kick{i} window", c.call("Browser.getWindowBounds", windowId=wid).get("bounds"))
+            off = blog_from(); t0 = time.time(); nm = f"kk{i}"
+            r = ext("cli_open_agent", {"agent": "claude", "name": nm, "task": f"KICKTASK-{i} reply with the word ready.", "workspace_path": ws})
+            say(f"kick{i} answer +{round(time.time()-t0,1)}s", json.dumps({x: r.get(x) for x in r if x not in ("instructions",)})[:500])
+            time.sleep(30)
+            c.call("Browser.setWindowBounds", windowId=wid, bounds={"windowState": "normal"})
+            lg = ext("cli_read_log", {"target": f"wn/{nm}", "workspace_path": ws, "lines": 25})
+            txt = json.dumps(lg, ensure_ascii=False)
+            say(f"kick{i} KICKTASK copies on screen={txt.count(f'KICKTASK-{i}')} stub_requests={stub_hits(f'KICKTASK-{i}', t0)[0]} load={gload()}")
+            tail = (lg.get("text") or lg.get("log") or txt)[-900:]
+            say(f"kick{i} screen tail:", tail)
+            ks = []
+            with open(BLOG, encoding="utf-8", errors="replace") as f:
+                f.seek(off); ks = [l.strip()[:220] for l in f if "kickoff" in l.lower() or "spawn." in l]
+            for l in ks[-12:]: say(f"  kick{i} log:", l)
+            say(f"kick{i} close", json.dumps(ext("cli_close_agent", {"target": f"wn/{nm}", "workspace_path": ws}))[:160]); time.sleep(5)
+    finally:
+        for q in pids: os.kill(q, signal.SIGTERM)
+        say("busy pids ended", pids)
+elif phase == "reclaim":
+    n = _s.token_hex(4); purl = pane_url(st["qb"])
+    rules([{"match": f"CHILDTASK-{n}", "sleep": 40, "text": "child work done"}])
+    r = mcp(purl, "cli_open_agent", {"agent": "claude", "name": "kid", "task": f"CHILDTASK-{n} do the work, then report to your parent with cli_send."})
+    say("open child as qb", json.dumps(r)[:300]); kid = r.get("pane_id")
+    for _ in range(30):
+        time.sleep(2)
+        if pane_url(kid): break
+    kurl = pane_url(kid); say("child MCP url found", bool(kurl), "busy", wait_busy("kid", 30))
+    rr = mcp(kurl, "cli_send", {"to": "qb", "text": f"REPORT-{n}: child work done"}); say("child -> qb cli_send", json.dumps(rr)[:200])
+    k = rr.get("msg_key")
+    for _ in range(40):
+        time.sleep(3)
+        if check(k).get("status") != "queued": break
+    say("report delivery", check(k))
+    for _ in range(40):
+        time.sleep(3)
+        if not status("wn/kid").get("busy"): break
+    time.sleep(3); say("child status", status("wn/kid"))
+    rc = mcp(purl, "cli_reclaim_agent", {"target": "kid"}); say("RESULT reclaim", json.dumps(rc)[:300])
+    RULES.unlink()
+elif phase in ("browser", "browsernoanswer"):
+    qa, qb = pane_url(st["qa"]), pane_url(st["qb"]); sp = "shared-" + _s.token_hex(3)
+    def body(r):  # the plugin's JSON answer inside the MCP text wrapper, or the bare error
+        try:
+            t = r["result"]["content"][0]["text"]; return json.loads(t[t.index("{"):t.rindex("}") + 1])
+        except Exception: return r
+    def kinds(r):  # content item types / mime types of an MCP answer (a screenshot comes back as an image item)
+        return [(c.get("type"), c.get("mimeType"), len(c.get("data") or c.get("text") or "")) for c in ((r.get("result") or {}).get("content") or [])]
+    def timed(tool, args, who=None):
+        t0 = time.time(); r = mcp(who or qa, tool, args); return r, round(time.time() - t0, 1)
+    # The plugin only loads http(s) URLs: serve the test page from a throwaway local server (PID recorded, ended below).
+    pd = ROOTP + "/browser-page"; os.makedirs(pd, exist_ok=True)
+    open(pd + "/t.html", "w").write("<h1>t</h1><p>static text</p><button id=b onclick=\"this.textContent='clicked'\">Press</button><input aria-label=name><div id=r><a href=#x>link</a></div>")
+    srv = subprocess.Popen([sys.executable, "-m", "http.server", "8952", "--bind", "127.0.0.1", "--directory", pd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); time.sleep(1)
+    page = "http://127.0.0.1:8952/t.html"; say("page server pid", srv.pid)
+    if phase == "browsernoanswer":
+        # the first write-type call in a workspace raises the native permission dialog; nobody answers it here:
+        # the call must end with PLUGIN_TOOL_TIMEOUT within about 30 s instead of hanging
+        r, dt = timed("browser_open", {"space": sp, "url": page})
+        say("RESULT browsernoanswer", f"after={dt}s", json.dumps(body(r))[:400])
+    else:
+        say("list (qa)", json.dumps(body(mcp(qa, "browser_list", {})))[:300])
+        r, dt = timed("browser_open", {"space": sp, "url": page}); say("open qa", f"{dt}s", json.dumps(body(r))[:300])
+        say("goto page", json.dumps(body(mcp(qa, "browser_act", {"space": sp, "action": "goto", "url": page}))))
+        ev = body(mcp(qa, "browser_evaluate", {"space": sp, "expression": "JSON.stringify({w:innerWidth,h:innerHeight,focus:document.hasFocus(),vis:document.visibilityState,ready:document.readyState})"}))
+        say("RESULT browser viewport", ev.get("value", ev))
+        full = body(mcp(qa, "browser_snapshot", {"space": sp})); say("snapshot default", json.dumps(full)[:800])
+        inter = body(mcp(qa, "browser_snapshot", {"space": sp, "filter": "interactive"})); say("snapshot interactive", json.dumps(inter)[:800])
+        snap = str(inter.get("snapshot") or ""); refs = re.findall(r"@\d+", snap)
+        say("RESULT browser snapshot", f"default_len={len(str(full.get('snapshot') or ''))} interactive_len={len(snap)} refs={refs[:8]}")
+        bref = next((re.findall(r"@\d+", l)[0] for l in snap.splitlines() if "Press" in l and re.search(r"@\d+", l)), refs[0] if refs else "@0")
+        root = body(mcp(qa, "browser_snapshot", {"space": sp, "root": bref})); say("RESULT browser root", bref, json.dumps(root)[:500])
+        act = body(mcp(qa, "browser_act", {"space": sp, "action": "click", "ref": bref, "diff": True})); say("RESULT browser act diff", bref, json.dumps(act)[:800])
+        r, dt = timed("browser_screenshot", {"space": sp}); say("RESULT browser screenshot", f"after={dt}s content={kinds(r)}", json.dumps(body(r))[:200] if not kinds(r) or kinds(r)[0][0] != "image" else "")
+        h = mcp(qa, "browser_handoff", {"space": sp, "note": "please sign in (qa)"}); say("qa handoff", json.dumps(body(h))[:300])
+        def spc():
+            L = body(mcp(qb, "browser_list", {}))
+            return [x for x in (L.get("views") or []) if sp in json.dumps(x)] or json.dumps(L)[:400]
+        say("space after handoff (as qb sees it)", spc())
+        # Space names are scoped per pane: qb opening the same name gets its own Space (the tool description says so)
+        say("qb open same space name", json.dumps(body(mcp(qb, "browser_open", {"space": sp})))[:400])
+        say("qb take_over", json.dumps(body(mcp(qb, "browser_take_over", {"space": sp, "note": "qb wants to continue", "timeoutMs": 3000})))[:300])
+        say("qb finish", json.dumps(body(mcp(qb, "browser_finish", {"space": sp, "note": "qb done"})))[:300])
+        say("RESULT browser qa list after qb finish", [x for x in (body(mcp(qa, "browser_list", {})).get("views") or []) if sp in json.dumps(x)])
+    srv.terminate(); srv.wait(10); say("page server ended", srv.pid)

@@ -19,6 +19,7 @@ import {
   createPluginGitSurfacePorts,
   createPluginGitContributionHostPort,
   createPluginGitWorkspaceGrantPort,
+  createPluginGitReviewPort,
   createPluginGitSettingsPort,
   createPluginLegacyRepoSelectionPort,
 } from './pluginSurfacePorts'
@@ -27,6 +28,7 @@ import {
   GIT_BRANCH_DIFF_KEY,
   GIT_FILE_ACCESS_KEY,
   GIT_ISSUES_KEY,
+  GIT_REVIEW_KEY,
   GIT_TRANSPORT_KEY,
   GIT_UI_KEY,
 } from './ports/gitSurface'
@@ -88,6 +90,7 @@ const contributionHostPort = createPluginGitContributionHostPort(capabilitySdk)
 const workspaceGrantPort = createPluginGitWorkspaceGrantPort(capabilitySdk)
 const legacyRepoSelection = createPluginLegacyRepoSelectionPort(capabilitySdk)
 const settingsPort = createPluginGitSettingsPort(capabilitySdk)
+const reviewPort = createPluginGitReviewPort(capabilitySdk)
 const isLeftContribution = query.get('contribution') === 'left'
 const isDetailContribution = query.get('contribution') === 'branch-detail'
 
@@ -136,6 +139,7 @@ function mountPlugin(): void {
   app.provide(GIT_BRANCH_DIFF_KEY, surfacePorts.branchDiff)
   app.provide(GIT_ACCOUNTS_KEY, surfacePorts.accounts)
   app.provide(GIT_ISSUES_KEY, surfacePorts.issues)
+  app.provide(GIT_REVIEW_KEY, reviewPort)
   app.mount('#app')
 
   // Announce readiness only after the app has mounted and installed every port.

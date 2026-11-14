@@ -1,21 +1,27 @@
 # Navide Plugin Agent Tools and Disclosure: Interface Contract (v1)
 
-Status: **contract only**. This is step 0 ("介面約定") of plan B in
-`.agent-team/plans/navide_b5ecff.html` (section `plan-b`). It fixes the shapes
-that the parallel work lines B1 (agent tools), B2 (Navide Marketplace MCP
-tools) and D (disclosure) build against. Nothing described here is wired into
-the app yet:
+Status: **implemented** (current as of 0.2.39). This began as step 0
+("介面約定") of plan B in `.agent-team/plans/navide_b5ecff.html` (section
+`plan-b`), which fixed the shapes the work lines B1 (agent tools), B2 (Navide
+Marketplace MCP tools) and D (disclosure) were built against. All three now
+run on it:
 
-- B1-a turned on `backend.agentTools` in `plugin-manifest-v2.schema.json`
-  ([section 2.6](#26-schema-fragment)): the Host and the
-  Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
-  the consent key carries the tools digest (section 2.8), and the consent
-  surfaces list the tools. The Registry image is built from
+- B1: `backend.agentTools` ([section 2](#2-manifest-backendagenttools)) and,
+  since 0.2.39, view-served `contributes.agentTools`
+  ([2.9](#29-view-served-tools-contributesagenttools)) are offered to agents.
+  The Host and the Registry run `validateAgentTools` / `validate_agent_tools`
+  on every manifest, the consent key carries the tools digest (section 2.8),
+  and the consent surfaces list the tools. The Registry image is built from
   `marketplace/registry` alone, so it ships a byte-identical copy of
   `agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
-- No MCP tool, Host route, WebSocket handler, Registry endpoint or database
-  table exists for anything else below. The reference code is types, constants and
-  pure functions:
+- B2: the `marketplace_*` and `plugins_*` MCP tools read listings and file
+  install, update, rollback and removal requests the user approves.
+- D: the consent card, Settings → Navide Plugins and the Registry listing show
+  the disclosure ([section 3](#3-disclosure)), and the Registry signs the
+  static scan report ([3.8](#38-scan-report)).
+
+The reference code the Host, the backend and the Registry share is types,
+constants and pure functions:
 
 | Language | Module | Contents |
 |---|---|---|
@@ -100,21 +106,29 @@ is disclosed and they travel in pieces
 | `timeoutMs` | no | integer | 1 to 120000 (the Host's existing backend-call bound, `MAX_BACKEND_TIMEOUT_MS`); default 30000 |
 
 Backend method and event names must be lowercase dotted names,
-`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$` (as `devmap.block.status`). The
-manifest schema also accepts upper-case letters
-(`plugin-manifest-v2.schema.json:192`,
-`marketplace/registry/registry/manifest_v2.py:18`), but the Host backend
-supervisor accepts only `^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$`
-(`src/main/plugins/pluginBackendSupervisor.ts:655-657`, applied to the
-approved method and event lists at `:2791-2794` and `:2807-2810` and to every
-call at `:2374`), so a camelCase method such as `devmap.setStatus` passes
-publishing and is then refused when the backend activates. The rule above is
-the intersection of the two. Closing the gap in the schema is a separate
-change.
+`^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$` (as `devmap.block.status`). The Host
+backend supervisor accepts only `^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$`
+(`isMethodName` in `src/main/plugins/pluginBackendSupervisor.ts`, applied to
+the approved method and event lists when the backend activates and to every
+call), and the rule above is the intersection of that and the manifest
+schema. As of 0.2.39:
 
-No other field is allowed. `agentTools` requires a native backend, so a package
-that declares it is at least risk **high**. Frontend-only packages cannot
-declare agent tools (DB13 is open).
+- `agentTools[].method`: the Host refuses a name the supervisor would refuse
+  when the package is installed (`src/main/plugins/pluginManifestV2.ts`), and
+  the Registry when it is published (`_AGENT_TOOL_METHOD_RE` in
+  `marketplace/registry/registry/manifest_v2.py`).
+- `backend.methods` and `backend.events`: the manifest schema (`backendNames`
+  in `plugin-manifest-v2.schema.json`) and the Registry
+  (`_V2_BACKEND_NAME_RE`) still accept upper-case letters, so a camelCase
+  method no tool names, such as `devmap.setStatus`, passes publishing and
+  install and is then refused when the backend activates. Closing that gap in
+  the schema is a separate change.
+
+No other field is allowed. `backend.agentTools` requires a native backend, so
+a package that declares it is at least risk **high**. Since 0.2.39 a package
+without a backend declares its tools under `contributes.agentTools` instead,
+served by one of its views ([2.9](#29-view-served-tools-contributesagenttools));
+DB13 is closed by that section.
 
 ### 2.2 Names and the prefix
 
@@ -143,10 +157,10 @@ declare agent tools (DB13 is open).
 
 A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
-`cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_` `memory_`
-`miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_` `preview_`
-`prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_` `window_`
-`workspace_`
+`channels_` `cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_`
+`memory_` `miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_`
+`preview_` `prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_`
+`window_` `workspace_`
 
 `git_`, `plans_` and `miniide_` are the prefixes the built-in packages
 (`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party
@@ -189,7 +203,9 @@ tool means adding it there (or giving it a reserved prefix).
   (2.7).
 - The core server prefixes every description with the source label
   `[third-party Navide plugin <id> v<version> | permissions: ...]` (D4, built by
-  B1-c from the sync entry's `permissions`).
+  B1-c from the sync entry's `permissions`). The plugins Navide ships
+  (`navide.browser`, `navide.git`, `navide.mini-ide`, `navide.plans`) get
+  `[bundled Navide plugin ...` instead; nothing else about them differs.
 - Tool **results**: every Cc character except TAB and LF is removed
   (`sanitizeAgentToolResultText`; CR is removed too), then the result is wrapped
   as external content with the plugin id, version and permissions (D4).
@@ -263,6 +279,67 @@ stay valid. Any change to any tool (name, method, risk, text, schema, timeout)
 then requires new consent, and until then all of that package's tools are in
 state `consent-required`.
 
+### 2.9 View-served tools (`contributes.agentTools`)
+
+A package with no native backend (and so one that runs on Windows, where
+third-party backends do not) may declare the same tools under
+`contributes.agentTools[]`. Each entry has the fields of [2.1](#21-fields)
+with **`view`** (the id of one of `contributes.views`) in place of `method`;
+every other rule of this section applies unchanged: the name pattern and the
+prefix derived from the id ([2.2](#22-names-and-the-prefix)), the reserved
+names ([2.3](#23-reserved-names)), the text rules ([2.4](#24-text-rules)),
+the validation order ([2.5](#25-validation-order-and-error-codes)) with one
+more code, `AGENT_TOOL_VIEW_UNDECLARED` (the view id is not declared), and the
+DB9 cap ([2.7](#27-db9-stability-cap)). Names are unique across both lists; a
+`validateAgentTools` error for a `contributes` entry carries `list:
+"contributes"`. A package with a backend may declare both lists.
+
+```json
+"contributes": {
+  "views": [{ "id": "main", "kind": "custom", "location": "right", "title": "Hello", "entry": "frontend/main/index.html" }],
+  "agentTools": [
+    { "name": "hello_greet", "view": "main", "risk": "read", "title": "Say hello",
+      "description": "Returns a greeting from the open Hello view.",
+      "inputSchema": { "type": "object", "properties": { "who": { "type": "string" } } } }
+  ]
+}
+```
+
+In the disclosure ([3.1](#31-shape)), the catalog ([4.1](#41-host--backend-pluginsagenttoolssync))
+and every surface that shows them, a view-served tool is spelled exactly like
+a backend one with `method: "view:<view id>"` (`agentToolViewId()` reads it
+back), so the disclosure of a package that declares none is unchanged, as is
+its digest. Its risk is the package's own permissions plus `agentTools.write`
+for a write tool; it does not add `nativeBackend`.
+
+Consent is the install grant of the exact package version: the install card
+lists the tools like a backend's, and the version's grant is what
+`hasConsent` checks. The C3 rule applies (allowing the package turns the
+master switch on while it is still at its default). The Disabled switch of
+the package applies; the native-backend switches do not.
+
+A call ([4.2](#42-backend--host-the-agent-tool-call)) reaches the view only
+while that view is **open on the target workspace**: the Host finds the
+running `<pluginId>.<view>` contribution of the consented version in a
+window of that workspace, ready and not stopping, and sends it one
+`plugin:agentTool:call` `{callId, name, arguments, timeoutMs}` over the
+view's own bridge (ipc for a surface, the private MessagePort for a frame).
+The view answers one `plugin:agentTool:result` `{callId, ok: true, result}`
+or `{callId, ok: false, error: {code, message}}`; the SDK's
+`onAgentToolCall(name, handler)` does this for it, answering a tool with no
+handler at once with `PLUGIN_TOOL_UNHANDLED`. The Host accepts the answer
+only from the instance it sent the call to, and settles the call at the
+tool's deadline (`PLUGIN_TOOL_TIMEOUT`, `reason: "execution"`) or when the
+view goes away. No view open on that workspace answers
+`PLUGIN_TOOL_UNAVAILABLE` with `reason: "view-not-open"`; the Host does not
+load a view behind the user's back for a call, except a view whose manifest
+declares `headless: true` (0.2.40), which it opens hidden on a Navide window
+of that workspace through the same open as the user's and unmounts after 5
+idle minutes (plugin-development-v2.md, Headless views). Every other check of 4.2
+(master switch, caller kind, package state, consent, workspace grant, DB3
+first write, execution policy) runs before the dispatch, the same as for a
+backend tool; the headless backend binding is skipped.
+
 ## 3. Disclosure
 
 ### 3.1 Shape
@@ -324,10 +401,12 @@ optional manifest arrays become `[]`.
 |---|---|
 | `plugin` | `id`, `version`, `publisher` of the manifest |
 | `permissions.system` | `permissions.system`, sorted; `[]` when absent |
-| `permissions.shell` | `allowlist` → `{mode: "allowlist", executables: ["gh","git","glab"]}` (the Host shell allowlist); `full` → `{mode: "full", executables: null}` (any executable); absent → `null` |
+| `permissions.shell` | `allowlist` → `{mode: "allowlist", executables: ["gh","git","glab"]}` (the Host shell allowlist), plus the package's declared executables sorted into the list when the manifest spells `shell` as `{mode: "allowlist", executables: [...]}` (C2; a parsed manifest carries them as `permissions.shellExecutables`); `full` → `{mode: "full", executables: null}` (any executable); absent → `null` |
 | `permissions.scopes` | `scopes.fs` with `root` defaulted to `workspace` and `read`/`write` sorted (absent → `[]`); `null` when no scopes |
+| `permissions.network` | `{hosts}` with `permissions.network.hosts` sorted; the key is **absent** (not `null`) when the manifest declares no hosts, so the disclosure and digest of every earlier manifest are unchanged |
 | `nativeBackend` | `{methods, events}` sorted when the manifest has `backend` (also when it lists none); otherwise `null` |
-| `network` | `"via-shell"` when `permissions.shell` is declared, else `"none"`. The frame CSP (`connect-src 'none'`) and the backend sandbox have no network and DB10 (a network permission) is deferred, but a declared shell runs `git`/`gh`/`glab` (or, in `full` mode, any executable), which reach remote hosts. The scan report ([3.8](#38-scan-report)) names the hosts it can see |
+| `network` | `"via-shell"` when `permissions.shell` is declared, else `"none"`: commands and the native backend only. The backend sandbox has no network, but a declared shell runs `git`/`gh`/`glab` (or, in `full` mode, any executable), which reach remote hosts. The scan report ([3.8](#38-scan-report)) names the hosts it can see |
+| `networkHosts` | `permissions.network.hosts` sorted, the hosts the package's views may connect to (enforced by the frame CSP and the Host's session hook, PR C1); **absent** when the manifest declares none |
 | `agentTools` | each declared tool with `timeoutMs` defaulted, sorted by `name` |
 | `dataLocations.hostStorage` | always `true` (Host-managed storage partitions) |
 | `dataLocations.backendDataDirectory` | `true` when `nativeBackend` is not `null` (the sandbox's private data directory) |
@@ -355,9 +434,11 @@ in this order, each only when it applies:
 | `web` | `system` contains `web` | `{}` |
 | `agents` | `system` contains `agents` | `{}` |
 | `agentMessages` | `system` contains `agentMessages` | `{}` |
+| `secrets` | `system` contains `secrets` | `{}` |
+| `agentNotify` | `system` contains `agentNotify` | `{}` |
 | `ui` | `system` contains `ui` | `{}` |
 | `agentTools` | at least one tool | `{read: <count>, write: <count>}` |
-| `network` | reserved for DB10; never produced in v1 | `{}` |
+| `network` | `permissions.network.hosts` declared | `{hosts}` sorted, after `networkViaShell` |
 | `noPermissions` | none of the above | `{}` |
 
 ### 3.3 Risk level
@@ -373,11 +454,15 @@ none apply. Reasons are listed in this fixed order:
 | `system.web` | `system` contains `web` (plugin browser views and their saved sign-ins) | high |
 | `system.agents` | `system` contains `agents` (agent panes, lineage, message delivery records, session list; no message text) | medium |
 | `system.agentMessages` | `system` contains `agentMessages` (the text of messages between agents) | high |
+| `system.secrets` | `system` contains `secrets` (the package's own API keys and tokens, encrypted on this device) | high |
+| `system.agentNotify` | `system` contains `agentNotify` (notifications into the agent panes of its workspace, 0.2.40) | high |
 | `shell.allowlist` | `shell` is `allowlist` | high |
+| `shell.executables` | the package declares executables beyond the Host's three (C2) | high |
 | `nativeBackend` | the manifest has `backend` | high |
 | `agentTools.write` | at least one tool has `risk: "write"` | high |
 | `shell.full` | `shell` is `full` | highest |
-| `network` | reserved for DB10; never produced in v1 | highest |
+| `shell.interpreter` | a declared executable runs any program handed to it (`SHELL_ANY_PROGRAM_EXECUTABLES`: shells, interpreters, package runners, privilege wrappers) | highest |
+| `network` | `permissions.network.hosts` declared (a view can send what it reads to a named party) | highest |
 
 These are the manifest reasons. The level every surface shows is
 `cardRiskLevel(disclosure, scan)`: the highest of this level and the scan
@@ -537,6 +622,7 @@ package envelope as before.
 | `nativeBackend` | `native` | backend |
 | `backendMethod`, `backendEvent` | name | name |
 | `network` | value | only when not `none` |
+| `networkHost` | host | declared host (`networkHosts`) |
 | `agentTool` | tool name | tool; `detail` is the tool entry without `name` |
 
 `detail` is `null` for every kind except `agentTool`. Two items are the same
@@ -639,24 +725,30 @@ The report holds facts only:
 | `coverage` | `skipped[].reason` is one of `binaryAsset`, `tooLarge`, `redacted`, `unsupported`, `scannerError` (the scanner failed on that file and went on with the others), `tooComplex` (the file hit a structural ceiling: template nesting, section, import or symbol counts); `truncated` when any bound below was hit; `timedOut` when the time budget ran out. None of them fails a publish; `scannerError` and `tooComplex` (`INCOMPLETE_SKIP_REASONS`) make the scan incomplete, as `truncated` and `timedOut` do |
 | `shell.calls` | one entry per distinct `(executable, subcommand, source, evidence)`; `category` from `classifyShellCommand`; `evidence` is `callSite` (the `command` value of a `shell.run` call is a string literal) or `commandLikeString` (a literal that reads as a command); `files` counts the files it occurs in |
 | `shell.dynamic` | `shell.run` calls whose command is built at run time (a template with `${}`, an identifier, an expression): count and files only |
-| `network.hosts` | host names from URLs (`http(s)`, `ws(s)`, `ssh`, `git@host:`); never a path, query or credential (DS5) |
+| `network.hosts` | host names from URLs (`http(s)`, `ws(s)`, `ssh`, `git@host:`); never a path, query or credential (DS5). Identifiers that only look like URLs are skipped: XML namespace names (`http://www.w3.org/2000/svg` and the like) and, since scanner 1.1.0, Vue's production error-reference link `https://vuejs.org/error-reference/#<fragment>` when the fragment ends the URL. The same host reached any other way is still reported |
 | `files` | string-literal `path` values of `fs.*` calls; a path that is not ASCII, not relative or longer than `maxPathLength` counts in `dynamicPaths` instead |
-| `capabilities` | capability addresses (`namespace.method`) that occur as literals |
+| `capabilities` | capability addresses (`namespace.method`) of the public catalog that occur as literals. Since scanner 1.1.0 a literal only shaped like one (an i18n key such as `'ui.title'`, a storage or CSS key) is not counted: the Host answers an address outside the catalog with `METHOD_NOT_FOUND`, so it reaches nothing |
 | `code` | per source, `null` when that source has no code: counts of `eval(`, `new Function(`, non-literal `import(`, string `setTimeout`/`setInterval`; `obfuscationSignals` names (for example `hexEscapes`, `hexIdentifiers`, `longBase64`, `charCodeStrings`) |
+| `sites` (scanner 1.2.0) | on every `shell.calls`, `network.hosts` and `capabilities` entry: where the scan saw it, at most 3 sites (`MAX_SITES_PER_FINDING`), ordered by file, line and column, the first ones in each file. `file` is the archive path, `line` and `col` are 1-based and count code points, `excerpt` is the line around the finding (from 40 code points before it, whitespace runs collapsed to one space, a URL's user information and every query value replaced by `…`, at most 120 code points) or `null` when a secret-scan rule matches it or the 1000 code points on either side of it, across line breaks. A file records at most 600 sites (`MAX_SITE_OFFSETS_PER_FILE`), and locating them counts against the scan's time budget (`timedOut`). The literal a site points at is the string or identifier the finding came from (for a `callSite`, the `command` value). Backend findings have `sites: []`. Sites are additive: no other field, rule or verdict changed in 1.2.0, a diff (3.6) and a rescan notice never treat a site as a new item, and a Host or a reader of an older scanner's report reads it as before (no `sites`) |
 | `native` | one entry per native executable: format, architecture, linked libraries, notable imports, import count; `packer` (`upx`, ...) or `embeddedRuntime` (`pyinstaller`, `node-sea`, `bun`, `deno`) when the code inside cannot be scanned (DS6). Commands, hosts and capability addresses found in its strings go into `shell`, `network` and `capabilities` with `source: "backend"` |
 
 Every string in a report is ASCII (hosts in their IDNA form, commands and
 subcommands matching `^[a-z][a-z0-9-]{0,39}$`, paths in the scope pattern
-character set), every array is sorted and every number is a safe integer, so
-`canonicalContractJson` spells it the same way in both languages.
+character set) except a site's `file` and `excerpt`, every array is sorted
+and every number is a safe integer, so `canonicalContractJson` spells it the
+same way in both languages; both escape non-ASCII as `\uXXXX` per UTF-16
+unit, so an excerpt has one spelling too.
 `classifyShellCommand` reports no subcommand for an executable outside the
 Host allowlist and drops any argument that does not read as a subcommand, so
 command arguments, URLs and values are never echoed.
 
-**Never in a report**: file contents, code excerpts, full command arguments,
-URL paths and queries, raw strings of a native executable. Every string the
+**Never in a report**: file contents, code excerpts beyond a site's
+`excerpt`, full command arguments outside an excerpt, URL paths and queries
+outside an excerpt, raw strings of a native executable. Every string the
 scanner would emit is first matched against the secret-scan rules; a match is
-dropped and counted under `coverage.skipped` as `redacted`.
+dropped and counted under `coverage.skipped` as `redacted`. An excerpt whose
+surroundings match is `null` instead, and is not counted: the finding itself
+was not dropped.
 
 **Bounds** (`SCAN_LIMITS`): `maxItemsPerKind` 100, `maxPaths` 50,
 `maxPathLength` 200, `maxScriptBytes` 20 MiB per script file,
@@ -728,13 +820,19 @@ publish (DS3).
 | read or write paths while `system` lacks `fs` | `system` / `fs` |
 | a write path matching no `scopes.fs.write` pattern (scopes declared) | `fsScopeWrite` / the path |
 | a read path matching no `scopes.fs.read` or `write` pattern (scopes declared) | `fsScopeRead` / the path |
+| a scanned host no declared host covers (`networkHosts` present) | `networkHost` / the host |
 | declared shell, but no call, no dynamic command and no `shell.*` address | `declaredNotSeen`: `shell` / the mode |
 | a declared `system` namespace with no address of it (for `fs`, also no path) | `declaredNotSeen`: `system` / the namespace |
+| a declared host no scanned host falls under (`networkHosts` present) | `declaredNotSeen`: `networkHost` / the declared host |
 
 Scope patterns match by `scopePatternMatches`: `**` is zero or more whole
 path segments, `*` any run of characters inside one segment, everything else
 literal. `fs` declared without scopes ("undeclared" project writes) flags no
-path.
+path. Hosts match by `networkHostMatches`: a declared `*.example.com` covers
+every name below `example.com` (as CSP reads it), never `example.com` itself;
+any other declared host matches exactly. A package without `networkHosts` has
+no view network, so the hosts its code names stay a scan sentence and are
+never flagged.
 
 ## 4. Host and backend messages
 
@@ -764,9 +862,21 @@ A Host event carrying the complete catalog; each one replaces the previous one.
 - `revision` increases strictly within one Host process; the backend ignores
   a snapshot whose revision is not greater than the last one it applied, and
   starts again from the first snapshot after a Host reconnect.
-- `enabled` is the DB8 master switch. While it is off since start-up, the Host
-  sends **nothing** (no-regression guarantee: `tools/list` equals main). When
-  it is switched off, the Host sends one snapshot with `enabled: false` and
+- `enabled` is true while the Host serves any tool. Two switches decide which
+  packages are in the snapshot: the DB8 master switch (off by default; since
+  0.2.39 the consent card is the switch — allowing a third-party package whose
+  card lists agent tools, at install or at the native-backend prompt, turns it
+  on while it is still at its default, and the card says so; a value the user
+  set in Settings → Navide Plugins → **Let agents call tools from third-party
+  Navide plugins** (`enabledSetByUser`) holds, on or off, and that switch stays
+  the one place that turns every third-party tool off again) covers
+  third-party packages, and the first-party switch (on by default; Settings →
+  Navide Plugins → **Let agents call tools from first-party Navide plugins**) covers
+  first-party packages (`navide.browser`). A package whose switch is off is
+  left out and its `agentMethods` stay `[]`. With the master switch off since
+  start-up and no first-party package served, the Host sends **nothing**
+  (no-regression guarantee: `tools/list` equals main). When the last served
+  package goes, the Host sends one snapshot with `enabled: false` and
   `tools: []`.
 - `externalCallers` is the DB4 switch.
 - `state` is `available` | `consent-required` | `plugin-disabled` |
@@ -820,8 +930,18 @@ result)` path:
 { "ok": false, "error": "devmap is disabled", "error_code": "PLUGIN_TOOL_UNAVAILABLE", "reason": "plugin-disabled" }
 ```
 
+**A tool answer never carries a secret.** A package must not put an API key,
+token or password (its own or the user's) into a tool result or an error
+message, and the Host enforces it for the package's own secrets (`secrets`):
+before the answer goes back to the core, every string in it (keys and values of
+`result`, a chunked result joined first, `error`, `plugin_error`) is redacted
+against the values the package keeps, each occurrence replaced with
+`[secret redacted]`. A chunked result that held one goes back inline (the core
+chunks it again). The tool can still use its key to call its service; only the
+answer is cleaned. No MCP tool returns a `secrets.*` value.
+
 Host checks run on every call, in this order, regardless of what the CLI has
-cached: master switch → caller kind → package installed, enabled, not
+cached: the package's switch (DB8 for third-party, the first-party switch for first-party) → caller kind → package installed, enabled, not
 quarantined, not revoked, not stopping → tool in the consented list →
 workspace grant → first-write confirmation (DB3) → execution policy →
 headless binding → `callBound`.
@@ -829,7 +949,7 @@ headless binding → `callBound`.
 | `error_code` | Meaning |
 |---|---|
 | `BAD_REQUEST` | malformed request |
-| `PLUGIN_TOOL_UNAVAILABLE` | not callable now; `reason` is one of `master-switch-off`, `external-callers-off`, `plugin-not-installed`, `plugin-disabled`, `plugin-quarantined`, `plugin-revoked`, `plugin-stopping`, `consent-required`, `tool-not-consented`, `name-collision` |
+| `PLUGIN_TOOL_UNAVAILABLE` | not callable now; `reason` is one of `master-switch-off`, `external-callers-off`, `plugin-not-installed`, `plugin-disabled`, `plugin-quarantined`, `plugin-revoked`, `plugin-stopping`, `consent-required`, `tool-not-consented`, `name-collision`, `view-not-open` (a view-served tool, [2.9](#29-view-served-tools-contributesagenttools), whose view is not open on the target workspace) |
 | `WORKSPACE_NOT_AUTHORIZED` | no grant for the target workspace |
 | `WORKSPACE_WRITE_DECLINED` | the user declined the first-write confirmation |
 | `EXECUTION_POLICY_DENIED` | the user's agent execution policy refused it |
@@ -947,6 +1067,17 @@ For `plugins_disable` / `plugins_enable`. The backend unicasts
   "requester": { "paneId": "p-41", "paneName": "dev", "workspace": "/Users/me/project", "callerKind": "pane" } }
 ```
 
+`plugins_disable` with `clear_secrets=true` sends the Host the same
+`disable` as without it: the request never carries `clear_secrets`, and the
+Host refuses one that does (`BAD_REQUEST`). Deleting the package's own secrets
+is filed afterwards by the backend as a `plugin-clear-secrets` request
+(section 6, target version = the installed version) for the user's decision,
+whether or not the switch changed; the agent's answer adds
+`secretsClear: {ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status, expires_at}`,
+and the audit records `request-clear-secrets`. The main window deletes them
+(`plugins:clearSecrets`) only when the user approves the card, and tells the
+user whenever secrets were deleted.
+
 The Host answers with the WebSocket message `plugins.agent_action.result`:
 `{request_id, ok: true, pluginId, pluginVersion, disabled, changed}` or `{request_id,
 ok: false, error, error_code}` with `BAD_REQUEST` | `NOT_INSTALLED` |
@@ -1004,6 +1135,45 @@ false, switchError, pluginId, fromVersion, pluginVersion}`, and the backend
 answers the agent `{ok: false, status: "staged", applied: false, error_code:
 "SWITCH_FAILED", error, pluginId, fromVersion, pluginVersion}` (audited as
 `error` with `ACTION_FAILED`), without the Host's text and without filing a request.
+
+Since 0.2.40 (plan P2) a `disable` the Host carries out is a **stop**: the same
+switch, recorded with `via: "mcp"` and the plugin's activity at that moment
+(see 4.3.2). The answer to the agent is unchanged.
+
+### 4.3.2 Backend → Host: `plugins.stop` (plan P2)
+
+A chat command in a bound Channels chat (`/plugins status`, `/plugins stop
+<id>`; the sender is one the user approved) reaches the Host as the event
+`plugins.stop.request` `{request_id, action: "status" | "stop" | "stop-all", plugin_id?, requester?}`
+over its authenticated session, and the Host answers with the message
+`plugins.stop.result` `{request_id, ok, ...}`; the backend waits 30 s.
+
+- `status`: `{ok: true, plugins: [{id, version, disabled}]}`, the installed
+  third-party packages that have the Disabled switch.
+- `stop`: the user's own stop, `via: "telegram"`: `{ok: true, pluginId,
+  changed}`, or `{ok: false, error_code: "NOT_INSTALLED" | "BAD_REQUEST" |
+  "ACTION_FAILED" | "HOST_UNAVAILABLE", error}`. A bundled Navide plugin is
+  `NOT_INSTALLED` here. There is no `start`: enabling stays in the window.
+- `stop-all` (plan P3): from a chat (`/plugins stop all`, no `requester`, the
+  user's own, `via: "telegram"`) or from `plugins_disable_all` (with the
+  `requester` the backend resolved from the MCP credential, an agent's stop,
+  `via: "mcp"`, each stopped plugin told to the user like plugins_disable).
+  The Host turns off third-party native backends, DB8 and DB4, stops every
+  running third-party plugin and keeps `{at, via, by, stopped, previous}` on
+  disk (`previous`: the three switches before it) until the user's Resume all
+  in Settings; a user's `stop-all` takes over plugins an agent's stopped.
+  Answer: `{ok: true, stopped: [ids], failed: [ids]}`. `plugins_disable_all`
+  answers the agent the same, ids filtered to the package-id grammar, and
+  audits a `disable` row per plugin.
+
+Every stop (Settings, the status bar, a chat, `plugins_disable`) disables the
+package as the Disabled switch does and records, beside who disabled it,
+`stop: {at, via, summary}`; `summary` is `{inFlightCalls, toolCallsLastMinute,
+capabilityCallsLastMinute, consecutiveFailures, undeclaredHosts}`, read beside
+the stop from `plugins.activity.overview` (5.1) for at most 2 s, its counts
+null when the backend did not answer in time. `plugins:listInstalled` carries
+it as `stopRecord` while the package stays disabled; the installed list shows
+it before Enable goes through.
 
 ### 4.4 Chunked transfer of results and arguments
 
@@ -1377,7 +1547,8 @@ the counts stay exact:
   way); it is `<failed>` only when it is known to have changed nothing:
   - its address is read-only (`PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES`, each
     checked to write nothing to disk and start no process: `fs.readFile`,
-    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.glob`,
+    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.queryFiles`,
+    `fs.glob`,
     `fs.stat`, `fs.statPath`, `fs.listArchive`, `fs.previewResource`,
     `fs.convertOffice` and their legacy snake_case names; `fs.findInFiles`
     runs a search process and is not in it);
@@ -1558,7 +1729,8 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`backendMethod` keys `backend.<method>`, `agentTool` names) from the installed
+`backendMethod` keys `backend.<method>`, `agentTool` names, `networkHost`
+declared hosts) from the installed
 manifest, since the backend has no third-party manifest; without `declared`,
 `declaredUnused` is `[]`. Calls into a plugin's own backend, whichever path
 made them, are counted in `plugin_backend_call_days` under address
@@ -1596,17 +1768,67 @@ malformed one whole.
 | `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
 | `files[]` | fs paths, newest first: `path` (workspace-relative), `address`, `workspace`, `outcome`, `count`, `lastAt` |
 | `commands[]` | shell commands (executable and subcommand only), newest first: `command`, `workspace`, `outcome`, `count`, `lastAt` |
+| `network[]` | hosts the plugin's views reached (`allowed`), failed to reach (`error`) or were refused (`denied`, always `undeclared`), host only, newest first: `host`, `workspace`, `outcome`, `count`, `lastAt`. From the `network` rows the Host records (PR C1) under the address `network.<host>`; a refusal also appears in `undeclared[]` under that address |
 | `daily[]` | oldest first, up to the 90 days kept: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` (daily rows plus the detail rows not yet rolled up) |
-| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool`), `key`, `lastUsedAt` (or null) |
+| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool` / `networkHost`), `key`, `lastUsedAt` (or null); a declared `*.example.com` is used by any `network.<host>` row below it |
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
-| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`; the child's own life is three more fixed entries, `backend.<crashed>` (`error`), `backend.<restarted>` (`allowed`) and `backend.<stopped-after-crashes>` (`error`), C4), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted
 in a statistic. Every string is shown as plain text: no link is made from a
 path or a command, and nothing is rendered as HTML.
+
+#### Every plugin on one table: `plugins.activity.overview`
+
+The Activity monitor at the top of Settings → Navide Plugins → Installed
+reads `plugins.activity.overview` (`PLUGIN_ACTIVITY_OVERVIEW_MESSAGE`), also
+accepted only from the Host's authenticated session: the Host sends
+`{plugin_ids: [string]}`, the ids it has installed, and the backend answers
+`{schemaVersion: 1, generatedAt, plugins[]}`, one row per id in order. It
+reads the last minute and a bounded tail of the tables, never the 7-day
+detail lists, so it can be polled every few seconds. Records only.
+
+| Field of a row | Meaning |
+|---|---|
+| `pluginId` | the id asked about |
+| `toolCallsLastMinute` | `plugin_tool_calls` rows that ended in the last 60 s |
+| `capabilityCallsLastMinute` | broker and shell-broker calls (`plugin_activity` and `plugin_activity_counts`, `network` rows excluded) from the minute 60 s ago started in: counted rows are per minute, so this covers between one and two minutes |
+| `consecutiveFailures` | the newest run of `plugin_tool_calls` whose `outcome` is not `ok`, read from at most the newest 100 calls |
+| `lastToolCallAt` | when the newest `plugin_tool_calls` row ended, or `null` (0.2.40 P5; absent from an older backend, read as `null`) |
+| `backendRestartsLast10Minutes` | automatic restarts of its backend (`backend.<restarted>` in `plugin_backend_call_minutes`) from the minute 10 minutes ago started in (P5; absent reads as 0) |
+| `hosts[]` | the `network.<host>` rows of the 7 days of detail, newest first, at most 50: `host`, `refused` (some request was refused), `lastAt`. The Host adds `declared`: whether the installed manifest's `permissions.network.hosts` match it, or `null` without a Manifest v2 disclosure |
+
+The page adds the Host's live numbers itself: the status from the installed
+list and the backend's resources from the watchdog (section 5.2).
+
+#### Automatic pauses (plan P5)
+
+The Host checks every running third-party plugin every 30 s against fixed
+thresholds (0.2.40; one Settings switch, on by default, turns the checks off):
+
+| Rule | Trips when | Read from |
+|---|---|---|
+| `R1` | more than 60 tool calls, or 600 capability calls, in the last minute | `toolCallsLastMinute`, `capabilityCallsLastMinute` |
+| `R2` | a view reached a host the installed manifest does not declare, or was refused one, since the previous check | `hosts[]` (`lastAt`, `refused`, the Host's `declared`) |
+| `R3` | 10 failed tool calls in a row with the newest since the previous check, or 3 backend restarts in 10 minutes | `consecutiveFailures`, `lastToolCallAt`, `backendRestartsLast10Minutes` |
+| `R4` | the watchdog holds an unanswered resource notice for its backend (section 5.2) | the Host's notices |
+| `R5` | a notification refused for the per-minute limit of `agentNotify.send` | the Host's limit |
+
+A shell command's destination is not recorded (only the executable and the
+subcommand), so `R2` does not judge `git push` or `git clone`. A pause is a
+stop (section 4.3.2) with `via: "auto"` and the `rule` in its record, owned by
+the user, so an agent cannot enable it again. Nothing is paused during a
+global stop. The Host then sends `plugins.auto_paused` (`PLUGIN_AUTO_PAUSED_MESSAGE`,
+Host session only) `{plugin_id, plugin_version, rule, value, threshold, detail}`:
+`value` is the number that tripped the rule, `detail` a host (`R2`), a resource
+item (`R4`) or a fixed word. The backend writes it to `plugin_auto_pauses`
+(`PLUGIN_AUTO_PAUSES_DDL`, its own schema component; a removed plugin's rows
+are forgotten) and tells every bound direct chat. A report lists the last 30
+days of them as `autoPauses[]`, newest first: `at`, `rule`, `value`,
+`threshold`, `detail`, `pluginVersion` (`[]` from an older backend).
 
 ### 5.2 Resource thresholds: notice, then the user decides
 
@@ -1725,6 +1947,16 @@ B2-c tools and messages:
   kind. On approval the window turns the user's Enable switch on (its own
   action); a rejection leaves the package disabled. Recovery counts it
   `completed` when the package is installed and enabled.
+
+- `plugin-clear-secrets`: filed by `plugins_disable` with `clear_secrets=true`
+  after the disable, whatever it changed. `owner`
+  `plugin-clear-secrets:<id>@<installed version>`, `target.version` the
+  installed version, `fromVersion` null, `card` null, `reason` empty. The card
+  says the deletion cannot be undone and its approve button reads "Delete
+  secrets"; on approval the window calls `plugins:clearSecrets` and the Host
+  deletes the package's own secrets and tells the user how many went. A
+  rejection deletes nothing. Recovery counts one a restart left `applying` as
+  `failed` (`interrupted`): the package list cannot show a deletion.
 
 - `marketplace_request_install` / `_update` / `_rollback` `(namespace, name,
   version, reason)` and `plugins_request_remove` `(namespace, name, reason)`

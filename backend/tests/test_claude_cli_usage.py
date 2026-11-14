@@ -297,3 +297,86 @@ def test_an_account_dir_probe_runs_on_that_dir(monkeypatch) -> None:
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/inherited")
     assert "CLAUDE_CONFIG_DIR" not in cu._panel_probe_env()
     assert cu._panel_probe_env("/acct/config-dir")["CLAUDE_CONFIG_DIR"] == "/acct/config-dir"
+
+
+# ── an account with no session window ───────────────────────────────────────
+
+# What Claude Code 2.1.316 prints for a verified Ultra account, from a real
+# report: there is no session row at all, and the activity section follows the
+# weekly rows.
+NO_SESSION_REPORT = """\
+You are currently using your subscription to power your Claude Code usage
+
+Current week (all models): 30% used · resets Nov 6 at 11:59am (Asia/Taipei)
+Current week (Fable): 0% used · resets Nov 6 at 12pm (Asia/Taipei)
+
+What's contributing to your usage?
+Approximate · sessions on this machine only · shares overlap
+
+Last 24h · 4407 requests · 155 sessions
+  78%  Run fewer sessions at once · up to 16 at once
+"""
+_HEADER, _, _REST = NO_SESSION_REPORT.partition("\n\n")
+_WEEK_ROW = "Current week (all models): 30% used · resets Nov 6 at 11:59am (Asia/Taipei)"
+
+
+def test_a_complete_report_with_no_session_row_confirms_the_window_is_absent() -> None:
+    assert cu.usage_panel_absent_windows(NO_SESSION_REPORT) == ["session"]
+
+
+def test_the_overage_header_is_the_same_report() -> None:
+    report = NO_SESSION_REPORT.replace(
+        "You are currently using your subscription to power your Claude Code usage",
+        "You are currently using your overages to power your Claude Code usage.",
+    )
+
+    assert cu.usage_panel_absent_windows(report) == ["session"]
+
+
+@pytest.mark.parametrize("report", [
+    pytest.param(PRINTED_REPORT, id="session row present"),
+    pytest.param(NO_SESSION_REPORT.replace(_WEEK_ROW, "Current session: 0% used\n" + _WEEK_ROW), id="idle session"),
+    # The row is there but the figure is not: parse_usage_panel drops it, and
+    # that must not read the same as a row that was never printed.
+    pytest.param(NO_SESSION_REPORT.replace(_WEEK_ROW, "Current session: unavailable\n" + _WEEK_ROW), id="no figure"),
+    pytest.param(NO_SESSION_REPORT.replace(_WEEK_ROW, "Current 5-hour window: 12% used\n" + _WEEK_ROW), id="renamed row"),
+    pytest.param(_HEADER + "\n\nCurrent week (all models): 30% us", id="cut inside the weekly row"),
+    pytest.param(_HEADER + "\n", id="cut after the header"),
+    pytest.param(_REST, id="header lost"),
+    pytest.param(_HEADER + "\n\n" + _WEEK_ROW + "\n", id="nothing after the weekly row"),
+    pytest.param(_HEADER + "\n\nFailed to load usage data: HTTP 500\n", id="error text"),
+    pytest.param("", id="empty"),
+    pytest.param(NO_SESSION_REPORT.replace(_WEEK_ROW + "\n", ""), id="all-models row missing"),
+    pytest.param(NO_SESSION_REPORT.replace(_WEEK_ROW, "Current week (all models): unavailable"), id="weekly without a figure"),
+    pytest.param("Please run /login\n", id="not a report"),
+])
+def test_anything_short_of_a_complete_report_confirms_nothing(report: str) -> None:
+    assert cu.usage_panel_absent_windows(report) == []
+
+
+async def _read_panel(monkeypatch, tmp_path, report: str) -> dict:
+    from agent_team_backend import ai_chat_cli_engine
+
+    async def creds(home):
+        return {"accessToken": "x"}
+
+    async def read(binary):
+        return report
+
+    monkeypatch.setattr(cu, "read_claude_credentials", creds)
+    monkeypatch.setattr(ai_chat_cli_engine, "resolve_cli_binary", lambda name: "/bin/claude")
+    monkeypatch.setattr(cu, "read_usage_panel", read)
+    return await _REAL_FETCH(tmp_path)
+
+
+async def test_the_snapshot_says_the_session_window_is_absent(monkeypatch, tmp_path) -> None:
+    snap = await _read_panel(monkeypatch, tmp_path, NO_SESSION_REPORT)
+
+    assert snap["status"] == "ok"
+    assert snap["absentWindows"] == ["session"]
+
+
+async def test_a_snapshot_with_a_session_window_adds_nothing(monkeypatch, tmp_path) -> None:
+    snap = await _read_panel(monkeypatch, tmp_path, PRINTED_REPORT)
+
+    assert "absentWindows" not in snap

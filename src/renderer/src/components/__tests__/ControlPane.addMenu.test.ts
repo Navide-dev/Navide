@@ -101,6 +101,129 @@ describe('ControlPane – the ＋ menu', () => {
     expect(opts[0].classes()).toContain('on')
   })
 
+  it('splits the roster into a CLI block and an Agents block, each under its heading', async () => {
+    // Order inside each block is the order of agentSpecs, i.e. Settings → CLI
+    // Agents; Devin stays a CLI.
+    wrapper = mountWith({
+      agentSpecs: [
+        { agentKey: 'hermes', label: 'Hermes Agent', kind: 'agent' },
+        { agentKey: 'claude', label: 'Claude Code' },
+        { agentKey: 'devin', label: 'Devin CLI' },
+        { agentKey: 'openclaw', label: 'OpenClaw', kind: 'agent' },
+        { agentKey: 'terminal', label: 'Terminal' }
+      ]
+    })
+    await openMenu(wrapper)
+    const rows = wrapper.findAll('.ws-add-scroll > *').map((el) =>
+      el.classes().includes('ws-add-sec') ? `# ${el.text()}` : `${el.attributes('data-section')}: ${el.text()}`
+    )
+    expect(rows).toEqual([
+      '# label.add-menu-cli',
+      'cli: Claude Code',
+      'cli: Devin CLI',
+      '# label.add-menu-agents',
+      // Agents are named before they open: each vendor offers "new agent"
+      // (plan agent-0-2-40_78e071, figure 3); there are no identities yet.
+      'agents: agentPane.addMenu.new',
+      'agents: agentPane.addMenu.new'
+    ])
+  })
+
+  const agentSpecs = [
+    { agentKey: 'claude', label: 'Claude Code' },
+    { agentKey: 'hermes', label: 'Hermes Agent', kind: 'agent' },
+    { agentKey: 'terminal', label: 'Terminal' }
+  ]
+  const identity = (over: Record<string, unknown>) => ({
+    identity: {
+      id: 'id-1', name: 'Secretary', color: 'teal', agentKey: 'hermes',
+      workspacePath: '/Users/me/Desktop/Agent-Team', paneId: null, sessionId: null, createdAt: 1, ...over
+    },
+    open: false,
+    status: ''
+  })
+
+  it('lists agent identities of the menu workspace and opens the one clicked', async () => {
+    wrapper = mountWith({
+      agentSpecs,
+      agentIdentities: [identity({}), identity({ id: 'id-2', name: 'Elsewhere', workspacePath: '/other' })]
+    })
+    await openMenu(wrapper)
+    const rows = wrapper.findAll('[data-testid="add-menu-agent-identity"]')
+    expect(rows.map((r) => r.text())).toEqual(['SSecretaryagentPane.addMenu.closed'])
+    await rows[0].trigger('click')
+    expect(wrapper.emitted('agent-open')?.[0]).toEqual(['id-1'])
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
+  it('asks a new agent for its name and spawns it under that name', async () => {
+    wrapper = mountWith({ agentSpecs })
+    await openMenu(wrapper)
+    const newRow = wrapper.findAll('.ws-add-opt[data-section="agents"]').at(-1)!
+    await newRow.trigger('click')
+    expect(wrapper.emitted('spawn')).toBeUndefined()
+    const form = wrapper.find('[data-testid="add-menu-new-agent-form"]')
+    expect(form.exists()).toBe(true)
+    await form.find('input').setValue('  Secretary ')
+    await form.trigger('submit')
+    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({ agentKey: 'hermes', customName: 'Secretary' })
+  })
+
+  it('does not spawn a new agent without a name', async () => {
+    wrapper = mountWith({ agentSpecs })
+    await openMenu(wrapper)
+    await wrapper.findAll('.ws-add-opt[data-section="agents"]').at(-1)!.trigger('click')
+    await wrapper.find('[data-testid="add-menu-new-agent-form"]').trigger('submit')
+    expect(wrapper.emitted('spawn')).toBeUndefined()
+  })
+
+  it('files exactly OpenClaw and Hermes Agent under Agents in the real roster', () => {
+    const agents = CLI_AGENT_SPECS.filter((s) => s.kind === 'agent').map((s) => s.agentKey)
+    expect(agents.sort()).toEqual(['hermes', 'openclaw'])
+    expect(CLI_AGENT_SPECS.find((s) => s.agentKey === 'devin')?.kind ?? 'cli').toBe('cli')
+  })
+
+  it('drops the Agents block, heading included, when none of its agents is enabled', async () => {
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    expect(wrapper.findAll('.ws-add-sec').map((h) => h.text())).toEqual(['label.add-menu-cli'])
+  })
+
+  it('caps the menu at the room on its side of the button', async () => {
+    // The scroller shrinks into the menu's max-height instead of a fixed 45vh,
+    // which cut the last entry off in a 900px window that had room for it.
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: 0, right: 20, width: 20, height: 20, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.maxHeight).toBe(`${window.innerHeight - 120 - 24}px`)
+  })
+
+  it('keeps the widened menu inside the window when the button sits near the left edge', async () => {
+    // The menu hangs leftwards from the button and is wider than the narrowest
+    // sidebar; right-aligned there, its left edge would leave the window.
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: 170, right: 190, width: 20, height: 20, x: 170, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.right).toBe(`${window.innerWidth - 320 - 8}px`)
+  })
+
+  it('stays right-aligned with the button when there is room on its left', async () => {
+    wrapper = mountWith()
+    const add = wrapper.find('.ws-add')
+    const right = 600
+    add.element.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 120, left: right - 20, right, width: 20, height: 20, x: right - 20, y: 100, toJSON: () => ({}) }) as DOMRect
+    await add.trigger('click')
+    const style = (wrapper.find('.ws-add-menu').element as HTMLElement).style
+    expect(style.right).toBe(`${window.innerWidth - right}px`)
+  })
+
   it('opens with an icon rather than a text glyph', async () => {
     // It used to be the full-width character ＋. A glyph takes its weight from
     // the typeface, so it could not match the stroke icons beside it at any
@@ -125,6 +248,13 @@ describe('ControlPane – the ＋ menu', () => {
     await openMenu(wrapper)
     expect(wrapper.find('.ws-add-scroll .ws-add-term').exists()).toBe(false)
     expect(wrapper.find('.ws-add-term').exists()).toBe(true)
+  })
+
+  it('points cloud agents at the Navide Marketplace, below the CLI list', async () => {
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    expect(wrapper.find('.ws-add-scroll .ws-add-hint').exists()).toBe(false)
+    expect(wrapper.find('.ws-add-hint').text()).toBe('label.cloud-agents-plugin-hint')
   })
 
   it('says a heading can be dragged out, only when it can be', async () => {
@@ -338,6 +468,19 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
   })
 
+  it('stays open while its own list scrolls', async () => {
+    // A short window caps the list, so reaching the Agents block takes a
+    // scroll inside the menu; that must not count as the page moving.
+    wrapper = mountWith()
+    await openMenu(wrapper)
+    wrapper.find('.ws-add-scroll').element.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(true)
+    document.body.dispatchEvent(new Event('scroll'))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ws-add-menu').exists()).toBe(false)
+  })
+
   it('closes after a spawn', async () => {
     wrapper = mountWith()
     await openMenu(wrapper)
@@ -438,9 +581,15 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
+/** A `.ws-add-sec` heading (CLI, Agents): ~15px text plus 9px padding, and the
+ *  second one adds a divider with 9px more space above it — 24 + 31, rounded up
+ *  to 28 each. */
+const HEADING_PX = 28
+
 /** Everything in the menu that is not the scroller: its own padding, the role
- *  picker, two dividers, and the Terminal + Manual-spawn buttons. */
-const FURNITURE_PX = 80
+ *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
+ *  the Terminal + Manual-spawn buttons. */
+const FURNITURE_PX = 152
 
 function scrollerCapPx(): number {
   const m = COMPONENT_SRC.match(/\.ws-add-scroll\s*\{[\s\S]*?max-height:\s*min\((\d+)px/)
@@ -456,7 +605,7 @@ function flipThresholdPx(): number {
 
 describe('ControlPane – the ＋ menu fits its roster', () => {
   it('the scroller is tall enough to show every CLI at once', () => {
-    const needed = CLI_AGENT_SPECS.length * ROW_PX
+    const needed = CLI_AGENT_SPECS.length * ROW_PX + 2 * HEADING_PX
     expect(scrollerCapPx()).toBeGreaterThanOrEqual(needed)
   })
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 
 import asyncio
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Callable, NamedTuple, Protocol
@@ -188,8 +189,9 @@ class Paths(Protocol):
 
         Installers on POSIX write `PATH` exports into shell rc files, which a
         GUI-launched backend never read; the probe recovers them. Windows
-        keeps `PATH` in the registry and the process already has it, so there
-        is nothing to probe — None tells the caller to keep what it has.
+        keeps `PATH` in the registry, so there is no shell to probe — None
+        tells the caller to merge only `login_path_tail_fallbacks`, which on
+        Windows re-reads the registry `PATH` an installer may have changed.
 
         The line to read is the one prefixed with `LOGIN_PATH_MARKER`: the
         shell's own rc chatter shares stdout, and "the last line" was the
@@ -218,7 +220,8 @@ class Paths(Protocol):
         Appended, they still make a CLI installed under one of them findable
         (nothing earlier provides it) without displacing anything the user's
         shell put first. Entries that do not exist on disk are the caller's to
-        drop.
+        drop. On Windows this is the current registry `PATH` plus npm's global
+        dir: what an installer wrote after this process started.
         """
         ...
 
@@ -249,6 +252,18 @@ class Paths(Protocol):
         ``COM1`` ..., with any extension) opens the device, and a trailing dot
         or space is stripped, so two names land on one file. A caller writing
         names that arrived from elsewhere (a synced skill) asks this first.
+        """
+        ...
+
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        """An lstat of *path* whose ``st_dev``/``st_ino`` identify the file.
+
+        *scandir_stat* is ``DirEntry.stat(follow_symlinks=False)`` for the same
+        entry. On POSIX that already is an lstat and is returned as is, so a
+        directory walk costs no second syscall per file. On Windows it carries
+        FindFirstFile metadata whose device and inode fields are zero, so a
+        real ``os.lstat`` is made for a caller that compares it with an
+        opened descriptor's ``fstat``.
         """
         ...
 
@@ -479,33 +494,37 @@ class ProcessTree(Protocol):
     def own_group_spawn_kwargs(self) -> dict[str, int]:
         """Spawn keyword arguments that make the child lead a group of its own.
 
-        POSIX: a new process group (not a new session: the controlling
-        terminal stays), so `end_own_group` also reaches a grandchild forked
-        after any snapshot. Windows has no process groups: the child starts
-        suspended instead, and `start_own_group` must follow the spawn."""
+        Every key must be one both asyncio and uvloop accept: uvicorn runs the
+        backend on uvloop wherever it is installed. POSIX: a new session, and
+        with it a new process group (the child leaves the controlling
+        terminal; credentials go through askpass), so `end_own_group` also
+        reaches a grandchild forked after any snapshot. Windows has no process groups and adds nothing:
+        not suspended, no job (each git.exe started suspended in a job left a
+        kernel Token object behind), so a timeout ends the tree from a
+        snapshot of it."""
         ...
 
     def start_own_group(self, pid: int) -> int | None:
         """Finish a spawn made with `own_group_spawn_kwargs`.
 
-        Windows: put the suspended child in a kill-on-close job (`contain`),
-        then let it run, so nothing it starts can be outside the job. The job
-        handle is returned for `end_contained` (a timed-out run) or
-        `release_contained` (any other end); None when the job could not be
-        made, and the child runs uncontained. Raises OSError, with the child
-        killed, only when it cannot be resumed. POSIX: None, nothing done."""
+        Returns a job handle for `end_contained` (a timed-out run) or
+        `release_contained` (any other end), or None. Both platforms return
+        None and do nothing: POSIX has its group, and Windows no longer
+        contains these runs (see `own_group_spawn_kwargs`)."""
         ...
 
     def release_contained(self, pid: int, job: int) -> None:
-        """Let go of a job from `start_own_group` without ending what is left
-        in it: whatever the child left running keeps running, as it would
-        without the job. Never raises. A no-op on POSIX."""
+        """Close a job from `start_own_group`. Windows closes the handle as is,
+        so its kill-on-close ends what is left in it (clearing the limit first
+        was dropped with the Token leak); `start_own_group` returns no job
+        there now, so no run reaches this. Never raises. A no-op on POSIX."""
         ...
 
     def end_own_group(self, pid: int) -> None:
         """SIGKILL the group a child spawned with `own_group_spawn_kwargs` leads,
         only while `pid` still leads it and never the caller's own group.
-        Never raises. A no-op on Windows."""
+        Windows, which has neither groups nor (now) a job for these runs,
+        kills the tree as it reads at this moment instead. Never raises."""
         ...
 
     def contain(self, pid: int) -> int | None:

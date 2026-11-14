@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -2957,6 +2958,198 @@ class TestDiscoverRepositories:
         # subtree is pruned — inner itself should appear.
         assert "." in rel_paths
         assert str(Path("pkg") / "inner") in rel_paths
+
+
+# ── discover_repositories: no git process per repo, one scan per burst ─────────
+#
+# A home-directory workspace re-ran discovery on every git.changed from every
+# window, and each run spawned `git rev-parse --abbrev-ref HEAD` once per repo
+# found — 898 git processes in 2.5 minutes on one Windows host. The branch now
+# comes from the HEAD file, and concurrent discoveries share a scan.
+
+
+def _git_out(path: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=path, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _no_rev_parse(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    spawned: list[list[str]] = []
+    real = git_service._run
+
+    async def tracking(args, cwd, env=None):
+        spawned.append(list(args))
+        return await real(args, cwd, env)
+
+    monkeypatch.setattr(git_service, "_run", tracking)
+    return spawned
+
+
+class TestDiscoverBranchFromHead:
+    @pytest.mark.asyncio
+    async def test_branch_is_read_without_spawning_git(self, tmp_path, monkeypatch):
+        for name in ("a", "b"):
+            (tmp_path / name).mkdir()
+            init_repo(tmp_path / name)
+        subprocess.run(["git", "checkout", "-q", "-b", "feat/x"], cwd=tmp_path / "b", check=True)
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        branches = {r["rel_path"]: r["branch"] for r in result["repositories"]}
+        assert branches == {
+            "a": _git_out(tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD"),
+            "b": "feat/x",
+        }
+        assert spawned == []
+
+    @pytest.mark.asyncio
+    async def test_packed_branch_is_read_without_spawning_git(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        subprocess.run(["git", "pack-refs", "--all"], cwd=tmp_path / "a", check=True)
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        assert result["repositories"][0]["branch"] == _git_out(
+            tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD"
+        )
+        assert spawned == []
+
+    @pytest.mark.asyncio
+    async def test_detached_head_reads_as_git_prints_it(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        subprocess.run(["git", "checkout", "-q", "--detach"], cwd=tmp_path / "a", check=True)
+        expected = _git_out(tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD")
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        assert result["repositories"][0]["branch"] == expected
+        assert spawned == []
+
+    @pytest.mark.asyncio
+    async def test_linked_worktree_follows_its_gitdir_file(self, tmp_path, monkeypatch):
+        main = tmp_path / "main"
+        main.mkdir()
+        init_repo(main)
+        subprocess.run(
+            ["git", "worktree", "add", "-q", "-b", "wt-branch", str(tmp_path / "wt")],
+            cwd=main, check=True,
+        )
+        assert (tmp_path / "wt" / ".git").is_file()
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        branches = {r["rel_path"]: r["branch"] for r in result["repositories"]}
+        assert branches["wt"] == "wt-branch"
+        assert spawned == []
+
+    @pytest.mark.asyncio
+    async def test_an_unborn_branch_still_asks_git(self, tmp_path, monkeypatch):
+        # HEAD names a branch with no commit yet; git says it cannot resolve
+        # HEAD, and the answer stays what git said (an empty branch).
+        (tmp_path / "fresh").mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path / "fresh", check=True)
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        assert result["repositories"][0]["branch"] == ""
+        assert len(spawned) == 1
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_head_falls_back_to_git(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        expected = _git_out(tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD")
+        real_read = git_service._read_head_branch
+
+        def unreadable(_repo: str) -> str | None:
+            return None
+
+        monkeypatch.setattr(git_service, "_read_head_branch", unreadable)
+        spawned = _no_rev_parse(monkeypatch)
+        result = await git_service.discover_repositories(str(tmp_path))
+        assert result["repositories"][0]["branch"] == expected
+        assert len(spawned) == 1
+        assert real_read(str(tmp_path / "a")) == expected
+
+
+    def test_a_head_naming_an_invalid_ref_is_left_to_git(self, tmp_path):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        (tmp_path / "a" / ".git" / "HEAD").write_text("ref: refs/heads/../../config\n")
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="named pipes via mkfifo are POSIX-only")
+    def test_a_head_that_is_a_fifo_is_left_to_git_without_blocking(self, tmp_path):
+        # A .git file can point a gitdir anywhere; a FIFO named HEAD used to
+        # block the discovery thread on open.
+        (tmp_path / "a").mkdir()
+        (tmp_path / "trap").mkdir()
+        os.mkfifo(tmp_path / "trap" / "HEAD")
+        (tmp_path / "a" / ".git").write_text(f"gitdir: {tmp_path / 'trap'}\n")
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    def test_an_oversized_head_is_left_to_git(self, tmp_path):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        (tmp_path / "a" / ".git" / "HEAD").write_text("ref: refs/heads/main\n" + " " * 8192)
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    def test_oversized_packed_refs_are_left_to_git(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        expected = _git_out(tmp_path / "a", "rev-parse", "--abbrev-ref", "HEAD")
+        assert git_service._read_head_branch(str(tmp_path / "a")) == expected
+        (tmp_path / "a" / ".git" / "packed-refs").write_text("# pack-refs with: peeled\n" + "x" * 64)
+        monkeypatch.setattr(git_service, "_PACKED_REFS_LIMIT", 16)
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+    def test_a_branch_sharing_a_tag_name_is_left_to_git(self, tmp_path):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        subprocess.run(["git", "checkout", "-q", "-b", "v1"], cwd=tmp_path / "a", check=True)
+        subprocess.run(["git", "tag", "v1"], cwd=tmp_path / "a", check=True)
+        assert git_service._read_head_branch(str(tmp_path / "a")) is None
+
+
+class TestDiscoverCoalesce:
+    @pytest.mark.asyncio
+    async def test_concurrent_discoveries_share_a_scan(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        scans: list[str] = []
+        real = git_service._discover_workspace
+
+        def counting(workspace_path, *args):
+            scans.append(workspace_path)
+            return real(workspace_path, *args)
+
+        monkeypatch.setattr(git_service, "_discover_workspace", counting)
+        results = await asyncio.gather(
+            *(git_service.discover_repositories(str(tmp_path)) for _ in range(5))
+        )
+        # One scan for the burst, plus at most one queued scan that started
+        # after it so no caller gets a result from before its request.
+        assert 1 <= len(scans) <= 2  # was 5
+        assert all(r == results[0] for r in results)
+        # Each caller owns its copy.
+        results[0]["repositories"].clear()
+        assert results[1]["repositories"]
+
+    @pytest.mark.asyncio
+    async def test_different_options_do_not_share(self, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        init_repo(tmp_path / "a")
+        scans: list[int] = []
+        real = git_service._discover_workspace
+
+        def counting(workspace_path, max_depth, *args):
+            scans.append(max_depth)
+            return real(workspace_path, max_depth, *args)
+
+        monkeypatch.setattr(git_service, "_discover_workspace", counting)
+        await asyncio.gather(
+            git_service.discover_repositories(str(tmp_path), max_depth=1),
+            git_service.discover_repositories(str(tmp_path), max_depth=3),
+        )
+        assert sorted(scans) == [1, 3]
 
 
 # ── cloud-sync mounts ──────────────────────────────────────────────────────────

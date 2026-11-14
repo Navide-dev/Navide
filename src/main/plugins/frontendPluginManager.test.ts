@@ -363,7 +363,7 @@ vi.mock('./pluginWebViewHost', async () => {
           toJPEG: () => Buffer.from('jpeg'),
         }),
         navigationHistory: { canGoBack: () => false, canGoForward: () => false, goBack: () => {}, goForward: () => {} },
-        debugger: { isAttached: () => false, attach: () => {}, detach: () => {}, sendCommand: async () => ({}) },
+        debugger: { isAttached: () => false, attach: () => {}, detach: () => {}, sendCommand: async () => ({}), on: () => {} },
       }
       const guest = {
         options,
@@ -406,16 +406,14 @@ import {
   openMiniIdePluginView,
   openPlansPluginView,
   plansQuery,
-  openGitLeftPluginView,
-  closeGitLeftPluginView,
   GIT_PLUGIN_ID,
   PLANS_PLUGIN_ID,
+  PLANS_INITIATOR_PANE_VERSION,
   PLANS_BACKEND_STOPPED_MESSAGE,
   MINI_IDE_PLUGIN_ID,
   bundledMiniIdeDir,
   bundledPlansDir,
   bundledPlansV2Dir,
-  bundledGitDir,
   officialPluginArtifactPackageDir,
   registerBundledMiniIde,
   registerBundledPlans,
@@ -2753,6 +2751,74 @@ describe('createPluginBackendChildEnvironment', () => {
   })
 })
 
+describe('Plans agent initiator pane', () => {
+  async function initiatorFor(packageVersion: string, pane: string | undefined): Promise<Record<string, unknown>> {
+    const mgr = new FrontendPluginManager()
+    const workspacePath = process.cwd()
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/frontend/window/index.html',
+      views: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.add_note'],
+      agentMethods: ['plans.add_note'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] },
+      revision: 1,
+      state: 'user',
+    }))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace').mockResolvedValue('headless-1')
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockResolvedValue({ ok: true } as never)
+    try {
+      await expect(mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID,
+        workspacePath,
+        { reqId: 'agent-note', name: 'plans.add_note', args: {} },
+        pane,
+      )).resolves.toMatchObject({ ok: true })
+      const options = call.mock.calls[0][3] as { initiator: Record<string, unknown> }
+      return options.initiator
+    } finally {
+      call.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  }
+
+  it('names the calling pane to Plans 1.1.0 and later', async () => {
+    expect(await initiatorFor(PLANS_INITIATOR_PANE_VERSION, 'Reviewer')).toEqual({
+      kind: 'agent', source: 'mcp', id: expect.any(String), pane: 'Reviewer',
+    })
+    expect(await initiatorFor('2.0.0', 'Reviewer')).toMatchObject({ pane: 'Reviewer' })
+  })
+
+  it('sends an older Plans package exactly the three agent keys it accepts', async () => {
+    const initiator = await initiatorFor('1.0.0', 'Reviewer')
+    expect(Object.keys(initiator).sort()).toEqual(['id', 'kind', 'source'])
+  })
+
+  it('sends no pane when the core named none, as an older core does', async () => {
+    const initiator = await initiatorFor(PLANS_INITIATOR_PANE_VERSION, undefined)
+    expect(Object.keys(initiator).sort()).toEqual(['id', 'kind', 'source'])
+  })
+})
+
 describe('isReservedPluginId', () => {
   it('flags first-party and internal Host identities, not third-party ids', () => {
     expect(isReservedPluginId('navide.mini-ide')).toBe(true)
@@ -3506,7 +3572,6 @@ describe('devPlansPluginDescriptor', () => {
       join('/resources', 'official-artifacts', PLANS_PLUGIN_ID, '4.5.6', `${process.platform}-${process.arch}`, 'package')
     )
     expect(bundledPlansDir(source)).toBe(join('/resources', 'plugins', 'plans'))
-    expect(bundledGitDir(source)).toBe(join('/resources', 'plugins', 'git'))
     expect(officialPluginArtifactPackageDir(
       { isPackaged: false, resourcesPath: '', artifactVersion: '4.5.6', devRoot: '/repo' },
       MINI_IDE_PLUGIN_ID,
@@ -11590,6 +11655,203 @@ describe('first-party Git private bridge', () => {
     expect(bind).not.toHaveBeenCalled()
   })
 
+  it('searches the file picker with the caller\'s strategy when it sends one', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'git-file-picker-strategy')
+    mgr.setBackendWsUrl('ws://public-file-picker-strategy-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const invocationRef: { current: Pick<FilePickerInvocation, 'search'> | null } = { current: null }
+    let found: string[] = []
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        invocationRef.current = candidate
+        found = await candidate.search('foo')
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+
+    const pending = mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: 'foo', candidates: [], search: { matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'] } },
+    })
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request).toMatchObject({
+      type: 'fs.query_files',
+      payload: { workspace_path: '/workspace', query: 'foo', match_on: 'path', mode: 'subsequence', exclude: ['vendor/*'], limit: 20 },
+    })
+    socket.receive({
+      id: request.id,
+      type: request.type,
+      ok: true,
+      payload: { ok: true, files: [{ path: 'z/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }, { path: 'a/foo.ts', name: 'foo.ts', matchSpans: [], size: 1, mtime: 1 }] },
+      error: null,
+      timestamp: '',
+    })
+    await expect(pending).resolves.toEqual({ opened: true })
+    expect(found).toEqual(['z/foo.ts', 'a/foo.ts'])
+  })
+
+  it('queues a file picker search behind the plugin\'s own query, and holds the slot while it runs', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'file-picker-slot')
+    mgr.setBackendWsUrl('ws://public-file-picker-slot-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const answer = (index: number, files: unknown[]) => {
+      const request = JSON.parse(socket.sent[index]!) as { id: string; type: string }
+      socket.receive({ id: request.id, type: request.type, ok: true, payload: { ok: true, files }, error: null, timestamp: '' })
+    }
+    const query = () => mgr.executePublicCapability({
+      kind: 'public', address: 'fs.queryFiles', scope: 'workspace', runtime, args: { query: 'own' },
+    })
+    const picker: { search: FilePickerInvocation['search'] | null } = { search: null }
+    mgr.setFilePickerHost({
+      open: vi.fn(async (candidate: FilePickerInvocation) => {
+        picker.search = candidate.search
+        return { opened: true }
+      }),
+      cancelInstance: vi.fn(),
+      cancelSession: vi.fn(),
+    })
+    await mgr.executePublicCapability({
+      kind: 'public',
+      address: 'ui.openFilePicker',
+      scope: 'workspace',
+      runtime,
+      args: { query: '', candidates: [], search: { mode: 'subsequence' } },
+    })
+
+    const own = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const superseded = picker.search!('fo')
+    const latest = picker.search!('foo')
+    await expect(superseded).resolves.toEqual([])
+    expect(socket.sent).toHaveLength(1)
+
+    answer(0, [])
+    await own
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+    expect(JSON.parse(socket.sent[1]!)).toMatchObject({ type: 'fs.query_files', payload: { query: 'foo' } })
+    await expect(query()).resolves.toEqual({ ok: false, error: 'busy' })
+
+    answer(1, [{ path: 'foo.ts' }])
+    await expect(latest).resolves.toEqual(['foo.ts'])
+    const next = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(3))
+    answer(2, [])
+    await next
+  })
+
+  it('answers a second fs.queryFiles from one plugin with busy at once, and leaves the first alone', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-busy')
+    mgr.setBackendWsUrl('ws://public-fs-query-busy-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const query = (text: string) => mgr.executePublicCapability({
+      kind: 'public', address: 'fs.queryFiles', scope: 'workspace', runtime, args: { query: text },
+    })
+
+    const first = query('first')
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    await expect(query('second')).resolves.toEqual({ ok: false, error: 'busy' })
+    expect(socket.sent).toHaveLength(1)
+
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    const result = { ok: true, files: [], gitignoreApplied: true, listingTruncated: false }
+    socket.receive({ id: request.id, type: request.type, ok: true, payload: result, error: null, timestamp: '' })
+    await expect(first).resolves.toEqual(result)
+
+    const third = query('third')
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+    const next = JSON.parse(socket.sent[1]!) as { id: string; type: string }
+    socket.receive({ id: next.id, type: next.type, ok: true, payload: result, error: null, timestamp: '' })
+    await expect(third).resolves.toEqual(result)
+  })
+
+  it('frees the fs.queryFiles slot when the backend call fails', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-busy-failure')
+    mgr.setBackendWsUrl('ws://public-fs-query-busy-failure-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+    const query = () => mgr.executePublicCapability({
+      kind: 'public', address: 'fs.queryFiles', scope: 'workspace', runtime, args: { query: 'a' },
+    })
+
+    const first = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    socket.receive({ id: request.id, type: request.type, ok: false, payload: null, error: 'boom', timestamp: '' })
+    await expect(first).rejects.toThrow()
+
+    const second = query()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+    const next = JSON.parse(socket.sent[1]!) as { id: string; type: string }
+    socket.receive({ id: next.id, type: next.type, ok: true, payload: { ok: true, files: [] }, error: null, timestamp: '' })
+    await expect(second).resolves.toEqual({ ok: true, files: [] })
+  })
+
+  it('forwards fs.queryFiles to the backend under the bound workspace, with the caller\'s strategy', async () => {
+    const { mgr, instanceId } = await openGitView('/workspace', 'fs-query-files')
+    mgr.setBackendWsUrl('ws://public-fs-query-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const runtime = (
+      mgr as unknown as {
+        running: Map<string, { capabilityContext: HostCapabilityContext }>
+      }
+    ).running.get(instanceId)!.capabilityContext.runtimeBinding!
+
+    const pending = mgr.executePublicCapability({
+      kind: 'public',
+      address: 'fs.queryFiles',
+      scope: 'workspace',
+      runtime,
+      args: { query: 'app/Foo', matchOn: 'path', mode: 'subsequence', exclude: ['vendor/*'], limit: 5, cursor: '7' },
+    })
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request).toMatchObject({
+      type: 'fs.query_files',
+      payload: {
+        workspace_path: '/workspace',
+        query: 'app/Foo',
+        match_on: 'path',
+        mode: 'subsequence',
+        exclude: ['vendor/*'],
+        limit: 5,
+        cursor: '7',
+      },
+    })
+    const result = { ok: true, files: [], gitignoreApplied: true, listingTruncated: false }
+    socket.receive({ id: request.id, type: request.type, ok: true, payload: result, error: null, timestamp: '' })
+    await expect(pending).resolves.toEqual(result)
+  })
+
   it('opens the Host file picker with bound view context and Host-owned search', async () => {
     const { mgr, instanceId } = await openGitView('/workspace', 'git-file-picker')
     mgr.setBackendWsUrl('ws://public-file-picker-test')
@@ -12092,6 +12354,8 @@ describe('first-party Git private bridge', () => {
 
   it('loads the selected factory contribution with its actual provenance regardless of the development environment flag', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-factory-query-')))
+    // The real manifest is copied in below; its version names the artifact.
+    const plansVersion = JSON.parse(readFileSync('plugins/navide-plans/manifest.json', 'utf8')).version as string
     const mgr = new FrontendPluginManager()
     try {
       const packageDir = join(
@@ -12100,7 +12364,7 @@ describe('first-party Git private bridge', () => {
         'official-artifacts',
         'factory-resources',
         PLANS_PLUGIN_ID,
-        '0.1.0',
+        plansVersion,
         `${process.platform}-${process.arch}`,
         'package',
       )
@@ -12114,24 +12378,24 @@ describe('first-party Git private bridge', () => {
       expect(registerBundledPlans(mgr, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '0.1.0',
+        artifactVersion: plansVersion,
         devRoot: root,
       })).toEqual({ registered: true })
       mgr.setPlansDiagnosticsEnabled(true)
-      mgr.setCapabilityGrantResolver(() => ({ packageVersion: '0.1.0', system: ['fs', 'ui', 'aiCli'], storage: true }))
+      mgr.setCapabilityGrantResolver(() => ({ packageVersion: plansVersion, system: ['fs', 'ui', 'aiCli'], storage: true }))
       const descriptor = mgr.getDescriptor(PLANS_PLUGIN_ID)!
       const contribution = descriptor.views!.find((view) => view.location === 'window')!
       const host = new FakeBrowserWindow()
       await mgr.openView({ ...descriptor, entryFile: contribution.entryFile }, contribution, {
         hostWindow: asHost(host), bounds: 'fill', workspacePath: root,
-        capabilityContext: mgr.plansCapabilityContext('0.1.0', root, 'plans-window'),
+        capabilityContext: mgr.plansCapabilityContext(plansVersion, root, 'plans-window'),
         query: '?plans_package_source=spoofed',
       })
       const loaded = (host.children[0] as FakeViewLike).webContents.loads[0]
       expect(loaded).toContain(contribution.entryFile)
       const query = new URLSearchParams(loaded.split('?')[1])
       expect(query.get('plans_package_source')).toBe('factory-bundled')
-      expect(query.get('plans_package_version')).toBe('0.1.0')
+      expect(query.get('plans_package_version')).toBe(plansVersion)
     } finally {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
@@ -12509,6 +12773,29 @@ describe('first-party Git private bridge', () => {
         args: [{ type: 'ui.settings_changed', data: { source: 'host', settings: { 'agent-team:language': locale } } }],
       },
     ])
+  })
+
+  it('answers ui.getLocale with the Host locale and pushes ui.localeChanged to v2 views', async () => {
+    const { mgr, view } = await openGitView()
+    let locale: 'ja-JP' | 'zh-TW' = 'ja-JP'
+    mgr.setUiLocaleResolver(() => locale)
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    const handler = ipcHandlers.get(CAPABILITY_CALL)
+    expect(handler).toBeDefined()
+
+    await expect(handler!({ sender: { id: view.webContents.id } }, {
+      reqId: 'locale-1', ns: 'ui', method: 'getLocale', args: {},
+    })).resolves.toEqual({ reqId: 'locale-1', ok: true, result: { locale: 'ja-JP' } })
+
+    locale = 'zh-TW'
+    mgr.notifyHostLocaleChanged('zh-TW')
+    expect(view.webContents.sent).toEqual([{
+      channel: 'plugin:cap:event',
+      args: [{ type: 'ui.localeChanged', data: { locale: 'zh-TW' } }],
+    }])
+    await expect(handler!({ sender: { id: view.webContents.id } }, {
+      reqId: 'locale-2', ns: 'ui', method: 'getLocale', args: {},
+    })).resolves.toEqual({ reqId: 'locale-2', ok: true, result: { locale: 'zh-TW' } })
   })
 
   it('routes Host-owned language settings changes to active Plans v2 views', async () => {
@@ -15207,7 +15494,11 @@ describe('first-party Git private bridge', () => {
         },
       })
       await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
-      const create = JSON.parse(socket.sent[0]!)
+      const settings = JSON.parse(socket.sent[0]!)
+      expect(settings.type).toBe('ui.settings.get')
+      socket.receive({ id: settings.id, type: settings.type, ok: true, payload: { settings: {} }, error: null, timestamp: '' })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+      const create = JSON.parse(socket.sent[1]!)
       expect(create.type).toBe('terminal.create')
       // The Host must hand the backend the documented command shape: a POSIX
       // `[shell, flags, line]` wrapper, or a single string off Windows. The
@@ -15269,8 +15560,8 @@ describe('first-party Git private bridge', () => {
         runtime: runtimeOf(second.instanceId),
         args: { cols: 100, rows: 30 },
       })
-      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
-      const reattach = JSON.parse(socket.sent[1]!)
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(3))
+      const reattach = JSON.parse(socket.sent[2]!)
       expect(reattach).toMatchObject({
         type: 'terminal.reattach',
         payload: { terminal_session_ids: ['ai-session-1'], cols: 100, rows: 30 },
@@ -15285,6 +15576,7 @@ describe('first-party Git private bridge', () => {
       })
       await expect(resume).resolves.toEqual({ sessionId: 'ai-session-1', profileId: 'claude' })
       expect(socket.sent.map((raw) => JSON.parse(raw).type)).toEqual([
+        'ui.settings.get',
         'terminal.create',
         'terminal.reattach',
       ])
@@ -15315,7 +15607,11 @@ describe('first-party Git private bridge', () => {
           args: { profileId, requestId, cols: 80, rows: 24, yolo: true },
         })
         await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
-        const create = JSON.parse(socket.sent[0]!)
+        const settings = JSON.parse(socket.sent[0]!)
+        expect(settings.type, profileId).toBe('ui.settings.get')
+        socket.receive({ id: settings.id, type: settings.type, ok: true, payload: { settings: {} }, error: null, timestamp: '' })
+        await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+        const create = JSON.parse(socket.sent[1]!)
         expect(create.type, profileId).toBe('terminal.create')
 
         const profile = AI_CLI_PROFILES[profileId as keyof typeof AI_CLI_PROFILES]
@@ -15345,6 +15641,62 @@ describe('first-party Git private bridge', () => {
       }
     } finally {
       vi.useRealTimers()
+    }
+  })
+
+  it('ignores a package yolo request on a non-persisted start when the Host forces the profile off', async () => {
+    const cases: Array<{ settings: Record<string, string>; bypass: boolean }> = [
+      { settings: { 'agentTeam.cliPermission.claude': 'force-off' }, bypass: false },
+      { settings: { 'agentTeam.cliPermission.claude': 'force-on', 'agentTeam.yolo': '0' }, bypass: true },
+      { settings: {}, bypass: true },
+      // The Host's global switch off: the package cannot widen it.
+      { settings: { 'agentTeam.yolo': '0' }, bypass: false },
+    ]
+    for (const [index, { settings: hostSettings, bypass }] of cases.entries()) {
+      const opened = await openGitView('/workspace', 'git-window')
+      opened.mgr.setBackendWsUrl(`ws://git-ai-yolo-force-off-${index}`)
+      const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      socket.open()
+      const runtime = (
+        opened.mgr as unknown as {
+          running: Map<string, { capabilityContext: HostCapabilityContext }>
+        }
+      ).running.get(opened.instanceId)!.capabilityContext.runtimeBinding!
+      const requestId = `yolo-gate-${index}`
+      const start = opened.mgr.executePublicCapability({
+        kind: 'public',
+        address: 'aiCli.startSession',
+        scope: 'workspace',
+        runtime,
+        args: { profileId: 'claude', requestId, cols: 80, rows: 24, yolo: true },
+      })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+      const settings = JSON.parse(socket.sent[0]!)
+      expect(settings.type).toBe('ui.settings.get')
+      socket.receive({
+        id: settings.id,
+        type: settings.type,
+        ok: true,
+        payload: { settings: hostSettings },
+        error: null,
+        timestamp: '',
+      })
+      await vi.waitFor(() => expect(socket.sent).toHaveLength(2))
+      const create = JSON.parse(socket.sent[1]!)
+      expect(create.type).toBe('terminal.create')
+      const command = create.payload.command as string | string[]
+      const line = Array.isArray(command) ? command.at(-1)! : command
+      expect(line, JSON.stringify(hostSettings)).toBe(
+        bypass ? 'claude --dangerously-skip-permissions' : 'claude')
+      socket.receive({
+        id: create.id,
+        type: create.type,
+        ok: true,
+        payload: { terminal_session_id: `yolo-${index}`, pane_id: create.payload.pane_id, create_generation: requestId },
+        error: null,
+        timestamp: '',
+      })
+      await expect(start).resolves.toEqual({ sessionId: `yolo-${index}` })
     }
   })
 
@@ -15837,65 +16189,6 @@ describe('first-party Git private bridge', () => {
 })
 
 describe('Git left legacy rollback composition', () => {
-  it('returns an explicit legacy fallback after replacing a live v2 left view', async () => {
-    const host = new FakeBrowserWindow()
-    Object.defineProperty(host, 'id', { value: 77 })
-    const v2: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      packageVersion: '2.0.0',
-      requires: ['terminal'],
-      capabilityPolicy: manifestV2CapabilityPolicy({
-        system: ['fs', 'ui', 'aiCli'],
-        shell: 'allowlist',
-      }),
-      capabilityContext: frontendPluginManager.gitCapabilityContext('2.0.0', '/workspace', 'git-left'),
-      devUrl: '',
-      entryFile: '/plugins/navide-git/index.html',
-      views: [
-        {
-          id: 'left',
-          contributionKey: 'navide.git.left',
-          kind: 'custom',
-          location: 'left',
-          title: 'Git',
-          entryFile: '/plugins/navide-git/left.html',
-        },
-      ],
-    }
-    const legacy: PluginLaunchDescriptor = {
-      id: 'navide.git',
-      requires: [],
-      devUrl: '',
-      entryFile: '/plugins/git/index.html',
-    }
-
-    frontendPluginManager.replaceBuiltinForRecovery(v2)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-      '',
-      '',
-      {
-        git_yolo: '0',
-        git_analyzer_model: 'qwen2:latest',
-        git_theme_custom: '{}',
-      },
-    )).resolves.toEqual({ ok: true })
-    expect((host.children[0] as FakeViewLike).webContents.loads).toEqual([
-      '/plugins/navide-git/left.html?workspace_path=%2Fworkspace&git_yolo=0&git_analyzer_model=qwen2%3Alatest&git_theme_custom=%7B%7D&v2=1&contribution=left',
-    ])
-
-    frontendPluginManager.replaceBuiltinForRecovery(legacy)
-    await expect(openGitLeftPluginView(
-      asHost(host),
-      '/workspace',
-      { x: 0, y: 0, width: 400, height: 300 },
-    )).resolves.toEqual({ ok: true, fallback: 'legacy' })
-    expect(host.children).toHaveLength(0)
-    expect(closeGitLeftPluginView(asHost(host))).toEqual({ ok: true })
-  })
-
   describe('plansQuery and openPlansPluginView locale propagation', () => {
     it('formats plansQuery with validated locale', () => {
       const q1 = new URLSearchParams(plansQuery('/workspace', 'http://127.0.0.1:1', 'plan.html', 'dark', 'en-US'))
@@ -16615,6 +16908,51 @@ describe('agent capability requests the Host cannot serve', () => {
       })
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('req-malformed'))
     } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('passes the optional calling pane of a workspace request on, and refuses a malformed one', async () => {
+    const { mgr, socket } = connectHost('acme.agent-pane', true)
+    await flush()
+    const execute = vi.spyOn(mgr, 'executeAgentBackendCallForWorkspace')
+      .mockResolvedValue({ reqId: 'inner', ok: true, result: null } as never)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const workspaceRequest = (requestId: string, extra: Record<string, unknown>): Record<string, unknown> => ({
+      request_id: requestId,
+      target: { plugin_id: PLANS_PLUGIN_ID, workspace_path: '/workspace' },
+      operation: 'backend',
+      payload: { reqId: 'inner', name: 'plans.add_note', args: {} },
+      ...extra,
+    })
+    try {
+      request(socket, workspaceRequest('req-pane', { pane: 'Reviewer' }))
+      request(socket, workspaceRequest('req-no-pane', {}))
+      request(socket, workspaceRequest('req-pane-id', { pane: 'p-1' }))
+      await flush()
+      expect(execute).toHaveBeenNthCalledWith(1, PLANS_PLUGIN_ID, '/workspace', expect.anything(), 'Reviewer')
+      expect(execute).toHaveBeenNthCalledWith(2, PLANS_PLUGIN_ID, '/workspace', expect.anything(), undefined)
+      expect(execute).toHaveBeenNthCalledWith(3, PLANS_PLUGIN_ID, '/workspace', expect.anything(), 'p-1')
+
+      // A name the core would never send (150 emoji = 300 UTF-16 units, U+FEFF
+      // only) is refused here; the core sends the pane id instead.
+      const refusedPanes = ['', '  ', 7, 'x'.repeat(201), { id: 'p-1' }, '\u{1F600}'.repeat(150), '\uFEFF']
+      for (const [index, pane] of (refusedPanes as unknown[]).entries()) {
+        request(socket, workspaceRequest(`req-bad-${index}`, { pane }))
+      }
+      request(socket, workspaceRequest('req-extra', { pane: 'Reviewer', token: 't' }))
+      await flush()
+      expect(execute).toHaveBeenCalledTimes(3)
+      const refused = resultsOf(socket).filter((message) => String(message.payload.request_id).startsWith('req-bad') ||
+        message.payload.request_id === 'req-extra')
+      expect(refused).toHaveLength(8)
+      for (const message of refused) {
+        expect(message.payload.response).toEqual(expect.objectContaining({
+          ok: false, error: expect.objectContaining({ code: 'BAD_REQUEST' }),
+        }))
+      }
+    } finally {
+      execute.mockRestore()
       warn.mockRestore()
     }
   })
@@ -17850,6 +18188,33 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     }
   })
 
+  it('answers by the deadline while the first-write dialog is still unanswered, and the dialog stays for the retry', async () => {
+    const f = await fixture()
+    let answerDialog: (allowed: boolean) => void = () => {}
+    f.confirmWrite.mockImplementationOnce(() => new Promise<boolean>((resolve) => { answerDialog = resolve }))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      f.socket.receive({ type: 'agent.capability.request', payload: toolRequest(f) })
+      await vi.advanceTimersByTimeAsync(31_000)
+      const results = sentOf(f.socket).filter((message) => message.type === 'agent.capability.result')
+      expect(results.at(-1)?.payload.response).toMatchObject({
+        ok: false,
+        error_code: 'PLUGIN_TOOL_TIMEOUT',
+        error: expect.stringContaining('approval'),
+      })
+      expect(f.call).not.toHaveBeenCalled()
+      answerDialog(true)
+    } finally {
+      vi.useRealTimers()
+    }
+    try {
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:after-allow' }))).resolves.toMatchObject({ ok: true })
+      expect(f.call).toHaveBeenCalledTimes(1)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
   it('does not dispatch when the bind finishes after the deadline', async () => {
     const f = await fixture()
     const realNow = Date.now
@@ -17960,7 +18325,8 @@ describe('third-party agent tool calls (contract 4.2)', () => {
         },
       })
       await settle()
-      expect(plansRoute).toHaveBeenCalledWith('navide.plans', f.workspace, { reqId: 'r', name: 'plans.list', args: {} })
+      // No calling pane was named, so none is passed on.
+      expect(plansRoute).toHaveBeenCalledWith('navide.plans', f.workspace, { reqId: 'r', name: 'plans.list', args: {} }, undefined)
       expect(f.call).not.toHaveBeenCalled()
     } finally {
       plansRoute.mockRestore()
@@ -18100,7 +18466,7 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     const mgr = new FrontendPluginManager()
     mgr.setDisabledPluginResolver(() => true)
     expect(mgr.isBuiltinPluginDisabled('acme.demo')).toBe(false)
-    expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
+    expect(mgr.listDisabledBuiltinPlugins()).toEqual(['navide.browser', GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
   })
 
   it('drains the real Plans backend activation on Disable and registers it again on Enable', async () => {
@@ -18578,6 +18944,56 @@ describe('web.* view capabilities (Host web view registry)', () => {
     expect(webEvents(other.view)).toEqual([])
   })
 
+  it('web.cdp drives the plugin\'s own view through the Host allowlist while agents own and control it', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-cdp')
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    const evaluate = { viewId, method: 'Runtime.evaluate', params: { expression: 'document.title' } }
+
+    // A Space the user owns or took over is USER_IN_CONTROL, answered as CAPABILITY_DENIED.
+    await expect(a.call('cdp', evaluate)).resolves.toMatchObject({
+      ok: false, error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('user-owned') },
+    })
+    await a.call('setOwner', { viewId, owner: 'agent' }, gesture)
+    await expect(a.call('cdp', evaluate)).resolves.toEqual({ reqId: expect.any(String), ok: true, result: { result: {} } })
+    expect(pluginWebViewRegistry().list('acme.web-cdp')[0]).toMatchObject({ agentScriptSinceLoad: true })
+    await a.call('takeControl', { viewId }, gesture)
+    await expect(a.call('cdp', evaluate)).resolves.toMatchObject({
+      ok: false, error: { code: 'CAPABILITY_DENIED', message: expect.stringContaining('manual_takeover') },
+    })
+    pluginWebViewRegistry().destroyPlugin('acme.web-cdp')
+  })
+
+  it('web.cdp refuses methods off the allowlist, malformed requests, other plugins\' views and ungranted callers', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-cdp-deny')
+    const b = await openWeb(mgr, 'acme.web-cdp-deny-other')
+    const ungranted = await openWeb(mgr, 'acme.web-cdp-deny', ['ui'])
+    const viewId = (await a.call('create', { space: 's' }, gesture)).result!.viewId as string
+    await a.call('setOwner', { viewId, owner: 'agent' }, gesture)
+
+    for (const method of ['Network.getCookies', 'Storage.getCookies', 'Page.addScriptToEvaluateOnNewDocument', 'Fetch.enable']) {
+      await expect(a.call('cdp', { viewId, method })).resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    }
+    // A view is not a pane: it has no workspace to upload files from.
+    await expect(a.call('cdp', { viewId, method: 'DOM.setFileInputFiles', params: { files: ['/etc/hosts'], nodeId: 1 } }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    for (const args of [
+      { viewId, method: 'runtime.evaluate' },
+      { viewId, method: 'Runtime.evaluate', params: [] },
+      { viewId, method: 'Runtime.evaluate', sessionId: 'other' },
+      { viewId },
+    ]) {
+      await expect(a.call('cdp', args)).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    }
+    await expect(b.call('cdp', { viewId, method: 'Runtime.evaluate' }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } })
+    await expect(ungranted.call('cdp', { viewId, method: 'Runtime.evaluate' }))
+      .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+    expect(pluginWebViewRegistry().list('acme.web-cdp-deny')[0]).toMatchObject({ agentScriptSinceLoad: false })
+    pluginWebViewRegistry().destroyPlugin('acme.web-cdp-deny')
+  })
+
   it('refuses agent-initiated web calls unless the execution policy names web', async () => {
     const mgr = newManager()
     const a = await openWeb(mgr, 'acme.web-agent')
@@ -18636,6 +19052,29 @@ describe('web.* view capabilities (Host web view registry)', () => {
       record.carrier = 'surface'
     }
     expect(a.host.children).toHaveLength(1)
+  })
+
+  it('attaches several views at once and answers RESOURCE_LIMIT past the view cap', async () => {
+    const mgr = newManager()
+    const a = await openWeb(mgr, 'acme.web-caps')
+    const ids: string[] = []
+    for (let index = 0; index < 32; index++) {
+      ids.push((await a.call('create', { space: `s-${index}` }, gesture)).result!.viewId as string)
+    }
+    await expect(a.call('create', { space: 'one-more' }, gesture)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'RESOURCE_LIMIT', message: 'web view limit reached (LIMIT_REACHED)' },
+    })
+    await a.call('attach', { viewId: ids[0], rect: { x: 0, y: 0, width: 50, height: 50 } })
+    await a.call('attach', { viewId: ids[1], rect: { x: 50, y: 0, width: 50, height: 50 } })
+    expect(pluginWebViewRegistry().list('acme.web-caps').filter(view => view.attached).map(view => view.viewId))
+      .toEqual([ids[0], ids[1]])
+    for (const viewId of ids.slice(2, 9)) await a.call('attach', { viewId, rect: { x: 0, y: 0, width: 10, height: 10 } })
+    await expect(a.call('attach', { viewId: ids[9], rect: { x: 0, y: 0, width: 10, height: 10 } })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'RESOURCE_LIMIT' },
+    })
+    pluginWebViewRegistry().destroyPlugin('acme.web-caps')
   })
 
   it('follows the plugin view bounds and visibility, and keeps views running after the view closes', async () => {
@@ -18861,5 +19300,137 @@ describe('a third-party window view opens without its native backend', () => {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('Navide plugin commands', () => {
+  const views: PluginLaunchDescriptor['views'] = [
+    { id: 'win', contributionKey: 'acme.runner.win', kind: 'custom', location: 'window', title: 'W', entryFile: '/p/w.html' },
+    { id: 'tab', contributionKey: 'acme.runner.tab', kind: 'custom', location: 'main', title: 'M', entryFile: '/p/m.html' },
+    { id: 'side', contributionKey: 'acme.runner.side', kind: 'custom', location: 'left', title: 'L', entryFile: '/p/l.html' },
+    { id: 'more', contributionKey: 'acme.runner.more', kind: 'custom', location: 'detail', title: 'D', entryFile: '/p/d.html' },
+  ]
+  const managerWith = (hostWindow: object) => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor({
+      ...descriptor('acme.runner'),
+      views,
+      displayName: 'Runner',
+      commands: [
+        { id: 'acme.runner.win', title: 'Win', run: { view: 'win', target: { tab: 'a' } }, suggestedKey: 'cmd+alt+t' },
+        { id: 'acme.runner.tab', title: 'Tab', run: { view: 'tab', target: { tab: 'b' } } },
+        { id: 'acme.runner.side', title: 'Side', run: { view: 'side' } },
+        { id: 'acme.runner.more', title: 'More', run: { view: 'more' } },
+        { id: 'acme.runner.call', title: 'Call', run: { method: 'tests.run' } },
+      ],
+    })
+    const internals = mgr as unknown as {
+      running: Map<string, unknown>
+      sendOpenTarget: (record: unknown, params: Record<string, string>) => void
+    }
+    const sent = vi.spyOn(internals, 'sendOpenTarget').mockImplementation(() => {})
+    const mount = (contributionKey: string, visible: boolean): void => {
+      internals.running.set(contributionKey, { contributionKey, hostWindow, workspacePath: '/ws', visible })
+    }
+    return { mgr, mount, sent }
+  }
+  const host = {} as never
+
+  it('lists nothing for a package that declares none', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor(descriptor('acme.plain'))
+    expect(mgr.listCommandCatalog()).toEqual([])
+    expect(mgr.resolveCommandRun(host, 'acme.plain.go', '/ws')).toEqual({ ok: false, reason: 'not-installed' })
+  })
+
+  it('names the plugin and the suggested key', () => {
+    expect(managerWith(host).mgr.listCommandCatalog()[0]).toEqual({
+      commandId: 'acme.runner.win', title: 'Win', pluginId: 'acme.runner', pluginName: 'Runner', suggestedKey: 'cmd+alt+t',
+    })
+  })
+
+  it('hands a window view back to be opened with its target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.win', '/ws')).toEqual({
+      ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+    })
+  })
+
+  it('reveals a mounted main tab and delivers the target', () => {
+    const { mgr, mount, sent } = managerWith(host)
+    mount('acme.runner.tab', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: true, reveal: 'acme.runner.tab' })
+    expect(sent).toHaveBeenCalledWith(expect.objectContaining({ contributionKey: 'acme.runner.tab' }), { tab: 'b' })
+  })
+
+  it('never mounts a view nobody opened', () => {
+    const { mgr, sent } = managerWith(host)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    expect(sent).not.toHaveBeenCalled()
+  })
+
+  it('leaves a hidden region alone, and uses one that is on screen', () => {
+    const { mgr, mount } = managerWith(host)
+    mount('acme.runner.side', false)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+    mount('acme.runner.side', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.side', '/ws')).toEqual({ ok: true })
+  })
+
+  it('ignores a view mounted in another window or workspace', () => {
+    const { mgr, mount } = managerWith({})
+    mount('acme.runner.tab', true)
+    expect(mgr.resolveCommandRun(host, 'acme.runner.tab', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+  })
+
+  it('refuses a detail view as a target', () => {
+    expect(managerWith(host).mgr.resolveCommandRun(host, 'acme.runner.more', '/ws')).toEqual({ ok: false, reason: 'view-not-openable' })
+  })
+
+  describe('a method command', () => {
+    const withHandler = (hostWindow: object, answer: { ok: boolean }) => {
+      const made = managerWith(hostWindow)
+      const internals = made.mgr as unknown as {
+        running: Map<string, unknown>
+        backendCallHandler: (plugin: unknown, payload: Record<string, unknown>) => Promise<{ ok: boolean }>
+      }
+      const handler = vi.fn(async () => answer)
+      internals.backendCallHandler = handler
+      const record = { id: 'acme.runner', contributionKey: 'acme.runner.tab', hostWindow, workspacePath: '/ws', visible: false }
+      return { ...made, handler, internals, record }
+    }
+
+    it('starts nothing when no view of the plugin is open', async () => {
+      const { mgr, handler } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it("goes through the open view's own call path, as that view", async () => {
+      const { mgr, handler, internals, record } = withHandler(host, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: true })
+      expect(handler).toHaveBeenCalledWith(record, { reqId: expect.any(String), name: 'tests.run', args: {} })
+    })
+
+    it('says so when the call fails', async () => {
+      const { mgr, internals, record } = withHandler(host, { ok: false })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'method-failed' })
+    })
+
+    it('ignores a view of the plugin in another window', async () => {
+      const { mgr, handler, internals, record } = withHandler({}, { ok: true })
+      internals.running.set('i', record)
+      expect(await mgr.runCommand(host, 'acme.runner.call', '/ws')).toEqual({ ok: false, reason: 'view-not-open' })
+      expect(handler).not.toHaveBeenCalled()
+    })
+
+    it('leaves a view command to resolveCommandRun', async () => {
+      const { mgr } = withHandler(host, { ok: true })
+      expect(await mgr.runCommand(host, 'acme.runner.win', '/ws')).toEqual({
+        ok: true, window: { contributionKey: 'acme.runner.win', params: { tab: 'a' } },
+      })
+    })
   })
 })

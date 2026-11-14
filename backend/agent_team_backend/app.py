@@ -30,7 +30,7 @@ from . import __version__
 from . import agent_messaging
 from . import hook_auth
 from . import hook_drain
-from . import guard_hooks
+from . import guard_fail_closed, guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
 from . import error_ledger
@@ -38,6 +38,7 @@ from . import launch_id
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
+from . import plugin_host_events
 from . import portable_credentials_cleanup
 from . import push_delivery
 from . import resource_limits
@@ -61,6 +62,7 @@ from .analyzer_ollama import (
     delete_model as _ollama_delete_model,
 )
 from .analyzer_settings import AnalyzerSettingsStore
+from . import session_archive
 from .ai_chat_settings import AIChatSettingsStore
 from .applog import app_data_dir, backend_log_path, backend_port_file, in_data_dir
 from .cli_vendors.registry import VENDORS as _CLI_VENDORS
@@ -76,6 +78,7 @@ from .log_readers import (
 from .log_readers.attribution import Attribution
 from .log_readers.claude import encode_claude_cwd
 from .credential_vault import CredentialVault
+from .db_executor import run_in_db_thread
 from .credential_watcher import CredentialWatcher, reconcile_live_account
 from .doc_injector import fetch_stage_docs
 from .mcp_manager import MCPManager
@@ -103,6 +106,7 @@ from .dev_time_store import DevTimeStore
 from .store_migrations import run_startup_migrations, version_change
 from .terminals import TerminalService, output_frame_session_id
 from .tokens_store import TokensStore
+from .cost_ledger import CostLedger
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
@@ -119,9 +123,12 @@ from .cli_risk_store import CliRiskStore
 from .sync_engine import SyncStore
 from .history_store import HistoryStore
 from .agent_message_log import AgentMessageLog
+from .account_switch_log import AccountSwitchLog
+from . import failover_notice
 from .preview_log import MAX_ROWS as PREVIEW_MAX_ROWS, PreviewLog
 from . import git_service
 from . import issue_service
+from . import file_query
 from . import fs_service
 from . import pty_registry
 from . import search_service
@@ -212,6 +219,7 @@ recent_workspaces_store = RecentWorkspacesStore(db=database)
 roles_store = RolesStore(db=database)
 stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
+cost_ledger = CostLedger(database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
 # Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
@@ -236,6 +244,8 @@ dev_time_store = DevTimeStore(
 )
 # Cross-workspace by construction, so it lives in the global database.
 agent_message_log = AgentMessageLog(db=database)
+# Switches an agent or a chat button made without the user's click (D7).
+account_switch_log = AccountSwitchLog(db=database)
 codex_home_manager = CodexHomeManager()
 cli_profiles_store = CliProfilesStore(db=database)
 from .credential_store import CredentialStores, active_store_metadata, managed_watch_path
@@ -246,6 +256,7 @@ plugin_host = PluginHost()
 mcp_settings_store = MCPSettingsStore()
 skills_store = SkillsStore()
 analyzer_settings_store = AnalyzerSettingsStore(db=database)
+archive_settings_store = session_archive.ArchiveSettingsStore(db=database)
 ai_chat_settings_store = AIChatSettingsStore(db=database)
 ui_settings_store = UiSettingsStore(db=database)
 cli_risk_service = CliRiskService(CliRiskStore(database))
@@ -388,6 +399,40 @@ async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) 
             _SESSIONS.discard(session)
 
 
+_tokens_version = 0
+
+
+async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[str, Any] | None = None) -> None:
+    """Tell windows that a workspace's token statistics changed.
+
+    A session that declared its workspaces with `tokens.watch` gets a small
+    `tokens.notice` only for those (or every workspace with "*") and fetches
+    `tokens.snapshot` itself. A session that never declared (an older renderer)
+    still gets the full snapshot as `tokens.changed`, which is built only when
+    such a session is connected."""
+    global _tokens_version
+    _tokens_version += 1
+    path = workspace_path or ""
+    notice = make_event("tokens.notice", {"workspace_path": path, "version": _tokens_version})
+    full: dict[str, Any] | None = None
+    for session in list(_SESSIONS):
+        watch = session.tokens_watch
+        if watch is None:
+            if full is None:
+                full = make_event("tokens.changed",
+                                  snapshot if snapshot is not None else tokens_store.snapshot(path or None))
+            event = full
+        elif "*" in watch or path in watch:
+            event = notice
+        else:
+            continue
+        try:
+            await session.send_json(event)
+        except Exception as err:  # noqa: BLE001
+            log.warning("broadcast send failed: %s", err)
+            _SESSIONS.discard(session)
+
+
 async def unicast_to(session: "Session | None", event: dict[str, Any]) -> bool:
     """Send *event* to one named session. Returns False when it is not there.
 
@@ -525,7 +570,7 @@ def host_supports_plans_backend() -> bool:
 
 
 #: The Navide plugins whose Disabled switch the Host reports.
-DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide", "navide.browser"})
 #: Set by main on every backend start: the built-ins disabled at that moment,
 #: comma-separated. Absent when none is.
 DISABLED_BUILTIN_PLUGINS_ENV = "NAVIDE_DISABLED_BUILTIN_PLUGINS"
@@ -673,6 +718,10 @@ class Session:
         # count a window holding the caller's workspace as the caller's own
         # even when none of that workspace's panes sit in it.
         self.held_workspaces: tuple[str, ...] = ()
+        # Workspaces whose token changes this connection wants (`tokens.watch`).
+        # None until declared: such a connection gets the full legacy
+        # `tokens.changed` snapshot. See broadcast_tokens_changed.
+        self.tokens_watch: frozenset[str] | None = None
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
@@ -862,6 +911,7 @@ async def _broadcast_git_changed(
     `paths` is additive — `workspace_path` stays exactly as the existing
     `git.changed` consumers read it."""
     git_service.pane_git_snapshots.invalidate(ws_path)
+    file_query.invalidate(ws_path)
     entries = [
         {"rel_path": rel_path, "change": _GIT_EVENT_CHANGES[event_type]}
         for rel_path, event_type in (paths or [])
@@ -907,6 +957,7 @@ async def _broadcast_plans_changed(ws_path: str) -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("plan snapshot scan failed for %s: %s", ws_path, err)
     await broadcast(make_event("plans.changed", {"workspace_path": ws_path}))
+    await plugin_host_events.on_plans_changed(ws_path)
 
 
 _PLAN_DOC_PREFIXES = (
@@ -1037,6 +1088,14 @@ _TERMINALS: TerminalService | None = None
 # terminal_session_id → owning WS Session. Populated on terminal.create and
 # updated on terminal.reattach. Entries removed when the owning WS disconnects.
 _PTY_OWNERS: "dict[str, Session]" = {}
+# #448 diagnostics, counts only (ui_diagnostics → frame_drops): terminal frames
+# dropped because no window owns their PTY, and terminal requests that named a
+# terminal id this backend does not know. Since this backend started.
+_FRAME_DROPS: dict[str, int] = {"ownerless": 0, "unknown_terminal": 0}
+
+
+def frame_drop_counts() -> dict[str, int]:
+    return dict(_FRAME_DROPS)
 
 
 # An autonomous PTY death (exit/EOF) must release the attribution registration
@@ -1080,6 +1139,7 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
         session_id = output_frame_session_id(frame)
         sess = _PTY_OWNERS.get(session_id) if session_id else None
         if sess is None:
+            _FRAME_DROPS["ownerless"] += 1
             return  # detached: drop output, PTY keeps running, TUI redraws on reattach
         try:
             await sess.send_bytes(frame)
@@ -1110,6 +1170,7 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
     else:
         sess = _PTY_OWNERS.get(session_id) if session_id else None
     if sess is None:
+        _FRAME_DROPS["ownerless"] += 1
         return  # detached: drop output, PTY keeps running, TUI redraws on reattach
     try:
         await sess.send_json(event)
@@ -1149,6 +1210,32 @@ _ownerless_sweeper_task: "asyncio.Task[None] | None" = None
 _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
+_session_archive_task: "asyncio.Task[None] | None" = None
+_frozen_keepalive_task: "asyncio.Task[None] | None" = None
+
+_SESSION_ARCHIVE_FIRST_S = 600
+_SESSION_ARCHIVE_EVERY_S = 86_400
+
+
+async def _session_archive_loop() -> None:
+    """The opt-in session-log archive, once a day (first ten minutes after
+    startup). Both switches start off, so by default this only reads the
+    settings; Claude Code's project folders are the logs it covers."""
+    await asyncio.sleep(_SESSION_ARCHIVE_FIRST_S)
+    while True:
+        settings = archive_settings_store.get()
+        if settings["compress_enabled"] or settings["upload_enabled"]:
+            claude = next((r for r in _readers if r.vendor == "claude"), None)
+            roots = claude.project_dirs() if claude is not None else []
+            try:
+                counts = await asyncio.to_thread(
+                    session_archive.run_once, settings, roots, database,
+                    open_sessions=attribution.bound_session_ids(),
+                )
+                log.info("session archive: %s", counts)
+            except Exception as err:  # noqa: BLE001 — the loop must survive
+                log.warning("session archive pass failed: %s", err)
+        await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -1352,6 +1439,12 @@ _pane_activity: dict[str, dict[str, Any]] = {}
 # Observers of the table above (chat channels): called as (pane_id, entry) on
 # every record and (pane_id, None) when a closed pane is forgotten. Must not raise.
 pane_activity_listeners: list[Callable[[str, dict[str, Any] | None], None]] = []
+# Observers of the text a Claude Stop hook carries itself (chat channels): called
+# as (pane_id, text, log_ended) — ``last_assistant_message``, the turn's final
+# assistant message, which is the same message the log reader's turn_complete
+# carries; ``log_ended`` when the log already reported this turn's end, so its
+# text was posted from there. Must not raise.
+hook_reply_listeners: list[Callable[[str, str, bool], None]] = []
 # Observers of the user's own prompts (chat channels): (pane_id, text) for every
 # user-record event: the reader's longer copy when it has one (up to 16K chars),
 # else the naming snippet. Must not raise.
@@ -1524,6 +1617,47 @@ def _hook_turn_end(pane_id: str) -> tuple[str, dict[str, Any]]:
     }
 
 
+def _note_hook_reply(pane_id: str, payload: dict[str, Any]) -> None:
+    """Hand a Claude Stop hook's own copy of the turn's final text to the reply
+    listeners (chat channels), so a chat's reply does not wait for the log
+    reader's walk — minutes behind on a loaded machine (2026-11-04: p50 119 s,
+    p90 767 s), and never when a blocked Stop hook had that turn's log end
+    downgraded. ``last_assistant_message`` is the final assistant message of
+    the turn, the same message the reader's turn_complete carries (checked
+    against Claude Code 2.1.318: a text, tool, text turn gives the last text
+    only, as the end_turn line does). A hook without it (older builds) changes
+    nothing. Blocked or not, the text is the pane's answer to what it was
+    working on; it is not posted again when the log already ended the turn.
+    """
+    text = payload.get("last_assistant_message")
+    if not isinstance(text, str) or not text.strip():
+        return
+    text = _cap_activity_text(text)
+    log_ended = _log_ended_with(pane_id, text)
+    for listener in hook_reply_listeners:
+        try:
+            listener(_current_pane_id(pane_id), text, log_ended)
+        except Exception as err:  # noqa: BLE001
+            log.warning("hook reply listener failed: %s", err)
+
+
+def _log_ended_with(pane_id: str, text: str) -> bool:
+    """Whether the log already reported the end of the turn whose final text
+    the Stop hook carries as ``text``: its latest record is a log turn end
+    with that same text, or the turn end `_hook_turn_end` pairs with this hook
+    and it carries no text of its own (the text half still to come, or the
+    reader lagging a whole turn — then the hook's text would be another
+    turn's, and the log is left to answer, as before)."""
+    key = _current_pane_id(pane_id)
+    entry = _pane_activity.get(key)
+    if entry is None or entry["event_type"] != "turn_complete" or entry.get("source") != "log":
+        return False
+    if entry["text"].strip() == text.strip():
+        return True
+    match = log_turn_end_after(pane_id, _last_hook_turn_end.get(key))
+    return match is not None and not match["text"].strip()
+
+
 def forget_pane_activity(pane_id: str) -> None:
     """Drop a closed pane's entry so the cache tracks live panes only."""
     _pane_activity.pop(pane_id, None)
@@ -1536,6 +1670,14 @@ def forget_pane_activity(pane_id: str) -> None:
     hook_drain.forget_pane(pane_id)
     push_delivery.forget_pane(pane_id)
     forget_pane_live_sessions(pane_id)
+
+
+def _note_webhook_session(pane_id: str, vendor: str, session_id: str) -> None:
+    from . import webhook_service
+
+    webhooks = webhook_service.current()
+    if webhooks is not None:
+        webhooks.note_pane_session(pane_id, vendor, session_id)
 
 
 async def _on_log_activity(event: ActivityEvent) -> None:
@@ -1559,6 +1701,7 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # External session — skip; no pane to deliver to.
             return
         pane_id = attributed.pane_id or ""
+        _note_webhook_session(pane_id, event.vendor, event.session_id)
         if event.event_type == "subagent_turn_end":
             # A Codex sub-agent's turn end is not its parent pane's: the pane's
             # state, reply text and dev time ignore it. The per-account turn
@@ -1616,7 +1759,9 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             "event_type": event.event_type,
             "superseded": superseded,
             "workspace_path": attributed.workspace_path,
-            "pane_id": pane_id,
+            # The window knows a pane by the id it answers to now, and every
+            # map a turn end lands in is keyed by it.
+            "pane_id": _current_pane_id(pane_id),
             "stage_id": attributed.stage_id or "",
             "session_id": event.session_id,
             "cwd": event.cwd,
@@ -1628,7 +1773,7 @@ async def _on_log_activity(event: ActivityEvent) -> None:
             # generous — see _ACTIVITY_TEXT_MAX_CHARS.
             "text": _cap_activity_text(event.text),
         }))
-        if dev_time_store.agent_event(
+        if await run_in_db_thread(dev_time_store.agent_event,
             attributed.workspace_path, pane_id,
             "agent_active" if superseded else event.event_type, event.timestamp,
         ):
@@ -1659,9 +1804,7 @@ def _schedule_tokens_broadcast(workspace_path: str) -> None:
             await asyncio.sleep(_TOKENS_BROADCAST_DEBOUNCE_SEC)
         finally:
             _pending_tokens_broadcast.discard(workspace_path)
-        await broadcast(
-            make_event("tokens.changed", tokens_store.snapshot(workspace_path))
-        )
+        await broadcast_tokens_changed(workspace_path)
         changed = await asyncio.to_thread(quota_ledger.reconcile_pending, tokens_store)
         for agent, profile, kind in changed:
             await broadcast(make_event("tokens.quota_cycles_changed", {
@@ -2197,7 +2340,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             workspace_path = usage.replay_workspace
         else:
             workspace_path = attributed.workspace_path
-        if workspace_path is None:
+        if workspace_path is None and not attributed.global_only:
             # External session — outside any registered workspace. Skip silently.
             return TokenSinkResult(False)
         # Namespace the dedup key by vendor + file_path so collisions across
@@ -2234,6 +2377,12 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
             cache_creation_tokens=usage.cache_creation_tokens,
             timestamp=usage.timestamp,
         )
+        # Never raises and does not feed `handled`: the ledger must not change
+        # what tokens_store records or how its checkpoint advances.
+        await run_in_db_thread(cost_ledger.record,
+            usage, workspace_path, attributed.slot_key or attributed.pane_id or "",
+            usage.profile_id,
+        )
         # The watcher just told us this session's log grew — the cheapest and
         # most timely rescan trigger there is, since it already carries the
         # vendor, the session id and the attributed workspace/pane. Skipped for
@@ -2247,7 +2396,7 @@ async def _on_log_token_usage(usage: TokenUsage) -> TokenSinkResult:
                 session_file=usage.file_path,
             )
         _schedule_tokens_broadcast(workspace_path)
-        return TokenSinkResult(handled, workspace_path)
+        return TokenSinkResult(handled, workspace_path or "")
     except Exception as err:  # noqa: BLE001
         log.warning("log token sink failed: %s", err)
         return TokenSinkResult(False)
@@ -2443,6 +2592,10 @@ async def _start_log_watcher() -> None:
     # Settings → Resource limits, for code with no handle on the store
     # (terminals marks new panes for the leftover-server list).
     resource_limits.set_settings_reader(lambda: ui_settings_store.get())
+    # Settings → CLI Agents → ACP (experimental); off unless the user turned it on.
+    from . import acp_switch
+
+    acp_switch.apply_settings(ui_settings_store.get())
     # Per-pane watch files hold message text in the clear and belong to panes
     # that died with the previous process. Only a startup sweep ever removes
     # the ones a killed backend left behind.
@@ -2522,6 +2675,17 @@ async def _start_log_watcher() -> None:
     global _plugin_audit_task
     _plugin_audit_task = asyncio.create_task(plugin_audit_log.run())
 
+    # Opt-in session-log archive (off by default; see session_archive.py).
+    global _session_archive_task
+    _session_archive_task = asyncio.create_task(_session_archive_loop())
+
+    # Frozen onefile build only: keep the extraction directory from being
+    # purged as idle temp while the backend stays up (see frozen_env).
+    from . import frozen_env
+
+    global _frozen_keepalive_task
+    _frozen_keepalive_task = asyncio.create_task(frozen_env.keep_extraction_warm())
+
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
     from . import scheduler
@@ -2530,6 +2694,15 @@ async def _start_log_watcher() -> None:
         await (await asyncio.to_thread(scheduler.get_service)).start()
     except Exception as err:  # noqa: BLE001
         log.warning("scheduler startup failed: %s", err)
+
+    # Webhook triggers: empty tables and no listener until the user turns them on.
+    from . import webhook_service, webhook_ws
+
+    try:
+        await webhook_ws.startup()
+    except Exception as err:  # noqa: BLE001
+        log.warning("webhook startup failed: %s", err)
+        webhook_service.mark_unavailable()
 
     # Each workspace's self-evolution: its watchdog notices runs that ran past
     # their time or budget, and runs a missed slot once its workspace opens.
@@ -2597,6 +2770,10 @@ async def _start_log_watcher() -> None:
     await server_link.start()
     # Chat channels (Telegram, Discord, ...): adapters start in the background.
     await channels.start()
+    # An automatic quota switch is recorded and told to the chats (failover_notice).
+    failover_notice.install()
+    # Plugin `agents.*` events (metadata only); the Host routes them by grant.
+    plugin_host_events.start(asyncio.get_running_loop())
 
     # Start MCP servers in the background so they're ready for the first pipeline run.
     asyncio.create_task(mcp_manager.startup())
@@ -2629,7 +2806,12 @@ async def _start_log_watcher() -> None:
         # Before the server starts: its session manager snapshots the tool
         # registry, so a tool installed afterwards is missing from the list
         # clients see, with no error anywhere.
-        contributed = plugin_wiring.apply_mcp_tools(plugin_host, mcp_server.server)
+        # Off the loop: each tool builds a pydantic model, ~2.4 s apiece on a
+        # first Windows boot. Nothing reads the registry until the server
+        # starts below.
+        contributed = await asyncio.to_thread(
+            plugin_wiring.apply_mcp_tools, plugin_host, mcp_server.server
+        )
         if contributed:
             log.info("plugins contributing MCP tools: %s", contributed)
         plugin_wiring.apply_routes(plugin_host, app.router)
@@ -2643,7 +2825,11 @@ async def _start_log_watcher() -> None:
     from . import copilot_hooks
 
     convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
-    convenience_wiring.install_cli_hooks(str(backend_port_file()))
+    # Awaited, so it still ends before the MCP server comes up; off the loop,
+    # because the settings files it reads and writes held it 29 s on a first
+    # Windows boot. Same writes in the same order — the gate is thread-safe
+    # and the version probe already runs this from a thread.
+    await asyncio.to_thread(convenience_wiring.install_cli_hooks, str(backend_port_file()))
 
     # Navide's own MCP server. Deliberately outside the guard above: this is
     # the endpoint every CLI pane is wired to, and it must come up even if
@@ -2679,6 +2865,10 @@ async def _stop_log_watcher() -> None:
             _mem_probe_task.cancel()
         if _dev_time_sweeper_task is not None:
             _dev_time_sweeper_task.cancel()
+        if _session_archive_task is not None:
+            _session_archive_task.cancel()
+        if _frozen_keepalive_task is not None:
+            _frozen_keepalive_task.cancel()
         if _plugin_audit_task is not None:
             # Cancelling runs its final flush; wait for it so queued rows land.
             _plugin_audit_task.cancel()
@@ -2686,6 +2876,9 @@ async def _stop_log_watcher() -> None:
         from . import scheduler
 
         await scheduler.shutdown()
+        from . import webhook_ws
+
+        await webhook_ws.shutdown()
         from . import evolve_service
 
         await evolve_service.shutdown()
@@ -2720,6 +2913,7 @@ async def _stop_log_watcher() -> None:
             _git_watcher.stop()
         if _credential_watcher is not None:
             _credential_watcher.stop()
+        failover_notice.uninstall()
         await channels.stop()
         await server_link.stop()
     finally:
@@ -2932,6 +3126,12 @@ _HOOK_VENDORS = frozenset(
     key for key, spec in _CLI_VENDORS.items() if spec.install_hooks is not None
 )
 
+# Hook vendors whose events name their pane by the spawn token instead of a
+# session id (VendorSpec.hook_pane_token).
+_HOOK_PANE_TOKEN_VENDORS = frozenset(
+    key for key in _HOOK_VENDORS if _CLI_VENDORS[key].hook_pane_token
+)
+
 # Vendors whose hooks report BOTH halves of a subagent's life — the Task going
 # in (PreToolUse) and its stop coming back out (SubagentStop). Counting on a
 # vendor that reports only the first would climb forever, and a count stuck
@@ -3057,11 +3257,14 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         return Response(status_code=404)
     if not hook_auth.presented(request.headers.get(hook_auth.HEADER)):
         return Response(status_code=403)
+    fail_closed = request.headers.get(guard_fail_closed.HEADER) == "1"
     try:
         payload = await request.json()
     except ValueError:
         payload = None
     if not isinstance(payload, dict):
+        if fail_closed:
+            return JSONResponse(guard_fail_closed.deny(vendor, "the call could not be read"))
         return Response(status_code=200)
     cwd = str(payload.get("cwd") or "")
     pane_id, ws_path = "", ""
@@ -3082,6 +3285,12 @@ async def cli_pretooluse_guard_hook(vendor: str, request: Request) -> Response:
         pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
         pane = agent_messaging.current(pane_id) if pane_id else None
         ws_path = pane.workspace_path if pane is not None else ws_path
+    # The token still names the pane after /clear, before the new session is attributed.
+    _note_webhook_session(pane_id, vendor, str(payload.get("session_id") or payload.get("sessionId") or ""))
+    if fail_closed:
+        return JSONResponse(await guard_fail_closed.respond(
+            vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
+        ))
     answer = await guard_hooks.respond(
         vendor, payload, pane_id=pane_id or "", cwd=cwd, workspace=ws_path or cwd
     )
@@ -3159,6 +3368,13 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # lookup bypasses it. Race (stop before JSONL claimed the session) → empty
     # pane_id, and the JSONL path's matching event supplies it shortly.
     pane_id, ws_path, stage_id = attribution.pane_for_session(session_id)
+    if not pane_id and vendor in _HOOK_PANE_TOKEN_VENDORS:
+        # No log reader attributes this vendor's sessions, so the session id
+        # never names a pane: the pane's spawn token does (Kiro). Other
+        # vendors keep waiting for their log path, as above.
+        pane_id = _pane_for_guard_token(request.headers.get(guard_hooks.PANE_TOKEN_HEADER, ""))
+        pane = agent_messaging.current(pane_id) if pane_id else None
+        ws_path = pane.workspace_path if pane is not None else ws_path
     # Background-subagent bookkeeping: Task in on PreToolUse, out on
     # SubagentStop. The frontend loop reads the resulting count to tell a turn
     # that ended DONE from one that ended to WAIT — see subagent_tracker.
@@ -3178,7 +3394,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         # gated on subagent counting, and a failure here must never disturb the
         # response this endpoint owes the busy-state path.
         try:
-            recorded = _record_hook_file_write(
+            recorded = await run_in_db_thread(_record_hook_file_write,
                 vendor, pane_id or "", ws_path or "", str(payload.get("tool_name") or ""), payload
             )
             # Inside the same guard as the write: the panels seeing this row
@@ -3207,6 +3423,15 @@ async def cli_hook(vendor: str, request: Request) -> Any:
             # call the pane idle and start injecting the NEXT queued message
             # over stdin, into a pane that is already working.
             event_type = "agent_active"
+        if pane_id:
+            # Before the turn end is recorded below: a chat run this answers is
+            # closed by it, so the hook's own turn end does not wait on the log.
+            _note_hook_reply(pane_id, payload)
+    # The turn's reply text is only in the transcript. Read it next rather than
+    # behind every other file the log watcher has queued.
+    transcript = payload.get("transcript_path")
+    if event_type == "turn_complete" and isinstance(transcript, str) and transcript and _log_watcher is not None:
+        _log_watcher.prioritize(Path(transcript))
     # idle_prompt fires about a minute after EVERY finished turn (draft in the
     # composer or not). It reports the pane waiting, not working, so recording
     # it as agent_active would replace the turn_complete entry for good —
@@ -3229,7 +3454,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
         "vendor": vendor,
         "event_type": event_type,
         "workspace_path": ws_path or cwd,
-        "pane_id": pane_id or "",
+        "pane_id": _current_pane_id(pane_id) if pane_id else "",
         "stage_id": stage_id or "",
         "session_id": session_id,
         "cwd": cwd,
@@ -3254,7 +3479,7 @@ async def cli_hook(vendor: str, request: Request) -> Any:
     # A late tool result is no work signal either: it can follow Stop.
     if event_kind not in ("notification", "permission_request", *_TOOL_RESULT_EVENTS):
         try:
-            if dev_time_store.agent_event(ws_path or cwd, pane_id or "", event_type, ""):
+            if await run_in_db_thread(dev_time_store.agent_event, ws_path or cwd, pane_id or "", event_type, ""):
                 await broadcast(
                     make_event("devtime.changed", {"workspace_path": ws_path or cwd})
                 )
@@ -3599,9 +3824,7 @@ def _record_analyzer_tokens(result: dict[str, Any], payload: dict[str, Any]) -> 
         input_tokens=pev,
         output_tokens=ev,
     )
-    asyncio.create_task(
-        broadcast(make_event("tokens.changed", tokens_store.snapshot(workspace_path)))
-    )
+    asyncio.create_task(broadcast_tokens_changed(workspace_path))
 
 
 # Agent-CLI spawns inherit the backend's PATH (terminals.py copies os.environ),
@@ -3721,9 +3944,12 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
     installed (cursor ships `agent`; older installs only have `cursor-agent`).
     Spawning the pinned name then dies with exit 127 while detection reports
     the CLI as present — so resolve the alias here instead.
+
+    The same goes for a name that resolves to another product's stand-in
+    (Dep.shim_dirs: VS Code's copilot-shim) ahead of the real CLI on PATH.
     """
     dep = onboarding_deps.DEPS_BY_ID.get(agent_key)
-    if dep is None or not dep.alt_commands:
+    if dep is None or not (dep.alt_commands or dep.shim_dirs):
         return command
     text = _command_text(command)
     try:
@@ -3732,7 +3958,8 @@ def _command_with_installed_cli_alias(agent_key: str, command: Any) -> Any:
         return command
     if not parts or not _names_a_known_command(parts[0], (dep.check_cmd[0], *dep.alt_commands)):
         return command
-    if osplat.paths.resolve_program(parts[0]):
+    requested = osplat.paths.resolve_program(parts[0])
+    if requested and not onboarding_deps.is_shim(dep, requested):
         return command  # the requested name resolves — nothing to fix
     installed = onboarding_deps.resolve_executable(dep)
     if not installed:
@@ -3969,6 +4196,8 @@ def _probe_agent_cli_for_spawn(agent_key: str, requested_command: Any = None) ->
     known_names = (dep.check_cmd[0], *dep.alt_commands)
     if requested_executable and _names_a_known_command(requested_executable, known_names):
         executable = osplat.paths.resolve_program(requested_executable)
+        if executable and onboarding_deps.is_shim(dep, executable):
+            executable = None  # VS Code's stand-in, not the CLI (Dep.shim_dirs)
     executable = executable or onboarding_deps.resolve_executable(dep)
     if not executable:
         if _spawn_execs_the_cli_directly(requested_command, known_names):
@@ -4179,6 +4408,8 @@ async def handle_message(session: Session, msg: dict[str, Any]) -> None:
             make_error(msg_id, msg_type, "SETUP_ERROR", _redact_home(str(err)))
         )
     except KeyError as err:
+        if "unknown terminal session" in str(err):
+            _FRAME_DROPS["unknown_terminal"] += 1
         await session.send_json(
             make_error(msg_id, msg_type, "BAD_REQUEST", f"missing field: {err}")
         )

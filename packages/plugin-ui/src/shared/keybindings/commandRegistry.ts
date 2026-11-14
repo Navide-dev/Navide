@@ -1,9 +1,27 @@
 import type { CommandHandler } from './types'
 
 const _commands = new Map<string, CommandHandler>()
+/** Ids that came through registerPluginCommand: the only ones that can be removed. */
+const _pluginCommands = new Set<string>()
 
 export function registerCommand(id: string, handler: CommandHandler): void {
   _commands.set(id, handler)
+}
+
+// A Navide plugin's command. It cannot take over an id the Host registered:
+// false means nothing was registered.
+export function registerPluginCommand(id: string, handler: CommandHandler): boolean {
+  if (_commands.has(id) && !_pluginCommands.has(id)) return false
+  _commands.set(id, handler)
+  _pluginCommands.add(id)
+  return true
+}
+
+// Removes a command only if registerPluginCommand added it; a Host command stays.
+export function unregisterCommand(id: string): boolean {
+  if (!_pluginCommands.delete(id)) return false
+  _commands.delete(id)
+  return true
 }
 
 // Returns true if a handler was found and it consumed the invocation.
@@ -33,6 +51,10 @@ export interface InvokeCommandResult {
   ok: boolean
   result?: unknown
   error?: string
+  /** A stable reason the handler attached to the error it threw (`code` on
+   *  the Error), for a caller that words the failure itself. */
+  code?: string
+  params?: Record<string, unknown>
 }
 
 // Like executeCommand, but awaits the handler and surfaces its return value
@@ -45,11 +67,18 @@ export async function invokeCommand(id: string, args?: unknown): Promise<InvokeC
     const result = await handler(args)
     return { ok: true, result }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    const coded = err as { code?: unknown; params?: unknown } | null
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      ...(typeof coded?.code === 'string' ? { code: coded.code } : {}),
+      ...(coded?.params && typeof coded.params === 'object' ? { params: coded.params as Record<string, unknown> } : {}),
+    }
   }
 }
 
 // For testing only.
 export function _resetRegistry(): void {
   _commands.clear()
+  _pluginCommands.clear()
 }

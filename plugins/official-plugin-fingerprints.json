@@ -1,0 +1,21 @@
+{
+  "baseline": "v0.2.42",
+  "plugins": {
+    "navide.browser": {
+      "version": "1.1.3",
+      "fingerprint": "35a6befbb7f90f6dab23cb2f8cc8874ac1b4b75c43fcca5d18206751613d6741"
+    },
+    "navide.git": {
+      "version": "1.0.6",
+      "fingerprint": "aa544720d44c108fd802424921d69a6752153be8dfe9f3dcdcad5a33da927531"
+    },
+    "navide.mini-ide": {
+      "version": "1.0.5",
+      "fingerprint": "aa6292fd4e8744867e7004d7889313ec673791e251d61ce5ffb2084c4f6b34cd"
+    },
+    "navide.plans": {
+      "version": "1.1.5",
+      "fingerprint": "9685320732e7c0ed2ad7bb70bc8dbb12244a6afe193d4d43b9cb8eb7d97a8bc3"
+    }
+  }
+}

@@ -376,12 +376,14 @@ function previewReadback(): void {
 </script>
 
 <template>
-  <SettingsSection :label="t('settings.voice.section')">
+  <!-- No label: the page title already says Voice Input. -->
+  <SettingsSection>
     <SettingsCard>
       <SettingRow
         data-settings-section="voice-input"
         :title="t('settings.voice.enabled')"
         :description="t('settings.voice.enabled-hint')"
+        fold-description
       >
         <template #control>
           <ToggleSwitch
@@ -497,7 +499,15 @@ function previewReadback(): void {
         data-settings-section="voice-readback"
         :title="t('settings.voice.readback')"
         :description="t('settings.voice.readback-hint')"
+        fold-description
       >
+        <!-- The 🔊 glyph gets its own box and margin so it never runs into the
+             words around it. -->
+        <template #description>
+          <template v-for="(part, i) in t('settings.voice.readback-hint').split('🔊')" :key="i">
+            <span v-if="i > 0" class="voice-readback-glyph">🔊</span>{{ part }}
+          </template>
+        </template>
         <template #control>
           <ToggleSwitch
             :model-value="voiceReadbackEnabled"
@@ -590,6 +600,11 @@ function previewReadback(): void {
 </template>
 
 <style scoped>
+.voice-readback-glyph {
+  display: inline-block;
+  margin-inline: 0.2em;
+  line-height: 1;
+}
 .voice-btn {
   font-size: var(--font-2xs);
   padding: 4px 10px;

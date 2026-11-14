@@ -8,7 +8,20 @@ previous snapshot (2026-09-20, `9a630efe`, v0.2.8) was re-read field by field;
 the roster, the backend and frontend matrices and their totals are unchanged.
 New since then: the [support tiers](#support-tiers-l1l5) and the OpenCode 2.x
 reader note. Goose (`goose`) was added on 2026-10-21, making 16 vendors; its
-rows below were read from the tree that adds it.
+rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
+Hermes Agent (`hermes`) were added on 2026-11-07 as CLI vendors (the ＋
+menu's CLI list), making 18; they appear in the roster only — no
+reader, resume, model flag, usage or account switching to tabulate. (Since
+0.2.40 both have a SQLite reader and resume, still no model flag; their
+record in `cli-extension-guide.md` has them, the
+matrices below do not.) Devin CLI
+(`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
+CLI list), making 19; it too appears in the roster only, for the same reason —
+it was wired from the docs with no binary installed (see the
+[integration record](cli-extension-guide.md)). Kiro CLI (`kiro`, AWS) was
+added on 2026-11-12 the same way, making 20: roster only, docs-wired, with
+the navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook but
+no reader, resume, model flag, usage or account switching.
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -18,6 +31,25 @@ that reproduce each table, so a stale entry is always cheap to catch.
 - To **add** a vendor, follow [Adding a CLI vendor](../adding-a-cli-vendor.md).
 - For the **research and traps** behind an individual integration, see the
   [CLI integration records](cli-extension-guide.md).
+
+---
+
+## API key accounts
+
+Added in 0.2.36. A CLI account can pay by usage with an API key instead of a
+subscription login. `SUPPORTED_AGENT_KEYS` in
+`backend/agent_team_backend/api_key_accounts.py` lists the CLIs that take one;
+every other vendor has no API key account.
+
+| Vendor | Platforms | How a pane gets the key | Reach | Live key check on record |
+|---|---|---|---|---|
+| `claude` | macOS, Linux; refused on Windows (`unsupported-platform`) | `apiKeyHelper` in the account's own config dir (`CLAUDE_CONFIG_DIR`); the key stays in the Keychain or an owner-only file | New panes, per the pane default; the live login is never swapped | None |
+| `codex` | macOS, Linux, Windows | `auth.json` in the account slot, as `codex login --with-api-key` writes it, swapped in by the existing switch | Every Codex pane, restarted by the switch | None. Not tested with a real key |
+
+Cloud services and custom endpoints appear in the add-account panel as coming
+soon, for no vendor yet. No spend figure is read or estimated for either vendor.
+Storage and data flow per platform are in
+[Privacy and Data Flows](privacy.md#credentials).
 
 ---
 
@@ -81,6 +113,10 @@ label does not upgrade a CLI or establish compatibility with a newer release.
 | `droid` | Droid CLI (Factory) | `droid` | `brew install --cask droid` |
 | `mcode` | MiniMax Code | `mcode` | `npm i -g @minimax-ai/code` |
 | `goose` | Goose (AAIF) | `goose` | install script (github.com/aaif-goose) |
+| `devin` | Devin CLI (Cognition) | `devin` (`--permission-mode dangerous`) | install script (docs.devin.ai/cli) — user runs it |
+| `kiro` | Kiro CLI (AWS) | `kiro-cli chat --v3` (`--trust-all-tools`) | install script (kiro.dev/docs/cli) — user runs it |
+| `openclaw` | OpenClaw | `openclaw tui --local` | install script (docs.openclaw.ai) — user runs it |
+| `hermes` | Hermes Agent | `hermes chat` (`--yolo`) | install script (hermes-agent.nousresearch.com) — user runs it |
 
 Two keys do not match their binary: `antigravity` runs `agy`, and `cursor` runs
 `agent` (`cursor-agent` is an older symlink the installer leaves behind, and is
@@ -156,6 +192,11 @@ How to read the columns:
   Kimi Code prints a bare version. Kimi's `official_regex` names the mismatch
   in the pane's startup probe line and points at the Kimi Code installer; the
   launch is not refused.
+- **Copilot CLI vs VS Code's copilot-shim.** VS Code installs
+  `bin\copilot-shim\copilot.exe` and puts its `bin` on PATH. It is not the
+  Copilot CLI, so Copilot's `shim_dirs` names that directory: detection, the
+  CLI health check and the startup probe skip it, and look further down PATH
+  for a real install (0.2.38).
 - **Turn text is validated for two vendors only.** `verifiedTurnText: true`
   is set in `claude.ts:19` and `codex.ts:21`; every other reader's turn text
   is enough for inter-CLI messaging but keeps the loose buffer scan.

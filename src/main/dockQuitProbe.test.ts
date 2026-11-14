@@ -489,6 +489,8 @@ describe('the last window closing quits like Cmd+Q (Linux, Windows)', () => {
     const win = new Proxy({}, {
       get: (_target, key) => key === 'on'
         ? (event: string, handler: (event: unknown) => void) => { if (event === 'close') closeHandlers.push(handler) }
+        // App Lock hooks the window's own webContents for keys (appLockOverlay.watch).
+        : key === 'webContents' ? { on: () => undefined }
         : () => undefined,
     })
     for (const [event, listener] of appListeners) {

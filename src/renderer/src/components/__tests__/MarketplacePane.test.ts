@@ -8,6 +8,7 @@ import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import SettingsNavItem from '../settings/SettingsNavItem.vue'
 import { usePluginUpdates } from '../../composables/usePluginUpdates'
 import MarketplacePane from '../MarketplacePane.vue'
+import { marketplaceView, setMarketplaceView } from '../../composables/useMarketplaceForms'
 import MarketplaceIcon from '../MarketplaceIcon.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
 import { computeDisclosure } from '../../../../shared/pluginDisclosure'
@@ -445,6 +446,20 @@ describe('MarketplacePane', () => {
     await wrapper.get('.ext-search button').trigger('click')
     await flushPromises()
     expect(wrapper.get('.mkt-empty').text()).toContain('zzz')
+  })
+
+  it('offers to build a Navide plugin from the list and from an empty result (plan v2_8714c5 b3)', async () => {
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 }),
+    })
+    setMarketplaceView('browse')
+    wrapper = mountMarketplace()
+    await flushPromises()
+    const build = wrapper.get('[data-testid="marketplace-build-own"]')
+    expect(build.text()).toContain(i18n.global.t('settings.extensions.marketplace.buildOwnHint'))
+    await build.get('button').trigger('click')
+    expect(marketplaceView.value).toBe('developer')
+    setMarketplaceView('browse')
   })
 
   it('marks installed items and offers Update only when the main process reports one', async () => {
@@ -1702,6 +1717,22 @@ describe('MarketplacePane', () => {
       ])
     })
 
+    it('formats version dates in the Navide language, not the system one', async () => {
+      const previous = i18n.global.locale.value
+      i18n.global.locale.value = 'zh-TW'
+      try {
+        mockPlugins()
+        wrapper = mountMarketplace()
+        await flushPromises()
+        await wrapper.get('[data-id="acme.demo"]').trigger('click')
+        await flushPromises()
+        const firstRow = wrapper.findAll('.mkt-versions tbody tr')[0]
+        expect(firstRow.findAll('td')[1].text()).toBe(new Date('2026-09-01T00:00:00Z').toLocaleDateString('zh-TW'))
+      } finally {
+        i18n.global.locale.value = previous
+      }
+    })
+
     it('translates category chips in zh-TW', async () => {
       const previous = i18n.global.locale.value
       i18n.global.locale.value = 'zh-TW'
@@ -1822,7 +1853,7 @@ describe('MarketplacePane', () => {
       await wrapper.get('.ext-search input').setValue('zzz')
       await wrapper.get('.ext-search button').trigger('click')
       await flushPromises()
-      await wrapper.get('.mkt-empty .mkt-state-actions .nv-btn').trigger('click')
+      await wrapper.get('.mkt-empty .settings-empty-actions .nv-btn').trigger('click')
       await flushPromises()
       expect((wrapper.get('.ext-search input').element as HTMLInputElement).value).toBe('')
       expect(api.marketplaceSearch).toHaveBeenLastCalledWith(undefined, 'downloads', expect.anything())
@@ -2034,7 +2065,7 @@ describe('MarketplacePane', () => {
       }
     })
 
-    it('marks every state page with the signature diamond', async () => {
+    it('marks the error page with the signature diamond and uses the shared empty state', async () => {
       mockPlugins({ marketplaceSearch: vi.fn().mockRejectedValue(new Error('offline')) })
       wrapper = mountMarketplace()
       await flushPromises()
@@ -2044,7 +2075,8 @@ describe('MarketplacePane', () => {
       mockPlugins({ marketplaceSearch: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 }) })
       wrapper = mountMarketplace()
       await flushPromises()
-      expect(wrapper.find('.mkt-empty .mkt-sigil').exists()).toBe(true)
+      expect(wrapper.find('.mkt-empty.settings-empty').exists()).toBe(true)
+      expect(wrapper.find('.mkt-empty .mkt-sigil').exists()).toBe(false)
     })
   })
 })

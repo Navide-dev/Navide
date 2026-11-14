@@ -60,6 +60,39 @@
     "errors": {
       "generic": "Something went wrong ({code}).",
       "invalid-address": "Enter an http or https address."
+    },
+    "layout": {
+      "label": "Layout",
+      "tiled": "Side by Side",
+      "switch": "One at a Time"
+    },
+    "page": {
+      "previous": "Previous Page",
+      "next": "Next Page",
+      "status": "Page {page} of {count}"
+    },
+    "tab": {
+      "new": "New Tab",
+      "close": "Close Tab",
+      "untitled": "New tab",
+      "discarded": "Closed to save memory; click to load it again",
+      "discarded-note": "This tab was closed to save memory after 10 minutes out of sight. Its page loads again from its address.",
+      "restore": "Restore Tab"
+    },
+    "dialog": {
+      "open": "Dialog open ({type}): {message}",
+      "type": {
+        "alert": "Alert",
+        "confirm": "Confirmation",
+        "prompt": "Prompt",
+        "beforeunload": "Leave page"
+      }
+    },
+    "uploads": {
+      "title": "Files the agent uploaded",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Looks like a secret",
+      "sensitive-note": "Agent uploaded files whose names look like secrets"
     }
   }
 }

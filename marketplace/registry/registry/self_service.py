@@ -26,7 +26,7 @@ from sqlmodel import Session, select
 
 from . import audit, qualification
 from .dns_verify import TxtResolver, is_verified, new_token, normalize_domain
-from .models import CliAuthCode, Publisher, PublisherToken
+from .models import CliAuthCode, NamespaceMember, Publisher, PublisherToken
 from .repository import hash_token
 from .signing import public_key_fingerprint
 from .similarity import ClaimVerdict, check_namespace_claim
@@ -38,6 +38,11 @@ CLI_TOKEN_DAYS = 30
 CLI_CODE_TTL = timedelta(minutes=5)
 MAX_LABEL_LENGTH = 64
 TOKEN_PREFIX = "nvp_"
+ROLE_OWNER = "owner"
+ROLE_PUBLISHER = "publisher"
+"""0.2.40 has one member role: publish and yank under the namespace. Only the
+owner adds or removes members, sets the signing key or transfers anything."""
+MAX_MEMBER_ID_LENGTH = 128
 
 
 class SelfServiceError(ValueError):
@@ -51,6 +56,21 @@ class QualificationRequired(SelfServiceError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+class KeyConflict(SelfServiceError):
+    """The publisher already has a different public key (L1d). Replacing it
+    silently would make every package signed with the current key fail
+    verification, so a caller that did not ask to replace is refused and told
+    the current key's fingerprint."""
+
+    def __init__(self, fingerprint: str) -> None:
+        super().__init__(
+            "This publisher already has a signing key registered "
+            f"(fingerprint {fingerprint}). Replacing it stops packages signed with the current key from publishing; "
+            "ask to replace it explicitly."
+        )
+        self.fingerprint = fingerprint
 
 
 def _require_vetted(session: Session, publisher: Publisher) -> None:
@@ -88,6 +108,139 @@ def owned_publisher(session: Session, member_id: str, namespace: str) -> Publish
     return session.exec(
         select(Publisher).where(Publisher.name == namespace, Publisher.navide_member_id == member_id)
     ).first()
+
+
+def member_publishers(session: Session, member_id: str) -> list[Publisher]:
+    """Namespaces the account may publish under: owned ones and the ones it
+    is a publisher member of."""
+    joined = select(NamespaceMember.publisher_id).where(NamespaceMember.navide_member_id == member_id)
+    return list(
+        session.exec(
+            select(Publisher)
+            .where((Publisher.navide_member_id == member_id) | Publisher.id.in_(joined))
+            .order_by(Publisher.name)
+        ).all()
+    )
+
+
+def member_publisher(session: Session, member_id: str, namespace: str) -> Publisher | None:
+    """The namespace when the account owns it or is a publisher member of it."""
+    return next((p for p in member_publishers(session, member_id) if p.name == namespace), None)
+
+
+def is_publisher_member(session: Session, publisher: Publisher, member_id: str) -> bool:
+    return (
+        session.exec(
+            select(NamespaceMember).where(
+                NamespaceMember.publisher_id == publisher.id,
+                NamespaceMember.navide_member_id == member_id,
+            )
+        ).first()
+        is not None
+    )
+
+
+def member_may_publish(session: Session, publisher: Publisher, member_id: str | None) -> bool:
+    """Whether a token issued to ``member_id`` may still act for the namespace:
+    the owner (or None, a token from before members existed, which only the
+    owner could issue) always; a publisher member while it is a member and
+    its own developer qualification is approved."""
+    if member_id is None or member_id == publisher.navide_member_id:
+        return True
+    return is_publisher_member(session, publisher, member_id) and qualification.is_approved(session, member_id)
+
+
+def list_members(session: Session, publisher: Publisher) -> list[dict]:
+    """The owner first, then publisher members in the order they were added."""
+    members: list[dict] = []
+    if publisher.navide_member_id is not None:
+        members.append(
+            {"member_id": publisher.navide_member_id, "role": ROLE_OWNER, "added_by": None, "added_at": None}
+        )
+    rows = session.exec(
+        select(NamespaceMember)
+        .where(NamespaceMember.publisher_id == publisher.id)
+        .order_by(NamespaceMember.added_at, NamespaceMember.id)
+    ).all()
+    for row in rows:
+        added_at = _aware(row.added_at)
+        members.append(
+            {
+                "member_id": row.navide_member_id,
+                "role": row.role,
+                "added_by": row.added_by,
+                "added_at": added_at.isoformat() if added_at else None,
+            }
+        )
+    return members
+
+
+def add_member(session: Session, publisher: Publisher, *, member_id: str, actor: str) -> NamespaceMember:
+    """Add ``member_id`` as a publisher of the namespace. The caller has
+    checked that ``actor`` is the owner. The account must be an approved
+    developer, like anyone who publishes."""
+    member_id = member_id.strip()
+    if not member_id or len(member_id) > MAX_MEMBER_ID_LENGTH:
+        raise SelfServiceError("Give the Navide Cloud account id of the member to add.")
+    _require_vetted(session, publisher)
+    if member_id == publisher.navide_member_id:
+        raise SelfServiceError("The owner is already a member of the namespace.")
+    if not qualification.is_approved(session, member_id):
+        raise QualificationRequired(
+            "QUALIFICATION_REQUIRED",
+            "That account is not an approved developer; it must apply for developer qualification first.",
+        )
+    row = NamespaceMember(
+        publisher_id=publisher.id, navide_member_id=member_id, role=ROLE_PUBLISHER, added_by=actor
+    )
+    session.add(row)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise SelfServiceError("That account is already a publisher of this namespace.") from exc
+    audit.record(
+        session,
+        actor=actor,
+        action="namespace-member.add",
+        target=f"publisher:{publisher.name}",
+        detail={"member_id": member_id, "role": ROLE_PUBLISHER},
+    )
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def remove_member(session: Session, publisher: Publisher, *, member_id: str, actor: str) -> bool:
+    """Remove a publisher member and revoke every publish token issued to it
+    for this namespace. False when the account is not a member."""
+    row = session.exec(
+        select(NamespaceMember).where(
+            NamespaceMember.publisher_id == publisher.id,
+            NamespaceMember.navide_member_id == member_id,
+        )
+    ).first()
+    if row is None:
+        return False
+    session.delete(row)
+    revoked = session.execute(
+        update(PublisherToken)
+        .where(
+            PublisherToken.publisher_id == publisher.id,
+            PublisherToken.navide_member_id == member_id,
+            PublisherToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=_now())
+    )
+    audit.record(
+        session,
+        actor=actor,
+        action="namespace-member.remove",
+        target=f"publisher:{publisher.name}",
+        detail={"member_id": member_id, "role": row.role, "tokens_revoked": revoked.rowcount},
+    )
+    session.commit()
+    return True
 
 
 def counted_namespaces(member_id: str):
@@ -157,13 +310,23 @@ def claim_namespace(session: Session, *, member_id: str, display_name: str, name
     return session.exec(select(Publisher).where(Publisher.name == namespace)).one()
 
 
-def set_public_key(session: Session, publisher: Publisher, pem: str) -> str:
+def set_public_key(session: Session, publisher: Publisher, pem: str, *, replace: bool = False) -> str:
+    """Register ``pem`` as the publisher's signing key. A different key already
+    registered is kept unless ``replace`` is asked for (L1d): the web form is
+    the developer's explicit action and passes it; the App's sign-in does not."""
     pem = pem.strip() + "\n"
     try:
         fingerprint = public_key_fingerprint(pem)
     except Exception as exc:  # noqa: BLE001 - any parse failure is a bad key
         raise SelfServiceError("That is not an Ed25519 public key in PEM form.") from exc
     _require_vetted(session, publisher)
+    if publisher.public_key and not replace:
+        try:
+            current = public_key_fingerprint(publisher.public_key)
+        except Exception:  # noqa: BLE001 - an unreadable stored key is replaced
+            current = None
+        if current is not None and current != fingerprint:
+            raise KeyConflict(current)
     publisher.public_key = pem
     session.add(publisher)
     qualification.record_key(session, publisher, pem)
@@ -186,23 +349,34 @@ def _label(value: str) -> str:
     return value
 
 
-def create_token(session: Session, publisher: Publisher, *, label: str, days: int = DEFAULT_TOKEN_DAYS) -> tuple[str, PublisherToken]:
-    """Return (plain token, row). The plain token is shown once, never stored."""
+def create_token(
+    session: Session,
+    publisher: Publisher,
+    *,
+    label: str,
+    days: int = DEFAULT_TOKEN_DAYS,
+    member_id: str | None = None,
+) -> tuple[str, PublisherToken]:
+    """Return (plain token, row). The plain token is shown once, never stored.
+    ``member_id`` is the account the token is issued to (None: the owner)."""
     if not 1 <= days <= MAX_TOKEN_DAYS:
         raise SelfServiceError(f"A token can last 1-{MAX_TOKEN_DAYS} days.")
     _require_vetted(session, publisher)
+    if not member_may_publish(session, publisher, member_id):
+        raise SelfServiceError("This account is not a publisher of the namespace.")
     plain = TOKEN_PREFIX + secrets.token_urlsafe(32)
     row = PublisherToken(
         publisher_id=publisher.id,
         label=_label(label),
         token_hash=hash_token(plain),
         expires_at=_now() + timedelta(days=days),
+        navide_member_id=member_id,
     )
     session.add(row)
     session.flush()
     audit.record(
         session,
-        actor=_owner_actor(publisher),
+        actor=audit.member_actor(member_id) if member_id is not None else _owner_actor(publisher),
         action="publisher-token.issue",
         target=f"publisher:{publisher.name}",
         detail={"token_id": row.id, "label": row.label, "days": days},
@@ -268,10 +442,14 @@ def pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
 
 
-def issue_cli_code(session: Session, publisher: Publisher, *, code_challenge: str, label: str) -> str:
+def issue_cli_code(
+    session: Session, publisher: Publisher, *, code_challenge: str, label: str, member_id: str | None = None
+) -> str:
     if not (43 <= len(code_challenge) <= 128):
         raise SelfServiceError("invalid code_challenge")
     _require_vetted(session, publisher)
+    if not member_may_publish(session, publisher, member_id):
+        raise SelfServiceError("This account is not a publisher of the namespace.")
     code = secrets.token_urlsafe(32)
     session.add(
         CliAuthCode(
@@ -280,6 +458,7 @@ def issue_cli_code(session: Session, publisher: Publisher, *, code_challenge: st
             code_challenge=code_challenge,
             label=_label(label),
             expires_at=_now() + CLI_CODE_TTL,
+            navide_member_id=member_id,
         )
     )
     session.commit()
@@ -303,7 +482,9 @@ def exchange_cli_code(session: Session, *, code: str, code_verifier: str) -> tup
     if not secrets.compare_digest(pkce_challenge(code_verifier).encode(), row.code_challenge.encode()):
         raise SelfServiceError("invalid or expired code")
     publisher = session.get(Publisher, row.publisher_id)
-    plain, token = create_token(session, publisher, label=row.label, days=CLI_TOKEN_DAYS)
+    plain, token = create_token(
+        session, publisher, label=row.label, days=CLI_TOKEN_DAYS, member_id=row.navide_member_id
+    )
     return plain, token, publisher
 
 

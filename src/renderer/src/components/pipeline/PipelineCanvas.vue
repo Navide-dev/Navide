@@ -71,6 +71,9 @@ const props = defineProps<{
   locked: boolean
   /** Instance id, so a second canvas (executions replay) keeps its own viewport. */
   flowId?: string
+  /** Extra class on a node's Vue Flow wrapper (the n8n import preview colors
+   *  nodes by how they were converted). */
+  nodeClass?: (node: GraphNode) => string
 }>()
 const emit = defineEmits<{
   (e: 'select', id: string | null): void
@@ -105,6 +108,7 @@ const flowNodes = computed<FlowNode[]>(() =>
     connectable: !props.locked,
     selected: props.selectedId === n.id,
     width: NODE_SIZE[n.kind].w,
+    class: props.nodeClass?.(n),
   }))
 )
 
@@ -112,6 +116,7 @@ function edgeTone(e: GraphEdge): string {
   const from = props.runNodes[e.from]?.status
   const to = props.runNodes[e.to]?.status
   if (to === 'running' || to === 'awaiting') return 'live'
+  if (props.runNodes[e.to]?.skipReason === 'untaken') return 'idle'
   if (from === 'done' || from === 'skipped') return 'done'
   return 'idle'
 }
@@ -145,6 +150,11 @@ const flowEdges = computed<FlowEdge[]>(() =>
     }
   })
 )
+
+function whenText(e: GraphEdge): string {
+  const w = e.when
+  return typeof w === 'string' ? w : w ? `${w.path} = ${JSON.stringify(w.equals)}` : ''
+}
 
 function roleOf(n: GraphNode): string {
   return n.slot?.roleKey ? (props.roleLabels[n.slot.roleKey] ?? n.slot.roleKey) : ''
@@ -318,6 +328,15 @@ function mainPath(p: EdgeProps): { path: string; labelX: number; labelY: number 
         <Handle id="reject-out" type="source" :position="Position.Bottom" class="pcv-handle pcv-handle--reject" :title="t('pipelineEditor.canvas.reject-handle')" />
         <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
       </template>
+      <template #node-subpipeline="{ data }">
+        <Handle id="in" type="target" :position="Position.Left" class="pcv-handle" />
+        <PipelineNodeCard
+          :data-node-id="data.node.id" class="pcv-node pcv-node--subpipeline"
+          :node="data.node" :run="runNodes[data.node.id]" :now="now" :selected="selectedId === data.node.id"
+        />
+        <Handle id="out" type="source" :position="Position.Right" class="pcv-handle" />
+        <Handle id="reject-in" type="target" :position="Position.Left" class="pcv-handle pcv-handle--loop-in" />
+      </template>
       <template #node-gate="{ data }">
         <Handle id="in" type="target" :position="Position.Left" class="pcv-handle" />
         <PipelineNodeCard
@@ -334,11 +353,21 @@ function mainPath(p: EdgeProps): { path: string; labelX: number; labelY: number 
         <g @mouseenter="hoverEdge = p.id" @mouseleave="hoverEdge = null">
           <BaseEdge
             :id="p.id" :path="mainPath(p).path"
-            class="pcv-edge" :class="[`is-${p.data.tone}`, { 'is-selected': p.selected }]"
+            class="pcv-edge" :class="[`is-${p.data.tone}`, `pcv-edge--${p.data.edge.kind ?? 'main'}`, { 'is-selected': p.selected }]"
             :interaction-width="22"
           />
         </g>
-        <EdgeLabelRenderer v-if="!locked">
+        <!-- A branch or error link names its condition; the pill selects it. -->
+        <EdgeLabelRenderer v-if="p.data.edge.kind === 'branch' || p.data.edge.kind === 'error'">
+          <button
+            type="button" class="pcv-loop-label pcv-cond-label nodrag nopan"
+            :class="[`pcv-cond-label--${p.data.edge.kind}`, { 'is-selected': p.selected }]"
+            :style="{ transform: `translate(-50%, -50%) translate(${mainPath(p).labelX}px, ${mainPath(p).labelY}px)` }"
+            :aria-label="t('pipelineEditor.link.title')"
+            @click.stop="selectedEdge = p.id; emit('select', null)"
+          >{{ p.data.edge.kind === 'error' ? t('pipelineEditor.canvas.error-label') : t('pipelineEditor.canvas.branch-label', { when: whenText(p.data.edge) }) }}</button>
+        </EdgeLabelRenderer>
+        <EdgeLabelRenderer v-else-if="!locked">
           <button
             type="button" class="pcv-insert nodrag nopan"
             :class="{ 'is-shown': hoverEdge === p.id || p.selected }"
@@ -493,6 +522,10 @@ function mainPath(p: EdgeProps): { path: string; labelX: number; labelY: number 
 .pcv-loop-label:hover,
 .pcv-loop-label.is-selected { background: color-mix(in srgb, var(--done-emphasis) 14%, var(--bg-elevated)); border-color: var(--done-emphasis); }
 .pcv-loop-label:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 2px; }
+.pcv-cond-label { border-color: color-mix(in srgb, var(--accent-emphasis) 45%, transparent); color: var(--accent-fg); }
+.pcv-cond-label--error { border-color: color-mix(in srgb, var(--danger-emphasis) 45%, transparent); color: var(--danger-fg); }
+.pcv :deep(.pcv-edge--branch) { stroke-dasharray: 6 3; }
+.pcv :deep(.pcv-edge--error) { stroke: var(--danger-emphasis); stroke-dasharray: 2 3; }
 
 /* Minimap */
 .pcv :deep(.pcv-minimap) {

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import errno
+import hashlib
 import json
 import os
 import shutil
@@ -72,6 +73,59 @@ def test_a_single_call_write_replaces_the_file_by_rename(tmp_path: Path) -> None
     assert target.read_text(encoding="utf-8") == "new"
     assert target.stat().st_ino != before.st_ino
     assert sorted(path.name for path in tmp_path.iterdir()) == ["doc.html"]
+
+
+def test_a_base64_write_stores_the_exact_bytes(tmp_path: Path) -> None:
+    data = bytes(range(256)) + b"\x89PNG\r\n\x1a\n"
+
+    result = fs_service.write_file(
+        str(tmp_path), "out/image.png", base64.b64encode(data).decode("ascii"), encoding="base64"
+    )
+
+    assert result["ok"] is True
+    assert (tmp_path / "out" / "image.png").read_bytes() == data
+
+
+def test_a_base64_write_refuses_text_that_is_not_base64(tmp_path: Path) -> None:
+    result = fs_service.write_file(str(tmp_path), "image.png", "not base64!", encoding="base64")
+
+    assert result == {"ok": False, "error": "content is not valid base64"}
+    assert not (tmp_path / "image.png").exists()
+
+
+def test_a_text_write_still_encodes_a_base64_looking_string_as_text(tmp_path: Path) -> None:
+    result = fs_service.write_file(str(tmp_path), "note.txt", "aGk=")
+
+    assert result["ok"] is True
+    assert (tmp_path / "note.txt").read_text(encoding="utf-8") == "aGk="
+
+
+def test_a_write_whose_bytes_changed_under_the_same_mtime_is_a_conflict(tmp_path: Path) -> None:
+    target = tmp_path / "doc.html"
+    target.write_text("old", encoding="utf-8")
+    seen = hashlib.sha256(b"old").hexdigest()
+    # Someone else rewrites it and puts the mtime back: only the bytes tell.
+    before = target.stat()
+    target.write_text("theirs", encoding="utf-8")
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    refused = fs_write.write_file(
+        str(tmp_path), "doc.html", "mine", expected_mtime=before.st_mtime, expected_sha256=seen
+    )
+    assert refused["ok"] is False and refused["conflict"] is True
+    assert target.read_text(encoding="utf-8") == "theirs"
+
+    upload_id = "0123456789abcdef0123456789abcdef"
+    assert fs_write.write_part(str(tmp_path), "doc.html", upload_id, 0, base64.b64encode(b"mine").decode())["ok"]
+    committed = fs_write.write_commit(str(tmp_path), "doc.html", upload_id, 4, expected_sha256=seen)
+    assert committed["ok"] is False and committed["conflict"] is True
+    assert target.read_text(encoding="utf-8") == "theirs"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["doc.html"]
+
+    current = hashlib.sha256(b"theirs").hexdigest()
+    accepted = fs_write.write_file(str(tmp_path), "doc.html", "mine", expected_sha256=current)
+    assert accepted["ok"] is True
+    assert target.read_text(encoding="utf-8") == "mine"
 
 
 # ── concurrent writers ───────────────────────────────────────────────────────

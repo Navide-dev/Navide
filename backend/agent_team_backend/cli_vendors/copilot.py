@@ -133,6 +133,7 @@ from ..usage_common import (
     parse_retry_after,
 )
 from ..log_readers.base import (
+    ActivityLines,
     ActivityEvent,
     IncrementalParseResult,
     LogReader,
@@ -923,7 +924,7 @@ class CopilotLogReader(LogReader):
         last_text = _read_last_text(seen_keys)
         text_changed = False
         try:
-            fh = path.open(encoding="utf-8")
+            fh = ActivityLines(self, path, seen_keys)
         except OSError:
             return out
 
@@ -931,7 +932,7 @@ class CopilotLogReader(LogReader):
         last_line = high_water
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_line in fh:
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -997,6 +998,7 @@ class CopilotLogReader(LogReader):
                         text_changed = True
         finally:
             set_activity_high_water(seen_keys, last_line)
+            fh.save(last_line)
 
         if text_changed:
             _write_last_text(seen_keys, last_text)
@@ -1543,13 +1545,17 @@ SPEC = VendorSpec(
     install_dep=Dep("copilot", "GitHub Copilot CLI", "GitHub Copilot coding agent CLI", "agent_cli",
         ["copilot", "--version"], r"(\d+\.\d+\.\d+)",
         install_cmd="brew install --cask copilot-cli",
+        # VS Code's own `copilot` stand-in, see Dep.shim_dirs.
+        shim_dirs=("copilot-shim",),
         needs_terminal=True, requires_binaries=("brew",), optional=True,
         docs_url="https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli",
         # Windows: WinGet, per
         # https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli
         # (running it needs PowerShell 6+, which the same page states).
         install_cmds={"win32": PlatformInstall(
-            "winget install GitHub.Copilot", ("winget",), needs_terminal=True)},
+            "winget install GitHub.Copilot", ("winget",), needs_terminal=True),
+            # A cask is macOS-only; the wizard links docs_url instead.
+            "linux": PlatformInstall("")},
         update_cmd="copilot update",
         npm_package="@github/copilot",
         config_home_env="COPILOT_HOME",

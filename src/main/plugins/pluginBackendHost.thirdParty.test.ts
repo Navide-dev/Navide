@@ -151,6 +151,37 @@ describe('PluginBackendHost third-party branch', () => {
     expect(supervisor.restart).toHaveBeenCalledTimes(1)
   })
 
+  it('reports a restart that brought the child back, and the Host giving up (C4)', async () => {
+    vi.useFakeTimers()
+    const supervisor = fakeSupervisor()
+    let options: PluginBackendSupervisorOptions | undefined
+    const noteFailure = vi.fn<() => number | null>().mockReturnValueOnce(1_000).mockReturnValueOnce(null)
+    const onBackendRestarted = vi.fn()
+    const onBackendGaveUp = vi.fn()
+    const host = new PluginBackendHost({
+      admitThirdParty: async () => admission({ noteFailure }),
+      createSupervisor: (_activation, next) => {
+        options = next
+        return supervisor
+      },
+      onBackendRestarted,
+      onBackendGaveUp,
+    })
+    hosts.push(host)
+    host.register(thirdParty())
+    await host.bindView(runtime('acme.indexer'), workspace, workspace)
+    options?.onFailure?.(new BackendPluginError('BACKEND_UNAVAILABLE'))
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(supervisor.restart).toHaveBeenCalledTimes(1)
+    expect(onBackendRestarted).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer', instanceId: 'view-1' }))
+    expect(onBackendGaveUp).not.toHaveBeenCalled()
+    options?.onFailure?.(new BackendPluginError('BACKEND_UNAVAILABLE'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(supervisor.restart).toHaveBeenCalledTimes(1)
+    expect(onBackendGaveUp).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer', instanceId: 'view-1' }))
+    expect(onBackendRestarted).toHaveBeenCalledTimes(1)
+  })
+
   it('kill switch stops only third-party children', async () => {
     const supervisors: PluginBackendSupervisor[] = []
     const host = new PluginBackendHost({

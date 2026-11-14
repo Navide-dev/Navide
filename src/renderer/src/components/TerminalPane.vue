@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTerminal, type ClipboardFailureReason } from '@navide/terminal'
 import { agentProfileFor } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -11,10 +11,12 @@ import type { MentionCandidate } from '@navide/terminal'
 import { PLAN_REF_MIME, isPlanDrag, parsePlanRefPayload, type PlanDragRef } from '../lib/planDrag'
 import { formatLoopTime } from '../lib/loopPrompt'
 import { PANE_STUCK_AFTER_MS } from '../lib/paneStuck'
+import type { StaleConfigPart } from '../lib/staleConfigPanes'
 import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { castablePromptSkills } from '../lib/promptSkills'
 import { paneStatusLabelText } from '../lib/paneStatusLabel'
+import { VENDORS_REPORTING_INTERRUPT } from '../lib/agentMessaging'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -28,6 +30,10 @@ import CliRiskPill from './CliRiskPill.vue'
 import { cliRiskKey } from '../composables/useResourceUsage'
 import type { CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
 import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
+import AgentControlPanel from './agent/AgentControlPanel.vue'
+import { agentConsoleKey } from '../composables/useAgentConsole'
+import type { AgentPaneInfo } from '../lib/agentIdentity'
+import { formatClock } from '../lib/schedulerJobs'
 
 interface Props {
   paneId: string
@@ -74,6 +80,8 @@ interface Props {
   /** Epoch ms of the heuristic quota-reset estimate (loop start + 5h Claude
    *  session window) shown on the running badge as an approximate time. */
   loopEstimateResetAt?: number | null
+  /** The estimate is the account's weekly reset, not the 5-hour guess. */
+  loopEstimateWeekly?: boolean
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
@@ -83,6 +91,17 @@ interface Props {
   /** When the pane went quiet mid-turn (App.vue's stuck poll); null when not
    *  stuck. */
   stuckSince?: number | null
+  /** What this pane's CLI loaded at start that has changed since (MCP
+   *  servers, skills); empty when nothing has. Clicking asks for a rebuild. */
+  staleConfig?: StaleConfigPart[]
+  /** This pane's CLI has a newer release (onboarding.update_notices); null
+   *  when it has none. */
+  updateAvailable?: { version: string; latest: string } | null
+  /** The "update available" badge's click: App.vue opens this CLI's update
+   *  in Settings, where it runs in a terminal the user can see. A callback,
+   *  not an emit: one more emit overload is past what Vue's emit typing
+   *  resolves, and every listener type on this component degrades to any. */
+  openCliUpdate?: () => void
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
@@ -128,6 +147,11 @@ interface Props {
    *  (their terminals must survive), so the terminal uses this to skip
    *  display-only upkeep instead of running it for an invisible pane. */
   onScreen?: boolean
+  /** Set for an agent pane (spec kind 'agent'; plan agent-0-2-40_78e071): the
+   *  header shows the identity, the control panel sits on the right, and the
+   *  CLI-only chips (loop, login, quota, account) are left out. Undefined for
+   *  every CLI pane, which renders exactly as before. */
+  agent?: AgentPaneInfo
 }
 
 const props = defineProps<Props>()
@@ -254,6 +278,7 @@ const terminal = useTerminal(props.paneId, props.terminalPort, {
   workspacePath: props.workspacePath,
   onClear: () => emit('rebuild-clean'),
   onUserResume: () => emit('user-resume'),
+  reportsInterrupt: () => VENDORS_REPORTING_INTERRUPT.has(props.agentKey ?? ''),
   mentionCandidates: () => props.mentionCandidates?.(props.paneId) ?? [],
   onMentionPick: (addresses) => emit('mention-pick', addresses),
   onScreen: () => props.onScreen ?? true,
@@ -363,13 +388,139 @@ const showContinueButton = computed<boolean>(
     (terminal.lastUserKeyAt?.value ?? 0) === 0
 )
 
+// ── Agent pane ───────────────────────────────────────────────────────────────
+const agentConsole = inject(agentConsoleKey, null)
+/** The agent prop when given, else what the app's agent console knows of
+ *  this pane; undefined for a CLI pane. */
+const agentView = computed<AgentPaneInfo | undefined>(
+  () => props.agent ?? agentConsole?.paneInfo(props.paneId, props.agentKey, props.title)
+)
+/** Panes narrower than this start with the control panel folded (decision 1). */
+const AGENT_PANEL_FOLD_BELOW_PX = 720
+const agentPanelCollapsed = ref(false)
+const headerRef = ref<HTMLElement | null>(null)
+/** The panel sits under the header, beside the terminal; the header's height
+ *  varies with its sub line, so it is measured rather than assumed. */
+const agentPanelTop = ref(0)
+let headerObserver: ResizeObserver | null = null
+const agentNow = ref(Date.now())
+let agentTick: ReturnType<typeof setInterval> | null = null
+
+function toggleAgentPanel(): void {
+  agentPanelCollapsed.value = !agentPanelCollapsed.value
+}
+
+/** Below the fold width the header ranks its badges status > channel >
+ *  schedule > other, and folds the others behind "…" (CLI panes unchanged). */
+const agentNarrow = ref(false)
+const agentBadgesOpen = ref(false)
+/** How many "other" badges the narrow header is folding right now. */
+const agentFoldedBadges = ref(0)
+const AGENT_OTHER_BADGES = '.commander-inline, .muted-inline, .readback-toggle, .stale-config-inline, .cli-risk-inline, .pane-guard'
+let paneObserver: ResizeObserver | null = null
+let badgeObserver: MutationObserver | null = null
+
+function countAgentBadges(): void {
+  agentFoldedBadges.value = headerRef.value?.querySelectorAll(AGENT_OTHER_BADGES).length ?? 0
+}
+
+watch(
+  () => !!agentView.value,
+  (isAgent) => {
+    headerObserver?.disconnect()
+    headerObserver = null
+    paneObserver?.disconnect()
+    paneObserver = null
+    badgeObserver?.disconnect()
+    badgeObserver = null
+    if (agentTick !== null) clearInterval(agentTick)
+    agentTick = null
+    if (!isAgent) return
+    void nextTick(() => {
+      const root = containerRef.value?.parentElement
+      const width = root?.clientWidth ?? 0
+      if (width > 0 && width < AGENT_PANEL_FOLD_BELOW_PX) agentPanelCollapsed.value = true
+      agentNarrow.value = width > 0 && width < AGENT_PANEL_FOLD_BELOW_PX
+      if (root && typeof ResizeObserver !== 'undefined') {
+        paneObserver = new ResizeObserver(() => {
+          const w = root.clientWidth
+          agentNarrow.value = w > 0 && w < AGENT_PANEL_FOLD_BELOW_PX
+        })
+        paneObserver.observe(root)
+      }
+      const header = headerRef.value
+      if (!header) return
+      countAgentBadges()
+      if (typeof MutationObserver !== 'undefined') {
+        badgeObserver = new MutationObserver(countAgentBadges)
+        badgeObserver.observe(header, { childList: true, subtree: true })
+      }
+      agentPanelTop.value = header.offsetHeight
+      if (typeof ResizeObserver !== 'undefined') {
+        headerObserver = new ResizeObserver(() => (agentPanelTop.value = header.offsetHeight))
+        headerObserver.observe(header)
+      }
+    })
+    agentTick = setInterval(() => (agentNow.value = Date.now()), 30_000)
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => {
+  headerObserver?.disconnect()
+  paneObserver?.disconnect()
+  badgeObserver?.disconnect()
+  if (agentTick !== null) clearInterval(agentTick)
+})
+
+/** The enabled schedule that wakes this agent next, for the header chip. */
+const agentNextRun = computed(() => {
+  if (!agentView.value) return null
+  const job = agentConsole?.nextJob(props.paneId, props.title)
+  const at = job?.state?.next_run_at
+  return job && typeof at === 'number' ? { name: job.name, time: formatClock(at) } : null
+})
+
+/** "Hermes Agent · resident since 11/7" under the identity name. */
+const agentVendorLine = computed(() => {
+  const a = agentView.value
+  if (!a) return ''
+  if (a.createdAt <= 0) return a.vendor
+  const at = new Date(a.createdAt)
+  const now = new Date(agentNow.value)
+  if (at.toDateString() === now.toDateString()) return i18n.global.t('agentPane.header.vendor-today', { vendor: a.vendor })
+  return i18n.global.t('agentPane.header.vendor-since', { vendor: a.vendor, date: at.toLocaleDateString([], { month: 'numeric', day: 'numeric' }) })
+})
+
+/** Model · this turn N min · last done HH:MM — replaces the CLI sub line. */
+const agentSubLine = computed(() => {
+  const a = agentView.value
+  if (!a) return ''
+  const t = i18n.global.t
+  const parts = [a.model ? t('agentPane.header.model', { model: a.model }) : t('agentPane.header.model-default')]
+  const clock = agentConsole?.turnFor(props.paneId)
+  if (clock?.startedAt != null && displayStatus.value === 'running') {
+    parts.push(t('agentPane.header.turn', { minutes: Math.max(0, Math.round((agentNow.value - clock.startedAt) / 60_000)) }))
+  }
+  parts.push(clock?.endedAt != null
+    ? t('agentPane.header.last-done', { time: formatLoopTime(clock.endedAt) })
+    : t('agentPane.header.never-done'))
+  return parts.join(' · ')
+})
+
 defineExpose({
+  toggleAgentPanel,
   spawn: terminal.spawn,
   interrupt: terminal.interrupt,
   kill: terminal.kill,
   focus: terminal.focus,
   status: terminal.status,
   displayStatus,
+  liveStatus: terminal.liveStatus,
+  stoppedBy: terminal.stoppedBy,
+  stopIneffective: terminal.stopIneffective,
+  noteInterruptEvidence: terminal.noteInterruptEvidence,
+  stopHeldForUser: terminal.stopHeldForUser,
+  markAgentTurnStart: terminal.markAgentTurnStart,
   awaitingKind: terminal.awaitingKind,
   startingStartedAt: terminal.startingStartedAt,
   startingAgeMs: terminal.startingAgeMs,
@@ -378,6 +529,7 @@ defineExpose({
   // Empty unless this pane reattached to a live PTY, in which case it names
   // the transcript that PTY is really writing to.
   attachedOutputLogFile: terminal.attachedOutputLogFile,
+  attachedBypassDropped: terminal.attachedBypassDropped,
   error: terminal.error,
   lastCommand: terminal.lastCommand,
   cleanBuffer: terminal.cleanBuffer,
@@ -390,12 +542,14 @@ defineExpose({
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,
+  terminalSize: terminal.terminalSize,
   // The ⌘V path (never submits), false when the text would be dropped; voice
   // dictation types its text through it.
   insertText: terminal.insertText,
   markTurnComplete: terminal.markTurnComplete,
   markNeedsInput: terminal.markNeedsInput,
   clearNeedsInput: terminal.clearNeedsInput,
+  markBoxOnScreen: terminal.markBoxOnScreen,
   holdNeedsInput: terminal.holdNeedsInput,
   releaseNeedsInputHold: terminal.releaseNeedsInputHold,
   awaitingHeld: terminal.awaitingHeld,
@@ -423,7 +577,11 @@ defineExpose({
   redraw: terminal.redraw,
   // STOP badge: App.vue owns persistence; it reflects stored/broadcast truth
   // into this pane's composable ref via setStopped (no persist side-effect).
-  setStopped: (v: boolean) => { terminal.isStopped.value = v }
+  // Cleared elsewhere means a person resumed it there: drop the gate hold too.
+  setStopped: (v: boolean) => {
+    terminal.isStopped.value = v
+    if (!v) terminal.stopHeldForUser.value = false
+  }
 })
 
 /** True when the drag carries a CLI pane's identity (pane→pane context share)
@@ -610,7 +768,9 @@ const loopBadge = computed(() => {
   if (props.loopEstimateResetAt != null) {
     return {
       textKey: 'pane.terminal.loop-badge-estimate' as string | null,
-      titleKey: 'pane.terminal.loop-estimate-tooltip',
+      titleKey: props.loopEstimateWeekly
+        ? 'pane.terminal.loop-estimate-weekly-tooltip'
+        : 'pane.terminal.loop-estimate-tooltip',
       time: formatLoopTime(props.loopEstimateResetAt)
     }
   }
@@ -637,7 +797,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected }]">
+  <div
+    :class="['pane', { 'pane-focus': isFocus, 'pane-selected': isSelected, 'pane-agent': agentView, 'pane-agent-awaiting': agentView && displayStatus === 'awaiting', 'pane-agent-narrow': agentView && agentNarrow, 'agent-badges-open': agentView && agentNarrow && agentBadgesOpen }]"
+    :style="agentView ? { '--agent-color': agentView.color } : undefined"
+  >
     <button
       v-if="rebuildVisible"
       class="rebuild-btn"
@@ -648,6 +811,7 @@ onMounted(() => {
     ><RebuildIcon /></button>
     <button class="minimize-btn" @click.stop="emit('minimize')" :title="$t('pane.terminal.minimize-tooltip')">⊟</button>
     <header
+      ref="headerRef"
       :class="['pane-header', { 'drag-over': isReorderDragOver }]"
       data-tour="pane-header"
       :draggable="!editingTitle"
@@ -663,6 +827,7 @@ onMounted(() => {
     >
       <div class="header-main">
         <span v-if="pipeTag" class="pipe-tag">{{ pipeTag }}</span>
+        <span v-if="agentView" class="agent-avatar" aria-hidden="true" data-testid="agent-avatar">{{ agentView.initial }}</span>
         <input
           v-if="editingTitle"
           ref="titleInput"
@@ -684,7 +849,9 @@ onMounted(() => {
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
+        <span v-if="agentView" class="agent-vendor" data-testid="agent-vendor" v-truncate>{{ agentVendorLine }}</span>
         <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
+        <template v-if="!agentView">
         <span
           v-if="loopActive"
           class="loop-inline"
@@ -705,6 +872,7 @@ onMounted(() => {
             :aria-label="$t('pane.terminal.loop-tooltip')"
           >∞</button>
         </PromptSkillPicker>
+        </template>
         <span
           v-if="muted"
           class="muted-inline"
@@ -720,6 +888,7 @@ onMounted(() => {
           :title="$t(readback ? 'pane.terminal.readback-on-tooltip' : 'pane.terminal.readback-off-tooltip')"
           @click.stop="emit('toggle-readback')"
         >🔊<span v-if="readbackSpeaking" class="readback-speaking">{{ $t('pane.terminal.readback-speaking') }}</span></button>
+        <template v-if="!agentView">
         <span
           v-if="loginExpired"
           class="login-expired-inline"
@@ -727,6 +896,7 @@ onMounted(() => {
           :title="$t('pane.terminal.login-expired-tooltip')"
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
+        </template>
         <span
           v-if="exitCode != null && (displayStatus === 'exited' || displayStatus === 'error')"
           class="exit-fault-inline"
@@ -737,6 +907,27 @@ onMounted(() => {
           class="stuck-inline"
           :title="$t('pane.terminal.stuck-tooltip', { minutes: PANE_STUCK_AFTER_MS / 60_000 })"
         >{{ $t('pane.terminal.stuck-badge', { minutes: PANE_STUCK_AFTER_MS / 60_000 }) }}</span>
+        <span
+          v-if="staleConfig?.length && displayStatus !== 'exited' && displayStatus !== 'error'"
+          class="stale-config-inline"
+          role="button"
+          data-testid="stale-config-badge"
+          :title="$t(staleConfig.length > 1
+            ? 'pane.terminal.stale-config-tooltip-both'
+            : staleConfig[0] === 'mcp'
+              ? 'pane.terminal.stale-config-tooltip-mcp'
+              : 'pane.terminal.stale-config-tooltip-skills')"
+          @click.stop="emit('rebuild')"
+        >{{ $t('pane.terminal.stale-config-badge') }}</span>
+        <span
+          v-if="updateAvailable && !agentView"
+          class="update-available-inline"
+          role="button"
+          data-testid="update-available-badge"
+          :title="$t('pane.terminal.update-available-tooltip', { latest: updateAvailable.latest, version: updateAvailable.version })"
+          @click.stop="openCliUpdate?.()"
+        >{{ $t('pane.terminal.update-available-badge') }}</span>
+        <template v-if="!agentView">
         <span
           v-if="usageLimitHit"
           class="usage-limit-inline"
@@ -756,6 +947,7 @@ onMounted(() => {
           :title="$t('account-follow.quota-button-tooltip')"
           @click.stop="emit('quota-switch-account')"
         >{{ $t('account-follow.quota-button') }}</span>
+        </template>
         <CliRiskPill
           v-if="cliRisk && cliRiskState?.signals.length && !restoring && onScreen !== false"
           :pane-id="cliRiskPaneId"
@@ -774,6 +966,13 @@ onMounted(() => {
           :style="statusBadgeVars"
           :title="statusTooltipKey ? $t(statusTooltipKey) : ''"
         >{{ statusBadgeText }}</span>
+        <span
+          v-if="terminal.stopIneffective.value && displayStatus !== 'exited' && displayStatus !== 'error'"
+          class="stop-ineffective"
+          data-testid="stop-ineffective"
+          :title="$t('pane.terminal.stop-ineffective-tooltip')"
+        >{{ $t('pane.terminal.stop-ineffective') }}</span>
+        <template v-if="!agentView">
         <UsageBadge
           v-if="agentKey"
           data-tour="usage-badge"
@@ -792,14 +991,34 @@ onMounted(() => {
           :title="$t('account-follow.pinned-indicator-tooltip')"
           :aria-label="$t('account-follow.pinned-indicator-label')"
         >📌</span>
+        </template>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
+        <template v-if="agentView">
+        <span
+          v-if="agentNextRun"
+          class="agent-sched-inline"
+          data-testid="agent-next-schedule"
+          :title="$t('agentPane.header.next-schedule-title', agentNextRun)"
+        >{{ $t('agentPane.header.next-schedule', { time: agentNextRun.time }) }}</span>
+        <button
+          v-if="agentNarrow && agentFoldedBadges > 0"
+          type="button"
+          class="agent-more-badges"
+          data-testid="agent-more-badges"
+          :aria-expanded="agentBadgesOpen ? 'true' : 'false'"
+          :title="$t('agentPane.header.more-badges', { n: agentFoldedBadges })"
+          :aria-label="$t('agentPane.header.more-badges', { n: agentFoldedBadges })"
+          @click.stop="agentBadgesOpen = !agentBadgesOpen"
+        >…</button>
+        </template>
       </div>
-      <div v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
+      <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
+      <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
     <div
       ref="containerRef"
       class="xterm-host"
-      :class="{ 'drag-over': isDragOver, 'cli-drag-over': isCliDragOver, 'plan-drag-over': isPlanDragOver, 'alt-buffer': terminal.isAltBuffer.value }"
+      :class="{ 'drag-over': isDragOver, 'cli-drag-over': isCliDragOver, 'plan-drag-over': isPlanDragOver, 'alt-buffer': terminal.isAltBuffer.value, 'agent-with-panel': agentView && !agentPanelCollapsed, 'agent-panel-folded': agentView && agentPanelCollapsed }"
       :data-pane-id="paneId"
       @mousedown.left="emit('set-focus')"
       @contextmenu.prevent="onTerminalContextMenu"
@@ -808,6 +1027,17 @@ onMounted(() => {
       @dragleave="onTerminalDragLeave"
       @drop.prevent="onTerminalDrop"
     ></div>
+    <!-- Sibling of .xterm-host, never inside it (xterm owns that subtree). -->
+    <AgentControlPanel
+      v-if="agentView"
+      :style="{ top: agentPanelTop + 'px' }"
+      :pane-id="paneId"
+      :pane-name="title"
+      :agent-key="agentKey"
+      :display-status="displayStatus"
+      :collapsed="agentPanelCollapsed"
+      @toggle="toggleAgentPanel"
+    />
     <!-- Backend down: a frozen pane is indistinguishable from a thinking CLI,
          and keystrokes are refused while it shows (see inputTransportReady).
          Deliberately a banner, not a cover: the history stays readable and
@@ -1130,6 +1360,21 @@ onMounted(() => {
   white-space: nowrap;
   flex-shrink: 0;
 }
+/* Started before an MCP or skills change: a quiet notice, clickable to rebuild. */
+/* A newer CLI release exists. Same quiet look as the stale-config badge. */
+.stale-config-inline,
+.update-available-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
 /* Quota exhausted. Deliberately louder than the login badge. Clicking it
    (after a confirm) dismisses the flag, e.g. when it is stale or moot. */
 .usage-limit-inline {
@@ -1230,6 +1475,17 @@ onMounted(() => {
   color: var(--status-badge-fg, var(--text-bright));
   border: 1px solid var(--border-default);
 }
+/* A STOP the CLI did not act on: sits beside the live status badge, in the
+ * warning colours, so the pane reads as still working and the press as missed. */
+.stop-ineffective {
+  font-size: var(--font-3xs);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--warning-fg) 20%, transparent);
+  color: var(--warning-fg);
+  border: 1px dashed var(--warning-fg);
+}
 .xterm-host {
   flex: 1;
   min-height: 0;
@@ -1237,6 +1493,93 @@ onMounted(() => {
   position: relative;
   transition: box-shadow 0.1s;
 }
+/* Agent pane: identity bar on the left, control panel on the right. */
+.pane.pane-agent::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--agent-color);
+  z-index: 3;
+  pointer-events: none;
+}
+.pane.pane-agent .pane-header {
+  padding-left: 14px;
+  background: color-mix(in srgb, var(--agent-color) 10%, var(--bg-subtle));
+}
+.pane.pane-agent.pane-agent-awaiting {
+  border-color: var(--warning-fg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning-fg) 45%, transparent);
+}
+.agent-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--agent-color);
+  color: #fff;
+  font-size: var(--font-3xs);
+  font-weight: 700;
+}
+.agent-vendor {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-3xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agent-sched-inline {
+  flex: none;
+  font-size: var(--font-3xs);
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.agent-more-badges {
+  flex: none;
+  font: inherit;
+  font-size: var(--font-3xs);
+  line-height: 1;
+  padding: 2px 6px;
+  border: 1px solid var(--border-muted);
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+/* Narrow agent pane: status > channel > schedule > other; the others fold
+   behind "…" until it is opened. */
+.pane.pane-agent-narrow .header-main { min-width: 0; }
+.pane.pane-agent-narrow .header-main > .status,
+.pane.pane-agent-narrow .header-main > .exit-fault-inline,
+.pane.pane-agent-narrow .header-main > .stuck-inline,
+.pane.pane-agent-narrow .header-main > .stop-ineffective { order: 1; flex: none; }
+.pane.pane-agent-narrow .header-main :deep(.pane-channel) { order: 2; flex: none; }
+.pane.pane-agent-narrow .header-main > .agent-sched-inline { order: 3; }
+.pane.pane-agent-narrow .header-main > .commander-inline,
+.pane.pane-agent-narrow .header-main > .muted-inline,
+.pane.pane-agent-narrow .header-main > .readback-toggle,
+.pane.pane-agent-narrow .header-main > .stale-config-inline,
+.pane.pane-agent-narrow .header-main :deep(.cli-risk-inline),
+.pane.pane-agent-narrow .header-main :deep(.pane-guard) { order: 4; }
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .commander-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .muted-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .readback-toggle,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main > .stale-config-inline,
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main :deep(.cli-risk-inline),
+.pane.pane-agent-narrow:not(.agent-badges-open) .header-main :deep(.pane-guard) { display: none; }
+.pane.pane-agent-narrow .header-main > .agent-more-badges { order: 5; }
+.pane.pane-agent-narrow.agent-badges-open .header-main { flex-wrap: wrap; }
+.xterm-host.agent-with-panel { margin-right: 200px; }
+.xterm-host.agent-panel-folded { margin-right: 18px; }
 .xterm-host.drag-over,
 .xterm-host.cli-drag-over,
 .xterm-host.plan-drag-over {

@@ -42,6 +42,13 @@ const QUOTED_LABELS: ReadonlyArray<{ key: string; params?: Record<string, string
   { key: 'action.reapply-role' },
   { key: 'action.remove' },
   { key: 'action.remove-children', params: { count: 'N' } },
+  { key: 'action.remove-with-children', params: { count: 'N' } },
+  { key: 'action.mute' },
+  { key: 'action.fit-width' },
+  { key: 'action.reclaim' },
+  { key: 'reconnect.menu-item' },
+  { key: 'label.add-menu-cli' },               // ＋ menu blocks
+  { key: 'label.add-menu-agents' },
   { key: 'action.restore' },                   // expanded docked row
   { key: 'pane.terminal.click-to-resume' },    // placeholder card
   { key: 'action.interrupt-selected' },        // batch context menu
@@ -138,7 +145,7 @@ describe('WorkspacePanesHelp', () => {
     expect(text).toContain('快捷鍵速查')
     // The interface labels the prose quotes turn Chinese along with it.
     expect(text).toContain('傳送訊息')
-    expect(text).toContain('關閉工作區與 CLI 視窗')
+    expect(text).toContain('關閉工作區與其中的分格')
     expect(text).toContain('格狀')
     expect(text).toContain('排程')
     expect(wrapper.findAll('.wph-h2')).toHaveLength(8)

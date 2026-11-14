@@ -1378,3 +1378,236 @@ async def test_a_tree_read_that_raises_still_kills_the_root_and_returns_the_enve
 
     assert (rc, killed) == (128, [4242]) and "timed out" in stderr
     assert any("could not read the process tree of pid 4242" in r.getMessage() for r in caplog.records)
+
+
+# ---- Windows: no suspend, no job for a short allowlisted run ---------------
+#
+# Every git.exe the backend started suspended and boxed in a kill-on-close
+# job left one kernel Token object behind on a user's Windows host (paged
+# pool +280MB/h); the processes git starts itself, with neither, did not.
+# These run the Windows process_tree with kernel32 and psutil stubbed.
+
+
+class _RecordingKernel32:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __getattr__(self, name):
+        def call(*_a):
+            self.calls.append(name)
+            return 1
+
+        return call
+
+
+def _windows_tree(monkeypatch) -> _RecordingKernel32:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _RecordingKernel32()
+    monkeypatch.setattr(_windows, "_kernel32", lambda: kernel32)
+    monkeypatch.setattr(_windows, "_jobs", {})
+    monkeypatch.setattr(host_shell, "process_tree", _windows.process_tree)
+
+    def no_resume(pid):
+        raise AssertionError(f"psutil.Process({pid}) touched: no resume is needed")
+
+    monkeypatch.setattr(_windows.psutil, "Process", no_resume)
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: name)
+    return kernel32
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("capped", [False, True])
+async def test_on_windows_a_run_starts_unsuspended_and_outside_any_job(monkeypatch, capped) -> None:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _windows_tree(monkeypatch)
+    spawn_kwargs: list[dict] = []
+
+    class DoneProc:
+        pid = 4_194_305  # only the stubbed process tree ever sees it
+        returncode = 0
+
+        async def communicate(self, *_a):
+            return b"main\n", b""
+
+    class DoneStream:
+        async def read(self, *_a):
+            return b""
+
+    async def fake_exec(*_a, **kwargs):
+        spawn_kwargs.append(kwargs)
+        proc = DoneProc()
+        proc.stdout = proc.stderr = DoneStream()
+
+        async def wait():
+            return 0
+
+        proc.wait = wait
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    if capped:
+        rc, *_ = await host_shell.run_allowlisted_capped(["git", "status"], max_stdout_bytes=10)
+    else:
+        rc, stdout, _ = await host_shell.run_allowlisted(["git", "rev-parse", "HEAD"])
+        assert stdout == b"main\n"
+
+    assert rc == 0
+    flags = spawn_kwargs[0].get("creationflags", 0)
+    assert not flags & _windows.CREATE_SUSPENDED
+    assert kernel32.calls == []  # no CreateJobObjectW, no assign, no SetInformationJobObject
+
+
+@pytest.mark.asyncio
+async def test_on_windows_a_timed_out_run_still_ends_its_tree(monkeypatch) -> None:
+    from agent_team_backend.osplat import _windows
+
+    kernel32 = _windows_tree(monkeypatch)
+    killed: list[int] = []
+
+    class HungProc:
+        pid = 4242
+        returncode = None
+
+        async def communicate(self, *_a):
+            await asyncio.Event().wait()
+
+        async def wait(self):
+            return None
+
+        def kill(self):
+            killed.append(self.pid)
+
+    async def fake_exec(*_a, **_k):
+        return HungProc()
+
+    tree = _windows.process_tree
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    # cmd\git.exe is a launcher: the real git.exe is its child.
+    monkeypatch.setattr(tree, "descendants", lambda pid: [pid + 1] if pid == 4242 else [])
+    monkeypatch.setattr(tree, "identity", lambda pid: f"id-{pid}")
+    monkeypatch.setattr(tree, "kill", lambda pid, *, force: killed.append(pid))
+    # The second read, just before the root dies: what started after the first.
+    reread: list[int] = []
+    monkeypatch.setattr(tree, "kill_tree", lambda pid, *, force: reread.append(pid))
+
+    rc, _, stderr = await host_shell.run_allowlisted(["git", "fetch"], timeout=0.05)
+
+    assert rc == 128 and b"timed out" in stderr
+    assert sorted(killed) == [4242, 4243]
+    assert reread == [4242]
+    assert kernel32.calls == []
+
+
+# ── C2: executables a package declares (permissions.shell.executables) ─────
+
+
+def test_declared_executables_admit_only_bare_lowercase_names() -> None:
+    from agent_team_backend.host_shell import declared_executables
+
+    assert declared_executables(None) == frozenset()
+    assert declared_executables(["npm", "terraform"]) == frozenset({"npm", "terraform"})
+    for bad in (["/usr/bin/npm"], ["NPM"], ["npm;rm"], "npm", [7], [f"t{i}" for i in range(33)],
+                ["git"], ["gh"], ["git.exe"], ["gh.cmd"], ["npm.cmd"], ["run.ps1"]):
+        with pytest.raises(ValueError):
+            declared_executables(bad)
+
+
+def test_a_declared_executable_is_admitted_as_written_in_the_workspace(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    declared = frozenset({"npm", "terraform"})
+    argv = parse_public_allowlisted_command(
+        "npm test -- --coverage", cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+    )
+    assert argv == ["npm", "test", "--", "--coverage"]
+    # The Git family keeps its own policy whatever else is declared.
+    with pytest.raises(ValueError):
+        parse_public_allowlisted_command(
+            "git -c alias.pwn=!sh status", cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+        )
+    # Not declared, a path, or shell syntax: refused as before.
+    for command in ("pnpm test", "./npm test", "npm test; rm -rf .", "/usr/bin/terraform plan"):
+        with pytest.raises(ValueError):
+            parse_public_allowlisted_command(
+                command, cwd=str(workspace), workspace_root=str(workspace), allowed_executables=declared
+            )
+    # Without a declaration nothing changed.
+    with pytest.raises(ValueError):
+        parse_public_allowlisted_command("npm test", cwd=str(workspace), workspace_root=str(workspace))
+
+
+@pytest.mark.asyncio
+async def test_a_declared_executable_runs_with_the_users_own_environment(tmp_path, monkeypatch) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    seen: dict = {}
+
+    class Proc:
+        returncode = 0
+        pid = 4_194_306
+
+        async def communicate(self, *_a):
+            return b"ok\n", b""
+
+    async def fake_exec(*a, **k):
+        seen["argv"] = a
+        seen["env"] = k.get("env")
+        seen["cwd"] = k.get("cwd")
+        return Proc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+    monkeypatch.setattr(host_shell.paths, "resolve_program", lambda name, *, path=None: f"/usr/local/bin/{name}")
+    monkeypatch.setenv("NAVIDE_TEST_MARKER", "present")
+
+    rc, stdout, _ = await run_public_allowlisted_text(
+        ["npm", "test"], str(workspace), workspace_root=str(workspace), allowed_executables=frozenset({"npm"})
+    )
+    assert rc == 0 and stdout == "ok\n"
+    assert seen["argv"][0].endswith("npm") and seen["argv"][1:] == ("test",)
+    assert seen["cwd"] == str(workspace)
+    # The user's environment, not the Git family's isolated home.
+    assert seen["env"]["NAVIDE_TEST_MARKER"] == "present"
+    assert "GIT_CONFIG_GLOBAL" not in seen["env"]
+
+    rc, _, stderr = await run_public_allowlisted_text(
+        ["terraform", "plan"], str(workspace), workspace_root=str(workspace), allowed_executables=frozenset({"npm"})
+    )
+    assert rc == 126 and "not allowlisted or declared" in stderr
+
+
+@pytest.mark.asyncio
+async def test_a_declared_executable_behind_a_windows_shim_refuses_cmd_metacharacters(monkeypatch) -> None:
+    """npm on Windows is `npm.cmd`, run through cmd.exe, which re-reads its
+    arguments (TA-2, BatBadBut): an argument cmd would read as a command is
+    refused with the argument named; plain arguments still run."""
+    from agent_team_backend.osplat import _windows
+
+    argv: list[tuple] = []
+
+    class Proc:
+        returncode = 0
+        pid = 4_194_307
+
+        async def communicate(self, *_a):
+            return b"ok\n", b""
+
+    async def fake_exec(*a, **_k):
+        argv.append(a)
+        return Proc()
+
+    monkeypatch.setattr(host_shell, "paths", _windows.paths)
+    monkeypatch.setattr(_windows.paths, "resolve_program", lambda name, *, path=None: rf"C:\npm\{name}.cmd")
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(host_shell.process_tree, "start_own_group", lambda pid: None)
+
+    rc, _, _ = await run_allowlisted_text(["npm", "test"], allowed_executables=frozenset({"npm"}))
+    assert rc == 0 and argv[0] == ("cmd.exe", "/d", "/c", r"C:\npm\npm.cmd", "test")
+
+    for bad in ("%PATH%", "a^b", 'say "hi"', "wow!"):
+        argv.clear()
+        rc, _, stderr = await run_allowlisted_text(["npm", "run", bad], allowed_executables=frozenset({"npm"}))
+        assert rc == 126 and bad in stderr and ".cmd shim" in stderr and argv == []

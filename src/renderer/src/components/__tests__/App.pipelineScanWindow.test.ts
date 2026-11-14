@@ -250,11 +250,11 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
       expect(act).not.toContain('if (managerSlot && !ok) {')
       // Two exits fail the run: the failed kickoff's, and the one for a role
       // that never landed, which sends no kickoff (#448). Both are held to it.
-      const failed = act.indexOf('await failRunOnKickoff(index, slot.label, failure, held)')
+      const failed = act.indexOf('await failRunOnKickoff(index, slot.label, failure, held, false, parked)')
       expect(failed, 'the failed-kickoff exit').toBeGreaterThan(-1)
       expect(act.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBeGreaterThan(inject)
       expect(act.indexOf("sendQuiet<ProjectPayload>('pipeline.stage_spawn'", failed)).toBe(-1)
-      expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom)', failed)).toBeGreaterThan(failed)
+      expect(act.indexOf('startStageWatcher(index, pane.id, kickoffScanFrom, kickoffStartedAt)', failed)).toBeGreaterThan(failed)
       const roleFailed = act.indexOf('await failRunOnKickoff(index, slot.label, roleFailure)')
       expect(roleFailed, 'the failed-role exit').toBeGreaterThan(-1)
       expect(roleFailed, 'the failed-role exit sends no kickoff').toBeLessThan(inject)
@@ -286,6 +286,43 @@ describe('the Manager router does not read its own kickoff echo as a result', ()
   })
 })
 
+describe('a turn that ends before the watcher arms still finishes the slot', () => {
+  it('counts from the injection on the fresh-pane path too', () => {
+    const start = appSource.indexOf('await runPipelineKickoff({')
+    const path = appSource.slice(appSource.lastIndexOf('let held = false', start), appSource.indexOf('startStageWatcher(stageIndexForPane', start) + 100)
+    expect(path).toContain('let kickoffStartedAt = Date.now()')
+    expect(path.slice(path.indexOf('inject: async () => {'), path.indexOf('await injectPane('))).toContain('kickoffStartedAt = Date.now()')
+    expect(path).toContain('startStageWatcher(stageIndexForPane, pane.id, kickoffScanFrom2, kickoffStartedAt)')
+  })
+
+  it('counts from the injection, not from the arm two round trips later', () => {
+    const act = body('async function activateStage(', '\nasync function spawnPipelineStage(')
+    const started = act.indexOf('let kickoffStartedAt = Date.now()')
+    expect(started, 'stamped before the kickoff').toBeGreaterThan(-1)
+    expect(started).toBeLessThan(act.indexOf('await runPipelineKickoff('))
+    // A retry is a new injection, so the stamp follows it.
+    const inject = act.indexOf('inject: async () => {')
+    expect(act.slice(inject, act.indexOf('await injectPane(', inject))).toContain('kickoffStartedAt = Date.now()')
+
+    const watcher = body('function startStageWatcher(', '\nfunction handleAnalyzerResult(')
+    expect(watcher).toContain('armedAt: kickoffStartedAt ?? Date.now()')
+    expect(watcher).toContain('paneArmedAt.set(paneId, watcher.armedAt)')
+  })
+
+  it('keeps arming at now for a restart, which injects no kickoff of its own', () => {
+    expect(appSource).toContain('startStageWatcher(p.stageIndex, p.paneId)')
+  })
+})
+
+describe('a pane card never claims a bypass the pane does not have', () => {
+  it('shows the command the backend reports, and keeps the request for later launches', () => {
+    const handler = body("backend.on('cli.bypass_dropped'", '\n})\n')
+    expect(handler).toContain('pane.bypassDroppedCommand = ev.command')
+    expect(handler).not.toContain('pane.command =')
+    expect(appSource).toContain('command: p.bypassDroppedCommand || (ref?.attachedBypassDropped as string | undefined) || p.command,')
+  })
+})
+
 describe('a cross-agent handoff does not swallow a sibling sentinel', () => {
   const completed = body('function onStageSlotCompleted(', '\nfunction releaseStageSlot(')
 
@@ -312,5 +349,43 @@ describe('a cross-agent handoff does not swallow a sibling sentinel', () => {
     // For verified-turn-text vendors the loose buffer scan is deliberately not
     // authoritative — and they lose nothing, judgeTurnText ignores scanFrom.
     expect(completed).toContain('!TURN_TEXT_VENDORS.has(sVendor)')
+  })
+})
+
+describe('turn-text vendors take their questions from the turn, not the buffer (#733)', () => {
+  // Codex echoes the kickoff verbatim, so its buffer holds the protocol's own
+  // QUESTION examples past scanFrom. claude/codex have validated turn text, so
+  // judgeTurnText surfaces their questions and the buffer scan skips them.
+  const judge = fnBody('function judgeTurnText(')
+  const watcher = body('function startStageWatcher(', '\nfunction handleAnalyzerResult(')
+
+  it('judgeTurnText enqueues the turn questions for a turn-text vendor', () => {
+    expect(judge).toContain("TURN_TEXT_VENDORS.has(paneMeta?.agentKey ?? '')")
+    expect(judge).toContain('enqueueQuestion({')
+    expect(judge).toContain('watcher.waitingForAnswer = true')
+  })
+
+  it('never asks the same turn twice, nor while an answer is pending', () => {
+    expect(judge).toContain('!watcher.waitingForAnswer')
+    expect(judge).toContain('watcher.turnQuestionKey !== turnKey')
+    expect(judge).toContain('watcher.turnQuestionKey = turnKey')
+    // The freshness guard still runs before any question is surfaced.
+    expect(judge.indexOf('TURN_TEXT_REPLAY_TOLERANCE_MS')).toBeLessThan(judge.indexOf('enqueueQuestion({'))
+  })
+
+  it('a question in the turn still wins over the sentinel', () => {
+    expect(judge.indexOf('if (realBlocks.length > 0)')).toBeLessThan(judge.indexOf('turnEndsWithSentinel('))
+  })
+
+  it('skips both buffer question scans and the pending-question stall check for turn-text vendors', () => {
+    expect(watcher).toContain('const turnTextVendor = TURN_TEXT_VENDORS.has(')
+    const scans = watcher.match(/stage\.allowQuestions && !turnTextVendor/g) ?? []
+    expect(scans.length).toBe(2)
+    expect(watcher).toMatch(/stage\.allowQuestions &&\s*!turnTextVendor &&\s*buf\.indexOf\('---QUESTION-START---'/)
+  })
+
+  it('the buffer scans that remain skip the protocol examples', () => {
+    const calls = watcher.match(/findConsecutiveQuestionBlocks\(buf, watcher\.scanFrom, undefined, PROTOCOL_EXAMPLE_PROMPTS\)/g) ?? []
+    expect(calls.length).toBe(2)
   })
 })

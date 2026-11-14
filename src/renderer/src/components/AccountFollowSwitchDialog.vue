@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { DEFAULT_SLOT_ID, type FollowSwitchRow, type QuotaTarget } from '../lib/accountFollowSwitch'
+import { DEFAULT_SLOT_ID, type FollowSwitchRow, type QuotaTarget, type SubtreeFixSkip } from '../lib/accountFollowSwitch'
 
 /** One pane row as shown: the pure row plus its account's display label. */
 export interface FollowDialogRow extends FollowSwitchRow {
   accountLabel: string
+  /** 'fix-children' mode: the pane runs fixed in an account's own dir now. */
+  fixed?: boolean
+  /** 'fix-children' mode: listed, but cannot be ticked. */
+  skip?: SubtreeFixSkip
 }
 
 const props = defineProps<{
@@ -14,14 +18,17 @@ const props = defineProps<{
    *  'follow': a new default account, and following panes are mid-turn —
    *  move them once they finish, or leave them out.
    *  'unpin': "make all follow", and some of the fixed panes are mid-turn —
-   *  same choice, about reopening them on the live login. */
-  mode: 'switch' | 'quota' | 'follow' | 'unpin'
+   *  same choice, about reopening them on the live login.
+   *  'fix-children': fix a pane's sub-panes to its account — tick which. */
+  mode: 'switch' | 'quota' | 'follow' | 'unpin' | 'fix-children'
   /** Label of the account switched to ('switch' mode) or of the pane that
    *  ran out ('quota' mode) — used in the heading. */
   subject: string
   rows: FollowDialogRow[]
   /** 'quota' mode only: the accounts the pane can move to. */
   targets?: QuotaTarget[]
+  /** 'fix-children' mode: the parent itself follows the live login. */
+  parentFollows?: boolean
 }>()
 const emit = defineEmits<{
   confirm: [paneIds: string[], targetId: string | null]
@@ -56,8 +63,9 @@ function toggle(id: string): void {
 const count = computed(() => checked.value.size)
 // The modes that ask about running panes: wait for them, or skip them.
 const waitMode = computed(() => props.mode === 'follow' || props.mode === 'unpin')
+const pickMode = computed(() => props.mode === 'switch' || props.mode === 'fix-children')
 const canConfirm = computed(() =>
-  props.mode === 'switch' ? count.value > 0 : target.value !== null
+  pickMode.value ? count.value > 0 : target.value !== null
 )
 
 function confirm(): void {
@@ -86,7 +94,9 @@ function confirm(): void {
             ? $t('account-follow.follow-title', { account: subject, count: rows.length })
             : mode === 'unpin'
               ? $t('account-follow.unpin-title', { count: rows.length })
-              : $t('account-follow.quota-title', { pane: subject })"
+              : mode === 'fix-children'
+                ? $t('account-follow.fix-children-title', { account: subject })
+                : $t('account-follow.quota-title', { pane: subject })"
       >
         <h2>{{ mode === 'switch'
           ? $t('account-follow.switch-title', { account: subject })
@@ -94,7 +104,9 @@ function confirm(): void {
             ? $t('account-follow.follow-title', { account: subject, count: rows.length })
             : mode === 'unpin'
               ? $t('account-follow.unpin-title', { count: rows.length })
-              : $t('account-follow.quota-title', { pane: subject }) }}</h2>
+              : mode === 'fix-children'
+                ? $t('account-follow.fix-children-title', { account: subject })
+                : $t('account-follow.quota-title', { pane: subject }) }}</h2>
 
         <template v-if="mode === 'quota'">
           <p>{{ $t('account-follow.quota-pick') }}</p>
@@ -118,20 +130,26 @@ function confirm(): void {
         </template>
         <p v-else-if="mode === 'follow'">{{ $t('account-follow.follow-body') }}</p>
         <p v-else-if="mode === 'unpin'">{{ $t('account-follow.unpin-body') }}</p>
+        <p v-else-if="mode === 'fix-children'">
+          {{ $t('account-follow.fix-children-body', { account: subject }) }}
+          <template v-if="parentFollows">{{ $t('account-follow.fix-children-parent-follows') }}</template>
+        </p>
         <p v-else>{{ $t('account-follow.switch-body') }}</p>
 
         <ul v-if="rows.length" class="rows">
           <li v-for="r in rows" :key="r.paneId" :data-testid="`account-follow-row-${r.paneId}`">
-            <label>
+            <label :class="{ skipped: r.skip }">
               <input
                 v-if="!waitMode"
                 type="checkbox"
                 :checked="checked.has(r.paneId)"
+                :disabled="!!r.skip"
                 @change="toggle(r.paneId)"
               />
               <span v-truncate class="name">{{ r.name }}</span>
-              <span class="acct">{{ r.accountLabel }}</span>
-              <span :class="['state', r.state]">{{ $t(`account-follow.state-${r.state}`) }}</span>
+              <span v-if="r.skip !== 'not-claude'" class="acct">{{ r.fixed ? `📌 ${r.accountLabel}` : r.accountLabel }}</span>
+              <span v-if="r.skip" class="state">{{ $t(`account-follow.skip-${r.skip}`, { account: r.accountLabel }) }}</span>
+              <span v-else :class="['state', r.state]">{{ $t(`account-follow.state-${r.state}`) }}</span>
             </label>
           </li>
         </ul>
@@ -165,7 +183,9 @@ function confirm(): void {
           >
             {{ mode === 'switch'
               ? $t('account-follow.switch-confirm', { count })
-              : $t('account-follow.quota-confirm', { count: count + 1 }) }}
+              : mode === 'fix-children'
+                ? $t('account-follow.fix-children-confirm', { count })
+                : $t('account-follow.quota-confirm', { count: count + 1 }) }}
           </button>
         </div>
       </section>
@@ -207,7 +227,7 @@ p.sub { margin-top: 12px; }
   cursor: pointer;
 }
 .rows label:hover, .target:hover { background: var(--bg-subtle); }
-.target.disabled { cursor: default; opacity: 0.6; }
+.target.disabled, .rows label.skipped { cursor: default; opacity: 0.6; }
 .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct, .hint, .state { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
 .state { max-width: 14em; white-space: normal; text-align: right; }

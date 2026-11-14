@@ -3,6 +3,7 @@ import { computed, inject, onUnmounted, ref, watch } from 'vue'
 import { createPluginViewRuntimeClient, type JsonValue, type PluginDetailCloseDecision, type PluginDetailCloseRequest } from '@navide/plugin-sdk'
 import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import BranchDiffPane from './editor/BranchDiffPane.vue'
+import ReviewPane from './components/ReviewPane.vue'
 import ConflictPane from './editor/ConflictPane.vue'
 import GitFileDetailPane from './GitFileDetailPane.vue'
 import { useGit } from './composables/useGit'
@@ -129,7 +130,11 @@ onUnmounted(() => {
 
 <template>
   <main class="git-detail-root">
-    <BranchDiffPane v-if="target?.resource.kind === 'branch-comparison'" :workspace-path="detailWorkspacePath" :base="target.resource.base" :compare="target.resource.compare" :git-transport="gitTransport" :branch-diff="branchDiff" :git-status="gitStatus" :git-branches="gitBranches" />
+    <BranchDiffPane v-if="target?.resource.kind === 'branch-comparison'" :workspace-path="detailWorkspacePath" :base="target.resource.base" :compare="target.resource.compare" :git-transport="gitTransport" :branch-diff="branchDiff" :git-status="gitStatus" :git-branches="gitBranches" @open-file="(p) => openInEditor(p.filepath)">
+      <template #review="{ workspacePath: reviewWorkspacePath, gitStatus: reviewGitStatus, gitBranches: reviewGitBranches, close, openFile: reviewOpenFile }">
+        <ReviewPane :workspace-path="reviewWorkspacePath" :git-status="reviewGitStatus" :git-branches="reviewGitBranches" :hide-header="true" @close="close" @open-file="reviewOpenFile" />
+      </template>
+    </BranchDiffPane>
     <GitFileDetailPane v-else-if="fileTarget" ref="filePane" :target="fileTarget" :workspace-path="detailWorkspacePath" :git-transport="gitTransport" :file-access="fileAccess" :file-log="fileLog" :commit-file-diff="commitFileDiff" :blame-file="blameFile" :diff-blame="diffBlame" @open-file="openInEditor" />
     <ConflictPane v-else-if="target?.resource.kind === 'merge-conflict'" ref="conflictPane" :workspace-path="detailWorkspacePath" :filepath="target.resource.filepath" :name="target.resource.filepath.split('/').at(-1) ?? target.resource.filepath" :git-transport="gitTransport" :file-access="fileAccess" :merge-aborted="!conflictLive" />
     <p v-else class="git-detail-unavailable">{{ i18n.global.t('git.detail-unavailable') }}</p>

@@ -334,3 +334,21 @@ export function matchAwaitingInput(agentKey: string, screen: string): boolean {
 export function awaitingClearsOnMiss(agentKey: string): boolean {
   return awaitingSpecFor(agentKey)?.clearsOnMiss !== false
 }
+
+/** One poll of the screen watcher for a pane: `boxOnScreen` is the vendor's
+ *  awaitingInput pattern on the rendered screen tail.
+ *
+ *  The box being on screen is its own wait, which ends the poll the box is
+ *  gone. It used to re-stamp the Notification hook's wait instead, whose settle
+ *  window then read the answer's echo as the box painting itself: after Submit
+ *  on Claude's AskUserQuestion the pane stayed AWAITING while Claude thought
+ *  (10-29). A hook-raised wait is left alone unless the pattern is the
+ *  vendor's only signal (awaitingClearsOnMiss). */
+export function applyScreenWatch(
+  term: { markBoxOnScreen?: (onScreen: boolean) => void; clearNeedsInput?: () => void },
+  agentKey: string,
+  boxOnScreen: boolean,
+): void {
+  term.markBoxOnScreen?.(boxOnScreen)
+  if (!boxOnScreen && awaitingClearsOnMiss(agentKey)) term.clearNeedsInput?.()
+}

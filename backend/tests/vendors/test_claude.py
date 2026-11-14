@@ -759,3 +759,35 @@ def test_parse_activity_reports_background_task_ends(
     assert all(e.event_type == "agent_active" for e in events if e.detail == "background:end")
     # No turn ended anywhere in here.
     assert [e for e in events if e.event_type == "turn_complete"] == []
+
+
+def test_parse_activity_reports_the_interrupt_record(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    # A STOP that took effect writes "[Request interrupted by user]" (as a text
+    # block, or inside the cut-off tool's result). The frontend keeps the STOP
+    # badge on that evidence; without it the badge reads "STOP not applied".
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "int-001.jsonl"
+    _write_jsonl(session, [
+        {"type": "user", "timestamp": "2026-11-10T01:00:00.000Z",
+         "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]}},
+        {"type": "user", "timestamp": "2026-11-10T01:00:01.000Z",
+         "message": {"role": "user", "content": [{"type": "tool_result", "is_error": True,
+                                                   "content": "[Request interrupted by user for tool use]"}]}},
+        {"type": "user", "timestamp": "2026-11-10T01:00:02.000Z",
+         "message": {"role": "user", "content": "[Request interrupted by user]"}},
+        {"type": "user", "timestamp": "2026-11-10T01:00:03.000Z",
+         "message": {"role": "user", "content": "please explain [Request interrupted by user]"}},
+        {"type": "user", "timestamp": "2026-11-10T01:00:04.000Z",
+         "message": {"role": "user", "content": [{"type": "tool_result", "content": "ok"}]}},
+    ])
+    events = reader.parse_activity(session, set())
+    marks = [e for e in events if e.detail == "user:interrupted"]
+    assert [e.timestamp for e in marks] == [
+        "2026-11-10T01:00:00.000Z", "2026-11-10T01:00:01.000Z", "2026-11-10T01:00:02.000Z",
+    ]
+    assert all(e.event_type == "agent_active" for e in marks)
+    # Rides alongside the plain user event, under its own dedup key.
+    assert [e.detail for e in events].count("user") == 5
+    assert len({e.dedup_key for e in events}) == len(events)

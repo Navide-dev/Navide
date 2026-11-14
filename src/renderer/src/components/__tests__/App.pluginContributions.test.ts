@@ -85,19 +85,19 @@ describe('titlebar button order', () => {
 })
 
 describe('generic plugin placement boot wiring', () => {
-  it('imports PluginRegionHost at runtime and passes the recovery mode to ControlPane', () => {
+  it('imports PluginRegionHost at runtime and passes the Git failure to ControlPane', () => {
     expect(appSource).toMatch(
       /import PluginRegionHost,\s*\{ type PluginRegionContribution \} from ['"]\.\/components\/PluginRegionHost\.vue['"]/
     )
     expect(appSource).not.toMatch(
       /import type \{ PluginRegionContribution \} from ['"]\.\/components\/PluginRegionHost\.vue['"]/,
     )
-    expect(appSource).toContain(':legacy-git-recovery="legacyGitRecovery"')
+    expect(appSource).toContain(':git-activation-failure="gitActivationFailure"')
   })
 
-  it('carries the internal legacy boot flag only when recovery is enabled', () => {
+  it('carries the Git failure and the Plans recovery flag only when they apply', () => {
     expect(mainSource).toMatch(
-      /const mainBootParams: Record<string, string> = \{[\s\S]*legacy_git_recovery: '1'[\s\S]*legacy_plans_recovery: '1'/
+      /const mainBootParams: Record<string, string> = \{[\s\S]*git_activation_failure: gitActivationFailure[\s\S]*legacy_plans_recovery: '1'/
     )
     expect(mainSource).toContain("loadWindow(win, { window: 'main', ...params, ...mainBootParams })")
   })
@@ -120,23 +120,22 @@ describe('generic plugin placement boot wiring', () => {
     )
   })
 
-  it('tracks the recovery notification in both directions', () => {
+  it('tracks the Git failure notification in both directions', () => {
     expect(appSource).toMatch(
-      /const legacyGitRecovery = ref\(new URLSearchParams\(window\.location\.search\)\.get\(['"]legacy_git_recovery['"]\) === ['"]1['"]\)/
+      /const gitActivationFailure = ref<string \| null>\(new URLSearchParams\(window\.location\.search\)\.get\(['"]git_activation_failure['"]\)\)/
     )
-    expect(appSource).toContain('onGitRecoveryChanged')
-    // Leaving recovery (Extensions restores the bundled v2 package) must reach
-    // the open window too; latching on true stranded it on the legacy panel.
-    expect(appSource).toContain('legacyGitRecovery.value = change.legacy')
-    expect(appSource).not.toContain('if (change.legacy) legacyGitRecovery.value = true')
-    expect(appSource).toContain('stopGitRecoveryChanged?.()')
-    expect(appSource).toContain(':legacy-git-recovery="legacyGitRecovery"')
+    expect(appSource).toContain('onPluginActivationFailed')
+    // Git running again (a retry or a reinstall) must reach the open window
+    // too; latching on a failure stranded it on the notice.
+    expect(appSource).toContain("if (change.pluginId === 'navide.git') gitActivationFailure.value = change.reason")
+    expect(appSource).toContain('stopPluginActivationFailed?.()')
+    expect(mainSource).toContain("hostWindow.webContents.send('plugins:activationFailed', { pluginId: 'navide.git', reason })")
   })
 
-  it('uses the typed recovery listener exposed by preload', () => {
+  it('uses the typed activation failure listener exposed by preload', () => {
     const preloadSource = readFileSync(resolve(process.cwd(), 'src/preload/index.ts'), 'utf8')
-    expect(preloadSource).toContain('onGitRecoveryChanged')
-    expect(preloadSource).toMatch(/typeof payload\.legacy === ['"]boolean['"]|payload\.legacy === true/)
+    expect(preloadSource).toContain('onPluginActivationFailed')
+    expect(preloadSource).toMatch(/record\.reason === null \|\| typeof record\.reason === 'string'/)
     expect(preloadSource).toContain('removeListener')
   })
 })

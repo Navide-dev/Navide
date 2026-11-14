@@ -494,6 +494,29 @@ export default {
           allowedContent: 'README from Host',
           deniedCode: 'CAPABILITY_DENIED',
         })
+
+        // The published in-memory Host (@navide/plugin-sdk/testing) answers the
+        // same plugin the same way, from the installed package alone.
+        const testingModule = await import(
+          pathToFileURL(
+            join(externalProject, 'node_modules', '@navide', 'plugin-sdk', 'dist', 'testing.js')
+          ).href
+        )
+        const testHost = testingModule.createTestHost({
+          pluginId: binding.pluginId,
+          packageVersion: binding.packageVersion,
+          permissions: { system: ['fs'] },
+          handlers: { 'fs.readFile': () => ({ content: 'README from the test Host' }) },
+        })
+        await pluginModule.plugin.activate(testHost.context)
+        expect(pluginModule.lastRun).toMatchObject({
+          allowedContent: 'README from the test Host',
+          deniedCode: 'CAPABILITY_DENIED',
+        })
+        expect(testHost.calls.map((call: { address: string; outcome: string }) => [call.address, call.outcome])).toEqual([
+          ['fs.readFile', 'ok'],
+          ['shell.run', 'CAPABILITY_DENIED'],
+        ])
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true })
       }

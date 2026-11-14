@@ -1,5 +1,6 @@
 """Exercise manual Plans mutations at the packaged child's real write seam."""
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -85,7 +86,11 @@ def test_document_transport_preserves_read_mtime_and_write_conflict(child, monke
     calls = []
     monkeypatch.setattr(child, "_bridge_call", lambda *args: calls.append(args))
     read = child._manual_document(origin, {"rel_path": path}, "read")
-    assert read == {"ok": True, "content": plan([]), "mtime": 12.0}
+    # The whole file's sha256 rides along for the writer's expected_sha256.
+    assert read == {
+        "ok": True, "content": plan([]), "mtime": 12.0,
+        "sha256": hashlib.sha256(plan([]).encode("utf-8")).hexdigest(),
+    }
     # Someone else saves the document after it was read.
     os.utime(document, (13.0, 13.0))
     result = child._manual_document(origin, {"rel_path": path, "content": "changed", "expected_mtime": 12.0}, "write")

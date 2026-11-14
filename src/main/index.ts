@@ -5,12 +5,14 @@ import { guardLastWindowClose } from './last-window-close'
 import { join, dirname, basename, isAbsolute, relative, sep } from 'node:path'
 import { writeFile, readFile, mkdir } from 'node:fs/promises'
 import { readFileSync, statSync, existsSync, realpathSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { release as osRelease, tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import {
   startBackend,
   setBackendDisabledBuiltinsProvider,
   getResolvedUserPath,
+  getFreshResolvedUserPath,
+  warmRegistryPath,
   readWsToken,
   mintTrustConfirmation,
   backendDataDir,
@@ -18,11 +20,15 @@ import {
 } from './backend'
 import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
-import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
+import { pluginBackendTmpDir, prepareBackendTmpDir } from './backend-tmpdir'
+import { installApplicationMenu, type AppMenuHooks, type ClosedWindowMenuEntry, type RecentMenuEntry } from './menu'
+import { planReopen } from './reopen-closed-window'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS } from '../shared/marketplaceDeveloper'
+import { parsePluginCommandTarget, type PluginCommandRunResult } from '../shared/pluginCommands'
 import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
-import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
+import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
 import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
 import { dockSurfaceProvided } from './dockSurfaceProvider'
@@ -46,6 +52,8 @@ import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
 import { DeveloperVault } from './plugins/developerVault'
+import { PluginSecretStore } from './plugins/pluginSecrets'
+import type { PluginSecretsNotice } from '../shared/pluginSecretsNotice'
 import { createDeveloperQueryHandler, registerDeveloperIpc } from './plugins/developerIpc'
 import { prepareLocalInstall } from './plugins/pluginInstaller'
 import { contributionIcon } from './plugins/pluginContributionIcon'
@@ -59,6 +67,8 @@ import {
   ExecutionPolicySourceStore,
 } from './plugins/executionPolicySourceStore'
 import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
+import { registerWorkbenchSourceIpc } from './plugins/workbenchSourceIpc'
+import { WorkbenchSourceStore } from './plugins/workbenchSourceStore'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
 import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
@@ -79,9 +89,10 @@ import {
 } from './plugins/pluginBackendSupervisor'
 import { bundledMiniIdeV2Dir, MINI_IDE_CONTRIBUTION, activateInstalledMiniIdeRecovery } from './plugins/miniIdePackage'
 import { MINI_IDE_PLUGIN_ID, MiniIdeStorageLifecycleSelector } from './plugins/miniIdeStorageLifecycle'
+import { officialPluginVersion, supersedingBundledVersions } from './plugins/officialPluginVersions'
 import { createMiniIdeStorageMigrationGate, type MiniIdeStorageAvailability } from './plugins/miniIdeStorageMigrationGate'
 import { createMiniIdeLegacyPreferences } from './plugins/miniIdeLegacyPreferences'
-import { recoverFailedGitV2Activation } from './plugins/gitV2ActivationRecovery'
+import { isSelectedGitV2ActivationFailure } from './plugins/gitV2ActivationRecovery'
 import { composePluginContributionQuery } from './plugins/pluginContributionQuery'
 import {
   createPlansWindowRouter,
@@ -90,11 +101,7 @@ import {
 } from './plansWindowRouting'
 import { menuStringsFor } from './menuStrings'
 import { HostLocaleManager, readPersistedLocaleFromSettings, type SupportedLocale } from './hostLocale'
-import {
-  activateFactoryGitWithLegacyFallback,
-  assertFactoryGitRestoreAllowed,
-  shouldAttemptFactoryGit,
-} from './plugins/factoryGitStartup'
+import { activateFactoryGit, shouldAttemptFactoryGit } from './plugins/factoryGitStartup'
 import { migrateBundledGitPreferences } from './plugins/gitStorageMigration'
 import { GitStorageLifecycleSelector } from './plugins/gitStorageLifecycle'
 import { PlansStorageLifecycleSelector } from './plugins/plansStorageLifecycle'
@@ -120,6 +127,7 @@ import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
 import { MAX_RESTORE_ATTEMPTS, onScreenBounds, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
 import { registeredGitLeftWorkspace, trustedGitLeftWindow } from './gitLeftIpc'
+import { mayReportWorkspace } from './workspaceReportIpc'
 import { setWindowDockTileBadge } from './dock-tile-badge'
 import { writeTempTextArtifact } from './temp-text-artifact'
 import { BackendBroadcastTracker } from './backend-broadcast'
@@ -183,12 +191,20 @@ import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { createPluginStagedCandidateRelay } from './pluginStagedCandidateRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
+import { isAppNavigation as isAppNavigationPolicy } from './navigationPolicy'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
 import { isLinux, isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
 import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
+import { AppLockController } from './appLock'
+import { AppLockOverlay } from './appLockOverlay'
+import { APP_LOCK_FILE } from './appLockStore'
+import { APP_LOCK_SYSTEM_NAMES, type AppLockStatus, type AppLockSystemKind } from '../shared/appLock'
+import { appLockStrings } from './appLockStrings'
+import { hwndArg, runHelper, WindowsHello, windowsHelloHelperPath } from './windowsHello'
+import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
@@ -202,7 +218,7 @@ import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
-import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
+import { PluginAgentToolsHost, isBackendAgentToolPackage, type AgentToolPackage } from './plugins/pluginAgentToolsHost'
 import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import { isFirstPartyAgentToolPlugin, isFirstPartyBackendPlugin } from './plugins/pluginFirstPartyBackends'
@@ -210,6 +226,7 @@ import { isPluginWebGuest } from './plugins/pluginWebViews'
 import { guardPlanFrameNavigation } from './planFrameNavigation'
 import {
   firstPartyAgentToolSpec,
+  viewAgentToolPackage,
   firstPartyBackendLaunchSpec,
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -364,6 +381,9 @@ const quitCancelWatch = createQuitCancelWatch({
 // True while the quit confirmation dialog is on screen, so a second close
 // request cannot stack another one.
 let quitPromptOpen = false
+// The window the open quit dialog is parented to, so a repeated quit request
+// can bring that dialog forward instead of opening a second one.
+let quitPromptWindow: BrowserWindow | undefined
 // Multiple independent main windows (VS Code-style cmd+shift+N). `mainWindow`
 // tracks the most-recently-focused one so dialogs parent to it; `mainWindows`
 // holds them all for lifecycle code that must reach every main window.
@@ -372,19 +392,15 @@ const mainWindows = new Set<BrowserWindow>()
 /** Dedicated hosts are keyed by the stable catalog contribution key. The
  * renderer never receives the corresponding plugin instance id. */
 const contributionWindows = new Map<string, BrowserWindow>()
-const gitRecoveryForced = process.env['NAVIDE_GIT_RECOVERY'] === 'legacy'
-let gitRecoveryEnabled = gitRecoveryForced
-let legacyGitRegisteredForForcedRecovery = false
-/** The ready-time legacy Git registration for a recovery session. */
-function registerForcedLegacyGit(): void {
-  legacyGitRegisteredForForcedRecovery = true
-  const recovery = registerLegacyBundledGit(frontendPluginManager, {
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    artifactVersion: app.getVersion(),
-  })
-  if (!recovery.registered) {
-    warnMain(`[main] NAVIDE_GIT_RECOVERY=legacy but legacy Git bundle is unavailable: ${recovery.reason}`)
+/** Why the Git plugin could not start this session; null while it runs (or
+ *  is simply not installed). The main window shows it with a Reinstall action
+ *  in place of the Git tab; the Host has no Git interface of its own. */
+let gitActivationFailure: string | null = null
+function setGitActivationFailure(reason: string | null): void {
+  gitActivationFailure = reason
+  for (const hostWindow of mainWindows) {
+    if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+    hostWindow.webContents.send('plugins:activationFailed', { pluginId: 'navide.git', reason })
   }
 }
 const plansRecoveryForced = process.env['NAVIDE_PLANS_RECOVERY'] === 'legacy'
@@ -777,6 +793,7 @@ async function createWindow(
   // A Plans notice that found no loaded main window is handed to this one.
   win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
   win.webContents.on('did-finish-load', () => pluginAgentActionRelay.flush(win))
+  win.webContents.on('did-finish-load', () => flushPluginSecretsNotices(win))
   win.webContents.on('did-finish-load', () => pluginStagedCandidateRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
@@ -790,10 +807,13 @@ async function createWindow(
       mainWindow = remaining.length ? remaining[remaining.length - 1] : null
     }
     broadcastOpenWorkspacesChanged()
+    recentlyClosedChanged()
   })
 
   const mainBootParams: Record<string, string> = {
-    ...(gitRecoveryEnabled ? { legacy_git_recovery: '1' } : {}),
+    // Like the Plans reason below: a window opened after Git failed to start
+    // never sees the IPC event.
+    ...(gitActivationFailure !== null ? { git_activation_failure: gitActivationFailure } : {}),
     ...(plansRecoveryEnabled ? { legacy_plans_recovery: '1' } : {}),
     // A window opened after the downgrade never sees the IPC event, so the
     // reason has to travel with it or its recovery panel has nothing to say.
@@ -1187,8 +1207,14 @@ async function preflightCandidateBackend(
     approvedEvents: [],
     approvedBridgePorts: [],
   }
+  // Same temp directory as the plugin's views get, never swept here: those
+  // views may be running while a new version is checked.
+  const tmpDir = app.isPackaged ? pluginBackendTmpDir(backendDataDir(process.env), launch.pluginId) : null
+  const preparedTmpDir = tmpDir ? prepareBackendTmpDir(tmpDir, false) : null
   const supervisor = new PluginBackendSupervisor(launch, {
-    environment: createPluginBackendChildEnvironment(),
+    environment: preparedTmpDir
+      ? { ...createPluginBackendChildEnvironment(), TMPDIR: preparedTmpDir, TMP: preparedTmpDir, TEMP: preparedTmpDir }
+      : createPluginBackendChildEnvironment(),
     beforeSpawn: () => verifyCurrentInstalledBackendTrust(launch),
   })
   try {
@@ -1233,6 +1259,14 @@ function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, 
   }
   return true
 }
+// An installed Marketplace copy of a first-party plugin is superseded when the
+// App bundles a newer version. Only ids whose bundled copy is attempted below
+// take part: an opted-out factory copy or a forced legacy Plans recovery
+// keeps the installed package in charge.
+frontendPluginManager.setBundledPluginVersions(supersedingBundledVersions({
+  optedOut: (pluginId) => pluginFactoryOptOuts.has(pluginId),
+  plansRecoveryForced,
+}))
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
   provenance: 'official-registry',
   trust: installedPluginTrust,
@@ -1248,7 +1282,12 @@ const installedGitDescriptorPresent = frontendPluginManager.getDescriptor('navid
 const miniIdeSource = {
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  artifactVersion: app.getVersion(),
+  artifactVersion: officialPluginVersion(MINI_IDE_PLUGIN_ID),
+}
+const gitSource = {
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  artifactVersion: officialPluginVersion('navide.git'),
 }
 const installedMiniIdeDescriptorPresent = frontendPluginManager.getDescriptor(MINI_IDE_PLUGIN_ID) !== undefined
 frontendPluginManager.setContributionIconResolver(contributionIcon)
@@ -1261,6 +1300,13 @@ frontendPluginManager.setAppQuittingProbe(() => dockQuitInProgress || quittingWi
 frontendPluginManager.setCapabilityGrantResolver((pluginId, packageVersion) =>
   pluginCapabilityGrants.get(pluginId, packageVersion)
 )
+// Packaged plugin backends are onefile binaries that unpack into their temp
+// directory; keep them out of the OS temp sweep, as the core backend is.
+if (app.isPackaged) {
+  frontendPluginManager.setPluginBackendTmpDir((pluginId) =>
+    pluginBackendTmpDir(backendDataDir(process.env), pluginId)
+  )
+}
 frontendPluginManager.setBackendSpawnTrustVerifier((activation) => {
   try {
     verifyCurrentInstalledBackendTrust(activation)
@@ -1295,11 +1341,15 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
   shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   agentsPort: () => frontendPluginManager.createThirdPartyAgentsPort(),
+  secretsPort: () => frontendPluginManager.createThirdPartySecretsPort(),
+  agentNotifyPort: () => frontendPluginManager.createThirdPartyAgentNotifyPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
-  onConsentGranted: () => {
-    void agentToolsHost?.refresh().catch(() => undefined)
+  // C3: allowing a package whose consent card listed its agent tools turns
+  // the third-party agent-tools switch on (and refreshes the catalog).
+  onConsentGranted: (pluginId) => {
+    void agentToolsHost?.consented(pluginId).catch(() => undefined)
   },
   promptAgentToolWrite: promptAgentToolWorkspaceWrite,
   agentToolCall: (initiatorId) => frontendPluginManager.agentToolCallFor(initiatorId),
@@ -1479,7 +1529,10 @@ for (const activation of installedPluginLoad.activationCatalog) {
     : thirdPartyBackendActivation(activation)
   if (!spec || frontendPluginManager.hasBackendActivation(activation.pluginId, activation.packageVersion)) continue
   try {
-    frontendPluginManager.registerBackendActivation(spec)
+    // A registry-installed built-in (navide.browser) the user disabled keeps
+    // its backend for Enable instead of starting it.
+    if (isFirstPartyBackendPlugin(activation.pluginId)) frontendPluginManager.registerBuiltinBackendActivation(spec)
+    else frontendPluginManager.registerBackendActivation(spec)
   } catch (error) {
     console.warn(
       `[main] third-party backend for ${activation.pluginId} was not registered: ${
@@ -1523,7 +1576,7 @@ frontendPluginManager.setExecutionPolicyResolver((workspacePath?: string): Execu
 })
 const factoryGitActivations = installedPluginLoad.activationCatalog.slice(0, 0)
 const factoryGitDir = (): string => officialPluginArtifactPackageDir(
-  miniIdeSource,
+  gitSource,
   'navide.git',
   UNIVERSAL_PLUGIN_TARGET,
 )
@@ -1583,61 +1636,87 @@ if (!installedMiniIdeDescriptorPresent && !pluginFactoryOptOuts.has(MINI_IDE_PLU
   if (factoryMiniIde.loaded) factoryMiniIdeActivations.push(factoryMiniIde.activation)
   else warnMain(`[main] bundled Mini-IDE v2 unavailable: ${factoryMiniIde.reason}`)
 }
+// navide.browser: an App-bundled first-party package like Git, whose native
+// backend starts like Plans (pluginFirstPartyBackends.ts). Built per host
+// target, because its backend is a native program. A registry install of it
+// takes precedence, as for Git and Mini-IDE.
+const BROWSER_PLUGIN_ID = 'navide.browser'
+const browserSource = {
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  artifactVersion: officialPluginVersion(BROWSER_PLUGIN_ID),
+}
+const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
+  browserSource,
+  BROWSER_PLUGIN_ID,
+  currentPluginHostTarget(),
+)
+/** Load the bundled browser package. A build without it (no staged
+ *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
+function loadFactoryBrowserPackage():
+  | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
+  | { loaded: false; reason: string; absent?: true } {
+  if (!existsSync(join(factoryBrowserDir(), 'manifest.json'))) {
+    return { loaded: false, reason: 'factory package is not bundled', absent: true }
+  }
+  const factoryBrowser = frontendPluginManager.loadFactoryPlugin(factoryBrowserDir(), BROWSER_PLUGIN_ID)
+  if (!factoryBrowser.loaded) return factoryBrowser
+  const descriptor = frontendPluginManager.getDescriptor(factoryBrowser.pluginId)
+  const policy = descriptor?.capabilityPolicy
+  if (policy?.kind !== 'manifest-v2') {
+    frontendPluginManager.removeInstalledPlugin(factoryBrowser.pluginId, { restoreBuiltin: false })
+    return { loaded: false as const, reason: 'factory package has no Manifest v2 policy' }
+  }
+  pluginCapabilityGrants.set(factoryBrowser.pluginId, {
+    packageVersion: factoryBrowser.packageVersion,
+    system: [...policy.system],
+    ...(policy.shell ? { shell: policy.shell } : {}),
+    storage: true,
+  })
+  const backend = factoryBrowser.activation.backend ? firstPartyBackendActivation(factoryBrowser.activation) : null
+  if (backend && !frontendPluginManager.hasBackendActivation(backend.pluginId, backend.packageVersion)) {
+    frontendPluginManager.registerBuiltinBackendActivation(backend)
+  }
+  return factoryBrowser
+}
+const installedBrowserDescriptorPresent = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID) !== undefined
+const factoryBrowserActivations = installedPluginLoad.activationCatalog.slice(0, 0)
+if (!installedBrowserDescriptorPresent && !pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID)) {
+  const factoryBrowser = loadFactoryBrowserPackage()
+  if (factoryBrowser.loaded) factoryBrowserActivations.push(factoryBrowser.activation)
+  else if (!factoryBrowser.absent) warnMain(`[main] bundled navide.browser unavailable: ${factoryBrowser.reason}`)
+}
 if (shouldAttemptFactoryGit({
-  forcedLegacy: gitRecoveryEnabled,
   installedPackagePresent: installedGitDescriptorPresent,
   optedOut: pluginFactoryOptOuts.has('navide.git'),
 })) {
-  const selection = activateFactoryGitWithLegacyFallback({
-    loadFactory: loadFactoryGitPackage,
-    activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      artifactVersion: app.getVersion(),
-    }),
-  })
+  const selection = activateFactoryGit(loadFactoryGitPackage)
   if (selection.mode === 'v2') factoryGitActivations.push(selection.activation)
-  else if (selection.mode === 'legacy') {
-    gitRecoveryEnabled = true
-    warnMain(`[main] bundled navide.git v2 failed; using legacy recovery: ${selection.v2Reason}`)
-  } else {
-    warnMain(
-      `[main] bundled navide.git is unavailable: ${selection.v2Reason}; ${selection.legacyReason}`
-    )
+  else {
+    gitActivationFailure = selection.reason
+    warnMain(`[main] bundled navide.git v2 failed to load: ${selection.reason}`)
   }
 }
 let miniIdeRecoveryEnabled = false
 frontendPluginManager.setActivationFailureHandler((failure) => {
-  const recovered = recoverFailedGitV2Activation(failure, {
+  if (isSelectedGitV2ActivationFailure(failure, {
     selectedDescriptor: () => frontendPluginManager.getDescriptor('navide.git') ?? null,
     hasExactGrant: (pluginId, packageVersion) =>
       pluginCapabilityGrants.get(pluginId, packageVersion) !== null,
-    activateLegacy: () => registerLegacyBundledGit(frontendPluginManager, {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      artifactVersion: app.getVersion(),
-    }),
-    onActivated: () => {
-      // The only record of *why* the session downgraded. Without it a user
-      // reporting the "Legacy recovery" panel left nothing to diagnose from.
-      warnMain(
-        `[main] navide.git v2 activation failed (${failure.reason}); switched to legacy recovery`
-      )
-      gitRecoveryEnabled = true
-      for (const [key, hostWindow] of contributionWindows) {
-        if (key.startsWith('navide.git.') && !hostWindow.isDestroyed()) hostWindow.close()
-      }
-      for (const hostWindow of mainWindows) {
-        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
-        hostWindow.webContents.send('plugins:contributionsChanged')
-        hostWindow.webContents.send('git:recoveryChanged', { legacy: true })
-      }
-    },
-  })
-  if (!recovered && failure.pluginId === 'navide.git') {
-    warnMain(
-      `[main] failed navide.git v2 activation could not switch to legacy recovery: ${failure.reason}`
-    )
+  })) {
+    // The only record of *why* Git stopped. Without it a user reporting the
+    // reinstall notice left nothing to diagnose from.
+    warnMain(`[main] navide.git v2 activation failed (${failure.reason}); showing the reinstall notice`)
+    for (const [key, hostWindow] of contributionWindows) {
+      if (key.startsWith('navide.git.') && !hostWindow.isDestroyed()) hostWindow.close()
+    }
+    for (const hostWindow of mainWindows) {
+      if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+      hostWindow.webContents.send('plugins:contributionsChanged')
+    }
+    setGitActivationFailure(failure.reason)
+  } else if (failure.pluginId === 'navide.git') {
+    warnMain(`[main] navide.git v2 activation failed outside the selected granted package: ${failure.reason}`)
   }
   if (
     failure.pluginId === MINI_IDE_PLUGIN_ID &&
@@ -1690,6 +1769,17 @@ const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
 // An agent disabled or enabled a Navide plugin (B2-c): the main window names
 // the caller and offers the undo; held until one has loaded.
 const pluginAgentActionRelay = createPluginAgentActionRelay({ window: () => mainWindow })
+// A plugin's own secrets were isolated (the same id from another source or
+// publisher) or deleted: the main window says so; held until one has loaded.
+const heldPluginSecretsNotices: PluginSecretsNotice[] = []
+const flushPluginSecretsNotices = (win: BrowserWindow): void => {
+  if (win.isDestroyed() || win.webContents.isLoading()) return
+  for (const notice of heldPluginSecretsNotices.splice(0)) win.webContents.send('plugins:secretsNotice', notice)
+}
+frontendPluginManager.setPluginSecretsNoticeHandler((notice) => {
+  heldPluginSecretsNotices.push(notice)
+  if (mainWindow) flushPluginSecretsNotices(mainWindow)
+})
 // A plugin installed without Restart that the launch could not activate: the
 // main window says why and where Restart and Discard are; held until one has loaded.
 const pluginStagedCandidateRelay = createPluginStagedCandidateRelay({ window: () => mainWindow })
@@ -1704,6 +1794,7 @@ let approvedInstalledPluginActivations = [
   ...installedPluginLoad.activationCatalog,
   ...factoryGitActivations,
   ...factoryMiniIdeActivations,
+  ...factoryBrowserActivations,
 ]
 for (const error of installedPluginLoad.errors) {
   console.warn(`[main] installed plugin quarantined: ${error}`)
@@ -1723,7 +1814,7 @@ const terminalStorageOwnerService = new TerminalStorageOwnerService({
           bundledMiniIdeDir({
             isPackaged: app.isPackaged,
             resourcesPath: process.resourcesPath,
-            artifactVersion: app.getVersion(),
+            artifactVersion: officialPluginVersion(MINI_IDE_PLUGIN_ID),
           }),
           'index.html',
         ),
@@ -1738,6 +1829,57 @@ const terminalStorageOwnerService = new TerminalStorageOwnerService({
 frontendPluginManager.setTerminalStorageHandler((origin, request, canDispatch) =>
   terminalStorageOwnerService.execute(origin, request, canDispatch)
 )
+// App Lock: a privacy screen over every window. Main owns it end to end and
+// nothing else reads it — the backend, terminals, chat channels, MCP and
+// schedules carry on while it is up.
+const appLockOverlay = new AppLockOverlay({
+  preloadPath: join(__dirname, '../preload/app-lock-preload.js'),
+  entry: process.env['ELECTRON_RENDERER_URL']
+    ? { url: process.env['ELECTRON_RENDERER_URL'] }
+    : { filePath: join(__dirname, '../renderer/index.html') },
+})
+// Windows 11 unlocks with Windows Hello through navide-hello.exe; macOS with
+// Touch ID; Linux and Windows 10 with the PIN only.
+const windowsHello = new WindowsHello({
+  platform: process.platform,
+  osRelease: osRelease(),
+  helperPath: () => windowsHelloHelperPath(app.isPackaged, process.resourcesPath, app.getAppPath()),
+  run: runHelper,
+  log: logMain,
+})
+const appLockSystemKind: AppLockSystemKind | null = isMac() ? 'touch-id' : windowsHello.supported() ? 'windows-hello' : null
+const appLockSystemName = (): string => APP_LOCK_SYSTEM_NAMES[appLockSystemKind ?? 'touch-id']
+function publishAppLockStatus(status: AppLockStatus): void {
+  if (status.locked) appLockOverlay.show()
+  else appLockOverlay.hide()
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (!win.isDestroyed()) win.webContents.send('app-lock:status-changed', status)
+  }
+}
+const appLock = new AppLockController({
+  filePath: join(app.getPath('userData'), APP_LOCK_FILE),
+  now: () => Date.now(),
+  systemIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+  systemKind: appLockSystemKind,
+  canPromptSystem: () =>
+    appLockSystemKind === 'touch-id' ? systemPreferences.canPromptTouchID() : windowsHello.isAvailable(),
+  promptSystem: () => {
+    const reason = appLockStrings(currentUiLocale(), appLockSystemName()).systemReason
+    if (appLockSystemKind === 'touch-id') return systemPreferences.promptTouchID(reason)
+    // Parent the dialog to the window the user is looking at, so it opens in front.
+    const win = BrowserWindow.getFocusedWindow() ?? [...mainWindows].find((w) => !w.isDestroyed())
+    if (!win) return Promise.reject(new Error('no window for Windows Hello'))
+    return windowsHello.verify(hwndArg(win.getNativeWindowHandle()), reason.charAt(0).toLocaleUpperCase() + reason.slice(1))
+  },
+  onChange: (status) => publishAppLockStatus(status),
+})
+// Settings reads the status again whenever it opens; this keeps "Windows Hello
+// available" current after the user sets it up or removes it.
+const refreshWindowsHello = (): void => {
+  void windowsHello.refresh().then((changed) => { if (changed) publishAppLockStatus(appLock.status()) })
+}
+app.on('browser-window-created', (_event, win) => appLockOverlay.watch(win))
 const filePickerHostService = new FilePickerHostService({
   preloadPath: join(__dirname, '../preload/file-picker-preload.js'),
   entry: process.env['ELECTRON_RENDERER_URL']
@@ -1827,7 +1969,9 @@ const applyPluginActivationChange = ({
         ? firstPartyBackendActivation(activation)
         : thirdPartyBackendActivation(activation)
     if (backend && !frontendPluginManager.hasBackendActivation(pluginId, activation.packageVersion)) {
-      frontendPluginManager.registerBackendActivation(backend)
+      // A disabled built-in browser keeps its backend for Enable.
+      if (isFirstPartyAgentToolPlugin(pluginId)) frontendPluginManager.registerBuiltinBackendActivation(backend)
+      else frontendPluginManager.registerBackendActivation(backend)
     }
   }
   approvedInstalledPluginActivations = approvedInstalledPluginActivations.filter(
@@ -1849,53 +1993,38 @@ const applyPluginActivationChange = ({
     }
   }
 }
-/** Re-activate the App-bundled v2 package, from a cold start or from legacy
- *  recovery. Recovery keeps the package registered, so the plain factory load
- *  refuses to run again and needs the recovery-specific seam. */
-function activateFactoryGitPackage():
-  | { loaded: true; activation: (typeof approvedInstalledPluginActivations)[number] }
+/** Bring Git back after it failed to start. A package that failed while
+ *  running stays registered, so clearing the failure lets the next view
+ *  activate it again; one that never loaded is loaded from the App bundle. */
+function reactivateFactoryGit():
+  | { loaded: true; activation?: (typeof approvedInstalledPluginActivations)[number] }
   | { loaded: false; reason: string } {
-  if (!gitRecoveryEnabled) return loadFactoryGitPackage()
-  const restored = frontendPluginManager.restoreFactoryAfterRecovery(factoryGitDir(), 'navide.git')
-  return restored.restored
-    ? { loaded: true, activation: restored.activation }
-    : { loaded: false, reason: restored.reason }
+  if (frontendPluginManager.getDescriptor('navide.git')) return { loaded: true }
+  return loadFactoryGitPackage()
 }
 
 // A failed v2 activation is usually transient: a readiness handshake that
 // missed its budget under load, or a guest torn down before it reported ready.
-// The downgrade used to last the whole session, with no way back but a
-// restart. Opening the Git tab is the user's natural retry, so spend a small
-// budget of v2 attempts there before the session settles on legacy Git.
+// Opening the Git tab is the user's natural retry, so spend a small budget of
+// attempts there before the session settles on the reinstall notice.
 const GIT_V2_RECOVERY_RETRIES = 2
 let gitV2RetriesLeft = GIT_V2_RECOVERY_RETRIES
 function retryGitV2AfterRecovery(): { ok: boolean; reason?: string } {
-  if (!gitRecoveryEnabled) return { ok: true }
-  if (gitRecoveryForced) return { ok: false, reason: 'NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery' }
+  if (gitActivationFailure === null) return { ok: true }
   if (pluginFactoryOptOuts.has('navide.git')) return { ok: false, reason: 'factory package is opted out' }
   if (gitV2RetriesLeft <= 0) return { ok: false, reason: 'no v2 attempt left this session' }
-  const restored = activateFactoryGitPackage()
+  const restored = reactivateFactoryGit()
   if (!restored.loaded) {
-    // Only an attempt that actually failed costs budget. Spending it up front
-    // meant a restore that worked still burned one, so two downgrades — even
-    // two spurious ones — stranded the session on legacy until a restart.
+    // Only an attempt that actually failed costs budget.
     gitV2RetriesLeft -= 1
     warnMain(`[main] navide.git v2 retry failed: ${restored.reason}; ${gitV2RetriesLeft} retry left`)
     return { ok: false, reason: restored.reason }
   }
-  gitRecoveryEnabled = false
-  // v2 is running again, so the budget has served its purpose. A later,
-  // unrelated downgrade starts from a full budget rather than inheriting the
-  // cost of one that was already recovered from.
+  // A later, unrelated failure starts from a full budget.
   gitV2RetriesLeft = GIT_V2_RECOVERY_RETRIES
-  applyPluginActivationChange({ pluginId: 'navide.git', activation: restored.activation })
-  for (const hostWindow of mainWindows) {
-    if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
-    hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-  }
-  warnMain(
-    `[main] navide.git v2 restored after legacy recovery; retry budget reset to ${gitV2RetriesLeft}`
-  )
+  if (restored.activation) applyPluginActivationChange({ pluginId: 'navide.git', activation: restored.activation })
+  setGitActivationFailure(null)
+  warnMain(`[main] navide.git v2 retried after a failed start; retry budget reset to ${gitV2RetriesLeft}`)
   return { ok: true }
 }
 ipcMain.handle('git:retryV2', (event) => {
@@ -1930,22 +2059,60 @@ const registeredFirstPartyAgentToolSpecs = (): ThirdPartyLaunchSpec[] =>
       return []
     }
   })
+// Batch 4 (contract 2.9): packages without a backend whose views serve their
+// agent tools. Their consent is the install grant of the exact version, and
+// their manifest is read once per installed package directory.
+const viewAgentToolPackageCache = new Map<string, AgentToolPackage | null>()
+const registeredViewAgentToolPackages = (): AgentToolPackage[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (activation.backend || isFirstPartyAgentToolPlugin(activation.pluginId)) return []
+    const key = `${activation.pluginId}\u0000${activation.packageVersion}\u0000${activation.packageDir}`
+    if (!viewAgentToolPackageCache.has(key)) {
+      try {
+        viewAgentToolPackageCache.set(key, viewAgentToolPackage(activation))
+      } catch (error) {
+        console.warn(
+          `[main] agent tools of ${activation.pluginId} are unavailable: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+        viewAgentToolPackageCache.set(key, null)
+      }
+    }
+    const spec = viewAgentToolPackageCache.get(key)
+    return spec ? [spec] : []
+  })
+const isViewAgentToolPackageId = (pluginId: string): boolean =>
+  registeredViewAgentToolPackages().some((spec) => spec.pluginId === pluginId)
+// The install grant is the consent of a view-served tool; its DB3 write
+// answer is bound to the version the grant covers.
+const VIEW_AGENT_TOOL_WRITE_GRANT = 'install-grant'
+const viewAgentToolGrant = (spec: AgentToolPackage): string | undefined =>
+  pluginCapabilityGrants.get(spec.pluginId, spec.packageVersion)?.packageVersion === spec.packageVersion
+    ? VIEW_AGENT_TOOL_WRITE_GRANT
+    : undefined
 agentToolsHost = new PluginAgentToolsHost({
   switches: () => nativeBackendStore.agentToolSwitches(),
   setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
-  listPackages: registeredThirdPartySpecs,
+  listPackages: () => [...registeredThirdPartySpecs(), ...registeredViewAgentToolPackages()],
   listFirstPartyPackages: registeredFirstPartyAgentToolSpecs,
   // Native backends turned off globally or for the package count as disabled.
   // A first-party package is not a third-party native backend: only its own
-  // Disabled switch applies (the installed-package one: it is a Marketplace
-  // package).
+  // Disabled switch applies (the built-in one for the bundled browser, the
+  // installed-package one for a Marketplace package).
   isDisabled: (pluginId) =>
     isFirstPartyAgentToolPlugin(pluginId)
-      ? frontendPluginManager.isPluginDisabled(pluginId)
-      : !nativeBackendStore.isEnabled() ||
-        frontendPluginManager.isPluginDisabled(pluginId) ||
-        nativeBackendStore.record(pluginId).disabled === true,
-  hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
+      ? frontendPluginManager.isPluginDisabled(pluginId) || frontendPluginManager.isBuiltinPluginDisabled(pluginId)
+      : isViewAgentToolPackageId(pluginId)
+        // No native backend: only the package's own Disabled switch applies.
+        ? frontendPluginManager.isPluginDisabled(pluginId)
+        : !nativeBackendStore.isEnabled() ||
+          frontendPluginManager.isPluginDisabled(pluginId) ||
+          nativeBackendStore.record(pluginId).disabled === true,
+  hasConsent: (spec) =>
+    isBackendAgentToolPackage(spec)
+      ? thirdPartyBackends.hasAgentToolsConsent(spec)
+      : Promise.resolve(viewAgentToolGrant(spec) !== undefined),
   // DB1 collision order, per name (B1-a): when a consented version first
   // declared this name, else when the package first declared tools.
   agentToolSince: (pluginId, name) => {
@@ -1955,9 +2122,13 @@ agentToolsHost = new PluginAgentToolsHost({
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
-    isFirstPartyAgentToolPlugin(spec.pluginId)
+    isFirstPartyAgentToolPlugin(spec.pluginId) && isBackendAgentToolPackage(spec)
       ? thirdPartyBackends.confirmFirstPartyAgentToolWrite(spec, workspaceRoot, tool)
-      : thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+      : isBackendAgentToolPackage(spec)
+        ? thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool)
+        : thirdPartyBackends.confirmViewAgentToolWrite(
+          spec, workspaceRoot, tool, VIEW_AGENT_TOOL_WRITE_GRANT, () => viewAgentToolGrant(spec),
+        ),
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)
@@ -1968,6 +2139,19 @@ frontendPluginManager.setAgentToolWorkspaceResolver((root) => {
     ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed()).flatMap(([, paths]) => paths),
   ]
   return open.some((path) => canonicalExistingDirectory(path) === root)
+})
+// 0.2.40: a view that declares `headless: true` mounts hidden on a Navide
+// window of the target workspace, with the query a user's open there gets.
+frontendPluginManager.setHeadlessViewHost((root) => {
+  const windows: Array<[BrowserWindow, string]> = [
+    ...[...mainWindowWorkspaces].filter(([win]) => !win.isDestroyed()),
+    ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed())
+      .flatMap(([win, paths]) => paths.map((path): [BrowserWindow, string] => [win, path])),
+  ]
+  const match = windows.find(([, path]) => canonicalExistingDirectory(path) === root)
+  if (!match) return null
+  const [hostWindow, workspacePath] = match
+  return { hostWindow, query: (contributionKey) => catalogContributionQuery(contributionKey, workspacePath) }
 })
 const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
@@ -1994,7 +2178,43 @@ const pluginTrustRefresh = registerPluginIpc(
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
+    // Plan P5: the anomaly rules run every 30 s; R4 reads the watchdog's
+    // notices, and the main windows hear each automatic pause.
+    autoPauseIntervalMs: 30_000,
+    resourceNotices: () => thirdPartyBackends.resourceNotices(),
+    onPluginAutoPaused: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:autoPaused', notice)
+      }
+    },
+    // Plan P3: a global stop turns the third-party switches off (native
+    // backends, DB8, DB4) and "Resume all" puts them back as they were. A
+    // choice made this way counts as the user's own (C3).
+    globalStopSwitches: {
+      read: () => {
+        const switches = nativeBackendStore.agentToolSwitches()
+        return { nativeBackends: nativeBackendStore.isEnabled(), agentTools: switches.enabled, externalCallers: switches.externalCallers }
+      },
+      turnOff: async () => {
+        await thirdPartyBackends.setEnabled(false)
+        await agentToolsControls.setSwitches({ enabled: false, enabledSetByUser: true })
+      },
+      restore: async (previous) => {
+        await thirdPartyBackends.setEnabled(previous.nativeBackends)
+        await agentToolsControls.setSwitches({ enabled: previous.agentTools, enabledSetByUser: true })
+        if (previous.agentTools) await agentToolsControls.setSwitches({ externalCallers: previous.externalCallers })
+      },
+    },
     onPackageSwitched: (notice) => pluginStagedCandidateRelay.notifySwitched(notice),
+    // H1: a switch drains the plugin's views now, or has settled; only
+    // Navide's own main windows hear it, never a plugin guest or window.
+    onPackageSwitching: (notice) => {
+      for (const hostWindow of mainWindows) {
+        if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+        hostWindow.webContents.send('plugins:switching', notice)
+      }
+    },
     onPackageSwitchFailed: (failure) => {
       console.warn(`[main] switching ${failure.pluginId} to ${failure.stagedVersion} failed: ${failure.reason}`)
       pluginStagedCandidateRelay.notifyStagedUpdates([failure])
@@ -2032,9 +2252,18 @@ const pluginTrustRefresh = registerPluginIpc(
     // run in a worker thread (the scanner's budget is up to 30 s).
     scanLocalPackage: scanLocalPackageInWorker,
     forgetBackendConsent: (pluginId, keepInstallConsentFor) => nativeBackendStore.forgetGrants(pluginId, keepInstallConsentFor),
-    noteInstallConsent: (pluginId, packageVersion) => nativeBackendStore.noteInstallConsent(pluginId, packageVersion),
+    noteInstallConsent: (pluginId, packageVersion) => {
+      nativeBackendStore.noteInstallConsent(pluginId, packageVersion)
+      // C3: the install consent card listed the package's agent tools. A
+      // package whose backend is not registered yet is caught by the
+      // controller's onConsentGranted when its first start records the
+      // install consent as the backend's consent.
+      void agentToolsHost?.consented(pluginId).catch(() => undefined)
+    },
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
+    carryPluginViewState: (pluginId, fromVersion, toVersion) =>
+      pluginStorageStore.carryViewState(pluginId, fromVersion, toVersion),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)
@@ -2047,18 +2276,7 @@ const pluginTrustRefresh = registerPluginIpc(
         frontendPluginManager.setMiniIdeStorageSnapshotContext('', null)
       }
     },
-    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID],
-    // loadFactoryPackage refuses the same way, but only after the open Git
-    // views were drained; asking first keeps the button hidden instead.
-    factoryRollbackRefusal: (pluginId) => {
-      if (pluginId !== 'navide.git') return undefined
-      try {
-        assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
-        return undefined
-      } catch (error) {
-        return error instanceof Error ? error.message : String(error)
-      }
-    },
+    factoryPackageIds: ['navide.git', MINI_IDE_PLUGIN_ID, BROWSER_PLUGIN_ID],
     backendCallConcurrency: () => frontendPluginManager.backendCallConcurrency(),
     backendResourceUsage: () => frontendPluginManager.backendResourceUsage(),
     listFactoryPackages: () => {
@@ -2067,7 +2285,7 @@ const pluginTrustRefresh = registerPluginIpc(
         .listInstalledPackages()
         .some((pkg) => pkg.id === 'navide.git' && pkg.provenance === 'factory-bundled') &&
         descriptor?.capabilityPolicy?.kind === 'manifest-v2' &&
-        !gitRecoveryEnabled
+        gitActivationFailure === null
       const miniDescriptor = frontendPluginManager.getDescriptor(MINI_IDE_PLUGIN_ID)
       const miniFactoryActive = frontendPluginManager
         .listInstalledPackages()
@@ -2078,6 +2296,22 @@ const pluginTrustRefresh = registerPluginIpc(
         disabled: frontendPluginManager.isBuiltinPluginDisabled(pluginId),
         ...(builtinRemovedEarlier.has(pluginId) ? { dataDeletedByEarlierRemoval: true } : {}),
       })
+      // The browser row is listed only in a build that ships it, or while a
+      // copy of it is loaded.
+      const browserDescriptor = frontendPluginManager.getDescriptor(BROWSER_PLUGIN_ID)
+      const browserFactoryActive = frontendPluginManager
+        .listInstalledPackages()
+        .some((pkg) => pkg.id === BROWSER_PLUGIN_ID && pkg.provenance === 'factory-bundled') &&
+        browserDescriptor?.capabilityPolicy?.kind === 'manifest-v2'
+      const browserRows = browserDescriptor || existsSync(join(factoryBrowserDir(), 'manifest.json'))
+        ? [{
+            id: BROWSER_PLUGIN_ID,
+            version: browserFactoryActive ? browserDescriptor?.packageVersion ?? null : null,
+            active: browserFactoryActive,
+            optedOut: pluginFactoryOptOuts.has(BROWSER_PLUGIN_ID),
+            ...builtinSwitch(BROWSER_PLUGIN_ID),
+          }]
+        : []
       return [{
         id: 'navide.git',
         version: factoryActive ? descriptor?.packageVersion ?? null : null,
@@ -2093,9 +2327,19 @@ const pluginTrustRefresh = registerPluginIpc(
       }, {
         ...plansFactoryPackageSummary(frontendPluginManager, plansRecoveryEnabled),
         ...builtinSwitch('navide.plans'),
-      }]
+      }, ...browserRows]
     },
     restoreFactoryPackage: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        if (existsSync(join(pluginsRoot(), pluginId))) {
+          throw new Error('an installed package already owns this plugin id')
+        }
+        const restored = loadFactoryBrowserPackage()
+        if (!restored.loaded) throw new Error(restored.reason)
+        pluginFactoryOptOuts.remove(pluginId)
+        applyPluginActivationChange({ pluginId, activation: restored.activation })
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         if (existsSync(join(pluginsRoot(), pluginId))) {
           throw new Error('an installed package already owns this plugin id')
@@ -2118,20 +2362,14 @@ const pluginTrustRefresh = registerPluginIpc(
         return
       }
       if (pluginId !== 'navide.git') throw new Error('unknown factory package')
-      assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
       if (existsSync(join(pluginsRoot(), pluginId))) {
         throw new Error('an installed package already owns this plugin id')
       }
-      const restored = activateFactoryGitPackage()
+      const restored = reactivateFactoryGit()
       if (!restored.loaded) throw new Error(restored.reason)
       pluginFactoryOptOuts.remove(pluginId)
-      gitRecoveryEnabled = false
-      applyPluginActivationChange({ pluginId, activation: restored.activation })
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-        }
-      }
+      if (restored.activation) applyPluginActivationChange({ pluginId, activation: restored.activation })
+      setGitActivationFailure(null)
     },
     // Rollback hands an id back to the same bundled bytes restoreFactoryPackage
     // serves, so it owes the same guard and the same recovery-state reset. It
@@ -2165,22 +2403,32 @@ const pluginTrustRefresh = registerPluginIpc(
         return loaded
       }
       if (pluginId === 'navide.git') {
-        // Refuses while Git is pinned to legacy, the same way a restore does.
-        assertFactoryGitRestoreAllowed({ forcedLegacy: gitRecoveryForced })
         const loaded = loadFactoryGitPackage()
         if (!loaded.loaded) return loaded
-        gitRecoveryEnabled = false
         pluginFactoryOptOuts.remove(pluginId)
-        for (const hostWindow of mainWindows) {
-          if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-            hostWindow.webContents.send('git:recoveryChanged', { legacy: false })
-          }
-        }
+        setGitActivationFailure(null)
         return loaded
+      }
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        const loaded = loadFactoryBrowserPackage()
+        if (loaded.loaded) pluginFactoryOptOuts.remove(pluginId)
+        return loaded.loaded ? loaded : { loaded: false, reason: loaded.reason }
       }
       return { loaded: false, reason: 'unknown factory package' }
     },
     onFactoryPackageRemoved: (pluginId) => {
+      if (pluginId === BROWSER_PLUGIN_ID) {
+        pluginFactoryOptOuts.add(pluginId)
+        for (const [key, hostWindow] of contributionWindows) {
+          if (key.startsWith(`${BROWSER_PLUGIN_ID}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+        }
+        for (const hostWindow of mainWindows) {
+          if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+            hostWindow.webContents.send('plugins:contributionsChanged')
+          }
+        }
+        return
+      }
       if (pluginId === MINI_IDE_PLUGIN_ID) {
         pluginFactoryOptOuts.add(pluginId)
         miniIdeRecoveryEnabled = false
@@ -2196,19 +2444,14 @@ const pluginTrustRefresh = registerPluginIpc(
         return
       }
       pluginFactoryOptOuts.add(pluginId)
-      gitRecoveryEnabled = gitRecoveryForced
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('git:recoveryChanged', { legacy: gitRecoveryEnabled })
-        }
-      }
+      setGitActivationFailure(null)
     },
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
+      if (pluginId === BROWSER_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
     onBuiltinSwitchReset: (resumed) => {
-      for (const pluginId of resumed) completeBuiltinEnable(pluginId)
       builtinSwitchReconciler.sync()
       for (const hostWindow of mainWindows) {
         if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
@@ -2243,6 +2486,20 @@ void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
   const staged = pluginTrustRefresh.stagedUpdates()
   if (staged.length > 0) pluginStagedCandidateRelay.notifyStagedUpdates(staged)
 })
+
+// A plugin's own secrets (`secrets`): safeStorage ciphertext in
+// <userData>/plugin-secrets, keyed by plugin id, never synced, exported or
+// logged. Without real encryption every set/get answers SECRETS_UNAVAILABLE;
+// nothing is ever written in plain text. Not the CLI account credentials.
+const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), {
+  get available(): boolean {
+    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
+      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  },
+  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+})
+frontendPluginManager.setPluginSecretStore(pluginSecretStore)
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their
@@ -2308,20 +2565,11 @@ async function applyBuiltinSwitch(pluginId: string, disabled: boolean): Promise<
     await frontendPluginManager.suspendBuiltinPlugin(pluginId)
   } else {
     frontendPluginManager.resumeBuiltinPlugin(pluginId)
-    completeBuiltinEnable(pluginId)
   }
   for (const hostWindow of mainWindows) {
     if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
       hostWindow.webContents.send('plugins:contributionsChanged')
     }
-  }
-}
-/** What enabling a built-in needs after `resumeBuiltinPlugin`, shared by the
- *  Enable switch and the reset of an unreadable store: a forced legacy Git
- *  recovery session registers the legacy Git it would have at startup. */
-function completeBuiltinEnable(pluginId: string): void {
-  if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
-    registerForcedLegacyGit()
   }
 }
 // A store that turns unreadable while the app runs fails closed for the
@@ -2358,6 +2606,15 @@ registerExecutionPolicyIpc(
         hostWindow.webContents.send('execution-policy:changed')
       }
     },
+  },
+)
+registerWorkbenchSourceIpc(
+  new WorkbenchSourceStore(app.getPath('userData')),
+  (event) => isTrustedPluginManagementSender(event, mainWindows),
+  (event) => {
+    const hostWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!hostWindow || !mainWindows.has(hostWindow) || detachedWindowIds.has(hostWindow.id)) return undefined
+    return mainWindowWorkspaces.get(hostWindow) ?? undefined
   },
 )
 async function refreshInstalledPluginTrust(): Promise<void> {
@@ -2493,7 +2750,7 @@ if (selectedMiniIdeV2) {
 const bundledPlans = registerBundledPlans(frontendPluginManager, {
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  artifactVersion: app.getVersion(),
+  artifactVersion: officialPluginVersion('navide.plans'),
   installedActivation: installedPluginLoad.activationCatalog.find(
     (entry) => entry.pluginId === 'navide.plans'
   ),
@@ -3270,6 +3527,19 @@ function currentDetectedEditors(refresh = false): DetectedEditor[] {
   return detectedEditorsCache
 }
 
+// The list Settings and the "Open with…" menus show. The first detection and
+// Settings' rescan follow a registry PATH read (Windows) awaited off the main
+// thread, rather than one run synchronously on it.
+async function listDetectedEditors(refresh: boolean): Promise<DetectedEditor[]> {
+  if (!refresh && detectedEditorsCache) return detectedEditorsCache
+  detectedEditorsCache = detectEditors(await getFreshResolvedUserPath())
+  return detectedEditorsCache
+}
+
+// The registry PATH read behind getResolvedUserPath is a PowerShell start-up
+// on Windows; have it ready before the first editor menu or terminal needs it.
+app.whenReady().then(() => void warmRegistryPath())
+
 // An external editor that cannot be launched falls back to the mini-IDE, which
 // on its own looks like the setting was ignored. Warn once per editor id per
 // session: enough to explain it, not so much that every click nags.
@@ -3513,7 +3783,7 @@ frontendPluginManager.setEditorNativeHandlers({
     const result = await openTempFilePath(name, content)
     if (!result.ok) throw new Error(result.error ?? 'open temp file failed')
   },
-  listEditors: async (refresh) => currentDetectedEditors(refresh).map((editor) => ({
+  listEditors: async (refresh) => (await listDetectedEditors(refresh === true)).map((editor) => ({
     id: editor.id,
     label: editor.id === 'vscode' ? 'Visual Studio Code' : editor.id === 'cursor' ? 'Cursor' : editor.id,
     available: editor.available,
@@ -3657,9 +3927,9 @@ frontendPluginManager.setHostShellHandlers({
       revealMainWindow(existing)
       return { ok: true }
     }
-    // duplicate=1: same semantics as window:openMain — skip pane restore for a
-    // window cloned while its source's CLI sessions are still running.
-    void createWindow({ workspace_path: ws, duplicate: '1' })
+    // Same boot as window:openMain: no window holds the workspace, so its panes
+    // are restored (live PTYs reattach); skip_recent keeps Recent untouched.
+    void createWindow({ workspace_path: ws, skip_recent: '1' })
     return { ok: true }
   },
   pickFolder: async (defaultPath) => {
@@ -3746,12 +4016,23 @@ function showPlansPreviewUnavailable(workspacePath: string): void {
 function openDiffWindow(host: BrowserWindow | null, params: Record<string, string>): void {
   // Diff surfaces belong to the Git extension: the request is forwarded to its
   // window, which selects the file there. The IDE never renders a diff.
-  void openGitWindow(params.workspace_path ?? '', gitWindowExtraParams({
+  void openGitWindowOrExplain(host, params.workspace_path ?? '', gitWindowExtraParams({
     filepath: params.filepath,
     ...(params.name === undefined ? {} : { name: params.name }),
     ...(params.staged === undefined ? {} : { staged: params.staged }),
     ...(params.commit === undefined ? {} : { commit: params.commit }),
   }))
+}
+
+/** Open the Git window for a diff request; when it cannot open, say why
+ *  (a disabled Git plugin already explains itself through refuseDisabledBuiltin). */
+async function openGitWindowOrExplain(
+  host: BrowserWindow | null,
+  workspacePath: string,
+  extraParams: Record<string, string>,
+): Promise<void> {
+  if (refuseDisabledBuiltin('navide.git', host)) return
+  if (!(await openGitWindow(workspacePath, extraParams))) await showGitViewUnavailable(host)
 }
 
 /** Route a diff-shaped editor request to the Git extension's own window. The
@@ -3801,16 +4082,18 @@ function openMainWindow(workspacePath = '', background = false): void {
       return
     }
     params.workspace_path = ws
-    // duplicate=1 marks a window cloned from a live one (its source's CLI
-    // sessions are still running), so the renderer skips pane restore once.
-    // Externally-opened workspaces (openWorkspaceFromPath) must NOT carry
-    // this — their previous sessions are dead and restore should run.
-    params.duplicate = '1'
+    // No duplicate=1: the check above means no window holds this workspace,
+    // so nothing else shows its sessions. The renderer restores its panes,
+    // reattaching the PTYs a closed window left running; skipping restore here
+    // left those CLIs running with no pane. skip_recent keeps the boot out of
+    // Recent, as duplicate=1 did (callers that mean it touch Recent themselves).
+    params.skip_recent = '1'
   }
   void createWindow(params, background ? { background: true } : undefined)
 }
 
-ipcMain.handle('window:openMain', (_event, args?: { workspace_path?: string; background?: boolean }) => {
+ipcMain.handle('window:openMain', (event, args?: { workspace_path?: string; background?: boolean }) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   openMainWindow(args?.workspace_path, args?.background === true)
   return { ok: true }
 })
@@ -3836,6 +4119,9 @@ ipcMain.on('terminal:selection-changed', (event, selection: unknown) => {
 // without reloading, so main's per-window workspace map — and the crash-restore
 // registry — must be told. Empty path = the window returned to Welcome.
 ipcMain.on('window:reportWorkspace', (event, workspacePath: string) => {
+  // This decides which repository a workbench acceptance applies to: a subframe
+  // must not be able to point it somewhere else.
+  if (!mayReportWorkspace(event, mainWindows)) return
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win || !mainWindows.has(win)) return
   if (detachedWindowIds.has(win.id)) return // detached child — never registry-tracked
@@ -3987,6 +4273,113 @@ ipcMain.handle('restore:getSkipped', () => {
   const claimed = skippedRestores
   skippedRestores = []
   return claimed
+})
+
+// ── Reopen Closed Window (plan 0-2-41_bbfee9) ────────────────────────────────
+// A workspace window closed while the app kept running is remembered by the
+// registry (remove()) and can be brought back whole: its own workspace, the
+// ones its sidebar adopted, and its bounds. Panes come back the way a restore
+// brings them back — from each workspace's project.json, as resume cards.
+
+function workspaceName(path: string): string {
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path
+}
+
+/** The menu and every Welcome screen show the list; tell both it changed. */
+function recentlyClosedChanged(): void {
+  rebuildAppMenu()
+  for (const win of mainWindows) {
+    if (win.isDestroyed() || detachedWindowIds.has(win.id)) continue
+    win.webContents.send('restore:recentlyClosedChanged')
+  }
+}
+
+function recentlyClosedMenuEntries(): ClosedWindowMenuEntry[] {
+  return windowRegistry.recentlyClosedWindows().map((w) => ({
+    name: workspaceName(w.workspace_path),
+    // The sidebar's list includes the window's own workspace; count the rest.
+    others: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path).map(workspaceName),
+    closedAt: w.closed_at,
+  }))
+}
+
+/** Tell a window which folders a reopen skipped because they are gone. */
+function sendReopenMissing(win: BrowserWindow, missing: string[], fresh: boolean): void {
+  if (!missing.length || win.isDestroyed()) return
+  const send = (): void => { if (!win.isDestroyed()) win.webContents.send('restore:reopenMissing', missing) }
+  if (fresh) win.webContents.once('did-finish-load', send)
+  else send()
+}
+
+/** Reopen one closed window, the newest when no index is given. Returns how
+ *  many workspaces came back in a new window, were focused, or were skipped. */
+async function reopenClosedWindow(index = 0): Promise<{ opened: number; focused: number; missing: string[] }> {
+  const entry = windowRegistry.takeRecentlyClosed(index)
+  if (!entry) return { opened: 0, focused: 0, missing: [] }
+  const plan = planReopen(entry, {
+    exists: (path) => existsSync(path),
+    isOpen: (path) => findMainWindowForWorkspace(path) !== null,
+  })
+  let target: BrowserWindow | null = null
+  for (const path of plan.focus) {
+    const existing = findMainWindowForWorkspace(path)
+    if (existing) { revealMainWindow(existing); target = existing }
+  }
+  let fresh = false
+  if (plan.open) {
+    const { workspace_path, bounds, adopted_workspaces } = plan.open
+    // Same boot as a crash restore: the renderer runs pane restore. A closed
+    // window's PTYs outlive it, so a pane with a pinned session reattaches,
+    // and one without (a terminal, codex before its first turn) restores
+    // fresh and reaps the old PTY through its replaces key.
+    const win = await createWindow({ workspace_path, restore: '1' }, bounds ? { bounds } : undefined)
+    if (adopted_workspaces?.length) pendingAdoptedWorkspaces.set(win.id, adopted_workspaces)
+    target = win
+    fresh = true
+  }
+  if (plan.missing.length) {
+    warnMain(`[main] reopen closed window skipped ${plan.missing.length} missing folder(s)`)
+    if (!target) {
+      // Nothing opened or focused, and possibly no window at all (macOS keeps
+      // running windowless): a Welcome window is where the notice can land.
+      const focused = BrowserWindow.getFocusedWindow()
+      target = focused && mainWindows.has(focused) ? focused : mainWindow
+      if (!target || target.isDestroyed()) { target = await createWindow(); fresh = true }
+    }
+    sendReopenMissing(target, plan.missing, fresh)
+  }
+  recentlyClosedChanged()
+  return {
+    opened: plan.open ? 1 + (plan.open.adopted_workspaces?.length ?? 0) : 0,
+    focused: plan.focus.length,
+    missing: plan.missing,
+  }
+}
+
+ipcMain.handle('restore:listRecentlyClosed', () =>
+  windowRegistry.recentlyClosedWindows().map((w) => ({
+    workspace_path: w.workspace_path,
+    adopted_workspaces: (w.adopted_workspaces ?? []).filter((p) => p !== w.workspace_path),
+    closed_at: w.closed_at,
+  })))
+
+// No path: the newest (⇧⌘T). A path picks that entry (the Welcome list), so a
+// list that changed since the renderer last read it cannot reopen the wrong one.
+ipcMain.handle('restore:reopenClosed', async (event, workspacePath?: unknown) => {
+  const list = windowRegistry.recentlyClosedWindows()
+  const index = typeof workspacePath === 'string' && workspacePath
+    ? list.findIndex((w) => w.workspace_path === workspacePath)
+    : 0
+  if (index < 0 || !list.length) return { ok: false, opened: 0, focused: 0, missing: [] }
+  const result = await reopenClosedWindow(index)
+  // Asked from a startup Welcome screen that holds no workspace: the restored
+  // window replaces it, rather than leaving an empty window behind.
+  const sender = BrowserWindow.fromWebContents(event.sender)
+  if (result.opened && sender && mainWindows.has(sender) && !detachedWindowIds.has(sender.id)
+    && !mainWindowWorkspaces.has(sender) && !adoptedWorkspaces.has(sender)) {
+    sender.close()
+  }
+  return { ok: true, ...result }
 })
 
 ipcMain.handle('restore:getAutoRestore', () => windowRegistry.getRestoreOnLaunch())
@@ -4221,6 +4614,10 @@ async function openCatalogContributionWindow(
       } catch {
         // The host has already torn down its WebContentsView.
       }
+      // The Git window's embedded AI panels end with it (not on app quit), in
+      // its own workspace only: other workspaces' Git windows keep theirs. Its
+      // AI review closes with the view instance in closeContribution.
+      if (contributionKey === 'navide.git.window') frontendPluginManager.endDockSurface('git', workspacePath)
     })
   }
 
@@ -4326,15 +4723,8 @@ function catalogContributionQuery(
 
 async function openGitWindow(workspacePath: string, extraParams: Record<string, string> = {}): Promise<boolean> {
   if (refuseDisabledBuiltin('navide.git', findMainWindowForWorkspace(workspacePath))) return false
-  const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
   const generic = await openCatalogContributionWindow('navide.git.window', workspacePath, extraParams)
-  if (generic.ok) return true
-  if (!gitRecoveryEnabled) return false
-  await migrateGitStorage()
-  return openGitPluginView(workspacePath, httpUrl, currentUiTheme(), {
-    ...currentGitReadOnlyQuery(),
-    ...extraParams,
-  })
+  return generic.ok
 }
 
 function gitWindowExtraParams(args: {
@@ -4365,61 +4755,6 @@ ipcMain.handle('window:openGit', async (_event, args: Record<string, string>) =>
   // load and via the incremental openTarget delivery when already open.
   const ok = await openGitWindow(workspacePath, gitWindowExtraParams(args))
   return { ok }
-})
-
-function pluginBoundsFrom(value: unknown): { x: number; y: number; width: number; height: number } | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
-  const record = value as Record<string, unknown>
-  const values = [record.x, record.y, record.width, record.height]
-  if (!values.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) return null
-  if (Number(record.width) <= 0 || Number(record.height) <= 0) return null
-  return {
-    x: Math.round(Number(record.x)),
-    y: Math.round(Number(record.y)),
-    width: Math.round(Number(record.width)),
-    height: Math.round(Number(record.height)),
-  }
-}
-
-// The renderer supplies layout geometry and a workspace assertion. The main
-// process resolves the registered workspace and actual left contribution;
-// neither the workspace authority nor the opaque instance handle comes from
-// renderer input.
-ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  const requestedWorkspace = typeof args?.workspace_path === 'string' ? args.workspace_path : ''
-  const registeredWorkspace = hostWindow
-    ? registeredGitLeftWorkspace(hostWindow, requestedWorkspace, mainWindowWorkspaces, normalizeWorkspacePath)
-    : null
-  const bounds = pluginBoundsFrom(args?.bounds)
-  if (!hostWindow || !registeredWorkspace || !bounds) return { ok: false }
-  const workspacePath = normalizeWorkspacePath(registeredWorkspace)
-  if (!workspacePath) return { ok: false }
-  await migrateGitStorage()
-  const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
-  return openGitLeftPluginView(
-    hostWindow,
-    workspacePath,
-    bounds,
-    httpUrl,
-    currentUiTheme(),
-    currentGitReadOnlyQuery(),
-  )
-})
-
-ipcMain.handle('window:updateGitLeft', (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  const bounds = pluginBoundsFrom(args?.bounds)
-  if (!hostWindow || !bounds) return { ok: false }
-  return updateGitLeftPluginView(hostWindow, bounds, args?.visible === true)
-})
-
-ipcMain.handle('window:closeGitLeft', (event) => {
-  if (!gitRecoveryEnabled) return { ok: false }
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  return hostWindow ? closeGitLeftPluginView(hostWindow) : { ok: false }
 })
 
 function trustedPluginRegionHost(event: IpcMainInvokeEvent): BrowserWindow | null {
@@ -4494,6 +4829,24 @@ ipcMain.handle('plugins:prepareContribution', async (event, args: Record<string,
   return result
 })
 
+/** Run a Navide plugin command for the main window. A keystroke is the only
+ * thing that gets here: ui_invoke refuses these commands in the renderer. */
+ipcMain.handle('plugins:runCommand', async (event, args: Record<string, unknown>): Promise<PluginCommandRunResult> => {
+  const requestingWindow = trustedPluginRegionHost(event)
+  const commandId = typeof args?.commandId === 'string' ? args.commandId : ''
+  const workspacePath = requestingWindow
+    ? registeredGitLeftWorkspace(requestingWindow, args?.workspace_path, mainWindowWorkspaces, normalizeWorkspacePath)
+    : null
+  if (!requestingWindow || !commandId || !workspacePath) return { ok: false, reason: 'view-not-open' }
+  // A view slot (Explorer entry, pane) hands its command what it was used on.
+  const target = args?.target === undefined ? undefined : parsePluginCommandTarget(args.target)
+  if (target === null) return { ok: false, reason: 'view-not-open' }
+  const outcome = await frontendPluginManager.runCommand(requestingWindow, commandId, workspacePath, target)
+  if (!outcome.ok || !('window' in outcome)) return outcome
+  const opened = await openCatalogContributionWindow(outcome.window.contributionKey, workspacePath, outcome.window.params)
+  return opened.ok ? { ok: true } : { ok: false, reason: 'view-not-open' }
+})
+
 /** Open a catalog window contribution in a dedicated BrowserWindow. Only the
  * trusted main renderer may request this; the opaque plugin instance remains
  * entirely in the main process. */
@@ -4528,13 +4881,6 @@ ipcMain.handle('plugins:closeContribution', (event, args: Record<string, unknown
   return frontendPluginManager.closeContribution(hostWindow, contributionKey)
 })
 
-ipcMain.handle('window:getZoomFactor', (event) => {
-  const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
-  if (!hostWindow) return 1
-  const factor = hostWindow.webContents.getZoomFactor()
-  return Number.isFinite(factor) && factor > 0 ? factor : 1
-})
-
 // Interface scale, applied to every window at once. Accepted only from a
 // top-level app frame: plugin content runs in a child frame or a
 // WebContentsView whose preload does not expose this bridge at all, so it can
@@ -4548,7 +4894,7 @@ ipcMain.handle('window:setUiScale', (event, next: unknown) => {
 })
 
 function openBranchDiffWindow(host: BrowserWindow | null, params: Record<string, string>): void {
-  void openGitWindow(params.workspace_path ?? '', {
+  void openGitWindowOrExplain(host, params.workspace_path ?? '', {
     git_diff_base: params.branch_diff_base ?? 'main',
     git_diff_compare: params.branch_diff_compare ?? '',
   })
@@ -4557,61 +4903,6 @@ function openBranchDiffWindow(host: BrowserWindow | null, params: Record<string,
 ipcMain.handle('window:openBranchDiff', (event, args: Record<string, string>) => {
   openBranchDiffWindow(BrowserWindow.fromWebContents(event.sender), args ?? {})
   return { ok: true }
-})
-
-// Reject only what git itself forbids in ref names (git-check-ref-format), so
-// non-ASCII (e.g. CJK) branch names are allowed — matching the Python backend's
-// _INVALID_REF_RE. An ASCII allowlist here wrongly rejected branches like
-// "AI修改". Not the security boundary: execFile is exec-not-shell and the
-// leading-'-' check below blocks flag smuggling.
-const INVALID_GIT_REF_RE = /(\.\.|\x00|@\{|\\|[ ~^:?*[\]]|\/$|\.lock$|\.lock\/)/
-
-function validateRef(value: string, label: string): string | null {
-  if (!value) return null // empty is OK (means "omit")
-  if (value.startsWith('-')) return `invalid ${label}: must not start with '-'`
-  if (INVALID_GIT_REF_RE.test(value))
-    return `invalid ${label}: contains characters git disallows in ref names`
-  return null
-}
-
-// Run git diff directly in main process — no Python backend needed, always up-to-date.
-ipcMain.handle('git:diff-head', async (_event, args: { workspace_path: string; base?: string; compare?: string }) => {
-  const { execFile } = await import('node:child_process')
-  const { promisify } = await import('node:util')
-  const execFileAsync = promisify(execFile)
-  const cwd = (args.workspace_path ?? '').trim()
-  if (!cwd) return { ok: false, diff: '', error: 'workspace_path required' }
-  const compare = (args.compare ?? '').trim()
-  const base = (args.base ?? '').trim()
-  const refErr = validateRef(base, 'base') ?? validateRef(compare, 'compare')
-  if (refErr) return { ok: false, diff: '', error: refErr }
-  // A compare target needs an explicit base — align with the backend, which
-  // errors here rather than silently diffing HEAD and ignoring compare.
-  if (compare && !base) return { ok: false, diff: '', error: 'base branch is required to compare' }
-  try {
-    const gitArgs: string[] = ['-c', 'core.quotePath=false', 'diff']
-    if (compare && base) {
-      gitArgs.push(`${base}...${compare}`)
-    } else {
-      gitArgs.push('HEAD')
-    }
-    // timeout+SIGKILL so a hung git (stale mount, wedged filter) can't spin the
-    // diff pane forever; generous maxBuffer since we only keep the first 100 K.
-    const { stdout } = await execFileAsync('git', gitArgs, {
-      cwd,
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: 30_000,
-      killSignal: 'SIGKILL'
-    })
-    const truncated = stdout.length > 100_000
-    return { ok: true, diff: stdout.slice(0, 100_000), truncated }
-  } catch (err: unknown) {
-    const e = err as { stderr?: string; message?: string; killed?: boolean; code?: string }
-    if (e.killed) return { ok: false, diff: '', error: 'git diff timed out' }
-    if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')
-      return { ok: false, diff: '', error: 'diff too large to display' }
-    return { ok: false, diff: '', error: e.stderr?.trim() || e.message || 'git error' }
-  }
 })
 
 // Reviewable plan doc: top-level, non-infrastructure `.agent-team/plans/*.html`
@@ -4625,6 +4916,7 @@ function isHtmlPlanDocPath(relPath: string): boolean {
 }
 
 ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   const params = args ?? {}
   const workspacePath = params.workspace_path ?? ''
   const filepath = params.filepath ?? ''
@@ -4644,12 +4936,13 @@ ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) 
 // Default-editor surface for Settings and the "Open with…" menus: the built-in
 // editors plus whether each one was found on this machine.
 ipcMain.handle('editors:list', (_event, args?: { refresh?: boolean }) =>
-  currentDetectedEditors(args?.refresh === true)
+  listDetectedEditors(args?.refresh === true)
 )
 
 ipcMain.handle(
   'editor:openFolder',
   async (event, args: { dir?: string; editorId?: string }) => {
+    if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
     const ok = await openFolderInEditor(
       BrowserWindow.fromWebContents(event.sender),
       args?.dir ?? '',
@@ -5358,6 +5651,8 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'guard.terminal.set_category',
   'guard.terminal.add_pattern',
   'guard.terminal.remove_pattern',
+  // Exempting a line from the credential pipe-upload rule (M4).
+  'guard.terminal.add_exemption',
   // Loosening Navide Guard's grading (lowering a built-in rule, adding an
   // allow pattern, removing a deny pattern or a protected branch).
   'guard.builtin.set_level',
@@ -5479,6 +5774,30 @@ async function writeKeybindingsFile(
   }
 }
 
+ipcMain.handle('workbench:read', async () => {
+  try {
+    return { ok: true, content: await readFile(join(app.getPath('userData'), 'workbench.json'), 'utf-8') }
+  } catch (e) {
+    // No file is the normal case, and means no buttons.
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') return { ok: true, content: '' }
+    return { ok: false, error: String(e) }
+  }
+})
+
+ipcMain.handle('workbench:write', async (event, content: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  if (typeof content !== 'string') return { ok: false, error: 'invalid content' }
+  try {
+    await writeFile(join(app.getPath('userData'), 'workbench.json'), content, 'utf-8')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) win.webContents.send('workbench:changed', content)
+    }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+})
+
 // Read bytes from a file starting at a given offset. Used by the stage watcher
 // to scan the outputLogFile for sentinel strings — more reliable than cleanBuffer
 // which can be truncated or have scanFrom issues from Q&A injections.
@@ -5538,7 +5857,8 @@ ipcMain.handle('logs:findManualLog', async (_event, workspacePath: string, filen
 // matched. See log-content-search.ts for the chunked-read implementation.
 ipcMain.handle(
   'logs:searchContent',
-  async (_event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+  async (event, args: { query: string; files: Array<{ id: string; path: string }> }) => {
+    if (!isAppWindowSender(event)) return { matchedIds: [] }
     if (!args || typeof args.query !== 'string' || !Array.isArray(args.files)) return { matchedIds: [] }
     const matchedIds = await searchLogFiles(args.query, args.files)
     return { matchedIds }
@@ -5555,6 +5875,7 @@ ipcMain.on('settings:language-changed', (_event, locale: string) => {
     frontendPluginManager.dispatchHostSettingsChanged({
       settings: { 'agent-team:language': normalizedLocale },
     })
+    frontendPluginManager.notifyHostLocaleChanged(normalizedLocale)
     // The native menu is built once at startup; Electron has no API to
     // re-label it in place, so a language change has to install a new one.
     rebuildAppMenu()
@@ -5690,21 +6011,6 @@ ipcMain.handle('git-accounts:getBinding', (event, workspacePath: string) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, accountId: getGitAccountsStore().getBinding(workspacePath) }
-  } catch (e) {
-    return { ok: false, error: String(e) }
-  }
-})
-
-ipcMain.handle('git-accounts:getCredential', (event, workspacePath: string) => {
-  // Sensitive: returns a decrypted PAT. Restrict to the top frame of a known
-  // app window so a sub-frame/iframe injected into rendered content can't call
-  // this to exfiltrate a token.
-  const win = BrowserWindow.fromWebContents(event.sender)
-  if (!win || !mainWindows.has(win) || event.senderFrame?.parent) {
-    return { ok: false, error: 'unauthorized' }
-  }
-  try {
-    return { ok: true, credential: getGitAccountsStore().getCredentialForWorkspace(workspacePath) }
   } catch (e) {
     return { ok: false, error: String(e) }
   }
@@ -5895,15 +6201,9 @@ if (!gotSingleInstanceLock) {
 const DEV_ORIGIN = process.env['ELECTRON_RENDERER_URL']
   ? new URL(process.env['ELECTRON_RENDERER_URL']).origin
   : null
+const APP_INDEX_PATH = join(__dirname, '../renderer/index.html')
 function isAppNavigation(url: string): boolean {
-  try {
-    const u = new URL(url)
-    if (DEV_ORIGIN && u.origin === DEV_ORIGIN) return true
-    if (u.protocol === 'file:') return u.pathname.endsWith('/renderer/index.html')
-  } catch {
-    // Malformed URL — treat as not-app and block.
-  }
-  return false
+  return isAppNavigationPolicy(url, DEV_ORIGIN, APP_INDEX_PATH)
 }
 app.on('web-contents-created', (_e, contents) => {
   // Page zoom is owned by the app's interface-scale setting, not by Chromium's
@@ -5920,13 +6220,7 @@ app.on('web-contents-created', (_e, contents) => {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(
-    contents,
-    () => {
-      if (!contents.isDestroyed()) contents.send('window:zoom-changed')
-    },
-    () => (scalable ? zoom.get() : 1)
-  )
+  lockPageZoom(contents, () => (scalable ? zoom.get() : 1))
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
@@ -5974,6 +6268,26 @@ app.whenReady().then(async () => {
     isTrusted: (event) => isAppWindowSender(event),
     isMac,
   })
+  // Settings → App Lock, plus the lock screens themselves (see app-lock-ipc.ts).
+  registerAppLockIpc(ipcMain, {
+    controller: appLock,
+    isAppWindow: (event) => isAppWindowSender(event),
+    isLockScreen: (event) => appLockOverlay.isLockScreen(event.sender.id),
+    onStatusRead: refreshWindowsHello,
+    screenInit: () => {
+      const status = appLock.status()
+      return {
+        strings: appLockStrings(currentUiLocale(), appLockSystemName()).screen,
+        systemUnlockAvailable: status.systemUnlockAvailable,
+        preferSystem: status.settings.unlockMethod === 'system',
+      }
+    },
+  })
+  refreshWindowsHello()
+  powerMonitor.on('lock-screen', () => appLock.handleScreenLock())
+  powerMonitor.on('suspend', () => appLock.handleSuspend())
+  const appLockIdleTimer = setInterval(() => appLock.tick(), 15_000)
+  app.on('will-quit', () => clearInterval(appLockIdleTimer))
   // Settings → Voice → Read aloud: Spoken Content, to download a better voice.
   registerSpokenContentSettingsIpc(ipcMain, {
     openExternal: (url) => shell.openExternal(url),
@@ -5986,10 +6300,6 @@ app.whenReady().then(async () => {
   // Windows/Linux cold start: the link is a launch argument.
   const launchLink = app.isPackaged ? deepLinkFromArgv(process.argv) : null
   if (launchLink) deepLinks.handle(launchLink)
-  // A disabled Git gets no legacy view either; Enable registers it then.
-  if (gitRecoveryEnabled && !frontendPluginManager.isBuiltinPluginDisabled('navide.git')) {
-    registerForcedLegacyGit()
-  }
   // The plugin-view dev entry is opt-in via AGENT_TEAM_PLUGIN_DEV=1 so the
   // default menu / UI is unchanged for every normal launch (dev or packaged).
   // This mode keeps the fixed first-party dist-plugins bundles available for
@@ -6013,7 +6323,7 @@ app.whenReady().then(async () => {
     // has loaded one. A second backend for the same plugin id cannot be
     // registered safely, so the legacy bundle is considered only when no v2
     // package/backend pair is active.
-    const devPlansV2Package = devPlansV2PluginBundle(app.getVersion())
+    const devPlansV2Package = devPlansV2PluginBundle(officialPluginVersion('navide.plans'))
     const activePlansDescriptor = frontendPluginManager.getDescriptor('navide.plans')
     let devPlansV2Registered = Boolean(
       activePlansDescriptor?.capabilityPolicy?.kind === 'manifest-v2' &&
@@ -6073,12 +6383,19 @@ app.whenReady().then(async () => {
     onOpenTurnStats: () => requestTurnStats(),
     onOpenTokenMonitor: () => requestTokenMonitor(),
     onOpenAccount: () => sendMenuAction('open-account'),
+    recentlyClosedWindows: () => recentlyClosedMenuEntries(),
+    onReopenClosedWindow: (index) => void reopenClosedWindow(index),
     onOpenRepo: () => void shell.openExternal('https://github.com/Navide-dev/Navide'),
     onReportIssue: () => void shell.openExternal('https://github.com/Navide-dev/Navide/issues'),
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
     onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
+    onOpenDeveloperDoc: (doc) => void shell.openExternal(DEVELOPER_DOC_URLS[doc]),
+    onOpenDeveloperPage: (page) => sendMenuAction(`open-developer:${page}`),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
+    onLockNow: () => void appLock.lock(),
+    lockNowEnabled: () => appLock.status().settings.enabled && !appLock.isLocked(),
+    appLocked: () => appLock.isLocked(),
     onReloadWindow: (target) => {
       void windowCloseCoordinator.prepareAndReload(target)
       // Handled synchronously from the menu's point of view whenever the target
@@ -6116,6 +6433,8 @@ app.whenReady().then(async () => {
       : {})
   }
   rebuildAppMenu()
+  // After the menu has its hooks: locking rebuilds it (Lock Now greys out).
+  appLock.handleStart()
   // Fill the native About panel (⌘ About Navide) with Navide branding.
   app.setAboutPanelOptions({
     applicationName: 'Navide',
@@ -6430,11 +6749,13 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
     checkboxChecked: false,
   }
   quitPromptOpen = true
+  quitPromptWindow = win
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
   } finally {
     quitPromptOpen = false
+    quitPromptWindow = undefined
   }
   if (res.response === 1) return false
   if (res.checkboxChecked) {
@@ -6450,6 +6771,12 @@ app.on('before-quit', async (e) => {
   // Confirmation gate — shared "confirm before close" setting, driven by renderer.
   if (quitConfirm.enabled && !quitConfirmed) {
     e.preventDefault()
+    // A second quit request (Quit pressed twice, Browser.close sent twice)
+    // while the dialog is up: bring the open dialog forward, never stack one.
+    if (quitPromptOpen) {
+      if (quitPromptWindow && !quitPromptWindow.isDestroyed()) quitPromptWindow.focus()
+      return
+    }
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
     if (!(await askQuitConfirm(win))) return // cancelled — stay open (default already prevented)
     quitConfirmed = true

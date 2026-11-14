@@ -23,6 +23,7 @@ function tabs(over: Partial<StageTabInput> = {}) {
     detachedGroupIds: new Set<string>(),
     manualLabel: 'manual',
     orphanLabel: 'orphan',
+    defaultLabel: 'Default',
     ...over,
   })
 }
@@ -43,6 +44,13 @@ describe('buildStageTabs', () => {
     expect(t.find((x) => x.key === 'g1')?.count).toBe(2)
     expect(t.find((x) => x.key === 'g1')?.paneIds).toEqual(['a', 'b'])
     expect(t.find((x) => x.key === 'g2')?.count).toBe(1)
+  })
+
+  it('shows the default tab in the UI language until it is renamed', () => {
+    // The default tab is created as '預設' and project.json keeps that name.
+    expect(tabs({ groups: [{ id: 'rg-default', name: '預設' }] })[0].label).toBe('Default')
+    expect(tabs({ groups: [{ id: 'rg-default', name: 'Inbox' }] })[0].label).toBe('Inbox')
+    expect(tabs({ groups: [{ id: 'g9', name: '預設' }] })[0].label).toBe('預設')
   })
 
   it('keeps an empty group as a tab', () => {

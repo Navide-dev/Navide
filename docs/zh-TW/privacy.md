@@ -13,7 +13,7 @@ Navide 採用 **Local-first**，但不代表所有情況都完全離線。Electr
 - 應用程式資料目錄中的 Host 管理 Plugin Storage Partition；它們依驗證過的 Plugin／Package 及（Workspace Scope）驗證過的 Workspace 分隔，不會傳送給 Navide 或 Plugin Registry
 - 從本機 CLI Log 衍生的 Token Attribution 與 Deduplication Metadata
 - 本機 `navide.db` 裡的第三方 Navide 外掛活動紀錄（`plugin_activity`）：哪個外掛、哪個 `namespace.method`、時間、workspace、被允許／拒絕／失敗、workspace 內的相對路徑（workspace 外的路徑只記 `<outside-workspace>`，從不存檔案內容），shell 呼叫只記執行檔與子指令。明細保留 7 天，之後只留每日計數 90 天。內建的 Plans、Git、Mini-IDE 不記錄。這些資料不會離開這台電腦
-- 本機 `navide.db` 裡，pane 離線時聊天室訊息的預覽（`channels.wake_kept`，重啟後改存 `channels.wake_lost`）：綁定的聊天室在 pane 不在線上時傳來的每則訊息，前 40 個字，用來告訴聊天室哪幾則沒有送進去。照原樣存放、不做遮罩，所以訊息開頭若是機密也會一併存下。訊息送進 pane 或聊天室已被告知後刪除；聊天室解除綁定或 bot 被移除時也會刪除；bot 停用期間會保留到它再次啟動。這些資料不會離開這台電腦
+- 本機 `navide.db` 裡，分格離線時聊天室訊息的預覽（`channels.wake_kept`，重啟後改存 `channels.wake_lost`）：綁定的聊天室在分格不在線上時傳來的每則訊息，前 40 個字，用來告訴聊天室哪幾則沒有送進去。照原樣存放、不做遮罩，所以訊息開頭若是機密也會一併存下。訊息送進分格或聊天室已被告知後刪除；聊天室解除綁定或 bot 被移除時也會刪除；bot 停用期間會保留到它再次啟動。這些資料不會離開這台電腦
 - 選用的 AI Provider API Key；它會儲存在受限制檔案權限保護的本機設定檔中（受支援系統上為 `0600`）
 
 Navide 不營運專案 Telemetry 服務，也不要求建立 Navide 帳號。
@@ -40,6 +40,7 @@ Consumer：Git Preference 使用驗證過的 Package／Workspace Storage Partiti
 |---|---|---|
 | Coding Agent CLI | CLI 供應商或設定的模型 Provider | Prompt、選取的 Context、Tool Result 與供應商定義的 Telemetry |
 | Cloud AI（Inline 編輯與 Code Review） | Anthropic、OpenAI、Google、Groq、DeepSeek、Mistral、xAI 或自訂 Endpoint | 選取的程式碼、Prompt 與 Model Parameter |
+| API key 帳號 | 發行該金鑰的廠商（Anthropic 或 OpenAI） | 金鑰本身，由 CLI 呼叫時送出，按「測試金鑰」時也會送出。見[憑證](#憑證) |
 | Context7 Injection | Context7 及其 MCP Distribution／Runtime 相依套件 | 偵測到的 Library Name 與文件查詢 |
 | Web Search | Search Provider | 搜尋查詢文字 |
 | Git Operation 與 Issue Detection | 設定的 Git Host，透過本機 `git`、`gh` 或 `glab` CLI | Repository／Issue 資料，以及由 CLI 或 Host Account Flow 處理的憑證 |
@@ -48,7 +49,7 @@ Consumer：Git Preference 使用驗證過的 Package／Workspace Storage Partiti
 | Skills package retrieval | GitHub API and codeload | Requested repository/ref and normal network metadata; downloads a public archive without uploading local skill contents |
 | CLI risk DNS lookups | Operating system resolver and its configured upstream service | Declared expected hostnames and configured allowed hostnames |
 | MCP Server | 設定的 MCP Server 與它使用的服務 | 完全取決於該 Server 的 Tool 與設定 |
-| 聊天頻道 | pane 綁定的聊天平台（Telegram、Slack、Discord 等）與該聊天室的所有成員 | 對聊天室傳來訊息的回覆；鏡像詳細度高於「只回覆聊天室」時，另含本機輸入、每回合結果、委派內容與子視窗。遮蔽只涵蓋該頻道自己的機器人憑證，指令或結果中的 API 金鑰等其他機密會原樣送出 |
+| 聊天頻道 | 分格綁定的聊天平台（Telegram、Slack、Discord 等）與該聊天室的所有成員 | 對聊天室傳來訊息的回覆；鏡像詳細度高於「只回覆聊天室」時，另含本機輸入、每回合結果、委派內容與子視窗。遮蔽只涵蓋該頻道自己的機器人憑證，指令或結果中的 API 金鑰等其他機密會原樣送出 |
 
 傳送私人程式碼或受規範資料前，請先閱讀各 Provider 政策。
 
@@ -82,7 +83,7 @@ marketplace plugin 後，這項資料流就會停止，其他外部服務資料�
 
 ## CLI risk observation data
 
-For vendors with declarations, the backend samples numeric endpoints of established TCP sockets attributed to active pane process trees and inventories declared local data roots. Format checks read at most 64 KiB from each candidate file locally. This feature does not intercept packets, decrypt TLS or upload file contents. Read buffers are used for format recognition; file contents and tokens are not stored in the risk records.
+For vendors with declarations, the backend samples numeric endpoints of established TCP sockets attributed to active 分格 process trees and inventories declared local data roots. Format checks read at most 64 KiB from each candidate file locally. This feature does not intercept packets, decrypt TLS or upload file contents. Read buffers are used for format recognition; file contents and tokens are not stored in the risk records.
 
 The local `navide.db` retains baseline and file-membership metadata, paths, sizes/classes, presence and absence observation times, network endpoint findings and counts, availability, and Ignore/Allow decisions. An allowed exact IP is also retained in that vendor's UI settings. Metadata can reveal local paths and contacted IPs even though it contains no copied file contents.
 
@@ -90,7 +91,29 @@ Building the expected-address snapshot performs forward DNS lookups for declared
 
 ## 憑證
 
-Agent CLI 憑證保留在各 CLI 自己的設定中。如果在 Navide 輸入 Cloud AI Key，Navide 會把它保存在本機，供 AI 功能（Inline 編輯、Code Review）使用。設定 Export 會遮蔽 API Key 與 Token。
+Agent CLI 憑證保留在各 CLI 自己的設定中，API key 帳號例外，見下方說明。如果在 Navide 輸入 Cloud AI Key，Navide 會把它保存在本機，供 AI 功能（Inline 編輯、Code Review）使用。設定 Export 會遮蔽 API Key 與 Token。
+
+**API key 帳號**（Claude Code 和 Codex）。金鑰只存在這台電腦：
+
+| 金鑰 | 存放位置 |
+|---|---|
+| macOS 上的 Claude Code | 你的登入鑰匙圈裡的一個項目 |
+| Linux 上的 Claude Code | Navide 資料夾裡僅限本人讀取的檔案，沒有加密，也不在鑰匙圈 |
+| Windows 上的 Claude Code | 這一版不支援 |
+| macOS、Linux 上的 Codex | Navide 資料夾內該帳號資料夾裡僅限本人讀取的 `auth.json`，沒有加密，也不在鑰匙圈 |
+| Windows 上的 Codex | 同一個檔案，以你的 Windows 帳號用 DPAPI 加密 |
+| Codex 帳號使用中時 | 同時也在 Codex 自己的 `auth.json`，僅限本人讀取、沒有加密，Codex 從這裡讀取 |
+
+Navide 的本機帳號紀錄只有名稱、金鑰最後四碼、每月預算備註和自動切換設定，沒有金鑰本身。
+
+金鑰只會送到一個地方，就是發行它的廠商：
+
+- CLI 每次呼叫時送出，對象是 CLI 設定的位址。預設是 Claude Code 送到 Anthropic、Codex 送到 OpenAI。Claude API key 帳號的資料夾會複製一份你的 Claude `settings.json`，所以你在那裡設定的其他端點也會收到金鑰。
+- **測試金鑰**會向 `api.anthropic.com` 或 `api.openai.com` 送一次列出模型的請求，確認廠商接受這把金鑰。只有你按下按鈕時才會送。
+
+金鑰不經 Navide Cloud，也不在雲端同步、設定匯出、分享包或 Navide 訊息裡：沒有 MCP 工具會回傳金鑰，`cli_accounts_list` 只會標示哪些是 API key 帳號。
+
+**分格裡的程式取得得到金鑰。**Claude 分格透過帳號資料夾裡的小程式 `navide-api-key-helper` 取得金鑰。這個小程式本身不含金鑰，但執行時會印出金鑰，所以在該分格執行的程式或 Agent 也能執行它。Codex 的 `auth.json` 則是任何以你的身分執行的程式都讀得到。不要假設金鑰對分格裡執行的東西是隱藏的。刪除帳號會把金鑰從這台電腦移除；要到廠商後台撤銷，金鑰才會失效。
 
 **可攜憑證**（貼入的值，例如 `claude setup-token` 印出的 token）已在 Navide 0.2.32 移除。用過的裝置在第一次啟動 0.2.32 時，會清除加密存著的值、加密它的金鑰，以及舊版從雲端同步拉下來的副本；沒用過的裝置什麼都不會動。
 
@@ -134,4 +157,4 @@ Successful observations from the existing Claude quota polling service are saved
 
 ### 透過 MCP 對 Navide 市集提出請求
 
-使用 `marketplace_request_install`、`_update`、`_rollback` 時，Navide 應用程式會用和 `marketplace_detail` 相同的方式查詢套件；所有請求工具都會讀取本機的已安裝清單。請求連同提出請求的 pane 名稱、workspace 和 agent 寫的理由，會留在後端記憶體中，直到被決定或過期，並在 Navide 視窗顯示給使用者。`plugins_disable` 與 `plugins_enable` 不會對外送出任何資料。每一次請求、決定、停用和啟用都會記在本機的 navide.db（`plugin_agent_actions`：外掛、動作、呼叫端類型、pane id、pane 名稱、workspace、結果），保留 30 天，之後只留最新的 10,000 筆。
+使用 `marketplace_request_install`、`_update`、`_rollback` 時，Navide 應用程式會用和 `marketplace_detail` 相同的方式查詢套件；所有請求工具都會讀取本機的已安裝清單。請求連同提出請求的分格名稱、workspace 和 agent 寫的理由，會留在後端記憶體中，直到被決定或過期，並在 Navide 視窗顯示給使用者。`plugins_disable` 與 `plugins_enable` 不會對外送出任何資料。每一次請求、決定、停用和啟用都會記在本機的 navide.db（`plugin_agent_actions`：外掛、動作、呼叫端類型、分格 id、分格名稱、workspace、結果），保留 30 天，之後只留最新的 10,000 筆。

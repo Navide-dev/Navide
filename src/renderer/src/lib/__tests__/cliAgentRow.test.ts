@@ -56,9 +56,9 @@ describe('cliAgentRowChips', () => {
     })
   })
 
-  it('paints a missing CLI red and an outdated one amber', () => {
+  it('shows a missing CLI as a neutral fact and an outdated one amber', () => {
     expect(chip('install', { install: { status: 'missing', version: '' } }))
-      .toMatchObject({ tone: 'bad' })
+      .toMatchObject({ tone: 'neutral' })
     expect(chip('install', { install: { status: 'outdated', version: '1.0' } }))
       .toMatchObject({ tone: 'warn' })
   })
@@ -116,7 +116,7 @@ describe('cliAgentRowChips', () => {
 
   it('separates having no channel from having one switched off', () => {
     expect(chip('push')).toMatchObject({
-      tone: 'ok',
+      tone: 'info',
       label: 'settings.cliAgents.chip.push:rewake',
     })
     expect(chip('push', { pushEnabled: false })).toMatchObject({ tone: 'bad' })

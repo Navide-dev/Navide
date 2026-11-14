@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentToolCaller, AgentToolsSyncPayload } from '../../shared/pluginAgentTools'
 import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
-import { agentToolUnavailableMessage, PluginAgentToolsHost, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
+import { agentToolUnavailableMessage, isBackendAgentToolPackage, PluginAgentToolsHost, type AgentToolPackage, type PluginAgentToolsHostOptions } from './pluginAgentToolsHost'
 import type { AgentToolSwitches } from './pluginNativeBackendStore'
 import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -46,7 +46,7 @@ const DEVMAP = spec('nerdtechnic.devmap', '0.2.0', [
 interface Harness {
   host: PluginAgentToolsHost
   switches: AgentToolSwitches
-  packages: ThirdPartyLaunchSpec[]
+  packages: AgentToolPackage[]
   disabled: Set<string>
   consented: Set<string>
   /** B1-a's agentToolsSince per package. */
@@ -96,6 +96,56 @@ function harness(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: 
 }
 
 const notStopping = (): boolean => false
+
+/** Batch 4: a package without a backend whose view serves its tools (contract 2.9). */
+function viewPackage(pluginId: string, version: string, tools: DisclosureAgentTool[]): AgentToolPackage {
+  return {
+    pluginId,
+    packageVersion: version,
+    packageDir: `/pkgs/${pluginId}/${version}`,
+    thirdParty: { name: pluginId, system: ['fs'], agentTools: tools, permissions: { system: ['fs'], shell: null, scopes: null } },
+  }
+}
+
+describe('PluginAgentToolsHost with a view-served package (batch 4, contract 2.9)', () => {
+  const HELLO = viewPackage('acme.hello', '1.0.0', [tool('hello_greet', 'view:main'), tool('hello_note', 'view:main', 'write')])
+
+  it('lists and admits its tools like a backend package, with no backend methods to open', async () => {
+    const h = harness({}, { enabled: true })
+    h.packages = [DEVMAP, HELLO]
+    h.consented.add('acme.hello')
+    await h.host.refresh()
+    expect(isBackendAgentToolPackage(HELLO)).toBe(false)
+    expect(isBackendAgentToolPackage(DEVMAP)).toBe(true)
+    const hello = h.sent[0].tools.filter((entry) => entry.pluginId === 'acme.hello')
+    expect(hello.map((entry) => [entry.name, entry.method, entry.risk, entry.state])).toEqual([
+      ['hello_greet', 'view:main', 'read', 'available'],
+      ['hello_note', 'view:main', 'write', 'available'],
+    ])
+    // consentedAgentMethods leaves view methods out: nothing to open on a backend.
+    expect(h.methods.get('acme.hello@1.0.0')).toEqual([])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual(['devmap.read', 'devmap.setStatus'])
+    await expect(h.host.admit({ pluginId: 'acme.hello', toolName: 'hello_note', pluginVersion: '1.0.0', caller: PANE }, notStopping))
+      .resolves.toMatchObject({ ok: true, spec: { pluginId: 'acme.hello' }, tool: { name: 'hello_note', method: 'view:main' } })
+  })
+
+  it('needs the install grant (hasConsent) and follows the Disabled switch', async () => {
+    const h = harness({}, { enabled: true })
+    h.packages = [HELLO]
+    await h.host.refresh()
+    expect(h.sent[0].tools.map((entry) => entry.state)).toEqual(['consent-required', 'consent-required'])
+    h.consented.add('acme.hello')
+    h.disabled.add('acme.hello')
+    await h.host.refresh()
+    expect(h.sent[1].tools.map((entry) => entry.state)).toEqual(['plugin-disabled', 'plugin-disabled'])
+    await expect(h.host.admit({ pluginId: 'acme.hello', toolName: 'hello_greet', pluginVersion: '1.0.0', caller: PANE }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'plugin-disabled' })
+  })
+
+  it('names the view-not-open refusal', () => {
+    expect(agentToolUnavailableMessage('view-not-open')).toContain('not open')
+  })
+})
 
 describe('PluginAgentToolsHost with the master switch off (golden: same as main)', () => {
   it('sends nothing and keeps every third-party agentMethods empty on every lifecycle refresh', async () => {
@@ -449,18 +499,58 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
     return { ...h, firstPartyPackages, h }
   }
 
-  it('serves no first-party tool with the master switch off (DB8 applies to them too)', async () => {
+  it('serves first-party tools with the master switch off, and only them (DB8 covers third-party packages)', async () => {
     const { h } = withBrowser()
+    await h.host.refresh()
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0]).toMatchObject({ enabled: true, externalCallers: false })
+    expect(h.sent[0].tools.map((entry) => [entry.pluginId, entry.name, entry.state])).toEqual([
+      ['navide.browser', 'browser_list', 'available'],
+      ['navide.browser', 'browser_act', 'available'],
+    ])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual(['browser.act', 'browser.list'])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toMatchObject({ ok: true, tool: { name: 'browser_list' } })
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    // The switch covers third-party tools only, and the agent is told so.
+    expect(agentToolUnavailableMessage('master-switch-off')).toBe('Agent tools from this kind of Navide plugin (first-party or third-party) are turned off in Settings.')
+  })
+
+  it('serves no first-party tool with the first-party switch off, whatever the master switch says', async () => {
+    const { h } = withBrowser({}, { firstParty: false })
     await h.host.refresh()
     expect(h.sent).toEqual([])
     expect(h.methods.get('navide.browser@1.0.0') ?? []).toEqual([])
     await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
-    // The switch covers first-party tools too, so the agent is not told "third-party".
-    expect(agentToolUnavailableMessage('master-switch-off')).toBe('Agent tools from Navide plugins are turned off.')
+    await h.host.setSwitches({ enabled: true })
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.pluginId)).toEqual(['nerdtechnic.devmap', 'nerdtechnic.devmap'])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    await expect(h.host.admit(browserCall, notStopping)).resolves.toEqual({ ok: false, reason: 'master-switch-off' })
+    await expect(h.host.admit(call, notStopping)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('sends one disabled snapshot when the first-party switch goes off and nothing else is served', async () => {
+    const { h } = withBrowser({ listPackages: () => [] })
+    await h.host.refresh()
+    await h.host.setSwitches({ firstParty: false })
+    expect(h.sent.map((payload) => [payload.enabled, payload.tools.length])).toEqual([[true, 2], [false, 0]])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    await h.host.setSwitches({ firstParty: true })
+    expect(h.sent.at(-1)).toMatchObject({ enabled: true })
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual(['browser.act', 'browser.list'])
+  })
+
+  it('still refuses first-party calls without a pane while the master switch is off', async () => {
+    const { h } = withBrowser()
+    await h.host.refresh()
+    await expect(h.host.admit({ ...browserCall, caller: EXTERNAL }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'external-callers-off' })
+    await expect(h.host.admit({ ...browserCall, caller: HOST }, notStopping))
+      .resolves.toEqual({ ok: false, reason: 'external-callers-off' })
   })
 
   it('serves first-party tools with the master switch on and no consent', async () => {
-    const hasConsent = vi.fn(async (candidate: ThirdPartyLaunchSpec) => candidate.pluginId === 'nerdtechnic.devmap')
+    const hasConsent = vi.fn(async (candidate: AgentToolPackage) => candidate.pluginId === 'nerdtechnic.devmap')
     const { h } = withBrowser({ hasConsent }, { enabled: true })
     await h.host.refresh()
     expect(h.sent).toHaveLength(1)
@@ -540,12 +630,65 @@ describe('PluginAgentToolsHost first-party agent tools (navide.browser)', () => 
       .resolves.toEqual({ ok: false, reason: 'name-collision' })
   })
 
-  it('sends one disabled snapshot when the master switch goes off while first-party tools are served', async () => {
-    const { h } = withBrowser({ listPackages: () => [] }, { enabled: true })
+  it('drops only the third-party tools when the master switch goes off while both are served', async () => {
+    const { h } = withBrowser({}, { enabled: true })
     await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.pluginId)).toEqual([
+      'navide.browser', 'navide.browser', 'nerdtechnic.devmap', 'nerdtechnic.devmap',
+    ])
     await h.host.setSwitches({ enabled: false })
+    expect(h.sent.at(-1)).toMatchObject({ enabled: true, externalCallers: false })
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.pluginId)).toEqual(['navide.browser', 'navide.browser'])
+    expect(h.methods.get('navide.browser@1.0.0')).toEqual(['browser.act', 'browser.list'])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual([])
+  })
+
+  it('sends one disabled snapshot when the first-party package leaves while the master switch is off', async () => {
+    const { h, firstPartyPackages } = withBrowser({ listPackages: () => [] })
+    await h.host.refresh()
+    firstPartyPackages.value = []
+    await h.host.refresh()
     await h.host.refresh()
     expect(h.sent.map((payload) => [payload.enabled, payload.tools.length])).toEqual([[true, 2], [false, 0]])
-    expect(h.methods.get('navide.browser@1.0.0')).toEqual([])
+    expect(h.host.snapshot()).toEqual([])
+  })
+})
+
+describe('C3: the consent card is the switch', () => {
+  it('turns the master switch on when the user allows a third-party package that offers tools', async () => {
+    const h = harness()
+    expect(await h.host.consented('nerdtechnic.devmap')).toBe(true)
+    expect(h.switches.enabled).toBe(true)
+    expect(h.sent).toHaveLength(1)
+    expect(h.sent[0].tools.map((entry) => [entry.name, entry.state])).toEqual([
+      ['devmap_read', 'available'],
+      ['devmap_set_status', 'available'],
+    ])
+  })
+
+  it('only refreshes for a package without tools, an unknown id, or a switch already on', async () => {
+    const h = harness()
+    h.packages = [spec('acme.silent', '1.0.0', [])]
+    expect(await h.host.consented('acme.silent')).toBe(false)
+    expect(await h.host.consented('acme.never-installed')).toBe(false)
+    expect(h.switches.enabled).toBe(false)
+    expect(h.sent).toEqual([])
+    const on = harness({}, { enabled: true })
+    expect(await on.host.consented('nerdtechnic.devmap')).toBe(false)
+    expect(on.switches.enabled).toBe(true)
+    expect(on.sent).toHaveLength(1)
+  })
+
+  it('leaves a switch the user set in Settings alone, off or on', async () => {
+    const off = harness({}, { enabled: false, enabledSetByUser: true })
+    expect(await off.host.consented('nerdtechnic.devmap')).toBe(false)
+    expect(off.switches.enabled).toBe(false)
+    expect(off.sent).toEqual([])
+  })
+
+  it('never turns external callers on with it', async () => {
+    const h = harness()
+    await h.host.consented('nerdtechnic.devmap')
+    expect(h.switches).toMatchObject({ enabled: true, externalCallers: false })
   })
 })

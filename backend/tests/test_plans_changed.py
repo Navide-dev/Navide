@@ -152,7 +152,7 @@ async def test_broadcast_plans_changed_snapshots_then_notifies(tmp_path: Path) -
     try:
         await app._broadcast_plans_changed(str(tmp_path))
         await asyncio.sleep(0)
-        snaps = list((plans / ".history" / "my-plan_ab12cd").glob("*_approved.html"))
+        snaps = list((plans / ".history" / "my-plan_ab12cd").glob("*_approved.html.gz"))
         assert len(snaps) == 1
         events = [m for m in session.websocket.sent if m.get("type") == "plans.changed"]  # type: ignore[attr-defined]
         assert len(events) == 1

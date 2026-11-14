@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from abc import ABC, abstractmethod
@@ -373,6 +374,104 @@ def set_activity_high_water(seen_keys: set[str], line_no: int) -> None:
     seen_keys.add(f"{_ACTIVITY_HW_PREFIX}{line_no}")
 
 
+class ActivityLines:
+    """The lines of a transcript for one parse_activity walk, as ``(line_no, text)``,
+    starting after the high-water line when the last walk of this file stopped there.
+
+    The mark skips parsing, not reading: a walk from line 1 read the whole file on
+    every append, so a long conversation made the serial log reader fall minutes
+    behind. A walk resumes from the byte after the mark's line only when the
+    reader's last walk of this path ended at that line, the file is the same inode,
+    is not shorter than that offset, and has a line end just before it; anything
+    else (truncated, replaced, a rewound or fresh bag, another reader) reads from
+    line 1 as before. Decoding is strict UTF-8, as the text-mode read was.
+
+    Use: ``lines = ActivityLines(self, path, seen_keys)`` (raises OSError as
+    ``path.open`` did), iterate it inside ``with lines:``, and call
+    ``lines.save(last_line)`` once the walk has set its mark.
+    """
+
+    def __init__(self, reader: object, path: Path, seen_keys: set[str]) -> None:
+        self._store: dict[str, tuple[int, int, int]] = reader.__dict__.setdefault(
+            "_activity_line_resume", {})
+        self._key = str(path)
+        self._fh = path.open("rb")
+        self._inode = os.fstat(self._fh.fileno()).st_ino
+        high_water = activity_high_water(seen_keys)
+        self._first, offset = 1, 0
+        resume = self._store.get(self._key)
+        if resume is not None and resume[0] == high_water and resume[2] == self._inode:
+            try:
+                if os.fstat(self._fh.fileno()).st_size >= resume[1] > 0:
+                    self._fh.seek(resume[1] - 1)
+                    if self._fh.read(1) == b"\n":
+                        self._first, offset = high_water + 1, resume[1]
+                self._fh.seek(offset)
+            except OSError:
+                self._first, offset = 1, 0
+                self._fh.seek(0)
+        self._high_water = high_water
+        self._offset = offset
+        # line -> byte offset just past it, for lines a walk may leave its mark on
+        self._ends: dict[int, int] = {self._first - 1: offset} if self._first > 1 else {}
+
+    def __enter__(self) -> "ActivityLines":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._fh.close()
+
+    def __iter__(self):  # noqa: ANN204
+        for line_no, raw in enumerate(self._fh, self._first):
+            self._offset += len(raw)
+            if line_no >= self._high_water and raw.endswith(b"\n"):
+                self._ends[line_no] = self._offset
+            yield line_no, raw.decode("utf-8")
+
+    def save(self, last_line: int) -> None:
+        """Remember where the walk that set the mark to ``last_line`` can be picked up."""
+        end = self._ends.get(last_line)
+        if end is None:
+            self._store.pop(self._key, None)
+        else:
+            self._store[self._key] = (last_line, end, self._inode)
+
+
+def rewind_past_eof_mark(path: Path, seen_keys: set[str]) -> bool:
+    """Bring back a line mark that points past the end of the file.
+
+    Transcripts only grow, so a mark beyond the last line was earned by a file
+    that is no longer there: a session id that came back as a new file (the old
+    transcript is gone and the pane started fresh under the same id), or a
+    rewrite. Left alone it reads every line of the new file as already seen, so
+    no turn end ever reaches the pane's window or chat.
+
+    What the new file holds so far is marked as read rather than walked: this
+    path is only reached on a file nobody has delivered from, and a walk would
+    post every old turn to the chat at once. Returns True when the mark moved.
+    Walks the file, so the caller runs it once per file, not once per append.
+    """
+    mark = activity_high_water(seen_keys)
+    if not mark:
+        return False
+    last_complete = line_no = 0
+    try:
+        with path.open("rb") as fh:
+            for line_no, raw_line in enumerate(fh, 1):
+                if line_no >= mark:
+                    return False
+                if raw_line.endswith(b"\n") and raw_line.strip():
+                    last_complete = line_no
+    except OSError:
+        return False
+    seen_keys.difference_update(
+        {k for k in seen_keys if k.startswith(_ACTIVITY_HW_PREFIX)}
+    )
+    if last_complete:
+        set_activity_high_water(seen_keys, last_complete)
+    return True
+
+
 #: Wall-clock time this process started, captured at import. A transcript whose
 #: last write predates it cannot hold activity the running backend has any live
 #: pane state to attach to, so on first sight it is seeded rather than replayed
@@ -527,6 +626,12 @@ class LogReader(ABC):
         already assigned this session to, when one exists — vendors whose
         logs carry no cwd (cursor) attribute bound sessions through it.
         None = not migrated (attribution's legacy chain decides)."""
+        return None
+
+    def session_in_workspace(self, file_path: str, workspace_path: str) -> bool | None:
+        """Did the session in ``file_path`` run in ``workspace_path``? For vendors
+        whose folder name alone cannot tell workspaces apart.
+        None = the file does not say."""
         return None
 
     def pane_cwd_match(

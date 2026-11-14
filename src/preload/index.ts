@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { AgentToolsResultHelperState } from '../shared/pluginAgentTools'
+import { isPluginSecretsNotice, type PluginSecretsNotice } from '../shared/pluginSecretsNotice'
 import { normalizePlatformId } from '../shared/osplat'
 import type {
   UpdateActionResult,
@@ -19,10 +20,14 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
-import type { PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginActivityOverview, PluginActivityReport } from '../shared/pluginActivity'
+import type { PluginAutoPauseNotice, PluginGlobalStopRecord, PluginStopSummary } from '../shared/pluginStop'
+import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../shared/pluginCommands'
+import type { ProjectWorkbenchResult, ProjectWorkbenchSnapshot } from '../shared/projectWorkbench'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
+import type { AppLockApi, AppLockStatus } from '../shared/appLock'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
 import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
@@ -71,20 +76,17 @@ export interface GitCredential {
   expectedHost: string
 }
 
-/** Main-owned recovery transition. The renderer can only move into recovery;
- * there is deliberately no public event or API for switching back. */
-export interface GitRecoveryChanged {
-  legacy: boolean
+/** A built-in plugin could not start (reason) or runs again (null). Main-owned:
+ * the renderer only shows it and offers the Host's reinstall action. */
+export interface PluginActivationFailed {
+  pluginId: string
+  reason: string | null
 }
 
-function isGitRecoveryChanged(payload: unknown): payload is GitRecoveryChanged {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    !Array.isArray(payload) &&
-    'legacy' in payload &&
-    typeof payload.legacy === 'boolean'
-  )
+function isPluginActivationFailed(payload: unknown): payload is PluginActivationFailed {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && (record.reason === null || typeof record.reason === 'string')
 }
 
 export interface PlansRecoveryChanged {
@@ -179,6 +181,21 @@ function isPluginSwitchNotice(payload: unknown): payload is PluginSwitchNotice {
       nullableString(agent.paneId) && nullableString(agent.paneName) && nullableString(agent.workspace)))
 }
 
+/** H1: a switch between installed versions drains the plugin's views now
+ *  ('start') or has settled, switched or not ('end'). */
+export interface PluginSwitchingNotice {
+  pluginId: string
+  toVersion: string
+  phase: 'start' | 'end'
+}
+
+function isPluginSwitchingNotice(payload: unknown): payload is PluginSwitchingNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  return typeof record.pluginId === 'string' && typeof record.toVersion === 'string' &&
+    (record.phase === 'start' || record.phase === 'end')
+}
+
 function isPluginStagedUpdates(payload: unknown): payload is PluginStagedUpdate[] {
   return Array.isArray(payload) && payload.every((item) => {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) return false
@@ -197,6 +214,25 @@ function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChang
     typeof payload.legacy === 'boolean' &&
     (!('reason' in payload) || typeof payload.reason === 'string')
   )
+}
+
+/** A window closed while the app kept running, as Welcome lists it. */
+export interface RecentlyClosedWindow {
+  workspace_path: string
+  /** The other workspaces it held, its own excluded. */
+  adopted_workspaces: string[]
+  /** Epoch milliseconds. */
+  closed_at: number
+}
+
+export interface ReopenClosedResult {
+  ok: boolean
+  /** Workspaces that came back in a new window. */
+  opened: number
+  /** Workspaces already open elsewhere, focused instead. */
+  focused: number
+  /** Folders that no longer exist, skipped. */
+  missing: string[]
 }
 
 export interface GitContributionState {
@@ -406,7 +442,7 @@ export interface NativeBackendStatusRow {
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
-  agentTools?: { enabled: boolean; externalCallers: boolean }
+  agentTools?: { enabled: boolean; externalCallers: boolean; firstParty?: boolean }
   /** #642 review L2: off for this run, not saved; on again after a restart. */
   offUnsaved?: true
 }
@@ -670,12 +706,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
   // and gives up the upgrade source.
   repairPlansStorageRecord: (): Promise<{ ok: boolean; repaired: boolean; reason?: string }> =>
     ipcRenderer.invoke('plans:repairStorageRecord'),
-  onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void): (() => void) => {
+  onPluginActivationFailed: (cb: (change: PluginActivationFailed) => void): (() => void) => {
     const listener = (_event: unknown, payload: unknown): void => {
-      if (isGitRecoveryChanged(payload)) cb(payload)
+      if (isPluginActivationFailed(payload)) cb(payload)
     }
-    ipcRenderer.on('git:recoveryChanged', listener)
-    return () => ipcRenderer.removeListener('git:recoveryChanged', listener)
+    ipcRenderer.on('plugins:activationFailed', listener)
+    return () => ipcRenderer.removeListener('plugins:activationFailed', listener)
   },
   onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void): (() => void) => {
     const listener = (_event: unknown, payload: unknown): void => {
@@ -700,6 +736,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.on('plugins:agentAction', listener)
     return () => ipcRenderer.removeListener('plugins:agentAction', listener)
   },
+  // A plugin's own secrets were isolated after an identity change, or deleted.
+  onPluginSecretsNotice: (cb: (notice: PluginSecretsNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSecretsNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:secretsNotice', listener)
+    return () => ipcRenderer.removeListener('plugins:secretsNotice', listener)
+  },
   // A plugin installed without Restart could not be activated at launch.
   onPluginStagedCandidateNotActivated: (cb: (notice: PluginStagedCandidateNotice) => void): (() => void) => {
     const listener = (_event: unknown, payload: unknown): void => {
@@ -723,6 +767,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plugins:switched', listener)
     return () => ipcRenderer.removeListener('plugins:switched', listener)
+  },
+  // H1: a switch between installed versions drains the plugin's views, then settles.
+  onPluginSwitching: (cb: (notice: PluginSwitchingNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginSwitchingNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:switching', listener)
+    return () => ipcRenderer.removeListener('plugins:switching', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
@@ -851,25 +903,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ...(args.base === undefined ? {} : { base: args.base }),
       ...(args.compare === undefined ? {} : { compare: args.compare }),
     }),
-  openGitLeftView: (args: {
-    workspace_path: string
-    bounds: { x: number; y: number; width: number; height: number }
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
-    ipcRenderer.invoke('window:openGitLeft', args),
-  updateGitLeftView: (args: {
-    bounds: { x: number; y: number; width: number; height: number }
-    visible: boolean
-  }): Promise<{ ok: boolean; fallback?: 'legacy' }> =>
-    ipcRenderer.invoke('window:updateGitLeft', args),
-  closeGitLeftView: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:closeGitLeft'),
-  getZoomFactor: (): Promise<number> => ipcRenderer.invoke('window:getZoomFactor'),
   // Interface scale: main applies it to every window's WebContents at once.
   setUiScale: (scale: number): Promise<number> => ipcRenderer.invoke('window:setUiScale', scale),
-  onZoomChanged: (cb: () => void): (() => void) => {
-    const listener = (): void => cb()
-    ipcRenderer.on('window:zoom-changed', listener)
-    return () => ipcRenderer.removeListener('window:zoom-changed', listener)
-  },
   // Plan-window side receiver: main asks an already-open plan window to switch
   // to a newly clicked plan instead of reopening the window. Returns a disposer.
   onPlanOpenDoc: (handler: (relPath: string) => void): (() => void) => {
@@ -936,15 +971,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
       branch_diff_base: args.base,
       branch_diff_compare: args.compare ?? '',
     }),
-  onOpenEditorBranchDiff: (cb: (params: Record<string, string>) => void): void => {
-    ipcRenderer.on('editor:openBranchDiff', (_event, params: Record<string, string>) => cb(params))
-  },
-  gitDiffHead: (args: {
-    workspace_path: string
-    base?: string
-    compare?: string
-  }): Promise<{ ok: boolean; diff: string; error?: string }> =>
-    ipcRenderer.invoke('git:diff-head', args),
   saveJson: (args: {
     defaultName?: string
     content: string
@@ -1023,6 +1049,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('keybindings:write', content),
   onKeybindingsChanged: (cb: (content: string) => void): void => {
     ipcRenderer.on('keybindings:changed', (_event, content: string) => cb(content))
+  },
+  readWorkbench: (): Promise<{ ok: boolean; content?: string; error?: string }> =>
+    ipcRenderer.invoke('workbench:read'),
+  writeWorkbench: (content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('workbench:write', content),
+  onWorkbenchChanged: (cb: (content: string) => void): void => {
+    ipcRenderer.on('workbench:changed', (_event, content: string) => cb(content))
+  },
+  workbenchProject: {
+    inspect: (): Promise<ProjectWorkbenchSnapshot> => ipcRenderer.invoke('workbench-project:inspect'),
+    accept: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
+      ipcRenderer.invoke('workbench-project:accept', { fingerprint }),
+    revoke: (): Promise<ProjectWorkbenchResult> => ipcRenderer.invoke('workbench-project:revoke'),
+    markNotified: (fingerprint: string): Promise<ProjectWorkbenchResult> =>
+      ipcRenderer.invoke('workbench-project:mark-notified', { fingerprint }),
   },
   // Synchronous on purpose: seeds the renderer settings cache before first
   // paint (zero-flash theme/language). Returns the ui_settings.json text,
@@ -1236,6 +1277,22 @@ contextBridge.exposeInMainWorld('agentTeam', {
     getSkipped: (): Promise<string[]> => ipcRenderer.invoke('restore:getSkipped'),
     apply: (): Promise<{ ok: boolean; opened: number }> => ipcRenderer.invoke('restore:apply'),
     dismiss: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('restore:dismiss'),
+    // Reopen Closed Window: the list newest first, and reopen one (no path =
+    // the newest). The two events say the list changed, or that a reopen
+    // skipped folders that no longer exist.
+    listRecentlyClosed: (): Promise<RecentlyClosedWindow[]> => ipcRenderer.invoke('restore:listRecentlyClosed'),
+    reopenClosed: (workspacePath?: string): Promise<ReopenClosedResult> =>
+      ipcRenderer.invoke('restore:reopenClosed', workspacePath),
+    onRecentlyClosedChanged: (cb: () => void): (() => void) => {
+      const listener = (): void => cb()
+      ipcRenderer.on('restore:recentlyClosedChanged', listener)
+      return () => ipcRenderer.removeListener('restore:recentlyClosedChanged', listener)
+    },
+    onReopenMissing: (cb: (missing: string[]) => void): (() => void) => {
+      const listener = (_event: unknown, missing: string[]): void => cb(Array.isArray(missing) ? missing : [])
+      ipcRenderer.on('restore:reopenMissing', listener)
+      return () => ipcRenderer.removeListener('restore:reopenMissing', listener)
+    },
     getAutoRestore: (): Promise<boolean> => ipcRenderer.invoke('restore:getAutoRestore'),
     setAutoRestore: (value: boolean): Promise<{ ok: boolean }> =>
       ipcRenderer.invoke('restore:setAutoRestore', value),
@@ -1275,10 +1332,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('git-accounts:unbind', workspacePath),
     getBinding: (workspacePath: string): Promise<{ ok: boolean; accountId?: string | null; error?: string }> =>
       ipcRenderer.invoke('git-accounts:getBinding', workspacePath),
-    getCredential: (
-      workspacePath: string
-    ): Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }> =>
-      ipcRenderer.invoke('git-accounts:getCredential', workspacePath),
   },
   permissions: {
     status: (): Promise<Record<PermissionKey, PermissionStatus>> =>
@@ -1295,6 +1348,20 @@ contextBridge.exposeInMainWorld('agentTeam', {
     askMicrophone: (): Promise<{ granted: boolean; status: string; prompted?: boolean }> =>
       ipcRenderer.invoke('media:ask-microphone'),
   },
+  /** Settings → App Lock; main owns the lock state and the PIN. */
+  appLock: {
+    status: () => ipcRenderer.invoke('app-lock:status'),
+    updateSettings: (patch) => ipcRenderer.invoke('app-lock:update-settings', patch),
+    setPin: (newPin, currentPin) => ipcRenderer.invoke('app-lock:set-pin', newPin, currentPin),
+    resetPinWithSystem: (newPin) => ipcRenderer.invoke('app-lock:reset-pin-with-system', newPin),
+    removePin: (currentPin) => ipcRenderer.invoke('app-lock:remove-pin', currentPin),
+    lockNow: () => ipcRenderer.invoke('app-lock:lock-now'),
+    onStatus: (handler) => {
+      const listener = (_e: unknown, status: AppLockStatus): void => handler(status)
+      ipcRenderer.on('app-lock:status-changed', listener)
+      return () => ipcRenderer.removeListener('app-lock:status-changed', listener)
+    },
+  } satisfies AppLockApi,
   // The fn (🌐) key for voice input (macOS); see src/main/fn-key-helper.ts.
   fnKey: {
     subscribe: () => ipcRenderer.invoke('voice:fn-key-subscribe'),
@@ -1357,13 +1424,16 @@ contextBridge.exposeInMainWorld('agentTeam', {
     state: () => ipcRenderer.invoke('developer:state'),
     signIn: (scope) => ipcRenderer.invoke('developer:signIn', scope),
     signOut: () => ipcRenderer.invoke('developer:signOut'),
-    registerKey: () => ipcRenderer.invoke('developer:registerKey'),
+    registerKey: (options) => ipcRenderer.invoke('developer:registerKey', options ?? {}),
     application: () => ipcRenderer.invoke('developer:application'),
     submitApplication: (input) => ipcRenderer.invoke('developer:submitApplication', input),
     versions: () => ipcRenderer.invoke('developer:versions'),
     stagePackage: (path) => ipcRenderer.invoke('developer:stagePackage', path ?? null),
     publish: (input) => ipcRenderer.invoke('developer:publish', input),
     yank: (input) => ipcRenderer.invoke('developer:yank', input),
+    members: () => ipcRenderer.invoke('developer:members'),
+    addMember: (input) => ipcRenderer.invoke('developer:addMember', input),
+    removeMember: (input) => ipcRenderer.invoke('developer:removeMember', input),
   } satisfies DeveloperApi,
   plugins: {
     listInstalled: (): Promise<InstalledPluginSummary[]> =>
@@ -1382,6 +1452,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
     activityReport: (id: string): Promise<
       { ok: true; report: PluginActivityReport } | { ok: false; error: string }
     > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+    activityOverview: (): Promise<
+      { ok: true; overview: PluginActivityOverview } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityOverview'),
     /** D-f: installed Registry packages' disclosures and install-time scans. */
     installedDisclosures: (): Promise<Array<{
       id: string
@@ -1402,6 +1476,21 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:disabledStoreStatus'),
     resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:resetDisabledStore'),
+    listCommands: (): Promise<PluginCommandEntry[]> => ipcRenderer.invoke('plugins:listCommands'),
+    /** Commands enabled packages put on the status bar, pane and Explorer menus. */
+    listSlots: (): Promise<PluginSlotEntry[]> => ipcRenderer.invoke('plugins:listSlots'),
+    /** A package's declared settings and their values, or null. */
+    readSettings: (id: string): Promise<{
+      settings: Array<{
+        key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+        default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+      }>
+      values: Record<string, boolean | string | number>
+    } | null> => ipcRenderer.invoke('plugins:settings:read', { id }),
+    writeSetting: (id: string, key: string, value: boolean | string | number): Promise<boolean> =>
+      ipcRenderer.invoke('plugins:settings:write', { id, key, value }),
+    runCommand: (args: { commandId: string; workspace_path: string; target?: PluginCommandTarget }): Promise<PluginCommandRunResult> =>
+      ipcRenderer.invoke('plugins:runCommand', args),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null
@@ -1584,15 +1673,54 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }> => ipcRenderer.invoke('plugins:rollback', { id, ...(options.consentConfirmed === true ? { consentConfirmed: true } : {}) }),
     /** Drop the version staged for the next restart (the downgrade of an agent's O1 update). */
     discardCandidate: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:discardCandidate', { id }),
-    remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
+    remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:remove', {
+        id,
+        ...(nativeBackendData === undefined ? {} : { nativeBackendData }),
+        ...(secrets === undefined ? {} : { secrets }),
+      }),
+    /** How many secrets (`secrets`) the plugin keeps on this device; never names or values. */
+    secretCount: (id: string): Promise<{ count: number }> => ipcRenderer.invoke('plugins:secretCount', { id }),
+    /** Delete the plugin's own secrets: an agent's clear request the user approved. */
+    clearSecrets: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('plugins:clearSecrets', { id }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
+    /** Run a pipeline's plugin node on the contributing plugin's backend. */
+    runPipelineNode: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }): Promise<
+      { ok: true; output: unknown } | { ok: false; code: string; message: string }
+    > => ipcRenderer.invoke('plugins:runPipelineNode', request),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
+    /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+    stop: (id: string, via: 'settings' | 'status-bar'): Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }> =>
+      ipcRenderer.invoke('plugins:stop', { id, via }),
+    /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+    stopAll: (via: 'settings' | 'status-bar'): Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:stopAll', { via }),
+    /** Plan P3: the user's "Resume all": enable what the global stop disabled and put the switches back. */
+    resumeAll: (): Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }> =>
+      ipcRenderer.invoke('plugins:resumeAll'),
+    /** Plan P3: the global stop in effect, or null. */
+    globalStopState: (): Promise<PluginGlobalStopRecord | null> => ipcRenderer.invoke('plugins:globalStopState'),
+    /** Plan P4: the user's "Notify agent panes" switch for a package that declares agentNotify. */
+    setNotifyAgents: (id: string, allowed: boolean): Promise<{ id: string; notifyAgents: boolean }> =>
+      ipcRenderer.invoke('plugins:setNotifyAgents', { id, allowed }),
+    /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+    autoPauseState: (): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:autoPauseState'),
+    setAutoPause: (enabled: boolean): Promise<{ enabled: boolean; thresholds: Record<string, number> }> =>
+      ipcRenderer.invoke('plugins:setAutoPause', { enabled }),
+    /** Plan P5: Navide paused a plugin on an anomaly rule. */
+    onAutoPaused: (handler: (notice: PluginAutoPauseNotice) => void): (() => void) => {
+      const listener = (_event: unknown, notice: PluginAutoPauseNotice) => handler(notice)
+      ipcRenderer.on('plugins:autoPaused', listener)
+      return () => { ipcRenderer.removeListener('plugins:autoPaused', listener) }
+    },
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>
       ipcRenderer.invoke('plugins:setDisabled', { id, disabled }),
+    setNetworkStrict: (id: string, strict: boolean): Promise<{ id: string; networkStrict: boolean }> =>
+      ipcRenderer.invoke('plugins:setNetworkStrict', { id, strict }),
     marketplacePackMembers: (members: string[]): Promise<PackMemberSummary[]> =>
       ipcRenderer.invoke('plugins:marketplacePackMembers', { members }),
     preparePack: (args: { namespace: string; name: string }): Promise<PreparedPackSummary> =>
@@ -1614,7 +1742,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
-      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean } | { firstParty: boolean }): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
       /** Watchdog option C: unanswered resource notices (contract 5.2). */
       resourceNotices: (): Promise<BackendResourceNoticeView[]> =>

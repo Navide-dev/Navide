@@ -60,6 +60,39 @@
     "errors": {
       "generic": "エラーが発生しました（{code}）。",
       "invalid-address": "http または https のアドレスを入力してください。"
+    },
+    "layout": {
+      "label": "レイアウト",
+      "tiled": "並べて表示",
+      "switch": "1 つずつ表示"
+    },
+    "page": {
+      "previous": "前のページ",
+      "next": "次のページ",
+      "status": "{page}/{count} ページ"
+    },
+    "tab": {
+      "new": "新しいタブ",
+      "close": "タブを閉じる",
+      "untitled": "新しいタブ",
+      "discarded": "メモリ節約のため閉じました。クリックで再読み込みします",
+      "discarded-note": "このタブは 10 分以上表示されなかったため、メモリ節約のため閉じました。元のアドレスから再読み込みします。",
+      "restore": "タブを再読み込み"
+    },
+    "dialog": {
+      "open": "ダイアログが開いています（{type}）：{message}",
+      "type": {
+        "alert": "警告",
+        "confirm": "確認",
+        "prompt": "入力",
+        "beforeunload": "ページを離れる"
+      }
+    },
+    "uploads": {
+      "title": "agent がアップロードしたファイル",
+      "item": "{file} → {origin}、{time}",
+      "sensitive": "機密情報の可能性",
+      "sensitive-note": "agent が機密情報らしい名前のファイルをアップロードしました"
     }
   }
 }

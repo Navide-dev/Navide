@@ -18,8 +18,11 @@ import { aiTerminalPaneId } from '@navide/plugin-shell'
 import { backendErrorText } from '../lib/pipelineErrors'
 import { usePipelineRunState, type HostRun } from '../composables/usePipelineRunState'
 import PipelineEditor from './pipeline/PipelineEditor.vue'
+import N8nImportDialog from './pipeline/N8nImportDialog.vue'
+import PipelineActionMenu, { type ActionMenuItem } from './pipeline/PipelineActionMenu.vue'
 import RolePropertiesEditor, { rolePropertyProblems } from './pipeline/RolePropertiesEditor.vue'
 import type { RoleProperty } from '../lib/pipelineGraph'
+import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -75,6 +78,10 @@ const backendStatusLabel = computed(
 // here would be dead code behind the capture-phase keybinding dispatcher. The
 // host calls this first so a nested confirm dialog closes before the modal.
 function closeTopLayer(): boolean {
+  if (plN8nImportOpen.value) {
+    plN8nImportOpen.value = false
+    return true
+  }
   const openConfirm = sConfirmReset.value || rConfirmDelete.value || rConfirmReset.value
   if (!openConfirm) return !!editorRef.value?.closeTopLayer()
   sConfirmReset.value = false
@@ -96,6 +103,7 @@ const plBusy = ref(false)
 const plSummary = ref('')
 const plRenamingId = ref('')
 const plRenameText = ref('')
+const plN8nImportOpen = ref(false)
 
 // Stage cache scoped to the pipeline being edited: getActivePipelineId feeds
 // both refresh() and the stages.changed broadcast filter, so external edits to
@@ -119,6 +127,9 @@ const plCount = computed(() => pipelinesApi.pipelines.value.length)
 const plCurrentPipeline = computed(
   () => pipelinesApi.pipelines.value.find((p) => p.id === plEditingId.value) ?? null
 )
+/** A created pipeline's reset also deletes its drawn graph (gates, loops,
+ *  branches); the confirm says so, and confirming is what sends discard_graph. */
+const sResetDropsGraph = computed(() => !!plCurrentPipeline.value && !plCurrentPipeline.value.builtin && !!plCurrentPipeline.value.has_graph)
 
 async function plEnterDetail(id: string): Promise<void> {
   plEditingId.value = id
@@ -138,7 +149,7 @@ function plBackToList(): void {
  *  fold it into the toast instead of showing a bare "failed". */
 function plFail(key: string): string {
   const reason = pipelinesApi.error.value
-    ? backendErrorText(t, { code: pipelinesApi.errorCode.value, message: pipelinesApi.error.value }, key)
+    ? backendErrorText(t, { code: pipelinesApi.errorCode.value, message: pipelinesApi.error.value, details: pipelinesApi.errorDetails.value }, key)
     : ''
   return reason ? `${t(key)} — ${reason}` : t(key)
 }
@@ -148,8 +159,13 @@ async function plCreate(): Promise<void> {
   plBusy.value = true
   try {
     const p = await pipelinesApi.createPipeline(plNewName.value.trim())
-    if (p) { plNewName.value = ''; plCreating.value = false; plSummary.value = t('label.created-name', { name: p.name }) }
-    else notify.toast(plFail('error.create-failed'), { type: 'error' })
+    if (p) {
+      plNewName.value = ''
+      plCreating.value = false
+      plSummary.value = t('label.created-name', { name: p.name })
+      // Straight into the new pipeline: an empty one has nothing to do on the list.
+      await plEnterDetail(p.id)
+    } else notify.toast(plFail('error.create-failed'), { type: 'error' })
   } finally {
     plBusy.value = false
   }
@@ -223,6 +239,33 @@ async function plResetBuiltin(p: PipelineSummary): Promise<void> {
   }
 }
 
+/** The editor toolbar's ⋯ menu: the pipeline actions that used to sit in the
+ *  toolbar as five buttons and push the name and Delete out of the window. */
+const plMenuItems = computed<ActionMenuItem[]>(() => {
+  const locked = plLocked.value ? t('pipelineEditor.toolbar.locked') : ''
+  return [
+    ...(plEditingId.value !== pipelinesApi.activePipelineId.value
+      ? [{ id: 'set-default', label: t('action.set-as-default') }]
+      : []),
+    { id: 'export', label: t('settings.roles.export-json') },
+    { id: 'import', label: t('settings.roles.import-json'), blocked: locked },
+    { id: 'import-n8n', label: t('action.import-from-n8n') },
+    { id: 'reset', label: t('action.reset-defaults'), blocked: locked, danger: true },
+    {
+      id: 'delete', label: t('action.delete-pipeline'), danger: true,
+      blocked: pipelinesApi.pipelines.value.length <= 1 ? t('hint.at-least-one-pipeline') : '',
+    },
+  ]
+})
+function plMenuSelect(id: string): void {
+  if (id === 'set-default') void plSetActive(plEditingId.value)
+  else if (id === 'export') void sExport()
+  else if (id === 'import') void sImport()
+  else if (id === 'import-n8n') plN8nImportOpen.value = true
+  else if (id === 'reset') sConfirmReset.value = true
+  else if (id === 'delete') void plDelete(plEditingId.value, plCurrentPipeline.value?.name ?? '')
+}
+
 // Deep link into a pipeline's detail view. Used by the host's
 // `initialPipelineId` prop when the modal is opened from a specific pipeline.
 // Unknown ids get one list refresh before being ignored.
@@ -273,7 +316,11 @@ watch(
 async function sDoReset(): Promise<void> {
   try {
     const resp = await backend.send<{ stages: unknown[] }>(
-      'stages.reset', { pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
+      'stages.reset', {
+        pipeline_id: plEditingId.value,
+        workspace_path: props.workspacePath,
+        ...(sResetDropsGraph.value ? { discard_graph: true } : {}),
+      }
     )
     sConfirmReset.value = false
     if (!resp.ok) { sError.value = backendErrorText(t, resp.error, 'error.reset-failed'); return }
@@ -636,6 +683,7 @@ function buildAiContext(): string {
       <template v-if="plView === 'list'">
         <div class="toolbar">
           <button class="ghost" :disabled="plBusy" @click="plCreating = !plCreating">{{ $t('action.new-pipeline') }}</button>
+          <button class="ghost pl-import-n8n" :disabled="plBusy" @click="plN8nImportOpen = true">{{ $t('action.import-from-n8n') }}</button>
           <span v-if="plSummary" class="summary-ok">{{ plSummary }}</span>
           <span v-if="plCount" class="pl-count">{{ $t('label.pipeline-count', { count: plCount }) }}</span>
         </div>
@@ -659,12 +707,15 @@ function buildAiContext(): string {
             @click="plEnterDetail(p.id)"
             @keydown.enter.prevent="plEnterDetail(p.id)"
             @keydown.space.prevent="plEnterDetail(p.id)">
-            <span class="pl-name" v-truncate>{{ p.name }}</span>
+            <span class="pl-name" v-truncate>{{ pipelineDisplayName(p) }}</span>
             <span class="pl-tags">
               <span v-if="p.id === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
               <span v-if="p.builtin" class="pl-badge pl-badge--builtin">{{ $t('label.builtin') }}</span>
+              <span
+                v-if="p.imported_from?.kind === 'n8n'" class="pl-badge pl-badge--imported"
+                :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
             </span>
-            <span class="pl-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
+            <span class="pl-meta">{{ p.step_count === undefined ? $t('label.stage-count', { count: p.stage_count }) : $t('label.step-count', { count: p.step_count }) }}</span>
             <span class="pl-actions">
               <button
                 v-if="p.builtin" class="icon-btn" :disabled="plBusy"
@@ -697,9 +748,8 @@ function buildAiContext(): string {
             </button>
           </div>
         </div>
-        <div v-if="pipelinesApi.pipelinesPath.value" class="pl-source">
-          <span>{{ $t('label.pipeline-definition-file') }}</span>
-          <span class="pl-source-path" v-truncate>{{ pipelinesApi.pipelinesPath.value }}</span>
+        <div v-if="pipelinesApi.pipelinesPath.value" class="pl-source" :title="pipelinesApi.pipelinesPath.value">
+          <span>{{ $t('hint.pipelines-stored-locally') }}</span>
         </div>
       </template>
 
@@ -727,30 +777,22 @@ function buildAiContext(): string {
               <button class="ghost tiny" @click="plRenamingId = ''">✕</button>
             </template>
             <h2 v-else class="pl-detail-title">
-              <span class="pl-detail-name" v-truncate>{{ plCurrentPipeline?.name ?? plEditingId }}</span>
+              <span class="pl-detail-name" v-truncate>{{ plCurrentPipeline ? pipelineDisplayName(plCurrentPipeline) : plEditingId }}</span>
               <button
                 class="icon-btn" :disabled="plBusy" :title="$t('action.rename')"
                 @click="plStartRename(plEditingId, plCurrentPipeline?.name ?? '')">✎</button>
             </h2>
             <span v-if="plEditingId === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
+            <span
+              v-if="plCurrentPipeline?.imported_from?.kind === 'n8n'" class="pl-badge pl-badge--imported"
+              :title="$t('hint.imported-from-n8n')">{{ $t('label.imported-from-n8n') }}</span>
           </template>
           <template #trail>
-            <div class="toolbar">
-              <button class="ghost" :disabled="sExportBusy" @click="sExport">{{ sExportBusy ? '…' : $t('settings.roles.export-json') }}</button>
-              <button class="ghost" :disabled="sImporting || plLocked" @click="sImport">{{ sImporting ? '…' : $t('settings.roles.import-json') }}</button>
-              <button class="ghost danger-link" :disabled="plLocked" @click="sConfirmReset = true">↺ {{ $t('action.reset-defaults') }}</button>
-              <span v-if="sSummary" class="summary-ok">{{ sSummary }}</span>
-            </div>
-            <div class="pl-detail-actions">
-              <button
-                v-if="plEditingId !== pipelinesApi.activePipelineId.value" class="ghost" :disabled="plBusy"
-                @click="plSetActive(plEditingId)">{{ $t('action.set-as-default') }}</button>
-              <button
-                class="icon-btn danger-icon"
-                :disabled="plBusy || pipelinesApi.pipelines.value.length <= 1"
-                :title="pipelinesApi.pipelines.value.length <= 1 ? $t('hint.at-least-one-pipeline') : $t('action.delete-pipeline')"
-                @click="plDelete(plEditingId, plCurrentPipeline?.name ?? '')">🗑</button>
-            </div>
+            <span v-if="sSummary" class="summary-ok pl-trail-summary" v-truncate>{{ sSummary }}</span>
+            <PipelineActionMenu
+              label="⋯" :title="$t('pipelineEditor.toolbar.more')" :items="plMenuItems"
+              :disabled="plBusy || sExportBusy || sImporting" @select="plMenuSelect"
+            />
           </template>
         </PipelineEditor>
       </template>
@@ -777,7 +819,7 @@ function buildAiContext(): string {
               @click="rSelectKey(r.key)">
               <div class="row-g"><span class="mono-key">{{ r.key }}</span><span v-if="r.is_default" class="badge">{{ $t('label.default') }}</span></div>
               <div class="item-label">{{ r.label }}</div>
-              <div class="item-sub" v-truncate>{{ r.one_line }}</div>
+              <div class="item-sub" v-truncate>{{ roleDisplayOneLine(r) }}</div>
             </li>
           </ul>
         </aside>
@@ -844,11 +886,17 @@ function buildAiContext(): string {
     />
     </div><!-- end main-row -->
 
+    <N8nImportDialog
+      :backend="backend" :open="plN8nImportOpen" :workspace-path="workspacePath"
+      @close="plN8nImportOpen = false" @imported="plEnterDetail"
+    />
+
     <!-- ── Confirm dialogs ───────────────────────────────────────────────── -->
     <div v-if="sConfirmReset" class="modal" @click.self="sConfirmReset = false">
       <div class="modal-card">
         <h3>{{ $t('hint.reset-stages-title') }}</h3>
         <p>{{ $t('hint.reset-stages-warning') }}</p>
+        <p v-if="sResetDropsGraph" class="reset-graph-warning" data-test="reset-graph-warning">{{ $t('hint.reset-stages-graph-warning') }}</p>
         <div class="modal-actions">
           <button class="ghost" @click="sConfirmReset = false">{{ $t('action.cancel') }}</button>
           <button class="danger nv-btn nv-btn--danger" @click="sDoReset">{{ $t('action.reset') }}</button>
@@ -1125,6 +1173,12 @@ function buildAiContext(): string {
   background: var(--bg-muted);
   border-color: var(--border-default);
 }
+/* Where the pipeline came from, not a state: neutral like builtin. */
+.pl-badge--imported {
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  border-color: var(--border-default);
+}
 .pl-enter {
   color: var(--text-muted);
   font-size: var(--font-md);
@@ -1163,8 +1217,8 @@ function buildAiContext(): string {
   gap: 8px;
   margin-top: 6px;
 }
-/* "Show where the data lives", the same affordance SettingsModal's meta row
-   gives every tab. pipelinesPath was already fetched and never displayed. */
+/* Says where the pipelines are kept, in words; the database path is the
+   tooltip, for whoever needs to find the file. */
 .pl-source {
   display: flex;
   align-items: center;
@@ -1175,13 +1229,6 @@ function buildAiContext(): string {
   padding: 6px 0 8px;
   font-size: var(--font-2xs);
   color: var(--text-secondary);
-}
-.pl-source-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
 }
 
 /* ── Pipeline detail header ───────────────────────────────────────────────── */
@@ -1215,23 +1262,18 @@ function buildAiContext(): string {
   white-space: nowrap;
 }
 .pl-detail-name {
-  min-width: 0;
+  min-width: 6em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Inside the editor's single toolbar row the stage actions sit inline. */
-.pl-editor .toolbar {
-  padding: 0;
+.pl-trail-summary {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pl-rename {
   flex: 0 1 260px;
-}
-.pl-detail-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
 }
 .tiny {
   font-size: var(--font-2xs);
@@ -1464,9 +1506,6 @@ button.ghost:hover:not(:disabled) {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--accent-focus);
 }
-.danger-icon {
-  color: var(--danger-fg);
-}
 .danger-link {
   color: var(--danger-fg);
 }
@@ -1542,6 +1581,9 @@ button.ghost:hover:not(:disabled) {
   color: var(--text-primary);
   margin: 0 0 14px;
   line-height: 1.6;
+}
+.modal-card p.reset-graph-warning {
+  color: var(--attention-fg);
 }
 .modal-actions {
   display: flex;

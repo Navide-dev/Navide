@@ -135,6 +135,11 @@
   --risk-fg: var(--attention-fg);
   --risk-subtle: var(--attention-subtle);
   --risk-muted: var(--attention-muted);
+  /* Text on a status family's own subtle fill (pills, chips). The -fg colour
+   * already clears 4.5:1 there in the dark themes; light.css darkens these
+   * so small pill text keeps that margin on pale yellow and green. */
+  --attention-on-subtle: var(--attention-fg);
+  --success-on-subtle: var(--success-fg);
 
   /* ── Icon button containers (3 sizes) ───────────────────────── */
   --icon-btn-sm: 20px;
@@ -152,6 +157,14 @@
  * locale (foundation/i18n), so every other locale keeps the stack above. */
 :root:lang(zh-CN) {
   --font-ui: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+}
+
+/* Japanese has no spaces, so wrap at phrase boundaries instead of mid-word.
+   word-break is inherited from here, so components break long tokens with
+   overflow-wrap rather than `word-break: break-word`, which would reset it. */
+:lang(ja) {
+  word-break: auto-phrase;
+  line-break: strict;
 }
 
 /* Zero out motion tokens when the OS asks for reduced motion; covers
@@ -250,8 +263,11 @@
    * another status (dark-forest's green accent against green 'running')
    * overrides these rather than the family. */
   --status-starting-subtle: var(--attention-subtle);
-  --status-starting-muted: var(--attention-muted);
-  --status-starting-fg: var(--attention-fg);
+  /* A starting badge is small text on its own fill: the subtle tier and the
+   * on-subtle text keep it above 4.5:1 in light and dark (attention-fg on
+   * attention-muted was 2.6:1 dark, 3.7:1 light). */
+  --status-starting-muted: var(--attention-subtle);
+  --status-starting-fg: var(--attention-on-subtle);
   --status-starting-emphasis: var(--attention-emphasis);
   --status-idle-subtle: var(--accent-subtle);
   --status-idle-muted: var(--accent-muted);
@@ -324,6 +340,12 @@
   --modal-w-compact: 440px;   /* confirmations, single-field prompts */
   --modal-w-standard: 620px;  /* forms, guided flows */
   --modal-w-wide: 1100px;     /* data tables, multi-pane settings */
+  /* Settings pages end at one of two right edges: every page at
+     --settings-page-max, and the card-grid / list pages (CLI Agents, MCP,
+     Skills, Prompts, Accounts) at --settings-page-max-wide. Fixed lengths,
+     not ch, so a page's edge does not move with its own font size. */
+  --settings-page-max: 960px;
+  --settings-page-max-wide: 1200px;
   --modal-backdrop: var(--shadow-overlay);
   --modal-backdrop-blur: 4px;
 

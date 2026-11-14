@@ -221,6 +221,31 @@ describe('PlansApp markdown carrier', () => {
     expect(content).toContain('name: Markdown plan')
   })
 
+  it('offers both versions when the section changed on disk during the edit', async () => {
+    const view = await mountPlans()
+
+    const goals = view.findAll('.pmb-section').find((section) => section.get('.pmb-section-title').text() === 'Goals')!
+    await goals.findAll('.pmb-btn').find((button) => button.text() === 'pane.plans.edit')!.trigger('click')
+    await nextTick()
+    // An agent rewrites the same section while the textarea is open.
+    state.files[planPath] = state.files[planPath].replace(/## Goals\n\n[^#]*/, '## Goals\n\nAgent goals.\n\n')
+    state.mtimes[planPath] += 1
+    await goals.get('textarea.pmb-textarea').setValue('My goals.')
+    await goals.findAll('.pmb-btn').find((button) => button.text() === 'pane.plans.save')!.trigger('click')
+    await flushPromises()
+
+    expect(writes()).toHaveLength(0)
+    expect(view.get('.scd-dialog [data-side="mine"] textarea').element.value).toBe('My goals.')
+    expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent goals.')
+
+    await view.get('.scd-keep-mine').trigger('click')
+    await flushPromises()
+    expect(writes()).toHaveLength(1)
+    expect(String(writes()[0].content)).toContain('## Goals\n\nMy goals.')
+    expect(String(writes()[0].content)).not.toContain('Agent goals.')
+    expect(view.get('.scd-dialog [data-side="theirs"] textarea').element.value).toContain('Agent goals.')
+  })
+
   it('cycles an in-document todo from the rendered body', async () => {
     const view = await mountPlans()
 

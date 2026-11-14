@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from pathlib import Path
 
 import pytest
 
@@ -238,6 +240,53 @@ def test_a_round_during_a_finishing_review_does_not_mark_it_waiting_for_space(
     assert raced
     (row,) = _held("big")
     assert row["displayable"] is True
+
+
+# Windows refuses to replace a file another thread has open (WinError 5), and
+# a reader can meet the same refusal from the replace, so a read and the write
+# that replaces the file may never overlap. A CI run lost a finished review's
+# summary to this; the race is too narrow to hit on purpose, the lock is not.
+def _lock_free_during_read(monkeypatch, target, read):
+    real = Path.read_text
+    seen = []
+
+    def probe():
+        taken = sync_approvals._lock.acquire(blocking=False)
+        if taken:
+            sync_approvals._lock.release()
+        seen.append(taken)
+
+    def spy(self, *args, **kwargs):
+        if self == target:
+            other = threading.Thread(target=probe)
+            other.start()
+            other.join()
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy)
+    read()
+    return seen
+
+
+def _hold_one():
+    record = _mcp("x")
+    assert sync_approvals.hold("mcp", "x", record, local=None, kind="new",
+                               summary=sync_scopes._mcp_summary("x", record))
+
+
+def test_reading_the_index_excludes_the_write_that_replaces_it(account_key, monkeypatch):
+    _hold_one()
+    seen = _lock_free_during_read(monkeypatch, sync_approvals._index_path(), sync_approvals.listing)
+    assert seen and not any(seen)
+
+
+def test_reading_a_held_payload_excludes_the_write_that_replaces_it(account_key, monkeypatch):
+    _hold_one()
+    seen = _lock_free_during_read(
+        monkeypatch, sync_approvals._stash_path("mcp", "x"),
+        lambda: sync_approvals.held_payload("mcp", "x"),
+    )
+    assert seen == [False]
 
 
 def test_the_review_cache_size_skips_a_file_that_vanishes_mid_count(monkeypatch):

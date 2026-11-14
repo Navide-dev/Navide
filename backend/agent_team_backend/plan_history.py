@@ -1,14 +1,15 @@
-"""Plan version history: snapshot plan documents on stage transitions.
+"""Plan version history: record a version whenever a plan document changes.
 
-Snapshots live in ``<workspace>/.agent-team/plans/.history/<plan-stem>/`` and
+Versions live in ``<workspace>/.agent-team/plans/.history/<plan-stem>/`` and
 are named ``<YYYYMMDDTHHMMSS>_<stage><suffix>`` where the suffix follows the
 source document: ``.html`` for HTML plans and ``.plan.md`` for markdown plans.
-The stage recorded in the newest snapshot filename is the last-seen stage for
-that plan; a new snapshot is taken whenever the stage currently on disk differs
-(or when the plan has no history yet — the baseline). Detection is
-filesystem-driven (see the plans sink wired to GitWatcher in app.py), so it
-works for every writer: App-side ``fs.write_file`` calls and agent CLIs editing
-the file directly.
+Recording, the ``index.jsonl`` beside them and retention live in
+:mod:`plan_versions`, shared with the Plans backend. This module is the
+filesystem-driven side (see the plans sink wired to GitWatcher in app.py): it
+sees every writer, agent CLIs editing the file directly included, and records
+their changes as ``external`` versions. The Plans backend records its own
+writes with their author; a write both see is stored once. The first version
+of a plan is its baseline, and a change of stage is always its own version.
 
 Only ``.agent-team/plans/`` is scanned; ``.cursor/plans`` stays frozen legacy
 per ``_spec.md`` and is intentionally out of scope (new plans land in
@@ -24,18 +25,16 @@ from __future__ import annotations
 import json
 import logging
 import re
-import shutil
-from datetime import datetime
 from pathlib import Path
 
+from . import plan_versions
 from .plan_index import find_nested_plan_roots
 from .projects import PROJECT_DIR_NAME
 
 log = logging.getLogger("agent_team_backend.plan_history")
 
 _PLANS_DIR_NAME = "plans"
-HISTORY_DIR_NAME = ".history"
-MAX_SNAPSHOTS_PER_PLAN = 20
+HISTORY_DIR_NAME = plan_versions.HISTORY_DIR_NAME
 
 # Python port of the frontend PLAN_META_RE (usePlanHtml.ts): the single
 # machine-readable island. Attribute-order tolerant; the `\s` before `id`
@@ -48,7 +47,6 @@ _PLAN_META_RE = re.compile(
 # Stage enum from `.agent-team/plans/_spec.md` (schema v1).
 _STAGES = frozenset({"draft", "in-review", "approved", "in-progress", "done", "abandoned"})
 
-_TS_FORMAT = "%Y%m%dT%H%M%S"
 _HTML_SUFFIX = ".html"
 _MD_SUFFIX = ".plan.md"
 
@@ -111,8 +109,8 @@ def _snapshot_stage(name: str, suffix: str) -> str | None:
 
 
 def snapshot_plans(workspace_path: str) -> list[str]:
-    """Scan every plans dir in the workspace; snapshot each plan whose current
-    stage differs from its newest recorded snapshot (or that has no history yet).
+    """Scan every plans dir in the workspace; record a version of each plan
+    whose bytes differ from its newest version (or that has no history yet).
 
     Covers the workspace's own plans dir and those of nested plan roots, matching
     what the plans list surfaces — a plan the user can see and stage must get a
@@ -145,36 +143,27 @@ def _snapshot_plans_dir(plans_dir: Path, workspace_root: Path) -> list[str]:
         if name.startswith(("_", ".")) or not plan.is_file():
             continue
         try:
-            content = plan.read_bytes().decode("utf-8", errors="replace")
+            data = plan.read_bytes()
         except OSError:
             continue
+        content = data.decode("utf-8", errors="replace")
         stage = parse_plan_stage(content) if suffix == _HTML_SUFFIX else parse_plan_stage_md(content)
         if stage is None:
             continue
-        stem = name[: -len(suffix)]
-        history_dir = plans_dir / HISTORY_DIR_NAME / stem
-        snapshots = sorted(p.name for p in history_dir.glob(f"*{suffix}")) if history_dir.is_dir() else []
-        if snapshots and _snapshot_stage(snapshots[-1], suffix) == stage:
-            continue
-        ts = datetime.now().astimezone().strftime(_TS_FORMAT)
-        target = history_dir / f"{ts}_{stage}{suffix}"
         try:
-            history_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(plan, target)
-        except OSError as err:
+            version = plan_versions.record_version(
+                plan, data, stage=stage, author={"kind": "external"}, reason="external", warn=log.warning,
+            )
+        except (OSError, ValueError) as err:
             log.warning("plan snapshot failed for %s: %s", plan, err)
             continue
-        created.append(target.relative_to(workspace_root).as_posix())
-        _prune(history_dir, suffix)
+        if version is not None:
+            target = plan_versions.history_dir_for(plan) / version
+            created.append(target.relative_to(workspace_root).as_posix())
     return created
 
 
 def _prune(history_dir: Path, suffix: str) -> None:
-    """Keep at most MAX_SNAPSHOTS_PER_PLAN snapshots (of this format) in the
-    history dir, dropping the oldest."""
-    snapshots = sorted(history_dir.glob(f"*{suffix}"))
-    for stale in snapshots[: max(0, len(snapshots) - MAX_SNAPSHOTS_PER_PLAN)]:
-        try:
-            stale.unlink()
-        except OSError:
-            pass
+    """Apply the shared retention rules to one history directory (both plan
+    formats share it; ``suffix`` is kept for existing callers)."""
+    plan_versions.prune_history(history_dir, warn=log.warning)

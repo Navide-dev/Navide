@@ -44,7 +44,7 @@ describe('LayoutSettingsPane', () => {
     const w = mountPane()
     const left = card(w, 'layout.slot.left')
     expect(left.findAll('.ls-view-name').map((n) => n.text())).toEqual([
-      '🤖 label.agents', '🔀 label.pipeline', '📁 label.explorer', '🌿 label.git', '📋 label.plans',
+      'label.agents', 'label.pipeline', 'label.explorer', 'label.git', 'label.plans',
     ])
     w.unmount()
   })

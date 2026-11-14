@@ -310,6 +310,12 @@ async def test_cli_profiles_create_and_list(
     assert listing["payload"]["defaults"] == {key: None for key in SUPPORTED_AGENT_KEYS}
     assert listing["payload"]["supported_agents"] == list(SUPPORTED_AGENT_KEYS)
     assert listing["payload"]["supported_agents"][:4] == ["claude", "codex", "kimi", "grok"]
+    # The window keys slot-less sign-in pane auto-close on this field
+    # (App.vue onCliLoginSpawn); quota_failover's own capability drops it.
+    caps = listing["payload"]["account_capabilities"]
+    assert caps["codex"]["loginCommand"] is True
+    assert caps["claude"]["loginCommand"] is True
+    assert all(isinstance(c["loginCommand"], bool) for c in caps.values())
 
 
 async def test_cli_profiles_list_includes_identities(
@@ -590,6 +596,28 @@ async def test_set_default_broadcast_carries_agent_key_and_forced(
     assert renamed["reason"] == "rename"
     assert "agent_key" not in renamed
     assert "forced" not in renamed
+
+
+async def test_set_default_broadcast_marks_an_unattended_forced_switch(
+    store: CliProfilesStore, events: list[dict[str, Any]], vault: FakeVault
+) -> None:
+    """A forced switch nobody clicked (cli_account_switch, plan
+    agent-0-2-42_3f728e R6) says so, and windows then restart only idle panes.
+    The flag rides on forced switches only; the user's own forced switch has none."""
+    session = _session()
+    profile = store.create(agent_key="kimi", name="Work")
+
+    for msg_id, payload in (
+        ("u1", {"agent_key": "kimi", "profile_id": profile["id"], "force": True, "unattended": True}),
+        ("u2", {"agent_key": "kimi", "profile_id": None, "force": True}),
+        ("u3", {"agent_key": "kimi", "profile_id": profile["id"], "unattended": True}),
+    ):
+        await app.handle_message(session, {"id": msg_id, "type": "cli_profiles.set_default", "payload": payload})
+
+    unattended, manual, plain = (e["payload"] for e in events if e["type"] == "cli_profiles.changed")
+    assert (unattended["forced"], unattended.get("unattended")) == (True, True)
+    assert (manual["forced"], "unattended" in manual) == (True, False)
+    assert (plain["forced"], "unattended" in plain) == (False, False)
 
 
 async def test_concurrent_switches_serialize_no_slot_clobber(

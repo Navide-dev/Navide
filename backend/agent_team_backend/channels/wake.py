@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 COOLDOWN_S = 300.0  # between two wakes of one binding
+FAILED_COOLDOWN_S = 30.0  # after a wake that opened something but did not bring the pane back
 DAILY_MAX = 10  # wakes of one binding per local day
 STASH_MAX = 20  # messages kept for the wake to deliver, per binding
 STASH_TTL_S = 1800.0  # a kept message older than this is not delivered by a later wake
@@ -29,11 +30,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "可直接輸入：{commands}",
         "woke": "✅ 已喚醒，接回原本的對話",
         "woke_sent": "✅ 已喚醒，接回原本的對話；暫存的 {count} 則訊息已送進去",
+        "woke_paid": "ℹ️ 這個 pane 使用 API key，依用量計費",
         "already_online": "pane 已在線上，不需要喚醒",
         "busy": "⚠️ 另一個 pane 正在喚醒，請稍後再試",
         "cooldown": "⚠️ 剛喚醒過，請 {wait} 秒後再試",
         "daily": "⚠️ 這個聊天室今天已喚醒 {max} 次，已達上限，明天再試",
         "quota": "⚠️ {agent} 額度已用完，喚醒了也無法回應，所以沒有喚醒",
+        "key_account": "⚠️ 這個 pane 現在喚醒可能會改用 API key 計費，或離開它原本的帳號，所以沒有喚醒；請到電腦上開啟",
         "unresumable": "⚠️ 原本的對話接不回來（{reason}），沒有喚醒；Navide 不會改開新的對話",
         "failed": "⚠️ 喚醒失敗（{reason}），pane 仍不在線上",
         "reason_missing": "找不到這段對話的紀錄",
@@ -61,11 +64,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Type: {commands}",
         "woke": "✅ Awake, back on its own conversation",
         "woke_sent": "✅ Awake, back on its own conversation; the {count} kept message(s) were sent in",
+        "woke_paid": "ℹ️ This pane runs on an API key, billed by usage",
         "already_online": "The pane is already online; there is nothing to wake",
         "busy": "⚠️ Another pane is being woken; try again shortly",
         "cooldown": "⚠️ Woken a moment ago; try again in {wait} s",
         "daily": "⚠️ This chat has woken its pane {max} times today, the daily limit; try again tomorrow",
         "quota": "⚠️ {agent} is out of quota and could not answer, so the pane was not woken",
+        "key_account": "⚠️ Waking this pane now could move it onto an API key, or off the account it was on, so it was not woken; open it on the computer",
         "unresumable": "⚠️ Its own conversation cannot be resumed ({reason}), so the pane was not woken; Navide never starts a new conversation instead",
         "failed": "⚠️ Waking failed ({reason}); the pane is still not online",
         "reason_missing": "no record of the conversation was found",
@@ -93,11 +98,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "次のように入力できます：{commands}",
         "woke": "✅ 起こしました。元の会話に戻っています",
         "woke_sent": "✅ 起こしました。元の会話に戻り、保留していた {count} 件のメッセージを送りました",
+        "woke_paid": "ℹ️ この pane は API キーで動作し、利用量に応じて課金されます",
         "already_online": "pane はすでにオンラインです。起こす必要はありません",
         "busy": "⚠️ 別の pane を起こしています。しばらくしてからもう一度お試しください",
         "cooldown": "⚠️ 起こしたばかりです。{wait} 秒後にもう一度お試しください",
         "daily": "⚠️ このチャットは今日すでに {max} 回 pane を起こしており、上限に達しました。明日もう一度お試しください",
         "quota": "⚠️ {agent} の利用枠を使い切っているため応答できず、起こしませんでした",
+        "key_account": "⚠️ いま起こすと API キーの課金に移るか、元のアカウントから外れるおそれがあるため、起こしませんでした。パソコンで開いてください",
         "unresumable": "⚠️ 元の会話に戻れないため（{reason}）、起こしませんでした。Navide が代わりに新しい会話を始めることはありません",
         "failed": "⚠️ 起こせませんでした（{reason}）。pane はまだオフラインです",
         "reason_missing": "この会話の記録が見つかりません",
@@ -125,11 +132,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "可直接输入：{commands}",
         "woke": "✅ 已唤醒，接回原本的对话",
         "woke_sent": "✅ 已唤醒，接回原本的对话；暂存的 {count} 条消息已送进去",
+        "woke_paid": "ℹ️ 这个 pane 使用 API key，按用量计费",
         "already_online": "pane 已在线，不需要唤醒",
         "busy": "⚠️ 另一个 pane 正在唤醒，请稍后再试",
         "cooldown": "⚠️ 刚唤醒过，请 {wait} 秒后再试",
         "daily": "⚠️ 这个聊天室今天已唤醒 {max} 次，已达上限，明天再试",
         "quota": "⚠️ {agent} 额度已用完，唤醒了也无法回应，所以没有唤醒",
+        "key_account": "⚠️ 现在唤醒这个 pane 可能会改用 API key 计费，或离开它原本的账号，所以没有唤醒；请到电脑上打开",
         "unresumable": "⚠️ 原本的对话接不回来（{reason}），没有唤醒；Navide 不会改开新的对话",
         "failed": "⚠️ 唤醒失败（{reason}），pane 仍不在线",
         "reason_missing": "找不到这段对话的记录",
@@ -157,11 +166,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "입력: {commands}",
         "woke": "✅ 깨어나서 원래 대화로 돌아왔어요",
         "woke_sent": "✅ 깨어나서 원래 대화로 돌아왔어요. 보관한 메시지 {count}개를 보냈어요",
+        "woke_paid": "ℹ️ 이 pane은 API 키로 실행되며 사용량에 따라 과금돼요",
         "already_online": "pane이 이미 온라인이라 깨울 필요가 없어요",
         "busy": "⚠️ 다른 pane을 깨우는 중이에요. 잠시 후 다시 시도하세요",
         "cooldown": "⚠️ 방금 깨웠어요. {wait}초 후에 다시 시도하세요",
         "daily": "⚠️ 이 채팅은 오늘 이미 pane을 {max}번 깨워서 하루 한도에 도달했어요. 내일 다시 시도하세요",
         "quota": "⚠️ {agent}의 할당량을 다 써서 응답할 수 없으므로 pane을 깨우지 않았어요",
+        "key_account": "⚠️ 지금 깨우면 API 키 과금으로 바뀌거나 원래 계정에서 벗어날 수 있어서 깨우지 않았어요. 컴퓨터에서 여세요",
         "unresumable": "⚠️ 원래 대화를 재개할 수 없어서({reason}) pane을 깨우지 않았어요. Navide는 대신 새 대화를 시작하지 않아요",
         "failed": "⚠️ 깨우지 못했어요({reason}). pane은 여전히 온라인 상태가 아니에요",
         "reason_missing": "이 대화의 기록을 찾을 수 없어요",
@@ -189,11 +200,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Escribe: {commands}",
         "woke": "✅ Despierto, de vuelta en su propia conversación",
         "woke_sent": "✅ Despierto, de vuelta en su propia conversación; se enviaron los {count} mensajes guardados",
+        "woke_paid": "ℹ️ Este pane usa una clave de API, con facturación por uso",
         "already_online": "El pane ya está en línea; no hay nada que despertar",
         "busy": "⚠️ Se está despertando otro pane; inténtalo de nuevo en un momento",
         "cooldown": "⚠️ Se despertó hace un momento; inténtalo de nuevo dentro de {wait} s",
         "daily": "⚠️ Este chat ya ha despertado su pane {max} veces hoy, el límite diario; inténtalo de nuevo mañana",
         "quota": "⚠️ {agent} se ha quedado sin cuota y no podría responder, así que no se despertó el pane",
+        "key_account": "⚠️ Despertar este pane ahora podría pasarlo a una clave de API o sacarlo de su cuenta, así que no se despertó; ábrelo en el ordenador",
         "unresumable": "⚠️ No se puede retomar su propia conversación ({reason}), así que no se despertó el pane; Navide nunca abre una conversación nueva en su lugar",
         "failed": "⚠️ No se pudo despertar ({reason}); el pane sigue sin estar en línea",
         "reason_missing": "no se encontró ningún registro de la conversación",
@@ -221,11 +234,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Tapez\u00a0: {commands}",
         "woke": "✅ Réveillé, de retour sur sa propre conversation",
         "woke_sent": "✅ Réveillé, de retour sur sa propre conversation\u00a0; les {count} message(s) conservés ont été envoyés",
+        "woke_paid": "ℹ️ Ce pane utilise une clé API, facturée à l’usage",
         "already_online": "Le pane est déjà en ligne\u00a0; il n’y a rien à réveiller",
         "busy": "⚠️ Un autre pane est en cours de réveil\u00a0; réessayez dans un instant",
         "cooldown": "⚠️ Réveillé il y a un instant\u00a0; réessayez dans {wait} s",
         "daily": "⚠️ Ce chat a réveillé son pane {max} fois aujourd’hui, la limite quotidienne\u00a0; réessayez demain",
         "quota": "⚠️ Le quota de {agent} est épuisé et il ne pourrait pas répondre, le pane n’a donc pas été réveillé",
+        "key_account": "⚠️ Réveiller ce pane maintenant pourrait le faire passer sur une clé API ou le sortir de son compte, il n’a donc pas été réveillé ; ouvrez-le sur l’ordinateur",
         "unresumable": "⚠️ Sa propre conversation ne peut pas être reprise ({reason}), le pane n’a donc pas été réveillé\u00a0; Navide n’ouvre jamais une nouvelle conversation à la place",
         "failed": "⚠️ Échec du réveil ({reason})\u00a0; le pane n’est toujours pas en ligne",
         "reason_missing": "aucune trace de la conversation n’a été trouvée",
@@ -253,11 +268,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Eingeben: {commands}",
         "woke": "✅ Wach, zurück in seiner eigenen Unterhaltung",
         "woke_sent": "✅ Wach, zurück in seiner eigenen Unterhaltung; die {count} zwischengespeicherte(n) Nachricht(en) wurden gesendet",
+        "woke_paid": "ℹ️ Dieser Pane läuft mit einem API-Schlüssel und wird nach Nutzung abgerechnet",
         "already_online": "Das pane ist bereits online; es gibt nichts aufzuwecken",
         "busy": "⚠️ Ein anderes pane wird gerade aufgeweckt; versuchen Sie es gleich noch einmal",
         "cooldown": "⚠️ Gerade erst aufgeweckt; versuchen Sie es in {wait} s erneut",
         "daily": "⚠️ Dieser Chat hat sein pane heute {max}-mal aufgeweckt, das Tageslimit; versuchen Sie es morgen erneut",
         "quota": "⚠️ Das Kontingent von {agent} ist aufgebraucht und es könnte nicht antworten, daher wurde das pane nicht aufgeweckt",
+        "key_account": "⚠️ Ein Aufwecken könnte diesen Pane jetzt auf einen API-Schlüssel oder weg von seinem Konto bringen, daher wurde er nicht aufgeweckt; öffnen Sie ihn am Computer",
         "unresumable": "⚠️ Seine eigene Unterhaltung kann nicht fortgesetzt werden ({reason}), daher wurde das pane nicht aufgeweckt; Navide startet nie stattdessen eine neue Unterhaltung",
         "failed": "⚠️ Aufwecken fehlgeschlagen ({reason}); das pane ist weiterhin nicht online",
         "reason_missing": "es wurde kein Eintrag zu der Unterhaltung gefunden",
@@ -285,11 +302,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Digite: {commands}",
         "woke": "✅ Desperto, de volta à conversa dele",
         "woke_sent": "✅ Desperto, de volta à conversa dele; as {count} mensagens guardadas foram enviadas",
+        "woke_paid": "ℹ️ Este pane usa uma chave de API, com cobrança por uso",
         "already_online": "O pane já está online; não há nada para despertar",
         "busy": "⚠️ Outro pane está sendo despertado; tente de novo daqui a pouco",
         "cooldown": "⚠️ Despertado há pouco; tente de novo em {wait} s",
         "daily": "⚠️ Este chat já despertou o pane {max} vezes hoje, o limite diário; tente de novo amanhã",
         "quota": "⚠️ {agent} está sem cota e não conseguiria responder, então o pane não foi despertado",
+        "key_account": "⚠️ Acordar este pane agora poderia movê-lo para uma chave de API ou tirá-lo da conta dele, então ele não foi acordado; abra-o no computador",
         "unresumable": "⚠️ Não é possível retomar a conversa dele ({reason}), então o pane não foi despertado; o Navide nunca abre uma conversa nova no lugar",
         "failed": "⚠️ Falha ao despertar ({reason}); o pane continua offline",
         "reason_missing": "nenhum registro da conversa foi encontrado",
@@ -317,11 +336,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Введите: {commands}",
         "woke": "✅ Pane проснулся и вернулся к своему разговору",
         "woke_sent": "✅ Pane проснулся и вернулся к своему разговору; отложенные сообщения отправлены (количество: {count})",
+        "woke_paid": "ℹ️ Этот pane работает на API-ключе с оплатой по использованию",
         "already_online": "Pane уже в сети, будить его не нужно",
         "busy": "⚠️ Сейчас пробуждается другой pane; попробуйте чуть позже",
         "cooldown": "⚠️ Pane только что разбудили; попробуйте снова через {wait} с",
         "daily": "⚠️ Этот чат сегодня уже будил свой pane {max} раз — это дневной лимит; попробуйте завтра",
         "quota": "⚠️ Квота {agent} исчерпана, и ответить он не смог бы, поэтому pane не разбудили",
+        "key_account": "⚠️ Сейчас пробуждение могло бы перевести этот pane на API-ключ или увести его с его аккаунта, поэтому он не был разбужен; откройте его на компьютере",
         "unresumable": "⚠️ Его собственный разговор невозможно возобновить ({reason}), поэтому pane не разбудили; Navide никогда не начинает вместо него новый разговор",
         "failed": "⚠️ Не удалось разбудить pane ({reason}); он по-прежнему не в сети",
         "reason_missing": "запись разговора не найдена",
@@ -349,11 +370,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "typed_hint": "Gõ: {commands}",
         "woke": "✅ Đã thức, quay lại cuộc hội thoại vốn có",
         "woke_sent": "✅ Đã thức, quay lại cuộc hội thoại vốn có; {count} tin nhắn tạm giữ đã được gửi vào",
+        "woke_paid": "ℹ️ Pane này dùng khóa API, tính phí theo mức dùng",
         "already_online": "Pane đã trực tuyến; không cần đánh thức",
         "busy": "⚠️ Một pane khác đang được đánh thức; vui lòng thử lại sau giây lát",
         "cooldown": "⚠️ Vừa đánh thức xong; vui lòng thử lại sau {wait} giây",
         "daily": "⚠️ Hôm nay cuộc trò chuyện này đã đánh thức pane của nó {max} lần, đạt giới hạn mỗi ngày; hãy thử lại vào ngày mai",
         "quota": "⚠️ {agent} đã hết hạn mức và không thể trả lời, nên pane không được đánh thức",
+        "key_account": "⚠️ Đánh thức pane này lúc này có thể chuyển nó sang khóa API hoặc rời khỏi tài khoản của nó, nên pane chưa được đánh thức; hãy mở trên máy tính",
         "unresumable": "⚠️ Không thể tiếp tục cuộc hội thoại vốn có của pane ({reason}), nên pane không được đánh thức; Navide không bao giờ mở cuộc hội thoại mới để thay thế",
         "failed": "⚠️ Đánh thức thất bại ({reason}); pane vẫn không trực tuyến",
         "reason_missing": "không tìm thấy bản ghi của cuộc hội thoại",
@@ -400,6 +423,8 @@ def outcome_text(lang: str, result: dict[str, Any]) -> str:
         return text(lang, "open_elsewhere")
     if code == "quota":
         return text(lang, "quota", agent=str(result.get("agent") or "CLI"))
+    if code == "key-account-unclear":
+        return text(lang, "key_account")
     if code in UNRESUMABLE_REASONS:
         return text(lang, "unresumable", reason=text(lang, UNRESUMABLE_REASONS[code]))
     reason = text(lang, FAILURE_REASONS.get(code, "reason_window"))
@@ -421,12 +446,16 @@ class WakeLimits:
     """One wake at a time; per binding (its chat location) a cooldown and a daily cap.
 
     Only a wake that got as far as opening something counts: one refused up front (no
-    window, out of quota, a conversation that cannot be resumed) leaves the limits alone."""
+    window, out of quota, a conversation that cannot be resumed) leaves the limits alone.
+    One that opened something and still failed (the window did not answer, or refused)
+    counts towards the day's cap but cools down for FAILED_COOLDOWN_S only: the chat was
+    told it failed, and the wake itself checks again, before opening anything, whether the
+    conversation came back meanwhile."""
 
     clock: Callable[[], float] = time.monotonic
     today: Callable[[], str] = lambda: time.strftime("%Y-%m-%d")
     waking: str = ""  # the location being woken now
-    _last: dict[str, float] = field(default_factory=dict)
+    _until: dict[str, float] = field(default_factory=dict)  # location -> when its cooldown ends
     _count: dict[str, tuple[str, int]] = field(default_factory=dict)  # location -> (day, wakes)
 
     def refusal(self, key: str, lang: str) -> str:
@@ -436,19 +465,19 @@ class WakeLimits:
         day, count = self._count.get(key, ("", 0))
         if day == self.today() and count >= DAILY_MAX:
             return text(lang, "daily", max=DAILY_MAX)
-        last = self._last.get(key)
-        if last is not None and self.clock() - last < COOLDOWN_S:
-            return text(lang, "cooldown", wait=int(COOLDOWN_S - (self.clock() - last)) + 1)
+        until = self._until.get(key)
+        if until is not None and self.clock() < until:
+            return text(lang, "cooldown", wait=int(until - self.clock()) + 1)
         return ""
 
     def begin(self, key: str) -> None:
         self.waking = key
 
-    def end(self, key: str, *, counted: bool) -> None:
+    def end(self, key: str, *, counted: bool, succeeded: bool = True) -> None:
         self.waking = ""
         if not counted:
             return
-        self._last[key] = self.clock()
+        self._until[key] = self.clock() + (COOLDOWN_S if succeeded else FAILED_COOLDOWN_S)
         day, count = self._count.get(key, ("", 0))
         today = self.today()
         self._count[key] = (today, count + 1 if day == today else 1)

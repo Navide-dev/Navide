@@ -20,6 +20,7 @@ describe('trust:confirm action list', () => {
       'guard.terminal.set_category',
       'guard.terminal.add_pattern',
       'guard.terminal.remove_pattern',
+      'guard.terminal.add_exemption',
     ]))
   })
 

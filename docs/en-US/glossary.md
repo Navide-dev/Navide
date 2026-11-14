@@ -11,9 +11,11 @@ The rule behind every term: **name a thing by who owns its files.**
 | Concept | zh-TW | en | ja | Covers |
 |---|---|---|---|---|
 | A package that extends Navide itself | Navide 外掛 | Navide plugin | Navide プラグイン | Manifest v1/v2 packages, the plugin SDK and `navide-plugin`, the plugin backend sandbox, the bundled `navide.git`, `navide.plans` and `navide.mini-ide` |
-| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `server.navide.dev/registry` |
+| Where Navide plugins are published | Navide 市集 | Navide Marketplace | Navide マーケットプレイス | `marketplace.navide.dev` |
+| A Host-drawn button the user adds to run actions | 動作按鈕 | Action button | アクションボタン | The bar at the right end of the stage tabs, Settings → Layout |
 | A bundle of Navide plugins | Navide 外掛組合 | Navide Plugin Pack | Navide プラグインパック | Packages that declare `extensionPack` |
 | The Settings group for what the AI CLIs work with | Agent 資產 | Agent Assets | エージェント資産 | The pages listed under it in the Settings sidebar, in its order: MCP, Skills, Prompts, Memory, Credentials & Keys, Extensions. Being an Agent Asset says nothing about sync: credentials and keys never leave the machine, and Memory and Extensions do not sync |
+| The stage pane that runs one resident agent (a feature name) | Agent 分格 (zh-CN Agent 分格) | Agent pane | エージェントペイン | Capitalized as a feature name in zh and ko ("Agent 分格"); the common noun agent stays lowercase in zh. Labels such as 新 Agent, 我的 Agent, Agent 名稱, Agent 設定 keep "Agent" |
 | An add-on that belongs to one AI CLI | CLI 擴充 | CLI extension | CLI 拡張 | That CLI's plugins, mods, extensions, hooks, agents, commands, themes |
 | The kind of a CLI extension | vendor's own name, untranslated | vendor's own name | vendor's own name | Shown as a badge: "Claude plugin", "Claude mod", "Codex hook", "Pi extension", … |
 | A CLI's marketplace | CLI 擴充來源 | CLI extension source | CLI 拡張のソース | Claude, Codex, Droid … marketplaces; only Navide's is called a marketplace in prose |
@@ -92,7 +94,7 @@ on-screen label exactly as the label is written.
 **Feature names are proper nouns** and keep their capitals everywhere, in
 any of the above: Turn Stats, Navide Cloud, Navide Marketplace, Navide Plugin
 Pack, Agent Assets, Pipeline Manager, Resource Manager, Execution Policy,
-Auto Commit, Developer Mode, Navide Guard, Navide Browser, Loop.
+Auto Commit, Developer Mode, Navide Guard, Navide Browser, Loop, App Lock.
 
 **Title Case mechanics (Apple Style Guide):** capitalize the first and last
 word and every noun, pronoun, verb, adjective and adverb; lowercase a, an,
@@ -116,11 +118,23 @@ term kept in English here stays English in zh-CN too.
 
 **Kept in English in zh-TW and zh-CN:** AI, agent, CLI, MCP, MCP server, Git,
 PR, API, JSON, SSH, OAuth, LLM, token, session, hook, bot, stash, Loop, Guard,
-pane, pipeline, worktree, repo, URL, plus product and vendor names. Common
+App Lock,
+pipeline, worktree, repo, URL, plus product and vendor names. Common
 nouns are lowercase even at the start of a string (agent, token, session,
-hook, bot, pane, pipeline, worktree, repo); acronyms and feature names keep
+hook, bot, pipeline, worktree, repo); acronyms and feature names keep
 their form. Put a half-width space between the English word and Chinese
-text. 面板 is reserved for "panel" and never means a pane.
+text.
+
+**Layout terms in zh-TW and zh-CN (the user's call, 2026-11-05):** pane 分格,
+window 視窗 (zh-CN 窗口), panel 面板, dialog 對話框 (zh-CN 对话框),
+workspace 工作區 (zh-CN 工作区), group 群組 (zh-CN 群组), tab 分頁
+(zh-CN keeps its existing 标签页). 視窗／窗口 means a real Navide or
+operating-system window only, never a pane; 面板 means a panel only, never a
+pane. A named tool surface that en-US calls a pane but that is not a cell of
+the stage grid (the Git pane, the plan pane) stays 面板. Do not write
+"分割分格" for "split pane": use a verb ("再切一格", "左右切分"). The first
+mention on a help page or in onboarding carries the gloss
+"分格＝視窗裡的一格，通常跑一個 agent" (zh-CN "分格＝窗口里的一格，通常跑一个 agent").
 
 **zh-TW renderings:** workspace 工作區, plan 計畫, commit 提交, branch 分支,
 diff 差異, skill 技能, terminal 終端機, tab 分頁, quota 額度, Settings 設定,
@@ -144,13 +158,20 @@ rendering for a term the locale already uses.
 
 **Feature names kept in English:** Turn Stats, Pipeline Manager, Loop
 (also in the "∞ Loop" badge), Navide Cloud, Navide Marketplace, Navide Guard,
-Navide Browser, Testplace, Registry. Other feature names are translated like
+Navide Browser, Testplace, Registry, App Lock. Other feature names are translated like
 ordinary words: Resource Manager is de-DE "Ressourcenverwaltung", ja-JP
 "リソースマネージャー"; Memory (the CLI instruction files) is de-DE
 "Gedächtnis", ja-JP "メモリ".
 
-**Kept in English in de-DE:** turn (an agent's turn, as in Turn Stats; the
-Turn Stats table's "Turns" column too), plus the words zh-TW and zh-CN keep.
+**de-DE renderings (the user's call, 2026-10-29):** pane "Bereich" (der
+Bereich; "Claude-Bereich", "Terminalbereich"), turn "Runde" ("Rundenerkennung",
+"Rundenende"). The feature name Turn Stats and its table's columns stay
+English. Otherwise de-DE keeps in English the words zh-TW and zh-CN keep.
+
+**ru-RU renderings (the user's call, 2026-10-29):** agent "агент", pane
+"панель", session "сеанс" (never "сессия"), skill "навык", workspace "рабочая
+область", turn "ход", declined like any Russian noun. hook, token,
+worktree, prompt and the feature names above stay English.
 
 ## What stays as it is
 

@@ -56,6 +56,8 @@ interface Stubs {
   currentWorkspace: { value: string }
   pipeline: { state: PipelineState; workspacePath: string; task: string; stageIndex: number }
   pipelinesApi: { activePipelineId: { value: string } }
+  /** The run's own pipeline (PR-E E4): what the real onPipelineStart sets. */
+  runPipelineId: { value: string }
   stagesApi: { stages: { value: unknown[] } }
   existingProject: { value: ExistingRun | null }
   onPipelineStart: ReturnType<typeof vi.fn>
@@ -65,6 +67,11 @@ interface Stubs {
   onPipelineReset: ReturnType<typeof vi.fn>
   onPipelineRestart: ReturnType<typeof vi.fn>
   clearStoredPipelineRun: ReturnType<typeof vi.fn>
+  confirmPipelineReset: ReturnType<typeof vi.fn>
+  confirmPipelineAbort: ReturnType<typeof vi.fn>
+  /** The workspace of a stored run this window does not drive, or ''. */
+  interruptedRunWorkspace: { value: string }
+  abortInterruptedRun: ReturnType<typeof vi.fn>
 }
 
 interface StubOverrides {
@@ -84,10 +91,12 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     stageIndex: overrides.stageIndex ?? -1,
   }
   const existingProject = { value: overrides.existingProject ?? null }
+  const runPipelineId = { value: '' }
   return {
     currentWorkspace: { value: overrides.workspace ?? '/tmp/ws' },
     pipeline,
     pipelinesApi: { activePipelineId: { value: overrides.activePipelineId ?? 'pl-active' } },
+    runPipelineId,
     stagesApi: { stages: { value: new Array(overrides.stages ?? 3).fill({}) } },
     existingProject,
     // The real onPipelineStart is what moves the run to 'running'; a stub that
@@ -95,6 +104,7 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
     // below: each one reproduces the state move its real counterpart makes, so
     // a test that wants the soft-exit case has to opt into it explicitly.
     onPipelineStart: vi.fn(async (payload: StartPayload) => {
+      runPipelineId.value = payload.pipelineId ?? ''
       pipeline.state = 'running'
       pipeline.workspacePath = payload.workspacePath
       pipeline.task = payload.task
@@ -119,12 +129,17 @@ function makeStubs(overrides: StubOverrides = {}): Stubs {
       pipeline.task = ''
     }),
     onPipelineRestart: vi.fn(async (payload: StartPayload) => {
+      runPipelineId.value = runPipelineId.value || (overrides.activePipelineId ?? 'pl-active')
       pipeline.state = 'running'
       pipeline.workspacePath = payload.workspacePath
       pipeline.task = payload.task
       pipeline.stageIndex = 0
     }),
     clearStoredPipelineRun: vi.fn(async () => true),
+    confirmPipelineReset: vi.fn(async () => true),
+    confirmPipelineAbort: vi.fn(async () => true),
+    interruptedRunWorkspace: { value: '' },
+    abortInterruptedRun: vi.fn(async () => true),
   }
 }
 
@@ -138,6 +153,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'currentWorkspace',
     'pipeline',
     'pipelinesApi',
+    'runPipelineId',
     'stagesApi',
     'existingProject',
     'onPipelineStart',
@@ -150,6 +166,10 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'onPipelineGateApprove',
     'onPipelineGateReject',
     'clearStoredPipelineRun',
+    'confirmPipelineReset',
+    'confirmPipelineAbort',
+    'interruptedRunWorkspace',
+    'abortInterruptedRun',
     code,
   )
   factory(
@@ -157,6 +177,7 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     stubs.currentWorkspace,
     stubs.pipeline,
     stubs.pipelinesApi,
+    stubs.runPipelineId,
     stubs.stagesApi,
     stubs.existingProject,
     stubs.onPipelineStart,
@@ -171,6 +192,10 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     vi.fn(async () => true),
     vi.fn(async () => true),
     stubs.clearStoredPipelineRun,
+    stubs.confirmPipelineReset,
+    stubs.confirmPipelineAbort,
+    () => stubs.interruptedRunWorkspace.value,
+    stubs.abortInterruptedRun,
   )
   return handlers
 }
@@ -237,9 +262,11 @@ describe('ui.pipeline.start', () => {
       task: 'ship it',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-7',
-    })
+      origin: 'agent',
+    }, expect.any(Function)) // the refusal reporter (PR-B)
+    // The run's pipeline, which is not made the default (PR-E E4).
     expect(result).toEqual({
-      pipelineId: 'pl-active',
+      pipelineId: 'pl-7',
       stages: 4,
       workspacePath: '/tmp/ws',
       state: 'running',
@@ -254,7 +281,8 @@ describe('ui.pipeline.start', () => {
       task: 'go',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-current',
-    })
+      origin: 'agent',
+    }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 
   it('defaults task to an empty string when none was given', async () => {
@@ -265,7 +293,8 @@ describe('ui.pipeline.start', () => {
       task: '',
       workspacePath: '/tmp/ws',
       pipelineId: 'pl-active',
-    })
+      origin: 'agent',
+    }, expect.any(Function)) // the refusal reporter (PR-B)
   })
 
   it('refuses a second run while one is already running, without touching the first', async () => {
@@ -335,6 +364,53 @@ describe('ui.pipeline.abort', () => {
     const handlers = await loadActions(stubs)
     await expect(handlers['ui.pipeline.abort']()).rejects.toThrow(/state "aborted"/)
     expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+  })
+
+  it('never asks a caller that sets no confirm flag (MCP pipeline_abort)', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    const handlers = await loadActions(stubs)
+    await handlers['ui.pipeline.abort']()
+    expect(stubs.confirmPipelineAbort).not.toHaveBeenCalled()
+    expect(stubs.onPipelineAbort).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks first when the editor Abort sets confirm, and changes nothing on cancel', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    stubs.confirmPipelineAbort.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']({ confirm: true })
+    expect(stubs.confirmPipelineAbort).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ state: 'running', cancelled: true })
+  })
+
+  it('aborts as before once the confirm is accepted', async () => {
+    const stubs = makeStubs({ state: 'running' })
+    stubs.pipeline.workspacePath = '/tmp/ws'
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']({ confirm: true })
+    expect(stubs.confirmPipelineAbort).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted' })
+  })
+
+  // A Reload or crash left the stored run at running with no window driving it:
+  // MCP pipeline_abort ends it instead of answering "no pipeline is running".
+  it('ends an interrupted run this window does not drive', async () => {
+    const stubs = makeStubs({ state: 'idle' })
+    stubs.interruptedRunWorkspace.value = '/tmp/ws'
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.abort']()
+    expect(stubs.abortInterruptedRun).toHaveBeenCalledWith('/tmp/ws')
+    expect(stubs.onPipelineAbort).not.toHaveBeenCalled()
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted' })
+  })
+
+  it('refuses when the backend says another window still drives that run', async () => {
+    const stubs = makeStubs({ state: 'idle' })
+    stubs.interruptedRunWorkspace.value = '/tmp/ws'
+    stubs.abortInterruptedRun.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.abort']()).rejects.toMatchObject({ code: 'not-running' })
   })
 })
 
@@ -477,6 +553,34 @@ describe('ui.pipeline.reset', () => {
     await expect(handlers['ui.pipeline.reset']()).rejects.toThrow(/was not cleared/)
     expect(stubs.onPipelineReset).toHaveBeenCalledTimes(1)
     expect(stubs.clearStoredPipelineRun).not.toHaveBeenCalled()
+  })
+
+  it('never asks a caller that sets no confirm flag (MCP pipeline_reset)', async () => {
+    const stubs = makeStubs({ state: 'aborted' })
+    const handlers = await loadActions(stubs)
+    await handlers['ui.pipeline.reset']()
+    expect(stubs.confirmPipelineReset).not.toHaveBeenCalled()
+    expect(stubs.onPipelineReset).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks first when the editor Reset sets confirm, and changes nothing on cancel', async () => {
+    const stubs = makeStubs({ state: 'aborted', stageIndex: 1 })
+    stubs.confirmPipelineReset.mockImplementation(async () => false)
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.reset']({ confirm: true })
+    expect(stubs.confirmPipelineReset).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineReset).not.toHaveBeenCalled()
+    expect(stubs.clearStoredPipelineRun).not.toHaveBeenCalled()
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'aborted', cancelled: true })
+  })
+
+  it('resets as before once the confirm is accepted', async () => {
+    const stubs = makeStubs({ state: 'aborted', stageIndex: 1 })
+    const handlers = await loadActions(stubs)
+    const result = await handlers['ui.pipeline.reset']({ confirm: true })
+    expect(stubs.confirmPipelineReset).toHaveBeenCalledTimes(1)
+    expect(stubs.onPipelineReset.mock.calls).toEqual([[]])
+    expect(result).toEqual({ workspacePath: '/tmp/ws', state: 'idle', stageIndex: -1 })
   })
 })
 
@@ -667,5 +771,40 @@ describe('ui.settings.yolo', () => {
     const result = await yolo({ yolo: 'off' })
     expect(stubs.yoloEnabled.value).toBe(true)
     expect(result).toMatchObject({ yolo: true })
+  })
+})
+
+// Pipeline UX PR-B (B2): every refusal also carries a code (and the numbers
+// it mentions) for the editor to say in the UI language; the English sentence
+// is unchanged for MCP callers.
+describe('refusals carry a code', () => {
+  it('the start, with the refusal onPipelineStart reported', async () => {
+    const stubs = makeStubs()
+    stubs.onPipelineStart.mockImplementation(async (_p: StartPayload, report?: (r: unknown) => void) => {
+      report?.({ code: 'spawn-failed', params: {} })
+      return 'no agent of the first stage could be started'
+    })
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.start']({ task: 'x' })).rejects.toMatchObject({
+      code: 'not-started',
+      params: { reason: 'spawn-failed' },
+    })
+  })
+
+  it('next on the last stage says which stage of how many', async () => {
+    const stubs = makeStubs({ state: 'running', stageIndex: 2, stages: 3 })
+    const handlers = await loadActions(stubs)
+    await expect(handlers['ui.pipeline.next']()).rejects.toMatchObject({
+      code: 'last-stage',
+      params: { stage: 3, total: 3 },
+      message: 'ui.pipeline.next: stage 3 of 3 is the last one — there is no next stage to advance to',
+    })
+  })
+
+  it('abort, resume and gate decisions', async () => {
+    const idle = await loadActions(makeStubs({ state: 'idle' }))
+    await expect(idle['ui.pipeline.abort']()).rejects.toMatchObject({ code: 'not-running' })
+    await expect(idle['ui.pipeline.resume']()).rejects.toMatchObject({ code: 'no-run' })
+    await expect(idle['ui.pipeline.gate_pass']({ nodeId: 'g' })).rejects.toMatchObject({ code: 'not-at-gate' })
   })
 })

@@ -33,6 +33,13 @@ export interface ReadDiagnosticsOptions {
   limit?: number
 }
 
+/** The inject.failed message, with the pane's terminal size at that moment
+ *  (#448 diagnostics: a failure is compared against the width the pane had). */
+export function injectFailedMessage(size: { cols: number; rows: number } | null | undefined): string {
+  const base = 'content never appeared in the input box'
+  return size ? `${base} (terminal ${size.cols}x${size.rows})` : `${base} (terminal size unknown)`
+}
+
 const MAX_ENTRIES = 200
 
 const buffer: DiagnosticEntry[] = []

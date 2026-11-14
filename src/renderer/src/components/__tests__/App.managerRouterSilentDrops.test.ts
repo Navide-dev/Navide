@@ -20,7 +20,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { findSentinel } from '../../platform/terminal/lib/buffer'
-import { MANAGER_READY_SENTINEL } from '../../data/stages'
+import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -87,6 +87,7 @@ async function load(opts: {
     stagesApi: { stages: { value: [{ id: 'storyboard' }, { id: 'illustration' }] } },
     findSentinel,
     MANAGER_READY_SENTINEL,
+    MANAGER_STAGE_DONE_SENTINEL,
     TURN_TEXT_REPLAY_TOLERANCE_MS: 60_000,
     ROUTER_POLL_MS: 4_000,
     managerRouterScan: vi.fn(async () => {}),
@@ -97,7 +98,11 @@ async function load(opts: {
       return opts.injectOk ? opts.injectOk(paneId) : true
     }),
     i18n: { global: { t: (key: string, named?: Record<string, unknown>) => `${key} ${JSON.stringify(named ?? {})}` } },
+    // No pane here sits on a CLI prompt: the held queue sends at once.
+    routerInject: undefined as unknown,
   }
+  deps.routerInject = (paneId: string, text: string, label: string) =>
+    (deps.injectPane as (...args: unknown[]) => Promise<boolean>)(paneId, text, label, true)
   const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {
     routeManagerTurnText: (paneId: string, text: string, timestamp: string) => Promise<void>
     routeManagerDispatch: (r: typeof router, stageId: string, d: { to: string; message: string }) => Promise<void>

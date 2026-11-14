@@ -17,6 +17,8 @@ export {
 } from './lib/settings'
 export type { SettingsBackend, SettingsReadinessStatus } from './lib/settings'
 export * from './lib/uiScale'
+export * from './layout/gridLayout'
+export * from './layout/paneCycle'
 
 export type { KeybindingsPort } from './ports/keybindings'
 export type { PortError, PortResponse } from './ports/response'
@@ -33,6 +35,8 @@ export {
   invokeCommand,
   listCommands,
   registerCommand,
+  registerPluginCommand,
+  unregisterCommand,
 } from './keybindings/commandRegistry'
 export type { InvokeCommandResult } from './keybindings/commandRegistry'
 

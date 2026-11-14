@@ -1,0 +1,130 @@
+{
+  "vendor": "openclaw",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "backend/tests/vendors/test_openclaw.py",
+    "revision": "b2372a25f",
+    "notes": "Hand-authored transcript_events rows in the four columns the reader depends on; the table's full DDL and the key/sessionId link were not captured (plan openclaw-hermes-0-2-40_a50148). Entry shapes follow oc-transcript-sample.txt. No account data, provider calls or keys."
+  },
+  "sessionId": "agent:main:navide-11111111-2222-4333-8444-555555555555",
+  "path": "${HOME}/.openclaw/agents/main/agent/openclaw-agent.sqlite",
+  "expected": {
+    "tokens": [
+      13,
+      3
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "phases": {
+    "initial": [
+      {
+        "kind": "sqlite",
+        "schema": "CREATE TABLE transcript_events(session_id TEXT NOT NULL, seq INTEGER NOT NULL, event_json TEXT, event_zstd BLOB, message_role TEXT, PRIMARY KEY(session_id, seq));",
+        "statements": [
+          {
+            "sql": "INSERT INTO transcript_events(session_id, seq, event_json, message_role) VALUES (?, ?, ?, ?)",
+            "params": [
+              "agent:main:navide-11111111-2222-4333-8444-555555555555",
+              0,
+              {
+                "type": "session"
+              },
+              null
+            ]
+          },
+          {
+            "sql": "INSERT INTO transcript_events(session_id, seq, event_json, message_role) VALUES (?, ?, ?, ?)",
+            "params": [
+              "agent:main:navide-11111111-2222-4333-8444-555555555555",
+              1,
+              {
+                "type": "message",
+                "timestamp": "2026-11-10T05:00:00.000Z",
+                "message": {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "${MARKER} work"
+                    }
+                  ]
+                }
+              },
+              "user"
+            ]
+          }
+        ]
+      }
+    ],
+    "response": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO transcript_events(session_id, seq, event_json, message_role) VALUES (?, ?, ?, ?)",
+            "params": [
+              "agent:main:navide-11111111-2222-4333-8444-555555555555",
+              2,
+              {
+                "type": "message",
+                "timestamp": "2026-11-10T05:00:00.000Z",
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "toolCall"
+                    }
+                  ],
+                  "stopReason": "toolUse",
+                  "usage": {
+                    "input": 10,
+                    "output": 3,
+                    "cacheRead": 0,
+                    "cacheWrite": 0
+                  }
+                }
+              },
+              "assistant"
+            ]
+          }
+        ]
+      }
+    ],
+    "complete": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO transcript_events(session_id, seq, event_json, message_role) VALUES (?, ?, ?, ?)",
+            "params": [
+              "agent:main:navide-11111111-2222-4333-8444-555555555555",
+              3,
+              {
+                "type": "message",
+                "timestamp": "2026-11-10T05:00:00.000Z",
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Regression reply: café 完成\n---MSG-END---"
+                    }
+                  ],
+                  "stopReason": "stop",
+                  "usage": {
+                    "input": 3,
+                    "output": 0
+                  }
+                }
+              },
+              "assistant"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "binary": "openclaw",
+  "resumeCommand": "openclaw tui --local --session agent:main:navide-11111111-2222-4333-8444-555555555555",
+  "guardedEnvironment": []
+}

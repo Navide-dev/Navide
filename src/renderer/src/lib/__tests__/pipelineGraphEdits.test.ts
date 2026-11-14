@@ -155,6 +155,21 @@ describe('pipelineGraphEdits', () => {
     expect(badges.has('n-02-1')).toBe(false)
   })
 
+  it('badges branch and error links as forward flow, never as a reject loop', () => {
+    let g = base()
+    g = applyGraphOps(g, [
+      { op: 'add_edge', edge: { id: 'b-yes', from: 'n-01-0', to: 'n-02-0', kind: 'branch', when: 'yes' } },
+      { op: 'add_edge', edge: { id: 'b-obj', from: 'n-01-0', to: 'n-03-0', kind: 'branch', when: { path: 'ok', equals: true } } },
+      { op: 'add_edge', edge: { id: 'x', from: 'n-02-1', to: 'n-03-0', kind: 'error' } },
+    ])
+    const badges = laneBadges(g)
+    expect(badges.get('n-01-0')).toEqual([
+      { kind: 'branch', edgeId: 'b-yes', targetLayer: 2, when: 'yes' },
+      { kind: 'branch', edgeId: 'b-obj', targetLayer: 3, when: 'ok = true' },
+    ])
+    expect(badges.get('n-02-1')).toEqual([{ kind: 'error', edgeId: 'x', targetLayer: 3 }])
+  })
+
   it('never reuses a slot label or node id', () => {
     const g = base()
     expect(uniqueLabel(g, 'A')).toBe('A 2')

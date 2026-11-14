@@ -9,11 +9,15 @@ import type { EditorNativeParams, EditorNativeResults, EditorNativeEvents } from
 import type { GitCapabilityParams, GitCapabilityResults } from './gitCapabilities.js'
 import type { GitAccountParams, GitAccountResults, GitCredentialEvents } from './gitAccounts.js'
 import type { IssueParams, IssueResults } from './issues.js'
-import type { AgentsParams, AgentsResults } from './agents.js'
+import { AGENTS_EVENTS, type AgentsEventAddress, type AgentsEventPayloads, type AgentsParams, type AgentsResults } from './agents.js'
+import type { PluginsParams, PluginsResults } from './plugins.js'
+import type { WebEventPayloads, WebParams, WebResults } from './web.js'
+import type { SecretsParams, SecretsResults } from './secrets.js'
+import type { AgentNotifyParams, AgentNotifyResults } from './agentNotify.js'
 import type { EditorPreferenceParams, EditorPreferenceResults, EditorPreferenceEvents } from './editorPreferences.js'
 import type { FilePickerRequest } from './filePicker.js'
 export { validFilePickerRequest } from './filePicker.js'
-export type { FilePickerRequest } from './filePicker.js'
+export type { FilePickerRequest, FilePickerSearch, FilePickerTarget } from './filePicker.js'
 
 export * from './archive.js'
 export * from './aiTerminal.js'
@@ -23,9 +27,13 @@ export type { EditorNativeParams, EditorNativeResults, EditorNativeEvents, Edito
 export * from './gitCapabilities.js'
 export * from './issues.js'
 export * from './agents.js'
+export * from './plugins.js'
+export * from './web.js'
+export * from './secrets.js'
+export * from './agentNotify.js'
 export * from './editorPreferences.js'
 export * from './staticScan.js'
-export { deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
+export { agentToolViewId, AGENT_TOOL_VIEW_METHOD_PREFIX, deriveAgentToolPrefix, validateAgentTools } from './agentToolsValidation.js'
 export type { AgentToolErrorCode, AgentToolValidationError } from './agentToolsValidation.js'
 export type { GitAccountParams, GitAccountResults, GitAccountSummary } from './gitAccounts.js'
 
@@ -38,8 +46,41 @@ export type StorageGetResult =
 
 export const V2_VIEW_LOCATIONS = ['top', 'bottom', 'right', 'left', 'main', 'window', 'detail'] as const
 export const V2_RECEIVER_LOCATIONS = ['left', 'detail'] as const
-export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'] as const
+export const V2_SYSTEM_NAMESPACES = ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify'] as const
 export const V2_SHELL_MODES = ['allowlist', 'full'] as const
+/** Most executables one package may declare in `permissions.shell.executables`. */
+export const MAX_SHELL_EXECUTABLES = 32
+/** One declared executable: a bare lowercase name as it is spelled on PATH
+ *  (`npm`, `python3.12`), never a path or a shell word. */
+export const V2_SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
+/** A declared name may not be a Host-family executable (those have their own
+ *  policy and are always admitted) nor spell one through a Windows extension
+ *  (`git.exe`, `gh.cmd`): the broker and the backend admit bare names only,
+ *  and a suffixed spelling would reach the Git family's binary without its
+ *  subcommand policy. Checked after the spelling rule. */
+export function shellExecutableRefusal(name: string): string | null {
+  const suffix = /\.(exe|cmd|bat|com|ps1)$/.exec(name)
+  if (suffix) return `a declared executable is a bare name: ${JSON.stringify(name)} must not carry the ${suffix[0]} extension`
+  if (HOST_SHELL_FAMILY.includes(name)) return `${JSON.stringify(name)} is always available to a shell: "allowlist" package and cannot be declared`
+  return null
+}
+const HOST_SHELL_FAMILY: readonly string[] = ['git', 'gh', 'glab']
+/** Executables that run any program handed to them (shells, interpreters,
+ *  package runners, privilege wrappers). Disclosure only: a package may
+ *  declare them; the card then says "can run any program" (TA-2, highest). */
+export const SHELL_ANY_PROGRAM_EXECUTABLES: readonly string[] = [
+  'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'pwsh', 'powershell', 'cmd',
+  'node', 'deno', 'bun', 'python', 'python3', 'ruby', 'perl', 'php', 'lua', 'osascript',
+  'npx', 'pnpm', 'npm', 'yarn', 'pip', 'pipx', 'uv', 'uvx', 'cargo', 'go', 'make', 'cmake', 'gradle', 'mvn',
+  'docker', 'podman', 'kubectl', 'nix', 'brew', 'apt', 'winget', 'choco',
+  'sudo', 'doas', 'su', 'runas',
+  'env', 'xargs', 'nohup', 'timeout', 'nice', 'find', 'awk', 'ssh', 'busybox', 'setsid',
+]
+/** Most hosts one package may declare in `permissions.network.hosts`. */
+export const MAX_NETWORK_HOSTS = 32
+/** One declared network host: lowercase DNS labels, at most one leading `*.`
+ *  wildcard standing for one label; no scheme, port, path or user info. */
+export const V2_NETWORK_HOST = /^(?:\*\.)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/
 /** Most members one Extension Pack may list. */
 export const MAX_EXTENSION_PACK_MEMBERS = 20
 export const EXECUTION_POLICY_SCHEMA_VERSION = 1 as const
@@ -74,11 +115,85 @@ export type PluginManifestV2Scopes = {
   fs: PluginManifestV2FsScopes
 }
 
+/** Hosts the package's views may connect to (fetch, XHR, WebSocket, EventSource).
+ *  Enforced by the plugin frame's `connect-src`; a request to any other host
+ *  is refused by the frame. The backend sandbox is not affected. */
+export type PluginManifestV2Network = {
+  hosts: string[]
+}
+
 export type PluginManifestV2Permissions = {
   system?: PluginSystemNamespace[]
+  /** The shell mode. The manifest may spell `allowlist` as
+   *  `{ "mode": "allowlist", "executables": [...] }`; the parser keeps the
+   *  mode here and the declared names in `shellExecutables`. */
   shell?: PluginShellMode
+  /** Executables a `shell: "allowlist"` package declares beyond the Host's
+   *  `git`, `gh`, `glab` (C2): bare names, enforced by the broker, each
+   *  disclosed; names that run any program are disclosed as highest risk. */
+  shellExecutables?: string[]
   /** Optional declared resource scopes; disclosure only, never a grant. */
   scopes?: PluginManifestV2Scopes
+  /** Optional declared network hosts; enforced on views, disclosed everywhere. */
+  network?: PluginManifestV2Network
+  /** Host events declared one by one; needs `agents` in `system`. */
+  agents?: { events: AgentsEventAddress[] }
+  /** Ids of the installed plugins whose `contributes.api` this one calls. */
+  plugins?: string[]
+}
+
+/** One backend method other plugins may call (`plugins.call`); it must also be
+ *  listed in `backend.methods`. */
+export type PluginManifestV2ApiMethod = {
+  method: string
+  description: string
+}
+
+/** One setting the Host renders in Settings → Navide Plugins. Its value is kept
+ *  in the plugin's own storage (scope `plugin`) under `settings.<key>`; until
+ *  the user changes it the plugin reads `default` itself. */
+export type PluginManifestV2Setting = {
+  key: string
+  title: string
+  description?: string
+  type: 'boolean' | 'string' | 'number' | 'enum'
+  default: boolean | string | number
+  /** enum only: the allowed values, default among them. */
+  options?: string[]
+  /** number only. */
+  minimum?: number
+  maximum?: number
+  /** string only (default 1024). */
+  maxLength?: number
+}
+
+/** A status bar item that runs `command` (one of this plugin's commands). */
+export type PluginManifestV2StatusBarItem = { command: string; text: string; tooltip?: string }
+/** An entry in a pane's context menu; the command gets `{ paneId }`. */
+export type PluginManifestV2PaneAction = { command: string; title: string }
+/** An entry in the Explorer's context menu; the command gets `{ path }`. */
+export type PluginManifestV2ExplorerMenuItem = {
+  command: string
+  title: string
+  when?: 'file' | 'directory' | 'any'
+}
+
+/** A deterministic pipeline step this plugin contributes. The Host calls
+ *  `method` (also listed in `backend.methods`) with `{ input: string }`, the
+ *  node's expanded input, and the JSON it returns becomes the node's output,
+ *  treated as external content. No backend (Windows) means the node is
+ *  unavailable there and fails at once. */
+export type PluginManifestV2PipelineNode = {
+  /** Unique within the plugin; what a pipeline graph's plugin node names. */
+  id: string
+  title: string
+  description?: string
+  method: string
+  /** 1000..600000; the Host's backend call default when absent. */
+  timeoutMs?: number
+  /** n8n node types (e.g. `n8n-nodes-base.httpRequest`) this node can stand in
+   *  for when a workflow is imported. */
+  n8nTypes?: string[]
 }
 
 export type PluginManifestV2Receiver = {
@@ -86,6 +201,17 @@ export type PluginManifestV2Receiver = {
   locations: (typeof V2_RECEIVER_LOCATIONS)[number][]
   editorTargets?: { protocolVersion: 1 }
   closeGuard?: { protocolVersion: 1 }
+}
+
+export type PluginManifestV2CommandRun = { view: string; target?: Record<string, string> } | { method: string }
+
+export type PluginManifestV2Command = {
+  /** `<plugin id>.<name>`. The schema cannot express the prefix; the parser does. */
+  id: string
+  title: string
+  run: PluginManifestV2CommandRun
+  /** Shown as a suggestion in Settings; never bound without the user's click. */
+  suggestedKey?: string
 }
 
 export type PluginManifestV2View = {
@@ -98,6 +224,9 @@ export type PluginManifestV2View = {
   detailView?: string
   targetSchema?: string
   receives?: PluginManifestV2Receiver
+  /** 0.2.40: the Host may open this view hidden to answer its agent tools
+   *  while it is not open (opt-in; a window or detail view cannot). */
+  headless?: boolean
 }
 
 export type PluginManifestV2 = {
@@ -117,7 +246,19 @@ export type PluginManifestV2 = {
     categories?: string[]
     icon?: string
   }
-  contributes?: { views: PluginManifestV2View[] }
+  contributes?: {
+    views: PluginManifestV2View[]
+    commands?: PluginManifestV2Command[]
+    agentTools?: PluginManifestV2ViewAgentTool[]
+    api?: PluginManifestV2ApiMethod[]
+    pipelineNodes?: PluginManifestV2PipelineNode[]
+    /** Settings the Host shows as a form; values live in the plugin's storage. */
+    settings?: PluginManifestV2Setting[]
+    /** Batch 4 view slots: one of this plugin's own commands on a Host surface. */
+    statusBar?: PluginManifestV2StatusBarItem[]
+    paneActions?: PluginManifestV2PaneAction[]
+    explorerMenu?: PluginManifestV2ExplorerMenuItem[]
+  }
   backend?: {
     entry: string
     protocolVersion: 1
@@ -153,6 +294,9 @@ export type PluginManifestV2AgentTool = {
   inputSchema: Record<string, unknown>
   timeoutMs?: number
 }
+
+/** One `contributes.agentTools` entry (contract section 2.9): served by a declared view instead of a backend method. */
+export type PluginManifestV2ViewAgentTool = Omit<PluginManifestV2AgentTool, 'method'> & { view: string }
 
 export type PluginContractErrorCode =
   | 'INVALID_JSON'
@@ -490,7 +634,7 @@ function parseScopes(value: unknown): PluginManifestV2Scopes {
 
 function parsePermissions(value: unknown): PluginManifestV2Permissions {
   const permissions = assertObject(value, 'manifest permissions')
-  assertOnlyKeys(permissions, ['system', 'shell', 'scopes'], 'manifest permissions')
+  assertOnlyKeys(permissions, ['system', 'shell', 'scopes', 'network', 'agents', 'plugins'], 'manifest permissions')
   let system: PluginSystemNamespace[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'system')) {
     const values = uniqueStringArray(permissions.system, 'manifest permissions.system', 1, V2_SYSTEM_NAMESPACES.length)
@@ -505,16 +649,92 @@ function parsePermissions(value: unknown): PluginManifestV2Permissions {
     system = values as PluginSystemNamespace[]
   }
   let shell: PluginShellMode | undefined
+  let shellExecutables: string[] | undefined
   if (Object.prototype.hasOwnProperty.call(permissions, 'shell')) {
-    if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
-      fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}`)
+    if (typeof permissions.shell === 'object' && permissions.shell !== null && !Array.isArray(permissions.shell)) {
+      const declared = permissions.shell as Record<string, unknown>
+      assertOnlyKeys(declared, ['mode', 'executables'], 'manifest permissions.shell')
+      if (required(declared, 'mode', 'manifest permissions.shell') !== 'allowlist') {
+        fail(`manifest permissions.shell.mode must be "allowlist" when executables are declared, got ${JSON.stringify(declared.mode)}; full mode runs any executable and declares none`)
+      }
+      const executables = uniqueStringArray(
+        required(declared, 'executables', 'manifest permissions.shell'),
+        'manifest permissions.shell.executables',
+        1,
+        MAX_SHELL_EXECUTABLES
+      )
+      const invalid = executables.find((name) => !V2_SHELL_EXECUTABLE.test(name))
+      if (invalid !== undefined) {
+        fail(`manifest permissions.shell.executables contains an invalid name ${JSON.stringify(invalid)}; a name is lowercase such as npm or terraform, as spelled on PATH, with no path or shell word`)
+      }
+      for (const name of executables) {
+        const refusal = shellExecutableRefusal(name)
+        if (refusal) fail(`manifest permissions.shell.executables: ${refusal}`)
+      }
+      shell = 'allowlist'
+      shellExecutables = executables
+    } else {
+      if (!V2_SHELL_MODES.includes(permissions.shell as PluginShellMode)) {
+        fail(`manifest permissions.shell contains an unknown mode ${JSON.stringify(permissions.shell)}; allowed: ${V2_SHELL_MODES.join(', ')}, or { "mode": "allowlist", "executables": [...] }`)
+      }
+      shell = permissions.shell as PluginShellMode
     }
-    shell = permissions.shell as PluginShellMode
   }
   const scopes = Object.prototype.hasOwnProperty.call(permissions, 'scopes')
     ? parseScopes(permissions.scopes)
     : undefined
-  return { ...(system ? { system } : {}), ...(shell ? { shell } : {}), ...(scopes ? { scopes } : {}) }
+  const network = Object.prototype.hasOwnProperty.call(permissions, 'network')
+    ? parseNetwork(permissions.network)
+    : undefined
+  let agents: { events: AgentsEventAddress[] } | undefined
+  if (Object.prototype.hasOwnProperty.call(permissions, 'agents')) {
+    const declared = assertObject(permissions.agents, 'manifest permissions.agents')
+    assertOnlyKeys(declared, ['events'], 'manifest permissions.agents')
+    const events = uniqueStringArray(
+      required(declared, 'events', 'manifest permissions.agents'),
+      'manifest permissions.agents.events',
+      1,
+      AGENTS_EVENTS.length
+    )
+    const unknown = events.find((event) => !(AGENTS_EVENTS as readonly string[]).includes(event))
+    if (unknown !== undefined) {
+      fail(`manifest permissions.agents.events contains an unknown event ${JSON.stringify(unknown)}; allowed: ${AGENTS_EVENTS.join(', ')}`)
+    }
+    // Host events are agent metadata: disclosed on top of the namespace.
+    if (!system?.includes('agents')) fail('manifest permissions.agents declares events without agents in permissions.system')
+    agents = { events: events as AgentsEventAddress[] }
+  }
+  let plugins: string[] | undefined
+  if (Object.prototype.hasOwnProperty.call(permissions, 'plugins')) {
+    plugins = uniqueStringArray(permissions.plugins, 'manifest permissions.plugins', 1, MAX_PLUGIN_TARGETS)
+    const invalid = plugins.find((target) => !PLUGIN_ID.test(target))
+    if (invalid !== undefined) fail(`manifest permissions.plugins contains an invalid plugin id ${JSON.stringify(invalid)}`)
+  }
+  return {
+    ...(system ? { system } : {}),
+    ...(shell ? { shell } : {}),
+    ...(shellExecutables ? { shellExecutables } : {}),
+    ...(scopes ? { scopes } : {}),
+    ...(network ? { network } : {}),
+    ...(agents ? { agents } : {}),
+    ...(plugins ? { plugins } : {}),
+  }
+}
+
+function parseNetwork(value: unknown): PluginManifestV2Network {
+  const network = assertObject(value, 'manifest permissions.network')
+  assertOnlyKeys(network, ['hosts'], 'manifest permissions.network')
+  const hosts = uniqueStringArray(
+    required(network, 'hosts', 'manifest permissions.network'),
+    'manifest permissions.network.hosts',
+    1,
+    MAX_NETWORK_HOSTS
+  )
+  const invalid = hosts.find((host) => host.length > 253 || !V2_NETWORK_HOST.test(host))
+  if (invalid !== undefined) {
+    fail(`manifest permissions.network.hosts contains an invalid host ${JSON.stringify(invalid)}; a host is lowercase DNS labels such as api.example.com, optionally starting with *. for one wildcard label, with no scheme, port or path`)
+  }
+  return { hosts }
 }
 
 function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
@@ -546,13 +766,17 @@ function parseMarketplace(value: unknown): PluginManifestV2['marketplace'] {
 
 function parseViews(value: unknown): { views: PluginManifestV2View[] } {
   const contributes = assertObject(value, 'manifest contributes')
-  assertOnlyKeys(contributes, ['views'], 'manifest contributes')
+  assertOnlyKeys(
+    contributes,
+    ['views', 'commands', 'agentTools', 'api', 'pipelineNodes', 'settings', 'statusBar', 'paneActions', 'explorerMenu'],
+    'manifest contributes'
+  )
   if (!Array.isArray(contributes.views) || contributes.views.length < 1 || contributes.views.length > 16) {
     fail('manifest contributes.views must contain 1-16 view(s)')
   }
   const views = contributes.views.map((raw, index) => {
     const view = assertObject(raw, `manifest contributes.views[${index}]`)
-    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives'], `manifest contributes.views[${index}]`)
+    assertOnlyKeys(view, ['id', 'kind', 'location', 'title', 'icon', 'entry', 'detailView', 'targetSchema', 'receives', 'headless'], `manifest contributes.views[${index}]`)
     const id = stringValue(required(view, 'id', `manifest contributes.views[${index}]`), `manifest contributes.views[${index}].id`)
     if (!VIEW_ID.test(id)) fail(`manifest contributes.views[${index}].id ${JSON.stringify(id)} is invalid; ${VIEW_ID_RULE}`)
     if (view.kind !== 'custom') fail(`manifest contributes.views[${index}].kind must be 'custom'`)
@@ -609,6 +833,13 @@ function parseViews(value: unknown): { views: PluginManifestV2View[] } {
     if (parsed.detailView !== undefined && parsed.location !== 'left') fail(`manifest contributes.views[${index}].detailView is only valid for a left view`)
     if (parsed.targetSchema !== undefined && parsed.location !== 'detail') fail(`manifest contributes.views[${index}].targetSchema is only valid for a detail view`)
     if (parsed.receives !== undefined && parsed.location !== 'window') fail(`manifest contributes.views[${index}].receives is only valid for a window view`)
+    if (view.headless !== undefined) {
+      if (typeof view.headless !== 'boolean') fail(`manifest contributes.views[${index}].headless must be a boolean`)
+      parsed.headless = view.headless
+      if (view.headless && (parsed.location === 'window' || parsed.location === 'detail')) {
+        fail(`manifest contributes.views[${index}].headless is not valid for a ${parsed.location} view`)
+      }
+    }
     return parsed
   })
   const ids = new Set<string>()
@@ -653,6 +884,7 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
 }
 
 const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
+const VIEW_AGENT_TOOL_KEYS = ['name', 'view', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
 const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
 // The Host backend supervisor's method-name rule (isMethodName in
 // src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
@@ -669,27 +901,49 @@ function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
     const tool = assertObject(raw, label)
     assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
     for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
-    if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
     if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
       fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
     }
-    if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
-    for (const key of ['title', 'description'] as const) {
-      const text = tool[key]
-      if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
-        fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
-      }
-    }
-    const schema = tool.inputSchema
-    if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
-    if (tool.timeoutMs !== undefined) {
-      const timeout = tool.timeoutMs
-      if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
-        fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
-      }
-    }
+    checkAgentToolFields(tool, label)
     return structuredClone(tool) as PluginManifestV2AgentTool
   })
+}
+
+/** The `viewAgentTool` definition: a tool a declared view serves (contract section 2.9). */
+function viewAgentToolList(value: unknown, viewIds: readonly string[]): PluginManifestV2ViewAgentTool[] {
+  if (!Array.isArray(value) || value.length === 0) fail('manifest contributes.agentTools must be a non-empty array')
+  return value.map((raw, index) => {
+    const label = `manifest contributes.agentTools[${index}]`
+    const tool = assertObject(raw, label)
+    assertOnlyKeys(tool, VIEW_AGENT_TOOL_KEYS, label)
+    for (const key of VIEW_AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
+    if (typeof tool.view !== 'string' || !VIEW_ID.test(tool.view)) fail(`${label}.view is invalid; ${VIEW_ID_RULE}`)
+    if (!viewIds.includes(tool.view as string)) {
+      fail(`${label}.view ${JSON.stringify(tool.view)} is not a declared view (declared: ${viewIds.join(', ')})`)
+    }
+    checkAgentToolFields(tool, label)
+    return structuredClone(tool) as PluginManifestV2ViewAgentTool
+  })
+}
+
+/** The fields a method-bound and a view-bound tool share. */
+function checkAgentToolFields(tool: Record<string, unknown>, label: string): void {
+  if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
+  if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
+  for (const key of ['title', 'description'] as const) {
+    const text = tool[key]
+    if (typeof text !== 'string' || !AGENT_TOOL_TEXT_PATTERN.test(text)) {
+      fail(`${label}.${key} must be non-empty plain text without control characters or < >`)
+    }
+  }
+  const schema = tool.inputSchema
+  if (!isRecord(schema) || schema.type !== 'object') fail(`${label}.inputSchema must be a JSON Schema of type 'object'`)
+  if (tool.timeoutMs !== undefined) {
+    const timeout = tool.timeoutMs
+    if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120_000) {
+      fail(`${label}.timeoutMs must be an integer from 1 to 120000`)
+    }
+  }
 }
 
 /** Most package-local methods / events one backend may declare. */
@@ -708,6 +962,262 @@ function backendNameList(value: unknown, label: string, maxItems: number): strin
     }
   }
   return names
+}
+
+const MAX_COMMANDS = 32
+const MAX_PLUGIN_TARGETS = 16
+/** Control, zero-width and bidirectional formatting characters: never in text
+ *  the Host shows on its own surfaces next to its own controls. */
+const SLOT_TEXT_UNSAFE = /[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/
+const BACKEND_METHOD_NAME = /^[a-z][a-zA-Z0-9._-]{0,63}$/
+const PIPELINE_NODE_ID = /^[a-z][a-z0-9-]{0,39}$/
+const N8N_TYPE = /^[A-Za-z0-9@][A-Za-z0-9@/._-]{0,127}$/
+const SETTING_KEY = /^[a-z][a-zA-Z0-9]{0,31}(\.[a-z][a-zA-Z0-9]{0,31}){0,3}$/
+
+function slotText(value: unknown, label: string, maxLength = 80): string {
+  const text = displayText(value, label, maxLength)
+  if (SLOT_TEXT_UNSAFE.test(text)) fail(`${label} contains control or bidirectional characters`)
+  return text
+}
+
+function objectList(value: unknown, label: string, maxItems: number): Record<string, unknown>[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > maxItems) {
+    fail(`${label} must contain 1-${maxItems} item(s)`)
+  }
+  return value.map((item, index) => assertObject(item, `${label}[${index}]`))
+}
+
+/** contributes.api, pipelineNodes, settings and the view slots. A method must
+ *  be one the backend declares; a slot's command one this package declares. */
+function parseContributedExtras(
+  raw: Record<string, unknown>,
+  contributes: NonNullable<PluginManifestV2['contributes']>,
+  backendMethods: string[] | undefined
+): void {
+  const backendMethod = (value: unknown, label: string): string => {
+    const method = stringValue(value, label, 1, 64)
+    if (!BACKEND_METHOD_NAME.test(method)) fail(`${label} ${JSON.stringify(method)} is not a backend method name`)
+    if (!backendMethods?.includes(method)) fail(`${label} ${JSON.stringify(method)} is not listed in backend.methods`)
+    return method
+  }
+  if (raw.api !== undefined) {
+    const seen = new Set<string>()
+    contributes.api = objectList(raw.api, 'manifest contributes.api', 32).map((entry, index) => {
+      const label = `manifest contributes.api[${index}]`
+      assertOnlyKeys(entry, ['method', 'description'], label)
+      const method = backendMethod(required(entry, 'method', label), `${label}.method`)
+      if (seen.has(method)) fail(`${label}.method ${JSON.stringify(method)} is listed twice`)
+      seen.add(method)
+      return { method, description: stringValue(required(entry, 'description', label), `${label}.description`, 1, 280) }
+    })
+  }
+  if (raw.pipelineNodes !== undefined) {
+    const seen = new Set<string>()
+    contributes.pipelineNodes = objectList(raw.pipelineNodes, 'manifest contributes.pipelineNodes', 16).map((entry, index) => {
+      const label = `manifest contributes.pipelineNodes[${index}]`
+      assertOnlyKeys(entry, ['id', 'title', 'description', 'method', 'timeoutMs', 'n8nTypes'], label)
+      const id = stringValue(required(entry, 'id', label), `${label}.id`)
+      if (!PIPELINE_NODE_ID.test(id)) fail(`${label}.id ${JSON.stringify(id)} is invalid; a node id is a-z, 0-9 and -, starting with a letter`)
+      if (seen.has(id)) fail(`${label}.id ${JSON.stringify(id)} is listed twice`)
+      seen.add(id)
+      const node: PluginManifestV2PipelineNode = {
+        id,
+        title: slotText(required(entry, 'title', label), `${label}.title`),
+        method: backendMethod(required(entry, 'method', label), `${label}.method`),
+      }
+      if (entry.description !== undefined) node.description = stringValue(entry.description, `${label}.description`, 1, 280)
+      if (entry.timeoutMs !== undefined) {
+        if (typeof entry.timeoutMs !== 'number' || !Number.isInteger(entry.timeoutMs) || entry.timeoutMs < 1000 || entry.timeoutMs > 600000) {
+          fail(`${label}.timeoutMs must be an integer 1000-600000`)
+        }
+        node.timeoutMs = entry.timeoutMs
+      }
+      if (entry.n8nTypes !== undefined) {
+        node.n8nTypes = uniqueStringArray(entry.n8nTypes, `${label}.n8nTypes`, 1, 16)
+        const invalid = node.n8nTypes.find((type) => !N8N_TYPE.test(type))
+        if (invalid !== undefined) fail(`${label}.n8nTypes contains an invalid n8n node type ${JSON.stringify(invalid)}`)
+      }
+      return node
+    })
+  }
+  if (raw.settings !== undefined) {
+    const seen = new Set<string>()
+    contributes.settings = objectList(raw.settings, 'manifest contributes.settings', 32).map((entry, index) =>
+      parseSetting(entry, `manifest contributes.settings[${index}]`, seen))
+  }
+  const commands = new Set((contributes.commands ?? []).map((command) => command.id))
+  const command = (value: unknown, label: string): string => {
+    const id = stringValue(value, label)
+    if (!commands.has(id)) fail(`${label} ${JSON.stringify(id)} is not one of this package's contributes.commands`)
+    return id
+  }
+  if (raw.statusBar !== undefined) {
+    contributes.statusBar = objectList(raw.statusBar, 'manifest contributes.statusBar', 4).map((entry, index) => {
+      const label = `manifest contributes.statusBar[${index}]`
+      assertOnlyKeys(entry, ['command', 'text', 'tooltip'], label)
+      return {
+        command: command(required(entry, 'command', label), `${label}.command`),
+        text: slotText(required(entry, 'text', label), `${label}.text`),
+        ...(entry.tooltip !== undefined ? { tooltip: slotText(entry.tooltip, `${label}.tooltip`, 200) } : {}),
+      }
+    })
+  }
+  if (raw.paneActions !== undefined) {
+    contributes.paneActions = objectList(raw.paneActions, 'manifest contributes.paneActions', 8).map((entry, index) => {
+      const label = `manifest contributes.paneActions[${index}]`
+      assertOnlyKeys(entry, ['command', 'title'], label)
+      return {
+        command: command(required(entry, 'command', label), `${label}.command`),
+        title: slotText(required(entry, 'title', label), `${label}.title`),
+      }
+    })
+  }
+  if (raw.explorerMenu !== undefined) {
+    contributes.explorerMenu = objectList(raw.explorerMenu, 'manifest contributes.explorerMenu', 8).map((entry, index) => {
+      const label = `manifest contributes.explorerMenu[${index}]`
+      assertOnlyKeys(entry, ['command', 'title', 'when'], label)
+      if (entry.when !== undefined && !['file', 'directory', 'any'].includes(entry.when as string)) {
+        fail(`${label}.when must be file, directory or any`)
+      }
+      return {
+        command: command(required(entry, 'command', label), `${label}.command`),
+        title: slotText(required(entry, 'title', label), `${label}.title`),
+        ...(entry.when !== undefined ? { when: entry.when as 'file' | 'directory' | 'any' } : {}),
+      }
+    })
+  }
+}
+
+function parseSetting(entry: Record<string, unknown>, label: string, seen: Set<string>): PluginManifestV2Setting {
+  assertOnlyKeys(entry, ['key', 'title', 'description', 'type', 'default', 'options', 'minimum', 'maximum', 'maxLength'], label)
+  const key = stringValue(required(entry, 'key', label), `${label}.key`)
+  if (!SETTING_KEY.test(key)) fail(`${label}.key ${JSON.stringify(key)} is invalid; a key is up to four dot-separated camelCase words`)
+  if (seen.has(key)) fail(`${label}.key ${JSON.stringify(key)} is listed twice`)
+  seen.add(key)
+  const type = required(entry, 'type', label)
+  if (type !== 'boolean' && type !== 'string' && type !== 'number' && type !== 'enum') {
+    fail(`${label}.type must be boolean, string, number or enum`)
+  }
+  const setting: PluginManifestV2Setting = {
+    key,
+    title: slotText(required(entry, 'title', label), `${label}.title`),
+    type,
+    default: false,
+  }
+  if (entry.description !== undefined) setting.description = stringValue(entry.description, `${label}.description`, 1, 280)
+  const only = (field: string, types: readonly string[]): void => {
+    if (entry[field] !== undefined && !types.includes(type)) fail(`${label}.${field} is only for type ${types.join(' or ')}`)
+  }
+  only('options', ['enum'])
+  only('minimum', ['number'])
+  only('maximum', ['number'])
+  only('maxLength', ['string'])
+  const value = required(entry, 'default', label)
+  if (type === 'boolean') {
+    if (typeof value !== 'boolean') fail(`${label}.default must be a boolean`)
+  } else if (type === 'number') {
+    for (const bound of ['minimum', 'maximum'] as const) {
+      if (entry[bound] !== undefined) {
+        if (typeof entry[bound] !== 'number' || !Number.isFinite(entry[bound])) fail(`${label}.${bound} must be a number`)
+        setting[bound] = entry[bound] as number
+      }
+    }
+    if (setting.minimum !== undefined && setting.maximum !== undefined && setting.minimum > setting.maximum) {
+      fail(`${label}.minimum is above its maximum`)
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value) ||
+      (setting.minimum !== undefined && value < setting.minimum) ||
+      (setting.maximum !== undefined && value > setting.maximum)) {
+      fail(`${label}.default must be a number within its bounds`)
+    }
+  } else if (type === 'string') {
+    if (entry.maxLength !== undefined) {
+      if (typeof entry.maxLength !== 'number' || !Number.isInteger(entry.maxLength) || entry.maxLength < 1 || entry.maxLength > 4096) {
+        fail(`${label}.maxLength must be an integer 1-4096`)
+      }
+      setting.maxLength = entry.maxLength
+    }
+    stringValue(value, `${label}.default`, 0, setting.maxLength ?? 1024)
+  } else {
+    const options = optionList(required(entry, 'options', label), `${label}.options`)
+    setting.options = options
+    if (typeof value !== 'string' || !options.includes(value)) fail(`${label}.default must be one of its options`)
+  }
+  setting.default = value as boolean | string | number
+  return setting
+}
+
+function optionList(value: unknown, label: string): string[] {
+  const options = uniqueStringArray(value, label, 1, 32)
+  options.forEach((option, index) => slotText(option, `${label}[${index}]`))
+  return options
+}
+const COMMAND_NAME = /^[a-z][a-zA-Z0-9]*$/
+const COMMAND_TARGET_KEY = /^[a-zA-Z][a-zA-Z0-9_-]*$/
+/** First segments of the Host's own command ids. A publisher may be called any
+ *  of these, so a prefix check on the plugin id alone would not keep a plugin
+ *  command from reading as Navide's. */
+const RESERVED_COMMAND_HEADS = ['workbench', 'ui', 'editor', 'git', 'navide']
+
+function parseCommands(
+  value: unknown,
+  pluginId: string,
+  views: PluginManifestV2View[],
+  methods: string[] | undefined
+): PluginManifestV2Command[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_COMMANDS) {
+    fail(`manifest contributes.commands must contain 1-${MAX_COMMANDS} command(s)`)
+  }
+  const head = pluginId.split('.', 1)[0]
+  if (RESERVED_COMMAND_HEADS.includes(head)) {
+    fail(`manifest contributes.commands cannot be declared under ${JSON.stringify(head)}, which is a namespace of Navide's own commands`)
+  }
+  const seen = new Set<string>()
+  return value.map((raw, index) => {
+    const label = `manifest contributes.commands[${index}]`
+    const command = assertObject(raw, label)
+    assertOnlyKeys(command, ['id', 'title', 'run', 'suggestedKey'], label)
+    const id = stringValue(required(command, 'id', label), `${label}.id`)
+    const prefix = `${pluginId}.`
+    if (!id.startsWith(prefix) || !COMMAND_NAME.test(id.slice(prefix.length))) {
+      fail(`${label}.id ${JSON.stringify(id)} is invalid; a command id is the plugin id, a dot, then a name of letters and digits starting with a lower-case letter, for example ${prefix}runTests`)
+    }
+    if (seen.has(id)) fail(`${label}.id ${JSON.stringify(id)} is declared twice`)
+    seen.add(id)
+    const title = displayText(required(command, 'title', label), `${label}.title`)
+    const run = assertObject(required(command, 'run', label), `${label}.run`)
+    let parsedRun: PluginManifestV2CommandRun
+    if (run.view !== undefined) {
+      assertOnlyKeys(run, ['view', 'target'], `${label}.run`)
+      const view = stringValue(run.view, `${label}.run.view`)
+      if (!views.some((candidate) => candidate.id === view)) {
+        fail(`${label}.run.view ${JSON.stringify(view)} is not a view this manifest declares`)
+      }
+      parsedRun = { view }
+      if (run.target !== undefined) {
+        const target = assertObject(run.target, `${label}.run.target`)
+        const entries = Object.entries(target)
+        if (entries.length < 1 || entries.length > 16) fail(`${label}.run.target must contain 1-16 key(s)`)
+        for (const [key, text] of entries) {
+          if (!COMMAND_TARGET_KEY.test(key)) fail(`${label}.run.target key ${JSON.stringify(key)} is invalid`)
+          stringValue(text, `${label}.run.target.${key}`, 0, 256)
+        }
+        parsedRun.target = target as Record<string, string>
+      }
+    } else if (run.method !== undefined) {
+      assertOnlyKeys(run, ['method'], `${label}.run`)
+      const method = stringValue(run.method, `${label}.run.method`)
+      if (!methods?.includes(method)) fail(`${label}.run.method ${JSON.stringify(method)} is not listed in backend.methods`)
+      parsedRun = { method }
+    } else {
+      fail(`${label}.run must name a view or a method`)
+    }
+    const parsed: PluginManifestV2Command = { id, title, run: parsedRun }
+    if (command.suggestedKey !== undefined) {
+      parsed.suggestedKey = stringValue(command.suggestedKey, `${label}.suggestedKey`, 1, 64)
+    }
+    return parsed
+  })
 }
 
 export function parseManifestV2(raw: unknown): PluginManifestV2 {
@@ -755,14 +1265,28 @@ export function parseManifestV2(raw: unknown): PluginManifestV2 {
     if (manifest.contributes !== undefined || manifest.backend !== undefined) {
       fail('an extension pack must not declare contributes or backend')
     }
-    if (permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined) {
+    if (
+      permissions.system !== undefined || permissions.shell !== undefined || permissions.scopes !== undefined ||
+      permissions.network !== undefined || permissions.agents !== undefined || permissions.plugins !== undefined
+    ) {
       fail('an extension pack must not request permissions')
     }
   } else if (manifest.contributes === undefined && manifest.backend === undefined) {
     fail('manifest must declare contributes or backend')
   }
-  const contributes = manifest.contributes === undefined ? undefined : parseViews(manifest.contributes)
+  const contributes: PluginManifestV2['contributes'] = manifest.contributes === undefined ? undefined : parseViews(manifest.contributes)
   const backend = manifest.backend === undefined ? undefined : parseBackend(manifest.backend)
+  const declaredCommands = isRecord(manifest.contributes) ? manifest.contributes.commands : undefined
+  if (contributes && declaredCommands !== undefined) {
+    contributes.commands = parseCommands(declaredCommands, id, contributes.views, backend?.methods)
+  }
+  const declaredViewTools = isRecord(manifest.contributes) ? manifest.contributes.agentTools : undefined
+  if (contributes && declaredViewTools !== undefined) {
+    contributes.agentTools = viewAgentToolList(declaredViewTools, contributes.views.map((view) => view.id))
+  }
+  if (contributes && isRecord(manifest.contributes)) {
+    parseContributedExtras(manifest.contributes, contributes, backend?.methods)
+  }
   return {
     schemaVersion: 2,
     apiVersion,
@@ -946,13 +1470,25 @@ export class PluginError extends Error {
   }
 }
 
-export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams {
+export interface PublicMethodParams extends EditorFilesystemParams, EditorAiParams, AiTerminalParams, EditorNativeParams, GitCapabilityParams, GitAccountParams, IssueParams, EditorPreferenceParams, AgentsParams, PluginsParams, WebParams, SecretsParams, AgentNotifyParams {
   'ui.openFilePicker': FilePickerRequest
   'fs.readFile': { path: string; encoding?: string; selectionGrant?: string }
+  /** `encoding: 'base64'` (Navide 0.2.40+) writes binary: `content` is the base64 text of the bytes. */
   'fs.writeFile': { path: string; content: string; encoding?: string; expectedMtime?: number; selectionGrant?: string }
   'fs.readImage': { path: string; selectionGrant?: string }
   'fs.listDirectory': { path: string; showHidden?: boolean }
   'fs.listFilesFlat': { query?: string; maxResults?: number }
+  'fs.queryFiles': {
+    query: string
+    matchOn?: 'name' | 'path'
+    mode?: 'substring' | 'subsequence' | 'glob'
+    exclude?: string[]
+    respectGitignore?: boolean
+    includeHidden?: boolean
+    includeNoiseDirs?: boolean
+    limit?: number
+    cursor?: string
+  }
   'fs.glob': { pattern: string }
   'fs.stat': { path: string; selectionGrant?: string }
   'fs.statPath': { path: string; selectionGrant?: string }
@@ -962,6 +1498,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'ui.shareCreate': { path: string; ttlSeconds?: number; requireLogin?: boolean; sendToChat?: boolean; chatId?: string }
   'ui.shareChatTargets': Record<string, never>
   'ui.openExternal': { url: string }
+  'ui.getLocale': Record<string, never>
   'aiCli.listProfiles': { terminalView?: boolean }
   'aiCli.startSession': { profileId: string; requestId?: string; cols: number; rows: number; yolo?: boolean; persistView?: boolean }
   'aiCli.resumeSession': { cols: number; rows: number; persistView?: boolean }
@@ -978,7 +1515,7 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'storage.delete': { scope: StoragePartitionScope; key: string }
 }
 
-export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults {
+export interface PublicMethodResults extends EditorFilesystemResults, EditorAiResults, AiTerminalResults, EditorNativeResults, GitCapabilityResults, GitAccountResults, IssueResults, EditorPreferenceResults, AgentsResults, PluginsResults, WebResults, SecretsResults, AgentNotifyResults {
   'ui.openFilePicker': { opened: boolean }
   'fs.readFile': {
     content: string
@@ -1001,6 +1538,15 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     error?: string
   }
   'fs.listFilesFlat': { files?: string[]; ok?: boolean; truncated?: boolean; error?: string }
+  'fs.queryFiles': {
+    ok: boolean
+    files?: Array<{ path: string; name: string; matchSpans: Array<[number, number]>; size: number; mtime: number }>
+    nextCursor?: string
+    gitignoreApplied?: boolean
+    listingTruncated?: boolean
+    timedOut?: boolean
+    error?: string
+  }
   'fs.glob': { paths: string[] }
   'fs.stat': { kind: 'file' | 'directory'; size: number; modifiedAt: string }
   'fs.statPath': { exists: boolean }
@@ -1014,6 +1560,8 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
     | { ok: true; chats: Array<{ chatId: string; platform: string; name: string }> }
     | { ok: false; code: string; message: string }
   'ui.openExternal': { opened: boolean }
+  /** The interface language now in effect, a BCP 47 tag such as `en-US` (Navide 0.2.40+). */
+  'ui.getLocale': { locale: string }
   'aiCli.listProfiles': { profiles: Array<{ id: string; label: string; fullScreenTui?: boolean; bracketedPaste?: boolean; shiftEnterSequence?: string }> }
   'aiCli.startSession': { sessionId: string }
   'aiCli.resumeSession': { sessionId: string; profileId: string } | null
@@ -1039,9 +1587,11 @@ export type PublicMethod = keyof PublicMethodParams
 export type Params<M extends PublicMethod> = PublicMethodParams[M]
 export type Result<M extends PublicMethod> = PublicMethodResults[M]
 
-export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents {
+export interface PublicEventPayloads extends EditorAiEvents, EditorNativeEvents, EditorPreferenceEvents, GitCredentialEvents, AgentsEventPayloads, WebEventPayloads {
   /** UI notification for a write to this receiver's own selected snapshot. */
   'ui.pluginStorageChanged': { scope: StoragePartitionScope; key: string; value: JsonValue; deleted: boolean }
+  /** The interface switched language; `locale` is what `ui.getLocale` now returns (Navide 0.2.40+). */
+  'ui.localeChanged': { locale: string }
   'workspace.filesChanged': {
     changes: Array<{ path: string; kind: 'created' | 'changed' | 'deleted' }>
   }
@@ -1057,3 +1607,4 @@ export interface Disposable {
 }
 
 export { manifestV2Schema, capabilitiesV1, executionPolicyV1Schema }
+export { PLUGIN_API_VERSION, isPluginApiSupported, pluginApiMajor } from './apiVersion.js'

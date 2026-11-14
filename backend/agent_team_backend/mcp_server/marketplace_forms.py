@@ -195,6 +195,10 @@ def _version_target(namespace: Any, name: Any, version: Any) -> tuple[dict[str, 
 async def marketplace_developer_application_open(ctx: Context) -> dict[str, Any]:
     """Open the Navide Marketplace developer application form in Navide for the user.
 
+    New to Navide plugins? First install the guide with
+    skills_prepare_install(source="navide:plugin-authoring"); it walks you
+    and the user from the template to a published version.
+
     Use this when the user wants to fill the application in themselves: call
     it, then stop and wait for them. Navide brings in what it already has (the
     user's earlier application, if any); everything else is left blank, and
@@ -250,16 +254,51 @@ async def marketplace_developer_status(ctx: Context) -> dict[str, Any]:
 
     Read-only. Returns {ok, signed_in: {account, publisher}, namespace,
     key_registered, application: {status, fields, field_sources, source,
-    reason, submitted_at, decided_at} | null}. status is none, pending,
+    reason, submitted_at, decided_at} | null, members: {your_role, items:
+    [{member_id, role, added_at}]} | null}. status is none, pending,
     approved, rejected or revoked; reason is the reviewer's when rejected or
-    revoked. Never carries a token or key. NOT_SIGNED_IN means the user has
+    revoked. members lists who may publish under the signed-in namespace
+    (role owner or publisher; null without a publisher sign-in); only the
+    user changes it, in Settings > Navide Marketplace > Developer. Never
+    carries a token or key. NOT_SIGNED_IN means the user has
     not signed in under Settings > Navide Marketplace > Developer.
+
+    next_step says what the user does next: "sign-in" (with NOT_SIGNED_IN),
+    "apply" (marketplace_developer_application_open or _fill), "wait-for-review",
+    "register-key" (sign in as a publisher in Settings > Navide Marketplace >
+    Developer), "publish" (marketplace_publish_open or _fill), or null when
+    the developer status was revoked; guide is the page that explains every
+    step, to give the user.
     """
     try:
         _core._resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
-    return await _developer_answer({"kind": "developer-status"})
+    answer = await _developer_answer({"kind": "developer-status"})
+    if answer.get("ok") is True:
+        answer["next_step"] = _developer_next_step(answer)
+    elif answer.get("error_code") == "NOT_SIGNED_IN":
+        answer["next_step"] = "sign-in"
+    else:
+        return answer
+    answer["guide"] = BUILD_FOR_NAVIDE_URL
+    return answer
+
+
+#: The one entry page for Navide plugin authors (plan v2_8714c5 b4).
+BUILD_FOR_NAVIDE_URL = "https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md"
+
+
+def _developer_next_step(status: dict[str, Any]) -> str | None:
+    application = status.get("application")
+    state = application.get("status") if isinstance(application, dict) else None
+    if state in (None, "none", "rejected"):
+        return "apply"
+    if state == "pending":
+        return "wait-for-review"
+    if state != "approved":
+        return None
+    return "publish" if status.get("key_registered") is True else "register-key"
 
 
 # ── publish (S0, S5, S6) ─────────────────────────────────────────────────────
@@ -268,6 +307,10 @@ async def marketplace_developer_status(ctx: Context) -> dict[str, Any]:
 @server.tool()
 async def marketplace_publish_open(ctx: Context, path: str = "") -> dict[str, Any]:
     """Open the Navide Marketplace publish form in Navide for the user.
+
+    New to Navide plugins? First install the guide with
+    skills_prepare_install(source="navide:plugin-authoring"); it walks you
+    and the user from the template to a published version.
 
     Use this when the user wants to publish themselves: call it, then
     stop and wait for them. `path` optionally brings in a .vsix package (an

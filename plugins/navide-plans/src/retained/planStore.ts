@@ -22,6 +22,7 @@ import {
   writePlanMeta,
   replacePlanSectionBody,
   deleteSection as deleteMarkdownSection,
+  sectionRegion as markdownSectionRegion,
   parsePlanFile,
 } from './usePlanFile'
 import {
@@ -31,6 +32,7 @@ import {
   syncTodoMarkup,
   replaceSectionBody as replaceHtmlSectionBody,
   deleteSection as deleteHtmlSection,
+  sectionRegion as htmlSectionRegion,
   type HtmlPlanMeta,
 } from './usePlanHtml'
 import { extractPlanOutline } from './planRuntime'
@@ -50,6 +52,25 @@ export interface WriteResult {
   error?: string
   /** The final on-disk content on success, or the fresh content on abandon. */
   raw?: string
+  /** A section write merged into a document someone else had changed elsewhere. */
+  merged?: boolean
+  /** The section itself changed on disk since the edit began; nothing was written. */
+  sectionConflict?: SectionConflict
+}
+
+/**
+ * Both sides of a section that changed on disk while the user edited it.
+ * `mine` is what the user submitted (empty for a delete), `theirs` the
+ * section's current source on disk (null when it no longer exists), and
+ * `fresh` the whole document it was read from: passing `fresh` back as the
+ * base writes `mine` over exactly that version, and conflicts again if the
+ * document moved once more.
+ */
+export interface SectionConflict {
+  anchor: string
+  mine: string
+  theirs: string | null
+  fresh: string
 }
 
 export type SectionBody = { kind: 'markdown'; text: string } | { kind: 'html'; sanitized: string }
@@ -83,8 +104,20 @@ export interface PlanStore {
      */
     syncBody?: (content: string) => string,
   ): Promise<WriteResult>
-  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody): Promise<WriteResult>
-  deleteSection(ctx: PlanCtx, anchor: string): Promise<WriteResult>
+  /**
+   * `base` is the document the user was looking at when the edit began. With
+   * it, a section that changed on disk since then is reported as
+   * `sectionConflict` instead of being overwritten; changes elsewhere in the
+   * document are kept and the result says `merged`. Without it, the write is
+   * reapplied to fresh bytes on a conflict, as for an agent-side mutation.
+   */
+  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody, base?: string): Promise<WriteResult>
+  deleteSection(ctx: PlanCtx, anchor: string, base?: string): Promise<WriteResult>
+  /** The source of the section `anchor` names (heading included), or null. */
+  sectionRegion(raw: string, anchor: string): string | null
+  /** `raw` with the section `anchor` replaced by `body`, or removed when
+   *  `body` is absent: the same edit a section write applies, without I/O. */
+  withSection(raw: string, anchor: string, body?: SectionBody): string
   outline(raw: string): string[]
 }
 
@@ -92,6 +125,7 @@ interface ReadFileResp {
   ok: boolean
   content?: string
   mtime?: number
+  sha256?: string
   error?: string
 }
 interface WriteFileResp {
@@ -108,13 +142,15 @@ function readFile(ctx: PlanCtx) {
   })
 }
 
-/** Write content back with the optimistic-lock `expected_mtime` (when known). */
-function writeFile(ctx: PlanCtx, content: string, expectedMtime?: number) {
+/** Write content back with the optimistic-lock `expected_mtime` and
+ *  `expected_sha256` of the read it was derived from (each when known). */
+function writeFile(ctx: PlanCtx, content: string, read: { mtime?: number; sha256?: string }) {
   return ctx.backend.send<WriteFileResp>('fs.write_file', {
     workspace_path: ctx.workspacePath,
     rel_path: ctx.relPath,
     content,
-    ...(typeof expectedMtime === 'number' ? { expected_mtime: expectedMtime } : {}),
+    ...(typeof read.mtime === 'number' ? { expected_mtime: read.mtime } : {}),
+    ...(typeof read.sha256 === 'string' ? { expected_sha256: read.sha256 } : {}),
   })
 }
 
@@ -132,10 +168,9 @@ async function writeBody(ctx: PlanCtx, mutate: (fresh: string) => string): Promi
       return { ok: false, error: readResp.payload?.error }
     }
     const fresh = readResp.payload.content
-    const expectedMtime = readResp.payload.mtime
     const next = mutate(fresh)
     if (next === fresh) return { ok: true, raw: fresh } // no-op: anchor not found or region refused
-    const resp = await writeFile(ctx, next, expectedMtime)
+    const resp = await writeFile(ctx, next, readResp.payload)
     if (resp.payload?.ok) return { ok: true, raw: next }
     if (resp.payload?.conflict) {
       if (attempt === 0) continue // file changed under us — re-read and retry once
@@ -144,6 +179,45 @@ async function writeBody(ctx: PlanCtx, mutate: (fresh: string) => string): Promi
     return { ok: false, error: resp.payload?.error }
   }
   return { ok: false } // unreachable: both iterations return
+}
+
+/** Re-reads allowed while other writers keep moving the document. */
+const SECTION_WRITE_ATTEMPTS = 3
+
+/**
+ * A user's section write against the document they saw (`base`). Each attempt
+ * compares the section in `base` with the one on disk: unchanged, the edit is
+ * applied to the fresh bytes (keeping every other change); changed, the
+ * attempt stops with both sides so the user can choose. A write that loses a
+ * race is re-evaluated the same way, never reapplied blindly.
+ */
+async function writeSection(
+  ctx: PlanCtx,
+  base: string,
+  anchor: string,
+  mine: string,
+  region: (raw: string, anchor: string) => string | null,
+  mutate: (fresh: string) => string,
+): Promise<WriteResult> {
+  for (let attempt = 0; attempt < SECTION_WRITE_ATTEMPTS; attempt++) {
+    const readResp = await readFile(ctx)
+    if (!readResp.payload?.ok || readResp.payload.content === undefined) {
+      return { ok: false, error: readResp.payload?.error }
+    }
+    const fresh = readResp.payload.content
+    if (fresh !== base) {
+      const theirs = region(fresh, anchor)
+      if (theirs !== region(base, anchor)) {
+        return { ok: false, sectionConflict: { anchor, mine, theirs, fresh } }
+      }
+    }
+    const next = mutate(fresh)
+    if (next === fresh) return { ok: true, raw: fresh } // no-op: anchor not found or region refused
+    const resp = await writeFile(ctx, next, readResp.payload)
+    if (resp.payload?.ok) return { ok: true, raw: next, ...(fresh !== base ? { merged: true } : {}) }
+    if (!resp.payload?.conflict) return { ok: false, error: resp.payload?.error }
+  }
+  return { ok: false, conflict: true }
 }
 
 /** Strip the memory-only `format` field before serialization; never persisted. */
@@ -193,7 +267,6 @@ class HtmlPlanStore implements PlanStore {
         return { ok: false, error: readResp.payload?.error }
       }
       const freshContent = readResp.payload.content
-      const expectedMtime = readResp.payload.mtime
       const parsed = parseHtmlPlanMeta(freshContent)
       if (!parsed) return { ok: false, error: 'not a plan file' }
       const next = mutate({ ...parsed.meta, format: 'html' } as PlanMeta)
@@ -203,7 +276,7 @@ class HtmlPlanStore implements PlanStore {
       content = syncStageMarkup(content, nextHtml.stage)
       for (const todo of nextHtml.todos) content = syncTodoMarkup(content, todo.id, todo.status)
       if (syncBody) content = syncBody(content)
-      const resp = await writeFile(ctx, content, expectedMtime)
+      const resp = await writeFile(ctx, content, readResp.payload)
       if (resp.payload?.ok) return { ok: true, raw: content }
       if (resp.payload?.conflict) {
         if (attempt === 0) continue // re-read and retry once
@@ -214,13 +287,24 @@ class HtmlPlanStore implements PlanStore {
     return { ok: false } // unreachable: both iterations return
   }
 
-  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody): Promise<WriteResult> {
+  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody, base?: string): Promise<WriteResult> {
     const html = body.kind === 'html' ? body.sanitized : body.text
-    return writeBody(ctx, (fresh) => replaceHtmlSectionBody(fresh, anchor, html))
+    const mutate = (fresh: string) => replaceHtmlSectionBody(fresh, anchor, html)
+    return base === undefined ? writeBody(ctx, mutate) : writeSection(ctx, base, anchor, html, htmlSectionRegion, mutate)
   }
 
-  deleteSection(ctx: PlanCtx, anchor: string): Promise<WriteResult> {
-    return writeBody(ctx, (fresh) => deleteHtmlSection(fresh, anchor))
+  deleteSection(ctx: PlanCtx, anchor: string, base?: string): Promise<WriteResult> {
+    const mutate = (fresh: string) => deleteHtmlSection(fresh, anchor)
+    return base === undefined ? writeBody(ctx, mutate) : writeSection(ctx, base, anchor, '', htmlSectionRegion, mutate)
+  }
+
+  sectionRegion(raw: string, anchor: string): string | null {
+    return htmlSectionRegion(raw, anchor)
+  }
+
+  withSection(raw: string, anchor: string, body?: SectionBody): string {
+    if (!body) return deleteHtmlSection(raw, anchor)
+    return replaceHtmlSectionBody(raw, anchor, body.kind === 'html' ? body.sanitized : body.text)
   }
 
   outline(raw: string): string[] {
@@ -260,14 +344,13 @@ class MarkdownPlanStore implements PlanStore {
         return { ok: false, error: readResp.payload?.error }
       }
       const freshContent = readResp.payload.content
-      const expectedMtime = readResp.payload.mtime
       const freshMeta = parsePlanMeta(freshContent)
       if (!freshMeta) return { ok: false, error: 'not a plan file' }
       const next = mutate(freshMeta)
       if (!next) return { ok: false, raw: freshContent } // mutation abandoned
       let content = writePlanMeta(next, freshContent)
       if (syncBody) content = syncBody(content)
-      const resp = await writeFile(ctx, content, expectedMtime)
+      const resp = await writeFile(ctx, content, readResp.payload)
       if (resp.payload?.ok) return { ok: true, raw: content }
       if (resp.payload?.conflict) {
         if (attempt === 0) continue // re-read and retry once
@@ -278,13 +361,24 @@ class MarkdownPlanStore implements PlanStore {
     return { ok: false } // unreachable: both iterations return
   }
 
-  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody): Promise<WriteResult> {
+  replaceSectionBody(ctx: PlanCtx, anchor: string, body: SectionBody, base?: string): Promise<WriteResult> {
     const text = body.kind === 'markdown' ? body.text : body.sanitized
-    return writeBody(ctx, (fresh) => replacePlanSectionBody(fresh, anchor, text))
+    const mutate = (fresh: string) => replacePlanSectionBody(fresh, anchor, text)
+    return base === undefined ? writeBody(ctx, mutate) : writeSection(ctx, base, anchor, text, markdownSectionRegion, mutate)
   }
 
-  deleteSection(ctx: PlanCtx, anchor: string): Promise<WriteResult> {
-    return writeBody(ctx, (fresh) => deleteMarkdownSection(fresh, anchor))
+  deleteSection(ctx: PlanCtx, anchor: string, base?: string): Promise<WriteResult> {
+    const mutate = (fresh: string) => deleteMarkdownSection(fresh, anchor)
+    return base === undefined ? writeBody(ctx, mutate) : writeSection(ctx, base, anchor, '', markdownSectionRegion, mutate)
+  }
+
+  sectionRegion(raw: string, anchor: string): string | null {
+    return markdownSectionRegion(raw, anchor)
+  }
+
+  withSection(raw: string, anchor: string, body?: SectionBody): string {
+    if (!body) return deleteMarkdownSection(raw, anchor)
+    return replacePlanSectionBody(raw, anchor, body.kind === 'markdown' ? body.text : body.sanitized)
   }
 
   outline(raw: string): string[] {
@@ -292,6 +386,24 @@ class MarkdownPlanStore implements PlanStore {
     // `##` heading has no anchor to scroll to, so listing it dead-ends the nav.
     return parsePlanFile(raw)?.sections.filter((s) => s.body.trim()).map((s) => s.heading) ?? []
   }
+}
+
+/**
+ * Keep the side of a section conflict the user did not choose as a version
+ * of the plan. `mine` is the user's document (their section applied to the
+ * disk version shown in the conflict) when they kept the disk version; absent,
+ * the backend pins the disk bytes it is about to be overwritten with. Resolves
+ * to whether a version now holds it.
+ */
+export async function preserveConflictSide(ctx: PlanCtx, mine?: string): Promise<boolean> {
+  const resp = await ctx.backend.send<{ ok?: boolean; version?: string | null }>('history.preserve', {
+    workspace_path: ctx.workspacePath,
+    rel_path: ctx.relPath,
+    ...(mine === undefined ? {} : { content: mine }),
+  })
+  // A document that keeps no history (no stage, or outside .agent-team/plans)
+  // answers ok with no version: nothing was kept.
+  return resp.payload?.ok === true && typeof resp.payload.version === 'string'
 }
 
 const htmlPlanStore = new HtmlPlanStore()

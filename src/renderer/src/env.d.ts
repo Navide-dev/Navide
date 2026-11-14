@@ -6,6 +6,7 @@ type UpdaterSettings = import('../../shared/updater').UpdaterSettings
 type UpdateState = import('../../shared/updater').UpdateState
 type ExecutionPolicyApi = import('../../shared/executionPolicy').ExecutionPolicyApi
 type FnKeyApi = import('../../shared/fnKey').FnKeyApi
+type AppLockApi = import('../../shared/appLock').AppLockApi
 type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type DeveloperApi = import('../../shared/marketplaceDeveloper').DeveloperApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
@@ -18,6 +19,10 @@ type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDi
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
 type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
+type PluginActivityOverview = import('../../shared/pluginActivity').PluginActivityOverview
+type PluginStopSummary = import('../../shared/pluginStop').PluginStopSummary
+type PluginStopRecord = import('../../shared/pluginStop').PluginStopRecord
+type PluginGlobalStopRecord = import('../../shared/pluginStop').PluginGlobalStopRecord
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -53,8 +58,9 @@ interface GitCredential {
   expectedHost: string
 }
 
-interface GitRecoveryChanged {
-  legacy: boolean
+interface PluginActivationFailed {
+  pluginId: string
+  reason: string | null
 }
 
 interface PlansRecoveryChanged {
@@ -93,7 +99,7 @@ declare global {
       retryGitV2: () => Promise<{ ok: boolean; reason?: string }>
       retryPlansV2: () => Promise<{ ok: boolean; reason?: string }>
       repairPlansStorageRecord: () => Promise<{ ok: boolean; repaired: boolean; reason?: string }>
-      onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
+      onPluginActivationFailed: (cb: (change: PluginActivationFailed) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onPluginAgentAction?: (cb: (notice: {
@@ -105,8 +111,10 @@ declare global {
         requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
       }) => void) => () => void
       onPluginStagedCandidateNotActivated?: (cb: (notice: { pluginId: string; version: string; reason: string }) => void) => () => void
+      onPluginSecretsNotice?: (cb: (notice: import('../../shared/pluginSecretsNotice').PluginSecretsNotice) => void) => () => void
       onPluginStagedUpdates?: (cb: (updates: { pluginId: string; activeVersion: string; stagedVersion: string; reason?: string }[]) => void) => () => void
       onPluginSwitched?: (cb: (notice: { pluginId: string; fromVersion: string; toVersion: string; source: 'marketplace' | 'local-unsigned'; at: number; agent?: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host'; tainted?: true } }) => void) => () => void
+      onPluginSwitching?: (cb: (notice: { pluginId: string; toVersion: string; phase: 'start' | 'end' }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -176,18 +184,7 @@ declare global {
         compare?: string
       }) => Promise<{ ok: boolean }>
       openBranchDiffWindow?: (args: { workspace_path: string; base: string }) => Promise<{ ok: boolean }>
-      openGitLeftView: (args: {
-        workspace_path: string
-        bounds: { x: number; y: number; width: number; height: number }
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      updateGitLeftView: (args: {
-        bounds: { x: number; y: number; width: number; height: number }
-        visible: boolean
-      }) => Promise<{ ok: boolean; fallback?: 'legacy' }>
-      closeGitLeftView: () => Promise<{ ok: boolean }>
-      getZoomFactor?: () => Promise<number>
       setUiScale?: (scale: number) => Promise<number>
-      onZoomChanged?: (cb: () => void) => () => void
       onPlanOpenDoc: (handler: (relPath: string) => void) => () => void
       openDiffWindow: (args: {
         workspace_path: string
@@ -251,6 +248,15 @@ declare global {
       readKeybindings: () => Promise<{ ok: boolean; content?: string; error?: string }>
       writeKeybindings: (content: string) => Promise<{ ok: boolean; error?: string }>
       onKeybindingsChanged: (cb: (content: string) => void) => void
+      readWorkbench?: () => Promise<{ ok: boolean; content?: string; error?: string }>
+      writeWorkbench?: (content: string) => Promise<{ ok: boolean; error?: string }>
+      onWorkbenchChanged?: (cb: (content: string) => void) => void
+      workbenchProject?: {
+        inspect: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchSnapshot>
+        accept: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+        revoke: () => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+        markNotified: (fingerprint: string) => Promise<import('../../shared/projectWorkbench').ProjectWorkbenchResult>
+      }
       getBootstrapSettings: () => string
       broadcastLanguageChange: (locale: string) => void
       onLanguageChanged: (cb: (locale: string) => void) => void
@@ -358,6 +364,13 @@ declare global {
         dismiss: () => Promise<{ ok: boolean }>
         getAutoRestore: () => Promise<boolean>
         setAutoRestore: (value: boolean) => Promise<{ ok: boolean }>
+        /** Windows closed while the app kept running, newest first. */
+        listRecentlyClosed?: () => Promise<{ workspace_path: string; adopted_workspaces: string[]; closed_at: number }[]>
+        /** Reopen one closed window whole; no path = the newest. */
+        reopenClosed?: (workspacePath?: string) => Promise<{ ok: boolean; opened: number; focused: number; missing: string[] }>
+        onRecentlyClosedChanged?: (cb: () => void) => () => void
+        /** A reopen skipped these folders because they no longer exist. */
+        onReopenMissing?: (cb: (missing: string[]) => void) => () => void
       }
       updater?: {
         getState: () => Promise<UpdateState>
@@ -377,9 +390,6 @@ declare global {
         bind: (workspacePath: string, accountId: string) => Promise<{ ok: boolean; error?: string }>
         unbind: (workspacePath: string) => Promise<{ ok: boolean; error?: string }>
         getBinding: (workspacePath: string) => Promise<{ ok: boolean; accountId?: string | null; error?: string }>
-        getCredential: (
-          workspacePath: string
-        ) => Promise<{ ok: boolean; credential?: GitCredential | null; error?: string }>
       }
       permissions?: {
         status: () => Promise<Record<TccPermissionKey, TccPermissionStatus>>
@@ -392,6 +402,7 @@ declare global {
       media?: {
         askMicrophone: () => Promise<{ granted: boolean; status: string; prompted?: boolean }>
       }
+      appLock?: AppLockApi
       fnKey?: FnKeyApi
       deepLink?: DeepLinkApi
       developer?: DeveloperApi
@@ -407,6 +418,8 @@ declare global {
         endBackgroundAiSession?: (id: string, sessionId: string) => Promise<{ ok: boolean }>
         /** D-f: one installed plugin's activity report (read only). */
         activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** Plan P1: the Settings monitor, one row per installed plugin (read only). */
+        activityOverview?: () => Promise<{ ok: true; overview: PluginActivityOverview } | { ok: false; error: string }>
         /** D-f: installed Registry packages' disclosures and install-time scans. */
         installedDisclosures?: () => Promise<Array<{
           id: string
@@ -442,6 +455,17 @@ declare global {
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        listCommands: () => Promise<import('../../shared/pluginCommands').PluginCommandEntry[]>
+        listSlots?: () => Promise<import('../../shared/pluginCommands').PluginSlotEntry[]>
+        readSettings?: (id: string) => Promise<{
+          settings: Array<{
+            key: string; title: string; description?: string; type: 'boolean' | 'string' | 'number' | 'enum'
+            default: boolean | string | number; options?: string[]; minimum?: number; maximum?: number; maxLength?: number
+          }>
+          values: Record<string, boolean | string | number>
+        } | null>
+        writeSetting?: (id: string, key: string, value: boolean | string | number) => Promise<boolean>
+        runCommand: (args: { commandId: string; workspace_path: string; target?: import('../../shared/pluginCommands').PluginCommandTarget }) => Promise<import('../../shared/pluginCommands').PluginCommandRunResult>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
@@ -567,13 +591,35 @@ declare global {
           skippedDestroyedHostWindows: number
         }>
         discardCandidate?: (id: string) => Promise<{ ok: boolean }>
-        remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        remove: (id: string, nativeBackendData?: 'keep' | 'delete', secrets?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        secretCount?: (id: string) => Promise<{ count: number }>
+        clearSecrets?: (id: string) => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         /** The installed version's disclosure (Manifest v2), or null. */
         installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
+        /** Run a pipeline's plugin node on the contributing plugin's backend. */
+        runPipelineNode?: (request: { workspacePath: string; pluginId: string; node: string; input: string; origin: 'user' | 'agent' | 'schedule' | 'webhook' }) => Promise<
+          { ok: true; output: unknown } | { ok: false; code: string; message: string }
+        >
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
+        /** Plan P2: stop one third-party plugin at once (the Disabled switch, recorded as a stop). */
+        stop?: (id: string, via: 'settings' | 'status-bar') => Promise<{ id: string; disabled: true; changed: boolean; summary: PluginStopSummary }>
+        /** Plan P3: stop every running third-party plugin and turn the third-party switches off. */
+        stopAll?: (via: 'settings' | 'status-bar') => Promise<{ stopped: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the user's "Resume all". */
+        resumeAll?: () => Promise<{ resumed: string[]; failed: Array<{ id: string; error: string }> }>
+        /** Plan P3: the global stop in effect, or null. */
+        globalStopState?: () => Promise<PluginGlobalStopRecord | null>
+        /** Plan P4: the user's "Notify agent panes" switch. */
+        setNotifyAgents?: (id: string, allowed: boolean) => Promise<{ id: string; notifyAgents: boolean }>
+        /** Plan P5: whether automatic pauses are on, and the fixed thresholds. */
+        autoPauseState?: () => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        setAutoPause?: (enabled: boolean) => Promise<{ enabled: boolean; thresholds: Record<string, number> }>
+        /** Plan P5: Navide paused a plugin on an anomaly rule. */
+        onAutoPaused?: (handler: (notice: import('../../shared/pluginStop').PluginAutoPauseNotice) => void) => () => void
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
+        setNetworkStrict?: (id: string, strict: boolean) => Promise<{ id: string; networkStrict: boolean }>
         marketplacePackMembers: (members: string[]) => Promise<PackMemberSummary[]>
         preparePack: (args: { namespace: string; name: string }) => Promise<PreparedPackSummary>
         finishPack: (id: string) => Promise<{ recorded: boolean; pack?: InstalledPackRecord }>
@@ -585,7 +631,7 @@ declare global {
           allow: (id: string) => Promise<NativeBackendOverview>
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
-          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
+          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean } | { firstParty: boolean }) => Promise<NativeBackendOverview>
           /** Watchdog option C: unanswered resource notices (contract 5.2). */
           resourceNotices?: () => Promise<BackendResourceNoticeView[]>
           resourceStatus?: () => Promise<BackendResourceStatusView[]>
@@ -653,6 +699,12 @@ declare global {
     getsPrereleases?: boolean
     /** The user's "Disabled" switch; absent on rows it does not apply to. */
     disabled?: boolean
+    /** C1: the user's "Only allow declared network hosts" switch (present with `disabled`). */
+    networkStrict?: boolean
+    /** P2: present while the package is disabled by a stop. */
+    stopRecord?: PluginStopRecord
+    /** P4: present when the manifest declares agentNotify: the "Notify agent panes" switch (off by default). */
+    notifyAgents?: boolean
   }
 
   interface FactoryPluginSummary {
@@ -769,7 +821,7 @@ declare global {
     enabled: boolean
     plugins: NativeBackendStatusRow[]
     /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
-    agentTools?: { enabled: boolean; externalCallers: boolean }
+    agentTools?: { enabled: boolean; externalCallers: boolean; firstParty?: boolean }
     /** #642 review L2: off for this run, not saved; on again after a restart. */
     offUnsaved?: true
   }

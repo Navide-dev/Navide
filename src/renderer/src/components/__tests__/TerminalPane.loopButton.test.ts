@@ -35,6 +35,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
     ...actual,
     useTerminal: () => ({
       mount: vi.fn(),
+      stopIneffective: { value: false },
       pasteText: vi.fn(),
       updateXtermTheme: vi.fn(),
       setDisableStdin: vi.fn(),
@@ -145,6 +146,11 @@ describe('TerminalPane – loop launch button', () => {
 
     await wrapper.setProps({ loopWaitUntil: null })
     expect(wrapper.find('.loop-inline').classes()).not.toContain('waiting')
+  })
+
+  it('says the estimate is the weekly reset when it is one', () => {
+    wrapper = mountPane({ loopActive: true, loopEstimateResetAt: Date.now() + 3600_000, loopEstimateWeekly: true })
+    expect(wrapper.find('.loop-inline').attributes('title')).toContain('pane.terminal.loop-estimate-weekly-tooltip')
   })
 
   it('renders the ~HH:mm estimate on the running badge when loopEstimateResetAt is set', () => {

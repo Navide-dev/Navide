@@ -22,16 +22,17 @@
   <meta name="twitter:title" content="{{ self.title()|trim }}">
   <meta name="twitter:description" content="{{ page_description|trim }}">
   <meta name="twitter:image" content="{{ site_url }}/static/og-card.png">
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
   <link rel="stylesheet" href="{{ base }}/static/style.css">
 </head>
 <body>
   <header class="site-header">
     <div class="wrap header-inner">
-      <a class="brand" href="{{ base }}/">
+      <a class="brand" href="{{ store }}/">
         <span class="brand-mark"><svg viewBox="0 0 28 28" aria-hidden="true" focusable="false"><defs><linearGradient id="nv-mark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7d94f4"/><stop offset="1" stop-color="#3b5bdb"/></linearGradient></defs><rect x="5.5" y="5.5" width="17" height="17" rx="4.5" transform="rotate(45 14 14)" fill="url(#nv-mark)"/><rect x="10.6" y="10.6" width="6.8" height="6.8" rx="1.6" transform="rotate(45 14 14)" fill="#fff" fill-opacity=".9"/></svg></span>
         <span class="brand-name">Navide Marketplace</span>
       </a>
-      <form class="search" action="{{ base }}/" method="get" role="search">
+      <form class="search" action="{{ store }}/" method="get" role="search">
         <input type="search" name="q" value="{{ query|default('') }}"
                placeholder="Search extensions…" aria-label="Search extensions">
         <button type="submit">Search</button>
@@ -39,14 +40,15 @@
       <nav class="site-nav">
         {% if viewer %}
           {% set here = request.url.path %}
-          {% if viewer.is_admin %}<a href="{{ base }}/admin/review"{% if here.endswith('/admin/review') %} aria-current="page"{% endif %}>Review</a><a href="{{ base }}/admin/reports"{% if here.endswith('/admin/reports') %} aria-current="page"{% endif %}>Reports</a>{% endif %}
-          <a href="{{ base }}/publisher"{% if '/publisher' in here %} aria-current="page"{% endif %}>{{ viewer.name }} ▾</a>
+          {% if viewer.is_admin %}<a href="{{ dev }}/admin/review"{% if here.endswith('/admin/review') %} aria-current="page"{% endif %}>Review</a><a href="{{ dev }}/admin/reports"{% if here.endswith('/admin/reports') %} aria-current="page"{% endif %}>Reports</a>{% endif %}
+          <a href="{{ dev }}/publisher"{% if '/publisher' in here %} aria-current="page"{% endif %}>{{ viewer.name }} ▾</a>
           <form class="inline-form" method="post" action="{{ base }}/logout">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button type="submit" class="link-button">Sign out</button>
           </form>
         {% else %}
-          <a href="{{ base }}/publish"{% if request.url.path.endswith('/publish') %} aria-current="page"{% endif %}>Publish</a>
+          <a href="{{ dev }}/developer"{% if request.url.path.endswith('/developer') %} aria-current="page"{% endif %}>Build</a>
+          <a href="{{ dev }}/publish"{% if request.url.path.endswith('/publish') %} aria-current="page"{% endif %}>Publish</a>
           {% if cloud_auth %}<a href="{{ base }}/login">Sign in</a>{% endif %}
         {% endif %}
       </nav>
@@ -61,7 +63,11 @@
     <div class="wrap">
       <span class="footer-mark">Navide Marketplace</span>
       <span>Packages are served by this registry, and the Navide app verifies each one before it installs anything.</span>
-      <a href="{{ base }}/removed">Removed extensions</a>
+      <a href="{{ store }}/removed">Removed extensions</a>
+      <a href="{{ dev }}/developer">Developers</a>
+      <a href="{{ guide_url }}">Docs</a>
+      <a href="{{ discussions_url }}">Discussions</a>
+      <a href="{{ security_url }}">Security</a>
     </div>
   </footer>
 </body>

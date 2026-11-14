@@ -120,6 +120,7 @@ def test_pipeline_panes_are_still_cleared_by_start_pipeline(
     store.record_slot_spawn(ws, stage_index=0, slot_label="Build",
                             pane_id="pipe-1", agent="codex")
     assert any(p.pane_id == "pipe-1" for p in store.peek(ws).panes)
+    store.abort_pipeline(ws)  # a live run refuses a new start
     store.start_pipeline(
         ws, task_description="t2", total_stages=1,
         stage_blueprint=[{"stage_id": "01", "title": "Build", "slots": []}],

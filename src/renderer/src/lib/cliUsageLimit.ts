@@ -14,7 +14,15 @@ import {
   parseLimitReset
 } from './loopPrompt'
 import { AGENT_SPECS } from '@navide/plugin-shell'
-import { exhaustedWindow, hasHeadlineHeadroom, usageFor } from '../composables/useUsage'
+import {
+  exhaustedWindow,
+  hasHeadlineHeadroom,
+  noteSessionLimitNamed,
+  usageFor,
+  windowAbsent,
+  type UsageSnapshot,
+  type UsageWindow
+} from '../composables/useUsage'
 
 /** The limit announcement stripped of its reset clock, e.g. a wrapped or
  *  reworded "You've hit your usage limit" with no time attached.
@@ -108,8 +116,30 @@ export function quotaExhaustedPayload(hit: UsageLimitHit, pane: { agentKey: stri
   }
 }
 
+/** The weekly window that stands in for the session window, for an account a
+ *  reading proved has none. Undefined for every other account. */
+function noSessionWeekly(snap: UsageSnapshot | undefined, now: number): UsageWindow | undefined {
+  if (!windowAbsent(snap, 'session')) return undefined
+  return snap!.windows.find(
+    (w) => w.kind === 'weekly' && !w.expired && !!w.resetsAt && Date.parse(w.resetsAt) > now
+  )
+}
+
+/** The pre-limit reset estimate a running loop shows. `weekly` says which
+ *  figure it is: an account with no session window has no 5-hour window to
+ *  guess from, so it gets its weekly reset, or no estimate at all. */
+export function loopEstimate(
+  snap: UsageSnapshot | undefined,
+  now: number
+): { at: number | null; weekly: boolean } {
+  if (!windowAbsent(snap, 'session')) return { at: now + LOOP_ESTIMATE_WINDOW_MS, weekly: false }
+  const weekly = noSessionWeekly(snap, now)
+  return { at: weekly ? Date.parse(weekly.resetsAt as string) : null, weekly: true }
+}
+
 /** Resume time taken from the account's own `/usage` reading: the spent
- *  window's reset, else the session window's.
+ *  window's reset, else the session window's, else, for an account with no
+ *  session window, the weekly one's.
  *
  *  This is the FALLBACK, not the preferred source. The panel reading can be a
  *  quarter of an hour old (it costs a whole Claude Code start, so it is read
@@ -121,10 +151,42 @@ export function usageResumeAt(
   now: number = Date.now()
 ): number | null {
   const snap = usageFor(agentKey)
-  const window = exhaustedWindow(snap) ?? snap?.windows.find((w) => w.kind === 'session' && !w.expired)
+  const window =
+    exhaustedWindow(snap) ??
+    snap?.windows.find((w) => w.kind === 'session' && !w.expired) ??
+    noSessionWeekly(snap, now)
   const at = window?.resetsAt ? Date.parse(window.resetsAt) : NaN
   if (!Number.isFinite(at) || at <= now) return null
   return at + LIMIT_RESET_BUFFER_MS
+}
+
+/** A hit from its sentence. On an account with no session window, a sentence
+ *  with no date cannot be about a 5-hour clock, so the weekly reading says when
+ *  the quota is back. A sentence that names the session window keeps its own
+ *  clock: it is newer than the reading, and it means the reading was wrong. */
+function limitHit(
+  agentKey: string | undefined | null,
+  message: string,
+  resumeAt: number | null,
+  now: number
+): UsageLimitHit {
+  const evidence = parseLimitEvidence(message, now)
+  const snap = usageFor(agentKey)
+  if (agentKey && evidence.windowKind === 'session' && windowAbsent(snap, 'session')) {
+    noteSessionLimitNamed(agentKey, resumeAt ?? now + USAGE_LIMIT_UNKNOWN_TTL_MS)
+  }
+  const weekly = noSessionWeekly(snap, now)
+  const aboutWeekly = (evidence.windowKind ?? 'weekly') === 'weekly' && (evidence.modelScope ?? 'all') === 'all'
+  if (!weekly || evidence.resetAt !== null || !aboutWeekly) return { message, resumeAt, ...evidence }
+  const resetAt = Date.parse(weekly.resetsAt as string)
+  return {
+    message,
+    resumeAt: resetAt + LIMIT_RESET_BUFFER_MS,
+    resetAt,
+    windowKind: 'weekly',
+    modelScope: 'all',
+    resetPrecision: 'minute'
+  }
 }
 
 /** Detect a quota-limit announcement in a pane's buffer tail.
@@ -157,11 +219,7 @@ export function detectUsageLimit(
   if (clocked !== null) {
     if (hasHeadlineHeadroom(usageFor(agentKey))) return QUOTA_READING_VETO
     const parsed = parseLimitReset(clocked, now)
-    return {
-      message: clocked,
-      resumeAt: parsed ?? usageResumeAt(agentKey, now),
-      ...parseLimitEvidence(clocked, now)
-    }
+    return limitHit(agentKey, clocked, parsed ?? usageResumeAt(agentKey, now), now)
   }
   // The vendor's own declared notice (agents/<key>.ts quotaExhausted): its
   // exact words, so it is trusted like the clocked sentence — and vetoed by
@@ -171,9 +229,9 @@ export function detectUsageLimit(
   const own = declared ? declared.exec(tail.replace(/\s+/g, ' ')) : null
   if (own) {
     if (hasHeadlineHeadroom(usageFor(agentKey))) return QUOTA_READING_VETO
-    return { message: own[0], resumeAt: usageResumeAt(agentKey, now), ...parseLimitEvidence(own[0], now) }
+    return limitHit(agentKey, own[0], usageResumeAt(agentKey, now), now)
   }
   const bare = BARE_LIMIT_RE.exec(tail.replace(/\s+/g, ' '))
   if (!bare || exhaustedWindow(usageFor(agentKey)) === undefined) return null
-  return { message: bare[0], resumeAt: usageResumeAt(agentKey, now), ...parseLimitEvidence(bare[0], now) }
+  return limitHit(agentKey, bare[0], usageResumeAt(agentKey, now), now)
 }

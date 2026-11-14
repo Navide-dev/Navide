@@ -21,6 +21,7 @@ import { useI18n } from 'vue-i18n'
 import type { useBackend } from './useBackend'
 import {
   formatClock,
+  schedulerFailReason,
   shortId,
   type JobOwner,
   type SchedulerJob,
@@ -35,8 +36,17 @@ const DAY_MS = 86_400_000
 
 export type Light = 'running' | 'off' | 'err' | 'skip' | 'ok' | 'new'
 
+// One window can hold several instances (App.vue's behind the agent console,
+// TaskerPanel's), and the backend leaves the requesting window out of its
+// scheduler.changed broadcast: the window refreshes itself. So a list any
+// instance fetches goes to every mounted one, and the request number is shared
+// so an older list still in flight never overwrites a newer one.
+type ListApplier = (jobs: SchedulerJob[], limits: SchedulerLimits | null) => void
+const mountedInstances = new Set<ListApplier>()
+let listSeq = 0
+
 export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
-  const { t } = useI18n()
+  const { t, te } = useI18n()
 
   const jobs = ref<SchedulerJob[]>([])
   /** From the last scheduler.list; runs today is not in the change broadcast. */
@@ -82,6 +92,11 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     return !job.enabled && !!job.state?.rebound_needs_enable && !targetGone(job)
   }
 
+  /** Why the last run failed, in the UI language when its code is known. */
+  function failReason(job: SchedulerJob): string {
+    return schedulerFailReason(t, te, job.state?.last_error_code, job.state?.last_error ?? '')
+  }
+
   function skipLabel(job: SchedulerJob): string {
     const reason = job.state?.last_skip_reason
     return reason ? t(`scheduler.skip.${reason}`) : t('scheduler.skip.unknown')
@@ -90,6 +105,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   function targetLabel(job: SchedulerJob): string {
     if (isSystem(job)) return t('scheduler.system.managed-by')
     const a = job.action
+    if (a.kind === 'pipeline_start') return t('scheduler.pipeline-target', { name: a.pipeline_name || a.pipeline_id || '' })
     const name = a.pane_name || shortId(a.pane_id)
     return a.pane_id
       ? t('scheduler.target-with-id', { name, id: shortId(a.pane_id) })
@@ -119,6 +135,13 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     if (!isAgent(job.owner)) return ''
     const owner = job.owner as JobOwner
     return owner.kind === 'pane' ? t('scheduler.owner.agent', { name: whoLabel(owner) }) : whoLabel(owner)
+  }
+
+  /** Who created the job, for a job that starts a pipeline even when it is
+   *  the user's own (it spends quota unattended); ownerLabel otherwise. */
+  function creatorLabel(job: SchedulerJob): string {
+    if (job.action.kind !== 'pipeline_start') return ownerLabel(job)
+    return ownerLabel(job) || t('scheduler.owner.user')
   }
 
   function ownerTitle(job: SchedulerJob): string {
@@ -176,7 +199,11 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     return t('scheduler.when-backoff', { time: formatClock(until) })
   }
 
-  let listSeq = 0
+  const applyList: ListApplier = (list, lim) => {
+    jobs.value = list
+    limits.value = lim
+    listError.value = ''
+  }
 
   async function refresh(): Promise<void> {
     if (backend.status.value !== 'connected') return
@@ -194,9 +221,10 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
       )
       if (seq !== listSeq) return
       if (resp.ok && resp.payload && resp.payload.ok !== false) {
-        jobs.value = resp.payload.jobs ?? []
-        limits.value = resp.payload.limits ?? null
-        listError.value = ''
+        const list = resp.payload.jobs ?? []
+        const lim = resp.payload.limits ?? null
+        applyList(list, lim)
+        for (const apply of mountedInstances) if (apply !== applyList) apply(list, lim)
       } else listError.value = resp.error?.message ?? resp.payload?.error ?? 'scheduler.list failed'
     } catch (err) {
       if (seq !== listSeq) return
@@ -208,13 +236,13 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   async function mutate(type: string, payload: Record<string, unknown>): Promise<boolean> {
     opError.value = ''
     try {
-      const resp = await backend.send<{ ok: boolean; error?: string }>(type, payload, RPC_TIMEOUT_MS)
+      const resp = await backend.send<{ ok: boolean; error?: string; error_code?: string }>(type, payload, RPC_TIMEOUT_MS)
       if (!resp.ok) {
-        opError.value = resp.error?.message ?? `${type} failed`
+        opError.value = schedulerFailReason(t, te, resp.error?.code, resp.error?.message ?? `${type} failed`)
         return false
       }
       if (resp.payload && resp.payload.ok === false) {
-        opError.value = resp.payload.error ?? `${type} failed`
+        opError.value = schedulerFailReason(t, te, resp.payload.error_code, resp.payload.error ?? `${type} failed`)
         return false
       }
       return true
@@ -275,6 +303,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   let offChanged: (() => void) | null = null
 
   onMounted(() => {
+    mountedInstances.add(applyList)
     offChanged = backend.on('scheduler.changed', (p) => {
       const next = (p as { jobs?: SchedulerJob[] } | null)?.jobs
       if (Array.isArray(next)) jobs.value = next
@@ -292,6 +321,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
   )
 
   onUnmounted(() => {
+    mountedInstances.delete(applyList)
     offChanged?.()
     if (tick !== null) clearInterval(tick)
     for (const timer of graceTimers.values()) clearTimeout(timer)
@@ -307,12 +337,14 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     light,
     targetGone,
     rebound,
+    failReason,
     skipLabel,
     targetLabel,
     isSystem,
     systemWorkspace,
     backoffLabel,
     ownerLabel,
+    creatorLabel,
     ownerTitle,
     updatedByLabel,
     expiryLabel,

@@ -15,6 +15,8 @@ import {
   isEvolveSystemPane,
   openEvolvePanel,
   refreshEvolveBadges,
+  retroBeforeReclaim,
+  setEvolveBadge,
   useEvolve,
   useEvolveBadges,
   type EvolveBadge,
@@ -185,7 +187,7 @@ describe('useEvolve', () => {
     ])
     expect(timeout.actions?.map((a) => a.kind)).toEqual(['evolve-open-pane', 'evolve-interrupt', 'evolve-reclaim'])
     expect(skipped.title).toBe('自我優化未執行 · beta')
-    expect(skipped.highlights).toEqual(['這個 workspace 已有一次在執行'])
+    expect(skipped.highlights).toEqual(['這個工作區已有一次在執行'])
     expect(skipped.actions).toEqual([{ kind: 'evolve-panel', workspace: B }])
   })
 
@@ -194,7 +196,7 @@ describe('useEvolve', () => {
     emit('evolve.notice', { workspace: A, kind: 'over_budget', run: run({ id: 'r7', status: 'error', reason: 'over_budget', detail: '312k / 200k' }) })
     const row = useAnnouncements().items.value.find((i) => i.kind === 'evolve')!
     expect(row.title).toBe('自我優化超出預算 · alpha')
-    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。'])
+    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的分格。'])
     expect(row.note).toBe('312k / 200k')
     expect(row.actions).toEqual([{ kind: 'evolve-open-pane', workspace: A, paneId: 'pane-1' }])
   })
@@ -217,5 +219,49 @@ describe('useEvolve', () => {
     expect(isEvolveSystemPane('p-old')).toBe(true)
     expect(isEvolveSystemPane('evolve-1009-0900')).toBe(false)
     expect(isEvolveSystemPane('')).toBe(false)
+  })
+})
+
+describe('retroBeforeReclaim (S5b)', () => {
+  beforeEach(() => {
+    calls.length = 0
+    replies = {}
+    __resetEvolveForTest()
+  })
+
+  it('switched off, or for a reclaim the user clicked, sends nothing at all', async () => {
+    const backend = fakeBackend()
+    setEvolveBadge(A, badge({ enabled: true }))
+    expect(await retroBeforeReclaim(backend, A, 'p1', 'idle-sweep')).toBe(false)
+    setEvolveBadge(A, badge({ enabled: true, reclaim_retro: true }))
+    expect(await retroBeforeReclaim(backend, A, 'p1')).toBe(false)
+    expect(await retroBeforeReclaim(backend, B, 'p1', 'agent')).toBe(false)
+    expect(await retroBeforeReclaim(backend, undefined, 'p1', 'agent')).toBe(false)
+    expect(backend.send).not.toHaveBeenCalled()
+  })
+
+  it('switched on, asks the backend for this pane and says whether it asked', async () => {
+    const backend = fakeBackend()
+    setEvolveBadge(A, badge({ enabled: true, reclaim_retro: true }))
+    replies['evolve.retro_request'] = { ok: true, asked: true, collected: true, idle: true }
+    expect(await retroBeforeReclaim(backend, A, 'p1', 'pipeline')).toBe(true)
+    expect(calls.at(-1)).toEqual({ type: 'evolve.retro_request', payload: { workspace: A, pane_id: 'p1' } })
+    replies['evolve.retro_request'] = { ok: true, asked: false, reason: 'not_long_running' }
+    expect(await retroBeforeReclaim(backend, A, 'p2', 'agent')).toBe(false)
+  })
+
+  it('never holds a reclaim past its limit, and a failure just lets it go on', async () => {
+    vi.useFakeTimers()
+    try {
+      setEvolveBadge(A, badge({ enabled: true, reclaim_retro: true }))
+      const hanging = { ...fakeBackend(), send: vi.fn(() => new Promise(() => {})) } as unknown as ReturnType<typeof useBackend>
+      const pending = retroBeforeReclaim(hanging, A, 'p1', 'idle-sweep')
+      await vi.advanceTimersByTimeAsync(95_000)
+      expect(await pending).toBe(false)
+      const failing = { ...fakeBackend(), send: vi.fn(async () => { throw new Error('down') }) } as unknown as ReturnType<typeof useBackend>
+      expect(await retroBeforeReclaim(failing, A, 'p1', 'agent')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

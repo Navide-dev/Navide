@@ -32,35 +32,35 @@
 
 ## CLI 回報自己的 Auto-update 失敗
 
-Pane 內可能出現 CLI 自己的訊息，例如 `✘ Auto-update failed`。同一個 CLI 的安裝目錄由所有 Pane 與 Profile 共用，多個 Pane 同時更新時可能互相衝突。
+分格內可能出現 CLI 自己的訊息，例如 `✘ Auto-update failed`。同一個 CLI 的安裝目錄由所有分格與 Profile 共用，多個分格同時更新時可能互相衝突。
 
 - 開啟 Settings → CLI Agents。失敗的更新會列在該 CLI 的那一列，含時間、版本與記錄該結果的 Config Home。
 - 使用該列的更新動作。它會在終端機執行 CLI 自己的更新指令（例如 `claude update`、`codex update`、`agy update`、`grok update`）；Navide 不會自行更新 CLI。沒有更新子指令的 CLI 則改為連結到官方文件。
 - 若衝突反覆發生，可把該 CLI 的 Auto-update 設為手動。Navide 會在每次 Spawn 帶入該 CLI 官方提供的關閉變數，改由這個面板更新。
-- 執行中的 Session 會沿用啟動時的 Binary；更新後請重新啟動該 Pane。
+- 執行中的 Session 會沿用啟動時的 Binary；更新後請重新啟動該分格。
 
-## Pane 一直停在「detecting session」
+## 分格一直停在「detecting session」
 
-Codex 與 Antigravity 依賴 Log 或 Database Discovery，將新的 CLI Session 綁定到 Navide Pane。（Grok Build pane 啟動時就帶著自己的 Session ID，不會停在這裡。）
+Codex 與 Antigravity 依賴 Log 或 Database Discovery，將新的 CLI Session 綁定到 Navide 分格。（Grok Build 分格啟動時就帶著自己的 Session ID，不會停在這裡。）
 
 Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 `SessionEnd` Timeout 警告需要分別調查，不能單憑這些訊息認定 Session ID 發生碰撞。Codex 0.154 會將 `SessionStart` 排入第一輪執行佇列；只開啟 TUI 並不保證該事件已執行。
 
-某些 Codex 版本會把 Navide 以命令列注入的 `SessionStart` Hook 當成未審核的 Hook，每開一個 Pane 都跳出 **Hooks need review**。是否如此無法從版本號判斷（0.155 實測不會，0.154 有回報會），因此 Navide 改為**觀察**：第一次看到該畫面就記下來，之後開的 Codex Pane 一律不注入該 Hook，並在 Pipeline Log 說明。
+某些 Codex 版本會把 Navide 以命令列注入的 `SessionStart` Hook 當成未審核的 Hook，每開一個分格都跳出 **Hooks need review**。是否如此無法從版本號判斷（0.155 實測不會，0.154 有回報會），因此 Navide 改為**觀察**：第一次看到該畫面就記下來，之後開的 Codex 分格一律不注入該 Hook，並在 Pipeline Log 說明。
 
 - Navide **不會**修改你的 `~/.codex/config.toml`，也**不會**加上 `--dangerously-bypass-hook-trust`——那個旗標會連你自己 `hooks.json` 裡的 Hook 也一併跳過審查。
-- 停用該 Hook 只損失「Pane 對應 Session」的一條捷徑，Session 仍由 Log 與 Marker 辨識，功能不受影響。
-- 目前這個畫面若已出現，對該 Pane 按 `2`（Trust all and continue）或直接關閉 Pane 即可；不會再擋第二次。
+- 停用該 Hook 只損失「分格對應 Session」的一條捷徑，Session 仍由 Log 與 Marker 辨識，功能不受影響。
+- 目前這個畫面若已出現，對該分格按 `2`（Trust all and continue）或直接關閉分格即可；不會再擋第二次。
 
-- 傳送一般訊息，讓 CLI 保存 Pane Marker。
+- 傳送一般訊息，讓 CLI 保存分格 Marker。
 - 確認 CLI 能寫入其正常 Session Directory。
 - 第一次 Session 被偵測前，不要立即 Rebuild 或 Resume。
-- 如果偵測始終沒有完成，在建立 Issue 前保留 Pane Output 與相關 Backend Log。
+- 如果偵測始終沒有完成，在建立 Issue 前保留分格 Output 與相關 Backend Log。
 
-## Grok Build Pane
+## Grok Build 分格
 
-- **「Do you trust the contents of this directory?」** 提示問的是 pane 自己的工作區時，Navide 會替它開的每個 Grok pane 回答，並透過 `~/.grok/trusted_folders.toml` 讓其他 Grok pane 共用這個答案（便利功能 `grok.folder-trust`，可在便利功能總覽關閉並收回）；只有 pane 開啟的工作區或它底下的資料夾，才會共享到 `~/.grok`。提示還留在畫面上時 pane 會顯示為等待中，訊息會先等著，不會被打進提示裡。信任資料夾是永久的，所以 agent 或聊天轉送只能拒絕（`cli_answer_prompt` 的 "deny"，也就是 Grok 的 "No, quit"）；要接受請自己在 pane 裡按。
+- **「Do you trust the contents of this directory?」** 提示問的是分格自己的工作區時，Navide 會替它開的每個 Grok 分格回答，並透過 `~/.grok/trusted_folders.toml` 讓其他 Grok 分格共用這個答案（便利功能 `grok.folder-trust`，可在便利功能總覽關閉並收回）；只有分格開啟的工作區或它底下的資料夾，才會共享到 `~/.grok`。提示還留在畫面上時分格會顯示為等待中，訊息會先等著，不會被打進提示裡。信任資料夾是永久的，所以 agent 或聊天轉送只能拒絕（`cli_answer_prompt` 的 "deny"，也就是 Grok 的 "No, quit"）；要接受請自己在分格裡按。
 - **`[startup probe] … does not identify as Grok Build`** 表示 `PATH` 上的 `grok` 是另一個同名程式（例如社群版 `grok-cli`）。請用 `curl -fsSL https://x.ai/cli/install.sh | bash` 安裝官方 CLI。
-- **額度顯示為無法取得。** Grok Build 不對其他程式回報額度；請在 Grok pane 裡輸入 `/usage`。
+- **額度顯示為無法取得。** Grok Build 不對其他程式回報額度；請在 Grok 分格裡輸入 `/usage`。
 - **Grok 工作中送出的斜線指令會晚點才執行。** Grok Build 會把它排到目前回合結束，所以用 `cli_send_and_wait` 等到的回覆可能屬於前一個回合。
 - **回合結束得很慢。** Grok Build 預設會匯入你的 `~/.claude` hooks、skills 與 MCP 伺服器，每個回合結束時都會跑 Claude 的 stop hooks。不想這樣的話，在 `~/.grok/config.toml` 加上：
 
@@ -71,23 +71,23 @@ Codex 可開啟 `/hooks` 檢查待審核的 Hook。MCP 啟動失敗或第三方 
 
 ## Resume 無法運作
 
-- 確認該 Pane 先前曾到達 Detected Session 狀態。
+- 確認該分格先前曾到達 Detected Session 狀態。
 - 確認原始 CLI 的 History 中仍有該 Session。
 - 檢查 Workspace Path 是否改變。
 - CLI Upgrade 可能改變 Resume Syntax 或 Session Storage；Bug Report 應包含 CLI 與 Navide Version。
 
 ## Codex 對話未出現在 History
 
-- Codex 的原始 Rollout 檔案位於 Pane 隔離的 `~/.codex-panes/<session_home_id>/sessions` 目錄，與 Navide 的歷史中繼資料分開保存。History 沒有列出，不代表原始對話檔案已被刪除。
+- Codex 的原始 Rollout 檔案位於分格隔離的 `~/.codex-panes/<session_home_id>/sessions` 目錄，與 Navide 的歷史中繼資料分開保存。History 沒有列出，不代表原始對話檔案已被刪除。
 - History 搜尋涵蓋已載入的項目。即使目前搜尋沒有結果，仍可載入更多項目以繼續搜尋較早的對話；內容搜尋會重新搜尋新載入的項目。
 - 若要在 Navide 外恢復已知對話，請使用原本的 `CODEX_HOME` 與確切的 Session ID。同一個 Home 有多段對話時，不要直接選擇最新的 Session。
 - 偵測到的 Session ID 現在由 Backend 在通知 UI 前保存，後續 Snapshot 未帶入 ID 時也會保留既有值。這不會自動找回先前已遺失 Session Identity 的舊項目。
-- 已移除的 Codex 項目若沒有 **Session** 列，代表沒有 resume id，History 就不會顯示 **Resume** 按鈕。常見原因是啟動時的 **Hooks need review** 畫面吃掉了 session marker，或重啟後 pane 以全新對話重開而沒有補打 marker；兩者皆已修正。原始 rollout 仍在——依時間與 `cwd` 在 `sessions/` 下找到它，用同一個 `CODEX_HOME` 執行 `codex resume <id>`。
+- 已移除的 Codex 項目若沒有 **Session** 列，代表沒有 resume id，History 就不會顯示 **Resume** 按鈕。常見原因是啟動時的 **Hooks need review** 畫面吃掉了 session marker，或重啟後分格以全新對話重開而沒有補打 marker；兩者皆已修正。原始 rollout 仍在——依時間與 `cwd` 在 `sessions/` 下找到它，用同一個 `CODEX_HOME` 執行 `codex resume <id>`。
 
 ## Token Stats 空白或重複
 
 - Token Tracking 依賴 Provider Log Format，只有 CLI 寫入相容 Record 後才能看見 Usage。
-- 確認 Navide 已將 CLI Session 與目前 Workspace、Pane 建立關聯。
+- 確認 Navide 已將 CLI Session 與目前 Workspace、分格建立關聯。
 - 帳務請與 Provider Dashboard 比較；Navide 顯示的是 Operational Telemetry。
 - 如果重複問題持續存在，請回報 CLI Version、可安全分享的 Session ID，以及經過遮蔽的範例 Record。
 
@@ -110,11 +110,11 @@ Windows 安裝程式尚未程式碼簽章，SmartScreen 會顯示「Windows 已�
 - 先給執行權限：`chmod +x Navide-<版本>-x86_64.AppImage`。AppImage 自帶 FUSE runtime，不需另裝 `libfuse`。
 - 若安裝的是 `.deb`，請在終端機執行 `navide` 以看到啟動錯誤；該套件的更新來自 `apt`，不是 App 內更新器。
 
-## Terminal Pane 的複製貼上行為異常
+## Terminal 分格的複製貼上行為異常
 
 - CLI 啟用 Mouse Reporting 時，一般拖曳會被轉送給程式本身，劃不出任何選取。請按住 **Option**（macOS）或 **Shift**（Windows/Linux）再拖曳，強制進行文字選取。
-- **Edit → Copy**、Pane 右鍵的 **Copy** 與 **⌘C / Ctrl+C** 都會複製終端機選取。終端機的選取對作業系統不可見，因此背景執行的第三方輔助使用或剪貼簿工具（Typeless 這類會攔截 Edit 選單或 Pasteboard 的工具）可能吃掉複製動作。若複製沒有任何反應，請關閉該工具（或在 **System Settings → Privacy & Security → Accessibility** 中排除 Navide）後再試。
-- 在 CLI 面板要插入換行而不送出，可按 **Shift+Enter**、**Ctrl+Enter** 或 **⌘Enter**。一般 shell 面板只有 Shift+Enter 有此作用 —— Ctrl+Enter 維持送出，因為那是 shell 原本的行為。單純的 Enter 一律送出。
+- **Edit → Copy**、分格右鍵的 **Copy** 與 **⌘C / Ctrl+C** 都會複製終端機選取。終端機的選取對作業系統不可見，因此背景執行的第三方輔助使用或剪貼簿工具（Typeless 這類會攔截 Edit 選單或 Pasteboard 的工具）可能吃掉複製動作。若複製沒有任何反應，請關閉該工具（或在 **System Settings → Privacy & Security → Accessibility** 中排除 Navide）後再試。
+- 在 CLI 分格要插入換行而不送出，可按 **Shift+Enter**、**Ctrl+Enter** 或 **⌘Enter**。一般 shell 分格只有 Shift+Enter 有此作用 —— Ctrl+Enter 維持送出，因為那是 shell 原本的行為。單純的 Enter 一律送出。
 
 ## Context7 或 Documentation Injection 失敗
 

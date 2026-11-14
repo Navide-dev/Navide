@@ -16,6 +16,8 @@
  * (superscripts, circled digits); here only Unicode decimal digits start a number.
  */
 
+import capabilitiesV1 from './schemas/capabilities-v1.json' with { type: 'json' }
+
 declare const TextDecoder: new (label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean }) => {
   decode(input: Uint8Array): string
 }
@@ -23,7 +25,7 @@ declare const performance: { now(): number }
 
 export const STATIC_SCAN_SCHEMA_VERSION = 1
 export const STATIC_SCANNER_ID = 'navide-static-scan'
-export const STATIC_SCANNER_VERSION = '1.0.0'
+export const STATIC_SCANNER_VERSION = '1.2.0'
 export const STATIC_SCAN_LIMITS = {
   maxItemsPerKind: 100,
   maxPaths: 50,
@@ -36,6 +38,16 @@ const HOST_SHELL_ALLOWLIST = ['gh', 'git', 'glab']
 
 export type StaticScanShellCategory = 'remoteWrite' | 'remoteRead' | 'localWrite' | 'local' | 'other' | 'unknownSubcommand'
 export type StaticScanSource = 'frontend' | 'backend'
+
+/** Scanner 1.2.0: where a frontend finding was seen. Line and column are
+ *  1-based and count code points; excerpt is null when a secret rule matched
+ *  around it. Backend findings have no sites. */
+export interface StaticScanSite {
+  file: string
+  line: number
+  col: number
+  excerpt: string | null
+}
 
 export interface StaticScanReport {
   schemaVersion: 1
@@ -59,12 +71,13 @@ export interface StaticScanReport {
       source: StaticScanSource
       evidence: 'callSite' | 'commandLikeString'
       files: number
+      sites: StaticScanSite[]
     }>
     dynamic: { count: number; files: number }
   }
-  network: { hosts: Array<{ host: string; source: StaticScanSource; count: number }> }
+  network: { hosts: Array<{ host: string; source: StaticScanSource; count: number; sites: StaticScanSite[] }> }
   files: { readPaths: string[]; writePaths: string[]; dynamicPaths: number }
-  capabilities: Array<{ address: string; source: StaticScanSource }>
+  capabilities: Array<{ address: string; source: StaticScanSource; sites: StaticScanSite[] }>
   code: {
     frontend: { eval: number; newFunction: number; dynamicImport: number; stringTimers: number; obfuscationSignals: string[] } | null
     backend: null
@@ -321,9 +334,11 @@ interface Token {
   value: string
   dynamic: boolean
   escapes: number
+  /** UTF-16 offset of the token's first character (scanner 1.2.0 sites). */
+  start: number
 }
 
-const token = (kind: Token['kind'], value: string, dynamic = false, escapes = 0): Token => ({ kind, value, dynamic, escapes })
+const token = (kind: Token['kind'], value: string, dynamic = false, escapes = 0): Token => ({ kind, value, dynamic, escapes, start: 0 })
 
 // Astral code points are outside Python's \u0080-\uffff, so surrogates are too.
 const IDENT_START = /[A-Za-z_$\u0080-\ud7ff\ue000-\uffff]/
@@ -526,6 +541,7 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
       continue
     }
     let next: Token | null
+    const begin = index
     if (char === "'" || char === '"') {
       ;[next, index] = readString(text, index, deadline)
     } else if (char === '`') {
@@ -560,6 +576,7 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
       }
     }
     if (next !== null) {
+      next.start = begin
       yield next
       previous = next
     }
@@ -568,8 +585,16 @@ function* iterTokens(text: string, deadline: Deadline): Generator<Token> {
 
 // ── script rules (static_scan/js_scan.py) ───────────────────────────────────
 
-const CAPABILITY_ADDRESS_RE = /^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
-const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath'])
+const CAPABILITY_ADDRESS_RE = /^(agentMessages|agentNotify|agents|aiCli|fs|secrets|shell|storage|ui|web|workspace)\.[a-z][A-Za-z0-9]{0,63}$/
+// A literal counts only when it is a catalog address (registry/static_scan/
+// catalog_addresses.py): any other `namespace.word` string, such as the i18n
+// key 'ui.title', reaches nothing, because the Host answers METHOD_NOT_FOUND.
+const CATALOG_ADDRESSES: ReadonlySet<string> = new Set(
+  [...capabilitiesV1.methods, ...capabilitiesV1.events].map((entry) => entry.address),
+)
+const isCapabilityAddress = (value: string): boolean =>
+  CAPABILITY_ADDRESS_RE.test(value) && CATALOG_ADDRESSES.has(value)
+const FS_READ_ADDRESSES = new Set(['fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.queryFiles', 'fs.glob', 'fs.stat', 'fs.statPath'])
 const FS_WRITE_ADDRESSES = new Set(['fs.writeFile'])
 const COMMAND_EXECUTABLES = new Set([
   'git', 'gh', 'glab', 'curl', 'wget', 'ssh', 'scp', 'sftp', 'rsync', 'nc', 'ncat', 'telnet', 'ftp',
@@ -586,12 +611,30 @@ const XML_NAMESPACE_URLS = [
   'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xhtml', 'http://www.w3.org/1999/xlink',
   'http://www.w3.org/XML/1998/namespace', 'http://www.w3.org/2000/xmlns/', 'http://www.w3.org/1998/Math/MathML',
 ]
+// Error-reference links frameworks print in production builds, never fetched:
+// Vue's runtime builds `https://vuejs.org/error-reference/#runtime-${code}`.
+// Only a bare fragment that ends the URL is dropped, so anything appended
+// after it (another URL, a path) is still scanned.
+const REFERENCE_URL_RE = new RegExp(`https://vuejs\\.org/error-reference/#[A-Za-z0-9_-]*(?=$|\\$\\{|[${PY_WS}'"\`])`, 'g')
 const PATH_RE = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._*/-]+$/
 const HEX_IDENTIFIER_RE = /^_0x[0-9a-f]{4,}$/
 const BASE64_RE = /^[A-Za-z0-9+/=_-]+$/
 const PATH_LOOKAHEAD = 12
 const OBFUSCATION_THRESHOLDS = { hexIdentifiers: 20, hexEscapes: 200, longBase64: 2000, charCodeStrings: 20 }
 const SHELL_RUN_LITERAL = /['"`]shell\.run['"`]/
+const MAX_SITES_PER_FINDING = 3
+const EXCERPT_BEFORE = 40
+const EXCERPT_AFTER = 400
+const EXCERPT_LENGTH = 120
+const EXCERPT_REDACTION_MARGIN = 1000
+const MAX_SITE_OFFSETS_PER_FILE = 600
+const EXCERPT_USERINFO_RE = /(:\/\/)[^/ '"`@]*@/g
+const EXCERPT_QUERY_RE = /([?&][^=?&#/ '"`]*=)[^&# '"`]*/g
+const maskExcerpt = (excerpt: string): string =>
+  excerpt.replace(EXCERPT_USERINFO_RE, '$1\u2026@').replace(EXCERPT_QUERY_RE, '$1\u2026')
+
+/** [line, column, excerpt]: code points, as Python counts them. */
+type Site = [number, number, string | null]
 
 type Command = [string, string | null, StaticScanShellCategory]
 
@@ -609,6 +652,12 @@ interface ScriptFacts {
   dynamicImport: number
   stringTimers: number
   obfuscationSignals: Set<string>
+  /** Finding key (JSON of `['call', ...call]`, `['host', host]` or
+   *  `['capability', address]`) → UTF-16 offsets while scanning. */
+  siteOffsets: Map<string, number[]>
+  /** Offsets recorded so far, at most MAX_SITE_OFFSETS_PER_FILE. */
+  siteOffsetCount: number
+  sites: Map<string, Site[]>
 }
 
 const emptyFacts = (): ScriptFacts => ({
@@ -625,7 +674,81 @@ const emptyFacts = (): ScriptFacts => ({
   dynamicImport: 0,
   stringTimers: 0,
   obfuscationSignals: new Set(),
+  siteOffsets: new Map(),
+  siteOffsetCount: 0,
+  sites: new Map(),
 })
+
+const addSite = (facts: ScriptFacts, key: unknown[], offset: number): void => {
+  if (facts.siteOffsetCount >= MAX_SITE_OFFSETS_PER_FILE) return
+  const id = JSON.stringify(key)
+  const offsets = facts.siteOffsets.get(id) ?? []
+  if (offsets.length < MAX_SITES_PER_FINDING && !offsets.includes(offset)) {
+    offsets.push(offset)
+    facts.siteOffsetCount += 1
+  }
+  facts.siteOffsets.set(id, offsets)
+}
+
+const isLowSurrogate = (text: string, index: number): boolean => {
+  const unit = text.charCodeAt(index)
+  return unit >= 0xdc00 && unit <= 0xdfff
+}
+
+/** The UTF-16 index `steps` code points after `index`, at most `limit`. */
+function forward(text: string, index: number, steps: number, limit: number): number {
+  let at = index
+  for (let step = 0; step < steps && at < limit; step += 1) at += isLowSurrogate(text, at + 1) ? 2 : 1
+  return Math.min(at, limit)
+}
+
+/** The UTF-16 index `steps` code points before `index`, at least `limit`. */
+function backward(text: string, index: number, steps: number, limit: number): number {
+  let at = index
+  for (let step = 0; step < steps && at > limit; step += 1) at -= isLowSurrogate(text, at - 1) && at - 2 >= limit ? 2 : 1
+  return Math.max(at, limit)
+}
+
+function codePoints(text: string, from: number, to: number): number {
+  let total = to - from
+  for (let index = from; index < to; index += 1) if (isLowSurrogate(text, index)) total -= 1
+  return total
+}
+
+/** js_scan.locate: the site of every offset, lines counted in one pass. */
+function locate(text: string, offsets: number[], redact: (value: string) => boolean, deadline: Deadline): Map<number, Site> {
+  const located = new Map<number, Site>()
+  let line = 1
+  let lineStart = 0
+  let nextNewline = text.indexOf('\n')
+  let column = 1
+  let columnAt = 0
+  const reach = EXCERPT_AFTER
+  for (const offset of [...new Set(offsets)].sort((a, b) => a - b)) {
+    deadline.check()
+    while (nextNewline !== -1 && nextNewline < offset) {
+      line += 1
+      lineStart = nextNewline + 1
+      nextNewline = text.indexOf('\n', lineStart)
+    }
+    if (columnAt < lineStart) {
+      column = 1
+      columnAt = lineStart
+    }
+    column += codePoints(text, columnAt, offset)
+    columnAt = offset
+    const bound = forward(text, offset, reach, text.length)
+    // nextNewline is the first newline at or after offset: never searched for again.
+    const lineEnd = nextNewline !== -1 && nextNewline < bound ? nextNewline : bound
+    const begin = backward(text, offset, EXCERPT_BEFORE, lineStart)
+    const end = Math.min(lineEnd, forward(text, offset, EXCERPT_AFTER, text.length))
+    let excerpt: string | null = [...maskExcerpt(pySplit(text.slice(begin, end)).join(' '))].slice(0, EXCERPT_LENGTH).join('')
+    const around = text.slice(backward(text, begin, EXCERPT_REDACTION_MARGIN, 0), forward(text, end, EXCERPT_REDACTION_MARGIN, text.length))
+    if (redact(around)) excerpt = null
+    located.set(offset, [line, column, excerpt])
+  }
+  return located
+}
 
 const addCall = (facts: ScriptFacts, call: Command, evidence: 'callSite' | 'commandLikeString'): void => {
   facts.calls.set(JSON.stringify([...call, evidence]), [...call, evidence])
@@ -659,6 +782,7 @@ function commandLike(value: string): Command | null {
 function hostsIn(text: string): string[] {
   let value = text
   for (const namespace of XML_NAMESPACE_URLS) value = value.split(namespace).join('')
+  value = value.replace(REFERENCE_URL_RE, '')
   const found: string[] = []
   for (const match of [...value.matchAll(URL_RE), ...value.matchAll(SCP_RE)]) {
     const host = match[1].toLowerCase().replace(/^\.+|\.+$/g, '')
@@ -711,7 +835,8 @@ function collectCommand(at: At, index: number, facts: ScriptFacts): void {
     facts.dynamic += 1
     return
   }
-  const value = staticValue(at(index + 2))
+  const valueToken = at(index + 2)
+  const value = staticValue(valueToken)
   const end = at(index + 3)
   if (value === null || end === null || ![',', '}'].includes(end.value)) {
     facts.dynamic += 1
@@ -723,6 +848,7 @@ function collectCommand(at: At, index: number, facts: ScriptFacts): void {
     return
   }
   addCall(facts, parsed, 'callSite')
+  addSite(facts, ['call', ...parsed, 'callSite'], valueToken!.start)
 }
 
 function collectPath(at: At, index: number, write: boolean, facts: ScriptFacts, maximum: number): void {
@@ -742,7 +868,7 @@ function collectPath(at: At, index: number, write: boolean, facts: ScriptFacts, 
   facts.dynamicPaths += 1
 }
 
-function scanScript(text: string, maxPathLength: number, deadline: Deadline): ScriptFacts {
+function scanScript(text: string, maxPathLength: number, deadline: Deadline, redact: (value: string) => boolean = () => false): ScriptFacts {
   const window = new TokenWindow(iterTokens(text, deadline))
   const at: At = (index) => window.at(index)
   const facts = emptyFacts()
@@ -758,15 +884,19 @@ function scanScript(text: string, maxPathLength: number, deadline: Deadline): Sc
     const value = staticValue(item)
     if (item.kind === 'str' || item.kind === 'tmpl') {
       escapes += item.escapes
-      for (const host of hostsIn(item.value)) count(facts.hosts, host)
+      for (const host of hostsIn(item.value)) {
+        count(facts.hosts, host)
+        addSite(facts, ['host', host], item.start)
+      }
       if (
         item.kind === 'str' && [...item.value].length >= OBFUSCATION_THRESHOLDS.longBase64 &&
         !item.value.startsWith('data:') && BASE64_RE.test(item.value)
       ) facts.obfuscationSignals.add('longBase64')
     }
     if (value !== null) {
-      if (CAPABILITY_ADDRESS_RE.test(value)) {
+      if (isCapabilityAddress(value)) {
         facts.capabilities.add(value)
+        addSite(facts, ['capability', value], item.start)
         if (FS_READ_ADDRESSES.has(value) || FS_WRITE_ADDRESSES.has(value)) {
           collectPath(at, index, FS_WRITE_ADDRESSES.has(value), facts, maxPathLength)
         }
@@ -776,7 +906,10 @@ function scanScript(text: string, maxPathLength: number, deadline: Deadline): Sc
         }
       }
       const parsed = commandLike(value)
-      if (parsed !== null) addCall(facts, parsed, 'commandLikeString')
+      if (parsed !== null) {
+        addCall(facts, parsed, 'commandLikeString')
+        addSite(facts, ['call', ...parsed, 'commandLikeString'], item.start)
+      }
     } else if (item.kind === 'tmpl' && item.dynamic && hasShellRun) {
       const head = pySplit(item.value)
       if (head.length && COMMAND_EXECUTABLES.has(head[0])) facts.dynamic += 1
@@ -807,6 +940,8 @@ function scanScript(text: string, maxPathLength: number, deadline: Deadline): Sc
   if (hexIdentifiers >= OBFUSCATION_THRESHOLDS.hexIdentifiers) facts.obfuscationSignals.add('hexIdentifiers')
   if (escapes >= OBFUSCATION_THRESHOLDS.hexEscapes) facts.obfuscationSignals.add('hexEscapes')
   if (charCodes >= OBFUSCATION_THRESHOLDS.charCodeStrings) facts.obfuscationSignals.add('charCodeStrings')
+  const located = locate(text, [...facts.siteOffsets.values()].flat(), redact, deadline)
+  for (const [key, offsets] of facts.siteOffsets) facts.sites.set(key, offsets.map((offset) => located.get(offset)!))
   return facts
 }
 
@@ -1144,7 +1279,7 @@ function* printableRuns(data: Uint8Array, step: 1 | 2, deadline: Deadline): Gene
 function classifyNativeString(text: string, facts: NativeFacts): void {
   for (const host of hostsIn(text)) count(facts.hosts, host)
   for (const item of pySplit(text)) {
-    if (CAPABILITY_ADDRESS_RE.test(item)) facts.capabilities.add(item)
+    if (isCapabilityAddress(item)) facts.capabilities.add(item)
   }
   const parsed = commandLike(pyStrip(text))
   if (parsed !== null) facts.commands.set(JSON.stringify(parsed), parsed)
@@ -1246,6 +1381,7 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
   const callFiles = new Map<string, [string, string | null, StaticScanShellCategory, string, StaticScanSource, number]>()
   const backendHosts = new Map<string, number>()
   const backendCapabilities = new Set<string>()
+  const findingSites = new Map<string, Array<[string, ...Site]>>()
   const natives: NativeFacts[] = []
   let anyScript = false
   const skip = (reason: string, by = 1): void => count(skipped, reason, by)
@@ -1308,7 +1444,7 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
     }
     let facts: ScriptFacts
     try {
-      facts = scanScript(decoder.decode(content), STATIC_SCAN_LIMITS.maxPathLength, deadline)
+      facts = scanScript(decoder.decode(content), STATIC_SCAN_LIMITS.maxPathLength, deadline, redacted)
     } catch (error) {
       if (error instanceof ScanTimeout) {
         timedOut = true
@@ -1322,6 +1458,11 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
     bytesScanned += content.length
     for (const [executable, subcommand, category, evidence] of facts.calls.values()) {
       addCallFile([executable, subcommand, category], evidence, 'frontend')
+    }
+    for (const [key, located] of facts.sites) {
+      const list = findingSites.get(key) ?? []
+      for (const site of located) list.push([path, ...site])
+      findingSites.set(key, list)
     }
     merged.dynamic += facts.dynamic
     for (const [host, hostCount] of facts.hosts) count(merged.hosts, host, hostCount)
@@ -1337,6 +1478,11 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
     if (facts.dynamic) merged.dynamicFiles += 1
   }
 
+  const sitesOf = (key: unknown[]): StaticScanSite[] =>
+    [...(findingSites.get(JSON.stringify(key)) ?? [])]
+      .sort((a, b) => compareTuples([a[0], a[1], a[2]], [b[0], b[1], b[2]]))
+      .slice(0, MAX_SITES_PER_FINDING)
+      .map(([file, line, col, excerpt]) => ({ file, line, col, excerpt }))
   let redactions = 0
   const keep = (values: string[]): string[] => {
     const kept: string[] = []
@@ -1360,7 +1506,10 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
       redactions += 1
       continue
     }
-    calls.push({ executable, subcommand, category, source, evidence: evidence as 'callSite' | 'commandLikeString', files })
+    calls.push({
+      executable, subcommand, category, source, evidence: evidence as 'callSite' | 'commandLikeString', files,
+      sites: source === 'frontend' ? sitesOf(['call', executable, subcommand, category, evidence]) : [],
+    })
   }
   const sites = new Set(calls.filter((call) => call.evidence === 'callSite').map((call) => JSON.stringify([call.executable, call.subcommand, call.source])))
   calls = calls.filter((call) => call.evidence === 'callSite' || !sites.has(JSON.stringify([call.executable, call.subcommand, call.source])))
@@ -1397,9 +1546,15 @@ export function scanPackageFiles(input: ScanPackageFilesInput): StaticScanReport
       timedOut,
     },
     shell: { calls, dynamic: { count: merged.dynamic, files: merged.dynamicFiles } },
-    network: { hosts: hostEntries.map(([host, source, hostCount]) => ({ host, source, count: hostCount })).slice(0, limit) },
+    network: {
+      hosts: hostEntries.map(([host, source, hostCount]) => ({
+        host, source, count: hostCount, sites: source === 'frontend' ? sitesOf(['host', host]) : [],
+      })).slice(0, limit),
+    },
     files: { readPaths, writePaths, dynamicPaths: merged.dynamicPaths },
-    capabilities: capabilityEntries.map(([address, source]) => ({ address, source })).slice(0, limit),
+    capabilities: capabilityEntries.map(([address, source]) => ({
+      address, source, sites: source === 'frontend' ? sitesOf(['capability', address]) : [],
+    })).slice(0, limit),
     code: {
       frontend: anyScript
         ? {
@@ -1422,6 +1577,14 @@ export interface StaticScanPermissions {
   system: string[]
   shell: { mode: 'allowlist'; executables: string[] } | { mode: 'full'; executables: null } | null
   scopes: { fs: { root: 'workspace' | 'repository'; read: string[]; write: string[] } } | null
+  /** C1: `permissions.network.hosts` sorted; absent when the manifest declares none. */
+  network?: { hosts: string[] }
+}
+
+/** Twin of pluginDisclosureScan.networkHostMatches: exact, or below a `*.` wildcard. */
+export function networkHostMatches(declared: string, host: string): boolean {
+  if (declared.startsWith('*.')) return host.endsWith(declared.slice(1)) && host.length > declared.length - 1
+  return host === declared
 }
 
 const compareCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -1431,20 +1594,28 @@ const sortedStrings = (values: readonly string[] | undefined): string[] => [...(
 export function disclosurePermissions(manifest: unknown): StaticScanPermissions {
   const declared = ((manifest as { permissions?: unknown } | null)?.permissions ?? {}) as {
     system?: string[]
-    shell?: string
+    shell?: string | { mode?: string; executables?: string[] }
+    shellExecutables?: string[]
     scopes?: { fs?: { root?: 'workspace' | 'repository'; read?: string[]; write?: string[] } }
+    network?: { hosts?: string[] }
   }
+  // C2: `shell` may be the object form, or a parsed manifest's mode plus `shellExecutables`.
+  const mode = typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.mode : declared.shell
+  const declaredExecutables =
+    (typeof declared.shell === 'object' && declared.shell !== null ? declared.shell.executables : declared.shellExecutables) ?? []
   const shell: StaticScanPermissions['shell'] =
-    declared.shell === 'allowlist'
-      ? { mode: 'allowlist', executables: [...HOST_SHELL_ALLOWLIST] }
-      : declared.shell === 'full'
+    mode === 'allowlist'
+      ? { mode: 'allowlist', executables: sortedStrings([...new Set([...HOST_SHELL_ALLOWLIST, ...declaredExecutables])]) }
+      : mode === 'full'
         ? { mode: 'full', executables: null }
         : null
   const fsScope = declared.scopes?.fs
+  const hosts = sortedStrings(declared.network?.hosts)
   return {
     system: sortedStrings(declared.system),
     shell,
     scopes: fsScope ? { fs: { root: fsScope.root ?? 'workspace', read: sortedStrings(fsScope.read), write: sortedStrings(fsScope.write) } } : null,
+    ...(hosts.length > 0 ? { network: { hosts } } : {}),
   }
 }
 
@@ -1478,7 +1649,7 @@ export function declaredVsScanned(
   disclosure: { permissions: StaticScanPermissions },
   scan: StaticScanReport
 ): { undeclared: StaticScanItem[]; declaredNotSeen: StaticScanItem[] } {
-  const { system, shell, scopes } = disclosure.permissions
+  const { system, shell, scopes, network } = disclosure.permissions
   const declared = new Set<string>(system)
   const undeclared = new Set<string>()
   const add = (set: Set<string>, kind: string, key: string): void => {
@@ -1494,7 +1665,7 @@ export function declaredVsScanned(
   if (shell === null && scan.shell.dynamic.count) add(undeclared, 'shellDynamic', 'dynamic')
   const namespaces = new Set(scan.capabilities.map((item) => item.address.split('.')[0]))
   if (shell === null && namespaces.has('shell')) add(undeclared, 'shell', 'shell.run')
-  for (const namespace of ['aiCli', 'fs', 'ui']) {
+  for (const namespace of ['aiCli', 'fs', 'ui', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify']) {
     if (namespaces.has(namespace) && !declared.has(namespace)) add(undeclared, 'system', namespace)
   }
   const files = scan.files
@@ -1509,12 +1680,25 @@ export function declaredVsScanned(
       if (!readPatterns.some((pattern) => scopePatternMatches(pattern, path))) add(undeclared, 'fsScopeRead', path)
     }
   }
+  // C1: hosts are compared only for a package that declares some.
+  const declaredHosts = network?.hosts
+  const scannedHosts = scan.network.hosts.map((entry) => entry.host)
+  if (declaredHosts !== undefined) {
+    for (const host of scannedHosts) {
+      if (!declaredHosts.some((candidate) => networkHostMatches(candidate, host))) add(undeclared, 'networkHost', host)
+    }
+  }
   const notSeen = new Set<string>()
   if (shell !== null && !calls.length && !scan.shell.dynamic.count && !namespaces.has('shell')) add(notSeen, 'shell', shell.mode)
   for (const namespace of system) {
     const seen = namespaces.has(namespace) ||
       (namespace === 'fs' && Boolean(files.readPaths.length || files.writePaths.length || files.dynamicPaths))
     if (!seen) add(notSeen, 'system', namespace)
+  }
+  if (declaredHosts !== undefined) {
+    for (const candidate of declaredHosts) {
+      if (!scannedHosts.some((host) => networkHostMatches(candidate, host))) add(notSeen, 'networkHost', candidate)
+    }
   }
   return { undeclared: listed(undeclared), declaredNotSeen: listed(notSeen) }
 }

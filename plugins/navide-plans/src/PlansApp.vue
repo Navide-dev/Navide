@@ -23,8 +23,9 @@ import PlanMarkdownBody from './retained/PlanMarkdownBody.vue'
 import HtmlFilePreview from './HtmlFilePreview.vue'
 import PlanShareButton from './PlanShareButton.vue'
 import NotificationHost from './retained/NotificationHost.vue'
-import { resolvePlanStore, type SectionBody } from './retained/planStore'
-import { htmlPlanAwaitingUser, parseHtmlPlanMeta } from './retained/usePlanHtml'
+import SectionConflictDialog from './retained/SectionConflictDialog.vue'
+import { preserveConflictSide, resolvePlanStore, type SectionBody, type SectionConflict, type WriteResult } from './retained/planStore'
+import { htmlPlanAwaitingUser, parseHtmlPlanMeta, replaceSectionBody as spliceHtmlSection, syncHeaderMarkup } from './retained/usePlanHtml'
 import { sharePlanToGit } from './retained/planShare'
 import { plansTransport } from './retained/transport'
 import { listAllPlans, readWholeDocument } from './planPaging'
@@ -231,6 +232,10 @@ const reviewNoteAnchors = computed(() => {
 const currentDocumentToken = ref<string | null>(null)
 
 let savedScrollY = 0
+// Edit mode is owned by the frame (its toggle, Escape, or our request) and
+// mirrored here; a plain flag, not a ref, so turning it on never re-renders
+// the document, while a re-render for another reason keeps it on.
+let editModeOnRender = false
 let previewAnchorCounts: Record<string, number> = {}
 const currentAnchorCounts = computed(() => JSON.stringify(countNoteAnchors(selected.value?.meta?.reviewNotes ?? [])))
 const sectionEditing = ref(false)
@@ -249,6 +254,7 @@ const preparedDoc = computed(() => {
       editLabel: t('pane.plans.edit'), deleteLabel: t('pane.plans.delete'),
       saveLabel: t('pane.plans.save'), cancelLabel: t('pane.plans.cancel'),
       scrollY: savedScrollY,
+      editMode: editModeOnRender,
     }) + buildTodoStatusRuntime(documentToken, todoIds),
   })
 })
@@ -328,22 +334,145 @@ function captureSectionTarget(): SectionTarget | null {
 function isActiveSectionTarget(target: SectionTarget): boolean {
   return selectedPath.value === target.path && activeReadGeneration === target.generation && selected.value === target.document
 }
+// The document the user saw when the current inline edit began. Section
+// writes are checked against it, so an agent's change to the same section is
+// never overwritten without the user choosing.
+let sectionEditBase: string | null = null
+// A section write waiting on the user's choice between their version and the
+// one on disk; `body` is absent for a delete.
+const pendingSectionConflict = ref<{ target: SectionTarget; conflict: SectionConflict; body?: SectionBody } | null>(null)
+const sectionConflictSaving = ref(false)
+const sectionConflictDialog = ref<InstanceType<typeof SectionConflictDialog> | null>(null)
+
+function writeSection(target: SectionTarget, anchor: string, body: SectionBody | undefined, base: string): Promise<WriteResult> {
+  const store = resolvePlanStore(target.path)
+  const ctx = { backend: plansTransport, workspacePath, relPath: target.path }
+  return body ? store.replaceSectionBody(ctx, anchor, body, base) : store.deleteSection(ctx, anchor, base)
+}
+/** Apply a section write's result; true when it was written. In edit mode
+ *  the document is not re-rendered (that would drop the caret and anything
+ *  typed since): the save state says it was written instead. */
+async function settleSectionWrite(target: SectionTarget, body: SectionBody | undefined, result: WriteResult, inEditMode = false): Promise<boolean> {
+  if (result.sectionConflict) {
+    pendingSectionConflict.value = { target, conflict: result.sectionConflict, body }
+    return false
+  }
+  if (!result.ok) {
+    throw new Error(result.conflict ? t('pane.plans.section-write-busy') : result.error || t('pane.plans.review-save-failed'))
+  }
+  if (inEditMode) return true
+  if (result.merged) toast(t('pane.plans.merged-others'), { type: 'success' })
+  if (isActiveSectionTarget(target)) await refreshSelected()
+  return true
+}
+
+const editModeActive = ref(false)
+const editSaveState = ref<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+const editSavedAt = ref('')
+// What the edit-mode frame shows: the document it rendered with this view's
+// own saves applied. Saves are checked against it, so a section someone else
+// changed after the frame rendered is a conflict, never overwritten with the
+// stale text on screen.
+let editModeView: string | null = null
+// The bytes this view wrote last, which tells its own writes from others'.
+let lastOwnWrite: string | null = null
+// Edit-mode saves run one at a time, in the order they were typed.
+let editWrites: Promise<void> = Promise.resolve()
+let queuedEditWrites = 0
+
+function queueEditWrite(task: () => Promise<boolean>): Promise<void> {
+  queuedEditWrites++
+  editSaveState.value = 'saving'
+  const run = editWrites
+    .then(task)
+    .then(
+      (written) => {
+        if (written) editSavedAt.value = new Date().toLocaleTimeString()
+        return written ? 'saved' as const : 'held' as const
+      },
+      (cause: unknown) => {
+        toast(formatBackendError(cause), { type: 'error' })
+        return 'failed' as const
+      },
+    )
+    .then((outcome) => {
+      queuedEditWrites--
+      if (outcome === 'failed') editSaveState.value = 'failed'
+      else if (queuedEditWrites === 0 && editSaveState.value === 'saving') {
+        // 'held': a conflict waits on the user's choice; nothing new was saved.
+        editSaveState.value = outcome === 'saved' || editSavedAt.value ? 'saved' : 'idle'
+      }
+    })
+  editWrites = run
+  return run
+}
+
+function postToFrame(message: Record<string, unknown>): void {
+  planDocFrame.value?.contentWindow?.postMessage({ ...message, documentToken: currentDocumentToken.value }, '*')
+}
+function toggleEditMode(): void {
+  postToFrame({ type: 'edit-mode', active: !editModeActive.value })
+}
+async function onEditModeChanged(active: boolean): Promise<void> {
+  editModeActive.value = active
+  editModeOnRender = active
+  if (active) {
+    editModeView = selected.value?.html ?? null
+    lastOwnWrite = null
+    editSaveState.value = 'idle'
+    return
+  }
+  // Leaving edit mode: once its last saves land, show the document as saved.
+  await editWrites
+  if (lastOwnWrite !== null && !editModeActive.value) await refreshSelected()
+}
+
+async function saveSectionInEditMode(target: SectionTarget, anchor: string, body: SectionBody & { kind: 'html' }): Promise<boolean> {
+  const base = editModeView ?? target.document.html ?? ''
+  const result = await writeSection(target, anchor, body, base)
+  if (!(await settleSectionWrite(target, body, result, true))) return false
+  editModeView = spliceHtmlSection(base, anchor, body.sanitized)
+  lastOwnWrite = result.raw ?? lastOwnWrite
+  return true
+}
+
+async function saveHeaderInEditMode(field: 'name' | 'overview', text: string): Promise<boolean> {
+  const target = captureSectionTarget()
+  if (!target) return false
+  const store = resolvePlanStore(target.path)
+  const result = await store.writeMeta(
+    { backend: plansTransport, workspacePath, relPath: target.path },
+    fresh => ({ ...fresh, [field]: text }),
+    content => syncHeaderMarkup(content, field, text),
+  )
+  if (!result.ok) {
+    throw new Error(result.conflict ? t('pane.plans.section-write-busy') : result.error || t('pane.plans.review-save-failed'))
+  }
+  editModeView = syncHeaderMarkup(editModeView ?? target.document.html ?? '', field, text)
+  lastOwnWrite = result.raw ?? lastOwnWrite
+  const meta = result.raw ? store.parseMeta(result.raw) : null
+  if (meta) applyToolbarMetadata(meta)
+  return true
+}
+
 async function replaceSectionBody(anchor: string, body: string): Promise<void> {
   const target = captureSectionTarget()
   if (!target) return
+  const store = resolvePlanStore(target.path)
+  if (editModeActive.value && store.format === 'html') {
+    const sanitized = { kind: 'html' as const, sanitized: sanitizePlanSectionHtml(body) }
+    await queueEditWrite(() => saveSectionInEditMode(target, anchor, sanitized))
+    return
+  }
+  const base = sectionEditBase ?? target.document.html ?? ''
+  sectionEditBase = null
   try {
-    const store = resolvePlanStore(target.path)
     // The carrier decides the payload kind: a markdown file stores the edited
     // text verbatim, only an HTML plan is sanitized as markup.
     const sectionBody: SectionBody = store.format === 'markdown'
       ? { kind: 'markdown', text: body }
       : { kind: 'html', sanitized: sanitizePlanSectionHtml(body) }
-    const result = await store.replaceSectionBody(
-      { backend: plansTransport, workspacePath, relPath: target.path },
-      anchor, sectionBody,
-    )
-    if (!result.ok) throw new Error(result.error || t('pane.plans.review-save-failed'))
-    if (isActiveSectionTarget(target)) await refreshSelected()
+    await settleSectionWrite(target, sectionBody, await writeSection(target, anchor, sectionBody, base))
   } catch (cause) { toast(formatBackendError(cause), { type: 'error' }) }
 }
 async function deleteSection(anchor: string): Promise<void> {
@@ -354,12 +483,53 @@ async function deleteSection(anchor: string): Promise<void> {
   })
   if (!accepted || !isActiveSectionTarget(target)) return
   try {
-    const result = await resolvePlanStore(target.path).deleteSection(
-      { backend: plansTransport, workspacePath, relPath: target.path }, anchor,
-    )
-    if (!result.ok) throw new Error(result.error || t('pane.plans.review-save-failed'))
-    if (isActiveSectionTarget(target)) await refreshSelected()
+    await settleSectionWrite(target, undefined, await writeSection(target, anchor, undefined, target.document.html ?? ''))
   } catch (cause) { toast(formatBackendError(cause), { type: 'error' }) }
+}
+/** Keep the side the user did not choose as a version; false when it could
+ *  not be (the dialog then says it exists only on screen). */
+async function preserveDiscarded(target: SectionTarget, mine?: string): Promise<boolean> {
+  try {
+    return await preserveConflictSide({ backend: plansTransport, workspacePath, relPath: target.path }, mine)
+  } catch (cause) {
+    toast(formatBackendError(cause), { type: 'error' })
+    return false
+  }
+}
+/** Write the user's version over the document shown in the conflict. */
+async function keepMySection(): Promise<void> {
+  const pending = pendingSectionConflict.value
+  if (!pending || sectionConflictSaving.value) return
+  sectionConflictSaving.value = true
+  try {
+    // The disk version is about to be overwritten: pin it as a version first.
+    const kept = await preserveDiscarded(pending.target)
+    const result = await writeSection(pending.target, pending.conflict.anchor, pending.body, pending.conflict.fresh)
+    // Conflicting again replaces the dialog's content with the newer disk version.
+    if (await settleSectionWrite(pending.target, pending.body, result, editModeActive.value)) {
+      sectionConflictDialog.value?.showDiscarded('theirs', kept)
+      // The edit-mode frame still shows the other sections as they were; show
+      // the document as it is now (edit mode stays on).
+      if (editModeActive.value) await refreshSelected()
+    }
+  } catch (cause) {
+    toast(formatBackendError(cause), { type: 'error' })
+  } finally {
+    sectionConflictSaving.value = false
+  }
+}
+/** Keep the disk version; the user's version is kept as a version of the
+ *  plan, and stays in the dialog to copy. */
+async function keepTheirSection(): Promise<void> {
+  const pending = pendingSectionConflict.value
+  if (!pending || sectionConflictSaving.value) return
+  sectionConflictSaving.value = true
+  const store = resolvePlanStore(pending.target.path)
+  const mine = store.withSection(pending.conflict.fresh, pending.conflict.anchor, pending.body)
+  const kept = await preserveDiscarded(pending.target, mine)
+  sectionConflictSaving.value = false
+  sectionConflictDialog.value?.showDiscarded('mine', kept)
+  if (isActiveSectionTarget(pending.target) || editModeActive.value) await refreshSelected()
 }
 
 const onWindowMessage = createPlanRuntimeMessageHandler({
@@ -376,7 +546,15 @@ const onWindowMessage = createPlanRuntimeMessageHandler({
   },
   onSectionEdit: (anchor, html) => { if (!snapshotPreview.value) void replaceSectionBody(anchor, html) },
   onSectionDelete: anchor => { if (!snapshotPreview.value) void deleteSection(anchor) },
-  onSectionEditing: active => { sectionEditing.value = active },
+  onSectionEditing: active => {
+    sectionEditing.value = active
+    if (active) sectionEditBase = selected.value?.html ?? null
+  },
+  onHeaderEdit: (field, text) => {
+    if (snapshotPreview.value || !editModeActive.value) return
+    void queueEditWrite(() => saveHeaderInEditMode(field, text))
+  },
+  onEditModeChanged: active => { void onEditModeChanged(active) },
 })
 
 function planTitle(plan: PlanSummary): string {
@@ -660,6 +838,7 @@ function isPinned(relPath: string): boolean {
 let activeReadGeneration = 0
 
 function applySelected(document: PlanDocument, relPath: string): void {
+  openDocumentChangedOnDisk.value = false
   htmlPreviewTarget.value = null
   previewAnchorCounts = countNoteAnchors(document.meta?.reviewNotes ?? [])
   selected.value = { ...document, rel_path: document.rel_path || relPath }
@@ -728,6 +907,9 @@ async function readPlan(relPath: string): Promise<void> {
     snapshotPreview.value = null
     savedScrollY = 0
     sectionEditing.value = false
+    // Edit mode belongs to the document it was turned on for.
+    editModeOnRender = false
+    editModeActive.value = false
   }
   selectedPath.value = relPath
   try {
@@ -794,9 +976,48 @@ function schedulePlansReload(): void {
   if (plansChangedTimer !== null) clearTimeout(plansChangedTimer)
   plansChangedTimer = setTimeout(() => {
     plansChangedTimer = null
-    void loadPlans(false)
+    void loadPlans(false).then(reloadOpenDocumentIfChanged)
   }, PLANS_CHANGED_DEBOUNCE_MS)
 }
+
+// Set when the open document changed on disk while the user was editing it;
+// the document reloads once the edit (or a pending conflict) ends.
+const openDocumentChangedOnDisk = ref(false)
+
+function isEditingOpenDocument(): boolean {
+  return sectionEditing.value || pendingSectionConflict.value !== null ||
+    markdownBody.value?.isEditing() === true || markdownBody.value?.hasPendingConflict() === true
+}
+
+/** Reload the open document when the listing shows a newer copy on disk:
+ *  in place when nobody is editing it, otherwise after the edit ends. */
+async function reloadOpenDocumentIfChanged(): Promise<void> {
+  const open = selected.value
+  if (!open || open.rel_path !== selectedPath.value || typeof open.mtime !== 'number') return
+  const listed = plans.value.find(plan => plan.rel_path === open.rel_path)
+  if (typeof listed?.mtime !== 'number' || listed.mtime === open.mtime) return
+  if (editModeActive.value && lastOwnWrite !== null) {
+    // Edit mode does not re-render after its own saves; a newer copy that is
+    // exactly what it wrote last is not someone else's change.
+    const ownWrite = lastOwnWrite
+    const disk = await plansTransport.send<{ ok: boolean; content?: string }>('fs.read_file', {
+      workspace_path: workspacePath, rel_path: open.rel_path,
+    }).catch(() => null)
+    if (disk?.payload?.ok && disk.payload.content === ownWrite) {
+      open.mtime = listed.mtime
+      return
+    }
+  }
+  if (isEditingOpenDocument()) {
+    openDocumentChangedOnDisk.value = true
+    return
+  }
+  await refreshSelected()
+}
+
+watch(() => isEditingOpenDocument(), (editing) => {
+  if (!editing && openDocumentChangedOnDisk.value) void refreshSelected()
+})
 
 async function loadPlans(openSelected = true): Promise<void> {
   if (!workspacePath) {
@@ -1149,6 +1370,9 @@ function confirmQuickOpen(): void {
  * left contribution — so the priority order lives in one place.
  */
 function peelOverlay(): boolean {
+  // A section conflict holds text that exists nowhere else: only its own
+  // buttons may close it, never a stray Escape.
+  if (pendingSectionConflict.value || markdownBody.value?.hasPendingConflict()) return true
   if (sectionEditing.value) {
     planDocFrame.value?.contentWindow?.postMessage({ type: 'cancel-edit' }, '*')
     sectionEditing.value = false
@@ -1187,11 +1411,14 @@ function scrollToAnchor(anchor: string): void {
   planDocFrame.value?.contentWindow?.postMessage({ type: 'scroll-to', anchor }, '*')
 }
 
-async function previewSnapshot(snapshot: { relPath: string; label: string }): Promise<void> {
+async function previewSnapshot(snapshot: { relPath: string; label: string; file?: string }): Promise<void> {
   const path = selectedPath.value
   const generation = activeReadGeneration
   try {
-    const response = await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('fs.read_file', { rel_path: snapshot.relPath })
+    // Versions are read through the backend, which decompresses them.
+    const response = snapshot.file
+      ? await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('history.read', { rel_path: path, file: snapshot.file })
+      : await plansTransport.send<{ ok: boolean; content?: string; error?: string }>('fs.read_file', { rel_path: snapshot.relPath })
     if (selectedPath.value !== path || activeReadGeneration !== generation) return
     if (!response.payload.ok || response.payload.content === undefined) throw new Error(response.payload.error || t('pane.plans.history-diff-failed'))
     snapshotPreview.value = {
@@ -1683,8 +1910,27 @@ onUnmounted(() => {
             <span class="plan-snapshot-note">{{ t('pane.plans.snapshot-readonly') }}</span>
             <button class="plan-snapshot-close" @click="snapshotPreview = null">{{ t('pane.plans.snapshot-close') }}</button>
           </div>
+          <div v-if="openDocumentChangedOnDisk" class="plan-snapshot-banner plan-disk-changed-banner" role="status">
+            <span class="plan-snapshot-note">{{ t('pane.plans.external-change') }}</span>
+          </div>
 
           <div class="plan-main-body">
+            <!-- Edit mode: the whole document editable, saving by itself. -->
+            <div
+              v-if="selected.html && isHtmlPath(selected.rel_path) && selected.meta && !snapshotPreview"
+              class="plan-edit-bar"
+              :class="{ active: editModeActive }"
+            >
+              <button type="button" class="plan-edit-toggle" :aria-pressed="editModeActive" @click="toggleEditMode">
+                {{ editModeActive ? t('pane.plans.edit-mode-done') : t('pane.plans.edit-mode') }}
+              </button>
+              <span v-if="editModeActive" class="plan-edit-status" role="status">
+                <template v-if="editSaveState === 'saving'">{{ t('pane.plans.edit-saving') }}</template>
+                <template v-else-if="editSaveState === 'failed'">{{ t('pane.plans.edit-save-failed') }}</template>
+                <template v-else-if="editSaveState === 'saved'">{{ t('pane.plans.edit-saved', { time: editSavedAt }) }}</template>
+                <template v-else>{{ t('pane.plans.edit-mode-hint') }}</template>
+              </span>
+            </div>
             <!-- HTML preview iframe -->
             <div v-if="selected.html && isHtmlPath(selected.rel_path)" class="plan-preview-container">
               <iframe
@@ -1768,6 +2014,16 @@ onUnmounted(() => {
         <p v-if="!quickOpenRows.length" class="muted">{{ t('pane.plans.v2.no-matching') }}</p>
       </div>
     </div>
+
+    <SectionConflictDialog
+      v-if="pendingSectionConflict"
+      ref="sectionConflictDialog"
+      :conflict="pendingSectionConflict.conflict"
+      :saving="sectionConflictSaving"
+      @keep-mine="void keepMySection()"
+      @keep-theirs="void keepTheirSection()"
+      @close="pendingSectionConflict = null"
+    />
 
     <div v-if="renameTarget" class="overlay" @click.self="cancelRename">
       <form class="rename-dialog" @submit.prevent="void submitRename()"><h2>{{ t('pane.plans.v2.rename-plan') }}</h2><input ref="renameInput" v-model="renameValue" @keydown.escape="cancelRename" /><div class="dialog-actions"><button type="button" @click="cancelRename">{{ t('action.cancel') }}</button><button type="submit">{{ t('action.rename') }}</button></div></form>
@@ -2181,6 +2437,19 @@ onUnmounted(() => {
   overflow: hidden;
   position: relative;
 }
+.plan-edit-bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-xs);
+}
+.plan-edit-bar.active { background: var(--bg-subtle); }
+.plan-edit-toggle { border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-muted); color: var(--text-primary); font-size: var(--font-xs); padding: 3px 10px; }
+.plan-edit-bar.active .plan-edit-toggle { border-color: var(--accent-focus); color: var(--accent-fg); }
+.plan-edit-status { color: var(--text-muted); }
 .plan-preview-container {
   flex: 1 1 0;
   min-height: 0;

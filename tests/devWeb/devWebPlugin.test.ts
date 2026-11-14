@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createDevWebGate, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
+import { createDevWebGate, devTokenFile, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
 
 const TOKEN = 'a'.repeat(64)
 const HOST = '127.0.0.1:5274'
@@ -82,6 +82,21 @@ describe('devWebPlugins', () => {
     const cfg = (plugins[0].config as () => { server: { host: string; strictPort: boolean } })()
     expect(cfg.server.host).toBe('127.0.0.1')
     expect(cfg.server.strictPort).toBe(true)
+  })
+})
+
+describe('devTokenFile', () => {
+  it('keeps the shared $TMPDIR/agent-team-dev-token for the Electron dev server and the default dev web port', () => {
+    expect(devTokenFile({}, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+    expect(devTokenFile({ NAVIDE_DEV_WEB: '1' }, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+    expect(devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5274' }, '/t')).toBe(join('/t', 'agent-team-dev-token'))
+  })
+
+  it('gives two dev web instances on different ports different token files', () => {
+    const a = devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5274' }, '/t')
+    const b = devTokenFile({ NAVIDE_DEV_WEB: '1', NAVIDE_DEV_WEB_PORT: '5275' }, '/t')
+    expect(a).not.toBe(b)
+    expect(b).toBe(join('/t', 'agent-team-dev-token-5275'))
   })
 })
 
@@ -177,5 +192,15 @@ describe('ensurePrivateDir', () => {
     } finally {
       rmSync(base, { recursive: true, force: true })
     }
+  })
+})
+
+// The isolated backend's passwd-based home lookups (native_skills, skills_store,
+// native_mcp) read its scratch HOME only when this flag reaches the child env;
+// backend/tests/test_isolated_home.py covers the backend side.
+describe('isolated backend env', () => {
+  it('flags the backend so every home lookup uses its scratch HOME', () => {
+    const src = readFileSync(new URL('../../scripts/dev-web/devWebPlugin.ts', import.meta.url), 'utf8')
+    expect(src).toMatch(/HOME: home,[\s\S]*AGENT_TEAM_ISOLATED_HOME: '1',[\s\S]*spawn\(cmd, argv, \{ cwd: runDir, env: childEnv/)
   })
 })

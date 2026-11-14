@@ -9,6 +9,8 @@ import { withDescendants } from '../lib/paneLineage'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { paneStatusLabelText, type PaneStatusValue } from '../lib/paneStatusLabel'
 import { rollupPaneStatus } from '../lib/paneStatusRollup'
+import { pipelineDisplayName, roleDisplayOneLine } from '../lib/builtinNames'
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
@@ -40,7 +42,7 @@ import PaneChannelIcon from './PaneChannelIcon.vue'
 import PaneGuardIcon from './PaneGuardIcon.vue'
 import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
-import GitPluginHostSlot from './GitPluginHostSlot.vue'
+import GitRecoveryPanel from './GitRecoveryPanel.vue'
 import PluginRegionHost, { type PluginRegionContribution } from './PluginRegionHost.vue'
 import { chromeSourceMark, pluginDisclosureTitle, pluginIconFallback } from '../lib/pluginSourceMark'
 import { readLegacyPlansPreferenceProjection } from '../editor/plansPreferences'
@@ -49,7 +51,6 @@ import type { BackendStatus, useBackend } from '../composables/useBackend'
 import type { DisplayStatus } from '@navide/terminal'
 import type { Role, RoleKey } from '../data/roles'
 import type { Stage, StageId } from '../data/stages'
-import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
 import { formatKeySpec, onSettingsChanged, registerCommand, settingsGet, settingsKeySpec, settingsSet, sidebarTabKeySpec } from '@navide/plugin-ui/shared'
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
@@ -66,6 +67,7 @@ const PlanPane = defineAsyncComponent(() => import('../editor/PlanPane.vue'))
 import type { AgentSpec } from '@navide/plugin-shell'
 export type { AgentSpec } from '@navide/plugin-shell'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
+import { AGENT_COLOR_HEX, agentInitial, agentVendorLabel, type AgentIdentitySummary } from '../lib/agentIdentity'
 import {
   chooseLaunchCommand,
   cliCommandKey,
@@ -77,6 +79,8 @@ import {
 } from '@navide/plugin-shell'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
+import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
+import { useArenaPrefs } from '../composables/useArenaPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -292,6 +296,8 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Steps as the editor counts them; absent from an older backend. */
+  step_count?: number
 }
 
 export type PipelineState = 'idle' | 'running' | 'completed' | 'aborted'
@@ -312,7 +318,12 @@ export interface PipelineStatusView {
   backendLogFile: string
   /** The gate the run is paused on, or null; the sidebar's Next stays
    *  disabled until it is passed or sent back. */
-  awaitingGate?: { gateId: string; label: string } | null
+  /** prompt: what the gate asks to check; rejectEndsRun: Send Back would end
+   *  the run (no loop back, or its budget spent). */
+  awaitingGate?: { gateId: string; label: string; prompt?: string; rejectEndsRun?: false | 'no-edge' | 'exhausted' } | null
+  /** A sub-pipeline's child run: the parent runs waiting on it, outermost
+   *  first. Absent for a run that is no one's child. */
+  parents?: Array<{ name: string; pipelineId: string }>
 }
 
 export interface ExistingProjectInfo {
@@ -335,6 +346,11 @@ export interface ExistingProjectInfo {
   nodeGate?: { gateId?: string; nextIndex?: number } | null
   /** Last reported per-node run states (project node_states). */
   nodeStates?: Record<string, import('../lib/pipelineGraph').NodeRunState>
+  /** Recorded per-node outputs (project node_outputs). */
+  nodeOutputs?: Record<string, unknown>
+  /** Parent runs suspended at a sub-pipeline, outermost first (project
+   *  run_stack); absent when there are none. */
+  runStack?: Array<{ id: string; pipeline_name: string; node_id: string; run?: { pipeline_id?: string } }>
 }
 
 export interface AnalyzerModelOption {
@@ -378,6 +394,10 @@ interface Props {
   pipelines?: PipelineSummary[]
   /** Currently active pipeline id (global). */
   activePipelineId?: string
+  /** The pipeline this window's run belongs to; '' with no run. Running a
+   *  pipeline no longer makes it the default, so this, not activePipelineId,
+   *  names the running one. */
+  runPipelineId?: string
   /** Full backend instance — forwarded to GitPane for git operations. */
   backend?: ReturnType<typeof useBackend>
   /** Past spawns (incl. backend-backfilled manual panes) for the resume datalist. */
@@ -403,8 +423,8 @@ interface Props {
   issueHandoffs?: Record<string, { paneId: string; mode: string; state: string }>
   /** Manifest-driven contributions available to this Host window. */
   pluginContributions?: PluginRegionContribution[]
-  /** Main-process-only legacy Git recovery mode. */
-  legacyGitRecovery?: boolean
+  /** Why the Git plugin could not start; null/absent while it runs. */
+  gitActivationFailure?: string | null
   /** Main-process-only legacy Plans recovery mode. */
   legacyPlansRecovery?: boolean
   /** Host-side reason for that downgrade, '' when it is not known. */
@@ -439,6 +459,12 @@ interface Props {
    *  them" — the layout store supplies the real list. A view moved to another
    *  slot disappears from here, which is what keeps it a singleton. */
   views?: string[]
+  /** Agent identities with their pane state (App's agentPaneSummaries); the ＋
+   *  menu's Agents block lists them. Absent = none. */
+  agentIdentities?: AgentIdentitySummary[]
+  /** Model arena runs recorded for the workspace on screen (experimental);
+   *  the ＋ menu's Compare block offers to reopen them when there are any. */
+  arenaRuns?: number
 }
 
 const props = defineProps<Props>()
@@ -1108,7 +1134,11 @@ watch(
 )
 
 const emit = defineEmits<{
+  /** Focus an agent identity's pane, or open one that resumes it. */
+  (e: 'agent-open', identityId: string): void
   (e: 'spawn', payload: SpawnPayload): void
+  /** Settings → CLI Agents → ACP (experimental) only: open an ACP pane. */
+  (e: 'spawn-acp', payload: SpawnPayload): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
   (e: 'kill-all'): void
@@ -1151,7 +1181,7 @@ const emit = defineEmits<{
   (e: 'pipeline-start', payload: { task: string; workspacePath: string; pipelineId?: string }): void
   (e: 'pipeline-next'): void
   (e: 'pipeline-gate-approve', gateId: string): void
-  (e: 'pipeline-gate-reject', gateId: string): void
+  (e: 'pipeline-gate-reject', gateId: string, comment?: string): void
   (e: 'pipeline-abort'): void
   (e: 'pipeline-reset'): void
   (e: 'update:yoloEnabled', v: boolean): void
@@ -1182,15 +1212,14 @@ const emit = defineEmits<{
   (e: 'open-history', workspacePath?: string): void
   (e: 'switch-workspace'): void
   (e: 'workspace-browse', path: string): void
-  (e: 'dispatch-issue', payload: { paneId: string; issue: IssueDetail }): void
-  (e: 'spawn-for-issue', payload: { agentKey: string; mode: IssueHandlerMode; issue: Issue; provider: IssueProvider }): void
-  (e: 'open-git-accounts'): void
-  (e: 'changes-count', count: number): void
   (e: 'rename-pane', paneId: string, name: string): void
   /** A workspace's display name was edited. An empty `name` clears the alias
    *  and restores the folder name. */
   (e: 'rename-workspace', workspacePath: string, name: string): void
   (e: 'install-cli', payload: { agentKey: string; label: string }): void
+  /** Model arena (experimental): open the start dialog / the run view for a workspace. */
+  (e: 'arena-start', workspacePath: string): void
+  (e: 'arena-panel', workspacePath: string): void
   (e: 'update:collapsed', v: boolean): void
   /** The header's mode switch. App owns the value so it can persist it and so
    *  the stage agrees with the list about which panes are on screen. */
@@ -1461,6 +1490,18 @@ const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
 
+/** The ＋ menu lists vendors of `kind: 'agent'` (long-lived agents such as
+ *  OpenClaw and Hermes Agent) under their own "Agents" heading below the CLI
+ *  block; everywhere else they stay ordinary entries of manualAgentSpecs.
+ *  Both blocks keep the order and enabled set of Settings → CLI Agents, since
+ *  they filter agentSpecs. */
+const addMenuCliSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind !== 'agent')
+)
+const addMenuAgentSpecs = computed(() =>
+  manualAgentSpecs.value.filter((spec) => spec.kind === 'agent')
+)
+
 // Available agent types for "Handle Issue As…" pane spawn.
 const availableAgents = computed(() =>
   manualAgentSpecs.value.map((spec) => ({ key: spec.agentKey, label: spec.label }))
@@ -1521,7 +1562,7 @@ const _TAB_KEY = 'agentTeam.sidebarTab'
 type SidebarTab = 'agents' | 'pipeline' | 'explorer' | 'git' | 'plans' | `plugin:${string}`
 const CORE_SIDEBAR_TABS = ['agents', 'pipeline', 'explorer'] as const
 type CoreSidebarTab = (typeof CORE_SIDEBAR_TABS)[number]
-const legacyGitRecovery = computed(() => props.legacyGitRecovery === true)
+const gitPluginFailed = computed(() => props.gitActivationFailure != null)
 const legacyPlansRecovery = computed(() => props.legacyPlansRecovery === true)
 /** The storage repair rebuilds an unreadable lifecycle record — it is the
  *  answer to exactly one downgrade. Offering it for a failed backend child
@@ -1589,7 +1630,7 @@ const sidebarTab = ref<SidebarTab>(
       // Backward-compat: unknown / legacy values fall back to the first tab.
       const isKnown = v !== null && (
         v === 'agents' || v === 'pipeline' || v === 'explorer' ||
-        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && legacyGitRecovery.value)
+        v === 'plans' || v.startsWith('plugin:') || (v === 'git' && gitPluginFailed.value)
       )
       return isKnown ? v : 'agents'
     } catch { return 'agents' }
@@ -1597,9 +1638,9 @@ const sidebarTab = ref<SidebarTab>(
 )
 watch(sidebarTab, (v) => { try { sessionStorage.setItem(_TAB_KEY, v) } catch { /* ignore */ } })
 
-// Opening Git while the session sits in legacy recovery is the user's natural
-// retry: the downgrade is usually a transient activation failure, and the Host
-// answers with a bounded budget of v2 attempts.
+// Opening Git after the plugin failed to start is the user's natural retry:
+// the failure is usually transient, and the Host answers with a bounded budget
+// of v2 attempts.
 let awaitingGitV2Tab = false
 let gitV2RetryInFlight = false
 function requestGitV2Retry(): void {
@@ -1669,7 +1710,7 @@ async function requestPlansV2Retry(explicit = false): Promise<void> {
   }
 }
 
-watch(legacyGitRecovery, (enabled) => {
+watch(gitPluginFailed, (enabled) => {
   if (enabled || sidebarTab.value !== 'git') return
   const restored = gitPluginTab.value?.tabId
   if (restored) {
@@ -1739,7 +1780,7 @@ registerCommand('workbench.action.focusExplorer', () => selectSidebarTab('explor
 registerCommand('workbench.action.focusPipeline', () => selectSidebarTab('pipeline'))
 registerCommand('workbench.action.focusSourceControl', () => {
   if (disabledBuiltins.isDisabled('navide.git')) return false
-  if (legacyGitRecovery.value) {
+  if (gitPluginFailed.value) {
     selectSidebarTab('git')
     return
   }
@@ -1774,6 +1815,12 @@ const openedPipeline = computed(
   () => props.pipelines?.find((p) => p.id === openedPipelineId.value) ?? null
 )
 
+/** A listed pipeline's name as shown (a builtin in the UI language); undefined when not listed. */
+function pipelineNameById(id: string | null | undefined): string | undefined {
+  const p = props.pipelines?.find((x) => x.id === id)
+  return p ? pipelineDisplayName(p) : undefined
+}
+
 function openPipelineDetail(id: string): void {
   openedPipelineId.value = id
   sidebarView.value = 'pipeline'
@@ -1795,12 +1842,12 @@ function showSidebarTab(tab: SidebarTab): void {
 const gitChangesCount = computed(() => props.gitChangesCount ?? 0)
 
 function selectSidebarTab(tab: SidebarTab): void {
-  const target = tab === 'git' && !legacyGitRecovery.value
+  const target = tab === 'git' && !gitPluginFailed.value
     ? gitPluginTab.value?.tabId
     : tab
   if (!target) return
   showSidebarTab(target)
-  if (tab === 'git' && legacyGitRecovery.value) requestGitV2Retry()
+  if (tab === 'git' && gitPluginFailed.value) requestGitV2Retry()
   if (tab === 'plans' && legacyPlansRecovery.value) void requestPlansV2Retry()
   // Surfacing a tab while the slot is collapsed has to reopen it, or Cmd+1..5
   // and the programmatic entry points would only move a highlight on the rail.
@@ -1853,8 +1900,11 @@ watch(visibleTabs, (tabs) => {
   showSidebarTab(tabs[0].id)
 }, { immediate: true })
 
+// The run's pipeline: the one this window ran, else the default (no run yet).
+const runId = computed(() => props.runPipelineId || props.activePipelineId || '')
+
 function isPipelineRunning(pipelineId: string): boolean {
-  return pipelineId === (props.activePipelineId ?? '') && props.pipeline.state === 'running'
+  return pipelineId === runId.value && props.pipeline.state === 'running'
 }
 
 // The unfinished run recorded in project.json belongs to exactly ONE pipeline.
@@ -1865,7 +1915,7 @@ function isPipelineRunning(pipelineId: string): boolean {
 const resumeMatchesActivePipeline = computed<boolean>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
   if (!owner) return true
-  return owner === (props.activePipelineId ?? '')
+  return owner === runId.value
 })
 
 // Name of the pipeline the unfinished run belongs to, for the card shown when
@@ -1873,7 +1923,7 @@ const resumeMatchesActivePipeline = computed<boolean>(() => {
 // been deleted, and the id is still more use than an empty string.
 const resumeOwnerPipelineName = computed<string>(() => {
   const owner = props.existingProject?.pipelineId ?? ''
-  return props.pipelines?.find((p) => p.id === owner)?.name ?? owner
+  return pipelineNameById(owner) ?? owner
 })
 
 // ── Pipeline list pagination ───────────────────────────────────────────────
@@ -1993,6 +2043,14 @@ function openPipelineManager(pipelineId?: string): void {
   emit('open-pipeline-manager', pipelineId)
 }
 
+/** A pipeline's size in steps, as the editor and Executions count it; stages
+ *  only when an older backend sends no step count. */
+function sizeLabel(p: PipelineSummary): string {
+  return p.step_count === undefined
+    ? i18n.global.t('label.stage-count', { count: p.stage_count })
+    : i18n.global.t('label.step-count', { count: p.step_count })
+}
+
 function interruptTooltip(p: ActivePaneView): string {
   if (p.status !== 'running') return i18n.global.t('action.interrupt-not-running')
   return i18n.global.t('action.interrupt')
@@ -2065,7 +2123,7 @@ function showResumeError(message: string): void {
 
 // Stage count for the pipeline currently being viewed (may differ from active pipeline)
 const effectiveStageCount = computed(() => {
-  if (!openedPipelineId.value || openedPipelineId.value === (props.activePipelineId ?? '')) {
+  if (!openedPipelineId.value || openedPipelineId.value === runId.value) {
     return props.stages.length
   }
   return openedPipeline.value?.stage_count ?? 0
@@ -2080,6 +2138,16 @@ const canRunPipeline = computed(
     effectiveStageCount.value > 0
 )
 
+/** The condition holding Run back, in canRunPipeline's order ('' when it can
+ *  run, or while a run is going — Run is not offered then). */
+const runBlockedReason = computed(() => {
+  if (props.backendStatus !== 'connected') return i18n.global.t('pipelineEditor.run.blocked-backend')
+  if (!workspacePath.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-workspace')
+  if (effectiveStageCount.value <= 0) return i18n.global.t('pipelineEditor.state.empty-title')
+  if (!taskDescription.value.trim()) return i18n.global.t('pipelineEditor.run.blocked-task')
+  return ''
+})
+
 /** Set while a spawn is on its way from a workspace heading other than this
  *  window's primary. Cleared once the request is out — the card's own button
  *  always means "here". */
@@ -2090,7 +2158,7 @@ const spawnWorkspaceOverride = ref<string>('')
  *  active tab points". */
 const spawnGroupOverride = ref<string>('')
 
-function emitSpawn(agentKey: string): void {
+function emitSpawn(agentKey: string, customName?: string): void {
   // The dialog's fields are the pick only while the dialog is open and is
   // showing THIS agent. Every other entry point (the ＋ menu, the heading
   // button) spawns without the dialog ever rendering, so it takes the vendor's
@@ -2110,7 +2178,8 @@ function emitSpawn(agentKey: string): void {
     workspacePath: spawnWorkspaceOverride.value || workspacePath.value,
     runGroupId: spawnGroupOverride.value || undefined,
     model: pick.model || undefined,
-    effort: pick.effort || undefined
+    effort: pick.effort || undefined,
+    ...(customName ? { customName } : {})
   })
   spawnWorkspaceOverride.value = ''
   spawnGroupOverride.value = ''
@@ -2638,23 +2707,45 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 }
 // Fixed, not absolute: the pane list scrolls under `overflow-y: auto`, which
 // would clip a menu positioned inside it.
-const addMenuAnchor = ref<{ top: number; bottom: number; right: number } | null>(null)
+const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
- *  384px) plus the fixed furniture around it — role picker, two dividers,
- *  the Terminal and Manual-spawn buttons, and the menu's own padding. Only
+ *  546px: the rows plus the CLI and Agents headings) plus the fixed
+ *  furniture around it — role picker, two dividers,
+ *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 474
+const ADD_MENU_MAX_H = 716
+/** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
+ *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
+ *  ~276px of bold system-font text plus 36px of check mark and padding); at
+ *  200px eight English rows lost their suffix. Used to keep the menu's left
+ *  edge inside the window: the menu hangs leftwards from the button, and the
+ *  narrowest sidebar (200px) is narrower than the menu. */
+const ADD_MENU_W = 320
 
 const addMenuStyle = computed(() => {
   const a = addMenuAnchor.value
   if (!a) return {}
-  // Flip upwards when there is not enough room below the button.
-  const below = window.innerHeight - a.bottom
-  return below < ADD_MENU_MAX_H && a.top > below
-    ? { bottom: `${window.innerHeight - a.top + 4}px`, right: `${a.right}px` }
-    : { top: `${a.bottom + 4}px`, right: `${a.right}px` }
+  // Right-aligned with the button, unless that would push the left edge past
+  // an 8px margin; then it slides right just enough. A window narrower than
+  // the menu is handled by the CSS max-width (and v-truncate on the rows).
+  const right = `${Math.max(8, Math.min(a.right, window.innerWidth - ADD_MENU_W - 8))}px`
+  // Flip upwards when there is not enough room below the button. "Below"
+  // ends at the sidebar's bottom edge, not the window's: the status bar under
+  // it sits on top of the menu.
+  const below = a.floor - a.bottom
+  const up = below < ADD_MENU_MAX_H && a.top > below
+  // The menu is a flex column capped at the room on its side (less the 4px
+  // gap and an 8px edge margin, and its own 5px padding and 1px border either
+  // side, which max-height does not include), and only the roster scroller
+  // shrinks to fit. A fixed `45vh` cap cut the last entry off in a 900px
+  // window that had room for the whole list.
+  const maxHeight = `${Math.max(0, (up ? a.top : below) - 24)}px`
+  return up
+    ? { bottom: `${window.innerHeight - a.top + 4}px`, right, maxHeight }
+    : { top: `${a.bottom + 4}px`, right, maxHeight }
 })
 
 function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
@@ -2664,7 +2755,8 @@ function toggleAddMenu(ev: MouseEvent, wsPath = '', groupId = ''): void {
     return
   }
   const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
-  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right }
+  const floor = (ev.currentTarget as HTMLElement).closest('.sidebar')?.getBoundingClientRect().bottom || window.innerHeight
+  addMenuAnchor.value = { top: r.top, bottom: r.bottom, right: window.innerWidth - r.right, floor }
   addMenuWorkspace.value = wsPath
   addMenuGroup.value = groupId
   addMenuOpen.value = true
@@ -2679,6 +2771,79 @@ function spawnAs(agentKey: string): void {
   spawnGroupOverride.value = addMenuGroup.value
   addMenuOpen.value = false
   spawn(agentKey)
+}
+
+// ── ＋ menu, Agents block (plan agent-0-2-40_78e071, figure 3) ───────────────
+/** The identities of the workspace the menu was opened for. */
+const addMenuAgentIdentities = computed(() => {
+  const ws = addMenuWorkspace.value || workspacePath.value
+  return (props.agentIdentities ?? []).filter((row) => !ws || row.identity.workspacePath === ws)
+})
+/** The vendor whose "new agent" row is asking for a name; '' when none. */
+const newAgentKey = ref('')
+const newAgentName = ref('')
+const newAgentInput = ref<HTMLInputElement[] | null>(null)
+watch(addMenuOpen, (open) => {
+  if (!open) newAgentKey.value = ''
+})
+
+// ── ＋ menu, ACP entries (Settings → CLI Agents → ACP (experimental)) ─────────
+const { acpEnabled } = useAcpPrefs()
+/** Nothing while the switch is off (the default): the menu is main's. */
+const addMenuAcpRows = computed(() =>
+  acpEnabled.value
+    ? ACP_MENU_ENTRIES.flatMap((entry) => {
+        const spec = props.agentSpecs.find((s) => s.agentKey === entry.agentKey)
+        return spec ? [{ ...entry, label: i18n.global.t('label.add-menu-acp', { label: spec.label }) }] : []
+      })
+    : []
+)
+
+/** An ACP pane for `row`, or the adapter's guided install while it is missing. */
+async function spawnAcpFromMenu(row: { agentKey: string; adapterDep: string; label: string }): Promise<void> {
+  const workspace = addMenuWorkspace.value || workspacePath.value
+  const group = addMenuGroup.value
+  addMenuOpen.value = false
+  // Re-detected every time: the adapter is listed only while the switch is on,
+  // so a status read before it was turned on says nothing about it.
+  cliStatusFetchedAt = 0
+  await refreshCliStatus()
+  if (missingClis.value.has(row.adapterDep)) {
+    emit('install-cli', { agentKey: row.adapterDep, label: row.label })
+    return
+  }
+  emit('spawn-acp', {
+    agentKey: row.agentKey,
+    roleKey: pickedRole.value,
+    stageId: '',
+    workspacePath: workspace,
+    runGroupId: group || undefined,
+  })
+}
+
+function openAgentFromMenu(identityId: string): void {
+  addMenuOpen.value = false
+  emit('agent-open', identityId)
+}
+
+/** A new agent is named first: the name is its identity (decision 5). */
+function startNewAgent(agentKey: string): void {
+  if (missingClis.value.has(agentKey)) {
+    spawnAs(agentKey)
+    return
+  }
+  newAgentKey.value = agentKey
+  newAgentName.value = ''
+  void nextTick(() => newAgentInput.value?.[0]?.focus())
+}
+
+function spawnNewAgent(agentKey: string): void {
+  const name = newAgentName.value.trim()
+  if (!name) return
+  spawnWorkspaceOverride.value = addMenuWorkspace.value
+  spawnGroupOverride.value = addMenuGroup.value
+  addMenuOpen.value = false
+  emitSpawn(agentKey, name)
 }
 
 /** The plain-shell spec, kept out of manualAgentSpecs because the agent
@@ -2703,6 +2868,17 @@ function openTerminalFromMenu(): void {
   emit('spawn', { agentKey: 'terminal', roleKey: '', stageId: '', workspacePath: ws, runGroupId: group || undefined })
 }
 
+// ── ＋ menu, Compare block (Settings → General → Experimental features) ──────
+const { arenaEnabled } = useArenaPrefs()
+const arenaShortcut = formatKeySpec('cmd+alt+a')
+
+function openArenaFromMenu(panel: boolean): void {
+  const ws = addMenuWorkspace.value || workspacePath.value
+  addMenuOpen.value = false
+  if (panel) emit('arena-panel', ws)
+  else emit('arena-start', ws)
+}
+
 function openSpawnCardFromMenu(): void {
   spawnGroupOverride.value = addMenuGroup.value
   addMenuOpen.value = false
@@ -2725,6 +2901,12 @@ watch(manualSpawnOpen, (open) => {
 onUnmounted(() => document.removeEventListener('keydown', onSpawnModalKeydown))
 function closeAddMenu(): void {
   addMenuOpen.value = false
+}
+const addMenuEl = ref<HTMLElement | null>(null)
+/** Scroll inside the menu (its capped list) is not the page moving. */
+function onAddMenuScroll(e: Event): void {
+  if (e.target instanceof Node && addMenuEl.value?.contains(e.target)) return
+  closeAddMenu()
 }
 
 // Same three dismissals the ＋ roster uses, for the same reasons: a click
@@ -2769,17 +2951,17 @@ watch(addMenuOpen, (open) => {
     // Capture: the pane list is the element that scrolls, and its scroll
     // events do not bubble. Without this the menu would hang in mid-air over
     // whatever scrolled into the button's old place.
-    document.addEventListener('scroll', closeAddMenu, true)
+    document.addEventListener('scroll', onAddMenuScroll, true)
   } else {
     document.removeEventListener('click', closeAddMenu)
     document.removeEventListener('keydown', onAddMenuKeydown)
-    document.removeEventListener('scroll', closeAddMenu, true)
+    document.removeEventListener('scroll', onAddMenuScroll, true)
   }
 })
 onUnmounted(() => {
   document.removeEventListener('click', closeAddMenu)
   document.removeEventListener('keydown', onAddMenuKeydown)
-  document.removeEventListener('scroll', closeAddMenu, true)
+  document.removeEventListener('scroll', onAddMenuScroll, true)
 })
 
 function spawn(agentKey: string = activeSpawnAgent.value): void {
@@ -2825,7 +3007,7 @@ function startPipeline(): void {
   emit('pipeline-start', {
     task: taskDescription.value.trim(),
     workspacePath: workspacePath.value,
-    // Pass the opened pipeline id so App.vue activates it first if it differs from active
+    // Pass the opened pipeline id so App.vue runs it; the default pipeline stays as it is
     pipelineId: openedPipelineId.value || undefined,
   })
   backToList()
@@ -2834,7 +3016,7 @@ function startPipeline(): void {
 // Down here rather than at the top of setup: canRunPipeline is a const declared
 // above this line. startPipeline/canRunPipeline let the empty stage's "or run
 // the pipeline" link drive the sidebar's own Run button, guard included.
-defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline })
+defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline, spawn })
 
 const statusColor = computed(() => {
   switch (props.backendStatus) {
@@ -2897,38 +3079,41 @@ const pipelineNextStage = computed<Stage | null>(() => {
 })
 
 const pipelineGate = computed(() => (props.pipeline.state === 'running' ? props.pipeline.awaitingGate ?? null : null))
+/** Optional reason sent back with a Send Back; cleared for each new gate. */
+const gateComment = ref('')
+watch(() => pipelineGate.value?.gateId, () => { gateComment.value = '' })
 
 function injectionLabel(status: ActivePaneView['injectionStatus']): string {
   switch (status) {
     case 'pending':
-      return 'role: waiting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.pending')
     case 'scheduled':
-      return 'role: injecting'
+      return i18n.global.t('pipelineEditor.paneStatus.role.scheduled')
     case 'sent':
-      return 'role: injected'
+      return i18n.global.t('pipelineEditor.paneStatus.role.sent')
     case 'failed':
-      return 'role: inject failed'
+      return i18n.global.t('pipelineEditor.paneStatus.role.failed')
     case 'skipped':
-      return 'role: skipped'
+      return i18n.global.t('pipelineEditor.paneStatus.role.skipped')
   }
 }
 
 function preparationLabel(status: ActivePaneView['preparationStatus']): string {
   switch (status) {
     case 'starting':
-      return 'setup: starting CLI'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.starting')
     case 'checking-dialog':
-      return 'setup: checking dialog'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.checking-dialog')
     case 'settling':
-      return 'setup: waiting prompt'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.settling')
     case 'injecting-role':
-      return 'setup: injecting role'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.injecting-role')
     case 'waiting-agent':
-      return 'setup: waiting agent'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.waiting-agent')
     case 'ready':
-      return 'setup: ready'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.ready')
     case 'failed':
-      return 'setup: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.setup.failed')
     default:
       return ''
   }
@@ -2938,15 +3123,15 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
   if (!status || status === 'none') return ''
   switch (status) {
     case 'pending':
-      return '· kickoff: queued'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.pending')
     case 'sent':
-      return '· kickoff: sent'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.sent')
     // Written, but the only echo we got was the buffer growing — which a
     // booting CLI does regardless. Say so rather than claiming it was sent.
     case 'unverified':
-      return '· kickoff: unverified'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.unverified')
     case 'failed':
-      return '· kickoff: failed'
+      return i18n.global.t('pipelineEditor.paneStatus.kickoff.failed')
   }
 }
 
@@ -3235,19 +3420,19 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :key="t.id"
         :class="[
           'tab-btn',
-          { 'plugin-tab-btn': t.id === 'git' && !legacyGitRecovery && gitPluginTab },
+          { 'plugin-tab-btn': t.id === 'git' && !gitPluginFailed && gitPluginTab },
           { active: sidebarTab === t.id || (t.id === 'git' && gitPluginTab?.tabId === sidebarTab) }
         ]"
         :data-tab="t.id"
-        :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
-        :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
+        :data-git-activation-failed="t.id === 'git' && gitPluginFailed ? '' : undefined"
+        :data-plugin-contribution="t.id === 'git' && !gitPluginFailed ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
           ? `${pluginTabLabel(gitPluginTab)} (${formatKeySpec(sidebarTabKeySpec(4))})`
           : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
         :aria-label="t.id === 'git' && gitPluginTab ? pluginTabLabel(gitPluginTab) : undefined"
         @click="selectSidebarTab(t.id)"
       >
-        <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
+        <template v-if="t.id === 'git' && !gitPluginFailed && gitPluginTab">
           <span
             v-if="isMonoPluginIcon(gitPluginTab)"
             class="plugin-tab-icon plugin-tab-icon--mono"
@@ -3333,7 +3518,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === pluginTab.tabId"
         />
         <PluginRegionHost
-          v-if="gitPluginTab && !legacyGitRecovery"
+          v-if="gitPluginTab && !gitPluginFailed"
           :key="gitPluginTab.contributionKey"
           :contribution="gitPluginTab"
           :workspace-path="workspace ?? ''"
@@ -3347,24 +3532,10 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :visible="!collapsed && sidebarTab === 'plans'"
           :before-prepare="projectPlansPreferencesBeforePrepare"
         />
-        <template v-if="legacyGitRecovery && backend && sidebarTab === 'git'">
-          <div class="legacy-recovery-label" data-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
-          <GitPluginHostSlot
-            :workspace-path="workspace ?? ''"
-            :visible="true"
-            :backend="backend"
-            :analyzer-model="analyzerModel"
-            :dispatch-targets="dispatchTargets"
-            :available-agents="availableAgents"
-            :issue-handoffs="issueHandoffs"
-            @changes-count="$emit('changes-count', $event)"
-            @open-workspace="$emit('workspace-browse', $event)"
-            @dispatch-issue="$emit('dispatch-issue', $event)"
-            @spawn-for-issue="$emit('spawn-for-issue', $event)"
-            @focus-pane="$emit('focus-pane', $event)"
-            @open-git-accounts="$emit('open-git-accounts')"
-          />
-        </template>
+        <GitRecoveryPanel
+          v-if="gitPluginFailed && sidebarTab === 'git'"
+          :reason="gitActivationFailure ?? ''"
+        />
         <template v-if="legacyPlansRecovery && backend && sidebarTab === 'plans'">
           <div class="legacy-recovery-label" data-plans-legacy-recovery-label>{{ $t('label.legacy-recovery') }}</div>
           <div class="plans-repair-row">
@@ -3422,7 +3593,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
     <section class="block panel-section">
       <div class="row between">
         <label class="lbl">{{ $t('label.pipelines') }}</label>
-        <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager()">⚙</button>
+        <button class="ghost manage-btn" @click="openPipelineManager()">{{ $t('action.manage-pipelines') }}</button>
       </div>
       <ul v-if="pipelines && pipelines.length && pipeline.state !== 'running' && pipeline.state !== 'aborted'" class="pipeline-list">
         <li
@@ -3432,17 +3603,17 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :class="{ 'pipeline-active': p.id === activePipelineId }"
           @click="openPipelineDetail(p.id)"
         >
-          <span class="pipeline-item-name" v-truncate>{{ p.name }}</span>
-          <span class="pipeline-item-meta">{{ $t('label.stage-count', { count: p.stage_count }) }}</span>
+          <span class="pipeline-item-name" v-truncate>{{ pipelineDisplayName(p) }}</span>
+          <span class="pipeline-item-meta">{{ sizeLabel(p) }}</span>
           <span
             class="pipeline-item-badge"
             :class="isPipelineRunning(p.id) ? 'running'
-              : p.id === activePipelineId && pipeline.state === 'completed' ? 'done'
+              : p.id === runId && pipeline.state === 'completed' ? 'done'
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? 'done'
               : 'idle'"
           >
             {{ isPipelineRunning(p.id) ? `● ${$t('paneStatus.running')}`
-              : p.id === activePipelineId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
+              : p.id === runId && pipeline.state === 'completed' ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject?.runCount ?? 1 })}`
               : existingProject?.pipelineId === p.id && existingProject?.nextStageIndex < 0 ? `✓ ${$t('label.pipeline-runs-done', { count: existingProject.runCount })}`
               : `○ ${$t('paneStatus.idle')}` }}
           </span>
@@ -3488,6 +3659,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <button class="primary wide" @click="emit('pipeline-resume')">
               {{ $t('action.resume-from-stage', { n: String(existingProject.nextStageIndex + 1).padStart(2, '0') }) }}
             </button>
+            <button v-if="existingProject.state === 'running'" class="danger" @click="emit('pipeline-abort')">
+              {{ $t('action.abort') }}
+            </button>
             <button
               class="danger"
               @click="confirmingRestart = true"
@@ -3504,7 +3678,16 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <div class="pipeline-running-divider"></div>
         <div class="pipeline-running-name">
           <div class="prn-title">
-            ▶ {{ pipelines?.find(p => p.id === activePipelineId)?.name ?? $t('label.pipelines') }}
+            ▶ {{ pipelineNameById(runId) ?? $t('label.pipelines') }}
+          </div>
+          <!-- A sub-pipeline's child run: where it was called from, and a way
+               back to the parent's runs. -->
+          <div v-if="pipeline.parents?.length" class="prn-crumbs" data-test="run-parents" :aria-label="$t('pipelineEditor.controlPane.parents')">
+            <template v-for="(p, i) in pipeline.parents" :key="i">
+              <button class="ghost prn-crumb" :title="$t('pipelineEditor.controlPane.open-parent')" @click="openPipelineManager(p.pipelineId || undefined)">{{ p.name }}</button>
+              <span class="prn-crumb-sep" aria-hidden="true">›</span>
+            </template>
+            <span class="prn-crumb-here">{{ pipelineNameById(runId) ?? '' }}</span>
           </div>
           <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
@@ -3513,7 +3696,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <!-- Full run control (gates, rerun-from-step, per-step state) lives
                in the Pipeline workspace; this card stays compact. -->
-          <button class="ghost prn-open" @click="openPipelineManager(activePipelineId || undefined)">
+          <button class="ghost prn-open" @click="openPipelineManager(runId || undefined)">
             {{ $t('pipelineEditor.controlPane.open-in-canvas') }}
           </button>
         </div>
@@ -3523,25 +3706,37 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
-            <span v-if="pipelineCurrentStage" class="muted">· {{ pipelineCurrentStage.shortTitle }}</span>
+            <span v-if="pipelineCurrentStage" class="muted">· {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}</span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
             <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <p class="hint pipeline-gate-prompt">{{ pipelineGate.prompt || $t('pipelineEditor.gate.default-prompt') }}</p>
+            <textarea
+              v-model="gateComment"
+              class="pipeline-gate-comment"
+              rows="2"
+              spellcheck="false"
+              :placeholder="$t('pipelineEditor.gate.comment')"
+              :aria-label="$t('pipelineEditor.gate.comment')"
+            ></textarea>
             <div class="row pipeline-row">
               <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
-              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.reject') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId, gateComment.trim())">{{ $t('pipelineEditor.gate.reject') }}</button>
             </div>
+            <p v-if="pipelineGate.rejectEndsRun" class="hint warn pipeline-gate-ends">{{ $t('pipelineErrors.gate.ends-run-hint') }}</p>
             <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
           </div>
           <div class="row pipeline-row">
             <button
+              v-if="pipelineNextStage"
               class="primary wide"
-              :disabled="!pipelineNextStage || !!pipelineGate"
+              :disabled="!!pipelineGate"
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4337,26 +4532,118 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </template>
       </div>
-      <div v-if="addMenuOpen" class="ws-add-menu" :style="addMenuStyle" @click.stop>
+      <div v-if="addMenuOpen" ref="addMenuEl" class="ws-add-menu" :style="addMenuStyle" @click.stop>
         <select v-model="pickedRole" class="ws-add-role">
           <option value="">{{ $t('label.select-role') }}</option>
           <option v-for="r in roles" :key="r.key" :value="r.key">{{ r.label }}</option>
         </select>
         <div class="ws-add-div"></div>
         <div class="ws-add-scroll">
-          <button
-            v-for="spec in manualAgentSpecs"
-            :key="spec.agentKey"
-            class="ws-add-opt"
-            :class="{ on: spec.agentKey === pickedAgent }"
-            @click="spawnAs(spec.agentKey)"
+          <!-- Two blocks, each under its own heading: coding CLIs, then general
+               agents (OpenClaw, Hermes Agent). A block with no enabled entry
+               drops out with its heading. -->
+          <template
+            v-for="sec in [
+              { id: 'cli', label: $t('label.add-menu-cli'), specs: addMenuCliSpecs },
+              { id: 'agents', label: $t('label.add-menu-agents'), specs: addMenuAgentSpecs }
+            ]"
+            :key="sec.id"
           >
-            <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
-            <span class="ws-add-lb" v-truncate>
-              {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
-            </span>
-          </button>
+            <div v-if="sec.specs.length" class="ws-add-sec" :data-section="sec.id">{{ sec.label }}</div>
+            <template v-if="sec.id === 'cli'">
+            <button
+              v-for="spec in sec.specs"
+              :key="spec.agentKey"
+              class="ws-add-opt"
+              :class="{ on: spec.agentKey === pickedAgent }"
+              :data-section="sec.id"
+              @click="spawnAs(spec.agentKey)"
+            >
+              <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
+              <span class="ws-add-lb" v-truncate>
+                {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
+              </span>
+            </button>
+            </template>
+            <template v-else-if="sec.specs.length">
+              <!-- Agents are listed by identity, not vendor: open → switch to
+                   it, closed → open a pane and resume it. -->
+              <button
+                v-for="row in addMenuAgentIdentities"
+                :key="row.identity.id"
+                class="ws-add-opt ws-add-agent"
+                :data-section="sec.id"
+                data-testid="add-menu-agent-identity"
+                @click="openAgentFromMenu(row.identity.id)"
+              >
+                <span class="ws-add-avatar" :style="{ background: AGENT_COLOR_HEX[row.identity.color] }" aria-hidden="true">{{ agentInitial(row.identity.name, row.identity.agentKey) }}</span>
+                <span class="ws-add-agent-txt">
+                  <span class="ws-add-lb" v-truncate>{{ row.identity.name }}</span>
+                  <span class="ws-add-agent-sub" v-truncate>{{ $t(row.open ? 'agentPane.addMenu.open' : 'agentPane.addMenu.closed', { vendor: agentVendorLabel(row.identity.agentKey) }) }}</span>
+                </span>
+              </button>
+              <template v-for="spec in sec.specs" :key="spec.agentKey">
+                <form
+                  v-if="newAgentKey === spec.agentKey"
+                  class="ws-add-newagent"
+                  data-testid="add-menu-new-agent-form"
+                  @submit.prevent="spawnNewAgent(spec.agentKey)"
+                >
+                  <input
+                    ref="newAgentInput"
+                    v-model="newAgentName"
+                    class="ws-add-newagent-input"
+                    :placeholder="$t('agentPane.addMenu.name-placeholder')"
+                    :aria-label="$t('agentPane.addMenu.name-placeholder')"
+                    @keydown.esc.stop.prevent="newAgentKey = ''"
+                  />
+                  <button type="submit" class="ws-add-newagent-go" :disabled="!newAgentName.trim()">{{ $t('agentPane.addMenu.create') }}</button>
+                </form>
+                <button
+                  v-else
+                  class="ws-add-opt ws-add-more"
+                  :data-section="sec.id"
+                  @click="startNewAgent(spec.agentKey)"
+                >
+                  <span class="ws-add-lb" v-truncate>
+                    {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : $t('agentPane.addMenu.new', { vendor: spec.label }) }}
+                  </span>
+                </button>
+              </template>
+            </template>
+          </template>
+          <template v-if="addMenuAcpRows.length">
+            <div v-if="!addMenuAgentSpecs.length" class="ws-add-sec" data-section="agents">{{ $t('label.add-menu-agents') }}</div>
+            <button
+              v-for="row in addMenuAcpRows"
+              :key="`acp:${row.agentKey}`"
+              class="ws-add-opt ws-add-more"
+              data-section="agents"
+              data-testid="add-menu-acp"
+              @click="spawnAcpFromMenu(row)"
+            >
+              <span class="ws-add-lb" v-truncate>
+                {{ missingClis.has(row.adapterDep) ? $t('label.agent-not-installed', { label: row.label }) : row.label }}
+              </span>
+            </button>
+          </template>
         </div>
+        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
+             ship as Navide plugins, so the menu points there. -->
+        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
+        <!-- Model arena (experimental): its own block, styled exactly like the
+             CLI / Agents headings and entries; absent while the switch is off. -->
+        <template v-if="arenaEnabled">
+          <div class="ws-add-sec" data-section="compare">{{ $t('arena.menu.section') }}</div>
+          <button class="ws-add-opt ws-add-more ws-add-arena" data-testid="add-menu-arena" @click="openArenaFromMenu(false)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.start') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+            <span class="ws-add-kbd">{{ arenaShortcut }}</span>
+          </button>
+          <button v-if="arenaRuns" class="ws-add-opt ws-add-more" data-testid="add-menu-arena-runs" @click="openArenaFromMenu(true)">
+            <span class="ws-add-lb" v-truncate>{{ $t('arena.menu.runs', { n: arenaRuns }) }}</span>
+          </button>
+          <div class="ws-add-hint">{{ $t('arena.menu.hint') }}</div>
+        </template>
         <div class="ws-add-div"></div>
         <!-- A plain shell. Not in the list above: that list scrolls once there
              are more CLIs than fit, and an eleventh entry sat below the fold
@@ -4369,7 +4656,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           v-if="terminalSpec"
           class="ws-add-opt ws-add-more ws-add-term"
           @click="openTerminalFromMenu"
-        >{{ terminalSpec.label }}</button>
+        >{{ $t('label.terminal') }}</button>
         <button class="ws-add-opt ws-add-more ws-add-card" @click="openSpawnCardFromMenu">
           {{ $t('label.manual-spawn') }}…
         </button>
@@ -4385,7 +4672,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <button class="spawn-modal-close" :aria-label="$t('action.close')" @click="manualSpawnOpen = false">✕</button>
         </div>
         <div class="spawn-card-body">
-          <div class="row two-col">
+          <!-- One control per line: side by side, each select got ~145px and
+               "Claude Code (Anthropic)" was cut to "Claude Code (Anth". -->
+          <div class="row spawn-pick-row">
             <select v-model="modalAgent" @focus="refreshCliStatus">
               <option v-for="spec in manualAgentSpecs" :key="spec.agentKey" :value="spec.agentKey">
                 {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
@@ -4455,7 +4744,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>
-            <p class="role-line" v-truncate>{{ currentRole.one_line }}</p>
+            <p class="role-line" v-truncate>{{ roleDisplayOneLine(currentRole) }}</p>
             <pre v-if="previewOpen" class="prompt-preview">{{ currentRole.system_prompt }}</pre>
           </div>
           <div v-else class="prompt-block warn-block">
@@ -4480,14 +4769,14 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
       <section class="block pipeline-detail-header">
         <div class="pipeline-detail-nav">
           <button class="ghost back-btn" @click="backToList">← {{ $t('action.back') }}</button>
-          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline?.name ?? openedPipelineId }}</span>
+          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline ? pipelineDisplayName(openedPipeline) : openedPipelineId }}</span>
           <span v-if="openedPipelineId === activePipelineId" class="active-tag">{{ $t('label.default') }}</span>
-          <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager(openedPipelineId || undefined)">⚙</button>
+          <button class="ghost manage-btn" @click="openPipelineManager(openedPipelineId || undefined)">{{ $t('action.manage-pipelines') }}</button>
         </div>
       </section>
       <section class="block" :class="{ pipeline: pipelineOpen }">
         <button class="lbl collapsible-header" @click="pipelineOpen = !pipelineOpen">
-          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline?.name ?? $t('label.pipelines') }} · {{ $t('label.stage-count', { count: effectiveStageCount }) }}
+          {{ pipelineOpen ? '▾' : '▸' }} {{ openedPipeline ? pipelineDisplayName(openedPipeline) : $t('label.pipelines') }} · {{ openedPipeline ? sizeLabel(openedPipeline) : $t('label.stage-count', { count: effectiveStageCount }) }}
         </button>
         <template v-if="pipelineOpen">
         <div
@@ -4532,6 +4821,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="row">
             <button class="primary wide" @click="emit('pipeline-resume')">
               {{ $t('action.resume-from-stage', { n: String(existingProject.nextStageIndex + 1).padStart(2, '0') }) }}
+            </button>
+            <button v-if="existingProject.state === 'running'" class="danger" @click="emit('pipeline-abort')">
+              {{ $t('action.abort') }}
             </button>
             <button
               class="danger"
@@ -4596,12 +4888,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </button>
         </div>
         <div v-if="pipeline.state === 'idle' || pipeline.state === 'completed' || pipeline.state === 'aborted'" class="row pipeline-row">
-          <button class="primary wide" :disabled="!canRunPipeline" @click="startPipeline">
+          <button class="primary wide" :disabled="!canRunPipeline" :title="runBlockedReason || undefined" @click="startPipeline">
             {{ $t('action.run-pipeline') }}
           </button>
           <button
             v-if="pipeline.state !== 'idle'"
-            class="ghost"
+            class="danger"
             @click="emit('pipeline-reset')"
             :title="$t('action.clear-pipeline')"
           >
@@ -4615,26 +4907,38 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="pipeline-line">
             {{ $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: pipeline.totalStages }) }}
             <span v-if="pipelineCurrentStage" class="muted">
-              · {{ pipelineCurrentStage.shortTitle }}
+              · {{ builtinTextForUi(pipelineCurrentStage.shortTitle) }}
             </span>
           </div>
           <div v-if="pipelineGate" class="pipeline-gate">
             <p class="hint warn pipeline-gate-label">{{ $t('pipelineEditor.run.gate', { name: pipelineGate.label }) }}</p>
+            <p class="hint pipeline-gate-prompt">{{ pipelineGate.prompt || $t('pipelineEditor.gate.default-prompt') }}</p>
+            <textarea
+              v-model="gateComment"
+              class="pipeline-gate-comment"
+              rows="2"
+              spellcheck="false"
+              :placeholder="$t('pipelineEditor.gate.comment')"
+              :aria-label="$t('pipelineEditor.gate.comment')"
+            ></textarea>
             <div class="row pipeline-row">
               <button class="primary wide pipeline-gate-approve" @click="emit('pipeline-gate-approve', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.approve') }}</button>
-              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId)">{{ $t('pipelineEditor.gate.reject') }}</button>
+              <button class="ghost pipeline-gate-reject" @click="emit('pipeline-gate-reject', pipelineGate.gateId, gateComment.trim())">{{ $t('pipelineEditor.gate.reject') }}</button>
             </div>
+            <p v-if="pipelineGate.rejectEndsRun" class="hint warn pipeline-gate-ends">{{ $t('pipelineErrors.gate.ends-run-hint') }}</p>
             <p class="hint pipeline-gate-why">{{ $t('pipelineEditor.controlPane.next-gated') }}</p>
           </div>
           <div class="row pipeline-row">
             <button
+              v-if="pipelineNextStage"
               class="primary wide"
-              :disabled="!pipelineNextStage || !!pipelineGate"
+              :disabled="!!pipelineGate"
               :title="pipelineGate ? $t('pipelineEditor.controlPane.next-gated') : undefined"
               @click="emit('pipeline-next')"
             >
-              {{ pipelineNextStage ? `Next → ${pipelineNextStage.shortTitle}` : $t('action.finish') }}
+              {{ $t('pipelineEditor.controlPane.next-stage', { stage: builtinTextForUi(pipelineNextStage.shortTitle) }) }}
             </button>
+            <p v-else class="hint pipeline-last-stage">{{ $t('pipelineEditor.controlPane.last-stage') }}</p>
             <button class="danger" @click="emit('pipeline-abort')">{{ $t('action.abort') }}</button>
           </div>
         </div>
@@ -4644,8 +4948,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <p v-else-if="pipeline.state === 'aborted'" class="hint warn">
           {{ $t('label.pipeline-aborted-paused') }}
         </p>
-        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint">
-          {{ $t('label.provide-task') }}
+        <p v-else-if="pipeline.state === 'idle' && !canRunPipeline" class="hint pipeline-run-blocked">
+          {{ runBlockedReason }}
         </p>
         </template>
       </section>
@@ -4991,6 +5295,11 @@ textarea.drag-over {
 .row.two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.row.spawn-pick-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .row.between {
@@ -5425,6 +5734,8 @@ button.icon-btn.muted:hover {
   color: var(--text-bright);
 }
 .manage-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: var(--font-2xs);
   padding: 2px 6px;
   color: var(--text-secondary);
@@ -5643,6 +5954,21 @@ button.icon-btn.muted:hover {
   color: var(--success-fg);
   letter-spacing: 0.02em;
 }
+.prn-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
+.prn-crumb {
+  padding: 0 2px;
+  font-size: var(--font-2xs);
+  color: var(--accent-fg);
+}
+.prn-crumb-sep { color: var(--text-secondary); }
+.prn-crumb-here { color: var(--text-bright); font-weight: 600; }
 .prn-task {
   font-size: var(--font-2xs);
   color: var(--text-bright);
@@ -6426,28 +6752,40 @@ button.icon-btn.muted:hover {
 .ws-add-menu {
   position: fixed;
   z-index: 60;
-  width: 200px;
-  max-width: calc(100vw - 24px);
+  /* ADD_MENU_W in the script tracks this. */
+  width: 320px;
+  max-width: calc(100vw - 16px);
   padding: 5px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated, var(--bg-secondary));
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   font-size: var(--font-xs);
+  /* A column whose max-height (set inline by addMenuStyle) is the room on its
+   * side of the button: everything but the roster scroller keeps its size,
+   * and the scroller gives way. */
+  display: flex;
+  flex-direction: column;
 }
+.ws-add-menu > * { flex-shrink: 0; }
 .ws-add-role {
   width: calc(100% - 12px);
   margin: 2px 6px 4px;
   font-size: 11.5px;
 }
-.ws-add-div { height: 1px; margin: 4px 0; background: var(--border-muted); }
+.ws-add-div { height: 1px; margin: 6px 0; background: var(--border-muted); }
 /* Tall enough for the whole roster, capped against the viewport so a short
  * window still gets a menu that fits. 200px was set when ten vendors was the
  * whole list; at fourteen it cut the last four off with nothing on screen
  * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 384px carries sixteen. */
+ * 3px padding either side), so 480px carries twenty, and 546px adds the
+ * two section headings (~24px, and ~31px with the divider above Agents). The
+ * viewport cap is no longer a guessed 45vh: the menu's own max-height is the
+ * room it has, and this box shrinks into it (never below three rows). */
 .ws-add-scroll {
-  max-height: min(384px, 45vh);
+  max-height: min(546px, 100vh);
+  flex-shrink: 1;
+  min-height: 72px;
   overflow-y: auto;
   /* Scroll affordance. The two fades are painted in the scroller's own
    * coordinate space (`local`), so each one is visible only while content is
@@ -6455,12 +6793,15 @@ button.icon-btn.muted:hover {
    * (`scroll`) and are covered by a fade once that end is reached. Pure CSS —
    * no scroll listener. The list must never again look complete when it is
    * not: that mistake has now been made twice here (see the Terminal entry's
-   * comment in the template). */
+   * comment in the template).
+   * The shadows are drawn in the text colour, not black: a black shadow on the
+   * dark theme's menu was all but invisible, so a cut-off list still read as
+   * complete there. */
   background:
-    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 30%, transparent) top / 100% 14px no-repeat local,
-    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 70%) bottom / 100% 14px no-repeat local,
-    radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 22%), transparent) top / 100% 5px no-repeat scroll,
-    radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 22%), transparent) bottom / 100% 5px no-repeat scroll;
+    linear-gradient(var(--bg-elevated, var(--bg-secondary)) 50%, transparent) top / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--bg-elevated, var(--bg-secondary)) 50%) bottom / 100% 20px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-secondary) 45%, transparent), transparent) bottom / 100% 10px no-repeat scroll;
 }
 .ws-add-opt {
   display: flex;
@@ -6480,6 +6821,25 @@ button.icon-btn.muted:hover {
 .ws-add-ck { flex: none; width: 10px; font-size: var(--font-3xs); }
 .ws-add-lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-add-more { color: var(--text-secondary); padding-left: 26px; }
+/* Section heading in the roster ("CLI", "Agents"): bold and bright, aligned
+ * with the entry labels; every heading after the first sits under a divider,
+ * so the blocks read apart without a background or a highlighted entry. */
+.ws-add-sec { padding: 6px 10px 3px 26px; color: var(--text-bright); font-size: var(--font-2xs); font-weight: 700; line-height: 1.35; letter-spacing: 0.04em; }
+.ws-add-sec:not(:first-child) { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-muted); }
+.ws-add-agent { gap: 8px; padding-left: 8px; }
+.ws-add-avatar {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; color: #fff; font-size: var(--font-3xs); font-weight: 700;
+}
+.ws-add-agent-txt { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+.ws-add-agent-sub { color: var(--text-secondary); font-size: var(--font-3xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-add-newagent { display: flex; gap: 4px; padding: 3px 8px 3px 26px; }
+.ws-add-newagent-input { flex: 1; min-width: 0; font: inherit; font-size: var(--font-xs); padding: 2px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-base); color: var(--text-primary); }
+.ws-add-newagent-go { font: inherit; font-size: var(--font-xs); padding: 2px 8px; border: none; border-radius: var(--radius-xs); background: var(--accent-emphasis); color: var(--text-on-emphasis); cursor: pointer; }
+.ws-add-newagent-go:disabled { opacity: 0.5; cursor: default; }
+.ws-add-hint { padding: 4px 8px 2px 26px; color: var(--text-secondary); font-size: var(--font-3xs); line-height: 1.35; }
+.ws-add-exp { color: var(--text-secondary); font-size: var(--font-3xs); }
+.ws-add-kbd { margin-left: auto; padding-left: 8px; color: var(--text-secondary); font-size: var(--font-3xs); }
 
 /* Right-click menu on a workspace heading. Fixed at the pointer, same reason
    the ＋ menu is fixed: the pane list scrolls. */
@@ -7324,8 +7684,10 @@ button.icon-btn.muted:hover {
   -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
 }
 .spawn-card--modal {
-  /* Keeps its own 320px: it is a compact spawn card, not a dialog tier. */
-  width: min(320px, 92vw);
+  /* Keeps its own compact width: it is a spawn card, not a dialog tier.
+   * 360px leaves the agent select room for the longest
+   * "<label> — not installed" entry. */
+  width: min(360px, 92vw);
   max-width: 100%;
   max-height: calc(100vh - 48px);
   overflow-y: auto;

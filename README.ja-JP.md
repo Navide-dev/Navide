@@ -10,7 +10,7 @@ Navide は、一人の人間が複数の Coding Agent を指揮するための�
 
 [English](README.md) | [繁體中文](README.zh-TW.md) | 日本語
 
-[v0.2.32 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
+[v0.2.42 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.42) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -115,11 +115,11 @@ Navide はすでに、創設者がこのプロジェクトを進化させるた�
 | 2 週間前 | █████████████ | 293 |
 | 先週 | █████████ | 204 |
 
-数値は 2026-10-27（v0.2.32）時点のものです。ページ上部のバッジには最新の数値が表示されます。
+数値は 2026-10-27（v0.2.42）時点のものです。ページ上部のバッジには最新の数値が表示されます。
 
 ## 現在利用できる機能
 
-- **Multi-agent Workspace：** 対応する 16 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Goose、Grok CLI、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、Pi、Qwen Code）または通常の Terminal を、それぞれ独立した Pane で実行できます。
+- **Multi-agent Workspace：** 対応する 20 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、Kiro CLI、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code）または通常の Terminal を、それぞれ独立した Pane で実行できます。
 - **CLI 管理：** Install 済みの Coding CLI とそのバージョン・Install 方法を検出し、各 CLI 公式の更新コマンドと診断コマンドを実行できます。
 - **Session Lifecycle：** 対応 CLI の Session を検出、保存、再構築、再開できます。
 - **設定可能な Pipeline：** Stage、並列 Slot、Agent、Role、Kickoff Prompt、Question、Documentation Query、完了 Sentinel を定義できます。
@@ -153,13 +153,13 @@ Local-first は常に完全オフラインという意味ではありません�
 
 ## Navide を試す
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.32 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.42 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
 
-- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
-- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
-- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
-- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
-- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
+- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.dmg))
+- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.zip))
+- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-x64.exe))
+- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-arm64.exe))
+- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-amd64.deb))
 
 リンク先は dl.navide.dev で、アプリの自動更新と同じ配信元です。隣の「GitHub」リンクは GitHub Release 上の同じファイル（バイト単位で同一。リリースワークフローが両方に公開し、チェックサムの一致を確認しています）。
 
@@ -189,11 +189,17 @@ bun run dev
 
 Onboarding Wizard は Runtime を確認し、Agent CLI を検出し、関連する macOS 権限を説明します。続きは[はじめに](docs/ja-JP/getting-started.md)と[ユーザーガイド](docs/ja-JP/user-guide.md)を参照してください。
 
+## Navide 向けにプラグインを作る
+
+自分の Navide プラグインを作り、[Navide Marketplace](https://marketplace.navide.dev/) に公開できます。`npx navide-plugin init --template vue` で 5 分でビルドできるプラグインが手に入り（Navide 0.2.42 以降）、Developer Mode なら公開せずに読み込んで試せます。[developers.navide.dev](https://developers.navide.dev/developer) で一度だけ実名申請し、審査を通れば公開できます。
+流れ全体は [Build for Navide（英語）](docs/en-US/build-for-navide.md) の 1 ページにまとまっています。質問は [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions) へ。
+
 ## ドキュメントと詳細資料
 
 - **Navide を使う：** [はじめに](docs/ja-JP/getting-started.md)、[ユーザーガイド](docs/ja-JP/user-guide.md)、[トラブルシューティング](docs/ja-JP/troubleshooting.md)
 - **プロダクトを理解する：** [マニフェスト](docs/ja-JP/manifesto.md)、[ビジョン](docs/ja-JP/vision.md)、[ポジショニング](docs/ja-JP/product-positioning.md)、[ロードマップ](docs/ja-JP/roadmap.md)
 - **境界を確認する：** [プライバシーとデータフロー](docs/ja-JP/privacy.md)と[セキュリティポリシー（英語）](SECURITY.md)
+- **Navide 向けに開発する：** [Build for Navide（英語）](docs/en-US/build-for-navide.md)は `npx navide-plugin init` から Marketplace 審査・公開までを 1 ページで説明し、[欲しいプラグインの一覧](docs/en-US/plugin-ideas.md)もあります
 - **すべてを見る：** [日本語ドキュメント索引](docs/ja-JP/README.md)または[言語入口](docs/README.md)
 
 ## ライセンス

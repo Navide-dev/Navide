@@ -7,7 +7,6 @@ import { GIT_EVENT_TYPES, GIT_REQUEST_TYPES } from '../gitTransport'
 const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
 const gitConsumerRoots = [
   join(repositoryRoot, 'src/renderer/src'),
-  join(repositoryRoot, 'src/renderer/plugins/git'),
   join(repositoryRoot, 'plugins/navide-git/src'),
 ]
 
@@ -39,15 +38,17 @@ function collectGitTypes(pattern: RegExp): string[] {
   return [...matches].sort()
 }
 
-const requestCallPattern = /\b(?:send|runWrite)\s*(?:<[\s\S]*?>\s*)?\(\s*['"](git\.[a-z_]+)['"]/g
+// The type-argument group stops at a parenthesis so one call's generic cannot
+// run on into a later, unrelated call (e.g. a `sendQuiet<…>('git.summary'`).
+const requestCallPattern = /\b(?:send|runWrite)\s*(?:<[^()]*?>\s*)?\(\s*['"](git\.[a-z_]+)['"]/g
 const eventSubscriptionPattern = /\bon\s*\(\s*['"](git\.[a-z_]+)['"]/g
 
 describe('Git transport inventory', () => {
-  it('matches every Git request issued by v2 and legacy consumers', () => {
+  it('matches every Git request issued by the plugin and the Host', () => {
     expect(collectGitTypes(requestCallPattern)).toEqual([...GIT_REQUEST_TYPES].sort())
   })
 
-  it('matches every Git event subscribed by v2 and legacy consumers', () => {
+  it('matches every Git event subscribed by the plugin and the Host', () => {
     expect(collectGitTypes(eventSubscriptionPattern)).toEqual([...GIT_EVENT_TYPES].sort())
   })
 })

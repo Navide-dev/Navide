@@ -11,6 +11,7 @@ const signedIn = (account: boolean) => ({
   tokenExpiresAt: { account: null, publisher: null },
   keyFingerprint: null,
   keyRegistered: false,
+  keyConflictFingerprint: null,
 })
 
 const listing = {

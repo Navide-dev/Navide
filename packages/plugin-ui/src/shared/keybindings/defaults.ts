@@ -189,6 +189,12 @@ export const defaults: KeybindingRule[] = [
   // off macOS (PlanWindowApp.test.ts pins that). Same key on macOS either way.
   { key: 'mod+p',       command: 'workbench.action.quickOpen' },
   { key: 'cmd+shift+t', command: 'workbench.action.reopenClosedEditor' },
+  // Same key, the main window: reopen the last closed WINDOW, the way a browser
+  // reopens a tab in a tab strip and a window from an empty one. Later rules
+  // win, and `paneStage` holds only in the main window, so the Mini IDE and the
+  // editor window keep ⌘⇧T for their closed tabs. The Window menu shows the key
+  // without registering it (main/menu.ts), or it would win in every window.
+  { key: 'cmd+shift+t', command: 'workbench.action.reopenClosedWindow', when: 'paneStage' },
 
   // ── Workbench: sidebar & view ────────────────────────────────────────────────
   { key: 'cmd+b',       command: 'workbench.action.toggleSidebar' },
@@ -201,6 +207,9 @@ export const defaults: KeybindingRule[] = [
   // Right-rail preview panel. cmd+shift+v is left alone because terminals
   // treat it as paste-as-plain-text.
   { key: 'cmd+alt+v',   command: 'workbench.action.focusPreview' },
+  // Model arena (experimental). A no-op while Settings → General →
+  // Experimental features → Model arena is off.
+  { key: 'cmd+alt+a',   command: 'workbench.action.startModelArena' },
   // cmd+shift+p is the command palette and cmd+shift+l is taken by
   // selectHighlights/addSelectionToChat, so Plans lives on cmd+shift+d.
   { key: 'cmd+shift+d', command: 'workbench.action.openPlans' },
@@ -338,6 +347,20 @@ export const defaults: KeybindingRule[] = [
   // its Source Control sidebar (the rule above), and this one must sit AFTER
   // that rule to win where it applies.
   { key: 'cmd+shift+g', command: 'workbench.action.openGitWindow', when: 'paneStage && !findOpen' },
+  // Navide Browser, beside the built-in plugin windows.
+  { key: 'cmd+shift+x', command: 'workbench.action.openBrowser' },
+  // Off macOS only, beside the ⌘ rules (which stay as they were): ⌘ is the
+  // Win/Super key there, so ⌘⇧D / ⌘⇧G / ⌘⇧I / ⌘⇧X never reached Plans, Git, the
+  // Mini IDE or Navide Browser. Ctrl takes the same letter, except the Mini
+  // IDE: Ctrl+Shift+I is the menu's toggleDevTools accelerator off macOS, which
+  // fires before any renderer rule, so the Mini IDE takes Ctrl+Shift+M (not
+  // Ctrl+Alt+I: Ctrl+Alt is AltGr on Windows).
+  ...(isMacPlatform() ? [] : [
+    { key: 'ctrl+shift+d', command: 'workbench.action.openPlans' },
+    { key: 'ctrl+shift+g', command: 'workbench.action.openGitWindow', when: 'paneStage && !findOpen' },
+    { key: 'ctrl+shift+m', command: 'workbench.action.openMiniIDE' },
+    { key: 'ctrl+shift+x', command: 'workbench.action.openBrowser' },
+  ]),
 
   // ── Voice input ─────────────────────────────────────────────────────────────
   // Hold to talk into the focused CLI pane; releasing any key of the chord

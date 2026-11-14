@@ -166,7 +166,7 @@ describe('which vendors get the turn watch', () => {
 
   it('watches the vendors whose log reader reports a turn start', () => {
     for (const key of ['claude', 'codex', 'copilot', 'cursor', 'droid', 'antigravity', 'aider',
-      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen', 'goose']) {
+      'muse', 'opencode', 'kilo', 'grok', 'kimi', 'pi', 'qwen', 'goose', 'hermes', 'openclaw']) {
       expect(shouldWatchTurn({ agentKey: key, midTurn: false }), key).toBe(true)
     }
   })
@@ -201,7 +201,8 @@ describe('injectText never presses an extra Enter it cannot justify', () => {
   })
 
   it('decides the turn watch per vendor and per mid-turn', () => {
-    expect(fn).toContain('watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
+    expect(fn).toContain('const watchTurn = shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter })')
+    expect(fn).toContain('watchTurn,')
   })
 })
 

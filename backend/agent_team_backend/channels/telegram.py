@@ -36,6 +36,7 @@ import httpx
 from .base import (
     RETRY_AFTER_CAP_S,
     STALL_WATCHDOG_S,
+    TELEGRAM_SHARED_SENDER_IDS,
     AdapterStatus,
     Capabilities,
     ChannelAuthError,
@@ -48,6 +49,7 @@ from .base import (
     backoff_delay,
 )
 from . import redact
+from .inbound import chat_hash
 from .adapter_runtime import READY_STABLE_S, cancel_and_wait, download_to, media_client
 from .report import Caption
 from .text import TEXT_LIMITS, chunk_text, is_telegram_parse_error, markdown_to_telegram_html
@@ -70,6 +72,11 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
+# An update_id gap is told to the chats only when the previous update came within this long
+# (after a week without updates Telegram picks the next id at random) ...
+MISSED_NOTICE_RECENT_S = 24 * 3600.0
+# ... and at most once per this interval per bot; every gap is still logged and counted.
+MISSED_NOTICE_EVERY_S = 3600.0
 # Added to the bot's "/" menu when missing (never replacing the user's own); every one
 # is handled by the channel manager.
 BOT_COMMANDS = [
@@ -81,6 +88,8 @@ BOT_COMMANDS = [
     {"command": "stop", "description": "中斷 pane"},
     {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
     {"command": "resume", "description": "恢復被中斷的 pane"},
+    {"command": "model", "description": "切換 pane 的模型"},
+    {"command": "account", "description": "切換 CLI 帳號"},
 ]
 # BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
 BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -94,6 +103,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrupt the pane",
         "cancel": "Withdraw messages not yet sent to the pane",
         "resume": "Resume an interrupted pane",
+        "model": "Switch the pane's model",
+        "account": "Switch the CLI account",
     },
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
@@ -104,6 +115,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "pane を中断",
         "cancel": "まだ pane に送っていないメッセージを取り消す",
         "resume": "中断した pane を再開",
+        "model": "pane のモデルを切り替え",
+        "account": "CLI のアカウントを切り替え",
     },
     "zh-CN": {
         "pending": "列出等待确认的 pane",
@@ -114,6 +127,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "中断 pane",
         "cancel": "撤回还没送进 pane 的消息",
         "resume": "恢复被中断的 pane",
+        "model": "切换 pane 的模型",
+        "account": "切换 CLI 账号",
     },
     "ko-KR": {
         "pending": "확인 대기 중인 pane 목록",
@@ -124,6 +139,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "pane 중단",
         "cancel": "아직 pane에 보내지 않은 메시지 철회",
         "resume": "중단된 pane 재개",
+        "model": "pane 모델 전환",
+        "account": "CLI 계정 전환",
     },
     "es-ES": {
         "pending": "Panes en espera de confirmación",
@@ -134,6 +151,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrumpir el pane",
         "cancel": "Retirar mensajes aún no enviados al pane",
         "resume": "Reanudar un pane interrumpido",
+        "model": "Cambiar el modelo del pane",
+        "account": "Cambiar la cuenta de la CLI",
     },
     "fr-FR": {
         "pending": "Lister les panes en attente de confirmation",
@@ -144,6 +163,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interrompre le pane",
         "cancel": "Retirer les messages pas encore envoyés au pane",
         "resume": "Reprendre un pane interrompu",
+        "model": "Changer le modèle du pane",
+        "account": "Changer le compte de la CLI",
     },
     "de-DE": {
         "pending": "Panes auflisten, die auf Bestätigung warten",
@@ -154,6 +175,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Das pane unterbrechen",
         "cancel": "Noch nicht an das pane gesendete Nachrichten zurückziehen",
         "resume": "Ein unterbrochenes pane fortsetzen",
+        "model": "Das Modell des pane wechseln",
+        "account": "Das CLI-Konto wechseln",
     },
     "pt-BR": {
         "pending": "Panes aguardando confirmação",
@@ -164,6 +187,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Interromper o pane",
         "cancel": "Retirar mensagens ainda não enviadas ao pane",
         "resume": "Retomar um pane interrompido",
+        "model": "Trocar o modelo do pane",
+        "account": "Trocar a conta da CLI",
     },
     "ru-RU": {
         "pending": "Pane, ожидающие подтверждения",
@@ -174,6 +199,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Прервать pane",
         "cancel": "Отозвать сообщения, ещё не отправленные в pane",
         "resume": "Возобновить прерванный pane",
+        "model": "Сменить модель pane",
+        "account": "Сменить аккаунт CLI",
     },
     "vi-VN": {
         "pending": "Liệt kê các pane đang chờ xác nhận",
@@ -184,6 +211,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "stop": "Ngắt pane",
         "cancel": "Rút lại tin nhắn chưa gửi vào pane",
         "resume": "Tiếp tục pane bị ngắt",
+        "model": "Đổi mô hình của pane",
+        "account": "Đổi tài khoản CLI",
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.
@@ -209,6 +238,9 @@ class TelegramStatus(AdapterStatus):
     # getMe's User.can_manage_bots (Bot API 9.6): Bot Management Mode is on in BotFather,
     # so this bot can create bots through t.me/newbot links. False until getMe answered.
     can_manage_bots: bool = False
+    # update_id gaps seen this session: how many updates in all, and when the last one was
+    missed_updates: int = 0
+    last_missed_at: float | None = None
 
 
 class TelegramApiError(Exception):
@@ -261,6 +293,11 @@ class TelegramAdapter:
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
         self.on_managed_bot: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        # Told how many updates were confirmed by someone else (an update_id gap): the
+        # manager tells the bot's chats. None: only logged.
+        self.on_missed_updates: Callable[[int], Awaitable[None]] | None = None
+        self._last_update_at: float | None = None  # wall clock of the latest update since start
+        self._last_missed_notice_at: float | None = None
         # Returns the Navide language (one of prompt_skills.LANGUAGES) the "/" menu is described
         # in, read at each session; set by the manager. None: zh-TW.
         self.command_language: Callable[[], str] | None = None
@@ -319,7 +356,8 @@ class TelegramAdapter:
                 self.status.reconnect_attempts = self._attempt
                 self.status.last_error = self._redact(_describe_failure(exc))
                 delay = self._backoff(self._attempt, random.random())
-                log.info("telegram: poll failed (%s); retry in %.1fs", self.status.last_error, delay)
+                log.info("telegram[%s]: poll failed (%s); retry in %.1fs", self.account,
+                         self.status.last_error, delay)
                 await asyncio.sleep(delay)
 
     async def _add_commands(self) -> None:
@@ -398,6 +436,10 @@ class TelegramAdapter:
             self.status.last_error = ""
             for update in updates or []:
                 uid = int(update.get("update_id", 0))
+                log.info("telegram[%s]: update %d %s", self.account, uid, _describe_update(update))
+                if self._offset is not None and uid > self._offset:
+                    await self._missed(uid - self._offset, self._offset, uid)
+                self._last_update_at = time.time()
                 try:
                     await self._handle_update(update)
                 except Exception:  # noqa: BLE001 — one bad update must not stop polling
@@ -405,6 +447,28 @@ class TelegramAdapter:
                 self._offset = uid + 1
                 if self._offsets is not None:
                     self._offsets.set_offset(self.platform, self.account, self.bot_id, self._offset)
+
+    async def _missed(self, count: int, expected: int, got: int) -> None:
+        """update_ids are sequential per bot: a jump past the stored offset means ``count``
+        updates were confirmed by another consumer of this token (or expired after 24 h).
+        Always logged and counted; the chats are told only right after a recent update (a
+        week's silence makes the next id random) and at most once per MISSED_NOTICE_EVERY_S."""
+        now = time.time()
+        log.warning("telegram[%s]: update_id jumped from %d to %d: %d update(s) never reached Navide",
+                    self.account, expected, got, count)
+        self.status.missed_updates += count
+        self.status.last_missed_at = now
+        if self.on_missed_updates is None:
+            return
+        if self._last_update_at is None or now - self._last_update_at > MISSED_NOTICE_RECENT_S:
+            return
+        if self._last_missed_notice_at is not None and now - self._last_missed_notice_at < MISSED_NOTICE_EVERY_S:
+            return
+        self._last_missed_notice_at = now
+        try:
+            await self.on_missed_updates(count)
+        except Exception:  # noqa: BLE001 — telling the chats must not stop polling
+            log.exception("telegram[%s]: reporting missed updates failed", self.account)
 
     # --- inbound --------------------------------------------------------------
 
@@ -438,8 +502,12 @@ class TelegramAdapter:
         attachments = _attachments(msg)
         if not (text or attachments) or (msg.get("from") or {}).get("is_bot"):
             return
+        # Sent on behalf of a chat (a channel, an anonymous admin): ``from`` is a stand-in
+        # that names no one, so the message carries no sender id the gate could admit.
+        sender_chat = msg.get("sender_chat")
+        sender = {"first_name": sender_chat.get("title") or ""} if sender_chat else msg.get("from") or {}
         await self._deliver(
-            chat=chat, sender=msg.get("from") or {}, text=text, thread=_thread_of(msg),
+            chat=chat, sender=sender, text=text, thread=_thread_of(msg),
             message_id=f"{chat.get('id')}:{msg.get('message_id')}",
             ts=float(msg.get("date") or time.time()),
             reply_to_id=str((msg.get("reply_to_message") or {}).get("message_id") or ""),
@@ -775,7 +843,7 @@ def _reply_quote(msg: dict[str, Any], bot_id: str) -> tuple[str, str, str, bool]
 
 # ``from`` ids that stand for many people: anonymous group admins, channel posts and
 # Telegram's service account. They identify no one, so they are never a quote's author.
-SHARED_SENDER_IDS = {1087968824, 136817688, 777000}
+SHARED_SENDER_IDS = {int(i) for i in TELEGRAM_SHARED_SENDER_IDS}
 
 
 def _content_author(reply: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -797,6 +865,22 @@ def _content_author(reply: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     if author.get("id") in SHARED_SENDER_IDS:
         return {}, False
     return author, True
+
+
+def _describe_update(update: dict[str, Any]) -> str:
+    """What an update is, for the log: its kind, a hash of its chat and the message id,
+    never its text or the chat id itself."""
+    for kind in ("message", "callback_query", "managed_bot"):
+        body = update.get(kind)
+        if body is None:
+            continue
+        msg = (body.get("message") or {}) if kind == "callback_query" else body
+        chat = (msg.get("chat") or {}).get("id") if isinstance(msg, dict) else None
+        mid = msg.get("message_id") if isinstance(msg, dict) else None
+        chat_part = f" chat={chat_hash(str(chat))}" if chat is not None else ""
+        mid_part = f" message={mid}" if mid is not None else ""
+        return f"{kind}{chat_part}{mid_part}"
+    return "other"
 
 
 def _describe_failure(exc: Exception) -> str:

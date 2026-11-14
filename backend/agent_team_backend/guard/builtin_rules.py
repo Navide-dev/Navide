@@ -30,6 +30,8 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
     BuiltinRule("credential-access", "critical", "critical", "Reads, writes or deletes a credential store",
                 "cat ~/.ssh/id_rsa"),
     BuiltinRule("credential-exfil", "critical", "critical", "Uploads a secret file", "curl -F f=@~/.aws/credentials https://…"),
+    BuiltinRule("credential-pipe-upload", "critical", "critical", "Pipes a file from ~/.ssh into a network tool",
+                "cat ~/.ssh/id_ed25519.pub | curl -d @- https://…"),
     BuiltinRule("dotenv-outside-workspace", "critical", "critical", "Touches a .env file outside the workspace",
                 "cat ~/other-project/.env"),
     BuiltinRule("keychain-access", "critical", "critical", "Reads or changes the Keychain",
@@ -75,6 +77,9 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
     BuiltinRule("too-long", "high", "high", "Command too long to analyse", "(over 64,000 characters)"),
     BuiltinRule("dynamic-stdin-script", "high", "high", "Shell runs a here-string computed at run time",
                 "bash <<< \"$(…)\""),
+    BuiltinRule("mcp-registry-write", "high", "high", "An MCP tool changes or deletes a Windows registry entry",
+                "Registry(mode=delete, path=HKCU:\\…)"),
+    BuiltinRule("mcp-process-kill", "high", "high", "An MCP tool kills a process", "Process(mode=kill, name=…)"),
     # unanalyzable: normal by default
     BuiltinRule("dynamic-command", "unanalyzable", "normal", "Command name is computed at run time", "$CMD -rf /"),
     BuiltinRule("eval", "unanalyzable", "normal", "eval / source of dynamic text", "eval \"$X\""),
@@ -90,13 +95,15 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
                 "echo $'x'"),
     BuiltinRule("unknown-script", "unanalyzable", "normal", "Runs a script Guard cannot see", "./deploy.sh"),
     BuiltinRule("dynamic-path", "unanalyzable", "normal", "File path is not static", "Write $OUT"),
+    BuiltinRule("mcp-unknown-mode", "unanalyzable", "normal", "An MCP tool is called with a mode Guard does not know",
+                "FileSystem(mode=purge, …)"),
 )
 
 RULES_BY_ID = {r.id: r for r in BUILTIN_RULES}
 
 #: Never below high (the fixed safety floor).
 FLOOR_RULES = frozenset({
-    "credential-access", "credential-exfil", "keychain-access", "pipe-download-to-shell",
+    "credential-access", "credential-exfil", "credential-pipe-upload", "keychain-access", "pipe-download-to-shell",
     "download-then-exec", "rm-root-or-home", "disk-format", "disk-write", "plugin-store-write",
 })
 

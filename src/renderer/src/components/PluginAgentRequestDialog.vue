@@ -155,6 +155,12 @@ const diff = computed<DisclosureDiff | null>(() => {
   }
 })
 
+// A request may arrive while this window is behind another one, minimized or
+// not focused: bring it to the front when the dialog opens so it is seen.
+watch(() => current.value !== null, (open) => {
+  if (open) void window.agentTeam?.focusSelf?.()
+})
+
 watch(() => current.value?.approval_id, async (approvalId) => {
   error.value = ''
   stagingExpired.value = false
@@ -249,6 +255,12 @@ function applyDeps(): PluginRequestApplyDeps {
     async enable(pluginId: string): Promise<void> {
       await plugins().setDisabled(pluginId, false)
       await inventory.refresh()
+    },
+    // A plugin-clear-secrets request: the user pressed "Delete secrets".
+    async clearSecrets(pluginId: string): Promise<void> {
+      const api = plugins()
+      if (!api.clearSecrets) throw new Error(t('plugin-request.unavailable'))
+      await api.clearSecrets(pluginId)
     },
     listInstalled: requests.listInstalled,
     async finish(approvalId: string, result: FinishStatus): Promise<void> {
@@ -376,6 +388,9 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
           </template>
           <dt>{{ $t('plugin-request.expires') }}</dt><dd>{{ expiresText }}</dd>
         </dl>
+        <p v-if="current.kind === 'plugin-clear-secrets'" class="pr-note pr-unreviewed" role="note" data-testid="plugin-request-clear-secrets">
+          {{ $t('plugin-request.clear-secrets-note', { plugin: label }) }}
+        </p>
         <!-- W1 (S2): a local file is no Marketplace version; nothing vouches for it. -->
         <p v-if="current.kind === 'plugin-install-file'" class="pr-note pr-unreviewed" role="note" data-testid="plugin-request-file-unreviewed">
           {{ $t(current.target.packageKind === 'folder' ? 'plugin-request.file.unreviewed-folder' : 'plugin-request.file.unreviewed') }}
@@ -432,7 +447,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
             data-testid="plugin-request-approve"
             @click="decide(true)"
           >
-            {{ busy ? $t('plugin-request.applying') : $t('plugin-request.approve') }}
+            {{ busy ? $t('plugin-request.applying') : $t(current.kind === 'plugin-clear-secrets' ? 'settings.extensions.marketplace.uninstallSecretsDelete' : 'plugin-request.approve') }}
           </button>
         </template>
       </footer>

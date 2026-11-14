@@ -119,6 +119,36 @@ async def test_a_chat_the_running_bot_never_saw_is_still_listed_from_its_binding
     assert [b["pane_id"] for b in chat["bindings"]] == ["pane-1"]
 
 
+def _row(res: dict, chat_id: str, pane_id: str, account: str = "default") -> dict:
+    return next(b for b in _chat(_bot(res, account=account), chat_id)["bindings"] if b["pane_id"] == pane_id)
+
+
+async def test_a_binding_in_a_dm_whose_sender_is_not_approved_needs_approval(ov: Env) -> None:
+    ov.store.remember_chat("telegram", _bot_key(ov), "42", "stranger", "direct", False, 1)
+    ov.store.bind("pane-1", Location("telegram", "default", "42", "", "api"))
+
+    assert _row(ov.m.overview(), "42", "pane-1")["needs_approval"] is True
+
+    ov.store.add_allow("telegram", "42", "stranger", 2)
+    assert "needs_approval" not in _row(ov.m.overview(), "42", "pane-1")
+
+
+async def test_a_dm_only_the_adapter_knows_is_judged_by_its_own_kind(ov: Env) -> None:
+    ov.tg.known_locations = lambda: [{"chat_id": "42", "title": "stranger", "kind": "private",  # type: ignore[attr-defined]
+                                      "supports_topics": False}]
+    ov.store.bind("pane-1", Location("telegram", "default", "42", "", "api"))
+
+    assert _row(ov.m.overview(), "42", "pane-1")["needs_approval"] is True
+
+
+async def test_a_group_binding_needs_approval_only_on_a_bot_with_nobody_allowed(ov: Env) -> None:
+    ov.store.bind("pane-1", Location("telegram", "default", "-100", "50", "api"))
+    assert "needs_approval" not in _row(ov.m.overview(), "-100", "pane-1")
+
+    assert ov.store.remove_allow("telegram", "7")
+    assert _row(ov.m.overview(), "-100", "pane-1")["needs_approval"] is True
+
+
 async def test_every_configured_bot_is_listed_even_without_chats(ov: Env) -> None:
     assert (await ov.m.configure("telegram", {"account": "b2"}, {"token": "tok-B"}, "b2"))["ok"]
     res = ov.m.overview()
@@ -209,3 +239,43 @@ async def test_ws_api_routes_the_new_requests(ov: Env) -> None:
     focus = await ws_api._dispatch(ov.m, "channels.focus_pane", {"pane_id": "pane-2"})
     assert focus["ok"] is True and focus["workspace_path"] == "/w/Other"
 
+
+
+async def test_list_summarises_each_bots_bindings_with_one_directory_read(ov: Env) -> None:
+    ov.tg.bot_id = "7421000"
+    ov.store.remember_chat("telegram", _bot_key(ov), "-100", "Dev group", "supergroup", True, 5)
+    ov.store.bind("pane-1", Location("telegram", "default", "-100", "50", "api"))
+    ov.store.bind("pane-2", Location("telegram", "default", "-100", "60", "scout"))
+    ov.store.set_wake_target("pane-2", "/w/Other", "s-2")
+    ov.fake.gone.add("pane-2")
+    calls = []
+    directory = ov.m._seams.pane_directory
+    ov.m._seams = dataclasses.replace(ov.m._seams, pane_directory=lambda: calls.append(1) or directory())
+    bot = ov.m.list()["platforms"][0]["accounts"][0]
+    assert len(calls) == 1
+    assert bot["bot_id"] == "7421000"
+    by_pane = {b["pane_id"]: b for b in bot["bindings"]}
+    assert by_pane["pane-1"]["pane_name"] == "api" and by_pane["pane-1"]["pane_exists"] is True
+    assert by_pane["pane-1"]["workspace_path"] == "/w/Agent-Team"
+    assert by_pane["pane-1"]["workspace_name"] == "Agent-Team"
+    # A closed pane keeps the name it was bound under and the workspace it was woken from.
+    assert by_pane["pane-2"]["pane_exists"] is False and by_pane["pane-2"]["pane_name"] == "scout"
+    assert by_pane["pane-2"]["workspace_name"] == "Other"
+    assert bot["last_activity_at"] == max(b["created_at"] for b in bot["bindings"])
+
+
+async def test_list_gives_an_unbound_bot_no_bindings(ov: Env) -> None:
+    bot = ov.m.list()["platforms"][0]["accounts"][0]
+    assert bot["bindings"] == [] and bot["last_activity_at"] is None
+
+
+async def test_one_locations_call_answers_every_running_bot(ov: Env) -> None:
+    ov.store.remember_chat("telegram", _bot_key(ov), "-100", "Dev group", "supergroup", True, 5)
+    res = await ws_api._dispatch(ov.m, "channels.locations", {"all": True})
+    assert res["ok"] is True
+    bot = next(b for b in res["bots"] if b["platform"] == "telegram" and b["account"] == "default")
+    assert bot["locations"] == ov.m.locations("telegram")["locations"]
+    assert any(loc["chat_id"] == "-100" for loc in bot["locations"])
+    # Without the flag it stays the per-bot call it always was.
+    one = await ws_api._dispatch(ov.m, "channels.locations", {"platform": "telegram"})
+    assert one == ov.m.locations("telegram")

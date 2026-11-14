@@ -26,14 +26,11 @@ function stub(name: string, props: string[] = []) {
 // the host's routing (which pane the v-if chain mounts).
 vi.mock('../../components/ExplorerPane.vue', () => stub('ExplorerPane'))
 vi.mock('../../components/SearchPane.vue', () => stub('SearchPane'))
-vi.mock('../../components/GitPane.vue', () => stub('GitPane'))
 vi.mock('../../components/ProblemsPane.vue', () => stub('ProblemsPane'))
 vi.mock('../../components/NotificationHost.vue', () => stub('NotificationHost'))
 vi.mock('@navide/plugin-ui/editor', () => ({ EditorPane: stub('EditorPane').default }))
 vi.mock('../PlanFileView.vue', () => stub('PlanFileView'))
 vi.mock('../DiffPane.vue', () => stub('DiffPane'))
-vi.mock('../ConflictPane.vue', () => stub('ConflictPane'))
-vi.mock('../BranchDiffPane.vue', () => stub('BranchDiffPane'))
 vi.mock('../FilePreviewPane.vue', () => stub('FilePreviewPane'))
 
 vi.mock('../../composables/useBackend', () => ({

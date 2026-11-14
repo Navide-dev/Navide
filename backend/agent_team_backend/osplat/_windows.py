@@ -48,6 +48,7 @@ from typing import Any, Callable
 
 import psutil
 
+from .. import frozen_env
 from .proctree import children_map, walk_descendants
 from .spec import ProcInfo, windows_refused_file_name, windows_short_name
 
@@ -58,9 +59,15 @@ log = logging.getLogger(__name__)
 # line on stderr when none can be made. A random name rather than
 # GetTempFileName: that creates tmpXXXX.tmp and fails for good once 65535 are
 # left behind by hooks killed mid-wait; curl creates this file itself.
+# .NET calls only, never Join-Path / Get-Content / Remove-Item: those live in
+# Microsoft.PowerShell.Management, and its first use per process autoloads the
+# module, which cost about 23 s per hook run on the windows-11-arm runner where
+# `exit 0` starts in 0.4 s (release run 40904538508). The `throw` keeps
+# Join-Path's refusal of an unset TEMP; Combine would return a relative path.
 _PS_TEMP_PATH = (
     "$TMP = $null; $TMPERR = ''; "
-    "try { $TMP = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName()) } catch { $TMPERR = \"$_\" }; "
+    "try { if (-not $env:TEMP) { throw 'TEMP is not set' }; "
+    "$TMP = [IO.Path]::Combine($env:TEMP, [IO.Path]::GetRandomFileName()) } catch { $TMPERR = \"$_\" }; "
     "if (-not $TMP) { [Console]::Error.Write('navide hook: no temp file: ' + $TMPERR + "
     "[Environment]::NewLine); exit 0 }; "
 )
@@ -486,56 +493,40 @@ class WindowsProcessTree:
         self.kill_tree(gid, force=force)
 
     def own_group_spawn_kwargs(self) -> dict[str, int]:
-        # Suspended until `start_own_group` has put it in its job: a child
-        # that ran first could start a process (cmd\git.exe starts the real
-        # git.exe at once) before the assignment, and that one and everything
-        # it starts would be outside the job.
-        return {"creationflags": CREATE_SUSPENDED}
+        # Not suspended, and `start_own_group` puts it in no job. Until 0.2.38
+        # a run started CREATE_SUSPENDED, joined a kill-on-close job and was
+        # resumed with NtResumeProcess; on a user's host every git.exe started
+        # that way left one kernel Token object behind (paged pool +280MB/h
+        # under GitWatcher), while the processes git starts itself, with
+        # neither, left none. Both steps are dropped, since which one leaks
+        # could not be tested there. A timeout kills the tree from a snapshot
+        # instead (host_shell._kill_tree_and_reap).
+        return {}
 
     def end_own_group(self, pid: int) -> None:
-        return None
+        # No group and, since 0.2.38, no job either (see
+        # `own_group_spawn_kwargs`): the tree is read again here, just before
+        # host_shell kills the root, so a grandchild started after its first
+        # snapshot still ends. The root is unreaped, so its pid is still its.
+        try:
+            self.kill_tree(pid, force=True)
+        except OSError:
+            pass
 
     def start_own_group(self, pid: int) -> int | None:
-        job: int | None = None
-        try:
-            job = self.contain(pid)
-        except OSError as exc:
-            # Degraded, not fatal: the run works, and a timeout falls back to
-            # killing the snapshot of its tree.
-            log.warning("job object unavailable for pid %s: %s", pid, exc)
-        try:
-            # NtResumeProcess: Popen has already closed the thread handle.
-            psutil.Process(pid).resume()
-        except psutil.Error as exc:
-            if job is not None:
-                self.end_contained(pid, job)
-            else:
-                try:
-                    self.kill(pid, force=True)
-                except OSError:
-                    pass
-            raise _translate(exc) from None
-        return job
+        # No job (see `own_group_spawn_kwargs`): nothing to assign or resume.
+        return None
 
     def release_contained(self, pid: int, job: int) -> None:
         with _jobs_lock:
             entry = _jobs.get(pid)
             if entry is not None and entry[0] == job:
                 del _jobs[pid]
-        k = _kernel32()
-        # Zeroed limits: no KILL_ON_JOB_CLOSE, so the close below ends nothing.
-        info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        if k.SetInformationJobObject(
-            job, JobObjectExtendedLimitInformation, ctypes.byref(info), ctypes.sizeof(info)
-        ):
-            k.CloseHandle(job)
-            return
-        # Closing it now would end what the run left running: keep the handle.
-        log.warning(
-            "could not clear kill-on-close for pid %s (error %s); keeping its job open",
-            pid,
-            ctypes.get_last_error(),  # type: ignore[attr-defined]
-        )
+        # Closed as is, limits not cleared first: clearing them before the
+        # close was one of the two steps under suspicion for the leaked Token
+        # objects (see `own_group_spawn_kwargs`). With KILL_ON_JOB_CLOSE still
+        # set, the close ends whatever the child left running in the job.
+        _kernel32().CloseHandle(job)
 
     def contain(self, pid: int) -> int | None:
         job = _create_kill_on_close_job()
@@ -698,6 +689,11 @@ _EXIT_WATCH_MS = 250
 _EXIT_DRAIN_S = 0.05
 #: How long `watch_writable` waits before retrying a drain (see module doc).
 _WRITE_RETRY_S = 0.05
+#: Output a pause may leave queued before the oldest chunks are dropped. A
+#: pause cannot throttle the CLI here (see `pause_reading`), so this is what
+#: bounds the backend's memory while a drain stalls. Equal to terminals'
+#: _BUF_CAP, the bound POSIX applies to the same stall one layer up.
+_PAUSED_QUEUE_CAP = 5 * 1024 * 1024
 
 
 class WindowsTerminalHandle:
@@ -716,6 +712,8 @@ class WindowsTerminalHandle:
         self._job = job
         self.proc = _WindowsChild(pid, process_handle)
         self._chunks: deque[bytes] = deque()
+        self._queued = 0
+        self._dropped = 0
         self._lock = threading.Lock()
         self._eof = False
         self._closed = False
@@ -742,9 +740,11 @@ class WindowsTerminalHandle:
             head = self._chunks[0]
             if len(head) <= max_bytes:
                 self._chunks.popleft()
-                return head
-            self._chunks[0] = head[max_bytes:]
-            return head[:max_bytes]
+            else:
+                self._chunks[0] = head[max_bytes:]
+                head = head[:max_bytes]
+            self._queued -= len(head)
+            return head
 
     def start_reading(
         self, loop: asyncio.AbstractEventLoop, callback: Callable[[], None]
@@ -790,6 +790,12 @@ class WindowsTerminalHandle:
     def resume_reading(self) -> None:
         with self._lock:
             self._paused = False
+            dropped, self._dropped = self._dropped, 0
+        if dropped:
+            log.warning(
+                "conpty output dropped pid=%s bytes=%d (paused queue over %d)",
+                self.pid, dropped, _PAUSED_QUEUE_CAP,
+            )
         self._notify()
 
     def stop_reading(self) -> None:
@@ -879,6 +885,13 @@ class WindowsTerminalHandle:
     def _enqueue(self, data: bytes) -> None:
         with self._lock:
             self._chunks.append(data)
+            self._queued += len(data)
+            # Only a pause lets the queue build up; drop the oldest, keeping
+            # at least the chunk that just arrived.
+            while self._paused and self._queued > _PAUSED_QUEUE_CAP and len(self._chunks) > 1:
+                old = self._chunks.popleft()
+                self._queued -= len(old)
+                self._dropped += len(old)
         self._notify()
 
     def _notify(self) -> None:
@@ -1074,6 +1087,7 @@ class WindowsTerminalBackend:
         head, tail = paths.pty_launch_parts(exe, words[1:], path=env.get("PATH") or None)
         appname = subprocess.list2cmdline([head])
         cmdline = subprocess.list2cmdline(tail) or None
+        env = frozen_env.restore_user_temp_env(env)
         env_block = "\0".join(f"{k}={v}" for k, v in env.items()) + "\0"
         try:
             import winpty
@@ -1137,6 +1151,8 @@ terminal_backend = WindowsTerminalBackend()
 # as a pure append; `paths` is rebound below to the complete implementation.
 
 import tempfile  # noqa: E402
+
+from ._posix_paths import _npmrc_prefix  # noqa: E402  (a portable ini read)
 
 
 class WindowsLayout(WindowsPaths):
@@ -1434,6 +1450,60 @@ def _probe_symlinks() -> bool:
     return True
 
 
+_MACHINE_ENV_KEY = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
+_USER_ENV_KEY = "Environment"
+
+
+def _registry_path_entries() -> list[str]:
+    """The PATH a new process would get now: Machine, then User, expanded.
+
+    Read fresh on every call; it is a pair of registry reads. A key or value
+    that is absent (a locked-down profile has no User PATH) contributes
+    nothing rather than failing the rest.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return []
+    entries: list[str] = []
+    for root, subkey in (
+        (winreg.HKEY_LOCAL_MACHINE, _MACHINE_ENV_KEY),
+        (winreg.HKEY_CURRENT_USER, _USER_ENV_KEY),
+    ):
+        try:
+            key = winreg.OpenKey(root, subkey)
+            try:
+                value, _kind = winreg.QueryValueEx(key, "Path")
+            finally:
+                winreg.CloseKey(key)
+        except OSError:
+            continue
+        # REG_EXPAND_SZ holds `%USERPROFILE%\...` as written; expanded either
+        # way, since a REG_SZ with no `%` comes back unchanged.
+        expanded = winreg.ExpandEnvironmentStrings(str(value))
+        entries.extend(entry for entry in expanded.split(";") if entry.strip())
+    return entries
+
+
+def _npm_global_dirs(home: Path) -> list[str]:
+    """Where `npm install -g` puts its `.cmd` shims on Windows.
+
+    npm's default prefix there is `%APPDATA%\npm`, and unlike POSIX the shims
+    sit in the prefix itself, not `<prefix>\bin`. A prefix the user set
+    (`npm_config_prefix`, `~/.npmrc`) is added too.
+    """
+    appdata = os.environ.get("APPDATA")
+    roaming = Path(appdata) if appdata else home / "AppData" / "Roaming"
+    dirs = [str(roaming / "npm")]
+    configured = (os.environ.get("npm_config_prefix") or "").strip() or _npmrc_prefix(home)
+    if configured:
+        prefix = Path(os.path.expandvars(configured)).expanduser()
+        # Absolute only, for the reason `npm_prefix_bins` gives.
+        if prefix.is_absolute() and str(prefix) not in dirs:
+            dirs.append(str(prefix))
+    return dirs
+
+
 class WindowsDiscoveryLayout(WindowsLayout):
     def executable_candidates(self, name: str) -> list[str]:
         exts = _pathext()
@@ -1447,8 +1517,8 @@ class WindowsDiscoveryLayout(WindowsLayout):
         return True
 
     def login_path_probe(self) -> list[str] | None:
-        # No login shell: PATH comes from the registry and the process
-        # already carries it.
+        # No login shell: PATH comes from the registry, re-read through
+        # `login_path_tail_fallbacks` so a dir added after launch is seen.
         return None
 
     def login_path_fallbacks(self, home: Path) -> list[str]:
@@ -1456,7 +1526,13 @@ class WindowsDiscoveryLayout(WindowsLayout):
         return []
 
     def login_path_tail_fallbacks(self, home: Path) -> list[str]:
-        return []
+        # The process PATH is the one Explorer handed Navide at launch. An
+        # installer that ran since (winget's Node MSI, nvm-windows, Volta)
+        # wrote its dir to the registry, and `npm install -g` lands in npm's
+        # global dir — neither reaches this process until Navide restarts.
+        # Appended, never prepended: nothing the inherited PATH resolves
+        # first is displaced.
+        return [*_registry_path_entries(), *_npm_global_dirs(home)]
 
     def git_subprocess_env(self, askpass: str) -> dict[str, str]:
         # GIT_ASKPASS only, as before: whether the bundled OpenSSH execs the
@@ -1474,6 +1550,10 @@ class WindowsDiscoveryLayout(WindowsLayout):
 
     def file_name_refused(self, name: str) -> bool:
         return windows_refused_file_name(name) or windows_short_name(name)
+
+    def lstat_for_identity(self, path: Path, scandir_stat: os.stat_result) -> os.stat_result:
+        # DirEntry.stat() here is FindFirstFile metadata: st_dev/st_ino are 0.
+        return os.lstat(path)
 
     def symlinks_available(self) -> bool:
         global _symlinks_available
@@ -1680,6 +1760,18 @@ def _ps_quote(value: str) -> str:
     return f"'{escaped}'"
 
 
+def _ps_read_port(port_file: str) -> str:
+    """`$PORT` from the port file, `$null`-ish when it cannot be read.
+
+    What `Get-Content -ErrorAction SilentlyContinue` gave, without loading the
+    module it lives in (see `_PS_TEMP_PATH`): the lines with their endings
+    stripped, falsy for a missing or empty file, and a one-line file reads and
+    interpolates as that line. The path is literal, where Get-Content's -Path
+    read `[` and `]` in it as wildcards.
+    """
+    return f"$PORT = $null; try {{ $PORT = [IO.File]::ReadAllLines({_ps_quote(port_file)}) }} catch {{}}; "
+
+
 class WindowsScripts:
     def hook_entry(self, command: str) -> dict:
         # Without `shell`, Claude Code looks for Git Bash and only falls back
@@ -1727,12 +1819,12 @@ class WindowsScripts:
                 f"{_PS_TEMP_PATH}"
                 f"{post}; "
                 f"$OUTB = $null; try {{ $OUTB = [IO.File]::ReadAllBytes($TMP) }} catch {{}}; "
-                f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+                f"try {{ [IO.File]::Delete($TMP) }} catch {{}}; "
                 f"if ($OUTB) {{ $OUTS = [Console]::OpenStandardOutput(); "
                 f"$OUTS.Write($OUTB, 0, $OUTB.Length); $OUTS.Flush() }}"
             )
         return (
-            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
+            f"{_ps_read_port(port_file)}"
             f"if ($PORT) {{ {post} }}; exit 0"
         )
 
@@ -1748,7 +1840,7 @@ class WindowsScripts:
         # left the parent console on 65001 when two hooks interleaved or one
         # was killed mid-wait.
         return (
-            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
+            f"{_ps_read_port(port_file)}"
             f"if (-not $PORT) {{ exit 0 }}; "
             f"{_PS_TEMP_PATH}"
             f"& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} -o $TMP -X POST "
@@ -1758,7 +1850,7 @@ class WindowsScripts:
             f"--data-binary '@-' "
             f'"http://127.0.0.1:$PORT{url_path}" 2>$null; '
             f"$BODY = $null; try {{ $BODY = [IO.File]::ReadAllLines($TMP, [Text.Encoding]::UTF8) }} catch {{}}; "
-            f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+            f"try {{ [IO.File]::Delete($TMP) }} catch {{}}; "
             f"if (($BODY -join '').Trim()) {{ "
             f"$ERRB = [Text.Encoding]::UTF8.GetBytes(($BODY -join [Environment]::NewLine) + [Environment]::NewLine); "
             f"$ERRS = [Console]::OpenStandardError(); $ERRS.Write($ERRB, 0, $ERRB.Length); $ERRS.Flush(); "

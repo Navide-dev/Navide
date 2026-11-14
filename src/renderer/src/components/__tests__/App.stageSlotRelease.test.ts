@@ -161,17 +161,26 @@ describe('closing a workspace ends the run its panes belonged to', () => {
     // Written next to each 'running' transition and nowhere else, or it stops
     // naming the run and the gate starts answering about the wrong project.
     const writes = appSource.match(/(?<!let )pipelineRunWorkspace = /g) ?? []
-    // 2 starts (start + resume), 1 rollback (a resume the backend refused puts
-    // back what it had just written), 3 clears (pipeline reset, workspace close,
-    // workspace close that keeps its panes).
-    expect(writes.length).toBe(6)
-    // The rollback is legitimate only because it undoes a 'running' write that
-    // never took: it must live in the refused-resume branch and nowhere else.
-    const rollback = appSource.indexOf('pipelineRunWorkspace = before.runWorkspace')
-    expect(rollback).toBeGreaterThan(-1)
-    const refused = appSource.lastIndexOf('if (!resp) {', rollback)
-    expect(refused).toBeGreaterThan(appSource.lastIndexOf("sendQuiet<ProjectPayload>('pipeline.resume'", rollback))
-    expect(appSource.indexOf('pipelineRunWorkspace = before.runWorkspace', rollback + 1)).toBe(-1)
+    // 2 starts (start + resume), 2 rollbacks (a start or a resume the backend
+    // refused puts back what it had just written), 3 clears (pipeline reset,
+    // workspace close, workspace close that keeps its panes).
+    expect(writes.length).toBe(7)
+    // A rollback is legitimate only because it undoes a 'running' write that
+    // never took: one lives in the refused-start branch, one in the
+    // refused-resume branch, and there is no third.
+    const first = appSource.indexOf('pipelineRunWorkspace = before.runWorkspace')
+    const second = appSource.indexOf('pipelineRunWorkspace = before.runWorkspace', first + 1)
+    expect(first).toBeGreaterThan(-1)
+    expect(second).toBeGreaterThan(first)
+    expect(appSource.indexOf('pipelineRunWorkspace = before.runWorkspace', second + 1)).toBe(-1)
+    const branches = [
+      { opens: 'if (!resp) {', send: "sendQuiet<ProjectPayload>('pipeline.resume'" },
+      { opens: 'if (refused.code !== undefined) {', send: "sendQuiet<ProjectPayload>('pipeline.start'" },
+    ]
+    for (const branch of branches) {
+      const at = [first, second].find((r) => appSource.lastIndexOf(branch.opens, r) > appSource.lastIndexOf(branch.send, r))
+      expect(at, branch.send).toBeDefined()
+    }
     expect(appSource).toContain("let pipelineRunWorkspace = ''")
     expect(appSource).toContain("pipelineRunWorkspace = resumeWorkspacePath\n  pipeline.stageIndex = info.nextStageIndex\n  pipeline.state = 'running'")
     expect(appSource).toContain("pipelineRunWorkspace = payload.workspacePath\n  pipeline.stageIndex = 0\n  pipeline.state = 'running'")

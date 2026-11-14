@@ -93,7 +93,11 @@ _POSIX_PROGRAM_RE = re.compile(
 )
 #: Offenders today, each with the gate that makes it acceptable. Empty: the
 #: one there was (`/bin/sh -c` in the PATH-probe test) now asks the seam.
-POSIX_PROGRAM_ALLOWLIST: set[str] = set()
+POSIX_PROGRAM_ALLOWLIST: set[str] = {
+    # Runs the POSIX hook line through the /bin/sh the CLI uses; the whole module
+    # is skipped on Windows, where unattended panes do not exist yet.
+    "test_guard_fail_closed.py",
+}
 
 
 class TestNoUngatedPosixProgramInTests:

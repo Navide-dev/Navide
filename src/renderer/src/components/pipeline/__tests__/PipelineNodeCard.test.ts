@@ -25,6 +25,36 @@ describe('PipelineNodeCard', () => {
     w.unmount()
   })
 
+  it('labels a branch and an error link by what they do; only a reject link says back', () => {
+    const w = mount(PipelineNodeCard, {
+      props: {
+        node,
+        badges: [
+          { kind: 'branch', edgeId: 'b', targetLayer: 3, when: 'yes' },
+          { kind: 'error', edgeId: 'x', targetLayer: 4 },
+          { kind: 'reject', edgeId: 'r', targetLayer: 1, maxLoops: 2 },
+        ],
+      },
+      global: { plugins: [i18n] },
+    })
+    const texts = w.findAll('.pnc-badge').map((b) => b.text())
+    expect(texts).toEqual(['⑂ If yes → layer 3', '⚠ On failure → layer 4', '↺ Back to layer 1 (max 2)'])
+    expect(w.findAll('.pnc-badge').map((b) => b.classes().find((c) => c.startsWith('pnc-badge--'))))
+      .toEqual(['pnc-badge--branch', 'pnc-badge--error', 'pnc-badge--reject'])
+    w.unmount()
+  })
+
+  it('badges an imported step that needs review', () => {
+    const w = mount(PipelineNodeCard, { props: { node: { ...node, needsReview: true } }, global: { plugins: [i18n] } })
+    const mark = w.find('.pnc-mark--review')
+    expect(mark.exists()).toBe(true)
+    expect(mark.attributes('aria-label')).toBe(i18n.global.t('pipelineEditor.node.needs-review'))
+    w.unmount()
+    const plain = mount(PipelineNodeCard, { props: { node }, global: { plugins: [i18n] } })
+    expect(plain.find('.pnc-mark--review').exists()).toBe(false)
+    plain.unmount()
+  })
+
   it('adds no reason to a node that has none', () => {
     const w = mount(PipelineNodeCard, { props: { node, run: { status: 'done' } }, global: { plugins: [i18n] } })
     expect(w.find('.pnc-status').attributes('title')).toBeUndefined()

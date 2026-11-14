@@ -11,44 +11,13 @@ An ACP pane is one whose agent the backend runs over the Agent Client Protocol
 (acp_ws / acp_sessions); its own session state is authoritative, so none of
 this asks a window or reads a terminal.
 
-TODO(P5): the MCP tool descriptions say nothing about ACP panes yet, so
-tools/list stays byte-identical to main while no pane can be one (user,
-2026-10-24). When an ACP entry point ships, add these paragraphs to the
-docstrings in server.py (and re-pin MAIN_TOOLS_LIST_SHA256), and give
-docs/*/inter-cli-messaging.md (en-US, ja-JP, zh-TW) the section on ACP
-delivery, in the place #592 first had it (end of "Delivery", before
-"Stop-hook delivery (claude)"): "ACP panes are delivered to as prompts,
-not typed" — the window queues, rate-limits, logs acks, renders the
-envelope and holds it mid-turn as for any pane, then hands it to the
-backend (acp.prompt) as session/prompt; delivered = the backend accepted
-the prompt (sent, or queued behind a running turn), not that the agent
-read or answered it; with no window it waits in the queue as for any pane.
-
-cli_read_log:
-For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-with no terminal) the log is the transcript the backend writes — each
-prompt as "> " lines, then the agent's reply text and tool-call titles —
-read from the backend's own copy when the window recorded no path.
-
-cli_get_status:
-For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-with no terminal) the result also has `display`: "acp" and `acp`:
-{state: "starting"|"idle"|"running"|"cancelling", queued,
-pending_permissions} from the backend's own session; both are absent for
-every other pane.
-
-cli_wait_idle:
-For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-with no terminal) the backend's own session state decides: source
-"acp_state" when the session is idle with no prompt queued, "acp_exited"
-when its agent has exited; while it waits on a permission request, a
-timeout reports reason "awaiting".
-
-cli_interrupt:
-For an ACP pane (an agent Navide runs over the Agent Client Protocol,
-with no terminal) the backend cancels the running turn itself
-(session/cancel; no window is involved) and the result says `via`: "acp";
-when no turn was running, `sent` is false with an advisory saying so.
+The four tools' descriptions say nothing about ACP panes while Settings →
+CLI Agents → "ACP (experimental)" is off (the default), so tools/list stays
+byte-identical to main (MAIN_TOOLS_LIST_SHA256). While it is on, acp_switch
+appends TOOL_NOTES below to them (pinned by ACP_ON_TOOLS_LIST_SHA256); the
+docstrings in server.py are never edited. How an ACP pane is delivered to
+is in docs/en-US/inter-cli-messaging.md ("ACP panes are delivered to as
+prompts, not typed", end of "How delivery actually works").
 """
 
 from __future__ import annotations
@@ -57,6 +26,36 @@ import asyncio
 import time
 from contextlib import AbstractContextManager
 from typing import Any, Callable
+
+#: What each tool's description gains while the ACP switch is on (acp_switch).
+TOOL_NOTES: dict[str, str] = {
+    "cli_read_log": (
+        "For an ACP pane (an agent Navide runs over the Agent Client Protocol,\n"
+        "with no terminal) the log is the transcript the backend writes — each\n"
+        "prompt as \"> \" lines, then the agent's reply text and tool-call titles —\n"
+        "read from the backend's own copy when the window recorded no path."
+    ),
+    "cli_get_status": (
+        "For an ACP pane (an agent Navide runs over the Agent Client Protocol,\n"
+        "with no terminal) the result also has `display`: \"acp\" and `acp`:\n"
+        "{state: \"starting\"|\"idle\"|\"running\"|\"cancelling\", queued,\n"
+        "pending_permissions} from the backend's own session; both are absent for\n"
+        "every other pane."
+    ),
+    "cli_wait_idle": (
+        "For an ACP pane (an agent Navide runs over the Agent Client Protocol,\n"
+        "with no terminal) the backend's own session state decides: source\n"
+        "\"acp_state\" when the session is idle with no prompt queued, \"acp_exited\"\n"
+        "when its agent has exited; while it waits on a permission request, a\n"
+        "timeout reports reason \"awaiting\"."
+    ),
+    "cli_interrupt": (
+        "For an ACP pane (an agent Navide runs over the Agent Client Protocol,\n"
+        "with no terminal) the backend cancels the running turn itself\n"
+        "(session/cancel; no window is involved) and the result says `via`: \"acp\";\n"
+        "when no turn was running, `sent` is false with an advisory saying so."
+    ),
+}
 
 # How often cli_wait_idle looks at an ACP pane's state (the same cadence the
 # tool uses for every other pane).

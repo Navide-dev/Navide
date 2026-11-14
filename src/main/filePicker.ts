@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
-import type { FilePickerRequest } from '../../packages/plugin-contracts/src/filePicker'
+import type { FilePickerRequest, FilePickerTarget } from '../../packages/plugin-contracts/src/filePicker'
 import { splitFilePickerCandidate } from '../../packages/plugin-contracts/src/filePicker'
 import type { HostFilePickerRow } from '../shared/filePicker'
 
@@ -35,6 +35,12 @@ interface Picker {
   selecting: boolean
   attached: boolean
   finish(opened: boolean): void
+}
+
+/** What the caller wants opened: its own parsed `targets`, or else the
+ * `candidates` strings as this Host has always read them. */
+function requestedTargets(request: FilePickerRequest): FilePickerTarget[] {
+  return request.targets ?? request.candidates.map(splitFilePickerCandidate)
 }
 
 /** A picker-only trusted renderer. Candidates are never filesystem authority;
@@ -103,10 +109,9 @@ export class FilePickerHostService implements FilePickerHost {
     try { found = await invocation.search(query) } catch { /* Keep a valid clicked candidate, as the existing picker does. */ }
     if (!this.live(picker) || generation !== picker.generation) return []
     const preferred = query === invocation.request.query
-      ? (await Promise.all(invocation.request.candidates.map(async candidate => {
-          const parsed = splitFilePickerCandidate(candidate)
-          const target = await this.resolveCandidate(invocation.workspacePath, parsed.path)
-          return target ? { ...target, line: parsed.line ?? invocation.request.line } : null
+      ? (await Promise.all(requestedTargets(invocation.request).map(async candidate => {
+          const target = await this.resolveCandidate(invocation.workspacePath, candidate.path)
+          return target ? { ...target, line: candidate.line ?? invocation.request.line } : null
         }))).find(target => target !== null)
       : undefined
     const resolved = [preferred, ...await Promise.all(found.map(path => this.resolveCandidate(invocation.workspacePath, path)))]
@@ -192,8 +197,8 @@ export class FilePickerHostService implements FilePickerHost {
         if (this.options.openPreview) {
           // The original terminal directly previews a clicked workspace HTML
           // report. External candidates still require the trusted row picker.
-          for (const candidate of invocation.request.candidates) {
-            const target = await this.resolveCandidate(invocation.workspacePath, splitFilePickerCandidate(candidate).path)
+          for (const candidate of requestedTargets(invocation.request)) {
+            const target = await this.resolveCandidate(invocation.workspacePath, candidate.path)
             if (!this.live(picker)) { close(); return }
             if (!target) continue
             const root = await realpath(invocation.workspacePath)

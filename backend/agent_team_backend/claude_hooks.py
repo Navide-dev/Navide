@@ -686,6 +686,13 @@ def wire_spawn(command: Any) -> Any:
     return _append_to_command(command, f"{SETTINGS_FLAG} {osplat.paths.quote_arg(str(pane_settings_path()))}")
 
 
+def append_settings(command: Any, settings: Path) -> Any:
+    """``command`` starting from `settings`, which wire_spawn then leaves alone."""
+    from .push_delivery import _append_to_command
+
+    return _append_to_command(command, f"{SETTINGS_FLAG} {osplat.paths.quote_arg(str(settings))}")
+
+
 def hooks_present(settings_file: Path | None = None, *, dev_only: bool = False) -> bool:
     """Whether the settings file still carries any hook Navide wrote (a dev
     backend's own only, with ``dev_only``).

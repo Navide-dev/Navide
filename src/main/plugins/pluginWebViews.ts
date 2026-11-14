@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto'
+import { closeSync, constants, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, isAbsolute, join, parse, relative, sep } from 'node:path'
 import {
   isAllowedWebUrl,
+  type WebViewUpload,
   type WebAgentCaller,
   type WebControlReason,
   type WebViewControl,
+  type WebViewDialog,
   type WebViewInfo,
   type WebViewOwner,
   type WebViewRect,
@@ -16,16 +21,19 @@ import {
  * its lane lives here, not in the plugin: one persistent partition per
  * plugin, a sandboxed guest with no preload, an http(s)-only navigation
  * allowlist, denied permission requests, the owner/control flags that make
- * `cdp` answer USER_IN_CONTROL, and a per-method CDP allowlist that keeps the
+ * `cdp` answer USER_IN_CONTROL, a per-method CDP allowlist that keeps the
  * debugger inside the page (no cookies, no interception, no persistent
- * scripts, no file chooser paths, no download directory, no other targets). The Electron objects are injected so the rules are tested
- * without a browser. */
+ * scripts, no download directory, no other targets; file chooser paths only
+ * for regular files inside the calling pane's workspace), and per-plugin caps
+ * on live and attached views. The Electron objects are injected so the rules
+ * are tested without a browser. */
 
 export type WebViewErrorCode =
   | 'INVALID_ARGUMENT'
   | 'USER_IN_CONTROL'
   | 'CAPABILITY_DENIED'
   | 'CDP_ERROR'
+  | 'LIMIT_REACHED'
 
 export class WebViewError extends Error {
   readonly code: WebViewErrorCode
@@ -60,6 +68,7 @@ export interface WebGuestContents {
     attach(protocolVersion?: string): void
     detach(): void
     sendCommand(method: string, params?: Record<string, unknown>): Promise<unknown>
+    on(event: string, listener: Listener): unknown
   }
 }
 
@@ -96,32 +105,69 @@ export interface PluginWebViewDeps {
   session(partition: string): WebGuestSession
   /** Called (coalesced per microtask) whenever a plugin's view list changes. */
   onChanged(pluginId: string, views: WebViewInfo[]): void
+  /** Diagnostic lines for the main log. */
+  log?(line: string): void
 }
 
 export const DEFAULT_CAPTURE_WIDTH = 480
+/** Bounds of a view on no window. A WebContentsView never given bounds is
+ *  0x0: its page has no viewport (innerWidth 0) and never paints, so a
+ *  viewport snapshot comes back empty and Page.captureScreenshot never
+ *  answers. Hidden views still lay out and paint at this size. */
+export const UNATTACHED_VIEW_BOUNDS: WebViewRect = { x: 0, y: 0, width: 1280, height: 800 }
 const CDP_PROTOCOL_VERSION = '1.3'
+/** How long Page.captureScreenshot may wait for a frame. A view on no window
+ *  may never get one: on Linux and Windows its layer has no compositor, and
+ *  under software rendering a hidden view does not paint at all. */
+export const SCREENSHOT_FRAME_WAIT_MS = 2500
+/** How long the capturePage fallback may take after that. */
+export const SCREENSHOT_CAPTURE_WAIT_MS = 1500
+/** CDP_ERROR message prefix the browser backend reads as VIEW_NOT_RENDERED. */
+export const NO_FRAME_MESSAGE = 'no-frame: the page produced no frame to capture (it is on no window and does not paint here)'
+const TIMED_OUT: unique symbol = Symbol('timed-out')
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<typeof TIMED_OUT>(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), ms) }),
+  ]).finally(() => clearTimeout(timer))
+}
 const MAX_CDP_ERROR_MESSAGE = 500
 const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+/** Live views per plugin; `create` and popups past it are LIMIT_REACHED. */
+export const MAX_VIEWS_PER_PLUGIN = 32
+/** Views one plugin may have attached at once (a 3×3 grid of Spaces). */
+export const MAX_ATTACHED_VIEWS = 9
+const MAX_DIALOG_TEXT = 500
+const MAX_UPLOAD_FILES = 16
+/** Each uploaded file is copied before the page gets it; this bounds a copy. */
+const MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+const DIALOG_TYPES: readonly string[] = ['alert', 'confirm', 'prompt', 'beforeunload']
 
 /** The only CDP methods the plugin may send: exactly what the Navide Browser
  *  backend uses to read and drive a page. Anything else is refused, which
  *  keeps out the cookie jar (shared with the user's own Spaces), the cache,
  *  request interception (`Fetch.*`, `Network.setRequestInterception`),
  *  scripts and bindings that outlive a page (`Page.addScriptToEvaluateOnNewDocument`,
- *  `Runtime.addBinding`), DOM storage, file chooser paths, the download
- *  directory and every other target. */
+ *  `Runtime.addBinding`), DOM storage, the download directory and every other
+ *  target. `DOM.setFileInputFiles` is allowed only with files the Host checked
+ *  are regular files inside the calling pane's workspace; `Page.enable` is the
+ *  Host's own (for dialog events), never the plugin's. */
 const CDP_ALLOWED_METHODS: ReadonlySet<string> = new Set([
   'Accessibility.getFullAXTree',
   'DOM.focus',
   'DOM.getBoxModel',
   'DOM.resolveNode',
   'DOM.scrollIntoViewIfNeeded',
+  'DOM.setFileInputFiles',
   'DOMSnapshot.captureSnapshot',
   'Input.dispatchKeyEvent',
   'Input.dispatchMouseEvent',
   'Input.insertText',
   'Page.captureScreenshot',
   'Page.getNavigationHistory',
+  'Page.handleJavaScriptDialog',
   'Page.navigate',
   'Page.navigateToHistoryEntry',
   'Runtime.callFunctionOn',
@@ -167,6 +213,16 @@ interface WebViewEntry {
   /** The agent ran script in the current document (Runtime.evaluate or
    *  callFunctionOn); it may outlive a detach until the next document. */
   agentScriptSinceLoad: boolean
+  /** The view whose window.open created this one. */
+  readonly openerViewId: string | undefined
+  /** A JS dialog open in the page, seen through the agent's debugger. */
+  dialog: WebViewDialog | null
+  /** The debugger 'message' listener is installed (once per contents). */
+  dialogListener: boolean
+  /** Host-private directory holding this view's checked upload copies. */
+  uploadDir: string | null
+  /** Disclosed in the view info: what the agent uploaded, and where to. */
+  uploads: WebViewUpload[]
 }
 
 export class PluginWebViewRegistry {
@@ -190,8 +246,20 @@ export class PluginWebViewRegistry {
     owner: WebViewOwner,
     caller?: WebAgentCaller,
   ): { viewId: string } {
+    return this.spawn(pluginId, request, owner, owner === 'agent' && caller ? { ...caller } : null, undefined)
+  }
+
+  /** `create` and popups: every view goes through the same guards. */
+  private spawn(
+    pluginId: string,
+    request: { space: string; url?: string },
+    owner: WebViewOwner,
+    agentPane: WebAgentCaller | null,
+    openerViewId: string | undefined,
+  ): { viewId: string } {
     const partition = webPartitionFor(pluginId)
     if (request.url !== undefined && !isAllowedWebUrl(request.url)) throw new WebViewError('INVALID_ARGUMENT')
+    if (this.countViews(pluginId, false) >= MAX_VIEWS_PER_PLUGIN) throw new WebViewError('LIMIT_REACHED')
     this.guardSession(partition)
     // An agent's view runs in the background, never attached: it must not be
     // throttled while nobody watches it.
@@ -203,7 +271,7 @@ export class PluginWebViewRegistry {
       space: request.space,
       view,
       owner,
-      agentPane: owner === 'agent' && caller ? { ...caller } : null,
+      agentPane,
       control: owner,
       reason: owner === 'user' ? 'user-owned' : undefined,
       state: owner === 'agent' ? 'running' : 'idle',
@@ -212,21 +280,26 @@ export class PluginWebViewRegistry {
       rect: null,
       agentInput: 0,
       agentScriptSinceLoad: false,
+      openerViewId,
+      dialog: null,
+      dialogListener: false,
+      uploadDir: null,
+      uploads: [],
     }
     this.views.set(entry.viewId, entry)
     this.wireGuest(entry)
     view.setVisible(false)
+    view.setBounds(UNATTACHED_VIEW_BOUNDS)
     void view.webContents.loadURL(request.url ?? 'about:blank').catch(() => undefined)
     this.changed(pluginId)
     return { viewId: entry.viewId }
   }
 
-  /** Stack the view on the caller's plugin view; one attached view per plugin. */
+  /** Stack the view on the caller's plugin view at its own rect; several
+   *  views may be attached at once, up to MAX_ATTACHED_VIEWS per plugin. */
   attach(pluginId: string, viewId: string, rect: WebViewRect, host: WebHostSurface): void {
     const entry = this.entry(pluginId, viewId)
-    for (const other of this.views.values()) {
-      if (other !== entry && other.pluginId === pluginId && other.host) this.detachEntry(other)
-    }
+    if (!entry.host && this.countViews(pluginId, true) >= MAX_ATTACHED_VIEWS) throw new WebViewError('LIMIT_REACHED')
     if (entry.host && entry.host.key !== host.key) this.detachEntry(entry)
     if (!entry.host) {
       host.addChildView(entry.view)
@@ -313,7 +386,8 @@ export class PluginWebViewRegistry {
     entry.state = state
     entry.note = note
     if (state === 'need-action') {
-      this.takeOver(entry, 'manual_takeover')
+      // The agent handed the view over; nothing the user did took it.
+      this.takeOver(entry, 'agent_handoff')
       // The agent asked the user in: there is no user input to lose, so the
       // page its script ran in is reloaded before the user types anything.
       const contents = entry.view.webContents
@@ -342,6 +416,12 @@ export class PluginWebViewRegistry {
     this.assertAgentInControl(entry)
     if (!CDP_ALLOWED_METHODS.has(method)) throw new WebViewError('CAPABILITY_DENIED')
     if (method === 'Page.navigate' && !isAllowedWebUrl(params?.url)) throw new WebViewError('INVALID_ARGUMENT')
+    let uploaded: WebViewUpload[] | null = null
+    if (method === 'DOM.setFileInputFiles') {
+      const staged = this.stageUploads(entry, params?.files, caller)
+      params = { ...params, files: staged.copies }
+      uploaded = staged.records
+    }
     const contents = entry.view.webContents
     if (contents.isDestroyed()) throw new WebViewError('INVALID_ARGUMENT')
     if (!contents.debugger.isAttached()) {
@@ -350,14 +430,38 @@ export class PluginWebViewRegistry {
       } catch (error) {
         throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
       }
+      this.watchDialogs(entry)
+      // Host-internal: dialog events need the Page domain. Not awaited, so a
+      // page blocked on a dialog cannot stall the agent's command behind it.
+      try {
+        contents.debugger.sendCommand('Page.enable').catch(() => undefined)
+      } catch {
+        /* Dialog events are a convenience; the agent's command still runs. */
+      }
     }
     const script = method === 'Runtime.evaluate' || method === 'Runtime.callFunctionOn'
     if (script) entry.agentScriptSinceLoad = true
     const input = method.startsWith('Input.')
     if (input) entry.agentInput += 1
     try {
-      return await contents.debugger.sendCommand(method, params)
+      if (method === 'Page.captureScreenshot') return await this.captureScreenshot(entry, params)
+      const result = await contents.debugger.sendCommand(method, params)
+      if (uploaded === null) return result
+      // Disclose, don't restrict: the view info and the agent's own result
+      // both say what went where, and flag names that look like secrets.
+      entry.uploads.push(...uploaded)
+      entry.uploads.splice(0, Math.max(0, entry.uploads.length - MAX_UPLOAD_RECORDS))
+      this.changed(entry.pluginId)
+      const secret = uploaded.filter(upload => upload.sensitive).map(upload => upload.file)
+      return {
+        ...(isRecord(result) ? result : {}),
+        uploaded: uploaded.map(({ file, origin, sensitive }) => ({ file, origin, sensitive })),
+        ...(secret.length === 0 ? {} : {
+          warning: `Uploaded files whose names look like secrets: ${secret.join(', ')}. The user sees this on the Space.`,
+        }),
+      }
     } catch (error) {
+      if (error instanceof WebViewError) throw error
       throw new WebViewError('CDP_ERROR', { message: cdpMessage(error) })
     } finally {
       if (input) entry.agentInput -= 1
@@ -365,6 +469,33 @@ export class PluginWebViewRegistry {
       if (script) entry.agentScriptSinceLoad = true
       // The user may have taken over while the command ran; the next one is refused.
     }
+  }
+
+  /** Page.captureScreenshot that cannot hang: when no frame comes in time,
+   *  fall back to capturePage (JPEG requests only, the format it can match),
+   *  and failing that answer NO_FRAME_MESSAGE. */
+  private async captureScreenshot(entry: WebViewEntry, params?: Record<string, unknown>): Promise<unknown> {
+    const contents = entry.view.webContents
+    const frame = contents.debugger.sendCommand('Page.captureScreenshot', params)
+    // A frame that arrives after the fallback answered has nobody to go to.
+    frame.catch(() => undefined)
+    const shot = await withTimeout(frame, SCREENSHOT_FRAME_WAIT_MS)
+    if (shot !== TIMED_OUT) return shot
+    const where = `view ${entry.viewId} (${entry.host === null ? 'on no window' : 'attached'})`
+    this.deps.log?.(`[PluginWebViewRegistry] Page.captureScreenshot: no frame in ${SCREENSHOT_FRAME_WAIT_MS}ms for ${where}; trying capturePage`)
+    if (params?.format !== 'jpeg') {
+      this.deps.log?.(`[PluginWebViewRegistry] no capturePage fallback for format ${String(params?.format ?? 'png')} on ${where}`)
+      throw new WebViewError('CDP_ERROR', { message: NO_FRAME_MESSAGE })
+    }
+    const image = await withTimeout(contents.capturePage(), SCREENSHOT_CAPTURE_WAIT_MS)
+      .catch((): typeof TIMED_OUT => TIMED_OUT)
+    if (image !== TIMED_OUT && !image.isEmpty()) {
+      const quality = typeof params.quality === 'number' ? params.quality : 80
+      this.deps.log?.(`[PluginWebViewRegistry] capturePage fallback gave an image for ${where}`)
+      return { data: image.toJPEG(quality).toString('base64') }
+    }
+    this.deps.log?.(`[PluginWebViewRegistry] capturePage fallback ${image === TIMED_OUT ? 'timed out' : 'was empty'} for ${where}`)
+    throw new WebViewError('CDP_ERROR', { message: NO_FRAME_MESSAGE })
   }
 
   /** `web.capture`: a JPEG data URL for the Spaces overview card. */
@@ -418,6 +549,7 @@ export class PluginWebViewRegistry {
    *  `cdp`, once control is back, attaches again. Script already running in
    *  the page survives this; only a reload clears it. */
   private detachDebugger(entry: WebViewEntry): void {
+    entry.dialog = null
     const contents = entry.view.webContents
     if (contents.isDestroyed()) return
     try {
@@ -450,6 +582,66 @@ export class PluginWebViewRegistry {
       loading: alive ? contents.isLoading() : false,
       attached: entry.host !== null,
       agentScriptSinceLoad: entry.agentScriptSinceLoad,
+      ...(entry.openerViewId === undefined ? {} : { openerViewId: entry.openerViewId }),
+      ...(entry.dialog === null ? {} : { dialog: { ...entry.dialog } }),
+      ...(entry.uploads.length === 0 ? {} : { uploads: entry.uploads.map(upload => ({ ...upload })) }),
+    }
+  }
+
+  private countViews(pluginId: string, attachedOnly: boolean): number {
+    let count = 0
+    for (const entry of this.views.values()) {
+      if (entry.pluginId === pluginId && (!attachedOnly || entry.host !== null)) count += 1
+    }
+    return count
+  }
+
+  /** Once per contents: track JS dialogs through the agent's debugger. The
+   *  events only arrive while it is attached with the Page domain enabled. */
+  private watchDialogs(entry: WebViewEntry): void {
+    if (entry.dialogListener) return
+    entry.dialogListener = true
+    entry.view.webContents.debugger.on('message', (_event: unknown, method: string, params: Record<string, unknown> | undefined) => {
+      if (this.views.get(entry.viewId) !== entry) return
+      if (method === 'Page.javascriptDialogOpening') {
+        const type = params?.type
+        if (typeof type !== 'string' || !DIALOG_TYPES.includes(type)) return
+        entry.dialog = {
+          type: type as WebViewDialog['type'],
+          message: typeof params?.message === 'string' ? params.message.slice(0, MAX_DIALOG_TEXT) : '',
+          ...(type === 'prompt' && typeof params?.defaultPrompt === 'string'
+            ? { defaultPrompt: params.defaultPrompt.slice(0, MAX_DIALOG_TEXT) }
+            : {}),
+        }
+        this.changed(entry.pluginId)
+      } else if (method === 'Page.javascriptDialogClosed') {
+        if (entry.dialog === null) return
+        entry.dialog = null
+        this.changed(entry.pluginId)
+      }
+    })
+  }
+
+  /** A page's window.open: a sibling view in the same Space, with the
+   *  opener's owner and pane, through `spawn`'s guards. At the view cap the
+   *  URL loads in the opener instead. */
+  private openPopup(opener: WebViewEntry, url: string): void {
+    if (this.views.get(opener.viewId) !== opener) return
+    try {
+      const { viewId } = this.spawn(opener.pluginId, { space: opener.space, url }, opener.owner,
+        opener.agentPane === null ? null : { ...opener.agentPane }, opener.viewId)
+      // A popup of a page the user has taken over stays with the user: the
+      // agent must not drive the new view while it may not drive its opener.
+      const popup = this.views.get(viewId)!
+      if (opener.control === 'user' && popup.control !== 'user') {
+        popup.control = 'user'
+        popup.reason = opener.reason ?? 'manual_takeover'
+      }
+    } catch (error) {
+      // Only the cap falls back; nothing else may turn a popup into a window.
+      if (error instanceof WebViewError && error.code === 'LIMIT_REACHED') {
+        void opener.view.webContents.loadURL(url).catch(() => undefined)
+      }
     }
   }
 
@@ -476,6 +668,7 @@ export class PluginWebViewRegistry {
     entry.host = null
     entry.rect = null
     entry.view.setVisible(false)
+    entry.view.setBounds(UNATTACHED_VIEW_BOUNDS)
     if (host) {
       try {
         host.removeChildView(entry.view)
@@ -485,9 +678,40 @@ export class PluginWebViewRegistry {
     }
   }
 
+  /** Check each file, then copy it into a Host-private directory and give the
+   *  page the copy: the path Chromium reads later can no longer be swapped
+   *  for a link to a file outside the workspace. */
+  private stageUploads(
+    entry: WebViewEntry,
+    files: unknown,
+    caller: WebAgentCaller | undefined,
+  ): { copies: string[]; records: WebViewUpload[] } {
+    const checked = workspaceFiles(files, caller)
+    const root = realpathSync(caller!.workspace as string)
+    entry.uploadDir ??= mkdtempSync(join(tmpdir(), 'navide-web-upload-'))
+    const batch = mkdtempSync(join(entry.uploadDir, 'u-'))
+    const copies = checked.map((file, index) => copyChecked(file, join(batch, String(index)), caller!.workspace as string))
+    const at = new Date().toISOString()
+    const origin = pageOrigin(entry.view.webContents)
+    const records = checked.map((file): WebViewUpload => ({
+      file: relative(root, file).split(sep).join('/'),
+      origin,
+      sensitive: looksSecret(basename(file)),
+      at,
+    }))
+    return { copies, records }
+  }
+
+  private removeUploads(entry: WebViewEntry): void {
+    if (entry.uploadDir === null) return
+    rmSync(entry.uploadDir, { recursive: true, force: true })
+    entry.uploadDir = null
+  }
+
   private destroyEntry(entry: WebViewEntry): void {
     this.detachEntry(entry)
     this.views.delete(entry.viewId)
+    this.removeUploads(entry)
     const contents = entry.view.webContents
     if (contents.isDestroyed()) return
     try {
@@ -556,8 +780,9 @@ export class PluginWebViewRegistry {
       contents.stop()
       void contents.loadURL('about:blank').catch(() => undefined)
     })
+    // Electron never opens a window: the registry makes the popup a view.
     contents.setWindowOpenHandler(({ url }) => {
-      if (isAllowedWebUrl(url)) void contents.loadURL(url).catch(() => undefined)
+      if (isAllowedWebUrl(url)) this.openPopup(entry, url)
       return { action: 'deny' }
     })
     // Electron's defaults would hand a site the first client certificate in the
@@ -586,7 +811,10 @@ export class PluginWebViewRegistry {
     })
     // A main-frame navigation (a reload included) replaces the document and
     // with it any script the agent left there; in-page navigations do not.
-    contents.on('did-navigate', () => { entry.agentScriptSinceLoad = false })
+    contents.on('did-navigate', () => {
+      entry.agentScriptSinceLoad = false
+      entry.dialog = null
+    })
     for (const event of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading']) {
       contents.on(event, () => this.changed(entry.pluginId))
     }
@@ -594,6 +822,7 @@ export class PluginWebViewRegistry {
       if (this.views.get(entry.viewId) !== entry) return
       this.detachEntry(entry)
       this.views.delete(entry.viewId)
+      this.removeUploads(entry)
       this.changed(entry.pluginId)
     })
   }
@@ -603,6 +832,89 @@ export class PluginWebViewRegistry {
     this.takeOver(entry, 'manual_takeover')
     this.changed(entry.pluginId)
   }
+}
+
+/** `DOM.setFileInputFiles` files: 1 to MAX_UPLOAD_FILES absolute paths, each
+ *  (symlinks resolved) a regular file strictly inside the calling pane's
+ *  workspace (also resolved). Returns the resolved paths, so what the page
+ *  gets is what was checked; anything else is CAPABILITY_DENIED. */
+function workspaceFiles(files: unknown, caller: WebAgentCaller | undefined): string[] {
+  const deny = (): never => { throw new WebViewError('CAPABILITY_DENIED') }
+  if (!caller || typeof caller.workspace !== 'string' || !isAbsolute(caller.workspace)) deny()
+  if (!Array.isArray(files) || files.length === 0 || files.length > MAX_UPLOAD_FILES) deny()
+  let root: string
+  try {
+    root = realpathSync(caller!.workspace as string)
+  } catch {
+    return deny()
+  }
+  // A workspace at the file system root would contain every file.
+  if (root === parse(root).root) deny()
+  const prefix = root.endsWith(sep) ? root : root + sep
+  return (files as unknown[]).map((file) => {
+    if (typeof file !== 'string' || !isAbsolute(file)) deny()
+    let real: string
+    try {
+      real = realpathSync(file as string)
+      if (!statSync(real).isFile()) deny()
+    } catch {
+      return deny()
+    }
+    if (!real.startsWith(prefix)) deny()
+    return real
+  })
+}
+
+/** Copy one checked file into `directory` (created owner-only) under its own
+ *  name. The source is opened without following a final link, must still be a
+ *  regular file of at most MAX_UPLOAD_BYTES, and must still be the file its
+ *  resolved path inside the workspace names; otherwise CAPABILITY_DENIED. */
+function copyChecked(file: string, directory: string, workspace: string): string {
+  const deny = (): never => { throw new WebViewError('CAPABILITY_DENIED') }
+  let fd: number
+  try {
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW)
+  } catch {
+    return deny()
+  }
+  try {
+    const opened = fstatSync(fd)
+    if (!opened.isFile() || opened.size > MAX_UPLOAD_BYTES) deny()
+    // The descriptor must be the file the workspace check approved.
+    const [again] = workspaceFiles([file], { paneId: null, workspace })
+    const named = statSync(again)
+    if (named.dev !== opened.dev || named.ino !== opened.ino) deny()
+    const data = readFileSync(fd)
+    if (data.length > MAX_UPLOAD_BYTES) deny()
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    const copy = join(directory, basename(file))
+    writeFileSync(copy, data, { mode: 0o600, flag: 'wx' })
+    return copy
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** Upload records kept per view (oldest dropped first). */
+const MAX_UPLOAD_RECORDS = 20
+
+/** Names that look like credentials: flagged, never refused. */
+const SECRET_NAME = /^\.env(\..*)?$|\.pem$|^id_|credentials|secret|token/i
+
+export function looksSecret(name: string): boolean {
+  return SECRET_NAME.test(name)
+}
+
+function pageOrigin(contents: WebGuestContents): string {
+  try {
+    return contents.isDestroyed() ? '' : new URL(contents.getURL()).origin
+  } catch {
+    return ''
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function cdpMessage(error: unknown): string {

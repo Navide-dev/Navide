@@ -9,6 +9,7 @@ import {
   gatesBefore,
   pinnedLabels,
   rejectGate,
+  rejectOutcome,
   restartPointFor,
   upstreamSlotNodes,
 } from '../pipelineDagRun'
@@ -121,5 +122,24 @@ describe('pins, restart-from and upstream', () => {
     expect(expandPrevSummary('plain', [])).toBe('plain')
     expect(expandPrevSummary('do: {{prev.summary}}', [{ label: 'a', summary: 'S' }])).toBe('do: S')
     expect(expandPrevSummary('{{prev.summary}}', [{ label: 'a', summary: '1' }, { label: 'b', summary: '2' }])).toBe('[a]\n1\n\n[b]\n2')
+  })
+})
+
+describe('rejectOutcome says what a reject would do, without doing it (B4)', () => {
+  it('loop while the budget lasts, then exhausted; no-edge without a reject link', () => {
+    const { graph, stages } = gated()
+    const plan = buildDagPlan(graph, stages)
+    const s = createRunState(plan)
+    expect(rejectOutcome(plan, s, 'gate')).toBe('loop')
+    expect(s.gates.gate).not.toBe('rejected')
+    rejectGate(plan, s, 'gate')
+    rejectGate(plan, s, 'gate')
+    expect(rejectOutcome(plan, s, 'gate')).toBe('exhausted')
+
+    const bare = applyGraphOps(deriveGraphFromStages(LEGACY), [
+      { op: 'add_node', node: { id: 'g', kind: 'gate', position: { x: 0, y: 0 } }, after: ['n-03-0'] },
+    ])
+    const barePlan = buildDagPlan(bare, deriveStagesFromGraph(bare, LEGACY))
+    expect(rejectOutcome(barePlan, createRunState(barePlan), 'g')).toBe('no-edge')
   })
 })

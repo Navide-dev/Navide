@@ -143,6 +143,13 @@ describe('PipelineManagerModal list-view CSS', () => {
     expect(empty).toContain('text-align: center')
   })
 
+  it('keeps the pipeline name readable when the editor toolbar runs short of room', () => {
+    // min-width: 0 let the toolbar squeeze the name to nothing at 1600px.
+    const name = block('.pl-detail-name')
+    expect(name).toMatch(/min-width: \d+(\.\d+)?em/)
+    expect(name).toContain('text-overflow: ellipsis')
+  })
+
   it('carries no hard-coded colour anywhere in the component styles', () => {
     // Five themes only work if every colour comes from a token.
     expect(style.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([])

@@ -100,7 +100,7 @@ Navide
 
 ## 目前可以支持的主張
 
-- Navide 支援多個獨立 Coding Agent 與 Terminal Pane。
+- Navide 支援多個獨立 Coding Agent 與 Terminal 分格。
 - 目前 Registry 支援 14 種 coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）與一般 Terminal Session。
 - 受支援的 Session 可以被偵測、保存、重建與恢復。
 - Pipeline 可以定義 Stage、平行 slot、角色、Prompt、問題、文件查詢與完成 sentinel。

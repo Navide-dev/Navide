@@ -12,8 +12,11 @@ import { parseHtmlPlanMeta, replaceHtmlPlanMeta } from './usePlanHtml'
 import type { HtmlPlanMeta } from './usePlanHtml'
 import { parsePlanMeta } from './usePlanFile'
 import { resolvePlanStore, type PlanStore } from './planStore'
+import { installPlansMessages } from '../plansI18n'
 
 i18n.global.locale.value = 'en-US'
+// The package's own messages, as the Plans view installs them at start.
+installPlansMessages((locale, messages) => i18n.global.mergeLocaleMessage(locale, messages))
 
 const toastMock = vi.hoisted(() => vi.fn())
 const confirmMock = vi.hoisted(() => vi.fn(async () => true))
@@ -70,6 +73,14 @@ interface HistoryOpts {
   error?: string
   /** Extra rel_path → content read responses (snapshot files). */
   files?: Record<string, string>
+  /** history.list versions as the backend returns them (overrides entries). */
+  versions?: Array<Record<string, unknown>>
+  /** history.restore reply. */
+  restore?: { ok: boolean; conflict?: boolean }
+  /** sha256 the plan's own fs.read_file reports. */
+  currentSha?: string
+  /** Each history.read waits for the next of these, when given. */
+  readGates?: Array<Promise<void>>
 }
 
 vi.mock('./transport', () => ({ plansShell: {
@@ -118,11 +129,35 @@ async function mountToolbar(
         if (opts.history?.files && rel in opts.history.files) {
           return { payload: { ok: true, content: opts.history.files[rel], mtime: mtimeNow } }
         }
-        return { payload: { ok: true, content: current, mtime: mtimeNow } }
+        return {
+          payload: {
+            ok: true, content: current, mtime: mtimeNow,
+            ...(opts.history?.currentSha ? { sha256: opts.history.currentSha } : {}),
+          },
+        }
       }
-      if (type === 'fs.list_dir') {
-        if (opts.history?.error) return { payload: { ok: false, error: opts.history.error } }
-        return { payload: { ok: true, entries: opts.history?.entries ?? [] } }
+      // Versions are listed and read through the backend; it lists every
+      // file of the history directory as a version (it decompresses and
+      // filters in the real backend).
+      if (type === 'history.list') {
+        if (opts.history?.versions) return { payload: { ok: true, versions: opts.history.versions } }
+        if (opts.history?.error) return { payload: { ok: true, versions: [] } }
+        return {
+          payload: {
+            ok: true,
+            versions: (opts.history?.entries ?? []).filter((entry) => !entry.is_dir).map((entry) => ({ file: entry.name, stage: '' })),
+          },
+        }
+      }
+      if (type === 'history.restore') return { payload: opts.history?.restore ?? { ok: true } }
+      if (type === 'history.read') {
+        const gate = opts.history?.readGates?.shift()
+        if (gate) await gate
+        const rel = `${HISTORY_DIR}/${payload.file as string}`
+        if (opts.history?.files && rel in opts.history.files) {
+          return { payload: { ok: true, content: opts.history.files[rel], mtime: mtimeNow } }
+        }
+        return { payload: { ok: true, content: current, mtime: mtimeNow } }
       }
       if (type === 'fs.write_file') {
         writeAttempts.push({
@@ -194,6 +229,7 @@ async function mountToolbar(
   await flushPromises()
   return {
     wrapper,
+    backend,
     writes,
     writeCalls,
     writeAttempts,
@@ -745,7 +781,209 @@ describe('PlanReviewToolbar – history panel', () => {
     expect(rows[0].find('.prt-history-stage').text()).toBe('in-review')
     expect(rows[1].find('.prt-history-stage').text()).toBe('draft')
     const actions = rows[0].findAll('.prt-history-action')
-    expect(actions.map((a) => a.text())).toEqual(['Preview', 'Diff'])
+    expect(actions.map((a) => a.text())).toEqual(['Preview', 'Diff', 'Restore'])
+  })
+
+  it('labels who made each version and why, and marks a kept conflict side', async () => {
+    const { wrapper } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [
+          { file: '20260710T120000_in-review.html.parts.gz', stage: 'in-review', author: { kind: 'agent' }, reason: 'save' },
+          { file: '20260709T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'user' }, reason: 'conflict', detached: true },
+          { file: '20260708T120000_draft.html.gz', stage: 'draft', author: { kind: 'external' }, reason: 'external' },
+          { file: '20260601T080000_draft.html', stage: 'draft' },
+        ],
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    const rows = wrapper.findAll('.prt-history-row')
+    expect(rows.map(row => [row.find('.prt-history-author').text(), row.find('.prt-history-reason').text()])).toEqual([
+      ['Agent', 'Saved'],
+      ['You', 'Version you did not keep'],
+      ['Outside Plans', 'Edited outside Plans'],
+      ['Unknown', 'Stage change'],
+    ])
+  })
+
+  it('names the agent pane a version came from, and ignores a pane on any other author', async () => {
+    const { wrapper } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [
+          { file: '20260710T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'agent', pane: 'Reviewer' }, reason: 'save' },
+          { file: '20260709T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'agent', pane: '  ' }, reason: 'save' },
+          { file: '20260708T120000_in-review.html.gz', stage: 'in-review', author: { kind: 'user', pane: 'Reviewer' }, reason: 'save' },
+        ],
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    const rows = wrapper.findAll('.prt-history-row')
+    expect(rows.map(row => row.find('.prt-history-author').text())).toEqual(['Agent · Reviewer', 'Agent', 'You'])
+  })
+
+  it('restores a version after confirmation and refreshes the plan', async () => {
+    const { wrapper, backend } = await mountToolbar(planDoc(baseMeta()), {
+      history: { versions: [{ file: '20260601T080000_draft.html.gz', stage: 'draft', author: { kind: 'user' }, reason: 'save' }] },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    confirmMock.mockClear()
+    await wrapper.find('.prt-history-restore').trigger('click')
+    await flushPromises()
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    const restore = (backend.send as ReturnType<typeof vi.fn>).mock.calls.find(([type]) => type === 'history.restore')
+    expect(restore?.[1]).toMatchObject({ rel_path: PLAN_REL_PATH, file: '20260601T080000_draft.html.gz' })
+    expect(wrapper.emitted('updated')).toBeTruthy()
+  })
+
+  it('does not restore when declined, and says so when the plan moved meanwhile', async () => {
+    const { wrapper, backend } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [{ file: '20260601T080000_draft.html.gz', stage: 'draft' }],
+        restore: { ok: false, conflict: true },
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    const restores = () => (backend.send as ReturnType<typeof vi.fn>).mock.calls.filter(([type]) => type === 'history.restore')
+    confirmMock.mockResolvedValueOnce(false)
+    await wrapper.find('.prt-history-restore').trigger('click')
+    await flushPromises()
+    expect(restores()).toHaveLength(0)
+    toastMock.mockClear()
+    await wrapper.find('.prt-history-restore').trigger('click')
+    await flushPromises()
+    expect(restores()).toHaveLength(1)
+    expect(toastMock).toHaveBeenCalledWith('The plan changed while restoring. Try again.')
+    expect(wrapper.emitted('updated')).toBeFalsy()
+  })
+
+  it('shows the text that changed between a version and the plan', async () => {
+    const snapshot = planDoc(baseMeta()).replace('tail marker', 'old closing line')
+    const { wrapper } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [{ file: '20260601T080000_in-review.html.gz', stage: 'in-review' }],
+        files: { [`${HISTORY_DIR}/20260601T080000_in-review.html.gz`]: snapshot },
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.prt-history-action')[1].trigger('click')
+    await flushPromises()
+    const lines = wrapper.findAll('.prt-history-line').map(line => [line.classes().find(c => c.startsWith('prt-history-line--')), line.text()])
+    expect(lines).toEqual([
+      ['prt-history-line--del', '−old closing line'],
+      ['prt-history-line--add', '+tail marker'],
+    ])
+  })
+
+  it('flags an approved plan whose text changed since approval, not its todo progress', async () => {
+    const approved = planDoc(baseMeta({ stage: 'approved' }))
+    const versions = [{ file: '20260601T080000_approved.html.gz', stage: 'approved', reason: 'stage' }]
+    const files = { [`${HISTORY_DIR}/20260601T080000_approved.html.gz`]: approved }
+    const unchanged = await mountToolbar(planDoc(baseMeta({
+      stage: 'in-progress',
+      todos: [{ id: 'phase-a', content: 'Phase A', status: 'done' }, { id: 'phase-b', content: 'Phase B', status: 'done' }],
+    })), { history: { versions, files } })
+    await flushPromises()
+    expect(unchanged.wrapper.find('[data-test="approved-modified"]').exists()).toBe(false)
+
+    const edited = await mountToolbar(planDoc(baseMeta({ stage: 'in-progress' })).replace('tail marker', 'rewritten after approval'), {
+      history: { versions, files },
+    })
+    await flushPromises()
+    const badge = edited.wrapper.get('[data-test="approved-modified"]')
+    expect(badge.text()).toBe('Changed since approval')
+    await badge.trigger('click')
+    await flushPromises()
+    expect(edited.wrapper.find('.prt-history-line--add').text()).toContain('rewritten after approval')
+  })
+
+  const historyReads = (backend: Harness['backend']): string[] =>
+    (backend.send as ReturnType<typeof vi.fn>).mock.calls
+      .filter(([type]) => type === 'history.read')
+      .map(([, payload]) => (payload as { file: string }).file)
+
+  it('compares with the approval itself, not with saves made while approved', async () => {
+    const approval = planDoc(baseMeta({ stage: 'approved' }))
+    const firstSave = approval.replace('tail marker', 'first save')
+    const current = approval.replace('tail marker', 'second save')
+    const versions = [
+      { file: '20260601T090000_approved.html.gz', stage: 'approved', reason: 'save' },
+      { file: '20260601T085000_approved.html.gz', stage: 'approved', reason: 'save' },
+      { file: '20260601T080000_approved.html.gz', stage: 'approved', reason: 'stage' },
+    ]
+    const files = {
+      [`${HISTORY_DIR}/20260601T090000_approved.html.gz`]: current,
+      [`${HISTORY_DIR}/20260601T085000_approved.html.gz`]: firstSave,
+      [`${HISTORY_DIR}/20260601T080000_approved.html.gz`]: approval,
+    }
+    const { wrapper, backend } = await mountToolbar(current, { history: { versions, files } })
+    await flushPromises()
+    expect(wrapper.find('[data-test="approved-modified"]').exists()).toBe(true)
+    expect(historyReads(backend)).toEqual(['20260601T080000_approved.html.gz'])
+  })
+
+  it('keeps the latest approval as the baseline after the plan moves on', async () => {
+    const approval = planDoc(baseMeta({ stage: 'approved' }))
+    const current = planDoc(baseMeta({ stage: 'in-progress' })).replace('tail marker', 'edited later')
+    const versions = [
+      { file: '20260602T090000_in-progress.html.gz', stage: 'in-progress', reason: 'stage' },
+      { file: '20260602T085000_approved.html.gz', stage: 'approved', reason: 'save' },
+      { file: '20260602T080000_approved.html.gz', stage: 'approved', reason: 'stage' },
+      { file: '20260601T090000_in-review.html.gz', stage: 'in-review', reason: 'stage' },
+      { file: '20260601T080000_approved.html', stage: 'approved' },
+    ]
+    const files = { [`${HISTORY_DIR}/20260602T080000_approved.html.gz`]: approval }
+    const { wrapper, backend } = await mountToolbar(current, { history: { versions, files } })
+    await flushPromises()
+    expect(wrapper.find('[data-test="approved-modified"]').exists()).toBe(true)
+    expect(historyReads(backend)).toEqual(['20260602T080000_approved.html.gz'])
+  })
+
+  it('never lets an older badge check overwrite a newer one', async () => {
+    const approval = planDoc(baseMeta({ stage: 'approved' }))
+    const versions = [{ file: '20260601T080000_approved.html.gz', stage: 'approved', reason: 'stage' }]
+    const files = { [`${HISTORY_DIR}/20260601T080000_approved.html.gz`]: approval }
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const { wrapper, setContent, emitBackend } = await mountToolbar(approval.replace('tail marker', 'edited'), {
+      history: { versions, files, readGates: [gate] },
+    })
+    // The edit is undone before the first check finishes.
+    setContent(approval)
+    emitBackend('plans.changed', { workspace_path: '/ws' })
+    await flushPromises()
+    expect(wrapper.find('[data-test="approved-modified"]').exists()).toBe(false)
+    release()
+    await flushPromises()
+    expect(wrapper.find('[data-test="approved-modified"]').exists()).toBe(false)
+  })
+
+  it('restores with the sha256 of the plan the diff was shown against', async () => {
+    const snapshot = planDoc(baseMeta()).replace('tail marker', 'old closing line')
+    const { wrapper, backend } = await mountToolbar(planDoc(baseMeta()), {
+      history: {
+        versions: [{ file: '20260601T080000_in-review.html.gz', stage: 'in-review' }],
+        files: { [`${HISTORY_DIR}/20260601T080000_in-review.html.gz`]: snapshot },
+        currentSha: 'a'.repeat(64),
+      },
+    })
+    await openOverflow(wrapper)
+    await wrapper.find('.prt-history-btn').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.prt-history-action')[1].trigger('click')
+    await flushPromises()
+    await wrapper.find('.prt-history-restore').trigger('click')
+    await flushPromises()
+    const restore = (backend.send as ReturnType<typeof vi.fn>).mock.calls.find(([type]) => type === 'history.restore')
+    expect(restore?.[1]).toMatchObject({ file: '20260601T080000_in-review.html.gz', expected_sha256: 'a'.repeat(64) })
   })
 
   it('shows the empty state when the history directory does not exist', async () => {
@@ -1756,15 +1994,15 @@ describe('PlanReviewToolbar – markdown plans', () => {
       on: () => () => {},
       send: vi.fn(async (type: string) => {
         if (type === 'fs.read_file') return { payload: { ok: true, content: MD_CONTENT, mtime: 1 } }
-        if (type === 'fs.list_dir') {
+        if (type === 'history.list') {
           return {
             payload: {
               ok: true,
-              entries: [
-                { name: '20260601T080000_draft.plan.md', is_dir: false },
-                { name: '20260710T120000_in-review.plan.md', is_dir: false },
+              versions: [
+                { file: '20260601T080000_draft.plan.md', stage: 'draft' },
+                { file: '20260710T120000_in-review.plan.md.gz', stage: 'in-review' },
                 // Same-stem HTML snapshots must not leak into a markdown plan's history.
-                { name: '20260711T090000_approved.html', is_dir: false },
+                { file: '20260711T090000_approved.html.gz', stage: 'approved' },
               ],
             },
           }

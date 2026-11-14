@@ -38,6 +38,7 @@ from ..skills_store import SkillsStore
 from . import _protocols
 from ..usage_common import HTTP_TIMEOUT, _snapshot, parse_retry_after
 from ..log_readers.base import (
+    ActivityLines,
     ActivityEvent,
     IncrementalParseResult,
     LogReader,
@@ -124,6 +125,57 @@ def _read_cumulative(seen_keys: set[str]) -> tuple[int, int]:
             except (ValueError, KeyError):
                 continue
     return 0, 0
+
+
+#: parse_incremental checkpoints whose input_total/output_total follow
+#: _session_totals. Checkpoints without it were written when the totals added
+#: cached_input_tokens and reasoning_output_tokens a second time.
+_TOTALS_BASIS = 2
+
+
+def _session_totals(totals: dict) -> tuple[int, int]:
+    """A token_count's running (input, output) totals. Codex's input_tokens
+    already contains cached_input_tokens and its output_tokens already contains
+    reasoning_output_tokens — total_tokens is input + output — so neither is
+    added again."""
+    return _int(totals.get("input_tokens")), _int(totals.get("output_tokens"))
+
+
+def _token_count_totals(rec: dict | None) -> dict | None:
+    if rec is None or rec.get("type") != "event_msg":
+        return None
+    payload = rec.get("payload") or {}
+    if not isinstance(payload, dict) or payload.get("type") != "token_count":
+        return None
+    info = payload.get("info")
+    totals = info.get("total_token_usage") if isinstance(info, dict) else None
+    return totals if isinstance(totals, dict) else None
+
+
+def _counted_totals_before(path: Path, offset: int) -> tuple[int, int]:
+    """The last running totals a pre-basis checkpoint counted, re-read in the
+    current basis: the last token_count wholly before its byte offset.
+
+    An old checkpoint only stored its totals in the double-counting basis, from
+    which the true pair cannot be recovered; the rollout itself still holds it.
+    Read once per such checkpoint, after which the checkpoint carries the basis.
+    """
+    found = (0, 0)
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(offset)
+    except OSError as err:
+        log.debug("re-read %s for checkpoint basis failed: %s", path, err)
+        return found
+    for raw in head.splitlines():
+        try:
+            rec = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        totals = _token_count_totals(rec if isinstance(rec, dict) else None)
+        if totals is not None:
+            found = _session_totals(totals)
+    return found
 
 
 def _write_cumulative(seen_keys: set[str], input_total: int, output_total: int) -> None:
@@ -362,8 +414,7 @@ class CodexLogReader(LogReader):
                 if not isinstance(totals, dict):
                     continue
 
-                cur_in = _int(totals.get("input_tokens")) + _int(totals.get("cached_input_tokens"))
-                cur_out = _int(totals.get("output_tokens")) + _int(totals.get("reasoning_output_tokens"))
+                cur_in, cur_out = _session_totals(totals)
                 # Accept any monotonically non-decreasing pair; if values shrink
                 # the user likely rotated session — reset baseline silently.
                 if cur_in < latest_in or cur_out < latest_out:
@@ -420,6 +471,8 @@ class CodexLogReader(LogReader):
         )
         prev_in = 0 if replaced else max(0, int(checkpoint.get("input_total") or 0))
         prev_out = 0 if replaced else max(0, int(checkpoint.get("output_total") or 0))
+        if (prev_in or prev_out) and checkpoint.get("basis") != _TOTALS_BASIS:
+            prev_in, prev_out = _counted_totals_before(path, int(checkpoint.get("offset") or 0))
         latest_in, latest_out = prev_in, prev_out
         cwd = "" if replaced else str(checkpoint.get("cwd") or "")
         model = "" if replaced else str(checkpoint.get("model") or "")
@@ -429,11 +482,20 @@ class CodexLogReader(LogReader):
         # replays its ancestors' records after it, and taking the last one
         # filed the sub-agent's tokens under its parent's session.
         meta_seen = False if replaced else bool(checkpoint.get("meta_seen"))
+        # The model a turn ran on (turn_context), for the cost ledger; `model`
+        # above is the provider name.
+        ledger_model = "" if replaced else str(checkpoint.get("ledger_model") or "")
+        latest_totals: dict = {}
         latest_event: dict | None = None
         latest_end = int(next_checkpoint.get("offset") or 0)
 
         for end, rec in records:
             if rec is None:
+                continue
+            if rec.get("type") == "turn_context":
+                payload = rec.get("payload") or {}
+                if isinstance(payload, dict) and payload.get("model"):
+                    ledger_model = str(payload["model"])
                 continue
             if rec.get("type") == "session_meta":
                 payload = rec.get("payload") or {}
@@ -453,8 +515,8 @@ class CodexLogReader(LogReader):
             totals = info.get("total_token_usage") if isinstance(info, dict) else None
             if not isinstance(totals, dict):
                 continue
-            latest_in = _int(totals.get("input_tokens")) + _int(totals.get("cached_input_tokens"))
-            latest_out = _int(totals.get("output_tokens")) + _int(totals.get("reasoning_output_tokens"))
+            latest_in, latest_out = _session_totals(totals)
+            latest_totals = totals
             latest_event = rec
             latest_end = end
 
@@ -466,6 +528,8 @@ class CodexLogReader(LogReader):
             "session_id": session_id,
             "cli_version": cli_version,
             "meta_seen": meta_seen,
+            "ledger_model": ledger_model,
+            "basis": _TOTALS_BASIS,
         })
         if latest_event is None:
             return IncrementalParseResult([], next_checkpoint)
@@ -489,6 +553,21 @@ class CodexLogReader(LogReader):
             model=model,
             checkpoint=event_checkpoint,
             cli_version=cli_version,
+            # The session's running totals as the CLI reports them, for the cost
+            # ledger: input_tokens already contains cached_input_tokens and
+            # output_tokens already contains reasoning (total_tokens is their
+            # sum), so the uncached input is what is left after the cache reads
+            # and writes. Totals rather than this read's delta, so a backfill
+            # and live reads land on the same numbers wherever each one started.
+            raw={"ledger_session_totals": {
+                "input": max(0, _int(latest_totals.get("input_tokens"))
+                             - _int(latest_totals.get("cached_input_tokens"))
+                             - _int(latest_totals.get("cache_write_input_tokens"))),
+                "cache_read": _int(latest_totals.get("cached_input_tokens")),
+                "cache_write": _int(latest_totals.get("cache_write_input_tokens")),
+                "output": _int(latest_totals.get("output_tokens")),
+                "model": ledger_model,
+            }},
         )
         return IncrementalParseResult([event], next_checkpoint)
 
@@ -620,7 +699,7 @@ class CodexLogReader(LogReader):
         last_text = _read_last_text(seen_keys)
         text_changed = False
         try:
-            fh = path.open(encoding="utf-8")
+            fh = ActivityLines(self, path, seen_keys)
         except OSError:
             return out
 
@@ -636,7 +715,7 @@ class CodexLogReader(LogReader):
 
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_line in fh:
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -754,6 +833,7 @@ class CodexLogReader(LogReader):
                             text_changed = True
         finally:
             set_activity_high_water(seen_keys, last_line)
+            fh.save(last_line)
             if text_changed:
                 _write_last_text(seen_keys, last_text)
         return out
@@ -1832,6 +1912,9 @@ async def fetch_codex(codex_home: Path) -> dict:
     payload = resp.json()
     windows, plan = _protocols.normalize_codex(payload)
     snap = _snapshot("codex", "ok", windows=windows, plan_type=plan)
+    absent = _protocols.codex_absent_windows(payload.get("rate_limit") or {})
+    if absent:
+        snap["absentWindows"] = absent
     credits = _protocols._codex_credits(payload)
     if credits is not None:
         snap["credits"] = credits
@@ -1963,5 +2046,10 @@ SPEC = VendorSpec(
         requires_binaries=("npm",),
         optional=True, docs_url="https://learn.chatgpt.com/docs/codex/cli",
         update_cmd="codex update", doctor_cmd="codex doctor",
-        npm_package="@openai/codex"),
+        npm_package="@openai/codex",
+        # Codex's "Update available" menu takes Enter as "Update now", so a
+        # pane that is typed into while it shows would run a global install.
+        autoupdate_args=("-c", "check_for_update_on_startup=false"),
+        latest_version_file="version.json",
+        config_home_env="CODEX_HOME", config_home_default=".codex"),
 )

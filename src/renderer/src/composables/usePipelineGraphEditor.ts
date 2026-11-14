@@ -3,8 +3,9 @@ import type { useBackend } from './useBackend'
 import { stageDefToFrontend, type Stage } from '../data/stages'
 import {
   applyGraphOps,
-  validateGraph,
+  graphProblems,
   type GraphOp,
+  type GraphProblem,
   type PipelineGraph,
 } from '../lib/pipelineGraph'
 
@@ -24,6 +25,10 @@ export interface EditorError {
   code: string
   message: string
   details?: string[]
+  /** GRAPH_INVALID found here: the same problems as `details`, coded. */
+  problems?: GraphProblem[]
+  /** GRAPH_INVALID from the backend: its problem code, when it gave one. */
+  problemCode?: string
 }
 
 export type EditResult = { ok: true } | { ok: false; error: EditorError }
@@ -98,11 +103,13 @@ export function usePipelineGraphEditor(
 
   function errorOf(resp: { error?: { code?: string; message?: string; details?: Record<string, unknown> } | null }, fallback: string): EditorError {
     const details = resp.error?.details?.errors
+    const problemCode = resp.error?.details?.code
     return {
       code: resp.error?.code ?? 'ERROR',
       // '' when the backend gave no reason: the view words that itself.
       message: resp.error?.message ?? fallback,
       details: Array.isArray(details) ? details.map(String) : undefined,
+      ...(typeof problemCode === 'string' && problemCode ? { problemCode } : {}),
     }
   }
 
@@ -174,9 +181,10 @@ export function usePipelineGraphEditor(
     } catch (err) {
       return Promise.resolve({ ok: false, error: { code: 'GRAPH_INVALID', message: err instanceof Error ? err.message : String(err) } })
     }
-    const problems = validateGraph(next)
+    const problems = graphProblems(next)
     if (problems.length) {
-      return Promise.resolve({ ok: false, error: { code: 'GRAPH_INVALID', message: problems[0], details: problems } })
+      const details = problems.map((p) => p.message)
+      return Promise.resolve({ ok: false, error: { code: 'GRAPH_INVALID', message: details[0], details, problems } })
     }
     graph.value = next
     return enqueue(async () => {

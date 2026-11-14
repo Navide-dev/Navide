@@ -10,6 +10,8 @@ export interface HostRun {
   state: string
   pipelineId: string
   workspacePath: string
+  /** The run is on its last stage: there is no next stage to advance to. */
+  lastStage?: boolean
 }
 
 interface NodeStatesPayload {
@@ -86,7 +88,7 @@ export function usePipelineRunState(
     const host = hostRun?.()
     const s = snapshot.value
     if (host && host.workspacePath === workspacePath() && host.state === 'running') {
-      return { ...s, state: 'running', pipelineId: host.pipelineId || s.pipelineId }
+      return { ...s, state: 'running', pipelineId: host.pipelineId || s.pipelineId, lastStage: host.lastStage }
     }
     return s
   })

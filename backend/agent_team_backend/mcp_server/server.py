@@ -49,10 +49,13 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
+from agent_team_backend import __version__ as _backend_version
 from agent_team_backend import login_panes
 from agent_team_backend import acp_mcp
 from agent_team_backend import osplat as _osplat
+from agent_team_backend import pipeline_liveness
 from agent_team_backend.fs_service import FsError
+from agent_team_backend.db_executor import run_in_db_thread
 from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
 # workspace the same way plans do, and both must agree on what one root means.
@@ -152,7 +155,9 @@ server = NavideMCP(
         "a send refused outright returns ok: false and no msg_key at all. "
         "That table is backend memory, not a log: only the last hour and the "
         "last 500 sends, gone on restart, so an unknown key means "
-        "\"no longer tracked\", not \"never sent\".\n"
+        "\"no longer tracked\", not \"never sent\". To rename a pane "
+        "(yours, or one you opened), use cli_rename_pane — do not reopen its "
+        "session under a new name and reclaim the old pane.\n"
         "\n"
         "Other machines: when this machine is linked to a Navide-Server, the "
         "user's other machines are in reach too. cli_list_targets returns "
@@ -194,6 +199,13 @@ server = NavideMCP(
         "sane advisory thresholds gets logged as a diagnostic warning (readable "
         "via ui_diagnostics) rather than refused.\n"
         "\n"
+        "Commands the user must type into: when a step needs the user at a "
+        "terminal (a password, sudo, a login, ssh-copy-id), open a plain shell "
+        "pane with cli_open_agent(agent=\"terminal\") instead of asking the user "
+        "to type `!` in your own CLI. A command the terminal protection refuses "
+        "can still go there with submit: false — it is prefilled on the command "
+        "line without Enter, and the user checks it and presses Enter.\n"
+        "\n"
         "Picking up an earlier conversation: a CLI session outlives the pane "
         "that ran it — the pane closes, the app restarts, and the vendor's "
         "transcript stays on disk. cli_list_sessions lists the ones this "
@@ -214,9 +226,24 @@ server = NavideMCP(
         "last known activity, and cli_wait_idle blocks until it goes idle or a "
         "timeout passes — the reliable way to learn a pane is done, and the "
         "only way for an external caller, which gets no completion message at "
-        "all."
+        "all.\n"
+        "\n"
+        "Chat channels (Telegram, Discord, Slack, ...): the channels_* tools "
+        "read the bots, chats, bindings and pairing requests and make the "
+        "changes within your reach; what only the user can grant — letting a "
+        "person in, adding or removing a bot, a bind outside your reach — they "
+        "file as a request the user decides in the main window "
+        "(channels_request_status follows it). A bot's credential never goes "
+        "through a tool: if the user pastes one to you, ask them to paste it "
+        "into the form channels_bot_add_open or channels_bot_add_fill opens."
     ),
 )
+# Every initialize response carries a server version. Left unset, the MCP SDK
+# reads it from the installed ``mcp`` package metadata on each new session; in
+# the onefile backend that metadata lives in the temp extraction directory,
+# which macOS purges after three idle days -- after that every session failed
+# to initialize until the app was restarted (2026-11-08).
+server._mcp_server.version = _backend_version
 
 #: Tools owned by a built-in Navide plugin, hidden from tools/list while the
 #: user has that plugin disabled. Filled by the plugin's installer.
@@ -1122,6 +1149,8 @@ async def cli_open_agent(
     run_group_id: str | None = None,
     window: str = "",
     window_id: str = "",
+    account: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Open a new CLI pane and give it a task.
 
@@ -1147,6 +1176,14 @@ async def cli_open_agent(
     before resending. A destructive `task` is refused before the pane opens
     (error_code "terminal-command-refused" — see cli_send). Talk to it
     afterwards with cli_send — see there.
+
+    `submit: false` (terminal only) prefills `task` on the shell's command
+    line without pressing Enter: the user reads it and runs it themselves —
+    the way to hand over a command that needs the user (a password, sudo,
+    ssh-copy-id) or that the protection refuses. One printable line only. A
+    refused command is still prefilled, audited as a prefill, and the answer
+    carries `guard_refused` {rule, segment, reason}. `kickoff: "sent"` then
+    means it is on the command line, not that it ran.
 
     The pane you open is related to you: you opened it, so its result needs to
     come back to you. When you talk to the user about it, use whatever reads
@@ -1229,6 +1266,28 @@ async def cli_open_agent(
     here — an unknown one is the CLI's own error to report — but effort is
     checked against that CLI's vocabulary before the pane opens.
 
+    `account` says which account the new pane runs on, and by DEFAULT it is
+    the account YOU run on ("" = "inherit"). Only a claude pane can run on an
+    account other than its vendor's live login: one opened inside that
+    account's own folder, as the 📌 pin and "switch only this pane" do. So
+    "inherit" from such a pane opens the child in the same folder (it then
+    spends that account's quota and, like its parent, stays put when the live
+    login is switched); in every other case — you follow the live login, you
+    are another CLI, or you have no pane — the child opens exactly as before,
+    on the live login. "active" always asks for that old behaviour. An
+    account id (from cli_accounts_list) opens a claude pane in that
+    account's folder; the account must exist ("unknown-profile"), belong to
+    `agent` ("vendor-mismatch"), be a claude account other than the built-in
+    Default ("unsupported" — other CLIs run every pane on their live login)
+    and have signed in inside its own folder ("needs-user": the user signs it
+    in through cli_account_sign_in with mode "folder"). Naming the live
+    account is the same as "active". This never switches the live login and
+    never moves another pane. When you passed `account`, or the pane opened
+    on an account other than the live login, the answer carries `account`:
+    {mode, profile_id, runs_on: "account-dir"|"live", fixed}, for a CLI
+    Navide keeps accounts for. Ignored with `pane_id`, which reopens a pane
+    on its own.
+
     Use the returned name, not the one you asked for: a concurrent request may
     have taken that name, in which case yours gets a suffix.
 
@@ -1241,8 +1300,8 @@ async def cli_open_agent(
     `ui.pane.focus` and `ui.pane.getStatus` take through ui_invoke, all of which
     refuse a pane NAME. Keep it if you may want to close or focus what you
     opened; `address` remains the right thing to send to.
-    Returns {ok, name, address, pane_id, kickoff, hint?, advisories?} or
-    {ok: false, error}.
+    Returns {ok, name, address, pane_id, kickoff, hint?, account?, advisories?}
+    or {ok: false, error}.
 
     Passing `pane_id` REOPENS an existing pane instead of creating one: the
     one whose cli_list_targets row says `realized: false` — a restore
@@ -1329,6 +1388,12 @@ async def cli_open_agent(
             "ok": False,
             "error": "a terminal pane is a plain shell — it takes no model, effort or session_id",
         }
+    if not submit and agent_key != _TERMINAL_AGENT:
+        return {
+            "ok": False,
+            "error": 'submit: false prefills a command for the user — it applies to agent "terminal" only',
+            "error_code": "prefill-terminal-only",
+        }
     refusal = _refuse_unsupported_model(agent_key, (model or "").strip(), (effort or "").strip())
     if refusal:
         return {"ok": False, "error": refusal}
@@ -1346,6 +1411,20 @@ async def cli_open_agent(
             "error": 'window_id goes with window "existing"',
             "error_code": "invalid-window",
         }
+    # Checked before anything is prepared or opened: a refused account leaves
+    # no pane and no adopted workspace behind.
+    from agent_team_backend.mcp_server import open_agent_account
+
+    caller_entry = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    account_choice = await asyncio.to_thread(
+        open_agent_account.resolve,
+        agent_key,
+        account,
+        caller.pane_id if caller.kind == "pane" else "",
+        caller_entry.agent_key if caller_entry else "",
+    )
+    if isinstance(account_choice, dict):
+        return account_choice
     target_workspace = ""
     # A pane caller naming another project: the child goes there, still
     # parented on the caller. Empty when omitted or naming its own workspace,
@@ -1407,12 +1486,17 @@ async def cli_open_agent(
             _resume_lineage, resume_workspace, agent_key, resume_id
         )
 
+    guard_refused: dict[str, str] | None = None
     if agent_key == _TERMINAL_AGENT and (task or "").strip():
         # Checked before the pane exists: a refused first command should not
         # leave a shell behind that the caller then types into another way.
-        refused = _terminal_refusal(
-            task, workspace=target_workspace or _caller_workspace(caller), pane_id="", via="cli_open_agent"
-        )
+        terminal_workspace = target_workspace or _caller_workspace(caller)
+        if submit:
+            refused = _terminal_refusal(task, workspace=terminal_workspace, pane_id="", via="cli_open_agent")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                task, workspace=terminal_workspace, pane_id="", via="cli_open_agent"
+            )
         if refused:
             return refused
     prepared = ""
@@ -1468,6 +1552,15 @@ async def cli_open_agent(
             spawn_payload["effort"] = effort.strip()
         if run_group_id is not None:
             spawn_payload["run_group_id"] = run_group_id
+        # Only for a prefill: an older window ignores the key, and the backend's
+        # terminal.input guard still refuses whatever this refused.
+        if not submit:
+            spawn_payload["submit"] = False
+        # The explicit pin the window hands to spawnPane, the same pin a 📌
+        # pinned pane is spawned with. Absent when the pane runs on the live
+        # login: the payload is then exactly what it was before `account`.
+        if account_choice.pin:
+            spawn_payload["profile_id"] = account_choice.pin
         # The window turns this into the vendor's own resume command; absent
         # means a fresh conversation, which is what every older build does with
         # a key it does not know.
@@ -1515,7 +1608,7 @@ async def cli_open_agent(
         if cross_workspace:
             _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
         return refused_spawn
-    _taint_spawned(caller, str(verdict.get("pane_id") or ""))
+    await run_in_db_thread(_taint_spawned, caller, str(verdict.get("pane_id") or ""))
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
     # "delivered" by every caller that got it.
@@ -1576,6 +1669,10 @@ async def cli_open_agent(
     if agent_key == _TERMINAL_AGENT and not _TERMINAL_PROMPT_CHECK:
         result["prompt_check"] = "unavailable"
         advisories.append(_TERMINAL_NO_PROMPT_CHECK)
+    if not submit:
+        result["submit"] = False
+        if guard_refused:
+            result["guard_refused"] = guard_refused
     # Two answers only. "unverified" is the window's honest word for "bytes
     # written, nothing seen" — to the caller that is a task that did not
     # arrive, and the cure is the same as for an outright failure.
@@ -1605,6 +1702,16 @@ async def cli_open_agent(
         reason = str(kickoff_verdict.get("reason") or "")
         if reason:
             advisories.append(f"kickoff: {reason}")
+    from agent_team_backend.profiles_store import SUPPORTED_AGENT_KEYS
+
+    # Only when an account was asked for or the pane got one: a default call
+    # that opened on the live login answers exactly what it did before.
+    if agent_key in SUPPORTED_AGENT_KEYS and ((account or "").strip() or account_choice.pin):
+        result["account"] = await asyncio.to_thread(
+            open_agent_account.report, account_choice, new_pane_id, agent_key
+        )
+    if account_choice.advisory:
+        advisories.append(account_choice.advisory)
     if advisories:
         result["advisories"] = advisories
     return result
@@ -2307,6 +2414,24 @@ def _terminal_refusal(text: str, *, workspace: str, pane_id: str, via: str) -> d
     }
 
 
+def _terminal_prefill(
+    text: str, *, workspace: str, pane_id: str, via: str
+) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+    """(refusal answer, guard note) for prefilling ``text`` — typing it into a
+    terminal without Enter (submit: false). Only a single printable line is
+    refused; a command the protection refuses is still prefilled, because the
+    user runs it, but enforce() audits it as a prefill and the note says why."""
+    from agent_team_backend.guard import terminal_policy
+
+    problem = terminal_policy.prefill_line_error(text)
+    if problem:
+        return {"ok": False, "error": problem, "error_code": "prefill-not-single-line"}, None
+    refusal = terminal_policy.enforce(text, workspace=workspace, pane_id=pane_id, via=via, prefill=True)
+    if refusal is None:
+        return None, None
+    return None, {"rule": refusal.rule, "segment": refusal.segment, "reason": refusal.reason}
+
+
 class TerminalExternalRefused(Exception):
     """External content (a chat channel, another device) addressed to a plain
     terminal pane. Refused here, before it is broadcast or taints anything:
@@ -2343,6 +2468,7 @@ async def _dispatch_delivery(
     entry: Any, text: str, *, caller: "_Caller", me: str, cross_workspace: bool,
     reply_to: str = "", kind: str = "", from_display: str = "",
     origin: str = "", taint_detail: str = "", taint_source: str = "agent",
+    prefill: bool = False,
 ) -> str:
     """Hand one message to the windows and record it; returns its msg_key.
 
@@ -2379,7 +2505,7 @@ async def _dispatch_delivery(
         from agent_team_backend.guard.taint import safe_mark_tainted
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
-        safe_mark_tainted(entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+        await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -2412,6 +2538,9 @@ async def _dispatch_delivery(
                 # "channel" for a chat-channel message, so the window can mark
                 # it as external; absent otherwise.
                 **({"origin": origin} if origin else {}),
+                # Only for a terminal prefill (cli_send submit: false): typed
+                # without Enter. Absent otherwise.
+                **({"submit": False} if prefill else {}),
             },
         )
     )
@@ -2429,6 +2558,7 @@ async def cli_send(
     reply_to: str = "",
     kind: str = "message",
     open_target: bool = False,
+    submit: bool = True,
 ) -> dict[str, Any]:
     """Send an instruction to another CLI pane, in this or another workspace.
 
@@ -2473,8 +2603,24 @@ async def cli_send(
     services, fork bombs, piping a download into a shell, credential files,
     force-pushing main, and lines that cannot be judged statically. The answer
     is ok: false with error_code "terminal-command-refused" and `refused`
-    {rule, segment, reason}; tell the user to run it themselves. The user
-    tunes the categories and patterns in Settings → Security.
+    {rule, segment, reason}. Then resend it with `submit: false` so the user
+    can check it and press Enter, or ask the user to add an allow prefix in
+    Settings → Security (where the categories and patterns are tuned), or to
+    run it themselves.
+
+    `submit` (default true) applies to a terminal pane only. `submit: false`
+    prefills `text` on the shell's command line — written as a bracketed paste
+    where the shell supports it, and Enter is NOT pressed: the user reads it
+    and runs it (or clears it). Use it for anything the user has to see first
+    or type into (a password, sudo, ssh-copy-id) and for a refused command.
+    One printable line only: a newline, carriage return or other control
+    character fails with error_code "prefill-not-single-line". A refused
+    command is still prefilled, audited as a prefill, and the answer carries
+    `guard_refused` {rule, segment, reason}. Until the user types into that
+    terminal, every other message to it fails rather than being typed after
+    the prefill. "delivered" means it is on the command line, not that it
+    ran. Refused for any other pane, a group or another device
+    ("prefill-terminal-only").
 
     `to: "group"` broadcasts instead: every other pane in YOUR OWN tab group,
     in your own workspace. Deliberately narrower than the bare-line protocol's
@@ -2623,6 +2769,7 @@ async def cli_send(
         reply_to=reply_to,
         kind=kind,
         open_target=open_target,
+        submit=submit,
     )
 
 
@@ -2637,6 +2784,7 @@ async def _send(
     kind: str = "message",
     open_target: bool = False,
     taint_detail: str = "",
+    submit: bool = True,
 ) -> dict[str, Any]:
     """cli_send once its caller is resolved.
 
@@ -2654,6 +2802,15 @@ async def _send(
     send_kind = "ack" if kind == "ack" else ""
     me = caller.pane_id if caller.kind == "pane" else ""
     target_id = (pane_id or "").strip()
+    prefill_only = {
+        "ok": False,
+        "error": "submit: false prefills a command for the user — it applies to one terminal pane on this machine only",
+        "error_code": "prefill-terminal-only",
+    }
+    if not submit and send_kind == "ack":
+        return prefill_only
+    if not submit and not target_id and _is_group_target(to):
+        return prefill_only
     if not target_id and _is_group_target(to):
         if caller.kind != "pane":
             return {
@@ -2698,6 +2855,8 @@ async def _send(
         # The resolution order lives in message_routing, shared with the
         # bare-line path so the two cannot answer the same address differently.
         routed = message_routing.route(me, to)
+        if routed.remote is not None and not submit:
+            return prefill_only
         if routed.remote is not None:
             if send_kind == "ack":
                 # Refused rather than relayed, because the relay cannot carry
@@ -2763,8 +2922,16 @@ async def _send(
         opened = {"realized": True, "reason": open_result["reason"]}
         target = open_result["pane"]
 
+    if not submit and target.agent_key != _TERMINAL_AGENT:
+        return prefill_only
+    guard_refused: dict[str, str] | None = None
     if target.agent_key == _TERMINAL_AGENT and send_kind != "ack":
-        refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        if submit:
+            refused = _terminal_refusal(text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send")
+        else:
+            refused, guard_refused = _terminal_prefill(
+                text, workspace=target.workspace_path, pane_id=target.pane_id, via="cli_send"
+            )
         if refused:
             return refused
     msg_key = await _dispatch_delivery(
@@ -2776,6 +2943,7 @@ async def _send(
         reply_to=reply_to,
         kind=send_kind,
         taint_detail=taint_detail,
+        prefill=not submit,
     )
     answer: dict[str, Any] = {
         "ok": True,
@@ -2783,6 +2951,10 @@ async def _send(
         "cross_workspace": result.cross_workspace,
         "msg_key": msg_key,
     }
+    if not submit:
+        answer["submit"] = False
+        if guard_refused:
+            answer["guard_refused"] = guard_refused
     if opened is not None:
         answer["opened"] = opened
     elif not target.realized:
@@ -4078,7 +4250,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, account?, git?, log_reader?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. Right after a Claude turn end reported by its Stop hook,
     `text` is absent until Navide has read the turn from the conversation log
@@ -4096,10 +4268,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     name behind `agent_key`; `model` / `effort` are what cli_open_agent or the
     spawn form asked for — absent means the vendor's own default, and a
     `/model` switch typed inside the CLI is invisible here; `profileId` is
-    the account pin the pane was spawned on ("__default__" = the real home),
-    bookkeeping only — every pane runs on the vendor's live credentials, so
+    the account pin the pane was spawned on ("__default__" = the real home)
+    — for a pane on the vendor's live credentials it is bookkeeping, and
     after an account switch it names the old login while the CLI already runs
-    on the new one; `loginExpired` (true) and `usageLimitUntil` (wall-clock
+    on the new one, so read the top-level `account` for the login a pane runs
+    on now; `loginExpired` (true) and `usageLimitUntil` (wall-clock
     ms) appear only while the CLI has printed its expired-login / hit-your-
     limit message — live detection from the pane's output, not a poll.
 
@@ -4109,9 +4282,21 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     stale, …}. It is a CACHED read — nothing is refreshed on this call, which
     cli_wait_idle polls every second — so `fetchedAt` / `stale` say how old it
     is, and cli_usage or the window's own refresh is where a fresh number
-    comes from. For claude it is the ACTIVE account's snapshot, which is the
-    login every claude pane actually runs on (see `profileId` above). Absent
-    when Navide has no snapshot for that vendor at all.
+    comes from. For claude it is the ACTIVE account's snapshot: the login a
+    pane whose `account.runs_on` is "live" runs on. A pane in an account's
+    own folder spends that account's quota instead, which cli_usage reports
+    under `accounts.claude[<account.profile_id>]`. Absent when Navide has no
+    snapshot for that vendor at all.
+
+    `account` is the account this pane runs on now, for a vendor Navide keeps
+    accounts for: {profile_id, runs_on, live_profile_id, pin}. `runs_on`
+    "account-dir" means it runs inside that claude account's own folder
+    (CLAUDE_CONFIG_DIR), so an account switch does not move it; "live" means
+    it runs on the vendor's live login, `live_profile_id`, and so follows
+    every switch. `pin` is the account the pane is filed under for
+    bookkeeping (the backend's side of `ui.profileId`, "unknown" when none
+    was recorded) and can lag behind a switch. Absent for a vendor without
+    accounts.
 
     `git` is the pane's checkout, in the shape and with the caveats
     cli_list_targets gives it: branch, worktree, dirty count and drift against
@@ -4201,6 +4386,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     usage = await _cached_usage_snapshot(pane.agent_key)
     if usage is not None:
         status["usage"] = usage
+    from agent_team_backend.mcp_server import pane_accounts
+
+    account = await asyncio.to_thread(pane_accounts.pane_status_account, pane.pane_id, pane.agent_key)
+    if account is not None:
+        status["account"] = account
     git = await pane_git(pane.pane_id, pane.workspace_path)
     if git is not None:
         status["git"] = git
@@ -5657,6 +5847,7 @@ async def request_host_agent_workspace_backend(
     *,
     caller: "_Caller",
     agent_tool: dict[str, Any] | None = None,
+    pane: str | None = None,
 ) -> dict[str, Any]:
     """Route one agent backend call to a Host-owned workspace binding.
 
@@ -5671,6 +5862,10 @@ async def request_host_agent_workspace_backend(
     built from the resolved caller (with ``verifiedTo``) and the tool's
     ``timeout_ms`` (used for the wait, not sent). Without it the request is
     exactly the ``backend`` operation it always was.
+
+    ``pane`` (``backend`` operation only) names the calling pane, by its name
+    or id and nothing else, for the plugin's own records; the Host adds it to
+    the agent Initiator. Omitted, the request is unchanged.
     """
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -5687,6 +5882,8 @@ async def request_host_agent_workspace_backend(
         "operation": "backend",
         "payload": payload,
     }
+    if pane is not None and agent_tool is None:
+        request["pane"] = pane
     wait_payload = payload
     if agent_tool is not None:
         request["operation"] = "agentTool"
@@ -6191,6 +6388,12 @@ _DEDICATED_CLOSE_ACTIONS = {
     # Takes a project into a window's sidebar; only cli_open_agent's cross-
     # workspace spawn asks for it, and that path records the action (review #546).
     "ui.workspace.adopt": "cli_open_agent with workspace_path",
+    # Renaming moves a messaging address; cli_rename_pane checks the caller
+    # may rename that pane, which a raw invoke would skip.
+    "ui.pane.rename": "cli_rename_pane",
+    # Typing /model or rebuilding a pane; cli_set_model checks the pane is
+    # idle and records the switch, which a raw invoke would skip.
+    "ui.pane.setModel": "cli_set_model",
 }
 
 
@@ -6232,6 +6435,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # Restores a placeholder around a spawned (often resumed) CLI: the same
     # startup wait as ui.pane.create, plus a session probe before it.
     "ui.pane.open",
+    # cli_set_model's restart fallback resumes the pane around a new CLI.
+    "ui.pane.setModel",
     "ui.pipeline.start",
     "ui.pipeline.next",
     "ui.pipeline.resume",
@@ -6245,8 +6450,8 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     # confirmation ends one ordinary wait before this one, leaving a pane
     # create its wait.
     "ui.accounts.signIn",
-    # Asks the user, then runs the window's own switch, which may restart
-    # panes (cli_account_switch): the same budget as the sign-in.
+    # Runs the window's own switch, which may restart idle panes
+    # (cli_account_switch, request_account_switch): the same budget as the sign-in.
     "ui.accounts.switch",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
@@ -6667,16 +6872,26 @@ async def ui_list_actions(workspace_path: str, ctx: Context) -> dict[str, Any]:
 
 @server.tool()
 async def ui_invoke(
-    workspace_path: str, action: str, ctx: Context, args: dict[str, Any] | None = None
+    workspace_path: str, action: str, ctx: Context, args: dict[str, Any] | None = None, snapshot: bool = False
 ) -> dict[str, Any]:
     """Invoke a registered UI action in the Navide window for workspace_path.
 
     `action` must be one returned by ui_list_actions; `args` is passed through
-    to it verbatim. `action` "ui.workspace.open" is routed differently: it has
+    to it verbatim. `snapshot` true also returns, after an action that answered
+    ok true, what ui_snapshot would answer then, as `snapshot` — one call
+    instead of two. The action's own answer is unchanged either way: a
+    snapshot that fails comes back as `snapshot_error` {error, error_code}
+    beside it, and does not make the action count as failed. `action` "ui.workspace.open" is routed differently: it has
     no fixed owner (the workspace may not have a window yet), so it is sent to
     any one live Navide window instead of broadcast to all. Errors if no
     window owns workspace_path (or, for ui.workspace.open, no window is open
     at all) within 15s.
+
+    An action the window refuses answers ok false with its `error` sentence;
+    a refusal the action names with a reason also carries `error_code` (and
+    `params`, the values the sentence was built from) — branch on the code,
+    not on the wording. The pipeline_* tools that go through the window
+    answer the same way.
 
     Called from a CLI pane, the request is delivered straight to the window
     that hosts that pane — whether or not it is focused, and whatever project
@@ -6714,6 +6929,11 @@ async def ui_invoke(
     refusal = _human_only_refusal(action, args)
     if refusal is not None:
         return refusal
+    if action == "ui.pipeline.start":
+        # Who started the run is recorded with its plugin nodes; a caller of
+        # this tool is an agent, whatever its args say. Only the scheduler and
+        # webhook paths (_start_pipeline_run) name another origin.
+        args = {**(args or {}), "origin": "agent"}
     if action in _PANE_PRIVATE_UI_ACTIONS:
         # Refused here as well as in the window: the renderer check is the one
         # that holds for every path a request can take, this one gives the
@@ -6774,7 +6994,8 @@ async def ui_invoke(
             rest = [i for i in ids if _named_pane_id(i) != scope.pane_id]
             own = _self_reclaim_entry(scope.pane_id)
             if not rest:
-                return {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+                reply = {"ok": True, "result": {"reclaimed": [], "refused": [own]}, "error": None}
+                return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
             reply = await _ui_request(
                 workspace_path,
                 "invoke",
@@ -6787,8 +7008,8 @@ async def ui_invoke(
             # own id was taken out of the batch.
             base = result if reply.get("ok") and isinstance(result, dict) else {"reclaimed": []}
             reply["result"] = {**base, "refused": [*(base.get("refused") or []), own]}
-            return reply
-    return await _ui_request(
+            return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
+    reply = await _ui_request(
         workspace_path,
         "invoke",
         caller=caller,
@@ -6796,6 +7017,30 @@ async def ui_invoke(
         args=args,
         is_global=action == "ui.workspace.open",
     )
+    return await _with_ui_snapshot(reply, snapshot, workspace_path, caller)
+
+
+async def _with_ui_snapshot(
+    reply: dict[str, Any], wanted: bool, workspace_path: str, caller: "_Caller"
+) -> dict[str, Any]:
+    """ui_invoke's `snapshot`: the action's answer, with ui_snapshot's beside it.
+
+    The action has already run; nothing about the snapshot may turn its answer
+    into a failure, so every way the snapshot can go wrong lands in
+    `snapshot_error` and the action's own keys stay exactly as they were.
+    """
+    if not wanted or not reply.get("ok"):
+        return reply
+    try:
+        taken = await _ui_request(workspace_path, "snapshot", caller=caller)
+    except Exception as err:  # noqa: BLE001 — reported beside the action's answer
+        return {**reply, "snapshot_error": {"error": str(err) or type(err).__name__, "error_code": "ui_snapshot_failed"}}
+    if taken.get("ok"):
+        return {**reply, "snapshot": taken.get("result")}
+    return {
+        **reply,
+        "snapshot_error": {"error": taken.get("error"), "error_code": taken.get("error_code") or "ui_snapshot_failed"},
+    }
 
 
 @server.tool()
@@ -6839,6 +7084,11 @@ async def ui_diagnostics(
     own workspace, and none when it asks about another workspace; a refused
     request carries none. It is there even when no window answered.
 
+    `frame_drops` counts, since the backend started, terminal frames dropped
+    because no window owned their PTY (`ownerless`) and terminal requests that
+    named a terminal id the backend did not know (`unknown_terminal`). The
+    window's own `inject.failed` entries carry the pane's terminal size.
+
     Called from a CLI pane, this reads that pane's own window when
     workspace_path names that pane's own workspace (or is empty) — see
     ui_invoke.
@@ -6855,6 +7105,9 @@ async def ui_diagnostics(
     )
     if not answer.get("ok") and answer.get("error_code") not in _DIAGNOSTICS_UNANSWERED:
         return answer  # refused: nothing from the ledger either
+    from agent_team_backend import app as _app
+
+    answer = {**answer, "frame_drops": _app.frame_drop_counts()}
     scope = _persisted_scope(caller, workspace_path)
     if scope is None:
         return answer
@@ -7312,6 +7565,18 @@ async def cli_usage(ctx: Context, agent: str = "") -> dict[str, Any]:
     vendor with quota left. A snapshot with status "unverified" is not an
     error: no standard pane has verified that vendor's credential store yet,
     so nothing is read until the user opens one; its quota is unknown.
+
+    `absentWindows` lists the window kinds a reading proved the account does
+    not have, and is left out otherwise. `["session"]` on a Claude snapshot
+    means no 5-hour limit: read the weekly window as the account's limit. On
+    another vendor it only says the vendor's answer holds no such window. A
+    kind in neither `windows` nor `absentWindows` means no data, not no limit.
+
+    This call only reads what Navide already holds and never contacts a
+    vendor: each snapshot is what the background poll last read (about every
+    `intervalSec` seconds), and its `fetchedAt` says when. A connection error
+    from the call itself (such as EADDRNOTAVAIL) is the link to Navide's
+    backend failing, not the quota being unreadable — call it again.
     """
     try:
         _resolve_caller(ctx)
@@ -7354,8 +7619,8 @@ def _recent_workspace_rows() -> dict[str, Any]:
         for entry in _app.recent_workspaces_store.list()
     ]
     # Opened through workspace_open but never recorded in Recent: such a
-    # window boots with duplicate=1, which (on purpose, for cloned windows)
-    # keeps it out of Recent. Listed here instead, so the path a caller just
+    # window boots with skip_recent=1, which (on purpose) keeps it out of
+    # Recent. Listed here instead, so the path a caller just
     # opened is one it can find again, without the MCP call reordering the
     # user's Recent list.
     listed = {_norm_workspace(str(entry.get("path") or "")) for entry in workspaces}
@@ -7458,7 +7723,7 @@ async def workspace_open(path: str, ctx: Context) -> dict[str, Any]:
     )
     if not result.get("ok"):
         return result
-    # The window opens with duplicate=1 and so stays out of Recent; this is
+    # The window opens with skip_recent=1 and so stays out of Recent; this is
     # what puts the path in workspace_list (see _recent_workspace_rows).
     _mcp_opened_workspaces.pop(path, None)
     _mcp_opened_workspaces[path] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
@@ -7552,17 +7817,22 @@ async def pipeline_list(ctx: Context) -> dict[str, Any]:
     """List Navide's pipeline templates and the roles their stages are cast from.
 
     A pipeline is a saved multi-stage run: an ordered set of stages, each with
-    slots naming which CLI plays which role. The user starts one from the
-    Pipelines window, and it is the shape a whole team of panes is built in —
-    none of which was visible from here. Read it to describe what the user's
-    Navide can run, or to see which stage a task belongs to before opening a
-    pane for it yourself. Read-only: nothing here starts a run.
+    slots naming which CLI plays which role. A run starts from the window's
+    sidebar or pipeline editor, from pipeline_start, or from a scheduled job,
+    and it is the shape a whole team of panes is built in. Read it to describe
+    what the user's Navide can run, or to see which stage a task belongs to
+    before opening a pane for it yourself. Read-only: nothing here starts a run.
 
     Returns {pipelines, active_pipeline_id, roles}. Each pipeline is {id, name,
-    builtin, stage_count, stages}; each stage is {id, title, short_title,
-    description, sentinel, allow_questions, recommended_roles, slots}, and each
-    slot {agent_key, role_key, label, is_commander}. `active_pipeline_id` is
-    the template the Pipelines window currently has selected.
+    builtin, stage_count, has_graph, stages}, plus `imported_from` for one
+    imported from n8n; each stage is {id, title, short_title, description,
+    sentinel, allow_questions, recommended_roles, slots}, and each slot
+    {agent_key, role_key, label, is_commander}. `active_pipeline_id` is the
+    default pipeline: the one pipeline_start runs when given no pipeline_id.
+
+    For a pipeline with `has_graph` true the stages are the layers its graph
+    derives to; its gates, reject loops, branch and error edges and
+    sub-pipeline calls are not in them — pipeline_graph op "get" shows those.
 
     Two things are deliberately not here, because both are whole prompts: a
     slot's kickoff body, and a role's system prompt. `roles` gives each role's
@@ -7593,6 +7863,12 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
     status: dict[str, Any] = {"workspace_path": workspace_path}
     status["active"] = stored.get("state") == "running"
     status.update(_pick(stored, _PROJECT_FIELDS))
+    if pipeline_liveness.is_interrupted(project):
+        # Left at running by a crashed app: no window drives it. Its record
+        # is untouched, so opening the workspace still offers resume.
+        status["active"] = False
+        status["state"] = "interrupted"
+        status["resumable"] = True
     status["stages"] = [
         _pick(stage, _STAGE_RECORD_FIELDS) for stage in stored.get("stages") or []
     ]
@@ -7609,6 +7885,13 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
         if isinstance(state, dict)
     }
     status["gate"] = stored.get("node_gate") or {}
+    if getattr(project, "run_stack", None):
+        # A sub-pipeline's child run: the parents waiting for it, outermost first.
+        from agent_team_backend.ws_handlers import run_frame_view
+
+        status["run_stack"] = [run_frame_view(f) for f in project.run_stack]
+        status["parent"] = status["run_stack"][-1]
+        status["depth"] = len(project.run_stack) + 1
     return status
 
 
@@ -7622,12 +7905,13 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     Read it before deciding how much of a job is yours. Read-only.
 
     Returns {workspace_path, active, ...}. `active` is true only while a run is
-    in progress. A workspace that has never run a pipeline answers with
+    in progress. A workspace Navide holds no project record for answers with
     {workspace_path, active: false} and nothing else — that is the empty state,
-    not an error.
+    not an error. One with a record that has never run a pipeline answers with
+    the fields below, state "idle", no stages and total_stages 0.
 
     When a project exists it also carries: state (idle / running / completed /
-    aborted), task_description (what the run was started for), pipeline_id
+    aborted / interrupted / suspended), task_description (what the run was started for), pipeline_id
     (which template from pipeline_list), current_stage_index and total_stages,
     run_count, log_file_name, updated_at, plus `stages` — {stage_id, title,
     agent, role, pane_id, status, started_at, ended_at} each — and `panes`,
@@ -7635,6 +7919,12 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     slot_label, spawn_status, kickoff_status}. Panes the user or an agent
     opened by hand are not pipeline slots and are left out; cli_list_targets is
     where every pane is listed.
+
+    state "interrupted" (with active false and resumable true) is a run whose
+    record was left at running by a closed or crashed app: no Navide window
+    drives it any more. It no longer blocks definition edits, and its record
+    is kept, so opening the workspace offers to resume it (or pipeline_resume
+    does, once a window holds the workspace).
 
     Per graph node it also carries `nodes` — {node_id: {status, startedAt,
     endedAt, tokens, paneId, attempts, pinned, error}}, status one of pending /
@@ -7644,7 +7934,15 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},
     or {} when it is not paused). Node ids are the ones pipeline_graph op
     "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
-    index>. A paused gate is resolved with pipeline_gate.
+    index>. Only nodes of the run's own pipeline are recorded. A paused gate
+    is resolved with pipeline_gate.
+
+    While the run is a sub-pipeline's child run it also carries `run_stack`,
+    the parent runs suspended at their subpipeline nodes, outermost first
+    ({id, node_id, pipeline_id, pipeline_name, child_pipeline_id, next_index,
+    task_description, suspended_at} each), `parent` (the innermost of them)
+    and `depth` (2 or 3). state "suspended" is the moment between a parent
+    suspending and its child starting.
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
@@ -7960,7 +8258,14 @@ def _token_stats_of(workspace_path: str) -> dict[str, Any]:
 
 
 @server.tool()
-async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, Any]:
+async def cli_token_stats(
+    ctx: Context,
+    workspace_path: str = "",
+    cost_by: str = "",
+    since: str = "",
+    until: str = "",
+    pane: str = "",
+) -> dict[str, Any]:
     """Read how many tokens this workspace has spent, as Navide counts them.
 
     The numbers behind the Token panel: what the current run has used, what the
@@ -7985,10 +8290,41 @@ async def cli_token_stats(ctx: Context, workspace_path: str = "") -> dict[str, A
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
+
+    `cost_by` adds `cost`: dollars from Navide's per-call usage ledger, for the
+    calls made in this workspace's folder or below it, grouped by "cwd",
+    "pane", "day", "session", "model", "account" (the account slot's
+    profile id, "" when unknown) or "model_account" (key "<model>::<profile
+    id>", with `model` and `account` on each group) or "day_model" (key
+    "<day>::<model>", with `day` and `model`). Each group is {key,
+    calls, input, cache_read, cache_write_5m, cache_write_1h, output, usd,
+    unpriced_calls}:
+    input is the uncached part, and a model the price table does not know adds
+    to unpriced_calls, not to usd. `pricing` names the price table's version
+    and effective date. `since` and `until` (YYYY-MM-DD, UTC, inclusive) limit
+    the days and `pane` one pane. Grouped by pane, `differences` lists the
+    panes whose own calls and whose sessions' calls add up to different token
+    counts. The ledger keeps calls Navide has read since it started keeping
+    one, so earlier usage is missing from `cost` though the token counts above
+    include it.
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _plan_workspace(caller, workspace_path)
-    return await asyncio.to_thread(_token_stats_of, workspace_path)
+    stats = await asyncio.to_thread(_token_stats_of, workspace_path)
+    if cost_by:
+        from agent_team_backend import app as _app
+        from agent_team_backend.cost_ledger import COST_REPORT_GROUPS
+
+        if cost_by not in COST_REPORT_GROUPS:
+            return {"ok": False, "error": f"cost_by must be one of {', '.join(COST_REPORT_GROUPS)}"}
+        if not _app.cost_ledger.enabled:
+            stats["cost_ledger_disabled"] = _app.cost_ledger.disabled_reason
+            return stats
+        stats["cost"] = await asyncio.to_thread(
+            _app.cost_ledger.report, cost_by,
+            cwd=workspace_path, pane=pane, since=since, until=until,
+        )
+    return stats
 
 
 def _memory_workspace_root(workspace_path: str) -> Path | None:
@@ -8580,23 +8916,50 @@ async def pipeline_start(
     starting one is not a step to take on a guess.
 
     `pipeline_id` is the template to run, as pipeline_list reports its id. Left
-    empty, the workspace's currently selected pipeline runs; a workspace with
-    none selected refuses rather than picking one for you. `task` is what the
-    run is for — the text each stage's kickoff message is built from.
+    empty, the default pipeline runs (pipeline_list's active_pipeline_id).
+    `task` is what the run is for — the text each stage's kickoff message is
+    built from.
 
     Returns the window's own reply — {ok, result, error}. `result` carries
     {pipelineId, stages, workspacePath, state} for a run that actually started.
-    ok false means nothing started: a run already going (abort it first), no
-    pipeline to run, or a first stage whose panes all failed to spawn. The
-    window reports the run's own state rather than the fact that the call
-    returned, so "ok" here is not the "started but nothing happened" answer.
+    ok false means nothing started. A run already in progress in the workspace
+    is refused before any window is asked, with error_code
+    "pipeline_already_running" (abort it first); a run left at running by a
+    closed or crashed app is not in progress and does not block a start. The
+    window's own refusals — a parent run suspended at a sub-pipeline waiting
+    here (resume or reset it first), no pipeline to run, or a first stage whose
+    panes all failed to spawn — carry its `error`, plus `error_code` and
+    `params` when the window names the reason. The window reports the run's
+    own state rather than the fact that the call returned, so "ok" here is not
+    the "started but nothing happened" answer.
 
     workspace_path defaults to your own pane's workspace; pass it only to start
     a run in another project's window.
     """
     caller = _resolve_caller(ctx)
     workspace_path = await _run_workspace(caller, workspace_path)
-    args: dict[str, Any] = {"task": str(task or "")}
+    return await _start_pipeline_run(
+        caller, workspace_path, task, pipeline_id, taint_detail=_inherited_taint(caller, "pipeline started")
+    )
+
+
+async def _start_pipeline_run(
+    caller: _Caller, workspace_path: str, task: str, pipeline_id: str, *, taint_detail: str = "",
+    origin: str = "agent",
+) -> dict[str, Any]:
+    """pipeline_start's path, shared with the scheduler's pipeline_start jobs:
+    ui.pipeline.start in the window holding the workspace, with the caller's
+    Guard taint carried into the run."""
+    from agent_team_backend.projects import PipelineAlreadyRunning
+
+    # The window refuses a second run too, but only in words; the stored run
+    # answers with the code callers branch on, before any window is asked.
+    if await asyncio.to_thread(_run_is_active, workspace_path):
+        refused = PipelineAlreadyRunning("start a pipeline run")
+        return {"ok": False, "error": str(refused), "error_code": refused.error_code}
+    # Who started the run (agent, schedule or webhook): the window records it
+    # with every plugin node the run reaches (plugin Activity).
+    args: dict[str, Any] = {"task": str(task or ""), "origin": origin}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
         args["pipelineId"] = pipeline_id
@@ -8604,7 +8967,7 @@ async def pipeline_start(
     # the caller's taint travels with the run (guard.taint arm/adopt).
     from agent_team_backend.guard import taint as guard_taint
 
-    detail = _inherited_taint(caller, "pipeline started")
+    detail = taint_detail
     if detail:
         guard_taint.arm_pipeline_run(workspace_path, detail)
     result: dict[str, Any] = {}
@@ -8718,7 +9081,7 @@ def _run_is_active(workspace_path: str) -> bool:
     if not workspace_path:
         return False
     project = _app.project_store.peek(workspace_path)
-    return bool(project is not None and project.state == "running")
+    return pipeline_liveness.run_is_live(project)
 
 
 def _stage_edit_blocked(workspace_path: str, pipeline_id: str) -> bool:
@@ -8820,11 +9183,12 @@ async def pipeline_define(
     - "rename"        — needs `pipeline_id` and `name`. Renames in place; ids
                         and stages are untouched.
     - "delete"        — needs `pipeline_id`. DESTRUCTIVE, see below.
-    - "set_active"    — needs `pipeline_id`. Selects the template the Pipelines
-                        window shows and that pipeline_start uses when called
-                        with no pipeline_id of its own.
-    - "reset_builtin" — needs `pipeline_id`, and only "default" or
-                        "maintenance" have seed data. DESTRUCTIVE, see below.
+    - "set_active"    — needs `pipeline_id`. Makes it the default pipeline:
+                        the one pipeline_start runs when called with no
+                        pipeline_id of its own.
+    - "reset_builtin" — needs `pipeline_id`, and only the builtins "default",
+                        "maintenance" and "evolve-landing" have seed data.
+                        DESTRUCTIVE, see below.
 
     `workspace_path` names the project whose run the guards check; it defaults
     to your own pane's workspace, and a caller with no pane that passes nothing
@@ -8835,8 +9199,10 @@ async def pipeline_define(
     - "delete" and "set_active" are REFUSED outright while that workspace has
       a run in the running state (error_code "pipeline_running"). Abort the run
       first if you mean it.
-    - "reset_builtin" replaces every stage of the pipeline with its seed set,
-      and is refused while the run in progress is using that pipeline — a run
+    - "reset_builtin" replaces every stage of the pipeline with its seed set
+      and drops a graph drawn on it (gates, loops, branches) — "evolve-landing"
+      gets its seed graph back instead — and is refused while the run in
+      progress is using that pipeline — a run
       records which pipeline it belongs to, and naming it explicitly does not
       get past the guard.
     - A deleted pipeline does not stop or rewind a run that was already
@@ -8914,6 +9280,7 @@ async def stage_define(
     stage: dict[str, Any] | None = None,
     ids: list[str] | None = None,
     workspace_path: str = "",
+    discard_graph: bool = False,
 ) -> dict[str, Any]:
     """Add, edit, remove, reorder or re-seed the STAGES inside one pipeline.
 
@@ -8945,8 +9312,8 @@ async def stage_define(
     - "reset"   — takes no extra argument. DESTRUCTIVE, see below.
 
     `pipeline_id` picks which pipeline to edit; left empty it means the active
-    one, which is what the Pipelines window has selected and not necessarily
-    the one you were reading. Name it.
+    one, which is the default pipeline (pipeline_list's active_pipeline_id)
+    and not necessarily the one you were reading. Name it.
 
     `workspace_path` names the project whose run the guard checks; it defaults
     to your own pane's workspace.
@@ -8964,7 +9331,10 @@ async def stage_define(
     the built-in stages for "default" and "maintenance", and NOTHING AT ALL for
     a pipeline you created — a custom pipeline reset this way is left empty and
     unrunnable, and there is no undo. Read it out of pipeline_list first if you
-    might want it back.
+    might want it back. A pipeline you created whose graph has gates, reject
+    loops or branches loses that graph too, so its reset is refused (error_code
+    "graph_nonlinear") unless you pass `discard_graph` true — ask the user
+    first. A builtin's reset always restores its seed, graph included.
 
     A pipeline whose graph has gates, reject loops or cross-layer edges cannot
     be expressed as a stage list: "upsert", "delete" and "reorder" are refused
@@ -9011,7 +9381,9 @@ async def stage_define(
             )
             written = None
         else:
-            await asyncio.to_thread(_app.stages_store.reset, pipeline_id or None)
+            await asyncio.to_thread(
+                _app.stages_store.reset, pipeline_id or None, discard_graph=bool(discard_graph)
+            )
             written = None
     except GraphNonLinearError as exc:
         return {"ok": False, "error": str(exc), "error_code": "graph_nonlinear"}
@@ -9238,43 +9610,81 @@ async def pipeline_graph(
     has, plus optional `params`), gate nodes (the run pauses there until
     pipeline_gate passes or rejects it) and a trigger — joined by edges keyed
     by id. Its stages (what stage_define and pipeline_list show) are derived
-    from it: each longest-path layer of slot nodes is one stage, run in order,
-    so a node waits for every node upstream of it. A pipeline that has never
+    from it: each longest-path layer of slot nodes (over main, branch and error
+    edges) is one stage, run in order, so a node waits for every node upstream
+    of it. A pipeline that has never
     been edited as a graph answers "get" with the graph its stages imply
     (derived: true) and is unchanged until you write one.
 
     `op`:
     - "get"   — returns {graph, derived, stages}.
     - "apply" — needs `ops`, a list applied all-or-nothing:
-        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger", label?,
+        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger"|"subpipeline", label?,
            position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,
-           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}
+           isCommander?, params?}, gate?:{prompt?},
+           subpipeline?:{pipelineId, task?, wait?:true}}, after?:[ids], before?:[ids]}
            (after/before wire main edges; an edge after→before is replaced,
            i.e. inserting on an edge)
         {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
-        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
+        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?},
+           subpipeline?:{...partial}}
         {op:"move_node", id, position:{x,y}}
-        {op:"add_edge", edge:{id?, from, to, kind?:"main"|"reject", maxLoops?}}
+        {op:"add_edge", edge:{id?, from, to,
+           kind?:"main"|"reject"|"branch"|"error", maxLoops?, when?}}
         {op:"remove_edge", id}
         {op:"set_gate", id, prompt?}
         {op:"set_pin", id, pinned}   (a pinned slot is skipped on later runs and
            its last output reused)
+        {op:"set_retry", id, retry:{maxTries, waitMs?} | null}  (a slot's failed
+           try — its kickoff never landed, or it reported ---NODE-FAILED--- —
+           runs again on the same pane, maxTries 1..5 tries in all, waitMs
+           0..300000 apart, before its error edge or the run fails; null clears)
         {op:"set_stage_meta", stageId, title?, shortTitle?, question?,
            description?, sentinel?, allowQuestions?, docQuery?,
            recommendedRoles?}  (metadata of the stage a layer derives to)
     - "set"   — needs `graph` ({version:1, nodes, edges}); replaces it whole.
 
-    Rules a write must satisfy: main edges form no cycle; the only loops are
-    "reject" edges, which must point to an upstream node and carry maxLoops
+    Rules a write must satisfy: main, branch and error edges form no cycle;
+    the only loops are "reject" edges, which must point to an upstream node and carry maxLoops
     1..10 (default 2) — a rejected gate follows its reject edge back and re-runs
-    from there at most that many times, then the run fails.
+    from there at most that many times, then the run fails. "branch" and
+    "error" edges start at a slot. A branch edge carries `when`: a string
+    matched (case-insensitively) against the value the agent reports with
+    ---BRANCH:<code>: <value>--- ("default" is taken when no other branch of
+    that slot matched), or {path, equals} compared with a field of the JSON
+    the slot reports between ---OUTPUT-START:<code>--- and
+    ---OUTPUT-END:<code>---. An error edge is taken only when its slot fails
+    (its kickoff never landed, or it reported
+    ---NODE-FAILED:<code>: <reason>---); on a slot without one, a kickoff
+    that never landed still fails the run. <code> is a random signal code
+    each kickoff names; a signal without it (an echoed kickoff, text the
+    agent read) is ignored, and claude / codex signals are read from their
+    turn text only, never from the screen.
+    A node none of whose inputs was taken is skipped, and so are the nodes
+    only it feeds. A kickoff may read {{node.<id>.output}} or
+    {{node.<id>.output.<path>}}. A graph without branch or error edges runs
+    exactly as before.
+
+    A "subpipeline" node runs another pipeline and waits for it: the run
+    suspends there (its panes stay open), the child pipeline runs in the same
+    workspace as an ordinary run, and when it completes its last steps'
+    summary and structured output become this node's output; the parent then
+    resumes. `task` is the child's task (empty: the parent's), and may use
+    {{task}}, {{prev.summary}} and {{node.<id>.output}}. A child that fails
+    fails the node, which then retries (set_retry) or takes its error edge
+    like a slot. Calls may not loop across pipelines (A → B → A is refused,
+    and every pipeline named must exist) and nest at most 3 runs deep. A
+    graph without subpipeline nodes runs exactly as before.
 
     Refused while the workspace's run is using this pipeline (error_code
     "pipeline_running"), like stage_define. `pipeline_id` empty means the
     active pipeline; name it. Returns {ok, op, pipeline_id, graph, stages}
     (+ derived for "get"); ok false carries `error`, `error_code` ("bad_op",
     "missing_argument", "pipeline_running", "not_found", "invalid") and, for
-    an invalid graph, `errors` — nothing was written.
+    an invalid graph, `errors` — nothing was written. A refused "apply" op also
+    carries `op_index`, the ops[] entry it came from; its errors start with
+    "ops[<i>] (<op>)", and an unknown op, node kind, edge kind or stageId
+    lists the ones there are.
     """
     caller = _resolve_caller(ctx)
     op = str(op or "").strip()
@@ -9303,7 +9713,10 @@ async def pipeline_graph(
         else:
             out = await asyncio.to_thread(_app.stages_store.set_graph, pipeline_id or None, graph)
     except GraphError as exc:
-        return {"ok": False, "error": str(exc), "error_code": "invalid", "errors": exc.errors}
+        refused = {"ok": False, "error": str(exc), "error_code": "invalid", "errors": exc.errors}
+        if getattr(exc, "op_index", None) is not None:
+            refused["op_index"] = exc.op_index  # type: ignore[attr-defined]
+        return refused
     except (KeyError, ValueError) as exc:
         return _store_refused(exc)
     # The same three events the pipelines.graph.* ws handlers send.
@@ -9311,6 +9724,95 @@ async def pipeline_graph(
 
     await _broadcast_graph_change(out, f"graph_{op}")
     return {"ok": True, "op": op, **out}
+
+
+@server.tool()
+async def pipeline_import_n8n(
+    ctx: Context,
+    json: str,
+    dry_run: bool = True,
+    default_agent: str = "",
+    name: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Convert an exported n8n workflow into a NEW pipeline template.
+
+    `json` is the workflow as n8n exports or copies it (nodes + connections),
+    or a list of workflows as `n8n export:workflow --all` writes: the first one
+    no other listed one calls is the main one, and the others are imported too.
+    With `dry_run` true (the default) nothing is written: you get the preview
+    graph and the conversion report to show the user first. With `dry_run`
+    false a new pipeline is created — an existing one is never overwritten, and
+    a name already in use gets " (2)", " (3)"… — holding the graph, the
+    redacted source JSON and the credential checklist. `name` defaults to the
+    workflow's name; `default_agent` (an agentKey, default "claude") is the CLI
+    for slots no AI Agent model decides. Sending the same import again (same
+    `json`, `name` and `default_agent`) within 10 minutes answers with the
+    pipeline it created, flagged `reused`, instead of a copy. `json` may be at
+    most 5 MB.
+
+    What the user should know before importing (say it):
+    - CLI agents carry out most steps. HTTP Request, Code, Set, app nodes
+      (Google Sheets, Slack, Gmail…), unknown or community nodes are run by an
+      agent from the node's original parameters, so results can differ from
+      n8n's. Runs of steps with no branching, small IF/Switch regions and loop
+      bodies are folded into one slot each; an AI Agent and its model, memory,
+      tools and output parser become one slot. Wait and send-and-wait become
+      gates. report.slots lists every slot's full kickoff and report.gates every
+      gate prompt; report.stats.needsReview counts steps to confirm.
+    - Embedded secrets are removed. Authorization headers, API keys, bearer and
+      common token shapes found anywhere in the workflow are replaced with
+      "<removed: add credential for …>" — in the graph, the report and the
+      stored source alike. report.secretsRemoved names only the node and field
+      of each; the values are not kept anywhere. Credentials themselves are
+      listed by type and name (`credentials`) for the user to set up locally
+      (an MCP server or the service's CLI login); n8n credential ids are
+      dropped and nothing is put into an environment.
+    - Execute Workflow becomes a sub-pipeline node when the workflow it calls
+      is listed too or was imported before; report.subworkflows says which
+      (status existing, imported, will-import, recursive or missing). A call
+      that would loop back, and one to a workflow Navide does not have, stay
+      pending. A workflow used as an AI Agent tool is named in the kickoff,
+      never converted: a pipeline cannot be called as a tool.
+    - Schedule, webhook and app triggers are imported but marked pending:
+      start such a pipeline by hand.
+    - Everything imported is external content. Every run of an imported
+      pipeline marks its panes with Navide Guard's external-content taint,
+      whoever starts it; that cannot be turned off.
+
+    Refused while the workspace has a run in progress (error_code
+    "pipeline_running"), like pipeline_define's delete. Returns {ok, dry_run,
+    graph, report, credentials} plus `pipeline` (the new pipeline's summary)
+    and `pipelines` when one was created; ok false carries `error` and
+    `error_code` ("invalid" for input that is not an n8n workflow,
+    "too_large", "refused" when the pipeline store refused a graph — nothing
+    of that import is kept — or "pipeline_running").
+    """
+    caller = _resolve_caller(ctx)
+    from agent_team_backend import app as _app
+    from agent_team_backend.n8n_import import N8nImportError, import_into_store
+
+    if not dry_run:
+        workspace_path = await _definition_workspace(caller, workspace_path)
+        if await asyncio.to_thread(_run_is_active, workspace_path):
+            return _run_in_progress("import a pipeline")
+    plugin_nodes = await host_plugin_pipeline_nodes()
+    try:
+        out = await asyncio.to_thread(
+            import_into_store,
+            _app.stages_store,
+            json,
+            dry_run=bool(dry_run),
+            default_agent=str(default_agent or "claude"),
+            name=str(name or ""),
+            plugin_nodes=plugin_nodes,
+        )
+    except N8nImportError as exc:
+        code = {"too-large": "too_large", "store-refused": "refused"}.get(exc.reason, "invalid")
+        return {"ok": False, "error": str(exc), "error_code": code}
+    if not dry_run:
+        out.update(await _publish_pipelines("import"))
+    return {"ok": True, **out}
 
 
 # ── Pipelines: driving a run that is already going ──────────────────────────
@@ -9556,6 +10058,41 @@ def _scheduler_actor(caller: _Caller) -> dict[str, Any]:
 
 _CROSS_WORKSPACE = "SCHEDULER_CROSS_WORKSPACE"
 
+#: What a pane caller still sees of a job in another workspace's state: timing
+#: and status only — never last_error, which can quote that workspace's output.
+_FOREIGN_STATE_KEYS = (
+    "next_run_at", "running_at", "last_run_at", "last_status", "last_skip_reason",
+    "consecutive_errors", "backoff_until", "disabled_reason",
+)
+
+
+def _foreign_job(caller: _Caller, job: dict[str, Any]) -> bool:
+    """True when a pane caller looks at a job aimed at another workspace. A
+    caller with no pane identity is the user's own access and sees every job."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return False
+    own = agent_messaging._normalize_workspace(_caller_workspace(caller))
+    action = job.get("action") or {}
+    owner = job.get("owner") or {}
+    target = str(action.get("workspace") or owner.get("workspace") or "")
+    return agent_messaging._normalize_workspace(target) != own
+
+
+def _redact_foreign_job(job: dict[str, Any]) -> dict[str, Any]:
+    """Another workspace's job as a pane sees it: metadata only. The action
+    keeps its kind and workspace (owner already names that workspace); its
+    text, pane target and pipeline are dropped, and so is state's error text."""
+    action = job.get("action") or {}
+    state = job.get("state") or {}
+    return {
+        **job,
+        "action": {"kind": action.get("kind"), "workspace": action.get("workspace")},
+        "state": {key: state.get(key) for key in _FOREIGN_STATE_KEYS if key in state},
+        "redacted": True,
+    }
+
 
 @server.tool()
 async def scheduler_list(ctx: Context) -> dict[str, Any]:
@@ -9568,6 +10105,11 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     gone — such a job is the user's to change now. `limits` reports the agent
     limits (see scheduler_upsert, LIMITS) and how much of them is in use:
     yours_enabled, agent_enabled, agent_runs_today.
+
+    A pane sees a job aimed at another workspace as metadata only, marked
+    `redacted: true`: its action keeps just kind and workspace (no text, pane
+    or pipeline), and its state keeps timing and status but not last_error.
+    A caller with no pane identity sees every job in full.
 
     Jobs fire only while Navide is running; nothing wakes the machine or the
     app. See scheduler_upsert for the shape of a job.
@@ -9584,6 +10126,9 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     result["limits"]["yours_enabled"] = sum(
         1 for job in result["jobs"] if job["editable"] and job["enabled"]
     )
+    result["jobs"] = [
+        _redact_foreign_job(job) if _foreign_job(caller, job) else job for job in result["jobs"]
+    ]
     return result
 
 
@@ -9664,6 +10209,19 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         A pane rebuilt by resuming the same session keeps its jobs: they move
         to the new pane id. Three "target_gone" runs in a row disable the job
         (state.disabled_reason "target_gone") and tell its creator once.
+      action — or {kind: "pipeline_start", workspace, pipeline_id | pipeline_name,
+        task}: start a pipeline run there, exactly as pipeline_start would —
+        THIS OPENS CLI PANES AND SPENDS THEIR QUOTA on every run. Exactly one of
+        pipeline_id / pipeline_name (as pipeline_list reports them; a name must
+        match one pipeline exactly), checked when the job is saved — an
+        unknown or ambiguous one is refused then, with error_code
+        "pipeline_not_found" — and resolved again each time the job runs. It
+        never opens a window: when no window holds the workspace the run is an
+        ERROR with reason "no_window" (not a skip), as are a pipeline deleted
+        since ("pipeline_not_found") and a refused start (a run already in
+        progress is "pipeline_already_running"), each with the reason code in
+        state.last_error_code and the detail in last_error. A pane caller's
+        default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
         defaults {"once", 24, 1800}.
       state — owned by Navide (next_run_at, running_at, last_status, last_error,
@@ -9684,7 +10242,7 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         action = dict(action)
         if not action.get("workspace"):
             action["workspace"] = _caller_workspace(caller)
-        if not action.get("pane_id") and not action.get("pane_name"):
+        if action.get("kind") != "pipeline_start" and not action.get("pane_id") and not action.get("pane_name"):
             me = agent_messaging.get(caller.pane_id)
             action["pane_id"] = caller.pane_id
             if me is not None:
@@ -9702,7 +10260,7 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
     try:
         result = await _scheduler_service().upsert(job, _scheduler_actor(caller))
     except JobInvalid as err:
-        return {"ok": False, "error": str(err)}
+        return {"ok": False, "error": str(err), **({"error_code": err.code} if err.code else {})}
     if result.get("ok"):
         await _announce_scheduler()
     return result
@@ -9753,7 +10311,9 @@ async def scheduler_run_now(id: str, ctx: Context) -> dict[str, Any]:
     scheduler_runs for the outcome. Refused while that job is already running.
     Clears a failure backoff; the error count resets only if this run succeeds.
     The run does not move the job's next scheduled slot. Only a job you created
-    (see scheduler_upsert, OWNERSHIP).
+    (see scheduler_upsert, OWNERSHIP). A pipeline_start job whose workspace no
+    window holds is refused before anything runs, with error_code "no_window":
+    open the workspace first.
     """
     try:
         caller = _resolve_caller(ctx)
@@ -9768,12 +10328,25 @@ async def scheduler_runs(id: str, ctx: Context, limit: int = 20) -> dict[str, An
 
     Each run is {id, job_id, started_at, ended_at, status: "ok" | "error" |
     "skipped", reason, detail}.
+
+    A pane may read only the runs of jobs aimed at its own workspace; another
+    workspace's job answers {ok: false, code: "SCHEDULER_CROSS_WORKSPACE"}.
+    A caller with no pane identity may read any job's runs.
     """
     try:
-        _resolve_caller(ctx)
+        caller = _resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
-    return await _scheduler_service().runs(str(id or ""), limit)
+    service = _scheduler_service()
+    job = await service.store.get_job(str(id or ""))
+    if job is not None and _foreign_job(caller, job):
+        return {
+            "ok": False,
+            "code": _CROSS_WORKSPACE,
+            "error": "this job belongs to another workspace; a pane may read only "
+            "its own workspace's run history — ask the user",
+        }
+    return await service.runs(str(id or ""), limit)
 
 
 @server.tool()
@@ -10197,6 +10770,59 @@ async def share_revoke(link_id: str, ctx: Context) -> dict:
     return await _share_run(call)
 
 
+# ── Plugin pipeline nodes (E2) ───────────────────────────────────────────────
+# An n8n import asks the authenticated Host which installed plugins contribute
+# pipeline nodes for which n8n types (contributes.pipelineNodes[].n8nTypes):
+# the backend unicasts `plugins.pipelineNodes.request`, the Host answers with
+# `plugins.pipelineNodes.result`. No answer means no plugin nodes, and every
+# step keeps its agent slot, exactly as before.
+PIPELINE_NODES_REQUEST_EVENT = "plugins.pipelineNodes.request"
+_PIPELINE_NODES_TIMEOUT_S = 5.0
+_pipeline_nodes_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
+_PIPELINE_NODE_ID = re.compile(r"[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+")
+
+
+def resolve_pipeline_nodes(request_id: str, response: dict[str, Any]) -> bool:
+    """Resolve one ``plugins.pipelineNodes.request`` with the Host's answer."""
+    return _pipeline_nodes_pending.resolve(request_id, response)
+
+
+def _pipeline_nodes_by_type(answer: Any) -> dict[str, dict[str, str]]:
+    """n8n type -> {pluginId, node, title}; the first plugin (by id) wins a type."""
+    nodes = answer.get("nodes") if isinstance(answer, dict) and answer.get("ok") is True else None
+    out: dict[str, dict[str, str]] = {}
+    if not isinstance(nodes, list):
+        return out
+    entries = [n for n in nodes if isinstance(n, dict)]
+    for n in sorted(entries, key=lambda e: (str(e.get("pluginId")), str(e.get("node")))):
+        pid, node, title, types = n.get("pluginId"), n.get("node"), n.get("title"), n.get("n8nTypes")
+        if not (isinstance(pid, str) and _PIPELINE_NODE_ID.fullmatch(pid) and isinstance(node, str) and node
+                and isinstance(title, str) and isinstance(types, list)):
+            continue
+        for t in types:
+            if isinstance(t, str) and t and t not in out:
+                out[t] = {"pluginId": pid, "node": node, "title": title}
+    return out
+
+
+async def host_plugin_pipeline_nodes() -> dict[str, dict[str, str]]:
+    """Installed plugins' pipeline nodes by n8n type, from the Host; {} when
+    the Host is not connected or does not answer in time."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = f"pn:{secrets.token_hex(16)}"
+    future = _pipeline_nodes_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(PIPELINE_NODES_REQUEST_EVENT, {"request_id": request_id}))
+        if not sent:
+            return {}
+        result = await _pipeline_nodes_pending.wait(request_id, future, timeout=_PIPELINE_NODES_TIMEOUT_S)
+        return {} if result is TIMEOUT else _pipeline_nodes_by_type(result)
+    finally:
+        _pipeline_nodes_pending.discard(request_id)
+
+
 # ── Marketplace, read-only (plan B, B2-a) ───────────────────────────────────
 # marketplace_search / marketplace_detail / plugins_list_installed ask the
 # Electron Host over its authenticated session (contract section 4.3): the
@@ -10275,8 +10901,8 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "agentTools", "network", "networkViaShell", "noPermissions",
-    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "shell.allowlist", "shell.full", "agentTools.write",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "web", "agents", "agentMessages", "secrets", "agentNotify", "agentTools", "network", "networkViaShell", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "system.web", "system.agents", "system.agentMessages", "system.secrets", "system.agentNotify", "shell.allowlist", "shell.full", "agentTools.write",
     "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
@@ -10284,12 +10910,15 @@ _MQ_ENUMS = frozenset({
     # PluginSource (src/shared/pluginSource.ts), for plugins_list_installed (W1).
     "marketplace", "prerelease", "testplace", "local-signed", "local-unsigned", "developer-unpacked",
     "factory-bundled",
+    # 0.2.39 disclosure: summary clause keys and command slot surfaces.
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "statusBar", "paneActions", "explorerMenu",
 })
 _MQ_ENUM_KEYS = frozenset({
     "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
     "state", "root", "projectWrites", "system", "executables",
     # An installed package's source (W1); a scan's `source` stays fenced.
     "source",
+    "slot",
 })
 _MQ_KNOWN_KEYS = frozenset({
     "kind", "items", "nextCursor", "item", "versions", "card",
@@ -10308,6 +10937,8 @@ _MQ_KNOWN_KEYS = frozenset({
     "capabilities", "address", "code", "frontend", "backend", "eval", "newFunction", "dynamicImport",
     "stringTimers", "obfuscationSignals", "native", "path", "format", "arch", "libraries", "notableImports",
     "importCount", "packer", "embeddedRuntime",
+    # 0.2.39 disclosure fields (agentEvents, pluginCalls, api, pipelineNodes, commandSlots).
+    "agentEvents", "pluginCalls", "api", "pipelineNodes", "commandSlots", "plugins", "slot", "command",
 })
 
 
@@ -10501,7 +11132,7 @@ async def marketplace_search(
         "nextCursor": next_cursor if isinstance(next_cursor, str) and _MQ_CURSOR.fullmatch(next_cursor) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_search")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_search")
     return out
 
 
@@ -10540,7 +11171,7 @@ async def marketplace_detail(ctx: Context, id: str, version: str | None = None) 
         "card": _fence_untrusted(card, label, fenced) if isinstance(card, dict) else None,
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "marketplace_detail")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "marketplace_detail")
     return out
 
 
@@ -10575,7 +11206,7 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
         ],
     }
     if fenced[0]:
-        _taint_marketplace_reader(caller, "plugins_list_installed")
+        await run_in_db_thread(_taint_marketplace_reader, caller, "plugins_list_installed")
     return out
 
 
@@ -11002,7 +11633,9 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     return answer
 
 
-async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: Any) -> dict[str, Any]:
+async def _plugin_agent_action(
+    ctx: Context, action: str, namespace: Any, name: Any, *, clear_secrets: bool = False,
+) -> dict[str, Any]:
     """Ask the Host to disable or enable one installed Marketplace package."""
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -11046,8 +11679,15 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
         return finish(_marketplace_error("HOST_UNAVAILABLE", f"Navide Host did not answer the {action} request"))
     if result.get("ok") is True and isinstance(result.get("pluginVersion"), str):
         version = result["pluginVersion"]
-        return finish({"ok": True, "pluginId": plugin_id, "pluginVersion": version,
-                       "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
+        answer = {"ok": True, "pluginId": plugin_id, "pluginVersion": version,
+                  "disabled": action == "disable", "changed": result.get("changed") is True}
+        if action == "disable" and clear_secrets:
+            # Deleting the package's secrets is never an agent's to do: it is
+            # filed for the user's decision, whatever the switch did.
+            answer["secretsClear"] = await _file_clear_secrets_request(
+                caller, requester, plugin_id, str(namespace), str(name), version,
+            )
+        return finish(answer, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
     if code == "APPROVAL_REQUIRED" and action == "enable" and isinstance(result.get("pluginVersion"), str):
@@ -11063,6 +11703,43 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     else:
         error = _fenced_request_error(caller, host_error, tool=f"plugins_{action}")
     return finish(_marketplace_error(code, error))
+
+
+async def _file_clear_secrets_request(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, namespace: str, name: str, version: str,
+) -> dict[str, Any]:
+    """plugins_disable with clear_secrets: file a plugin-clear-secrets request
+    for the user's decision. Nothing is deleted until the user approves it in a
+    main window; the user is told when the secrets are deleted."""
+    from agent_team_backend import app, skills_approvals
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    if not _MQ_SEMVER.fullmatch(version):
+        return {"ok": False, "error_code": "ACTION_FAILED", "error": f"Navide could not file a request for {plugin_id}"}
+    target = {"id": plugin_id, "namespace": namespace, "name": name, "version": version, "fromVersion": None}
+    try:
+        record = skills_approvals.registry.request_plugin(
+            kind="plugin-clear-secrets", requester=requester, reason="", target=target, card=None, diff=None,
+        )
+    except skills_approvals.SkillApprovalError as err:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                            action="request-clear-secrets", outcome="denied", error_code=err.code)
+        return {"ok": False, "error_code": err.code, "error": str(err)}
+    _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version,
+                        action="request-clear-secrets", outcome="allowed", approval_id=record["approval_id"])
+    await app.broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    return {
+        "ok": False,
+        "error_code": "APPROVAL_REQUIRED",
+        "error": (
+            f"Deleting the secrets of {plugin_id} needs the user's approval. A request was filed "
+            "for their decision in Navide; poll marketplace_request_status."
+        ),
+        "approval_id": record["approval_id"],
+        "status": record["status"],
+        "expires_at": record["expires_at"],
+    }
 
 
 async def _file_enable_request(
@@ -11114,7 +11791,7 @@ async def _file_enable_request(
 
 
 @server.tool()
-async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
+async def plugins_disable(ctx: Context, namespace: str, name: str, clear_secrets: bool = False) -> dict[str, Any]:
     """Disable an installed Navide plugin from the Navide Marketplace.
 
     Takes effect at once: the plugin stops and its views, backend and agent
@@ -11122,12 +11799,23 @@ async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, 
     agent did it, with a one-click undo, and the change is recorded. The
     bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
 
+    The plugin's own encrypted secrets (`secrets`: its API keys and tokens)
+    stay, so enabling it again finds them. `clear_secrets=true` asks to delete
+    them too: the plugin is disabled at once, and the deletion is filed as a
+    request for the user's decision in Navide (it cannot be undone, so only
+    the user approves it; the user is told when they are deleted). No secret
+    value is ever returned.
+
     Returns {ok, pluginId, pluginVersion, disabled: true, changed} or {ok:
     false, error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
-    ACTION_FAILED, HOST_UNAVAILABLE). `changed` is false when it was already
-    disabled: nothing happens then and the user is not notified.
+    ACTION_FAILED, HOST_UNAVAILABLE). With clear_secrets the answer also has
+    `secretsClear`: {ok: false, error_code: "APPROVAL_REQUIRED", error,
+    approval_id, status: "pending", expires_at}; follow it with
+    marketplace_request_status. `changed` is false when it was already
+    disabled: the switch is then left alone and the user is not notified of
+    it.
     """
-    return await _plugin_agent_action(ctx, "disable", namespace, name)
+    return await _plugin_agent_action(ctx, "disable", namespace, name, clear_secrets=clear_secrets is True)
 
 
 @server.tool()
@@ -11146,6 +11834,56 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     false, error, error_code}; `changed` is false when it was already enabled.
     """
     return await _plugin_agent_action(ctx, "enable", namespace, name)
+
+
+@server.tool()
+async def plugins_disable_all(ctx: Context) -> dict[str, Any]:
+    """Stop every running third-party Navide plugin at once (an emergency stop).
+
+    Navide first turns off third-party native backends and the third-party
+    agent-tool switches (agents and external MCP clients), then disables each
+    running third-party plugin as plugins_disable does: calls in flight end,
+    its views, events and backend stop; its files, grants and data stay. The
+    user is told which agent did it for each plugin, and the status bar shows
+    that every third-party plugin is stopped. The bundled Navide plugins are
+    not touched.
+
+    This can only stop. Turning the switches back on ("Resume all") is the
+    user's alone, in Navide's Settings; plugins_enable can enable again only a
+    plugin an agent stopped, and none the user stopped.
+
+    Returns {ok: true, stopped: [plugin ids], failed: [plugin ids]} or {ok:
+    false, error, error_code} (HOST_UNAVAILABLE, ACTION_FAILED).
+    """
+    from agent_team_backend.plugins import plugin_stop
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    requester = _approval_requester(caller)
+    answer = await plugin_stop.ask_host("stop-all", requester=requester)
+    if answer is None:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="HOST_UNAVAILABLE")
+        return _marketplace_error("HOST_UNAVAILABLE", "Navide Host did not answer the stop request")
+    if answer.get("ok") is not True:
+        _audit_agent_action(caller, requester, plugin_id="", action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+        return _marketplace_error("ACTION_FAILED", "Navide could not stop the third-party plugins")
+    def ids(key: str) -> list[str]:
+        """The Host's ids with the package-id grammar; anything else is dropped."""
+        values = answer.get(key)
+        return [value for value in values if isinstance(value, str) and "." in value
+                and _package_id(*value.split(".", 1)) == value] if isinstance(values, list) else []
+
+    stopped, failed = ids("stopped"), ids("failed")
+    for plugin_id in stopped:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="allowed")
+    for plugin_id in failed:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, action="disable", outcome="error",
+                            error_code="ACTION_FAILED")
+    return {"ok": True, "stopped": stopped, "failed": failed}
 
 
 # ── Quota failover state (read-only) ────────────────────────────────────────
@@ -11250,6 +11988,8 @@ async def cli_failover_state(ctx: Context, agent: str = "") -> dict[str, Any]:
 #: The fields of an account row this tool passes on: what the account store
 #: file holds about it, nothing read from its credentials.
 _ACCOUNT_FIELDS = ("id", "agentKey", "name", "scope", "createdAt")
+# Says which kind an account is, so an agent can tell a key that costs money.
+_ACCOUNT_FIELDS = (*_ACCOUNT_FIELDS, "authKind")
 #: The built-in Default row's id (cli_profiles' DEFAULT_SLOT_ID).
 _DEFAULT_ACCOUNT_ID = "__default__"
 
@@ -11271,8 +12011,8 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
     same key cli_whoami reports as agent_key. Left empty, every vendor comes
     back.
 
-    Returns {ok, accounts, active, defaultNames, paneDefaults}, plus `agent`
-    when a filter was applied.
+    Returns {ok, accounts, active, defaultNames, paneDefaults, panes}, plus
+    `agent` when a filter was applied.
       - `accounts` is every account row the user added: {id, agentKey, name,
         scope?, createdAt}. `scope` is the provider an account of a
         multi-provider CLI is bound to.
@@ -11282,6 +12022,12 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
       - `defaultNames` holds the names the user gave a vendor's Default row.
       - `paneDefaults` maps a vendor to the account new panes are pinned to,
         when the user chose one that differs from `active`.
+      - `panes` is every open pane on this machine of a vendor with accounts:
+        {paneId, name, address, agentKey, profileId, runsOn}. `profileId` is
+        the account the pane runs on now; `runsOn` "account-dir" means inside
+        that claude account's own folder, untouched by an account switch,
+        and "live" means on the vendor's `active` login. cli_get_status'
+        `account` gives the same for one pane.
     """
     try:
         _resolve_caller(ctx)
@@ -11312,6 +12058,9 @@ async def cli_accounts_list(ctx: Context, agent: str = "") -> dict[str, Any]:
     result["paneDefaults"] = {
         key: value for key, value in (doc.get("paneDefaults") or {}).items() if wanted(key)
     }
+    from agent_team_backend.mcp_server import pane_accounts
+
+    result["panes"] = pane_accounts.pane_rows(doc, agent)
     return result
 
 
@@ -11379,6 +12128,10 @@ async def cli_account_sign_in(
             "error": 'agent and profile_id are required, and mode is "isolated" or "folder"',
             "error_code": "bad-request",
         }
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {"ok": False, "error": "this is an API key account; it has no sign-in", "error_code": "api-key-account"}
     reason = " ".join(str(reason or "").split())
     # The cut is disclosed to the user too, not only in this docstring.
     reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
@@ -11438,44 +12191,248 @@ async def cli_account_sign_in(
 # ── CLI account switch (plan mcp_614482 P3) ─────────────────────────────────
 
 
+def _app_store_get(profile_id: str) -> dict[str, Any] | None:
+    from agent_team_backend import app as _app
+
+    return _app.cli_profiles_store.get(profile_id)
+
+
+# Statuses a switch can settle on; the first three are successes.
+_SWITCH_DONE = ("switched", "switched-signed-out", "switched-pane")
+# Queued switches whose requester asked to hear how they ended (request_id ->
+# callback). Process memory: a backend restart drops the queue with it.
+_switch_settled_callbacks: dict[str, Callable[[dict[str, Any]], Awaitable[None]]] = {}
+
+
+def _account_store_name(profile_id: str) -> str | None:
+    if profile_id == "__default__":
+        return "Default"
+    profile = _app_store_get(profile_id)
+    return str(profile.get("name") or "") or None if isinstance(profile, dict) else None
+
+
+async def request_account_switch(
+    agent_key: str,
+    profile_id: str,
+    *,
+    source: str,
+    who: str,
+    reason: str = "",
+    pane_id: str = "",
+    expected_from: str | None = None,
+    caller: "_Caller | None" = None,
+    workspace_path: str = "",
+    on_done: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+) -> dict[str, Any]:
+    """Switch a CLI account exactly as the user's own click in the window does.
+
+    The one entry for every switch that is not the user's own click: MCP
+    cli_account_switch and the Telegram account button both come through here.
+    Nothing asks the user. The window runs its own switch (Settings → Accounts'
+    path, or the badge's "switch only this pane" with `pane_id`); where the
+    user's click would ask before restarting a working pane, this instead
+    queues the switch until those panes are idle and returns "queued" at once.
+    A newer request for the same CLI (or the same pane) replaces a queued one.
+
+    Every request is written to account_switch_log and the window shows a
+    non-modal notice when it lands; neither waits on or holds the switch.
+
+    `expected_from` (an account id, "__default__" for Default) makes the
+    window answer "stale" without switching when the CLI's active account is
+    no longer that one. `on_done` is called once when a "queued" switch
+    settles, with {request_id, status, from, to, code?}.
+
+    Returns a dict that always carries `status` and `request_id`; `ok` is
+    true for "switched", "switched-signed-out", "switched-pane" and "queued".
+    """
+    from agent_team_backend import app as _app
+
+    agent_key = str(agent_key or "").strip().lower()
+    profile_id = str(profile_id or "").strip()
+    target_pane = str(pane_id or "").strip()
+    reason = " ".join(str(reason or "").split())
+    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
+    reason = reason[:_SIGN_IN_REASON_MAX]
+    target_name = await asyncio.to_thread(_account_store_name, profile_id) if profile_id else None
+    target_pane_name = ""
+    if target_pane:
+        from agent_team_backend import agent_messaging
+
+        registered = agent_messaging.get(target_pane)
+        target_pane_name = registered.name if registered else ""
+    row_id = await asyncio.to_thread(
+        _app.account_switch_log.record_request,
+        source=source, requester=who, agent_key=agent_key, to_profile_id=profile_id,
+        to_name=target_name, pane_name=target_pane_name or None, reason=reason,
+    )
+    request_id = str(row_id) if row_id is not None else f"x{secrets.token_hex(8)}"
+
+    async def settle(status: str, **extra: Any) -> dict[str, Any]:
+        if row_id is not None:
+            await asyncio.to_thread(
+                _app.account_switch_log.finish, row_id, status,
+                code=extra.get("code"), from_profile_id=extra.get("from_profile_id"),
+                from_name=extra.get("from"), to_name=extra.get("to"), pane_name=extra.get("pane_name"),
+            )
+        _log.info(
+            "account switch (%s, %s): agent=%s profile=%s pane=%s -> %s%s",
+            source, who, agent_key, profile_id, target_pane or "-", status,
+            f" ({extra['code']})" if extra.get("code") else "",
+        )
+        out: dict[str, Any] = {
+            "ok": status in _SWITCH_DONE or status == "queued",
+            "status": status, "request_id": request_id, "agent": agent_key, "profile_id": profile_id,
+        }
+        for key in ("from", "to", "code", "waiting"):
+            if extra.get(key) not in (None, ""):
+                out[key] = extra[key]
+        if target_pane:
+            out["pane_id"] = target_pane
+        return out
+
+    if not agent_key or not profile_id:
+        return {**await settle("bad-request"), "error": "agent and profile_id are required"}
+    from agent_team_backend import api_key_accounts
+
+    if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
+        return {
+            **await settle("api-key-account"),
+            "error": "this is an API key account; only the user chooses to spend it",
+        }
+    switch_args: dict[str, Any] = {
+        "agentKey": agent_key, "profileId": profile_id, "reason": reason,
+        "reasonTruncated": reason_truncated, "requestId": request_id,
+        "requester": {"source": source, "name": who},
+    }
+    if target_pane:
+        switch_args["paneId"] = target_pane
+    if expected_from is not None:
+        switch_args["expectedFrom"] = str(expected_from)
+    if caller is not None and caller.kind == "pane":
+        answer = await _ui_request(workspace_path, "invoke", caller=caller, action="ui.accounts.switch", args=switch_args)
+    elif target_pane:
+        answer = await _ui_request(workspace_path, "invoke", action="ui.accounts.switch", args=switch_args, route_pane_id=target_pane)
+    else:
+        answer = await _ui_request(workspace_path, "invoke", action="ui.accounts.switch", args=switch_args, is_global=True)
+    if not answer.get("ok"):
+        return {**await settle("no-window"), "error": "the Navide window did not answer"}
+    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
+    status = str(result.get("status") or "refused")
+    details = {
+        "from": str(result.get("from") or ""), "to": str(result.get("to") or ""),
+        "from_profile_id": result.get("fromProfileId"), "pane_name": result.get("paneName"),
+    }
+    if status == "queued":
+        if on_done is not None:
+            _switch_settled_callbacks[request_id] = on_done
+        waiting = result.get("waiting")
+        return await settle("queued", waiting=int(waiting) if isinstance(waiting, int) else None, **details)
+    # A pane move answers only a request that named a pane.
+    if status in _SWITCH_DONE and (status != "switched-pane" or target_pane):
+        return await settle(status, **details)
+    if status == "refused":
+        # The backend's refusal code only; its message is unreviewed text.
+        code = str(result.get("code") or "unknown")
+        return {**await settle("refused", code=code), "error": f"the switch was refused: {code}"}
+    if status in _SWITCH_DONE:
+        # A pane's answer to a CLI-wide request: not a switch of the CLI.
+        return {**await settle("refused", code="unexpected-result"), "error": "the window answered for something else"}
+    out = await settle(status)
+    out["error"] = str(result.get("message") or "the window refused the switch")
+    return out
+
+
+async def settle_account_switch(payload: dict[str, Any]) -> bool:
+    """A queued switch ended in the window: record it and tell its requester.
+
+    Called by the window (ws account_switch.settled); unknown ids are ignored.
+    """
+    request_id = str(payload.get("request_id") or "")
+    if not request_id:
+        return False
+    status = str(payload.get("status") or "refused")
+    from_name = str(payload.get("from") or "")
+    to_name = str(payload.get("to") or "")
+    code = str(payload.get("code") or "") or None
+    recorded = False
+    if request_id.isdigit():
+        from agent_team_backend import app as _app
+
+        recorded = await asyncio.to_thread(
+            _app.account_switch_log.finish, int(request_id), status, code=code,
+            from_profile_id=payload.get("from_profile_id") or None,
+            from_name=from_name or None, to_name=to_name or None,
+        )
+    _log.info("account switch %s settled: %s%s", request_id, status, f" ({code})" if code else "")
+    callback = _switch_settled_callbacks.pop(request_id, None)
+    if callback is not None:
+        done: dict[str, Any] = {"request_id": request_id, "status": status, "from": from_name, "to": to_name}
+        if code:
+            done["code"] = code
+        try:
+            await callback(done)
+        except Exception:  # noqa: BLE001 - a requester's notice never affects the switch
+            _log.exception("account switch %s: on_done callback failed", request_id)
+    return recorded or callback is not None
+
+
 @server.tool()
 async def cli_account_switch(
-    ctx: Context, agent: str, profile_id: str, reason: str,
+    ctx: Context, agent: str, profile_id: str, reason: str, pane_id: str = "",
 ) -> dict[str, Any]:
-    """Ask the user to switch one CLI to another of its accounts — for
-    example when the active account's quota ran out and another account of
-    the same vendor still has some.
+    """Switch one CLI to another of its accounts — for example when the
+    active account's quota ran out and another account of the same vendor
+    still has some. The switch happens directly: the user is not asked. It
+    is the same switch the user's own click in Settings → Accounts makes.
 
-    Your window first asks the user, naming which agent asked, the account it
-    switches from and to, and your `reason` (required; cut at 300
-    characters); nothing switches until they agree, and a no or no answer in
-    time is a refusal. If this call is cancelled or times out, the window
-    closes the question unanswered. On a yes it is the same switch Settings →
-    Accounts makes, never forced: if panes are running on that CLI, the window
-    asks the user again before restarting them, and a no there is
-    "restart-declined". Once the user says yes in time, the switch runs to
-    the end even if this call has timed out by then. If your own pane runs
-    on that CLI, the restart includes it and this call's result never
-    reaches you — after a restart, read cli_accounts_list to see where the
-    switch stands.
+    What it changes: the CLI's LIVE login, which every pane of that CLI not
+    pinned to an account runs on. claude switches hot: no pane restarts, and
+    running claude panes use the new account from their next request. Other
+    CLIs restart their panes on the new login; a pane that is working, in
+    any Navide window, is never interrupted for it — the switch waits until every such pane is
+    idle, then completes on its own (status "queued", below). claude panes
+    running inside an account's own folder (cli_get_status `account.runs_on`
+    "account-dir") are not moved by it.
+
+    `pane_id` (claude only) switches ONE pane instead, as the account badge's
+    "switch only this pane" does: that pane reopens on its conversation inside
+    `profile_id`'s own folder and stays there; the live login and every other
+    pane are left alone. The account must have signed in inside its own
+    folder ("needs-user" otherwise: cli_account_sign_in with mode "folder"),
+    and the built-in Default has no folder ("unsupported"). A pane that is
+    working is moved once its turn ends — so asking to move your OWN pane
+    always comes back "queued", and you are reopened on the new account after
+    this turn. A pane not in your window, or not running `agent`, is
+    "unknown-pane".
+
+    "queued": the switch is waiting for `waiting` panes to go idle and needs
+    nothing more from you. A newer switch of the same CLI (or the same pane)
+    replaces a queued one, and a queued switch is dropped ("stale") if the
+    account changed some other way meanwhile. Read cli_accounts_list later to
+    see where it landed.
+
+    `reason` is required (cut at 300 characters). The user is told afterwards
+    — a notice in the window naming which agent switched, from and to which
+    account, and your reason — and every switch is kept in the account switch
+    log (Settings → Accounts), whatever its outcome.
 
     agent is the vendor key ("claude", "codex", ...); profile_id is an
     account of that vendor as cli_accounts_list lists it, "__default__" for
-    the built-in Default. Only a CLI pane can call it.
+    the built-in Default. Only a CLI pane can call it. API key accounts are
+    the user's to choose ("api-key-account").
 
-    Returns {ok: true, status, agent, profile_id, from, to}: status
-    "switched", or "switched-signed-out" when the account switched to has no
-    usable sign-in (the window then starts one for the user); from and to are
-    the accounts' display names: the alias or name the user gave them, and an
-    account Navide added on its own is named after its email, so either can be
-    an email. Otherwise {ok: false, error,
-    error_code}: "pane-only", "bad-request", "reason-required",
-    "unknown-profile", "already-active", "unknown-caller", "declined" (the
-    user said no), "confirm-timeout" (the user did not answer in time),
-    "busy" (another agent's switch is waiting for the user),
-    "restart-declined", "refused" (Navide refused the switch; `code` says
-    why, e.g. SWITCH_RATE_LIMITED or UNRECONCILED_STATE) or
-    "window-unavailable". No credential or token ever comes back.
+    Returns {ok: true, status, agent, profile_id, from, to, request_id}:
+    status "switched", "switched-signed-out" (the account switched to has no
+    usable sign-in; the window starts one for the user), "switched-pane"
+    (also carries `pane_id`) or "queued" (also carries `waiting`); from and to
+    are the accounts' display names: the alias or name the user gave them,
+    and an account Navide added on its own is named after its email, so
+    either can be an email. Otherwise {ok: false, error, error_code}:
+    "pane-only", "bad-request", "reason-required", "api-key-account",
+    "unknown-profile", "already-active", "unknown-caller", "unknown-pane",
+    "needs-user", "unsupported", "refused" (Navide refused the switch; `code`
+    says why, e.g. SWITCH_RATE_LIMITED or LIVE_DRIFT) or "window-unavailable".
+    No credential or token ever comes back.
     """
     try:
         caller = _resolve_caller(ctx)
@@ -11487,14 +12444,7 @@ async def cli_account_switch(
             "error": "only a CLI pane can ask for an account switch; the user is told which pane asked",
             "error_code": "pane-only",
         }
-    agent = str(agent or "").strip().lower()
-    profile_id = str(profile_id or "").strip()
-    if not agent or not profile_id:
-        return {"ok": False, "error": "agent and profile_id are required", "error_code": "bad-request"}
-    reason = " ".join(str(reason or "").split())
-    reason_truncated = len(reason) > _SIGN_IN_REASON_MAX
-    reason = reason[:_SIGN_IN_REASON_MAX]
-    if not reason:
+    if not " ".join(str(reason or "").split()):
         return {
             "ok": False,
             "error": "say why: the reason is shown to the user with the switch",
@@ -11503,55 +12453,14 @@ async def cli_account_switch(
     from agent_team_backend import agent_messaging
 
     pane = agent_messaging.get(caller.pane_id)
-    # As for the sign-in: the user's yes is due one ordinary action's wait
-    # before this action's slow wait ends, leaving the window time to switch.
-    confirm_by = int((time.time() + _UI_INVOKE_SLOW_TIMEOUT_S - _UI_INVOKE_TIMEOUT_S) * 1000)
-    answer = await _ui_request(
-        pane.workspace_path if pane else "",
-        "invoke",
-        caller=caller,
-        action="ui.accounts.switch",
-        args={
-            "agentKey": agent, "profileId": profile_id, "reason": reason,
-            "reasonTruncated": reason_truncated, "confirmBy": confirm_by,
-        },
+    out = await request_account_switch(
+        agent, profile_id,
+        source="mcp", who=pane.name if pane else caller.pane_id, reason=reason, pane_id=pane_id,
+        caller=caller, workspace_path=pane.workspace_path if pane else "",
     )
-    result = answer.get("result") if isinstance(answer.get("result"), dict) else {}
-    status = str(result.get("status") or "") if answer.get("ok") else ""
-    _log.info(
-        "cli_account_switch from pane %s: agent=%s profile=%s -> %s%s",
-        caller.pane_id, agent, profile_id, status or "window-unavailable",
-        f" ({result.get('code')})" if result.get("code") else "",
-    )
-    if not answer.get("ok"):
-        return {
-            "ok": False,
-            "error": "the Navide window did not answer",
-            "error_code": "window-unavailable",
-        }
-    if status in ("switched", "switched-signed-out"):
-        return {
-            "ok": True,
-            "status": status,
-            "agent": agent,
-            "profile_id": profile_id,
-            "from": str(result.get("from") or ""),
-            "to": str(result.get("to") or ""),
-        }
-    if status == "refused":
-        # The backend's refusal code only; its message is unreviewed text.
-        code = str(result.get("code") or "unknown")
-        return {
-            "ok": False,
-            "error": f"the switch was refused: {code}",
-            "error_code": "refused",
-            "code": code,
-        }
-    return {
-        "ok": False,
-        "error": str(result.get("message") or "the window refused the switch"),
-        "error_code": status or "refused",
-    }
+    if not out["ok"]:
+        out["error_code"] = "window-unavailable" if out["status"] == "no-window" else out["status"]
+    return out
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 
@@ -11837,3 +12746,13 @@ from agent_team_backend.mcp_server import testplace_tools as _testplace_tools  #
 from . import plugin_local_tools as _plugin_local_tools  # noqa: E402,F401
 # DESIGN-C S3: window_list / window_focus.
 from . import window_tools as _window_tools  # noqa: E402,F401
+# Self-evolution S5b: evolve_retro.
+from . import evolve_retro_tool as _evolve_retro_tool  # noqa: E402,F401
+# Plan mcp-bot_507912: chat-channel tools (channels_*).
+from . import channel_tools as _channel_tools  # noqa: E402,F401
+# Registered last so the tools/list order before it stays main's (0.2.40).
+from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401
+# Registered after it (0.2.40): the Developer Mode backend call.
+from . import developer_backend_tool as _developer_backend_tool  # noqa: E402,F401
+# Registered after it (0.2.40): switching a running pane's model.
+from . import pane_model_tool as _pane_model_tool  # noqa: E402,F401

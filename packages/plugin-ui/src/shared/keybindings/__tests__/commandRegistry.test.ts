@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { registerCommand, executeCommand, hasCommand, listCommands, invokeCommand, _resetRegistry } from '../commandRegistry'
+import { registerCommand, registerPluginCommand, unregisterCommand, executeCommand, hasCommand, listCommands, invokeCommand, _resetRegistry } from '../commandRegistry'
 
 beforeEach(() => {
   _resetRegistry()
@@ -82,5 +82,52 @@ describe('invokeCommand', () => {
   it('resolves ok:false for an unknown command without throwing', async () => {
     const outcome = await invokeCommand('does.not.exist')
     expect(outcome).toEqual({ ok: false, error: 'unknown command: does.not.exist' })
+  })
+})
+
+describe('invokeCommand – a coded refusal', () => {
+  it('passes the code and params an error carries, next to its message', async () => {
+    registerCommand('test.coded', () => {
+      throw Object.assign(new Error('test.coded: stage 3 of 3 is the last one'), { code: 'last-stage', params: { stage: 3, total: 3 } })
+    })
+    expect(await invokeCommand('test.coded')).toEqual({
+      ok: false,
+      error: 'test.coded: stage 3 of 3 is the last one',
+      code: 'last-stage',
+      params: { stage: 3, total: 3 },
+    })
+  })
+
+  it('an uncoded error answers exactly as before', async () => {
+    registerCommand('test.plain', () => { throw new Error('boom') })
+    expect(await invokeCommand('test.plain')).toEqual({ ok: false, error: 'boom' })
+  })
+})
+
+describe('plugin commands', () => {
+  it('cannot remove a built-in command', () => {
+    registerCommand('ui.pane.close', () => {})
+    registerCommand('workbench.action.quickOpen', () => {})
+    expect(unregisterCommand('ui.pane.close')).toBe(false)
+    expect(unregisterCommand('workbench.action.quickOpen')).toBe(false)
+    expect(listCommands()).toEqual(['ui.pane.close', 'workbench.action.quickOpen'])
+  })
+
+  it('cannot take over a built-in command', () => {
+    const host = vi.fn()
+    const plugin = vi.fn()
+    registerCommand('ui.pane.close', host)
+    expect(registerPluginCommand('ui.pane.close', plugin)).toBe(false)
+    expect(unregisterCommand('ui.pane.close')).toBe(false)
+    executeCommand('ui.pane.close')
+    expect(host).toHaveBeenCalled()
+    expect(plugin).not.toHaveBeenCalled()
+  })
+
+  it('removes what a plugin registered, once', () => {
+    expect(registerPluginCommand('acme.runner.go', () => {})).toBe(true)
+    expect(unregisterCommand('acme.runner.go')).toBe(true)
+    expect(hasCommand('acme.runner.go')).toBe(false)
+    expect(unregisterCommand('acme.runner.go')).toBe(false)
   })
 })

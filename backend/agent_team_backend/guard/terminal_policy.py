@@ -92,6 +92,7 @@ _RULE_CATEGORY = {
     "download-then-exec": "pipe-to-shell",
     "credential-access": "credential",
     "credential-exfil": "credential",
+    "credential-pipe-upload": "credential",
     "credential-path-list": "credential",
     "keychain-access": "credential",
     "dotenv-outside-workspace": "credential",
@@ -102,7 +103,11 @@ _RULE_CATEGORY = {
 }
 #: Pipeline-context rules: judged on the whole line, never exempted by an
 #: allow prefix on one of its segments.
-_PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-exec"}
+_PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-exec", "credential-pipe-upload"}
+#: The pipeline rules a user exemption (Settings → Security) may lift for a
+#: whole line matching its pattern. Nothing else is exemptable: a block
+#: pattern still outranks it, and piping a download into a shell never is.
+EXEMPTABLE_RULES = frozenset({"credential-pipe-upload"})
 #: Opaque verdicts that mean "cannot be judged" rather than "an unknown script".
 _UNANALYZABLE_RULES = {"dynamic-command", "eval", "unbalanced-quotes", "nesting-too-deep", "too-long",
                        "decode-and-exec", "stdin-script", "dynamic-stdin-script"}
@@ -121,6 +126,8 @@ class Settings:
     disabled: frozenset[str] = DEFAULT_OFF
     block_patterns: tuple[str, ...] = ()
     allow_prefixes: tuple[str, ...] = ()
+    #: (rule id, pattern) pairs; rule ids are from EXEMPTABLE_RULES.
+    exemptions: tuple[tuple[str, str], ...] = ()
     # Shared with Guard's CLI grading (store guard_protected_branches).
     protected_branches: frozenset[str] = frozenset(PROTECTED_BRANCHES)
 
@@ -134,7 +141,21 @@ class Refusal:
 
     def message(self) -> str:
         what = f"refused to type into a terminal: `{_clip(self.segment)}` — {self.reason}"
-        return f"{what}. Run it yourself in the terminal if you really mean to."
+        # The two prefill refusals (ws_handlers): resending with submit: false
+        # is what got them here, so it is not the advice.
+        if self.rule == "prefill-pending":
+            return (
+                "refused to type into a terminal: a prefilled command is waiting on this terminal; "
+                "the user runs or clears it first."
+            )
+        if self.rule == "prefill-not-single-line":
+            return f"{what}."
+        return (
+            f"{what}. To let the user decide, send it again with submit: false — it is "
+            "prefilled on the command line without Enter, for the user to check and run; "
+            "or ask the user to add an allow prefix in Settings → Security, or to run it "
+            "themselves."
+        )
 
     def as_dict(self) -> dict[str, str]:
         out = {"rule": self.rule, "segment": self.segment, "reason": self.reason, "message": self.message()}
@@ -438,6 +459,73 @@ def _classifier_hits(text: str, workspace: str, protected: frozenset[str]) -> li
     return hits
 
 
+#: A line carrying any of these is never exempted: each could hide a second
+#: command (or a comment holding the pattern's text) next to the one the
+#: user meant, so the exemption would cover more than it names. Quotes are
+#: not parsed for this — a quoted one also keeps the line refused.
+_EXEMPT_UNSAFE = (";", "&", "||", "\n", "\r", "#", "`", "$(", "<", ">")
+
+
+def _exemption_matches(pattern: str, text: str) -> bool:
+    """An anchored, whole-line match, stage by stage: the line and the
+    pattern must have the same number of ``|`` stages, and each glob stage
+    must match its whole stage (a plain one must equal it), so a wildcard
+    never spans into another stage. Every word on the line that names a
+    path (see _path_like) must also appear verbatim in the pattern, so a
+    wildcard cannot carry a second file along, and a line the shell would
+    still rewrite (quotes, escapes, $, globs) is never exempted. Whitespace
+    runs collapse."""
+    if any(tok in text for tok in _EXEMPT_UNSAFE):
+        return False
+    p_stages = [" ".join(st.split()) for st in pattern.split("|")]
+    s_stages = [" ".join(st.split()) for st in text.split("|")]
+    if len(p_stages) != len(s_stages):
+        return False
+    for p, s in zip(p_stages, s_stages):
+        if any(ch in p for ch in "*?["):
+            if not fnmatch.fnmatchcase(s, p):
+                return False
+        elif s != p:
+            return False
+    # A word the shell would still rewrite (quotes, escapes, $ expansion, a
+    # glob) could name a credential path that reads as something else here.
+    if any(ch in text for ch in "$'\"\\*?["):
+        return False
+    named = set(pattern.split())
+    return all(w in named for w in text.split() if _path_like(w))
+
+
+def _path_like(word: str) -> bool:
+    """A word that names a file: it must be written out in the pattern."""
+    return (".ssh" in word or "~" in word or word.startswith(("/", "."))
+            or any(tok in word for tok in ("=/", "@/", "=.", "@.")))
+
+
+def _exemption_for(rule: str, text: str, settings: Settings) -> str | None:
+    """The user exemption pattern that lifts ``rule`` for this whole line, or None."""
+    if rule not in EXEMPTABLE_RULES:
+        return None
+    for exempt_rule, pattern in settings.exemptions:
+        if exempt_rule == rule and _exemption_matches(pattern, text):
+            return pattern
+    return None
+
+
+def exemptions_applied(text: str, *, workspace: str, settings: Settings) -> list[tuple[str, str]]:
+    """The (rule, pattern) pairs a user exemption lifts on this line: rules
+    that would refuse it (their category is on) but for the exemption."""
+    if not settings.exemptions:
+        return []
+    out: list[tuple[str, str]] = []
+    for rule, level, _reason in _classifier_hits(text, workspace, settings.protected_branches):
+        if _category_of(rule, level if level != "opaque" else "high") in settings.disabled:
+            continue
+        pattern = _exemption_for(rule, text, settings)
+        if pattern is not None and (rule, pattern) not in out:
+            out.append((rule, pattern))
+    return out
+
+
 def check(text: str, *, workspace: str, settings: Settings | None = None) -> Refusal | None:
     """The refusal for typing ``text`` into a plain terminal, or None."""
     settings = settings or Settings()
@@ -462,6 +550,8 @@ def check(text: str, *, workspace: str, settings: Settings | None = None) -> Ref
             if rule == "decode-and-exec":
                 cat = "unanalyzable"
             if cat in enabled:
+                if _exemption_for(rule, text, settings) is not None:
+                    continue
                 return Refusal(cat, text, reason)
     # 3. every segment on its own
     for seg in segs:
@@ -493,12 +583,44 @@ def check_with_store(text: str, *, workspace: str) -> Refusal | None:
     return check(text, workspace=workspace, settings=runtime.store().terminal_settings())
 
 
-def enforce(text: str, *, workspace: str, pane_id: str, via: str) -> Refusal | None:
+def prefill_line_error(text: str) -> str | None:
+    """Why ``text`` cannot be prefilled (typed without Enter), or None. Only a
+    single printable line: a newline or carriage return would run it, and a
+    control character can too (Ctrl-O, Ctrl-J) or end the bracketed paste."""
+    if "\n" in text or "\r" in text:
+        return "submit: false takes a single line — the text contains a newline or carriage return"
+    if any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in text):
+        return "submit: false takes printable text only — the text contains a control character"
+    return None
+
+
+#: Exempt audit rows already written, keyed (pane_id, line, rule, pattern) →
+#: time written. One send is checked twice — once by the tool that sends it
+#: (cli_send, agent_msg.route) and once when the renderer types it
+#: (terminal.input) — and the second check consumes the first's row instead
+#: of writing its own.
+_EXEMPT_AUDITED: dict[tuple[str, str, str, str], float] = {}
+_EXEMPT_PAIR_WINDOW_S = 30.0
+
+
+def enforce(
+    text: str, *, workspace: str, pane_id: str, via: str, prefill: bool = False, audit_exempt: bool = True
+) -> Refusal | None:
     """check_with_store(), and when it refuses: an audit row and a
     guard.decision event (the window shows it as a notice on that pane).
     ``via`` names the path that tried to type it (cli_send, cli_open_agent,
     agent_msg.route, terminal.input). Bookkeeping never overturns a refusal,
-    and a checker error refuses rather than letting the line through."""
+    and a checker error refuses rather than letting the line through.
+
+    ``prefill``: the line is typed without Enter for the user to run or clear,
+    so a refusal is not enforced by the caller. It is still audited, as action
+    "prefill", and no deny notice is shown — nothing was denied.
+
+    A line let through only by a user exemption is audited too, as action
+    "exempt", with the exemption's pattern in the excerpt — once per send:
+    ``audit_exempt`` False skips it (a line still being typed, checked again
+    at its Enter), and the typing of a line a sending tool already audited
+    writes no second row."""
     import logging
     import time
 
@@ -511,15 +633,40 @@ def enforce(text: str, *, workspace: str, pane_id: str, via: str) -> Refusal | N
         log.warning("guard: terminal check failed; refusing: %s", err, exc_info=True)
         refusal = Refusal("guard-error", text[:200], f"the terminal command check failed ({err})")
     if refusal is None:
+        if not audit_exempt:
+            return None
+        try:
+            store = runtime.store()
+            now = time.time()
+            for key, at in list(_EXEMPT_AUDITED.items()):
+                if now - at > _EXEMPT_PAIR_WINDOW_S:
+                    del _EXEMPT_AUDITED[key]
+            for rule, pattern in exemptions_applied(text, workspace=workspace, settings=store.terminal_settings()):
+                key = (pane_id or "", text, rule, pattern)
+                if key in _EXEMPT_AUDITED:
+                    del _EXEMPT_AUDITED[key]
+                    continue
+                _EXEMPT_AUDITED[key] = now
+                store.audit_add({
+                    "ts": now, "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
+                    "tool": f"terminal:{via}", "excerpt": f"{_clip(text, 200)} — exempted by `{pattern}`",
+                    "level": "critical", "action": "exempt", "rule_ids": (f"terminal-{rule}",),
+                    "tainted": False,
+                })
+        except Exception:  # noqa: BLE001 - bookkeeping never overturns the check
+            log.warning("guard: terminal exemption audit failed", exc_info=True)
         return None
     try:
         runtime.store().audit_add({
             "ts": time.time(), "pane_id": pane_id or "", "vendor": "terminal", "source": "agent",
             "tool": f"terminal:{via}", "excerpt": _clip(refusal.segment, 200), "level": "critical",
-            "action": "deny", "rule_ids": (f"terminal-{refusal.rule}",), "tainted": False,
+            "action": "prefill" if prefill else "deny", "rule_ids": (f"terminal-{refusal.rule}",),
+            "tainted": False,
         })
     except Exception:  # noqa: BLE001
         log.warning("guard: terminal refusal audit failed; refusal stands", exc_info=True)
+    if prefill:
+        return refusal
     try:
         runtime.emit("guard.decision", {
             "pane_id": pane_id, "action": "deny", "level": "critical",

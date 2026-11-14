@@ -9,7 +9,9 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
+import SettingsOverflowActions from './settings/SettingsOverflowActions.vue'
 import {
+  COMMAND_IDS,
   buildRows,
   classifyRow,
   conflictsByRow,
@@ -39,6 +41,8 @@ import { useKeyChordRecorder } from '../composables/useKeyChordRecorder'
 import { useFnKeyRecorder } from '../voice/fnKeyRecorder'
 import { HOLD_TO_TALK_COMMAND } from '../voice/voiceSettings'
 import KeyRecorderFeedback from './settings/KeyRecorderFeedback.vue'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { isPluginShapedCommand, pluginCommandEntry, pluginCommands } from '../lib/pluginCommands'
 
 type FilterMode = 'all' | 'customized' | 'conflicts'
 
@@ -54,9 +58,29 @@ const { t, te } = useI18n()
  * A command added without an i18n entry then shows a readable English name
  * rather than a blank cell.
  */
+/**
+ * A command bound under several conditions is named per condition where the
+ * locale has a name for it (Close Dialog: any dialog, outside a terminal, the
+ * Plan window), so the list does not repeat one title three times.
+ */
+function whenVariant(when: string | undefined): string {
+  if (!when) return ''
+  if (/\bplanWindow\b/.test(when)) return 'planWindow'
+  if (/!\s*terminalFocus\b/.test(when)) return 'notTerminal'
+  return ''
+}
 function labelFor(row: BindingRow): string {
+  const variant = whenVariant(row.when)
+  const variantKey = `settings.keybindings.cmdWhen.${row.command.replace(/\./g, '_')}.${variant}`
+  if (variant && te(variantKey)) return t(variantKey)
   const key = commandI18nKey(row.command)
   return te(key) ? t(key) : row.label
+}
+
+/** A group heading in the UI language; the catalog's English name otherwise. */
+function categoryLabel(row: BindingRow): string {
+  const key = `settings.keybindings.category.${row.command.split('.')[0]}`
+  return te(key) ? t(key) : row.category
 }
 
 const userRules = ref<KeybindingRule[]>([...getUserRules()])
@@ -72,7 +96,34 @@ onUnmounted(() => {
   if (recording.value) stopRecording()
 })
 
-const rows = computed(() => buildRows(userRules.value))
+const catalog = computed<readonly string[]>(() =>
+  pluginCommands.value.length
+    ? [...COMMAND_IDS, ...pluginCommands.value.map((command) => command.commandId)]
+    : COMMAND_IDS,
+)
+const missingPluginGroup = computed(() => t('settings.keybindings.plugin.not-installed'))
+
+/** A binding whose Navide plugin is not here keeps its row and says so. The
+ *  file still holds it, so reinstalling the plugin brings the key back. */
+function isMissingPluginRow(row: BindingRow): boolean {
+  return !COMMAND_IDS.includes(row.command) && !pluginCommandEntry(row.command) && isPluginShapedCommand(row.command)
+}
+
+const rows = computed(() => {
+  const all = buildRows(userRules.value, undefined, catalog.value)
+  const plain: BindingRow[] = []
+  const plugin: BindingRow[] = []
+  for (const row of all) {
+    const entry = pluginCommandEntry(row.command)
+    if (entry) plugin.push({ ...row, label: entry.title, category: entry.pluginName })
+    else if (isMissingPluginRow(row)) plugin.push({ ...row, label: row.command, category: missingPluginGroup.value })
+    else plain.push(row)
+  }
+  if (!plugin.length) return all
+  // Keeps each plugin's rows together: a row with a key would otherwise sit
+  // apart from the plugin's unbound rows and split its group in two.
+  return [...plain, ...plugin.sort((a, b) => a.category.localeCompare(b.category))]
+})
 const conflicts = computed(() => conflictsByRow(rows.value))
 const customizedCount = computed(() => rows.value.filter((r) => r.customized).length)
 
@@ -107,6 +158,22 @@ const groupedRows = computed(() => {
   }
   return groups
 })
+
+function isPluginRow(row: BindingRow): boolean {
+  return pluginCommandEntry(row.command) !== undefined || isMissingPluginRow(row)
+}
+
+/** The key a plugin suggests, while the row has none. Nothing binds it but the
+ *  user's click, and a key that is taken is shown as taken. */
+function suggestionFor(row: BindingRow): { key: string; taken: boolean } | null {
+  const key = pluginCommandEntry(row.command)?.suggestedKey
+  if (!key || row.keys.length > 0 || !validateKeySpec(key).ok) return null
+  return { key, taken: rows.value.some((other) => other.keys.some((chip) => chip.key === key)) }
+}
+
+function useSuggestion(row: BindingRow, key: string): Promise<void> {
+  return applyKeys(row, [key])
+}
 
 function hardConflict(row: BindingRow): boolean {
   return (conflicts.value.get(row.id) ?? []).some((c) => c.hard)
@@ -222,6 +289,7 @@ function clearRecording(): void {
 const ioBusy = ref(false)
 const ioMessage = ref('')
 const ioRejected = ref<string[]>([])
+const ioDeferred = ref(0)
 
 interface FileBridge {
   saveJson?: (a: { defaultName?: string; content: string; title?: string })
@@ -268,8 +336,9 @@ async function onImport(): Promise<void> {
     }
     // Replaces the current set, so the file has to be reviewed first: anything
     // rejected is listed rather than quietly discarded.
-    const review = reviewImportedRules(result.content)
+    const review = reviewImportedRules(result.content, catalog.value, isPluginShapedCommand)
     ioRejected.value = review.rejected
+    ioDeferred.value = review.deferred?.length ?? 0
     if (!review.rules.length && review.rejected.length) {
       ioMessage.value = t('settings.keybindings.import-failed')
       return
@@ -319,8 +388,8 @@ const visibleReference = computed(() => {
 
 <template>
   <div class="kse">
-    <p class="kse-intro">{{ $t('settings.keybindings.intro') }}</p>
-
+    <!-- The page intro sits under the page title (the settings modal renders
+         it, with the file's name and place in its tooltip). -->
     <div class="kse-toolbar">
       <input
         v-model="query"
@@ -333,23 +402,31 @@ const visibleReference = computed(() => {
           v-for="mode in (['all', 'customized', 'conflicts'] as FilterMode[])"
           :key="mode"
           type="button"
-          class="kse-filter"
+          class="kse-filter settings-filter-chip"
           :class="{ active: filterMode === mode }"
+          :aria-pressed="filterMode === mode"
           @click="filterMode = mode"
-        >{{ $t('settings.keybindings.filter.' + mode) }}</button>
+        >{{ $t('settings.keybindings.filter.' + mode) }}<span class="count">{{ mode === 'all' ? rows.length : mode === 'customized' ? rows.filter((row) => row.customized).length : conflicts.size }}</span></button>
       </div>
-      <button
-        type="button"
-        class="kse-reset-all"
-        :disabled="!customizedCount"
-        @click="onResetAll()"
-      >{{ $t('settings.keybindings.reset-all') }}</button>
-      <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
-        {{ $t('settings.keybindings.export') }}
-      </button>
-      <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
-        {{ $t('settings.keybindings.import') }}
-      </button>
+      <!-- The actions wrap as one group, right-aligned: the usual ones first,
+           the often-disabled Reset All last. All three are secondary, so on a
+           narrow page they fold into one "⋯" menu beside the filters. -->
+      <div class="kse-actions">
+        <SettingsOverflowActions>
+          <button type="button" class="kse-filter" :disabled="ioBusy" @click="onExport()">
+            {{ $t('settings.keybindings.export') }}
+          </button>
+          <button type="button" class="kse-filter" :disabled="ioBusy" @click="onImport()">
+            {{ $t('settings.keybindings.import') }}
+          </button>
+          <button
+            type="button"
+            class="kse-reset-all"
+            :disabled="!customizedCount"
+            @click="onResetAll()"
+          >{{ $t('settings.keybindings.reset-all') }}</button>
+        </SettingsOverflowActions>
+      </div>
     </div>
 
     <!-- The row icons carry their meaning only in a tooltip; this legend puts it
@@ -367,6 +444,9 @@ const visibleReference = computed(() => {
       {{ $t('settings.keybindings.customized-count', { count: customizedCount }) }}
     </p>
     <p v-if="ioMessage" class="kse-status">{{ ioMessage }}</p>
+    <p v-if="ioDeferred" class="kse-status">
+      {{ $t('settings.keybindings.plugin.import-deferred', { count: ioDeferred }) }}
+    </p>
     <div v-if="ioRejected.length" class="kse-rejected">
       <p>{{ $t('settings.keybindings.import-rejected', { count: ioRejected.length }) }}</p>
       <ul><li v-for="(r, i) in ioRejected" :key="i">{{ r }}</li></ul>
@@ -376,9 +456,12 @@ const visibleReference = computed(() => {
     </p>
 
     <div v-for="group in groupedRows" :key="group.category" class="kse-group">
-      <h3 class="kse-group-title">{{ group.category }}</h3>
-      <div class="kse-table-scroll">
-        <table class="kse-table">
+      <h3 class="kse-group-title">
+        {{ categoryLabel(group.rows[0]) }}
+        <span v-if="pluginCommandEntry(group.rows[0].command)" class="kse-plugin-mark">{{ $t('settings.keybindings.plugin.mark') }}</span>
+      </h3>
+      <div class="kse-table-scroll kse-bindings-scroll">
+        <table class="kse-table kse-bindings">
           <thead>
             <tr>
               <th class="kse-th-command">{{ $t('settings.keybindings.col.command') }}</th>
@@ -391,11 +474,13 @@ const visibleReference = computed(() => {
           <tbody>
             <tr v-for="row in group.rows" :key="row.id" :class="{ customized: row.customized }">
               <td class="kse-td-command">
-                <span class="kse-label">{{ labelFor(row) }}</span>
-                <span class="kse-id" v-truncate>{{ row.command }}</span>
+                <!-- The command id is for keybindings.json, not for reading: it
+                     stays searchable and in the tooltip, out of the visible line. -->
+                <span class="kse-label" :title="row.command">{{ labelFor(row) }}</span>
+                <span class="kse-id" aria-hidden="true">{{ row.command }}</span>
               </td>
 
-              <td class="kse-td-keys">
+              <td class="kse-td-keys" :data-label="$t('settings.keybindings.col.keys')">
                 <div class="kse-chips">
                   <!-- The cap being re-recorded is replaced by the recorder,
                        which is rendered once per row at the end of the chips. -->
@@ -481,15 +566,28 @@ const visibleReference = computed(() => {
                     ? $t('settings.keybindings.conflict-hard')
                     : $t('settings.keybindings.conflict-soft') }}</span>
                 </div>
+                <div v-if="suggestionFor(row) && !isRecordingRow(row)" class="kse-suggestion">
+                  <span>{{ $t('settings.keybindings.plugin.suggested', { key: formatKeySpec(suggestionFor(row)!.key) }) }}</span>
+                  <span v-if="suggestionFor(row)!.taken" class="kse-suggestion-taken">{{ $t('settings.keybindings.plugin.suggested-taken') }}</span>
+                  <button v-else type="button" class="kse-suggestion-use" @click="useSuggestion(row, suggestionFor(row)!.key)">{{ $t('settings.keybindings.plugin.use-suggested') }}</button>
+                </div>
               </td>
 
-              <td class="kse-td-when">
-                <code v-if="row.when">{{ row.when }}</code>
+              <td class="kse-td-when" :data-label="$t('settings.keybindings.col.when')">
+                <!-- The raw condition is an expression; it waits behind a
+                     disclosure for the people who want it. -->
+                <details v-if="row.when" class="kse-when-details">
+                  <summary>{{ $t('settings.keybindings.when-limited') }}</summary>
+                  <code>{{ row.when }}</code>
+                </details>
                 <span v-else class="kse-when-any">{{ $t('settings.keybindings.when-any') }}</span>
               </td>
 
-              <td class="kse-td-source">
-                <span class="kse-source" :class="classifyRow(row)">
+              <td class="kse-td-source" :data-label="$t('settings.keybindings.col.source')">
+                <span v-if="isPluginRow(row) && !row.keys.length" class="kse-source">
+                  {{ $t('settings.keybindings.plugin.mark') }}
+                </span>
+                <span v-else class="kse-source" :class="classifyRow(row)">
                   {{ $t('settings.keybindings.source.' + classifyRow(row)) }}
                 </span>
               </td>
@@ -509,9 +607,7 @@ const visibleReference = computed(() => {
       </div>
     </div>
 
-    <p v-if="!groupedRows.length && !visibleReference.length" class="kse-empty">
-      {{ $t('settings.keybindings.no-results') }}
-    </p>
+    <SettingsEmptyState v-if="!groupedRows.length && !visibleReference.length" class="kse-empty" :message="$t('settings.keybindings.no-results')" />
 
     <!-- Keys the rule table does not own: listed, never editable. -->
     <div v-if="visibleReference.length" class="kse-reference">
@@ -558,7 +654,6 @@ const visibleReference = computed(() => {
   color: var(--text-primary);
 }
 
-.kse-intro,
 .kse-footnote {
   margin: 0;
   font-size: var(--font-sm);
@@ -618,13 +713,27 @@ const visibleReference = computed(() => {
   border: 1px solid var(--border-default);
   border-radius: 6px;
 }
-.kse-search:focus {
+.kse-search:focus:not(:focus-visible) {
   outline: none;
+}
+.kse-search:focus {
   border-color: var(--accent-fg);
 }
 .kse-filters {
   display: flex;
   gap: 4px;
+}
+.kse-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+/* Narrow page: the search takes a full row; under it the filter chips start
+   at the content edge and the actions sit at the right of the same row while
+   they fit, dropping below the chips as one group otherwise. */
+.kse-toolbar { container: kse-toolbar / inline-size; }
+@container kse-toolbar (max-width: 720px) {
+  .kse-search { flex-basis: 100%; }
 }
 .kse-filter,
 .kse-reset-all {
@@ -636,11 +745,8 @@ const visibleReference = computed(() => {
   border-radius: 6px;
   cursor: pointer;
 }
-.kse-filter.active {
-  color: var(--accent-fg);
-  border-color: var(--accent-muted);
-  background: var(--accent-subtle);
-}
+/* The filter modes are the Settings window's shared .settings-filter-chip;
+   .kse-filter stays the skin of the Export / Import buttons. */
 .kse-reset-all:disabled {
   opacity: 0.45;
   cursor: default;
@@ -682,6 +788,41 @@ const visibleReference = computed(() => {
   flex-direction: column;
   gap: 6px;
 }
+.kse-plugin-mark {
+  margin-left: 8px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.kse-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+.kse-suggestion-taken {
+  color: var(--text-muted);
+}
+.kse-suggestion-use {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+.kse-suggestion-use:hover {
+  text-decoration: underline;
+}
+.kse-suggestion-use:focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
 .kse-group-title {
   margin: 0;
   font-size: var(--font-xs);
@@ -712,7 +853,7 @@ const visibleReference = computed(() => {
 }
 .kse-table th {
   text-align: left;
-  font-size: var(--font-3xs);
+  font-size: var(--font-2xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -738,10 +879,53 @@ const visibleReference = computed(() => {
 .kse-th-source  { width: 10%; }
 .kse-th-actions { width: 6%; }
 
+/* Narrow card: the five-column ruler stops fitting, so each binding becomes a
+   block — command title and reset button on top, then one labelled line each
+   for keys, condition and source. */
+.kse-bindings-scroll { container: kse-bindings / inline-size; }
+@container kse-bindings (max-width: 600px) {
+  .kse-bindings, .kse-bindings tbody { display: block; }
+  .kse-bindings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* Two columns for the labelled lines, shared by all three through a
+     subgrid: the labels end on one line and every value (key caps included)
+     starts on one line, each label on its value's first baseline. */
+  .kse-bindings tr {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) auto;
+    grid-template-areas: 'command command actions' 'keys keys keys' 'when when when' 'source source source';
+    column-gap: 12px;
+    row-gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-muted);
+  }
+  .kse-bindings tr:last-child { border-bottom: none; }
+  .kse-bindings td { display: block; padding: 0; border-bottom: none; }
+  .kse-bindings .kse-td-command { grid-area: command; }
+  .kse-bindings .kse-td-actions { grid-area: actions; }
+  .kse-bindings .kse-td-keys { grid-area: keys; }
+  .kse-bindings .kse-td-when { grid-area: when; }
+  .kse-bindings .kse-td-source { grid-area: source; }
+  .kse-bindings td[data-label] {
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: baseline;
+  }
+  .kse-bindings td[data-label] > * { grid-column: 2 / -1; min-width: 0; }
+  .kse-bindings td[data-label]::before {
+    content: attr(data-label);
+    grid-column: 1;
+    max-width: 12em;
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+  }
+  .kse-bindings .kse-source { justify-self: start; }
+}
+
 /* ── source badge ── */
 .kse-source {
   display: inline-block;
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 999px;
@@ -771,29 +955,33 @@ const visibleReference = computed(() => {
   overflow-wrap: anywhere;
 }
 .kse-id {
-  display: block;
-  margin-top: 1px;
-  font-family: monospace;
-  font-size: 10.5px;
-  color: var(--text-muted);
-  /* Fixed table layout will not widen for a long id; clip instead of forcing a
-     wrap that would double every row's height. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
+.kse-td-command { position: relative; }
+
+.kse-when-details summary {
+  cursor: pointer;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+.kse-when-details[open] summary { margin-bottom: 4px; }
 
 .kse-td-when code {
   display: inline-block;
   max-width: 100%;
   font-family: monospace;
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   line-height: 1.45;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 .kse-when-any {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
 }
 
@@ -848,16 +1036,32 @@ const visibleReference = computed(() => {
 .kse-add {
   border: 1px dashed var(--border-default);
   border-radius: 6px;
+  /* The add placeholder: a readable "+" inside its 28px target. */
+  font-size: var(--font-sm);
 }
+/* 28px targets: the remove "✕" and add "+" are the main actions on a row. */
+.kse-chip-remove,
 .kse-add,
 .kse-mini {
-  min-width: 24px;
-  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-h-md);
+  min-height: var(--control-h-md);
 }
 .kse-chip-remove:hover,
 .kse-add:hover,
 .kse-mini:hover {
   color: var(--text-bright);
+}
+/* The remove "✕" reads at body size, and its 28px target shows on hover. */
+.kse-chip-remove {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+.kse-chip-remove:hover {
+  background: var(--bg-muted);
 }
 .kse-mini:disabled {
   opacity: 0.35;
@@ -873,7 +1077,7 @@ const visibleReference = computed(() => {
   border-radius: 5px;
   background: var(--bg-muted);
   color: var(--text-bright);
-  font-size: 11.5px;
+  font-size: var(--font-xs);
   font-weight: 600;
   font-family: monospace;
   line-height: 1.4;
@@ -931,14 +1135,14 @@ const visibleReference = computed(() => {
 }
 
 .kse-unbound {
-  font-size: var(--font-2xs);
+  font-size: var(--font-xs);
   color: var(--text-muted);
   font-style: italic;
   order: -1;
 }
 
 .kse-conflict {
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 999px;
@@ -953,7 +1157,5 @@ const visibleReference = computed(() => {
 
 .kse-empty {
   margin: 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
 }
 </style>

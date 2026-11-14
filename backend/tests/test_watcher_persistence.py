@@ -351,6 +351,12 @@ async def test_only_tokens_wait_for_ingestion_interval(
 
         assert watcher._handler is not None
         watcher._handler._on_path(source)
+        # Two appends in a row are one walk (_enqueue_realtime coalesces a
+        # file already queued): the second comes after the first was walked.
+        for _ in range(500):
+            if len(session_events) == 2 and len(activity_events) == 2:
+                break
+            await asyncio.sleep(0.002)
         watcher._handler._on_path(source)
         for _ in range(500):
             if len(session_events) == 3 and len(activity_events) == 3:

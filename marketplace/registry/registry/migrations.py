@@ -571,6 +571,35 @@ def _grandfather_block_reason(connection: sqlite3.Connection) -> None:
         )
 
 
+def _namespace_members(connection: sqlite3.Connection) -> None:
+    """Namespace members with the 'publisher' role (0.2.40), and the account
+    each publish token and CLI login code was issued to. Existing tokens and
+    codes keep NULL: they were issued to the namespace's owner."""
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS namespace_member ("
+        "id INTEGER NOT NULL PRIMARY KEY, "
+        "publisher_id INTEGER NOT NULL REFERENCES publisher (id), "
+        "navide_member_id VARCHAR NOT NULL, "
+        "role VARCHAR NOT NULL, "
+        "added_by VARCHAR NOT NULL, "
+        "added_at DATETIME NOT NULL, "
+        "CONSTRAINT uq_namespace_member UNIQUE (publisher_id, navide_member_id))"
+    )
+    for column in ("publisher_id", "navide_member_id"):
+        connection.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_namespace_member_{column} "
+            f"ON namespace_member ({column})"
+        )
+    if "navide_member_id" not in _columns(connection, "publisher_token"):
+        connection.execute("ALTER TABLE publisher_token ADD COLUMN navide_member_id VARCHAR")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_publisher_token_navide_member_id "
+        "ON publisher_token (navide_member_id)"
+    )
+    if "navide_member_id" not in _columns(connection, "cli_auth_code"):
+        connection.execute("ALTER TABLE cli_auth_code ADD COLUMN navide_member_id VARCHAR")
+
+
 MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = (
     (1, "discovery-columns", _add_discovery_columns),
     (2, "registry-signing-columns", _add_registry_signing_columns),
@@ -585,6 +614,7 @@ MIGRATIONS: tuple[tuple[int, str, Callable[[sqlite3.Connection], None]], ...] = 
     (11, "developer-qualification", _developer_qualification),
     (12, "testplace", _testplace),
     (13, "grandfather-block-reason", _grandfather_block_reason),
+    (14, "namespace-members", _namespace_members),
 )
 
 

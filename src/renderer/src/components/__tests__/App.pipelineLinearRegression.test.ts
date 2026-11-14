@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
-import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
 import { registerStage } from '../../lib/stageTracker'
-import { linearPipelineDag } from './pipelineDagTestStub'
+import { linearPipelineDag, RUN_SLOT_STUB } from './pipelineDagTestStub'
 import { usePipelineDag } from '../../composables/usePipelineDag'
 import { applyGraphOps, deriveGraphFromStages, type PipelineGraph } from '../../lib/pipelineGraph'
 import type { Stage as StageDef } from '../../data/stages'
@@ -33,7 +33,7 @@ function block(startMarker: string, endMarker: string): string {
 const sources = [
   block('const stagePrewarms = new Map<number, Promise<void>>()', '\n/** Spawn all slots for one stage WITHOUT injecting kickoffs.'),
   block('async function preSpawnStage(index: number): Promise<void> {', '\n/** Build cross-stage context'),
-  block('async function activateStage(index: number): Promise<void> {', '\nasync function spawnPipelineStage('),
+  block('async function activateStage(index: number, opts: { only?: string; note?: string } = {}): Promise<void> {', '\nasync function spawnPipelineStage('),
   block(
     'async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string',
     '\n/** Before firing 🎉',
@@ -59,7 +59,7 @@ const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 
 async function load(extraDeps: Record<string, unknown> = {}) {
   const { code } = await transformWithEsbuild(
-    `${sources.join('\n')}\nreturn { onPipelineStart, onPipelineNext }`,
+    `${RUN_SLOT_STUB}\n${sources.join('\n')}\nreturn { onPipelineStart, onPipelineNext }`,
     'AppPipelineLinear.ts',
     { loader: 'ts' },
   )
@@ -71,6 +71,7 @@ async function load(extraDeps: Record<string, unknown> = {}) {
   const deps: Record<string, unknown> = {
     pipeline,
     pipelinesApi: { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(async () => true), error: { value: '' } },
+    runPipelineId: { value: '' },
     stagesApi: { isLoaded: { value: true }, stages: { value: STAGES }, refresh: vi.fn(), error: { value: '' } },
     panes,
     paneRefs: {},
@@ -136,8 +137,29 @@ async function load(extraDeps: Record<string, unknown> = {}) {
     pipelineDag: dag,
     // No pane in these traces was held by an earlier run (#448).
     heldKickoffCopy: () => undefined,
+    // ...and no retry finds a copy in the box.
+    kickoffCopyInBox: () => ({ holds: () => false, submit: async () => false }),
     heldKickoffPanes: new Set<string>(),
     failRunOnKickoff: async () => {},
+    runEndingSlots: new Set<string>(),
+    runPaneSentAt: new Map<string, number>(),
+    // No pacing: the trace is the pre-gate one.
+    kickoffPacing: () => ({}),
+    KICKOFF_ECHO_WAIT_MS,
+    runEnding: () => false,
+    markRunEnding: () => {},
+    // No pane in these traces sits on a CLI prompt.
+    paneParkedOnPrompt: () => false,
+    PARKED_ON_PROMPT_REASON: 'parked',
+    // ...and none is still in a turn when its kickoff goes in.
+    paneTurnBusy: () => false,
+    TURN_END_WAIT_MS: 90_000,
+    turnStillOpen: () => false,
+    turnEndUnconfirmed: () => false,
+    logInjectEvidence: () => {},
+    awaitRoleTurn: async () => 'ended',
+    waitUntilTurnEnds: async () => 'idle',
+    routerDeliveries: { clear: () => {} },
     ...extraDeps,
   }
   const factory = new Function(...Object.keys(deps), code)
@@ -150,8 +172,10 @@ async function load(extraDeps: Record<string, unknown> = {}) {
 
 /** The exact event trace the pre-DAG engine produced for STAGES. */
 const EXPECTED = [
-  'runGroup Pipeline',
+  // The run group is made once the backend has recorded the run, so a
+  // refused start leaves no empty group behind (PR-E E1).
   'send pipeline.start {"workspace_path":"/ws","task_description":"ship","total_stages":2,"stage_blueprint":[{"stage_id":"01","title":"Plan","sentinel":"---01---","slots":[{"agent":"claude","role":"dev","label":"fe"},{"agent":"codex","role":"dev","label":"be"}]},{"stage_id":"02","title":"Review","sentinel":"---02---","slots":[{"agent":"claude","role":"qa","label":"rv"}]}],"pipeline_id":"pl-1"}',
+  'runGroup Pipeline',
   'spawn 01/fe claude kickoff=null',
   'spawn 01/be codex kickoff=null',
   'send pipeline.slot_spawn {"workspace_path":"/ws","stage_index":0,"slot_label":"fe","pane_id":"p1","agent":"claude","role":"dev","session_id":"","session_home_id":"","run_group_id":"rg-1"}',
@@ -211,7 +235,7 @@ const gateSource = block(
 
 async function loadGraphRun(graph: PipelineGraph) {
   const { code } = await transformWithEsbuild(
-    `${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject }`,
+    `${RUN_SLOT_STUB}\n${sources.join('\n')}\n${gateSource}\nreturn { onPipelineStart, onPipelineNext, onPipelineGateApprove, onPipelineGateReject, onPipelineGateRejectFromPanel }`,
     'AppPipelineDag.ts',
     { loader: 'ts' },
   )
@@ -226,9 +250,13 @@ async function loadGraphRun(graph: PipelineGraph) {
     workspacePath: () => workspace,
   })
   const base = await load({ pipelineDag: dag })
+  const toast = vi.fn()
+  const confirm = vi.fn(async (_message: string, _opts?: unknown) => true)
   const deps = {
     ...base.deps,
     pipelineDag: dag,
+    notifyRestore: { toast, confirm },
+    i18n: { global: { t: (key: string, p?: Record<string, unknown>) => (p ? `${key} ${JSON.stringify(p)}` : key) } },
     tearDownPipelineOrchestration: () => { base.pipeline.state = 'aborted'; base.events.push('teardown') },
     onWorkspaceCheck: async () => {},
   }
@@ -237,13 +265,14 @@ async function loadGraphRun(graph: PipelineGraph) {
     onPipelineNext: () => Promise<void>
     onPipelineGateApprove: (id: string) => Promise<boolean>
     onPipelineGateReject: (id: string, comment?: string) => Promise<boolean>
+    onPipelineGateRejectFromPanel: (id: string, comment?: string) => Promise<boolean>
   }
   const start = async (opts: { fromNodeId?: string } = {}) => {
     workspace = '/ws'
     await api.onPipelineStart({ task: 'ship', workspacePath: '/ws', ...opts })
     await flush()
   }
-  return { api, dag, sent, events: base.events, pipeline: base.pipeline, start }
+  return { api, dag, sent, events: base.events, pipeline: base.pipeline, start, toast, confirm }
 }
 
 /** STAGES as a graph with a gate between 01 and 02 that loops back to 01. */
@@ -296,6 +325,32 @@ describe('a graph pipeline runs its gates, loops and pins', () => {
     await flush()
     expect(run.pipeline.state).toBe('aborted')
     expect(run.events.some((e) => e.startsWith('send pipeline.abort') && e.includes('"reason":"failed"'))).toBe(true)
+    // B4: the run ending is said, not only logged.
+    expect(run.toast).toHaveBeenCalledWith('pipelineErrors.gate.rejected-failed {"name":"OK?"}', { type: 'error' })
+  })
+
+  it('Send Back from a person asks first when it would end the run (B4)', async () => {
+    const run = await loadGraphRun(gatedGraph())
+    await run.start()
+    await run.api.onPipelineNext()
+    await flush()
+    // The budget (1) is not spent: no question, the run loops back.
+    expect(await run.api.onPipelineGateRejectFromPanel('gate', 'redo')).toBe(true)
+    await flush()
+    expect(run.confirm).not.toHaveBeenCalled()
+    await run.api.onPipelineNext()
+    await flush()
+    // Spent now: asked, and saying no keeps the run waiting at the gate.
+    run.confirm.mockResolvedValueOnce(false)
+    expect(await run.api.onPipelineGateRejectFromPanel('gate')).toBe(false)
+    expect(run.confirm).toHaveBeenCalledTimes(1)
+    expect(run.confirm.mock.calls[0][0]).toBe('pipelineErrors.gate.confirm-exhausted {"name":"OK?"}')
+    expect(run.pipeline.state).toBe('running')
+    expect(run.dag.awaitingGate.value?.gateId).toBe('gate')
+    // Saying yes ends it.
+    expect(await run.api.onPipelineGateRejectFromPanel('gate')).toBe(true)
+    await flush()
+    expect(run.pipeline.state).toBe('aborted')
   })
 
   it('a pinned slot is not spawned and counts as done', async () => {
@@ -383,7 +438,7 @@ describe('a run aborted while paused at a gate', () => {
     expect(run.dag.awaitingGate.value?.gateId).toBe('gate')
 
     // Abort through the real handler.
-    const { code: abortCode } = await transformWithEsbuild(`${abortSource}\nreturn { onPipelineAbort }`, 'AppAbort.ts', { loader: 'ts' })
+    const { code: abortCode } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${abortSource}\nreturn { onPipelineAbort }`, 'AppAbort.ts', { loader: 'ts' })
     const abortDeps: Record<string, unknown> = {
       pipeline: run.pipeline,
       pipelineLog: () => {},
@@ -404,11 +459,12 @@ describe('a run aborted while paused at a gate', () => {
       workspacePath: '/ws', pipelineId: 'pl-1',
       nodeGate: persisted.gate, nodeStates: persisted.nodes,
     }
-    const { code: resumeCode } = await transformWithEsbuild(`${resumeSource}\nreturn { runPipelineResume }`, 'AppResume.ts', { loader: 'ts' })
+    const { code: resumeCode } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${resumeSource}\nreturn { runPipelineResume }`, 'AppResume.ts', { loader: 'ts' })
     const activated: number[] = []
     const resumeDeps: Record<string, unknown> = {
       existingProject: { value: info },
       pipelinesApi: { activePipelineId: { value: 'pl-1' }, setActivePipeline: vi.fn(), error: { value: '' } },
+      runPipelineId: { value: '' },
       stagesApi: { stages: { value: STAGES }, refresh: vi.fn(), error: { value: '' } },
       pipeline: run.pipeline,
       pipelineRunWorkspace: '',
@@ -421,6 +477,8 @@ describe('a run aborted while paused at a gate', () => {
       realizeRestoredPane: async () => {},
       activateStage: async (i: number) => { activated.push(i) },
       startGlobalManagerRouter: () => {},
+      runEndingSlots: new Set<string>(),
+      runPaneSentAt: new Map<string, number>(),
     }
     await (new Function(...Object.keys(resumeDeps), resumeCode)(...Object.values(resumeDeps)) as { runPipelineResume: () => Promise<void> }).runPipelineResume()
     await flush()
@@ -491,7 +549,7 @@ const restartSource = block(
 
 describe('restart from a node', () => {
   it('a node id that is not in the pipeline is refused before any pane is closed', async () => {
-    const { code } = await transformWithEsbuild(`${restartSource}\nreturn { onPipelineRestart }`, 'AppRestart.ts', { loader: 'ts' })
+    const { code } = await transformWithEsbuild(`${RUN_SLOT_STUB}\n${restartSource}\nreturn { onPipelineRestart }`, 'AppRestart.ts', { loader: 'ts' })
     const dag = usePipelineDag({
       send: async (type) => (type === 'pipelines.graph.get' ? { derived: false, graph: gatedGraph() } : {}),
       log: () => {},
@@ -503,6 +561,8 @@ describe('restart from a node', () => {
     const deps: Record<string, unknown> = {
       cancelAllWatchers: vi.fn(),
       stageCompletions: new Map(),
+      runEndingSlots: new Set<string>(),
+      runPaneSentAt: new Map<string, number>(),
       activeQuestion: { value: null },
       panes: { value: [{ id: 'p1', origin: 'pipeline' }] },
       onKill,
@@ -510,6 +570,8 @@ describe('restart from a node', () => {
       onPipelineStart,
       pipelineDag: dag,
       pipelinesApi: { activePipelineId: { value: 'pl-1' } },
+      runPipelineId: { value: '' },
+      existingProject: { value: null },
       stagesApi: { stages: { value: STAGES } },
     }
     const api = new Function(...Object.keys(deps), code)(...Object.values(deps)) as {

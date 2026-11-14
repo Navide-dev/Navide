@@ -1,8 +1,34 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
 import capabilitiesV1 from '../../../packages/plugin-contracts/src/schemas/capabilities-v1.json'
+import { PLUGIN_API_VERSION } from '../../../packages/plugin-contracts/src/apiVersion'
 import { USER_GESTURE_CAPABILITY_ADDRESSES } from '../../../packages/plugin-contracts/src/userGesture'
 import { PUBLIC_CAPABILITY_CATALOG } from './pluginCapabilityCatalog'
+
+const NAV_SURFACE = [
+  'abortReceiverItem',
+  'acceptExistingReceiverOffer',
+  'apiVersion',
+  'callCapability',
+  'callHostAction',
+  'castCapability',
+  'disposeReceiver',
+  'hideSelf',
+  'listReceiverLeftContributions',
+  'mountReceiver',
+  'on',
+  'onAgentToolCall',
+  'onOpenTarget',
+  'onReceiverCloseGuard',
+  'onReceiverEditorTarget',
+  'onReceiverItemClosed',
+  'onReceiverOffer',
+  'openReceiverLeft',
+  'ready',
+  'registerReceiver',
+  'requestCloseReceiver',
+  'requestCloseReceiverTransaction',
+]
 
 const state = vi.hoisted(() => ({
   exposed: null as Record<string, unknown> | null,
@@ -127,6 +153,61 @@ describe('plugin preload frame admission', () => {
   })
 })
 
+describe('plugin preload view-served agent tools (batch 4)', () => {
+  it('answers a surface call through ipc with the handler result, an unhandled name and a thrown error', async () => {
+    const nav = await loadPreload(true)
+    const onAgentToolCall = nav.onAgentToolCall as (name: string, handler: (args: Record<string, unknown>) => unknown) => () => void
+    const dispose = onAgentToolCall('hello_greet', async (args) => ({ message: `hi ${String(args.who)}`, skipped: undefined }))
+    onAgentToolCall('hello_fail', () => { throw Object.assign(new Error('nope'), { code: 'NOT_READY' }) })
+    onAgentToolCall('hello_bad', () => { throw new Error('plain') })
+    const flush = async (): Promise<void> => { await new Promise((resolve) => setTimeout(resolve, 0)) }
+
+    emit('plugin:agentTool:call', {}, { callId: 'c1', name: 'hello_greet', arguments: { who: 'x' } })
+    await flush()
+    expect(state.send).toHaveBeenLastCalledWith('plugin:agentTool:result', { callId: 'c1', ok: true, result: { message: 'hi x' } })
+
+    emit('plugin:agentTool:call', {}, { callId: 'c2', name: 'hello_missing', arguments: {} })
+    await flush()
+    expect(state.send).toHaveBeenLastCalledWith('plugin:agentTool:result', {
+      callId: 'c2', ok: false, error: { code: 'PLUGIN_TOOL_UNHANDLED', message: 'The view registered no handler for hello_missing.' },
+    })
+
+    emit('plugin:agentTool:call', {}, { callId: 'c3', name: 'hello_fail', arguments: {} })
+    emit('plugin:agentTool:call', {}, { callId: 'c4', name: 'hello_bad', arguments: {} })
+    await flush()
+    expect(state.send.mock.calls.slice(-2).map(([, reply]) => reply)).toEqual([
+      { callId: 'c3', ok: false, error: { code: 'NOT_READY', message: 'nope' } },
+      { callId: 'c4', ok: false, error: { code: 'PLUGIN_TOOL_FAILED', message: 'plain' } },
+    ])
+
+    dispose()
+    emit('plugin:agentTool:call', {}, { callId: 'c5', name: 'hello_greet', arguments: {} })
+    await flush()
+    expect(state.send).toHaveBeenLastCalledWith('plugin:agentTool:result', expect.objectContaining({ callId: 'c5', ok: false }))
+    // Malformed calls are ignored, never answered.
+    const before = state.send.mock.calls.length
+    emit('plugin:agentTool:call', {}, { name: 'hello_greet' })
+    emit('plugin:agentTool:call', {}, 'nope')
+    await flush()
+    expect(state.send.mock.calls).toHaveLength(before)
+    expect(() => onAgentToolCall('', () => null)).toThrow(TypeError)
+  })
+
+  it('answers a frame call through the admitted port as a cast', async () => {
+    const nav = await loadPreload(false)
+    const documentReady = state.invoke.mock.calls.find(([channel]) => channel === 'plugin:frame:document-ready')
+    const frameHandler = [...(state.listeners.get('plugin:frame:port') ?? [])][0]
+    const admitted = port()
+    frameHandler?.({ ports: [admitted] }, { nonce: documentReady?.[1]?.nonce, documentGeneration: 2 })
+    ;(nav.onAgentToolCall as (name: string, handler: (args: Record<string, unknown>) => unknown) => () => void)('hello_greet', (args) => [args.who])
+    admitted.onmessage?.({ data: { channel: 'plugin:agentTool:call', documentGeneration: 2, payload: { callId: 'f1', name: 'hello_greet', arguments: { who: 'y' } } } })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(admitted.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'cast', channel: 'plugin:agentTool:result', payload: { callId: 'f1', ok: true, result: ['y'] },
+    }))
+  })
+})
+
 describe('plugin preload Host channels', () => {
   it('marks a capability call only with a trusted gesture inside the activation window', async () => {
     // `globalThis` is the window in a renderer, which is where the preload
@@ -191,6 +272,11 @@ describe('plugin preload Host channels', () => {
       now.mockRestore()
       addEventListener.mockRestore()
     }
+  })
+  it('keeps the bridge a plugin page can reach', async () => {
+    const nav = await loadPreload(true)
+    expect(Object.keys(nav).sort()).toEqual(NAV_SURFACE)
+    expect(nav.apiVersion).toBe(PLUGIN_API_VERSION)
   })
   it('gates exactly the capability addresses the catalog declares as gesture-required', () => {
     const declared = (capabilitiesV1.methods as Array<{ address: string; requiresUserGesture?: boolean }>)

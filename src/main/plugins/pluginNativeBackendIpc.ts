@@ -108,7 +108,7 @@ export function registerNativeBackendIpc(
   handle('plugins:nativeBackends:setAgentTools', async (event, args) => {
     assertAuthorized(event)
     if (!agentTools) throw new Error('agent tools are unavailable')
-    const { enabled, externalCallers } = record(args)
+    const { enabled, externalCallers, firstParty } = record(args)
     const change: Partial<AgentToolSwitches> = {}
     if (enabled !== undefined) {
       if (typeof enabled !== 'boolean') throw new Error('invalid agent tool setting')
@@ -118,7 +118,14 @@ export function registerNativeBackendIpc(
       if (typeof externalCallers !== 'boolean') throw new Error('invalid agent tool setting')
       change.externalCallers = externalCallers
     }
+    if (firstParty !== undefined) {
+      if (typeof firstParty !== 'boolean') throw new Error('invalid agent tool setting')
+      change.firstParty = firstParty
+    }
     if (Object.keys(change).length !== 1) throw new Error('invalid agent tool setting')
+    // C3: a choice the user makes here holds; a later consent card does not
+    // turn the switch back on by itself.
+    if (change.enabled !== undefined) change.enabledSetByUser = true
     await agentTools.setSwitches(change)
     return overview()
   })

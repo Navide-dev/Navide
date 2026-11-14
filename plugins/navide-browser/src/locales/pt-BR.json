@@ -65,6 +65,39 @@
     "errors": {
       "generic": "Algo deu errado ({code}).",
       "invalid-address": "Digite um endereço http ou https."
+    },
+    "layout": {
+      "label": "Disposição",
+      "tiled": "Lado a lado",
+      "switch": "Um de cada vez"
+    },
+    "page": {
+      "previous": "Página anterior",
+      "next": "Próxima página",
+      "status": "Página {page} de {count}"
+    },
+    "tab": {
+      "new": "Nova guia",
+      "close": "Fechar guia",
+      "untitled": "Nova guia",
+      "discarded": "Fechada para economizar memória; clique para carregar de novo",
+      "discarded-note": "Esta guia foi fechada para economizar memória depois de 10 minutos sem aparecer. A página carrega de novo a partir do endereço dela.",
+      "restore": "Carregar guia de novo"
+    },
+    "dialog": {
+      "open": "Caixa de diálogo aberta ({type}): {message}",
+      "type": {
+        "alert": "Alerta",
+        "confirm": "Confirmação",
+        "prompt": "Entrada",
+        "beforeunload": "Sair da página"
+      }
+    },
+    "uploads": {
+      "title": "Arquivos enviados pelo agent",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Parece um segredo",
+      "sensitive-note": "O agent enviou arquivos cujos nomes parecem segredos"
     }
   }
 }

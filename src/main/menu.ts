@@ -1,5 +1,6 @@
 import { app, clipboard, Menu, webContents, type BrowserWindow, type MenuItemConstructorOptions, type WebContents } from 'electron'
 import { LEGAL_LABELS, LEGAL_ROUTES, type LegalRoute } from '../shared/legalLinks'
+import { DEVELOPER_DOC_URLS, type DeveloperDoc, type DeveloperPage } from '../shared/marketplaceDeveloper'
 import { menuStringsFor } from './menuStrings'
 import type { SupportedLocale } from './hostLocale'
 import { isMac } from '../shared/osplat'
@@ -54,6 +55,15 @@ import { getTerminalSelection } from './terminal-selection-cache'
  * Installing a menu without them is the only way to drop them: Electron has no
  * API to edit the default menu in place.
  */
+// Electron labels the about, hide and quit roles with app.name, which is the
+// package name ("agent-team"). app.name is not renamed: it keys the userData
+// directory, the single-instance lock and the updater cache. The menu names
+// the product instead, worded the way Electron words those roles.
+const PRODUCT_NAME = 'Navide'
+
+const DEVELOPER_DOCS = Object.keys(DEVELOPER_DOC_URLS) as DeveloperDoc[]
+const DEVELOPER_PAGES: readonly DeveloperPage[] = ['developer-settings', 'testplace']
+
 /** One entry in the File > Open Recent submenu. */
 export interface RecentMenuEntry {
   path: string
@@ -61,11 +71,27 @@ export interface RecentMenuEntry {
   exists: boolean
 }
 
+/** One entry in the Window > Recently Closed Windows submenu. */
+export interface ClosedWindowMenuEntry {
+  /** Name of the window's own workspace (folder basename). */
+  name: string
+  /** Names of the other workspaces the window held, in sidebar order. */
+  others: string[]
+  /** When it was closed, epoch milliseconds. */
+  closedAt: number
+}
+
 export interface AppMenuHooks {
   /** App menu (macOS) / File menu (non-macOS): open the settings modal. */
   onOpenSettings?: () => void
   /** App menu (macOS) / File menu (non-macOS): check for updates. */
   onCheckUpdates?: () => void
+  /** App menu (macOS) / File menu (non-macOS): put up the App Lock screen. */
+  onLockNow?: () => void
+  /** Whether Lock Now can run — App Lock is on and the screen is not up. */
+  lockNowEnabled?: () => boolean
+  /** Whether the App Lock screen is up: every Navide item is greyed out. */
+  appLocked?: () => boolean
   /** File menu: pick a workspace folder and open it. */
   onOpenWorkspace?: () => void
   /** File menu: open a recent workspace by absolute path. */
@@ -80,6 +106,10 @@ export interface AppMenuHooks {
   onOpenTurnStats?: () => void
   /** Window menu: open the standalone machine-wide token monitor. */
   onOpenTokenMonitor?: () => void
+  /** Window menu: closed windows that can be reopened, newest first. */
+  recentlyClosedWindows?: () => ClosedWindowMenuEntry[]
+  /** Window menu: reopen a closed window by its index in that list. */
+  onReopenClosedWindow?: (index: number) => void
   /** Window menu: open the account window (sign in / create an account). */
   onOpenAccount?: () => void
   /** Help menu: open the Navide GitHub repo. */
@@ -92,6 +122,10 @@ export interface AppMenuHooks {
   onShowWhatsNew?: () => void
   /** Help menu: replay the first-run welcome tour. */
   onShowWelcomeTour?: () => void
+  /** Help → Developers: open one developer document in the browser. */
+  onOpenDeveloperDoc?: (doc: DeveloperDoc) => void
+  /** Help → Developers: open a Navide page (the Developer settings page or its Testplace section). */
+  onOpenDeveloperPage?: (page: DeveloperPage) => void
   /** Help menu: open one of the legal pages on navide.dev (see shared/legalLinks). */
   onOpenLegal?: (route: LegalRoute) => void
   /** View menu: route Reload Window through the native close preparation. */
@@ -233,6 +267,45 @@ export function installApplicationMenu(
     label: s.checkUpdates,
     click: () => hooks.onCheckUpdates?.()
   }
+  // A modifier set nothing else binds: ⌘⇧L and ⌘L belong to the editor and
+  // terminal, and ⌃⌘Q is macOS's own Lock Screen.
+  const lockNowItem: MenuItemConstructorOptions = {
+    label: s.lockNow,
+    accelerator: 'CmdOrCtrl+Alt+L',
+    enabled: hooks.lockNowEnabled?.() ?? false,
+    click: () => hooks.onLockNow?.()
+  }
+
+  // ⇧⌘T is shown but NOT registered (option A of plan 0-2-41_bbfee9): a native
+  // accelerator fires before any renderer and the menu bar is shared by every
+  // window, so registering it would take ⌘⇧T (Reopen Closed Tab) away from the
+  // Mini IDE and the editor window. The main window's keybinding rule
+  // (`paneStage`) answers the key instead. Shown on macOS only: off macOS the
+  // rule's `cmd` is the Super key, which a Ctrl+Shift+T label would misstate.
+  const closedWindows = hooks.recentlyClosedWindows?.() ?? []
+  const closedLabel = (w: ClosedWindowMenuEntry): string => {
+    const name = w.others.length ? s.windowWithOthers(w.name, w.others.length) : w.name
+    return `${name} — ${closedTime(w.closedAt, locale)}`
+  }
+  const reopenClosedItems: MenuItemConstructorOptions[] = [
+    {
+      label: s.reopenClosedWindow,
+      ...(mac ? { accelerator: 'CmdOrCtrl+Shift+T', registerAccelerator: false } : {}),
+      enabled: closedWindows.length > 0,
+      click: () => hooks.onReopenClosedWindow?.(0)
+    },
+    {
+      label: s.recentlyClosedWindows,
+      enabled: closedWindows.length > 0,
+      submenu: closedWindows.length
+        ? closedWindows.map((w, index): MenuItemConstructorOptions => ({
+            label: closedLabel(w),
+            ...(w.others.length ? { sublabel: w.others.join(', ') } : {}),
+            click: () => hooks.onReopenClosedWindow?.(index)
+          }))
+        : [{ label: s.noRecentlyClosedWindows, enabled: false }]
+    },
+  ]
 
   const template: MenuItemConstructorOptions[] = [
     ...(mac
@@ -240,18 +313,19 @@ export function installApplicationMenu(
           {
             label: app.name,
             submenu: [
-              { role: 'about' },
+              { role: 'about', label: `About ${PRODUCT_NAME}` },
               { type: 'separator' },
               settingsItem,
               checkUpdatesItem,
+              lockNowItem,
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },
-              { role: 'hide' },
+              { role: 'hide', label: `Hide ${PRODUCT_NAME}` },
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' },
-              { role: 'quit' }
+              { role: 'quit', label: `Quit ${PRODUCT_NAME}` }
             ]
           } as MenuItemConstructorOptions
         ]
@@ -284,6 +358,7 @@ export function installApplicationMenu(
               { type: 'separator' } as MenuItemConstructorOptions,
               settingsItem,
               checkUpdatesItem,
+              lockNowItem,
               { type: 'separator' } as MenuItemConstructorOptions,
               { role: 'quit' } as MenuItemConstructorOptions
             ])
@@ -345,6 +420,8 @@ export function installApplicationMenu(
         { label: s.turnStats, click: () => hooks.onOpenTurnStats?.() },
         { label: s.tokenMonitor, click: () => hooks.onOpenTokenMonitor?.() },
         { type: 'separator' },
+        ...reopenClosedItems,
+        { type: 'separator' },
         { role: 'minimize' },
         // macOS "zoom" = maximize the window frame. Unrelated to content zoom,
         // has no accelerator, and is part of the standard Window menu.
@@ -366,6 +443,25 @@ export function installApplicationMenu(
         { label: s.shortcuts, click: () => hooks.onShowShortcuts?.() },
         { label: s.whatsNew, click: () => hooks.onShowWhatsNew?.() },
         { label: s.welcomeTour, click: () => hooks.onShowWelcomeTour?.() },
+        { type: 'separator' },
+        {
+          label: s.developers.title,
+          submenu: [
+            ...DEVELOPER_DOCS.map(
+              (doc): MenuItemConstructorOptions => ({
+                label: s.developers[doc],
+                click: () => hooks.onOpenDeveloperDoc?.(doc)
+              })
+            ),
+            { type: 'separator' },
+            ...DEVELOPER_PAGES.map(
+              (page): MenuItemConstructorOptions => ({
+                label: s.developers[page],
+                click: () => hooks.onOpenDeveloperPage?.(page)
+              })
+            )
+          ]
+        },
         { type: 'separator' },
         // One entry per page, in the table's order, so the menu and the site
         // can only disagree by editing the table.
@@ -399,5 +495,41 @@ export function installApplicationMenu(
     template.push({ label: 'Developer', submenu })
   }
 
+  if (hooks.appLocked?.()) disableWhileLocked(template)
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+/** When a window was closed: the time alone today, the date and time before. */
+export function closedTime(closedAt: number, locale: string, now: number = Date.now()): string {
+  const at = new Date(closedAt)
+  const sameDay = at.toDateString() === new Date(now).toDateString()
+  return sameDay
+    ? at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+    : at.toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * Roles that stay usable under the App Lock screen. The Edit roles act on the
+ * focused page, which is the lock screen itself (it holds the focus), so the
+ * PIN box keeps paste and select-all; the rest only hide, size or quit the app.
+ * Toggle Developer Tools is greyed out too, so DevTools cannot be opened onto
+ * the window underneath; DevTools already open is left as it is.
+ */
+const ROLES_KEPT_WHILE_LOCKED = new Set<string>([
+  'about', 'services', 'hide', 'hideOthers', 'unhide', 'quit',
+  'undo', 'redo', 'cut', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll',
+  'togglefullscreen', 'minimize', 'zoom', 'front', 'close',
+])
+
+/**
+ * Grey out every Navide item while the App Lock screen is up, so neither a
+ * click nor an accelerator reaches the windows underneath. A disabled item's
+ * accelerator does not fire. Submenus stay open-able so the menu bar keeps its
+ * shape; locking and unlocking rebuild the menu (index.ts's onChange).
+ */
+function disableWhileLocked(items: MenuItemConstructorOptions[]): void {
+  for (const item of items) {
+    if (Array.isArray(item.submenu)) disableWhileLocked(item.submenu)
+    else if (item.type !== 'separator' && !(item.role && ROLES_KEPT_WHILE_LOCKED.has(item.role))) item.enabled = false
+  }
 }

@@ -204,3 +204,66 @@ async def test_wake_me_in_an_hour_is_a_once_job(wired, tmp_path) -> None:
     result = await plan_mcp.scheduler_upsert(job, _pane_ctx("me-1"))
     assert result["ok"] is True
     assert result["job"]["schedule"] == {"kind": "once", "at_ms": 1_800_000_000_000 + 3_600_000}
+
+
+async def _job_in(workspace: str, wired) -> dict:
+    """A host-created job aimed at `workspace`, with a run and an error on record."""
+    ctx = _host_ctx()
+    job = {**JOB, "action": {"kind": "message", "workspace": workspace,
+                              "pane_name": "report", "text": "secret client path /c/x"}}
+    created = (await plan_mcp.scheduler_upsert(job, ctx))["job"]
+    await plan_mcp.scheduler_run_now(created["id"], ctx)
+    for task, _manual in list(wired["service"]._runs.values()):  # noqa: SLF001
+        await task
+    stored = await wired["service"].store.get_job(created["id"])
+    await wired["service"].store.set_state(
+        created["id"], {**stored["state"], "last_error": "failed in /c/x"}
+    )
+    return created
+
+
+async def test_pane_sees_its_own_workspace_jobs_in_full(wired, tmp_path) -> None:
+    ws = str(tmp_path / "a")
+    agent_messaging.register("me-1", "planner", ws, "claude")
+    created = await _job_in(ws, wired)
+    [job] = (await plan_mcp.scheduler_list(_pane_ctx("me-1")))["jobs"]
+    assert "redacted" not in job
+    assert job["action"]["text"] == "secret client path /c/x"
+    assert job["action"]["pane_name"] == "report"
+    assert job["state"]["last_error"] == "failed in /c/x"
+    runs = await plan_mcp.scheduler_runs(created["id"], _pane_ctx("me-1"))
+    assert runs["ok"] is True and len(runs["runs"]) == 1
+
+
+async def test_pane_sees_another_workspace_job_as_metadata_only(wired, tmp_path) -> None:
+    agent_messaging.register("me-1", "planner", str(tmp_path / "a"), "claude")
+    other = str(tmp_path / "b")
+    created = await _job_in(other, wired)
+    [job] = (await plan_mcp.scheduler_list(_pane_ctx("me-1")))["jobs"]
+    assert job["redacted"] is True
+    assert job["id"] == created["id"] and job["name"] == "report" and job["enabled"] is True
+    assert job["schedule"] == created["schedule"] and job["owner"] == created["owner"]
+    assert job["editable"] is False
+    assert job["action"] == {"kind": "message", "workspace": other}
+    assert "last_error" not in job["state"] and "last_msg_key" not in job["state"]
+    assert job["state"]["last_status"] == "ok"
+    assert "/c/x" not in repr(job)
+
+
+async def test_pane_may_not_read_another_workspace_job_runs(wired, tmp_path) -> None:
+    agent_messaging.register("me-1", "planner", str(tmp_path / "a"), "claude")
+    created = await _job_in(str(tmp_path / "b"), wired)
+    runs = await plan_mcp.scheduler_runs(created["id"], _pane_ctx("me-1"))
+    assert runs["ok"] is False and runs["code"] == "SCHEDULER_CROSS_WORKSPACE"
+    assert "runs" not in runs
+
+
+async def test_host_caller_still_sees_every_job_in_full(wired, tmp_path) -> None:
+    agent_messaging.register("me-1", "planner", str(tmp_path / "a"), "claude")
+    created = await _job_in(str(tmp_path / "b"), wired)
+    [job] = (await plan_mcp.scheduler_list(_host_ctx()))["jobs"]
+    assert "redacted" not in job
+    assert job["action"]["text"] == "secret client path /c/x"
+    assert job["state"]["last_error"] == "failed in /c/x"
+    runs = await plan_mcp.scheduler_runs(created["id"], _host_ctx())
+    assert runs["ok"] is True and len(runs["runs"]) == 1

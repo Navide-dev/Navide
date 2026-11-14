@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PlansBridgeError } from './plansBridge'
-import { PluginWebViewRegistry, type WebGuestSession, type WebGuestView } from './pluginWebViews'
+import { MAX_VIEWS_PER_PLUGIN, PluginWebViewRegistry, type WebGuestSession, type WebGuestView } from './pluginWebViews'
 import { dispatchWebBridge } from './webBridge'
 import type { WebViewInfo } from './webCapability'
 
@@ -32,6 +32,7 @@ function fakeGuest(sent: string[]): WebGuestView & { emit(event: string, ...args
         if (method === 'DOM.resolveNode') throw new Error('y'.repeat(800))
         return { method }
       },
+      on: () => {},
     },
   }
   return {
@@ -87,7 +88,8 @@ describe('dispatchWebBridge', () => {
     await expect(dispatchWebBridge(registry, 'acme.web', 'list', {})).resolves.toEqual({ views: registry.list('acme.web') })
     await expect(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }))
       .resolves.toEqual({ result: { method: 'Page.getNavigationHistory' } })
-    expect(sent).toEqual(['Page.getNavigationHistory'])
+    // The Host enables the Page domain (dialog events) once per debugger attach.
+    expect(sent).toEqual(['Page.enable', 'Page.getNavigationHistory'])
     await expect(dispatchWebBridge(registry, 'acme.web', 'setState', { viewId, state: 'done', note: 'ok' }))
       .resolves.toEqual({ ok: true })
     expect(registry.list('acme.web')[0]).toMatchObject({ state: 'done', note: 'ok' })
@@ -164,7 +166,8 @@ describe('dispatchWebBridge', () => {
     expect(sent).toEqual([])
     await expect(dispatchWebBridge(registry, 'acme.web', 'list', {}, paneA)).resolves.toEqual({ views: registry.list('acme.web') })
     await dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }, paneA)
-    expect(sent).toEqual(['Page.getNavigationHistory'])
+    // The Host enables the Page domain (dialog events) once per debugger attach.
+    expect(sent).toEqual(['Page.enable', 'Page.getNavigationHistory'])
   })
 
   it('lets any pane use a Space the user handed to agents', async () => {
@@ -179,7 +182,7 @@ describe('dispatchWebBridge', () => {
     for (const viewId of [handed.viewId, taken.viewId]) {
       await dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Page.getNavigationHistory' }, paneB)
     }
-    expect(sent).toHaveLength(2)
+    expect(sent).toEqual(['Page.enable', 'Page.getNavigationHistory', 'Page.enable', 'Page.getNavigationHistory'])
     const listed = await dispatchWebBridge(registry, 'acme.web', 'list', {}, paneB) as unknown as { views: WebViewInfo[] }
     expect(listed.views.map(view => view.viewId)).toEqual([handed.viewId, taken.viewId])
   })
@@ -192,5 +195,24 @@ describe('dispatchWebBridge', () => {
     expect(failed.data).toEqual({ message: 'y'.repeat(500) })
     expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', 'cdp', { viewId, method: 'Target.getTargets' }))).code)
       .toBe('CAPABILITY_DENIED')
+  })
+
+  it('answers LIMIT_REACHED once the plugin has its maximum of live views', async () => {
+    const { registry } = setup()
+    for (let index = 0; index < MAX_VIEWS_PER_PLUGIN; index++) {
+      await dispatchWebBridge(registry, 'acme.web', 'create', { space: `task-${index}` })
+    }
+    expect((await bridgeError(dispatchWebBridge(registry, 'acme.web', 'create', { space: 'one-more' }))).code).toBe('LIMIT_REACHED')
+    await expect(dispatchWebBridge(registry, 'acme.other', 'create', { space: 'task' })).resolves.toEqual({ viewId: expect.any(String) })
+  })
+
+  it('never shows the agent a dialog on a user-owned Space', async () => {
+    const { registry } = setup()
+    const user = registry.create('acme.web', { space: 'mine' }, 'user')
+    const info = registry.list('acme.web')[0]
+    registry.list = () => [{ ...info, dialog: { type: 'alert', message: 'secret' } }]
+    const listed = await dispatchWebBridge(registry, 'acme.web', 'list', {}) as { views: Array<Record<string, unknown>> }
+    expect(listed.views[0]).toMatchObject({ viewId: user.viewId })
+    expect(listed.views[0]).not.toHaveProperty('dialog')
   })
 })

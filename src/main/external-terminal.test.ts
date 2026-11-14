@@ -337,7 +337,12 @@ describe('openInExternalTerminal', () => {
       // keeps the window open the way Terminal.app's `do script` does. The
       // process-scoped Bypass lets npm.ps1 and other .ps1 shims load under
       // the default Restricted / AllSigned policy, as the embedded run does.
-      expect(argv).toEqual(['powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', command])
+      // The registry PATH goes first (`;` escaped for wt, which would
+      // otherwise read it as its own subcommand separator).
+      expect(argv).toEqual([
+        'powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command',
+        terminal.REFRESH_PATH_PS.replace(/;$/, '\\;'), command,
+      ])
       expect(opts).toMatchObject({ detached: true, stdio: 'ignore' })
     })
 
@@ -349,7 +354,10 @@ describe('openInExternalTerminal', () => {
 
       const [exe, argv, opts] = spawnMock.mock.calls[0]
       expect(exe).toBe('cmd.exe')
-      expect(argv).toEqual(['/c', 'start', 'powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', 'x'])
+      expect(argv).toEqual([
+        '/c', 'start', 'powershell.exe', '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command',
+        terminal.REFRESH_PATH_PS, 'x',
+      ])
       // The launcher cmd.exe must not flash its own console; the PowerShell
       // window `start` opens is a new console and is unaffected.
       expect(opts).toMatchObject({ detached: true, stdio: 'ignore', windowsHide: true })
@@ -391,6 +399,21 @@ describe('openInExternalTerminal', () => {
       const result = await terminal.openInExternalTerminal('x', plainDirWith())
       expect(result.ok).toBe(false)
       expect(result.error).toContain('ENOENT')
+    })
+
+    it('re-reads the registry PATH before the command runs', () => {
+      // A terminal started from Navide inherits the PATH Navide launched
+      // with: Node installed since (winget, in the guided install) would
+      // leave `npm` unresolvable in this window. PowerShell reads both
+      // registry values itself, at run time, so no PATH value is ever
+      // spliced into the command line where it could be parsed as code.
+      expect(terminal.REFRESH_PATH_PS).toBe(
+        "$env:Path = @($env:Path, [Environment]::GetEnvironmentVariable('Path', 'Machine'), " +
+          "[Environment]::GetEnvironmentVariable('Path', 'User')) -join [IO.Path]::PathSeparator;"
+      )
+      // Survives both launchers' quoting: no double quote for Node's argv
+      // quoting to collide with, no `%` for cmd.exe to expand.
+      expect(terminal.REFRESH_PATH_PS).not.toMatch(/["%]/)
     })
 
     it('never touches osascript', async () => {

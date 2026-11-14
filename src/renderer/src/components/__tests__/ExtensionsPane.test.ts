@@ -51,6 +51,37 @@ describe('ExtensionsPane', () => {
     delete (window as unknown as Record<string, unknown>).agentTeam
   })
 
+  it('P2: shows what a stopped plugin was doing before it is enabled again', async () => {
+    const stopRecord = {
+      at: 1_792_108_800_000, via: 'telegram',
+      summary: { inFlightCalls: 2, toolCallsLastMinute: 61, capabilityCallsLastMinute: null, consecutiveFailures: 3, undeclaredHosts: ['evil.io'] },
+    }
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.2.0', provenance: 'official-registry', disabled: true, stopRecord },
+      ]),
+    })
+    i18n.global.locale.value = 'en-US'
+    wrapper = mountExtensions()
+    await flushPromises()
+    const row = wrapper.get('[data-id="acme.demo"]')
+    await row.get('.ext-enable').trigger('click')
+    // The first press only opens the summary.
+    expect(api.setDisabled).not.toHaveBeenCalled()
+    const summary = row.get('.ext-stop-enable').text()
+    expect(summary).toContain('from a chat command')
+    expect(summary).toContain('Calls in flight, ended: 2')
+    expect(summary).toContain('Tool calls in the last minute: 61')
+    expect(summary).toContain('Capability calls in the last minute: not read in time')
+    expect(summary).toContain('Undeclared or refused hosts: evil.io')
+    await row.get('.ext-stop-enable-cancel').trigger('click')
+    expect(row.find('.ext-stop-enable').exists()).toBe(false)
+    await row.get('.ext-enable').trigger('click')
+    await row.get('.ext-stop-enable-confirm').trigger('click')
+    await flushPromises()
+    expect(api.setDisabled).toHaveBeenCalledWith('acme.demo', false)
+  })
+
   it('offers a per-extension pre-release switch for Registry installs, off by default', async () => {
     const listInstalled = vi
       .fn()
@@ -983,11 +1014,33 @@ describe('ExtensionsPane', () => {
       wrapper = mountExtensions()
       await flushPromises()
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(wrapper.get('.ext-error').text()).toBe('Could not reload the installed Navide plugins: backend gone')
+      // The first read failed: the list's place says why, with Retry.
+      expect(wrapper.get('.ext-inventory-state-text').text()).toBe('Could not reload the installed Navide plugins: backend gone')
+      expect(wrapper.find('.ext-inventory-retry').exists()).toBe(true)
       expect(unhandled).toEqual([])
     } finally {
       process.off('unhandledRejection', onUnhandled)
     }
+  })
+
+  it('says the list is loading, and offers Retry when the read gives no answer', async () => {
+    let answer: (value: unknown) => void = () => {}
+    const listInstalled = vi
+      .fn()
+      .mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+      .mockResolvedValue([])
+    mockPlugins({ listInstalled })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state.nv-loading').exists()).toBe(true)
+
+    answer(undefined)
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state.nv-loading').exists()).toBe(false)
+    await wrapper.get('.ext-inventory-retry').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.ext-inventory-state').exists()).toBe(false)
+    expect(wrapper.find('.ext-empty').exists()).toBe(true)
   })
 
   it('shows both the rollback failure and a failed redraw after it', async () => {

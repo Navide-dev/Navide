@@ -32,7 +32,8 @@ one self-contained executable. Signing and verification cover the SHA-256
 digest of the complete archive with a detached Ed25519 signature. `login`
 signs in through the Registry in the browser and stores a publish token in
 `~/.config/navide-plugin/credentials.json` (0600); `publish` uploads to
-`--registry`, `$NAVIDE_REGISTRY_URL`, or `https://server.navide.dev/registry`.
+`--registry`, `$NAVIDE_REGISTRY_URL`, or `https://server.navide.dev/registry`
+(the Registry API; the website is `https://marketplace.navide.dev`).
 `dev-backend` runs a built backend under the same sandbox profile Navide uses
 and answers every Host bridge request with `CAPABILITY_DENIED`. There is no
 `dev` command.
@@ -44,3 +45,26 @@ open targets, window and detail composition) and `createPluginBackendClient()`
 `definePlugin` only returns a frozen `{ activate }` object; Navide never calls
 `activate`. See
 [SDK interface](../../docs/en-US/plugin-development-v2.md#sdk-interface).
+
+## Testing without Navide
+
+`@navide/plugin-sdk/testing` exports `createTestHost(options)`, an in-memory
+Host for a plugin's own unit tests. It builds a `PluginContext` whose
+`capabilities.invoke` answers from the handlers you pass and refuses an address
+your test permissions do not declare with `CAPABILITY_DENIED`, judged from the
+same capability catalog (`capabilities-v1.json`) Navide enforces. `emit()`
+delivers Host events to the plugin's subscribers (an `agents.*` event only when
+it is declared), and `calls` and `effects` record what the plugin did. It runs
+no Host code and grants nothing real.
+
+<!-- docs-typecheck: skip (test snippet; `plugin` and `expect` come from the reader's own test file) -->
+```ts
+import { createTestHost } from '@navide/plugin-sdk/testing'
+
+const host = createTestHost({
+  permissions: { system: ['fs'] },
+  handlers: { 'fs.readFile': () => ({ content: '# Readme' }) },
+})
+await plugin.activate(host.context)
+expect(host.calls.map((call) => call.outcome)).toEqual(['ok'])
+```

@@ -4,7 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import NativeBackendPanel from '../NativeBackendPanel.vue'
 
-function overview(agentTools?: { enabled: boolean; externalCallers: boolean }) {
+function overview(agentTools?: { enabled: boolean; externalCallers: boolean; firstParty?: boolean }) {
   return { enabled: true, plugins: [], ...(agentTools ? { agentTools } : {}) }
 }
 
@@ -48,6 +48,21 @@ describe('NativeBackendPanel agent-tool switches (plan B1-b)', () => {
     expect(wrapper.find<HTMLButtonElement>('[data-agent-tools-switch="externalCallers"]').element.disabled).toBe(false)
   })
 
+  it('shows the first-party switch on by default and forwards turning it off', async () => {
+    const setAgentTools = vi.fn().mockResolvedValue(overview({ enabled: false, externalCallers: false, firstParty: false }))
+    mockApi({ list: vi.fn().mockResolvedValue(overview({ enabled: false, externalCallers: false, firstParty: true })), setAgentTools })
+    wrapper = mount(NativeBackendPanel, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const firstParty = wrapper.find<HTMLButtonElement>('[data-agent-tools-switch="firstParty"]')
+    expect(firstParty.attributes('aria-checked')).toBe('true')
+    expect(firstParty.element.disabled).toBe(false)
+    expect(wrapper.text()).toContain("Let agents call tools from first-party Navide plugins")
+    await firstParty.trigger('click')
+    await flushPromises()
+    expect(setAgentTools).toHaveBeenCalledWith({ firstParty: false })
+    expect(wrapper.find('[data-agent-tools-switch="firstParty"]').attributes('aria-checked')).toBe('false')
+  })
+
   it('turns native backends off with its switch, and keeps the warning in the same card above it', async () => {
     const setEnabled = vi.fn().mockResolvedValue({ ...overview(), enabled: false })
     mockApi({ list: vi.fn().mockResolvedValue(overview()), setEnabled })
@@ -67,10 +82,11 @@ describe('NativeBackendPanel agent-tool switches (plan B1-b)', () => {
 
   // The sidebar marks the Developer page "On" with the switches that are on.
   it.each([
-    ['none', { enabled: false, plugins: [], agentTools: { enabled: false, externalCallers: false } }, []],
-    ['native backends', { enabled: true, plugins: [], agentTools: { enabled: false, externalCallers: false } }, ['settings.extensions.nativeBackends.enable']],
-    ['agent tools', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: false } }, ['settings.extensions.nativeBackends.agentTools.enable']],
-    ['agent tools and external callers', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: true } }, [
+    ['none', { enabled: false, plugins: [], agentTools: { enabled: false, externalCallers: false, firstParty: false } }, []],
+    ['first-party tools (the default)', { enabled: false, plugins: [], agentTools: { enabled: false, externalCallers: false, firstParty: true } }, ['settings.extensions.nativeBackends.agentTools.firstParty']],
+    ['native backends', { enabled: true, plugins: [], agentTools: { enabled: false, externalCallers: false, firstParty: false } }, ['settings.extensions.nativeBackends.enable']],
+    ['agent tools', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: false, firstParty: false } }, ['settings.extensions.nativeBackends.agentTools.enable']],
+    ['agent tools and external callers', { enabled: false, plugins: [], agentTools: { enabled: true, externalCallers: true, firstParty: false } }, [
       'settings.extensions.nativeBackends.agentTools.enable',
       'settings.extensions.nativeBackends.agentTools.externalCallers',
     ]],

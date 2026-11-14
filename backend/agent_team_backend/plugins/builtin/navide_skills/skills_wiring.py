@@ -208,8 +208,11 @@ def real_home() -> Path:
 
     ``Path.home()`` prefers ``$HOME``, and launching Navide from inside a
     shimmed pane makes the backend inherit that pane's HOME — building a shim
-    under it would mirror links to links.
+    under it would mirror links to links. An isolated backend
+    (``AGENT_TEAM_ISOLATED_HOME=1``) uses its scratch ``$HOME``.
     """
+    if os.environ.get("AGENT_TEAM_ISOLATED_HOME") == "1":
+        return Path.home()
     try:
         import pwd
 

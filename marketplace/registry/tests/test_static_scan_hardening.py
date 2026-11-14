@@ -35,7 +35,7 @@ from tests.phase2_helpers import (
     queued_artifacts,
     sign_in,
 )
-from tests.fixtures import build_v2_package, contract_manifest
+from tests.fixtures import build_v2_package, contract_manifest, without_sites
 
 MANIFEST = {"schemaVersion": 2, "id": "acme.scoped", "version": "1.0.0", "publisher": "acme"}
 BUDGET_S = disclosure_scan_contract.SCAN_LIMITS["timeBudgetMs"] / 1000
@@ -192,7 +192,7 @@ def test_a_scanner_crash_on_one_file_is_recorded_and_the_others_are_scanned(monk
     monkeypatch.setattr(report_module, "scan_script", flaky)
     report = _scan({"frontend/a.js": "'crash-me'", "frontend/b.js": "const u = 'https://ok.example.com'"})
     assert {"reason": "scannerError", "count": 1} in report["coverage"]["skipped"]
-    assert report["network"]["hosts"] == [{"host": "ok.example.com", "source": "frontend", "count": 1}]
+    assert without_sites(report["network"]["hosts"]) == [{"host": "ok.example.com", "source": "frontend", "count": 1}]
     assert "scannerError" in _incomplete(report)
 
 

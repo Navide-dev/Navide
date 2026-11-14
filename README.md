@@ -10,7 +10,7 @@ It is not another chat panel inside the traditional IDE. Navide is being built a
 
 English | [繁體中文](README.zh-TW.md) | [日本語](README.ja-JP.md)
 
-[Download v0.2.32](https://github.com/Navide-dev/Navide/releases/tag/v0.2.32) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
+[Download v0.2.42](https://github.com/Navide-dev/Navide/releases/tag/v0.2.42) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/Navide-dev/Navide/total?label=downloads&logo=github&color=2ea043)](https://github.com/Navide-dev/Navide/releases)
@@ -115,11 +115,11 @@ Commits per week over the last eight weeks - never fewer than 130:
 | 2 weeks ago | █████████████ | 293 |
 | last week | █████████ | 204 |
 
-Counts as of 2026-10-27 (v0.2.32). The badges at the top track the live numbers.
+Counts as of 2026-10-27 (v0.2.42). The badges at the top track the live numbers.
 
 ## Available today
 
-- **Multi-agent workspaces:** run any of 16 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Goose, Grok CLI, Kilo Code, Kimi Code, MiniMax Code, Muse Code, OpenCode, Pi, Qwen Code — or a plain terminal, each in its own pane.
+- **Multi-agent workspaces:** run any of 20 supported coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Devin CLI, Droid, Goose, Grok CLI, Hermes Agent, Kilo Code, Kimi Code, Kiro CLI, MiniMax Code, Muse Code, OpenCode, OpenClaw, Pi, Qwen Code — or a plain terminal, each in its own pane.
 - **CLI management:** detect installed coding CLIs, their versions and install methods, and run each CLI's own official update and diagnostic commands.
 - **Session lifecycle:** detect, persist, rebuild, and resume supported CLI sessions.
 - **Configurable pipelines:** define stages, parallel slots, agents, roles, kickoff prompts, questions, documentation queries, and completion sentinels.
@@ -153,13 +153,13 @@ Read [Privacy and Data Flows](docs/en-US/privacy.md) and the [Security Policy](S
 
 ## Try Navide
 
-Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.32 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
+Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.42 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
 
-- [Download DMG](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.dmg))
-- [Download ZIP](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-arm64.zip))
-- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-x64.exe))
-- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-win-arm64.exe))
-- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.32/Navide-0.2.32-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.32/Navide-0.2.32-amd64.deb))
+- [Download DMG](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.dmg))
+- [Download ZIP](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-arm64.zip))
+- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-x64.exe))
+- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-win-arm64.exe))
+- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.42/Navide-0.2.42-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.42/Navide-0.2.42-amd64.deb))
 
 Links go to dl.navide.dev, the same host the app updates itself from; the *GitHub* link beside each one is the same file, byte for byte, on the GitHub Release (the release workflow publishes both and checks their checksums match).
 
@@ -189,11 +189,17 @@ bun run dev
 
 The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant macOS permissions. Continue with [Getting Started](docs/en-US/getting-started.md) and the [User Guide](docs/en-US/user-guide.md).
 
+## Build for Navide
+
+Make your own Navide plugin and list it on the [Navide Marketplace](https://marketplace.navide.dev/). `npx navide-plugin init --template vue` gives you a buildable plugin in five minutes (Navide 0.2.42 or later), Developer Mode loads it without publishing, and one real-name application at [developers.navide.dev](https://developers.navide.dev/developer) lets you publish after review.
+Start with [Build for Navide](docs/en-US/build-for-navide.md), the one page for the whole flow; ask in [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions).
+
 ## Documentation and deeper reading
 
 - **Use Navide:** [Getting started](docs/en-US/getting-started.md), [User guide](docs/en-US/user-guide.md), and [Troubleshooting](docs/en-US/troubleshooting.md)
 - **Understand the product:** [Manifesto](docs/en-US/manifesto.md), [Vision](docs/en-US/vision.md), [Positioning](docs/en-US/product-positioning.md), and [Roadmap](docs/en-US/roadmap.md)
 - **Review the boundaries:** [Privacy and data flows](docs/en-US/privacy.md) and [Security policy](SECURITY.md)
+- **Build for Navide:** [one page](docs/en-US/build-for-navide.md) from `npx navide-plugin init` to a reviewed Marketplace listing, and the [plugins we would like to see](docs/en-US/plugin-ideas.md)
 - **Explore everything:** [English documentation index](docs/en-US/README.md) or [language gateway](docs/README.md)
 
 ## License

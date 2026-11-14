@@ -431,6 +431,10 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'list_panes'
     case 'agent-message-bodies':
       return 'read_message'
+    case 'secrets':
+      return 'list'
+    case 'agent-notify':
+      return 'send'
   }
   const exhaustive: never = port
   return exhaustive
@@ -922,9 +926,9 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  // `web`, `agents` and `agent-message-bodies` are mapped to their own policy
-  // namespaces, like filesystem and shell.
-  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies']
+  // `web`, `agents`, `agent-message-bodies`, `secrets` and `agent-notify` are
+  // mapped to their own policy namespaces, like filesystem and shell.
+  const POLICY_MAPPED_PORTS: readonly PlansBridgePort[] = ['filesystem', 'shell', 'web', 'agents', 'agent-message-bodies', 'secrets', 'agent-notify']
   it.each(PLANS_BRIDGE_PORTS.filter((port) => !POLICY_MAPPED_PORTS.includes(port)))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
@@ -1039,6 +1043,16 @@ describe('PluginBackendSupervisor', () => {
     // A denylist written before agentMessages existed never names it.
     ['agent-message-bodies', 'read_message', 'denylist', [], false],
     ['agent-message-bodies', 'read_message', 'full', [], true],
+    ['secrets', 'get', 'allowlist', ['secrets'], true],
+    ['secrets', 'get', 'allowlist', ['fs'], false],
+    // A denylist written before secrets existed never names it.
+    ['secrets', 'get', 'denylist', [], false],
+    ['secrets', 'get', 'full', [], true],
+    // Plan P4: a notification into an agent pane, never admitted by omission.
+    ['agent-notify', 'send', 'allowlist', ['agentNotify'], true],
+    ['agent-notify', 'send', 'allowlist', ['agents'], false],
+    ['agent-notify', 'send', 'denylist', [], false],
+    ['agent-notify', 'send', 'full', [], true],
   ] as const)(
     'checks agent use of the %s Bridge port (%s) against the agent Execution Policy (%s %j)',
     async (port, operation, mode, system, allowed) => {
@@ -1458,13 +1472,33 @@ describe('PluginBackendSupervisor', () => {
     supervisors.push(supervisor)
     await supervisor.start()
 
-    const subscription = supervisor.clientFor(authenticatedRuntime).subscribe(
-      ['fixture.changed'],
-      () => undefined,
-      { timeoutMs: 20 }
-    )
+    // The timeout timer starts at subscribe(), before the child acknowledges.
+    // Capture that one timer while subscribe() runs synchronously and fire it
+    // only after the acknowledgment, so a slow child can never lose the race.
+    const realSetTimeout = globalThis.setTimeout
+    let fireTimeout: (() => void) | undefined
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => void,
+      ms?: number,
+    ) => {
+      if (ms !== 20) return realSetTimeout(callback, ms)
+      fireTimeout = callback
+      return realSetTimeout(() => undefined, 60_000)  // cleared when the subscription settles
+    }) as typeof setTimeout)
+    let subscription: ReturnType<ReturnType<typeof supervisor.clientFor>['subscribe']>
+    try {
+      subscription = supervisor.clientFor(authenticatedRuntime).subscribe(
+        ['fixture.changed'],
+        () => undefined,
+        { timeoutMs: 20 }
+      )
+    } finally {
+      setTimeoutSpy.mockRestore()
+    }
+    if (fireTimeout === undefined) throw new Error('Expected the subscription timeout timer.')
     await subscription.acknowledged
 
+    fireTimeout()
     await expect(subscription.settled).resolves.toMatchObject({ reason: 'timeout' })
     await new Promise((resolve) => setTimeout(resolve, 10))
     await expect(
@@ -3119,5 +3153,20 @@ describe('PluginBackendSupervisor', () => {
       expect(String(error.cause)).toContain('exit code 0')
       expect(stderrSink).toHaveBeenCalledWith(expect.stringContaining('exit code 0'))
     })
+  })
+})
+
+describe('authenticated runtime initiator pane', () => {
+  it('keeps the calling pane through the authenticated copy, and adds none when absent', () => {
+    const named = createAuthenticatedBackendRuntime({
+      ...runtime,
+      initiator: { kind: 'agent', source: 'mcp', id: 'agent-pane-1', pane: 'Reviewer' },
+    })
+    expect(named.initiator).toEqual({ kind: 'agent', source: 'mcp', id: 'agent-pane-1', pane: 'Reviewer' })
+    const unnamed = createAuthenticatedBackendRuntime({
+      ...runtime,
+      initiator: { kind: 'agent', source: 'mcp', id: 'agent-pane-2' },
+    })
+    expect(Object.keys(unnamed.initiator).sort()).toEqual(['id', 'kind', 'source'])
   })
 })

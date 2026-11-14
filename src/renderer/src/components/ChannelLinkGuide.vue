@@ -7,9 +7,10 @@ import { channelPlatform, type ChannelLinkTarget } from '../platform/channels'
 /**
  * "Link my chat account" for one connected platform: asks the backend for a
  * one-time code, opens the platform's deep link when there is one, and waits
- * for `channels.linked`. Whoever sends the code is allowlisted and their chat
- * remembered, so no pairing approval is needed. Pending pairing requests for
- * the platform are approvable here too. Used by the pane picker's empty state
+ * for `channels.linked`. Whoever sends the code asks to be linked: unless they
+ * are already allowed, a pairing request appears below, and approving it links
+ * their chat. Other pending pairing requests for the platform are approvable
+ * here too. Used by the pane picker's empty state
  * and by the Settings → Channels card. Quick add hands it the invite it already
  * got (`initialInvite`): the guide opens and waits on it as if a button made it.
  */
@@ -21,6 +22,8 @@ const props = defineProps<{
   /** An invite created elsewhere (quick add): opened once, with the code command
    *  copied first when the platform's link does not carry the code. */
   initialInvite?: ChannelLinkInvite | null
+  /** The surrounding page lists this bot's pairing requests itself. */
+  hidePending?: boolean
 }>()
 const emit = defineEmits<{ linked: [title: string]; opened: [copied: boolean] }>()
 
@@ -187,7 +190,7 @@ watch(
       </span>
       <span class="clg-hint">{{ t('channels.link.expires') }}</span>
     </div>
-    <div v-for="req in pending" :key="req.code" class="clg-pair" data-testid="channel-link-pairing">
+    <div v-for="req in hidePending ? [] : pending" :key="req.code" class="clg-pair" data-testid="channel-link-pairing">
       <span class="clg-pair-name" v-truncate>{{ t('channels.link.pairing', { name: req.sender_name || req.sender_id }) }}</span>
       <button type="button" class="clg-btn sm primary" :disabled="busy" data-testid="channel-link-approve" @click="approve(req.code)">{{ t('channels.pairing.approve') }}</button>
     </div>

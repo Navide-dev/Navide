@@ -180,6 +180,27 @@ class PublisherToken(SQLModel, table=True):
     expires_at: datetime
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    navide_member_id: str | None = Field(default=None, index=True)
+    """Cloud account the token was issued to; None: issued to the owner (or
+    an admin-created publisher) before namespace members existed. A token
+    issued to a publisher member stops working once the member is removed."""
+
+
+class NamespaceMember(SQLModel, table=True):
+    """An account other than the owner that may publish under a namespace.
+    The owner itself is `Publisher.navide_member_id` and has no row here.
+    0.2.40 has one role, 'publisher': publish and yank, nothing else."""
+
+    __tablename__ = "namespace_member"
+    __table_args__ = (UniqueConstraint("publisher_id", "navide_member_id", name="uq_namespace_member"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    publisher_id: int = Field(foreign_key="publisher.id", index=True)
+    navide_member_id: str = Field(index=True)
+    role: str = Field(default="publisher")
+    added_by: str
+    """Audit actor of the owner who added the member."""
+    added_at: datetime = Field(default_factory=_now)
 
 
 class BlocklistEntry(SQLModel, table=True):
@@ -214,6 +235,9 @@ class CliAuthCode(SQLModel, table=True):
     label: str
     expires_at: datetime
     used_at: datetime | None = None
+    navide_member_id: str | None = None
+    """The signed-in account that asked for the code; the token it is
+    exchanged for is issued to that account."""
 
 
 class MemberSession(SQLModel, table=True):

@@ -575,15 +575,14 @@ onBeforeUnmount(() => offResult?.())
       </SettingRow>
     </SettingsCard>
 
-    <p class="sync-hint">{{ t('settings.sync.hint') }}</p>
-
+    <!-- The page intro (settings.sync.hint) sits under the page title. -->
     <!-- The three states kept apart: off is the absence of a toggle, so only
          the other two need saying out loud. -->
     <p v-if="!connected" class="sync-note">{{ t('settings.sync.not-connected') }}</p>
     <p v-else-if="!hasKey" class="sync-note">{{ t('settings.sync.no-key') }}</p>
 
     <div class="sync-actions">
-      <button type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
+      <button class="nv-btn nv-btn--sm sync-now-btn" type="button" :disabled="busy === 'all' || !connected" @click="syncNow">
         {{ t('settings.sync.now') }}
       </button>
     </div>
@@ -606,16 +605,16 @@ onBeforeUnmount(() => offResult?.())
     <div v-if="connected" class="sync-key">
       <p v-if="legacyRingPending && !hasKey" class="sync-note sync-key-legacy">
         {{ t('settings.sync.legacy-key') }}
-        <button type="button" :disabled="busy === 'key'" @click="adoptLegacyKey">
+        <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'key'" @click="adoptLegacyKey">
           {{ t('settings.sync.legacy-key-adopt') }}
         </button>
       </p>
       <p v-if="hasKey" class="sync-note sync-key-row">
         <span>{{ t('settings.sync.key-id', { id: keyId.slice(0, 8) || '—' }) }}</span>
-        <button type="button" :disabled="busy === 'key'" @click="rotateKey">
+        <button class="nv-btn nv-btn--sm" type="button" :disabled="busy === 'key'" @click="rotateKey">
           {{ rotateArmed ? t('settings.sync.rotate-confirm') : t('settings.sync.rotate') }}
         </button>
-        <button v-if="rotateArmed" type="button" @click="rotateArmed = false">
+        <button class="nv-btn nv-btn--sm" v-if="rotateArmed" type="button" @click="rotateArmed = false">
           {{ t('settings.sync.rotate-cancel') }}
         </button>
       </p>
@@ -733,6 +732,8 @@ onBeforeUnmount(() => offResult?.())
 </template>
 
 <style scoped>
+/* The page's main action meets the 28px target the other settings buttons use. */
+.sync-now-btn { box-sizing: border-box; min-height: var(--control-h-md); }
 .sync-row-off :deep(.setting-row-title) {
   color: var(--text-secondary);
   font-weight: 500;
@@ -755,6 +756,10 @@ onBeforeUnmount(() => offResult?.())
 }
 .sync-actions {
   margin-top: 10px;
+}
+/* Small in type, not in reach: every Settings button keeps a 28px target. */
+.nv-btn--sm {
+  min-height: var(--control-h-md);
 }
 .sync-results {
   list-style: none;

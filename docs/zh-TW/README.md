@@ -20,8 +20,21 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 | 文件 | 用途 |
 |---|---|
 | [開始使用](getting-started.md) | 下載已簽章的 macOS 版本或 Windows／Linux 安裝檔，或從原始碼安裝，並完成首次啟動 |
-| [使用指南](user-guide.md) | 學習 Workspace、Pane、Pipeline、協調、Git、History 與 Editor 工作流 |
+| [使用指南](user-guide.md) | 學習 Workspace、分格、Pipeline、協調、Git、History 與 Editor 工作流 |
+| [從 n8n 匯入](import-from-n8n.md) | 把匯出的 n8n workflow 轉成 Pipeline：預覽、憑證、外部內容標記、n8n MCP |
 | [疑難排解](troubleshooting.md) | 解決啟動、權限、Agent Session、Analyzer 與 Token Tracking 問題 |
+
+## 為 Navide 開發外掛
+
+從第一列開始：那一頁講完整個流程，其他幾份是它連結到的參考資料。
+
+| 文件 | 用途 |
+|---|---|
+| [Build for Navide — English](../en-US/build-for-navide.md) | 外掛作者從這裡開始：一頁講完 `npx navide-plugin init`、自測、Developer Mode，以及 Marketplace 的申請、Testplace、審核、更新與下架 |
+| [Plugin Ideas — English](../en-US/plugin-ideas.md) | Navide 團隊想要的外掛清單，附每個需要的能力與目前的阻礙 |
+| [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 使用公開 Contracts、SDK、UI Package 與外部 Frontend Package Workflow |
+| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | 用 `navide-plugin` 建立、打包、簽章並發布插件到 Navide Marketplace，通過審核上架 |
+| [Plugin Development (legacy) — English](../en-US/plugin-development.md) | Manifest v1 說明，為既有外掛保留：開發前端 View 插件或後端插件，並打包簽章發布 |
 
 ## 信任與安全
 
@@ -29,6 +42,8 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 |---|---|
 | [隱私與資料流](privacy.md) | 理解哪些資料留在本機、哪些功能可能連線第三方，以及憑證儲存位置 |
 | [Security Policy — English](../../SECURITY.md) | 理解目前安全邊界並私下回報 Vulnerability |
+| [Security Threat Model — English](../en-US/security-threat-model.md) | 每一次資安審查都要對照的攻擊者位置與 STRIDE 表 |
+| [Security Assessments — English](../en-US/security/README.md) | 信任邊界移動前寫好的威脅評估：後端網路、宣告的執行檔、Windows 後端、聊天頻道 Adapter |
 
 ## 開發與維護
 
@@ -39,9 +54,6 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | 新增 AI Coding CLI：兩份 Spec 檔、註冊，以及 CI 強制的檢查 |
 | [CLI Integration Records — English](../en-US/cli-extension-guide.md) | 各家 CLI 的整合紀錄：安裝方式、Resume 語法、Session 儲存格式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 已支援的 CLI 總覽：實際執行的指令，以及每家 spec 宣告的能力 |
-| [Plugin Development — English](../en-US/plugin-development.md) | 開發前端 View 插件或後端插件，並打包簽章發布 |
-| [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 使用公開 Contracts、SDK、UI Package 與外部 Frontend Package Workflow |
-| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | 用 `navide-plugin` 建立、打包、簽章並發布插件到 Navide Marketplace，通過審核上架 |
 | [外部 MCP 控制](external-mcp-control.md) | 連接外部 MCP Client 控制執行中的 Navide 視窗，並理解安全模型 |
 | [Release Guide — English](../en-US/releases.md) | 版本、封裝、簽章、Notarization、發布與復原 Release |
 

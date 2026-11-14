@@ -1,12 +1,10 @@
 import { ref, effectScope, type EffectScope } from 'vue'
 import type { useBackend, WsResponse, BackendStatus } from '../useBackend'
-import {
-  createHostGitFileAccessPort,
-  createHostGitSettingsPort,
-  createHostIssuePort,
-  createHostTerminalDockPort,
-} from '../hostSurfacePorts'
-import type { GitFileAccessPort, GitSettingsPort, IssuePort } from '../../ports/gitSurface'
+import { createHostTerminalDockPort } from '../hostSurfacePorts'
+import { createHostFileAccessPort } from '../hostFileAccess'
+import { createHostSettingsPort } from '../hostSettingsPort'
+import type { FileAccessPort } from '../../ports/fileAccess'
+import type { SettingsPort } from '../../ports/settings'
 import type { TerminalDockPort } from '@navide/terminal'
 
 // Lightweight stand-in for useBackend() used by composable tests. It records
@@ -102,35 +100,34 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     })
   }
 
-  const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on } as unknown as Backend
-  const fileAccess = createHostGitFileAccessPort(rawBackend)
-  const settingsPort = createHostGitSettingsPort(rawBackend)
-  const issuePort = createHostIssuePort(rawBackend)
+  /** Workspaces currently declared through watchTokens, one entry per holder. */
+  const tokenWatches: string[] = []
+  function watchTokens(path: string): () => void {
+    tokenWatches.push(path)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      tokenWatches.splice(tokenWatches.indexOf(path), 1)
+    }
+  }
+
+  const rawBackend = { status, wsUrl, httpUrl, lastError, shell, autoRestart, send, on, watchTokens } as unknown as Backend
+  const fileAccess = createHostFileAccessPort(rawBackend)
+  const settingsPort = createHostSettingsPort(rawBackend)
   const terminalPort = createHostTerminalDockPort(rawBackend)
 
   // Keep the legacy-shaped mock usable by existing composable tests while the
   // production code consumes named ports. The assigned methods are the same
   // adapters used by the Host composition roots, so tests exercise the seam
   // rather than a second fake protocol.
-  Object.assign(rawBackend, fileAccess, settingsPort, issuePort, terminalPort)
-  // `create` is the only name shared by the issue and terminal ports. Preserve
-  // the legacy mock's ability to stand in for either consumer while production
-  // compositions keep the ports separate and therefore cannot cross-route.
-  ;(rawBackend as unknown as {
-    create: (...args: unknown[]) => Promise<unknown>
-  }).create = ((first: unknown, ...rest: unknown[]) => {
-    if (typeof first === 'string') {
-      return issuePort.create(first, rest[0] as string, rest[1] as string)
-    }
-    return terminalPort.create(first as Parameters<TerminalDockPort['create']>[0], rest[0] as number)
-  })
-  const backend = rawBackend as Backend & GitFileAccessPort & GitSettingsPort & IssuePort & TerminalDockPort
+  Object.assign(rawBackend, fileAccess, settingsPort, terminalPort)
+  const backend = rawBackend as Backend & FileAccessPort & SettingsPort & TerminalDockPort
 
   return {
     backend,
     fileAccess,
     settingsPort,
-    issuePort,
     terminalPort,
     status,
     autoRestart,
@@ -139,6 +136,7 @@ export function createMockBackend(initialStatus: BackendStatus = 'connected') {
     setRejection,
     clearRejection,
     sent,
+    tokenWatches,
   }
 }
 

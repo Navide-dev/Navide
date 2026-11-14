@@ -32,15 +32,36 @@ describe('ExtensionsPane developer page', () => {
     await flushPromises()
     const section = () => wrapper!.get('[data-settings-section="extensions-developer-mode"]').element as HTMLElement
     expect(section().style.display).toBe('none')
-    expect((wrapper.get('.ext-md').element as HTMLElement).style.display).not.toBe('none')
+    // Nothing bundled or installed: the plugins page is one full-width empty
+    // state with its actions, not the list/detail split.
+    const empty = () => wrapper!.get('.ext-inventory-empty').element as HTMLElement
+    expect(empty().style.display).not.toBe('none')
+    expect((wrapper.get('.ext-md').element as HTMLElement).style.display).toBe('none')
+    expect(wrapper.get('.ext-inventory-empty .ext-install-file').text()).toBe(i18n.global.t('settings.extensions.localInstall.button'))
+    await wrapper.get('.ext-browse-marketplace').trigger('click')
+    expect(wrapper.emitted('openMarketplace')).toHaveLength(1)
 
     await wrapper.setProps({ page: 'developer' })
     expect(section().style.display).not.toBe('none')
+    expect(empty().style.display).toBe('none')
     expect((wrapper.get('.ext-md').element as HTMLElement).style.display).toBe('none')
     const toggle = wrapper.get('.ext-devmode-toggle')
     expect(toggle.attributes('role')).toBe('switch')
     expect(toggle.attributes('aria-checked')).toBe('true')
     expect(wrapper.get('[data-settings-section="extensions-developer-mode"]').text()).toContain(i18n.global.t('settings.extensions.developerMode.hint'))
+  })
+
+  it('points a first-time author at Build for Navide and the plugin-authoring skill (plan v2_8714c5 b2)', async () => {
+    mockPlugins({ enabled: false, folders: [] })
+    const openExternal = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as unknown as { agentTeam: Record<string, unknown> }).agentTeam.openExternal = openExternal
+    wrapper = mount(ExtensionsPane, { props: { page: 'developer' }, global: { plugins: [i18n] } })
+    await flushPromises()
+    const section = wrapper.get('[data-settings-section="extensions-developer-mode"]')
+    expect(section.get('[data-testid="developer-mode-first-time"]').text()).toContain(i18n.global.t('settings.extensions.developerMode.firstTime'))
+    expect(section.text()).toContain('navide:plugin-authoring')
+    await section.get('[data-testid="developer-mode-guide"]').trigger('click')
+    expect(openExternal).toHaveBeenCalledWith('https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md')
   })
 
   it('turns Developer Mode off from its switch', async () => {

@@ -38,7 +38,9 @@ def test_win32_install_is_the_vendors_windows_command(dep_id: str) -> None:
 @pytest.mark.parametrize("dep_id", sorted(WIN32))
 def test_win32_override_leaves_macos_and_linux_alone(dep_id: str) -> None:
     dep = DEPS_BY_ID[dep_id]
-    assert set(dep.install_cmds) == {"win32"}
+    # Copilot and Droid install from a macOS-only cask, so Linux links their docs instead.
+    linux = {"linux"} if dep_id in {"copilot", "droid"} else set()
+    assert set(dep.install_cmds) == {"win32"} | linux
     assert dep.install_for("darwin").command == dep.install_cmd
 
 

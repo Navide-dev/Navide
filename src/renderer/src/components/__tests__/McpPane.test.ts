@@ -107,6 +107,40 @@ describe('McpPane', () => {
     expect(groups[1]).toContain('Codex')
   })
 
+  it('discloses a shell or desktop-control server on its card and in the drawer, without blocking it', async () => {
+    const windowsMcp: NativeMcpServer = {
+      ...native[0], name: 'windows-mcp', command: 'uvx', args: ['windows-mcp'], env: {},
+    }
+    const shellServer = {
+      ...navideServers()[0], name: 'runner', command: 'node', args: ['runner.js'], env: {},
+      tools: [{ name: 'execute_command', description: 'runs a command' }],
+    }
+    wrapper = mountPane({ servers: [...navideServers(), shellServer], native: [...native, windowsMcp] })
+
+    const tagged = wrapper.findAll('.mcp-card')
+      .filter((c) => c.find('[data-testid="mcp-risk-tag"]').exists())
+      .map((c) => c.find('strong').text())
+    expect(tagged.sort()).toEqual(['runner', 'windows-mcp'])
+
+    await openCard(wrapper, 'windows-mcp')
+    const card = wrapper.find('[data-testid="mcp-risk-card"]')
+    expect(card.text()).toContain('control your mouse and keyboard')
+    expect(card.text()).toContain('run shell commands')
+    expect(card.text()).toContain('Navide does not block it')
+
+    await openCard(wrapper, 'runner')
+    const runnerCard = wrapper.find('[data-testid="mcp-risk-card"]')
+    expect(runnerCard.text()).toContain('run shell commands')
+    expect(runnerCard.text()).not.toContain('mouse and keyboard')
+  })
+
+  it('shows no risk card for an ordinary server', async () => {
+    wrapper = mountPane()
+    expect(wrapper.find('[data-testid="mcp-risk-tag"]').exists()).toBe(false)
+    await openCard(wrapper, 'context7')
+    expect(wrapper.find('[data-testid="mcp-risk-card"]').exists()).toBe(false)
+  })
+
   it('shows every place a server is configured on its card', () => {
     wrapper = mountPane()
 
@@ -329,7 +363,7 @@ describe('McpPane', () => {
   it('says so when nothing is configured anywhere', () => {
     wrapper = mountPane({ servers: [], native: [] })
 
-    expect(wrapper.find('.nv-empty').exists()).toBe(true)
+    expect(wrapper.find('.settings-empty').exists()).toBe(true)
     expect(wrapper.findAll('.mcp-card')).toHaveLength(0)
   })
 

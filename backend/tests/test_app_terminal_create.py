@@ -1076,6 +1076,32 @@ async def test_live_login_spawn_rewrites_command_without_a_profile(
 
 
 @pytest.mark.asyncio
+async def test_login_spawn_tells_the_card_the_sign_in_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The card of a sign-in pane shows the auth subcommand the pane really
+    runs instead of the command it was asked for — a Windows user read
+    `codex --dangerously-bypass-...` on a pane that ran `codex login`, exited 0
+    and looked broken. A slot sign-in takes the same branch (`is_login`)."""
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", False)
+    monkeypatch.setattr(app, "attribution", FakeAttribution())
+    monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+    session = _session()
+    await app.handle_message(session, {"id": "m1", "type": "terminal.create", "payload": {
+        "pane_id": "login-pane",
+        "agent_key": "codex",
+        "command": [_SHELL, "-lc", "codex --dangerously-bypass-approvals-and-sandbox"],
+        "cwd": "/ws",
+        "is_login": True,
+        "metadata": {"workspace_path": "/ws"},
+    }})
+
+    assert session.terminals.created[0]["command"][-1] == "codex login"  # type: ignore[attr-defined]
+    assert _bypass_dropped(session) == [{"pane_id": "login-pane", "command": "codex login"}]
+
+
+@pytest.mark.asyncio
 async def test_ordinary_spawn_is_not_rewritten(monkeypatch: pytest.MonkeyPatch) -> None:
     """Guard for the rewrite hoist: a normal pane keeps its command verbatim."""
     monkeypatch.setattr(app, "attribution", FakeAttribution())
@@ -1480,3 +1506,109 @@ async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
         assert f"{home / 'hooks.json'}:stop:0:0" in rows
     finally:
         convenience_wiring.install(None)
+
+
+async def _create_claude(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
+    session = await _claude_session(monkeypatch, command)
+    return session.terminals.created[0]["command"]
+
+
+async def _claude_session(monkeypatch: pytest.MonkeyPatch, command: str) -> Any:
+    monkeypatch.setattr(app, "attribution", FakeAttribution())
+    monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+    session = _session()
+    await app.handle_message(session, {
+        "id": "m1",
+        "type": "terminal.create",
+        "payload": {"pane_id": "reopened", "agent_key": "claude", "command": command, "cwd": "/ws",
+                    "metadata": {"workspace_path": "/ws", "origin": "manual"}},
+    })
+    return session
+
+
+def _bypass_dropped(session: Any) -> list[dict[str, Any]]:
+    return [m["payload"] for m in session.websocket.sent if m.get("type") == "cli.bypass_dropped"]
+
+
+async def test_terminal_create_resume_of_a_webhook_session_loses_the_bypass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    from agent_team_backend import webhook_service, webhook_triggers
+    from agent_team_backend.db import Database
+
+    db = Database(tmp_path / "navide.db")
+    store = webhook_triggers.WebhookStore(db)
+    store.add_run_sessions(["abc-123"], "claude", "run", False, "old-pane")
+    service = webhook_service.WebhookService(
+        store=store, db=db, window=SimpleNamespace(), pipeline=lambda _: None, known_program=lambda *_: True,
+    )
+    monkeypatch.setattr(webhook_service, "_service", service)
+    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" not in str(got) and "--permission-mode default" in str(got)
+
+
+async def test_terminal_create_without_the_service_a_resume_loses_the_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", True)
+    got = await _create_claude(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" not in str(got)
+
+
+async def test_terminal_create_tells_the_window_what_a_pane_without_its_bypass_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", True)
+    session = await _claude_session(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert _bypass_dropped(session) == [{"pane_id": "reopened", "command": "claude --resume abc-123"}]
+
+
+async def test_terminal_create_is_unchanged_when_webhooks_never_ran(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import webhook_service
+
+    monkeypatch.setattr(webhook_service, "_service", None)
+    monkeypatch.setattr(webhook_service, "_unavailable", False)
+    session = await _claude_session(monkeypatch, "claude --resume abc-123 --dangerously-skip-permissions")
+    assert "--dangerously-skip-permissions" in str(session.terminals.created[0]["command"])
+    assert _bypass_dropped(session) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("agent_key", "command", "carries"), [
+    ("kiro", "kiro-cli chat --v3", True),
+    ("devin", "devin", False),
+])
+async def test_terminal_create_gives_a_hook_pane_token_vendor_its_token(
+    monkeypatch: pytest.MonkeyPatch, agent_key: str, command: str, carries: bool,
+) -> None:
+    """Kiro's Stop hook names its pane by the spawn token (no log reader
+    attributes its sessions); a vendor with neither Guard nor such hooks gets
+    none."""
+    monkeypatch.setattr(app, "attribution", FakeAttribution())
+    monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+    session = _session()
+    await app.handle_message(session, {
+        "id": "m1",
+        "type": "terminal.create",
+        "payload": {
+            "pane_id": f"{agent_key}-pane",
+            "agent_key": agent_key,
+            "command": command,
+            "cwd": "/ws",
+            "metadata": {"workspace_path": "/ws"},
+        },
+    })
+    created = session.terminals.created[0]  # type: ignore[attr-defined]
+    env = created["env"] or {}
+    if carries:
+        assert env[guard_hooks.PANE_TOKEN_ENV]
+        assert created["metadata"]["guard_pane_token"] == env[guard_hooks.PANE_TOKEN_ENV]
+    else:
+        assert guard_hooks.PANE_TOKEN_ENV not in env
+        assert "guard_pane_token" not in created["metadata"]

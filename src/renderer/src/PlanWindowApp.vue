@@ -11,7 +11,8 @@ import { computed, onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue
 import { useI18n } from 'vue-i18n'
 import { useBackend } from './composables/useBackend'
 import { resolvePlanRoot as resolvePlanRootOperation } from '../plugins/plans/resolvePlanRoot'
-import { createHostGitSettingsPort, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { initSettingsBackend, onSettingsChanged, seedSettings, settingsGet } from '@navide/plugin-ui/shared'
 import { i18n, resolveAvailableUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useNotify } from '@navide/plugin-ui/foundation'
@@ -71,7 +72,7 @@ setDiagnosticSink((entry) => {
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to this window's own ws connection so theme changes
 // made in other windows arrive as ui.settings_changed broadcasts.
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 initKeybindingsPort(createHostKeybindingsPort())
 
 // Plan documents live in the project root, which is the workspace itself

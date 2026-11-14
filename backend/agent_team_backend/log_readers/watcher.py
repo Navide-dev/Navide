@@ -36,6 +36,7 @@ from .base import (
     LogReader,
     TokenSinkResult,
     TokenUsage,
+    rewind_past_eof_mark,
     seed_pre_start_activity,
 )
 
@@ -86,6 +87,11 @@ _ACTIVITY_KEYS_PERSIST_LIMIT = 8
 # up on them. See drain_pending_tokens: this is on the shutdown critical path.
 _SHUTDOWN_FLUSH_TIMEOUT_S = 5.0
 
+# Files the watchdog handler queues without a reader's say-so. .db =
+# Antigravity conversations / Grok's grok.db / OpenCode's opencode.db / Kilo's
+# kilo.db.
+_WATCHED_SUFFIXES = (".jsonl", ".json", ".db")
+
 TokenSink = Callable[[TokenUsage], Awaitable[TokenSinkResult | None]]
 ActivitySink = Callable[[ActivityEvent], Awaitable[None]]
 SessionSink = Callable[[str, Path], Awaitable[None]]  # (vendor, file_path)
@@ -116,12 +122,17 @@ class _Handler(FileSystemEventHandler):
         if s.endswith(".db-wal"):
             self._on_path(Path(s[: -len("-wal")]))
             return
+        # The same for a store a reader claims under another name (OpenClaw's
+        # .sqlite): its -wal journal stands for the canonical file.
+        if s.endswith("-wal") and self._accepts_path(s[: -len("-wal")]):
+            self._on_path(Path(s[: -len("-wal")]))
+            return
         if self._accepts_path(s):
             self._on_path(Path(s))
             return
         # .db = Antigravity conversations / Grok's grok.db / OpenCode's
         # opencode.db / Kilo's kilo.db.
-        if not s.endswith((".jsonl", ".json", ".db")):
+        if not s.endswith(_WATCHED_SUFFIXES):
             return
         self._on_path(Path(s))
 
@@ -187,7 +198,15 @@ class LogWatcher:
         self._activity_seen: dict[str, set[str]] = {}
         self._activity_seen_swept_at: float | None = None
         self._scan_mtimes: dict[str, float] = {}
+        # Last seen size per file: a stat is how an append skips the line count.
+        self._activity_sizes: dict[str, int] = {}
         self._queue: asyncio.Queue[tuple[Path | None, str]] = asyncio.Queue()
+        # Paths waiting in _queue for a realtime walk (see _enqueue_realtime).
+        self._realtime_queued: set[Path] = set()
+        # Queued paths to walk before the FIFO order (see prioritize), and how
+        # many FIFO entries a priority walk has already served per path.
+        self._priority: dict[Path, None] = {}
+        self._served_early: dict[Path, int] = {}
         self._pending_token_paths: dict[tuple[str, str], Path] = {}
         self._pending_token_backfills: dict[tuple[str, str], int] = {}
         self._token_flush_lock = asyncio.Lock()
@@ -227,7 +246,7 @@ class LogWatcher:
             if loop is None or loop.is_closed():
                 return
             try:
-                loop.call_soon_threadsafe(self._queue.put_nowait, (p, ""))
+                loop.call_soon_threadsafe(self._enqueue_realtime, p)
             except RuntimeError:
                 # loop closed mid-flight
                 pass
@@ -364,6 +383,66 @@ class LogWatcher:
 
     # ───────────────────────── workers ────────────────────────────────────
 
+    def _enqueue_realtime(self, path: Path) -> None:
+        """Queue a changed file for its realtime walk (on the loop), once.
+
+        Every append is a watchdog event and every queued entry a walk of the
+        whole file, so a busy transcript queued once per line made the serial
+        drain fall minutes behind the CLI (turn ends 120-733 s after their
+        Stop hook). A walk reads to the end of the file as it is when it runs,
+        so the entry already waiting covers later appends.
+        """
+        if path in self._realtime_queued:
+            return
+        self._realtime_queued.add(path)
+        self._queue.put_nowait((path, ""))
+
+    def prioritize(self, path: Path) -> None:
+        """Walk ``path`` next, ahead of the files already queued (on the loop).
+
+        A Stop hook names the transcript whose reply someone is waiting on;
+        behind a backed-up FIFO it waited for every other file's walk. Every
+        prioritized path also has exactly one FIFO entry (the one already
+        waiting, or the one queued here to wake the drain); the priority walk
+        makes that entry stale, so the file is still walked once.
+
+        ``path`` comes from a hook payload any local process can post, so it is
+        followed only when, symlinks resolved, it is a transcript (a watched
+        suffix or one a reader accepts) under a root the watcher already reads,
+        and a reader claims it. It is matched to a queued entry by that resolved
+        form, so a different spelling of a waiting file does not walk it twice.
+        """
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            log.debug("hook transcript ignored: %s does not resolve", path)
+            return
+        roots = set(self._watched_dirs)
+        for reader in self._readers:
+            roots.update(reader.project_dirs())
+        under_root = False
+        for root in roots:
+            try:
+                if resolved.is_relative_to(root.resolve()):
+                    under_root = True
+                    break
+            except (OSError, RuntimeError):
+                continue
+        name = str(resolved)
+        transcript = name.endswith(_WATCHED_SUFFIXES) or any(r.accepts_watch_path(name) for r in self._readers)
+        if not (under_root and transcript and resolved.is_file() and self._reader_for(resolved)):
+            log.debug("hook transcript ignored: %s is not a watched transcript", path)
+            return
+        for queued in self._realtime_queued:
+            try:
+                if queued.resolve() == resolved:
+                    resolved = queued
+                    break
+            except (OSError, RuntimeError):
+                continue
+        self._enqueue_realtime(resolved)
+        self._priority[resolved] = None
+
     def _queue_token_path(self, path: Path, replay_workspace: str = "") -> None:
         """Coalesce one path for the next token-ingestion pass."""
         try:
@@ -392,18 +471,35 @@ class LogWatcher:
                 self._token_flush_tasks.add(task)
                 task.add_done_callback(self._token_flush_tasks.discard)
                 continue
-            try:
-                await self._process_realtime_path(path)
-            except Exception as err:  # noqa: BLE001
-                log.warning("processing realtime signals from %s failed: %s", path, err)
-            finally:
-                # Token retry/progress is independent of session/activity
-                # parsing. Even an unclaimed replay path must reach the token
-                # pass so its backfill count can complete.
-                self._queue_token_path(path, replay_workspace)
-                processed += 1
-                if processed % 10 == 0:
-                    await asyncio.sleep(0)
+            while self._priority:
+                early = next(iter(self._priority))
+                del self._priority[early]
+                self._served_early[early] = self._served_early.get(early, 0) + 1
+                await self._walk_realtime(early, "")
+            if not replay_workspace and self._served_early.get(path):
+                # Its priority walk already ran; this FIFO entry is spent.
+                self._served_early[path] -= 1
+                if not self._served_early[path]:
+                    del self._served_early[path]
+                continue
+            await self._walk_realtime(path, replay_workspace)
+            processed += 1
+            if processed % 10 == 0:
+                await asyncio.sleep(0)
+
+    async def _walk_realtime(self, path: Path, replay_workspace: str) -> None:
+        if not replay_workspace:
+            # Before the walk: an append that lands during it queues again.
+            self._realtime_queued.discard(path)
+        try:
+            await self._process_realtime_path(path)
+        except Exception as err:  # noqa: BLE001
+            log.warning("processing realtime signals from %s failed: %s", path, err)
+        finally:
+            # Token retry/progress is independent of session/activity
+            # parsing. Even an unclaimed replay path must reach the token
+            # pass so its backfill count can complete.
+            self._queue_token_path(path, replay_workspace)
 
     async def _token_loop(self) -> None:
         """Commit coalesced token paths at most once per configured interval."""
@@ -628,6 +724,7 @@ class LogWatcher:
             keys += len(self._activity_seen.pop(path, ()))
             dropped += 1
             self._scan_mtimes.pop(path, None)
+            self._activity_sizes.pop(path, None)
         self._activity_seen_swept_at = now
         if dropped:
             log.info(
@@ -692,7 +789,7 @@ class LogWatcher:
                 # stays safe: this coroutine is its only writer, and the
                 # sweep below runs strictly after the thread returns.
                 for path in await asyncio.to_thread(self._files_to_scan):
-                    self._queue.put_nowait((path, ""))
+                    self._enqueue_realtime(path)
                 if self._loop is not None:
                     self._sweep_activity_seen(self._loop.time())
             except Exception as err:  # noqa: BLE001
@@ -734,6 +831,8 @@ class LogWatcher:
             if act_seen is None:
                 act_seen, seeded = await self._restore_activity_seen(key, path, reader)
                 self._activity_seen[key] = act_seen
+            if await self._rewind_replaced_file(key, path, reader, act_seen, seeded):
+                seeded = True
             before = frozenset(act_seen)
             try:
                 activity_events = await asyncio.to_thread(
@@ -784,6 +883,30 @@ class LogWatcher:
         # stat + line walk are disk-bound; the drain runs on the loop.
         seeded = await asyncio.to_thread(seed_pre_start_activity, path, seen)
         return seen, seeded
+
+    async def _rewind_replaced_file(
+        self, key: str, path: Path, reader: LogReader, act_seen: set[str], seeded: bool
+    ) -> bool:
+        """True when `act_seen` held a mark from a file that is no longer at `path`.
+
+        Only asks on first sight and when the file shrank, both of which a stat
+        answers: an append costs nothing here, however long the transcript. A
+        mark seeded a moment ago came from this very file and needs no asking.
+        """
+        if not reader.activity_resumes_by_line:
+            return False
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return False
+        last_size = self._activity_sizes.get(key)
+        self._activity_sizes[key] = size
+        if seeded or (last_size is not None and size >= last_size):
+            return False
+        if not await asyncio.to_thread(rewind_past_eof_mark, path, act_seen):
+            return False
+        log.info("activity mark of %s was past its end: the file was replaced", path)
+        return True
 
     def _persist_activity_seen(self, key: str, act_seen: set[str]) -> None:
         """Write a file's dedup bag back to the durable checkpoint store.

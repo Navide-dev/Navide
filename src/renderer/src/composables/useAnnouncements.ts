@@ -26,6 +26,7 @@ import { convenienceText } from '../lib/convenienceText'
 
 export type AnnouncementKind =
   | 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience' | 'plugin-agent' | 'plugin-staged' | 'plugin-switch'
+  | 'backend-restart'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -84,6 +85,11 @@ export type AnnouncementActionSpec =
   | EvolveAnnouncementAction
   | ConvenienceAnnouncementAction
   | PluginAgentAnnouncementAction
+  | PaneRebuildAnnouncementAction
+
+/** H3: rebuild one pane a backend restart left ended — the same resume as ⌘R,
+ *  only ever on the user's click. */
+export type PaneRebuildAnnouncementAction = { kind: 'pane-rebuild'; paneId: string; name: string }
 
 export interface Announcement {
   /** Stable across renders: `release:<version>`, `update:<version>`,
@@ -325,6 +331,57 @@ function backendItems(): Announcement[] {
       read: false,
     },
   ]
+}
+
+/** H3: what one backend restart did to the window's CLI panes. Not persisted:
+ *  the panes themselves keep showing what happened to them. */
+export interface BackendRestartNotice {
+  /** The restart repeated inside one auto-restart budget, so nothing resumed. */
+  crashLoop: boolean
+  resumed: string[]
+  /** Panes whose turn was running or waiting when the backend went away. */
+  interrupted: string[]
+  /** Panes left ended, with the reason, each offered a Rebuild. */
+  notResumed: { paneId: string; name: string; reason: 'crash-loop' | 'over-limit' | 'idle-off-screen' | 'no-session' | 'failed' }[]
+}
+
+const backendRestartNotices = ref<{ notice: BackendRestartNotice; at: number }[]>([])
+
+function backendRestartItems(): Announcement[] {
+  const t = i18n.global.t
+  return backendRestartNotices.value.map(({ notice, at }) => {
+    const highlights: string[] = []
+    if (notice.resumed.length) highlights.push(t('announce.backend-restart.resumed', { names: notice.resumed.join(', ') }))
+    if (notice.interrupted.length) highlights.push(t('announce.backend-restart.interrupted', { names: notice.interrupted.join(', ') }))
+    for (const row of notice.notResumed) {
+      highlights.push(t(`announce.backend-restart.not-resumed.${row.reason}`, { name: row.name }))
+    }
+    return {
+      id: `backend-restart:${at}`,
+      kind: 'backend-restart' as const,
+      title: t('announce.backend-restart.title', { time: new Date(at).toLocaleTimeString() }),
+      highlights,
+      note: notice.crashLoop ? t('announce.backend-restart.crash-loop') : t('announce.backend-restart.note'),
+      createdAt: at,
+      read: false,
+      actions: notice.notResumed.map((row) => ({ kind: 'pane-rebuild' as const, paneId: row.paneId, name: row.name })),
+    }
+  })
+}
+
+/** Record what a backend restart did to the panes. A restart that touched no
+ *  pane leaves no row. */
+function noteBackendRestart(notice: BackendRestartNotice, at: number = Date.now()): void {
+  if (!notice.resumed.length && !notice.interrupted.length && !notice.notResumed.length) return
+  backendRestartNotices.value = [{ notice, at }, ...backendRestartNotices.value]
+}
+
+/** H3: a row's Rebuild was used (or the pane is gone): drop its button. */
+function dropBackendRestartPane(paneId: string): void {
+  backendRestartNotices.value = backendRestartNotices.value.map((entry) => ({
+    ...entry,
+    notice: { ...entry.notice, notResumed: entry.notice.notResumed.filter((row) => row.paneId !== paneId) },
+  }))
 }
 
 /** What the backend's `scheduler.job_disabled` event carries: a job it
@@ -965,6 +1022,13 @@ const QUOTA_REASON_FALLBACK: Record<string, string> = {
   'unverified-adapter': '{agent}\'s account switching is not verified on this platform; switch manually.',
   'no-resume': '{agent} cannot resume its conversation automatically. Switch manually to keep this window and open a new conversation.',
   'no-candidate': 'No account to switch to. Sign in to another account or wait for the reset.',
+  'api-key-takeover': 'Panes moved to an API key account, billed by usage.',
+  'api-key-takeover-paused': 'Automatic switching is paused until the switch history can be written. Nothing moved to the API key account.',
+  'api-key-takeover-unrecorded': 'The move to the API key account could not be recorded, so nothing moved.',
+  'api-key-takeover-failed': 'The move to the API key account failed. Nothing moved. It still counts toward the automatic switch limit.',
+  'folder-login-takeover': 'Panes moved to another subscription account.',
+  'folder-login-takeover-unrecorded': 'The move to the other subscription account could not be recorded, so nothing moved.',
+  'folder-login-takeover-failed': 'The move to the other subscription account failed. Nothing moved. It still counts toward the automatic switch limit.',
   auto_budget_exhausted: 'Automatic switch limit reached. Switch manually or wait for the window to pass.',
   'chained-exhaustion': '{target} ran out as well. Nothing else was tried.',
   'pane-unowned': 'A pane in this switch belongs to no open window.',
@@ -1240,6 +1304,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
+    ...backendRestartItems(),
     ...backendItems(),
     ...updateItems(updateSource.value?.state.value ?? null),
     ...releaseItems(locale, appVersion.value),
@@ -1334,6 +1399,11 @@ export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceAgentLabel.value = (key) => key
 }
 
+/** Test-only: forget every backend-restart notice (the module is a singleton). */
+export function __resetBackendRestartAnnouncementsForTest(): void {
+  backendRestartNotices.value = []
+}
+
 /** Test-only: forget every evolve notice (the module is a singleton). */
 export function __resetEvolveAnnouncementsForTest(): void {
   evolveNotices.value = []
@@ -1349,6 +1419,8 @@ export function useAnnouncements() {
     setUpdateSource,
     noteBackendUpgrade,
     noteSchedulerDisabled,
+    noteBackendRestart,
+    dropBackendRestartPane,
     noteEvolveNotice,
     noteShareNotice,
     notePluginAgentNotice,

@@ -495,6 +495,12 @@ interface UseTerminalOptions {
   workspacePath?: string
   onClear?: () => void
   onUserResume?: () => void
+  /** Whether this pane's CLI leaves evidence when an interrupt takes effect
+   *  (Claude's "[Request interrupted by user]" record, a turn end such as
+   *  Codex's turn_aborted). Only then does a STOP with no evidence within
+   *  STOP_EVIDENCE_MS read as "STOP not applied": a CLI that reports nothing
+   *  would read that way after every interrupt. Defaults to false. */
+  reportsInterrupt?: () => boolean
   /** Getter for the OTHER CLI panes' addresses (already excluding self), with
    *  the pre-translated group and status words the menu draws beside them.
    *  Feeds the @-mention autocomplete menu. Read lazily at trigger time so the
@@ -842,6 +848,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // When Claude's PermissionRequest hook raised a wait, 0 when none: the box
   // stays open until answered, so output cannot end it. See holdNeedsInput.
   const awaitingHeldAt = ref<number>(0)
+  // The screen watcher sees the vendor's box on screen right now. A state, not
+  // an event: it holds while the box is there and ends when the box leaves,
+  // with no settle window to absorb what the CLI prints after the answer.
+  // Kept apart from awaitingInputAt so a box leaving never ends a wait the
+  // Notification hook raised. See markBoxOnScreen.
+  const boxOnScreen = ref(false)
   // The tool that box is for, as the backend keyed it. Not reactive: only
   // App.vue's release decision reads it.
   let awaitingHeldKey = ''
@@ -942,10 +954,96 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   const stallReason = ref<string | null>(null)
 
   const isStopped = ref(false)
+  /** Who caused the current STOP: 'agent' for an interrupt another agent sent
+   *  (cli_interrupt), 'user' for the STOP button and everything else, null when
+   *  not stopped or when STOP was restored from disk without an origin. The
+   *  messaging gate reads through only an agent's STOP: a person who pressed
+   *  STOP wants that agent to stay stopped until they type. */
+  const stoppedBy = ref<'agent' | 'user' | null>(null)
+  watch(isStopped, (stopped) => {
+    if (stopped) return
+    stoppedBy.value = null
+    stopIneffective.value = false
+    clearStopEvidenceTimer()
+  }, { flush: 'sync' })
+  /** A STOP that was not an agent's whose badge the agent's own next turn has
+   *  since cleared (markAgentTurnStart). The badge is gone, but the messaging
+   *  gate keeps holding queued messages until a person types: see stoppedBy. */
+  const stopHeldForUser = ref(false)
+  // When this composable last issued an interrupt; 0 for a STOP restored from
+  // disk or another window, which has no interrupted turn left to settle.
+  let stoppedAt = 0
+  // Activity stamped this soon after an interrupt still belongs to the turn it
+  // cut off (its last log records, Claude's "[Request interrupted by user]").
+  const STOP_SETTLE_MS = 3_000
+  // How long a STOP waits for evidence that the CLI acted on it. Ctrl-C at a
+  // Claude prompt with queued text clears the text and leaves the turn running.
+  const STOP_EVIDENCE_MS = 5_000
+  /** A STOP with no interrupt evidence while the CLI kept working: the badge
+   *  shows the live status (so Interrupt can be pressed again) marked "STOP
+   *  not applied". The STOP itself stays recorded: isStopped is still true,
+   *  and a person's STOP keeps holding the messaging gate. Cleared by the same
+   *  rules as the STOP badge, and by late evidence that the interrupt landed. */
+  const stopIneffective = ref(false)
+  let interruptConfirmed = false
+  let stopEvidenceTimer: ReturnType<typeof setTimeout> | null = null
+  function clearStopEvidenceTimer(): void {
+    if (stopEvidenceTimer) clearTimeout(stopEvidenceTimer)
+    stopEvidenceTimer = null
+  }
+  function judgeStopEvidence(): void {
+    stopEvidenceTimer = null
+    if (!isStopped.value || interruptConfirmed || liveStatus.value !== 'running') return
+    if (stoppedBy.value !== 'agent') stopHeldForUser.value = true
+    stopIneffective.value = true
+  }
+
+  /** The CLI acted on the interrupt: its transcript says so (Claude's
+   *  "[Request interrupted by user]"). Arrives late under a lagging log
+   *  reader, so it also takes back a "STOP not applied". */
+  function noteInterruptEvidence(): void {
+    if (!isStopped.value) return
+    interruptConfirmed = true
+    clearStopEvidenceTimer()
+    if (!stopIneffective.value) return
+    stopIneffective.value = false
+    stopHeldForUser.value = false
+  }
+
+  /** The agent began a turn of its own after a STOP: Stop hook feedback, a
+   *  schedule, a delivered message. The badge records the interrupt and must
+   *  not outlive the next turn — left on, it kept Interrupt / Reapply Role /
+   *  Reclaim disabled on a pane that was visibly working (0.2.38). Only the
+   *  badge clears: a STOP that was not an agent's keeps holding the messaging
+   *  gate through stopHeldForUser until a person types. `at` is when the
+   *  activity was recorded. */
+  function markAgentTurnStart(at: number): void {
+    if (!isStopped.value || at - stoppedAt < STOP_SETTLE_MS) return
+    if (stoppedBy.value !== 'agent') stopHeldForUser.value = true
+    isStopped.value = false
+  }
+
+  /** A person typed into the pane: the STOP is over, badge and gate hold both. */
+  function resumeFromStop(): void {
+    if (!isStopped.value && !stopHeldForUser.value) return
+    isStopped.value = false
+    stopHeldForUser.value = false
+    opts?.onUserResume?.()
+  }
 
   const displayStatus = computed<DisplayStatus>(() => {
     if (status.value === 'exited' || status.value === 'error') return status.value
-    if (isStopped.value) return 'stopped'
+    if (isStopped.value && !stopIneffective.value) return 'stopped'
+    return liveStatus.value
+  })
+
+  /** The CLI's own state with the STOP badge left out. 'stopped' records that
+   *  someone interrupted the pane and stays until a person types into it; it
+   *  says nothing about whether the CLI went back to its prompt. The messaging
+   *  gate reads this instead, so an interrupted pane that settled at its prompt
+   *  takes queued messages and one that kept working stays busy. */
+  const liveStatus = computed<DisplayStatus>(() => {
+    if (status.value === 'exited' || status.value === 'error') return status.value
     // A resume parked for a hidden tab hasn't created its PTY yet — a resumed
     // agent comes up idle, so show 'idle' instead of a stuck 'starting' in the
     // agent list until the tab is shown. (Fresh spawns create immediately, so
@@ -1126,9 +1224,13 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     flushPendingClean()
     turnCompleteAt.value = Date.now()
     runningLatched.value = false
+    // The turn ended inside the evidence window: the interrupt took (Codex's
+    // turn_aborted). After it, a turn end is the un-interrupted turn finishing.
+    if (stopEvidenceTimer) noteInterruptEvidence()
     // A turn that ended is not waiting on anyone: clear the flag so a stale
     // notification can't hold the badge on AWAITING past the turn.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
   }
 
@@ -1148,6 +1250,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     awaitingInputAt.value = 0
   }
 
+  /** The screen watcher's view of the box: on screen (true) or not. Only that
+   *  watcher calls this, once per poll. It never touches the hook's wait. */
+  function markBoxOnScreen(onScreen: boolean): void {
+    boxOnScreen.value = onScreen
+  }
+
   /** A permission wait is on right now: held, or raised by the Notification hook
    *  or the screen watcher and not yet settled. App.vue asks before raising one
    *  so a box two signals report chimes once. Edge: a Notification wait older
@@ -1156,6 +1264,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function permissionWaitLive(): boolean {
     return (
       awaitingHeldAt.value > 0 ||
+      boxOnScreen.value ||
       (awaitingInputAt.value > 0 &&
         lastCleanBurstAt.value < awaitingInputAt.value + AWAITING_SETTLE_MS)
     )
@@ -1989,6 +2098,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // and it is adopted here, so the caller can record what exists rather than
   // what it guessed.
   const attachedOutputLogFile = ref('')
+  const attachedBypassDropped = ref('')
   // Previous PTY id snapshotted at spawn() time (before tryReattach can clear
   // it) — sent as replaces_terminal_id so the backend reaps the predecessor.
   let replacesPtyId = ''
@@ -2282,6 +2392,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return term.modes.bracketedPasteMode === true
   }
 
+  /** The xterm's size now, for App.vue's inject.failed diagnostic (#448). */
+  function terminalSize(): { cols: number; rows: number } {
+    return { cols: term.cols, rows: term.rows }
+  }
+
   /** The other half of the same problem, and the precise one: a prompt answered
    *  with a single key never reaches Enter, so nothing above empties the buffer
    *  and the pane stays "being typed at" for good. Leaving `awaiting`/`question`
@@ -2383,7 +2498,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
 
   /** Input bookkeeping shared by term.onData and the manual-paste path. */
   function noteUserInput(text: string): void {
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     // A clipboard paste is the user putting something in the composer they have
     // not sent yet, so it counts as input for the draft gate exactly like typing.
     lastUserKeyAt.value = Date.now()
@@ -2422,7 +2537,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (!inputTransportReady()) return
       noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
           inputBuffer = ''
           syncDraft()
@@ -2446,10 +2561,10 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         // the failure this whole gate exists to prevent.
         inputBuffer = inputBuffer.replace(/\s*\S+\s*$/, '')
       } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         inputBuffer += data
       } else if (data.length > 1) {
-        if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+        resumeFromStop()
         // Terminal reports ride this same channel and are not typed text.
         // Dropping escape sequences is not enough for the mouse ones: X10
         // encodes the button and coordinates as three PRINTABLE bytes after
@@ -2576,6 +2691,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       // Adopt the survivor's real transcript path; '' when it was started
       // without one, and the caller then keeps whatever it derived.
       attachedOutputLogFile.value = resp.payload.logs?.[prev] ?? ''
+      attachedBypassDropped.value = resp.payload.bypass_dropped?.[prev] ?? ''
     } catch {
       return false  // backend unreachable; let the caller decide (it will spawn)
     }
@@ -2638,7 +2754,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     const id = sessionId.value
     try {
       const resp = await terminalPort.reattach([id], 0, 0)
-      if (!resp.ok || !resp.payload || !resp.payload.alive.includes(id)) {
+      // Only an explicit answer that leaves this session out means the PTY is
+      // gone. An error reply says nothing about the PTY — it may well be alive
+      // — so it is treated like the probe throwing: leave the pane alone and
+      // let the next reconnect ask again.
+      if (!resp.ok || !resp.payload) return
+      if (!resp.payload.alive.includes(id)) {
         // PTY died while disconnected — mark exited so the user sees it
         status.value = 'exited'
         term.writeln('\r\n\x1b[33m[session ended while disconnected]\x1b[0m')
@@ -2693,6 +2814,34 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // pendingSpawn — which does not exist until this line.
   watch(displayStatus, onLeftUserPrompt)
   let activeCreateGeneration: string | null = null
+  // Output frames that arrived while terminal.create was in flight, keyed by
+  // their PTY id: the backend streams a PTY's output the moment it spawns, but
+  // this pane only learns the id from the create response. A CLI that prints
+  // its whole banner before that response and then sits at its prompt was
+  // otherwise dropped entirely — the pane showed nothing, cleanBytesSeen stayed
+  // 0, and every injection into it read "printed nothing" (Windows VM 0.2.38,
+  // cli_open_agent into a new workspace). Frames for other panes' PTYs land
+  // here too and are discarded once the response names ours; the cap bounds
+  // what a busy window can pile up while one create is slow.
+  const EARLY_OUTPUT_CAP_BYTES = 512 * 1024
+  let earlyOutput = new Map<string, (string | Uint8Array)[]>()
+  let earlyOutputBytes = 0
+  function holdEarlyOutput(id: string, data: string | Uint8Array): void {
+    if (!id || earlyOutputBytes + data.length > EARLY_OUTPUT_CAP_BYTES) return
+    earlyOutputBytes += data.length
+    const held = earlyOutput.get(id)
+    if (held) held.push(data)
+    else earlyOutput.set(id, [data])
+  }
+  /** Hand the held frames of `id` to the normal output path, drop the rest. */
+  function replayEarlyOutput(id: string): void {
+    const held = earlyOutput.get(id)
+    earlyOutput = new Map()
+    earlyOutputBytes = 0
+    if (!held?.length) return
+    _pendingOutput.push(...held)
+    if (!_outputTimer) _outputTimer = setTimeout(() => _flushPendingOutput(true), _coalesceMs())
+  }
   let pendingCreateCancel: Promise<boolean> | null = null
   const createCancelRequests = new Map<string, Promise<boolean>>()
 
@@ -2852,6 +3001,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       if (activeCreateGeneration !== createGeneration || isDisposed) return
       stallReason.value = null  // past every silent exit — the create is going out
       createInFlight = true
+      // This pane's output handler is bound only once the response below names
+      // its PTY; hold whatever arrives meanwhile (see replayEarlyOutput).
+      earlyOutput = new Map()
+      earlyOutputBytes = 0
+      const earlyUnsub = terminalPort.onOutput((p) => holdEarlyOutput(p.terminal_session_id, p.data))
       const resp = await terminalPort.create({
         paneId,
         createGeneration,
@@ -2872,7 +3026,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,
-      }, TERMINAL_CREATE_TIMEOUT_MS)
+      }, TERMINAL_CREATE_TIMEOUT_MS).finally(earlyUnsub)
       // A cancellation or replacement can land while the RPC is in flight.
       // The backend cancellation owns rollback; a late result must never bind
       // its PTY or overwrite the newer pane state.
@@ -2895,6 +3049,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       activeCreateGeneration = null
       startingStartedAt.value = null
       sessionId.value = resp.payload.terminal_session_id
+      replayEarlyOutput(sessionId.value)
       rememberSessionId(sessionId.value)  // enable reattach after a reload
       resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
       status.value = 'running'
@@ -3048,6 +3203,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       throw new Error('terminal already running')
     }
     isStopped.value = false
+    stopHeldForUser.value = false
     runningLatched.value = false
     turnCompleteAt.value = 0
     // A rebuild/respawn out of AWAITING must not carry the old session's
@@ -3055,6 +3211,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // timestamp here would show the fresh pane as parked on a question that
     // no longer exists.
     awaitingInputAt.value = 0
+    boxOnScreen.value = false
     releaseNeedsInputHold()
     questionAt.value = 0
     deliveredPendingCount.value = 0
@@ -3092,6 +3249,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // backend reaps a still-live predecessor this spawn is replacing (resume-id
     // dedup can't: the id rotates on every resume, so it never matches).
     replacesPtyId = persistedSessionId()
+    // A restore spawns under a NEW pane id, so a pane whose key is its pane id
+    // finds nothing above; its predecessor's PTY id sits under the former id.
+    if (!replacesPtyId && opts.replacesKey) {
+      try { replacesPtyId = localStorage.getItem(`terminal-pty:${opts.replacesKey}`) || '' } catch { /* ignore */ }
+    }
     // True persistence: a PTY from before a reload may still be running. Reattach
     // to it (recovering bash/build panes too, with no --resume round-trip) before
     // spawning anew. Falls through to a fresh spawn if the PTY is gone.
@@ -3302,7 +3464,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   function submitAsTyped(): boolean {
     if (_stdinGated || isDisposed) return false
     if (!pasteText('\r', HUMAN_KEY)) return false
-    if (isStopped.value) { isStopped.value = false; opts?.onUserResume?.() }
+    resumeFromStop()
     inputBuffer = ''
     syncDraft()
     return true
@@ -3315,7 +3477,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
    *  exactly like "the agent ignored me" without it. True still means only
    *  that the backend accepted the request: it writes to the PTY and answers,
    *  and a write that fails there is logged, not reported back. */
-  async function interrupt(): Promise<boolean> {
+  async function interrupt(by: 'agent' | 'user' = 'user'): Promise<boolean> {
     if (!sessionId.value) return false
     // Guarded like every other user input, and for the sharpest case of it: a
     // frozen-looking pane is exactly when someone hits STOP, so a queued SIGINT
@@ -3324,7 +3486,14 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // once the request is on its way, so the STOP badge cannot advertise an
     // interrupt that never left.
     if (!inputTransportReady()) return false
+    stoppedBy.value = by
+    stoppedAt = Date.now()
+    stopHeldForUser.value = false
     isStopped.value = true
+    stopIneffective.value = false
+    interruptConfirmed = false
+    clearStopEvidenceTimer()
+    if (opts?.reportsInterrupt?.()) stopEvidenceTimer = setTimeout(judgeStopEvidence, STOP_EVIDENCE_MS)
     const reply = await terminalPort.interrupt(sessionId.value)
     // wsClient resolves an `ok: false` rather than rejecting it, so a refusal
     // has to be read off the reply the way _sendPasteChunk reads it.
@@ -3454,6 +3623,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     clearInterval(reconcileInterval)
     detachWebgl()
     stopStartingWatchdog()
+    clearStopEvidenceTimer()
     if (freshSpawnRefitTimer) clearTimeout(freshSpawnRefitTimer)
     if (_hintTimer) clearTimeout(_hintTimer)
     resizeCtrl.dispose()
@@ -3505,6 +3675,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     serializeScrollback,
     tryReattach,
     attachedOutputLogFile,
+    attachedBypassDropped,
     interrupt,
     kill,
     focus,
@@ -3518,6 +3689,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     insertText,
     status,
     displayStatus,
+    liveStatus,
+    stoppedBy,
+    stopIneffective,
+    noteInterruptEvidence,
+    stopHeldForUser,
+    markAgentTurnStart,
     awaitingKind,
     startingStartedAt,
     startingAgeMs,
@@ -3535,9 +3712,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     hasDraft,
     lastUserKeyAt,
     isBracketedPasteActive,
+    terminalSize,
     markTurnComplete,
     markNeedsInput,
     clearNeedsInput,
+    markBoxOnScreen,
     holdNeedsInput,
     releaseNeedsInputHold,
     awaitingHeld: (): { since: number; key: string } => ({ since: awaitingHeldAt.value, key: awaitingHeldKey }),

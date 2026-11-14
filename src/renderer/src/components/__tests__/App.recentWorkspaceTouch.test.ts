@@ -34,6 +34,10 @@ describe('bootWorkspaceToRecord', () => {
     expect(bootWorkspaceToRecord('?workspace_path=/Users/test/proj&duplicate=1')).toBe('')
   })
 
+  it('skips windows main opens for an agent, a plugin or a menu that touches Recent itself', () => {
+    expect(bootWorkspaceToRecord('?workspace_path=/Users/test/proj&skip_recent=1')).toBe('')
+  })
+
   it('skips detached run-group children', () => {
     expect(bootWorkspaceToRecord('?workspace_path=/Users/test/proj&detached_group=g1')).toBe('')
   })

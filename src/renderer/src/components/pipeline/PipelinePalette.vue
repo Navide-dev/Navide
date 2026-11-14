@@ -8,6 +8,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Role } from '../../composables/useRoles'
 import { DND_PALETTE, type PaletteItem } from './pipelineEditorModel'
+import { roleDisplayOneLine } from '../../lib/builtinNames'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
@@ -15,6 +16,8 @@ const props = defineProps<{
   locked?: boolean
   /** Popover mode: autofocus search, no section chrome. */
   compact?: boolean
+  /** Why Sub-pipeline cannot be added now ('' or absent when it can). */
+  subpipelineBlocked?: string
 }>()
 const emit = defineEmits<{ (e: 'pick', item: PaletteItem): void }>()
 const { t } = useI18n()
@@ -23,6 +26,11 @@ const query = ref('')
 const searchEl = ref<HTMLInputElement | null>(null)
 const listEl = ref<HTMLElement | null>(null)
 
+const subpipeline = computed<PaletteItem>(() => ({
+  kind: 'subpipeline',
+  label: t('pipelineEditor.palette.subpipeline'),
+  description: t('pipelineEditor.palette.subpipeline-desc'),
+}))
 const gate = computed<PaletteItem>(() => ({
   kind: 'gate',
   label: t('pipelineEditor.palette.gate'),
@@ -37,22 +45,24 @@ function matches(text: string): boolean {
 const roleItems = computed<PaletteItem[]>(() =>
   [...props.roles]
     .sort((a, b) => a.label.localeCompare(b.label))
-    .filter((r) => matches(`${r.label} ${r.key} ${r.one_line}`))
-    .map((r) => ({ kind: 'role', roleKey: r.key, label: r.label, description: r.one_line }))
+    .filter((r) => matches(`${r.label} ${r.key} ${roleDisplayOneLine(r)}`))
+    .map((r) => ({ kind: 'role', roleKey: r.key, label: r.label, description: roleDisplayOneLine(r) }))
 )
 const flowItems = computed<PaletteItem[]>(() =>
-  matches(`${gate.value.label} ${gate.value.description}`) ? [gate.value] : []
+  [gate.value, subpipeline.value].filter((item) => matches(`${item.label} ${item.description}`))
 )
 const empty = computed(() => !roleItems.value.length && !flowItems.value.length)
 
+const blocked = (item: PaletteItem): string => (item.kind === 'subpipeline' ? props.subpipelineBlocked ?? '' : '')
+
 function onDragStart(e: DragEvent, item: PaletteItem): void {
-  if (props.locked || !e.dataTransfer) return
+  if (props.locked || blocked(item) || !e.dataTransfer) return
   e.dataTransfer.setData(DND_PALETTE, JSON.stringify(item))
   e.dataTransfer.effectAllowed = 'copy'
 }
 
 function pick(item: PaletteItem): void {
-  if (!props.locked) emit('pick', item)
+  if (!props.locked && !blocked(item)) emit('pick', item)
 }
 
 /** ↑/↓ walk the items; the search box hands off to the first one. */
@@ -105,10 +115,14 @@ onMounted(() => {
         <h3 class="pp-group">{{ t('pipelineEditor.palette.flow') }}</h3>
         <button
           v-for="item in flowItems" :key="item.kind"
-          type="button" role="listitem" class="pp-item" :draggable="!locked" :disabled="locked"
+          type="button" role="listitem" class="pp-item" :draggable="!locked && !blocked(item)" :disabled="locked || !!blocked(item)"
+          :title="blocked(item) || undefined"
           @dragstart="onDragStart($event, item)" @click="pick(item)"
         >
-          <span class="pp-glyph pp-glyph--gate" aria-hidden="true">
+          <span v-if="item.kind === 'subpipeline'" class="pp-glyph pp-glyph--subpipeline" aria-hidden="true">
+            <svg viewBox="0 0 16 16"><path d="M2.5 3.5h7v4h-7zM6.5 8.5h7v4h-7zM4.5 7.5v3h2" /></svg>
+          </span>
+          <span v-else class="pp-glyph pp-glyph--gate" aria-hidden="true">
             <svg viewBox="0 0 16 16"><path d="M8 1.8 14.2 8 8 14.2 1.8 8z" /></svg>
           </span>
           <span class="pp-text">
@@ -188,6 +202,7 @@ onMounted(() => {
 }
 .pp-glyph--role { background: var(--bg-muted); color: var(--text-secondary); }
 .pp-glyph--gate { background: color-mix(in srgb, var(--attention-emphasis) 18%, transparent); color: var(--attention-fg); }
+.pp-glyph--subpipeline { background: color-mix(in srgb, var(--accent-emphasis) 18%, transparent); color: var(--accent-fg); }
 .pp-glyph svg { width: 12px; height: 12px; fill: currentColor; }
 .pp-text { display: grid; gap: 1px; min-width: 0; }
 .pp-label { font-size: var(--font-sm); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

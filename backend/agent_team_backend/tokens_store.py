@@ -1230,8 +1230,10 @@ class TokensStore:
         task: str,
         run_dir: str,
         pipeline_id: str = "",
+        parent_run_id: str = "",
     ) -> dict[str, Any]:
-        """Archive any in-progress current_run, then start a fresh one."""
+        """Archive any in-progress current_run, then start a fresh one.
+        ``parent_run_id`` marks a sub-pipeline's child run."""
         with self._flush_lock, self._lock:
             doc = self._load_workspace(workspace_path)
             if doc["current_run"]:
@@ -1241,10 +1243,48 @@ class TokensStore:
             doc["current_run"] = _new_run(run_id, task, run_dir)
             if pipeline_id:
                 doc["current_run"]["pipeline_id"] = pipeline_id
+            if parent_run_id:
+                doc["current_run"]["parent_run_id"] = parent_run_id
             self._dirty_workspaces.add(workspace_path)
             result = deepcopy(doc["current_run"])
             self._flush_dirty()
             return result
+
+    def suspend_run(self, workspace_path: str) -> str:
+        """Set the in-progress run aside while a sub-pipeline's child runs
+        (kept in ``suspended_runs``, not archived). Returns its run_id ('' if
+        there is none). The key appears only once a run is suspended."""
+        with self._flush_lock, self._lock:
+            doc = self._load_workspace(workspace_path)
+            current = doc["current_run"]
+            if not current:
+                return ""
+            doc.setdefault("suspended_runs", []).append(current)
+            doc["current_run"] = None
+            self._dirty_workspaces.add(workspace_path)
+            self._flush_dirty()
+            return str(current.get("run_id") or "")
+
+    def resume_suspended_run(self, workspace_path: str, *, child_run_id: str = "") -> None:
+        """Put the last suspended run back as the in-progress one, archiving
+        whatever run is current (the child), and link the two."""
+        with self._flush_lock, self._lock:
+            doc = self._load_workspace(workspace_path)
+            stack = doc.get("suspended_runs") or []
+            if not stack:
+                return
+            if doc["current_run"]:
+                child = doc["current_run"]
+                child["ended_at"] = child.get("ended_at") or _now_iso()
+                doc["runs"].append(child)
+            parent = stack.pop()
+            if child_run_id:
+                parent.setdefault("child_run_ids", []).append(child_run_id)
+            doc["current_run"] = parent
+            if not stack:
+                doc.pop("suspended_runs", None)
+            self._dirty_workspaces.add(workspace_path)
+            self._flush_dirty()
 
     def end_run(
         self,

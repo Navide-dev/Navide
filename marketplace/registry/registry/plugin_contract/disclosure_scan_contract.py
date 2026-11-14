@@ -329,6 +329,15 @@ def scope_pattern_matches(pattern: str, path: str) -> bool:
     return re.fullmatch("".join(parts), path) is not None
 
 
+def network_host_matches(declared: str, host: str) -> bool:
+    """Whether a declared host covers a host the scan found: an exact name, or
+    for ``*.example.com`` any name below ``example.com`` (CSP reads the
+    wildcard the same way), never ``example.com`` itself."""
+    if declared.startswith("*."):
+        return host.endswith(declared[1:]) and len(host) > len(declared) - 1
+    return host == declared
+
+
 def declared_vs_scanned(disclosure: ManifestDisclosure, scan: ScanReport) -> dict[str, list[dict[str, str]]]:
     """Section 3.9: what the scan found that the manifest does not declare
     (``undeclared``, shown first and in red) and what the manifest declares
@@ -349,7 +358,7 @@ def declared_vs_scanned(disclosure: ManifestDisclosure, scan: ScanReport) -> dic
     namespaces = {entry["address"].split(".", 1)[0] for entry in scan["capabilities"]}
     if shell is None and "shell" in namespaces:
         undeclared.add(("shell", "shell.run"))
-    for namespace in ("aiCli", "fs", "ui", "web", "agents", "agentMessages"):
+    for namespace in ("aiCli", "fs", "ui", "web", "agents", "agentMessages", "secrets", "agentNotify"):
         if namespace in namespaces and namespace not in system:
             undeclared.add(("system", namespace))
     files = scan["files"]
@@ -364,8 +373,21 @@ def declared_vs_scanned(disclosure: ManifestDisclosure, scan: ScanReport) -> dic
         for path in files["readPaths"]:
             if not any(scope_pattern_matches(p, path) for p in read_patterns):
                 undeclared.add(("fsScopeRead", path))
+    # Hosts are compared only for a package that declares some: a package
+    # without the declaration has no view network at all, and the hosts its
+    # code names stay a scan sentence, as before.
+    declared_hosts = disclosure.get("networkHosts")
+    scanned_hosts = [entry["host"] for entry in scan["network"]["hosts"]]
+    if declared_hosts is not None:
+        for host in scanned_hosts:
+            if not any(network_host_matches(d, host) for d in declared_hosts):
+                undeclared.add(("networkHost", host))
 
     not_seen: set[tuple[str, str]] = set()
+    if declared_hosts is not None:
+        for declared_host in declared_hosts:
+            if not any(network_host_matches(declared_host, host) for host in scanned_hosts):
+                not_seen.add(("networkHost", declared_host))
     if shell is not None and not calls and not scan["shell"]["dynamic"]["count"] and "shell" not in namespaces:
         not_seen.add(("shell", shell["mode"]))
     for namespace in sorted(system):

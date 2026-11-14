@@ -8,7 +8,32 @@ import type {
 import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
 import { isFirstPartyAgentToolPlugin } from './pluginFirstPartyBackends'
 import type { AgentToolSwitches } from './pluginNativeBackendStore'
+import type { DisclosurePermissions } from '../../shared/pluginDisclosure'
+import type { PluginSystemNamespace } from './pluginManifestV2'
 import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
+
+/**
+ * What the catalog needs of a package that declares agent tools: a
+ * third-party backend's launch spec, or (batch 4, contract 2.9) a package
+ * without a backend whose views serve its tools. The tools are the
+ * disclosure's `agentTools`, a view-served one spelled `method: "view:<id>"`.
+ */
+export interface AgentToolPackage {
+  pluginId: string
+  packageVersion: string
+  packageDir: string
+  thirdParty: {
+    name: string
+    system: readonly PluginSystemNamespace[]
+    agentTools?: readonly DisclosureAgentTool[]
+    permissions?: DisclosurePermissions
+  }
+}
+
+/** A package the Backend Host launches (its tools reach a backend method). */
+export function isBackendAgentToolPackage(spec: AgentToolPackage): spec is ThirdPartyLaunchSpec {
+  return 'entryFile' in spec
+}
 
 /**
  * Host side of plan B1-b: the third-party agent-tool catalog.
@@ -19,12 +44,15 @@ import { consentedAgentMethods, type ThirdPartyLaunchSpec } from './pluginThirdP
  * `agentMethods` in step with it, and re-checks everything again on every
  * call (section 4.2), whatever the CLI or the backend has cached.
  *
- * With the master switch (DB8) off since start-up nothing is sent and every
- * third-party `agentMethods` stays `[]`, exactly as on main.
+ * Two switches decide which packages are served. The master switch (DB8, off
+ * by default) covers third-party packages: while it is off every third-party
+ * `agentMethods` stays `[]`, and with nothing else served nothing is sent,
+ * exactly as on main. The first-party switch (on by default) covers Navide's
+ * own packages the same way.
  *
  * First-party packages (pluginFirstPartyBackends.ts, listed through
- * `listFirstPartyPackages`) follow the master switch too, but their tools need
- * no per-version consent and keep their names against a third-party package.
+ * `listFirstPartyPackages`) need no per-version consent for their tools and
+ * keep their names against a third-party package.
  * Everything else still applies to them: the Disabled switch, quarantine and
  * revocation, the caller-kind switch, and, on the backend side, the
  * external-content wrapping and pane taint of every result. A package counts as first-party
@@ -38,22 +66,22 @@ export interface PluginAgentToolsHostOptions {
   switches: () => AgentToolSwitches
   setSwitches: (change: Partial<AgentToolSwitches>) => void
   /** Installed, registered third-party backends (first-party ones excluded). */
-  listPackages: () => ThirdPartyLaunchSpec[]
+  listPackages: () => AgentToolPackage[]
   /** The agent-tool catalog entries of registered first-party backends
    *  (firstPartyAgentToolSpec). An entry whose id is not on the first-party
    *  list is ignored. */
-  listFirstPartyPackages?: () => ThirdPartyLaunchSpec[]
+  listFirstPartyPackages?: () => AgentToolPackage[]
   /** The user's "Disabled" switch for the package or for its native backend. */
   isDisabled: (pluginId: string) => boolean
   /** Consent covers this exact package content, permission set and agent-tool
    * list (the consent recorded the tool-list digest). */
-  hasConsent: (spec: ThirdPartyLaunchSpec) => Promise<boolean>
+  hasConsent: (spec: AgentToolPackage) => Promise<boolean>
   /** When the user consented (ISO time); decides which of two same-named tools is served. */
   /** DB1 order for one tool name (B1-a's agentToolNamesSince, else agentToolsSince). */
   agentToolSince: (pluginId: string, name: string) => string | null
   setAgentMethods: (pluginId: string, packageVersion: string, methods: string[]) => void
   /** DB3 first-write confirmation for one (package, workspace). */
-  confirmWrite: (spec: ThirdPartyLaunchSpec, tool: DisclosureAgentTool, workspaceRoot: string) => Promise<boolean>
+  confirmWrite: (spec: AgentToolPackage, tool: DisclosureAgentTool, workspaceRoot: string) => Promise<boolean>
   /** Deliver one snapshot to the core backend. `no-session`: nothing to send
    * to (a fresh snapshot follows registration); `failed`: retried, bounded. */
   send: (payload: AgentToolsSyncPayload) => Promise<AgentToolsSyncDelivery>
@@ -70,11 +98,11 @@ interface PackageMark {
 }
 
 export type AgentToolAdmission =
-  | { ok: true; spec: ThirdPartyLaunchSpec; tool: DisclosureAgentTool }
+  | { ok: true; spec: AgentToolPackage; tool: DisclosureAgentTool }
   | { ok: false; reason: AgentToolUnavailableReason }
 
 const UNAVAILABLE_MESSAGES: Record<AgentToolUnavailableReason, string> = {
-  'master-switch-off': 'Agent tools from Navide plugins are turned off.',
+  'master-switch-off': 'Agent tools from this kind of Navide plugin (first-party or third-party) are turned off in Settings.',
   'external-callers-off': 'External MCP clients may not call third-party Navide plugin tools.',
   'plugin-not-installed': 'The Navide plugin is not installed.',
   'plugin-disabled': 'The Navide plugin is disabled.',
@@ -84,13 +112,14 @@ const UNAVAILABLE_MESSAGES: Record<AgentToolUnavailableReason, string> = {
   'consent-required': 'The Navide plugin changed since the user allowed it.',
   'tool-not-consented': 'The user has not allowed this tool.',
   'name-collision': 'Another Navide plugin already provides a tool with this name.',
+  'view-not-open': 'The Navide plugin view that serves this tool is not open on the target workspace; open it in a window of that workspace.',
 }
 
 export function agentToolUnavailableMessage(reason: AgentToolUnavailableReason): string {
   return UNAVAILABLE_MESSAGES[reason]
 }
 
-function declaredTools(spec: ThirdPartyLaunchSpec): readonly DisclosureAgentTool[] {
+function declaredTools(spec: AgentToolPackage): readonly DisclosureAgentTool[] {
   return spec.thirdParty.agentTools ?? []
 }
 
@@ -100,11 +129,11 @@ export class PluginAgentToolsHost {
   /** What the backend was last told: null = nothing since start-up or reconnect. */
   private lastSentEnabled: boolean | null = null
   /** Last seen spec per package, kept while it is disabled, quarantined or revoked. */
-  private readonly known = new Map<string, ThirdPartyLaunchSpec>()
+  private readonly known = new Map<string, AgentToolPackage>()
   private readonly marks = new Map<string, PackageMark>()
   /** Packages that left the catalog without a mark (removed); kept so a
    * quarantine or revocation reported afterwards can still name its tools. */
-  private readonly departed = new Map<string, ThirdPartyLaunchSpec>()
+  private readonly departed = new Map<string, AgentToolPackage>()
   /** `${pluginId}\0${tool}` entries that lost a name collision at the last refresh. */
   private collided = new Set<string>()
   private catalog: AgentToolSyncEntry[] = []
@@ -130,6 +159,26 @@ export class PluginAgentToolsHost {
       await this.refresh()
     }
     return this.switches()
+  }
+
+  /** C3 (DB8 folded into the consent card): the user allowed a third-party
+   * package whose consent card listed its agent tools, so those tools go live.
+   * The master switch turns on when it is still at its default (off and never
+   * set by the user in Settings); a switch the user set themselves, on or off,
+   * is their choice and is left alone, so allowing one more package never
+   * re-enables the tools of others behind their back. A package that declares
+   * no tools, a first-party one or an unknown id only refreshes the catalog.
+   * Settings stays the one place that turns every third-party tool off again.
+   * Returns whether the switch was turned on. */
+  async consented(pluginId: string): Promise<boolean> {
+    const spec = this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
+    const switches = this.options.switches()
+    if (spec && declaredTools(spec).length > 0 && !switches.enabled && switches.enabledSetByUser !== true) {
+      await this.setSwitches({ enabled: true })
+      return true
+    }
+    await this.refresh()
+    return false
   }
 
   /** A trust refresh quarantined, or a spawn-time trust check revoked, the package. */
@@ -176,7 +225,7 @@ export class PluginAgentToolsHost {
   }
 
   /** The first-party catalog entries listed now (ids off the list dropped). */
-  private firstPartyPackages(): ThirdPartyLaunchSpec[] {
+  private firstPartyPackages(): AgentToolPackage[] {
     const listed = (this.options.listFirstPartyPackages?.() ?? [])
       .filter((spec) => isFirstPartyAgentToolPlugin(spec.pluginId))
     for (const spec of listed) this.firstPartyIds.add(spec.pluginId)
@@ -184,13 +233,12 @@ export class PluginAgentToolsHost {
   }
 
   /** First-party entries, then the third-party packages with another id. */
-  private listAll(): ThirdPartyLaunchSpec[] {
-    const firstParty = this.firstPartyPackages()
+  private listAll(firstParty = this.firstPartyPackages()): AgentToolPackage[] {
     const ids = new Set(firstParty.map((spec) => spec.pluginId))
     return [...firstParty, ...this.options.listPackages().filter((spec) => !ids.has(spec.pluginId))]
   }
 
-  private updateKnown(present: ThirdPartyLaunchSpec[]): void {
+  private updateKnown(present: AgentToolPackage[]): void {
     const presentIds = new Set(present.map((spec) => spec.pluginId))
     for (const pluginId of [...this.known.keys()]) {
       if (presentIds.has(pluginId)) continue
@@ -213,7 +261,7 @@ export class PluginAgentToolsHost {
     }
   }
 
-  private async packageState(spec: ThirdPartyLaunchSpec, present: boolean): Promise<AgentToolState> {
+  private async packageState(spec: AgentToolPackage, present: boolean): Promise<AgentToolState> {
     const mark = this.marks.get(spec.pluginId)?.kind
     if (mark === 'quarantined') return 'plugin-quarantined'
     if (mark === 'revoked') return 'plugin-revoked'
@@ -228,7 +276,10 @@ export class PluginAgentToolsHost {
     const present = registered.filter((spec) => declaredTools(spec).length > 0)
     this.updateKnown(present)
     const switches = this.options.switches()
-    if (!switches.enabled) {
+    // Third-party packages follow the master switch, first-party ones theirs.
+    const inScope = (pluginId: string): boolean =>
+      this.firstPartyIds.has(pluginId) ? switches.firstParty !== false : switches.enabled
+    if (!switches.enabled && ![...this.known.keys()].some(inScope)) {
       for (const spec of registered) this.options.setAgentMethods(spec.pluginId, spec.packageVersion, [])
       this.catalog = []
       this.collided = new Set()
@@ -238,7 +289,7 @@ export class PluginAgentToolsHost {
       return
     }
     const presentIds = new Set(present.map((spec) => spec.pluginId))
-    const specs = [...this.known.values()].sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
+    const specs = [...this.known.values()].filter((spec) => inScope(spec.pluginId)).sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0))
     const entries: AgentToolSyncEntry[] = []
     for (const spec of specs) {
       const state = await this.packageState(spec, presentIds.has(spec.pluginId))
@@ -280,13 +331,20 @@ export class PluginAgentToolsHost {
       }
     }
     // The switch may have been turned off while consent was being checked.
-    if (!this.options.switches().enabled) return this.refreshNow()
+    const now = this.options.switches()
+    if (now.enabled !== switches.enabled || (now.firstParty !== false) !== (switches.firstParty !== false)) {
+      return this.refreshNow()
+    }
     for (const spec of registered) {
+      if (!inScope(spec.pluginId)) {
+        this.options.setAgentMethods(spec.pluginId, spec.packageVersion, [])
+        continue
+      }
       // Only the tools actually served open their methods to agents.
       const served = new Set(entries
         .filter((entry) => entry.pluginId === spec.pluginId && entry.state === 'available')
         .map((entry) => entry.name))
-      const servedSpec: ThirdPartyLaunchSpec = {
+      const servedSpec: AgentToolPackage = {
         ...spec,
         thirdParty: { ...spec.thirdParty, agentTools: declaredTools(spec).filter((tool) => served.has(tool.name)) },
       }
@@ -337,11 +395,11 @@ export class PluginAgentToolsHost {
     pluginId: string,
     caller: AgentToolCaller,
     isStopping: (pluginId: string, packageVersion: string) => boolean,
-    expected?: ThirdPartyLaunchSpec,
-  ): { ok: true; spec: ThirdPartyLaunchSpec } | { ok: false; reason: AgentToolUnavailableReason } {
+    expected?: AgentToolPackage,
+  ): { ok: true; spec: AgentToolPackage } | { ok: false; reason: AgentToolUnavailableReason } {
     const switches = this.options.switches()
-    if (!switches.enabled) return { ok: false, reason: 'master-switch-off' }
     const firstParty = this.firstPartyPackages().find((candidate) => candidate.pluginId === pluginId)
+    if (firstParty ? switches.firstParty === false : !switches.enabled) return { ok: false, reason: 'master-switch-off' }
     if (caller.kind !== 'pane' && !switches.externalCallers) {
       return { ok: false, reason: 'external-callers-off' }
     }
@@ -381,7 +439,7 @@ export class PluginAgentToolsHost {
     return { ok: true, spec: again.spec, tool }
   }
 
-  confirmWrite(spec: ThirdPartyLaunchSpec, tool: DisclosureAgentTool, workspaceRoot: string): Promise<boolean> {
+  confirmWrite(spec: AgentToolPackage, tool: DisclosureAgentTool, workspaceRoot: string): Promise<boolean> {
     return this.options.confirmWrite(spec, tool, workspaceRoot)
   }
 }

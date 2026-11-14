@@ -36,13 +36,14 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, quick_menu, redact, relay, report, share_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
+from ..db_executor import run_in_db_thread
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
 )
-from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge
-from .pairing import LinkInvites, SenderGate, parse_link_code
+from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge, is_shared_sender
+from .pairing import LinkInvites, SenderGate, normalize_code, parse_link_code
 from .registry import PLATFORMS, load_module
 from .store import DEFAULT_ACCOUNT, DEFAULT_VERBOSITY, VERBOSITIES, Binding, ChannelStore
 from .text import chunk_for, msg_blocks, strip_msg_markers
@@ -68,7 +69,8 @@ WAKE_WORDS = {"/wake"}
 MATTERMOST_WAKE_WORD = "wake"
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
-                      WAKE_CALLBACK: "/wake"}
+                      WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model",
+                      account_menu.OPEN_CALLBACK: "/account"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -76,6 +78,9 @@ MAX_QUEUED_PER_PANE = 20
 CHAT_RATE_MAX = 30
 CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
+# /model on a busy pane: how often its idle state is checked, and how long it is waited for.
+MODEL_WAIT_POLL_S = 1.0
+MODEL_WAIT_TIMEOUT_S = 900.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
 STATUS_SEND_WAIT_S = 5.0  # how long a turn's end waits for a status message still on its way
@@ -94,6 +99,7 @@ EMPTY_TURN_GRACE_S = 120.0
 # follow, and it does, until RUN_WATCH_MAX_S.
 LATE_TEXT_STATUS_AFTER_S = 10.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
+HOOK_REPLIED_REMEMBERED = 16  # per pane: turn texts a Stop hook answered, for the log's late copy
 VERDICT_POLL_S = 5.0
 # Right after a restart a platform hands over what queued while Navide was down, before the
 # windows have registered their panes again: a pane that does not resolve yet is waited for
@@ -101,6 +107,7 @@ VERDICT_POLL_S = 5.0
 STARTUP_GRACE_S = 60.0
 STARTUP_POLL_S = 1.0
 HELD_NOTICE_AFTER_S = 600.0
+STATUS_LAST_CHARS = 200  # of a pane's last turn text, on one line, in /status
 HOLD_FAILURE_KEYS = {"gone", "not-ready"}
 HOLD_FAILURE_AFTER_S = 60.0
 VERDICT_WATCH_MAX_S = 3600.0
@@ -108,6 +115,7 @@ STATUS_POLL_S = 1.0
 DEBOUNCE_S = 0.5  # lines from one sender to one location within this window become one message
 DEBOUNCE_MAX_S = 3.0
 LONG_REPLY_MAX_CHUNKS = 3  # past this, a reply is a preview plus the whole text as a file
+TELEGRAM_DIRECT_KINDS = ("private", "direct")  # the adapter's chat type; what _remember_chat stores
 REPLY_QUOTE_MAX_CHARS = 500  # a native reply's quoted message, cut before it reaches the pane
 REPLY_QUOTE_NAME_MAX_CHARS = 64
 # Fixed wording: an untrusted author's display name is attacker-controlled text too.
@@ -134,15 +142,16 @@ MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
+MSG_BOUND_NEEDS_APPROVAL = "⚠️ 已連接 pane「{name}」，但這個聊天室的傳送者要先核准，訊息才會送進 pane。{how}"
+MSG_APPROVE_CODE = "請在 Navide 的 Settings → Channels 核准配對碼：{code}"
+MSG_APPROVE_SEND_FIRST = "請先私訊這個 bot 任一則訊息取得配對碼，再到 Navide 的 Settings → Channels 核准。"
 MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pane 解除連接"
 MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址或代碼，不能連接到聊天室"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
-MSG_READING_REPLY = "✅ 回合已結束，正在讀取回覆…"
-MSG_REPLY_LATE = "⏳ 回合已結束，但還沒讀到回覆文字；讀到後會補送。"
-MSG_LATE_PREFIX = "（補送）"
+MSG_READING_REPLY = "✅ 完成，正在送出回覆…"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
 MSG_USAGE_LIMIT_NO_RESET = "⚠️ {agent} 額度已用完（重置時間未知）"
@@ -171,7 +180,12 @@ MSG_PENDING_RELISTED = "↓ 已重新列在下方"
 MSG_HELD_BY_PROMPT = "⚠️ pane 正在等確認，這則訊息沒有送出。{how}"
 MSG_LINKED = "✅ 已連結 Navide。回到 Navide 在 pane 的聊天按鈕選這個聊天室即可。"
 MSG_LINK_FAILED = "⚠️ 連結失敗，請回到 Navide 重新取得代碼"
+MSG_LINK_PENDING = "⏳ 已收到代碼，請回到 Navide 核准這個連結（配對碼：{code}）"
+MSG_LINK_DM_ONLY = "⚠️ 這個代碼只能在和 bot 的私訊裡使用，已失效，請回到 Navide 重新取得代碼"
 LINK_TARGETS = ("direct", "group")
+# Platforms whose "direct" code travels only in a DM deep link (a separate "group"
+# code exists): seeing one in a group means it leaked, so it links nothing there.
+DM_ONLY_LINK_PLATFORMS = frozenset({"telegram"})
 QUICK_ADD_TIMEOUT_S = 10.0  # how long a quick add waits for the platform to accept the credential
 QUICK_ADD_POLL_S = 0.1
 # A whole quick add, the channels lock included: under the window's 45 s (QUICK_ADD_TIMEOUT_MS)
@@ -198,6 +212,10 @@ def _secret_name(platform: str, account: str = DEFAULT_ACCOUNT) -> str:
 def _legacy_secret_name(platform: str) -> str:
     """Where the one bot per platform kept its secret before accounts; still read for "default"."""
     return f"channel-{platform}"
+
+
+async def _no_turn_text() -> str:
+    return ""
 
 
 @dataclass
@@ -242,6 +260,9 @@ class Seams:
     # pane_id -> {until: ms | None, buffer: str}: the pane's usage-limit reading and screen
     # tail, via the UI probe; read-only, never a quota fetch
     limit_info: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_limit()
+    # pane_id -> {login_expired: bool}: whether the pane's CLI reports an expired login, via
+    # the UI probe; {} (never held) when the window does not say
+    cli_health: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_health()
     # pane_id -> True for a CLI sign-in pane (login_panes): never bound, its screen
     # holds an authorization URL or code
     is_login_pane: Callable[[str], bool] = lambda _pane_id: False
@@ -262,13 +283,47 @@ class Seams:
     wake_target: Callable[[str], dict[str, str]] = lambda _pane_id: {}
     # () -> whether any Navide window is connected
     windows_open: Callable[[], bool] = lambda: True
+    # pane_id -> whether it runs in a connected window: False for a restore placeholder
+    # not yet opened, or a pane whose window closed (still registered, waiting out its grace)
+    pane_live: Callable[[str], bool] = lambda _pane_id: True
     # (pane_id, workspace_path, session_id) -> {ok, pane_id} with the pane back on that same
     # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
     # `started` is False when it was refused before anything was opened
     wake: Callable[[str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
+    # The text the pane's own log holds for its last turn since a wall-clock time ("" when
+    # it holds none): a direct read, for a run whose log events never came.
+    turn_text: Callable[[str, float], Awaitable[str]] = lambda *_a: _no_turn_text()
+    # pane_id -> {agent_key, model, effort, supports_model, efforts, known}: the recorded
+    # model and effort, what the CLI accepts, and the models this workspace's panes of the
+    # same CLI were recorded on; {} when unknown. Blocking (reads the pane records)
+    pane_model: Callable[[str], dict[str, Any]] = lambda _pane_id: {}
+    # (pane_id, model, effort, who) -> cli_set_model's answer: {ok, pane_id, method,
+    # fallback?} or {ok: False, error, error_code, hold?}; audited as from `who`
+    set_model: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_set_model()
+    # pane_id -> the window's account rows for the pane's CLI (ui.accounts.channelMenu):
+    # {status: "ok", agentKey, activeId, fixedCount, rows: [{id, label, remaining, stale,
+    # signedOut, active}]}, {status: "unsupported"} for a CLI a chat cannot switch, or
+    # {status: "no-window" | "pane-gone"}
+    account_menu: Callable[[str], Awaitable[dict[str, Any]]] = lambda _p: _no_account()
+    # (pane_id, profile_id, from_id, who) -> {status: "switched" | "switched-signed-out",
+    # from, to, fixedCount} or {status: "stale" | "needs-window" | "refused" | ..., code?};
+    # the window's own switch, audited as from `who`
+    switch_account: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_account()
+
+
+async def _no_set_model() -> dict[str, Any]:
+    return {"ok": False, "error": "model switching is not available", "error_code": "unavailable"}
+
+
+async def _no_account() -> dict[str, Any]:
+    return {"status": "no-window"}
 
 
 async def _no_limit() -> dict[str, Any]:
+    return {}
+
+
+async def _no_health() -> dict[str, Any]:
     return {}
 
 
@@ -355,7 +410,6 @@ class _Pending:
     owner: str = ""  # pane whose messages these are, for reply-to routing
     limit_noticed: bool = False  # the chat was told this run's pane hit a usage limit
     next_limit_probe: float = 0.0
-    late: bool = False  # the chat was told the reply would follow: it goes as a follow-up
 
 
 @dataclass
@@ -365,6 +419,8 @@ class _AwaitText:
     pending: _Pending
     timer: asyncio.Task[None] | None = None
     log_ended: bool = False  # the log reported this turn's end, with no text (yet)
+    hook_wall: float | None = None  # when the hook's turn end arrived (wall clock)
+    since: float = 0.0  # self._clock() then
 
 
 @dataclass
@@ -402,6 +458,7 @@ class _Debounce:
     first_at: float
     task: asyncio.Task[None] | None = None
     attachments: list[Any] = field(default_factory=list)
+    inbound_ids: list[int] = field(default_factory=list)
 
 
 class ChannelManager:
@@ -416,6 +473,9 @@ class ChannelManager:
         self.store = store
         self.gate = SenderGate(store)
         self.invites = LinkInvites()
+        # Invite codes redeemed by someone not yet allowed, by (platform, pairing code):
+        # (the invite code, the redeeming message). Approving that pairing code links the chat.
+        self._pending_links: dict[tuple[str, str], tuple[str, InboundMessage]] = {}
         self._seams = seams
         self._factory_for = factory_for
         self._clock = clock
@@ -430,6 +490,10 @@ class ChannelManager:
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         # pane_id -> runs a hook's turn end closed, oldest first, waiting for the log's text
         self._await_text: dict[str, list[_AwaitText]] = {}
+        # pane_id -> (when, text) of the last turns a Stop hook's own text answered, so
+        # the log's end of each of those turns (arriving later) is not posted a second
+        # time; an entry is used up by the log turn end it matches
+        self._hook_replied: dict[str, deque[tuple[float, str]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
@@ -448,6 +512,10 @@ class ChannelManager:
         self._managed: dict[str, _ManagedRequest] = {}  # request_id -> open t.me/newbot request
         self.relay = relay.RelayTable(clock=clock, on_expired=self._relay_expired)
         self.quick = quick_menu.QuickMenus(clock=clock)
+        self.models = model_menu.ModelMenus(clock=clock)
+        self.accounts = account_menu.AccountMenus(clock=clock)
+        # pane id -> (its wait task, the message that asked, pane name, model shown, lang)
+        self._model_waits: dict[str, tuple[asyncio.Task[Any], InboundMessage, str, str, str]] = {}
         self.share_buttons = share_cmds.RevokeButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
@@ -462,6 +530,19 @@ class ChannelManager:
         self._wake_limits = wake.WakeLimits(clock=clock)
         # location -> (kept at, message): what reached a pane that was not online, for its wake
         self._wake_kept: dict[str, list[tuple[float, InboundMessage]]] = {}
+        # pane_id -> (kept at, message, binding): what a chat sent while the pane waited on a
+        # permission prompt, sent in once the prompt clears (channels.held)
+        self._prompt_held: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        self._held_watching: set[str] = set()  # panes whose kept messages are being watched
+        # pane_id -> (kept at, message, binding): what a chat sent while the pane's CLI reported
+        # an expired login, sent in once it is signed in again (channels.inbound)
+        self._cli_held: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        self._cli_watching: set[str] = set()
+        # channel_inbound rows this backend holds: in flight (live) and, of those, kept for
+        # later (parked: debounced, or held for a prompt or a login) and so not yet settled
+        self._live_inbound: set[int] = set()
+        self._parked: set[int] = set()
+        self._last_turn_text: dict[str, str] = {}  # pane_id -> its last turn's text, for /status
         self.mirror = Mirror(self)
 
     # --- lifecycle --------------------------------------------------------------
@@ -474,6 +555,7 @@ class ChannelManager:
         if self._status_task is None:
             self._status_task = asyncio.create_task(self._status_watch(), name="channels-status")
         self._adopt_lost_kept()
+        self._adopt_lost_replies()
         if self.store.global_enabled():
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
@@ -615,7 +697,7 @@ class ChannelManager:
         self._errors.pop(bot, None)
         self._adapters[bot] = adapter
         try:
-            self.store.adopt_chats(platform, _bot_key(adapter))
+            await run_in_db_thread(self.store.adopt_chats, platform, _bot_key(adapter))
         except Exception as exc:  # noqa: BLE001 — only the picker's list depends on it
             log.warning("channels: adopting seen chats for %s failed: %s", platform, exc)
 
@@ -627,11 +709,18 @@ class ChannelManager:
                 self._on_managed_bot(platform, account, adapter, update)
 
             adapter.on_managed_bot = on_managed_bot
+        if hasattr(adapter, "on_missed_updates"):
+            async def on_missed_updates(count: int) -> None:
+                self._on_missed_updates(bot, count)
+
+            adapter.on_missed_updates = on_missed_updates
         if hasattr(adapter, "command_language"):
             # Telegram describes its "/" menu in the language the rest of Navide speaks.
             adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
+        await self._replay_inbound(bot)
         await self._report_lost_kept(bot)
+        await self._report_lost_replies(bot)
         return None
 
     async def _stop_bot(self, platform: str, account: str) -> None:
@@ -711,17 +800,40 @@ class ChannelManager:
             self._spawn(self._changed())
         return changed
 
-    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None) -> dict[str, Any]:
+    def _bot_state(self, platform: str, account: str, acct: dict[str, Any] | None,
+                   bindings: list[Binding] | None = None,
+                   directory: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
         adapter = self._adapters.get((platform, account))
         config = acct["config"] if acct else {}
+        status = self._status_of(platform, account)
+        summary = [self._binding_summary(b, directory or {}) for b in bindings or []]
+        seen = self.store.chats_last_seen(platform, _bot_key(adapter)) if adapter is not None else None
+        activity = [t for t in (status.get("last_inbound_at"), seen, *(b["created_at"] for b in summary)) if t]
         return {
             "account": account,
             "name": str(config.get("name") or ""),
             "configured": acct is not None,
             "enabled": bool(acct and acct["enabled"]),
-            "status": self._status_of(platform, account),
+            "status": status,
             "config": {**config, "secret_hint": self._secret_hints.get((platform, account), "")},
             "capabilities": dataclasses.asdict(adapter.capabilities) if adapter is not None else None,
+            "bot_id": str(getattr(adapter, "bot_id", "") or "") if platform == "telegram" else "",
+            "bindings": summary,
+            "last_activity_at": max(activity) if activity else None,
+        }
+
+    def _binding_summary(self, binding: Binding, directory: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """Where one binding of a bot points, for its row in the Settings list."""
+        pane = self._pane_info(binding, directory)
+        workspace = pane["workspace_path"] or binding.workspace_path
+        return {
+            "pane_id": self._seams.resolve_pane(binding.pane_id) or binding.pane_id,
+            "pane_name": pane["name"],
+            "pane_exists": pane["exists"],
+            "workspace_path": workspace,
+            "workspace_name": os.path.basename(workspace.rstrip("/\\")) if workspace else "",
+            "chat_title": binding.title,
+            "created_at": binding.created_at,
         }
 
     def list(self) -> dict[str, Any]:
@@ -729,9 +841,14 @@ class ChannelManager:
         bot's state flattened onto the platform as before several bots existed."""
         self._sync_bindings()
         accounts = self.store.accounts()
+        directory = {str(p.get("pane_id")): p for p in self._seams.pane_directory()}
+        by_bot: dict[BotKey, list[Binding]] = {}
+        for b in self.store.bindings():
+            by_bot.setdefault((b.platform, b.account), []).append(b)
         platforms = []
         for platform in PLATFORMS:
-            bots = [self._bot_state(platform, a, acct) for (p, a), acct in accounts.items() if p == platform]
+            bots = [self._bot_state(platform, a, acct, by_bot.get((p, a)), directory)
+                    for (p, a), acct in accounts.items() if p == platform]
             first = bots[0] if bots else self._bot_state(platform, DEFAULT_ACCOUNT, None)
             platforms.append({
                 "platform": platform,
@@ -769,7 +886,7 @@ class ChannelManager:
                     if self._secret_writes.get(bot) is done else None
                 )
                 await asyncio.shield(write)
-            self.store.upsert_account(platform, config, account=account)
+            await run_in_db_thread(self.store.upsert_account, platform, config, account=account)
             err = None
             acct = self.store.accounts()[bot]
             if self.store.global_enabled() and acct["enabled"]:
@@ -826,11 +943,9 @@ class ChannelManager:
         finally:
             if bot not in self._quick_add_undos:
                 self._quick_adding.discard(bot)
+        # The name stays the user's own label: the handle is read live from the bot
+        # (status.identity), so a later token change cannot leave a stale one behind.
         identity = adapter.status.identity
-        async with self._lock:
-            acct = self.store.accounts().get(bot)
-            if acct is not None and not acct["config"].get("name") and identity:
-                self.store.upsert_account(platform, {**acct["config"], "name": identity}, account=account)
         await self._changed()
         name = str(((self.store.accounts().get(bot) or {}).get("config") or {}).get("name") or "")
         link = self.link_create(platform, link_target, account) if link_target else {}
@@ -901,7 +1016,7 @@ class ChannelManager:
                 log.exception("channels: deleting the credential of %s failed", _bot_label(bot))
             self._errors.pop(bot, None)
             self._secret_hints.pop(bot, None)
-            self.store.remove_account(platform, account)
+            await run_in_db_thread(self.store.remove_account, platform, account)
         await self._changed()
         await self.broadcast_status_changes()
 
@@ -1018,7 +1133,7 @@ class ChannelManager:
             config = {**acct["config"], "name": name.strip()}
             if not config["name"]:
                 del config["name"]
-            self.store.upsert_account(platform, config, account=account)
+            await run_in_db_thread(self.store.upsert_account, platform, config, account=account)
         await self._changed()
         return {"ok": True}
 
@@ -1026,7 +1141,7 @@ class ChannelManager:
         _check_platform(platform)
         _check_account(account)
         async with self._lock:
-            if not self.store.set_account_enabled(platform, enabled, account):
+            if not await run_in_db_thread(self.store.set_account_enabled, platform, enabled, account):
                 return {"ok": False, "error": "not configured"}
             err = None
             if not enabled:
@@ -1040,7 +1155,7 @@ class ChannelManager:
 
     async def set_global_enabled(self, enabled: bool) -> dict[str, Any]:
         async with self._lock:
-            self.store.set_global_enabled(enabled)
+            await run_in_db_thread(self.store.set_global_enabled, enabled)
             if not enabled:
                 self._cancel_workers()
                 for platform, account in list(self._adapters):
@@ -1075,9 +1190,9 @@ class ChannelManager:
                 self._errors.pop((platform, acc), None)
                 self._secret_hints.pop((platform, acc), None)
             if account is None:
-                self.store.remove_platform(platform)
+                await run_in_db_thread(self.store.remove_platform, platform)
             else:
-                self.store.remove_account(platform, account)
+                await run_in_db_thread(self.store.remove_account, platform, account)
             self._forget_lost(f"{platform}:" if account is None else f"{platform}:{account}:", prefix=True)
             for pane_id, p in list(self._pending.items()):
                 if p.loc.platform == platform and (account is None or p.loc.account == account):
@@ -1088,12 +1203,27 @@ class ChannelManager:
 
     def pairing_list(self, platform: str | None) -> dict[str, Any]:
         self.gate.prune()
-        return {"ok": True, "requests": [r.public() for r in self.store.list_pairing(platform or None)]}
+        # "invite": the request came from a redeemed link code (see ``_link_chat``).
+        return {"ok": True, "requests": [
+            {**r.public(), "source": "invite" if (r.platform, r.code) in self._pending_links else "pairing"}
+            for r in self.store.list_pairing(platform or None)]}
 
     async def pairing_approve(self, platform: str, code: str) -> dict[str, Any]:
-        req = self.gate.approve(platform, code)
+        via_invite = (platform, normalize_code(code)) in self._pending_links
+        req = self.gate.approve(platform, code, "invite" if via_invite else "pairing")
         if req is None:
             return {"ok": False, "error": "配對碼不存在或已過期 (unknown or expired code)"}
+        pending_link = self._pending_links.pop((platform, req.code), None)
+        if pending_link is not None:
+            # An invite redeemed by this sender: approving it completes that link.
+            invite_code, link_msg = pending_link
+            adapter = self._adapters.get((platform, req.account))
+            if adapter is None:
+                await self._link_failed(platform, invite_code, f"{platform} is not connected")
+                await self._changed()
+            else:
+                await self._complete_link(adapter, link_msg, invite_code)
+            return {"ok": True, "sender_id": req.sender_id}
         # Only the bot the sender wrote to can DM them back (it is stored with the request).
         adapter = self._adapters.get((platform, req.account))
         # The approved sender's DM is a chat the pane picker can offer right away.
@@ -1103,7 +1233,7 @@ class ChannelManager:
                         req.sender_id, _bot_label((platform, req.account)))
         else:
             try:
-                self.store.remember_chat(platform, _bot_key(adapter), req.chat_id, req.sender_name,
+                await run_in_db_thread(self.store.remember_chat, platform, _bot_key(adapter), req.chat_id, req.sender_name,
                                          "direct", False, int(time.time()))
             except Exception as exc:  # noqa: BLE001
                 log.warning("channels: remembering approved DM on %s failed: %s", platform, exc)
@@ -1117,11 +1247,15 @@ class ChannelManager:
 
     async def pairing_reject(self, platform: str, code: str) -> dict[str, Any]:
         req = self.gate.reject(platform, code)
+        pending_link = self._pending_links.pop((platform, req.code), None) if req else None
+        if pending_link is not None:
+            await self._link_failed(platform, pending_link[0], "the link was rejected")
         await self._changed()
         return {"ok": req is not None, **({} if req else {"error": "unknown code"})}
 
     def link_create(self, platform: str, target: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
-        """A one-time code that links whoever sends it to the bot (see ``_link_chat``)."""
+        """A one-time code that links whoever sends it to the bot once the user approves
+        them (see ``_link_chat``)."""
         _check_platform(platform)
         _check_account(account)
         target = target or "direct"
@@ -1137,11 +1271,14 @@ class ChannelManager:
                 "expires_at": invite.expires_at, "url": url or None}
 
     def allow_list(self, platform: str | None) -> dict[str, Any]:
-        return {"ok": True, "entries": self.store.list_allow(platform or None)}
+        # "shared": a Telegram id that stands for many people; the gate refuses it, and the
+        # UI offers to remove a row that names one (written before that rule).
+        return {"ok": True, "entries": [{**e, "shared": is_shared_sender(e["platform"], e["sender_id"])}
+                                        for e in self.store.list_allow(platform or None)]}
 
     async def allow_remove(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> dict[str, Any]:
         _check_account(account)
-        removed = self.store.remove_allow(platform, sender_id, account)
+        removed = await run_in_db_thread(self.store.remove_allow, platform, sender_id, account)
         await self._changed()
         return {"ok": removed, **({} if removed else {"error": "not found"})}
 
@@ -1156,6 +1293,28 @@ class ChannelManager:
             for loc in known():
                 merged[str(loc.get("chat_id"))] = {**merged.get(str(loc.get("chat_id")), {}), **loc}
         return {"ok": True, "locations": list(merged.values())}
+
+    def all_locations(self) -> dict[str, Any]:
+        """locations() of every running bot in one answer, for a picker listing them all."""
+        return {"ok": True, "bots": [{"platform": platform, "account": account,
+                                      "locations": self.locations(platform, account)["locations"]}
+                                     for platform, account in sorted(self._adapters)]}
+
+    def _chat_usable(self, platform: str, account: str, chat_id: str, kind: str) -> bool:
+        """Whether a message from this chat can pass the sender gate. A Telegram DM's chat
+        id is its user's id, so that one sender is asked about. Any other chat (a group,
+        another platform's DM, a kind not known) names no sender here: all that can be
+        said is that a bot with nobody allowed refuses everyone."""
+        if platform == "telegram" and kind in TELEGRAM_DIRECT_KINDS:
+            return self.gate.is_allowed(platform, chat_id, account)
+        return self.gate.has_linked(platform, account)
+
+    def _bound_needs_approval(self, name: str, loc: Location) -> str:
+        """What a refused chat is told when bound: the code already waiting for it, else how to get one."""
+        self.gate.prune()
+        req = next((r for r in self.store.list_pairing(loc.platform, loc.account) if r.chat_id == loc.chat_id), None)
+        how = MSG_APPROVE_CODE.format(code=f"{req.code[:4]}-{req.code[4:]}") if req else MSG_APPROVE_SEND_FIRST
+        return MSG_BOUND_NEEDS_APPROVAL.format(name=name, how=how)
 
     async def bind(self, pane_id: str, pane_name: str, platform: str, mode: str,
                    chat_id: str, thread_id: str = "", title: str = "", *, verbosity: str = "",
@@ -1201,7 +1360,7 @@ class ChannelManager:
             return {"ok": False, "error": f"unknown mode {mode!r}"}
         previous = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
         level = level or (previous.verbosity if previous else DEFAULT_VERBOSITY)
-        binding = self.store.bind(pane_id, loc, verbosity=level)
+        binding = await run_in_db_thread(self.store.bind, pane_id, loc, verbosity=level)
         await self._remember_wake_target(binding, pane_id)
         if previous is not None and previous.location().key() != loc.key():
             # Moved to another chat: child topics left in the old one would keep
@@ -1211,13 +1370,18 @@ class ChannelManager:
         self.mirror.schedule_sync()  # children the pane already has get their topics now
         # Tell the chat which pane it now drives; off the request path like unbind,
         # on the chat's worker so a quick unbind's notice cannot overtake it.
-        text = MSG_BOUND.format(name=pane_name or loc.title or pane_id)
+        name = pane_name or loc.title or pane_id
+        kind = next((str(c.get("kind") or "") for c in self.locations(platform, account)["locations"]
+                     if str(c.get("chat_id")) == loc.chat_id), "")
+        usable = self._chat_usable(platform, account, loc.chat_id, kind)
+        text = MSG_BOUND.format(name=name) if usable else self._bound_needs_approval(name, loc)
         self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text))
-        return {"ok": True, "binding": binding.public()}
+        return {"ok": True, "binding": binding.public(), **({} if usable else {"needs_approval": True})}
 
     async def unbind(self, pane_id: str, *, reason: str = "", pane_name: str = "") -> dict[str, Any]:
-        removed = self.store.unbind(pane_id)
+        removed = await run_in_db_thread(self.store.unbind, pane_id)
         self._drop_pending(pane_id)
+        self._drop_held(pane_id)
         if removed:
             # What was kept for the chat's wake goes with the binding it was kept for.
             self._set_kept(removed.location().key(), [])
@@ -1238,9 +1402,10 @@ class ChannelManager:
         """Move a binding to the pane that replaced ``from_pane_id`` (rebuild)."""
         if not from_pane_id or not to_pane_id:
             return {"ok": False, "error": "from_pane_id and to_pane_id are required"}
-        if from_pane_id == to_pane_id or not self.store.rename_pane(from_pane_id, to_pane_id):
+        if from_pane_id == to_pane_id or not await run_in_db_thread(self.store.rename_pane, from_pane_id, to_pane_id):
             return {"ok": True}
         self.mirror.rename_pane(from_pane_id, to_pane_id)
+        self._drop_held(from_pane_id)
         pending = self._pending.pop(from_pane_id, None)
         if pending is not None:
             if pending.task:
@@ -1259,7 +1424,7 @@ class ChannelManager:
         if level is None:
             return {"ok": False, "error": f"verbosity must be one of {', '.join(VERBOSITIES)} (got {verbosity!r})"}
         pane_id = self._seams.resolve_pane(pane_id) or pane_id
-        binding = self.store.set_verbosity(pane_id, level)
+        binding = await run_in_db_thread(self.store.set_verbosity, pane_id, level)
         if binding is None:
             return {"ok": False, "error": "this pane is not connected to a chat"}
         stack = [pane_id]
@@ -1267,7 +1432,7 @@ class ChannelManager:
             parent = stack.pop()
             for b in self.store.bindings():
                 if b.auto and b.parent_pane_id == parent and b.verbosity != level:
-                    self.store.set_verbosity(b.pane_id, level)
+                    await run_in_db_thread(self.store.set_verbosity, b.pane_id, level)
                     stack.append(b.pane_id)
         await self._changed()
         return {"ok": True, "binding": binding.public()}
@@ -1292,6 +1457,56 @@ class ChannelManager:
         else:
             loop.call_soon_threadsafe(self._handle_activity, pane_id, entry)
 
+    def on_hook_reply(self, pane_id: str, text: str, log_ended: bool) -> None:
+        """Sync listener registered in app.hook_reply_listeners. Never raises."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            self._handle_hook_reply(pane_id, text, log_ended)
+        else:
+            loop.call_soon_threadsafe(self._handle_hook_reply, pane_id, text, log_ended)
+
+    def _handle_hook_reply(self, pane_id: str, text: str, log_ended: bool) -> None:
+        """A Claude Stop hook brought the turn's final text itself: the same message the
+        log's turn end carries, so the chat run waiting on this turn is answered now, not
+        when the log reader gets to the line (minutes behind on a loaded machine, and never
+        when a blocked Stop hook had the log's end of the turn downgraded). The log's own
+        end of the turn, when it comes, is recognised by its text and not posted again.
+        A turn the log already ended was answered from there; a turn no chat message asked
+        for is left to the log, which mirrors it at the binding's verbosity, as before."""
+        if log_ended or not text.strip():
+            return
+        self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
+        pending = self._pending.get(pane_id)
+        if pending is None or pending.armed_at is None:
+            return
+        self._close_run(pane_id, pending)
+        replied = self._hook_replied.setdefault(pane_id, deque(maxlen=HOOK_REPLIED_REMEMBERED))
+        replied.append((time.time(), text.strip()))
+        self._spawn(self._send_reply(pending, text))
+
+    def _take_hook_replied(self, pane_id: str, text: str, wall: Any) -> bool:
+        """Whether a log turn end with ``text``, stamped ``wall`` (None when unstamped), is
+        the log's copy of a turn a Stop hook already answered — and use that entry up, so
+        a later turn that happens to end with the same words goes its own way (the
+        transcript is in order: the answered turn's log end comes first). A copy written
+        before the hook fired is stamped no later than the hook's arrival."""
+        replied = self._hook_replied.get(pane_id)
+        if not replied:
+            return False
+        wanted = text.strip()
+        for item in replied:
+            when, said = item
+            if said == wanted and (wall is None or float(wall) <= when):
+                replied.remove(item)
+                return True
+        return False
+
     def _handle_activity(self, pane_id: str, entry: dict[str, Any] | None) -> None:
         if entry is None:
             # Unregistered is not closed: a rebuild, detach or workspace switch
@@ -1301,6 +1516,8 @@ class ChannelManager:
             self._retire_relay(pane_id, MSG_RELAY_PANE_GONE)
             self._known_panes.discard(pane_id)
             self._turn_source.pop(pane_id, None)
+            self._hook_replied.pop(pane_id, None)
+            self._last_turn_text.pop(pane_id, None)
             return
         if pane_id not in self._known_panes:
             # First activity from this id (e.g. after a restart): rebind by alias.
@@ -1315,6 +1532,8 @@ class ChannelManager:
                 self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
         source = str(entry.get("source") or "")
+        if is_turn_end and text.strip():
+            self._last_turn_text[pane_id] = redact.redact_text(text)  # whole, before any cut
         if source == "hook" and is_turn_end and (text.strip() or entry.get("log_ended")):
             # The log ended this turn before its hook came, and that log turn end has
             # already answered the run. The run armed now is the NEXT message's: a late
@@ -1334,6 +1553,17 @@ class ChannelManager:
             if entry.get("turn_start") and head.log_ended:
                 # The log moved on to the next prompt: that turn wrote no text.
                 self._settle_await(pane_id, "")
+            elif entry.get("turn_start") and head.hook_wall is not None \
+                    and float(entry.get("event_wall") or 0) > head.hook_wall:
+                # A prompt written after the hook fired, and no end line for the hooked
+                # turn before it (an interrupted turn): its text is not coming.
+                self._lose_held(pane_id, head, "the log has no end for the turn")
+        if is_turn_end and source == "log" \
+                and self._take_hook_replied(pane_id, text, entry.get("event_wall")):
+            # The log's end of a turn whose Stop hook already answered the chat with this
+            # same text (_handle_hook_reply): posted once. Arriving late, it is neither the
+            # reply to a run armed since nor a turn to mirror.
+            return
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
             # The text half of a turn end that came in two lines: the reply after all.
@@ -1352,17 +1582,14 @@ class ChannelManager:
             if source != "hook":
                 self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
             return
-        self._pending.pop(pane_id, None)
-        if pending.task:
-            pending.task.cancel()
-        self._retire_relay(pane_id, MSG_RELAY_TURN_ENDED)
-        self._awaiting_posted.discard(pane_id)
-        self._awaiting_failures.pop(pane_id, None)
-        self._awaiting_shown.pop(pane_id, None)
+        self._close_run(pane_id, pending)
         if source == "hook":
             # The turn ended; its text is still on its way from the conversation log.
-            held = _AwaitText(pending)
+            wall = entry.get("event_wall")
+            held = _AwaitText(pending, hook_wall=float(wall) if wall is not None else None,
+                              since=self._clock())
             self._await_text.setdefault(pane_id, []).append(held)
+            self._count_awaiting(pending, 1)
             held.timer = self._spawn(self._watch_await(pane_id, held))
             return
         if not text.strip():
@@ -1373,6 +1600,16 @@ class ChannelManager:
             self._textless[pane_id] = (pending, self._spawn(self._reply_textless(pane_id, pending)))
             return
         self._spawn(self._send_reply(pending, text))
+
+    def _close_run(self, pane_id: str, pending: _Pending) -> None:
+        """The turn ``pending`` waited on has ended: the run is over, whatever answers it."""
+        self._pending.pop(pane_id, None)
+        if pending.task:
+            pending.task.cancel()
+        self._retire_relay(pane_id, MSG_RELAY_TURN_ENDED)
+        self._awaiting_posted.discard(pane_id)
+        self._awaiting_failures.pop(pane_id, None)
+        self._awaiting_shown.pop(pane_id, None)
 
     async def _reply_textless(self, pane_id: str, pending: _Pending) -> None:
         """No text came after a textless turn end within the grace: the turn said nothing."""
@@ -1389,19 +1626,102 @@ class ChannelManager:
             self._settle_held(pane_id, waiting[0], text)
 
     def _settle_held(self, pane_id: str, held: _AwaitText, text: str) -> None:
+        if not self._unhold(pane_id, held):
+            return
+        waited = self._clock() - held.since
+        if waited >= LATE_TEXT_STATUS_AFTER_S:
+            log.info("channels: reply text for %s read %.0fs after its turn ended",
+                     held.pending.loc.key(), waited)
+        self._spawn(self._send_reply(held.pending, text))
+
+    def _unhold(self, pane_id: str, held: _AwaitText) -> bool:
+        """Take ``held`` off the pane's waiting list; False when it was not on it."""
         waiting = self._await_text.get(pane_id)
         if not waiting or held not in waiting:
-            return
+            return False
         waiting.remove(held)
         if not waiting:
             del self._await_text[pane_id]
         if held.timer is not None and held.timer is not asyncio.current_task():
             held.timer.cancel()
-        self._spawn(self._send_reply(held.pending, text))
+        self._count_awaiting(held.pending, -1)
+        return True
+
+    def _lose_held(self, pane_id: str, held: _AwaitText, why: str) -> None:
+        """Stop waiting for ``held``'s text and tell the chat, in plain words, that the
+        reply could not be sent (it was not told anything was still coming)."""
+        if not self._unhold(pane_id, held):
+            return
+        pending = held.pending
+        log.warning("channels: reply for %s not sent: %s", pending.loc.key(), why)
+        if not pending.silent:
+            self._spawn(self._tell_reply_lost(pending.loc))
+
+    async def _tell_reply_lost(self, loc: Location) -> bool:
+        adapter = self._adapters.get((loc.platform, loc.account))
+        if adapter is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        return await self._notice(adapter, loc, media.text(lang, "reply.lost"))
+
+    def _count_awaiting(self, pending: _Pending, delta: int) -> None:
+        """Keep, per chat, how many replies are still awaited, so a restart can say they are lost."""
+        if pending.silent:
+            return
+        key = pending.loc.key()
+        try:
+            awaiting = self.store.awaiting_replies()
+            count = awaiting.get(key, 0) + delta
+            if count > 0:
+                awaiting[key] = count
+            else:
+                awaiting.pop(key, None)
+            self.store.set_awaiting_replies(awaiting)
+        except Exception as exc:  # noqa: BLE001 — the wait itself goes on in memory
+            log.warning("channels: saving the replies %s waits for failed: %s", key, exc)
+
+    def _adopt_lost_replies(self) -> None:
+        """At start: replies still awaited when the backend last stopped will not come."""
+        try:
+            lost = self.store.lost_replies()
+            for key, count in self.store.awaiting_replies().items():
+                lost[key] = lost.get(key, 0) + count
+            bound = {b.location().key() for b in self.store.bindings()}
+            self.store.set_lost_replies({k: v for k, v in lost.items() if k in bound})
+            self.store.set_awaiting_replies({})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the replies awaited before the restart failed: %s", exc)
+
+    async def _report_lost_replies(self, bot: BotKey) -> None:
+        """Tell ``bot``'s chats that replies awaited before the restart could not be sent."""
+        try:
+            lost = self.store.lost_replies()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the lost replies failed: %s", exc)
+            return
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() not in lost or (b.platform, b.account) != bot:
+                continue
+
+            async def tell(loc: Location = loc) -> None:
+                # Kept when the notice did not go: the bot's next start tries again.
+                if await self._tell_reply_lost(loc):
+                    log.info("channels: told %s a reply awaited before the restart was lost", loc.key())
+                    try:
+                        rest = self.store.lost_replies()
+                        rest.pop(loc.key(), None)
+                        await run_in_db_thread(self.store.set_lost_replies, rest)
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("channels: forgetting the lost replies of %s failed: %s", loc.key(), exc)
+
+            self._enqueue(loc.key(), tell)
 
     async def _watch_await(self, pane_id: str, held: _AwaitText) -> None:
-        """While a hook-ended run waits for its text: say it is being read, then that it
-        will follow; give up quietly once RUN_WATCH_MAX_S has passed."""
+        """While a hook-ended run waits for its text: the status says the turn is done.
+        The chat is told nothing else while it waits; the text, when it comes, is posted
+        like any reply. Once RUN_WATCH_MAX_S has passed, read the log directly; if that
+        finds nothing either, stop waiting and tell the chat the reply could not be sent."""
         pending = held.pending
 
         def still() -> bool:
@@ -1422,16 +1742,31 @@ class ChannelManager:
             # wrote none — the same answer a log-only turn end gets at the grace.
             self._settle_held(pane_id, held, "")
             return
-        pending.late = True
-        adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
-        if adapter is not None and not pending.silent:
-            await self._notice(adapter, pending.loc, MSG_REPLY_LATE)
+        log.info("channels: reply text for %s not read %.0fs after its turn ended; still waiting",
+                 pending.loc.key(), EMPTY_TURN_GRACE_S)
         await asyncio.sleep(max(0.0, RUN_WATCH_MAX_S - EMPTY_TURN_GRACE_S))
-        waiting = self._await_text.get(pane_id)
-        if waiting and held in waiting:
-            waiting.remove(held)
-            if not waiting:
-                del self._await_text[pane_id]
+        if not still():
+            return
+        text = await self._reread_turn(pane_id, held)
+        if not still():
+            return
+        if text.strip():
+            self._settle_held(pane_id, held, text)
+            return
+        self._lose_held(pane_id, held, f"no text after {RUN_WATCH_MAX_S:.0f}s")
+
+    async def _reread_turn(self, pane_id: str, held: _AwaitText) -> str:
+        """The held run's text straight from the pane's log. With several runs waiting the
+        last text could be any of theirs, so the oldest ones are not answered from it."""
+        if len(self._await_text.get(pane_id, [])) != 1:
+            return ""
+        armed = held.pending.armed_at or held.pending.started
+        since = time.time() - (self._clock() - armed)
+        try:
+            return await self._seams.turn_text(pane_id, since)
+        except Exception as exc:  # noqa: BLE001 — the chat is told either way
+            log.warning("channels: could not read the turn of %s from its log: %s", pane_id, exc)
+            return ""
 
     def _mirror_unclaimed_turn(self, pane_id: str, text: str) -> None:
         """A turn end no chat message asked for (typed at the keyboard, delegated by
@@ -1513,8 +1848,6 @@ class ChannelManager:
         attached as a file, where the platform takes files."""
         body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
-        if pending.late:
-            body = f"{MSG_LATE_PREFIX}{body or MSG_EMPTY_REPLY}"
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
         whole = full.strip() if len(full.strip()) > CHILD_SUMMARY_CHARS else ""
@@ -1638,18 +1971,118 @@ class ChannelManager:
         chat never stalls receiving for every platform.
         """
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            log.info("channels: %s dropped: channels off or its bot not running", _loc_log(msg))
             return
         if self._is_duplicate(msg):
+            log.info("channels: %s message %s dropped: duplicate", _loc_log(msg), msg.message_id)
             return
-        # A live invite code links its sender before the gate: that is its whole point.
+        # A live invite code is handled before the gate: its sender asks to be linked
+        # (an approval request), so the group drop below must not swallow it.
         code = parse_link_code(msg.text) if msg.text and not msg.callback_data else ""
         invite = self.invites.consume(msg.platform, code, msg.account) if code else None
         if invite is not None:
-            self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code))
+            self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code, invite.target))
             return
         if not msg.is_direct and not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            log.info("channels: %s dropped: group sender not allowed", _loc_log(msg))
             return  # group strangers are dropped silently
-        self._enqueue(msg.location_key(), lambda: self._process_inbound(msg))
+        # Kept before the adapter confirms it to the platform: a restart from here on replays it.
+        msg = await self._persist_inbound(msg)
+        self._enqueue(msg.location_key(), lambda: self._settle(msg, lambda: self._process_inbound(msg)))
+
+    # --- unsettled inbound messages (channel_inbound) ------------------------------------
+
+    async def _persist_inbound(self, msg: InboundMessage) -> InboundMessage:
+        try:
+            row_id = await run_in_db_thread(self.store.add_inbound, msg.platform, msg.account,
+                                            inbound.to_payload(msg))
+        except Exception as exc:  # noqa: BLE001 — the message still goes in, only unkept
+            log.warning("channels: keeping %s message %s failed: %s", _loc_log(msg), msg.message_id, exc)
+            return msg
+        self._live_inbound.add(row_id)
+        return dataclasses.replace(msg, inbound_ids=(row_id,))
+
+    async def _settle(self, msg: InboundMessage, run: Callable[[], Awaitable[Any]]) -> None:
+        """Run ``run`` for ``msg``; its rows are deleted unless it was kept for later (parked)
+        meanwhile. A cancel (stop) keeps them for the next start to replay."""
+        ids = msg.inbound_ids
+        self._parked.difference_update(ids)
+        try:
+            await run()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            await self._finish_inbound(ids)  # never replayed into the same failure
+            raise
+        if not self._parked.intersection(ids):
+            await self._finish_inbound(ids)
+
+    def _park(self, msg: InboundMessage) -> None:
+        self._parked.update(msg.inbound_ids)
+
+    async def _finish_inbound(self, ids: tuple[int, ...]) -> None:
+        if not ids:
+            return
+        self._parked.difference_update(ids)
+        self._live_inbound.difference_update(ids)
+        try:
+            await run_in_db_thread(self.store.delete_inbound, tuple(ids))
+        except Exception as exc:  # noqa: BLE001 — at worst replayed once after a restart
+            log.warning("channels: settling inbound rows %s failed: %s", ids, exc)
+
+    async def _replay_inbound(self, bot: BotKey) -> None:
+        """Process again what ``bot`` took off its platform but never settled (a crash or a
+        stop before it reached its pane); what is older than a day is reported instead."""
+        try:
+            rows = await run_in_db_thread(self.store.inbound, *bot)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading unsettled messages of %s failed: %s", _bot_label(bot), exc)
+            return
+        old: dict[str, list[InboundMessage]] = {}
+        replayed = 0
+        for row_id, created_at, payload in rows:
+            if row_id in self._live_inbound:
+                continue  # still in flight in this backend (a bot restarted, not Navide)
+            try:
+                msg = inbound.from_payload(payload, row_id)
+            except Exception as exc:  # noqa: BLE001 — unreadable: nothing left to send
+                log.warning("channels: unsettled message #%d of %s is unreadable: %s", row_id, _bot_label(bot), exc)
+                await self._finish_inbound((row_id,))
+                continue
+            self._live_inbound.add(row_id)
+            self._is_duplicate(msg)  # a late copy from the platform is not processed twice
+            if time.time() - created_at > inbound.REPLAY_MAX_AGE_S:
+                old.setdefault(msg.location_key(), []).append(msg)
+                continue
+            replayed += 1
+            self._enqueue(msg.location_key(), lambda m=msg: self._settle(m, lambda: self._process_inbound(m)))
+        if replayed:
+            log.info("channels: replaying %d unsettled message(s) of %s", replayed, _bot_label(bot))
+        for msgs in old.values():
+            async def tell(msgs: list[InboundMessage] = msgs) -> None:
+                lang = prompt_skills.language(await self._ui_settings())
+                previews = [_preview(m) for m in msgs]
+                await self._reply(msgs[0], wake.text(lang, "not_sent_restart", count=len(msgs),
+                                                     items=wake.quoted(previews)))
+                await self._finish_inbound(tuple(i for m in msgs for i in m.inbound_ids))
+
+            self._enqueue(msgs[0].location_key(), tell)
+
+    def _on_missed_updates(self, bot: BotKey, count: int) -> None:
+        """Updates of ``bot`` confirmed by someone else: tell each chat it drives a pane from."""
+        adapter = self._adapters.get(bot)
+        if adapter is None:
+            return
+        for b in self.store.bindings():
+            if (b.platform, b.account) != bot:
+                continue
+            loc = b.location()
+
+            async def tell(loc: Location = loc) -> None:
+                lang = prompt_skills.language(await self._ui_settings())
+                await self._notice(adapter, loc, inbound.text(lang, "updates_missed", count=count))
+
+            self._enqueue(loc.key(), tell)
 
     async def _process_inbound(self, msg: InboundMessage) -> None:
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
@@ -1669,6 +2102,12 @@ class ChannelManager:
                 return
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
             await self._quick_press(msg)
+            return
+        if model_menu.parse_callback(msg.callback_data) is not None:
+            await self._model_press(msg)
+            return
+        if account_menu.parse_callback(msg.callback_data) is not None:
+            await self._account_press(msg)
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
@@ -1702,6 +2141,9 @@ class ChannelManager:
         share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
         if share_cmd is not None and await self._share_command(msg, *share_cmd):
             return
+        plugin_cmd = plugin_cmds.parse_command(msg.text, self._identity(msg))
+        if plugin_cmd is not None and await self._plugin_command(msg, *plugin_cmd):
+            return
         binding = self._binding_for(msg)
         if binding is None:
             # One bot answers for its unbound chats and topics, as it always has; with
@@ -1712,18 +2154,22 @@ class ChannelManager:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
-        pane_id = await self._resolve_after_startup(binding.pane_id)
-        if not pane_id:
-            await self._offline(msg, binding)  # binding kept: it may come back
-            return
-        if pane_id != binding.pane_id:
-            self.store.rename_pane(binding.pane_id, pane_id)
-        self._spawn(self._remember_wake_target(binding, pane_id))
-        key = binding.location().key()
         # A typed /wake (offered where there are no buttons) is answered like the button, never
         # sent to the CLI as a prompt.
         wake_asked = wake_pressed or _command_word(
             quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
+        pane_id = await self._resolve_after_startup(binding.pane_id)
+        if pane_id and wake_asked and not self._seams.pane_live(pane_id):
+            # Registered but not running (a restore placeholder, or its window just closed):
+            # a wake opens it rather than answering that it is online.
+            pane_id = ""
+        if not pane_id:
+            await self._offline(msg, binding)  # binding kept: it may come back
+            return
+        if pane_id != binding.pane_id:
+            await run_in_db_thread(self.store.rename_pane, binding.pane_id, pane_id)
+        self._spawn(self._remember_wake_target(binding, pane_id))
+        key = binding.location().key()
         if wake_asked or key in self._wake_kept:
             # The pane is back (on its own, or a wake asked for before it came back): what
             # was kept for it goes in first, in order.
@@ -1745,6 +2191,14 @@ class ChannelManager:
         if _command_word(command) in RESUME_WORDS:
             await self._resume(msg, pane_id)
             return
+        model_cmd = model_menu.parse_command(command)
+        if model_cmd is not None:
+            await self._model_command(msg, binding, pane_id, model_cmd)
+            return
+        account_cmd = account_menu.parse_command(command)
+        if account_cmd is not False:
+            await self._account_command(msg, binding, pane_id, account_cmd)
+            return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
         await self._debounced_deliver(msg, binding, pane_id)
@@ -1761,7 +2215,7 @@ class ChannelManager:
         if not workspace_path or not session_id:
             return  # nothing known yet (a pane before its first turn): keep what is stored
         if (workspace_path, session_id) != (binding.workspace_path, binding.session_id):
-            self.store.set_wake_target(pane_id, workspace_path, session_id)
+            await run_in_db_thread(self.store.set_wake_target, pane_id, workspace_path, session_id)
 
     async def _offline(self, msg: InboundMessage, binding: Binding) -> None:
         """A message for a bound pane that is not online.
@@ -1813,17 +2267,20 @@ class ChannelManager:
                 log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
                 result = {"ok": False, "code": "error", "started": True}
         finally:
-            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)),
+                                  succeeded=bool(result.get("ok")))
         if not result.get("ok"):
             await self._reply(msg, wake.outcome_text(lang, result))
             return
         pane_id = str(result.get("pane_id") or binding.pane_id)
         if pane_id != binding.pane_id:
-            self.store.rename_pane(binding.pane_id, pane_id)
+            await run_in_db_thread(self.store.rename_pane, binding.pane_id, pane_id)
             await self._changed()
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
         await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        if result.get("paid"):
+            await self._reply(msg, wake.text(lang, "woke_paid"))
         await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
 
     def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:
@@ -1944,6 +2401,8 @@ class ChannelManager:
                                       reply_to_self=buf.msg.reply_to_self)
         buf.msg, buf.binding, buf.pane_id = msg, binding, pane_id
         buf.texts.append(msg.text)
+        buf.inbound_ids.extend(msg.inbound_ids)
+        self._park(msg)
         buf.attachments.extend(msg.attachments)
         if buf.task is not None:
             buf.task.cancel()
@@ -1957,9 +2416,10 @@ class ChannelManager:
         del self._debounce[key]
         # An attachment-only line has no text: it adds a file, not a blank line.
         joined = dataclasses.replace(buf.msg, text="\n".join(t for t in buf.texts if t),
-                                     attachments=list(buf.attachments))
+                                     attachments=list(buf.attachments), inbound_ids=tuple(buf.inbound_ids))
         # Back onto the location's worker so it stays ordered with that chat's other jobs.
-        self._enqueue(joined.location_key(), lambda: self._deliver(joined, buf.binding, buf.pane_id))
+        self._enqueue(joined.location_key(),
+                      lambda: self._settle(joined, lambda: self._deliver(joined, buf.binding, buf.pane_id)))
 
     def _sole_bot(self, platform: str) -> bool:
         """At most one enabled bot on ``platform`` (the only case before several bots)."""
@@ -1983,23 +2443,175 @@ class ChannelManager:
             return None  # "2 more tests please" is a message, not an answer
         return relay.RelayAnswer(live[0].id, choice, text)
 
-    async def _held_by_prompt(self, msg: InboundMessage, pane_id: str) -> bool:
-        """A pane waiting on a permission-type prompt would queue the text until the
-        prompt clears and then run it as a new prompt: say how to answer instead."""
+    async def _held_by_prompt(self, msg: InboundMessage, pane_id: str, binding: Binding,
+                              since: float | None = None) -> bool:
+        """A pane waiting on a permission-type prompt would queue the text behind the prompt
+        with no end: the text is kept instead, said so, and sent in once the prompt clears
+        (``_watch_held``), for held.HELD_TTL_S at most. ``since``: when it was first kept."""
         if self._seams.pane_state(pane_id).get("display_status") != "awaiting":
             return False
         live = self.relay.for_pane(pane_id)
-        if live:
-            await self._held_with_buttons(msg, live[0])
+        if not live:
+            try:
+                info = await self._seams.awaiting_info(pane_id)
+            except Exception:  # noqa: BLE001
+                return False
+            if info.get("kind") != "permission":
+                return False  # a question is answered by typing
+        choice, rest = relay.parse_bare(msg.text)
+        if choice and not rest:
+            # A bare yes / 2 that answered nothing here is not kept: sent in later, it would
+            # answer whatever prompt is on the screen by then.
+            if live:
+                await self._held_with_buttons(msg, live[0])
+            else:
+                await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
             return True
-        try:
-            info = await self._seams.awaiting_info(pane_id)
-        except Exception:  # noqa: BLE001
-            return False
-        if info.get("kind") != "permission":
-            return False  # a question is answered by typing
-        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
+        await self._hold(msg, binding, pane_id, live[0] if live else None, since)
         return True
+
+    async def _hold(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                    request: relay.RelayRequest | None, since: float | None) -> None:
+        """Keep ``msg`` for ``pane_id`` until its prompt clears and tell the chat, quoting the
+        prompt with its own buttons as the old warning did, plus a withdraw button."""
+        lang = prompt_skills.language(await self._ui_settings())
+        kept = self._prompt_held.setdefault(pane_id, [])
+        if len(kept) >= held.HELD_MAX:
+            await self._reply(msg, held.text(lang, "held_full", max=held.HELD_MAX))
+            return
+        kept.append((self._clock() if since is None else since, msg, binding))
+        self._park(msg)
+        if pane_id not in self._held_watching:
+            self._held_watching.add(pane_id)
+            self._spawn(self._watch_held(pane_id))
+        notice = held.text(lang, "held", n=len(kept), minutes=int(held.HELD_TTL_S // 60))
+        withdraw = [BUSY_BUTTONS[0]]
+        adapter = self._adapters.get((msg.platform, msg.account))
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if request is None or adapter is None:
+            await self._reply(msg, f"{notice}\n{MSG_AWAITING_LOCAL}", buttons=withdraw)
+            return
+        if request.loc.key() != loc.key():
+            # Prompted in another chat: an answer from here is refused, and its message is not here.
+            await self._reply(msg, f"{notice}\n{relay.answer_hint(request)}", buttons=withdraw)
+            return
+        text = f"{notice}\n{relay.held_text(request)}"
+        buttons = (_relay_buttons(adapter, request) or []) + (withdraw if adapter.capabilities.buttons else [])
+        try:
+            ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reply on %s failed: %s", msg.platform, exc)
+            return
+        if ids:
+            # Settled with the prompt; a chunked notice keeps only its last chunk.
+            request.held.append((ids[-1], text if len(ids) == 1 else ""))
+
+    async def _watch_held(self, pane_id: str) -> None:
+        """Send in, in order and on each chat's own worker, what was kept while ``pane_id``
+        waited on a prompt, once the prompt clears; what outlives held.HELD_TTL_S, or a pane
+        that went away, is dropped and its chat told. Never answers the prompt."""
+        try:
+            while self._prompt_held.get(pane_id):
+                await asyncio.sleep(AWAITING_PROBE_EVERY_S)
+                kept = self._prompt_held.get(pane_id) or []
+                if not kept:
+                    break
+                lang = prompt_skills.language(await self._ui_settings())
+                now = self._clock()
+                expired = [k for k in kept if now - k[0] >= held.HELD_TTL_S]
+                if expired:
+                    kept = [k for k in kept if k not in expired]
+                    self._prompt_held[pane_id] = kept
+                    await self._tell_held(expired, lang, "expired", minutes=int(held.HELD_TTL_S // 60))
+                if not kept:
+                    break
+                if not self._seams.resolve_pane(pane_id):
+                    self._prompt_held.pop(pane_id, None)
+                    await self._tell_held(kept, lang, "gone")
+                    break
+                if self._seams.pane_state(pane_id).get("display_status") == "awaiting":
+                    continue
+                self._prompt_held.pop(pane_id, None)
+                for since, msg, binding in kept:
+                    self._enqueue(msg.location_key(), lambda m=msg, b=binding, s=since: self._settle(
+                        m, lambda: self._send_held(m, b, pane_id, s, lang)))
+        finally:
+            if not self._prompt_held.get(pane_id):
+                self._prompt_held.pop(pane_id, None)
+            self._held_watching.discard(pane_id)
+
+    async def _send_held(self, msg: InboundMessage, binding: Binding, pane_id: str, since: float,
+                         lang: str) -> None:
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            # Channels turned off, or this bot stopped or removed, while it was kept: nothing
+            # from the chat goes in now. Told where the bot still runs; otherwise only logged.
+            if (msg.platform, msg.account) in self._adapters:
+                await self._tell_held([(since, msg, binding)], lang, "revoked")
+            else:
+                log.info("channels: a kept message for %s was dropped: its bot is no longer running", pane_id)
+            return
+        current = self._binding_for(msg)
+        if current is None or current.pane_id != binding.pane_id \
+                or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            # Unbound, rebound elsewhere, or its sender taken off the allowlist while it was
+            # kept: what the chat may no longer send is not sent for it now.
+            await self._tell_held([(since, msg, binding)], lang, "revoked")
+            return
+        if await self._deliver(msg, binding, pane_id, held_since=since):
+            await self._reply(msg, held.text(lang, "sent", items=wake.quoted([_preview(msg)])))
+
+    async def _tell_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str, key: str,
+                         **kw: Any) -> None:
+        """Tell each chat which of its kept messages were dropped (``key``: expired / gone /
+        revoked)."""
+        by_loc: dict[str, list[InboundMessage]] = {}
+        for _since, msg, _binding in dropped:
+            by_loc.setdefault(msg.location_key(), []).append(msg)
+        for msgs in by_loc.values():
+            items = wake.quoted([_preview(m) for m in msgs])
+            await self._reply(msgs[0], held.text(lang, key, count=len(msgs), items=items, **kw))
+        await self._finish_inbound(tuple(i for _s, m, _b in dropped for i in m.inbound_ids))
+
+    def _drop_held(self, pane_id: str) -> None:
+        """Unbind / rebind: forget what was kept for ``pane_id`` or through its binding (a
+        child's prompt), each chat told on its own worker; never sent in afterwards."""
+        dropped: list[tuple[float, InboundMessage, Binding]] = []
+        for held_pane, kept in list(self._prompt_held.items()):
+            gone = [k for k in kept if held_pane == pane_id or k[2].pane_id == pane_id]
+            if gone:
+                dropped += gone
+                self._prompt_held[held_pane] = [k for k in kept if k not in gone]
+        by_loc: dict[str, list[tuple[float, InboundMessage, Binding]]] = {}
+        for k in dropped:
+            by_loc.setdefault(k[1].location_key(), []).append(k)
+
+        async def tell(items: list[tuple[float, InboundMessage, Binding]]) -> None:
+            await self._tell_held(items, prompt_skills.language(await self._ui_settings()), "revoked")
+
+        for key, items in by_loc.items():
+            self._enqueue(key, lambda i=items: tell(i))
+
+    async def status_details(self, pane_id: str) -> list[str]:
+        """What /status adds under the pane tree: how long the pane has waited on a prompt,
+        how many kept messages follow it, and its last turn's text (redacted, one line)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        lines: list[str] = []
+        kept = self._prompt_held.get(pane_id) or []
+        if self._seams.pane_state(pane_id).get("display_status") == "awaiting":
+            starts = [r.created for r in self.relay.for_pane(pane_id)] or [k[0] for k in kept]
+            if starts:
+                minutes = int(max(self._clock() - min(starts), 0) // 60)
+                lines.append(held.text(lang, "status_awaiting", minutes=minutes))
+        if kept:
+            lines.append(held.text(lang, "status_held", count=len(kept)))
+        # Redacted whole (again: a secret registered since it was stored), then cut: a cut
+        # first could split a secret where redaction no longer recognises it.
+        last = " ".join(redact.redact_text(self._last_turn_text.get(pane_id, "")).split())
+        if last:
+            if len(last) > STATUS_LAST_CHARS:
+                last = last[:STATUS_LAST_CHARS - 1] + "…"
+            lines.append(held.text(lang, "status_last", text=last))
+        return lines
 
     async def _list_pending(self, msg: InboundMessage) -> None:
         """/pending: send this chat's waiting prompts again, each with its buttons. The new
@@ -2148,20 +2760,52 @@ class ChannelManager:
             workspace = ""
         return relay.screen_approval(request.pane_id, request.prompt, workspace, record=record).action != "allow"
 
-    async def _link_chat(self, msg: InboundMessage, code: str) -> None:
+    async def _link_chat(self, msg: InboundMessage, code: str, target: str = "") -> None:
+        """An invite code arrived. An allowed sender's chat is linked now; anyone else gets
+        the pairing request a stranger's DM gets, and the link completes when the user
+        approves it (``pairing_approve``). The code never admits anyone by itself."""
         # The invite is already spent, so every way out must reach the waiting UI.
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             await self._link_failed(msg.platform, code, f"{msg.platform} is not connected")
             return
+        if not msg.sender_id or is_shared_sender(msg.platform, msg.sender_id):
+            await self._reply(msg, MSG_LINK_FAILED)
+            await self._link_failed(msg.platform, code, "the sender cannot be identified")
+            return
+        if target == "direct" and not msg.is_direct and msg.platform in DM_ONLY_LINK_PLATFORMS:
+            await self._reply(msg, MSG_LINK_DM_ONLY)
+            await self._link_failed(msg.platform, code, "a direct-message code was sent in a group")
+            return
+        if self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            await self._complete_link(adapter, msg, code)
+            return
         try:
-            if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
-                self.store.add_allow(msg.platform, msg.sender_id, msg.sender_name, int(time.time()), msg.account)
+            outcome = self.gate.request_pairing(msg.platform, msg.sender_id, msg.sender_name, msg.chat_id,
+                                                msg.account)
         except Exception as exc:  # noqa: BLE001 — reported to the sender and the UI below
-            log.warning("channels: allowlisting linked sender on %s failed: %s", msg.platform, exc)
+            log.warning("channels: pairing request for linked sender on %s failed: %s", msg.platform, exc)
             await self._reply(msg, MSG_LINK_FAILED)
             await self._link_failed(msg.platform, code, str(exc))
             return
+        if outcome.request is None:
+            await self._reply(msg, MSG_LINK_FAILED)
+            await self._link_failed(msg.platform, code, "too many pairing requests are waiting for approval")
+            return
+        live = {(r.platform, r.code) for r in self.store.list_pairing(None)}
+        self._pending_links = {k: v for k, v in self._pending_links.items() if k in live}
+        pairing_code = outcome.request.code
+        self._pending_links[(msg.platform, pairing_code)] = (code, msg)
+        await self._reply(msg, MSG_LINK_PENDING.format(code=f"{pairing_code[:4]}-{pairing_code[4:]}"))
+        if outcome.created:
+            await self._seams.broadcast("channels.pairing_request", {
+                "platform": msg.platform, "account": msg.account, "code": pairing_code,
+                "sender_name": msg.sender_name,
+            })
+        await self._changed()
+
+    async def _complete_link(self, adapter: ChannelAdapter, msg: InboundMessage, code: str) -> None:
+        """Remember an allowed sender's chat from invite ``code``, confirm it there and tell the UI."""
         kind = "direct" if msg.is_direct else "group"
         title = msg.sender_name
         if not msg.is_direct:
@@ -2169,7 +2813,7 @@ class ChannelManager:
             titles = {str(c.get("chat_id")): c.get("title") for c in known()} if callable(known) else {}
             title = str(titles.get(msg.chat_id) or msg.chat_id)
         try:
-            self.store.remember_chat(msg.platform, _bot_key(adapter), msg.chat_id, title, kind,
+            await run_in_db_thread(self.store.remember_chat, msg.platform, _bot_key(adapter), msg.chat_id, title, kind,
                                      bool(msg.thread_id), int(time.time()))
         except Exception as exc:  # noqa: BLE001 — the sender is linked; only the picker list misses it
             log.warning("channels: remembering linked chat %s failed: %s", msg.chat_id, exc)
@@ -2234,6 +2878,12 @@ class ChannelManager:
     async def _cancel_queued(self, msg: InboundMessage) -> None:
         """``/cancel``: withdraw what this chat sent that has not gone into a pane yet."""
         withdrawn = 0
+        here = msg.location_key()
+        for pane_id, kept in list(self._prompt_held.items()):
+            mine = [k for k in kept if k[1].location_key() == here]
+            if mine:
+                withdrawn += len(mine)
+                self._prompt_held[pane_id] = [k for k in kept if k not in mine]
         for key in self._joining(msg):
             buf = self._debounce.pop(key)
             if buf.task is not None:
@@ -2412,12 +3062,17 @@ class ChannelManager:
         return msg.reply_to_self or (bool(author) and (
             author == msg.sender_id or self.gate.is_allowed(msg.platform, author, msg.account)))
 
-    async def _deliver(self, msg: InboundMessage, binding: Binding, pane_id: str) -> bool:
-        """True when the text went to the pane; every refusal has already been replied to."""
-        if await self._held_by_prompt(msg, pane_id):
+    async def _deliver(self, msg: InboundMessage, binding: Binding, pane_id: str, *,
+                       held_since: float | None = None, past_login: bool = False) -> bool:
+        """True when the text went to the pane; every refusal has already been replied to.
+        ``held_since``: a kept message sent in after a prompt, kept since then."""
+        if await self._held_by_prompt(msg, pane_id, binding, held_since):
+            return False
+        if not past_login and await self._held_by_cli(msg, pane_id, binding):
             return False
         queued = self._queued.setdefault(pane_id, set())
         if len(queued) >= MAX_QUEUED_PER_PANE:
+            log.info("channels: %s -> pane %s: not delivered: queue full", _loc_log(msg), pane_id)
             await self._reply(msg, MSG_QUEUE_FULL)
             return False
         now = self._clock()
@@ -2425,6 +3080,7 @@ class ChannelManager:
         self._chat_sends[(pane_id, msg.sender_id)] = sends
         if len(sends) >= CHAT_RATE_MAX:
             wait = math.ceil(sends[0] + CHAT_RATE_WINDOW_S - now)
+            log.info("channels: %s -> pane %s: not delivered: rate limit", _loc_log(msg), pane_id)
             await self._reply(msg, MSG_CHAT_RATE.format(max=CHAT_RATE_MAX, wait=wait))
             return False
         state = self._seams.pane_state(pane_id)
@@ -2445,10 +3101,13 @@ class ChannelManager:
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
         if not result.get("ok"):
+            log.warning("channels: %s -> pane %s: not delivered: %s", _loc_log(msg), pane_id,
+                        result.get("error") or "unknown")
             await self._reply(msg, f"⚠️ 無法送達 pane：{result.get('error') or 'unknown'}")
             return False
         sends.append(now)
         msg_key = str(result.get("msg_key") or "")
+        log.info("channels: %s -> pane %s: handed over (%s)", _loc_log(msg), pane_id, msg_key)
         pane_id = str(result.get("pane_id") or pane_id)
         loc = binding.location()
         pending = self._pending.get(pane_id)
@@ -2468,6 +3127,96 @@ class ChannelManager:
         self._queued_loc[msg_key] = msg.location_key()
         self._spawn(self._watch_delivery(pane_id, msg_key, pending))
         return True
+
+    async def _cli_login_expired(self, pane_id: str) -> bool:
+        try:
+            info = await asyncio.wait_for(self._seams.cli_health(pane_id), inbound.CLI_PROBE_TIMEOUT_S)
+        except Exception:  # noqa: BLE001 — a window that does not answer never holds a message
+            return False
+        return info.get("login_expired") is True
+
+    async def _held_by_cli(self, msg: InboundMessage, pane_id: str, binding: Binding) -> bool:
+        """A pane whose CLI reports an expired login would take the text and fail it: it is
+        queued here instead, the chat told, and sent in once the login is back
+        (``_watch_cli_held``). Behind ones already queued, a new one waits its turn."""
+        kept = self._cli_held.get(pane_id)
+        if not kept and not await self._cli_login_expired(pane_id):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        kept = self._cli_held.setdefault(pane_id, [])
+        agent = self._seams.pane_agent(pane_id)
+        agent = "Claude" if agent in ("", "claude") else agent
+        if len(kept) >= inbound.CLI_HELD_MAX:
+            log.info("channels: %s -> pane %s: not kept: login expired, queue full", _loc_log(msg), pane_id)
+            await self._reply(msg, inbound.text(lang, "login_full", agent=agent, max=inbound.CLI_HELD_MAX))
+            return True
+        kept.append((self._clock(), msg, binding))
+        self._park(msg)
+        log.info("channels: %s -> pane %s: kept: its CLI reports an expired login", _loc_log(msg), pane_id)
+        if pane_id not in self._cli_watching:
+            self._cli_watching.add(pane_id)
+            self._spawn(self._watch_cli_held(pane_id))
+        await self._reply(msg, inbound.text(lang, "login_held", n=len(kept), agent=agent))
+        return True
+
+    async def _watch_cli_held(self, pane_id: str) -> None:
+        """Send in, in order and on each chat's own worker, what was queued while ``pane_id``'s
+        login was expired, once it is not; a pane that went away drops them, chats told."""
+        try:
+            while self._cli_held.get(pane_id):
+                await asyncio.sleep(inbound.CLI_PROBE_EVERY_S)
+                kept = self._cli_held.get(pane_id) or []
+                if not kept:
+                    break
+                lang = prompt_skills.language(await self._ui_settings())
+                if not self._seams.resolve_pane(pane_id):
+                    self._cli_held.pop(pane_id, None)
+                    await self._tell_cli_held(kept, lang, "gone")
+                    break
+                if await self._cli_login_expired(pane_id):
+                    # Never stuck behind a login: past CLI_HELD_MAX_WAIT_S it goes in anyway
+                    # (a login flag that is wrong would otherwise hold it for good).
+                    now = self._clock()
+                    late = [k for k in kept if now - k[0] >= inbound.CLI_HELD_MAX_WAIT_S]
+                    if late:
+                        self._cli_held[pane_id] = [k for k in kept if k not in late]
+                        for _since, msg, binding in late:
+                            self._enqueue(msg.location_key(), lambda m=msg, b=binding: self._settle(
+                                m, lambda: self._send_cli_held(m, b, pane_id, lang, anyway=True)))
+                    continue
+                self._cli_held.pop(pane_id, None)
+                for _since, msg, binding in kept:
+                    self._enqueue(msg.location_key(), lambda m=msg, b=binding: self._settle(
+                        m, lambda: self._send_cli_held(m, b, pane_id, lang)))
+        finally:
+            if not self._cli_held.get(pane_id):
+                self._cli_held.pop(pane_id, None)
+            self._cli_watching.discard(pane_id)
+
+    async def _send_cli_held(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str,
+                             anyway: bool = False) -> None:
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            log.info("channels: a message queued for %s was dropped: its bot is no longer running", pane_id)
+            return
+        current = self._binding_for(msg)
+        if current is None or current.pane_id != binding.pane_id \
+                or not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            await self._tell_cli_held([(0.0, msg, binding)], lang, "revoked")
+            return
+        if await self._deliver(msg, binding, pane_id, past_login=anyway):
+            key = "sent_anyway" if anyway else "sent"
+            await self._reply(msg, inbound.text(lang, key, items=wake.quoted([_preview(msg)]),
+                                                minutes=int(inbound.CLI_HELD_MAX_WAIT_S // 60)))
+
+    async def _tell_cli_held(self, dropped: list[tuple[float, InboundMessage, Binding]], lang: str,
+                             key: str) -> None:
+        by_loc: dict[str, list[InboundMessage]] = {}
+        for _since, msg, _binding in dropped:
+            by_loc.setdefault(msg.location_key(), []).append(msg)
+        for msgs in by_loc.values():
+            items = wake.quoted([_preview(m) for m in msgs])
+            await self._reply(msgs[0], inbound.text(lang, key, count=len(msgs), items=items))
+        await self._finish_inbound(tuple(i for _s, m, _b in dropped for i in m.inbound_ids))
 
     # --- quick menu ------------------------------------------------------------
 
@@ -2503,14 +3252,14 @@ class ChannelManager:
             if msg.is_direct or self._sole_bot(msg.platform):
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
+        pane_id = await self._resolve_after_startup(binding.pane_id)
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
         if scope == "all":
             adapter = self._adapters.get((msg.platform, msg.account))
             buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
             await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
-            return
-        pane_id = await self._resolve_after_startup(binding.pane_id)
-        if not pane_id:
-            await self._reply(msg, wake.text(lang, "offline"))
             return
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
@@ -2548,6 +3297,438 @@ class ChannelManager:
             log.warning("channels: sending the quick menu on %s failed: %s", msg.platform, exc)
             await self._reply(msg, quick_menu.text(lang, "send_failed", error=redact.redact_text(str(exc))))
 
+    # --- /model: switch a pane's model from the chat (channels.model_menu) ----------------
+
+    async def model_buttons(self) -> list[tuple[str, str]]:
+        """The /status button that opens /model, in the Navide language."""
+        lang = prompt_skills.language(await self._ui_settings())
+        return [(model_menu.text(lang, "open"), model_menu.OPEN_CALLBACK)]
+
+    async def _model_rows(self, root_pane_id: str, binding: Binding) -> list[model_menu.PaneRow]:
+        """The panes /model offers: the bound pane and its children (the /status tree),
+        minus the ones without a model to switch."""
+        directory = self.mirror._directory()
+        ids = [root_pane_id, *(str(p["pane_id"]) for _, p in self.mirror.descendants(root_pane_id, directory))]
+        rows: list[model_menu.PaneRow] = []
+        for pid in ids:
+            if self._seams.is_login_pane(pid):
+                continue
+            try:
+                info = await asyncio.to_thread(self._seams.pane_model, pid)
+            except Exception as exc:  # noqa: BLE001 — the pane is left out, the rest still listed
+                log.warning("channels: reading the model of %s failed: %s", pid, exc)
+                continue
+            agent = str(info.get("agent_key") or self._seams.pane_agent(pid) or "")
+            if not agent or agent == "terminal" or not info.get("supports_model", True):
+                continue
+            current = str(info.get("model") or "")
+            fallback = binding.title.removeprefix("↳ ") if pid == root_pane_id and binding.title else pid
+            rows.append(model_menu.PaneRow(
+                pane_id=pid, name=str((directory.get(pid) or {}).get("name") or fallback),
+                agent_key=agent, model=current, efforts=tuple(info.get("efforts") or ()),
+                models=model_menu.model_options(agent, current, list(info.get("known") or [])),
+            ))
+        return rows
+
+    @staticmethod
+    def _model_who(msg: InboundMessage) -> str:
+        return f"{msg.platform}:{msg.sender_name or msg.sender_id}"
+
+    async def _model_command(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                             parsed: tuple[int | None, str, str]) -> None:
+        """``/model`` opens the menu (numbered lines where there are no buttons);
+        ``/model [n] <model> [effort]`` switches pane n (default: the bound one) at once,
+        and on a busy pane waits for it to go idle."""
+        lang = prompt_skills.language(await self._ui_settings())
+        index, model, effort = parsed
+        rows = await self._model_rows(pane_id, binding)
+        if not rows:
+            await self._reply(msg, model_menu.text(lang, "no_panes"))
+            return
+        if model:
+            if index is not None and not 1 <= index <= len(rows):
+                await self._reply(msg, self._model_list(rows, lang))
+                return
+            await self._model_switch(msg, rows[(index or 1) - 1], model, effort, lang)
+            return
+        if not self._menu_buttons(msg):
+            await self._reply(msg, self._model_list(rows, lang))
+            return
+        menu = self.models.create(location_key=msg.location_key(), sender_id=msg.sender_id, lang=lang,
+                                  root_pane_id=pane_id, panes=rows)
+        if index is not None and 1 <= index <= len(rows):
+            menu.step, menu.pane_id = "model", rows[index - 1].pane_id
+        await self._model_show(msg, menu)
+
+    @staticmethod
+    def _model_list(rows: list[model_menu.PaneRow], lang: str) -> str:
+        lines = [model_menu.text(lang, "pick_pane")]
+        for i, r in enumerate(rows, 1):
+            models = ", ".join(m for m, _ in r.models)
+            lines.append(f"{i}. {r.name} · {r.agent_key} · {r.model or model_menu.text(lang, 'default')}"
+                         + (f" — {models}" if models else ""))
+        lines.append(model_menu.text(lang, "list_hint"))
+        return "\n".join(lines)
+
+    async def _model_show(self, msg: InboundMessage, menu: model_menu.Menu, body: str | None = None) -> None:
+        """Render the menu's step into its message (a new one the first time)."""
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        text, rows = self.models.render(menu)
+        if menu.step in ("pane", "model"):
+            # The two chat menus link to each other: /account is one press away.
+            rows = [*rows[:-1], [(account_menu.text(menu.lang, "open"), account_menu.OPEN_CALLBACK)], rows[-1]]
+        text = redact.redact_text(body if body is not None else text)
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if menu.message_id:
+            try:
+                await adapter.edit_menu(loc, menu.message_id, text, rows)
+                return
+            except Exception as exc:  # noqa: BLE001 — sent afresh below
+                log.warning("channels: editing the model menu on %s failed: %s", msg.platform, exc)
+        try:
+            menu.message_id = await adapter.send_menu(loc, text, rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the model menu on %s failed: %s", msg.platform, exc)
+            self.models.close(menu)
+            await self._reply(msg, quick_menu.text(menu.lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    async def _model_settle(self, msg: InboundMessage, menu: model_menu.Menu, body: str) -> None:
+        """The menu's message as plain text, its buttons gone (the menu itself is kept)."""
+        self.models.freeze(menu)
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not menu.message_id:
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            await adapter.edit_menu(loc, menu.message_id, redact.redact_text(body), [])
+        except Exception as exc:  # noqa: BLE001 — its buttons are dead anyway
+            log.warning("channels: closing the model menu on %s failed: %s", msg.platform, exc)
+
+    async def _model_press(self, msg: InboundMessage) -> None:
+        token = model_menu.parse_callback(msg.callback_data) or ""
+        press, why = self.models.press(token, msg.location_key(), msg.sender_id)
+        lang = press.menu.lang if press is not None else prompt_skills.language(await self._ui_settings())
+        if press is None:
+            await self._reply(msg, model_menu.text(lang, why or "expired"))
+            return
+        menu = press.menu
+        binding = self._binding_for(msg)
+        root = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+
+        async def expired() -> None:
+            self.models.close(menu)
+            await self._model_settle(msg, menu, model_menu.text(lang, "expired"))
+
+        # A menu made for a pane tree the chat no longer drives is as dead as an expired one.
+        if binding is None or not root or root != self._seams.resolve_pane(menu.root_pane_id):
+            await expired()
+            return
+        if press.action == "cancel":
+            self.models.close(menu)
+            await self._model_settle(msg, menu, model_menu.text(lang, "cancelled"))
+            return
+        if press.action == "back":
+            menu.step, menu.pane_id, menu.with_effort = "pane", "", False
+            await self._model_show(msg, menu)
+            return
+        if press.action == "effort-step":
+            menu.with_effort = not menu.with_effort
+            await self._model_show(msg, menu)
+            return
+        # Re-read the tree: the pane may have closed, moved away or restarted under a new id.
+        live = {r.pane_id: r for r in await self._model_rows(root, binding)}
+        target = press.value if press.action == "pane" else menu.pane_id
+        row = live.get(target)
+        if row is None:
+            await expired()
+            return
+        if press.action == "pane":
+            menu.step, menu.pane_id, menu.with_effort = "model", row.pane_id, False
+            await self._model_show(msg, menu)
+            return
+        if press.action == "model":
+            if press.value not in {m for m, _ in row.models}:
+                await expired()
+                return
+            menu.model, menu.effort = press.value, ""
+            if menu.with_effort and row.efforts:
+                menu.step = "effort"
+                await self._model_show(msg, menu)
+                return
+        elif press.action == "effort":
+            if press.value not in row.efforts or not menu.model:
+                await expired()
+                return
+            menu.effort = press.value
+        elif press.action == "wait":
+            if not menu.model:
+                await expired()
+                return
+            self.models.close(menu)
+            await self._model_settle(msg, menu, self._model_queued_text(row.name, menu.model, menu.effort, lang))
+            self._model_queue(msg, row, menu.model, menu.effort, lang)
+            return
+        await self._model_switch(msg, row, menu.model, menu.effort, lang, menu=menu)
+
+    @staticmethod
+    def _model_shown(model: str, effort: str) -> str:
+        return f"{model} · {effort}" if effort else model
+
+    def _model_queued_text(self, pane: str, model: str, effort: str, lang: str) -> str:
+        return model_menu.text(lang, "queued", pane=pane, model=self._model_shown(model, effort),
+                               minutes=int(MODEL_WAIT_TIMEOUT_S // 60))
+
+    async def _model_switch(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                            lang: str, menu: model_menu.Menu | None = None) -> None:
+        shown = self._model_shown(model, effort)
+        if menu is not None:
+            await self._model_settle(msg, menu, model_menu.text(lang, "switching", pane=row.name, model=shown))
+        result = await self._seams.set_model(row.pane_id, model, effort, self._model_who(msg))
+        if not result.get("ok") and result.get("error_code") == "pane-busy":
+            # Not interrupted: offered a switch once it is idle (a typed /model asked for it outright).
+            body = model_menu.text(lang, "busy", pane=row.name)
+            if result.get("hold") == "awaiting":
+                body += "\n" + model_menu.text(lang, "busy_awaiting")
+            if menu is not None:
+                menu.step = "busy"
+                await self._model_show(msg, menu, body=body)
+                return
+            await self._reply(msg, body + "\n" + self._model_queued_text(row.name, model, effort, lang))
+            self._model_queue(msg, row, model, effort, lang)
+            return
+        if menu is not None:
+            self.models.close(menu)
+        await self._model_report(msg, row, model, effort, result, lang)
+
+    async def _model_report(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                            result: dict[str, Any], lang: str) -> None:
+        shown = self._model_shown(model, effort)
+        if result.get("ok"):
+            new_id = str(result.get("pane_id") or row.pane_id)
+            lines = [model_menu.text(lang, "ok", pane=row.name, model=shown, method=str(result.get("method") or ""))]
+            if new_id != row.pane_id:
+                lines.append(model_menu.text(lang, "restarted", old=row.pane_id, new=new_id))
+            if result.get("fallback"):
+                lines.append(model_menu.text(lang, "fallback", reason=str(result["fallback"])))
+            lines.append(model_menu.text(lang, "audited"))
+            # Shown in the Navide window too: whoever sits there sees who changed which model.
+            await self._seams.broadcast("channels.model_switched", {
+                "pane_id": row.pane_id, "new_pane_id": new_id, "pane_name": row.name,
+                "model": model, "effort": effort, "method": str(result.get("method") or ""),
+                "who": self._model_who(msg), "platform": msg.platform,
+            })
+        else:
+            error = str(result.get("error") or result.get("error_code") or "")
+            lines = [model_menu.text(lang, "failed", pane=row.name, model=shown, error=error)]
+        await self._reply(msg, redact.redact_text("\n".join(lines)))
+
+    def _model_queue(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                     lang: str) -> None:
+        """Switch once the pane is idle; one wait per pane, the newer replacing the older."""
+        old = self._model_waits.pop(row.pane_id, None)
+        if old is not None:
+            task, old_msg, pane, old_shown, old_lang = old
+            task.cancel()
+            self._spawn(self._reply(old_msg, model_menu.text(old_lang, "replaced", pane=pane, model=old_shown)))
+        task = self._spawn(self._model_wait(msg, row, model, effort, lang))
+        self._model_waits[row.pane_id] = (task, msg, row.name, self._model_shown(model, effort), lang)
+
+    async def _model_still_allowed(self, msg: InboundMessage, pane_id: str) -> bool:
+        """What a press checks, asked again: channels on, the sender still allowed, the chat
+        still bound, and the pane still in its tree."""
+        if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            return False
+        if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            return False
+        binding = self._binding_for(msg)
+        root = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+        if binding is None or not root:
+            return False
+        return pane_id in {r.pane_id for r in await self._model_rows(root, binding)}
+
+    async def _model_wait(self, msg: InboundMessage, row: model_menu.PaneRow, model: str, effort: str,
+                          lang: str) -> None:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + MODEL_WAIT_TIMEOUT_S
+        me = asyncio.current_task()
+        try:
+            while loop.time() < deadline:
+                await asyncio.sleep(MODEL_WAIT_POLL_S)
+                pane_id = self._seams.resolve_pane(row.pane_id)
+                state = self._seams.pane_state(pane_id) if pane_id else {"exists": False}
+                if not state.get("exists", True):
+                    await self._model_report(msg, row, model, effort,
+                                             {"ok": False, "error": "pane is gone", "error_code": "pane-gone"}, lang)
+                    return
+                if state.get("busy") or state.get("display_status") == "awaiting":
+                    continue
+                # Up to 15 minutes may have passed: the switch is made only on what holds now.
+                if not await self._model_still_allowed(msg, pane_id):
+                    await self._reply(msg, model_menu.text(lang, "expired"))
+                    return
+                result = await self._seams.set_model(pane_id, model, effort, self._model_who(msg))
+                if not result.get("ok") and result.get("error_code") == "pane-busy":
+                    continue  # busy again the moment it was asked: keep waiting
+                await self._model_report(msg, row, model, effort, result, lang)
+                return
+            await self._reply(msg, model_menu.text(lang, "timeout", pane=row.name,
+                                                   model=self._model_shown(model, effort),
+                                                   minutes=int(MODEL_WAIT_TIMEOUT_S // 60)))
+        finally:
+            held_wait = self._model_waits.get(row.pane_id)
+            if held_wait is not None and held_wait[0] is me:
+                del self._model_waits[row.pane_id]
+
+    # --- /account: switch the CLI account from the chat (channels.account_menu) ------------
+
+    async def _account_command(self, msg: InboundMessage, binding: Binding, pane_id: str,
+                               index: int | None) -> None:
+        """``/account`` opens the menu (numbered lines where there are no buttons, the list
+        only in a group chat); ``/account <n>`` switches to row n at once (direct chat)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        info = await self._seams.account_menu(pane_id)
+        status = str(info.get("status") or "")
+        if status == "unsupported":
+            agent = str(info.get("agentKey") or self._seams.pane_agent(pane_id) or "?")
+            await self._reply(msg, account_menu.text(lang, "unsupported", agent=agent))
+            return
+        if status != "ok":
+            await self._reply(msg, account_menu.text(lang, "no_window"))
+            return
+        rows = [account_menu.AccountRow.from_window(r) for r in info.get("rows") or [] if isinstance(r, dict)]
+        if len(rows) < 2:
+            await self._reply(msg, account_menu.text(lang, "no_accounts"))
+            return
+        fixed = info.get("fixedCount")
+        menu = self.accounts.create(
+            location_key=msg.location_key(), sender_id=msg.sender_id, lang=lang,
+            agent_key=str(info.get("agentKey") or ""), active_id=str(info.get("activeId") or account_menu.DEFAULT_ID),
+            rows=rows, fixed_count=fixed if isinstance(fixed, int) and not isinstance(fixed, bool) else 0,
+        )
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if self._kind_at(loc) != "direct":
+            self.accounts.close(menu)
+            await self._reply(msg, redact.redact_text(self.accounts.body(menu, group=True)))
+            return
+        if index is not None:
+            if not 1 <= index <= len(rows) or rows[index - 1].id == menu.active_id:
+                self.accounts.close(menu)
+                await self._reply(msg, redact.redact_text(self.accounts.body(menu, numbered=True)))
+                return
+            await self._account_switch(msg, pane_id, menu, rows[index - 1].id)
+            return
+        if not self._menu_buttons(msg):
+            self.accounts.close(menu)
+            await self._reply(msg, redact.redact_text(self.accounts.body(menu, numbered=True)))
+            return
+        await self._account_show(msg, menu)
+
+    async def _account_show(self, msg: InboundMessage, menu: account_menu.Menu) -> None:
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        body, rows = self.accounts.render(menu)
+        # The two chat menus link to each other: /model is one press away.
+        rows = [*rows[:-1], [(account_menu.text(menu.lang, "model_link"), model_menu.OPEN_CALLBACK)], rows[-1]]
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            menu.message_id = await adapter.send_menu(loc, redact.redact_text(body), rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the account menu on %s failed: %s", msg.platform, exc)
+            self.accounts.close(menu)
+            await self._reply(msg, quick_menu.text(menu.lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    async def _account_settle(self, msg: InboundMessage, menu: account_menu.Menu, body: str) -> bool:
+        """The menu's message as plain text, its buttons gone; False when there is none to edit."""
+        self.accounts.freeze(menu)
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not menu.message_id:
+            return False
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        try:
+            await adapter.edit_menu(loc, menu.message_id, redact.redact_text(body), [])
+            return True
+        except Exception as exc:  # noqa: BLE001 — its buttons are dead anyway
+            log.warning("channels: closing the account menu on %s failed: %s", msg.platform, exc)
+            return False
+
+    async def _account_press(self, msg: InboundMessage) -> None:
+        token = account_menu.parse_callback(msg.callback_data) or ""
+        press, why = self.accounts.press(token, msg.location_key(), msg.sender_id)
+        if press is None:
+            lang = prompt_skills.language(await self._ui_settings())
+            await self._reply(msg, account_menu.text(lang, why or "expired"))
+            return
+        menu = press.menu
+        binding = self._binding_for(msg)
+        pane_id = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        # The chat must still be a bound direct chat; the account must still be one the
+        # menu offered and not the one it was opened on.
+        if (not pane_id or self._kind_at(loc) != "direct" or press.action not in ("switch", "cancel")
+                or (press.action == "switch" and (press.value == menu.active_id
+                                                  or press.value not in {r.id for r in menu.rows}))):
+            self.accounts.close(menu)
+            await self._account_settle(msg, menu, account_menu.text(menu.lang, "expired"))
+            return
+        if press.action == "cancel":
+            self.accounts.close(menu)
+            await self._account_settle(msg, menu, account_menu.text(menu.lang, "cancelled"))
+            return
+        await self._account_switch(msg, pane_id, menu, press.value)
+
+    async def _account_switch(self, msg: InboundMessage, pane_id: str, menu: account_menu.Menu,
+                              target: str) -> None:
+        """Switch to ``target`` once: the menu is closed first, so a second press is expired.
+        The window re-checks that the active account is still the one the menu showed."""
+        lang = menu.lang
+        to_label = next((r.label for r in menu.rows if r.id == target), target)
+        self.accounts.close(menu)
+        await self._account_settle(msg, menu, account_menu.text(lang, "switching", to=to_label))
+
+        async def settled(answer: dict[str, Any]) -> None:
+            # A queued switch ended: its own message, the queued one stays as it was.
+            await self._reply(msg, redact.redact_text(self._account_result(answer, menu, to_label)))
+
+        result = await self._seams.switch_account(pane_id, target, menu.active_id, self._model_who(msg), settled)
+        body = self._account_result(result, menu, to_label)
+        if not await self._account_settle(msg, menu, body):
+            await self._reply(msg, redact.redact_text(body))
+
+    @staticmethod
+    def _account_result(result: dict[str, Any], menu: account_menu.Menu, to_label: str) -> str:
+        """What the chat is told about a switch's answer, or about a queued one's end."""
+        lang = menu.lang
+        status = str(result.get("status") or "")
+        to_shown = account_menu.mask_email(str(result.get("to") or to_label))
+        if status in ("switched", "switched-signed-out"):
+            from_label = account_menu.mask_email(str(result.get("from") or menu.current_label()))
+            lines = [account_menu.text(lang, "ok", to=to_shown, **{"from": from_label}) if status == "switched"
+                     else account_menu.text(lang, "ok_signed_out", to=to_shown)]
+            if menu.fixed_count:
+                lines.append(account_menu.text(lang, "fixed", count=menu.fixed_count))
+            lines.append(account_menu.text(lang, "audited"))
+            return "\n".join(lines)
+        if status == "queued":
+            waiting = result.get("waiting")
+            count = waiting if isinstance(waiting, int) and not isinstance(waiting, bool) else "?"
+            return account_menu.text(lang, "queued", count=count, to=to_shown)
+        if status == "superseded":
+            return account_menu.text(lang, "superseded", to=to_shown)
+        if status in ("stale", "already-active", "unknown-profile"):
+            return account_menu.text(lang, "expired")
+        if status == "needs-user":
+            return account_menu.text(lang, "needs_user", code=str(result.get("code") or status))
+        if status in ("unsupported", "api-key-account"):
+            return account_menu.text(lang, "unsupported", agent=menu.agent_key or "?")
+        if status == "unavailable":
+            return account_menu.text(lang, "unavailable")
+        if status in ("no-window", "pane-gone", ""):
+            return account_menu.text(lang, "no_window")
+        return account_menu.text(lang, "failed", error=str(result.get("code") or status))
+
     def _menu_buttons(self, msg: InboundMessage) -> bool:
         """Whether this chat's quick menus come as buttons rather than numbered lines."""
         adapter = self._adapters.get((msg.platform, msg.account))
@@ -2573,6 +3754,13 @@ class ChannelManager:
             return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
 
+    @staticmethod
+    def _bound_pane_closed(lang: str, binding: Binding) -> str:
+        """A bound chat whose pane is not open: which pane ("workspace / pane") and what to do."""
+        workspace = os.path.basename(binding.workspace_path.rstrip("/\\")) if binding.workspace_path else ""
+        pane = binding.title.removeprefix("↳ ") or binding.pane_id
+        return quick_menu.text(lang, "bound_pane_closed", where=f"{workspace} / {pane}" if workspace else pane)
+
     async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False,
                           scope: str | None = None) -> None:
         """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/prompts <n>``
@@ -2588,7 +3776,10 @@ class ChannelManager:
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
             return
         pane_id = self._seams.resolve_pane(binding.pane_id)
-        if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
+        if not pane_id:
+            await self._reply(msg, self._bound_pane_closed(lang, binding))
+            return
+        if menu is None or pane_id != self._seams.resolve_pane(menu.pane_id):
             await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
         press = self.quick.pick(msg.location_key(), number, mcp, scope)
@@ -2722,6 +3913,47 @@ class ChannelManager:
             return True
         return await self._share_revoke(msg, lang, matches[0])
 
+    async def _plugin_command(self, msg: InboundMessage, command: str, arg: str) -> bool:
+        """``/plugins status`` or ``/plugins stop <id>`` (plan P2); False leaves the
+        message to the usual pipeline. Only a bound chat, like ``/shares``: the
+        sender is already one the user approved. It can stop a plugin, never start one."""
+        from ..plugins import plugin_stop
+
+        if self._binding_for(msg) is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        if command == "stop" and not arg:
+            await self._reply(msg, quick_menu.text(lang, "plugins_stop_usage"))
+            return True
+        stop_all = command == "stop" and arg.lower() == "all"
+        if stop_all:
+            answer = await plugin_stop.ask_host("stop-all")
+        else:
+            answer = await plugin_stop.ask_host(command, arg if command == "stop" else None)
+        if answer is None:
+            await self._reply(msg, quick_menu.text(lang, "plugins_unavailable"))
+        elif stop_all:
+            stopped = answer.get("stopped") if isinstance(answer.get("stopped"), list) else None
+            if answer.get("ok") is True and stopped is not None:
+                await self._reply(msg, quick_menu.text(lang, "plugins_stopped_all", count=len(stopped)))
+            else:
+                error = str(answer.get("error") or answer.get("error_code") or "")
+                await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id="all", error=error)))
+        elif command == "status":
+            if answer.get("ok") is True and isinstance(answer.get("plugins"), list):
+                await self._reply(msg, redact.redact_text(plugin_cmds.render_status(lang, answer["plugins"])))
+            else:
+                await self._reply(msg, quick_menu.text(lang, "plugins_unavailable"))
+        elif answer.get("ok") is True:
+            key = "plugins_stopped" if answer.get("changed") is True else "plugins_already_stopped"
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, key, id=arg)))
+        elif answer.get("error_code") == "NOT_INSTALLED":
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_none", id=arg)))
+        else:
+            error = str(answer.get("error") or answer.get("error_code") or "")
+            await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id=arg, error=error)))
+        return True
+
     async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
         if not links:
             await self._reply(msg, quick_menu.text(lang, "shares_empty"))
@@ -2825,6 +4057,80 @@ class ChannelManager:
             log.warning("channels: a share-link notice to %s failed: %s", loc.platform,
                         share_cmds.mask_links(str(exc)))
 
+    async def notify_plugin_paused(self, plugin_id: str, rule: str) -> None:
+        """Plan P5: every bound direct chat once, in the user's language."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "plugins_auto_paused", id=plugin_id, reason=quick_menu.text(lang, f"plugins_rule_{rule}"))
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
+
+    async def notify_account_needs_login(self, account: str) -> None:
+        """Every bound direct chat once, in the user's language: the claude
+        account just switched in cannot sign in (account_switch_verify)."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "account_needs_login", account=account)
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
+
+    async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
+                                     from_label: str, to_id: str, to_label: str,
+                                     needs_login: bool = False) -> int:
+        """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
+        chat whose pane runs that CLI or was moved by the switch. Where the chat has
+        buttons, a claude switch carries "switch back": a one-row /account menu, so the
+        press goes the /account way (owner and chat checked, the active account
+        re-checked by the window, written to account_switch_log). Returns the chats told."""
+        lang = prompt_skills.language(await self._ui_settings())
+        shown_from = account_menu.mask_email(from_label or from_id)
+        shown_to = account_menu.mask_email(to_label or to_id)
+        body = account_menu.text(lang, "failover_needs_login" if needs_login else "failover_done",
+                                 to=shown_to, **{"from": shown_from})
+        moved = set(pane_ids)
+        told = 0
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() in seen or self._chat_kind(b) != "direct":
+                continue
+            pane_id = self._seams.resolve_pane(b.pane_id)
+            if not pane_id or (pane_id not in moved and self._seams.pane_agent(pane_id) != agent_key):
+                continue
+            seen.add(loc.key())
+            adapter = self._adapters.get((loc.platform, loc.account))
+            if adapter is None:
+                continue
+            buttons = None
+            if (agent_key == account_menu.SWITCH_AGENT and not needs_login and adapter.capabilities.buttons
+                    and loc.platform == "telegram"):
+                # A Telegram direct chat's id is its one person's id: the menu's owner.
+                menu = self.accounts.create(
+                    location_key=loc.key(), sender_id=loc.chat_id, lang=lang, agent_key=agent_key,
+                    active_id=to_id,
+                    rows=[account_menu.AccountRow(id=from_id, label=shown_from),
+                          account_menu.AccountRow(id=to_id, label=shown_to, active=True)],
+                )
+                rows = self.accounts.render_single(menu, from_id, account_menu.text(lang, "switch_back", to=shown_from))
+                buttons = [row[0] for row in rows]
+            if await self._notice(adapter, loc, redact.redact_text(body), buttons=buttons):
+                told += 1
+        return told
+
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         chat_id = str(link.get("chatId") or "")
         targets = self._share_targets(str(link.get("paneId") or ""), chat_id)
@@ -2920,10 +4226,11 @@ class ChannelManager:
         if current.task is None or current.task.done():
             current.task = self._spawn(self._while_running(pane_id, current))
 
-    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> bool:
+    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str,
+                      buttons: list[tuple[str, str]] | None = None) -> bool:
         """Post ``text`` to ``loc``; False (logged) when it did not go."""
         try:
-            await self.mirror.send(loc, text)
+            await self.mirror.send(loc, text, buttons=buttons) if buttons else await self.mirror.send(loc, text)
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: notice to %s failed: %s", loc.key(), exc)
             return False
@@ -3007,7 +4314,13 @@ class ChannelManager:
         if menu:
             lines.append(MSG_USAGE_LIMIT_MENU)
         lines.append(MSG_USAGE_LIMIT_KEPT)
-        await self._notice(adapter, pending.loc, "\n".join(lines))
+        buttons = None
+        # Another account may still have quota: offer the switch where a press can make it.
+        if (agent == "Claude" and adapter.capabilities.buttons
+                and self._kind_at(pending.loc) == "direct"):
+            lang = prompt_skills.language(await self._ui_settings())
+            buttons = [(account_menu.text(lang, "open"), account_menu.OPEN_CALLBACK)]
+        await self._notice(adapter, pending.loc, "\n".join(lines), buttons=buttons)
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
         if not pending.status_id and pending.status_send is not None:
@@ -3098,6 +4411,14 @@ class ChannelManager:
         prompt = str(info.get("prompt") or "")
         kind = str(info.get("kind") or "") or "permission"
         options = [str(o) for o in (info.get("options") or [])]
+        if not options and str(info.get("agent") or "") in relay.MENU_AGENTS:
+            # No menu on screen, nothing to answer: the input box and footer an
+            # answered question leaves while the pane's AWAITING badge settles.
+            # A prompt relayed earlier stays up; leaving awaiting settles it.
+            shown = self._awaiting_shown.get(pane_id)
+            self._awaiting_failures.pop(pane_id, None)
+            self._awaiting_shown[pane_id] = _Shown(prompt, shown.request_id if shown else "")
+            return
         if kind == "question" and not options:
             # A plain-text question at turn end: the turn's text already reached the
             # chat, and a typed reply goes in like any message.
@@ -3206,6 +4527,7 @@ class ChannelManager:
         for waiting in self._await_text.pop(pane_id, []):
             if waiting.timer is not None:
                 waiting.timer.cancel()
+            self._count_awaiting(waiting.pending, -1)
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)
@@ -3260,8 +4582,10 @@ class ChannelManager:
                 "chat_id": b.chat_id, "title": "", "kind": "",
                 "supports_topics": bool(b.thread_id), "bindings": []})
             pane = self._pane_info(b, directory)
+            usable = self._chat_usable(b.platform, b.account, b.chat_id, chat["kind"])
             chat["bindings"].append({**b.public(), "pane_id": self._seams.resolve_pane(b.pane_id) or b.pane_id,
-                                     "created_at": b.created_at, "pane": pane})
+                                     "created_at": b.created_at, "pane": pane,
+                                     **({} if usable else {"needs_approval": True})})
             if not pane["exists"]:
                 entry["orphans"].append(b.pane_id)
         return {"ok": True, "bots": [{**v, "chats": list(v["chats"].values())} for v in bots.values()]}
@@ -3315,6 +4639,11 @@ def _bot_label(bot: BotKey) -> str:
     """How errors name a bot: the bare platform for "default", as they always have."""
     platform, account = bot
     return platform if account == DEFAULT_ACCOUNT else f"{platform}/{account}"
+
+
+def _loc_log(msg: InboundMessage) -> str:
+    """A chat location in the log: its bot and a hash of the chat, never the chat id."""
+    return f"{_bot_label((msg.platform, msg.account))} chat={inbound.chat_hash(msg.location_key())}"
 
 
 def _failure_text(exc: BaseException) -> str:

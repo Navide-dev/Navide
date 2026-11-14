@@ -26,6 +26,9 @@ def _runs():
 class _Store:
     """Just enough project_store for the two spawn handlers and pipeline.start."""
 
+    def peek(self, workspace_path):
+        return None  # no run recorded: MCP's start path asks the window
+
     def start_pipeline(self, workspace_path, **_kw):
         return SimpleNamespace(workspace_path=workspace_path, log_file_name="", id="run", task_description="")
 

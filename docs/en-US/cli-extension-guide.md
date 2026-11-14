@@ -10,7 +10,7 @@ have since moved.
 
 Current built-in agent keys are `claude`, `codex`, `antigravity`, `grok`,
 `kimi`, `opencode`, `qwen`, `kilo`, `pi`, `copilot`, `cursor`, `aider`,
-`muse`, `droid`, `mcode`, and `goose`. One key identifies a vendor on both sides — `agentKey`
+`muse`, `droid`, `mcode`, `goose`, `devin`, `kiro`, `openclaw`, and `hermes`. One key identifies a vendor on both sides — `agentKey`
 in the frontend, `agent_key` in the backend.
 
 The [vendor matrix roster](cli-vendor-matrix.md#roster) lists the current UI
@@ -70,6 +70,55 @@ one carry `evidence="source"` — no real-account round-trip has been recorded; 
 Code's adapter (region-scoped compound file plus a companion `auth-state`
 write, no session resume) is the newest.
 
+### Two kinds of vendors: CLI and Agent
+
+Since 0.2.39 a vendor is one of two kinds:
+
+- **CLI** — a tool that writes code for the user inside a repository and is
+  done when its session ends: Claude Code, Codex, Devin CLI, Goose and the
+  rest. Navide runs it in a pane, reads its transcript where it can, resumes
+  it, and switches its accounts.
+- **Agent** — a long-lived, independent agent with its own identity, memory,
+  schedules and chat channels, which keeps running whether or not a pane is
+  open. Navide is a console onto it, not its runtime.
+
+How to decide: if the vendor's own state (who it is, what it remembers, what
+it is scheduled to do, which channels it answers) lives outside the session
+and outlives it, it is an Agent. If a session is the unit of work and the
+repository is where the work lands, it is a CLI. A vendor that merely
+*can* run unattended (`--yolo`, a headless mode) is still a CLI.
+
+The kind is the frontend spec's `kind` field
+(`src/renderer/src/platform/plugin-shell/agents/types.ts`): `'agent'` for an
+Agent, left out (or `'cli'`) for a CLI. Set it in `agents/<key>.ts`; nothing
+else needs an edit, and no surface keeps a list of names. The backend spec has
+no counterpart.
+
+Where it shows: the ＋ menu on a workspace heading lists its entries in two
+blocks, each under a small heading — **CLI** first, then **Agents**. Inside
+each block the order and the disabled set of Settings → CLI Agents apply as
+before, and a block with no enabled entry is left out with its heading.
+Terminal, Manual spawn and the cloud-agents Marketplace hint sit below both
+blocks. Every other surface (Manual spawn's dropdown, "Handle Issue As…",
+accounts, token stats) lists both kinds together.
+
+Current members: Agent = `openclaw` (OpenClaw) and `hermes` (Hermes Agent);
+every other vendor, Devin CLI included, is a CLI.
+
+What 0.2.39 wires for an Agent: launching it in a pane (the TUI attaches to
+the agent's own runtime where it has one), the guided install (docs link only —
+both official installers pipe a script into a shell), its data directories,
+and the YOLO flag where one exists (`hermes chat --yolo`). Since 0.2.40 both
+also have session resume (Navide names the session), a turn-end signal and
+token counts read from their own SQLite stores (Hermes `state.db`, OpenClaw
+`openclaw-agent.sqlite`). Still not wired: a model or effort choice for
+either (OpenClaw's TUI has none; Hermes refuses `-m` / `--reasoning` on the
+`--continue` launch Navide uses) and a kickoff flag for either
+(the role text is typed into the composer like every vendor's). Keys and account switching are left alone on purpose: an Agent's
+providers and keys live in its own home (`~/.openclaw`, `~/.hermes`), and
+Navide reads none of it, offers no account switching and fetches no usage.
+Part 2's OpenClaw and Hermes Agent record has the per-vendor detail.
+
 ---
 
 ## Part 2 — Integration records
@@ -80,6 +129,100 @@ exist as described, and the per-layer instructions are superseded by Part 1.
 What remains valid — and is recorded nowhere else — is the per-vendor
 research: install routes, resume syntax, session storage formats, token
 accounting, and the trap each CLI hides.
+
+### ACP panes: Claude Code over `claude-acp` — added 2026-11-10 (experimental)
+
+An ACP pane runs a CLI over the [Agent Client Protocol](https://agentclientprotocol.com)
+(JSON-RPC on stdio) instead of in a terminal: Navide draws the conversation,
+sends prompts as `session/prompt` and reads the turn end from the protocol's
+`stopReason`. It is added beside a CLI's terminal integration, never in place
+of it: `cli_vendors/<key>.py` is not touched, and a CLI absent from
+`acp_vendors.py` has no ACP pane.
+
+| Question | Claude Code (`claude`) |
+|---|---|
+| Switch | Settings → CLI Agents → ACP (experimental), ui setting `acpExperimental`, **off by default**. Off, `ACP_LAUNCHES` is empty, the ＋ menu has no ACP row, no adapter is listed for install and `tools/list` is byte-identical to main (`MAIN_TOOLS_LIST_SHA256`). `acp_switch.py` applies it at startup and on every `ui.settings.set` that changes the key. |
+| Launch | `claude-agent-acp` from npm `@agentclientprotocol/claude-agent-acp`, the ACP registry's `claude-acp` entry (0.102.0 on 2026-11-10; ACP protocol version 1, schema v1.30.0). The adapter runs Claude Code through the Claude Agent SDK with the user's own login. |
+| Install | The adapter is an install-wizard dependency (`claude-acp`, optional) only while the switch is on: `npm install -g @agentclientprotocol/claude-agent-acp@0.102.0`. The ＋ menu opens the guided install while it is missing; `acp.create` refuses with `ACP_ADAPTER_MISSING` (details `dep_id`) if it is still missing. |
+| Verified version | `verified_version = "0.102.0"` (`claude-agent-acp --version` prints the bare version). The install pins it; another installed version is not refused. |
+| Entry point | The ＋ menu's Agents block, "Claude Code (ACP)", the only caller of `spawnPane({display: 'acp'})` (App.vue `onAcpSpawn`, pinned by `acpEntryPoints.test.ts`). The pane's agent key stays `claude`. |
+| Messaging | A pane like any other: `cli_list_targets` lists it, `cli_send` is queued and enveloped by the window and handed over as a prompt (`acp.deliver` → `acp.prompt`), never typed. `cli_get_status`, `cli_wait_idle`, `cli_read_log` and `cli_interrupt` answer from the backend's own session (`acp_mcp.py`); their descriptions gain `acp_mcp.TOOL_NOTES` only while the switch is on (`ACP_ON_TOOLS_LIST_SHA256`). |
+| Turn end | `stopReason` → `turn_complete` with the reply text, recorded and broadcast as `agent.activity` like a log reader's (source `""`, so no hook/log pairing applies). |
+| Permissions | Every `session/request_permission` is asked in the pane (the main window); Guard is not consulted. Navide launches the adapter bare (no bypass flag, no `_meta` options), so the session's permission mode is the adapter's: an explicit mode, else the resumed transcript's, else the user's `permissions.defaultMode`, and with no `defaultMode` set **`auto`** whenever the mode catalog offers it (0.102.0 `resolveInitialPermissionMode`, "like an interactive Claude Code session"). In `auto` most tool calls never reach `canUseTool`, so the pane shows no request; `skipDangerousModePermissionPrompt` plays no part. To see requests, set `"permissions": {"defaultMode": "default"}` in the account's Claude settings (or `disableAutoMode: "disable"`). Verified on the Linux VM 2026-11-10 (B10 step 6): no `defaultMode`, a Bash `touch` ran with no request. |
+| Not wired (0.2.42 or later) | MCP back to Navide (`session/new` sends `mcpServers: []`), Guard on permission requests, roles (none is injected), restore after a restart (no manual-pane record is written), account switching, Agent History tokens. |
+| Hooks | Claude Code under the adapter runs the user's own hooks (0.102.0 passes `settingSources: ["user", "project", "local"]`; a PreToolUse hook in `~/.claude/settings.json` fired on the Linux VM, 2026-11-10). Navide's hooks (Guard, turn and permission-hold events) do **not** run: a terminal pane gets them through `--settings <runtime/claude/settings.json>` (`claude_hooks.wire_spawn`), and `acp.create` starts `claude-agent-acp` without it. Planned for 0.2.42 with the MCP connection back (candidate: `_meta.claudeCode.options.extraArgs`). |
+| Unverified | Windows (npm `.cmd` shim, non-ASCII user paths) has never run a real adapter. |
+
+### Kiro CLI (`kiro`, AWS) — added 2026-11-12
+
+A coding CLI (the ＋ menu's CLI list), the successor of Amazon Q Developer CLI.
+Read from the official docs on 2026-11-12 (kiro.dev/docs/cli,
+/docs/reference/cli-commands, /docs/reference/settings, /docs/mcp/configuration,
+/docs/hooks, /docs/hooks/types, /docs/hooks/actions, /docs/steering); no binary
+was installed, so nothing here is a live recording. The minimum integration:
+launch, install detection, navide MCP, a turn-end hook.
+
+| Question | Finding (docs, 2026-11-12) |
+|---|---|
+| Install | `curl -fsSL https://cli.kiro.dev/install \| bash` (macOS / Linux), a Homebrew cask `kiro-cli`, `.deb`, AppImage. Windows 11 is listed as supported with no install command. The install entry has no command and links kiro.dev/docs/cli. `kiro-cli update` updates; the diagnostic command is `kiro-cli diagnostic` (there is no `doctor`). |
+| Version | `kiro-cli --version` / `-V`; output undocumented, the generic `(\d+\.\d+\.\d+)` is used. No verified version (`test_spawn_probe_version_drift` exempts it). |
+| Launch | `kiro-cli chat --v3`. `kiro` alone opens the IDE. `--v3` pins the V3 harness, which the hook below is written for (headless runs default to V2). |
+| Permissions | YOLO appends `--trust-all-tools` (a `chat` flag); interactive V3 shows a confirmation warning first. |
+| MCP | No flag or variable carries a document, but `KIRO_HOME` relocates the whole global directory. Each pane gets its own (`mcp_server/pane_home.py`, kimi's shape): every entry links to the user's `~/.kiro`, except `settings/mcp.json` (the user's servers plus `navide` as a bare `url`) and `hooks/`. |
+| Turn end | `hooks/` in the pane's home is a real directory: the user's hook files are links, plus `navide.json`, a V3 hook with trigger `Stop` whose command posts the stdin JSON (`hook_event_name`, `cwd`, `session_id`) to `/hooks/kiro` and always exits 0 (`kiro_hooks.py`). The user's `~/.kiro/hooks` is never written, so a Kiro run outside Navide posts nothing. No reader attributes Kiro sessions, so the hook names its pane by the spawn token (`VendorSpec.hook_pane_token`; `cli_hook` looks it up only for vendors declaring it). Without the hook (for example `chat.agentEngine` set to `v2`) the pane falls back to PTY quiet time. |
+| Sign-in | `kiro-cli login` (GitHub, Google, AWS Builder ID, IAM Identity Center); credential location undocumented. No `login_command_args`, no account switching, no usage. |
+| Instruction files | `~/.kiro/steering/*.md`, `.kiro/steering/*.md`, and `AGENTS.md` at the workspace root (also read from `~/.kiro/steering/`). |
+| Not wired | Reader, resume (`--resume-id <ID>` exists, the session SQLite is undocumented), model / effort flags (documented, not checked against an invalid value), Guard (`PreToolUse` non-zero exit blocks), usage (`/usage`), extensions inventory. Busy/idle detection, bracketed paste and the bare-line reply protocol are unverified. |
+| Unverified | Whether `KIRO_HOME` covers `hooks/` (the docs list settings, sign-ins, sessions, agents, MCP, not hooks); whether Kiro rewrites its SQLite or credential files by atomic rename, which would replace a link in the pane's home with a pane-local file. Both are on the live acceptance list in plan `kiro-cli-kiroween_58d93a`. |
+
+### Devin CLI (`devin`, Cognition) — added 2026-11-07
+
+A coding CLI (the ＋ menu's CLI list). Read from the
+official docs on 2026-11-07 (docs.devin.ai/cli, /cli/reference/commands,
+/cli/essential-commands, /cli/handoff, /cli/extensibility/rules,
+/cli/reference/configuration/config-file, /cli/changelog/stable); no binary
+was installed, so nothing here is a live recording.
+
+| Question | Finding (docs, 2026-11-07) |
+|---|---|
+| Install | `curl -fsSL https://cli.devin.ai/install.sh \| bash` (macOS / Linux / WSL), `brew install --cask devin-cli`, or on Windows an x86_64/ARM64 installer or `irm https://static.devin.ai/cli/setup.ps1 \| iex` in PowerShell (not Git Bash or CMD). The install entry has no command, so the guided install shows the docs link. `devin update` / `devin doctor` are the update and diagnostic commands. |
+| Version | `devin --version` = `devin version`; the output line is undocumented. Releases are numbered `v3000.12.17`; the generic `(\d+\.\d+\.\d+)` reads `3000.12.17`. No verified version is declared (`test_spawn_probe_version_drift` exempts it). |
+| Launch | Bare `devin` opens the TUI. `devin -- <prompt>` preloads a prompt; Navide types the kickoff into the composer like every vendor. |
+| Permissions | `--permission-mode normal\|accept-edits\|smart\|dangerous\|autonomous` (`DEVIN_PERMISSION_MODE`); `dangerous` = `yolo` = `bypass`, admin deny/ask rules still apply; `autonomous` needs `--sandbox`. YOLO mode appends `--permission-mode dangerous`. |
+| Non-interactive | `-p/--print [PROMPT]`, `--prompt-file`; Navide never spawns it. |
+| Resume | `-c/--continue` (latest in cwd), `-r/--resume <id>`; `devin list` lists sessions. The session store's location is undocumented and no reader exists, so `supports_session_resume=False` and no `resumeArgs`. |
+| Cloud | `/handoff [task]` moves the session — repo, branch, conversation and **uncommitted changes** — to a cloud Devin VM; from a cloud session it pulls the PR branch back. Devin's own command and account; Navide adds nothing. |
+| Sign-in | `devin auth login` / `/login`; credential location undocumented. No `login_command_args`, no account switching, no usage. |
+| Instruction files | User: `~/.config/devin/AGENTS.md` (`%APPDATA%\devin\AGENTS.md` on Windows), `~/.devin/global_rules.md`, `~/.devin/rules/*.md`, `~/.claude/CLAUDE.md`. Project: `AGENTS.md`, `AGENTS.local.md`, `AGENT.md`, `CLAUDE.md`, `.windsurfrules`, `.devin/rules/*.md`, `.devin/global_rules.md`, plus `.windsurf/` and `.cursor/rules`. All always-on, loaded together. `native_memory` maps the Devin-specific ones and the standard files; the Windows user path is not covered (rows are home-relative). |
+| Config | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json`), project `.devin/config.json` / `config.local.json`. No relocation variable documented, so no `home_env_vars`; `data_dirs` declares that user config directory only (session and credential locations are undocumented). |
+| Not wired | Reader, resume, model flag (`--model` documented, not checked against an invalid value), MCP, skills, plugins/hooks inventory, usage, account switching. Busy/idle detection, paste protocol and the bare-line reply protocol are unverified. |
+
+### OpenClaw (`openclaw`) and Hermes Agent (`hermes`) — added 2026-11-07
+
+General assistants that own their runtime and model keys, wired as ordinary
+vendors of `kind: 'agent'` (see "Two kinds of vendors" in Part 1): the ＋
+menu's Agents block, Manual spawn and "Handle Issue As…".
+Read from the official docs on 2026-11-07. The Hermes column was measured on
+2026-11-10 against Hermes Agent v0.23.0 on Ubuntu 24.04 arm64 with a local
+stub provider, and the OpenClaw column against OpenClaw 2026.11.2 the same
+way (plan openclaw-hermes-0-2-40_a50148). The VM re-run the same day (Hermes
+v0.23.1, OpenClaw 2026.11.2) captured OpenClaw's session tables and Hermes's
+refusal of model flags on `--continue`; see the Log and Not wired rows.
+
+| Question | OpenClaw | Hermes Agent |
+|---|---|---|
+| Launch | `openclaw tui --local` (since 0.2.40; 0.2.39 ran bare `openclaw`, which attaches to a running Gateway when there is one): the TUI on the local embedded runtime, which left no background process. Navide never starts the Gateway. | `hermes chat` (since 0.2.40; 0.2.39 ran bare `hermes`): the same interactive chat, honouring `display.interface`. The subcommand because `--create-if-missing` exists only there (`hermes chat --help`, v0.23.0). |
+| Permissions | No bypass flag. | `chat --yolo`. |
+| Kickoff | Typed into the composer like every vendor. `tui --message` sends an initial message (measured) but is not used. | Typed into the composer. `chat -q` seeds the first turn on a TTY (measured) but is not used. |
+| Install | `curl \| bash`; the install entry has no command, so the guided install shows the docs link. | `curl \| bash`, or `iex (irm …/install.ps1)` on native Windows (supported; data in `%LOCALAPPDATA%\hermes`). Same: docs link only. |
+| Keys | OpenClaw's own config (`~/.openclaw/openclaw.json`). Navide reads none. | `~/.hermes/.env` / `config.yaml` (`$HERMES_HOME`). Navide reads none. |
+| Instruction files | Agent workspace `~/.openclaw/workspace/AGENTS.md`, `SOUL.md` — not the TUI's cwd. | Project: `.hermes.md`/`HERMES.md`, `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`; home: `SOUL.md`. |
+| Not wired | Model / effort flags (the TUI has none; `agent --model` is non-interactive, `models set` is global), MCP, skills, extensions inventory, usage, account switching, the `agent_end` plugin hook. | Model / effort: `chat` lists `-m` / `--reasoning`, but v0.23.1 refuses both on any `--continue` launch, creation included (exit 2, "creation overrides are unsupported on resume"); `/model` and `/reasoning` switch the session only when typed raw into the PTY, which no launch path does. Also MCP, skills, extensions inventory, usage, account switching, the `on_session_end` shell hook (it needs the user's `config.yaml`). |
+| Session | Navide names it: `--session agent:main:navide-<uuid>` on every launch, fresh or resumed (the same key reattaches; measured). | Navide names it: a fresh pane runs `--create-if-missing --continue navide-<uuid>`, a resume `--continue navide-<uuid>` (the latest session in that title's lineage; Hermes titles a continuation `<name> #2`). The CLI's own `local-<64hex>` id is never needed. |
+| Log | `<state>/agents/<agentId>/agent/openclaw-agent.sqlite`, table `transcript_events`, read-only through `session_id`, `seq`, `event_json`, `message_role` only. zstd-compressed rows are skipped (Python 3.12). The column holds the UUID `sessionId` and the header event names no key, so the key comes from the same store's `session_windows` (`session_id` → `session_key`, earlier windows included), else `session_nodes` (`current_session_id`); a build without them falls back to the column or header. A session none of them names reaches no pane, is logged once and is looked up again on the next pass. A store missing a column is logged once and gives no signal. | One SQLite store, `<home>/state.db`, read-only. Used columns: `sessions` id/title/parent_session_id/cwd/token counters/last_activity_at, `messages` id/session_id/role/content/tool_calls/timestamp/finish_reason. A store missing any of them is logged once and gives no signal. |
+| Turn end | An assistant `message` whose `stopReason` is set and is not `toolUse`. Measured only on the stub. | An assistant row whose `finish_reason` is set and is not `tool_calls`. Measured only on a local OpenAI-compatible stub; real providers with tools or an interrupt are unverified. |
+| Tokens | An assistant message's `usage` (input / output / cacheRead / cacheWrite) when the row carries it. | Growth of the per-session counters in `sessions` (no per-call rows); cache folded into input. Whether Hermes's `input_tokens` already contains the cache part is unverified. |
+| Background process | None with `--local`. The agent works in `~/.openclaw/workspace`, not the pane's cwd. | The first chat starts `hermes gateway run --idle-exit` (ppid 1); it outlived 12.5 idle minutes. Hermes's own; Navide neither starts nor stops it. |
 
 ### Goose (`goose`, AAIF) — added 2026-10-21
 

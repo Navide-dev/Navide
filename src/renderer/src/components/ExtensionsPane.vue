@@ -20,7 +20,9 @@ import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow }
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
+import PluginStopSummary from './PluginStopSummary.vue'
 import PluginBackgroundAiSessions from './PluginBackgroundAiSessions.vue'
+import PluginSettingsForm from './PluginSettingsForm.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import SettingsCard from './settings/SettingsCard.vue'
@@ -36,8 +38,15 @@ import { disclosureClauses } from '../lib/disclosureText'
 import { leadSentence } from '../lib/leadSentence'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { DisclosureRiskLevel } from '../../../shared/pluginDisclosure'
+import SettingsEmptyState from './settings/SettingsEmptyState.vue'
+import { BUILD_FOR_NAVIDE_URL } from '../../../shared/marketplaceDeveloper'
 
 const { t, locale } = useI18n()
+
+/** Developer Mode page: the entry page for a first Navide plugin (plan v2_8714c5 b2). */
+function openBuildGuide(): void {
+  void window.agentTeam?.openExternal?.(BUILD_FOR_NAVIDE_URL)
+}
 
 function pluginsApi() {
   return window.agentTeam?.plugins
@@ -70,6 +79,7 @@ const selectedId = computed(() =>
 // list row; the full disclosure is in the selected card and the overview below.
 // The Plans risk note leads with its first sentence in bold; every word stays.
 const plansRiskNote = computed(() => leadSentence(t('settings.extensions.plansRiskNote')))
+const browserRiskNote = computed(() => leadSentence(t('settings.extensions.browserRiskNote')))
 const riskById = ref(new Map<string, DisclosureRiskLevel>())
 // What it declares, in the disclosure's own clauses: the card's one-line reason
 // for its risk level. The full record is on the Disclosure page.
@@ -139,19 +149,26 @@ function factoryWarnings(p: FactoryRow): string[] {
     out.push(t('settings.extensionsPolicy.labeledValue', { label: t('settings.extensions.sensitive'), value: p.installed.sensitive.join(', ') }))
   }
   if (p.id === 'navide.plans') out.push(t('settings.extensions.plansRiskNote'))
+  if (p.id === 'navide.browser') out.push(t('settings.extensions.browserRiskNote'))
   return out
 }
 const busy = ref(false)
 const error = ref('')
 // A failed inventory read, shown apart from the action error it may follow.
-const inventoryError = ref('')
+// It keeps its i18n key and is translated when shown, so a language change
+// never leaves it in the previous language.
+const inventoryError = ref<{ key: string; params: Record<string, unknown> } | null>(null)
+// Until the first read answers, the list says it is loading (or why it is not
+// there) instead of showing an empty page.
+const inventoryLoaded = ref(false)
 
 async function reloadInventory(): Promise<void> {
   try {
     await refreshInstalled()
-    inventoryError.value = ''
+    inventoryError.value = null
+    inventoryLoaded.value = true
   } catch (err) {
-    inventoryError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+    inventoryError.value = { key: 'settings.extensions.inventoryRefreshFailed', params: { error: ipcErrorMessage(err) } }
   }
 }
 // Updates for installed Registry packages; the Update button reuses the
@@ -164,7 +181,7 @@ const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
 // D-f: rows whose permissions section is open; the activity panel (and its
 // reads) exists only then.
-const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]] }>()
+const emit = defineEmits<{ openDisclosureOverview: [id?: string]; developerOn: [switches: string[]]; openMarketplace: [] }>()
 // Settings shows this pane on two of the Navide Plugins pages: the plugins
 // themselves, and Developer Mode with native backends. Everything stays
 // mounted; the page only decides what is shown.
@@ -251,7 +268,6 @@ const HOST_REFUSALS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^previous package artifact identity changed before rollback$/, 'previousChanged'],
   [/^active package grant is unavailable for (?<id>.+)$/, 'grantUnavailable'],
   [/^factory package rollback is unavailable$/, 'factoryUnavailable'],
-  [/^Bundled Git cannot be restored while NAVIDE_GIT_RECOVERY=legacy is forcing legacy recovery$/, 'gitLegacyRecovery'],
   [/^Factory package restoration failed: (?<detail>.+)$/s, 'factoryRestoreFailed'],
 ]
 
@@ -416,7 +432,11 @@ function digestBlockKey(reason: 'security' | 'admin' | 'qualification-revoked' |
 // built-in waits for a store check in progress and then drains (Plans can
 // take about half a minute), so the row says it is working.
 const switching = ref<string | null>(null)
+// Plan P2: a package disabled by a stop shows what it was doing then before
+// it is enabled again; Enable on its row opens that summary first.
+const enableAsk = ref<string | null>(null)
 async function setDisabled(id: string, disabled: boolean): Promise<void> {
+  enableAsk.value = null
   const api = pluginsApi()
   if (!api?.setDisabled) return
   busy.value = true
@@ -444,6 +464,37 @@ async function refreshDisabledStoreStatus(): Promise<void> {
     disabledStoreStatus.value = 'ok'
   }
 }
+// Plan P4: the per-package "Notify agent panes" switch (off by default).
+async function setNotifyAgents(id: string, allowed: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setNotifyAgents) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setNotifyAgents(id, allowed)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+// C1: the per-package "Only allow declared network hosts" switch.
+async function setNetworkStrict(id: string, strict: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setNetworkStrict) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setNetworkStrict(id, strict)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function resetDisabledStore(): Promise<void> {
   const api = pluginsApi()
   if (!api?.resetDisabledStore) return
@@ -710,7 +761,7 @@ watch(installed, () => {
 <template>
   <div class="extensions-pane">
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
-    <p v-if="inventoryError" class="ext-error" role="alert">{{ inventoryError }}</p>
+    <p v-if="inventoryError && inventoryLoaded" class="ext-error" role="alert">{{ $t(inventoryError.key, inventoryError.params) }}</p>
     <p v-if="updateFlow.error.value" class="ext-error" role="alert">{{ updateFlow.error.value }}</p>
     <!-- Card K4: shown above the lists for as long as Developer Mode is on. -->
     <p v-if="developerMode.enabled" class="ext-devmode-banner ext-risk-banner" role="status">
@@ -759,7 +810,7 @@ watch(installed, () => {
          with its permissions and disclosure, on the right. All cards stay in
          the page (only the selected one is shown), so nothing a card offers
          depends on the selection. -->
-    <div v-show="props.page === 'plugins'" class="ext-md-toolbar">
+    <div v-show="props.page === 'plugins' && !(inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0)" class="ext-md-toolbar">
       <!-- Updates are for installed packages; with none installed the line
            would contradict the empty list. -->
       <span v-if="pluginUpdates.count.value && nonFactoryInstalled.length" class="ext-updates-summary" role="status">
@@ -775,7 +826,35 @@ watch(installed, () => {
         {{ $t('settings.extensions.localInstall.button') }}
       </button>
     </div>
-    <div v-show="props.page === 'plugins'" class="ext-md">
+    <p v-if="!inventoryLoaded && !inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-loading" role="status">
+      {{ $t('label.loading') }}
+    </p>
+    <div v-else-if="!inventoryLoaded && inventoryError" v-show="props.page === 'plugins'" class="ext-inventory-state nv-empty" role="alert">
+      <p class="ext-inventory-state-text">{{ $t(inventoryError.key, inventoryError.params) }}</p>
+      <button type="button" class="ext-inventory-retry nv-btn nv-btn--sm" @click="reloadInventory">
+        {{ $t('settings.extensions.marketplace.retry') }}
+      </button>
+    </div>
+    <!-- Nothing bundled and nothing installed: one full-width empty state with
+         the page's actions, not a list beside a blank detail pane. -->
+    <SettingsEmptyState
+      v-if="inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length === 0"
+      v-show="props.page === 'plugins'"
+      class="ext-inventory-empty"
+      :message="$t('settings.extensions.empty')"
+    >
+      <button
+        class="ext-install-file nv-btn nv-btn--primary nv-btn--sm"
+        :disabled="busy || updateFlow.busy.value"
+        @click="updateFlow.installFromFile()"
+      >
+        {{ $t('settings.extensions.localInstall.button') }}
+      </button>
+      <button type="button" class="ext-browse-marketplace nv-btn nv-btn--sm" @click="emit('openMarketplace')">
+        {{ $t('settings.extensions.browseMarketplace') }}
+      </button>
+    </SettingsEmptyState>
+    <div v-show="props.page === 'plugins' && inventoryLoaded && factoryRows.length + packs.length + nonFactoryInstalled.length > 0" class="ext-md">
       <div class="ext-md-list">
         <section class="ext-section" data-settings-section="extensions-bundled">
           <h3 class="ext-section-title">
@@ -793,7 +872,7 @@ watch(installed, () => {
               >
                 <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="28" />
                 <span class="ext-md-row-text">
-                  <span class="ext-md-row-name" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+                  <span class="ext-md-row-name" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id === 'navide.browser' ? $t('settings.extensions.bundledBrowser') : p.id }}</span>
                   <span class="ext-md-row-sub">{{ p.installed?.packageVersion ?? p.version }}</span>
                 </span>
                 <span class="ext-md-row-end">
@@ -894,7 +973,7 @@ watch(installed, () => {
               </button>
             </li>
           </ul>
-          <p v-if="!nonFactoryInstalled.length" class="ext-empty nv-empty">{{ $t('settings.extensions.empty') }}</p>
+          <SettingsEmptyState v-if="!nonFactoryInstalled.length" class="ext-empty" :message="$t('settings.extensions.empty')" />
         </section>
       </div>
       <div class="ext-md-detail">
@@ -921,7 +1000,7 @@ watch(installed, () => {
             <div class="ext-row-head">
               <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="32" />
               <div class="ext-row-title">
-                <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+                <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id === 'navide.browser' ? $t('settings.extensions.bundledBrowser') : p.id }}</span>
                 <span v-if="p.installed?.packageVersion ?? p.version" class="ext-requires">
                   {{ p.installed?.packageVersion ?? p.version }}
                 </span>
@@ -945,6 +1024,9 @@ watch(installed, () => {
                  sandbox wording does not apply to it. -->
             <p v-if="p.id === 'navide.plans'" class="ext-risk-note">
             <strong class="ext-lead">{{ plansRiskNote.lead }}</strong>{{ plansRiskNote.separator }}{{ plansRiskNote.rest }}
+            </p>
+            <p v-if="p.id === 'navide.browser'" class="ext-risk-note">
+            <strong class="ext-lead">{{ browserRiskNote.lead }}</strong>{{ browserRiskNote.separator }}{{ browserRiskNote.rest }}
             </p>
             <div v-if="p.disabled !== undefined || p.installed?.pendingCandidateVersion" class="ext-actions">
               <button
@@ -1185,10 +1267,30 @@ watch(installed, () => {
                   v-else-if="p.disabled"
                   class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
                   :disabled="busy || updateFlow.busy.value"
-                  @click="setDisabled(p.id, false)"
+                  @click="p.stopRecord ? (enableAsk = p.id) : setDisabled(p.id, false)"
                 >
                   {{ $t('settings.extensions.enable') }}
                 </button>
+                <!-- P4: notifications into agent panes; off until the user turns it on. -->
+                <label v-if="p.notifyAgents !== undefined" class="ext-network-strict ext-notify-agents" :title="$t('pluginNotify.switchNote')">
+                  <input
+                    type="checkbox"
+                    :checked="p.notifyAgents"
+                    :disabled="busy"
+                    @change="setNotifyAgents(p.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ $t('pluginNotify.switch') }}
+                </label>
+                <!-- C1: the per-package network switch (off by default: record, do not refuse). -->
+                <label v-if="p.networkStrict !== undefined" class="ext-network-strict" :title="$t('settings.extensions.networkStrictNote')">
+                  <input
+                    type="checkbox"
+                    :checked="p.networkStrict"
+                    :disabled="busy"
+                    @change="setNetworkStrict(p.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ $t('settings.extensions.networkStrict') }}
+                </label>
                 <!-- `navide.` packages ship with Navide: they are disabled, never removed.
                      A Marketplace first-party package (navide.browser) is the
                      exception: the Host offers its Disabled switch, and it is
@@ -1203,6 +1305,16 @@ watch(installed, () => {
                 </button>
               </div>
               <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
+              <div v-if="p.disabled && p.stopRecord && enableAsk === p.id" class="ext-stop-enable" role="group" :aria-label="$t('pluginStop.enable.heading', { id: reveal(p.id) })">
+                <p class="ext-stop-enable-head">{{ $t('pluginStop.enable.heading', { id: reveal(p.id) }) }}</p>
+                <PluginStopSummary :record="p.stopRecord" />
+                <div class="ext-actions">
+                  <button class="ext-stop-enable-confirm nv-btn nv-btn--primary nv-btn--sm" :disabled="busy" @click="setDisabled(p.id, false)">
+                    {{ $t('pluginStop.enable.confirm') }}
+                  </button>
+                  <button class="ext-stop-enable-cancel nv-btn nv-btn--sm" @click="enableAsk = null">{{ $t('pluginStop.cancel') }}</button>
+                </div>
+              </div>
               <p v-if="p.provenance === 'developer-local-unpacked' && folderLoadedByText(p.id)" class="ext-disabled-note ext-devmode-loaded-by">
                 {{ folderLoadedByText(p.id) }}
               </p>
@@ -1245,6 +1357,8 @@ watch(installed, () => {
                 :plugin-id="p.id"
                 :paused="selectedId !== p.id"
               />
+              <!-- The settings it declares (contributes.settings), as a form. -->
+              <PluginSettingsForm v-if="selectedId === p.id" :plugin-id="p.id" />
               <details
                 v-if="p.manifestPermissions || p.packageVersion"
                 class="ext-permission-details"
@@ -1325,6 +1439,11 @@ watch(installed, () => {
           </template>
         </SettingRow>
       </SettingsCard>
+      <p class="ext-devmode-first" data-testid="developer-mode-first-time">
+        {{ $t('settings.extensions.developerMode.firstTime') }}
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-mode-guide" @click="openBuildGuide">{{ $t('settings.extensions.developerMode.openGuide') }}</button>
+      </p>
+      <p class="ext-devmode-first">{{ $t('settings.extensions.developerMode.agentSkill') }} <code>navide:plugin-authoring</code></p>
       <button
         v-if="developerMode.enabled"
         class="ext-load-folder nv-btn nv-btn--sm"
@@ -1354,7 +1473,7 @@ watch(installed, () => {
       </ul>
     </section>
 
-    <div v-show="props.page === 'developer'">
+    <div v-show="props.page === 'developer'" class="ext-devmode-native">
       <NativeBackendPanel @on="(switches) => (nativeSwitchesOn = switches)" />
     </div>
 
@@ -1433,10 +1552,6 @@ watch(installed, () => {
 /* In the list the group names are labels, a tier below the page blocks. */
 .ext-md-list .ext-section-title {
   margin: 0 var(--space-2) var(--space-1);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0;
 }
 .ext-md-rows {
   display: grid;
@@ -1576,7 +1691,7 @@ watch(installed, () => {
 }
 .ext-badge.ext-md-risk--medium {
   background: var(--attention-subtle);
-  color: var(--attention-fg);
+  color: var(--attention-on-subtle);
 }
 .ext-badge.ext-md-risk--high {
   background: var(--warning-fg);
@@ -1588,9 +1703,6 @@ watch(installed, () => {
 }
 .ext-md-list .ext-empty {
   margin: 0 var(--space-2);
-  padding: var(--space-3);
-  font-size: var(--font-xs);
-  text-align: center;
 }
 .ext-md-detail {
   align-self: stretch;
@@ -1679,7 +1791,7 @@ watch(installed, () => {
   color: var(--danger-bright);
   font-size: var(--font-xs);
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ext-section {
   margin-bottom: var(--space-6);
@@ -1692,10 +1804,12 @@ watch(installed, () => {
   align-items: center;
   gap: var(--space-2);
   margin: 0 0 var(--space-3);
-  color: var(--text-bright);
-  font-size: var(--font-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  /* Section headings share SettingsSection's small uppercase label. */
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 /* Row actions get the regular control height: they are the main targets here. */
 .extensions-pane .nv-btn {
@@ -1719,6 +1833,16 @@ watch(installed, () => {
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   background: var(--risk-subtle);
   color: var(--risk-fg);
+}
+/* The Developer page is prose and switches: it takes the shared measure. */
+.ext-devmode,
+.ext-devmode-native {
+  max-width: var(--settings-page-max);
+}
+.ext-devmode-first {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
 }
 .ext-devmode .ext-load-folder {
   margin-top: var(--space-3);
@@ -1756,7 +1880,7 @@ watch(installed, () => {
 }
 .ext-installed {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-muted);
+  border: 1px solid var(--settings-card-border, var(--border-muted));
   border-radius: var(--radius-md);
   background: var(--bg-subtle);
   transition: border-color var(--motion-fast) var(--ease-out);
@@ -2240,6 +2364,22 @@ watch(installed, () => {
   color: var(--text-secondary);
   font-size: var(--font-xs);
 }
+/* Plan P2: what a stopped package was doing, before it is enabled again. */
+.ext-stop-enable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-muted);
+  border-left: 3px solid var(--attention-fg);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.ext-stop-enable-head {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
 .ext-pack-includes {
   color: var(--text-secondary);
   font-size: var(--font-xs);
@@ -2253,10 +2393,15 @@ watch(installed, () => {
   font-size: var(--font-xs);
   cursor: pointer;
 }
-.ext-empty {
-  color: var(--text-secondary);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
+/* The first inventory read is out or failed: one line, and Retry under it. */
+.ext-inventory-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ext-inventory-state-text {
+  margin: 0;
 }
 /* Long setting descriptions keep a readable line length. */
 :deep(.setting-row-desc) {

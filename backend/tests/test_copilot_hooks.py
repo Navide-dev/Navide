@@ -61,7 +61,7 @@ def test_both_shells_are_written_on_every_platform(tmp_path) -> None:
     assert handler["bash"].startswith("PORT=$(cat /tmp/port-file 2>/dev/null); ")
     # `curl` alone is a PowerShell alias for Invoke-WebRequest; `@` starts a splat.
     assert handler["powershell"].startswith(
-        "$PORT = Get-Content -ErrorAction SilentlyContinue '/tmp/port-file'; "
+        "$PORT = $null; try { $PORT = [IO.File]::ReadAllLines('/tmp/port-file') } catch {}; "
     )
     assert "& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 2 -o NUL -X POST" in handler["powershell"]
     assert "--data-binary '@-'" in handler["powershell"]

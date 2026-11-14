@@ -1,23 +1,45 @@
 {% extends "base.html" %}
+{% from "_journey.html" import journey_bar, journey_here %}
 {% block title %}Publish — Navide Marketplace{% endblock %}
 {% block content %}
 <section class="panel narrow">
   <h1>Publish on Navide Marketplace</h1>
-  <p>Sign in with your Navide Cloud account. Extensions you publish are
-    reviewed before they appear.</p>
-  <ol class="steps">
-    <li><div><b>Sign in</b><span>With the Navide account you use on the forum.</span></div></li>
-    <li><div><b>Claim a namespace</b><span>The first half of every extension id, such as <code>acme.my-extension</code>.</span></div></li>
-    <li><div><b>Publish with the CLI</b><span><code>navide-plugin publish</code> uploads a version; it goes public after review.</span></div></li>
-  </ol>
+  {% if journey %}
+    {{ journey_bar(journey.step) }}
+    {{ journey_here(journey, base) }}
+  {% else %}
+    <p>Seven steps from an approved developer to a listed extension. Sign in with your Navide
+      Cloud account to see which step you are on. Extensions you publish are reviewed before
+      they appear.</p>
+    {{ journey_bar(muted=True) }}
+  {% endif %}
+
+  <h2 class="section-title">Before you publish: the checklist</h2>
+  <p class="muted">Review looks at these five things.</p>
+  <ul class="checklist">
+    <li><code>navide-plugin scan</code> shows an empty red list: no undeclared capability, no likely credential.</li>
+    <li>The package is signed with the key registered on your dashboard (otherwise <code>403 invalid package signature</code>).</li>
+    <li>README, CHANGELOG and icon are included, and the name is not close to an existing extension's.</li>
+    <li><code>permissions</code> declares only what you use; adding one later asks users again.</li>
+    <li>With a backend, one package per platform; a version number is never reused.</li>
+  </ul>
+  <pre class="code">navide-plugin publish acme.hello-1.0.0-darwin-arm64.vsix
+# human review, target: 3 business days
+navide-plugin status acme.hello</pre>
+  <p class="muted">The full flow, with who acts and what to do when a step fails:
+    <a href="{{ guide_url }}#4-publishing-is-the-business-process">Build for Navide ↗</a></p>
+
   {% if error %}<p class="warn warn-block" role="alert">{{ error }}</p>{% endif %}
+  {% if not journey %}
   {% if enabled %}
-    <a class="install-button" href="{{ base }}/login?next=/publisher">Sign in with Navide Cloud</a>
+    <a class="install-button" href="{{ base }}/login?next=/publish">Sign in with Navide Cloud</a>
     <p class="muted">Uses the same Navide account as the forum. We only read your
       account id, display name and email-verified flag.</p>
     <p class="muted">Already have a namespace? <a href="{{ base }}/publisher">Go to dashboard</a></p>
+    <p class="muted">New here? <a href="{{ base }}/developer">What you need before you apply</a></p>
   {% else %}
     <p class="muted">Navide Cloud sign-in is not enabled on this registry.</p>
+  {% endif %}
   {% endif %}
 </section>
 {% endblock %}

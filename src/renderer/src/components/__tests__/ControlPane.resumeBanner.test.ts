@@ -21,11 +21,11 @@ const stage = (id: string, shortTitle: string) => ({
   slots: [{ agentKey: 'claude', roleKey: '', label: shortTitle, kickoffBody: '', isCommander: false }],
 })
 
-function existingProject(pipelineId: string) {
+function existingProject(pipelineId: string, state: 'aborted' | 'running') {
   return {
     projectId: 'proj1',
     name: 'run',
-    state: 'aborted' as const,
+    state,
     taskDescription: 'do the thing',
     currentStageIndex: 1,
     totalStages: 5,
@@ -38,7 +38,7 @@ function existingProject(pipelineId: string) {
   }
 }
 
-function mountPane(projectPipelineId: string, activePipelineId: string): VueWrapper {
+function mountPane(projectPipelineId: string, activePipelineId: string, state: 'aborted' | 'running' = 'aborted'): VueWrapper {
   sessionStorage.setItem('agentTeam.sidebarTab', 'pipeline')
   return shallowMount(ControlPane as never, {
     props: {
@@ -60,7 +60,7 @@ function mountPane(projectPipelineId: string, activePipelineId: string): VueWrap
         available: false, version: '', defaultModel: '', models: [], benchmarkResults: [],
       },
       autoAnswerEnabled: false,
-      existingProject: existingProject(projectPipelineId),
+      existingProject: existingProject(projectPipelineId, state),
       workspace: '/tmp/ws',
       workspaces: [],
     } as never,
@@ -94,5 +94,18 @@ describe('ControlPane – Resume banner pipeline scoping', () => {
   it('still shows a legacy record that carries no pipelineId', () => {
     wrapper = mountPane('', 'pB')
     expect(wrapper.find('.resume-card').exists()).toBe(true)
+  })
+
+  // A run a Reload or crash interrupted is still stored as running: it can be
+  // ended from its card, not only resumed.
+  it('offers Abort on an interrupted run, and only there', async () => {
+    wrapper = mountPane('pA', 'pA', 'running')
+    const abort = wrapper.findAll('.resume-card button').find((b) => b.text() === 'Abort')
+    expect(abort).toBeDefined()
+    await abort!.trigger('click')
+    expect(wrapper.emitted('pipeline-abort')).toHaveLength(1)
+    wrapper.unmount()
+    wrapper = mountPane('pA', 'pA')
+    expect(wrapper.findAll('.resume-card button').some((b) => b.text() === 'Abort')).toBe(false)
   })
 })

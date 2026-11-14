@@ -6,6 +6,13 @@ export interface PipelineSummary {
   name: string
   builtin: boolean
   stage_count: number
+  /** Steps as the editor counts them (graph nodes but the trigger); absent
+   *  from an older backend. */
+  step_count?: number
+  /** The pipeline has a stored graph (drawn or edited as a graph). */
+  has_graph?: boolean
+  /** Set on pipelines made by importing an n8n workflow. */
+  imported_from?: { kind: string; importedAt: string; workflow: string }
 }
 
 /**
@@ -21,6 +28,8 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
   const error = ref<string>('')
   /** Backend code of the last failure (e.g. PIPELINE_RUNNING); '' when none. */
   const errorCode = ref<string>('')
+  /** Backend details of the last failure (e.g. a refusal's reason). */
+  const errorDetails = ref<Record<string, unknown>>({})
 
   let unsubChanged: (() => void) | null = null
   let unsubBackend: (() => void) | null = null
@@ -37,6 +46,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'failed to load pipelines'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return
       }
       pipelines.value = resp.payload.pipelines
@@ -98,6 +108,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'create failed'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return null
       }
       pipelines.value = resp.payload.pipelines
@@ -105,6 +116,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'create failed'
       errorCode.value = ''
+      errorDetails.value = {}
       return null
     }
   }
@@ -118,6 +130,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'rename failed'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return false
       }
       pipelines.value = resp.payload.pipelines
@@ -125,6 +138,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'rename failed'
       errorCode.value = ''
+      errorDetails.value = {}
       return false
     }
   }
@@ -141,6 +155,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'delete failed'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return false
       }
       pipelines.value = resp.payload.pipelines
@@ -148,6 +163,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'delete failed'
       errorCode.value = ''
+      errorDetails.value = {}
       return false
     }
   }
@@ -167,6 +183,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'set active failed'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return false
       }
       activePipelineId.value = resp.payload.active_pipeline_id
@@ -175,6 +192,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'set active failed'
       errorCode.value = ''
+      errorDetails.value = {}
       return false
     }
   }
@@ -191,6 +209,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'reset failed'
         errorCode.value = resp.error?.code ?? ''
+        errorDetails.value = resp.error?.details ?? {}
         return false
       }
       pipelines.value = resp.payload.pipelines
@@ -198,6 +217,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'reset failed'
       errorCode.value = ''
+      errorDetails.value = {}
       return false
     }
   }
@@ -212,6 +232,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     loading,
     error,
     errorCode,
+    errorDetails,
     refresh,
     createPipeline,
     renamePipeline,

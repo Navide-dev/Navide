@@ -86,6 +86,13 @@ export interface AgentToolSwitches {
   enabled: boolean
   /** DB4: external MCP clients (and the Host credential) may call them too. */
   externalCallers: boolean
+  /** Agents may call the tools of Navide's own first-party plugins. On by
+   * default: absent or anything but false reads as on. */
+  firstParty?: boolean
+  /** C3: the user set `enabled` in Settings at least once. A consent card
+   * turns the switch on only while this is absent, so a choice the user made
+   * is never overridden by allowing one more package. */
+  enabledSetByUser?: boolean
 }
 
 export interface NativeBackendState {
@@ -178,7 +185,12 @@ function parseState(value: unknown): NativeBackendState {
     plugins[pluginId] = record
   }
   const agentTools = isRecord(value.agentTools)
-    ? { enabled: value.agentTools.enabled === true, externalCallers: value.agentTools.externalCallers === true }
+    ? {
+        enabled: value.agentTools.enabled === true,
+        externalCallers: value.agentTools.externalCallers === true,
+        ...(value.agentTools.firstParty === false ? { firstParty: false } : {}),
+        ...(value.agentTools.enabledSetByUser === true ? { enabledSetByUser: true } : {}),
+      }
     : undefined
   const migratedAt = typeof value.preInstallConsentMigratedAt === 'string' ? value.preInstallConsentMigratedAt : undefined
   return {
@@ -275,7 +287,12 @@ export class NativeBackendStore {
   }
 
   agentToolSwitches(): AgentToolSwitches {
-    return { enabled: this.state.agentTools?.enabled === true, externalCallers: this.state.agentTools?.externalCallers === true }
+    return {
+      enabled: this.state.agentTools?.enabled === true,
+      externalCallers: this.state.agentTools?.externalCallers === true,
+      firstParty: this.state.agentTools?.firstParty !== false,
+      ...(this.state.agentTools?.enabledSetByUser === true ? { enabledSetByUser: true } : {}),
+    }
   }
 
   /** Turning a switch off takes effect in memory even when the save fails. */
@@ -285,7 +302,8 @@ export class NativeBackendStore {
     // DB4 never outlives DB8: turning agents off also turns external clients
     // off, so turning agents on again never silently re-enables them.
     if (change.enabled === false) next.externalCallers = false
-    const restricting = (current.enabled && !next.enabled) || (current.externalCallers && !next.externalCallers)
+    const restricting = (current.enabled && !next.enabled) || (current.externalCallers && !next.externalCallers) ||
+      (current.firstParty !== false && next.firstParty === false)
     this.save({ ...this.state, agentTools: next }, restricting)
   }
 

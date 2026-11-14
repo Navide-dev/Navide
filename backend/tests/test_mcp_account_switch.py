@@ -1,22 +1,22 @@
-"""cli_account_switch (plan mcp_614482 P3).
+"""cli_account_switch and request_account_switch (plan agent-0-2-42_3f728e).
 
-An agent can ask Navide to switch a CLI to another of its accounts. What is
-pinned here:
+An agent (or the Telegram account button) switches a CLI to another of its
+accounts directly — the user is not asked. What is pinned here:
 
-  - the tool is a thin door to the window's own switch: it asks the caller's
-    window (which asks the user first), never touches the credential vault,
-    and only a pane can use it;
-  - it sends the vendor, the account and the reason, never force or any other
-    switch option;
+  - the tool is a thin door to the window's own switch: it hands the caller's
+    window the request, never touches the credential vault, and only a pane
+    can use it;
+  - it sends the vendor, the account, the reason and who asked, never force
+    or any other switch option;
   - the agent gets a status and account display names back, never a backend
     message;
-  - ui_invoke cannot reach that action around the tool;
-  - a withdrawn or timed-out request closes the window's question.
+  - every request lands in account_switch_log, and a queued one is settled
+    (and its requester told) when the window reports it;
+  - ui_invoke cannot reach that action around the tool.
 """
 
 from __future__ import annotations
 
-import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,6 +24,8 @@ import pytest
 
 from agent_team_backend import agent_messaging
 from agent_team_backend import app as backend_app
+from agent_team_backend.account_switch_log import AccountSwitchLog
+from agent_team_backend.db import Database
 from agent_team_backend.mcp_server import (
     server as plan_mcp,
     auth as plan_mcp_auth,
@@ -70,43 +72,51 @@ class _UiRequests:
 
 
 @pytest.fixture
-def ui(monkeypatch: pytest.MonkeyPatch) -> _UiRequests:
+def switch_log(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> AccountSwitchLog:
+    store = AccountSwitchLog(Database(tmp_path / "navide.db"))
+    monkeypatch.setattr(backend_app, "account_switch_log", store)
+    return store
+
+
+@pytest.fixture
+def ui(monkeypatch: pytest.MonkeyPatch, switch_log: AccountSwitchLog) -> _UiRequests:
     fake = _UiRequests()
     monkeypatch.setattr(plan_mcp, "_ui_request", fake)
     monkeypatch.setattr(backend_app, "credential_vault", _Untouchable())
+    monkeypatch.setattr(plan_mcp, "_app_store_get", lambda pid: {"name": f"name-{pid}"})
     return fake
 
 
 @pytest.mark.asyncio
-async def test_switch_asks_the_callers_window_with_the_account_only(ui: _UiRequests) -> None:
+async def test_switch_hands_the_callers_window_the_account_only(ui: _UiRequests, switch_log: AccountSwitchLog) -> None:
     agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
     ui.answers["ui.accounts.switch"] = {
-        "ok": True, "result": {"status": "switched", "from": "Personal", "to": "Work"},
+        "ok": True, "result": {"status": "switched", "from": "Personal", "to": "Work", "fromProfileId": "p-1"},
     }
 
-    before = time.time() * 1000
     result = await plan_mcp.cli_account_switch(
         _ctx(), agent="Claude", profile_id="p-2", reason="  quota ran   out ",
     )
-    after = time.time() * 1000
 
+    [row] = switch_log.list_recent()
     assert result == {
         "ok": True, "status": "switched", "agent": "claude", "profile_id": "p-2",
-        "from": "Personal", "to": "Work",
+        "from": "Personal", "to": "Work", "request_id": str(row["id"]),
     }
     [call] = ui.calls
     assert call["op"] == "invoke"
     assert call["action"] == "ui.accounts.switch"
     assert call["workspace_path"] == "/ws/alpha"
     assert call["caller"].kind == "pane" and call["caller"].pane_id == "pa"
-    args = dict(call["args"])
-    confirm_by = args.pop("confirmBy")
-    # Exactly these keys: no force, no restore, no live-drift assumption.
-    assert args == {
+    # Exactly these keys: no force, no restore, no live-drift assumption, no deadline.
+    assert call["args"] == {
         "agentKey": "claude", "profileId": "p-2", "reason": "quota ran out", "reasonTruncated": False,
+        "requestId": str(row["id"]), "requester": {"source": "mcp", "name": "builder"},
     }
-    confirm_ms = (plan_mcp._UI_INVOKE_SLOW_TIMEOUT_S - plan_mcp._UI_INVOKE_TIMEOUT_S) * 1000
-    assert int(before + confirm_ms) <= confirm_by <= after + confirm_ms
+    assert row["source"] == "mcp" and row["requester"] == "builder"
+    assert row["status"] == "switched"
+    assert (row["from_profile_id"], row["from_name"], row["to_profile_id"], row["to_name"]) == ("p-1", "Personal", "p-2", "Work")
+    assert row["reason"] == "quota ran out"
 
 
 @pytest.mark.asyncio
@@ -129,7 +139,7 @@ async def test_switch_tells_the_window_when_it_cut_the_reason(ui: _UiRequests) -
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", ["declined", "confirm-timeout", "busy", "already-active", "unknown-profile"])
+@pytest.mark.parametrize("status", ["already-active", "unknown-profile", "unknown-caller", "stale"])
 async def test_switch_passes_on_the_windows_refusal(ui: _UiRequests, status: str) -> None:
     agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
     ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": status, "message": "no"}}
@@ -146,10 +156,8 @@ async def test_a_backend_refusal_comes_back_as_its_code_only(ui: _UiRequests) ->
         "result": {"status": "refused", "code": "SWITCH_RATE_LIMITED", "message": "raw backend text"},
     }
     result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
-    assert result == {
-        "ok": False, "error": "the switch was refused: SWITCH_RATE_LIMITED",
-        "error_code": "refused", "code": "SWITCH_RATE_LIMITED",
-    }
+    assert result["error"] == "the switch was refused: SWITCH_RATE_LIMITED"
+    assert (result["ok"], result["error_code"], result["code"]) == (False, "refused", "SWITCH_RATE_LIMITED")
 
 
 @pytest.mark.asyncio
@@ -160,7 +168,7 @@ async def test_switch_returns_only_named_fields(ui: _UiRequests) -> None:
         "result": {"status": "switched", "from": "A", "to": "B", "email": "x@y.z", "token": "t" + "ok"},
     }
     result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
-    assert set(result) == {"ok", "status", "agent", "profile_id", "from", "to"}
+    assert set(result) == {"ok", "status", "agent", "profile_id", "from", "to", "request_id"}
 
 
 @pytest.mark.asyncio
@@ -169,9 +177,9 @@ async def test_switch_reports_an_unanswered_window(ui: _UiRequests) -> None:
     ui.answers["ui.accounts.switch"] = {"ok": False, "error": "TypeError: raw renderer text"}
     result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
     # The code only: the bus error is whatever the renderer threw.
-    assert result == {
-        "ok": False, "error": "the Navide window did not answer", "error_code": "window-unavailable",
-    }
+    assert result["error"] == "the Navide window did not answer"
+    assert (result["ok"], result["error_code"]) == (False, "window-unavailable")
+    assert "TypeError" not in str(result)
 
 
 @pytest.mark.asyncio
@@ -215,9 +223,184 @@ async def test_switch_is_registered_with_its_declared_arguments() -> None:
     tools = {tool.name: tool for tool in await plan_mcp.server.list_tools()}
     assert set(tools["cli_account_switch"].inputSchema.get("properties") or {}) == {
         "agent", "profile_id", "reason",
+        # 0.2.34 P4: switch one pane instead of the CLI's live login.
+        "pane_id",
     }
 
 
-def test_the_switch_waits_long_enough_and_is_withdrawn_when_nobody_waits() -> None:
+# ── pane_id: one pane only (plan mcp-pane-cli-usage_213031 P4) ──────────────
+
+
+@pytest.mark.asyncio
+async def test_a_pane_switch_names_the_pane_and_nothing_else_changes(ui: _UiRequests) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {
+        "ok": True, "result": {"status": "switched-pane", "from": "Account 13", "to": "Account 14"},
+    }
+
+    result = await plan_mcp.cli_account_switch(
+        _ctx(), agent="claude", profile_id="a14", reason="use 14 here", pane_id=" pw ",
+    )
+
+    assert result == {
+        "ok": True, "status": "switched-pane", "agent": "claude", "profile_id": "a14", "pane_id": "pw",
+        "from": "Account 13", "to": "Account 14", "request_id": result["request_id"],
+    }
+    [call] = ui.calls
+    args = dict(call["args"])
+    args.pop("requestId")
+    assert args == {
+        "agentKey": "claude", "profileId": "a14", "reason": "use 14 here", "reasonTruncated": False,
+        "paneId": "pw", "requester": {"source": "mcp", "name": "builder"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_pane_result_never_answers_a_cli_wide_switch(ui: _UiRequests) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "switched-pane", "from": "A", "to": "B"}}
+
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="a14", reason="x")
+
+    assert result["ok"] is False
+    assert "paneId" not in ui.calls[0]["args"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["unknown-pane", "unsupported", "needs-user"])
+async def test_a_pane_switch_passes_on_the_windows_refusal(ui: _UiRequests, status: str) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": status, "message": "no"}}
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="a14", reason="x", pane_id="pw")
+    assert result["ok"] is False
+    assert result["error_code"] == status
+
+
+def test_the_switch_has_time_to_restart_panes_and_is_withdrawn_when_nobody_waits() -> None:
     assert "ui.accounts.switch" in plan_mcp._UI_INVOKE_SLOW_ACTIONS
     assert "ui.accounts.switch" in plan_mcp._UI_INVOKE_WITHDRAWN_ACTIONS
+
+
+# ── no confirmation: queue, log, shared entry (plan agent-0-2-42_3f728e) ────
+
+
+@pytest.mark.asyncio
+async def test_a_queued_switch_answers_at_once_and_is_settled_later(ui: _UiRequests, switch_log: AccountSwitchLog) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {
+        "ok": True, "result": {"status": "queued", "waiting": 2, "from": "A", "to": "B"},
+    }
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="codex", profile_id="p-2", reason="out of quota")
+    assert result["ok"] is True
+    assert (result["status"], result["waiting"]) == ("queued", 2)
+    [row] = switch_log.list_recent()
+    assert row["status"] == "queued"
+
+    assert await plan_mcp.settle_account_switch({
+        "request_id": result["request_id"], "status": "switched", "from": "A", "to": "B", "from_profile_id": "p-1",
+    })
+    [row] = switch_log.list_recent()
+    assert (row["status"], row["from_profile_id"]) == ("switched", "p-1")
+
+
+@pytest.mark.asyncio
+async def test_the_shared_entry_serves_a_chat_button(ui: _UiRequests, switch_log: AccountSwitchLog) -> None:
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "queued", "waiting": 1, "from": "A", "to": "B"}}
+    told: list[dict[str, Any]] = []
+
+    async def on_done(payload: dict[str, Any]) -> None:
+        told.append(payload)
+
+    result = await plan_mcp.request_account_switch(
+        "claude", "p-2", source="telegram", who="telegram:me", expected_from="__default__", on_done=on_done,
+    )
+    [call] = ui.calls
+    assert call.get("is_global") is True and call.get("caller") is None
+    assert call["args"]["expectedFrom"] == "__default__"
+    assert call["args"]["requester"] == {"source": "telegram", "name": "telegram:me"}
+    assert result["status"] == "queued" and result["ok"] is True
+
+    await plan_mcp.settle_account_switch({"request_id": result["request_id"], "status": "switched", "from": "A", "to": "B"})
+    assert told == [{"request_id": result["request_id"], "status": "switched", "from": "A", "to": "B"}]
+    # Told once: a second report of the same id reaches nobody.
+    await plan_mcp.settle_account_switch({"request_id": result["request_id"], "status": "switched"})
+    assert len(told) == 1
+    [row] = switch_log.list_recent()
+    assert (row["source"], row["requester"], row["status"]) == ("telegram", "telegram:me", "switched")
+
+
+@pytest.mark.asyncio
+async def test_a_failing_on_done_never_breaks_the_settle(ui: _UiRequests) -> None:
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "queued", "waiting": 1}}
+
+    async def on_done(payload: dict[str, Any]) -> None:
+        raise RuntimeError("chat down")
+
+    result = await plan_mcp.request_account_switch("claude", "p-2", source="telegram", who="t", on_done=on_done)
+    assert await plan_mcp.settle_account_switch({"request_id": result["request_id"], "status": "switched"}) is True
+    assert await plan_mcp.settle_account_switch({"request_id": "99999", "status": "switched"}) is False
+
+
+@pytest.mark.asyncio
+async def test_a_pane_switch_from_a_chat_goes_to_the_window_holding_the_pane(ui: _UiRequests) -> None:
+    agent_messaging.register("pw", "worker", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "switched-pane", "from": "A", "to": "B"}}
+    result = await plan_mcp.request_account_switch("claude", "a14", source="telegram", who="t", pane_id="pw")
+    [call] = ui.calls
+    assert call.get("route_pane_id") == "pw"
+    assert result["status"] == "switched-pane"
+
+
+@pytest.mark.asyncio
+async def test_every_refusal_is_logged_too(ui: _UiRequests, switch_log: AccountSwitchLog) -> None:
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": False}
+    await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
+    [row] = switch_log.list_recent()
+    assert row["status"] == "no-window"
+
+
+@pytest.mark.asyncio
+async def test_an_unwritable_log_never_stops_the_switch(ui: _UiRequests, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Broken:
+        def record_request(self, **kw: Any) -> None:
+            return None
+
+        def finish(self, *a: Any, **kw: Any) -> bool:
+            raise AssertionError("finish must not be called for an unrecorded request")
+
+    monkeypatch.setattr(backend_app, "account_switch_log", _Broken())
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    ui.answers["ui.accounts.switch"] = {"ok": True, "result": {"status": "switched", "from": "A", "to": "B"}}
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="p-1", reason="x")
+    assert result["status"] == "switched"
+    assert result["request_id"].startswith("x")
+
+
+@pytest.mark.asyncio
+async def test_an_api_key_account_is_left_to_the_user(ui: _UiRequests, monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import api_key_accounts
+
+    monkeypatch.setattr(api_key_accounts, "is_api_key", lambda profile: True)
+    agent_messaging.register("pa", "builder", "/ws/alpha", agent_key="claude")
+    result = await plan_mcp.cli_account_switch(_ctx(), agent="claude", profile_id="k-1", reason="x")
+    assert result["error_code"] == "api-key-account"
+    assert ui.calls == []
+
+
+def test_the_busy_pane_view_covers_every_window() -> None:
+    """R6: what an unattended switch waits for is read from the registry,
+    which every main window mirrors its panes into."""
+    from agent_team_backend import ws_handlers
+
+    agent_messaging.register("w1-run", "a", "/ws/alpha", agent_key="codex")
+    agent_messaging.register("w2-run", "b", "/ws/beta", agent_key="codex")
+    agent_messaging.register("w2-idle", "c", "/ws/beta", agent_key="codex")
+    agent_messaging.register("w2-claude", "d", "/ws/beta", agent_key="claude")
+    agent_messaging.register("w2-old", "e", "/ws/beta", agent_key="codex")
+    agent_messaging.set_busy("w1-run", True, "running")
+    agent_messaging.set_busy("w2-run", True, "starting")
+    agent_messaging.set_busy("w2-idle", True, "idle")  # a draft in the prompt: not at work
+    agent_messaging.set_busy("w2-claude", True, "running")
+    agent_messaging.set_busy("w2-old", True)  # an older window: no status word, `busy` decides
+    assert sorted(ws_handlers.account_switch_busy_pane_ids("codex")) == ["w1-run", "w2-old", "w2-run"]

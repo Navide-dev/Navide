@@ -248,6 +248,9 @@ export class NodePluginStorageFileSystem implements PluginStorageFileSystem {
 
 const VALID_TIERS: readonly StorageSnapshotTier[] = ['candidate', 'active', 'previous']
 
+/** The SDK's createPluginViewState keeps each value under this prefix. */
+const VIEW_STATE_KEY_PREFIX = 'view-state:'
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -669,6 +672,62 @@ export class PluginStorageStore {
         } catch (error) {
           maintenanceError(error, 'storage snapshot clone failed')
         }
+      })
+    })
+  }
+
+  /** H1: a version switch within one source hands the SDK view state of the
+   * version that ran to the one that runs next. Only `view-state:` keys of
+   * every partition of `fromVersion`'s active snapshot are written, over the
+   * same keys of `toVersion`'s; every other key of the target stays as it was.
+   * Nothing is written unless every target partition fits. */
+  async carryViewState(pluginId: string, fromVersion: string, toVersion: string): Promise<void> {
+    const source: HostStorageSnapshotIdentity = { pluginId, packageVersion: fromVersion, tier: 'active' }
+    const target: HostStorageSnapshotIdentity = { pluginId, packageVersion: toVersion, tier: 'active' }
+    assertIdentity(source)
+    assertIdentity(target)
+    if (sameIdentity(source, target)) invalid('view state source and target must differ')
+    return this.withPluginOperation(pluginId, async () => {
+      const ordered = [source, target].sort((left, right) =>
+        identityKey(left).localeCompare(identityKey(right))
+      )
+      await this.withLocks(ordered, async () => {
+        const root = this.resolvedRoot()
+        const writes: Array<{ path: string; json: string }> = []
+        let added = 0
+        for (const file of await this.partitionFiles(source)) {
+          const carried = (await this.readPartitionFile(file.path, source, file.scope, file.workspaceId))
+            .document.entries.filter((entry) => entry.key.startsWith(VIEW_STATE_KEY_PREFIX))
+          if (carried.length === 0) continue
+          const path = partitionPath(root, target, { workspaceId: file.workspaceId })
+          const current = (await this.fs.stat(path))
+            ? await this.readPartitionFile(path, target, file.scope, file.workspaceId)
+            : null
+          const carriedKeys = new Set(carried.map((entry) => entry.key))
+          const document: PartitionDocument = {
+            schemaVersion: 2,
+            pluginId,
+            packageVersion: toVersion,
+            tier: 'active',
+            scope: file.scope,
+            workspaceId: file.workspaceId,
+            entries: [
+              ...(current?.document.entries ?? []).filter((entry) => !carriedKeys.has(entry.key)),
+              ...carried,
+            ],
+          }
+          const canonical = canonicalPartition(document)
+          if (canonical.bytes > MAX_PARTITION_FILE_BYTES) {
+            throw new PluginStorageError('STORAGE_QUOTA_EXCEEDED', 'storage partition exceeds the physical format bound')
+          }
+          added += canonical.bytes - (current?.size ?? 0)
+          writes.push({ path, json: canonical.json })
+        }
+        if (writes.length === 0) return
+        if (await this.snapshotUsage(target) + added > STORAGE_LIMITS.maxSnapshotBytes) {
+          throw new PluginStorageError('STORAGE_QUOTA_EXCEEDED', 'storage snapshot exceeds the Host limit')
+        }
+        for (const write of writes) await this.fs.writeAtomic(write.path, write.json)
       })
     })
   }

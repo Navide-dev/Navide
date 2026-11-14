@@ -67,7 +67,7 @@ describe('web view capability requests', () => {
   it('lists the contract surface', () => {
     expect(WEB_METHODS).toEqual([
       'web.list', 'web.create', 'web.attach', 'web.detach', 'web.navigate',
-      'web.setOwner', 'web.takeControl', 'web.returnControl', 'web.close', 'web.capture', 'web.clearData',
+      'web.setOwner', 'web.takeControl', 'web.returnControl', 'web.close', 'web.capture', 'web.clearData', 'web.cdp',
     ])
     expect(WEB_EVENTS).toEqual(['web.changed'])
     expect([...WEB_GESTURE_METHODS].sort()).toEqual(['web.clearData', 'web.create', 'web.returnControl', 'web.setOwner', 'web.takeControl'])
@@ -91,6 +91,8 @@ describe('web view capability requests', () => {
     ['web.capture', { viewId: 'view-1' }],
     ['web.capture', { viewId: 'view-1', maxWidth: 64 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 2048 }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: 'Input.insertText', params: { text: 'hi' } }],
   ])('accepts %s %j', (address, value) => {
     expect(validateWebRequest(address, value)).toBe(true)
   })
@@ -130,6 +132,12 @@ describe('web view capability requests', () => {
     ['web.capture', { viewId: 'view-1', maxWidth: 63 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 2049 }],
     ['web.capture', { viewId: 'view-1', maxWidth: 100.5 }],
+    ['web.cdp', { viewId: 'view-1' }],
+    ['web.cdp', { method: 'Runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: 'runtime.evaluate' }],
+    ['web.cdp', { viewId: 'view-1', method: `A.${'b'.repeat(127)}` }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate', params: [] }],
+    ['web.cdp', { viewId: 'view-1', method: 'Runtime.evaluate', sessionId: 'other' }],
   ])('rejects %s %j', (address, value) => {
     expect(validateWebRequest(address, value)).toBe(false)
   })
@@ -158,6 +166,9 @@ describe('web.changed event payload', () => {
   it('accepts a list of WebViewInfo', () => {
     expect(validateWebChangedEvent({ views: [] })).toBe(true)
     expect(validateWebChangedEvent({ views: [view, { ...view, note: 'Sign In', state: 'need-action', control: 'user' }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, openerViewId: 'view-0', dialog: { type: 'prompt', message: 'Name?', defaultPrompt: 'me' } }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, dialog: { type: 'beforeunload', message: '' } }] })).toBe(true)
+    expect(validateWebChangedEvent({ views: [{ ...view, uploads: [{ file: '.env', origin: 'https://a.example', sensitive: true, at: '2026-10-30T00:00:00.000Z' }] }] })).toBe(true)
   })
 
   it.each([
@@ -170,6 +181,15 @@ describe('web.changed event payload', () => {
     { views: [{ ...view, state: 'paused' }] },
     { views: [{ ...view, loading: 'no' }] },
     { views: [{ ...view, attached: undefined }] },
+    { views: [{ ...view, openerViewId: '' }] },
+    { views: [{ ...view, dialog: { type: 'print', message: 'x' } }] },
+    { views: [{ ...view, dialog: { type: 'alert', message: 'x'.repeat(501) } }] },
+    { views: [{ ...view, dialog: { type: 'alert', message: 'x', extra: 1 } }] },
+    { views: [{ ...view, dialog: null }] },
+    { views: [{ ...view, uploads: [{ file: '', origin: '', sensitive: false, at: '' }] }] },
+    { views: [{ ...view, uploads: [{ file: 'a', origin: '', sensitive: 'no', at: '' }] }] },
+    { views: [{ ...view, uploads: [{ file: 'a', origin: '', sensitive: false, at: '', path: '/x' }] }] },
+    { views: [{ ...view, uploads: Array(21).fill({ file: 'a', origin: '', sensitive: false, at: '' }) }] },
     { views: [{ ...view, viewId: '' }] },
     { views: [{ ...view, title: 1 }] },
     { views: [{ ...view, note: 2 }] },

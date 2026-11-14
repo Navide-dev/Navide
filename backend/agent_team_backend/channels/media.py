@@ -338,6 +338,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "zh-TW": {
         "long.title": "完整回覆",
         "long.attached": "📎 內容較長，完整內容見附件",
+        "reply.lost": "抱歉，這則回覆沒能送出，請再問一次。",
         "card.todos": "待辦 {done}/{total}",
         "card.pages": "{n} 頁",
         "card.pdf_failed": "⚠️ PDF 轉換失敗：{reason}，附上原始檔",
@@ -367,6 +368,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "en-US": {
         "long.title": "Full reply",
         "long.attached": "📎 This reply is long; the full text is attached",
+        "reply.lost": "Sorry, this reply couldn't be sent. Please ask again.",
         "card.todos": "todos {done}/{total}",
         "card.pages": "{n} pages",
         "card.pdf_failed": "⚠️ PDF conversion failed: {reason}; the original file is attached",
@@ -396,6 +398,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "ja-JP": {
         "long.title": "返信の全文",
         "long.attached": "📎 長い返信のため、全文を添付しました",
+        "reply.lost": "申し訳ありません。この返信を送信できませんでした。もう一度お尋ねください。",
         "card.todos": "ToDo {done}/{total}",
         "card.pages": "{n} ページ",
         "card.pdf_failed": "⚠️ PDF 変換に失敗しました：{reason}。元のファイルを添付します",
@@ -425,6 +428,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "zh-CN": {
         "long.title": "完整回复",
         "long.attached": "📎 内容较长，完整内容见附件",
+        "reply.lost": "抱歉，这条回复没能发送，请再问一次。",
         "card.todos": "待办 {done}/{total}",
         "card.pages": "{n} 页",
         "card.pdf_failed": "⚠️ PDF 转换失败：{reason}，附上原始文件",
@@ -454,6 +458,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "ko-KR": {
         "long.title": "전체 답변",
         "long.attached": "📎 답변이 길어서 전체 내용을 첨부했어요",
+        "reply.lost": "죄송해요, 이 답변을 보내지 못했어요. 다시 한 번 물어봐 주세요.",
         "card.todos": "할 일 {done}/{total}",
         "card.pages": "{n}페이지",
         "card.pdf_failed": "⚠️ PDF 변환 실패: {reason}. 원본 파일을 첨부했어요",
@@ -483,6 +488,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "es-ES": {
         "long.title": "Respuesta completa",
         "long.attached": "📎 Esta respuesta es larga; el texto completo va adjunto",
+        "reply.lost": "Lo sentimos, no se pudo enviar esta respuesta. Vuelve a preguntar.",
         "card.todos": "tareas {done}/{total}",
         "card.pages": "{n} páginas",
         "card.pdf_failed": "⚠️ No se pudo convertir a PDF: {reason}; se adjunta el archivo original",
@@ -512,6 +518,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "fr-FR": {
         "long.title": "Réponse complète",
         "long.attached": "📎 Cette réponse est longue\u00a0; le texte complet est joint",
+        "reply.lost": "Désolé, cette réponse n’a pas pu être envoyée. Merci de reposer la question.",
         "card.todos": "tâches {done}/{total}",
         "card.pages": "{n} pages",
         "card.pdf_failed": "⚠️ Échec de la conversion en PDF\u00a0: {reason}\u00a0; le fichier d’origine est joint",
@@ -541,6 +548,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "de-DE": {
         "long.title": "Vollständige Antwort",
         "long.attached": "📎 Diese Antwort ist lang; der vollständige Text ist angehängt",
+        "reply.lost": "Diese Antwort konnte leider nicht gesendet werden. Bitte die Frage noch einmal stellen.",
         "card.todos": "Aufgaben {done}/{total}",
         "card.pages": "{n} Seiten",
         "card.pdf_failed": "⚠️ PDF-Konvertierung fehlgeschlagen: {reason}; die Originaldatei ist angehängt",
@@ -570,6 +578,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "pt-BR": {
         "long.title": "Resposta completa",
         "long.attached": "📎 Esta resposta é longa; o texto completo está anexado",
+        "reply.lost": "Desculpe, não foi possível enviar esta resposta. Pergunte novamente.",
         "card.todos": "tarefas {done}/{total}",
         "card.pages": "{n} páginas",
         "card.pdf_failed": "⚠️ Falha na conversão para PDF: {reason}; o arquivo original está anexado",
@@ -599,6 +608,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "ru-RU": {
         "long.title": "Полный ответ",
         "long.attached": "📎 Ответ длинный; полный текст во вложении",
+        "reply.lost": "Извините, этот ответ не удалось отправить. Спросите ещё раз.",
         "card.todos": "задачи {done}/{total}",
         "card.pages": "страниц: {n}",
         "card.pdf_failed": "⚠️ Не удалось преобразовать в PDF: {reason}; исходный файл приложен",
@@ -628,6 +638,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "vi-VN": {
         "long.title": "Toàn bộ câu trả lời",
         "long.attached": "📎 Câu trả lời này dài; toàn văn có trong tệp đính kèm",
+        "reply.lost": "Xin lỗi, không gửi được câu trả lời này. Vui lòng hỏi lại.",
         "card.todos": "việc cần làm {done}/{total}",
         "card.pages": "{n} trang",
         "card.pdf_failed": "⚠️ Chuyển sang PDF thất bại: {reason}; đã đính kèm tệp gốc",

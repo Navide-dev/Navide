@@ -845,12 +845,14 @@ describe('plan 4a05af P1: the new version is ready before the running one is unl
   it('RULE ZERO: with Developer Mode off, an installed package installs and restarts exactly as on main', async () => {
     register()
     await marketplaceInstall('acme.files')
-    // One hidden-view check, the install's own; nothing watched, nothing reloaded.
-    expect(preflightFrontend).toHaveBeenCalledTimes(1)
+    // Two hidden-view checks: the install's own at staging, and H1's stricter
+    // one right before the switch (approved by the commander 2026-10-29).
+    // Nothing watched, nothing reloaded.
+    expect(preflightFrontend).toHaveBeenCalledTimes(2)
     expect(watches).toEqual([])
     expect(folderEvents).toEqual([])
     await call('plugins:restart', { id: 'acme.files' })
-    expect(preflightFrontend).toHaveBeenCalledTimes(1)
+    expect(preflightFrontend).toHaveBeenCalledTimes(2)
     expect(watches).toEqual([])
     expect(folderEvents).toEqual([])
   })

@@ -81,6 +81,39 @@ def _load_wire_frame(path: Path) -> Any:
     return json.loads(raw, object_pairs_hook=_unique_object)
 
 
+RESERVED_COMMAND_HEADS = {"workbench", "ui", "editor", "git", "navide"}
+
+
+def _validate_commands(manifest: dict[str, Any], view_ids: list[Any]) -> None:
+    """contributes.commands: the rules that need the rest of the manifest.
+
+    The same rules as parseCommands (packages/plugin-contracts) and
+    ManifestV2._check_commands (marketplace/registry).
+    """
+    commands = manifest["contributes"].get("commands")
+    if not isinstance(commands, list):
+        return
+    package_id = str(manifest.get("id"))
+    if package_id.split(".", 1)[0] in RESERVED_COMMAND_HEADS:
+        raise ValueError("contributes.commands cannot be declared under a namespace of Navide's own commands")
+    backend = manifest.get("backend")
+    methods = (backend.get("methods") or []) if isinstance(backend, dict) else []
+    seen: set[str] = set()
+    for command in commands:
+        command_id = str(command.get("id"))
+        name = command_id[len(package_id) + 1:] if command_id.startswith(f"{package_id}.") else ""
+        if not re.fullmatch(r"[a-z][a-zA-Z0-9]*", name):
+            raise ValueError(f"contributes.commands id {command_id!r} must be the package id, a dot and a name")
+        if command_id in seen:
+            raise ValueError(f"contributes.commands id {command_id!r} is declared twice")
+        seen.add(command_id)
+        run = command.get("run")
+        if "view" in run and run["view"] not in view_ids:
+            raise ValueError(f"contributes.commands run.view {run['view']!r} is not a declared view")
+        if "method" in run and run["method"] not in methods:
+            raise ValueError(f"contributes.commands run.method {run['method']!r} is not in backend.methods")
+
+
 def _validate_manifest_semantics(manifest: Any) -> None:
     """Validate invariants that Draft 2020-12 cannot express by itself.
 
@@ -111,6 +144,7 @@ def _validate_manifest_semantics(manifest: Any) -> None:
     view_ids = [view.get("id") for view in views if isinstance(view, dict)]
     if len(view_ids) != len(set(view_ids)):
         raise ValueError("contributes.views must contain unique ids")
+    _validate_commands(manifest, view_ids)
     by_id = {view["id"]: view for view in views if isinstance(view, dict) and isinstance(view.get("id"), str)}
     for view in views:
         if not isinstance(view, dict):
@@ -129,7 +163,7 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
     system_namespaces: set[str] = set()
     shell_entries = 0
     shell_addresses: set[str] = set()
-    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages"}
+    allowed_system = {"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"}
     for item in [*catalog["methods"], *catalog["events"]]:
         if item["visibility"] != "public":
             continue
@@ -168,6 +202,12 @@ def _catalog_permissions(catalog: dict[str, Any]) -> tuple[set[str], int]:
                 raise AssertionError(f"shell catalog entry is malformed: {item['address']}")
             shell_addresses.add(item["address"])
             shell_entries += 1
+        elif permission_id == "plugins":
+            # plugins.call carries one coarse permission object; the manifest's
+            # permissions.plugins list names which installed plugins may be
+            # called, so no per-address rule is defined here either.
+            if set(permission) != {"id", "scope"} or scope != "workspace":
+                raise AssertionError(f"plugins catalog entry is malformed: {item['address']}")
         else:
             raise AssertionError(f"catalog has unsupported permission id: {permission_id!r}")
     if "shell.run" not in shell_addresses:
@@ -253,7 +293,11 @@ def main() -> None:
     catalog_system_namespaces, shell_entries = _catalog_permissions(catalog)
     permission_properties = schema["properties"]["permissions"]["properties"]
     schema_system_namespaces = set(permission_properties["system"]["items"]["enum"])
-    schema_shell_modes = set(permission_properties["shell"]["enum"])
+    shell_schema = permission_properties["shell"]
+    # C2: `shell` is an enum string or (oneOf) the object form with executables.
+    schema_shell_modes = set(
+        shell_schema["enum"] if "enum" in shell_schema else next(alt["enum"] for alt in shell_schema["oneOf"] if "enum" in alt)
+    )
     if schema_system_namespaces != catalog_system_namespaces:
         raise AssertionError(
             "manifest system namespaces and public capability catalog differ: "

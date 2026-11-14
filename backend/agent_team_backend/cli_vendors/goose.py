@@ -420,6 +420,7 @@ SPEC = VendorSpec(
         # offers the docs link instead of a guess.
         install_cmds={"win32": PlatformInstall("")},
         update_cmd="goose update",
+        latest_source="github:aaif-goose/goose",
         doctor_cmd="goose doctor"),
     # No account switching to carry a verified version: the live checks of
     # sessions.db, resume and --version above were on 1.55.0.

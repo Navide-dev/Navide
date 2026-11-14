@@ -28,7 +28,9 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import datetime, timedelta
+from itertools import islice
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -113,6 +115,28 @@ def _asks_user_question(msg: dict) -> bool:
 # line, because an end record can name several tasks at once.
 BACKGROUND_START_DETAIL = "background:start"
 BACKGROUND_END_DETAIL = "background:end"
+# A STOP the CLI acted on: Claude writes this user record (as a text block, as
+# the cut-off tool's result, or as a plain string) when a turn is interrupted.
+# The frontend keeps the STOP badge on it; with no such record the badge reads
+# "STOP not applied" (Ctrl-C only cleared the input box).
+INTERRUPT_DETAIL = "user:interrupted"
+_INTERRUPT_PREFIX = "[Request interrupted by user"
+
+
+def _is_interrupt_record(content: Any) -> bool:
+    if isinstance(content, str):
+        return content.startswith(_INTERRUPT_PREFIX)
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        text = block.get("text") if block.get("type") == "text" else block.get("content")
+        if _is_interrupt_record(text):
+            return True
+    return False
+
+
 # Tools the agent uses to stop a background task itself. Such a stop writes no
 # <task-notification>, so the tool call is the only end record it leaves.
 _TASK_STOP_TOOLS = frozenset({"TaskStop", "KillShell", "KillBash"})
@@ -242,6 +266,14 @@ def claude_projects_root() -> Path | None:
     return None
 
 
+#: A transcript's first lines carry its cwd; anything past these never will.
+SESSION_CWD_SCAN_LINES = 50
+_session_cwds: dict[tuple[str, int], str] = {}
+# Files whose first SESSION_CWD_SCAN_LINES lines name no cwd: they never will, and
+# re-scanning them on every parse would read those lines again on each append.
+_session_cwd_misses: set[tuple[str, int]] = set()
+
+
 class ClaudeLogReader(LogReader):
     vendor: str = "claude"
 
@@ -252,6 +284,13 @@ class ClaudeLogReader(LogReader):
     #: one high-water mark, so an old file can be seeded to EOF by counting
     #: lines rather than replaying it (log_readers.base).
     activity_resumes_by_line: bool = True
+
+    def __init__(self) -> None:
+        super().__init__()
+        # path -> (high-water line, byte offset just past it, inode): where
+        # parse_activity picks a file up again. Memory only; a miss reads
+        # from the head, exactly as before.
+        self._activity_resume: dict[str, tuple[int, int, int]] = {}
 
     def _default_root(self) -> Path | None:
         return claude_projects_root()
@@ -302,12 +341,69 @@ class ClaudeLogReader(LogReader):
                 log.debug("enumerate %s failed: %s", d, err)
         return out
 
-    def cwd_from_file(self, path: Path) -> str:
-        """Reverse cwd-hash: project-dir-name `-foo-bar-baz` → `/foo/bar/baz`.
+    def own_session_files(self, workspace_path: str) -> list[Path]:
+        """session_files_for_workspace without a neighbour's sessions: the folder can
+        be shared (see session_in_workspace). The folder-wide list stays what pane
+        baselines and replays use; this one is for showing a workspace its own."""
+        return [
+            p for p in self.session_files_for_workspace(workspace_path)
+            if self.session_in_workspace(str(p), workspace_path) is not False
+        ]
 
-        Edge case: a literal `-` in the original path is ambiguous. Best-effort
-        only; attribution layer handles "unmatched cwd" gracefully.
+    def session_in_workspace(self, file_path: str, workspace_path: str) -> bool | None:
+        """Claude's folder name is lossy: every non-alphanumeric character becomes
+        "-", so two Chinese folder names of the same length share one folder. The
+        transcript's own cwd is what tells them apart."""
+        cwd = unicodedata.normalize("NFC", self._session_cwd(Path(file_path)))
+        if not cwd:
+            return None
+        root = unicodedata.normalize("NFC", workspace_path.rstrip("/\\"))
+        return cwd == root or cwd.startswith((root + "/", root + "\\"))
+
+    def _session_cwd(self, path: Path) -> str:
+        """The cwd a transcript started in. The inode is in the key because a session
+        id can come back as a new file at the same path, from another workspace."""
+        try:
+            key = (str(path), path.stat().st_ino)
+        except OSError:
+            return ""
+        if key in _session_cwd_misses:
+            return ""
+        cwd = _session_cwds.get(key) or self._read_session_cwd(path)
+        if cwd:
+            _session_cwds[key] = cwd
+        return cwd
+
+    def _read_session_cwd(self, path: Path) -> str:
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                scanned = 0
+                for raw in islice(fh, SESSION_CWD_SCAN_LINES):
+                    scanned += 1
+                    try:
+                        rec = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    cwd = rec.get("cwd") if isinstance(rec, dict) else None
+                    if cwd and isinstance(cwd, str):
+                        return cwd
+                if scanned >= SESSION_CWD_SCAN_LINES:
+                    _session_cwd_misses.add((str(path), os.fstat(fh.fileno()).st_ino))
+        except OSError as err:
+            log.debug("read cwd of %s failed: %s", path, err)
+        return ""
+
+    def cwd_from_file(self, path: Path) -> str:
+        """The cwd the transcript records (read once per file, then cached).
+
+        Only a transcript that names none falls back to reversing the folder
+        name, `-foo-bar-baz` → `/foo/bar/baz`: that guess is lossy (a literal
+        `-`, or any non-ASCII name, comes back wrong), and folders that encode
+        alike would all get the same answer.
         """
+        cwd = self._session_cwd(path)
+        if cwd:
+            return unicodedata.normalize("NFC", cwd)
         try:
             project_dir_name = path.parent.name
         except Exception:
@@ -419,6 +515,9 @@ class ClaudeLogReader(LogReader):
             recent.append(dedup_key)
             recent = recent[-64:]
             recent_set = set(recent)
+            cache_split = usage.get("cache_creation")
+            if not isinstance(cache_split, dict):
+                cache_split = {}
             event_checkpoint = dict(final_checkpoint)
             event_checkpoint["offset"] = end
             event_checkpoint["recent_keys"] = list(recent)
@@ -436,6 +535,9 @@ class ClaudeLogReader(LogReader):
                 cache_read_tokens=_int(usage.get("cache_read_input_tokens")),
                 cache_creation_tokens=_int(usage.get("cache_creation_input_tokens")),
                 cli_version=str(rec.get("version") or ""),
+                # The 1-hour TTL share of cache_creation, priced 2x input rather
+                # than 1.25x (cost_ledger).
+                raw={"cache_write_1h": _int(cache_split.get("ephemeral_1h_input_tokens"))},
             ))
 
         final_checkpoint["recent_keys"] = recent
@@ -529,7 +631,8 @@ class ClaudeLogReader(LogReader):
         cwd = self.cwd_from_file(path)
         session_id = path.stem
         try:
-            fh = path.open(encoding="utf-8")
+            fh = path.open("rb")
+            inode = os.fstat(fh.fileno()).st_ino
         except OSError:
             return out
 
@@ -539,10 +642,35 @@ class ClaudeLogReader(LogReader):
         # does not grow with the transcript. See log_readers.base.
         high_water = activity_high_water(seen_keys)
         last_line = high_water
+        # The mark skips parsing, not reading: a walk from byte 0 read a 315 MB
+        # transcript in full on every append, and the serial log reader fell
+        # minutes behind the Stop hook. Resume after the mark's line when this
+        # is still the file (same inode, not shorter, a line end right before).
+        first_line, offset = 1, 0
+        resume_key = str(path)
+        resume = self._activity_resume.get(resume_key)
+        if resume is not None and resume[0] == high_water and resume[2] == inode:
+            try:
+                if os.fstat(fh.fileno()).st_size >= resume[1] > 0:
+                    fh.seek(resume[1] - 1)
+                    if fh.read(1) == b"\n":
+                        first_line, offset = high_water + 1, resume[1]
+                fh.seek(offset)
+            except OSError:
+                first_line, offset = 1, 0
+                fh.seek(0)
+        # Byte offset just past line `last_line`, when that line ended in "\n".
+        resume_at: int | None = offset if first_line > 1 else None
 
         try:
             with fh:
-                for line_no, raw_line in enumerate(fh, 1):
+                for line_no, raw_bytes in enumerate(fh, first_line):
+                    offset += len(raw_bytes)
+                    if line_no == high_water and raw_bytes.endswith(b"\n"):
+                        resume_at = offset
+                    # Strict, as the text-mode read was: a line cut mid-character
+                    # raises, after the mark has kept the lines before it.
+                    raw_line = raw_bytes.decode("utf-8")
                     raw = raw_line.strip()
                     if not raw:
                         continue
@@ -565,8 +693,10 @@ class ClaudeLogReader(LogReader):
                         # re-reading — and re-emitting — the rest of the file
                         # on every poll.
                         last_line = line_no
+                        resume_at = offset
                         continue
                     last_line = line_no
+                    resume_at = offset if raw_line.endswith("\n") else None
 
                     rtype = rec.get("type")
                     ts = str(rec.get("timestamp") or "")
@@ -643,6 +773,15 @@ class ClaudeLogReader(LogReader):
                             dedup_key=key, timestamp=ts,
                             detail=str(rtype), text=text,
                         ))
+                        msg = rec.get("message")
+                        if rtype == "user" and isinstance(msg, dict) and _is_interrupt_record(msg.get("content")):
+                            out.append(ActivityEvent(
+                                vendor="claude",
+                                event_type="agent_active",
+                                cwd=cwd, session_id=session_id, file_path=str(path),
+                                dedup_key=f"int:{line_no}", timestamp=ts,
+                                detail=INTERRUPT_DETAIL,
+                            ))
                         started = _background_task_started(rec) if rtype == "user" else ""
                         if started:
                             out.append(ActivityEvent(
@@ -667,6 +806,10 @@ class ClaudeLogReader(LogReader):
                             ))
         finally:
             set_activity_high_water(seen_keys, last_line)
+            if resume_at is not None:
+                self._activity_resume[resume_key] = (last_line, resume_at, inode)
+            else:
+                self._activity_resume.pop(resume_key, None)
         return out
 
 
@@ -674,9 +817,12 @@ class ClaudeLogReader(LogReader):
 
 def _pane_cwd_match(self, usage, pane_cwd, pane_id):
     # Claude names its per-project dir after the encoded cwd; the file path
-    # carries it.
+    # carries it. The encoding is lossy, so a neighbour's folder can match too:
+    # the transcript's own cwd rules it out. One with no cwd yet stays a match.
     expected_dir = encode_claude_cwd(pane_cwd)
-    return expected_dir in Path(usage.file_path).parts
+    if expected_dir not in Path(usage.file_path).parts:
+        return False
+    return self.session_in_workspace(usage.file_path, pane_cwd) is not False
 
 
 ClaudeLogReader.pane_cwd_match = _pane_cwd_match
@@ -803,6 +949,9 @@ _SESSION_LINE = re.compile(r"^Current session\s*:\s*(.*)$", re.I)
 _WEEK_LINE = re.compile(r"^Current week\s*\((.+?)\)\s*:\s*(.*)$", re.I)
 _PERCENT = re.compile(r"(\d+(?:\.\d+)?)%\s+used", re.I)
 _RESETS = re.compile(r"\bresets\s+(.+?)\s*$", re.I)
+# Both wordings of the report's first line: "...your subscription to power..."
+# and "...your overages to power...".
+_REPORT_HEADER = "You are currently using your"
 
 
 def _parse_reset(phrase: str, now: datetime) -> str | None:
@@ -889,6 +1038,33 @@ def parse_usage_panel(text: str, *, now: datetime | None = None) -> list[dict]:
 
     order = {"session": 0, "weekly": 1}
     return [found[k] for k in sorted(found, key=lambda k: (order.get(k, 2), k))]
+
+
+def usage_panel_absent_windows(text: str) -> list[str]:
+    """``["session"]`` when the report proves this account has no session
+    window, else ``[]``.
+
+    A verified Ultra account has no 5-hour limit, and Claude Code prints no
+    session row for it. That has to be told apart from a row we failed to read,
+    so the proof is a report that is whole and leaves nothing unaccounted for:
+    the header above the weekly rows, the all-models figure, something after
+    the weekly rows, no session row in any form, and no percentage in a row we
+    do not recognise (the shape a renamed session row would take). Anything less
+    says nothing, which leaves the window unknown, as a reading missing it
+    always has been."""
+    lines = [line.strip() for line in text.splitlines()]
+    week_rows = [i for i, line in enumerate(lines) if _WEEK_LINE.match(line)]
+    if not week_rows or "current session" in text.lower():
+        return []
+    if not any(line.startswith(_REPORT_HEADER) for line in lines[:week_rows[0]]):
+        return []
+    if not any(lines[week_rows[-1] + 1:]):
+        return []
+    if any(_PERCENT.search(line) and not _WEEK_LINE.match(line) for line in lines):
+        return []
+    if not any(window["kind"] == "weekly" for window in parse_usage_panel(text)):
+        return []
+    return ["session"]
 
 
 def _panel_probe_env(config_dir: str | None = None) -> dict[str, str]:
@@ -1041,7 +1217,11 @@ async def fetch_claude_usage_via_cli(
     if not windows:
         log.info("claude /usage produced no readable windows")
         return _costly("claude -p /usage printed no usage windows")
-    return _snapshot("claude", "ok", windows=windows)
+    snap = _snapshot("claude", "ok", windows=windows)
+    absent = usage_panel_absent_windows(raw)
+    if absent:
+        snap["absentWindows"] = absent
+    return snap
 
 
 # ---- delegated OAuth refresh (merged from claude_delegated_refresh.py) -----
@@ -1326,12 +1506,77 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
     root = claude_projects_root()
     if root is None:
         return False
+    return session_exists_in(root, session_id)
+
+
+def session_exists_in(projects_root: Path, session_id: str) -> bool:
+    """True when ``<projects_root>/<any project>/<id>.jsonl`` exists — what
+    `claude --resume <id>` finds from the config dir owning that root."""
+    if not session_id or "/" in session_id or "\\" in session_id or session_id.startswith("."):
+        return False
     name = f"{session_id}.jsonl"
     try:
-        return any((d / name).is_file() for d in root.iterdir() if d.is_dir())
+        return any((d / name).is_file() for d in projects_root.iterdir() if d.is_dir())
     except OSError as err:
-        log.debug("scan %s for %s failed: %s", root, name, err)
+        log.debug("scan %s for %s failed: %s", projects_root, name, err)
         return False
+
+
+# A resume id we are willing to put into a handoff prompt (claude ids are UUIDs).
+_FALLBACK_ID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z-]{7,63}$")
+_RESUME_FLAG_RE = re.compile(r"\s--resume\s+\S+")
+# Never inside the prompt argument: cmd.exe expands %/! even in quotes, and a
+# line break would end the command.
+_PROMPT_UNSAFE = frozenset('"%!^\r\n')
+
+
+def resume_fallback_command(
+    command: Any,
+    *,
+    workspace_path: str,
+    config_projects: Path,
+    real_projects: Path,
+) -> tuple[Any, str]:
+    """``(command, '')`` unchanged unless it is `claude ... --resume <id>` and
+    the transcript is not reachable from ``config_projects`` (the projects
+    root of the config dir the pane runs on). Then the resume would only print
+    "No conversation found" and exit, so return a fresh launch whose first
+    message asks the agent to pick up the old transcript, plus the id."""
+    text = command_text(command)
+    session_id = _resume_id_from_command(text)
+    if not session_id or not _FALLBACK_ID_RE.match(session_id):
+        return command, ""
+    if session_exists_in(config_projects, session_id):
+        return command, ""
+    fresh = _RESUME_FLAG_RE.sub("", text, count=1)
+    prompt = _handoff_prompt(session_id, [
+        real_projects / encode_claude_cwd(workspace_path) / f"{session_id}.jsonl",
+        config_projects,
+    ])
+    rewritten = f"{fresh} {osplat.paths.quote_arg(prompt)}"
+    if isinstance(command, list):
+        return [*command[:-1], rewritten], session_id
+    return rewritten, session_id
+
+
+def _handoff_prompt(session_id: str, places: list[Path]) -> str:
+    """The first message of a resume that fell back to a new conversation.
+    English: it is read by the agent, not shown as UI. Paths and the id only —
+    nothing from any credential."""
+    shown = [os.fspath(p) for p in places if not _PROMPT_UNSAFE.intersection(os.fspath(p))]
+    where = (
+        f" Its transcript may be at {' or under '.join(shown)}, or in another folder"
+        " under the same projects directory."
+        if shown else ""
+    )
+    return (
+        f"Navide: this pane was meant to resume Claude Code session {session_id},"
+        " but that conversation was not found in this account's config folder,"
+        f" so a new conversation was started.{where} Please read that earlier"
+        " transcript if you can, summarize its key points and open tasks, and"
+        " continue from there. If you cannot find or read it, say so briefly and"
+        " start normally."
+    )
 
 
 # ---- vendor spec -----------------------------------------------------------

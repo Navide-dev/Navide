@@ -125,19 +125,42 @@ def disarm_pipeline_run(workspace: str) -> None:
     _ARMED_RUNS.pop(_ws_key(workspace), None)
 
 
-def pipeline_run_started(workspace: str) -> None:
+def pipeline_run_started(workspace: str, imported_detail: str = "") -> None:
+    """`imported_detail` is set when the pipeline itself came from outside (an
+    n8n import): its kickoffs are external content whoever starts it, and the
+    taint cannot be switched off."""
     key = _ws_key(workspace)
-    detail = _ARMED_RUNS.pop(key, None)
+    detail = _ARMED_RUNS.pop(key, None) or imported_detail
     if detail:
         _TAINTED_RUNS[key] = detail
     else:
         _TAINTED_RUNS.pop(key, None)
 
 
+def pipeline_run_resumed(workspace: str, imported_detail: str) -> None:
+    """A resumed run of an imported pipeline stays tainted after a restart
+    emptied the in-memory run table."""
+    if imported_detail:
+        _TAINTED_RUNS.setdefault(_ws_key(workspace), imported_detail)
+
+
 def pipeline_pane_spawned(workspace: str, pane_id: str) -> None:
     detail = _TAINTED_RUNS.get(_ws_key(workspace))
     if detail:
         safe_mark_tainted(pane_id, "agent", detail)
+
+
+def pipeline_run_taint(workspace: str) -> str:
+    """The taint detail of the workspace's run ('' when it is clean)."""
+    return _TAINTED_RUNS.get(_ws_key(workspace), "")
+
+
+def restore_pipeline_run_taint(workspace: str, detail: str) -> None:
+    """Put back a parent run's taint when it resumes after its sub-pipeline.
+    Only ever adds: a taint the child run carried is never cleared by a
+    clean parent."""
+    if detail:
+        _TAINTED_RUNS[_ws_key(workspace)] = detail
 
 
 def _reset_pipeline_runs_for_test() -> None:

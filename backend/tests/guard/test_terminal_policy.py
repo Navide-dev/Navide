@@ -108,11 +108,13 @@ def test_ordinary_commands_go_through(host, cmd):
     assert rule(cmd) is None, cmd
 
 
-def test_refusal_names_the_segment_and_tells_the_user_to_run_it_themselves():
+def test_refusal_names_the_segment_and_points_at_prefill_allow_or_the_user():
     r = tp.check("ls && sudo rm -rf /opt/x", workspace=WS)
     assert r is not None
     assert "sudo rm -rf /opt/x" in r.segment
-    assert "Run it yourself" in r.message()
+    msg = r.message()
+    assert "submit: false" in msg and "allow prefix" in msg and "Settings → Security" in msg
+    assert "run it themselves" in msg
     assert r.as_dict()["rule"] == r.rule
 
 

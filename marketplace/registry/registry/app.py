@@ -11,7 +11,7 @@ from typing import BinaryIO, Iterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -26,8 +26,12 @@ from .testplace import expiry as testplace_expiry
 from .testplace_api import register_testplace_routes
 from .blocklist import db_blocklists, digest_blocked
 from .db import create_db_engine
+from .error_docs import CAPABILITY_DENIED, DocumentedHTTPException, register_error_docs
+from .migrations import MIGRATIONS, applied_migrations
+from .signing import public_key_fingerprint
+from .static_scan.report import SCANNER_ID, SCANNER_VERSION
 from .dns_verify import TxtResolver, doh_txt_resolver
-from .disclosure import registry_facts, sign_disclosure
+from .disclosure import registry_facts, sign_disclosure, undeclared_network_hosts
 from .static_scan import run_scan
 from .plugin_contract.disclosure_contract import CanonicalJsonError
 from .plugin_contract.disclosure_scan_contract import card_risk_level
@@ -43,6 +47,7 @@ from .discovery import (
     pack_members,
 )
 from .models import Extension, ExtensionVersion, Publisher
+from .headless_views import headless_view_notices
 from .native_backend import local_native_backend_notices, native_backend_publish_problem
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
 from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
@@ -191,12 +196,16 @@ def create_app(
     # accepts both prefixed (ALB forwards the path unchanged) and prefix-stripped
     # request paths, and every URL the website emits carries the prefix.
     app = FastAPI(
-        title="Navide Marketplace Registry",
+        title="Navide Registry API",
         version="0.1.0",
         root_path=settings.root_path,
     )
     app.state.registry = state
-    if settings.root_path:
+    if settings.host_routing_enabled:
+        from .host_routing import HostRoutingMiddleware
+
+        app.add_middleware(HostRoutingMiddleware, settings=settings)
+    elif settings.root_path:
         app.add_middleware(_RootPathMiddleware, root_path=settings.root_path)
 
     @app.middleware("http")
@@ -204,6 +213,7 @@ def create_app(
         await run_in_threadpool(sweep_grandfather, request.app.state.registry)
         return await call_next(request)
 
+    register_error_docs(app)
     _register_routes(app)
     register_testplace_routes(
         app,
@@ -514,6 +524,35 @@ def _register_routes(app: FastAPI) -> None:
     def health() -> HealthResponse:
         return HealthResponse(status="ok")
 
+    @app.get("/api/readiness")
+    def readiness(request: Request) -> JSONResponse:
+        """Whether this Registry can serve: schema migrations, the signing
+        keys it signs with (key id and public fingerprints only) and the
+        static scanner version. 503 while a migration is missing."""
+        state: RegistryState = request.app.state.registry
+        applied = applied_migrations(state.engine)
+        pending = [number for number, _name, _step in MIGRATIONS if number not in applied]
+        signer = state.trust_signer
+        body = {
+            "status": "not-ready" if pending else "ready",
+            "schema": {
+                "version": max(applied, default=0),
+                "latest": MIGRATIONS[-1][0],
+                "migrations_complete": not pending,
+                "pending": pending,
+            },
+            "signing": {
+                "registry_profile": signer.registry_profile,
+                "key_id": signer.key_id,
+                "key_status": signer.status,
+                "key_fingerprint": public_key_fingerprint(signer.signer_public_key),
+                "root_fingerprint": signer.root_fingerprint,
+                "publisher_signatures": state.settings.verifier_kind,
+            },
+            "scanner": {"id": SCANNER_ID, "version": SCANNER_VERSION},
+        }
+        return JSONResponse(body, status_code=503 if pending else 200)
+
     @app.get("/api/categories", response_model=CategoryListResponse)
     def list_categories(
         repo: RegistryRepository = Depends(_repo),
@@ -720,6 +759,18 @@ def _register_routes(app: FastAPI) -> None:
         # for the reviewer; approval scans again and signs that report.
         scan = run_scan(data, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
+        if not testplace_publish:
+            # C1 (2026-11-07): a public listing that declares network hosts must
+            # declare the ones its code reaches; the card would show them red.
+            missing_hosts = undeclared_network_hosts(manifest.model_dump(exclude_none=True), scan)
+            if missing_hosts:
+                raise DocumentedHTTPException(
+                    status_code=422,
+                    detail="static scan found network hosts the manifest does not declare: "
+                    + ", ".join(missing_hosts)
+                    + "; declare them under permissions.network.hosts",
+                    code=CAPABILITY_DENIED,
+                )
         expires_at = None
         if testplace_publish:
             # D2: an invite-list build gets the automatic checks only, so a
@@ -860,7 +911,7 @@ def _register_routes(app: FastAPI) -> None:
             yanked=row.yanked,
             review_status=row.review_status,
             notices=(
-                local_native_backend_notices(publisher, manifest, local=local)
+                local_native_backend_notices(publisher, manifest, local=local) + headless_view_notices(manifest)
                 if isinstance(manifest, ManifestV2)
                 else []
             ),

@@ -16,6 +16,7 @@ export function bootWorkspaceToRecord(search: string): string {
   const path = params.get('workspace_path') ?? ''
   if (!path) return ''
   if (params.get('duplicate') === '1') return ''
+  if (params.get('skip_recent') === '1') return ''
   if (params.get('restore') === '1') return ''
   if ((params.get('detached_group') ?? '') !== '') return ''
   return path

@@ -3,6 +3,7 @@
 
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { vueTemplateFiles } from './init-template-vue.mjs'
 
 const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 const DISPLAY_NAME = /^[^\r\n<>]{1,80}$/
@@ -66,22 +67,29 @@ function files(id, name) {
   }
 }
 
-export function initPlugin(directory, id, name) {
+export const INIT_TEMPLATES = ['default', 'vue']
+
+export function initPlugin(directory, id, name, template = 'default') {
   if (!PLUGIN_ID.test(id)) {
     throw new Error(`plugin id '${id}' must be <namespace>.<name> in lowercase letters, digits and hyphens`)
+  }
+  if (!INIT_TEMPLATES.includes(template)) {
+    throw new Error(`unknown template '${template}'; templates: ${INIT_TEMPLATES.join(', ')}`)
   }
   const displayName = name ?? titleCase(id.split('.').slice(1).join('-'))
   if (!DISPLAY_NAME.test(displayName)) {
     throw new Error('plugin name must be 1-80 characters without newlines or angle brackets')
   }
+  // The vue template's names are checked before anything is written.
+  const generated = template === 'vue' ? vueTemplateFiles(id, displayName) : files(id, displayName)
   const root = resolve(directory)
   if (existsSync(root) && readdirSync(root).length > 0) {
     throw new Error(`'${directory}' already exists and is not empty`)
   }
-  for (const [path, contents] of Object.entries(files(id, displayName))) {
+  for (const [path, contents] of Object.entries(generated)) {
     const fullPath = join(root, path)
     mkdirSync(dirname(fullPath), { recursive: true })
-    writeFileSync(fullPath, contents, { flag: 'wx' })
+    writeFileSync(fullPath, contents, { flag: 'wx', ...(contents.startsWith('#!') ? { mode: 0o755 } : {}) })
   }
-  return { root, id, name: displayName }
+  return { root, id, name: displayName, template }
 }

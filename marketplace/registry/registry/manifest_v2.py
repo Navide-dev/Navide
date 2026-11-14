@@ -19,11 +19,15 @@ _V2_DISPLAY_TEXT_RE = r"^[^\r\n<>]+$"
 # Main's rule, unchanged (the App loads installed packages with it);
 # agentTools[].method has the stricter supervisor rule. Pinned by test_backend_name_rule.py.
 _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
+# Command rules: the App's, word for word (parseCommands, packages/plugin-contracts).
+_V2_COMMAND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*$")
+_V2_COMMAND_TARGET_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
+V2_RESERVED_COMMAND_HEADS: frozenset[str] = frozenset({"workbench", "ui", "editor", "git", "navide"})
 # The App's backend supervisor accepts only these method names (isMethodName,
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.
 _AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
-V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages"})
+V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
 # Manifest-level guard for recognizable source/script filenames. Proving that
@@ -141,6 +145,8 @@ class ManifestV2View(ManifestV2Model):
     detailView: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9-]*$")
     targetSchema: str | None = Field(default=None, min_length=1)
     receives: ManifestV2Receives | None = None
+    #: 0.2.40: the Host may open the view hidden to answer its agent tools.
+    headless: bool | None = None
 
     @field_validator("icon")
     @classmethod
@@ -171,11 +177,136 @@ class ManifestV2View(ManifestV2Model):
             raise ValueError("targetSchema is only valid for a detail view")
         if self.receives is not None and self.location != "window":
             raise ValueError("receives is only valid for a window view")
+        if self.headless and self.location in ("window", "detail"):
+            raise ValueError(f"headless is not valid for a {self.location} view")
         return self
+
+
+class ManifestV2CommandViewRun(ManifestV2Model):
+    view: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
+    target: dict[str, str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("target")
+    @classmethod
+    def _check_target(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        for key, text in (value or {}).items():
+            if _V2_COMMAND_TARGET_KEY_RE.fullmatch(key) is None:
+                raise ValueError(f"target key {key!r} is invalid")
+            if len(text) > 256:
+                raise ValueError(f"target value of {key!r} exceeds 256 characters")
+        return value
+
+
+class ManifestV2CommandMethodRun(ManifestV2Model):
+    method: str = Field(min_length=1)
+
+
+class ManifestV2Command(ManifestV2Model):
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_V2_DISPLAY_TEXT_RE)
+    run: ManifestV2CommandViewRun | ManifestV2CommandMethodRun
+    suggestedKey: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+# Text the Host shows on its own surfaces next to its own controls: no line
+# breaks, angle brackets, control, zero-width or bidirectional characters.
+_SLOT_TEXT_RE = r"^[^\r\n<>\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069]+$"
+_BACKEND_METHOD_NAME_RE = r"^[a-z][a-zA-Z0-9._-]{0,63}$"
+
+
+class ManifestV2ApiMethod(ManifestV2Model):
+    method: str = Field(pattern=_BACKEND_METHOD_NAME_RE)
+    description: str = Field(min_length=1, max_length=280)
+
+
+class ManifestV2PipelineNode(ManifestV2Model):
+    id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,39}$")
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    description: str | None = Field(default=None, min_length=1, max_length=280)
+    method: str = Field(pattern=_BACKEND_METHOD_NAME_RE)
+    timeoutMs: int | None = Field(default=None, ge=1000, le=600000)
+    n8nTypes: list[str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("n8nTypes")
+    @classmethod
+    def _check_n8n_types(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("must contain unique n8n node types")
+        if any(re.fullmatch(r"[A-Za-z0-9@][A-Za-z0-9@/._-]{0,127}", item) is None for item in value):
+            raise ValueError("must contain n8n node types such as n8n-nodes-base.httpRequest")
+        return value
+
+
+class ManifestV2Setting(ManifestV2Model):
+    key: str = Field(pattern=r"^[a-z][a-zA-Z0-9]{0,31}(\.[a-z][a-zA-Z0-9]{0,31}){0,3}$")
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    description: str | None = Field(default=None, min_length=1, max_length=280)
+    type: Literal["boolean", "string", "number", "enum"]
+    default: bool | int | float | str
+    options: list[str] | None = Field(default=None, min_length=1, max_length=32)
+    minimum: float | None = None
+    maximum: float | None = None
+    maxLength: int | None = Field(default=None, ge=1, le=4096)
+
+    @model_validator(mode="after")
+    def _check_type_rules(self) -> ManifestV2Setting:
+        only = {"options": "enum", "minimum": "number", "maximum": "number", "maxLength": "string"}
+        for field, kind in only.items():
+            if getattr(self, field) is not None and self.type != kind:
+                raise ValueError(f"settings {field} is only for type {kind}")
+        value = self.default
+        if self.type == "boolean" and not isinstance(value, bool):
+            raise ValueError("a boolean setting's default must be a boolean")
+        if self.type == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("a number setting's default must be a number")
+            if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+                raise ValueError("a number setting's minimum is above its maximum")
+            if (self.minimum is not None and value < self.minimum) or (self.maximum is not None and value > self.maximum):
+                raise ValueError("a number setting's default must be within its bounds")
+        if self.type == "string" and (not isinstance(value, str) or len(value) > (self.maxLength or 1024)):
+            raise ValueError("a string setting's default must be a string within its maxLength")
+        if self.type == "enum":
+            if not self.options or len(set(self.options)) != len(self.options):
+                raise ValueError("an enum setting needs unique options")
+            if any(re.fullmatch(_SLOT_TEXT_RE, option) is None or len(option) > 80 for option in self.options):
+                raise ValueError("an enum setting's options must be display text of at most 80 characters")
+            if not isinstance(value, str) or value not in self.options:
+                raise ValueError("an enum setting's default must be one of its options")
+        return self
+
+
+class ManifestV2StatusBarItem(ManifestV2Model):
+    command: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    tooltip: str | None = Field(default=None, min_length=1, max_length=200, pattern=_SLOT_TEXT_RE)
+
+
+class ManifestV2PaneAction(ManifestV2Model):
+    command: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+
+
+class ManifestV2ExplorerMenuItem(ManifestV2Model):
+    command: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=80, pattern=_SLOT_TEXT_RE)
+    when: Literal["file", "directory", "any"] | None = None
 
 
 class ManifestV2Contributes(ManifestV2Model):
     views: list[ManifestV2View] = Field(min_length=1, max_length=16)
+    commands: list[ManifestV2Command] | None = Field(default=None, min_length=1, max_length=32)
+    # View-served agent tools (contract 2.9), kept as plain JSON like
+    # backend.agentTools: every field rule is validate_agent_tools'.
+    agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
+    api: list[ManifestV2ApiMethod] | None = Field(default=None, min_length=1, max_length=32)
+    pipelineNodes: list[ManifestV2PipelineNode] | None = Field(default=None, min_length=1, max_length=16)
+    settings: list[ManifestV2Setting] | None = Field(default=None, min_length=1, max_length=32)
+    statusBar: list[ManifestV2StatusBarItem] | None = Field(default=None, min_length=1, max_length=4)
+    paneActions: list[ManifestV2PaneAction] | None = Field(default=None, min_length=1, max_length=8)
+    explorerMenu: list[ManifestV2ExplorerMenuItem] | None = Field(default=None, min_length=1, max_length=8)
 
     @model_validator(mode="after")
     def _check_unique_view_ids(self) -> ManifestV2Contributes:
@@ -267,14 +398,134 @@ class ManifestV2Scopes(ManifestV2Model):
     fs: ManifestV2FsScopes
 
 
-class ManifestV2Permissions(ManifestV2Model):
-    """Coarse Manifest v2 grants; method access remains Host-catalog-owned."""
+_NETWORK_HOST_RE = re.compile(
+    r"^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
 
-    system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages"]] | None = Field(
-        default=None, min_length=1, max_length=6
+
+class ManifestV2Network(ManifestV2Model):
+    """Hosts the package's views may connect to; enforced by the plugin
+    frame's connect-src on the App, disclosed here."""
+
+    hosts: list[str] = Field(min_length=1, max_length=32)
+
+    @field_validator("hosts")
+    @classmethod
+    def _check_hosts(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("must contain unique hosts")
+        if any(len(host) > 253 or _NETWORK_HOST_RE.fullmatch(host) is None for host in value):
+            raise ValueError(
+                "must contain lowercase DNS hosts such as api.example.com, optionally starting with *., "
+                "with no scheme, port or path"
+            )
+        return value
+
+
+AGENT_EVENTS = (
+    "agents.paneCreated", "agents.paneClosed", "agents.turnEnded", "agents.paneIdle",
+    "agents.messageReceived", "agents.planStageChanged", "agents.pipelineNodeChanged", "agents.scheduleFired",
+)
+
+
+class ManifestV2AgentEvents(ManifestV2Model):
+    """Host events the package receives, each disclosed on its own (E1)."""
+
+    events: list[
+        Literal[
+            "agents.paneCreated", "agents.paneClosed", "agents.turnEnded", "agents.paneIdle",
+            "agents.messageReceived", "agents.planStageChanged", "agents.pipelineNodeChanged", "agents.scheduleFired",
+        ]
+    ] = Field(min_length=1, max_length=8)
+
+    @field_validator("events")
+    @classmethod
+    def _check_unique(cls, value: list[str]) -> list[str]:
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.agents.events must contain unique events")
+        return value
+
+
+_SHELL_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
+_SHELL_EXTENSION_RE = re.compile(r"\.(exe|cmd|bat|com|ps1)$")
+
+
+class ManifestV2Permissions(ManifestV2Model):
+    """Coarse Manifest v2 grants; method access remains Host-catalog-owned.
+
+    ``shell`` may be spelled in the manifest as ``{"mode": "allowlist",
+    "executables": [...]}`` (C2): the object form is normalized here into
+    ``shell="allowlist"`` plus ``shellExecutables``, so every reader of
+    ``permissions.shell`` keeps comparing a mode string.
+    """
+
+    system: list[Literal["fs", "ui", "aiCli", "web", "agents", "agentMessages", "secrets", "agentNotify"]] | None = Field(
+        default=None, min_length=1, max_length=7
     )
     shell: Literal["allowlist", "full"] | None = None
+    shellExecutables: list[str] | None = Field(default=None, min_length=1, max_length=32)
     scopes: ManifestV2Scopes | None = None
+    network: ManifestV2Network | None = None
+    agents: ManifestV2AgentEvents | None = None
+    plugins: list[str] | None = Field(default=None, min_length=1, max_length=16)
+
+    @field_validator("plugins")
+    @classmethod
+    def _check_plugins(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.plugins must contain unique plugin ids")
+        if any(PACKAGE_ID_RE.fullmatch(item) is None for item in value):
+            raise ValueError("permissions.plugins must contain plugin ids such as acme.tools")
+        return value
+
+    @model_validator(mode="after")
+    def _check_agent_events_need_agents(self) -> ManifestV2Permissions:
+        if self.agents is not None and (self.system is None or "agents" not in self.system):
+            raise ValueError("permissions.agents declares events without agents in permissions.system")
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_shell_object(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        if "shellExecutables" in value:
+            raise ValueError("permissions.shellExecutables is not a manifest field; declare permissions.shell as an object")
+        shell = value.get("shell")
+        if not isinstance(shell, Mapping):
+            return value
+        if set(shell) != {"mode", "executables"}:
+            raise ValueError("permissions.shell as an object takes exactly mode and executables")
+        if shell["mode"] != "allowlist":
+            raise ValueError('permissions.shell.mode must be "allowlist" when executables are declared')
+        executables = shell["executables"]
+        if not isinstance(executables, list) or not all(isinstance(name, str) for name in executables):
+            raise ValueError("permissions.shell.executables must be a list of names")
+        normalized = dict(value)
+        normalized["shell"] = "allowlist"
+        normalized["shellExecutables"] = executables
+        return normalized
+
+    @field_validator("shellExecutables")
+    @classmethod
+    def _check_shell_executables(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return value
+        if len(set(value)) != len(value):
+            raise ValueError("permissions.shell.executables must contain unique names")
+        if any(_SHELL_EXECUTABLE_RE.fullmatch(name) is None for name in value):
+            raise ValueError(
+                "permissions.shell.executables must contain lowercase names such as npm, as spelled on PATH, with no path or shell word"
+            )
+        # A Host-family name is always admitted and has its own policy; a
+        # Windows extension would reach that family's binary without it.
+        if any(_SHELL_EXTENSION_RE.search(name) for name in value):
+            raise ValueError("permissions.shell.executables must be bare names without a .exe/.cmd/.bat/.com/.ps1 extension")
+        if any(name in ("git", "gh", "glab") for name in value):
+            raise ValueError("permissions.shell.executables must not declare git, gh or glab, which allowlist always admits")
+        return value
 
     @field_validator("system")
     @classmethod
@@ -329,18 +580,19 @@ class ManifestV2(ManifestV2Model):
             errors = validate_agent_tools(dict(value))
             if errors:
                 first = errors[0]
+                owner = "contributes" if first.get("list") == "contributes" else "backend"
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
                 detail = ""
                 if first["code"] == "AGENT_TOOL_PREFIX_MISMATCH":
                     # Name the prefix that would pass, as `navide-plugin validate` does.
-                    name = value["backend"]["agentTools"][first["index"]].get("name")
+                    name = value[owner]["agentTools"][first["index"]].get("name")
                     prefix = derive_agent_tool_prefix(value.get("id"))
                     detail = (
                         f" ({name!r} must start with '{prefix}_', the prefix Navide derives "
                         f"from id {value.get('id')!r}: its last segment without hyphens)"
                     )
-                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}{detail}")
+                raise ValueError(f"{owner}.agentTools{where}{field} is invalid: {first['code']}{detail}")
             backend = value.get("backend")
             declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
             for index, tool in enumerate(declared if isinstance(declared, list) else []):
@@ -363,13 +615,74 @@ class ManifestV2(ManifestV2Model):
                 self.permissions.system is not None
                 or self.permissions.shell is not None
                 or self.permissions.scopes is not None
+                or self.permissions.network is not None
+                or self.permissions.agents is not None
+                or self.permissions.plugins is not None
             ):
                 raise ValueError("an extension pack must not request permissions")
         elif self.contributes is None and self.backend is None:
             raise ValueError("manifest must declare contributes or backend")
         if self.publisher != self.namespace:
             raise ValueError("publisher must match id namespace")
+        self._check_commands()
+        self._check_contributed_extras()
         return self
+
+    def _check_contributed_extras(self) -> None:
+        """api / pipelineNodes name backend methods; view slots name this
+        package's own commands; ids and keys are unique."""
+        contributes = self.contributes
+        if contributes is None:
+            return
+        methods = set(self.backend.methods or []) if self.backend is not None else set()
+        for field in ("api", "pipelineNodes"):
+            entries = getattr(contributes, field) or []
+            for index, entry in enumerate(entries):
+                if entry.method not in methods:
+                    raise ValueError(f"contributes.{field}[{index}].method {entry.method!r} is not in backend.methods")
+        api = [entry.method for entry in contributes.api or []]
+        if len(set(api)) != len(api):
+            raise ValueError("contributes.api must list each method once")
+        nodes = [entry.id for entry in contributes.pipelineNodes or []]
+        if len(set(nodes)) != len(nodes):
+            raise ValueError("contributes.pipelineNodes must contain unique ids")
+        keys = [entry.key for entry in contributes.settings or []]
+        if len(set(keys)) != len(keys):
+            raise ValueError("contributes.settings must contain unique keys")
+        commands = {command.id for command in contributes.commands or []}
+        for field in ("statusBar", "paneActions", "explorerMenu"):
+            for index, entry in enumerate(getattr(contributes, field) or []):
+                if entry.command not in commands:
+                    raise ValueError(f"contributes.{field}[{index}].command {entry.command!r} is not one of contributes.commands")
+
+    def _check_commands(self) -> None:
+        contributes = self.contributes
+        if contributes is None or contributes.commands is None:
+            return
+        if self.namespace in V2_RESERVED_COMMAND_HEADS:
+            raise ValueError(
+                f"contributes.commands cannot be declared under {self.namespace!r}, "
+                "which is a namespace of Navide's own commands"
+            )
+        view_ids = {view.id for view in contributes.views}
+        methods = set(self.backend.methods or []) if self.backend is not None else set()
+        prefix = f"{self.id}."
+        seen: set[str] = set()
+        for index, command in enumerate(contributes.commands):
+            name = command.id[len(prefix):] if command.id.startswith(prefix) else ""
+            if _V2_COMMAND_NAME_RE.fullmatch(name) is None:
+                raise ValueError(
+                    f"contributes.commands[{index}].id {command.id!r} must be the package id, "
+                    "a dot, then a name of letters and digits starting with a lower-case letter"
+                )
+            if command.id in seen:
+                raise ValueError(f"contributes.commands[{index}].id {command.id!r} is declared twice")
+            seen.add(command.id)
+            run = command.run
+            if isinstance(run, ManifestV2CommandViewRun) and run.view not in view_ids:
+                raise ValueError(f"contributes.commands[{index}].run.view {run.view!r} is not a declared view")
+            if isinstance(run, ManifestV2CommandMethodRun) and run.method not in methods:
+                raise ValueError(f"contributes.commands[{index}].run.method {run.method!r} is not in backend.methods")
 
     @property
     def namespace(self) -> str:

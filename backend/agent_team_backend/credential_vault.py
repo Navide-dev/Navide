@@ -52,6 +52,7 @@ from typing import Callable
 
 from .applog import app_data_dir, default_app_data_dir
 from .cloud_secrets import SECURITY_LINE_MAX_BYTES
+from . import osplat
 from .osplat import secret_files
 from .cli_vendors.registry import vendor as _cli_vendor_spec
 from .profiles_store import (
@@ -389,6 +390,27 @@ def _write_private(path: Path, text: str) -> None:
 def _write_live_file(path: Path, text: str) -> None:
     """Same guarantees, plain content: the CLI itself reads this file."""
     secret_files.write_private_plain(path, text.encode("utf-8"))
+
+
+def _is_link(path: Path) -> bool:
+    """A symlink or a Windows directory junction (``is_symlink`` is False for
+    a junction)."""
+    return path.is_symlink() or os.path.isjunction(path)
+
+
+def _create_junction(target: Path, link: Path) -> None:
+    """Directory junction at ``link`` pointing at ``target``. Windows only;
+    unlike a symlink it needs no privilege (no Developer Mode)."""
+    import _winapi  # noqa: PLC0415 — Windows-only module
+
+    _winapi.CreateJunction(os.fspath(target), os.fspath(link))
+
+
+def _make_link(link: Path, target: Path, *, is_dir: bool, method: str) -> None:
+    if method == "junction":
+        _create_junction(target, link)
+    else:
+        link.symlink_to(target, target_is_directory=is_dir)
 
 
 def _link_target(raw: str) -> str:
@@ -1147,6 +1169,22 @@ class CredentialVault:
         self.write_live(agent_key, self.read_slot(agent_key, slot_id, scope=scope), scope=scope)
         self._sign_in_pending_live_marker(agent_key, slot_id).unlink(missing_ok=True)
 
+    def _api_key_slot_marker(self, agent_key: str, slot_id: str) -> Path:
+        return self.slot_dir(agent_key, slot_id) / ".api-key"
+
+    def mark_api_key_slot(self, agent_key: str, slot_id: str) -> None:
+        """Record that this claude slot belongs to an API key account. It holds
+        no login, so restoring it would clear the live login."""
+        marker = self._api_key_slot_marker(agent_key, slot_id)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+
+    def is_api_key_slot(self, agent_key: str, slot_id: str | None) -> bool:
+        return (
+            agent_key == "claude" and bool(slot_id)
+            and self._api_key_slot_marker(agent_key, str(slot_id)).exists()
+        )
+
     def _sign_in_pending_live_marker(self, agent_key: str, slot_id: str) -> Path:
         """Set while a claude sign-in harvested into the slot has not been
         restored to live; ``capture`` keeps it over an older live token of the
@@ -1176,6 +1214,8 @@ class CredentialVault:
         bring ``to_slot_id`` live. On a restore failure the captured snapshot is
         written back so the live state is never lost. ``scope`` (per-provider
         stores) names the one provider entry both sides of the swap touch."""
+        if self.is_api_key_slot(agent_key, from_slot_id) or self.is_api_key_slot(agent_key, to_slot_id):
+            raise CredentialVaultError("a claude API key account is never swapped into the live login")
         outgoing = self.capture(agent_key, from_slot_id, scope=scope)
         try:
             self.restore(agent_key, to_slot_id, scope=scope)
@@ -1625,6 +1665,8 @@ class CredentialVault:
         so Navide never reads it. A login a pane reported expired does not
         count until it changes — a new sign-in rewrites it. Blocking (a
         ``security`` call on macOS)."""
+        if self.is_api_key_slot("claude", slot_id):
+            return True
         present, stamp = self._account_dir_login_stamp(slot_id)
         if not present:
             return False
@@ -1669,10 +1711,17 @@ class CredentialVault:
         directory = self.account_dir_path(slot_id)
         secret_files.make_private_dir(directory)
         real = self._real_home / ".claude"
+        api_key = self.is_api_key_slot("claude", slot_id)
         for name, is_dir in CLAUDE_SHARED_ENTRIES:
+            if api_key and name == "settings.json":
+                continue  # Its own copy names the key's helper.
             target = real / name
             if name in _CLAUDE_ALWAYS_SHARED or target.exists() or target.is_symlink():
                 self._link_shared(directory / name, target, is_dir=is_dir)
+        if api_key:
+            from . import api_key_accounts
+
+            api_key_accounts.write_account_dir_settings(self, directory, slot_id)
         self._seed_account_dir_config(directory)
         return directory
 
@@ -1842,23 +1891,71 @@ class CredentialVault:
         only if fully drained, replaced with the symlink. Every IO path is
         guarded — a failure only logs and lets the spawn proceed against the
         isolated home, never raising."""
+        method = self._link_method(is_dir=is_dir)
         try:
-            if dst.is_symlink():
+            if _is_link(dst):
                 if _link_target(os.readlink(dst)) == os.fspath(target):
                     self._ensure_target_base(target, is_dir=is_dir)
                     return
                 dst.unlink()  # stale/wrong link -> repoint
             elif dst.exists():
+                if method is None or not self._link_works_beside(dst, target, is_dir=is_dir, method=method):
+                    # Draining into the real home with no link to put back
+                    # would hide every session from the CLI on this config
+                    # dir (Windows without Developer Mode: "No conversation
+                    # found" on each resume). Leave it unshared, in place.
+                    log.warning("cannot link %s -> %s; left unshared in place", dst, target)
+                    return
                 migrated = (
                     self._migrate_dir(dst, target) if is_dir
                     else self._migrate_file(dst, target)
                 )
                 if not migrated:
                     return  # could not drain safely; leave unshared
+            if method is None:
+                log.warning("cannot link %s -> %s; left unshared", dst, target)
+                return
             self._ensure_target_base(target, is_dir=is_dir)
-            dst.symlink_to(target, target_is_directory=is_dir)
+            _make_link(dst, target, is_dir=is_dir, method=method)
         except OSError as err:
             log.warning("shared-home link %s -> %s failed: %s", dst, target, err)
+
+    def _link_works_beside(self, dst: Path, target: Path, *, is_dir: bool, method: str) -> bool:
+        """Prove a link can be made next to ``dst`` before draining it: a
+        junction can still fail on one volume (FAT, some network shares)."""
+        probe = dst.with_name(f".{dst.name}.navide-link-probe")
+        try:
+            if _is_link(probe):
+                probe.unlink()
+            self._ensure_target_base(target, is_dir=is_dir)
+            _make_link(probe, target, is_dir=is_dir, method=method)
+            probe.unlink()
+            return True
+        except OSError as err:
+            log.warning("cannot link beside %s (%s): %s", dst, method, err)
+            return False
+
+    def _symlinks_available(self) -> bool:
+        return osplat.paths.symlinks_available()
+
+    def _link_method(self, *, is_dir: bool) -> str | None:
+        """How a shared entry can be linked here: a symlink, a directory
+        junction (Windows, needs no privilege, directories only), or None."""
+        if self._symlinks_available():
+            return "symlink"
+        if is_dir and self._platform == "win32":
+            return "junction"
+        return None
+
+    def account_dir_unshared(self, slot_id: str) -> list[str]:
+        """The always-shared entries of the account dir that are not linked to
+        the real home (sessions or Navide's settings stay per account)."""
+        directory = self.account_dir_path(slot_id)
+        api_key = self.is_api_key_slot("claude", slot_id)
+        return [
+            name for name in sorted(_CLAUDE_ALWAYS_SHARED)
+            if not (api_key and name == "settings.json") and not _is_link(directory / name)
+        ]
 
     # ---- one-time promotion of legacy profile-home credentials ----
 

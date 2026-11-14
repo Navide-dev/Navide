@@ -42,9 +42,9 @@ REQUEST_TOOLS = [
 B2_TOOLS = [*READONLY_TOOLS, *REQUEST_TOOLS, "marketplace_request_status", "plugins_disable", "plugins_enable"]
 
 #: sha256 of the canonical (name, inputSchema) list of the ten B2 tools on
-#: origin/main 06cee5189. A tool changed on purpose updates it: print
-#: _b2_surface()'s digest and paste it here.
-B2_SURFACE_SHA256 = "93ba81a1f078efb3681d9f8721be4210661270e8110bb189a57d0fddf41d1360"
+#: origin/main 06cee5189, plus plugins_disable's clear_secrets (0.2.39). A tool
+#: changed on purpose updates it: print _b2_surface()'s digest and paste it here.
+B2_SURFACE_SHA256 = "6136fdb92f1770e35a1e9d225999e1f3b48853202576e075e96e83256246a97a"
 
 #: Text a hostile package or Registry could write: a fake end of the fence, a
 #: fake message envelope and an instruction.

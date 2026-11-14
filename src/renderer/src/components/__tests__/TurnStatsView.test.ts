@@ -336,6 +336,15 @@ describe('TurnStatsView quota', () => {
     expect(spend.text()).toContain(`2 ${i18n.global.t('turn-stats.quota-window-turns')}`)
   })
 
+  it('adds the 5H note beside the real windows, and only for a confirmed account', async () => {
+    const weekly = { kind: 'weekly', label: 'Week', usedPercent: 12, resetsAt: '2026-09-20T00:00:00Z' }
+    const w = await mountView({ usage: claudeUsage({ windows: [weekly], absentWindows: ['session'] }) })
+    expect(w.get('[data-part="quota-session-note"]').text()).toContain(i18n.global.t('usage.window-unlimited'))
+    expect(w.findAll('[data-part="quota-window"]').map((el) => el.attributes('data-kind'))).toEqual(['weekly'])
+    const other = await mountView({ usage: claudeUsage({ windows: [weekly] }) })
+    expect(other.find('[data-part="quota-session-note"]').exists()).toBe(false)
+  })
+
   it('marks an exhausted window and leaves turns outside the window out of the sum', async () => {
     const usage = claudeUsage({
       windows: [{ kind: 'session', label: 'Session', usedPercent: 100, resetsAt: '2026-09-16T06:00:00Z' }],

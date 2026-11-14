@@ -407,6 +407,31 @@ describe('B0 capability and Backend Wire contract gate', () => {
     expect(agent.required).not.toContain('caller')
   })
 
+  it('answers a call whose agent initiator names the calling pane, an additive optional field', () => {
+    const raw = readFileSync(join(WIRE_FIXTURES, 'valid', 'call-agent-pane.json'), 'utf8').trimEnd()
+    const result = spawnSync(process.execPath, [BACKEND_WIRE_CHILD], {
+      encoding: 'utf8',
+      input: `${raw}\n`,
+      maxBuffer: 1_000_000,
+      timeout: 5_000,
+    })
+
+    expect(result.status).toBe(0)
+    const response = JSON.parse(result.stdout.trim()) as { id: string; error?: unknown; result?: { value?: { runtime?: unknown } } }
+    expect(response.error).toBeUndefined()
+    expect(response.id).toBe('req-4')
+    expect(response.result?.value?.runtime).toEqual(
+      (JSON.parse(raw) as { params: { runtime: unknown } }).params.runtime
+    )
+    const schema = JSON.parse(
+      readFileSync(join(CONTRACT_FIXTURES, 'backend-wire-v1.schema.json'), 'utf8')
+    ) as { $defs: { initiator: { oneOf: Array<{ required: string[]; properties: Record<string, unknown> }> } } }
+    const [user, agent] = schema.$defs.initiator.oneOf
+    expect(agent.properties.pane).toMatchObject({ type: 'string', minLength: 1, maxLength: 200 })
+    expect(agent.required).not.toContain('pane')
+    expect(user.properties.pane).toBeUndefined()
+  })
+
   it.each(rawWireFixtures)('rejects raw Backend Wire input %s at the Host framing seam', (name) => {
     const raw = readFileSync(join(WIRE_FIXTURES, 'invalid-raw', name), 'utf8')
     expect(() => parseBackendWireFrame(raw)).toThrow(

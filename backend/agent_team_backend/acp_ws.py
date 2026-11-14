@@ -265,10 +265,24 @@ async def acp_create(session: "Session", msg_id: str, msg_type: str, payload: di
     if output_log_file and not os.path.isabs(output_log_file):
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "output_log_file must be absolute"))
         return
+    argv = list(launch.argv)
+    if launch.adapter is not None:
+        # The adapter is a program of its own, installed through the usual
+        # install flow; the window offers that install on ACP_ADAPTER_MISSING.
+        from . import onboarding_deps
+
+        found = await asyncio.to_thread(onboarding_deps.resolve_executable, launch.adapter, True)
+        if not found:
+            await session.send_json(make_error(
+                msg_id, msg_type, "ACP_ADAPTER_MISSING", f"{launch.adapter.label} is not installed",
+                {"dep_id": launch.adapter.id, "label": launch.adapter.label},
+            ))
+            return
+        argv[0] = found
     _STARTING.setdefault(pane_id, set()).add(session)
     try:
         created = await get_service().create(
-            pane_id=pane_id, agent_key=agent_key, argv=list(launch.argv), cwd=cwd,
+            pane_id=pane_id, agent_key=agent_key, argv=argv, cwd=cwd,
             env=_spawn_env(cli_vendor(agent_key)), load_session_id=str(payload.get("load_session_id") or ""),
             output_log_file=output_log_file,
         )

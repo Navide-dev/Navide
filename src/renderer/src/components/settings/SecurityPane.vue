@@ -20,6 +20,7 @@ import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import TerminalProtectionSection from './TerminalProtectionSection.vue'
+import { leadSentence } from '../../lib/leadSentence'
 
 /**
  * Settings → Security: Navide Guard. The on/off switch, what Guard does per
@@ -65,9 +66,12 @@ const POLICY: Record<PolicyRow, Record<GuardLevel, GuardAction | 'allow-audit'>>
 }
 const POLICY_ROWS = Object.keys(POLICY) as PolicyRow[]
 
+// One status palette across Settings: green = allowed (and "Can be
+// blocked"), amber = ask, red = deny.
 function actionTone(action: string): string {
   if (action === 'deny') return 'bad'
   if (action === 'ask') return 'warn'
+  if (action === 'allow' || action === 'allow-audit') return 'ok'
   return 'muted'
 }
 
@@ -162,7 +166,7 @@ async function runTest(): Promise<void> {
     <p v-if="!store.available.value" class="gd-hint" data-testid="guard-unavailable">{{ t('guard.unavailable') }}</p>
 
     <SettingsCard>
-      <SettingRow :title="t('guard.enabled.title')" :description="t('guard.enabled.desc')">
+      <SettingRow :title="t('guard.enabled.title')" :description="t('guard.enabled.desc')" fold-description>
         <template #control>
           <ToggleSwitch
             data-testid="guard-enabled-toggle"
@@ -174,10 +178,11 @@ async function runTest(): Promise<void> {
         </template>
       </SettingRow>
       <div v-if="store.available.value" class="gd-counts" data-testid="guard-counts">
-        <span class="gd-pill bad">{{ t('guard.counts.critical', { n: store.counts.value.critical }) }}</span>
-        <span class="gd-pill warn">{{ t('guard.counts.high', { n: store.counts.value.high }) }}</span>
-        <span class="gd-pill warn">{{ t('guard.counts.asks', { n: store.counts.value.asks }) }}</span>
-        <span class="gd-pill bad">{{ t('guard.counts.denies', { n: store.counts.value.denies_24h }) }}</span>
+        <!-- A counter takes its colour only once something was counted: zero is neutral. -->
+        <span class="gd-pill" :class="{ bad: store.counts.value.critical > 0 }">{{ t('guard.counts.critical', { n: store.counts.value.critical }) }}</span>
+        <span class="gd-pill" :class="{ warn: store.counts.value.high > 0 }">{{ t('guard.counts.high', { n: store.counts.value.high }) }}</span>
+        <span class="gd-pill" :class="{ warn: store.counts.value.asks > 0 }">{{ t('guard.counts.asks', { n: store.counts.value.asks }) }}</span>
+        <span class="gd-pill" :class="{ bad: store.counts.value.denies_24h > 0 }">{{ t('guard.counts.denies', { n: store.counts.value.denies_24h }) }}</span>
       </div>
     </SettingsCard>
     <p v-if="actionError || store.error.value" class="gd-error" role="alert">{{ actionError || store.error.value }}</p>
@@ -185,6 +190,8 @@ async function runTest(): Promise<void> {
     <SettingsSection :label="t('guard.policy.title')">
       <p class="gd-hint">{{ t('guard.policy.hint') }}</p>
       <SettingsCard>
+        <!-- Below the container breakpoint each row stacks into a titled block with one labelled line per level. -->
+        <div class="gd-table-scroll">
         <table class="gd-table" data-testid="guard-policy">
           <thead>
             <tr>
@@ -195,12 +202,13 @@ async function runTest(): Promise<void> {
           <tbody>
             <tr v-for="row in POLICY_ROWS" :key="row">
               <th scope="row">{{ t(`guard.policy.row.${row}`) }}</th>
-              <td v-for="level in LEVELS" :key="level">
+              <td v-for="level in LEVELS" :key="level" :data-label="t(`guard.level.${level}`)">
                 <span class="gd-pill" :class="actionTone(POLICY[row][level])">{{ t(`guard.action.${POLICY[row][level]}`) }}</span>
               </td>
             </tr>
           </tbody>
         </table>
+        </div>
       </SettingsCard>
       <p class="gd-hint gd-footnote">{{ t('guard.policy.levels') }}</p>
     </SettingsSection>
@@ -210,16 +218,23 @@ async function runTest(): Promise<void> {
       <SettingsCard class="gd-vendors">
         <div v-for="v in vendors" :key="v.key" class="gd-item" data-testid="guard-vendor-row" :data-vendor="v.key">
           <span class="gd-item-name" v-truncate>{{ v.label }}</span>
+          <!-- Amber is kept for "Ask" (a decision); a CLI Guard cannot block
+               is a limitation, so it reads neutral with a small mark. -->
           <span
             class="gd-pill"
-            :class="v.support === 'block' ? 'ok' : v.support === 'none' ? 'warn' : 'muted'"
-          >{{ t(`guard.vendors.${v.support ?? 'unknown'}`) }}</span>
+            :class="v.support === 'block' ? 'ok' : v.support === 'none' ? 'limited' : 'muted'"
+          ><svg v-if="v.support === 'none'" class="gd-pill-icon" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="4.6"/><path d="M2.8 9.2l6.4-6.4"/></svg>{{ t(`guard.vendors.${v.support ?? 'unknown'}`) }}</span>
         </div>
       </SettingsCard>
     </SettingsSection>
 
     <SettingsSection :label="t('guard.builtin.title')" data-testid="guard-builtin">
-      <p class="gd-hint">{{ t('guard.builtin.hint') }}</p>
+      <!-- What the table is up front; how levels move folds under Learn more. -->
+      <p class="gd-hint">{{ leadSentence(t('guard.builtin.hint')).lead }}</p>
+      <details v-if="leadSentence(t('guard.builtin.hint')).rest" class="gd-more settings-more">
+        <summary>{{ t('action.learn-more') }}</summary>
+        <p>{{ leadSentence(t('guard.builtin.hint')).rest }}</p>
+      </details>
       <template v-for="g in builtinGroups" :key="g.group">
         <h4 class="gd-subhead">{{ t(`guard.builtin.group.${g.group}`) }}</h4>
         <SettingsCard>
@@ -261,7 +276,7 @@ async function runTest(): Promise<void> {
 
     <SettingsSection :label="t('guard.rules.title')">
       <p class="gd-hint">{{ t('guard.rules.hint') }}</p>
-      <details class="gd-more">
+      <details class="gd-more settings-more">
         <summary>{{ t('guard.terminal.more') }}</summary>
         <p>{{ t('guard.rules.hint-detail') }}</p>
       </details>
@@ -355,14 +370,14 @@ async function runTest(): Promise<void> {
 <style scoped>
 .security-pane { display: flex; flex-direction: column; }
 .gd-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
-.gd-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
+.gd-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
 .gd-inset { margin: 0; padding: 0 var(--space-row-x) 8px; }
 .gd-counts { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px var(--space-row-x); }
 
 /* Status pill: same shape as the Channels page's. */
 .gd-pill {
   flex-shrink: 0;
-  font-size: var(--font-3xs);
+  font-size: var(--font-xs);
   font-weight: 600;
   border-radius: 999px;
   padding: 1px 8px;
@@ -371,22 +386,39 @@ async function runTest(): Promise<void> {
   border: 1px solid var(--border-default);
   white-space: nowrap;
 }
-.gd-pill.ok { color: var(--success-fg); background: var(--success-subtle); border-color: var(--success-muted); }
-.gd-pill.warn { color: var(--attention-fg); background: var(--attention-subtle); border-color: var(--attention-muted); }
+.gd-pill.ok { color: var(--success-on-subtle); background: var(--success-subtle); border-color: var(--success-muted); }
+.gd-pill.warn { color: var(--attention-on-subtle); background: var(--attention-subtle); border-color: var(--attention-muted); }
 .gd-pill.bad { color: var(--danger-fg); background: var(--danger-subtle); border-color: var(--danger-muted); }
+.gd-pill.limited { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); background: transparent; border-color: var(--border-default); }
+.gd-pill-icon { flex: none; }
 
-.gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-2xs); }
+.gd-table-scroll { overflow-x: auto; container: gd-table / inline-size; }
+.gd-table { width: 100%; border-collapse: collapse; font-size: var(--font-xs); }
 .gd-table th, .gd-table td { padding: 6px var(--space-row-x); text-align: left; }
 .gd-table thead th { color: var(--text-secondary); font-weight: 600; border-bottom: 1px solid var(--border-muted); }
 .gd-table tbody th { color: var(--text-primary); font-weight: 600; }
 .gd-table tbody tr + tr th, .gd-table tbody tr + tr td { border-top: 1px solid var(--border-muted); }
+/* Narrow card: one block per request source — the source name as a wrapping
+   title, then one "level  action" line per column. The header row is kept for
+   assistive tech but hidden; each cell carries its column name instead. */
+@container gd-table (max-width: 600px) {
+  .gd-table, .gd-table tbody, .gd-table tr, .gd-table tbody th { display: block; }
+  .gd-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .gd-table tbody tr { padding: 8px var(--space-row-x); }
+  .gd-table tbody tr + tr { border-top: 1px solid var(--border-muted); }
+  .gd-table tbody tr + tr th, .gd-table tbody tr + tr td { border-top: none; }
+  .gd-table tbody th { padding: 0 0 4px; white-space: normal; overflow-wrap: anywhere; }
+  .gd-table td { display: grid; grid-template-columns: minmax(6em, 40%) minmax(0, 1fr); align-items: center; gap: 8px; padding: 2px 0; }
+  .gd-table td::before { content: attr(data-label); color: var(--text-secondary); overflow-wrap: anywhere; }
+  .gd-table td .gd-pill { justify-self: start; }
+}
 
 .gd-item { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-row-x); }
-.gd-empty { font-size: var(--font-2xs); color: var(--text-secondary); }
+.gd-empty { font-size: var(--font-xs); color: var(--text-secondary); }
 .gd-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .gd-item-name { flex: 1; min-width: 0; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gd-item-meta { font-size: var(--font-2xs); color: var(--text-secondary); word-break: break-word; }
-.gd-code { font-family: var(--font-mono, monospace); font-size: var(--font-2xs); color: var(--text-bright); word-break: break-all; }
+.gd-item-meta { font-size: var(--font-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+.gd-code { font-family: var(--font-mono, monospace); font-size: var(--font-xs); color: var(--text-bright); word-break: break-all; }
 
 .gd-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px var(--space-row-x); }
 .gd-input {
@@ -400,8 +432,9 @@ async function runTest(): Promise<void> {
 .gd-input.grow { flex: 1; min-width: 160px; }
 .gd-input.mono { font-family: var(--font-mono, monospace); }
 .gd-input:hover { border-color: var(--border-strong); }
-.gd-input:focus { outline: none; border-color: var(--accent-focus); }
-.gd-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-2xs); color: var(--text-secondary); }
+.gd-input:focus { border-color: var(--accent-focus); }
+.gd-input:focus:not(:focus-visible) { outline: none; }
+.gd-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--font-xs); color: var(--text-secondary); }
 .gd-test-result { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 var(--space-row-x) 10px; }
 .gd-test-matched .gd-item { padding-top: 4px; padding-bottom: 4px; }
 .gd-subhead { margin: 16px 0 6px; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
@@ -437,7 +470,7 @@ async function runTest(): Promise<void> {
   white-space: nowrap;
 }
 .gd-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
-.gd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.gd-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 /* A primary waiting for input keeps its frame instead of fading to a ghost of itself. */
 .gd-btn.primary:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
 .gd-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }

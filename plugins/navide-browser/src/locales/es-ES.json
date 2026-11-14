@@ -65,6 +65,39 @@
     "errors": {
       "generic": "Algo ha fallado ({code}).",
       "invalid-address": "Escribe una dirección http o https."
+    },
+    "layout": {
+      "label": "Diseño",
+      "tiled": "En paralelo",
+      "switch": "De uno en uno"
+    },
+    "page": {
+      "previous": "Página anterior",
+      "next": "Página siguiente",
+      "status": "Página {page} de {count}"
+    },
+    "tab": {
+      "new": "Nueva pestaña",
+      "close": "Cerrar pestaña",
+      "untitled": "Nueva pestaña",
+      "discarded": "Cerrada para ahorrar memoria; haz clic para volver a cargarla",
+      "discarded-note": "Esta pestaña se cerró para ahorrar memoria tras 10 minutos sin mostrarse. Su página se vuelve a cargar desde su dirección.",
+      "restore": "Volver a cargar pestaña"
+    },
+    "dialog": {
+      "open": "Diálogo abierto ({type}): {message}",
+      "type": {
+        "alert": "Alerta",
+        "confirm": "Confirmación",
+        "prompt": "Solicitud",
+        "beforeunload": "Salir de la página"
+      }
+    },
+    "uploads": {
+      "title": "Archivos que subió el agent",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Parece un secreto",
+      "sensitive-note": "El agent subió archivos cuyos nombres parecen secretos"
     }
   }
 }

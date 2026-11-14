@@ -65,6 +65,39 @@
     "errors": {
       "generic": "Une erreur s’est produite ({code}).",
       "invalid-address": "Saisissez une adresse http ou https."
+    },
+    "layout": {
+      "label": "Disposition",
+      "tiled": "Côte à côte",
+      "switch": "Un à la fois"
+    },
+    "page": {
+      "previous": "Page précédente",
+      "next": "Page suivante",
+      "status": "Page {page} sur {count}"
+    },
+    "tab": {
+      "new": "Nouvel onglet",
+      "close": "Fermer l’onglet",
+      "untitled": "Nouvel onglet",
+      "discarded": "Fermé pour économiser la mémoire ; cliquez pour le recharger",
+      "discarded-note": "Cet onglet a été fermé pour économiser la mémoire après 10 minutes sans être affiché. Sa page se recharge depuis son adresse.",
+      "restore": "Recharger l’onglet"
+    },
+    "dialog": {
+      "open": "Boîte de dialogue ouverte ({type}) : {message}",
+      "type": {
+        "alert": "Alerte",
+        "confirm": "Demande de confirmation",
+        "prompt": "Saisie",
+        "beforeunload": "Quitter la page"
+      }
+    },
+    "uploads": {
+      "title": "Fichiers envoyés par l’agent",
+      "item": "{file} → {origin}, {time}",
+      "sensitive": "Ressemble à un secret",
+      "sensitive-note": "L’agent a envoyé des fichiers dont le nom ressemble à un secret"
     }
   }
 }

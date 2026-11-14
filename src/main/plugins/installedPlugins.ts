@@ -162,6 +162,7 @@ function manifestViewsToDescriptors(
       ...(view.detailView ? { detailView: view.detailView } : {}),
       ...(view.targetSchema ? { targetSchema: view.targetSchema } : {}),
       ...(view.receives ? { receives: view.receives } : {}),
+      ...(view.headless === true ? { headless: true as const } : {}),
       entryFile: join(pluginDir, view.entry),
     }
   })
@@ -188,10 +189,20 @@ export function manifestToDescriptor(
       packageDir: pluginDir,
       requires: manifestCapabilities(manifest),
       capabilityPolicy: manifestCapabilityPolicy(manifest),
+      ...(manifest.permissions.network ? { networkHosts: [...manifest.permissions.network.hosts] } : {}),
       devUrl: '',
       entryFile: launchViews[0].entryFile,
       query,
       views: launchViews,
+      ...(manifest.contributes?.commands
+        ? { commands: manifest.contributes.commands, displayName: manifest.name }
+        : {}),
+      ...(manifest.contributes?.api ? { api: manifest.contributes.api.map(entry => entry.method) } : {}),
+      ...(manifest.contributes?.pipelineNodes ? { pipelineNodes: manifest.contributes.pipelineNodes } : {}),
+      ...(manifest.contributes?.settings ? { settings: manifest.contributes.settings } : {}),
+      ...(manifest.contributes?.statusBar ? { statusBar: manifest.contributes.statusBar } : {}),
+      ...(manifest.contributes?.paneActions ? { paneActions: manifest.contributes.paneActions } : {}),
+      ...(manifest.contributes?.explorerMenu ? { explorerMenu: manifest.contributes.explorerMenu } : {}),
     }
   }
   return {
@@ -355,6 +366,8 @@ export interface InstalledPluginPackageSummary {
   warning?: string
   /** The v2 manifest's `engines.navide`, verbatim, when it declares one. */
   enginesNavide?: string
+  /** The v2 manifest's `apiVersion`, verbatim. */
+  apiVersion?: string
   /** True when the v2 manifest declares a native `backend`; absent otherwise. */
   hasBackend?: true
 }
@@ -375,6 +388,7 @@ export function manifestToInstalledPackageSummary(
             ...(manifest.permissions.scopes ? { scopes: manifest.permissions.scopes } : {}),
           }),
           ...(manifest.engines ? { enginesNavide: manifest.engines.navide } : {}),
+          apiVersion: manifest.apiVersion,
           ...(manifest.backend ? { hasBackend: true as const } : {}),
         }
       : {}),

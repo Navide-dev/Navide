@@ -475,6 +475,33 @@ export function replacePlanSectionBody(raw: string, heading: string, newBody: st
 }
 
 /**
+ * The source of a `## Heading` section (the heading line plus its body up to
+ * the next `## ` heading or end of file), or null when the heading is not
+ * found. Uses the same frontmatter skip and first-match rule as
+ * `replacePlanSectionBody`.
+ */
+export function sectionRegion(raw: string, heading: string): string | null {
+  let bodyStart = 0
+  if (raw.startsWith('---')) {
+    const after = raw.slice(3)
+    const end = after.indexOf('\n---')
+    if (end !== -1) bodyStart = 3 + end + 4
+  }
+  const lines = raw.slice(bodyStart).split('\n')
+  const target = heading.trim()
+  const headingIdx = lines.findIndex((line) => line.match(/^##\s+(.+?)\s*$/)?.[1].trim() === target)
+  if (headingIdx === -1) return null
+  let nextIdx = lines.length
+  for (let i = headingIdx + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i])) {
+      nextIdx = i
+      break
+    }
+  }
+  return lines.slice(headingIdx, nextIdx).join('\n')
+}
+
+/**
  * Delete a whole `## Heading` section (the heading line plus its body up to the
  * next `## ` heading or end of file) from a raw `.plan.md` string. The
  * frontmatter and every other section are preserved byte-for-byte. Symmetric

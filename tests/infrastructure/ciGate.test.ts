@@ -52,7 +52,9 @@ describe('required CI gate', () => {
 
   // Probe the capability rather than assuming every Windows host has Git Bash.
   // The required Linux static job fails above if this executable check cannot run.
-  describe.skipIf(!bashAvailable)('actual workflow shell verdict', () => {
+  // Each case spawns bash several times; on a Windows runner one spawn can take
+  // over a second, so the 5s default timed out a case that passed (#846 CI).
+  describe.skipIf(!bashAvailable)('actual workflow shell verdict', { timeout: 30_000 }, () => {
     function run(overrides: Record<string, string | undefined>) {
       const env: NodeJS.ProcessEnv = {
         ...shellEnvironment,

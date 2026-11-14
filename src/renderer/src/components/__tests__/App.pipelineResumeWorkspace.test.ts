@@ -37,7 +37,9 @@ describe('resuming a pipeline run spawns into the workspace directory', () => {
   })
 
   it('feeds that workspace to every place the resumed run reads it from', () => {
-    expect(resume).toContain('setActivePipeline(info.pipelineId, resumeWorkspacePath)')
+    // Resuming loads the run's own pipeline without making it the default
+    // (PR-E E4), so the workspace no longer goes to setActivePipeline.
+    expect(resume).not.toContain('setActivePipeline')
     expect(resume).toContain('pipeline.workspacePath = resumeWorkspacePath')
     expect(resume).toContain('pipelineRunWorkspace = resumeWorkspacePath')
   })

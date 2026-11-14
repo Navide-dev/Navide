@@ -17,7 +17,7 @@ from registry.plugin_contract import disclosure_contract, disclosure_scan_contra
 from registry.static_scan import scan_package
 from registry.static_scan.native import summarize_executable
 from tests.conftest import SignedEnv
-from tests.fixtures import build_v2_package, contract_manifest
+from tests.fixtures import build_v2_package, contract_manifest, without_sites
 
 STRINGS = b"\0git push origin main\0https://api.example.com/v1?token=x\0fs.writeFile\0"
 
@@ -127,9 +127,9 @@ def test_report_lists_the_backend_with_source_backend() -> None:
     assert report is not None
     assert [n["path"] for n in report["native"]] == [manifest["backend"]["entry"]]
     assert {"executable": "git", "subcommand": "push", "category": "remoteWrite", "source": "backend",
-            "evidence": "commandLikeString", "files": 1} in report["shell"]["calls"]
-    assert {"host": "api.example.com", "source": "backend", "count": 1} in report["network"]["hosts"]
-    assert {"address": "fs.writeFile", "source": "backend"} in report["capabilities"]
+            "evidence": "commandLikeString", "files": 1} in without_sites(report["shell"]["calls"])
+    assert {"host": "api.example.com", "source": "backend", "count": 1} in without_sites(report["network"]["hosts"])
+    assert {"address": "fs.writeFile", "source": "backend"} in without_sites(report["capabilities"])
     assert "token=x" not in json.dumps(report)
     keys = [s["key"] for s in disclosure_scan_contract.scan_sentences(report)]
     assert "native.summary" in keys and "native.unscannable" not in keys

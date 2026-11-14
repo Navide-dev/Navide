@@ -72,9 +72,11 @@ function assertSafePath(path, label) {
 
 /** One `validateAgentTools` error as the Registry would refuse it, with the value that would pass. */
 function agentToolMessage(raw, error) {
-  const tools = raw.backend?.agentTools
+  const owner = error.list === 'contributes' ? 'contributes' : 'backend'
+  const tools = raw[owner]?.agentTools
   const tool = error.index === null || !Array.isArray(tools) ? undefined : tools[error.index]
-  const where = `manifest backend.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const where = `manifest ${owner}.agentTools${error.index === null ? '' : `[${error.index}]`}${error.index !== null && error.field ? `.${error.field}` : ''}`
+  const views = Array.isArray(raw.contributes?.views) ? raw.contributes.views.map((view) => view?.id).filter((id) => typeof id === 'string') : []
   const value = (field) => JSON.stringify(tool && typeof tool === 'object' ? tool[field] : undefined)
   const prefix = deriveAgentToolPrefix(raw.id)
   const methods = Array.isArray(raw.backend?.methods) ? raw.backend.methods : []
@@ -86,10 +88,11 @@ function agentToolMessage(raw, error) {
     AGENT_TOOL_NAME_RESERVED: ` ${value('name')} is a built-in Navide tool name; choose another '${prefix}_' name`,
     AGENT_TOOL_NAME_DUPLICATE: ` ${value('name')} is declared twice`,
     AGENT_TOOL_METHOD_UNDECLARED: ` ${value('method')} is not listed in backend.methods (declared: ${methods.length ? methods.join(', ') : 'none'})`,
+    AGENT_TOOL_VIEW_UNDECLARED: ` ${value('view')} is not a declared view id (declared: ${views.length ? views.join(', ') : 'none'})`,
     AGENT_TOOL_RISK_INVALID: ` ${value('risk')} must be 'read' or 'write'`,
     AGENT_TOOL_TIMEOUT_INVALID: ` ${value('timeoutMs')} must be an integer from 1 to 120000`,
     AGENT_TOOL_FIELD_MISSING: ' is required',
-    AGENT_TOOL_FIELD_UNKNOWN: ' is not a known field (allowed: name, method, risk, title, description, inputSchema, timeoutMs)',
+    AGENT_TOOL_FIELD_UNKNOWN: ` is not a known field (allowed: name, ${owner === 'backend' ? 'method' : 'view'}, risk, title, description, inputSchema, timeoutMs)`,
   }[error.code] ?? ' is invalid'
   return `${where}${detail} [${error.code}]`
 }
@@ -540,10 +543,47 @@ function generateKeys(outDir, name) {
   return { privatePath, publicPath }
 }
 
+const GUIDE_URL = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md'
+const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
+
+/** What to do after `init`: build, load, check, apply, read on. */
+function initNextSteps(result, directory) {
+  const vue = result.template === 'vue'
+  const packageDir = vue ? `${directory}/dist/package` : directory
+  return [
+    'Next:',
+    vue
+      ? `  1. Build:   cd ${directory} && npm install && npm run build && npm run build:backend`
+      : '  1. Build:   nothing to build; edit the files as they are',
+    `  2. Load:    Navide → Settings → Navide Plugins → Developer Mode → Load from folder… → ${packageDir}`,
+    vue
+      ? '  3. Check:   npm run check  (navide-plugin validate and scan, the checks review runs)'
+      : `  3. Check:   navide-plugin validate ${packageDir} && navide-plugin scan ${packageDir}`,
+    `  4. Publish: apply once as a developer at ${DEVELOPERS_URL}`,
+    `  5. Guide:   ${GUIDE_URL}`,
+  ].join('\n')
+}
+
+const PUBLISHING_URL = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md'
+
+/** For a publish the Registry refused: the one line that says where to read on. */
+function publishFailureHint(body) {
+  if (body.includes('invalid package signature')) {
+    return `Sign the exact file you upload with the key registered on your namespace dashboard: ${GUIDE_URL}#4-publishing-is-the-business-process`
+  }
+  if (body.includes('QUALIFICATION_REQUIRED')) {
+    return `Publishing needs an approved developer application: ${DEVELOPERS_URL}`
+  }
+  if (/% similar to/.test(body)) {
+    return `Names too close to an existing extension are refused; see ${PUBLISHING_URL}#5-review`
+  }
+  return ''
+}
+
 function usage() {
   return [
     'Usage:',
-    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>]',
+    '  navide-plugin init <directory> --id <namespace.name> [--name <display name>] [--template default|vue]',
     '  navide-plugin validate <directory> [--target <target>]',
     '  navide-plugin scan <package.vsix | directory> [--target <target>] [--json]',
     '  navide-plugin package <directory> [--target <target>] [--out <file>]',
@@ -557,17 +597,19 @@ function usage() {
     '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
     '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
     '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
-    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>]',
+    '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
     'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
     'publish --via-navide hands the package to the running Navide, where you sign in and submit it; the CLI reads no token.',
+    '',
+    `New to Navide plugins? The whole flow, from init to a listed extension: ${GUIDE_URL}`,
   ].join('\n')
 }
 
 // command -> [positional argument count, value options, boolean flags, positional is optional]
 const COMMANDS = {
-  init: [1, ['--id', '--name'], []],
+  init: [1, ['--id', '--name', '--template'], []],
   validate: [1, ['--target'], []],
   scan: [1, ['--target'], ['--json']],
   package: [1, ['--target', '--out'], []],
@@ -579,7 +621,7 @@ const COMMANDS = {
   status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
   publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
-  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data'], []],
+  'dev-backend': [1, ['--call', '--args', '--subscribe', '--data', '--workspace'], ['--allow-writes', '--provider-auth']],
 }
 
 function parseArgs(argv) {
@@ -628,9 +670,9 @@ async function main(argv) {
   const [argument] = positional
   if (command === 'init') {
     if (!options.get('--id')) fail(usage())
-    const result = initPlugin(argument, options.get('--id'), options.get('--name'))
+    const result = initPlugin(argument, options.get('--id'), options.get('--name'), options.get('--template') ?? 'default')
     console.log(`Created ${result.id} (${result.name}) in ${result.root}`)
-    console.log(`Next: navide-plugin validate ${argument}`)
+    console.log(initNextSteps(result, argument))
     return
   }
   if (command === 'validate') {
@@ -667,6 +709,9 @@ async function main(argv) {
       args: options.get('--args'),
       subscribe: (options.get('--subscribe') ?? '').split(',').filter(Boolean),
       dataDir: options.get('--data'),
+      workspace: options.get('--workspace') ?? null,
+      allowWrites: options.has('--allow-writes'),
+      providerAuth: options.has('--provider-auth'),
     })
     return
   }
@@ -763,8 +808,11 @@ async function main(argv) {
     channel: options.get('--channel'),
   })
   console.log(`${result.status} ${result.body}`)
-  if (result.status < 200 || result.status >= 300) process.exitCode = 1
-  else if (options.get('--channel') === 'testplace') {
+  if (result.status < 200 || result.status >= 300) {
+    process.exitCode = 1
+    const hint = publishFailureHint(result.body)
+    if (hint) console.error(`navide-plugin: ${hint}`)
+  } else if (options.get('--channel') === 'testplace') {
     console.log(
       'This is a Testplace build: only testers you invite can install it, and it expires in 90 days. Invite them with `navide-plugin testplace invite add`.',
     )

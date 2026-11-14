@@ -383,6 +383,27 @@ describe('useTerminal — reattach after the backend comes back', () => {
     scope.stop()
   })
 
+  // An error reply is no answer about the PTY either: the backend may be up
+  // but not ready to look, and the session may well be alive. Only an explicit
+  // reply that leaves the session out means it died.
+  it('leaves the pane alone on WS drop + reattach error reply', async () => {
+    const onPtyLostWhileDisconnected = vi.fn()
+    const { mock, result, scope } = await spawnedPane({ onPtyLostWhileDisconnected })
+    mock.setResponse('terminal.reattach', null, { ok: false, error: { code: 'internal', message: 'not ready' } })
+
+    mock.status.value = 'disconnected'
+    await nextTick()
+    mock.status.value = 'connected'
+    await nextTick()
+    await flush()
+
+    expect(onPtyLostWhileDisconnected).not.toHaveBeenCalled()
+    expect(result.status.value).not.toBe('exited')
+    expect(writes.some((w) => w.includes('session ended while disconnected'))).toBe(false)
+    expect(mock.sent.some((s) => s.type === 'terminal.kill' || s.type === 'terminal.close')).toBe(false)
+    scope.stop()
+  })
+
   it('does not probe for a pane that never spawned', async () => {
     const mock = createMockBackend()
     const { result, scope } = withScope(() => useTerminal('pane-1', mock.backend))

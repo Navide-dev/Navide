@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveReadySpawnGroupId } from '../../lib/runGroups'
+import { standaloneKickoffVerdict } from '../../lib/standalonePaneTask'
 
 // cli_open_agent from a pane naming another project: the window holding that
 // project creates the child, parents it on the requester — which may live in
@@ -47,7 +48,7 @@ function spawnHarness(opts: { panes?: Record<string, unknown>[]; held?: string[]
     activeTab: { value: '' }, runGroupsReady: { value: true },
     normWs: (path: string) => path.replace(/\/+$/, ''), resolveReadySpawnGroupId,
     mcpSpawnCommandOverride: () => '',
-    standaloneTaskDeps: () => ({}),
+    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
     recordDiagnostic: vi.fn(), notifyRestore: { toast: vi.fn() },

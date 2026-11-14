@@ -32,13 +32,12 @@ export const PLAN_RUNTIME_EVENTS = [
   'section-edit',
   'section-delete',
   'section-editing',
+  'header-edit',
+  'edit-mode-changed',
 ] as const
 
 /** Upper bound for a section anchor; longer payloads are rejected. */
 export const MAX_ANCHOR_LENGTH = 200
-
-/** Upper bound for an inline section-edit HTML payload; longer is rejected. */
-export const MAX_SECTION_HTML_LENGTH = 20_000
 
 export interface PlanRuntimeConfig {
   /** Unresolved review-note count per anchor, rendered as heading badges. */
@@ -52,6 +51,9 @@ export interface PlanRuntimeConfig {
   cancelLabel: string
   /** Scroll offset restored after a reload triggered by a meta write. */
   scrollY: number
+  /** Start in edit mode: every editable section and the header are editable
+   *  at once and save themselves (a re-render keeps the mode on). */
+  editMode?: boolean
 }
 
 export interface PlanRuntimeInit extends PlanRuntimeConfig {
@@ -67,6 +69,8 @@ export type PlanRuntimeMessage =
   | { type: 'section-edit'; anchor: string; html: string }
   | { type: 'section-delete'; anchor: string }
   | { type: 'section-editing'; active: boolean }
+  | { type: 'header-edit'; field: 'name' | 'overview'; text: string }
+  | { type: 'edit-mode-changed'; active: boolean }
 
 // Anchors are the leading text of section `<h2>`s and `.phase-head`s (text up
 // to the first child element), whitespace-collapsed — the runtime computes the
@@ -130,6 +134,10 @@ export interface PlanRuntimeHostHooks {
   onSectionDelete: (anchor: string) => void
   /** Frame entered/left inline section editing (drives ESC overlay priority). */
   onSectionEditing: (active: boolean) => void
+  /** Edit mode changed the plan's name or overview (plain text, not markup). */
+  onHeaderEdit?: (field: 'name' | 'overview', text: string) => void
+  /** The frame turned edit mode on or off (its toggle, Escape, or the host's request). */
+  onEditModeChanged?: (active: boolean) => void
 }
 
 /** Upper bounds for open-code payloads; anything beyond is rejected. */
@@ -260,7 +268,9 @@ export function createPlanRuntimeMessageHandler(
         if (typeof anchor !== 'string' || anchor.length === 0 || anchor.length > MAX_ANCHOR_LENGTH)
           return
         if (!hooks.getAnchors().includes(anchor)) return
-        if (typeof html !== 'string' || html.length > MAX_SECTION_HTML_LENGTH) return
+        // No length cap: a section is as long as the document needs (writes
+        // of any size go through the chunked path).
+        if (typeof html !== 'string') return
         hooks.onSectionEdit(anchor, html)
         return
       }
@@ -275,6 +285,21 @@ export function createPlanRuntimeMessageHandler(
       case 'section-editing': {
         if (typeof msg.active !== 'boolean') return
         hooks.onSectionEditing(msg.active)
+        return
+      }
+      case 'header-edit': {
+        const field = msg.field
+        const text = msg.text
+        if (field !== 'name' && field !== 'overview') return
+        if (typeof text !== 'string') return
+        // A plan always has a name; an emptied heading is not saved.
+        if (field === 'name' && text.trim().length === 0) return
+        hooks.onHeaderEdit?.(field, text)
+        return
+      }
+      case 'edit-mode-changed': {
+        if (typeof msg.active !== 'boolean') return
+        hooks.onEditModeChanged?.(msg.active)
         return
       }
       default:
@@ -626,7 +651,7 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     bindCodeLinks(editableEl(t));
     exitEdit(t);
   }
-  editBtn.addEventListener('click', function () { if (secbar._t) enterEdit(secbar._t); });
+  editBtn.addEventListener('click', function () { if (secbar._t && !editMode) enterEdit(secbar._t); });
   delBtn.addEventListener('click', function () {
     if (secbar._t) post({ type: 'section-delete', anchor: secbar._t.anchor });
   });
@@ -639,7 +664,7 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     if (editableEl(t).querySelector && editableEl(t).querySelector('ul.todos')) return;
     if (t.region.querySelector && t.region.querySelector('ul.todos')) return;
     t.region.addEventListener('mouseenter', function () {
-      if (editing) return;
+      if (editing || editMode) return;
       secCancelHide();
       secbar._t = t;
       setSecbar(editBtn, delBtn);
@@ -647,6 +672,142 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
       secbar.style.display = 'flex';
     });
     t.region.addEventListener('mouseleave', secScheduleHide);
+  });
+
+  // Edit mode: every editable region's body and the header's name and
+  // overview are contenteditable at once. A change is posted 1.5 s after the
+  // last keystroke, when focus leaves the frame or a field, or on Cmd/Ctrl+S;
+  // only regions that changed since their last post are sent. The host
+  // sanitizes and writes them exactly like a single section save, and the
+  // name and overview go to plan-meta as plain text.
+  var editMode = false;
+  var dirty = {};
+  var flushTimer = null;
+  var FLUSH_DELAY_MS = 1500;
+  var header = document.querySelector('header');
+  var nameEl = header ? header.querySelector('h1') : null;
+  var overviewEl = header ? header.querySelector('p.overview') : null;
+  function editableTargets() {
+    return targets.filter(function (t) {
+      return !(editableEl(t).querySelector && editableEl(t).querySelector('ul.todos')) &&
+        !(t.region.querySelector && t.region.querySelector('ul.todos'));
+    });
+  }
+  function headerName() {
+    var copy = nameEl.cloneNode(true);
+    var pills = copy.querySelectorAll('.pill');
+    for (var p = 0; p < pills.length; p++) pills[p].remove();
+    return (copy.textContent || '').replace(/\\s+/g, ' ').trim();
+  }
+  function plainText(el) {
+    return (el.textContent || '').replace(/\\s+/g, ' ').trim();
+  }
+  function snapshotClean() {
+    editableTargets().forEach(function (t) { t._clean = serializeBody(t); });
+    if (nameEl) nameEl._clean = headerName();
+    if (overviewEl) overviewEl._clean = plainText(overviewEl);
+  }
+  function flushAll() {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    var keys = Object.keys(dirty);
+    dirty = {};
+    keys.forEach(function (key) {
+      if (key === 'h:name' && nameEl) {
+        var name = headerName();
+        if (name && name !== nameEl._clean) {
+          nameEl._clean = name;
+          post({ type: 'header-edit', field: 'name', text: name });
+        }
+        return;
+      }
+      if (key === 'h:overview' && overviewEl) {
+        var overview = plainText(overviewEl);
+        if (overview !== overviewEl._clean) {
+          overviewEl._clean = overview;
+          post({ type: 'header-edit', field: 'overview', text: overview });
+        }
+        return;
+      }
+      var anchor = key.slice(2);
+      for (var k = 0; k < targets.length; k++) {
+        var t = targets[k];
+        if (t.anchor !== anchor) continue;
+        var html = serializeBody(t);
+        if (html !== t._clean) {
+          t._clean = html;
+          post({ type: 'section-edit', anchor: t.anchor, html: html });
+        }
+        return;
+      }
+    });
+  }
+  function ownerKey(node) {
+    var el = node && node.nodeType === 1 ? node : node && node.parentNode;
+    if (!el) return '';
+    if (nameEl && nameEl.contains(el)) return 'h:name';
+    if (overviewEl && overviewEl.contains(el)) return 'h:overview';
+    var list = editableTargets();
+    for (var k = 0; k < list.length; k++) {
+      if (editableEl(list[k]).contains(el)) return 'a:' + list[k].anchor;
+    }
+    return '';
+  }
+  function setEditMode(on) {
+    if (on === editMode) return;
+    if (on && editing) saveEdit(editing);
+    if (!on) flushAll();
+    editMode = on;
+    editableTargets().forEach(function (t) {
+      var el = editableEl(t);
+      if (on) {
+        el.setAttribute('contenteditable', 'true');
+        if (t.head !== el) t.head.setAttribute('contenteditable', 'false');
+      } else {
+        el.removeAttribute('contenteditable');
+        if (t.head !== el) t.head.removeAttribute('contenteditable');
+      }
+    });
+    [nameEl, overviewEl].forEach(function (el) {
+      if (!el) return;
+      if (on) el.setAttribute('contenteditable', 'true');
+      else el.removeAttribute('contenteditable');
+    });
+    if (nameEl) {
+      var pills = nameEl.querySelectorAll('.pill');
+      for (var p = 0; p < pills.length; p++) {
+        if (on) pills[p].setAttribute('contenteditable', 'false');
+        else pills[p].removeAttribute('contenteditable');
+      }
+    }
+    if (on) snapshotClean();
+    secbar.style.display = 'none';
+    document.documentElement.classList.toggle('plan-rt-editmode', on);
+    post({ type: 'section-editing', active: on });
+    post({ type: 'edit-mode-changed', active: on });
+  }
+  style.textContent +=
+    '.plan-rt-editmode [contenteditable="true"]{outline:1px dashed var(--line,#DDE1E9);' +
+    'outline-offset:4px;border-radius:4px}' +
+    '.plan-rt-editmode [contenteditable="true"]:focus{outline:2px solid var(--accent,#3B5BDB)}';
+  document.addEventListener('input', function (ev) {
+    if (!editMode) return;
+    var key = ownerKey(ev.target);
+    if (!key) return;
+    dirty[key] = true;
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = setTimeout(flushAll, FLUSH_DELAY_MS);
+  });
+  document.addEventListener('focusout', function () { if (editMode) flushAll(); });
+  window.addEventListener('blur', function () { if (editMode) flushAll(); });
+  window.addEventListener('keydown', function (ev) {
+    if (!editMode) return;
+    if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && (ev.key === 's' || ev.key === 'S')) {
+      ev.preventDefault();
+      flushAll();
+    } else if (ev.key === 'Enter' && (nameEl && nameEl.contains(ev.target) || overviewEl && overviewEl.contains(ev.target))) {
+      // The name and overview are one line each.
+      ev.preventDefault();
+    }
   });
 
   // Throttled scroll reporting so the host can restore position after the
@@ -668,8 +829,14 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
       ev.preventDefault();
       ev.stopPropagation();
       cancelEdit(editing);
+    } else if (ev.key === 'Escape' && editMode) {
+      // Leaving edit mode saves; it never throws text away.
+      ev.preventDefault();
+      ev.stopPropagation();
+      setEditMode(false);
     }
   });
+  if (INIT.editMode === true) setEditMode(true);
 
   // Host -> frame inbound messages: outline navigation, and cancel-edit (the
   // host's ESC priority layer when focus is outside the frame).
@@ -684,6 +851,17 @@ export function buildPlanRuntimeScript(init: PlanRuntimeInit): string {
     }
     if (d.type === 'cancel-edit') {
       if (editing) cancelEdit(editing);
+      else if (editMode) setEditMode(false);
+      return;
+    }
+    if (d.type === 'edit-mode') {
+      if (ev.source !== parent || d.documentToken !== INIT.documentToken || typeof d.active !== 'boolean') return;
+      setEditMode(d.active);
+      return;
+    }
+    if (d.type === 'flush-edits') {
+      if (ev.source !== parent || d.documentToken !== INIT.documentToken) return;
+      if (editMode) flushAll();
       return;
     }
     if (d.type !== 'scroll-to' || typeof d.anchor !== 'string') return;

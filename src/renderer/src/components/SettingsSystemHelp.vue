@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { AVAILABLE_UI_LOCALES, isBetaUiLocale } from '@navide/plugin-ui/foundation'
 
+import { helpKey, helpKeySpec } from '../lib/helpKeys'
+import { CLI_AGENT_SPECS } from '../platform/plugin-shell/agents'
 import MockFigure from './helpMocks/MockFigure.vue'
 import MockPanel from './helpMocks/MockPanel.vue'
 import MockSettings from './helpMocks/MockSettings.vue'
@@ -42,19 +45,22 @@ interface StageRow {
   stageSpan?: number
 }
 
-// ── 1 · The twenty-four tabs ───────────────────────────────────────────────
+// ── 1 · The twenty-seven tabs ───────────────────────────────────────────────
 const tabs: TabRow[] = [
-  { key: 'general', groupKey: 'settings.nav.group.general', groupSpan: 7, navKey: 'settings.nav.general' },
+  { key: 'general', groupKey: 'settings.nav.group.general', groupSpan: 8, navKey: 'settings.nav.general' },
   { key: 'appearance', navKey: 'settings.nav.appearance' },
   { key: 'language', navKey: 'settings.nav.language' },
   { key: 'statusBadges', navKey: 'settings.nav.statusBadges' },
   { key: 'layout', navKey: 'settings.nav.layout' },
   { key: 'notifications', navKey: 'settings.nav.notifications' },
   { key: 'voice', navKey: 'settings.nav.voice' },
-  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 5, navKey: 'settings.nav.accounts' },
+  { key: 'appLock', navKey: 'settings.nav.appLock' },
+  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 7, navKey: 'settings.nav.accounts' },
   { key: 'cliAgents', navKey: 'settings.nav.cliAgents' },
+  { key: 'agents', navKey: 'settings.nav.agents' },
   { key: 'analyzer', navKey: 'settings.nav.analyzer' },
   { key: 'security', navKey: 'guard.nav' },
+  { key: 'webhooks', navKey: 'webhooks.nav' },
   { key: 'channels', navKey: 'channels.nav' },
   { key: 'mcp', groupKey: 'settings.nav.group.integration', groupSpan: 6, navKey: 'settings.nav.mcp' },
   { key: 'skills', navKey: 'settings.nav.skills' },
@@ -144,9 +150,9 @@ const needsYou = [
   { key: 'accessRequest', labelKey: 'settings.p2p.trust.kind-access' },
 ] as const
 
-// The Sync block, which is the first section of the Navide Cloud settings
-// page rather than a tab of its own.
-const syncRows = ['scopes', 'credentials', 'states', 'key', 'legacy', 'conflicts'] as const
+// The Sync block: the first sub-tab of the Navide Cloud page, and the whole
+// page while Navide Cloud is not connected.
+const syncRows = ['scopes', 'credentials', 'states', 'key', 'legacy', 'conflicts', 'inventory'] as const
 
 // ── 6 · Menus and windows ────────────────────────────────────────────────
 // The Window menu is built in the main process, which has no i18n and keeps
@@ -225,7 +231,61 @@ const topicNames = computed(() => ({
   messaging: t('settings.help.topic.messaging'),
   mcp: t('settings.help.topic.mcp'),
 }))
+// Counts, shortcuts and labels the prose quotes, from the sources the product
+// itself reads: the tab table above (which the tests pin to the real nav), the
+// registered UI languages, the CLI registry, the live key bindings, and the
+// labels of the surfaces described. A new tab, language or CLI updates the
+// help text without touching the locale files.
+const helpVars = computed(() => ({
+  tabCount: tabs.length,
+  groupCount: tabs.filter((row) => row.groupKey).length,
+  settingsKey: helpKey('workbench.action.openSettings'),
+  closePaneKey: helpKey('workbench.action.closeActivePane'),
+  uiZoomIn: helpKey('workbench.action.zoomUiIn'),
+  uiZoomOut: helpKey('workbench.action.zoomUiOut'),
+  uiZoomReset: helpKey('workbench.action.zoomUiReset'),
+  // The terminal font-size keys are handled by the terminal itself, not a
+  // rebindable rule, so they are fixed specs.
+  fontZoomIn: helpKeySpec('mod+='),
+  fontZoomOut: helpKeySpec('mod+-'),
+  fontZoomReset: helpKeySpec('mod+0'),
+  paletteKey: helpKey('workbench.action.showCommands'),
+  shortcutsKey: helpKey('workbench.action.openKeyboardShortcuts'),
+  // File ▸ New Window is a menu accelerator (CmdOrCtrl+N in src/main/menu.ts).
+  newWindowKey: helpKeySpec('mod+n'),
+  miniIdeKey: helpKey('workbench.action.openMiniIDE'),
+  gitWindowKey: helpKey('workbench.action.openGitWindow'),
+  plansKey: helpKey('workbench.action.openPlans'),
+  languageCount: AVAILABLE_UI_LOCALES.length,
+  betaCount: AVAILABLE_UI_LOCALES.filter((code) => isBetaUiLocale(code)).length,
+  fallbackLanguage: t('settings.appearance.language-en-US'),
+  stateCount: statusBadges.length,
+  cliCount: CLI_AGENT_SPECS.length,
+  generalTab: t('settings.nav.general'),
+  sync: t('settings.cloud.subtab.sync'),
+  share: t('settings.cloud.subtab.share'),
+  devices: t('settings.cloud.subtab.devices'),
+  inventory: t('settings.cloud.inventory.title'),
+  copyLink: t('settings.cloud.share.copy'),
+  extend: t('settings.cloud.share.extend'),
+  rekey: t('settings.cloud.share.rekey'),
+  revoke: t('settings.cloud.share.revoke'),
+  revokeAll: t('settings.cloud.share.revoke-all'),
+  runNow: t('scheduler.run-now'),
+  edit: t('scheduler.edit'),
+  repair: t('scheduler.repair'),
+  adopt: t('scheduler.owner.adopt'),
+  keep: t('scheduler.owner.keep'),
+  retarget: t('scheduler.retarget'),
+  remove: t('scheduler.editor.remove'),
+  systemTag: t('scheduler.system.tag'),
+  rescan: t('executions.rescan'),
+  cpu: t('resource.cpu'),
+  memory: t('resource.memory'),
+  scan: t('resource.disk-scan'),
+}))
 const searchGaps = computed(() => ({
+  agents: t('settings.nav.agents'),
   layout: t('settings.nav.layout'),
   notifications: t('settings.nav.notifications'),
   security: t('guard.nav'),
@@ -296,7 +356,7 @@ const navLegend = computed(() => mockLegend('nav', ['search', 'groups', 'active'
 const resourceLegend = computed(() => mockLegend('resource', ['totals', 'rows', 'actions']))
 
 // The nav exactly as SettingsModal.vue renders it: five groups,
-// twenty-four pages, in this order. Labels come from the same `settings.nav.*`
+// twenty-seven pages, in this order. Labels come from the same `settings.nav.*`
 // keys the real nav reads, so renaming a page renames it here.
 //
 // Drawing this is what caught the prose claiming four groups and sixteen
@@ -313,6 +373,7 @@ const settingsGroups = computed(() => [
       { label: t('settings.nav.layout') },
       { label: t('settings.nav.notifications') },
       { label: t('settings.nav.voice') },
+      { label: t('settings.nav.appLock') },
     ],
   },
   {
@@ -320,8 +381,10 @@ const settingsGroups = computed(() => [
     items: [
       { label: t('settings.nav.accounts') },
       { label: t('settings.nav.cliAgents') },
+      { label: t('settings.nav.agents') },
       { label: t('settings.nav.analyzer') },
       { label: t('guard.nav') },
+      { label: t('webhooks.nav') },
       { label: t('channels.nav') },
     ],
   },
@@ -406,12 +469,12 @@ const resourceRows = computed(() => [
 
 <template>
   <div class="syh">
-    <p class="syh-intro">{{ $t('settings.help.settingsSystem.intro') }}</p>
+    <p class="syh-intro">{{ $t('settings.help.settingsSystem.intro', helpVars) }}</p>
 
     <!-- ── 1 · Settings overview ────────────────────────────────────── -->
     <section class="syh-section">
       <h2 class="syh-h2"><span class="syh-num">1</span>{{ $t('settings.help.settingsSystem.s1.title') }}</h2>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s1.p1')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s1.p1', helpVars)"></p>
 
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s1.h1') }}</h3>
       <p class="syh-p" v-html="$t('settings.help.settingsSystem.s1.p2')"></p>
@@ -448,7 +511,7 @@ const resourceRows = computed(() => [
             <tr v-for="row in tabs" :key="row.key">
               <td v-if="row.groupKey" :rowspan="row.groupSpan" class="syh-group">{{ $t(row.groupKey) }}</td>
               <td class="syh-nowrap"><strong>{{ $t(row.navKey) }}</strong></td>
-              <td>{{ $t(`settings.help.settingsSystem.s1.tabs.${row.key}.what`) }}</td>
+              <td>{{ $t(`settings.help.settingsSystem.s1.tabs.${row.key}.what`, helpVars) }}</td>
               <td class="syh-muted">{{ $t(`settings.help.settingsSystem.s1.tabs.${row.key}.more`, topicNames) }}</td>
             </tr>
           </tbody>
@@ -474,7 +537,7 @@ const resourceRows = computed(() => [
           <tbody>
             <tr v-for="row in generalSettings" :key="row.key">
               <td><strong>{{ $t(row.nameKey) }}</strong></td>
-              <td>{{ $t(`settings.help.settingsSystem.s2.generalSettings.${row.key}.desc`) }}</td>
+              <td>{{ $t(`settings.help.settingsSystem.s2.generalSettings.${row.key}.desc`, helpVars) }}</td>
               <td class="syh-nowrap">
                 {{ $t(`settings.help.settingsSystem.s2.generalSettings.${row.key}.fallback`) }}
               </td>
@@ -487,7 +550,7 @@ const resourceRows = computed(() => [
       <ul class="syh-list">
         <li v-html="$t('settings.help.settingsSystem.s2.appearance.theme')"></li>
         <li v-html="$t('settings.help.settingsSystem.s2.appearance.colors')"></li>
-        <li v-html="$t('settings.help.settingsSystem.s2.appearance.uiScale')"></li>
+        <li v-html="$t('settings.help.settingsSystem.s2.appearance.uiScale', helpVars)"></li>
         <li v-html="$t('settings.help.settingsSystem.s2.appearance.restore')"></li>
       </ul>
       <div class="syh-callout syh-callout--warn">
@@ -496,10 +559,10 @@ const resourceRows = computed(() => [
       </div>
 
       <h3 class="syh-h3">{{ $t('settings.nav.language') }}</h3>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s2.language')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s2.language', helpVars)"></p>
 
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s2.h3') }}</h3>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s2.p1')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s2.p1', helpVars)"></p>
       <div class="syh-tablewrap">
         <table class="syh-table">
           <thead>
@@ -531,7 +594,7 @@ const resourceRows = computed(() => [
         <div class="syh-callout-title">{{ $t('settings.help.settingsSystem.s3.callout1.title') }}</div>
         <div class="syh-callout-text" v-html="$t('settings.help.settingsSystem.s3.callout1.text')"></div>
       </div>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s3.p2')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s3.p2', helpVars)"></p>
       <div class="syh-tablewrap">
         <table class="syh-table">
           <thead>
@@ -574,7 +637,7 @@ const resourceRows = computed(() => [
         <li v-html="$t('settings.help.settingsSystem.s3.memory.notCreated')"></li>
         <li v-html="$t('settings.help.settingsSystem.s3.memory.reload')"></li>
       </ul>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s3.p6')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s3.p6', helpVars)"></p>
       <div class="syh-tablewrap">
         <table class="syh-table">
           <thead>
@@ -608,7 +671,7 @@ const resourceRows = computed(() => [
       <ul class="syh-list">
         <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.record')"></li>
         <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.instant')"></li>
-        <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.search')"></li>
+        <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.search', helpVars)"></li>
         <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.conflicts')"></li>
         <li v-html="$t('settings.help.settingsSystem.s4.shortcuts.reset')"></li>
       </ul>
@@ -746,10 +809,12 @@ const resourceRows = computed(() => [
       </div>
 
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s5.h6') }}</h3>
-      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s5.p11')"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s5.p11', helpVars)"></p>
       <ul class="syh-list">
-        <li v-for="key in syncRows" :key="key" v-html="$t(`settings.help.settingsSystem.s5.sync.${key}`)"></li>
+        <li v-for="key in syncRows" :key="key" v-html="$t(`settings.help.settingsSystem.s5.sync.${key}`, helpVars)"></li>
       </ul>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s5.share', helpVars)"></p>
+      <p class="syh-p" v-html="$t('settings.help.settingsSystem.s5.devices', helpVars)"></p>
     </section>
 
     <!-- ── 6 · Menus, standalone windows and schedules ──────────────── -->
@@ -784,7 +849,7 @@ const resourceRows = computed(() => [
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s6.h2') }}</h3>
       <ul class="syh-list">
         <li v-html="$t('settings.help.settingsSystem.s6.helpMenu.github')"></li>
-        <li v-html="$t('settings.help.settingsSystem.s6.helpMenu.shortcuts')"></li>
+        <li v-html="$t('settings.help.settingsSystem.s6.helpMenu.shortcuts', helpVars)"></li>
         <li v-html="$t('settings.help.settingsSystem.s6.helpMenu.legal')"></li>
       </ul>
       <div class="syh-callout syh-callout--warn">
@@ -813,7 +878,7 @@ const resourceRows = computed(() => [
         </table>
       </div>
       <p class="syh-p" v-html="$t('settings.help.settingsSystem.s6.p2')"></p>
-      <p class="syh-note" v-html="$t('settings.help.settingsSystem.s6.note2')"></p>
+      <p class="syh-note" v-html="$t('settings.help.settingsSystem.s6.note2', helpVars)"></p>
 
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s6.h4') }}</h3>
       <div class="syh-tablewrap">
@@ -827,14 +892,14 @@ const resourceRows = computed(() => [
           <tbody>
             <tr v-for="key in otherWindows" :key="key">
               <td class="syh-nowrap">{{ $t(`settings.help.settingsSystem.s6.otherWindows.${key}.window`) }}</td>
-              <td>{{ $t(`settings.help.settingsSystem.s6.otherWindows.${key}.how`) }}</td>
+              <td>{{ $t(`settings.help.settingsSystem.s6.otherWindows.${key}.how`, helpVars) }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="syh-callout">
         <div class="syh-callout-title">{{ $t('settings.help.settingsSystem.s6.callout2.title') }}</div>
-        <div class="syh-callout-text" v-html="$t('settings.help.settingsSystem.s6.callout2.text')"></div>
+        <div class="syh-callout-text" v-html="$t('settings.help.settingsSystem.s6.callout2.text', helpVars)"></div>
       </div>
       <p class="syh-note">{{ $t('settings.help.settingsSystem.s6.note3') }}</p>
     </section>
@@ -855,7 +920,7 @@ const resourceRows = computed(() => [
       </ul>
 
       <MockFigure
-        :caption="$t('settings.help.settingsSystem.mock.resource.caption')"
+        :caption="$t('settings.help.settingsSystem.mock.resource.caption', helpVars)"
         :legend="resourceLegend"
       >
         <MockPanel>
@@ -927,7 +992,7 @@ const resourceRows = computed(() => [
       <ul class="syh-list">
         <li v-html="$t('settings.help.settingsSystem.s7.orphans.leftover')"></li>
         <li v-html="$t('settings.help.settingsSystem.s7.orphans.backend')"></li>
-        <li v-html="$t('settings.help.settingsSystem.s7.orphans.timeout')"></li>
+        <li v-html="$t('settings.help.settingsSystem.s7.orphans.timeout', helpVars)"></li>
       </ul>
 
       <h3 class="syh-h3">{{ $t('settings.help.settingsSystem.s7.h4') }}</h3>
@@ -1045,7 +1110,7 @@ const resourceRows = computed(() => [
   flex-direction: column;
   gap: 26px;
   color: var(--text-primary);
-  max-width: 78ch;
+  max-width: var(--settings-page-max);
 }
 
 .syh-intro {

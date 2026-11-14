@@ -15,6 +15,7 @@ export const WEB_METHODS = [
   'web.close',
   'web.capture',
   'web.clearData',
+  'web.cdp',
 ] as const
 export type WebMethod = typeof WEB_METHODS[number]
 
@@ -36,8 +37,24 @@ export interface WebAgentCaller { paneId: string | null; workspace: string | nul
 export type WebViewControl = 'agent' | 'user'
 export type WebViewState = 'idle' | 'running' | 'need-action' | 'done'
 /** Why a bridge `cdp` call was refused with USER_IN_CONTROL. */
-export type WebControlReason = 'user-owned' | 'manual_takeover' | 'permission'
+export type WebControlReason = 'user-owned' | 'manual_takeover' | 'agent_handoff' | 'permission'
 export interface WebViewRect { x: number; y: number; width: number; height: number }
+/** A JavaScript dialog open in the page (message at most 500 characters). */
+export interface WebViewDialog {
+  type: 'alert' | 'confirm' | 'prompt' | 'beforeunload'
+  message: string
+  defaultPrompt?: string
+}
+/** One file the agent uploaded into the page (DOM.setFileInputFiles), as the
+ *  Host checked it: its path relative to the pane's workspace, the origin of
+ *  the page it went to, and whether its name looks like a secret. */
+export interface WebViewUpload {
+  file: string
+  origin: string
+  sensitive: boolean
+  /** ISO 8601 time of the upload. */
+  at: string
+}
 export interface WebViewInfo {
   viewId: string
   space: string
@@ -51,6 +68,12 @@ export interface WebViewInfo {
   attached: boolean
   /** The agent ran script in the page since it last loaded a new document. */
   agentScriptSinceLoad: boolean
+  /** The view whose window.open created this one. */
+  openerViewId?: string
+  /** A JS dialog open in the page, seen while the agent's debugger is attached. */
+  dialog?: WebViewDialog
+  /** The agent's uploads into this view, oldest first (at most 20). */
+  uploads?: WebViewUpload[]
 }
 
 export const WEB_BRIDGE_OPERATIONS = ['list', 'create', 'close', 'cdp', 'setState'] as const
@@ -63,6 +86,7 @@ const MAX_RECT_EXTENT = 16384
 const OWNERS: readonly string[] = ['agent', 'user']
 const STATES: readonly string[] = ['idle', 'running', 'need-action', 'done']
 const NAVIGATE_ACTIONS: readonly string[] = ['back', 'forward', 'reload', 'stop']
+const DIALOG_TYPES: readonly string[] = ['alert', 'confirm', 'prompt', 'beforeunload']
 const CDP_METHOD = /^[A-Z][A-Za-z]*\.[a-zA-Z]+$/
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -121,6 +145,14 @@ function isViewIdRequest(value: Record<string, unknown>): boolean {
   return hasOnlyKeys(value, ['viewId']) && isId(value.viewId)
 }
 
+/** One CDP command: the shape only. The Host view manager applies the method
+ *  allowlist and the agent-control rule, for the view and the Bridge alike. */
+function isCdpRequest(value: Record<string, unknown>): boolean {
+  return hasOnlyKeys(value, ['viewId', 'method', 'params']) && isId(value.viewId) &&
+    typeof value.method === 'string' && value.method.length <= MAX_ID_LENGTH && CDP_METHOD.test(value.method) &&
+    (value.params === undefined || isPlainObject(value.params))
+}
+
 /** Validate one view-side `web.*` request against its exact shape. */
 export function validateWebRequest(address: string, value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false
@@ -149,6 +181,8 @@ export function validateWebRequest(address: string, value: unknown): value is Re
       return hasOnlyKeys(value, ['viewId', 'maxWidth']) && isId(value.viewId) &&
         (value.maxWidth === undefined || (Number.isInteger(value.maxWidth) &&
           (value.maxWidth as number) >= 64 && (value.maxWidth as number) <= 2048))
+    case 'web.cdp':
+      return isCdpRequest(value)
     default:
       return false
   }
@@ -156,14 +190,34 @@ export function validateWebRequest(address: string, value: unknown): value is Re
 
 function isWebViewInfo(value: unknown): value is WebViewInfo {
   return isRecord(value) &&
-    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad']) &&
+    hasOnlyKeys(value, ['viewId', 'space', 'owner', 'control', 'state', 'note', 'url', 'title', 'loading', 'attached', 'agentScriptSinceLoad', 'openerViewId', 'dialog', 'uploads']) &&
     isId(value.viewId) && isId(value.space) &&
     OWNERS.includes(value.owner as string) && OWNERS.includes(value.control as string) &&
     STATES.includes(value.state as string) &&
     (value.note === undefined || typeof value.note === 'string') &&
     typeof value.url === 'string' && typeof value.title === 'string' &&
     typeof value.loading === 'boolean' && typeof value.attached === 'boolean' &&
-    typeof value.agentScriptSinceLoad === 'boolean'
+    typeof value.agentScriptSinceLoad === 'boolean' &&
+    (value.openerViewId === undefined || isId(value.openerViewId)) &&
+    (value.dialog === undefined || isDialog(value.dialog)) &&
+    (value.uploads === undefined || (Array.isArray(value.uploads) && value.uploads.length <= 20 &&
+      value.uploads.every(isUpload)))
+}
+
+function isUpload(value: unknown): boolean {
+  return isRecord(value) && hasOnlyKeys(value, ['file', 'origin', 'sensitive', 'at']) &&
+    typeof value.file === 'string' && value.file.length > 0 && value.file.length <= 1024 &&
+    typeof value.origin === 'string' && value.origin.length <= MAX_URL_LENGTH &&
+    typeof value.sensitive === 'boolean' &&
+    typeof value.at === 'string' && value.at.length <= 64
+}
+
+function isDialog(value: unknown): boolean {
+  return isRecord(value) && hasOnlyKeys(value, ['type', 'message', 'defaultPrompt']) &&
+    DIALOG_TYPES.includes(value.type as string) &&
+    typeof value.message === 'string' && value.message.length <= MAX_NOTE_LENGTH &&
+    (value.defaultPrompt === undefined ||
+      (typeof value.defaultPrompt === 'string' && value.defaultPrompt.length <= MAX_NOTE_LENGTH))
 }
 
 /** Validate the `web.changed` payload: `{ views: WebViewInfo[] }`. */
@@ -183,9 +237,7 @@ export function validateWebBridgeRequest(operation: string, value: unknown): val
     case 'close':
       return isViewIdRequest(value)
     case 'cdp':
-      return hasOnlyKeys(value, ['viewId', 'method', 'params']) && isId(value.viewId) &&
-        typeof value.method === 'string' && value.method.length <= MAX_ID_LENGTH && CDP_METHOD.test(value.method) &&
-        (value.params === undefined || isPlainObject(value.params))
+      return isCdpRequest(value)
     case 'setState':
       return hasOnlyKeys(value, ['viewId', 'state', 'note']) && isId(value.viewId) &&
         STATES.includes(value.state as string) &&

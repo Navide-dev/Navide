@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.builder",
+  "name": "Builder",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {
+    "system": [
+      "fs",
+      "ui"
+    ],
+    "shell": {
+      "mode": "allowlist",
+      "executables": [
+        "/usr/bin/npm"
+      ]
+    }
+  },
+  "marketplace": {
+    "description": "Runs the project's build and plan commands from a panel.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "bottom",
+        "title": "Builder",
+        "entry": "frontend/main/index.html"
+      }
+    ]
+  }
+}

@@ -7,9 +7,10 @@ import {
   normalizeDefaultEditor,
 } from '../lib/defaultEditor'
 
-// Which built-in Navide plugins (navide.plans, navide.git, navide.mini-ide) the
-// user disabled. One module-level set for the whole main window: the sidebar
-// tabs, the commands and the "open in editor" entries all read it. The Host
+// Which built-in Navide plugins (navide.plans, navide.git, navide.mini-ide,
+// navide.browser) the user disabled. One module-level set for the whole main
+// window: the sidebar tabs, the commands and the "open in editor" entries all
+// read it. The Host
 // sends `plugins:contributionsChanged` whenever the switch moves.
 const disabled = ref<ReadonlySet<string>>(new Set())
 let subscribed = false

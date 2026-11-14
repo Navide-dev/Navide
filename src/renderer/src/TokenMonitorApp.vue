@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { i18n, resolveAvailableUiLocale, useTheme } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, onSettingsChanged, settingsGet } from '@navide/plugin-ui/shared'
-import { createHostGitSettingsPort } from './composables/hostSurfacePorts'
+import { createHostSettingsPort } from './composables/hostSettingsPort'
 import { useBackend } from './composables/useBackend'
 import { useTokenMonitor } from './composables/useTokenMonitor'
 import TokenMonitorChart from './components/TokenMonitorChart.vue'
@@ -84,7 +84,7 @@ const { t, locale } = useI18n({ useScope: 'local', messages: {
   }
 } })
 const backend = useBackend()
-initSettingsBackend(createHostGitSettingsPort(backend))
+initSettingsBackend(createHostSettingsPort(backend))
 // The local table above covers en-US, zh-TW and ja-JP; any other locale reaches
 // en-US through the global fallback chain the local scope inherits.
 function applyLocale(value: unknown): void {

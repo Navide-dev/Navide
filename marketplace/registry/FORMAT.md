@@ -86,7 +86,7 @@ Unknown fields are refused at every level, and so is an explicit `null`.
 | `engines` | object | no | `{ "navide": "<range>" }`, the lowest Navide release the version supports; see [`engines.navide`](#enginesnavide). |
 | `permissions` | object | yes | `{}` or the grants below. |
 | `marketplace` | object | yes | Listing metadata, below. |
-| `contributes` | object | one of | `{ "views": [...] }`, 1-16 views. |
+| `contributes` | object | one of | `{ "views": [...], "commands"?: [...] }`, 1-16 views, 1-32 commands. Commands follow `docs/en-US/plugin-development-v2.md`, "Commands". |
 | `backend` | object | one of | The native backend, below. |
 | `extensionPack` | string[] | one of | An [Extension Pack](#extension-packs): 1-20 member ids. |
 
@@ -97,8 +97,12 @@ Extension Pack and declares neither.
 
 | Field | Type | Notes |
 |---|---|---|
-| `system` | string[] | 1-6 unique namespaces from `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`; `agentMessages` requires `agents`. |
-| `shell` | string | `allowlist` or `full`. |
+| `system` | string[] | 1-8 unique namespaces from `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, `secrets`, `agentNotify`; `agentMessages` requires `agents`. |
+| `shell` | string or object | `allowlist` or `full`, or `{"mode": "allowlist", "executables": [...]}`: `allowlist` plus the executables the package declares beyond the Host's `git`, `gh`, `glab` (1-32 unique bare lowercase names as spelled on PATH; never a path, a Windows extension, or `git`/`gh`/`glab`). Each declared name is disclosed; a name that runs any program is disclosed as highest risk. |
+| `shellExecutables` | string[] | Not a manifest field: the Registry normalizes the object form of `shell` into `shell: "allowlist"` plus this list, so readers compare a mode string. |
+| `network` | object | Optional. `{"hosts": [...]}`: 1-32 unique lowercase hosts (`api.example.com`, one leading `*.` wildcard, `localhost`, an IPv4 literal; no scheme, port or path) the package's views may connect to. Enforced by the App on views (frame CSP and the Host's session hook) and disclosed; the native backend's sandbox is not affected. |
+| `agents` | object | Optional. `{"events": [...]}`: 1-8 unique Host events the package receives (`agents.paneCreated`, `agents.paneClosed`, `agents.turnEnded`, `agents.paneIdle`, `agents.messageReceived`, `agents.planStageChanged`, `agents.pipelineNodeChanged`, `agents.scheduleFired`); requires `agents` in `system`. Each is disclosed. |
+| `plugins` | string[] | Optional. 1-16 unique plugin ids whose `contributes.api` the package calls through `plugins.call`; disclosed. |
 | `scopes` | object | Optional. `{"fs": {"root": ..., "read": [...], "write": [...]}}`: path patterns the package declares it reads or writes. `root` is `workspace` (default) or `repository` (the nearest enclosing Git root). At least one of `read`/`write`, each 1-16 unique safe relative patterns; `*` matches within one segment, a whole-segment `**` matches zero or more segments, and a pattern covers only what it matches. Shown to the user as a disclosure; it grants and restricts nothing. |
 
 ### `marketplace`
@@ -125,6 +129,7 @@ Extension Pack and declares neither.
 | `detailView` | string | no | `left` views only: the id of a `detail` view in the same package. |
 | `targetSchema` | string | no | `detail` views only: archive path of a `.json` schema. |
 | `receives` | object | no | `window` views only: `{ "protocolVersion": 1, "locations": ["left" and/or "detail"], "editorTargets"?: { "protocolVersion": 1 }, "closeGuard"?: { "protocolVersion": 1 } }`. |
+| `headless` | boolean | no | Not for `window` or `detail` views. `true` lets the Host open the view hidden to answer its agent tools (Navide 0.2.40+). |
 
 ### `backend`
 

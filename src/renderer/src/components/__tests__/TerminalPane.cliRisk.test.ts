@@ -13,7 +13,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
     ...await importOriginal<typeof import('@navide/terminal')>(),
     useTerminal: () => ({
       mount: vi.fn(), updateXtermTheme: vi.fn(), setDisableStdin: vi.fn(),
-      displayStatus: ref('idle'), sessionId: ref('session-a'), isAltBuffer: ref(false),
+      displayStatus: ref('idle'), sessionId: ref('session-a'), isAltBuffer: ref(false), stopIneffective: ref(false),
     }),
   }
 })

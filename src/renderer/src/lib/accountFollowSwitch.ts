@@ -167,6 +167,52 @@ export function quotaPeerRows(
     .map((p) => ({ paneId: p.id, name: p.name, profileId: account, state: 'quota' as const, checked: true }))
 }
 
+/** Why a sub-pane is left out of "fix sub-panes to my account". */
+export type SubtreeFixSkip = 'not-claude' | 'no-session' | 'already'
+
+export interface SubtreeFixRow extends FollowSwitchRow {
+  /** It runs fixed in an account's own dir now (else it follows the live login). */
+  fixed: boolean
+  /** Set when the row is listed but cannot be ticked. */
+  skip?: SubtreeFixSkip
+}
+
+/**
+ * The sub-panes "fix sub-panes to my account" lists, in pane order: every
+ * claude pane that can be rebuilt is ticked — following or fixed elsewhere
+ * alike — unless it is already fixed to `targetId`. Other CLIs and panes with
+ * no conversation to resume are listed as skipped, so the dialog can say why.
+ * `profileId` on a row is the account the pane runs on now.
+ */
+export function subtreeFixRows(
+  panes: FollowPaneInput[],
+  opts: {
+    targetId: string
+    liveId: string | null
+    dirSignedIn: (id: string) => boolean
+    fixed: (id: string) => boolean
+  },
+): SubtreeFixRow[] {
+  return panes.map((p) => {
+    const fixed = p.agentKey === FOLLOW_SWITCH_AGENT && opts.fixed(p.id)
+    const account = fixed ? (p.profileId ?? DEFAULT_SLOT_ID) : effectiveAccount(p.profileId, opts.liveId, opts.dirSignedIn)
+    const skip: SubtreeFixSkip | undefined =
+      p.agentKey !== FOLLOW_SWITCH_AGENT ? 'not-claude'
+        : !p.realized || !p.canRebuild ? 'no-session'
+          : fixed && account === opts.targetId ? 'already'
+            : undefined
+    return {
+      paneId: p.id,
+      name: p.name,
+      profileId: account,
+      state: paneState(p),
+      checked: skip === undefined,
+      fixed,
+      ...(skip ? { skip } : {}),
+    }
+  })
+}
+
 /** Rebuild outcomes worth waiting out: the pane got busy again, or another
  *  rebuild of it (a restart batch) holds its lock right now. */
 const RETRYABLE = new Set(['busy', 'locked'])

@@ -14,6 +14,7 @@ Thank you for your interest in contributing!
 - [Submitting a Pull Request](#submitting-a-pull-request)
 - [Code Style](#code-style)
 - [Commit Format](#commit-format)
+- [Documentation](#documentation) (including [Build for Navide](docs/en-US/build-for-navide.md) for plugin authors)
 
 ---
 
@@ -121,10 +122,21 @@ commit about to be pushed) also run the secret scan CI runs, gitleaks with
 without it the hooks print a warning and skip the scan. Record a false positive
 by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
 
+The scan is a backstop, not the rule. The rule is that secrets never leave the
+machine (see "Secrets never leave the machine" in
+[Architecture](docs/en-US/architecture.md#trust-boundaries)): no real API key,
+token, password or signing key goes into a commit, branch, PR, issue,
+CHANGELOG, test fixture, log or screenshot, and none is uploaded to Navide
+Cloud, S3 or a backup. Tests build fake values at run time (for example
+`['sk', 'test', label].join('-')`) instead of writing a key-shaped literal. A
+key that reached git history is compromised even after the commit is
+rewritten: rotate it.
+
 > 每個 clone 執行一次 `git config core.hooksPath .githooks`。pre-commit 會擋下
 > 「staged 的檔 import 了還沒進 index 的相對模組」——本機 typecheck 看得到工作樹的檔所以會過，
 > 只有 CI 會紅。pre-commit 與 pre-push 也會跑和 CI 相同的 gitleaks 密鑰掃描；誤判請把
-> fingerprint 加進 `.gitleaksignore`。
+> fingerprint 加進 `.gitleaksignore`。掃描只是最後一道防線：金鑰絕不上雲、絕不進 git 與任何歷史，
+> 測試假值一律執行期拼接；金鑰一旦進過 git 歷史就視同外洩，要換掉。
 
 ---
 
@@ -167,6 +179,24 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    change to conftest, test helpers, `pyproject.toml` or the lock runs the
    whole suite. It does not follow indirect imports, so it can miss a
    breakage the full suite catches.
+
+   Before pushing, one command runs what most often turns CI red, in minutes
+   rather than a 20-30 minute CI round trip:
+   ```bash
+   git add -A                             # the fingerprint checks read the index
+   node scripts/pre-push-check.mjs        # macOS and Linux
+   node scripts/pre-push-check.mjs --list # just print what would run
+   ```
+   It always runs the repository-scanning guards `vitest --changed` cannot
+   select, `tests/infrastructure` and the official plugin fingerprints; then
+   what the change calls for (Python compile and ruff, lockfile parity,
+   typecheck, the i18n test folder, the contract fixtures, the marketplace
+   checks); then `vitest --changed` and `changed-backend-tests.mjs`. It warns
+   when the branch is behind `origin/main` but never merges, waits while the
+   1-minute load is 60 or above, queues behind any other run in this clone's
+   worktrees, and prints each check's result and time. Any failure exits
+   non-zero. It does not replace CI: other platforms, the full suites and the
+   build still run only there.
 4. Run type checks:
    ```bash
    bun run typecheck
@@ -373,6 +403,8 @@ By participating you agree to abide by its terms.
 ## Documentation
 
 User-facing behavior changes must update the relevant canonical document under [`docs/en-US/`](docs/en-US/README.md), synchronize an existing localized counterpart in the same change, and add an entry under `CHANGELOG.md`'s Unreleased section. Avoid describing configurable registries with fixed counts, document any new external data flow in `docs/en-US/privacy.md`, and keep future vision distinct from shipped capability claims.
+
+Building a Navide plugin, as opposed to changing Navide, starts at [Build for Navide](docs/en-US/build-for-navide.md): one page from `npx navide-plugin init` through self-checks, Developer Mode and the Marketplace's application, Testplace, review, update and yank steps, with [the plugins we would like to see](docs/en-US/plugin-ideas.md). Open a Discussion in **Plugin ideas** before taking one up and in **Show and tell** when it ships.
 
 A PR that changes the plugin API (`packages/plugin-sdk`, `packages/plugin-contracts`), the manifest schema (`plugin-manifest-v2.schema.json`) or the capability catalog (`capabilities-v1.json`) must update `docs/en-US/plugin-development*.md` in the same PR. Two tests enforce part of this: `tests/infrastructure/pluginDocsExamples.test.ts` typechecks every TypeScript/JavaScript example in the plugin docs against the SDK source (mark a block that cannot compile with `<!-- docs-typecheck: skip (reason) -->` on the line before its fence) and rejects `definePlugin` as an activation path, and `tests/infrastructure/pluginDocsManifest.test.ts` compares the Spec v2 manifest field, view location, error code and capability tables with the schema and catalog. Prose they cannot parse is still yours to keep current.
 

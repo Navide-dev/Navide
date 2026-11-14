@@ -1,0 +1,73 @@
+{
+  "vendor": "hermes",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "backend/tests/vendors/test_hermes.py",
+    "revision": "2529dfc648ac0a1c61b99adcea2329033356edbb",
+    "notes": "Hand-authored rows in the state.db columns measured on Hermes Agent v0.23.0 (plan openclaw-hermes-0-2-40_a50148, hm-statedb-schema.txt); only the columns the reader depends on. No account data, provider calls or keys."
+  },
+  "sessionId": "navide-11111111-2222-4333-8444-555555555555",
+  "path": "${HOME}/.hermes/state.db",
+  "expected": {
+    "tokens": [
+      10,
+      3
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "phases": {
+    "initial": [
+      {
+        "kind": "sqlite",
+        "schema": "CREATE TABLE sessions(id TEXT PRIMARY KEY, source TEXT NOT NULL, title TEXT, parent_session_id TEXT, cwd TEXT, started_at REAL NOT NULL, input_tokens INTEGER DEFAULT 0, output_tokens INTEGER DEFAULT 0, cache_read_tokens INTEGER DEFAULT 0, cache_write_tokens INTEGER DEFAULT 0, last_activity_at REAL); CREATE TABLE messages(id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, tool_calls TEXT, timestamp REAL NOT NULL, finish_reason TEXT);",
+        "statements": [
+          {
+            "sql": "INSERT INTO sessions(id, source, title, cwd, started_at, last_activity_at) VALUES ('local-0001', 'cli', ?, ?, 1000, 1000)",
+            "params": [
+              "navide-11111111-2222-4333-8444-555555555555",
+              "${WORKSPACE}"
+            ]
+          },
+          {
+            "sql": "INSERT INTO messages(session_id, role, content, timestamp) VALUES ('local-0001', 'user', ?, 1000)",
+            "params": [
+              "${MARKER} work"
+            ]
+          }
+        ]
+      }
+    ],
+    "response": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO messages(session_id, role, content, tool_calls, timestamp, finish_reason) VALUES ('local-0001', 'assistant', '', ?, 1001, 'tool_calls')",
+            "params": [
+              "[{\"id\": \"call-1\"}]"
+            ]
+          },
+          {
+            "sql": "UPDATE sessions SET input_tokens = 10, output_tokens = 3, last_activity_at = 1001 WHERE id = 'local-0001'"
+          }
+        ]
+      }
+    ],
+    "complete": [
+      {
+        "kind": "sqlite",
+        "statements": [
+          {
+            "sql": "INSERT INTO messages(session_id, role, content, timestamp, finish_reason) VALUES ('local-0001', 'assistant', ?, 1002, 'stop')",
+            "params": [
+              "Regression reply: café 完成\n---MSG-END---"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "binary": "hermes",
+  "resumeCommand": "hermes chat --continue navide-11111111-2222-4333-8444-555555555555",
+  "guardedEnvironment": []
+}

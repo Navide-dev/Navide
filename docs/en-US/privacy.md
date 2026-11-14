@@ -31,6 +31,8 @@ Depending on enabled features, Navide stores:
   the chat is unbound, or when its bot is removed; while that bot stays
   disabled they wait for it. They never leave this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
+- API key accounts for Claude Code and Codex: the keys, and a local record of each account's name, the key's last four characters, the monthly budget note and the automatic-switch choice. See [Credentials](#credentials) for where each key is kept
+- Action buttons in `workbench.json` in the app's data folder, and which version of a repository's `.navide/workbench.json` you accepted. Neither is written to the repository
 
 Navide does not operate a project telemetry service and does not require a Navide account.
 
@@ -57,6 +59,7 @@ A future portability feature should use explicit local export/import with redact
 | Feature | Possible recipient | Data involved |
 |---|---|---|
 | Coding-agent CLI | The CLI vendor or configured model provider | Prompts, selected context, tool results, and provider-defined telemetry |
+| API key accounts | The vendor that issued the key (Anthropic or OpenAI) | The key, sent by the CLI with its calls and by **Test key**. See [Credentials](#credentials) |
 | Cloud AI (inline editing and code review) | Anthropic, OpenAI, Google, Groq, DeepSeek, Mistral, xAI, or a custom endpoint | Selected code, prompts, and model parameters |
 | Context7 injection | Context7 and its MCP distribution/runtime dependencies | Detected library names and documentation queries |
 | Web search | Search provider | Search query text |
@@ -137,7 +140,29 @@ Building the expected-address snapshot performs forward DNS lookups for declared
 
 ## Credentials
 
-Agent CLI credentials remain in each CLI's own configuration. If you enter cloud AI keys in Navide, Navide stores them locally so AI features (inline editing, code review) can use them. Settings export redacts API keys and tokens.
+Agent CLI credentials remain in each CLI's own configuration, except API key accounts, described below. If you enter cloud AI keys in Navide, Navide stores them locally so AI features (inline editing, code review) can use them. Settings export redacts API keys and tokens.
+
+**API key accounts** (Claude Code and Codex). A key is stored only on this computer:
+
+| Key | Where it is stored |
+|---|---|
+| Claude Code on macOS | An item in your login Keychain |
+| Claude Code on Linux | An owner-only file in Navide's data folder, not encrypted and not in a keychain |
+| Claude Code on Windows | Not available in this version |
+| Codex on macOS and Linux | An owner-only `auth.json` in the account's folder under Navide's data folder, not encrypted and not in a keychain |
+| Codex on Windows | The same file, encrypted with DPAPI for your Windows account |
+| Codex, while the account is active | Also in Codex's own `auth.json`, owner-only and not encrypted, which is where Codex reads it |
+
+Navide's local account record holds the name, the key's last four characters, the monthly budget note and the automatic-switch choice, never the key.
+
+A key is sent to one place, the vendor that issued it:
+
+- The CLI sends it with each call it makes, to the address the CLI is configured to use. By default that is Anthropic for Claude Code and OpenAI for Codex. The folder of a Claude API key account gets a copy of your Claude `settings.json`, so a different endpoint set there applies to the key too.
+- **Test key** sends one request to `api.anthropic.com` or `api.openai.com`, which lists models, to see whether the vendor accepts the key. It runs only when you press the button.
+
+It does not go through Navide Cloud, and it is not in Cloud sync, a settings export, a share bundle or a Navide message: no MCP tool returns it, and `cli_accounts_list` says only which accounts are API key accounts.
+
+**Programs in a pane can obtain the key.** A Claude pane reaches its key through a small helper, `navide-api-key-helper`, in the account's folder. The helper holds no key, but when run it prints the key, so a program or agent running in that pane can run it too. Codex's `auth.json` can be read by anything running as you. Do not count on a key being hidden from what runs in a pane. Deleting an account removes its key from this computer; the key stays valid until you revoke it in the vendor's console.
 
 **Portable CLI credentials** (a pasted value such as the token `claude setup-token` prints) were removed in Navide 0.2.32. On a device that used them, the first start of 0.2.32 erased the encrypted values, the key that encrypted them and any copies older versions pulled from Cloud sync; a device that never used them is not touched.
 

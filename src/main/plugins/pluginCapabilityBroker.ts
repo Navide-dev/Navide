@@ -5,9 +5,11 @@
 // `frontendPluginManager.ts`.
 
 import { eventNamespace, resolveWsType } from './capabilityMap'
+import { warnDeprecatedCapability } from './pluginCapabilityDeprecation'
 import { EDITOR_AI_EVENTS, validateEditorAiEvent } from './editorAiCapability'
 import { isPreferenceJsonValue, validateEditorPreferencesEvent } from './editorPreferenceCapability'
 import { validateWebChangedEvent } from './webCapability'
+import { isAgentsEvent } from './agentsEvents'
 import {
   HOST_SHELL_EXECUTABLE_ALLOWLIST,
   publicCapabilityEntry,
@@ -77,6 +79,9 @@ export interface HostCapabilityGrant {
   packageVersion: string
   system: readonly PluginSystemNamespace[]
   shell?: PluginShellMode
+  /** C2: the declared executables the user approved with this version; must
+   *  equal the manifest's set, so a version that adds one asks again. */
+  shellExecutables?: readonly string[]
   highRiskShellConfirmed?: boolean
   /** Host-managed storage grant. Not declared in a Manifest: the Host decides
    *  which packages may read/write their partition. */
@@ -112,7 +117,18 @@ export interface HostCapabilityContext {
  * never accepted from a Plugin request or exposed through the preload API. */
 export type AuthenticatedInitiator =
   | Readonly<{ kind: 'user'; id: string }>
-  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string; caller?: AgentInitiatorCaller }>
+  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string; caller?: AgentInitiatorCaller; pane?: string }>
+
+/** Longest `initiator.pane` the Host forwards, in UTF-16 code units
+ * (`String.length`); the core's `_pane_label_accepted` matches this check. */
+export const INITIATOR_PANE_MAX_LENGTH = 200
+
+/** The calling pane's name or id (never a credential, token or profile), as
+ * the core MCP server resolved it from the pane's own MCP token. For a
+ * plugin's display and records only, not an authorization decision. */
+export function isInitiatorPane(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= INITIATOR_PANE_MAX_LENGTH
+}
 
 /** Who called a third-party agent tool, as the core MCP server resolved it
  * from its credential (never from tool arguments). `verifiedTo` says how far
@@ -168,10 +184,13 @@ export function isAuthenticatedInitiator(value: unknown): value is Authenticated
     )
   }
   const keys = Object.keys(record)
+  const optional = keys.filter((key) => key === 'caller' || key === 'pane')
   return (
     record.kind === 'agent' &&
-    (keys.length === 3 || (keys.length === 4 && isAgentInitiatorCaller(record.caller))) &&
-    keys.every((key) => key === 'kind' || key === 'source' || key === 'id' || key === 'caller') &&
+    keys.length === 3 + optional.length &&
+    (!keys.includes('caller') || isAgentInitiatorCaller(record.caller)) &&
+    (!keys.includes('pane') || isInitiatorPane(record.pane)) &&
+    keys.every((key) => key === 'kind' || key === 'source' || key === 'id' || key === 'caller' || key === 'pane') &&
     record.source === 'mcp' &&
     typeof record.id === 'string' &&
     record.id.length > 0
@@ -218,6 +237,8 @@ export interface PublicCapabilityExecutionPlan {
   /** Policy revision captured when this plan was admitted. */
   policyRevision?: number
   shellMode?: PluginShellMode
+  /** C2: declared executables the backend broker admits beyond the Host's. */
+  shellExecutables?: readonly string[]
   session?: AuthenticatedRuntimeBinding
   storage?: StoragePlan
 }
@@ -734,6 +755,14 @@ function shellExecutables(command: string, depth: number): string[] | null {
   return executables.every((value) => value.length > 0) ? executables : null
 }
 
+/** C2: the approved and the declared executable sets, order-insensitive; an
+ *  absent list is the empty one. */
+export function sameExecutables(approved: readonly string[] | undefined, declared: readonly string[] | undefined): boolean {
+  const a = [...(approved ?? [])].sort()
+  const b = [...(declared ?? [])].sort()
+  return a.length === b.length && a.every((name, index) => name === b[index])
+}
+
 function shellCommandAllowed(command: string, allowlist: readonly string[]): boolean {
   const executables = shellTopLevelExecutables(command)
   return executables !== null && executables.every((executable) => allowlist.includes(executable))
@@ -745,7 +774,7 @@ function shellCommandAllowed(command: string, allowlist: readonly string[]): boo
 export function executionPolicyAllows(
   initiator: AuthenticatedInitiator | undefined,
   snapshot: ExecutionPolicySnapshot | undefined,
-  namespace: PluginSystemNamespace | 'shell',
+  namespace: PluginSystemNamespace | 'shell' | 'plugins',
   command?: string,
 ): boolean {
   // Direct user work is governed by the existing Host checks, not by the
@@ -789,6 +818,16 @@ export function executionPolicyAllows(
   if (namespace === 'agents' || namespace === 'agentMessages') {
     return policy.mode === 'allowlist' && policy.system.includes(namespace)
   }
+  // A plugin's own secrets: like `web`, never allowed by omission. The Host
+  // default allowlist names it, so an agent tool can use the plugin's API key;
+  // the value is redacted from every agent tool result.
+  if (namespace === 'secrets') return policy.mode === 'allowlist' && policy.system.includes('secrets')
+  // A notification into an agent pane: never allowed by omission, and the
+  // Host default allowlist leaves it out (plan P4).
+  if (namespace === 'agentNotify') return policy.mode === 'allowlist' && policy.system.includes('agentNotify')
+  // The target backend may write; an Execution Policy cannot name plugins, so
+  // like `web` it is never allowed by omission: only full mode reaches it.
+  if (namespace === 'plugins') return false
   return policy.mode === 'allowlist'
     ? policy.system.includes(namespace)
     : !policy.system.includes(namespace)
@@ -830,12 +869,21 @@ export function planPublicCapabilityCall(
     // `permissions.system` namespace array.
   } else if (entry.namespace === 'shell') {
     if (!policy.shell) return undeclaredDenied(call.reqId, 'shell access is not declared')
+  } else if (entry.namespace === 'plugins') {
+    if (!policy.plugins?.length) return undeclaredDenied(call.reqId, 'no plugin is declared in permissions.plugins')
   } else if (!policy.system.includes(entry.namespace)) {
     return undeclaredDenied(call.reqId, `system namespace '${entry.namespace}' is not declared`)
   }
 
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'publisher is not eligible for this capability')
+  }
+  // The method hands a file to whatever program the OS picks: only the full
+  // shell permission discloses "runs any program" (allowlist discloses
+  // git/gh/glab and the declared executables), so that is what a third-party
+  // package needs. Navide's own packages keep the first-party access they had.
+  if (entry.eligibility === 'declaredShell' && !context.publisherEligible && policy.shell !== 'full') {
+    return undeclaredDenied(call.reqId, `'${address}' starts a program with a file; declare permissions.shell "full"`)
   }
 
   if (entry.storage === true) {
@@ -861,16 +909,33 @@ export function planPublicCapabilityCall(
     if (grant.shell !== policy.shell) {
       return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell mode is not user-approved')
     }
+    if (!sameExecutables(grant.shellExecutables, policy.shellExecutables)) {
+      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executables are not user-approved')
+    }
     if (policy.shell === 'full' && grant.highRiskShellConfirmed !== true) {
       return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell requires high-risk confirmation')
     }
-  } else if (!grant.system.includes(entry.namespace)) {
+  } else if (entry.namespace !== 'plugins' && !grant.system.includes(entry.namespace)) {
+    // permissions.plugins is part of the manifest the package-version grant
+    // was given for; it holds no system namespace of its own.
     return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not user-approved`)
+  }
+  // ...and the user must have approved that full shell for this version, as
+  // for shell.run itself.
+  if (
+    entry.eligibility === 'declaredShell' &&
+    !context.publisherEligible &&
+    (grant.shell !== 'full' || grant.highRiskShellConfirmed !== true)
+  ) {
+    return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'full shell is not user-approved for this version')
   }
 
   const args = publicRequestArgs(call)
   if (!args || !entry.validateRequest?.(args)) {
     return publicDenied(call.reqId, 'INVALID_ARGUMENT', `invalid request for '${address}'`)
+  }
+  if (entry.namespace === 'plugins' && !policy.plugins?.includes(String(args.pluginId))) {
+    return undeclaredDenied(call.reqId, `plugin '${String(args.pluginId)}' is not declared in permissions.plugins`)
   }
   if (
     entry.address === 'aiCli.startSession' &&
@@ -926,8 +991,11 @@ export function planPublicCapabilityCall(
   }
 
   if (entry.namespace === 'shell' && policy.shell === 'allowlist') {
-    if (!shellCommandAllowed(entry.shellCommand ?? String(args.command), HOST_SHELL_EXECUTABLE_ALLOWLIST)) {
-      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    // C2: the Host's own three plus the executables the package declared
+    // (and the user approved with this version); nothing else, still lexically.
+    const allowlist = [...HOST_SHELL_EXECUTABLE_ALLOWLIST, ...(policy.shellExecutables ?? [])]
+    if (!shellCommandAllowed(entry.shellCommand ?? String(args.command), allowlist)) {
+      return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell executable is not Host-allowlisted or declared')
     }
   }
 
@@ -944,6 +1012,9 @@ export function planPublicCapabilityCall(
         ? { policyRevision: context.executionPolicy.revision }
         : {}),
       ...(policy.shell && entry.namespace === 'shell' ? { shellMode: policy.shell } : {}),
+      ...(policy.shell === 'allowlist' && entry.namespace === 'shell' && policy.shellExecutables?.length
+        ? { shellExecutables: [...policy.shellExecutables] }
+        : {}),
       ...(session ? { session } : {}),
     },
   }
@@ -1070,6 +1141,7 @@ export function isPublicCapabilityEventAllowed(
   if (!entry || entry.kind !== 'event') return false
   if (entry.namespace === 'shell' ? !policy.shell : !policy.system.includes(entry.namespace as PluginSystemNamespace)) return false
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) return false
+  if (entry.eligibility === 'declaredShell' && policy.shell !== 'full') return false
   const binding = context.runtimeBinding
   if (!binding || !requiresWorkspace(binding)) return false
   const grant = context.userGrant
@@ -1123,6 +1195,10 @@ export function isPublicCapabilityEventAllowed(
   if (event === 'ui.editorPreferencesChanged') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateEditorPreferencesEvent(payload))
   }
+  if (event === 'ui.localeChanged') {
+    return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && isRecord(payload) &&
+      Object.keys(payload).every(key => key === 'locale') && typeof payload.locale === 'string' && payload.locale.length > 0)
+  }
   if (event === 'ui.pluginStorageChanged') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && isRecord(payload) &&
       Object.keys(payload).every(key => ['scope', 'key', 'value', 'deleted'].includes(key)) &&
@@ -1132,6 +1208,11 @@ export function isPublicCapabilityEventAllowed(
   }
   if (event === 'web.changed') {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) && validateWebChangedEvent(payload))
+  }
+  if (isAgentsEvent(event)) {
+    // Each agents.* event is declared on its own (permissions.agents.events);
+    // the payload was validated field by field when the Host parsed the frame.
+    return Boolean(policy.agentEvents?.includes(event) && sourceBinding && sameBinding(sourceBinding, binding))
   }
   if ((EDITOR_AI_EVENTS as readonly string[]).includes(event)) {
     return Boolean(sourceBinding && sameBinding(sourceBinding, binding) &&
@@ -1197,6 +1278,7 @@ export function planCapabilityCall(
       }
     }
     const decision = planPublicCapabilityCall(call, policy, authorization)
+    if (decision.kind === 'allow') warnDeprecatedCapability(call.pluginId, `${call.ns}.${call.method}`)
     return decision.kind === 'allow'
       ? decision.plan
       : { kind: 'respond', response: undispatched(decision.response) }

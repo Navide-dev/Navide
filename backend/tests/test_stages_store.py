@@ -125,6 +125,23 @@ class TestPipelineCRUD:
         for p in pipelines:
             assert {"id", "name", "builtin", "stage_count"} <= p.keys()
 
+    def test_list_pipelines_counts_steps_not_layers(self, tmp_path):
+        # The sidebar showed "2 stages" next to an editor of 3 steps: a stage
+        # (layer) can hold several steps, and a gate is a step of its own.
+        store = fresh_store(tmp_path)
+        summary = next(x for x in store.list_pipelines() if x["id"] == "default")
+        slots = sum(len(s.get("slots") or []) for s in store.list("default"))
+        assert summary["step_count"] == slots
+        graph = store.get_graph("default")["graph"]
+        first, second = [n["id"] for n in graph["nodes"] if n["kind"] == "slot"][:2]
+        store.apply_graph_ops("default", [
+            {"op": "add_node", "node": {"id": "gate", "kind": "gate", "position": {"x": 0, "y": 0}},
+             "after": [first], "before": [second]},
+        ])
+        summary = next(x for x in store.list_pipelines() if x["id"] == "default")
+        assert summary["step_count"] == slots + 1
+        assert store.create_pipeline("Empty")["id"] in [x["id"] for x in store.list_pipelines() if x["step_count"] == 0]
+
     def test_create_pipeline(self, tmp_path):
         store = fresh_store(tmp_path)
         p = store.create_pipeline("我的流程")
@@ -160,6 +177,8 @@ class TestPipelineCRUD:
             "version": 2,
             "active_pipeline_id": "solo",
             "pipelines": [{"id": "solo", "name": "Only", "builtin": False, "stages": []}],
+            # The landing built-in was seeded once and deleted: it stays gone.
+            "seeded_builtins": ["evolve-landing"],
         }
         store = make_store(tmp_path, seed=doc)
         with pytest.raises(ValueError, match="last"):
@@ -319,3 +338,133 @@ class TestPersistence:
 
         store2 = StagesStore(tmp_path / PIPELINES_FILE)
         assert store2.get_active_pipeline_id() == "maintenance"
+
+
+# ── The "proposal landing" built-in (evolve S3) ───────────────────────────────
+
+import copy  # noqa: E402
+
+from agent_team_backend import pipeline_graph as pg  # noqa: E402
+from agent_team_backend import stages_store as ss  # noqa: E402
+
+LANDING = "evolve-landing"
+
+
+def _main_seed_pipelines() -> list[dict]:
+    """The two built-ins exactly as main seeds them."""
+    return [
+        {"id": "default", "name": "預設流程", "builtin": True, "stages": default_stages()},
+        {"id": "maintenance", "name": "維護流程", "builtin": True, "stages": default_maintenance_stages()},
+    ]
+
+
+def _old_doc() -> dict:
+    """A document an older build wrote: no landing built-in, a user edit, a custom pipeline."""
+    pipelines = _main_seed_pipelines()
+    pipelines[0]["name"] = "My flow"
+    pipelines[0]["stages"] = pipelines[0]["stages"][:2]
+    pipelines.append({"id": "mine", "name": "Mine", "builtin": False, "stages": default_stages()[:1]})
+    return {"version": 2, "schemaVersion": 1, "active_pipeline_id": "mine", "pipelines": pipelines}
+
+
+def _seed_kv(tmp_path: Path, doc: dict) -> StagesStore:
+    store = fresh_store(tmp_path)
+    store._db.kv_set("pipelines", doc, now=1)
+    return store
+
+
+def _landing(doc: dict) -> dict:
+    return next(p for p in doc["pipelines"] if p["id"] == LANDING)
+
+
+class TestEvolveLandingBuiltin:
+    def test_a_fresh_document_keeps_main_seeds_and_adds_the_landing_builtin(self, tmp_path):
+        doc = fresh_store(tmp_path)._read_doc()
+        assert doc["pipelines"][:2] == _main_seed_pipelines()
+        assert [p["id"] for p in doc["pipelines"]] == ["default", "maintenance", LANDING]
+        assert doc["active_pipeline_id"] == "default"
+        landing = _landing(doc)
+        assert landing["builtin"] is True and landing["name"] == "提案落地流程"
+        assert doc["seeded_builtins"] == [LANDING]
+
+    def test_an_older_document_gains_only_the_landing_builtin_once(self, tmp_path):
+        old = _old_doc()
+        store = _seed_kv(tmp_path, copy.deepcopy(old))
+        doc = store._read_doc()
+        assert doc["pipelines"][:-1] == old["pipelines"]  # nothing else touched
+        assert doc["active_pipeline_id"] == "mine"
+        assert doc["pipelines"][-1]["id"] == LANDING
+        stored = store._db.kv_get("pipelines")
+        assert [p["id"] for p in stored["pipelines"]] == ["default", "maintenance", "mine", LANDING]
+        # A second read writes nothing new.
+        assert StagesStore(tmp_path / PIPELINES_FILE)._read_doc() == stored
+
+    def test_a_deleted_landing_builtin_is_not_added_back(self, tmp_path):
+        store = _seed_kv(tmp_path, _old_doc())
+        store._read_doc()
+        store.delete_pipeline(LANDING)
+        again = StagesStore(tmp_path / PIPELINES_FILE)
+        assert LANDING not in [p["id"] for p in again.list_pipelines()]
+        # Like default and maintenance, which were never re-added either.
+        again.delete_pipeline("maintenance")
+        assert "maintenance" not in [p["id"] for p in StagesStore(tmp_path / PIPELINES_FILE).list_pipelines()]
+
+    def test_an_imported_document_keeps_the_seeded_mark(self, tmp_path):
+        store = _seed_kv(tmp_path, _old_doc())
+        exported = store._read_doc()
+        exported["pipelines"] = [p for p in exported["pipelines"] if p["id"] != LANDING]
+        store.replace_document(exported)
+        assert LANDING not in [p["id"] for p in StagesStore(tmp_path / PIPELINES_FILE).list_pipelines()]
+
+    def test_a_newer_document_is_not_rewritten(self, tmp_path):
+        newer = {**_old_doc(), "schemaVersion": ss.SCHEMA_VERSION + 1}
+        store = _seed_kv(tmp_path, copy.deepcopy(newer))
+        assert store._read_doc() == newer
+        assert store._db.kv_get("pipelines") == newer
+
+    def test_reset_builtin_drops_the_graph_of_main_seeds_and_keeps_the_landing_graph(self, tmp_path):
+        store = fresh_store(tmp_path)
+        doc = store._read_doc()
+        for p in doc["pipelines"][:2]:
+            p["graph"] = pg.derive_graph_from_stages(p["stages"])
+            p["stages"] = p["stages"][:1]
+        landing = _landing(doc)
+        landing["stages"] = landing["stages"][:1]
+        landing["graph"] = {"version": 1, "nodes": [], "edges": []}
+        store._write_doc(doc)
+        for pid in ("default", "maintenance"):
+            store.reset_builtin(pid)
+        store.reset_builtin(LANDING)
+        after = store._read_doc()
+        assert after["pipelines"][:2] == _main_seed_pipelines()  # graph gone, seed back
+        seed = ss.default_evolve_landing_pipeline()
+        assert _landing(after)["stages"] == seed["stages"] and _landing(after)["graph"] == seed["graph"]
+
+    def test_the_landing_template_ends_at_the_users_gate(self):
+        seed = ss.default_evolve_landing_pipeline()
+        graph = seed["graph"]
+        assert pg.validate_graph(graph) == []
+        layers, _ = pg.layer_graph(graph)
+        kinds = {n["id"]: n["kind"] for n in graph["nodes"]}
+        assert [kinds[i] for layer in layers for i in layer] == ["slot", "slot", "slot", "gate"]
+        assert pg.derive_stages_from_graph(graph, seed["stages"]) == seed["stages"]
+        labels = [s["slots"][0]["label"] for s in seed["stages"]]
+        assert labels == ["Implement", "Review", "CI check"]
+
+    def test_the_landing_template_has_no_merge_publish_load_deliver_or_start_step(self):
+        seed = ss.default_evolve_landing_pipeline()
+        bodies = [slot["kickoff_body"] for s in seed["stages"] for slot in s["slots"]]
+        text = "\n".join(bodies).lower()
+        for tool in ("gh pr merge", "pipeline_start", "pipeline_gate", "gate_pass", "plugins_enable",
+                     "skills_install", "skills_set_delivery", "scheduler_upsert", "marketplace_publish",
+                     "git push --force", "gh run rerun"):
+            assert tool not in text, tool
+        ci = seed["stages"][2]["slots"][0]["kickoff_body"]
+        assert "不要 rerun" in ci and "不要合併" in ci and "gh" in ci
+        review = seed["stages"][1]["slots"][0]["kickoff_body"]
+        assert "唯讀" in review
+
+    def test_the_landing_builtin_is_never_made_active(self, tmp_path):
+        store = _seed_kv(tmp_path, _old_doc())
+        assert store.get_active_pipeline_id() == "mine"
+        assert fresh_store(tmp_path / "x").get_active_pipeline_id() == "default"

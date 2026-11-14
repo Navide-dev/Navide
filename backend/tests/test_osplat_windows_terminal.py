@@ -638,6 +638,56 @@ class TestHandle:
         await asyncio.sleep(0.05)
         assert got == [b"a", b"b", None]
 
+    # ...but the queue a pause leaves behind is bounded. pywinpty keeps reading
+    # however long the drain stalls, so without a cap a flooding CLI grows the
+    # backend without limit; past the cap the OLDEST chunks go (the newest
+    # carry the TUI's current screen), as terminals' _BUF_CAP does on POSIX.
+    async def test_paused_queue_is_bounded_and_keeps_the_newest_output(self, monkeypatch):
+        monkeypatch.setattr(_windows, "_PAUSED_QUEUE_CAP", 4096)
+        import threading
+
+        released = threading.Event()
+
+        class _GatedPTY(_FakePTY):
+            # The output only starts once the pause is in place: the cap
+            # applies to what arrives during a pause, and a pump that won
+            # the race would have queued everything before it.
+            def read(self, blocking: bool = False) -> str:
+                released.wait(2)
+                return super().read(blocking)
+
+        pty = _GatedPTY(80, 24)
+        pty.reads = [letter * 1024 for letter in "abcdefgh"] + [""]
+        pty.alive = False
+        handle = _handle(pty)
+        loop = asyncio.get_running_loop()
+        got: list[bytes] = []
+        eof = asyncio.Event()
+
+        def on_readable() -> None:
+            while True:
+                try:
+                    chunk = handle.read(64 * 1024)
+                except BlockingIOError:
+                    return
+                if chunk is None:
+                    eof.set()
+                    return
+                got.append(chunk)
+
+        handle.start_reading(loop, on_readable)
+        handle.pause_reading()
+        released.set()
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if handle._eof:
+                break
+        assert handle._eof
+        assert sum(len(c) for c in handle._chunks) <= 4096
+        handle.resume_reading()
+        await asyncio.wait_for(eof.wait(), 2)
+        assert b"".join(got) == b"".join(letter.encode() * 1024 for letter in "efgh")
+
     # ConPTY never closes the conout pipe on the child's behalf: the exit has
     # to be watched and turned into EOF, or the session outlives its process.
     async def test_child_exit_becomes_eof_while_conpty_keeps_the_pipe_open(
@@ -1024,3 +1074,51 @@ def _fake_processes(monkeypatch, alive: dict, missing: dict | None = None) -> No
         return alive[pid]
 
     monkeypatch.setattr(_windows.psutil, "Process", factory)
+
+
+# ---- own group (host_shell runs) ---------------------------------------------
+
+
+class TestOwnGroup:
+    """A run of git and the like no longer starts suspended or in a job: every
+    git.exe spawned that way left one kernel Token object behind on a user's
+    host, while the processes git starts itself, with neither, did not."""
+
+    def test_a_run_spawns_unsuspended(self):
+        kwargs = _windows.process_tree.own_group_spawn_kwargs()
+        assert not kwargs.get("creationflags", 0) & _windows.CREATE_SUSPENDED
+
+    def test_start_makes_no_job_and_resumes_nothing(self, kernel32, monkeypatch):
+        def no_resume(pid):
+            raise AssertionError("the child was never suspended")
+
+        monkeypatch.setattr(_windows.psutil, "Process", no_resume)
+        assert _windows.process_tree.start_own_group(4242) is None
+        assert kernel32.calls == []
+        assert _windows._jobs == {}
+
+    def test_release_closes_the_job_without_clearing_its_limits(self, kernel32):
+        job = _windows.process_tree.contain(4242)
+        kernel32.calls.clear()
+
+        _windows.process_tree.release_contained(4242, job)
+
+        assert kernel32.calls == [("CloseHandle", job)]
+        assert _windows._jobs == {}
+
+    def test_end_kills_the_tree_as_it_is_now(self, kernel32, monkeypatch):
+        """With no job, a timed-out run's tree is read again just before its
+        root dies, which reaches what started after the first snapshot."""
+        ended: list[tuple[int, bool]] = []
+        monkeypatch.setattr(
+            _windows.process_tree, "kill_tree", lambda pid, *, force: ended.append((pid, force))
+        )
+        _windows.process_tree.end_own_group(4242)
+        assert ended == [(4242, True)]
+
+    def test_end_never_raises(self, kernel32, monkeypatch):
+        def gone(pid, *, force):
+            raise ProcessLookupError(pid)
+
+        monkeypatch.setattr(_windows.process_tree, "kill_tree", gone)
+        assert _windows.process_tree.end_own_group(4242) is None

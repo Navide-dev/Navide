@@ -1,5 +1,5 @@
 import type { JsonValue, StoragePartitionScope } from '../../../packages/plugin-contracts/src/index'
-import { validFilePickerRequest } from '../../../packages/plugin-contracts/src/filePicker'
+import { MAX_EXCLUDE_CHARS, MAX_EXCLUDES, validFilePickerRequest } from '../../../packages/plugin-contracts/src/filePicker'
 import { normalizeJsonValue, utf8ByteLength } from './pluginStorageJson'
 import { EDITOR_FILESYSTEM_METHODS, validateEditorFilesystemRequest } from './editorFilesystemCapability'
 import { EDITOR_AI_METHODS, EDITOR_AI_EVENTS, validateEditorAiRequest } from './editorAiCapability'
@@ -10,6 +10,10 @@ import { EDITOR_PREFERENCE_METHODS, validateEditorPreferenceRequest } from './ed
 import { GIT_ACCOUNT_PUBLIC_METHODS, validateGitAccountRequest } from './gitAccountCapability'
 import { WEB_EVENTS, WEB_GESTURE_METHODS, WEB_METHODS, validateWebRequest } from './webCapability'
 import { AGENTS_METHODS, validateAgentsRequest } from './agentsCapability'
+import { AGENTS_EVENTS } from '../../../packages/plugin-contracts/src/agents'
+import { validateInterPluginCallRequest } from './pluginInterCall'
+import { SECRETS_METHODS, validateSecretsRequest } from './pluginSecrets'
+import { AGENT_NOTIFY_METHODS, validateAgentNotifyRequest } from './agentNotify'
 
 /** Public Manifest v2 capability catalog used by the Host broker.
  *
@@ -23,7 +27,15 @@ export type PublicCapabilityScope = 'workspace' | 'plugin'
  *  Host derives the actual partition identity; the request only selects one of
  *  these two classes. */
 export type StoragePartitionClass = StoragePartitionScope
-export type PublicCapabilityEligibility = 'public' | 'firstParty'
+/** Who may call an entry once its namespace is declared and granted:
+ *  `public` any package; `firstParty` Navide's own packages only (the Host's
+ *  credential store, its own configuration, or the user's cloud account and
+ *  chat channels, see the list in plugin-development-v2.md); `declaredShell`
+ *  any package whose manifest declares `permissions.shell: "full"` and whose
+ *  user approved it (0.2.39): the method hands a file to whatever program the
+ *  OS picks, which only the full shell disclosure ("runs any program") tells
+ *  the user; allowlist discloses git/gh/glab and the declared executables. */
+export type PublicCapabilityEligibility = 'public' | 'firstParty' | 'declaredShell'
 
 export const STORAGE_LIMITS = {
   maxKeyBytes: 256,
@@ -56,7 +68,7 @@ export interface PublicStorageCapabilityCatalogEntry extends PublicCapabilityCat
 }
 
 export interface PublicSystemCapabilityCatalogEntry extends PublicCapabilityCatalogBase {
-  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'shell'
+  namespace: 'fs' | 'ui' | 'aiCli' | 'web' | 'agents' | 'agentMessages' | 'secrets' | 'agentNotify' | 'shell' | 'plugins'
   /** Host-pinned scope for declared namespaces (`ui.openExternal` and every
    *  `web.*` address are `plugin`; storage has its own discriminated entry). */
   scope: PublicCapabilityScope
@@ -217,6 +229,27 @@ function validateListFilesRequest(value: unknown): value is Record<string, unkno
   )
 }
 
+/** Search work grows with query length and paths × patterns; the backend holds the same limits. */
+const MAX_QUERY_CHARS = 1024
+
+function validateQueryFilesRequest(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || !hasOnlyKeys(value, [
+    'query', 'matchOn', 'mode', 'exclude', 'respectGitignore', 'includeHidden', 'includeNoiseDirs', 'limit', 'cursor',
+  ])) return false
+  return (
+    typeof value.query === 'string' && value.query.length <= MAX_QUERY_CHARS &&
+    (value.matchOn === undefined || value.matchOn === 'name' || value.matchOn === 'path') &&
+    (value.mode === undefined || value.mode === 'substring' || value.mode === 'subsequence' || value.mode === 'glob') &&
+    (value.exclude === undefined || (
+      Array.isArray(value.exclude) && value.exclude.length <= MAX_EXCLUDES &&
+      value.exclude.every((item) => typeof item === 'string' && item.length <= MAX_EXCLUDE_CHARS)
+    )) &&
+    ['respectGitignore', 'includeHidden', 'includeNoiseDirs'].every((key) => value[key] === undefined || typeof value[key] === 'boolean') &&
+    (value.limit === undefined || (positiveInteger(value.limit) && (value.limit as number) <= 1000)) &&
+    (value.cursor === undefined || (typeof value.cursor === 'string' && /^\d*$/.test(value.cursor)))
+  )
+}
+
 function validateSessionRequest(value: unknown): value is Record<string, unknown> {
   return requestWithString('sessionId', value)
 }
@@ -255,7 +288,7 @@ function systemMethod(
     address,
     kind: 'method',
     namespace,
-    scope: namespace === 'ui' && address === 'ui.openExternal' ? 'plugin' : 'workspace',
+    scope: address === 'ui.openExternal' || address === 'ui.getLocale' ? 'plugin' : 'workspace',
     eligibility,
     validateRequest,
   }
@@ -281,12 +314,18 @@ function storageMethod(
   }
 }
 
-/** Native `ui` methods a plain `ui` grant must not reach: opening a path or a
- *  plugin-written temp file hands it to the OS default app (a `.command` or
- *  `.bat` runs), and keybindings.json is the Host's own configuration. */
-const FIRST_PARTY_NATIVE_METHODS: ReadonlySet<string> = new Set([
+/** Native `ui` methods a plain `ui` grant must not reach. Opening a path or
+ *  a plugin-written temp file hands it to the OS default app (a `.command` or
+ *  `.bat` runs), so a package reaches them by declaring `permissions.shell:
+ *  "full"`, the permission that discloses "runs any program on your machine"
+ *  (batch 4, 0.2.39; allowlist is narrower). keybindings.json is the Host's own configuration: a package could
+ *  rebind any shortcut to any Host command, and no permission discloses
+ *  that, so it stays first-party. */
+const SHELL_DECLARED_NATIVE_METHODS: ReadonlySet<string> = new Set([
   'ui.openPath',
   'ui.openTempFile',
+])
+const FIRST_PARTY_NATIVE_METHODS: ReadonlySet<string> = new Set([
   'ui.writeKeybindings',
 ])
 
@@ -294,10 +333,12 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   'ui.openFilePicker': systemMethod('ui.openFilePicker', 'ui', (value): value is Record<string, unknown> => validFilePickerRequest(value)),
   ...Object.fromEntries(EDITOR_NATIVE_METHODS.map(address => [address, {
     address, kind: 'method', namespace: 'ui', scope: 'workspace',
-    eligibility: FIRST_PARTY_NATIVE_METHODS.has(address) ? 'firstParty' : 'public',
+    eligibility: FIRST_PARTY_NATIVE_METHODS.has(address) ? 'firstParty' : SHELL_DECLARED_NATIVE_METHODS.has(address) ? 'declaredShell' : 'public',
     validateRequest: (value: unknown) => validateEditorNativeRequest(address, value),
   } as PublicSystemCapabilityCatalogEntry])),
-  // Git accounts hold hosting tokens: first-party only.
+  // Git accounts hold hosting tokens (the Host's credential store): first-party
+  // only. A read side for third parties needs its own permission and
+  // disclosure clause first.
   ...Object.fromEntries(Object.keys(GIT_ACCOUNT_PUBLIC_METHODS).map(address => [address, {
     address, kind: 'method', namespace: 'ui', scope: 'workspace', eligibility: 'firstParty',
     validateRequest: (value: unknown) => validateGitAccountRequest(address, value),
@@ -312,6 +353,9 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   } as PublicSystemCapabilityCatalogEntry])),
   'ui.editorPreferencesChanged': {
     address: 'ui.editorPreferencesChanged', namespace: 'ui', scope: 'workspace', kind: 'event', eligibility: 'public',
+  },
+  'ui.localeChanged': {
+    address: 'ui.localeChanged', namespace: 'ui', scope: 'plugin', kind: 'event', eligibility: 'public',
   },
   'ui.pluginStorageChanged': {
     address: 'ui.pluginStorageChanged', namespace: 'ui', scope: 'workspace', kind: 'event', eligibility: 'public',
@@ -349,17 +393,17 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     requestWithString('path', value, ['showHidden']) &&
     (value.showHidden === undefined || typeof value.showHidden === 'boolean')),
   'fs.listFilesFlat': systemMethod('fs.listFilesFlat', 'fs', validateListFilesRequest),
+  'fs.queryFiles': systemMethod('fs.queryFiles', 'fs', validateQueryFilesRequest),
   'fs.glob': systemMethod('fs.glob', 'fs', (value) => requestWithString('pattern', value)),
   'fs.stat': systemMethod('fs.stat', 'fs', validateSelectedPathRequest),
   'fs.statPath': systemMethod('fs.statPath', 'fs', validateSelectedPathRequest),
   'ui.openInEditor': systemMethod('ui.openInEditor', 'ui', validateEditorRequest),
-  'ui.openPlansWindow': systemMethod(
-    'ui.openPlansWindow',
-    'ui',
-    validatePlansWindowRequest,
-    'firstParty',
-  ),
-  // Share links: the Plans view asks whether they work, then shares one plan.
+  // Opens the Plans window on a plan of the workspace, as ui.openPluginWindow
+  // (public) opens any installed window contribution: public since 0.2.39.
+  'ui.openPlansWindow': systemMethod('ui.openPlansWindow', 'ui', validatePlansWindowRequest),
+  // Share links publish workspace content through the user's Navide Cloud
+  // account and list their chat channels: first-party only until a `share`
+  // permission with its own disclosure clause exists.
   'ui.shareCaps': systemMethod('ui.shareCaps', 'ui', validateEmptyRequest, 'firstParty'),
   'ui.shareCreate': systemMethod('ui.shareCreate', 'ui', validateShareCreateRequest, 'firstParty'),
   'ui.shareChatTargets': systemMethod('ui.shareChatTargets', 'ui', validateEmptyRequest, 'firstParty'),
@@ -367,6 +411,7 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     ...systemMethod('ui.openExternal', 'ui', validateExternalRequest),
     requiresUserGesture: true,
   },
+  'ui.getLocale': systemMethod('ui.getLocale', 'ui', validateEmptyRequest),
   'storage.get': storageMethod('storage.get'),
   'storage.set': storageMethod('storage.set'),
   'storage.delete': storageMethod('storage.delete'),
@@ -447,12 +492,39 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
     scope: 'workspace', eligibility: 'public',
     validateRequest: (value: unknown): value is Record<string, unknown> => validateAgentsRequest(address, value),
   } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Host events about the bound workspace's panes, messages, plans, pipeline
+  // and schedules: metadata only, each declared under permissions.agents.events.
+  ...Object.fromEntries(AGENTS_EVENTS.map(address => [address, {
+    address, kind: 'event', namespace: 'agents', scope: 'workspace', eligibility: 'public',
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // The plugin's own encrypted secrets, keyed by plugin id (pluginSecrets.ts).
+  ...Object.fromEntries(SECRETS_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: 'secrets', scope: 'plugin', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateSecretsRequest(address, value),
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Plan P4: a notification to one agent pane of the bound workspace.
+  ...Object.fromEntries(AGENT_NOTIFY_METHODS.map(address => [address, {
+    address, kind: 'method', namespace: 'agentNotify', scope: 'workspace', eligibility: 'public',
+    validateRequest: (value: unknown): value is Record<string, unknown> => validateAgentNotifyRequest(address, value),
+  } satisfies PublicSystemCapabilityCatalogEntry])),
+  // Another installed plugin's contributes.api method; the target must be in
+  // the caller's permissions.plugins (not a system namespace). A literal, not
+  // pluginInterCall's constant: that module imports this one back.
+  'plugins.call': {
+    address: 'plugins.call',
+    kind: 'method',
+    namespace: 'plugins',
+    scope: 'workspace',
+    eligibility: 'public',
+    validateRequest: validateInterPluginCallRequest,
+  },
 }
 
 export const PUBLIC_CAPABILITY_EVENT_ADDRESSES: readonly string[] = [
   'workspace.filesChanged',
   'aiCli.output',
   'aiCli.exited',
+  ...AGENTS_EVENTS,
 ]
 
 export function publicCapabilityEntry(address: string): PublicCapabilityCatalogEntry | null {

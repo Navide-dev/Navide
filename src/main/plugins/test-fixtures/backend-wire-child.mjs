@@ -54,8 +54,10 @@ function isInitiator(value) {
     (exactKeys(value, ['kind', 'id']) &&
       value.kind === 'user' &&
       typeof value.id === 'string' && value.id.length > 0 ||
-      (exactKeys(value, ['kind', 'source', 'id']) ||
-        exactKeys(value, ['kind', 'source', 'id', 'caller']) && isAgentCaller(value.caller)) &&
+      [[], ['caller'], ['pane'], ['caller', 'pane']].some((extra) =>
+        exactKeys(value, ['kind', 'source', 'id', ...extra]) &&
+        (!extra.includes('caller') || isAgentCaller(value.caller)) &&
+        (!extra.includes('pane') || isPane(value.pane))) &&
       value.kind === 'agent' && value.source === 'mcp' &&
       typeof value.id === 'string' && value.id.length > 0)
 }
@@ -71,6 +73,11 @@ function isAgentCaller(value) {
   }
   return (value.kind === 'external' || value.kind === 'host') &&
     value.paneId === null && value.workspace === null && value.verifiedTo === 'caller-kind'
+}
+
+// The calling pane's name or id, another additive optional field.
+function isPane(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 200
 }
 
 function isRuntime(value) {

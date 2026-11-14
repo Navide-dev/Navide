@@ -34,3 +34,18 @@ describe('renderInterruptedChildrenNotice', () => {
     expect(renderInterruptedChildrenNotice([])).toBe('')
   })
 })
+
+describe('renderInterruptedChildrenNotice after a backend restart (H3)', () => {
+  it('names the backend restart as the cause and keeps the relaunch text by default', () => {
+    const children = [{ name: 'worker-1', resumed: true }, { name: 'worker-2', resumed: false }]
+    const backend = renderInterruptedChildrenNotice(children, 'backend-restart')
+    expect(backend).toContain('Navide 的後端重新啟動時')
+    expect(backend.startsWith(MSG_INTERRUPTED_PREFIX)).toBe(true)
+    expect(backend).toMatch(/worker-2[^\n]*未接回[^\n]*已結束/)
+    expect(backend).toContain('沒有自動續跑')
+    // The relaunch notice is unchanged.
+    expect(renderInterruptedChildrenNotice(children)).toBe(renderInterruptedChildrenNotice(children, 'relaunch'))
+    expect(renderInterruptedChildrenNotice(children)).toContain('— Navide 重新啟動時')
+    expect(renderInterruptedChildrenNotice(children)).toMatch(/worker-2[^\n]*仍是還原佔位/)
+  })
+})

@@ -4,6 +4,16 @@ title = "Agent-Team gitleaks config"
 [extend]
   useDefault = true
 
+# The built-in telegram-bot-api-token rule only fires when the variable name
+# contains "telegr"; GitHub's scanner matches the bare shape. Match the shape
+# too, and keep it active under backend/tests (see the rule allowlist below):
+# a test must build a fake token at runtime, never spell one out.
+[[rules]]
+  id = "navide-telegram-bot-token-shape"
+  description = "Telegram bot token shape (digits:35 chars) spelled out in source"
+  regex = '''(?:^|[^0-9A-Za-z_-])([0-9]{8,12}:[A-Za-z0-9_-]{35})(?:$|[^A-Za-z0-9_-])'''
+  secretGroup = 1
+
 [allowlist]
   description = "Project-level false-positive allowlist"
 

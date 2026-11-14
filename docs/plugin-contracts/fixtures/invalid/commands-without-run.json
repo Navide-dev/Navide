@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.commands",
+  "name": "Commands",
+  "version": "1.0.0",
+  "publisher": "acme",
+  "permissions": {},
+  "marketplace": { "description": "Expose a command with no run.", "license": "MIT" },
+  "contributes": {
+    "views": [{ "id": "main", "kind": "custom", "location": "window", "title": "Main", "entry": "frontend/index.html" }],
+    "commands": [{ "id": "acme.commands.run", "title": "Run" }]
+  }
+}

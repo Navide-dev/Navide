@@ -26,7 +26,7 @@ describe('reclaimPanesNow', () => {
   )
 
   it('keeps its existing callers on the same signature and guards', () => {
-    expect(fn).toContain('async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome): Promise<number> {')
+    expect(fn).toContain('async function reclaimPanesNow(paneIds?: string[], named = false, outcome?: ReclaimOutcome, source?: ReclaimRetroSource): Promise<number> {')
     expect(fn).toContain('namedReclaimBlockedBy(reclaimCandidate(pane), Date.now())')
     expect(fn).toContain('reclaimBlockedBy(reclaimCandidate(pane), RECLAIM_NOW_THRESHOLD_MS, Date.now())')
   })
@@ -49,6 +49,11 @@ describe('reclaimPanesNow', () => {
     // Callers that pass no outcome still see the throw, as before.
     expect(fn).toMatch(/if \(!outcome\) throw err/)
   })
+
+  it('asks for a retrospective only with a source, and judges the pane again after it', () => {
+    expect(fn).toContain('retroBeforeReclaim(backend, pane.workspacePath, paneId, source)')
+    expect(fn).toContain('outcome?.refused.push({ paneId, reason: again })')
+  })
 })
 
 describe('ui.pane.reclaim wiring', () => {
@@ -65,7 +70,7 @@ describe('ui.pane.reclaim wiring', () => {
   it('goes through the status bar path with its guards, focus included', () => {
     // `named` stays false: the focused-pane guard is part of what the status
     // bar refuses, and an agent naming a pane is not the user picking it.
-    expect(cmd).toContain('await reclaimPanesNow(ids, false, outcome)')
+    expect(cmd).toContain("await reclaimPanesNow(ids, false, outcome, 'agent')")
     expect(cmd).not.toContain('reclaimIdlePane(')
   })
 
@@ -73,5 +78,21 @@ describe('ui.pane.reclaim wiring', () => {
     expect(cmd).toContain('reclaimed: outcome.reclaimed')
     expect(cmd).toContain('reclaimRefusalReason(r.reason)')
     expect(cmd).toContain('r.message')
+  })
+})
+
+describe('the reclaim retrospective (S5b) stays out of the reclaim itself', () => {
+  it('leaves reclaimIdlePane as it was: no retrospective inside the kill path', () => {
+    const fn = block('async function reclaimIdlePane(paneId: string): Promise<boolean> {', '\n}\n')
+    expect(fn).not.toContain('retroBeforeReclaim')
+    expect(fn).toContain('await onKill(paneId, { markRemoved: false, keepInList: true, force: false })')
+  })
+
+  it('asks only from the agent, idle-sweep and pipeline paths; a click never waits', () => {
+    expect(appSource.match(/retroBeforeReclaim\(/g)).toHaveLength(3)
+    expect(appSource).toContain("retroBeforeReclaim(backend, pane.workspacePath, paneId, 'idle-sweep')")
+    expect(appSource).toContain("retroBeforeReclaim(backend, pane.workspacePath, paneId, 'pipeline')")
+    const withSource = appSource.match(/reclaimPanesNow\([^)]*'agent'\)/g) ?? []
+    expect(withSource).toEqual(["reclaimPanesNow(ids, false, outcome, 'agent')"])
   })
 })

@@ -1,6 +1,6 @@
 import type { App, InjectionKey } from 'vue'
 import { inject } from 'vue'
-import type { PluginContext } from '@navide/plugin-sdk'
+import type { Params, PluginContext } from '@navide/plugin-sdk'
 
 export { default as SafeAiCliPanel } from './SafeAiCliPanel.vue'
 export * from './tokens'
@@ -53,7 +53,10 @@ export interface AiCliTerminalView {
 }
 
 export interface AiCliTerminalResources {
-  openFilePicker?(request: { query: string; candidates: string[]; line?: number }): Promise<void>
+  openFilePicker?(request: Pick<Params<'ui.openFilePicker'>, 'query' | 'candidates' | 'line' | 'targets' | 'search'>): Promise<void>
+  /** Lets a plugin open a clicked terminal file itself. True means handled;
+   * otherwise the Host picker opens as it would without this. */
+  resolveFileLink?(request: { query: string; candidates: string[]; line?: number }): Promise<boolean>
   openExternal?(url: string): Promise<void>
   openPlan?(path: string): Promise<void>
   listMentionTargets(): Promise<Array<{ address: string; group?: string }>>

@@ -1,6 +1,8 @@
 // Pipeline stage type definitions and utility functions.
 // The actual stage data is loaded dynamically from the backend via useStages().
 
+import { i18n } from '@navide/plugin-ui/foundation'
+import { builtinTextForUi } from '../lib/builtinPipelineText'
 import { MSG_START, MSG_END, MSG_ENVELOPE_PREFIX, MSG_NOTICE_PREFIX, MSG_FORMAT_PREFIX, MSG_FALLBACK_PREFIX, MSG_SPAWN_FAILED_PREFIX, MSG_SPAWN_PARTIAL_PREFIX, SPAWN_START, SPAWN_END } from '../lib/agentMessaging'
 
 export type StageId = string
@@ -60,6 +62,15 @@ export const REPORT_END = '---REPORT-END---'
 export const DISPATCH_START = '---DISPATCH-START---'
 export const DISPATCH_END = '---DISPATCH-END---'
 
+// The preambles below go to the CLI in the UI language, read when a kickoff is
+// assembled so a language switch applies to the next send: zh-TW / zh-CN get
+// the Chinese text, every other locale English (the rule builtin kickoffs
+// follow, see builtinPipelineText.ts). Sentinels, block markers, field names
+// and notice prefixes are the same in both; only the prose is translated.
+function uiIsChinese(): boolean {
+  return String(i18n.global.locale.value).startsWith('zh')
+}
+
 // Inter-CLI messaging protocol — prepended to every pipeline slot kickoff so
 // agents know they can message other panes by messagingName. Manual panes get
 // no upfront protocol; the delivery envelope carries a one-line reply hint.
@@ -85,6 +96,28 @@ ${MSG_START} to: Agent-Team/reviewer
 
 `
 
+export const MESSAGING_PROTOCOL_EN = `[Inter-CLI Messaging Protocol]
+You can exchange messages with the agents in other CLI panes. Control signals must be bare text, never inside a markdown code block.
+to: must be on the same line as ${MSG_START}.
+
+To send a message to another agent, output:
+${MSG_START} to: <recipient name>
+<message content, may span multiple lines>
+${MSG_END}
+
+To broadcast to every other agent in the same workspace at once, write the recipient name as all (that is, ${MSG_START} to: all).
+
+To reach an agent in another workspace window, write the recipient name as <workspace folder name>/<recipient name>, for example:
+${MSG_START} to: Agent-Team/reviewer
+When folder names collide, write the full path instead (for example /Users/me/Agent-Team/reviewer). all only broadcasts within the same workspace.
+
+Input that begins with ${MSG_ENVELOPE_PREFIX} <name> is a message from another agent; to reply, use the MSG block above and name the sender (a message from another workspace already carries the workspace prefix in its name, so reply to it as is).
+When a message cannot be delivered, you receive a notice that begins with ${MSG_NOTICE_PREFIX}, giving the target name and the failure reason in English; it comes from Navide, so do not reply to it.
+When your turn contains ${MSG_START} but no message could be parsed from it, you receive a notice that begins with ${MSG_FORMAT_PREFIX}; rewrite the message in the format above, and again do not reply to the notice.
+Do not output an MSG block when you have nothing to communicate.
+
+`
+
 // Agent-initiated pane spawning — taught alongside the messaging protocol so
 // agents can delegate a task to a fresh CLI pane and get results back via MSG.
 export const SPAWN_PROTOCOL = `[CLI Pane Spawn Protocol]
@@ -103,6 +136,35 @@ pane 已經開起來但任務沒注入成功時，開頭是 ${MSG_SPAWN_PARTIAL_
 沒有派工需求時不要輸出 SPAWN 區塊。
 
 `
+
+export const SPAWN_PROTOCOL_EN = `[CLI Pane Spawn Protocol]
+You can ask Navide to open a new CLI pane and assign it a task. Output:
+${SPAWN_START}
+agent: <agent key, for example claude, codex>
+name: <name of the new pane; must not repeat an existing name>
+task: <task content; everything after task: up to the end of the block is the task, may span multiple lines>
+${SPAWN_END}
+
+Rules: one turn may output several SPAWN blocks, and all of them are processed. There is no hard limit on the number of child panes, the total number of CLI panes in the workspace, or the depth of a spawn chain, but you get a reminder in the report when the count runs high or the chain runs deep.
+Once the new pane finishes its task, it should report the result back to you with an MSG block. That report is the child agent's own output, not a Navide guarantee: while you are busy it queues until you reach a pause. If the child agent ends its first turn without reporting through an MSG block, Navide forwards the last output of that turn to you instead, starting with ${MSG_FALLBACK_PREFIX}; that is relayed content, not a report the child wrote itself. If you need to be sure it finished, check its status yourself.
+When a spawn opens no pane because of a name conflict, an invalid agent key or missing task content, you receive a notice that begins with ${MSG_SPAWN_FAILED_PREFIX}; you can fix it and retry.
+When the pane opened but its task was not injected, the notice begins with ${MSG_SPAWN_PARTIAL_PREFIX} — that pane already exists, so do not spawn it again under the same name.
+Both are system notices from Navide; like delivery-failure notices, do not reply to them.
+Do not output a SPAWN block when you have nothing to delegate.
+
+`
+
+// The prompts of the two QUESTION examples in INTERACTION_PROTOCOL and
+// INTERACTION_PROTOCOL_EN. A CLI that echoes the kickoff verbatim (Codex) puts
+// these examples in the pane buffer, so the buffer question scan skips blocks
+// with these prompts (#733). Both languages are listed: the language can change
+// while a kickoff is still on screen.
+export const PROTOCOL_EXAMPLE_PROMPTS: readonly string[] = [
+  '請問系統的主要使用者是誰？',
+  '資料庫要使用哪種技術？',
+  'Who are the main users of the system?',
+  'Which database technology should be used?',
+]
 
 // Universal pre-amble for Stage 01-style stages — the PM may ask the user.
 export const INTERACTION_PROTOCOL = `[Pipeline Control Protocol]
@@ -133,6 +195,34 @@ options:
 接下來是本階段任務：
 `
 
+export const INTERACTION_PROTOCOL_EN = `[Pipeline Control Protocol]
+You are being driven by an Agent-Team pipeline. Control signals must be bare text, never inside a markdown code block.
+
+When you need the user to make a decision, output only one QUESTION block, then stop immediately.
+Open-ended question example:
+---QUESTION-START---
+type: text
+prompt: Who are the main users of the system?
+---QUESTION-END---
+
+Multiple-choice example:
+---QUESTION-START---
+type: choice
+prompt: Which database technology should be used?
+options:
+  - PostgreSQL
+  - MySQL
+  - SQLite
+---QUESTION-END---
+
+Important: prompt must hold the real question and options the real choices; never use any placeholder text.
+
+When this stage is complete, the last line must contain only the specified sentinel, with no other text, punctuation or markdown on that line.
+After you receive the user's answer, continue the work directly; do not restate the rules.
+
+This stage's task follows:
+`
+
 // Pre-amble for Stages 03-05 — agents MUST NOT ask questions; they decide
 // autonomously and only emit the sentinel when done.
 export const INTERACTION_PROTOCOL_AUTO = `[Pipeline Control Protocol — 自主模式]
@@ -146,10 +236,22 @@ export const INTERACTION_PROTOCOL_AUTO = `[Pipeline Control Protocol — 自主�
 接下來是本階段任務：
 `
 
+export const INTERACTION_PROTOCOL_AUTO_EN = `[Pipeline Control Protocol — Autonomous Mode]
+You are being driven by an Agent-Team pipeline. Control signals must be bare text, never inside a markdown code block.
+
+[Important] This stage runs in autonomous mode: do not use a QUESTION block to ask the user anything.
+When something is unknown, decide on your own from the earlier stages' material and common industry practice, and briefly explain the reasoning behind each decision in your output.
+
+When this stage is complete, the last line must contain only the specified sentinel, with no other text, punctuation or markdown on that line.
+
+This stage's task follows:
+`
+
 // Pre-amble for the Manager slot. Goes BEFORE the slot's own kickoff_body.
 // Phase 1 (own work) → ${MANAGER_READY_SENTINEL} → Phase 2 (coordination) →
 // ${MANAGER_STAGE_DONE_SENTINEL}.
 export function renderManagerProtocol(slotRoster: { label: string; agentLabel: string; roleLabel: string }[]): string {
+  if (!uiIsChinese()) return renderManagerProtocolEn(slotRoster)
   const others = slotRoster.length
     ? slotRoster.map((s) => `  - ${s.label}（${s.agentLabel} · ${s.roleLabel}）`).join('\n')
     : '（本階段只有你一個 slot — 完成自己工作後直接印 ---STAGE-DONE--- 收尾）'
@@ -192,8 +294,72 @@ ${others}
 `
 }
 
+function renderManagerProtocolEn(slotRoster: { label: string; agentLabel: string; roleLabel: string }[]): string {
+  const others = slotRoster.length
+    ? slotRoster.map((s) => `  - ${s.label} (${s.agentLabel} · ${s.roleLabel})`).join('\n')
+    : '(You are the only slot in this stage — finish your own work, then print ---STAGE-DONE--- to wrap up)'
+
+  return `[Pipeline Control Protocol — Manager Mode]
+You are this stage's Manager and work in three phases. Control signals must be bare text, never inside a markdown code block.
+
+# Phase 1 · Do your own work first
+Complete your own deliverable as the task description below asks. **Once your own part is done, print on a line by itself:**
+${MANAGER_READY_SENTINEL}
+
+# Phase 2 · Coordinate and drive progress (only after you print MANAGER-READY)
+The other slot agents will send you messages:
+
+Receiving [→ ASK FROM <slot>] — that slot is stuck and needs your decision.
+Receiving [→ REPORT FROM <slot>] — that slot has reached a milestone.
+
+You can send an instruction to a specific slot at any time:
+---DISPATCH-START---
+to: <slot label>
+message: <what that slot should do, 1-3 sentences of concrete instruction>
+---DISPATCH-END---
+
+You can send several DISPATCH blocks to different slots at once.
+
+# Phase 3 · Wrap up
+When every slot has delivered enough and the quality is acceptable → **print on a line by itself:**
+${MANAGER_STAGE_DONE_SENTINEL}
+
+# Other rules
+- ${MANAGER_READY_SENTINEL} / ${MANAGER_STAGE_DONE_SENTINEL} / DISPATCH blocks must all be bare text (not inside a markdown code block)
+- Do not send DISPATCH during Phase 1 (the other slots are not listening to you yet)
+- Once in Phase 2, never go back to your own work; focus on coordinating
+- Do not use a QUESTION block to ask the user (the decisions are yours)
+
+# The slot agents you direct in this stage:
+${others}
+
+Your own task follows:
+`
+}
+
 // Pre-amble for non-Manager slots when a Manager exists in the same stage.
 export function renderWorkerProtocol(managerLabel: string): string {
+  if (!uiIsChinese()) {
+    return `[Pipeline Control Protocol — Worker Mode]
+This stage is coordinated by the Manager "${managerLabel}". Control signals must be bare text, never inside a markdown code block.
+
+# Working rules
+- Work on your own; **you will not receive any instructions** until the Manager has finished its own work, so start on the task below.
+- When you complete an important milestone or deliverable → print a REPORT block:
+  ---REPORT-START---
+  content: <one paragraph on what you completed and where things stand>
+  ---REPORT-END---
+- When you are unsure / stuck / need a decision → print an ASK block to ask the Manager for help:
+  ---ASK-START---
+  content: <one paragraph on the question you need decided>
+  ---ASK-END---
+- On receiving a [→ DISPATCH FROM Manager] message → carry it out at once
+- **Do not print the stage sentinel**; the Manager decides when to wrap up
+- Do not use a QUESTION block to ask the user (the Manager handles that)
+
+This stage's task follows:
+`
+  }
   return `[Pipeline Control Protocol — Worker 模式]
 本階段由 Manager 「${managerLabel}」協調。控制訊號必須是裸文字，不可放進 markdown code block。
 
@@ -276,6 +442,17 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
   }
 }
 
+/** How the n8n importer opens every step it writes (n8n_import.py). A step has
+ *  no {{task}} there, so the task someone typed at Run would go nowhere. Read
+ *  off the text so a pipeline already imported needs no change to its saved
+ *  data. A step that lost this line reads as one a person wrote, where leaving
+ *  {{task}} out can be the point. */
+const IMPORTED_STEP = '[External content: imported from the n8n workflow "'
+
+function isImportedWithoutTask(kickoffBody: string): boolean {
+  return kickoffBody.startsWith(IMPORTED_STEP) && !kickoffBody.includes('{{task}}')
+}
+
 /** Render a kickoff for one slot.
  *  - opts.isManager=true → Manager protocol (3 phases)
  *  - hasManager=true (and isManager=false) → Worker protocol
@@ -285,6 +462,13 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
  *  `slotRoster` is the list of OTHER slots in the same stage (used by the
  *  Manager protocol to tell the Manager who it's coordinating).
  *  `managerLabel` is the Manager slot's label (used by Worker protocol). */
+/** Whether a run's task is a webhook's: the boundary the backend wraps external
+ *  data in (webhook_payload). The task text is all a resumed run has. A task
+ *  that merely quotes the boundary changes nothing but its own kickoff. */
+export function holdsWebhookData(text: string): boolean {
+  return text.includes('<<<NAVIDE-WEBHOOK-DATA-')
+}
+
 export function renderSlotKickoff(
   slot: StageSlot,
   task: string,
@@ -296,19 +480,71 @@ export function renderSlotKickoff(
     slotRoster?: { label: string; agentLabel: string; roleLabel: string }[]
   } = {},
 ): string {
-  const body = slot.kickoffBody.replaceAll(
+  // A builtin step still carrying its Chinese seed goes out in the UI language.
+  const kickoffBody = builtinTextForUi(slot.kickoffBody)
+  const placed = kickoffBody.replaceAll(
     '{{task}}',
     task.trim() || '(no task description provided)'
   )
+  // A step imported from n8n has no {{task}} of its own. A webhook's data is what
+  // such a step exists to work on, and it comes wrapped and is not someone's word.
+  let body = placed
+  if (holdsWebhookData(task) && !kickoffBody.includes('{{task}}')) {
+    body = `${placed}\n\n${task.trim()}`
+  } else if (isImportedWithoutTask(kickoffBody) && task.trim()) {
+    // Ahead of the header, which says everything below it came from the
+    // workflow file. Worded for what is known: a schedule or an agent can start
+    // a run too, so this does not claim a person typed it.
+    body = `[Task given when this run started]\n${task.trim()}\n\n${placed}`
+  }
+  const zh = uiIsChinese()
   let protocol: string
   if (opts.isCommander) {
     protocol = renderManagerProtocol(opts.slotRoster ?? [])
   } else if (opts.hasCommander && opts.commanderLabel) {
     protocol = renderWorkerProtocol(opts.commanderLabel)
   } else if (opts.allowQuestions) {
-    protocol = INTERACTION_PROTOCOL
+    protocol = zh ? INTERACTION_PROTOCOL : INTERACTION_PROTOCOL_EN
   } else {
-    protocol = INTERACTION_PROTOCOL_AUTO
+    protocol = zh ? INTERACTION_PROTOCOL_AUTO : INTERACTION_PROTOCOL_AUTO_EN
   }
-  return MESSAGING_PROTOCOL + SPAWN_PROTOCOL + protocol + body
+  const preamble = zh ? MESSAGING_PROTOCOL + SPAWN_PROTOCOL : MESSAGING_PROTOCOL_EN + SPAWN_PROTOCOL_EN
+  return preamble + protocol + body
+}
+
+/** The wording of the prior-stage context App.vue's buildStageContext puts in
+ *  front of a kickoff, in the UI language (same rule as the preambles). */
+/** What a stalled stage is told after an answered QUESTION: carry on. */
+export function continueNudgeText(): string {
+  return uiIsChinese() ? '請繼續' : 'Please continue.'
+}
+
+export function stageContextText(): {
+  managerHeader: string
+  workerHeader: string
+  workerFooter: string
+  noLog: string
+  noOutput: string
+  summary: string
+  fullContent: string
+} {
+  return uiIsChinese()
+    ? {
+        managerHeader: '[完整前置歷程 — 你是 Manager，負責協調，請逐一完整讀取下列檔案]',
+        workerHeader: '[前置階段產出 — 下為摘要，需要細節請讀對應檔案]',
+        workerFooter: '（開始前請先讀取與你任務相關的檔案）',
+        noLog: '(無 log 檔)',
+        noOutput: '(無輸出)',
+        summary: '摘要：',
+        fullContent: '完整內容：',
+      }
+    : {
+        managerHeader: '[Full prior history — you are the Manager and coordinate, so read every file below in full]',
+        workerHeader: '[Prior stage outputs — summaries below; read the matching file for details]',
+        workerFooter: '(Before you start, read the files relevant to your task)',
+        noLog: '(no log file)',
+        noOutput: '(no output)',
+        summary: 'Summary: ',
+        fullContent: 'Full content: ',
+      }
 }

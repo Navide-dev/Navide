@@ -16,6 +16,11 @@ export interface TerminalSpawnOptions {
   isResume?: boolean
   restoreMode?: 'memory-resume' | 'fresh'
   skipReattach?: boolean
+  /** The persistence key the pane's previous PTY id was stored under, when
+   *  it is not this spawn's own key — a restore regenerates the pane id, and a
+   *  vendor with no launch-pinned session id has no resumeKey to carry over.
+   *  Read only to name that PTY in replaces_terminal_id. */
+  replacesKey?: string
   /** Serialized scrollback (from another pane's `serializeScrollback()`) to
    *  write into this pane's xterm before its PTY starts — the handoff a
    *  quota-failover restart uses so the conversation's history stays in the
@@ -126,8 +131,10 @@ export interface TerminalDockPort {
   cancelCreate(paneId: string, createGeneration: string): Promise<PortResponse>
   /** `logs` maps a surviving session id to the transcript it is actually
    *  appending to — the file opened when that PTY was created, which a pane
-   *  reattaching under a new id cannot derive from its own id. */
-  reattach(sessionIds: string[], cols: number, rows: number): Promise<PortResponse<{ alive: string[]; dead: string[]; logs?: Record<string, string> }>>
+   *  reattaching under a new id cannot derive from its own id.
+   *  `bypass_dropped` maps one to the command it really runs, when it was asked
+   *  to start with a permission bypass and did not get one. */
+  reattach(sessionIds: string[], cols: number, rows: number): Promise<PortResponse<{ alive: string[]; dead: string[]; logs?: Record<string, string>; bypass_dropped?: Record<string, string> }>>
   resize(sessionId: string, cols: number, rows: number): Promise<PortResponse>
   interrupt(sessionId: string): Promise<PortResponse>
   /** `retireRestore`: the user stopped this CLI (an embedded panel's Stop), so

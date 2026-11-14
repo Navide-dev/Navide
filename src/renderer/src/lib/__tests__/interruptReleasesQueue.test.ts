@@ -1,0 +1,137 @@
+// @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { INTERRUPT_ACTIVITY_DETAIL, TURN_STALE_MS, isTurnInFlight, messagingGateStatus } from '../agentMessaging'
+
+// 0.2.37: two Claude panes interrupted by cli_interrupt sat at their prompt
+// ("Interrupted · What should Claude do instead?") for 90 minutes while every
+// cli_send to them stayed queued. The STOP badge ('stopped') is sticky until a
+// person types into the pane, and the messaging gate read any status other than
+// running/idle as 'not-ready'. Its busy answer is mirrored to the backend too,
+// which is why cli_get_status reported busy:true next to ui.status "stopped".
+
+describe('messagingGateStatus', () => {
+  it('reads through a STOP an agent caused to the CLI state behind it', () => {
+    expect(messagingGateStatus('stopped', 'idle', 'agent')).toBe('idle')
+  })
+
+  it('keeps a STOP the user pressed: the pane stays held until they type', () => {
+    // The person pressed STOP to make that agent stop. Another agent's queued
+    // message typed in two minutes later would wake it against their wish.
+    expect(messagingGateStatus('stopped', 'idle', 'user')).toBe('stopped')
+  })
+
+  it('treats a STOP of unknown origin (restored from disk) as the user\'s', () => {
+    expect(messagingGateStatus('stopped', 'idle', null)).toBe('stopped')
+  })
+
+  it('keeps an agent-interrupted pane that is still working busy', () => {
+    expect(messagingGateStatus('stopped', 'running', 'agent')).toBe('running')
+  })
+
+  it('keeps an agent-interrupted pane parked on a prompt out of delivery', () => {
+    expect(messagingGateStatus('stopped', 'awaiting', 'agent')).toBe('awaiting')
+  })
+
+  it('leaves every other badge alone', () => {
+    for (const s of ['idle', 'running', 'awaiting', 'starting', 'exited', 'error']) {
+      expect(messagingGateStatus(s, 'idle', 'agent')).toBe(s)
+    }
+  })
+
+  it('keeps holding a user STOP whose badge the agent\'s next turn cleared', () => {
+    // 0.2.38: the badge follows the agent; the hold still waits for the person.
+    expect(messagingGateStatus('idle', 'idle', null, true)).toBe('stopped')
+    expect(messagingGateStatus('running', 'running', null, true)).toBe('stopped')
+    expect(messagingGateStatus('idle', 'idle', null, false)).toBe('idle')
+  })
+
+  it('stays not-ready when there is no live status to read', () => {
+    // An older TerminalPane (or an ACP pane) exposes no liveStatus.
+    expect(messagingGateStatus('stopped', undefined, 'agent')).toBe('stopped')
+  })
+})
+
+describe('the interrupted turn, as the gate sees it', () => {
+  it('is no longer in flight once its last activity is stale', () => {
+    // No Stop hook fires for an interrupted turn, so there is no turn_complete:
+    // the stale bound is what closes it. The incident's last agent_active was
+    // ~5800 s old.
+    const now = 10_000_000
+    expect(isTurnInFlight(now - 5_800_000, 0, now)).toBe(false)
+    expect(isTurnInFlight(now - TURN_STALE_MS + 1_000, 0, now)).toBe(true)
+  })
+})
+
+describe('App.vue wiring', () => {
+  const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
+  const start = appSource.indexOf('function messagingHoldKey(')
+  const body = appSource.slice(start, appSource.indexOf('\n}\n', start))
+
+  it('messagingHoldKey gates on messagingGateStatus over the live status', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(body).toContain('messagingGateStatus(')
+    expect(body).toContain('liveStatus')
+    expect(body).toContain('stoppedBy')
+  })
+
+  it('cli_interrupt (ui.pane.interrupt) marks its STOP as the agent\'s', () => {
+    const at = appSource.indexOf("registerCommand('ui.pane.interrupt'")
+    const handler = appSource.slice(at, appSource.indexOf('\n})\n', at))
+    expect(handler).toContain("onInterrupt(paneId, { by: 'agent' })")
+  })
+
+  it('every other interrupt (STOP button, batch, pipeline, evolve) stays the user\'s', () => {
+    const at = appSource.indexOf('async function onInterrupt(')
+    const body = appSource.slice(at, appSource.indexOf('\n}\n', at))
+    expect(body).toContain("ref.interrupt(opts.by ?? 'user')")
+    expect(appSource.match(/by: 'agent'/g)).toHaveLength(1)
+  })
+
+  it('messagingHoldKey passes the STOP hold left after the badge cleared', () => {
+    expect(body).toContain('stopHeldForUser')
+  })
+
+  it('an agent turn clears the STOP badge, user records included', () => {
+    // 0.2.38 Linux VM: a delivered message's turn is only its user record until
+    // the model answers; filtering user records left the badge on all turn.
+    const at = appSource.indexOf("ev.event_type === 'agent_active'")
+    const branch = appSource.slice(at, at + 4000)
+    expect(branch).toContain('markAgentTurnStart?.(agentTurnActivityAt(ev.timestamp, Date.now()))')
+    expect(branch).not.toContain("ev.detail !== 'user'")
+  })
+
+  it('the Stop-hook drain is given the same STOP hold (stopHeld)', () => {
+    // 0.2.39 Linux VM stopuser: a turn Claude started on its own after a
+    // person's STOP drained a queued cli_send through its Stop hook.
+    const at = appSource.indexOf('stopHeld: (paneId) => messagingGateStatus(')
+    expect(at).toBeGreaterThan(-1)
+    const dep = appSource.slice(at, appSource.indexOf("=== 'stopped'", at))
+    expect(dep).toContain('stopHeldForUser')
+    expect(dep).toContain('stoppedBy')
+    expect(dep).toContain('liveStatus')
+  })
+
+  it('TerminalPane exposes liveStatus', () => {
+    const pane = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/TerminalPane.vue'), 'utf8')
+    expect(pane).toContain('liveStatus: terminal.liveStatus')
+    expect(pane).toContain('stoppedBy: terminal.stoppedBy')
+    expect(pane).toContain('stopHeldForUser: terminal.stopHeldForUser')
+    expect(pane).toContain('markAgentTurnStart: terminal.markAgentTurnStart')
+  })
+
+  it('Claude\'s interrupt record reaches the pane as STOP evidence', () => {
+    // 0.2.40: without it every Claude STOP would read "STOP not applied".
+    const at = appSource.indexOf("ev.event_type === 'agent_active'")
+    const branch = appSource.slice(at, at + 4000)
+    expect(branch).toContain('if (ev.detail === INTERRUPT_ACTIVITY_DETAIL) paneRefs[ev.pane_id]?.noteInterruptEvidence?.()')
+    const pane = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/TerminalPane.vue'), 'utf8')
+    expect(pane).toContain('noteInterruptEvidence: terminal.noteInterruptEvidence')
+    expect(pane).toContain("reportsInterrupt: () => VENDORS_REPORTING_INTERRUPT.has(props.agentKey ?? '')")
+    expect(pane).toContain('data-testid="stop-ineffective"')
+    // The detail is a cross-end contract with the Claude log reader.
+    const reader = readFileSync(resolve(process.cwd(), 'backend/agent_team_backend/cli_vendors/claude.py'), 'utf8')
+    expect(reader).toContain(`INTERRUPT_DETAIL = "${INTERRUPT_ACTIVITY_DETAIL}"`)
+  })
+})

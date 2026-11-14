@@ -14,6 +14,8 @@ import type {
   GitFileWriteResult,
   GitWindowUiPort,
   GitPaneUiPort,
+  GitReviewPort,
+  GitReviewResult,
   IssuePort,
   LegacyRepoSelectionPort,
 } from './ports/gitSurface'
@@ -378,6 +380,48 @@ export function createPluginIssuePort(sdk: PluginCapabilitySdk): IssuePort {
     setState: (workspacePath, number, state) => sdk.request<{ ok: boolean; error?: string }>(
       'issues.set_state', { workspace_path: workspacePath, number, state }, 30_000,
     ),
+  }
+}
+
+export function createPluginGitReviewPort(sdk: PluginCapabilitySdk): GitReviewPort {
+  async function call<TPayload>(type: string, payload: Record<string, unknown> = {}): Promise<TPayload> {
+    const response = await sdk.request<TPayload>(type, payload)
+    if (!response.ok || response.payload === null) {
+      throw new Error(response.error?.message || `${type} failed`)
+    }
+    return response.payload
+  }
+  function onReview(event: string, callback: (payload: Record<string, unknown> & { reviewId: string }) => void): () => void {
+    return sdk.subscribe(event, (payload) => {
+      const record = payload as Record<string, unknown> | null
+      if (record && typeof record.reviewId === 'string') {
+        callback(record as Record<string, unknown> & { reviewId: string })
+      }
+    })
+  }
+  return {
+    async start({ mode, base, compare }) {
+      const started = await call<{ reviewId: string }>('aiCli.reviewStart', {
+        mode,
+        ...(base === undefined ? {} : { base }),
+        ...(compare === undefined ? {} : { compare }),
+      })
+      return started.reviewId
+    },
+    async stop(reviewId) {
+      await call('aiCli.reviewStop', { reviewId })
+    },
+    onResult: (callback) => onReview('aiCli.reviewResult', (p) => callback(p.reviewId, p.result as GitReviewResult)),
+    onEnd: (callback) => onReview('aiCli.reviewEnd', (p) => callback(p.reviewId)),
+    onError: (callback) => onReview('aiCli.reviewError', (p) => callback(p.reviewId, String(p.message ?? ''))),
+    getModelPreferences: () => call<{ provider: string; model: string }>('aiCli.getModelPreferences'),
+    async setModelPreferences(provider, model) {
+      await call('aiCli.setModelPreferences', { provider, model })
+    },
+    async listModels() {
+      const listed = await call<{ ok: boolean; models?: Array<{ name: string }> }>('aiCli.listModels')
+      return (listed.models ?? []).map((m) => m.name).filter(Boolean)
+    },
   }
 }
 

@@ -1,4 +1,5 @@
 import { computed, ref, watch, type InjectionKey } from 'vue'
+import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import type { useBackend } from './useBackend'
 import type { ChannelPlatform } from '../platform/channels'
 
@@ -41,6 +42,18 @@ export interface ChannelCapabilities {
 
 /** One bot on a platform. A platform may run several; `default` is the one every
  *  platform had before that, and added bots get a generated id (see newAccountId). */
+/** Where one binding of a bot points, as channels.list summarises it. */
+export interface ChannelBotBinding {
+  pane_id: string
+  pane_name: string
+  /** False while the bound pane is closed (it keeps the name it was bound under). */
+  pane_exists: boolean
+  workspace_path: string
+  workspace_name: string
+  chat_title: string
+  created_at: number
+}
+
 export interface ChannelAccountState {
   account: string
   /** Display name the user gave the bot; '' when unnamed. */
@@ -51,6 +64,12 @@ export interface ChannelAccountState {
   /** Non-secret config only; the backend never sends a secret back. */
   config: Record<string, unknown>
   capabilities: ChannelCapabilities | null
+  /** Telegram's numeric bot id ('' elsewhere); absent on older backends. */
+  bot_id?: string
+  /** The panes this bot is bound to; absent on older backends. */
+  bindings?: ChannelBotBinding[]
+  /** Epoch seconds of its latest message, seen chat or binding; null when none. */
+  last_activity_at?: number | null
 }
 
 export interface ChannelPlatformState {
@@ -97,6 +116,22 @@ export interface ChannelPairingRequest {
   sender_id: string
   sender_name: string
   created_at: number
+  /** "invite": made by a redeemed link code; "pairing": a pairing code. Absent from older backends. */
+  source?: 'pairing' | 'invite'
+}
+
+/** A request an agent filed through the channels_* MCP tools; the user decides it here.
+ *  Holds no credential (backend channels/agent_requests.py). */
+export interface ChannelAgentRequest {
+  id: string
+  kind: 'bot-add' | 'pairing-approve' | 'bot-remove' | 'bind'
+  requester: { pane_id?: string; address?: string; kind?: string }
+  reason: string
+  target: Record<string, string>
+  draft: { name?: string }
+  status: 'pending' | 'applying' | 'completed' | 'failed' | 'rejected' | 'expired'
+  error: string | null
+  expires_at: number
 }
 
 export interface ChannelAllowEntry {
@@ -106,6 +141,10 @@ export interface ChannelAllowEntry {
   sender_id: string
   sender_name: string
   added_at: number
+  /** How the sender was added; null for rows from before it was recorded, absent from older backends. */
+  source?: 'pairing' | 'invite' | null
+  /** A Telegram id shared by many people: always refused, and safe to remove. */
+  shared?: boolean
 }
 
 export interface ChannelBinding {
@@ -147,6 +186,8 @@ export interface ChannelOverviewPane {
 export interface ChannelOverviewBinding extends ChannelBinding {
   created_at: number
   pane: ChannelOverviewPane
+  /** True when the sender gate refuses this chat's messages; the backend decides. */
+  needs_approval?: boolean
 }
 
 export interface ChannelOverviewChat extends ChannelLocation {
@@ -190,7 +231,7 @@ export function chatRows(chat: ChannelOverviewChat): ChannelBindingRow[] {
     }))
 }
 
-/** A one-time code from `channels.link.create`: whoever sends it to the bot is linked. */
+/** A one-time code from `channels.link.create`: whoever sends it to the bot is linked once approved. */
 export interface ChannelLinkInvite {
   code: string
   target: 'direct' | 'group'
@@ -293,6 +334,8 @@ function createChannelsStore(backend: Backend) {
   const lastLinked = ref<ChannelLinkedEvent | null>(null)
   const lastLinkFailed = ref<ChannelLinkFailedEvent | null>(null)
   const lastManagedCreated = ref<ChannelManagedCreatedEvent | null>(null)
+  // Open agent requests (pending or being applied), newest last.
+  const agentRequests = ref<ChannelAgentRequest[]>([])
   // Settings → Channels: fetched once the page asks for it, then on every refresh.
   const overview = ref<ChannelOverviewBot[]>([])
   const overviewLoaded = ref(false)
@@ -409,9 +452,29 @@ function createChannelsStore(backend: Backend) {
     const msg = raw as ChannelLinkFailedEvent | null
     if (msg?.platform) lastLinkFailed.value = msg
   })
+  // A chat's /model switched a pane: shown here too, so whoever sits at this window
+  // sees who changed which pane's model (channels.model_menu).
+  backend.on('channels.model_switched', (raw) => {
+    const ev = raw as { who?: string; pane_name?: string; model?: string; effort?: string; method?: string } | null
+    if (!ev?.model) return
+    const model = ev.effort ? `${ev.model} · ${ev.effort}` : ev.model
+    useNotify().toast(i18n.global.t('channels.model-switched', {
+      who: ev.who ?? '', pane: ev.pane_name ?? '', model, method: ev.method ?? '',
+    }), { type: 'info', duration: 8000 })
+  })
   backend.on('channels.managed_created', (raw) => {
     const msg = raw as ChannelManagedCreatedEvent | null
     if (msg?.request_id) lastManagedCreated.value = msg
+  })
+  async function fetchAgentRequests(): Promise<void> {
+    const res = await call<{ requests: ChannelAgentRequest[] }>('channels.agent_request.list')
+    if (res.ok && res.data) agentRequests.value = res.data.requests ?? []
+  }
+  backend.on('channels.agent_request.changed', (raw) => {
+    const req = raw as ChannelAgentRequest | null
+    if (!req?.id) return
+    const rest = agentRequests.value.filter((r) => r.id !== req.id)
+    agentRequests.value = req.status === 'pending' || req.status === 'applying' ? [...rest, req] : rest
   })
   backend.on('channels.status', (raw) => {
     const msg = raw as { platform?: string; account?: string; status?: Partial<ChannelStatus> } | null
@@ -431,8 +494,10 @@ function createChannelsStore(backend: Backend) {
   watch(
     () => backend.status.value,
     (s, prev) => {
-      if (s === 'connected') void refresh()
-      else if (prev === 'connected') linkEpoch.value += 1
+      if (s === 'connected') {
+        void refresh()
+        void fetchAgentRequests()
+      } else if (prev === 'connected') linkEpoch.value += 1
     },
     { immediate: true }
   )
@@ -453,6 +518,12 @@ function createChannelsStore(backend: Backend) {
     lastLinkFailed,
     lastManagedCreated,
     linkEpoch,
+    agentRequests,
+    /** Approve or decline an agent's request; approving runs what it asked for. */
+    decideAgentRequest: (id: string, approve: boolean) => call('channels.agent_request.decide', { id, approve }),
+    /** The add-a-bot form an agent asked for: the user added the bot (or gave up). */
+    finishAgentRequest: (id: string, ok: boolean, account = '', error = '') =>
+      call('channels.agent_request.finish', { id, ok, account, error }),
     configuredPlatforms,
     refresh,
     overview,
@@ -543,6 +614,9 @@ function createChannelsStore(backend: Backend) {
       call<ChannelLinkInvite>('channels.link.create', { platform, target, ...acct(account) }),
     locations: async (platform: ChannelPlatform, account?: string): Promise<ChannelResult<{ locations: ChannelLocation[] }>> =>
       call<{ locations: ChannelLocation[] }>('channels.locations', { platform, ...acct(account) }),
+    /** Every running bot's locations in one call (a picker that lists them all). */
+    allLocations: async (): Promise<ChannelResult<{ bots: { platform: ChannelPlatform; account: string; locations: ChannelLocation[] }[] }>> =>
+      call<{ bots: { platform: ChannelPlatform; account: string; locations: ChannelLocation[] }[] }>('channels.locations', { all: true }),
     bind: ({ account, ...req }: BindRequest) => mutate('channels.bind', { ...req, ...acct(account) }),
     /** Child topics the backend auto-bound under a parent pane's binding. */
     childrenOf: (paneId: string): ChannelBinding[] => bindings.value.filter((b) => b.parent_pane_id === paneId),

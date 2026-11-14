@@ -110,5 +110,19 @@ export function formatScan({ id, version, report, declaredVsScanned: comparison 
     lines.push('Declared but not found by the scan:')
     for (const item of comparison.declaredNotSeen) lines.push(`  ${item.kind}: ${item.key}`)
   }
+  // Scanner 1.2.0: where each frontend finding was seen (at most three sites each).
+  const sites = [
+    ...report.shell.calls.map((call) => ['shell', command(call), call.sites]),
+    ...report.network.hosts.map((item) => ['host', item.host, item.sites]),
+    ...report.capabilities.map((item) => ['capability', item.address, item.sites]),
+  ].flatMap(([kind, key, found]) => (found ?? []).map((site) => [kind, key, site]))
+  // Package text on a terminal: control characters (an escape sequence) are shown as "?".
+  const plain = (value) => String(value).replace(/[\u0000-\u001f\u007f-\u009f]/g, '?')
+  if (sites.length) {
+    lines.push('Where the scan saw them:')
+    for (const [kind, key, site] of sites) {
+      lines.push(`  ${kind} ${plain(key)}: ${plain(site.file)}:${site.line}:${site.col}  ${site.excerpt === null ? '(excerpt hidden: looks like a secret)' : plain(site.excerpt)}`)
+    }
+  }
   return lines
 }

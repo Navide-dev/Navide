@@ -21,7 +21,20 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 |---|---|
 | [はじめに](getting-started.md) | 署名済み macOS ビルドまたは Windows／Linux Installer のダウンロード、または Source からのインストールと初回起動 |
 | [ユーザーガイド](user-guide.md) | Workspace、Pane、Pipeline、協調、Git、History、Editor Workflow の理解 |
+| [n8n からインポート](import-from-n8n.md) | エクスポートした n8n ワークフローを Pipeline に変換：プレビュー、認証情報、外部コンテンツのマーク、n8n MCP |
 | [トラブルシューティング](troubleshooting.md) | 起動、権限、Agent Session、Analyzer、Token Tracking の問題解決 |
+
+## Navide 向けにプラグインを作る
+
+最初の行から始めてください。流れ全体を 1 ページにまとめたもので、残りはそこからリンクされるリファレンスです。
+
+| ドキュメント | 目的 |
+|---|---|
+| [Build for Navide — English](../en-US/build-for-navide.md) | プラグイン作者はここから：`npx navide-plugin init`、セルフチェック、Developer Mode、Marketplace の申請・Testplace・審査・更新・取り下げを 1 ページで |
+| [Plugin Ideas — English](../en-US/plugin-ideas.md) | Navide チームが欲しいプラグインの一覧と、それぞれに必要な機能・現在の阻害要因 |
+| [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 公開 Contracts、SDK、UI Package、外部 Frontend Package Workflow を使用する |
+| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | `navide-plugin` でプラグインを作成・パッケージ化・署名し、Navide Marketplace に公開して審査を通す |
+| [Plugin Development (legacy) — English](../en-US/plugin-development.md) | 既存プラグインのために残している Manifest v1 の説明：フロントエンド View プラグインまたはバックエンドプラグインを開発し、パッケージ化して署名する |
 
 ## 信頼と安全
 
@@ -29,6 +42,8 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 |---|---|
 | [プライバシーとデータフロー](privacy.md) | ローカルに残るデータ、第三者へ送られる可能性、認証情報の保存場所を理解する |
 | [Security Policy — English](../../SECURITY.md) | 現在のセキュリティ境界を理解し、脆弱性を非公開で報告する |
+| [Security Threat Model — English](../en-US/security-threat-model.md) | すべてのセキュリティレビューで照合する攻撃者の位置と STRIDE 表 |
+| [Security Assessments — English](../en-US/security/README.md) | 信頼境界を動かす前に書く脅威評価：バックエンドのネットワーク、宣言された実行ファイル、Windows バックエンド、チャットチャネル Adapter |
 
 ## 開発とメンテナンス
 
@@ -39,9 +54,6 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | AI Coding CLI を追加する：2 つの Spec ファイル、登録、CI が強制するチェック |
 | [CLI Integration Records — English](../en-US/cli-extension-guide.md) | ベンダーごとの統合記録：インストール経路、Resume 構文、Session 保存形式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 対応済み CLI の一覧：実際に実行されるコマンドと、各 spec が宣言する機能 |
-| [Plugin Development — English](../en-US/plugin-development.md) | フロントエンド View プラグインまたはバックエンドプラグインを開発し、パッケージ化して署名する |
-| [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 公開 Contracts、SDK、UI Package、外部 Frontend Package Workflow を使用する |
-| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | `navide-plugin` でプラグインを作成・パッケージ化・署名し、Navide Marketplace に公開して審査を通す |
 | [外部 MCP 制御](external-mcp-control.md) | 外部 MCP クライアントを接続して実行中の Navide ウィンドウを操作し、セキュリティモデルを理解する |
 | [Release Guide — English](../en-US/releases.md) | Version、Package、署名、Notarization、公開、Release 復旧を行う |
 

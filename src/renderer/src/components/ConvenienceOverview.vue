@@ -211,7 +211,7 @@ onMounted(() => { void load() })
 <style scoped>
 .conv { display: flex; flex-direction: column; gap: 10px; }
 .conv-title { margin: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.conv-intro, .conv-empty, .conv-reason { margin: 0; font-size: 11.5px; color: var(--text-secondary); }
+.conv-intro, .conv-empty, .conv-reason { margin: 0; font-size: var(--font-xs); color: var(--text-secondary); }
 .conv-reason { color: var(--warning-fg, var(--text-primary)); }
 .conv-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); }
 .conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -219,7 +219,7 @@ onMounted(() => { void load() })
 .conv-card.focused { border-color: var(--accent-fg, var(--border-default)); }
 .conv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .conv-name { font-weight: 600; color: var(--text-bright); font-size: var(--font-xs); overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
-.conv-cli, .conv-required, .conv-presence { font-size: 10.5px; border-radius: 99px; padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
+.conv-cli, .conv-required, .conv-presence { font-size: var(--font-xs); border-radius: 99px; padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
 .conv-presence.absent { border-style: dashed; }
 .conv-switch { font: inherit; font-size: var(--font-2xs); border-radius: 99px; padding: 1px 10px; border: 1px solid var(--border-default); background: var(--bg-subtle); color: var(--text-secondary); cursor: pointer; }
 .conv-switch.on { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-fg, var(--border-default)); }
@@ -229,11 +229,11 @@ onMounted(() => { void load() })
 .conv-label { flex: none; color: var(--text-secondary); }
 .conv-targets, .conv-confirm-list, .conv-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .conv-target, .conv-log-row { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--font-2xs); }
-.conv-path { font-size: 10.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.conv-path { font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .conv-confirm { border: 1px solid var(--danger-fg); border-radius: var(--radius-xs); padding: 6px 8px; font-size: var(--font-2xs); display: flex; flex-direction: column; gap: 4px; }
 .conv-confirm p { margin: 0; }
 .conv-confirm-title { font-weight: 600; color: var(--text-bright); }
-.conv-confirm-list code { font-size: 10.5px; overflow-wrap: anywhere; }
+.conv-confirm-list code { font-size: var(--font-xs); overflow-wrap: anywhere; }
 .conv-confirm-acts { display: flex; gap: 6px; }
 .conv-btn { font: inherit; font-size: var(--font-2xs); color: var(--text-primary); background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: var(--radius-xs); padding: 3px 8px; cursor: pointer; }
 .conv-btn-danger { color: var(--danger-fg); border-color: var(--danger-fg); }

@@ -1,0 +1,25 @@
+{
+  "vendor": "devin",
+  "provenance": {
+    "kind": "synthetic",
+    "source": "backend/tests/vendors/test_devin.py",
+    "revision": "8fef8e4fd0d38679266f4985e9797a6268c09046",
+    "notes": "Hand-authored minimal records from the existing regression schema. No account data, provider calls, or claimed live recording; the CLI was not installed when this was written."
+  },
+  "sessionId": null,
+  "expected": {
+    "tokens": [
+      0,
+      0
+    ],
+    "reply": "Regression reply: café 完成\n---MSG-END---"
+  },
+  "phases": {
+    "initial": [],
+    "response": [],
+    "complete": []
+  },
+  "binary": "devin",
+  "resumeCommand": null,
+  "guardedEnvironment": []
+}

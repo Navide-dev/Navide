@@ -46,7 +46,9 @@ def _token_count_event(input_t: int, cached_in: int, output_t: int, reasoning_ou
                     "cached_input_tokens": cached_in,
                     "output_tokens": output_t,
                     "reasoning_output_tokens": reasoning_out,
-                    "total_tokens": input_t + cached_in + output_t + reasoning_out,
+                    # Codex's input_tokens already holds the cached share and
+                    # output_tokens the reasoning share.
+                    "total_tokens": input_t + output_t,
                 },
                 "model_context_window": 258400,
             },
@@ -63,10 +65,10 @@ def test_first_event_emits_full_total(fake_codex_session: Path) -> None:
     events = reader.parse_session_file(fake_codex_session, set())
     assert len(events) == 1
     ev = events[0]
-    # input = 100 (input_tokens) + 20 (cached_input_tokens) = 120
-    assert ev.input_tokens == 120
-    # output = 50 (output_tokens) + 10 (reasoning_output_tokens) = 60
-    assert ev.output_tokens == 60
+    # input = input_tokens (100, the 20 cached already in it)
+    assert ev.input_tokens == 100
+    # output = output_tokens (50, the 10 reasoning already in it)
+    assert ev.output_tokens == 50
     assert ev.cwd == "/Users/me/proj"
     assert ev.vendor == "codex"
 
@@ -801,3 +803,20 @@ def test_turns_answer_to_the_file_stem_as_well_as_the_session_meta_id(
     assert len(reader.turns_for_session(fake_codex_session, "thread-1")) == 1
     assert len(reader.turns_for_session(fake_codex_session, "rollout-test")) == 1
     assert reader.turns_for_session(fake_codex_session, "thread-9") == []
+
+
+def test_parse_activity_resumes_after_an_append(fake_codex_session: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    def turn(prompt: str, reply: str) -> list[dict]:
+        return [
+            {"timestamp": "2026-07-22T13:25:00Z", "type": "event_msg",
+             "payload": {"type": "user_message", "message": prompt}},
+            {"timestamp": "2026-07-22T13:26:00Z", "type": "event_msg",
+             "payload": {"type": "agent_message", "message": reply}},
+            _token_count_event(100, 0, 50, 0),
+            _task_complete_event(),
+        ]
+
+    _write_jsonl(fake_codex_session, turn("first", "one"))
+    assert_resumes(CodexLogReader, fake_codex_session, turn("second", "two"), monkeypatch)

@@ -1123,7 +1123,7 @@ describe('SkillsPane merged browse/route layout', () => {
     expect(titles).toEqual([
       ['Shared library · ~/.agents/skills', '1'],
       ["copilot's own", '2'],
-      ["claude's own", '1'],
+      ["Claude Code's own", '1'],
     ])
     // exactly one source tag per card, never a second badge or a per-row button
     for (const card of wrapper!.findAll('.skill-card')) {
@@ -1166,9 +1166,9 @@ describe('SkillsPane merged browse/route layout', () => {
     await mountAll()
     const shared = wrapper!.findAll('.skill-card').find((c) => c.find('strong').text() === 'review-code')!
 
-    // codex is a shared-root reader → "1 read it themselves"; claude/kimi/pi are delivered.
+    // codex is a shared-root reader → "Loaded by 1 CLI"; claude/kimi/pi are delivered.
     const chips = shared.findAll('.dchip').map((c) => c.text())
-    expect(chips).toContain('1 read it themselves')
+    expect(chips).toContain('Loaded by 1 CLI')
     expect(chips).toEqual(expect.arrayContaining(['claude', 'kimi', 'pi']))
     // native, opt-in, nothing chosen → says so
     const native = wrapper!.findAll('.skill-card').find((c) => c.find('strong').text() === 'bug-buster')!

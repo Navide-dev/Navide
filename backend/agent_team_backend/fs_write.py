@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import errno
+import hashlib
 import os
 import re
 import stat as stat_mod
@@ -200,19 +201,34 @@ def _advance_mtime(target: Path, replaced_ns: int) -> None:
         os.utime(target, ns=(st.st_atime_ns, replaced_ns + step_ns))
 
 
+def _content_changed(target: Path, expected_sha256: str | None) -> bool:
+    """Whether the file's bytes no longer hash to ``expected_sha256``.
+
+    The content check behind the mtime one: a copy that preserved the mtime, or
+    a rewrite inside one coarse clock tick, keeps the mtime but not the bytes.
+    Called under the target lock, so nothing can change them in between.
+    """
+    if expected_sha256 is None:
+        return False
+    return hashlib.sha256(target.read_bytes()).hexdigest() != expected_sha256
+
+
 def write_file(
     workspace_path: str,
     rel_path: str,
     content: str,
     encoding: str = "utf-8",
     expected_mtime: float | None = None,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Overwrite (or create) a text file with `content`.
+    """Overwrite (or create) a file with `content`.
 
     ``encoding`` is the codec used to encode ``content`` (read_file's display
-    labels, e.g. "UTF-8 with BOM", are accepted too). When ``expected_mtime``
-    is given and the file on disk has a different mtime, the write is refused
-    with ``conflict=True`` so the caller can surface a conflict dialog.
+    labels, e.g. "UTF-8 with BOM", are accepted too). ``"base64"`` writes binary
+    files: ``content`` is then the base64 text of the exact bytes to store. When ``expected_mtime``
+    is given and the file on disk has a different mtime, or ``expected_sha256``
+    is given and its bytes hash differently, the write is refused with
+    ``conflict=True`` so the caller can surface a conflict dialog.
     Success responses include the file's new ``mtime``.
     """
     try:
@@ -221,11 +237,17 @@ def write_file(
             raise FsError("invalid path")
         if target.exists() and target.is_dir():
             raise FsError("path is a directory")
-        codec = _ENC_FROM_LABEL.get(encoding, encoding)
-        try:
-            encoded = content.encode(codec)
-        except (LookupError, UnicodeEncodeError) as exc:
-            return {"ok": False, "error": f"cannot encode content as {encoding}: {exc}"}
+        if encoding.lower() == "base64":
+            try:
+                encoded = base64.b64decode(content, validate=True)
+            except ValueError:
+                return {"ok": False, "error": "content is not valid base64"}
+        else:
+            codec = _ENC_FROM_LABEL.get(encoding, encoding)
+            try:
+                encoded = content.encode(codec)
+            except (LookupError, UnicodeEncodeError) as exc:
+                return {"ok": False, "error": f"cannot encode content as {encoding}: {exc}"}
         if len(encoded) > _WRITE_SIZE_LIMIT:
             raise FsError(f"content too large ({len(encoded) // 1024} KB; limit 50 MB)")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -237,7 +259,9 @@ def write_file(
                 st = target.stat()
                 orig_mode = st.st_mode
                 replaced_ns = st.st_mtime_ns
-                if expected_mtime is not None and abs(st.st_mtime - expected_mtime) > 1e-4:
+                if (
+                    expected_mtime is not None and abs(st.st_mtime - expected_mtime) > 1e-4
+                ) or _content_changed(target, expected_sha256):
                     return {
                         "ok": False,
                         "conflict": True,
@@ -386,12 +410,13 @@ def write_commit(
     upload_id: str,
     total_size: int,
     expected_mtime: float | None = None,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Swap a fully staged upload in as ``rel_path``.
 
-    Same contract as :func:`write_file`: when ``expected_mtime`` is given and
-    the file on disk has a different mtime the write is refused with
-    ``conflict=True`` (the staging file is discarded); success returns the new
+    Same contract as :func:`write_file`: when ``expected_mtime`` (or
+    ``expected_sha256``) no longer matches the file on disk the write is refused
+    with ``conflict=True`` (the staging file is discarded); success returns the new
     ``mtime``. The replace is one atomic rename, so a reader never sees a
     half-written document.
     """
@@ -413,7 +438,9 @@ def write_commit(
                 st = target.stat()
                 orig_mode = st.st_mode
                 replaced_ns = st.st_mtime_ns
-                if expected_mtime is not None and abs(st.st_mtime - expected_mtime) > 1e-4:
+                if (
+                    expected_mtime is not None and abs(st.st_mtime - expected_mtime) > 1e-4
+                ) or _content_changed(target, expected_sha256):
                     staging.unlink(missing_ok=True)
                     return {"ok": False, "conflict": True, "mtime": st.st_mtime, "error": "file changed on disk"}
             if orig_mode is not None:

@@ -42,6 +42,7 @@ from threading import RLock
 from typing import Any, Callable, Coroutine
 
 from .db import WorkspaceDatabases
+from .db_executor import run_in_db_thread
 
 log = logging.getLogger("agent_team_backend.dev_time")
 
@@ -485,7 +486,7 @@ class DevTimeStore:
         while True:
             await asyncio.sleep(interval_s)
             try:
-                for label in self.sweep_stale():
+                for label in await run_in_db_thread(self.sweep_stale):
                     self.should_broadcast(label, True)
                     await on_change(label)
             except Exception as err:  # noqa: BLE001 — the sweeper must survive
@@ -564,7 +565,7 @@ class DevTimeStore:
             # Late import: the vendor module is heavy and app.py imports us early.
             from .cli_vendors.claude import ClaudeLogReader
 
-            session_files = ClaudeLogReader().session_files_for_workspace(workspace_path)
+            session_files = ClaudeLogReader().own_session_files(workspace_path)
         cutoff = wall - BACKFILL_DAYS * 86400
         rows: list[tuple[str, float, float]] = []
         for path in session_files:

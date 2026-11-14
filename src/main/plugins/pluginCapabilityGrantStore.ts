@@ -14,7 +14,9 @@ import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 
 const GRANTS_FILE = '.navide-capability-grants.json'
-const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages'])
+const SYSTEM_NAMESPACES = new Set(['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets', 'agentNotify'])
+/** C2: a declared executable is a bare lowercase name (packages/plugin-contracts V2_SHELL_EXECUTABLE). */
+const SHELL_EXECUTABLE = /^[a-z0-9][a-z0-9._+-]{0,63}$/
 
 interface PersistedGrantState {
   schemaVersion: 1
@@ -25,7 +27,7 @@ function validGrant(value: unknown): value is HostCapabilityGrant {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const grant = value as Record<string, unknown>
   const keys = Object.keys(grant)
-  if (keys.some((key) => !['packageVersion', 'system', 'shell', 'highRiskShellConfirmed', 'storage'].includes(key))) {
+  if (keys.some((key) => !['packageVersion', 'system', 'shell', 'shellExecutables', 'highRiskShellConfirmed', 'storage'].includes(key))) {
     return false
   }
   if (typeof grant.packageVersion !== 'string' || grant.packageVersion.length === 0) return false
@@ -35,6 +37,15 @@ function validGrant(value: unknown): value is HostCapabilityGrant {
   ) return false
   if (new Set(grant.system).size !== grant.system.length) return false
   if (grant.shell !== undefined && grant.shell !== 'allowlist' && grant.shell !== 'full') return false
+  if (grant.shellExecutables !== undefined) {
+    if (
+      grant.shell !== 'allowlist' ||
+      !Array.isArray(grant.shellExecutables) ||
+      grant.shellExecutables.length === 0 ||
+      grant.shellExecutables.some((name) => typeof name !== 'string' || !SHELL_EXECUTABLE.test(name)) ||
+      new Set(grant.shellExecutables).size !== grant.shellExecutables.length
+    ) return false
+  }
   if (grant.highRiskShellConfirmed !== undefined && typeof grant.highRiskShellConfirmed !== 'boolean') return false
   if (grant.storage !== undefined && typeof grant.storage !== 'boolean') return false
   return true

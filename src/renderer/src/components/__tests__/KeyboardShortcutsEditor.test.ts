@@ -11,9 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { i18n } from '@navide/plugin-ui/foundation'
 import KeyboardShortcutsEditor from '../KeyboardShortcutsEditor.vue'
-import { getUserRules, initKeybindingsPort, isKeyCaptureActive } from '@navide/plugin-ui/shared'
+import { getUserRules, initKeybindingsPort, isKeyCaptureActive, saveUserRules } from '@navide/plugin-ui/shared'
 import { _resetKeybindingsState } from '@navide/plugin-ui/shared/testing'
-import { nativeMenuKeys, TERMINAL_KEYS } from '@navide/plugin-ui/shared'
+import { buildRows, nativeMenuKeys, TERMINAL_KEYS } from '@navide/plugin-ui/shared'
+import { pluginCommands } from '../../lib/pluginCommands'
 
 interface Bridge {
   readKeybindings: ReturnType<typeof vi.fn>
@@ -471,5 +472,63 @@ describe('external changes', () => {
     setUserRules([{ key: 'cmd+s', command: '-editor.action.save', when: 'editorOpen && !terminalFocus' }])
     await wrapper.vm.$nextTick()
     expect(rowFor(wrapper, 'editor.action.save').find('.kse-unbound').exists()).toBe(true)
+  })
+})
+
+describe('Navide plugin commands', () => {
+  const entry = {
+    commandId: 'acme.runner.go',
+    title: 'Run tests',
+    pluginId: 'acme.runner',
+    pluginName: 'Runner',
+    suggestedKey: 'cmd+alt+t',
+  }
+
+  afterEach(() => { pluginCommands.value = [] })
+
+  it('shows nothing of them when no plugin declares a command', () => {
+    const w = mountEditor()
+    expect(w.find('.kse-plugin-mark').exists()).toBe(false)
+    expect(w.find('.kse-suggestion').exists()).toBe(false)
+    expect(w.findAll('.kse-id').map((id) => id.text()).sort()).toEqual(buildRows([]).map((row) => row.command).sort())
+    w.unmount()
+  })
+
+  it('groups them under the plugin, marked, with the title it declared', () => {
+    pluginCommands.value = [entry]
+    const w = mountEditor('acme.runner')
+    expect(w.find('.kse-group-title').text()).toContain('Runner')
+    expect(w.find('.kse-plugin-mark').text()).toBe('Navide plugin')
+    expect(rowFor(w, 'acme.runner.go').find('.kse-label').text()).toBe('Run tests')
+    // Not the red "disabled" of a built-in row: that would read as a disabled plugin.
+    expect(rowFor(w, 'acme.runner.go').find('.kse-source').classes()).toEqual(['kse-source'])
+    w.unmount()
+  })
+
+  it('binds a suggested key only when the user presses Use', async () => {
+    pluginCommands.value = [entry]
+    const w = mountEditor('acme.runner')
+    expect(bridge.writeKeybindings).not.toHaveBeenCalled()
+    await rowFor(w, 'acme.runner.go').find('.kse-suggestion-use').trigger('click')
+    expect(getUserRules()).toEqual([{ key: 'cmd+alt+t', command: 'acme.runner.go' }])
+    w.unmount()
+  })
+
+  it('offers no Use button for a key that is taken', () => {
+    pluginCommands.value = [{ ...entry, suggestedKey: 'cmd+shift+p' }]
+    const w = mountEditor('acme.runner')
+    const row = rowFor(w, 'acme.runner.go')
+    expect(row.find('.kse-suggestion-taken').exists()).toBe(true)
+    expect(row.find('.kse-suggestion-use').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('keeps the row of a binding whose plugin is gone, and says so', async () => {
+    await saveUserRules([{ key: 'cmd+alt+t', command: 'gone.runner.go' }])
+    const w = mountEditor('gone.runner')
+    expect(w.find('.kse-group-title').text()).toContain('Navide plugin not installed')
+    expect(w.find('.kse-plugin-mark').exists()).toBe(false)
+    expect(rowFor(w, 'gone.runner.go').exists()).toBe(true)
+    w.unmount()
   })
 })

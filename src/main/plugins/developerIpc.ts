@@ -20,7 +20,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { computeDisclosure } from '../../shared/pluginDisclosure'
 import type { MarketplaceDeveloperQuery } from '../../shared/pluginAgentTools'
 import { redactDeveloperSecrets, registryError, type DeveloperAccount, type DeveloperSignInScope } from './developerAccount'
-import type { DeveloperCallResult, DeveloperPublicState, StagedPackage } from '../../shared/marketplaceDeveloper'
+import type { DeveloperCallResult, DeveloperMembers, DeveloperPublicState, StagedPackage } from '../../shared/marketplaceDeveloper'
 import { isManifestV2 } from './pluginManifest'
 import { PackageStagingStore } from './pluginStagingStore'
 
@@ -52,14 +52,16 @@ export interface DeveloperIpcDeps {
 const TARGET = /^[a-z0-9][a-z0-9-]{0,63}$/
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 const NAME_PART = /^[a-z0-9][a-z0-9-]*$/
+/** A Navide Cloud account id as the Registry stores it (self_service.MAX_MEMBER_ID_LENGTH). */
+const MEMBER_ID = /^[^\s/]{1,128}$/
 /** How long a staged package waits for Submit; after that the form says it
  * expired and the package is chosen again. */
 const STAGE_TTL_MS = 60 * 60 * 1000
 
 function callResult(res: { status: number; body: unknown }, ok: (status: number) => boolean): DeveloperCallResult {
   if (ok(res.status)) return { ok: true, status: res.status, body: res.body }
-  const { code, message } = registryError(res.body)
-  return { ok: false, status: res.status, code, message }
+  const { code, message, doc } = registryError(res.body)
+  return { ok: false, status: res.status, code, message, doc }
 }
 
 function errorCodeFor(res: DeveloperCallResult & { ok: false }): string {
@@ -108,6 +110,21 @@ export function versionView(item: unknown): Record<string, unknown> {
     submitted_at: row.submitted_at ?? null,
     reviewed_at: row.reviewed_at ?? null,
   }
+}
+
+/** /api/publisher/me/members as the page and the status tool read it: ids, roles and dates only. */
+export function membersView(body: unknown): DeveloperMembers {
+  const record = asRecord(body)
+  const role = record.your_role === 'owner' || record.your_role === 'publisher' ? record.your_role : null
+  const items = (Array.isArray(record.members) ? record.members : []).map((item) => {
+    const row = asRecord(item)
+    return {
+      member_id: typeof row.member_id === 'string' ? row.member_id : '',
+      role: row.role === 'owner' ? 'owner' as const : 'publisher' as const,
+      added_at: typeof row.added_at === 'string' ? row.added_at : null,
+    }
+  })
+  return { your_role: role, items }
 }
 
 /** Whether `url` is a Registry on this computer (O3): the host name is exactly
@@ -175,6 +192,8 @@ export function createDeveloperQueryHandler(
       }
       const res = callResult(await account.application(), (s) => s === 200)
       if (!res.ok) return { ok: false, error: res.message || `the Registry answered ${res.status}`, error_code: errorCodeFor(res) }
+      // Read-only: who may publish under the signed-in namespace (null without a publisher sign-in).
+      const membersRes = state.signedIn.publisher ? callResult(await account.members(), (s) => s === 200) : null
       return {
         ok: true,
         result: {
@@ -182,7 +201,9 @@ export function createDeveloperQueryHandler(
           signed_in: { account: state.signedIn.account, publisher: state.signedIn.publisher },
           namespace: state.namespace,
           key_registered: state.keyRegistered,
+          key_conflict_fingerprint: state.keyConflictFingerprint,
           application: applicationView(res.body),
+          members: membersRes?.ok ? membersView(membersRes.body) : null,
         },
       }
     }
@@ -221,7 +242,8 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     return account.signIn(scope as DeveloperSignInScope)
   })
   on('developer:signOut', (): DeveloperPublicState => account.signOut())
-  on('developer:registerKey', (): Promise<DeveloperPublicState> => account.registerKey())
+  on('developer:registerKey', (_event, raw): Promise<DeveloperPublicState> =>
+    account.registerKey({ replace: asRecord(raw).replace === true }))
   on('developer:application', async (): Promise<DeveloperCallResult> =>
     callResult(await account.application(), (s) => s === 200))
   on('developer:submitApplication', async (_event, raw): Promise<DeveloperCallResult> => {
@@ -241,6 +263,25 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     if (!res.ok) return res
     const body = asRecord(res.body)
     return { ...res, body: { namespace: body.namespace ?? null, items: (Array.isArray(body.items) ? body.items : []).map(versionView) } }
+  })
+  on('developer:members', async (): Promise<DeveloperCallResult> => {
+    const res = callResult(await account.members(), (s) => s === 200)
+    return res.ok ? { ...res, body: membersView(res.body) } : res
+  })
+  // Adding or removing a member is the user's own action in the main window
+  // (authorize above); no agent tool reaches these.
+  const memberId = (raw: unknown): string => {
+    const id = asRecord(raw).memberId
+    if (typeof id !== 'string' || !MEMBER_ID.test(id.trim())) throw new Error('give a Navide Cloud account id')
+    return id.trim()
+  }
+  on('developer:addMember', async (_event, raw): Promise<DeveloperCallResult> => {
+    const res = callResult(await account.addMember(memberId(raw)), (s) => s === 201)
+    return res.ok ? { ...res, body: membersView(res.body) } : res
+  })
+  on('developer:removeMember', async (_event, raw): Promise<DeveloperCallResult> => {
+    const res = callResult(await account.removeMember(memberId(raw)), (s) => s === 200)
+    return res.ok ? { ...res, body: membersView(res.body) } : res
   })
   const stagePath = (path: string): StagedPackage => {
     if (!isAbsolute(path) || !path.toLowerCase().endsWith('.vsix')) throw new Error('choose a .vsix package')

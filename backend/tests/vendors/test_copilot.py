@@ -1154,3 +1154,16 @@ def test_workspace_and_pane_match_normalize_symlinked_roots(
     assert reader.workspace_match(usage, "") is False
     assert reader.pane_cwd_match(usage, str(link), "p1") is True
     assert reader.pane_cwd_match(usage, str(tmp_path / "elsewhere"), "p1") is False
+
+
+def test_parse_activity_resumes_after_an_append(fake_copilot_root: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    f = _write_session(fake_copilot_root, events=[
+        _session_start(), _user("first"), _assistant("one"),
+        _event("assistant.turn_end", {"turnId": "0"}, eid="ev-te"),
+    ])
+    assert_resumes(CopilotLogReader, f, [
+        _user("second", eid="ev-u2"), _assistant("two", eid="ev-a2"),
+        _event("assistant.turn_end", {"turnId": "1"}, eid="ev-te2"),
+    ], monkeypatch)

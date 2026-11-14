@@ -275,7 +275,10 @@ def test_a_child_that_outlives_the_reap_window_is_still_reported(tmp_path):
         started = time.monotonic()
         survivors = backend._reap_surviving_children(window_s=0.5)
         # A window, not an immediate sweep: it held before judging the child.
-        assert time.monotonic() - started >= 0.5
+        # One clock tick of slack: Windows monotonic ticks ~15.6 ms, and the
+        # subtraction of two tick-aligned floats can land a hair under 0.5.
+        tick = time.get_clock_info("monotonic").resolution
+        assert time.monotonic() - started >= 0.5 - tick
         assert [entry["pid"] for entry in survivors] == [child.pid]
         child.wait(timeout=5)
         assert child.poll() is not None

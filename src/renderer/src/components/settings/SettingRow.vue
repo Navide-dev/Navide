@@ -1,19 +1,43 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { leadSentence } from '../../lib/leadSentence'
 /**
  * A single settings row: title (+ optional description) on the left, a
  * right-aligned `control` slot on the right.
  */
-defineProps<{
-  title: string
+const props = defineProps<{
+  /** Left out when the page title already names the row. */
+  title?: string
   description?: string
+  /**
+   * Show only the description's first sentence; the rest folds into the
+   * shared "Learn more" disclosure under it (for descriptions that would run
+   * past two lines).
+   */
+  foldDescription?: boolean
+  /** Marks a setting a CLI reads once at start: panes already open keep the
+   *  old value until they are rebuilt. */
+  newPanesOnly?: boolean
 }>()
+const folded = computed(() => (props.foldDescription && props.description ? leadSentence(props.description) : null))
 </script>
 
 <template>
   <div class="setting-row">
     <div class="setting-row-text">
-      <div class="setting-row-title">{{ title }}</div>
-      <div v-if="description" class="setting-row-desc">{{ description }}</div>
+      <div v-if="title" class="setting-row-title">
+        {{ title }}<span
+          v-if="newPanesOnly"
+          class="setting-row-applies"
+          data-testid="setting-row-new-panes-only"
+          :title="$t('settings.applies.new-panes-only-tooltip')"
+        >{{ $t('settings.applies.new-panes-only') }}</span>
+      </div>
+      <div v-if="description" class="setting-row-desc"><slot name="description">{{ folded ? folded.lead : description }}</slot></div>
+      <details v-if="folded?.rest" class="settings-more">
+        <summary>{{ $t('action.learn-more') }}</summary>
+        <p>{{ folded.rest }}</p>
+      </details>
     </div>
     <div class="setting-row-control">
       <slot name="control"></slot>
@@ -44,14 +68,30 @@ defineProps<{
   font-weight: 600;
   color: var(--text-bright);
 }
+.setting-row-applies {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-row-desc);
+  font-weight: 500;
+  white-space: nowrap;
+}
 .setting-row-desc {
+  /* A readable measure: wide windows otherwise run a hint to 130+ characters. */
+  max-width: 75ch;
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
 }
+.settings-more { margin-top: 2px; }
 .setting-row-control {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
+  /* Two buttons side by side never touch. */
+  gap: 8px;
   flex-shrink: 0;
   max-width: 100%;
 }

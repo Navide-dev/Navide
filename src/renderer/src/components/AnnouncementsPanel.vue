@@ -11,6 +11,7 @@ import type {
   AnnouncementActionSpec,
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
+  PaneRebuildAnnouncementAction,
   PluginAgentAnnouncementAction,
   QuotaAnnouncementAction,
 } from '../composables/useAnnouncements'
@@ -36,6 +37,8 @@ const emit = defineEmits<{
   'convenience-action': [action: ConvenienceAnnouncementAction]
   /** The undo on an "an agent disabled / enabled a Navide plugin" row. */
   'plugin-agent-action': [action: PluginAgentAnnouncementAction]
+  /** H3: Rebuild on a backend-restart row, for one pane left ended. */
+  'pane-action': [action: PaneRebuildAnnouncementAction]
 }>()
 
 /** Buttons of a row: the typed list, else the single update action. */
@@ -50,6 +53,7 @@ function onAction(action: AnnouncementActionSpec): void {
   else if (action.kind === 'tour') emit('tour', action.version)
   else if (action.kind.startsWith('evolve-')) emit('evolve-action', action as EvolveAnnouncementAction)
   else if (action.kind.startsWith('convenience-')) emit('convenience-action', action as ConvenienceAnnouncementAction)
+  else if (action.kind === 'pane-rebuild') emit('pane-action', action)
   else if (action.kind === 'plugin-agent-undo' || action.kind === 'plugin-agent-downgrade' || action.kind === 'plugin-staged-apply' ||
     action.kind === 'plugin-switch-back') {
     emit('plugin-agent-action', action)
@@ -106,6 +110,8 @@ function actionLabel(action: AnnouncementActionSpec): string {
       return i18n.global.t('plugin-staged.button.apply')
     case 'plugin-switch-back':
       return i18n.global.t('plugin-switch.button.back', { version: action.fromVersion })
+    case 'pane-rebuild':
+      return i18n.global.t('announce.backend-restart.rebuild', { name: action.name })
   }
 }
 

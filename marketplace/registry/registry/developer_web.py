@@ -21,7 +21,16 @@ from . import audit, qualification, review
 from .account_auth import SCOPE_PUBLISHER, Bearer, BearerError, require_bearer
 from .models import Extension, ExtensionVersion, Publisher
 from .plugin_contract.disclosure_scan_contract import card_risk_level, declared_vs_scanned
-from .self_service import QualificationRequired, SelfServiceError, owned_publishers, set_public_key
+from .self_service import (
+    KeyConflict,
+    QualificationRequired,
+    SelfServiceError,
+    add_member,
+    list_members,
+    owned_publishers,
+    remove_member,
+    set_public_key,
+)
 from .signing import public_key_fingerprint
 from .versions import version_channel
 
@@ -37,6 +46,16 @@ class ApplicationRequest(BaseModel):
 
 class KeyRequest(BaseModel):
     public_key: str
+    #: L1d: replace a different key already registered; without it a conflict is a 409.
+    replace: bool = False
+
+
+class MemberRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    member_id: str
+    #: The one role 0.2.40 has; anything else is refused.
+    role: str = "publisher"
 
 
 class UnfreezeRequest(BaseModel):
@@ -76,6 +95,17 @@ def _publisher_bearer(bearer: Bearer) -> Publisher:
     return bearer.publisher
 
 
+def _is_owner(bearer: Bearer, publisher: Publisher) -> bool:
+    """The token was issued to the namespace's owner (or, for an
+    admin-created publisher with no owning account, is its own token)."""
+    return bearer.member_id == publisher.navide_member_id
+
+
+def _require_owner(bearer: Bearer, publisher: Publisher) -> None:
+    if publisher.navide_member_id is None or not _is_owner(bearer, publisher):
+        raise _error(403, "OWNER_ONLY", "only the namespace owner can change its members")
+
+
 def _iso(value) -> str | None:
     if value is None:
         return None
@@ -88,6 +118,13 @@ def _fingerprint(publisher: Publisher) -> str | None:
     try:
         return public_key_fingerprint(publisher.public_key)
     except Exception:  # noqa: BLE001 - an unparsable key reads as unset
+        return None
+
+
+def _pem_fingerprint(pem: str) -> str | None:
+    try:
+        return public_key_fingerprint(pem.strip() + "\n")
+    except Exception:  # noqa: BLE001 - not a key: never the namespace's
         return None
 
 
@@ -221,16 +258,77 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
 
     @router.put("/api/publisher/me/key")
     def publisher_key(request: Request, body: KeyRequest, authorization: str | None = Header(default=None)) -> JSONResponse:
-        publisher = _publisher_bearer(_bearer(request, authorization))
+        bearer = _bearer(request, authorization)
+        publisher = _publisher_bearer(bearer)
         with session_of(request) as session:
             publisher = session.get(Publisher, publisher.id)
+            if not _is_owner(bearer, publisher):
+                # A publisher member signs with the namespace's key (one key
+                # per namespace in 0.2.40); it can confirm that key but never
+                # set or replace it.
+                if body.replace or not publisher.public_key:
+                    raise _error(403, "OWNER_ONLY", "only the namespace owner can set or replace its signing key")
+                if _fingerprint(publisher) != _pem_fingerprint(body.public_key):
+                    raise _error(
+                        409,
+                        "KEY_EXISTS",
+                        "This namespace signs with its owner's key; publish with that key.",
+                        public_key_fingerprint=_fingerprint(publisher),
+                    )
             try:
-                fingerprint = set_public_key(session, publisher, body.public_key)
+                fingerprint = set_public_key(session, publisher, body.public_key, replace=body.replace)
             except QualificationRequired as exc:
                 raise _error(403, exc.code, str(exc)) from exc
+            except KeyConflict as exc:
+                raise _error(409, "KEY_EXISTS", str(exc), public_key_fingerprint=exc.fingerprint) from exc
             except SelfServiceError as exc:
                 raise _error(400, "KEY_INVALID", str(exc)) from exc
         return JSONResponse({"public_key_fingerprint": fingerprint}, headers=_NO_STORE)
+
+    @router.get("/api/publisher/me/members")
+    def publisher_members(request: Request, authorization: str | None = Header(default=None)) -> JSONResponse:
+        bearer = _bearer(request, authorization)
+        publisher = _publisher_bearer(bearer)
+        with session_of(request) as session:
+            members = list_members(session, publisher)
+        role = "owner" if _is_owner(bearer, publisher) else "publisher"
+        return JSONResponse(
+            {"namespace": publisher.name, "your_role": role, "members": members}, headers=_NO_STORE
+        )
+
+    @router.post("/api/publisher/me/members", status_code=201)
+    def publisher_add_member(
+        request: Request, body: MemberRequest, authorization: str | None = Header(default=None)
+    ) -> JSONResponse:
+        bearer = _bearer(request, authorization)
+        publisher = _publisher_bearer(bearer)
+        _require_owner(bearer, publisher)
+        if body.role != "publisher":
+            raise _error(422, "ROLE_INVALID", "the only member role is 'publisher'")
+        with session_of(request) as session:
+            publisher = session.get(Publisher, publisher.id)
+            try:
+                add_member(session, publisher, member_id=body.member_id, actor=bearer.actor)
+            except QualificationRequired as exc:
+                raise _error(409, exc.code, str(exc)) from exc
+            except SelfServiceError as exc:
+                raise _error(409, "MEMBER_INVALID", str(exc)) from exc
+            members = list_members(session, publisher)
+        return JSONResponse({"namespace": publisher.name, "members": members}, status_code=201, headers=_NO_STORE)
+
+    @router.delete("/api/publisher/me/members/{member_id}")
+    def publisher_remove_member(
+        request: Request, member_id: str, authorization: str | None = Header(default=None)
+    ) -> JSONResponse:
+        bearer = _bearer(request, authorization)
+        publisher = _publisher_bearer(bearer)
+        _require_owner(bearer, publisher)
+        with session_of(request) as session:
+            publisher = session.get(Publisher, publisher.id)
+            if not remove_member(session, publisher, member_id=member_id, actor=bearer.actor):
+                raise _error(404, "NOT_FOUND", "that account is not a publisher of this namespace")
+            members = list_members(session, publisher)
+        return JSONResponse({"namespace": publisher.name, "members": members}, headers=_NO_STORE)
 
     @router.get("/api/publisher/me/versions")
     def my_versions(
@@ -264,6 +362,14 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
         }
         context.update(extra or {})
         return page(request, "developer_apply.html", context, status=status)
+
+    @router.get("/developer")
+    def landing(request: Request) -> Response:
+        # The console's one page open without signing in: the seven steps,
+        # what an application needs, what to do before signing in. Like every
+        # console page it is noindex; discovery is the storefront's job.
+        enabled = request.app.state.registry.settings.cloud_auth_enabled
+        return page(request, "developer_landing.html", {"enabled": enabled})
 
     @router.get("/developer/apply")
     @guarded

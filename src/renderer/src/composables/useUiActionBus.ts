@@ -2,6 +2,7 @@ import { watch } from 'vue'
 import { invokeCommand, listCommands } from '@navide/plugin-ui/shared'
 import { currentDiagnosticSeq, takeDiagnosticsSince } from '../lib/uiDiagnostics'
 import { WINDOW_INSTANCE_ID } from '../lib/windowInstanceId'
+import { switchRequester } from '../lib/agentAccountSwitch'
 
 /**
  * Bridges an external MCP client's `ui.invoke.request` broadcasts into this
@@ -82,6 +83,10 @@ export interface UseUiActionBusOptions {
    *  one. A focus re-announces with focused true, so the backend prefers the
    *  window the user touched last. */
   focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+  /** Commands only a person may run, however they are registered: this bus
+   *  serves agents, so it refuses them with ui_human_only. A keystroke does
+   *  not come through here. Absent: nothing extra is refused. */
+  isHumanOnlyCommand?: (action: string) => boolean
   /** The window's account actions (ui.accounts.*), reached from MCP through
    *  their dedicated tools only. They are deliberately NOT in the command
    *  registry: a keybinding or anything else that runs registered commands
@@ -91,9 +96,24 @@ export interface UseUiActionBusOptions {
    *  backend. Absent (tests, plugin hosts): refused. */
   accountActions?: {
     signIn: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
-    /** ui.accounts.switch (cli_account_switch). Absent: refused. */
+    /** ui.accounts.switch (cli_account_switch, the Telegram account button).
+     *  `callerPaneId` is '' for a switch the backend makes for a chat. Absent: refused. */
     switch?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
+    /** ui.accounts.channelMenu: the rows of a chat's /account menu (channels
+     *  layer, never an MCP tool). Absent: refused. */
+    channelMenu?: (args: Record<string, unknown>, callerPaneId: string, signal: AbortSignal) => unknown | Promise<unknown>
   }
+}
+
+/** A request's args as the window acts on them. A pipeline run started over
+ *  the bus never counts as started by the person at the window: from a pane
+ *  it is an agent's, and from the backend itself a schedule's or a webhook's
+ *  when it says so, an agent's otherwise (recorded with its plugin nodes). */
+function remoteArgs(req: Partial<UiInvokeRequest>): Record<string, unknown> | undefined {
+  if (req.action !== 'ui.pipeline.start') return req.args ?? undefined
+  const said = req.args?.origin
+  const origin = !req.caller_pane_id && (said === 'schedule' || said === 'webhook') ? said : 'agent'
+  return { ...(req.args ?? {}), origin }
 }
 
 function errorMessage(err: unknown): string {
@@ -111,7 +131,7 @@ function errorMessage(err: unknown): string {
  *  is either read-only (snapshot, list_actions, ui.pane.getStatus,
  *  ui.diagnostics.read — they describe the window as it is), window-scoped
  *  (settings), or keyed by pane id, and stays on the wider rule. */
-const WORKSPACE_SCOPED_ACTIONS = new Set([
+export const WORKSPACE_SCOPED_ACTIONS = new Set([
   'ui.pane.create',
   'ui.window.openGit',
   'ui.preview.show',
@@ -272,6 +292,9 @@ export async function handleUiInvokeRequest(
   let ok = true
   let result: unknown
   let error: string | undefined
+  // A handler's coded refusal (code/params on the Error it threw), handed on
+  // so an MCP caller gets an error_code next to the sentence.
+  let coded: { code?: string; params?: Record<string, unknown> } = {}
   try {
     if (wrongProject) {
       ok = false
@@ -292,18 +315,27 @@ export async function handleUiInvokeRequest(
       if (!req.action) {
         ok = false
         error = 'action is required for op "invoke"'
+      } else if (opts.isHumanOnlyCommand?.(req.action)) {
+        ok = false
+        error = `${req.action} is a Navide plugin command; only the user can run it. An agent reaches a plugin through the agent tools it declares.`
+        coded = { code: 'ui_human_only' }
       } else if (req.action.startsWith(ACCOUNT_ACTION_PREFIX)) {
         const handler = req.action === 'ui.accounts.signIn'
           ? opts.accountActions?.signIn
-          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch : undefined
-        if (!req.caller_pane_id) {
+          : req.action === 'ui.accounts.switch' ? opts.accountActions?.switch
+            : req.action === 'ui.accounts.channelMenu' ? opts.accountActions?.channelMenu : undefined
+        // A switch the backend makes for a chat button (Telegram) names its
+        // requester and has no calling pane; only the backend can send one,
+        // since ui_invoke refuses every ui.accounts.* action.
+        const backendSwitch = req.action === 'ui.accounts.switch' && !!switchRequester(req.args ?? {})
+        if (!req.caller_pane_id && !backendSwitch) {
           ok = false
           error = `${req.action} is reachable only from a CLI pane, through its own MCP tool`
         } else if (!handler) {
           ok = false
           error = `unknown account action: ${req.action}`
         } else {
-          result = await handler(req.args ?? {}, req.caller_pane_id, signal)
+          result = await handler(req.args ?? {}, req.caller_pane_id ?? '', signal)
         }
       } else if (req.action === 'ui.pane.reclaim' && req.caller_pane_id && reclaimNamesCaller(req)) {
         // A batch can half succeed: the caller's own pane becomes one more
@@ -317,16 +349,18 @@ export async function handleUiInvokeRequest(
           const outcome = await invokeCommand(req.action, { ...(req.args ?? {}), paneId: rest })
           ok = outcome.ok
           error = outcome.error
+          coded = { code: outcome.code, params: outcome.params }
           const answer = outcome.result as { reclaimed?: unknown[]; refused?: unknown[] } | undefined
           // Kept on a failure too: the caller must still learn its own id was taken out.
           const base = ok && answer ? answer : { reclaimed: [] }
           result = { ...base, refused: [...(base.refused ?? []), own] }
         }
       } else {
-        const outcome = await invokeCommand(req.action, req.args ?? undefined)
+        const outcome = await invokeCommand(req.action, remoteArgs(req))
         ok = outcome.ok
         result = outcome.result
         error = outcome.error
+        coded = { code: outcome.code, params: outcome.params }
       }
     } else if (req.op === 'snapshot') {
       result = await opts.buildSnapshot()
@@ -343,6 +377,8 @@ export async function handleUiInvokeRequest(
 
   const diagnostics = takeDiagnosticsSince(diagnosticSeq)
   const payload: Record<string, unknown> = { request_id: req.request_id, ok, result, error: error ?? null }
+  if (!ok && coded.code) payload.code = coded.code
+  if (!ok && coded.params) payload.params = coded.params
   if (diagnostics.length > 0) {
     payload.warnings = diagnostics.map((d) => `[${d.code}] ${d.message}`)
   }

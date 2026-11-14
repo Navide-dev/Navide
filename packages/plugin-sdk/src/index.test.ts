@@ -5,10 +5,15 @@ import {
   createPluginViewRuntimeClient,
   createPluginBackendClient,
   PluginBackendError,
+  PluginError,
+  createPluginSecretStore,
   createPluginSettingsStore,
   createPluginViewState,
+  getHostLocale,
   hideView,
   onBackendStatus,
+  onAgentToolCall,
+  onHostLocaleChanged,
   onOpenTarget,
   openContributionWindow,
   viewReady,
@@ -761,7 +766,7 @@ describe('standalone view runtime functions', () => {
     expect(Object.isFrozen(client)).toBe(true)
     expect(Object.keys(client)).toEqual([
       'openDetail', 'onDetailTarget', 'onPrepareClose', 'onCloseCancelled', 'openContributionWindow',
-      'ready', 'hide', 'registerReceiver', 'onOpenTarget', 'onBackendStatus',
+      'ready', 'hide', 'registerReceiver', 'onOpenTarget', 'onAgentToolCall', 'onBackendStatus',
     ])
   })
 
@@ -812,6 +817,22 @@ describe('standalone view runtime functions', () => {
     expect(statuses).toEqual(['connected'])
   })
 
+  it('registers a view-served agent tool handler through the bridge, and says when the Host is too old', () => {
+    const remove = vi.fn()
+    const bridge = { ready: vi.fn(), onOpenTarget: vi.fn(() => vi.fn()), onAgentToolCall: vi.fn(() => remove) }
+    ;(globalThis as unknown as { nav: typeof bridge }).nav = bridge
+    const handler = vi.fn(() => ({ ok: true }))
+    const registered = onAgentToolCall('hello_greet', handler)
+    expect(Object.isFrozen(registered)).toBe(true)
+    expect(registered.dispose).toBe(remove)
+    expect(bridge.onAgentToolCall).toHaveBeenCalledWith('hello_greet', handler)
+    expect(createPluginViewRuntimeClient().onAgentToolCall('hello_greet', handler).dispose).toBe(remove)
+    expect(() => onAgentToolCall('', handler)).toThrow('Agent tool name is invalid.')
+    expect(() => onAgentToolCall('hello_greet', undefined as unknown as () => void)).toThrow('Agent tool handler is invalid.')
+    ;(globalThis as unknown as { nav: object }).nav = { ready: vi.fn(), onOpenTarget: vi.fn() }
+    expect(() => onAgentToolCall('hello_greet', handler)).toThrow('0.2.39 or later')
+  })
+
   it('reports an unavailable runtime the same way as the client', () => {
     expect(() => viewReady()).toThrow('Plugin view runtime is unavailable.')
     expect(() => onBackendStatus(vi.fn())).toThrow('Plugin capability runtime is unavailable.')
@@ -860,5 +881,87 @@ describe('createPluginViewState', () => {
     state.save('a')
     await expect(state.flush()).resolves.toBeUndefined()
     expect(() => createPluginViewState('', 0, { context: { capabilities: { invoke } } as unknown as Pick<PluginContext, 'capabilities'> })).toThrow(TypeError)
+  })
+})
+
+describe('Host locale', () => {
+  it('reads ui.getLocale and follows ui.localeChanged', async () => {
+    let localeListener: ((payload: unknown) => void) | undefined
+    const unsubscribe = vi.fn()
+    const bridge: TestCapabilityBridge = {
+      callCapability: vi.fn(async () => ({ reqId: 'locale', ok: true, result: { locale: 'ja-JP' } })),
+      on: vi.fn((_event: string, listener: (payload: unknown) => void) => {
+        localeListener = listener
+        return unsubscribe
+      }),
+    }
+    ;(globalThis as unknown as { nav: TestCapabilityBridge }).nav = bridge
+
+    await expect(getHostLocale()).resolves.toBe('ja-JP')
+    expect(bridge.callCapability).toHaveBeenCalledWith('ui', 'getLocale', {})
+
+    const seen: string[] = []
+    const subscription = onHostLocaleChanged((locale) => seen.push(locale))
+    expect(bridge.on).toHaveBeenCalledWith('ui.localeChanged', expect.any(Function))
+    localeListener?.({ locale: 'zh-TW' })
+    expect(seen).toEqual(['zh-TW'])
+    subscription.dispose()
+    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(() => onHostLocaleChanged(null as never)).toThrow(PluginError)
+  })
+})
+
+describe('createPluginSecretStore', () => {
+  it('maps each method to its secrets.* capability and passes nothing else', async () => {
+    const invoke = vi.fn(async () => ({ ok: true }))
+    const secrets = createPluginSecretStore({ capabilities: { invoke } } as never)
+    const value = ['sk', 'test', 'sdk'].join('-')
+    await secrets.set('API_KEY', value)
+    await secrets.get('API_KEY')
+    await secrets.delete('API_KEY')
+    await secrets.list()
+    expect(invoke.mock.calls).toEqual([
+      ['secrets.set', { name: 'API_KEY', value }],
+      ['secrets.get', { name: 'API_KEY' }],
+      ['secrets.delete', { name: 'API_KEY' }],
+      ['secrets.list', {}],
+    ])
+  })
+})
+
+const SDK_EXPORTS = [
+  'PluginBackendError',
+  'PluginError',
+  'createPluginBackendClient',
+  'createPluginCapabilityClient',
+  'createPluginSecretStore',
+  'createPluginSettingsStore',
+  'createPluginViewRuntimeClient',
+  'createPluginViewState',
+  'definePlugin',
+  'getHostLocale',
+  'hideView',
+  'hostApiVersion',
+  'onAgentToolCall',
+  'onBackendStatus',
+  'onHostLocaleChanged',
+  'onOpenTarget',
+  'openContributionWindow',
+  'viewReady',
+]
+
+describe('public surface', () => {
+  it('keeps its exports', async () => {
+    expect(Object.keys(await import('./index')).sort()).toEqual(SDK_EXPORTS)
+  })
+
+  it('reads the Host API version, and null from a Host too old to say', async () => {
+    const { hostApiVersion } = await import('./index')
+    const nav = (globalThis as { nav?: unknown }).nav
+    ;(globalThis as { nav?: unknown }).nav = { apiVersion: '1.0.0' }
+    expect(hostApiVersion()).toBe('1.0.0')
+    ;(globalThis as { nav?: unknown }).nav = {}
+    expect(hostApiVersion()).toBeNull()
+    ;(globalThis as { nav?: unknown }).nav = nav
   })
 })

@@ -618,3 +618,18 @@ def test_events_attribute_to_the_pane_workspace_by_cwd(sessions_root: Path, tmp_
 
     assert attr.attribute(usage("/w/proj")).workspace_path == "/w/proj"
     assert attr.attribute(usage("/w/other")).workspace_path is None
+
+
+def test_parse_activity_resumes_after_an_append(sessions_root: Path, monkeypatch) -> None:
+    from tests.activity_resume_support import assert_resumes
+
+    def turn(prompt: str, reply: str) -> list[dict]:
+        return [
+            _msg("user", [{"type": "text", "text": prompt}]),
+            _msg("assistant", [{"type": "text", "text": reply}]),
+            {"type": "agent_turn_outcome", "turnId": prompt, "reason": "completed",
+             "resultKind": "text"},
+        ]
+
+    path = _write_session(sessions_root, "/w", "a", [_session_start("a", "/w"), *turn("first", "one")])
+    assert_resumes(DroidLogReader, path, turn("second", "two"), monkeypatch)

@@ -358,7 +358,7 @@ def test_wire_call_routes_through_the_web_bridge_port(monkeypatch: pytest.Monkey
 def test_wire_unknown_method_is_method_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
     out = io.BytesIO()
     monkeypatch.setattr(browser.sys, "stdout", type("S", (), {"buffer": out})())
-    browser._handle(_call_frame(2, "browser.evaluate", {}))
+    browser._handle(_call_frame(2, "browser.unknown", {}))
     frame = json.loads(out.getvalue().decode().strip())
     assert frame["error"]["code"] == -32601
 

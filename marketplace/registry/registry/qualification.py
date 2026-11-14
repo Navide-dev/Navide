@@ -519,6 +519,18 @@ def revoke(session: Session, member_id: str, *, actor: str, reason: str) -> Revo
     publisher_ids = [p.id for p in publishers]
 
     tokens = _revoke_publisher_tokens(session, publisher_ids, now)
+    # Publish tokens and login codes it holds as a publisher member of other
+    # namespaces (they already stop working once it is not approved).
+    tokens += session.execute(
+        update(PublisherToken)
+        .where(PublisherToken.navide_member_id == member_id, PublisherToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    ).rowcount
+    session.execute(
+        update(CliAuthCode)
+        .where(CliAuthCode.navide_member_id == member_id, CliAuthCode.used_at.is_(None))
+        .values(used_at=now)
+    )
     tokens += session.execute(
         update(AccountToken)
         .where(AccountToken.navide_member_id == member_id, AccountToken.revoked_at.is_(None))
