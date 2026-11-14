@@ -63,6 +63,12 @@ TIMEOUT_RE = re.compile(r"\+{3,} Timeout \+{3,}")
 PY_SPY_ENV = "NAVIDE_CI_PY_SPY"
 STACK_DIR = os.path.join("test-results", "ci")
 STACK_SECONDS = 60
+# py-spy lists only threads that still have a Python thread state; the thread
+# a stalled join waits on had none left in that dump. The runner image's cdb
+# (Windows SDK) attaches non-invasively and walks every native thread.
+CDB_ENV = "NAVIDE_CI_CDB"
+CDB_COMMANDS = ".symfix+ C:\\cdb-symbols; .reload; ~*k 80; !locks; q"
+CDB_SECONDS = 300
 CREATE_NO_WINDOW = 0x08000000
 PROBE_SECONDS = 60
 PROBE_REAP_SECONDS = 5
@@ -245,10 +251,15 @@ def _stall_diagnostics(job) -> str:
 
 
 def _stack_dumps(pids: list[int]) -> list[str]:
-    """`py-spy dump --native` of each python in the job, saved under STACK_DIR
-    (uploaded with the diagnostics); one row per process names the file."""
-    py_spy = os.environ.get(PY_SPY_ENV)
-    if not py_spy:
+    """`py-spy dump --native` and `cdb -pv` stacks of each python in the job,
+    saved under STACK_DIR (uploaded with the diagnostics); one row per dump
+    names the file."""
+    tools = []
+    if os.environ.get(PY_SPY_ENV):
+        tools.append(("py-spy", lambda pid: [os.environ[PY_SPY_ENV], "dump", "--pid", str(pid), "--native"], STACK_SECONDS))
+    if os.environ.get(CDB_ENV):
+        tools.append(("cdb", lambda pid: [os.environ[CDB_ENV], "-pv", "-p", str(pid), "-c", CDB_COMMANDS], CDB_SECONDS))
+    if not tools:
         return []
     rows = []
     for pid in pids:
@@ -257,24 +268,24 @@ def _stack_dumps(pids: list[int]) -> list[str]:
                 continue
         except psutil.Error:
             continue
-        path = os.path.join(STACK_DIR, f"py-spy-{pid}-{int(time.time())}.txt")
-        try:
-            os.makedirs(STACK_DIR, exist_ok=True)
-            with open(path, "wb") as out:
-                proc = subprocess.Popen(
-                    [py_spy, "dump", "--pid", str(pid), "--native"],
-                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-                try:
-                    rc = proc.wait(timeout=STACK_SECONDS)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    rc = f"killed after {STACK_SECONDS}s"
-        except OSError as exc:
-            rows.append(f"    py-spy {pid}: {type(exc).__name__}: {exc}")
-            continue
-        rows.append(f"    py-spy {pid}: exit {rc}, stacks in {path}")
+        for name, argv, limit in tools:
+            path = os.path.join(STACK_DIR, f"{name}-{pid}-{int(time.time())}.txt")
+            try:
+                os.makedirs(STACK_DIR, exist_ok=True)
+                with open(path, "wb") as out:
+                    proc = subprocess.Popen(
+                        argv(pid), stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                        creationflags=CREATE_NO_WINDOW,
+                    )
+                    try:
+                        rc = proc.wait(timeout=limit)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        rc = f"killed after {limit}s"
+            except OSError as exc:
+                rows.append(f"    {name} {pid}: {type(exc).__name__}: {exc}")
+                continue
+            rows.append(f"    {name} {pid}: exit {rc}, stacks in {path}")
     return rows
 
 

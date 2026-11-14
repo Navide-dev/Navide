@@ -19,11 +19,12 @@ All notable released changes to Navide will be documented in this file. The form
 - Backend (0.2.43): routing a Codex transcript, each Stop hook and the link status no longer read the disk on the backend's event loop, which stalled it for seconds while many panes restored.
 - Navide Registry (0.2.43): a plugin upload is written to a temporary file as it arrives and checked from there, instead of being held whole in memory; a 32 MiB package peaked at 66.3 MiB of heap before and 4.3 MiB now. Validation, signature checks and scan results are unchanged. Takes effect with the next Registry deployment.
 - CI (0.2.43): the Dependency audit job blocks on high and critical Python advisories only, rated from OSV; low and moderate ones are printed as warnings. An advisory with no rating, a failed lookup or a failed pip-audit still blocks.
-- Dependencies (0.2.43): setup-uv 10.3.3, pywinpty 3.1.2, pytest 9.2.0, tzdata 2026.6, websockets 17.4, @playwright/test 1.65.0, koffi 3.3.7, mermaid 12.3.0 and ws 8.22.1 (dependabot #841, #847, #848, #849, #851, #857, #859, #860, #861).
+- Dependencies (0.2.43): setup-uv 10.3.3, pytest 9.2.0, tzdata 2026.6, websockets 17.4, @playwright/test 1.65.0, koffi 3.3.7, mermaid 12.3.0 and ws 8.22.1 (dependabot #841, #847, #848, #849, #851, #857, #859, #860, #861).
 - Plugins (0.2.43): the shared plugin UI strings changed for the Tools-not-connected notice, the Guard `dynamic-path-read` rule and the Marketplace Cloud sign-in, so the official plugins move to Navide Browser 1.1.4, Git 1.0.7, Mini-IDE 1.0.6, Plans 1.1.6.
 
 ### Fixed
 
+- Windows (0.2.43): pywinpty stays at 3.1.0 and is held below 3.1.1. Version 3.1.2 (winpty-rs 1.0.8) closes a handle that a background thread of its own still waits on after a terminal closes; Windows can hand that handle to a new lock in the backend, and the stray wait then swallows the lock's wake-up, leaving a thread blocked for good. It showed as Windows CI shards stalling between two tests.
 - MCP (0.2.43): when many Claude panes restored at once, some gave up their connection to Navide's tools and stayed without them until `/mcp` was run by hand (13 panes on 2026-11-12). The longer connect budget, the batched cold restore and the event-loop fix above address it, and the new notice and Reconnect cover a pane that still does not connect.
 - Windows (0.2.43): reopening a workspace no longer adds an empty "Default 0/0" tab beside the tab holding its restored panes.
 - Accounts (0.2.43): adding, renaming or removing an account and closing the window that asked right away no longer leaves other windows' account lists and quota badges on old data; the change notice now always reaches every window.

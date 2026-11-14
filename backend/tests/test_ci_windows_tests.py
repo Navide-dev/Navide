@@ -332,6 +332,7 @@ def test_a_stall_saves_py_spy_native_stacks_of_each_python(tmp_path, monkeypatch
     tests (2026-11-14), so a stall also reads py-spy's stacks from outside."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv(ci_windows_tests.PY_SPY_ENV, "py-spy.exe")
+    monkeypatch.delenv(ci_windows_tests.CDB_ENV, raising=False)
     names = {11: "python.exe", 12: "conhost.exe"}
     monkeypatch.setattr(ci_windows_tests.psutil, "Process", lambda pid: types.SimpleNamespace(name=lambda: names[pid]))
     calls = []
@@ -357,4 +358,33 @@ def test_a_stall_saves_py_spy_native_stacks_of_each_python(tmp_path, monkeypatch
 
 def test_without_py_spy_a_stall_reads_no_stacks(monkeypatch):
     monkeypatch.delenv(ci_windows_tests.PY_SPY_ENV, raising=False)
+    monkeypatch.delenv(ci_windows_tests.CDB_ENV, raising=False)
     assert ci_windows_tests._stack_dumps([11]) == []
+
+
+def test_a_stall_also_saves_cdb_stacks_of_every_native_thread(tmp_path, monkeypatch):
+    """py-spy lists only threads with a Python thread state; the thread the
+    stalled join waited on had none, so cdb walks the native ones too."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv(ci_windows_tests.PY_SPY_ENV, raising=False)
+    monkeypatch.setenv(ci_windows_tests.CDB_ENV, "cdb.exe")
+    monkeypatch.setattr(ci_windows_tests.psutil, "Process", lambda pid: types.SimpleNamespace(name=lambda: "python.exe"))
+    calls = []
+
+    class _Cdb:
+        def __init__(self, args, stdout, **_kwargs):
+            calls.append(args)
+
+        def wait(self, timeout=None):
+            assert timeout == ci_windows_tests.CDB_SECONDS
+            raise ci_windows_tests.subprocess.TimeoutExpired("cdb", timeout)
+
+        def kill(self):
+            calls.append("killed")
+
+    monkeypatch.setattr(ci_windows_tests.subprocess, "Popen", _Cdb)
+
+    rows = ci_windows_tests._stack_dumps([21])
+
+    assert calls == [["cdb.exe", "-pv", "-p", "21", "-c", ci_windows_tests.CDB_COMMANDS], "killed"]
+    assert rows[0].startswith(f"    cdb 21: exit killed after {ci_windows_tests.CDB_SECONDS}s, stacks in ")
