@@ -215,6 +215,11 @@ class Settings:
     def storage_root(self) -> Path:
         return self.data_dir / "packages"
 
+    @property
+    def upload_dir(self) -> Path:
+        """Where an upload is spooled while it is checked (unnamed temp files)."""
+        return self.data_dir / "uploads"
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)

@@ -24,6 +24,7 @@ from .models import Extension, ExtensionVersion, Publisher
 from .packs import pack_conflict
 from .registry_trust import RegistryTrustSigner
 from .repository import RegistryRepository
+from .package import PackageSource, source_size
 from .secret_scan import scan_package
 from .similarity import check_extension_name
 from .trust import compute_trust_tier, sensitive_capabilities
@@ -87,7 +88,7 @@ def submission_report(
     *,
     namespace: str,
     name: str,
-    data: bytes,
+    data: PackageSource,
     manifest: dict,
     signature_present: bool,
     size_limit: int,
@@ -111,7 +112,7 @@ def submission_report(
         "native_backend": has_backend,
         "capabilities": capabilities,
         "sensitive_capabilities": sensitive_capabilities(capabilities),
-        "size": len(data),
+        "size": source_size(data),
         "size_limit": size_limit,
     }
 
