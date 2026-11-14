@@ -9575,6 +9575,18 @@ async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction)
   announcements.dropBackendRestartPane(action.paneId)
 }
 
+/** Reconnect a pane whose Navide tools never connected: the same-session
+ *  rebuild (a fresh CLI on the same conversation dials the tool server anew).
+ *  Only while the pane is idle — a rebuild ends the CLI's background
+ *  processes — and nothing is typed into it: /mcp is an interactive menu. */
+async function reconnectPaneMcp(paneId: string): Promise<void> {
+  if (paneRefs[paneId]?.displayStatus !== 'idle') {
+    notifyRestore.toast(i18n.global.t('pane.terminal.mcp-reconnect-busy'), { type: 'info' })
+    return
+  }
+  await rebuildPaneViaResume(paneId, { suppressBusyToast: true })
+}
+
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
  *  the account-switch restart aggregate silent failures into one toast. */
@@ -18600,10 +18612,16 @@ backend.on('mcp.never_connected', (raw) => {
   const pane = panes.value.find((p) => p.id === ev?.pane_id)
   if (!pane) return
   pane.mcpNeverConnected = true
+  const paneId = pane.id
   const name = ev.name || pane.messagingName || pane.agentLabel
   const title = i18n.global.t('pane.terminal.mcp-never-connected-title', { name })
   const body = i18n.global.t('pane.terminal.mcp-never-connected-body', { name })
-  notifyRestore.toast(body, { type: 'error', title, duration: 15000 })
+  notifyRestore.toast(body, {
+    type: 'error',
+    title,
+    duration: 15000,
+    action: { label: i18n.global.t('pane.terminal.mcp-reconnect'), run: () => { void reconnectPaneMcp(paneId) } },
+  })
   sysNotify.notifyPaneState(pane.id, 'attention', title, body)
 })
 
@@ -26601,6 +26619,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
           :mcp-never-connected="p.mcpNeverConnected"
+          :reconnect-mcp="() => reconnectPaneMcp(p.id)"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"

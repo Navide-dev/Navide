@@ -30,4 +30,18 @@ describe('a pane whose Navide tools never connected', () => {
   it('passes the flag to the pane', () => {
     expect(appSource).toContain(':mcp-never-connected="p.mcpNeverConnected"')
   })
+
+  it('offers Reconnect on the toast and the badge, through the idle-only rebuild', () => {
+    const body = handler('mcp.never_connected')
+    expect(body).toContain("label: i18n.global.t('pane.terminal.mcp-reconnect')")
+    expect(body).toContain('run: () => { void reconnectPaneMcp(paneId) }')
+    expect(appSource).toContain(':reconnect-mcp="() => reconnectPaneMcp(p.id)"')
+    const at = appSource.indexOf('async function reconnectPaneMcp(')
+    const fn = appSource.slice(at, appSource.indexOf('\n}\n', at))
+    expect(fn).toContain("if (paneRefs[paneId]?.displayStatus !== 'idle')")
+    expect(fn).toContain("'pane.terminal.mcp-reconnect-busy'")
+    expect(fn).toContain('await rebuildPaneViaResume(paneId, { suppressBusyToast: true })')
+    // Never types into the pane: /mcp is an interactive menu.
+    expect(fn).not.toMatch(/sendInput|\/mcp/)
+  })
 })

@@ -89,4 +89,13 @@ describe('TerminalPane – login-expired badge', () => {
     await wrapper.setProps({ mcpNeverConnected: false })
     expect(wrapper.find('.mcp-never-connected-inline').exists()).toBe(false)
   })
+
+  it('asks App.vue to reconnect when the tools-not-connected badge is clicked', async () => {
+    const reconnectMcp = vi.fn()
+    wrapper = mountPane({ mcpNeverConnected: true, reconnectMcp })
+    const badge = wrapper.find('.mcp-never-connected-inline')
+    expect(badge.attributes('role')).toBe('button')
+    await badge.trigger('click')
+    expect(reconnectMcp).toHaveBeenCalledTimes(1)
+  })
 })

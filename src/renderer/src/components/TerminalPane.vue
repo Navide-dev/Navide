@@ -88,6 +88,9 @@ interface Props {
   /** Runtime-only: the pane's CLI has been up for minutes without ever
    *  reaching Navide's tool server (backend mcp_connect_watch). */
   mcpNeverConnected?: boolean
+  /** Badge click: App.vue reconnects the pane (idle-only same-session rebuild).
+   *  A callback, not an emit — the emits list is past what vue-tsc infers. */
+  reconnectMcp?: () => void
   /** The agent CLI's non-zero exit code, shown as a badge while the pane is
    *  exited; null for a clean exit or a pane that never exited. */
   exitCode?: number | null
@@ -902,7 +905,9 @@ onMounted(() => {
         <span
           v-if="mcpNeverConnected"
           class="mcp-never-connected-inline"
+          role="button"
           :title="$t('pane.terminal.mcp-never-connected-tooltip')"
+          @click.stop="reconnectMcp?.()"
         >{{ $t('pane.terminal.mcp-never-connected-badge') }}</span>
         </template>
         <span
@@ -1355,6 +1360,7 @@ onMounted(() => {
   letter-spacing: 0.2px;
   white-space: nowrap;
   flex-shrink: 0;
+  cursor: pointer;
 }
 /* A non-zero exit of the agent CLI: informational, so not clickable. */
 .exit-fault-inline {
