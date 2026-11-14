@@ -11490,6 +11490,7 @@
         "unknown-script": "Runs a script Guard cannot see",
         "dynamic-path": "File path is not static",
         "credential-pipe-upload": "Pipes a file from ~/.ssh into a network tool",
+        "dynamic-path-read": "Reads or uploads a path held in a variable too long for Guard to follow",
         "plugin-store-write": "Writes, deletes, moves, links or chmods the Navide plugin install root or trust stores",
         "dynamic-stdin-script": "Shell runs a here-string computed at run time",
         "mcp-registry-write": "An MCP tool changes or deletes a Windows registry entry",

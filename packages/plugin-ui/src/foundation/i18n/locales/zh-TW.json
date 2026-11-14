@@ -11490,6 +11490,7 @@
         "unknown-script": "執行 Guard 看不到內容的腳本",
         "dynamic-path": "檔案路徑不是靜態的",
         "credential-pipe-upload": "把 ~/.ssh 裡的檔案 pipe 給網路工具",
+        "dynamic-path-read": "讀取或上傳的路徑存在過長、Guard 無法追蹤的變數裡",
         "plugin-store-write": "寫入、刪除、移動、連結或 chmod Navide 外掛的安裝目錄或信任存放區",
         "dynamic-stdin-script": "Shell 執行執行時才算出的 here-string",
         "mcp-registry-write": "MCP 工具修改或刪除 Windows 登錄檔項目",
