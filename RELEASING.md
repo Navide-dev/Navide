@@ -60,7 +60,11 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    `xtajit64.dll`, not `IsWow64Process2`, which reports x64 emulation as native.
 4. **Dependency audit warnings** — the Windows-on-Arm pass of the Dependency
    audit job only warns. Read its output; the `cryptography` pin for win_arm64
-   is a known, accepted item until upstream ships newer wheels.
+   is a known, accepted item until upstream ships newer wheels. The main
+   pip-audit pass blocks on high and critical advisories (and on any advisory
+   it cannot rate) but only warns on low and moderate ones
+   (`scripts/pip-audit-severity-gate.py`): read those warnings too and decide
+   whether the release bumps the package.
 5. **What's New and CHANGELOG** — add the `whatsNew.ts` entry (below) and the
    `CHANGELOG.md` section for the new version. `release.sh` bumps versions and
    README download links but writes neither of these.
