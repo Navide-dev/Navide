@@ -56,6 +56,8 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 
 對 Kimi Code 分格，Navide 會提供 100 ms 的 Escape Sequence 重組時間，讓方向鍵在內嵌 Terminal 中仍能可靠導覽；若環境已有 `PI_TUI_ESC_TIMEOUT`，則仍以既有值為準。
 
+對 Claude Code 分格，Navide 會設定 `MCP_TIMEOUT=120000`，讓大量分格同時啟動、後端回應變慢時，Navide 工具仍能連上；若環境已有 `MCP_TIMEOUT`，則仍以既有值為準。
+
 ### CLI risk observations
 
 An active agent 分格 can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active 分格, while network findings belong to the observed 分格's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

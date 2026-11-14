@@ -56,6 +56,8 @@ Supported built-in agent keys cover 14 coding CLIs: Aider, Antigravity CLI, Clau
 
 For Kimi Code panes, Navide gives the CLI a 100 ms escape-sequence reassembly window so arrow-key navigation remains reliable through the embedded terminal. An existing `PI_TUI_ESC_TIMEOUT` environment value still takes precedence.
 
+For Claude Code panes, Navide sets `MCP_TIMEOUT=120000` so the Navide tools still connect when many panes start at once and the backend answers slowly. An existing `MCP_TIMEOUT` value still takes precedence.
+
 ### CLI risk observations
 
 An active agent pane can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active panes, while network findings belong to the observed pane's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.
