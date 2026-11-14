@@ -105,6 +105,17 @@ export function parseLegacyRunGroups(
   }
 }
 
+/** The groups a workspace opens with when project.json never stored any: the
+ *  legacy localStorage copy if there is one, else the single default tab — but
+ *  only for a project with no panes yet. A project that already has panes got
+ *  them without ever writing groups (its first window booted before the
+ *  project existed); those panes have their own tabs, and a default tab here
+ *  would sit empty beside them on every reopen. */
+export function initialRunGroups<G>(legacy: G[] | null, projectPaneCount: number, fallback: G): G[] {
+  if (legacy !== null) return legacy
+  return projectPaneCount > 0 ? [] : [fallback]
+}
+
 /** A pane, as much of one as group scoping needs. */
 export interface GroupPeerPane {
   id: string

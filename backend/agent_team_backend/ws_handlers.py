@@ -767,6 +767,79 @@ async def plugin_activity_forget(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
 
 
+_ASSERTION_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43,128}")
+_ASSERTION_NAMESPACE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+
+
+@handler("host.cloud.identity")
+async def host_cloud_identity(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """The Navide Cloud account the server link is signed in as, for the
+    Marketplace developer sign-in in the main process (Host-authenticated).
+    ``identity`` is null when there is no signed-in link."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from . import server_link
+
+    await session.send_json(make_response(msg_id, msg_type, {"identity": server_link.cloud_identity()}))
+
+
+@handler("host.cloud.registry_assertion")
+async def host_cloud_registry_assertion(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """A Registry assertion for the signed-in Navide Cloud account
+    (Host-authenticated). Only the main process may ask, because only it holds
+    the PKCE verifier the assertion is bound to; the server token itself never
+    crosses to the main process."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    scope = payload.get("scope") if isinstance(payload, dict) else None
+    namespace = payload.get("namespace") if isinstance(payload, dict) else None
+    challenge = payload.get("challenge") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"scope", "namespace", "challenge"}
+        or not isinstance(challenge, str)
+        or not _ASSERTION_CHALLENGE.fullmatch(challenge)
+        or not (
+            (scope == "account" and namespace is None)
+            or (scope == "publish" and isinstance(namespace, str) and _ASSERTION_NAMESPACE.fullmatch(namespace))
+        )
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "host.cloud.registry_assertion is malformed")
+        )
+        return
+    from . import server_link
+
+    reply = await server_link.registry_assertion(scope=scope, namespace=namespace, challenge=challenge)
+    if reply is None:
+        await session.send_json(
+            make_error(msg_id, msg_type, "CLOUD_NOT_CONFIGURED", "no Navide Cloud server is configured")
+        )
+        return
+    result = reply.get("payload") if reply.get("ok") else None
+    assertion = result.get("assertion") if isinstance(result, dict) else None
+    member_id = result.get("memberId") if isinstance(result, dict) else None
+    if not isinstance(assertion, str) or not isinstance(member_id, str):
+        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        code = error.get("code") if isinstance(error.get("code"), str) else "ASSERTION_UNAVAILABLE"
+        message = error.get("message") if isinstance(error.get("message"), str) else "the server issued no assertion"
+        await session.send_json(make_error(msg_id, msg_type, code, message))
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, {"assertion": assertion, "memberId": member_id})
+    )
+
+
 @handler("plugins.activity.report")
 async def plugins_activity_report(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -2562,6 +2635,10 @@ def _account_pin_for_history(pin: str) -> str:
     return pin or DEFAULT_SLOT_ID
 
 
+#: In-flight profile broadcasts, held so a shielded task is not garbage-collected.
+_PROFILE_BROADCASTS: set[asyncio.Task[None]] = set()
+
+
 async def _broadcast_profiles_changed(
     reason: str,
     harvested_profile_ids: list[str] | None = None,
@@ -2569,6 +2646,26 @@ async def _broadcast_profiles_changed(
     forced: bool | None = None,
     hot_switched_panes: list[dict[str, Any]] | None = None,
     unattended: bool = False,
+) -> None:
+    """Every window's account cache depends on this event, so it must not die
+    with the requester: a client that hangs up right after its response gets
+    its handler task cancelled, and the broadcast with it (0.2.42 VM r1). The
+    work runs in its own task; the caller still sees the cancellation."""
+    task = asyncio.create_task(_send_profiles_changed(
+        reason, harvested_profile_ids, agent_key, forced, hot_switched_panes, unattended,
+    ))
+    _PROFILE_BROADCASTS.add(task)
+    task.add_done_callback(_PROFILE_BROADCASTS.discard)
+    await asyncio.shield(task)
+
+
+async def _send_profiles_changed(
+    reason: str,
+    harvested_profile_ids: list[str] | None,
+    agent_key: str | None,
+    forced: bool | None,
+    hot_switched_panes: list[dict[str, Any]] | None,
+    unattended: bool,
 ) -> None:
     from . import app
 
@@ -5191,7 +5288,8 @@ async def p2p_link_status(session: "Session", msg_id: str, msg_type: str, payloa
     # Reported alongside the link's own state rather than folded into it: paused
     # is a thing the *user* did, and showing it as "unconfigured" or
     # "unreachable" would blame the network for a switch they flipped.
-    status["paused"] = _link_paused()
+    # A SQLite read: off the loop, which a restore storm already starves.
+    status["paused"] = await asyncio.to_thread(_link_paused)
     await session.send_json(make_response(msg_id, msg_type, {"status": status}))
 
 

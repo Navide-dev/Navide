@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   groupPeers,
+  initialRunGroups,
   parseLegacyRunGroups,
   resolveActiveTab,
   resolveManualSpawnGroupId,
@@ -206,5 +207,27 @@ describe('savedGroupToRecreate', () => {
     // viewed project for each group the others' panes carried — once per
     // relaunch, for every new id.
     expect(savedGroupToRecreate(viewed, 'rg-default', '/ws/other', '/ws/a')).toBeNull()
+  })
+})
+
+describe('initialRunGroups', () => {
+  // 0.2.42 Linux VM r4: a workspace whose first window booted before its
+  // project existed never wrote ui_run_groups. Every later open took the
+  // never-persisted branch and added an empty "Default 0/0" tab next to the
+  // tab already holding the restored panes.
+  const fallback = { id: 'rg-default', name: '預設', createdAt: 1 }
+
+  it('opens a project with no panes on the one default tab', () => {
+    expect(initialRunGroups(null, 0, fallback)).toEqual([fallback])
+  })
+
+  it('adds no empty default tab to a project that already has panes', () => {
+    expect(initialRunGroups(null, 3, fallback)).toEqual([])
+  })
+
+  it('keeps the legacy localStorage groups whatever the panes', () => {
+    const legacy = [{ id: 'rg-1', name: 'Run 1', createdAt: 2 }]
+    expect(initialRunGroups(legacy, 3, fallback)).toEqual(legacy)
+    expect(initialRunGroups([], 0, fallback)).toEqual([])
   })
 })

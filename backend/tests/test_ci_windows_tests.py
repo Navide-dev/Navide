@@ -325,3 +325,36 @@ def test_a_probe_past_its_time_is_ended_with_its_children_and_never_waited_on_un
     assert killed == ["child", "powershell"]
     assert out.startswith(f"host probe timed out after {ci_windows_tests.PROBE_SECONDS}s")
     assert ("partial" in out) is reaped
+
+
+def test_a_stall_saves_py_spy_native_stacks_of_each_python(tmp_path, monkeypatch):
+    """Neither watchdog speaks while another thread holds the GIL between two
+    tests (2026-11-14), so a stall also reads py-spy's stacks from outside."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(ci_windows_tests.PY_SPY_ENV, "py-spy.exe")
+    names = {11: "python.exe", 12: "conhost.exe"}
+    monkeypatch.setattr(ci_windows_tests.psutil, "Process", lambda pid: types.SimpleNamespace(name=lambda: names[pid]))
+    calls = []
+
+    class _Spy:
+        def __init__(self, args, stdout, **_kwargs):
+            calls.append(args)
+            stdout.write(b"Thread 0x1 (idle): native frames\n")
+
+        def wait(self, timeout=None):
+            assert timeout == ci_windows_tests.STACK_SECONDS
+            return 0
+
+    monkeypatch.setattr(ci_windows_tests.subprocess, "Popen", _Spy)
+
+    rows = ci_windows_tests._stack_dumps([11, 12])
+
+    assert calls == [["py-spy.exe", "dump", "--pid", "11", "--native"]]
+    assert len(rows) == 1 and rows[0].startswith("    py-spy 11: exit 0, stacks in ")
+    saved = list((tmp_path / "test-results" / "ci").glob("py-spy-11-*.txt"))
+    assert [p.read_text() for p in saved] == ["Thread 0x1 (idle): native frames\n"]
+
+
+def test_without_py_spy_a_stall_reads_no_stacks(monkeypatch):
+    monkeypatch.delenv(ci_windows_tests.PY_SPY_ENV, raising=False)
+    assert ci_windows_tests._stack_dumps([11]) == []

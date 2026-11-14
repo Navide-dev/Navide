@@ -181,8 +181,12 @@ class FakeVault:
 
 def _env_without_guard_token(env: dict[str, str] | None) -> dict[str, str] | None:
     """The spawn env minus Navide Guard's per-pane token, which every claude,
-    copilot and qwen pane gets (guard_hooks.PANE_TOKEN_ENV)."""
-    rest = {k: v for k, v in (env or {}).items() if k != guard_hooks.PANE_TOKEN_ENV}
+    copilot and qwen pane gets (guard_hooks.PANE_TOKEN_ENV), and claude's
+    MCP_TIMEOUT vendor default — neither is profile env."""
+    rest = {
+        k: v for k, v in (env or {}).items()
+        if k not in (guard_hooks.PANE_TOKEN_ENV, "MCP_TIMEOUT")
+    }
     return rest or None
 
 
@@ -1941,3 +1945,40 @@ async def test_cli_profiles_rename_too_long_is_bad_request(
     assert response["ok"] is False
     assert response["error"]["code"] == "BAD_REQUEST"
     assert "64" in response["error"]["message"]
+
+
+async def test_profiles_changed_survives_the_requester_disconnecting(
+    store: CliProfilesStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A client that closes right after its cli_profiles.create response gets
+    its handler task cancelled (ws_endpoint's finally); the broadcast every
+    other window needs must still go out (0.2.42 VM r1: unknown-profile)."""
+    real_view = ws_handlers._profile_account_view
+
+    def slow_view() -> dict[str, Any]:
+        time.sleep(0.2)  # the real view reads every account's identity from disk
+        return real_view()
+
+    monkeypatch.setattr(ws_handlers, "_profile_account_view", slow_view)
+    requester, window = _session(), _session()
+    monkeypatch.setattr(app, "_SESSIONS", {requester, window})
+    task = asyncio.create_task(app.handle_message(requester, {
+        "id": "c1", "type": "cli_profiles.create",
+        "payload": {"agent_key": "codex", "name": "New"},
+    }))
+    requester._handler_tasks.add(task)
+    while not requester.websocket.sent:  # type: ignore[attr-defined]
+        await asyncio.sleep(0.005)
+
+    # What ws_endpoint's finally does when the requester hangs up.
+    requester.dead = True
+    for t in requester._handler_tasks:
+        t.cancel()
+    for _ in range(200):
+        if window.websocket.sent:  # type: ignore[attr-defined]
+            break
+        await asyncio.sleep(0.01)
+
+    changed = [e for e in window.websocket.sent if e["type"] == "cli_profiles.changed"]  # type: ignore[attr-defined]
+    assert len(changed) == 1
+    assert [p["name"] for p in changed[0]["payload"]["profiles"]] == ["New"]

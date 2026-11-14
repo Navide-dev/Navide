@@ -85,6 +85,12 @@ interface Props {
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
+  /** Runtime-only: the pane's CLI has been up for minutes without ever
+   *  reaching Navide's tool server (backend mcp_connect_watch). */
+  mcpNeverConnected?: boolean
+  /** Badge click: App.vue reconnects the pane (idle-only same-session rebuild).
+   *  A callback, not an emit — the emits list is past what vue-tsc infers. */
+  reconnectMcp?: () => void
   /** The agent CLI's non-zero exit code, shown as a badge while the pane is
    *  exited; null for a clean exit or a pane that never exited. */
   exitCode?: number | null
@@ -896,6 +902,13 @@ onMounted(() => {
           :title="$t('pane.terminal.login-expired-tooltip')"
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
+        <span
+          v-if="mcpNeverConnected"
+          class="mcp-never-connected-inline"
+          role="button"
+          :title="$t('pane.terminal.mcp-never-connected-tooltip')"
+          @click.stop="reconnectMcp?.()"
+        >{{ $t('pane.terminal.mcp-never-connected-badge') }}</span>
         </template>
         <span
           v-if="exitCode != null && (displayStatus === 'exited' || displayStatus === 'error')"
@@ -1335,6 +1348,19 @@ onMounted(() => {
 }
 .login-expired-inline:hover {
   border-color: var(--attention-fg);
+}
+.mcp-never-connected-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--attention-fg);
+  background: var(--attention-subtle);
+  border: 1px solid var(--attention-muted);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 /* A non-zero exit of the agent CLI: informational, so not clickable. */
 .exit-fault-inline {

@@ -4088,6 +4088,22 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
 
+    async def notify_mcp_never_connected(self, pane: str) -> None:
+        """Every bound direct chat once, in the user's language: a pane's CLI
+        has been up for minutes and never reached Navide's tool server."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "mcp_never_connected", pane=pane)
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an MCP connection notice to %s failed: %s", b.platform, exc)
+
     async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
                                      from_label: str, to_id: str, to_label: str,
                                      needs_login: bool = False) -> int:

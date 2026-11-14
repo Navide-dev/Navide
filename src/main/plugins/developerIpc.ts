@@ -241,6 +241,8 @@ export function registerDeveloperIpc(deps: DeveloperIpcDeps): {
     if (scope !== 'account' && scope !== 'publish') throw new Error('scope must be account or publish')
     return account.signIn(scope as DeveloperSignInScope)
   })
+  // 0.2.43 #2b: reuse the Navide Cloud sign-in for the account scope; never opens a browser.
+  on('developer:syncCloudAccount', (): Promise<DeveloperPublicState> => account.syncCloudAccount())
   on('developer:signOut', (): DeveloperPublicState => account.signOut())
   on('developer:registerKey', (_event, raw): Promise<DeveloperPublicState> =>
     account.registerKey({ replace: asRecord(raw).replace === true }))

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 import time
 import urllib.parse
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO, Iterator
@@ -50,8 +52,9 @@ from .models import Extension, ExtensionVersion, Publisher
 from .headless_views import headless_view_notices
 from .native_backend import local_native_backend_notices, native_backend_publish_problem
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
-from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
+from .package import MAX_ARCHIVE_SIZE, READ_CHUNK, PackageError, read_package
 from .packs import pack_conflict
+from .cloud_assertion import CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS, CLOUD_EXCHANGE_FAILURES_PER_WINDOW
 from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
@@ -108,6 +111,12 @@ class RegistryState:
     report_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(REPORT_LIMIT_PER_HOUR, 3600)
     )
+    cloud_exchange_limiter: SlidingWindowLimiter = field(
+        default_factory=lambda: SlidingWindowLimiter(
+            CLOUD_EXCHANGE_FAILURES_PER_WINDOW, CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS
+        )
+    )
+    """Failed `/api/cli/cloud-exchange` verifications per client address."""
     grandfather_swept_at: float | None = None
     """Monotonic time of the last grandfather sweep (sweep_grandfather)."""
 
@@ -178,6 +187,7 @@ def create_app(
             "admin endpoints accept unauthenticated calls (local dev only)"
         )
     engine = create_db_engine(settings.db_path)
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
     state = RegistryState(
         engine=engine,
         storage=LocalStorageBackend(settings.storage_root),
@@ -324,6 +334,32 @@ def _session(state: RegistryState = Depends(_state)) -> Iterator[Session]:
 
 def _repo(session: Session = Depends(_session)) -> RegistryRepository:
     return RegistryRepository(session)
+
+
+MAX_UPLOAD_SIZE = MAX_ARCHIVE_SIZE + 8 * 1024 * 1024
+"""An archive whose expanded contents fit MAX_ARCHIVE_SIZE is never larger
+than this (ZIP headers and incompressible data add well under 8 MiB)."""
+
+
+async def _spooled_package(
+    package: UploadFile, state: RegistryState = Depends(_state)
+) -> AsyncIterator[BinaryIO]:
+    """The uploaded package copied, a chunk at a time, into an unnamed
+    temporary file under the data directory's `uploads/`. Nothing holds the
+    whole package in memory, and the file disappears when the request ends,
+    or with the process if it dies."""
+    with tempfile.TemporaryFile(dir=state.settings.upload_dir) as spool:
+        size = 0
+        while chunk := await package.read(READ_CHUNK):
+            size += len(chunk)
+            if size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"package exceeds the {MAX_UPLOAD_SIZE // (1024 * 1024)} MiB upload limit",
+                )
+            spool.write(chunk)
+        spool.seek(0)
+        yield spool
 
 
 # -- helpers ------------------------------------------------------------
@@ -611,7 +647,7 @@ def _register_routes(app: FastAPI) -> None:
     @app.post("/api/publish", response_model=PublishResponse, status_code=201)
     async def publish(
         request: Request,
-        package: UploadFile,
+        package: BinaryIO = Depends(_spooled_package),
         signature: str | None = None,
         target: str = Query(
             default="universal",
@@ -636,9 +672,8 @@ def _register_routes(app: FastAPI) -> None:
             )
         if channel is not None and channel not in VERSION_CHANNELS:
             raise HTTPException(status_code=400, detail=f"unknown channel '{channel}'")
-        data = await package.read()
         try:
-            loaded = read_package(data, target=target)
+            loaded = read_package(package, target=target)
         except PackageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -757,7 +792,7 @@ def _register_routes(app: FastAPI) -> None:
         # Contract 3.8 / DS4: scan synchronously, within the time budget, before
         # anything is signed. A pending submission keeps its (unsigned) report
         # for the reviewer; approval scans again and signs that report.
-        scan = run_scan(data, artifact_digest=loaded.digest, target=target,
+        scan = run_scan(package, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
         if not testplace_publish:
             # C1 (2026-11-07): a public listing that declares network hosts must
@@ -779,7 +814,7 @@ def _register_routes(app: FastAPI) -> None:
                 repo.session,
                 namespace=namespace,
                 name=name,
-                data=data,
+                data=package,
                 manifest=manifest.model_dump(exclude_none=True),
                 signature_present=signature is not None,
                 size_limit=MAX_ARCHIVE_SIZE,
@@ -830,7 +865,7 @@ def _register_routes(app: FastAPI) -> None:
                 repo.session,
                 namespace=namespace,
                 name=name,
-                data=data,
+                data=package,
                 manifest=manifest.model_dump(exclude_none=True),
                 signature_present=signature is not None,
                 size_limit=MAX_ARCHIVE_SIZE,
@@ -864,7 +899,7 @@ def _register_routes(app: FastAPI) -> None:
             review_report = {}
 
         key = _package_key(namespace, name, manifest.version, target)
-        state.storage.put(key, data)
+        state.storage.put_stream(key, package)
         try:
             row = repo.add_version(
                 extension=extension,

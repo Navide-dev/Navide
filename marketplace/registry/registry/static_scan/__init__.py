@@ -8,10 +8,10 @@ publish and never drops the report: a failed file is recorded as
 
 from __future__ import annotations
 
-import hashlib
 import logging
 
 from ..models import ExtensionVersion
+from ..package import PackageSource, source_digest
 from ..storage import StorageBackend
 from .report import SCANNER_VERSION, failed_report, scan_package
 
@@ -20,7 +20,7 @@ __all__ = ["SCANNER_VERSION", "run_scan", "scan_package", "scan_stored_version"]
 _log = logging.getLogger(__name__)
 
 
-def run_scan(data: bytes, *, artifact_digest: str, target: str, manifest: dict) -> dict | None:
+def run_scan(data: PackageSource, *, artifact_digest: str, target: str, manifest: dict) -> dict | None:
     """The scan report of a Manifest v2 artifact (None only for v1, which has
     no disclosure). A failure of the whole scan still yields an incomplete
     report (M1 of the #355 review), never a missing one."""
@@ -38,10 +38,10 @@ def scan_stored_version(storage: StorageBackend, row: ExtensionVersion) -> dict 
     actually read from storage (L1), so a stored package that no longer
     matches its signed digest cannot be signed again (sign_disclosure
     refuses a report of another artifact)."""
-    data = storage.get(row.package_key)
-    return run_scan(
-        data,
-        artifact_digest=hashlib.sha256(data).hexdigest(),
-        target=row.target,
-        manifest=row.manifest or {},
-    )
+    with storage.open_stream(row.package_key) as stream:
+        return run_scan(
+            stream,
+            artifact_digest=source_digest(stream),
+            target=row.target,
+            manifest=row.manifest or {},
+        )

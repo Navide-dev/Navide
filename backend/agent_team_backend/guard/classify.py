@@ -16,6 +16,7 @@ variable expansion in a command word or in the target of a destructive op,
 
 from __future__ import annotations
 
+import bisect
 import fnmatch
 import os
 import posixpath
@@ -191,6 +192,10 @@ class _Ctx:
     # them so far (see _record_assignments / _indirect_credentials).
     long_vars_chars: int = 0
     long_expansion_chars: int = 0
+    # Names whose value was too long to keep: a later read of one asks.
+    unfollowed: set[str] = field(default_factory=set)
+    # A backslash separates path components too (Windows, PowerShell).
+    backslash_sep: bool = False
 
 
 # ---------------------------------------------------------------- paths
@@ -1077,12 +1082,15 @@ def _subst_vars(word: str, values: dict[str, str]) -> str:
     return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
-def _collapse(text: str) -> str:
+def _collapse(text: str, backslash_sep: bool = False) -> str:
     """`//`, `/./` and `/x/../` folded to `/`, so padding made of them cannot
     make a path look long. Only whole components between two slashes are
     folded: `text` may be one piece of a word (a variable's value), and a
     fold across its edges, like normpath's, would change what it joins.
-    One pass over the components, so nesting costs nothing extra."""
+    One pass over the components, so nesting costs nothing extra. With
+    `backslash_sep` a backslash is a separator as well (`\\.\\`, `\\x\\..\\`)."""
+    if backslash_sep:
+        text = text.replace("\\", "/")
     if "/" not in text or "://" in text:
         return text
     head, *inner, tail = text.split("/")
@@ -1101,6 +1109,38 @@ def _too_big_to_follow(acc: _Acc) -> None:
     acc.opaque("dynamic-path", f"a variable longer than {SHORT_VAR_CHARS} characters is not followed past Guard's limits")
 
 
+#: Commands that read a file's content or send one somewhere: given a path
+#: Guard could not follow, they ask (dynamic-path-read) instead of passing.
+_READ_OR_SEND = DOWNLOADERS | DECODERS | {
+    "cat", "tac", "head", "tail", "less", "more", "bat", "nl", "od", "hexdump", "strings",
+    "cp", "scp", "rsync", "sftp", "ftp", "nc", "ncat", "netcat", "socat", "rclone",
+    "tar", "zip", "gzip", "bzip2", "xz", "gpg", "sed", "awk", "grep", "rg", "cut", "sort", "jq",
+    "get-content", "gc", "type",
+}
+
+
+def _reads_or_sends(cmd: _Cmd) -> bool:
+    if any(op in ("<", "<>") for op, _ in cmd.redirects):
+        return True
+    for word in cmd.argv:
+        if _ASSIGN_RE.match(word) or word in WRAPPERS_NO_ARG or word in {"sudo", "env", "xargs"} or word.startswith("-"):
+            continue
+        return os.path.basename(word).lower() in _READ_OR_SEND
+    return False
+
+
+def _unfollowed_reads(pipeline: list[_Cmd], capped: set[int], ctx: _Ctx, acc: _Acc) -> None:
+    """Ask when a command that reads or sends a file was given a word Guard
+    could not write out (capped) or a variable it stopped holding."""
+    if ctx.unfollowed:
+        for i, c in enumerate(pipeline):
+            words = [*c.argv, *(t for _, t in c.redirects)]
+            if any((m.group(1) or m.group(2)) in ctx.unfollowed for w in words for m in _VAR_REF_RE.finditer(w)):
+                capped.add(i)
+    if any(_reads_or_sends(pipeline[i]) for i in capped):
+        acc.hit("critical", "dynamic-path-read", "reads or sends a path held in a variable too long to follow")
+
+
 def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
     """Remember `F=path` and `export F=path`: a command made only of
     assignments, so a later `cat "$F"` can be graded like `cat path`."""
@@ -1111,60 +1151,74 @@ def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
         return
     for m in matches:
         name = m.group(1)
-        value = _collapse(_subst_vars(m.group(2), ctx.vars)) if _expanded_len(m.group(2), ctx.vars) <= MAX_VAR_CHARS else None
+        value = (_collapse(_subst_vars(m.group(2), ctx.vars), ctx.backslash_sep)
+                 if _expanded_len(m.group(2), ctx.vars) <= MAX_VAR_CHARS else None)
         old = ctx.vars.pop(name, None)
         if old is not None and len(old) > SHORT_VAR_CHARS:
             ctx.long_vars_chars -= len(old)
         if value is None:
             _too_big_to_follow(acc)
+            ctx.unfollowed.add(name)
             continue
+        if any((r.group(1) or r.group(2)) in ctx.unfollowed for r in _VAR_REF_RE.finditer(m.group(2))):
+            ctx.unfollowed.add(name)  # built from one Guard stopped holding
+        else:
+            ctx.unfollowed.discard(name)
         size = len(value)
         if size > SHORT_VAR_CHARS:
             # Make room by dropping the longest values first; short ones stay.
             while ctx.long_vars_chars + size > LONG_VARS_CHARS:
                 longest = max((n for n, v in ctx.vars.items() if len(v) > SHORT_VAR_CHARS), key=lambda n: len(ctx.vars[n]))
                 ctx.long_vars_chars -= len(ctx.vars.pop(longest))
+                ctx.unfollowed.add(longest)
                 _too_big_to_follow(acc)
             ctx.long_vars_chars += size
         ctx.vars[name] = value
 
 
-def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
+def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> set[int]:
     """Escalate only: grade the pipeline again with the variables set
     earlier in the command written out, and keep the credential rules it
     hits. Nothing else from that pass counts, so no other verdict moves.
-    A word too long to write out is graded as written and marks the verdict."""
+    A word too long to write out is graded as written and marks the verdict;
+    the indexes of the commands holding one are returned."""
+    capped: set[int] = set()
 
-    def expand(word: str) -> str:
+    def expand(word: str, i: int) -> str:
         size = _expanded_len(word, ctx.vars)
         if size <= SHORT_VAR_CHARS or size == len(word):
             return _subst_vars(word, ctx.vars)
         if size > MAX_VAR_CHARS:
             _too_big_to_follow(acc)
+            capped.add(i)
             return word
-        out = _collapse(_subst_vars(word, ctx.vars))
+        out = _collapse(_subst_vars(word, ctx.vars), ctx.backslash_sep)
         if len(out) <= SHORT_VAR_CHARS:
             return out
         if ctx.long_expansion_chars + len(out) > LONG_EXPANSION_CHARS:
             _too_big_to_follow(acc)
+            capped.add(i)
             return word
         ctx.long_expansion_chars += len(out)
         return out
 
-    expanded = [_Cmd([expand(a) for a in c.argv], [(op, expand(t)) for op, t in c.redirects]) for c in pipeline]
+    expanded = [_Cmd([expand(a, i) for a in c.argv], [(op, expand(t, i)) for op, t in c.redirects])
+                for i, c in enumerate(pipeline)]
     if all(e.argv == c.argv and e.redirects == c.redirects for e, c in zip(expanded, pipeline)):
-        return
-    copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={}, long_vars_chars=0)
+        return capped
+    copy = replace(ctx, downloaded=set(ctx.downloaded), heredocs=list(ctx.heredocs), vars={}, long_vars_chars=0,
+                   unfollowed=set())
     sub = _Acc()
     _classify_pipeline(expanded, copy, sub, sub_downloads, depth)
     for rule, reason in zip(sub.rules, sub.reasons):
         if rule in _CREDENTIAL_RULES and (level := sub.levels.get(rule)):
             acc.hit(level, rule, reason)
+    return capped
 
 
 def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
-    if ctx.vars:
-        _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth)
+    capped = _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth) if ctx.vars else set()
+    _unfollowed_reads(pipeline, capped, ctx, acc)
     if len(pipeline) == 1:
         _record_assignments(pipeline[0].argv, ctx, acc)
     upstream: set[str] = set()  # kinds of producers earlier in this pipeline
@@ -1734,6 +1788,30 @@ _PS_SENDER_RE = re.compile(
 _PS_INFILE_RE = re.compile(r"(?i)(?<![\w-])-infile(?:\s+|:)(" + _PS_WORD + ")")
 _PS_ASSIGN_RE = re.compile(r"(?i)\$((?:env:)?[A-Za-z_]\w*)\s*=\s*(" + _PS_WORD + ")")
 _PS_VAR_RE = re.compile(r"(?i)\$\{?((?:env:)?[A-Za-z_]\w*)\}?")
+_PS_SEGMENT_RE = re.compile(r"[^|;\n]+")
+_PS_CURL = {"curl", "curl.exe"}
+_PS_IWR = {"invoke-webrequest", "iwr", "invoke-restmethod", "irm"}
+
+
+def _ps_stdin_send(command: str) -> bool:
+    """curl.exe sending its stdin (`@-` in any form, `@/dev/stdin`, `-T -`, `--upload-file -`) or
+    iwr / irm `-InFile -`, anywhere in the command: a function or script
+    block defined first sends whatever is later piped into it."""
+    for seg in _PS_SEGMENT_RE.findall(command):
+        sender = None
+        prev = ""
+        for w in re.findall(_PS_WORD, seg):
+            w = w.strip("\"'{}&").lower()
+            if sender is None:
+                if posixpath.basename(w) in _PS_CURL | _PS_IWR:
+                    sender = posixpath.basename(w)
+            elif sender in _PS_CURL and (w.endswith(("@-", "@/dev/stdin")) or w == "-t-"
+                                         or (w == "-" and prev in {"-t", "--upload-file"})):
+                return True
+            elif sender in _PS_IWR and (w == "-infile:-" or (w == "-" and prev == "-infile")):
+                return True
+            prev = w
+    return False
 
 
 def _ps_credential_reads(command: str, ctx: _Ctx, acc: _Acc) -> None:
@@ -1741,15 +1819,29 @@ def _ps_credential_reads(command: str, ctx: _Ctx, acc: _Acc) -> None:
     or [IO.File]::Read*(), directly or through a `$var` set earlier, is
     graded like `cat` of it (credential-access); followed by a send
     (Invoke-WebRequest / iwr / Invoke-RestMethod / irm / curl.exe), through
-    a pipe or a variable, like curl uploading it (credential-exfil). Only
+    a pipe or a variable, or by a sender reading its stdin wherever it is
+    written (_ps_stdin_send), like curl uploading it (credential-exfil). Only
     credential and .env paths count, so every other read and send is unchanged."""
-    assigns = [(m.start(), m.group(1).lower(), m.group(2).strip("\"'")) for m in _PS_ASSIGN_RE.finditer(command)]
+    assigns: dict[str, tuple[list[int], list[str]]] = {}
+    for m in _PS_ASSIGN_RE.finditer(command):
+        at, values = assigns.setdefault(m.group(1).lower(), ([], []))
+        at.append(m.start())
+        values.append(m.group(2).strip("\"'"))
+
+    def value(m: re.Match, at: int) -> str:
+        """The last value assigned to the variable before `at`."""
+        if (entry := assigns.get(m.group(1).lower())) and (i := bisect.bisect_left(entry[0], at)):
+            return entry[1][i - 1]
+        return m.group(0)
+
+    seen: dict[str, str | None] = {}
 
     def secret(word: str, at: int) -> str | None:
-        values = {name: value for pos, name, value in assigns if pos < at}
-        word = _PS_VAR_RE.sub(lambda m: values.get(m.group(1).lower(), m.group(0)), word.strip("\"'"))
-        path = _resolve(word, ctx)
-        return path if path and (_credential_kind(path, ctx) or _is_dotenv(path)) else None
+        word = _PS_VAR_RE.sub(lambda m: value(m, at), word.strip("\"'"))
+        if word not in seen:
+            path = _resolve(word, ctx)
+            seen[word] = path if path and (_credential_kind(path, ctx) or _is_dotenv(path)) else None
+        return seen[word]
 
     reads: list[tuple[int, str]] = []
     for m in _PS_READER_RE.finditer(command):
@@ -1757,11 +1849,12 @@ def _ps_credential_reads(command: str, ctx: _Ctx, acc: _Acc) -> None:
     for m in _PS_DOTNET_READ_RE.finditer(command):
         if path := secret(m.group(1), m.start()):
             reads.append((m.end(), path))
-    sends = [m.start() for m in _PS_SENDER_RE.finditer(command)]
+    last_send = max((m.start() for m in _PS_SENDER_RE.finditer(command)), default=-1)
+    stdin_send = bool(reads) and _ps_stdin_send(command)
     for end, path in reads:
         if _credential_kind(path, ctx) and not _ssh_public_key(path, ctx):
             acc.hit("critical", "credential-access", f"touches a credential store: {path}")
-        if any(start >= end for start in sends):
+        if last_send >= end or stdin_send:
             acc.hit("critical", "credential-exfil", f"uploads a secret file: {path}")
     for m in _PS_INFILE_RE.finditer(command):
         if path := secret(m.group(1), m.start()):
@@ -1776,7 +1869,7 @@ def _ctx(cwd: str, workspace: str, protected: frozenset[str] | None = None) -> _
     ws = _norm(os.path.expanduser(workspace)) if workspace else ""
     base = _norm(os.path.expanduser(cwd)) if cwd else (ws or home)
     return _Ctx(cwd=base, workspace=ws, home=home, env_home=_env_home(),
-                protected=frozenset(PROTECTED_BRANCHES if protected is None else protected))
+                protected=frozenset(PROTECTED_BRANCHES if protected is None else protected), backslash_sep=_WINDOWS)
 
 
 def _tool_command(tool_input: dict) -> str | None:
@@ -1836,6 +1929,8 @@ def classify(
         name = mcp
     if name in SHELL_TOOLS:
         command = _tool_command(tool_input)
+        if name == "powershell" or tool_input.get("dialect") == "powershell":
+            ctx.backslash_sep = True
         if command and name == "powershell":
             # A backslash separates paths in PowerShell rather than escaping; '/' is equivalent there.
             command = command.replace("\\", "/")

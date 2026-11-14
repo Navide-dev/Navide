@@ -273,3 +273,34 @@ async def test_a_vendor_default_does_not_displace_a_user_value() -> None:
     created = session.terminals.created[0]  # type: ignore[attr-defined]
     assert created["env"]["PI_TUI_ESC_TIMEOUT"] == "250"
     assert _events(session, "cli.env_ignored") == []
+
+
+@pytest.mark.asyncio
+async def test_a_claude_pane_gets_a_longer_mcp_connect_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claude Code gives its first MCP connect 30s by default (MCP_TIMEOUT).
+    During a mass restore /plan-mcp answered in 20–57s, every pane gave up
+    after three retries and never tried again (2026-11-12). Verified against
+    2.1.325: an HTTP server whose initialize takes 40s fails by default and
+    connects with MCP_TIMEOUT=60000."""
+    monkeypatch.delenv("MCP_TIMEOUT", raising=False)
+    session = _session()
+
+    await _create(session, {})
+
+    created = session.terminals.created[0]  # type: ignore[attr-defined]
+    assert created["env"]["MCP_TIMEOUT"] == "120000"
+
+
+@pytest.mark.asyncio
+async def test_a_user_mcp_timeout_wins_over_the_claude_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MCP_TIMEOUT", raising=False)
+    session = _session()
+
+    await _create(session, {"MCP_TIMEOUT": "45000"})
+
+    created = session.terminals.created[0]  # type: ignore[attr-defined]
+    assert created["env"]["MCP_TIMEOUT"] == "45000"

@@ -267,6 +267,24 @@ class CodexLogReader(LogReader):
                 log.debug("enumerate %s failed: %s", panes_root, err)
         return _dedupe_resolved(roots)
 
+    def under_project_dirs(self, path: Path) -> bool:
+        """project_dirs() membership from the resolved path's own components.
+
+        Enumerating ~/.codex-panes and resolving every home's `sessions` ran
+        on the event loop for each routed file and Stop hook (2026-11-12
+        loop stalls). A legacy home whose `sessions` links to the default
+        tree resolves into it, so the default root covers it here as there.
+        """
+        home = Path.home()
+        default_root = home / ".codex" / "sessions"
+        try:
+            if path.is_relative_to(default_root.resolve()):
+                return default_root.is_dir()
+            rel = path.relative_to((home / ".codex-panes").resolve())
+        except (OSError, ValueError):
+            return False
+        return len(rel.parts) >= 2 and rel.parts[1] == "sessions"
+
     def watch_dirs(self) -> list[Path]:
         roots: list[Path] = []
         default_root = Path.home() / ".codex" / "sessions"

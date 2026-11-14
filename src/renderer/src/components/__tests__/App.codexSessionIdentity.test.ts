@@ -101,7 +101,7 @@ function harness() {
     workspaceRestoreSession: () => ({}), explicitRestoreDecision: () => 'fresh',
     // The one-CLI-per-conversation guard (a chat's wake): no other pane holds a session here.
     sessionHeldElsewhere, sessionHolders: () => [],
-    scheduledRestoreIds: new Set<string>(), wakeClaims: new WakeClaims(),
+    scheduledRestoreIds: new Set<string>(), realizedPaneIds: new Map<string, string>(), wakeClaims: new WakeClaims(),
     deferredPaneStillCurrent: () => true, skipFlagFor: () => '',
     canResumeSession: async () => false, savedHistoryFile: async () => '',
     stripPinnedSessionId: (command: string) => command,

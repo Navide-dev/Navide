@@ -26,9 +26,9 @@ describe('auto resume scope wiring', () => {
     expect(body).toContain('PREVIOUS_LAUNCH_ID_SETTING_KEY')
   })
 
-  it('starts an auto restore two at a time, like all', () => {
+  it('starts an auto restore under the same ceiling as all', () => {
     expect(fn('advanceRestoreSession')).toMatch(
-      /else if \(decision === 'resume' && session\.scope === 'auto'\) \{\s*\/\/[^\n]*\n\s*await runWithConcurrency\(ids, ALL_SCOPE_RESTORE_CONCURRENCY/,
+      /else if \(decision === 'resume' && session\.scope === 'auto'\) \{\s*\/\/[^\n]*\n\s*await runWithConcurrency\(ids, COLD_RESTORE_STARTING_LIMIT/,
     )
   })
 

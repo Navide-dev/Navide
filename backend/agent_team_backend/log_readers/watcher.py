@@ -417,11 +417,15 @@ class LogWatcher:
         except (OSError, RuntimeError):
             log.debug("hook transcript ignored: %s does not resolve", path)
             return
-        roots = set(self._watched_dirs)
-        for reader in self._readers:
-            roots.update(reader.project_dirs())
         under_root = False
-        for root in roots:
+        for reader in self._readers:
+            try:
+                if reader.under_project_dirs(resolved):
+                    under_root = True
+                    break
+            except (OSError, RuntimeError):
+                continue
+        for root in () if under_root else self._watched_dirs:
             try:
                 if resolved.is_relative_to(root.resolve()):
                     under_root = True

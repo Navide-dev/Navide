@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .signing import read_private_key_file
+from .signing import public_key_fingerprint, read_private_key_file
 from .manifest_v2 import PACKAGE_ID_BODY_PATTERN
 
 ENV_DATA_DIR = "REGISTRY_DATA_DIR"
@@ -36,6 +36,8 @@ ENV_DEVELOPER_ORIGIN = "REGISTRY_DEVELOPER_ORIGIN"
 ENV_LEGACY_HOSTS = "REGISTRY_LEGACY_HOSTS"
 ENV_LEGACY_REDIRECT_TO = "REGISTRY_LEGACY_REDIRECT_TO"
 ENV_LEGACY_ROBOTS_DISALLOW = "REGISTRY_LEGACY_ROBOTS_DISALLOW"
+ENV_CLOUD_ASSERTION_KEYS_FILE = "REGISTRY_CLOUD_ASSERTION_KEYS_FILE"
+CLOUD_ASSERTION_KID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DEFAULT_LEGACY_REDIRECT_TO = "https://navide.dev/"
 _ORIGIN_PATTERN = re.compile(r"^https?://[a-z0-9.-]+(?::[0-9]{1,5})?$")
 MIN_AUTH_SECRET_LENGTH = 32
@@ -117,6 +119,10 @@ class Settings:
     legacy_robots_disallow: bool = False
     """Off while search engines still need to crawl the legacy pages to see
     their redirect and noindex; turn on once the old URLs left the index."""
+    cloud_assertion_keys: tuple[tuple[str, str], ...] = ()
+    """(kid, Ed25519 SPKI PEM) pairs that may sign Navide-Server sign-in
+    assertions (cloud_assertion.py). Empty turns `/api/cli/cloud-exchange`
+    off (404). Two entries during a key rotation."""
 
     @property
     def host_routing_enabled(self) -> bool:
@@ -125,6 +131,10 @@ class Settings:
     @property
     def cloud_auth_enabled(self) -> bool:
         return self.auth_url is not None
+
+    @property
+    def cloud_exchange_enabled(self) -> bool:
+        return bool(self.cloud_assertion_keys)
 
     def __post_init__(self) -> None:
         auth_values = (
@@ -163,6 +173,7 @@ class Settings:
                 "root_path must be empty or start with '/' and have no trailing '/'"
             )
         self._validate_host_routing()
+        self._validate_cloud_assertion_keys()
         if self.trust_profile != TRUST_PROFILE_OFFICIAL:
             return
         if self.verifier_kind != VERIFIER_ED25519:
@@ -177,6 +188,20 @@ class Settings:
             raise ValueError("official registry cannot allow open admin endpoints")
         if not self.cookie_secure:
             raise ValueError("official registry requires Secure cookies")
+
+    def _validate_cloud_assertion_keys(self) -> None:
+        kids = [kid for kid, _ in self.cloud_assertion_keys]
+        if len(kids) != len(set(kids)):
+            raise ValueError("cloud assertion keys must have distinct kids")
+        for kid, pem in self.cloud_assertion_keys:
+            if not isinstance(kid, str) or not CLOUD_ASSERTION_KID_PATTERN.match(kid):
+                raise ValueError("cloud assertion key kid must match [A-Za-z0-9_-]{1,64}")
+            try:
+                public_key_fingerprint(pem)
+            except Exception as exc:  # noqa: BLE001 - any parse failure is a bad key
+                raise ValueError(
+                    f"cloud assertion key '{kid}' is not an Ed25519 SPKI public key in PEM form"
+                ) from exc
 
     def _validate_host_routing(self) -> None:
         if (self.store_origin is None) != (self.developer_origin is None):
@@ -214,6 +239,11 @@ class Settings:
     @property
     def storage_root(self) -> Path:
         return self.data_dir / "packages"
+
+    @property
+    def upload_dir(self) -> Path:
+        """Where an upload is spooled while it is checked (unnamed temp files)."""
+        return self.data_dir / "uploads"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -407,6 +437,38 @@ def _load_official_trust_config(path: Path) -> dict[str, Any]:
     }
 
 
+def _load_cloud_assertion_keys(path_value: str | None) -> tuple[tuple[str, str], ...]:
+    """The public keys file Navide-Server's keys are deployed in. Unset or
+    missing turns the exchange off (the App falls back to the browser
+    sign-in); a file that exists but is malformed stops startup, so a typo
+    never silently disables or weakens it. Keys are checked in Settings."""
+    if not path_value:
+        return ()
+    path = Path(path_value)
+    if not path.exists():
+        return ()
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("cloud assertion keys file cannot be read as JSON") from exc
+    if not isinstance(raw, dict) or set(raw) != {"keys"} or not isinstance(raw["keys"], list):
+        raise ValueError('cloud assertion keys file must be {"keys": [...]}')
+    keys: list[tuple[str, str]] = []
+    for index, entry in enumerate(raw["keys"]):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"kid", "public_key"}
+            or not isinstance(entry["kid"], str)
+            or not isinstance(entry["public_key"], str)
+        ):
+            raise ValueError(
+                f"cloud assertion keys[{index}] must be {{\"kid\": string, \"public_key\": string}}"
+            )
+        keys.append((entry["kid"], entry["public_key"]))
+    # An empty list is allowed: removing a leaked key's entry may leave none.
+    return tuple(keys)
+
+
 def load_settings() -> Settings:
     data_dir = Path(os.environ.get(ENV_DATA_DIR, DEFAULT_DATA_DIR))
     trust_profile = os.environ.get(ENV_TRUST_PROFILE, TRUST_PROFILE_SELF_HOSTED_DEV)
@@ -452,5 +514,6 @@ def load_settings() -> Settings:
         legacy_redirect_to=(os.environ.get(ENV_LEGACY_REDIRECT_TO) or "").strip()
         or DEFAULT_LEGACY_REDIRECT_TO,
         legacy_robots_disallow=_env_bool(ENV_LEGACY_ROBOTS_DISALLOW, False),
+        cloud_assertion_keys=_load_cloud_assertion_keys(os.environ.get(ENV_CLOUD_ASSERTION_KEYS_FILE)),
         **trust_config,
     )

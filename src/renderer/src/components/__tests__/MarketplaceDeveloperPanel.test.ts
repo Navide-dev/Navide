@@ -73,6 +73,24 @@ describe('MarketplaceDeveloperPanel', () => {
     expect(list.text()).toContain(i18n.global.t('marketplace-developer.application.reclaimed.no-reason'))
   })
 
+  it('signs in through the Navide Cloud account on opening, and says so (0.2.43 #2b)', async () => {
+    const signedIn = { ...state, signedIn: { account: true, publisher: false }, cloudMemberId: 'm_1' }
+    const syncCloudAccount = vi.fn(async () => signedIn)
+    ;(window as unknown as { agentTeam: unknown }).agentTeam = {
+      developer: {
+        syncCloudAccount,
+        state: vi.fn(async () => signedIn),
+        application: vi.fn(async () => ({ ok: false, status: 404, code: null, message: '' })),
+        versions: vi.fn(async () => ({ ok: true, status: 200, body: { items: [] } })),
+      },
+    }
+    closeMarketplaceForm()
+    wrapper = mount(MarketplaceDeveloperPanel, { props: { backend: createMockBackend('connected').backend }, global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(syncCloudAccount).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="developer-via-cloud"]').text()).toBe(i18n.global.t('marketplace-developer.account.via-cloud'))
+  })
+
   describe('entry card (plan v2_8714c5 b1)', () => {
     async function mountWith(signedIn: boolean, status: string | null, keyRegistered = false): Promise<VueWrapper> {
       const openExternal = vi.fn().mockResolvedValue({ ok: true })

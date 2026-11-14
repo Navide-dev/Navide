@@ -51,6 +51,7 @@ import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginU
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
+import { publishConfirmDialog } from './plugins/developerPublishConfirm'
 import { DeveloperVault } from './plugins/developerVault'
 import { PluginSecretStore } from './plugins/pluginSecrets'
 import type { PluginSecretsNotice } from '../shared/pluginSecretsNotice'
@@ -2516,6 +2517,19 @@ const developerAccount = new DeveloperAccount({
   }),
   registryUrl: () => resolveConfiguredMarketplace().registryUrl,
   openExternal: (url) => shell.openExternal(url),
+  // 0.2.43 #2b: reuse the Navide Cloud sign-in; the Cloud token stays in the backend.
+  cloud: {
+    identity: () => frontendPluginManager.requestCloudIdentity(),
+    assertion: (request) => frontendPluginManager.requestCloudRegistryAssertion(request),
+  },
+  confirmPublish: async (request) => {
+    const { options, namespaceFor } = publishConfirmDialog(request, currentUiLocale())
+    const parent = BrowserWindow.getFocusedWindow()
+    const { response } = await (parent && !parent.isDestroyed()
+      ? dialog.showMessageBox(parent, options)
+      : dialog.showMessageBox(options))
+    return namespaceFor(response)
+  },
 })
 setDeveloperAccount(developerAccount)
 const developerIpc = registerDeveloperIpc({
