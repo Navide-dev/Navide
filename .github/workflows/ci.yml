@@ -446,6 +446,15 @@ jobs:
       # to clean up descendants when pytest exits.
       # Preserve detached supervision: watchdog threads attached to the Actions
       # console previously hung the step even after pytest had exited.
+      # Diagnosis only: a stall gets native stacks of the stuck python, read
+      # without its GIL (see PY_SPY_ENV in backend/ci_windows_tests.py).
+      - name: Install py-spy for stall stacks
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          uv tool install py-spy==0.4.2
+          "NAVIDE_CI_PY_SPY=$(Join-Path $env:UV_TOOL_BIN_DIR 'py-spy.exe')" >> $env:GITHUB_ENV
       - name: Start detached Windows tests
         if: runner.os == 'Windows'
         shell: pwsh
