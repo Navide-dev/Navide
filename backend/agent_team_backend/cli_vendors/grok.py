@@ -80,7 +80,20 @@ _SESSIONS_DIRNAME = "sessions"
 #: Written by grok inside a group directory whose encoded name had to be
 #: shortened; holds the real cwd.
 _CWD_FILE = ".cwd"
+#: NAME_MAX on macOS, Linux and Windows: a longer path component cannot be
+#: created, and stat() on one raises ENAMETOOLONG instead of "not found".
+_NAME_MAX_BYTES = 255
 _TEXT_MAX_CHARS = 4_000
+
+
+def _group_name(workspace_path: str) -> str:
+    """grok's group directory name for a cwd when it fits (ASCII, so chars == bytes)."""
+    return quote(workspace_path.rstrip("/"), safe="")
+
+
+def _is_shortened(workspace_path: str) -> bool:
+    """Whether grok had to shorten this cwd's group name (and wrote ``.cwd``)."""
+    return len(_group_name(workspace_path)) > _NAME_MAX_BYTES
 
 
 def _cap_text(text: str) -> str:
@@ -248,21 +261,45 @@ class GrokLogReader(LogReader):
         """Only the sessions of one workspace — the group directory IS the
         index, so a per-workspace rescan never touches another project.
 
-        Returns None (meaning "cannot scope, scan everything") for a workspace
-        whose group name was shortened: the mapping is one-way then, and the
-        real path lives in a ``.cwd`` file the caller would have to read anyway.
+        A workspace whose encoded name is over 255 bytes is looked up by the
+        ``.cwd`` grok wrote into its shortened group; building the long name
+        would raise ENAMETOOLONG. For a short name that has no group yet the
+        answer is None ("cannot scope, scan everything") while any shortened
+        group exists, as before.
         """
         if not workspace_path:
             return None
-        group = self._sessions_root() / quote(workspace_path.rstrip("/"), safe="")
+        if _is_shortened(workspace_path):
+            group = self._shortened_group(workspace_path)
+            # Every shortened group was checked by its .cwd: none means no sessions.
+            return [] if group is None else self._transcripts_in(group)
+        group = self._sessions_root() / _group_name(workspace_path)
         if not group.is_dir():
             # Either no sessions yet, or a shortened group name. Distinguishing
             # them costs a full scan of the root either way.
             return None if self._has_shortened_group() else []
+        return self._transcripts_in(group)
+
+    @staticmethod
+    def _transcripts_in(group: Path) -> list[Path] | None:
         try:
             return sorted(group.glob(f"*/{_TRANSCRIPT}"))
         except OSError:
             return None
+
+    def _shortened_group(self, workspace_path: str) -> Path | None:
+        """The group of a workspace whose encoded name is over the limit, found
+        by the real path grok wrote into its ``.cwd`` — the slug and hash grok
+        names it with are grok's own and are not recomputed here."""
+        cwd = workspace_path.rstrip("/")
+        try:
+            for group in self._sessions_root().iterdir():
+                marker = group / _CWD_FILE
+                if marker.is_file() and marker.read_text(encoding="utf-8").strip().rstrip("/") == cwd:
+                    return group
+        except OSError:
+            pass
+        return None
 
     def _has_shortened_group(self) -> bool:
         root = self._sessions_root()
@@ -588,18 +625,20 @@ def _session_path(workspace_path: str, session_id: str) -> Path | None:
     named.
 
     The per-cwd group directory makes this reconstructable, which the community
-    CLI's one shared SQLite store never allowed. It stays unanswerable for a
-    workspace whose encoded name grok had to shorten: the real path then lives
-    in a ``.cwd`` file inside a group whose name is a hash, so the id alone
-    cannot point at it and "assume resumable" remains the right answer.
+    CLI's one shared SQLite store never allowed. A workspace whose encoded name
+    grok had to shorten is found by the ``.cwd`` in its group; with no such
+    group yet, "assume resumable" (None) remains the answer. A short name stays
+    unanswered while any shortened group exists, as before.
     """
     if not workspace_path or not session_id:
         return None
     reader = GrokLogReader()
+    if _is_shortened(workspace_path):
+        group = reader._shortened_group(workspace_path)
+        return None if group is None else group / session_id / _TRANSCRIPT
     if reader._has_shortened_group():
         return None
-    group = reader._sessions_root() / quote(workspace_path.rstrip("/"), safe="")
-    return group / session_id / _TRANSCRIPT
+    return reader._sessions_root() / _group_name(workspace_path) / session_id / _TRANSCRIPT
 
 
 # ---- credentials (vault layout + identity) ---------------------------------
