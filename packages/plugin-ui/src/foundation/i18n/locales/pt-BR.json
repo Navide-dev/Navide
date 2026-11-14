@@ -1092,6 +1092,8 @@
       "mcp-never-connected-body": "O painel \"{name}\" está aberto há 3 minutos e suas ferramentas do Navide nunca se conectaram.",
       "mcp-reconnect": "Reconectar",
       "mcp-reconnect-busy": "O painel está ocupado — toque em Reconectar quando ele estiver ocioso (reconectar encerra os processos em segundo plano da CLI)",
+      "parked-overdue-body": "Uma mensagem para \"{name}\" está parada há 10 minutos: esse painel ainda não foi aberto, e a mensagem entra quando ele for. ({excerpt})",
+      "parked-overdue-open": "Abrir painel",
       "login-expired-notify-title": "Login da CLI expirado",
       "login-expired-notify-body": "A CLI informou um login expirado: clique no selo do pane para entrar de novo",
       "login-expired-account-dir-notify-body": "{account} não está mais conectada na própria pasta. Clique no selo de login deste pane para entrar de novo ou use “Entrar” na lista de contas do selo de uso. Até lá, os novos panes usam o login compartilhado.",

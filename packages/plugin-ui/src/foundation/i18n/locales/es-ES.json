@@ -1092,6 +1092,8 @@
       "mcp-never-connected-body": "El panel «{name}» lleva 3 minutos abierto y sus herramientas de Navide no se han conectado.",
       "mcp-reconnect": "Reconectar",
       "mcp-reconnect-busy": "El panel está ocupado: pulsa Reconectar cuando esté inactivo (reconectar termina los procesos en segundo plano de la CLI)",
+      "parked-overdue-body": "Un mensaje para «{name}» lleva 10 minutos en espera: ese panel aún no está abierto y el mensaje entrará cuando se abra. ({excerpt})",
+      "parked-overdue-open": "Abrir panel",
       "login-expired-notify-title": "Inicio de sesión de la CLI caducado",
       "login-expired-notify-body": "La CLI informó de un inicio de sesión caducado: haz clic en la insignia del pane para volver a iniciar sesión",
       "login-expired-account-dir-notify-body": "{account} ya no tiene la sesión iniciada en su propia carpeta. Haz clic en la insignia de inicio de sesión de este pane para volver a iniciarla o usa «Iniciar sesión» en la lista de cuentas de la insignia de uso. Hasta entonces, los panes nuevos usan el inicio de sesión compartido.",

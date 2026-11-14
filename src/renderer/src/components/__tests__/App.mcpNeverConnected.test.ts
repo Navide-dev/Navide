@@ -45,3 +45,13 @@ describe('a pane whose Navide tools never connected', () => {
     expect(fn).not.toMatch(/sendInput|\/mcp/)
   })
 })
+
+describe('a message parked on an unopened pane for ten minutes', () => {
+  it('tells the user and offers to open the pane, from the window that holds it', () => {
+    const body = handler('agent_msg.parked_overdue')
+    expect(body).toContain('!p.realized && p.messagingName === name')
+    expect(body).toContain("'pane.terminal.parked-overdue-body'")
+    expect(body).toContain("label: i18n.global.t('pane.terminal.parked-overdue-open')")
+    expect(body).toContain('void realizeRestoredPane(paneId, false, { explicit: true })')
+  })
+})

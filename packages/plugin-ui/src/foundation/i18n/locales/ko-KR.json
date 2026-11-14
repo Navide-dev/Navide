@@ -1092,6 +1092,8 @@
       "mcp-never-connected-body": "창 \"{name}\"이(가) 3분째 실행 중이지만 Navide 도구에 연결되지 않았습니다.",
       "mcp-reconnect": "다시 연결",
       "mcp-reconnect-busy": "창이 작업 중입니다. 유휴 상태가 되면 \"다시 연결\"을 누르세요(다시 연결하면 CLI의 백그라운드 프로세스가 종료됩니다)",
+      "parked-overdue-body": "\"{name}\"에게 보낸 메시지가 10분째 대기 중입니다. 그 창이 아직 열리지 않았으며, 열리면 메시지가 전달됩니다. ({excerpt})",
+      "parked-overdue-open": "창 열기",
       "login-expired-notify-title": "CLI 로그인 만료",
       "login-expired-notify-body": "CLI가 로그인 만료를 보고했어요 — pane의 배지를 클릭해서 다시 로그인하세요",
       "login-expired-account-dir-notify-body": "{account}이(가) 자체 폴더에서 더 이상 로그인되어 있지 않아요. 이 pane의 로그인 배지를 클릭해서 다시 로그인하거나, 사용량 배지의 계정 목록에서 로그인을 사용하세요. 그때까지 새 pane은 공유 로그인을 사용해요.",

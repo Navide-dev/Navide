@@ -18625,6 +18625,22 @@ backend.on('mcp.never_connected', (raw) => {
   sysNotify.notifyPaneState(pane.id, 'attention', title, body)
 })
 
+// A cli_send has sat parked on a restore placeholder for 10 minutes (backend
+// take_overdue_parked). The window holding that unopened pane tells the user
+// and offers to open it; nothing opens by itself.
+backend.on('agent_msg.parked_overdue', (raw) => {
+  const ev = raw as { target?: string; excerpt?: string }
+  const name = (ev?.target ?? '').split('/').pop() ?? ''
+  const pane = panes.value.find((p) => !p.realized && p.messagingName === name)
+  if (!name || !pane) return
+  const paneId = pane.id
+  notifyRestore.toast(i18n.global.t('pane.terminal.parked-overdue-body', { name, excerpt: ev.excerpt ?? '' }), {
+    type: 'info',
+    duration: 20000,
+    action: { label: i18n.global.t('pane.terminal.parked-overdue-open'), run: () => { void realizeRestoredPane(paneId, false, { explicit: true }) } },
+  })
+})
+
 // That pane reached the server after all (a manual /mcp, a rebuild).
 backend.on('mcp.connected', (raw) => {
   const ev = raw as { pane_id?: string }

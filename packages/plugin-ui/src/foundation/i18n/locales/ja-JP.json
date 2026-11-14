@@ -1092,6 +1092,8 @@
       "mcp-never-connected-body": "ペイン「{name}」が起動して 3 分たちましたが、Navide ツールに接続できていません。",
       "mcp-reconnect": "再接続",
       "mcp-reconnect-busy": "ペインは作業中です。アイドルになってから「再接続」を押してください（再接続すると CLI のバックグラウンド処理は終了します）",
+      "parked-overdue-body": "「{name}」宛てのメッセージが 10 分間保留されています。このペインはまだ開かれておらず、開くと送信されます。（{excerpt}）",
+      "parked-overdue-open": "ペインを開く",
       "login-expired-notify-title": "CLI のログイン期限が切れました",
       "login-expired-notify-body": "CLI がログイン期限切れを報告しました。ペインのバッジをクリックして再ログインしてください",
       "login-expired-account-dir-notify-body": "{account} の専用フォルダーでのサインインが無効になりました。このペインのログインバッジをクリックして再サインインするか、使用量バッジのアカウント一覧で「サインイン」を押してください。それまで新しいペインは共有のログインを使います。",

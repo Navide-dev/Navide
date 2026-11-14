@@ -1213,6 +1213,8 @@ _plugin_audit_task: "asyncio.Task[None] | None" = None
 _session_archive_task: "asyncio.Task[None] | None" = None
 _frozen_keepalive_task: "asyncio.Task[None] | None" = None
 _mcp_connect_watch_task: "asyncio.Task[None] | None" = None
+_parked_message_watch_task: "asyncio.Task[None] | None" = None
+_PARKED_MESSAGE_SWEEP_S = 60.0
 
 _SESSION_ARCHIVE_FIRST_S = 600
 _SESSION_ARCHIVE_EVERY_S = 86_400
@@ -1241,8 +1243,24 @@ async def _session_archive_loop() -> None:
 
 @app.on_event("shutdown")
 async def _stop_mcp_connect_watch() -> None:
-    if _mcp_connect_watch_task is not None:
-        _mcp_connect_watch_task.cancel()
+    for task in (_mcp_connect_watch_task, _parked_message_watch_task):
+        if task is not None:
+            task.cancel()
+
+
+async def _parked_message_watch() -> None:
+    """Every minute: a cli_send still parked on a restore placeholder after 10
+    minutes goes to the windows once (agent_msg.parked_overdue), which tell
+    the user and offer to open the pane."""
+    from .mcp_server import server as plan_mcp
+
+    while True:
+        await asyncio.sleep(_PARKED_MESSAGE_SWEEP_S)
+        for item in plan_mcp.take_overdue_parked():
+            try:
+                await broadcast(make_event("agent_msg.parked_overdue", item))
+            except Exception as err:  # noqa: BLE001 — the loop must survive
+                log.warning("parked message notice failed: %s", err)
 
 
 async def _notify_mcp_connected(pane_id: str) -> None:
@@ -2711,10 +2729,12 @@ async def _start_log_watcher() -> None:
     # the windows and the bound chats once per pane.
     from . import mcp_connect_watch
 
-    global _mcp_connect_watch_task
+    global _mcp_connect_watch_task, _parked_message_watch_task
     _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
         _notify_mcp_never_connected, _notify_mcp_connected,
     ))
+    # A cli_send parked on a restore placeholder for 10 minutes: tell the user.
+    _parked_message_watch_task = asyncio.create_task(_parked_message_watch())
 
     # Frozen onefile build only: keep the extraction directory from being
     # purged as idle temp while the backend stays up (see frozen_env).
