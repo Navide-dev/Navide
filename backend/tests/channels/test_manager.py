@@ -1497,8 +1497,10 @@ async def test_failed_relay_send_leaves_no_answerable_id(env: Env) -> None:
 class _Gate:
     def __init__(self) -> None:
         self.release = asyncio.Event()
+        self.entered = asyncio.Event()
 
     async def block(self, *args, **kwargs):
+        self.entered.set()
         await self.release.wait()
         return {"ok": True, "sent": True, "msg_key": "kx", "pane_id": "pane-1"}
 
@@ -1528,11 +1530,15 @@ async def test_stuck_seam_does_not_block_other_chats(env: Env, stuck: str) -> No
         first = "stop"
     else:
         first = "slow"
-    t0 = time.monotonic()
-    await env.inbound(first, wait=False)  # returns at once: the receive loop stays free
-    assert time.monotonic() - t0 < 0.2
-    await env.inbound("side ping", chat="-200", thread="", wait=False)
-    await _until(lambda: "side ping" in seen, timeout=1.0)
+    # Proved by order, not by the wall clock: handle_inbound persists the row on the db
+    # thread before it returns, which a loaded Windows runner can stretch past any small
+    # budget. What matters is that it returns while the seam is still held, and that the
+    # other chat is delivered before the gate opens. The timeouts only turn a hang into a
+    # failure.
+    await asyncio.wait_for(env.inbound(first, wait=False), timeout=10)
+    await asyncio.wait_for(gate.entered.wait(), timeout=10)  # the first chat is now stuck
+    await asyncio.wait_for(env.inbound("side ping", chat="-200", thread="", wait=False), timeout=10)
+    await _until(lambda: "side ping" in seen, timeout=10)
     gate.release.set()
     await env.m.wait_idle()
 
