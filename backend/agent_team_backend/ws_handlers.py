@@ -12391,6 +12391,15 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", unsafe))
         return
 
+    remote_target: dict[str, Any] | None = None
+    if payload.get("remote") is not None:
+        from . import remote_devcontainer
+
+        try:
+            remote_target = remote_devcontainer.parse_remote(payload.get("remote"))
+        except remote_devcontainer.RemoteSpecError as err:
+            await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+            return
     manual_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
     # A rebuild re-keys the old record onto the new id; read the session the old
@@ -12431,6 +12440,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         spawned_by=payload.get("spawned_by", ""),
         launch_id=launch_id.current(),
         opened_by=str(payload.get("opened_by") or ""),
+        remote=remote_target,
     )
     await run_in_db_thread(app.pane_account_history.pin, str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(

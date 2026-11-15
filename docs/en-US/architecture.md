@@ -292,6 +292,21 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   both of which live in the Electron main process's data directory. Activity
   records a `secrets.*` call by its address only, and every agent tool answer
   is redacted against the package's own values.
+- A remote container pane (experimental, off by default;
+  `remote_devcontainer.py`, `remote_devcontainer_ws.py`) runs its CLI on
+  another machine through the user's own `ssh` and `docker exec`. What leaves
+  this machine is the pane's Navide MCP token and nothing else: it is written
+  as the pane's first input line only after the remote side has turned tty
+  echo off and asked for it, so it never appears on a local or remote command
+  line; the spawn environment is reduced to what `ssh` needs, so no `SendEnv`
+  rule can carry a local credential; agent and X11 forwarding are off. The
+  remote pane skips every local-credential step at spawn (CODEX_HOME, account
+  dir, credential launch, launch provenance), and the account-switch and
+  quota-failover callers refuse a pane whose term metadata carries `remote`.
+  The `ssh -R` tunnel binds the remote host's loopback (or, for a bridge
+  network, its Docker gateway, reachable by other accounts on that host and
+  guarded only by the per-pane token). Navide never runs `ssh-add` and never
+  reads or writes `~/.ssh`.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

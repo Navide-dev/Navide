@@ -216,3 +216,36 @@ def test_mcp_account_switch_refuses_a_remote_pane(monkeypatch: pytest.MonkeyPatc
     assert result["status"] == "refused"
     assert result["ok"] is False
 
+
+
+def test_pane_record_keeps_the_remote_target_across_restore(tmp_path: Path) -> None:
+    from agent_team_backend.projects import ProjectStore
+
+    ws = str(tmp_path)
+    store = ProjectStore()
+    spec = remote_devcontainer.parse_remote(
+        {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}})
+    store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude", remote=spec)
+    store.record_manual_pane_spawn(ws, pane_id="local", agent="claude")
+    # A restore re-keys the record under a new id without resending the target.
+    store.record_manual_pane_spawn(ws, pane_id="p2", previous_pane_id="p1", agent="claude")
+    reloaded = {p.pane_id: p for p in ProjectStore().load_or_create(ws).panes}
+    assert reloaded["p2"].remote == spec
+    assert reloaded["local"].remote == {}
+
+
+def test_manual_pane_spawn_refuses_a_malformed_remote_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: list[Any] = []
+    monkeypatch.setattr(app, "project_store", SimpleNamespace(
+        record_manual_pane_spawn=lambda *a, **kw: recorded.append(kw)), raising=False)
+
+    async def run() -> list[dict[str, Any]]:
+        session = _session(None)
+        await ws_handlers.manual_pane_spawn(session, "m1", "manual_pane.spawn", {
+            "workspace_path": "/w", "pane_id": "p", "agent": "claude",
+            "remote": {"host": "-oProxyCommand=x", "container": "c"},
+        })
+        return session.sent
+
+    assert asyncio.run(run())[-1]["error"]["code"] == "BAD_REQUEST"
+    assert recorded == []

@@ -3023,6 +3023,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         loginProfileId: opts.loginProfileId ?? null,
         isLogin: opts.isLogin ?? false,
         ...(opts.accountDirLogin ? { accountDirLogin: true } : {}),
+        ...(opts.remote ? { remote: opts.remote } : {}),
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,

@@ -906,6 +906,11 @@ describe('paneNeedsAccountRestart', () => {
     expect(paneNeedsAccountRestart({ ...pane, realized: false }, 'claude', 'running')).toBe(false)
   })
 
+  it('excludes a remote container pane: its CLI signs in inside the container', () => {
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' as const } }
+    expect(paneNeedsAccountRestart({ ...pane, remote }, 'claude', 'running')).toBe(false)
+  })
+
   it('excludes exited and errored panes', () => {
     expect(paneNeedsAccountRestart(pane, 'claude', 'exited')).toBe(false)
     expect(paneNeedsAccountRestart(pane, 'claude', 'error')).toBe(false)

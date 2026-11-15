@@ -232,6 +232,8 @@ import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
+import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
+import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -523,6 +525,7 @@ const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
+const RemoteDevcontainerDialog = defineAsyncComponent(() => import('./components/RemoteDevcontainerDialog.vue'))
 const ArenaPanel = defineAsyncComponent(() => import('./components/ArenaPanel.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
@@ -1986,6 +1989,12 @@ interface ActivePane {
    *  — an authorization URL, a pasted code — is never handed to another pane,
    *  a chat or the editor's AI Chat, and it writes no log file. */
   isLogin?: boolean
+  /** A remote container pane (Settings → Experimental → Remote container
+   *  panes): the CLI runs over ssh in this container. It never takes part in
+   *  account switching or quota failover, and every respawn (rebuild,
+   *  reconnect, restore) goes back to the same container. Persisted on the
+   *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
+  remote?: RemoteTarget
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -6624,8 +6633,9 @@ function checkPaneUsageLimit(
   // And the failover authority: it attributes the hit to the account the pane
   // was on, verifies the text against the vendor's declared notice and
   // decides — by the persisted policy — whether anything follows. The text
-  // goes along as evidence; the backend, not this poll, judges it.
-  void quotaFailover.report({
+  // goes along as evidence; the backend, not this poll, judges it. Never for a
+  // remote pane: its quota belongs to the account signed in in the container.
+  if (!pane.remote) void quotaFailover.report({
     agentKey: pane.agentKey,
     paneId: pane.id,
     workspacePath: pane.workspacePath,
@@ -6718,7 +6728,7 @@ function raiseFromQuotaReading(pane: ActivePane, watcher: PaneHealthWatcher, now
   watcher.limitProfileId = pane.profileId ?? null
   // The reading itself is the signal here (no text): the backend checks its
   // own snapshot of the slot before trusting it.
-  void quotaFailover.report({
+  if (!pane.remote) void quotaFailover.report({
     agentKey: pane.agentKey,
     paneId: pane.id,
     workspacePath: pane.workspacePath,
@@ -8220,6 +8230,8 @@ interface SpawnInternal {
   isLogin?: boolean
   /** With `isLogin`: a claude sign-in inside `profileId`'s own config dir. */
   accountDirLogin?: boolean
+  /** Remote container target; see ActivePane.remote. */
+  remote?: RemoteTarget
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8400,8 +8412,10 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   // Login panes get NO marker: they sit at an interactive sign-in wizard, and
   // the marker bootstrap (dismissStartupDialog + pasted marker + Enter) would
   // inject input into it. No marker also means no session overlay for them.
+  // A remote pane gets none either: its session file is in the container,
+  // where the backend's marker reader cannot look.
   const sessionMarker =
-    !opts.isResume && !opts.isLogin && SESSION_MARKER_AGENTS.has(opts.agentKey)
+    !opts.isResume && !opts.isLogin && !opts.remote && SESSION_MARKER_AGENTS.has(opts.agentKey)
       ? `at-pane:${id}`
       : ''
   const pane: ActivePane = {
@@ -8439,6 +8453,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     openedById: opts.openedById,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
+    remote: opts.remote,
   }
   acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
@@ -8446,6 +8461,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   if (
     opts.agentKey === FOLLOW_SWITCH_AGENT &&
     !opts.isLogin &&
+    !opts.remote &&
     (!opts.profileId || !followDirSignedIn(opts.profileId))
   ) {
     accountFollow.add(id)
@@ -8605,6 +8621,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       loginProfileId: opts.loginProfileId,
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
+      ...(opts.remote ? { remote: opts.remote } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -9638,6 +9655,12 @@ async function rebuildPaneViaResume(
   if (!pane?.realized) return 'missing-pane'
   // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
   if (acp.owns(paneId)) return 'no-session'
+  // A remote container pane has no local transcript to resume: the rebuild is
+  // a fresh CLI in the same container (the reconnect banner's path too).
+  if (pane.remote) {
+    await rebuildPaneClean(paneId)
+    return undefined
+  }
   // A sign-in pane has no session to resume. Restarting one whose CLI ended
   // opens the ordinary CLI in its place; rebuildPaneClean carries no sign-in.
   if (loginPaneRestartable(pane, paneRefs[paneId]?.status as string | undefined)) {
@@ -10267,6 +10290,8 @@ const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
  *  on, optionally taking the other panes that ran out on the same account. */
 async function onQuotaSwitchAccount(paneId: string): Promise<void> {
   if (!followSwitchFlag.value) return
+  // A remote pane signs in inside its container; no account here is its own.
+  if (panes.value.find((p) => p.id === paneId)?.remote) return
   const inputs = panes.value.map(followPaneInput)
   const self = inputs.find((p) => p.id === paneId)
   if (!self) return
@@ -10366,7 +10391,7 @@ function paneAccountFixed(p: ActivePane): boolean {
  *  that is working; a declined or failed rebuild leaves the flag as it was. */
 async function toggleAccountPin(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
-  if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
+  if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT || pane.remote) return
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
   if (pane.isLogin) return
   if (paneAccountFixed(pane)) {
@@ -10512,6 +10537,7 @@ async function fixDescendantsToAccount(paneId: string): Promise<void> {
 async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (pane?.remote) return
   if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
   await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
 }
@@ -10669,6 +10695,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     model: pane.model,
     effort: pane.effort,
     muted: isPaneMuted(paneId),
+    // A remote pane reconnects to the same container.
+    remote: pane.remote,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -10690,6 +10718,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       isResume: false,
       model: snap.model,
       effort: snap.effort,
+      remote: snap.remote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -13310,6 +13339,8 @@ const channelAccountDeps: ChannelAccountDeps = {
 }
 
 async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+  // The backend refuses these first; this keeps the renderer from moving one.
+  if (panes.value.find((p) => p.id === String(args.paneId ?? ''))?.remote) return { status: 'refused', code: 'REMOTE_PANE' }
   const ctx = switchToastContext(args, callerPaneId)
   const outcome = await runAgentPaneAccountSwitch(args, {
     accounts: cliProfilesApi,
@@ -13757,6 +13788,16 @@ interface ProjectPane {
   /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
    *  Absent on records written before the field existed. */
   last_live_launch?: string
+  /** A remote container pane's target; `{}` or absent for a local pane. */
+  remote?: Partial<RemoteTarget>
+}
+
+/** A saved pane's remote target, or undefined for a local pane. */
+function savedRemoteTarget(saved: { remote?: Partial<RemoteTarget> }): RemoteTarget | undefined {
+  const r = saved.remote
+  return r && typeof r.host === 'string' && r.host && typeof r.container === 'string' && r.container && r.network
+    ? { host: r.host, container: r.container, network: r.network }
+    : undefined
 }
 
 const HISTORY_ORIGINS: readonly SpawnHistoryEntry['origin'][] = ['manual', 'pipeline', 'mcp']
@@ -13949,6 +13990,8 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     formerPaneIds: [saved.pane_id],
     replacePaneId: opts.replacePaneId,
     restoring: opts.restoring,
+    // The backend's record of a remote pane: it goes back to its container.
+    remote: savedRemoteTarget(saved),
   })
   if (!paneId) return null
   if (opts.shouldPersist && !opts.shouldPersist(paneId)) {
@@ -17946,7 +17989,7 @@ backend.on('agent.activity', (raw) => {
     // not text. Same authority, same verification as the pane text path.
     const turnPane = panes.value.find((p) => p.id === ev.pane_id)
     const turnDetail = turnPane ? agentSpecs.find((s) => s.agentKey === turnPane.agentKey)?.quotaExhausted?.turnDetail : undefined
-    if (turnPane && turnDetail && ev.detail === turnDetail) {
+    if (turnPane && turnDetail && ev.detail === turnDetail && !turnPane.remote) {
       void quotaFailover.report({
         agentKey: turnPane.agentKey,
         paneId: turnPane.id,
@@ -24394,6 +24437,51 @@ function openArenaStart(workspace?: string, prefill?: ArenaPrefill): void {
   arenaStartOpen.value = true
 }
 
+// ── Remote container panes (Settings → General → Experimental) ──────────────
+const { remoteEnabled: remoteDevcontainerEnabled } = useRemoteDevcontainerPrefs()
+/** Where the dialog's pane goes; null while the dialog is closed. */
+const remoteDialogTarget = ref<{ workspacePath: string; runGroupId?: string } | null>(null)
+
+function openRemoteDialog(payload: { workspacePath: string; runGroupId?: string }): void {
+  if (!remoteDevcontainerEnabled.value) return
+  remoteDialogTarget.value = { workspacePath: payload.workspacePath || currentWorkspace.value, runGroupId: payload.runGroupId }
+}
+
+/** The dialog's "Open remote pane": a manual pane whose CLI the backend runs
+ *  in the chosen container, recorded like any manual pane so it is restored. */
+async function onRemoteDialogOpen(req: RemoteOpenRequest): Promise<void> {
+  const target = remoteDialogTarget.value
+  remoteDialogTarget.value = null
+  if (!target) return
+  const onScreen = normWs(target.workspacePath) === normWs(currentWorkspace.value)
+  const spawnGroupId = onScreen
+    ? resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, target.runGroupId ?? '')
+    : ''
+  const paneId = await spawnPane({
+    agentKey: req.agentKey,
+    roleKey: '',
+    stageId: '',
+    commandOverride: '',
+    workspacePath: target.workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    remote: req.remote,
+  })
+  if (!paneId) return
+  const pane = panes.value.find((p) => p.id === paneId)
+  await sendQuiet<ProjectPayload>('manual_pane.spawn', {
+    workspace_path: target.workspacePath,
+    pane_id: paneId,
+    agent: req.agentKey,
+    role: '',
+    command: '',
+    session_id: pane?.pinnedSessionId ?? '',
+    run_group_id: spawnGroupId,
+    output_log_file: pane?.outputLogFile ?? '',
+    remote: req.remote,
+  })
+}
+
 function openArenaPanel(runId?: string): void {
   if (!arenaEnabled.value) return
   arenaPanelRunId.value = runId || arenaRuns.value[0]?.id || ''
@@ -25862,6 +25950,13 @@ function paneIsCommander(p: ActivePane): boolean {
     :request="agentSignInConfirm.pending.value"
     @answer="agentSignInConfirm.answer"
   />
+  <RemoteDevcontainerDialog
+    v-if="remoteDialogTarget"
+    :open="!!remoteDialogTarget"
+    :backend="backend"
+    @open="onRemoteDialogOpen"
+    @cancel="remoteDialogTarget = null"
+  />
   <ArenaStartDialog
     v-if="arenaStartOpen"
     :open="arenaStartOpen"
@@ -26142,6 +26237,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @agent-open="openAgentIdentity"
       @spawn="onManualSpawn"
       @spawn-acp="onAcpSpawn"
+      @spawn-remote="openRemoteDialog"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"
@@ -26653,6 +26749,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :account-follow="paneAccountFollow(p)"
           :continue-available="p.resumeContinueAvailable"
           :restoring="p.restoring"
+          :remote="p.remote"
+          :remote-reconnect="() => rebuildPaneClean(p.id)"
+          :remote-close-pane="() => onKill(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"
           @minimize="minimizePane(p.id)"

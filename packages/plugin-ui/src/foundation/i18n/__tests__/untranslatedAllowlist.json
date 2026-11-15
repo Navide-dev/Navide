@@ -925,7 +925,8 @@
     "settings.tab.pipelines",
     "turn-stats.title",
     "webhooks.host.placeholder",
-    "webhooks.kind.github"
+    "webhooks.kind.github",
+    "remoteDevcontainer.host-placeholder"
   ],
   "vi-VN": [
     "account.title",
@@ -1076,7 +1077,8 @@
     "webhooks.outcome.ping",
     "webhooks.reveal.secret",
     "webhooks.fieldType.email",
-    "label.terminal"
+    "label.terminal",
+    "remoteDevcontainer.host-placeholder"
   ],
   "ja-JP": [
     "webhooks.form.pipeline",

@@ -75,3 +75,24 @@ describe('Host terminal dock adapter', () => {
     ])
   })
 })
+
+describe('Host terminal dock adapter – remote container panes', () => {
+  const base = {
+    paneId: 'pane-1', createGeneration: 'g-1', agentKey: 'claude', command: 'claude', cwd: '/w', env: null,
+    cols: 80, rows: 24, metadata: null, outputLogFile: null, loginProfileId: null, isLogin: false, replacesTerminalId: null,
+  }
+
+  it('sends the remote target as a top-level field for a remote pane', async () => {
+    const harness = createHarness()
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'bridge' as const, gateway: '172.17.0.1' } }
+    await harness.port.create({ ...base, remote }, 10)
+    expect(harness.sent[0].payload.remote).toEqual(remote)
+    expect(harness.sent[0].payload.metadata).toBeNull()
+  })
+
+  it('leaves a local pane payload without any remote key', async () => {
+    const harness = createHarness()
+    await harness.port.create(base, 10)
+    expect(harness.sent[0].payload).not.toHaveProperty('remote')
+  })
+})
