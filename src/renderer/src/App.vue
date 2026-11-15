@@ -24506,6 +24506,9 @@ async function onRemoteDialogOpen(req: RemoteOpenRequest): Promise<void> {
   const spawnGroupId = onScreen
     ? resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, target.runGroupId ?? '')
     : ''
+  // The user's own choice, recorded app-wide first: the backend connects only
+  // to a target listed there, never to one a workspace's pane record names.
+  if (!await sendQuiet('remote_devcontainer.trust', { remote: req.remote })) return
   const paneId = await spawnPane({
     agentKey: req.agentKey,
     roleKey: '',

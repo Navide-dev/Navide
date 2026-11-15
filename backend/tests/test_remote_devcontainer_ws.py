@@ -101,11 +101,18 @@ async def _wait_for(path: Path, timeout: float = 10.0) -> dict[str, Any]:
     raise AssertionError("fake ssh never received its token")
 
 
-def test_refused_while_the_switch_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def off() -> bool:
-        return False
+TRUSTED = [{"host": "mac-mini-ubuntu", "container": "devc-navide-app"}]
 
-    monkeypatch.setattr(remote_devcontainer_ws, "_enabled", off)
+
+def _use_settings(monkeypatch: pytest.MonkeyPatch, settings: dict[str, Any]) -> None:
+    async def read() -> dict[str, Any]:
+        return settings
+
+    monkeypatch.setattr(remote_devcontainer_ws, "_settings", read)
+
+
+def test_refused_while_the_switch_is_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_settings(monkeypatch, {remote_devcontainer.TRUSTED_KEY: TRUSTED})
 
     async def run() -> list[dict[str, Any]]:
         created: list[Any] = []
@@ -119,10 +126,7 @@ def test_refused_while_the_switch_is_off(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_bad_host_is_refused_before_anything_spawns(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def on() -> bool:
-        return True
-
-    monkeypatch.setattr(remote_devcontainer_ws, "_enabled", on)
+    _use_settings(monkeypatch, {remote_devcontainer.SETTING_KEY: True, remote_devcontainer.TRUSTED_KEY: TRUSTED})
     monkeypatch.setattr(wiring, "backend_port", lambda: 49161)
 
     async def run() -> list[dict[str, Any]]:
@@ -139,10 +143,7 @@ def test_bad_host_is_refused_before_anything_spawns(monkeypatch: pytest.MonkeyPa
 def test_remote_pane_gets_its_token_on_stdin_and_nothing_local(
     fake_ssh: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    async def on() -> bool:
-        return True
-
-    monkeypatch.setattr(remote_devcontainer_ws, "_enabled", on)
+    _use_settings(monkeypatch, {remote_devcontainer.SETTING_KEY: True, remote_devcontainer.TRUSTED_KEY: TRUSTED})
     secret_name = "ANTHROPIC" + "_API_KEY"
     monkeypatch.setenv(secret_name, "fake-" + str(random.randint(1, 9999)))
     monkeypatch.setenv("CODEX_HOME", "/tmp/should-not-pass")
@@ -249,3 +250,50 @@ def test_manual_pane_spawn_refuses_a_malformed_remote_target(monkeypatch: pytest
 
     assert asyncio.run(run())[-1]["error"]["code"] == "BAD_REQUEST"
     assert recorded == []
+
+
+def test_a_target_the_user_never_opened_does_not_connect(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A pane record in the workspace database (which a cloned repository can
+    # carry) names a host the user never chose in the dialog: no ssh at all.
+    _use_settings(monkeypatch, {remote_devcontainer.SETTING_KEY: True, remote_devcontainer.TRUSTED_KEY: TRUSTED})
+    monkeypatch.setattr(wiring, "backend_port", lambda: 49161)
+
+    async def run() -> list[dict[str, Any]]:
+        created: list[Any] = []
+        session = _session(SimpleNamespace(create=lambda **kw: created.append(kw)))
+        payload = _payload(remote={"host": "attacker.example", "container": "devc-navide-app"})
+        await ws_handlers.terminal_create(session, "m1", "terminal.create", payload)
+        assert created == []
+        return session.sent
+
+    error = asyncio.run(run())[-1]["error"]
+    assert error["code"] == "REMOTE_UNTRUSTED"
+
+
+def test_trust_records_names_only_newest_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    store: dict[str, Any] = {remote_devcontainer.SETTING_KEY: True,
+                             remote_devcontainer.TRUSTED_KEY: [{"host": "old", "container": "c"}]}
+    monkeypatch.setattr(app, "ui_settings_store", SimpleNamespace(
+        get=lambda: dict(store), set=lambda updates: store.update(updates) or updates), raising=False)
+
+    async def run() -> list[dict[str, Any]]:
+        session = _session(None)
+        await remote_devcontainer_ws.remote_trust(session, "m1", "remote_devcontainer.trust", {"remote": {
+            "host": "mac-mini-ubuntu", "container": "devc-navide-app",
+            "network": {"mode": "bridge", "gateway": "172.17.0.1"}}})
+        return session.sent
+
+    assert asyncio.run(run())[-1]["payload"] == {"trusted": True}
+    assert store[remote_devcontainer.TRUSTED_KEY] == [
+        {"host": "mac-mini-ubuntu", "container": "devc-navide-app"}, {"host": "old", "container": "c"}]
+
+
+def test_trust_is_refused_while_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_settings(monkeypatch, {})
+
+    async def run() -> list[dict[str, Any]]:
+        session = _session(None)
+        await remote_devcontainer_ws.remote_trust(session, "m1", "remote_devcontainer.trust", {"remote": {}})
+        return session.sent
+
+    assert asyncio.run(run())[-1]["error"]["code"] == "REMOTE_DISABLED"

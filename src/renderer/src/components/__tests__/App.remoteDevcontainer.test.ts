@@ -23,8 +23,11 @@ describe('App – remote container panes', () => {
     expect(body).toContain('remote: req.remote')
     expect(body).toContain("'manual_pane.spawn'")
     // The backend's pane record keeps the target; nothing goes to localStorage.
-    expect(body.split('remote: req.remote').length - 1).toBe(2)
+    expect(body.split('remote: req.remote').length - 1).toBe(3) // trust, spawnPane, manual_pane.spawn
     expect(appSource).not.toContain('agentTeam.remotePanes')
+    // Trusted app-wide before anything spawns; a refusal opens nothing.
+    expect(body).toContain("if (!await sendQuiet('remote_devcontainer.trust', { remote: req.remote })) return")
+    expect(body.indexOf('remote_devcontainer.trust')).toBeLessThan(body.indexOf('spawnPane('))
   })
 
   it('spawnPane records the target on the pane and hands it to the terminal', () => {

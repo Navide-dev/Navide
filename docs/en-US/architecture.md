@@ -305,8 +305,13 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   quota-failover callers refuse a pane whose term metadata carries `remote`.
   The `ssh -R` tunnel binds the remote host's loopback (or, for a bridge
   network, its Docker gateway, reachable by other accounts on that host and
-  guarded only by the per-pane token). Navide never runs `ssh-add` and never
-  reads or writes `~/.ssh`.
+  guarded only by the per-pane token). A pane connects only to a host and
+  container the user opened from the setup dialog, kept app-wide in
+  `ui_settings` (`remoteDevcontainerTrusted`): the pane record lives in the
+  workspace's `.agent-team/` database, which a cloned repository can carry, so
+  a target read from it is a claim the backend refuses (`REMOTE_UNTRUSTED`)
+  until the user opens that target themselves. Navide never runs `ssh-add`
+  and never reads or writes `~/.ssh`.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
