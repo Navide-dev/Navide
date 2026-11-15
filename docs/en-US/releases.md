@@ -105,6 +105,46 @@ notarization verify step** (`codesign` / `spctl` / `stapler`) instead of
 silently shipping an app that cannot update. Secrets are never required for
 local development and must never be committed.
 
+### Windows code signing (opt-in)
+
+The Windows jobs build unsigned installers unless the `WINDOWS_SIGNING`
+variable is set. Turning it on signs, through an SSL.com eSigner OV
+certificate whose key stays in SSL.com's cloud HSM, every `.exe`
+electron-builder produces or packages: `Navide.exe`, the backend and plugin
+backends, the speech and Windows Hello helpers, the NSIS uninstaller and the
+installer itself, for x64 and arm64 alike. It also writes the publisher into
+`app-update.yml`, so from that release on electron-updater installs only
+updates signed by the same publisher.
+
+Set these under **Settings → Secrets and variables → Actions** (or on the
+`production` Environment). Only the names belong in the repo; the values come
+from the SSL.com account and are entered by the account owner.
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `WINDOWS_SIGNING` | `esigner` turns signing on; unset or empty leaves it off |
+| Variable | `WINDOWS_PUBLISHER_NAME` | The certificate subject, e.g. `CN=<name>, O=<name>, C=<country>` exactly as issued |
+| Variable | `CODESIGNTOOL_SHA256` | SHA-256 of the CodeSignTool for Windows zip the job downloads from ssl.com |
+| Secret | `ES_USERNAME` | SSL.com account user name |
+| Secret | `ES_PASSWORD` | SSL.com account password |
+| Secret | `ES_CREDENTIAL_ID` | eSigner credential ID of the code-signing certificate |
+| Secret | `ES_TOTP_SECRET` | eSigner TOTP secret (automated signing), not a one-time code |
+
+The switch fails closed. With `WINDOWS_SIGNING` set, the job fails when any
+name above is missing, when the downloaded CodeSignTool does not match
+`CODESIGNTOOL_SHA256` (update the variable deliberately when SSL.com ships a
+new version), when a file cannot be signed (`forceCodeSigning`), and when the
+**Verify Windows signatures** step finds an installer or packaged `.exe`
+without a valid signature from `WINDOWS_PUBLISHER_NAME`. Each signed file
+costs one eSigner signing (one SHA-256 pass per file), and dry runs sign too,
+so size the eSigner plan for both arches times every run. Try the first
+signed build as a `workflow_dispatch` dry run before tagging a release.
+
+Before turning it on, keep in mind that once a signed release is installed,
+every later Windows release must be signed with the same certificate subject,
+or its in-app update is refused. Turning the variable off again stops
+updates for users already on a signed build.
+
 ## Creating a release
 
 1. Finish and verify the intended changes. Update `CHANGELOG.md`, and add the

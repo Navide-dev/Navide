@@ -214,6 +214,11 @@
     "win": {
       "target": "nsis",
       "icon": "resources/icon.png",
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      },
       "extraResources": [
         {
           "from": "backend/dist/agent_team_backend",
