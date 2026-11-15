@@ -385,6 +385,8 @@ let quitPromptOpen = false
 // The window the open quit dialog is parented to, so a repeated quit request
 // can bring that dialog forward instead of opening a second one.
 let quitPromptWindow: BrowserWindow | undefined
+// Closes the open quit dialog when the quit no longer needs an answer (SIGTERM).
+let quitPromptAbort: AbortController | undefined
 // Multiple independent main windows (VS Code-style cmd+shift+N). `mainWindow`
 // tracks the most-recently-focused one so dialogs parent to it; `mainWindows`
 // holds them all for lifecycle code that must reach every main window.
@@ -6751,6 +6753,7 @@ app.on('quit', () => {
 // The "confirm before quit" dialog. Resolves true when the user chose Quit;
 // the "don't show again" checkbox is applied here so both callers agree.
 async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> {
+  const abort = new AbortController()
   const opts = {
     type: 'question' as const,
     title: QUIT_DIALOG_TITLE,
@@ -6761,17 +6764,21 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
     detail: quitConfirm.detail,
     checkboxLabel: quitConfirm.dontShowLabel,
     checkboxChecked: false,
+    signal: abort.signal,
   }
   quitPromptOpen = true
   quitPromptWindow = win
+  quitPromptAbort = abort
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
   } finally {
     quitPromptOpen = false
     quitPromptWindow = undefined
+    quitPromptAbort = undefined
   }
-  if (res.response === 1) return false
+  // Closed by SIGTERM: that quit is already under way, not this prompt's to start.
+  if (abort.signal.aborted || res.response === 1) return false
   if (res.checkboxChecked) {
     quitConfirm.enabled = false
     for (const w of BrowserWindow.getAllWindows()) {
@@ -6780,6 +6787,19 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
   }
   return true
 }
+
+// SIGTERM (a logout or shutdown, `kill`, a supervisor stopping the app) is a
+// request to end, not a question for the user: quit as if the prompt had said
+// Quit, closing a prompt that is already on screen. Left to before-quit, the
+// prompt held the quit open until something force-killed the app, and the next
+// launch took that for a crash. The rest of the quit runs as usual, so the exit
+// is marked clean and the backend is stopped rather than orphaned.
+process.on('SIGTERM', () => {
+  quitConfirmed = true
+  dockQuitInProgress = true
+  quitPromptAbort?.abort()
+  app.quit()
+})
 
 app.on('before-quit', async (e) => {
   // Confirmation gate — shared "confirm before close" setting, driven by renderer.
