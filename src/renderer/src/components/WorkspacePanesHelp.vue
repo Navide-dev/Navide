@@ -246,6 +246,7 @@ const prose = computed(() => ({
            three terms above are easier to hold once you can see where each of
            them lives. -->
       <MockFigure
+        shot="workspace.shell"
         :caption="$t('settings.help.workspace.mock.shell.caption')"
         :legend="shellLegend"
       >
@@ -409,6 +410,7 @@ const prose = computed(() => ({
       <!-- Same panes, both ways round: the tab bar and grid on the stage, the
            three-level list in the sidebar. -->
       <MockFigure
+        shot="workspace.groups"
         :caption="$t('settings.help.workspace.mock.groups.caption')"
         :legend="groupsLegend"
       >

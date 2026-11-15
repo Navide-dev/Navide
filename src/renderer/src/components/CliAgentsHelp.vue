@@ -310,6 +310,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p">{{ $t('settings.help.cliAgents.s2.p3') }}</p>
 
       <MockFigure
+        shot="cliAgents.menu"
         :caption="$t('settings.help.cliAgents.mock.menu.caption')"
         :legend="menuLegend"
       >
@@ -327,6 +328,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p">{{ $t('settings.help.cliAgents.s2.p5') }}</p>
 
       <MockFigure
+        shot="cliAgents.install"
         :caption="$t('settings.help.cliAgents.mock.install.caption')"
         :legend="installLegend"
       >
@@ -512,6 +514,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-p">{{ $t('settings.help.cliAgents.s4.p4', facts) }}</p>
 
       <MockFigure
+        shot="cliAgents.settings"
         :caption="$t('settings.help.cliAgents.mock.settings.caption')"
         :legend="settingsLegend"
       >
@@ -664,6 +667,7 @@ const installChain = computed(() => [sample('chain1'), sample('chain2'), sample(
       <p class="cah-note">{{ $t('settings.help.cliAgents.s6.note') }}</p>
 
       <MockFigure
+        shot="cliAgents.usage"
         :caption="$t('settings.help.cliAgents.mock.usage.caption')"
         :legend="usageLegend"
       >
