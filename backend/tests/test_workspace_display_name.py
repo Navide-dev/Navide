@@ -261,6 +261,47 @@ async def test_handler_persists_mirrors_and_broadcasts_both_events(
     assert events[1]["payload"]["recent"][0]["name"] == "Client Portal"
 
 
+async def test_a_written_rename_reaches_the_other_windows_after_the_requester_hangs_up(
+    wired: tuple[Path, list[dict]], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ws_endpoint cancels a closed connection's handler tasks; the rename is
+    already being written in a thread by then, so the windows must hear of it
+    (0.2.44 p8; leftover-bugs-0243 report-c)."""
+    import asyncio
+    import threading
+    import time
+
+    ws, events = wired
+    store = app_module.project_store
+    writing = threading.Event()
+    real = store.set_display_name
+
+    def slow_set_display_name(*args: object, **kwargs: object) -> object:
+        writing.set()
+        time.sleep(0.2)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(store, "set_display_name", slow_set_display_name)
+    session = _Session()
+    task = asyncio.create_task(ws_handlers.project_set_display_name(
+        session, "1", "project.set_display_name",  # type: ignore[arg-type]
+        {"workspace_path": str(ws), "display_name": "Client Portal"},
+    ))
+    while not writing.is_set():
+        await asyncio.sleep(0.005)
+    task.cancel()  # the requester hung up mid-write
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(200):
+        if len(events) == 2:
+            break
+        await asyncio.sleep(0.01)
+
+    assert [e["type"] for e in events] == ["project.ui_state_changed", "workspace.recent_changed"]
+    assert events[0]["payload"]["display_name"] == "Client Portal"
+    assert session.sent == []  # nobody left to answer
+
+
 async def test_handler_clears_the_alias(wired: tuple[Path, list[dict]]) -> None:
     ws, events = wired
     session = _Session()

@@ -11238,6 +11238,24 @@ async def project_get_spawn_history(session: "Session", msg_id: str, msg_type: s
     )
 
 
+#: Follow-up work of a handler, held so a shielded task is not garbage-collected.
+_OUTLIVING_REQUESTER: set["asyncio.Future[Any]"] = set()
+
+
+async def _outlive_requester(work: Awaitable[Any]) -> Any:
+    """Run ``work`` to its end even if the requester hangs up meanwhile.
+
+    ws_endpoint cancels a closed connection's handler tasks. A handler that
+    writes and then tells the other windows would stop between the two: the
+    write lands (a thread cannot be cancelled), the broadcast never goes, and
+    every other window keeps the old state until it reloads. The work runs in
+    a task of its own; the caller still sees the cancellation."""
+    task = asyncio.ensure_future(work)
+    _OUTLIVING_REQUESTER.add(task)
+    task.add_done_callback(_OUTLIVING_REQUESTER.discard)
+    return await asyncio.shield(task)
+
+
 @handler("project.set_display_name")
 async def project_set_display_name(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Persist a user-set display name for the workspace itself.
@@ -11283,7 +11301,34 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
             app.recent_workspaces_store.set_name(ws_raw, display_name)
         return proj
 
-    project = await asyncio.to_thread(_persist)
+    async def _persist_and_announce() -> Any:
+        project = await asyncio.to_thread(_persist)
+        if project is None:
+            return None
+        # Peer windows adopt the new name live (sidebar, title bar).
+        await app.broadcast(
+            make_event(
+                "project.ui_state_changed",
+                {
+                    "workspace_path": project.workspace_path,
+                    "display_name": display_name,
+                },
+            ),
+            exclude=session,
+        )
+        # And the Welcome recent list re-reads the mirror.
+        recent = await asyncio.to_thread(app.recent_workspaces_store.list)
+        await app.broadcast(
+            make_event(
+                "workspace.recent_changed",
+                {"recent": recent, "reason": "display_name"},
+            )
+        )
+        return project
+
+    # A rename that was written reaches the other windows even when the
+    # requester hangs up while it is being written.
+    project = await _outlive_requester(_persist_and_announce())
     if project is None:
         await session.send_json(
             make_response(
@@ -11293,26 +11338,6 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
             )
         )
         return
-
-    # Peer windows adopt the new name live (sidebar, title bar).
-    await app.broadcast(
-        make_event(
-            "project.ui_state_changed",
-            {
-                "workspace_path": project.workspace_path,
-                "display_name": display_name,
-            },
-        ),
-        exclude=session,
-    )
-    # And the Welcome recent list re-reads the mirror.
-    recent = await asyncio.to_thread(app.recent_workspaces_store.list)
-    await app.broadcast(
-        make_event(
-            "workspace.recent_changed",
-            {"recent": recent, "reason": "display_name"},
-        )
-    )
     await session.send_json(
         make_response(msg_id, msg_type, {"ok": True, "display_name": display_name})
     )
@@ -11448,31 +11473,38 @@ async def pane_generate_auto_name(session: "Session", msg_id: str, msg_type: str
         return
 
     name = result["name"]
-    project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
-        ws_raw, pane_id=pane_id, auto_name=name, source="llm"
-    )
-    if project is not None and changed:
-        await asyncio.to_thread(
-            app.spawn_history_store.patch_entry,
-            ws_raw,
-            pane_id,
-            {"autoName": name},
-            seed=project.ui_spawn_history,
+
+    async def _persist_and_announce() -> bool:
+        project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
+            ws_raw, pane_id=pane_id, auto_name=name, source="llm"
         )
-        await app.broadcast(
-            make_event(
-                "project.ui_state_changed",
-                {
-                    "workspace_path": project.workspace_path,
-                    "auto_named_pane": {
-                        "pane_id": pane_id,
-                        "auto_name": name,
-                        "source": "llm",
+        if project is not None and changed:
+            await asyncio.to_thread(
+                app.spawn_history_store.patch_entry,
+                ws_raw,
+                pane_id,
+                {"autoName": name},
+                seed=project.ui_spawn_history,
+            )
+            await app.broadcast(
+                make_event(
+                    "project.ui_state_changed",
+                    {
+                        "workspace_path": project.workspace_path,
+                        "auto_named_pane": {
+                            "pane_id": pane_id,
+                            "auto_name": name,
+                            "source": "llm",
+                        },
                     },
-                },
-            ),
-            exclude=session,
-        )
+                ),
+                exclude=session,
+            )
+        return changed
+
+    # Once the name is being written, the spawn-history mirror and the other
+    # windows get it too, even if the requester hangs up meanwhile.
+    changed = await _outlive_requester(_persist_and_announce())
     # 'changed' is reported so the caller can tell an accepted upgrade from one
     # the arbiter refused (the pane was renamed while the model was thinking).
     await session.send_json(make_response(
