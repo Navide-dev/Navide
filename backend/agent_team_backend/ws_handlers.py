@@ -3825,7 +3825,14 @@ async def account_switch_settled(session: "Session", msg_id: str, msg_type: str,
 @handler("quota_failover.report")
 async def quota_failover_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .remote_devcontainer_ws import is_remote_pane
 
+    if is_remote_pane(str(payload.get("pane_id") or "")):
+        # A remote pane's quota is its container's own sign-in: failing over
+        # would copy this machine's credentials, so it is never reported.
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_PANE", "remote container panes do not fail over"))
+        return
     await _failover_call(
         session, msg_id, msg_type, lambda: app.quota_failover.report(payload),
         shape=lambda result: {"incident": result[0].to_dict(), "created": result[1]},
@@ -8800,9 +8807,16 @@ async def terminal_create(session: "Session", msg_id: str, msg_type: str, payloa
         }
         session._terminal_create_transactions[key] = transaction
         try:
-            await _terminal_create_impl(
-                session, msg_id, msg_type, payload, transaction, generation
-            )
+            if payload.get("remote") is not None:
+                from .remote_devcontainer_ws import create_remote_pane
+
+                await create_remote_pane(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
+            else:
+                await _terminal_create_impl(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
         except asyncio.CancelledError:
             await _rollback_terminal_create(session, transaction)
             raise

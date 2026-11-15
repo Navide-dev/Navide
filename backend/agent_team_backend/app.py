@@ -141,6 +141,7 @@ from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
 from . import acp_ws  # registers the acp.* requests; ACP on disconnect, janitor and shutdown
+from . import remote_devcontainer_ws  # noqa: F401 — registers remote_devcontainer.* requests
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
