@@ -349,13 +349,29 @@ describe('0.2.43 — MCP connection fixes, Cloud developer sign-in, Guard edges,
     expect(zh).toContain('重連')
   })
 
-  it('says the Cloud developer sign-in waits for the server update and falls back to the browser', () => {
+  it('says the Cloud developer sign-in is not switched on server-side yet, so the browser sign-in is used', () => {
     const en = entry!.highlights.map((text) => text['en-US']).join('\n')
     const zh = entry!.highlights.map((text) => text['zh-TW']).join('\n')
-    expect(en).toContain('once the server update goes live')
-    expect(en).toContain('the browser sign-in is used as before')
-    expect(zh).toContain('伺服器端更新上線')
-    expect(zh).toContain('瀏覽器登入')
+    expect(en).toContain('The server side is not switched on yet')
+    expect(en).toContain('you still sign in through the browser')
+    expect(zh).toContain('伺服器端尚未開通')
+    expect(zh).toContain('目前仍用瀏覽器登入')
+  })
+
+  // The connection fix lowers the odds; Known limitations says a pane that
+  // never connected is not rebuilt automatically, so no locale may promise
+  // more. The dependency count is 8 packages (9 was the PR count).
+  it('does not overstate the MCP fix and counts eight dependencies', () => {
+    const en = entry!.highlights.map((text) => text['en-US']).join('\n')
+    const zh = entry!.highlights.map((text) => text['zh-TW']).join('\n')
+    expect(en).toContain('less likely')
+    expect(en).toContain('nothing is rebuilt automatically')
+    expect(en).toContain('a pane with no conversation yet reopens fresh')
+    expect(en).toContain('Eight other dependencies')
+    expect(zh).toContain('不會自動重建')
+    expect(zh).toContain('8 個相依套件')
+    const security = entry!.highlights.find((text) => text['en-US'].includes('CVE-2026-126360'))!
+    for (const locale of locales) expect(security[locale], locale).not.toMatch(/\b9\b|nine|neuf|neun|nove|девять|Chín|9 つ|9 个|9개/i)
   })
 
   it('names the new Guard rule', () => {

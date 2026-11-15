@@ -35,6 +35,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Windows (0.2.43): reopening a workspace no longer adds an empty "Default 0/0" tab beside the tab holding its restored panes.
 - Accounts (0.2.43): adding, renaming or removing an account and closing the window that asked right away no longer leaves other windows' account lists and quota badges on old data; the change notice now always reaches every window.
 - Grok (0.2.43): a Grok pane in a deeply nested workspace (whose encoded folder name is over 255 bytes, often with CJK characters) could not scope or resume its sessions. Navide now finds the session group through Grok's `.cwd` marker; short paths are found as before.
+- Navide Guard (0.2.43): the answer a CLI shows names at most three reasons, and they were taken in the order the rules fired, so on Windows a PowerShell credential read piped to a stdin upload could show only opaque notes (unmodelled syntax, a computed command name) and leave out "uploads a secret file". Reasons are now named most severe rule first; verdicts, levels and actions are unchanged (#890).
 
 ### Security
 
