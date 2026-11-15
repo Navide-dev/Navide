@@ -522,7 +522,7 @@
     "reason-pane-closed": "Le pane cible a été fermé avant la remise",
     "reason-dropped": "Retiré du journal avant d’avoir pu être remis",
     "reason-inject-failed": "Échec de l’injection : la CLI cible n’a jamais affiché le message",
-    "reason-inject-timeout": "Délai de livraison dépassé : le backend de Navide n’a pas répondu à temps, même après plusieurs essais",
+    "reason-inject-timeout": "Délai de livraison dépassé : le backend de Navide n’a pas répondu à temps, même après plusieurs essais",
     "reason-delivery-unconfirmed": "Envoyé, mais la CLI cible n’a pas encore montré qu’elle l’a reçu. Vérifiez le pane avant de renvoyer",
     "reason-inject-error": "Erreur d’injection : {error}",
     "reason-push-stuck": "La zone de saisie de la CLI ne s’est pas vidée après deux envois",
