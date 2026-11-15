@@ -3,8 +3,9 @@
 Branch `refactor/cli-runtime-lifecycle-main`, based on upstream/main
 `75272dd4b`, pushed to the fork (draft PR 18). The design is in `DESIGN.md`.
 
-This is the state after fix round 7 (the last seven review items), first in
-this report after the PR summary; round 6 (the full review) follows it. Round
+This is the state after fix round 8 (the last two Lows of review 8), first in
+this report after the PR summary; round 7 (five items) follows it, then round
+6 (the full review). Round
 5 answers reviews 5-A and 5-B (no finding Medium
 or higher). Round 4's section follows
 (reviews 4-A and 4-B). Round 2 ended at `5690f50d1` (CI run 43553202513 was
@@ -24,9 +25,10 @@ section, finding by finding.
   events) are one declaration in the crate; the Python registry, the frontend
   agent specs and the Rust readers are all read from it. The Python readers
   stay in the tree and answer whenever the runtime cannot.
-- **What it costs, and what it does not do.** A routed call costs about 62 µs
+- **What it costs, and what it does not do.** A routed call costs about 63 µs
   against 23 µs for the Python reader (micro-benchmark below; the round 7
-re-run, 2026-11-14, gave 63 µs against 23 µs). This PR does not
+  re-run, 2026-11-14). The figure before round 6 was 62 µs against 23 µs.
+  This PR does not
   target the lag with hundreds of agents; it is the seam, the declaration flow
   and the parity proof that a later stage builds on.
 - **What is off by default.** The `rustCliRuntime` UI setting (no Settings
@@ -40,11 +42,28 @@ re-run, 2026-11-14, gave 63 µs against 23 µs). This PR does not
   - No reader call was routed through a packaged sidecar. In the packaged-like
     layout (a frozen backend beside `<resources>/bin/navide-cli-runtime`) only
     `/health` was read, so the handshake and the calls were not exercised there.
-  - The perf harness (hundreds of panes) was not re-run for round 6 or round 7.
+  - The perf harness (hundreds of panes) was not re-run for round 6, 7 or 8.
     The micro-benchmark was re-run in round 7 (2026-11-14, see below); its
     earlier 62 µs / 23 µs figure predated round 6.
 
-## Fix round 7 (the last review's seven items)
+## Fix round 8 (the last two Lows of review 8)
+
+Starts from `3b7761217`. Round 7's CI run 43614420146 failed only
+`test_webhook_listener.py::test_oversized_headers_are_refused`, in a file this
+branch does not touch; the failed job was re-run.
+
+| Item | Status | What changed | The test that shows it |
+|------|--------|--------------|------------------------|
+| **L1** `json.loads(bytes)` decodes with `surrogatepass`, so `22 ED A0 80 22` (`"\ud800"`) was `Rejected` | Fixed, narrower than the brief | `pyjson::parse_bytes` answers `Python` for bytes that are valid UTF-8 once encoded surrogates (`ED A0..BF 80..BF`) are let through. The brief said to answer `Python` for any bytes `from_utf8` refuses; that was tried first and made the Cursor `cursor_db` parity step hand its activity call over, because a protobuf blob (`12 FF …`) sat in the JSON column. CPython rejects such a blob (probe: `22eda08022` accepted as `'\ud800'`, `12ff2066696c65` raises `UnicodeDecodeError`), so it stays `Rejected` and no text Python reads is `Rejected`. | `tests/json_dialect.json` gains `22eda08022` (`python`, `python_accepts: true`; 66 cases); `12ff2066696c65` stays `rejected`. Crate test `bytes_that_are_not_utf8_are_python_s_only_for_encoded_surrogates` adds a cut-short surrogate, a surrogate beside a bad byte, and two surrogates. **Fails on old code:** `cargo test --offline --lib the_recorded_dialect_cases` failed with `"22eda08022": rejected, expected "python"`. |
+| **L2** "seven" items | Fixed | Round 7 had five table rows (K2, K1, C2, A1, A2); the sentence now says so. | Docs only. |
+| PR summary | Fixed | Leads with 63 µs against 23 µs; one sentence says the earlier figure was 62/23. | Docs only. |
+
+Results: `cargo test --offline` 49 passed; `cargo clippy --offline
+--all-targets` no warnings; the json, parity and seam tests 184 passed; the same
+three with `-p tests.cli_runtime_on` plus `backend/tests/vendors`: 969 passed, 1
+skipped, all 17 CLIs in the table with `fallback=0`.
+
+## Fix round 7 (the last review's five items)
 
 Starts from `a8d6d00fa` (round 6 head; its final CI is run 43610111921: green,
 Secret scan 43610111901: green). Every item below is the manager's decision
