@@ -18,6 +18,7 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import * as injectEcho from '../../lib/injectEcho'
+import * as injectChunkSend from '../../lib/injectChunkSend'
 import * as submitTurnConfirm from '../../lib/submitTurnConfirm'
 import * as submitStall from '../../lib/submitStall'
 import { awaitEcho } from '../../lib/ptyInputBlock'
@@ -109,7 +110,7 @@ async function run(echoWaitMs: number | undefined) {
     awaitingKind: null,
   }
   const { injectText } = await loadInjectText({
-    ...injectEcho, ...submitTurnConfirm, ...submitStall,
+    ...injectEcho, ...submitTurnConfirm, ...submitStall, ...injectChunkSend,
     awaitEcho,
     composerClearKeys,
     backend,
