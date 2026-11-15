@@ -522,6 +522,7 @@
     "reason-pane-closed": "전달 전에 대상 pane이 닫혔어요",
     "reason-dropped": "전달되기 전에 로그에서 삭제되었어요",
     "reason-inject-failed": "주입 실패 — 대상 CLI에 메시지가 표시되지 않았어요",
+    "reason-inject-timeout": "전달 시간 초과 — 재시도해도 Navide 백엔드가 제때 응답하지 않았어요",
     "reason-delivery-unconfirmed": "보냈지만 대상 CLI가 아직 받았다고 표시하지 않았어요 — 다시 보내기 전에 pane을 확인하세요",
     "reason-inject-error": "주입 오류: {error}",
     "reason-push-stuck": "두 번 푸시해도 CLI의 입력란이 비워지지 않았어요",

@@ -522,6 +522,7 @@
     "reason-pane-closed": "The target pane closed before delivery",
     "reason-dropped": "Dropped from the log before it could be delivered",
     "reason-inject-failed": "Injection failed — the target CLI never echoed the message",
+    "reason-inject-timeout": "Delivery timed out — Navide's backend did not answer in time, even after retries",
     "reason-delivery-unconfirmed": "Sent, but the target CLI has not shown it received it yet — check the pane before resending",
     "reason-inject-error": "Injection error: {error}",
     "reason-push-stuck": "The CLI's input box would not clear after two pushes",

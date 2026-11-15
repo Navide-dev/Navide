@@ -10,6 +10,7 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import * as injectEcho from '../../lib/injectEcho'
+import * as injectChunkSend from '../../lib/injectChunkSend'
 import { composerClearKeys } from '../../lib/cliCoordination'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -57,6 +58,7 @@ async function run(task: string) {
   }
   const { injectText } = await loadInjectText({
     ...injectEcho,
+    ...injectChunkSend,
     composerClearKeys,
     backend,
     paneRefs: { p1: ref },

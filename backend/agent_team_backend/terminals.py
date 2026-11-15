@@ -173,6 +173,11 @@ class TerminalSession:
     # a stale entry from ever matching a recycled pid (same pattern as
     # pty_registry).
     descendants: dict[int, str] = field(default_factory=dict)
+    # Under the macOS pane helper the PTY child is the helper and the pane's
+    # shell is its one direct child, in a process group of its own once its
+    # job control is up. Taken from the same snapshot; 0 until it is seen, or
+    # when there is no helper (the PTY child is the shell itself).
+    shell_pid: int = 0
     # Sanitized path/override context only; never persisted as pane metadata.
     risk_context: VendorRuntimeContext | None = field(default=None, repr=False)
 
@@ -795,7 +800,13 @@ class TerminalService:
         if fg <= 0:
             return None
         try:
-            return fg == osplat.process_tree.group_of(session.proc.pid)
+            if fg == osplat.process_tree.group_of(session.proc.pid):
+                return True
+            # The pane helper's child is the shell: an interactive one moves
+            # to a group of its own, which is then the shell in front — read
+            # against the helper's group alone, an idle pane was "busy" for
+            # good and every cli_send to it failed (0.2.43 macOS dmg).
+            return bool(session.shell_pid) and fg == osplat.process_tree.group_of(session.shell_pid)
         except (ProcessLookupError, PermissionError):
             return None
 
@@ -1533,6 +1544,9 @@ class TerminalService:
                 continue
             pids = _walk_descendants(children, session.proc.pid)
             session.descendants = {pid: snap[pid][2] for pid in pids}
+            if getattr(osplat.terminal_backend, "helper", None):
+                kids = children.get(session.proc.pid) or []
+                session.shell_pid = kids[0] if len(kids) == 1 else 0
             persist[session.proc.pid] = {
                 pid: snap[pid][2]
                 for pid in pids

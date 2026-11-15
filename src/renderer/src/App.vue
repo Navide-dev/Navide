@@ -216,6 +216,7 @@ import {
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
 import { failedInjectReleasesHold } from './lib/deliveryHold'
+import { newInjectId, sendChunkWithRetry } from './lib/injectChunkSend'
 import { RESUME_CONSUME_WAIT_MS, resumeBootHold, resumeUnconfirmed } from './lib/resumeBoot'
 import {
   awaitEcho, awaitInputUnblocked, createInputBlockTracker, needsInputWait, PROBE_SESSION_GONE
@@ -2909,7 +2910,7 @@ async function deliverAgentMessage(
   paneId: string,
   text: string,
   shouldAbort?: () => boolean,
-): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
+): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true } | { timedOut: true }> {
   if (acp.owns(paneId)) return acp.deliver(paneId, text)
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
@@ -2929,6 +2930,7 @@ async function deliverAgentMessage(
     foregroundBusy?: boolean
     commandRefused?: string
     updatePrompt?: 'skipped' | 'blocked'
+    injectTimeout?: boolean
   } = {}
   // Sampled before typing: our own message's user record is the signal that
   // would confirm the resume, so asking afterwards could answer "confirmed" on
@@ -2966,6 +2968,9 @@ async function deliverAgentMessage(
     if (failedInjectReleasesHold(outcome.leftInComposer === true)) {
       paneRefs[paneId]?.clearDeliveredPending?.()
     }
+    // The backend did not answer in time: worth another go from the queue,
+    // which bounds how many (INJECT_TIMEOUT_RETRY_LIMIT).
+    if (outcome.injectTimeout) return { timedOut: true }
     return false
   }
   // A resumed CLI that has not spoken since its spawn may still be repainting,
@@ -4926,6 +4931,9 @@ async function injectText(
      *  skipped and nothing landed ('skipped'), or the pane is held on it
      *  ('blocked'). No Enter went into it either way. */
     updatePrompt?: 'skipped' | 'blocked'
+    /** A content chunk's request kept timing out (a stalled backend, not a
+     *  refusal): the injection was given up and the box cleared. */
+    injectTimeout?: boolean
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -5027,27 +5035,39 @@ async function injectText(
   // because the PTY would not take them (0 from a backend too old to say) — or
   // null when a send threw or was refused.
   let wroteBytes = false
+  // Tags every chunk so a resend after a request timeout is written once
+  // (lib/injectChunkSend.ts).
+  const injectId = newInjectId()
   const sendChunks = async (): Promise<number | null> => {
     let pending = 0
     for (let i = 0; i < chunks.length; i++) {
-      try {
-        const resp = await backend.send<{ ok?: boolean; pending?: number; error?: string; refusal?: { message?: string } }>(
-          'terminal.input', { terminal_session_id: sessionId, data: chunks[i], ...shellGuard },
-        )
-        // A refusal is a normal answer (envelope ok) whose payload says ok: false.
-        if (resp.payload?.ok === false) {
-          noteShellRefusal(resp.payload)
-          return null
+      const sent = await sendChunkWithRetry(
+        () => backend.send<{ ok?: boolean; pending?: number; error?: string; refusal?: { message?: string } }>(
+          'terminal.input', { terminal_session_id: sessionId, data: chunks[i], inject_id: injectId, seq: i, ...shellGuard },
+        ),
+        { aborted: () => aborted() },
+      )
+      if (!sent.ok) {
+        console.error(`[injectText] content send failed at chunk ${i + 1}/${chunks.length}:`, sent.error)
+        if (sent.timedOut) {
+          // The backend may still write it: clear the box on the way out, and
+          // tell the caller this was a timeout, not a refusal.
+          wroteBytes = true
+          if (evidence) evidence.injectTimeout = true
         }
-        wroteBytes = true
-        pending = resp.payload?.pending ?? 0
-        // Nothing pending means nothing blocked, whatever the tracker still
-        // says: an unblocked event lost on the way must not wedge it.
-        if (pending === 0) inputBlocks.onUnblocked(sessionId)
-      } catch (err) {
-        console.error(`[injectText] content send failed at chunk ${i + 1}/${chunks.length}:`, err)
         return null
       }
+      const resp = sent.resp
+      // A refusal is a normal answer (envelope ok) whose payload says ok: false.
+      if (resp.payload?.ok === false) {
+        noteShellRefusal(resp.payload)
+        return null
+      }
+      wroteBytes = true
+      pending = resp.payload?.pending ?? 0
+      // Nothing pending means nothing blocked, whatever the tracker still
+      // says: an unblocked event lost on the way must not wedge it.
+      if (pending === 0) inputBlocks.onUnblocked(sessionId)
     }
     return pending
   }

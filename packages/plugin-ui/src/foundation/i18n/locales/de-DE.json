@@ -522,6 +522,7 @@
     "reason-pane-closed": "Der Zielbereich wurde vor der Zustellung geschlossen",
     "reason-dropped": "Aus dem Protokoll entfernt, bevor sie zugestellt werden konnte",
     "reason-inject-failed": "Einspeisen fehlgeschlagen – die Ziel-CLI hat die Nachricht nie angezeigt",
+    "reason-inject-timeout": "Zustellung abgelaufen – das Navide-Backend hat auch nach Wiederholungen nicht rechtzeitig geantwortet",
     "reason-delivery-unconfirmed": "Gesendet, aber die Ziel-CLI hat den Empfang noch nicht angezeigt – prüfen Sie den Bereich, bevor Sie erneut senden",
     "reason-inject-error": "Fehler beim Einspeisen: {error}",
     "reason-push-stuck": "Das Eingabefeld der CLI wurde nach zwei Übergaben nicht geleert",

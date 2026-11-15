@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -149,6 +149,8 @@ MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pa
 MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址或代碼，不能連接到聊天室"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
+MSG_NOT_DELIVERED = "⚠️ 訊息沒有送進分格「{name}」（{reason}）"
+MSG_RESEND_EXPIRED = "⚠️ 這個重送按鈕已失效，請重新傳送訊息"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_READING_REPLY = "✅ 完成，正在送出回覆…"
@@ -517,6 +519,7 @@ class ChannelManager:
         # pane id -> (its wait task, the message that asked, pane name, model shown, lang)
         self._model_waits: dict[str, tuple[asyncio.Task[Any], InboundMessage, str, str, str]] = {}
         self.share_buttons = share_cmds.RevokeButtons(clock=clock)
+        self.resend_buttons = resend.ResendButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
         # One serial worker per location: order kept within a chat, chats never block each other.
@@ -2111,6 +2114,14 @@ class ChannelManager:
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
+        if msg.callback_data.startswith(resend.CALLBACK_PREFIX):
+            text = self.resend_buttons.press(resend.parse_callback(msg.callback_data) or "", msg.location_key())
+            if text is None:
+                await self._reply(msg, MSG_RESEND_EXPIRED)
+                return
+            # On through every check below, as if the text had been typed again.
+            msg = dataclasses.replace(msg, text=text, callback_data="", attachments=[],
+                                      reply_to_text="", reply_to_sender_id="", reply_to_self=False)
         wake_pressed = msg.callback_data == WAKE_CALLBACK
         if msg.callback_data in _CALLBACK_COMMANDS:
             # Then on through the binding checks below, as if the command had been typed.
@@ -3125,7 +3136,7 @@ class ChannelManager:
             pending.status_id = await self._reply(msg, MSG_RECEIVED_BUSY, buttons=BUSY_BUTTONS)
         queued.add(msg_key)
         self._queued_loc[msg_key] = msg.location_key()
-        self._spawn(self._watch_delivery(pane_id, msg_key, pending))
+        self._spawn(self._watch_delivery(pane_id, msg_key, pending, resend=(msg.location_key(), text)))
         return True
 
     async def _cli_login_expired(self, pane_id: str) -> bool:
@@ -4181,7 +4192,10 @@ class ChannelManager:
         for loc in self._share_targets(str(link.get("paneId") or "")):
             await self._share_notice(loc, share_cmds.opened_text(lang, link, opens))
 
-    async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:
+    async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending,
+                              resend: tuple[str, str] | None = None) -> None:
+        """Follow one message into the pane. ``resend``: (location key, text) the failure
+        notice offers to send again."""
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
         started = self._clock()
         held_notice = False
@@ -4196,7 +4210,12 @@ class ChannelManager:
                     return
                 if status in ("failed", "cancelled"):
                     if adapter is not None and status == "failed":
-                        await self._notice(adapter, pending.loc, f"⚠️ 訊息沒有送進 pane（{verdict.get('reason') or 'failed'}）")
+                        # Named: a bot can drive several panes, and "the pane" alone does not
+                        # say which one dropped it (inject-failed 2026-11-15).
+                        text = MSG_NOT_DELIVERED.format(name=self._pane_name(pane_id),
+                                                        reason=verdict.get("reason") or "failed")
+                        buttons = [self.resend_buttons.button(*resend)] if resend and resend[1] else None
+                        await self._notice(adapter, pending.loc, text, buttons=buttons)
                     return
                 age = self._clock() - started
                 hold = (verdict.get("hold") or {}).get("key") or ""
@@ -4220,6 +4239,14 @@ class ChannelManager:
                 if not q:
                     self._queued.pop(pane_id, None)
             self._queued_loc.pop(msg_key, None)
+
+    def _pane_name(self, pane_id: str) -> str:
+        """The pane's name as Navide shows it, or its id when the directory does not know it."""
+        resolved = self._seams.resolve_pane(pane_id) or pane_id
+        for row in self._seams.pane_directory():
+            if str(row.get("pane_id")) in (pane_id, resolved) and row.get("name"):
+                return str(row["name"])
+        return pane_id
 
     def _arm(self, pane_id: str, pending: _Pending) -> None:
         """The message is in the pane: its next turn_complete is the reply.

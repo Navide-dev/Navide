@@ -522,6 +522,7 @@
     "reason-pane-closed": "目标分格在投递前已关闭",
     "reason-dropped": "消息在投递前已从记录中移除",
     "reason-inject-failed": "注入失败 — 目标 CLI 没有回应这则消息",
+    "reason-inject-timeout": "送达超时 — Navide 后端多次重试仍未及时响应",
     "reason-delivery-unconfirmed": "已送出，但目标 CLI 尚未显示收到 — 重送前请先查看该分格",
     "reason-inject-error": "注入错误：{error}",
     "reason-push-stuck": "推送两次后 CLI 输入框仍清不掉",
