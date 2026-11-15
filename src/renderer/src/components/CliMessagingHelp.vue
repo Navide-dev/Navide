@@ -273,6 +273,7 @@ const logRows = computed(() => [
            writes it; the transcripts either side stay blank because a CLI's
            own output is not ours to invent. -->
       <MockFigure
+        shot="messaging.delivery"
         :caption="$t('settings.help.messaging.mock.delivery.caption')"
         :legend="deliveryLegend"
       >
@@ -310,6 +311,7 @@ const logRows = computed(() => [
 
       <!-- The panel those list items point at. -->
       <MockFigure
+        shot="messaging.panel"
         :caption="$t('settings.help.messaging.mock.panel.caption')"
         :legend="panelLegend"
       >
