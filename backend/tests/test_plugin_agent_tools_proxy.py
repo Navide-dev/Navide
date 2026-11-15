@@ -234,6 +234,9 @@ CHANNEL_CORE_TOOLS = frozenset({
 #: description gained the navide:<name> source for skills shipped with Navide.
 #: No other plan_* or skills_* tool changed.
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
+#: The same for the ship_log_* tools the built-in Shipped Log package
+#: (navide.shipped-log) installs, new in 0.2.44.
+SHIPPED_LOG_TOOLS_SHA256 = "6b200031b48f02c571e3907fedea3352a362fe4cd0eebe19fc8a233c1f808ff5"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],
@@ -383,10 +386,20 @@ async def _builtin_package_tools() -> list[Any]:
     return await probe.list_tools()
 
 
+async def _shipped_log_tools() -> list[Any]:
+    from mcp.server.fastmcp import FastMCP
+
+    from agent_team_backend.plugins.builtin.navide_shipped_log import ship_log_tools
+
+    probe = FastMCP(name="builtin-probe")
+    ship_log_tools.install(probe)
+    return await probe.list_tools()
+
+
 async def _builtin_package_tool_names() -> set[str]:
-    """Names the built-in Plans and Skills packages install on the core server.
-    Other tests in the same run install them there; main's digest is of the
-    server module alone."""
+    """Names the built-in Plans, Skills and Shipped Log packages install on the
+    core server. Other tests in the same run install them there; main's digest
+    is of the server module alone."""
     from mcp.server.fastmcp import FastMCP
 
     from agent_team_backend.plugins.builtin.navide_plans import plan_tools
@@ -395,7 +408,7 @@ async def _builtin_package_tool_names() -> set[str]:
     probe = FastMCP(name="builtin-probe")
     plan_tools.install(probe)
     skills_tools.install(probe)
-    return {tool.name for tool in await probe.list_tools()}
+    return {tool.name for tool in await probe.list_tools()} | {tool.name for tool in await _shipped_log_tools()}
 
 
 async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() -> None:
@@ -929,6 +942,14 @@ async def test_plan_and_skills_tools_are_byte_identical_to_main() -> None:
         sort_keys=True, separators=(",", ":"), ensure_ascii=True,
     )
     assert hashlib.sha256(probe_text.encode()).hexdigest() == MAIN_PLAN_SKILLS_TOOLS_SHA256
+
+
+async def test_ship_log_tools_are_pinned() -> None:
+    probe_text = json.dumps(
+        [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in await _shipped_log_tools()],
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
+    assert hashlib.sha256(probe_text.encode()).hexdigest() == SHIPPED_LOG_TOOLS_SHA256
 
 
 async def test_tools_list_serves_every_schema_string_neutralized() -> None:

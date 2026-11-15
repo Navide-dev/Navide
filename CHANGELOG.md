@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Shipped Log (0.2.44, MVP): a new built-in Navide plugin, `navide.shipped-log`, answers "what went live since …". Agents record a change once it is live with `ship_log_record` (a plain-language line, `commit`/`config`/`migration`/`other`, optional ref and time; a production setting is sensitive by default), and `ship_log_report` merges those entries with the deploy branch's first-parent commits (`main`, else `master`) and the tags created in the window, one item per commit, each naming its basis (agent, branch or tag). In a bound chat, `/shipped [today|yesterday|7d|ISO time]` answers from the backend without waking the pane; a sensitive item there is only counted, and secrets and email addresses are masked. An entry that looks like it carries a secret is refused, never stored. The ledger lives in the workspace's own `.agent-team/navide.db` and never leaves the machine. Plugins can no longer derive the `ship_` agent-tool prefix.
+
 ### Changed
 
 - Plugins (0.2.44): the App-bundled plugins no longer move with the Host. The Host's own UI strings left the shared `@navide/plugin-ui` catalogs for `src/renderer/src/i18n/locales`, and Git and Mini-IDE now ship their own strings, as Plans and Browser already did, so a Host-only string change leaves every plugin's fingerprint as it was (`node scripts/official-plugin-fingerprints.mjs --probe <path>` shows which plugins a change would move). A fingerprint counts only the workspace packages a plugin's bundle contains, without the `plugin-sdk` command-line tools, and the Plans backend bundles the Python plugin SDK, which now holds the path guard, write path, Git-internal path check and plan versions itself instead of borrowing them from the core backend. Each plugin runs its own tests through `plugins/<dir>/vitest.config.ts` (`pnpm test:plugins`). The plugins move once to Navide Browser 1.1.5, Git 1.0.8, Mini-IDE 1.0.7 and Plans 1.1.7; what they show is unchanged.

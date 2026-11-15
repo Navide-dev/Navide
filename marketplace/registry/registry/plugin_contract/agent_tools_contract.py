@@ -51,7 +51,7 @@ def agent_tool_view_id(method: Any) -> str | None:
 #: are the prefixes the built-in packages derive (``git_``, ``plans_``, ``miniide_``).
 RESERVED_TOOL_PREFIXES = (
     "channels_", "cli_", "credentials_", "evolve_", "git_", "marketplace_", "mcp_", "memory_", "miniide_", "navide_", "pipeline_",
-    "plan_", "plans_", "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "skills_", "stage_", "ui_",
+    "plan_", "plans_", "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "ship_", "skills_", "stage_", "ui_",
     "window_", "workspace_",
 )
 
@@ -92,7 +92,7 @@ CORE_TOOL_NAMES = (
     "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
-    "share_list", "share_revoke", "skills_inspect", "skills_install", "skills_install_status", "skills_list",
+    "share_list", "share_revoke", "ship_log_record", "ship_log_report", "skills_inspect", "skills_install", "skills_install_status", "skills_list",
     "skills_prepare_install", "skills_set_delivery", "stage_define", "ui_diagnostics", "ui_invoke",
     "ui_list_actions", "ui_snapshot", "window_close", "window_focus", "window_list", "window_move_pane",
     "workspace_close", "workspace_list",

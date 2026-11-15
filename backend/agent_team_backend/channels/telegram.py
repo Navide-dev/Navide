@@ -90,6 +90,7 @@ BOT_COMMANDS = [
     {"command": "resume", "description": "恢復被中斷的 pane"},
     {"command": "model", "description": "切換 pane 的模型"},
     {"command": "account", "description": "切換 CLI 帳號"},
+    {"command": "shipped", "description": "最近上線了什麼"},
 ]
 # BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
 BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -105,6 +106,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Resume an interrupted pane",
         "model": "Switch the pane's model",
         "account": "Switch the CLI account",
+        "shipped": "What shipped recently",
     },
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
@@ -117,6 +119,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "中断した pane を再開",
         "model": "pane のモデルを切り替え",
         "account": "CLI のアカウントを切り替え",
+        "shipped": "最近リリースされた変更",
     },
     "zh-CN": {
         "pending": "列出等待确认的 pane",
@@ -129,6 +132,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "恢复被中断的 pane",
         "model": "切换 pane 的模型",
         "account": "切换 CLI 账号",
+        "shipped": "最近上线了什么",
     },
     "ko-KR": {
         "pending": "확인 대기 중인 pane 목록",
@@ -141,6 +145,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "중단된 pane 재개",
         "model": "pane 모델 전환",
         "account": "CLI 계정 전환",
+        "shipped": "최근 배포된 변경",
     },
     "es-ES": {
         "pending": "Panes en espera de confirmación",
@@ -153,6 +158,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Reanudar un pane interrumpido",
         "model": "Cambiar el modelo del pane",
         "account": "Cambiar la cuenta de la CLI",
+        "shipped": "Qué se ha publicado últimamente",
     },
     "fr-FR": {
         "pending": "Lister les panes en attente de confirmation",
@@ -165,6 +171,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Reprendre un pane interrompu",
         "model": "Changer le modèle du pane",
         "account": "Changer le compte de la CLI",
+        "shipped": "Ce qui a été mis en production récemment",
     },
     "de-DE": {
         "pending": "Panes auflisten, die auf Bestätigung warten",
@@ -177,6 +184,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Ein unterbrochenes pane fortsetzen",
         "model": "Das Modell des pane wechseln",
         "account": "Das CLI-Konto wechseln",
+        "shipped": "Was zuletzt ausgeliefert wurde",
     },
     "pt-BR": {
         "pending": "Panes aguardando confirmação",
@@ -189,6 +197,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Retomar um pane interrompido",
         "model": "Trocar o modelo do pane",
         "account": "Trocar a conta da CLI",
+        "shipped": "O que foi entregue recentemente",
     },
     "ru-RU": {
         "pending": "Pane, ожидающие подтверждения",
@@ -201,6 +210,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Возобновить прерванный pane",
         "model": "Сменить модель pane",
         "account": "Сменить аккаунт CLI",
+        "shipped": "Что недавно выпущено",
     },
     "vi-VN": {
         "pending": "Liệt kê các pane đang chờ xác nhận",
@@ -213,6 +223,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Tiếp tục pane bị ngắt",
         "model": "Đổi mô hình của pane",
         "account": "Đổi tài khoản CLI",
+        "shipped": "Những gì vừa được phát hành",
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.

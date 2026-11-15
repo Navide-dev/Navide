@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, shipped_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -2155,6 +2155,9 @@ class ChannelManager:
         plugin_cmd = plugin_cmds.parse_command(msg.text, self._identity(msg))
         if plugin_cmd is not None and await self._plugin_command(msg, *plugin_cmd):
             return
+        shipped_arg = shipped_cmds.parse_command(msg.text, self._identity(msg))
+        if shipped_arg is not None and await self._shipped_command(msg, shipped_arg):
+            return
         binding = self._binding_for(msg)
         if binding is None:
             # One bot answers for its unbound chats and topics, as it always has; with
@@ -3963,6 +3966,19 @@ class ChannelManager:
         else:
             error = str(answer.get("error") or answer.get("error_code") or "")
             await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id=arg, error=error)))
+        return True
+
+    async def _shipped_command(self, msg: InboundMessage, arg: str) -> bool:
+        """``/shipped [window]``: the bound pane's workspace Shipped Log, answered here
+        without waking the pane. Only a bound chat, like ``/plugins``; False leaves the
+        message to the usual pipeline."""
+        binding = self._binding_for(msg)
+        if binding is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        workspace = binding.workspace_path or self._seams.pane_workspace(
+            self._seams.resolve_pane(binding.pane_id) or binding.pane_id)
+        await self._reply(msg, await shipped_cmds.answer(workspace, arg, lang))
         return True
 
     async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
