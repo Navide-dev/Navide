@@ -131,11 +131,19 @@ async def _serve(state: _OwnLoop) -> None:
             timeout_keep_alive=75,
             timeout_graceful_shutdown=5,
         )
-        state.server = uvicorn.Server(config)
+        listening = asyncio.Event()
+
+        class _Server(uvicorn.Server):
+            async def startup(self, sockets: Any = None) -> None:
+                await super().startup(sockets=sockets)
+                listening.set()
+
+        state.server = _Server(config)
         # Ready as soon as the listener is up, not when serve() returns.
         serving = loop.create_task(state.server.serve(sockets=[state.sock]))
-        while not state.server.started and not serving.done():
-            await asyncio.sleep(0.01)
+        waiting = loop.create_task(listening.wait())
+        await asyncio.wait({serving, waiting}, return_when=asyncio.FIRST_COMPLETED)
+        waiting.cancel()
         if serving.done():
             serving.result()
         state.ready.set()
