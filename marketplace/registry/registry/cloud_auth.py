@@ -29,7 +29,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 
 from . import host_routing
-from .config import Settings
+from .config import AUTH_PROXY_PREFIX, Settings
 from .models import MemberSession
 
 SESSION_COOKIE = "navide_registry_session"
@@ -71,10 +71,20 @@ def decode_payload(sso: str) -> dict[str, str] | None:
     return dict(urllib.parse.parse_qsl(raw, keep_blank_values=True))
 
 
-def build_login_redirect(settings: Settings, nonce: str, return_url: str | None = None) -> str:
-    sso = encode_payload({"nonce": nonce, "return_sso_url": return_url or settings.auth_return_url})
+def build_login_redirect(
+    settings: Settings,
+    nonce: str,
+    return_url: str | None = None,
+    *,
+    auth_base: str | None = None,
+    audience: str | None = None,
+) -> str:
+    fields = {"nonce": nonce, "return_sso_url": return_url or settings.auth_return_url}
+    if audience is not None:
+        fields["audience"] = audience
+    sso = encode_payload(fields)
     query = urllib.parse.urlencode({"sso": sso, "sig": sign(settings.auth_secret, sso)})
-    return f"{settings.auth_url}/{CLIENT_ID}/sso?{query}"
+    return f"{auth_base or settings.auth_url}/{CLIENT_ID}/sso?{query}"
 
 
 @dataclass(frozen=True)
@@ -172,8 +182,31 @@ def return_url(request: Request) -> str:
     return settings.auth_return_url
 
 
+# Which site the sign-in page names (navide-auth picks its title from it).
+_AUDIENCES = {host_routing.STORE: "marketplace", host_routing.DEVELOPER: "developers"}
+
+
+def login_target(request: Request) -> tuple[str | None, str | None]:
+    """(navide-auth base URL, audience) for a sign-in begun on this host.
+    With REGISTRY_AUTH_UPSTREAM set, the storefront and the console serve
+    navide-auth's page on their own host (auth_proxy.py); everywhere else
+    the browser goes to auth_url as before."""
+    settings: Settings = request.app.state.registry.settings
+    role = host_routing.request_role(request)
+    audience = _AUDIENCES.get(role)
+    if audience is not None and settings.auth_upstream is not None:
+        return host_routing.origin_for(settings, role) + AUTH_PROXY_PREFIX, audience
+    return None, audience
+
+
 def start_login(
-    settings: Settings, next_path: str, now: float, return_url: str | None = None
+    settings: Settings,
+    next_path: str,
+    now: float,
+    return_url: str | None = None,
+    *,
+    auth_base: str | None = None,
+    audience: str | None = None,
 ) -> tuple[str, str]:
     """Return (login-state cookie value, navide-auth redirect URL)."""
     nonce = secrets.token_urlsafe(24)
@@ -182,7 +215,9 @@ def start_login(
         "login-state",
         {"nonce": nonce, "next": next_path, "exp": now + LOGIN_STATE_TTL_SECONDS},
     )
-    return state, build_login_redirect(settings, nonce, return_url)
+    return state, build_login_redirect(
+        settings, nonce, return_url, auth_base=auth_base, audience=audience
+    )
 
 
 def session_version(engine: Engine, member_id: str) -> int:

@@ -360,11 +360,14 @@ def create_publisher_router() -> APIRouter:
         settings = _settings(request)
         if not settings.cloud_auth_enabled:
             raise HTTPException(status_code=503, detail="Navide Cloud sign-in is not configured")
+        auth_base, audience = cloud_auth.login_target(request)
         state, location = cloud_auth.start_login(
             settings,
             cloud_auth.safe_next(next, _default_next(request)),
             time.time(),
             cloud_auth.return_url(request),
+            auth_base=auth_base,
+            audience=audience,
         )
         response = RedirectResponse(location, status_code=303, headers=_NO_STORE)
         cloud_auth.set_cookie(

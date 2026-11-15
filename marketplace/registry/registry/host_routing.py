@@ -47,7 +47,12 @@ _DEVELOPER_PAGE = re.compile(
 _STORE_FORM = re.compile(r"^/extensions/[^/]+/[^/]+/(?:rating|rating/delete|report)$")
 _STORE_ASSET = re.compile(r"^/extensions/[^/]+/[^/]+/[^/]+/assets/.+$")
 _DEVELOPER_FORM = re.compile(r"^/(?:publisher|developer|cli|admin)/.+$")
-_SHARED = re.compile(r"^/(?:login|logout|robots\.txt|auth/.+|static/.+)$")
+_SHARED = re.compile(
+    r"^/(?:login|logout|robots\.txt|auth/.+|static/.+"
+    r"|navide-auth/registry/sso(?:/login)?)$"
+)
+# /navide-auth/registry/sso[/login] is navide-auth's sign-in page, served on
+# each host by auth_proxy.py when REGISTRY_AUTH_UPSTREAM is set (404 otherwise).
 # On the legacy host /login is a page too (it starts a sign-in there); its
 # /auth/* stays served so a sign-in begun before the move can finish.
 # The old CLI opens this page on the legacy host to sign in; it moves to the

@@ -244,6 +244,9 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .auth_proxy import create_auth_proxy_router
+
+    app.include_router(create_auth_proxy_router())
     from .testplace_web import create_testplace_admin_router
 
     app.include_router(create_testplace_admin_router())
