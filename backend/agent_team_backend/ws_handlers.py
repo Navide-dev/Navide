@@ -7866,7 +7866,11 @@ async def tokens_snapshot(session: "Session", msg_id: str, msg_type: str, payloa
     # log changed since is rescanned in the background and lands as a
     # `tokens.changed` broadcast.
     app.refresh_live_scans(workspace_path or "")
-    snap = app.tokens_store.snapshot(workspace_path)
+    # Off the loop: the token panel refetches this often, and a snapshot
+    # deep-copies twenty runs and may read the workspace document from the
+    # db (inject-failed root cause D, 2026-11-15). The db thread keeps it
+    # behind any write submitted before it, as on the loop.
+    snap = await run_in_db_thread(app.tokens_store.snapshot, workspace_path)
     if payload.get("global") == "all_time":
         # The token panel shows only the all-time total; leave the per-day,
         # per-account and per-version history out of its frequent refetches.
