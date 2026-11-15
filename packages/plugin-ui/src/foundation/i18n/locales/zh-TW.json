@@ -1090,6 +1090,8 @@
       "mcp-never-connected-tooltip": "這個分格的 CLI 開了 3 分鐘，Navide 工具一直沒有連上，點一下在閒置時重連",
       "mcp-never-connected-title": "Navide 工具未連線：{name}",
       "mcp-never-connected-body": "分格「{name}」開了 3 分鐘，Navide 工具還沒連上。",
+      "mcp-disconnected-title": "Navide 工具連線中斷：{name}",
+      "mcp-disconnected-body": "分格「{name}」的 Navide 工具連線斷了，CLI 已停止重試。",
       "mcp-reconnect": "重連",
       "mcp-reconnect-busy": "分格忙碌中，等它閒置再按「重連」（重連會結束 CLI 的背景程序）",
       "parked-overdue-body": "給「{name}」的訊息已停放 10 分鐘：這個分格還沒開啟，訊息要等它開啟才會送進去。（{excerpt}）",

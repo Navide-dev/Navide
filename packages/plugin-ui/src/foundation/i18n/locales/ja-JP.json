@@ -1090,6 +1090,8 @@
       "mcp-never-connected-tooltip": "このペインの CLI は起動して 3 分たちますが、Navide ツールに一度も接続していません。アイドル時にクリックで再接続",
       "mcp-never-connected-title": "Navide ツール未接続：{name}",
       "mcp-never-connected-body": "ペイン「{name}」が起動して 3 分たちましたが、Navide ツールに接続できていません。",
+      "mcp-disconnected-title": "Navide ツールの接続が切れました：{name}",
+      "mcp-disconnected-body": "ペイン「{name}」の Navide ツールへの接続が切れ、CLI は再試行をやめました。",
       "mcp-reconnect": "再接続",
       "mcp-reconnect-busy": "ペインは作業中です。アイドルになってから「再接続」を押してください（再接続すると CLI のバックグラウンド処理は終了します）",
       "parked-overdue-body": "「{name}」宛てのメッセージが 10 分間保留されています。このペインはまだ開かれておらず、開くと送信されます。（{excerpt}）",

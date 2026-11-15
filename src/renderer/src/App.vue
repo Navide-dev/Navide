@@ -9575,19 +9575,28 @@ async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction)
   announcements.dropBackendRestartPane(action.paneId)
 }
 
-/** Reconnect a pane whose Navide tools never connected: the same-session
- *  rebuild (a fresh CLI on the same conversation dials the tool server anew).
- *  Only while the pane is idle — a rebuild ends the CLI's background
- *  processes — and nothing is typed into it: /mcp is an interactive menu.
- *  A pane nobody typed in has no transcript to resume, so it reopens fresh;
- *  the busy case is answered here, and every other failure keeps its toast. */
+/** Reconnect a pane whose Navide tools never connected or were dropped.
+ *  Only while the pane is idle. A claude pane is first told
+ *  `/mcp reconnect navide` (non-interactive): its CLI dials the tool server
+ *  again in place, keeping the conversation and its background processes.
+ *  Otherwise — another CLI, a held pane, or the command not going in — the
+ *  same-session rebuild (a fresh CLI on the same conversation dials anew); a
+ *  pane nobody typed in has no transcript to resume, so it reopens fresh. The
+ *  busy case is answered here, and every other failure keeps its toast. */
 async function reconnectPaneMcp(paneId: string): Promise<void> {
   if (paneRefs[paneId]?.displayStatus !== 'idle') {
     notifyRestore.toast(i18n.global.t('pane.terminal.mcp-reconnect-busy'), { type: 'info' })
     return
   }
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (pane?.agentKey === 'claude' && messagingHoldKey(paneId) === null) {
+    if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return
+  }
   await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })
 }
+
+/** Claude Code's in-place reconnect of Navide's server (wiring SERVER_NAME). */
+const MCP_RECONNECT_COMMAND = '/mcp reconnect navide'
 
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
@@ -18618,6 +18627,26 @@ backend.on('mcp.never_connected', (raw) => {
   const name = ev.name || pane.messagingName || pane.agentLabel
   const title = i18n.global.t('pane.terminal.mcp-never-connected-title', { name })
   const body = i18n.global.t('pane.terminal.mcp-never-connected-body', { name })
+  notifyRestore.toast(body, {
+    type: 'error',
+    title,
+    duration: 15000,
+    action: { label: i18n.global.t('pane.terminal.mcp-reconnect'), run: () => { void reconnectPaneMcp(paneId) } },
+  })
+  sysNotify.notifyPaneState(pane.id, 'attention', title, body)
+})
+
+// The same for a pane whose CLI was connected, lost the connection when the
+// backend stalled and stopped retrying (2026-11-15: 65 of 66 panes).
+backend.on('mcp.disconnected', (raw) => {
+  const ev = raw as { pane_id?: string; name?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane) return
+  pane.mcpNeverConnected = true
+  const paneId = pane.id
+  const name = ev.name || pane.messagingName || pane.agentLabel
+  const title = i18n.global.t('pane.terminal.mcp-disconnected-title', { name })
+  const body = i18n.global.t('pane.terminal.mcp-disconnected-body', { name })
   notifyRestore.toast(body, {
     type: 'error',
     title,

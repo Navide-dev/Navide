@@ -748,6 +748,8 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     `mcp: "never-connected"` appears on a pane whose CLI has been up for three
     minutes without once reaching Navide's tool server: its Navide tools are
     missing, so a message it is asked to answer through them will not come.
+    `mcp: "disconnected"` is the same for a CLI that was connected, lost the
+    connection and stopped retrying.
 
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
@@ -4314,7 +4316,8 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     renderer; it is omitted (not a failure) when the window does not reply.
     `mcp: "never-connected"` appears when the pane's CLI has been up for
     three minutes without once reaching Navide's tool server, so its Navide
-    tools are missing; absent otherwise.
+    tools are missing; `mcp: "disconnected"` when it was connected, lost the
+    connection and stopped retrying; absent otherwise.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -12671,9 +12674,20 @@ class _PlanMcpASGI:
                 return
             await send(message)
 
+        # A pane's GET is its CLI's long-lived stream: while one is open the
+        # CLI is connected, and one closing without another opening is a CLI
+        # that may have given up (mcp_connect_watch, 2026-11-15).
+        stream_pane = caller.pane_id if caller is not None and caller.kind == "pane" \
+            and scope.get("method") == "GET" else ""
+        if stream_pane:
+            from agent_team_backend import mcp_connect_watch
+
+            mcp_connect_watch.stream_opened(stream_pane)
         try:
             await manager.handle_request(scope, counting_receive, explaining_send)
         finally:
+            if stream_pane:
+                mcp_connect_watch.stream_closed(stream_pane)
             _sdk_failures.reset(failures_token)
             _request_body_bytes.reset(token)
             from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES

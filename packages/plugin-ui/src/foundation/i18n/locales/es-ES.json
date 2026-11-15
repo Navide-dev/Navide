@@ -1090,6 +1090,8 @@
       "mcp-never-connected-tooltip": "La CLI de este panel lleva 3 minutos en marcha y sus herramientas de Navide nunca se conectaron — haz clic para reconectar cuando esté inactivo",
       "mcp-never-connected-title": "Herramientas de Navide sin conectar: {name}",
       "mcp-never-connected-body": "El panel «{name}» lleva 3 minutos abierto y sus herramientas de Navide no se han conectado.",
+      "mcp-disconnected-title": "Herramientas de Navide desconectadas: {name}",
+      "mcp-disconnected-body": "El panel «{name}» perdió la conexión con las herramientas de Navide y su CLI dejó de reintentar.",
       "mcp-reconnect": "Reconectar",
       "mcp-reconnect-busy": "El panel está ocupado: pulsa Reconectar cuando esté inactivo (reconectar termina los procesos en segundo plano de la CLI)",
       "parked-overdue-body": "Un mensaje para «{name}» lleva 10 minutos en espera: ese panel aún no está abierto y el mensaje entrará cuando se abra. ({excerpt})",

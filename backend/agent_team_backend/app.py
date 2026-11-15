@@ -1284,6 +1284,23 @@ async def _notify_mcp_never_connected(entry: Any) -> None:
         await manager.notify_mcp_never_connected(entry.name)
 
 
+async def _notify_mcp_disconnected(entry: Any) -> None:
+    """A pane's CLI was connected to /plan-mcp, lost its stream and stopped
+    trying (2026-11-15 loop stall): badge, toast and one chat notice, like
+    never-connected."""
+    await broadcast(make_event("mcp.disconnected", {
+        "pane_id": entry.pane_id,
+        "name": entry.name,
+        "workspace_path": entry.workspace_path,
+        "agent_key": entry.agent_key,
+    }))
+    from .channels import get_manager
+
+    manager = get_manager()
+    if manager is not None:
+        await manager.notify_mcp_disconnected(entry.name)
+
+
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
     """One janitor pass: kill live PTYs ownerless longer than the grace.
     Returns the killed terminal ids (for tests/logging)."""
@@ -2731,8 +2748,14 @@ async def _start_log_watcher() -> None:
 
     global _mcp_connect_watch_task, _parked_message_watch_task
     _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
-        _notify_mcp_never_connected, _notify_mcp_connected,
+        _notify_mcp_never_connected, _notify_mcp_connected, _notify_mcp_disconnected,
     ))
+    # A stall longer than the CLIs' reconnect budget: re-check their streams
+    # as soon as the loop is back.
+    main_loop = asyncio.get_running_loop()
+    loop_watchdog.on_recovery(
+        lambda stalled_s: main_loop.call_soon_threadsafe(mcp_connect_watch.note_stall, stalled_s)
+    )
     # A cli_send parked on a restore placeholder for 10 minutes: tell the user.
     _parked_message_watch_task = asyncio.create_task(_parked_message_watch())
 
