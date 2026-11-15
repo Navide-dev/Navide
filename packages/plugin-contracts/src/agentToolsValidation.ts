@@ -39,13 +39,14 @@ export function agentToolViewId(method: unknown): string | null {
  *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
   'channels_', 'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
-  'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
-  'workspace_',
+  'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'ship_', 'skills_', 'stage_', 'ui_',
+  'window_', 'workspace_',
 ] as const
 
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
 export const CORE_TOOL_NAMES = [
   'cli_account_sign_in',
+  'cli_account_switch',
   'cli_accounts_list',
   'cli_answer_prompt', 'cli_cancel_message', 'cli_check_message', 'cli_close_agent', 'cli_extensions_list',
   'cli_failover_state',
@@ -58,19 +59,32 @@ export const CORE_TOOL_NAMES = [
   'channels_pairing_approve_request', 'channels_pairing_reject', 'channels_pairing_requests', 'channels_request_status', 'channels_set_verbosity',
   'channels_status', 'channels_unbind',
   'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
-  'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
-  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
-  'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
+  'marketplace_detail',
+  'marketplace_developer_application_fill', 'marketplace_developer_application_open',
+  'marketplace_developer_status', 'marketplace_open', 'marketplace_publish_fill', 'marketplace_publish_open',
+  'marketplace_publish_status', 'marketplace_publish_yank_fill', 'marketplace_publish_yank_open',
+  'marketplace_request_install', 'marketplace_request_rollback',
+  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search',
+  'marketplace_testplace_invite_fill', 'marketplace_testplace_invite_open', 'mcp_list', 'memory_list',
+  'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph', 'pipeline_import_n8n',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_developer_backend_call', 'plugins_disable', 'plugins_disable_all', 'plugins_enable',
-  'plugins_list_installed', 'plugins_request_remove',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo',
+  'plugins_developer_backend_call', 'plugins_developer_mode_open',
+  'plugins_disable', 'plugins_disable_all', 'plugins_enable',
+  'plugins_install_file_fill', 'plugins_install_file_open',
+  'plugins_list_installed',
+  'plugins_package',
+  'plugins_request_remove',
+  'plugins_validate_package',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
-  'share_list', 'share_revoke', 'skills_inspect', 'skills_install', 'skills_install_status', 'skills_list',
+  'share_list', 'share_revoke', 'ship_log_record', 'ship_log_report', 'skills_inspect', 'skills_install', 'skills_install_status', 'skills_list',
   'skills_prepare_install', 'skills_set_delivery', 'stage_define', 'ui_diagnostics', 'ui_invoke',
-  'ui_list_actions', 'ui_snapshot', 'workspace_list', 'workspace_open', 'workspace_switch',
+  'ui_list_actions', 'ui_snapshot', 'window_close', 'window_focus', 'window_list', 'window_move_pane',
+  'workspace_close',
+  'workspace_list', 'workspace_open', 'workspace_switch',
 ] as const
 
 export type AgentToolNameError =
