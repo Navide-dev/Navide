@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const source = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
 const locale = (code: string): Record<string, any> =>
-  JSON.parse(source(`packages/plugin-ui/src/foundation/i18n/locales/${code}.json`))
+  JSON.parse(source(`src/renderer/src/i18n/locales/${code}.json`))
 
 describe('first-run surfaces', () => {
   it('gives the wizard the UI font: it renders beside .app, not inside it', () => {

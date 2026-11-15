@@ -1,0 +1,13 @@
+{
+  "editorWindow": {
+    "quit-dirty": "{count} Datei hat ungespeicherte Änderungen. Beenden und verwerfen? | {count} Dateien haben ungespeicherte Änderungen. Beenden und verwerfen?",
+    "app": {
+      "breadcrumb-empty": "(leer)"
+    }
+  },
+  "pane": {
+    "pluginViews": {
+      "unavailable": "Diese Ansicht stammt von einem Navide-Plug-in und konnte nicht geöffnet werden."
+    }
+  }
+}

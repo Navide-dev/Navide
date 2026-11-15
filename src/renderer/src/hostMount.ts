@@ -1,5 +1,6 @@
 import { createApp, type Component } from 'vue'
 import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
+import './i18n/hostMessages'
 import { seedSettings } from '@navide/plugin-ui/shared'
 import { readHostBootstrapSettings } from './lib/settingsBootstrap'
 

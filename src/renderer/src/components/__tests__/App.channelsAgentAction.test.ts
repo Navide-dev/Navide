@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import enUS from '../../../../../packages/plugin-ui/src/foundation/i18n/locales/en-US.json'
+import enUS from '../../i18n/locales/en-US.json'
 
 // channels.agent_action: the backend's channels_* tools announce every change
 // they made (mcp_server/channel_tools.py _act). App.vue cannot be mounted by

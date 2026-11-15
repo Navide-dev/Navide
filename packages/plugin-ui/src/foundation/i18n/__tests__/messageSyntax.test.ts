@@ -9,6 +9,9 @@ import { describe, expect, it } from 'vitest'
 // the Security page showed only the text before the pipe.
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
+  'src/renderer/src/i18n/locales',
+  'plugins/navide-git/src/locales',
+  'plugins/navide-mini-ide/src/locales',
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'
 ]
@@ -148,7 +151,7 @@ describe('locale message syntax', () => {
   }
 
   it.each(LOCALES)('renders guard.policy.levels in %s with the literal curl | sh', (locale) => {
-    const messages = load(localeDirs[0], locale)
+    const messages = load('src/renderer/src/i18n/locales', locale)
     const i18n = createI18n({ legacy: false, locale, messages: { [locale]: messages } as Record<string, Record<string, string>> })
     // The full message tree is too deep for vue-i18n's key typing (TS2589).
     const { t } = i18n.global as unknown as { t: (key: string) => string }

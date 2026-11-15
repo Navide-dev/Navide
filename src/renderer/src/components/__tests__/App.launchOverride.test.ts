@@ -113,7 +113,7 @@ describe('the launch-command override stops at a fresh spawn — and says so', (
     'utf8',
   )
   const settingsSource = readFileSync(
-    resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'),
+    resolve(process.cwd(), 'src/renderer/src/i18n/locales/zh-TW.json'),
     'utf8',
   )
 

@@ -56,7 +56,7 @@ released has no entry, so skipping an announcement is always a decision.
 | `missingKey` | Required when `anchor` is set: shown when the anchor is not on screen (no pane open, feature hidden), saying where the thing is instead |
 
 Step text lives in the locale files
-(`packages/plugin-ui/src/foundation/i18n/locales/{en-US,zh-TW,ja-JP}.json`)
+(the Host's own catalogs, `src/renderer/src/i18n/locales/{en-US,zh-TW,ja-JP}.json`)
 under the version's own namespace: `tour.v<major>_<minor>_<patch>`, for example
 `tour.v0_2_10`. The shared buttons (`tour.next`, `tour.back`, `tour.skip`,
 `tour.done`, `tour.progress`) already exist.

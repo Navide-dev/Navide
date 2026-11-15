@@ -227,7 +227,7 @@ describe('an account switch lets go of the quota flag', () => {
     expect(pane).toContain("$t('pane.terminal.usage-limit-badge', { time: formatLoopTime(usageLimitUntil) })")
     for (const lang of ['en-US', 'zh-TW']) {
       const locale = JSON.parse(
-        readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${lang}.json`), 'utf8')
+        readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${lang}.json`), 'utf8')
       )
       for (const key of ['usage-limit-badge', 'usage-limit-badge-unknown', 'usage-limit-tooltip', 'usage-limit-tooltip-unknown', 'usage-limit-dismiss-confirm']) {
         expect(locale.pane.terminal[key], `${lang} pane.terminal.${key}`).toBeTypeOf('string')

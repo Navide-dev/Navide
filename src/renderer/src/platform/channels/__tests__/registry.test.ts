@@ -19,7 +19,7 @@ const PLATFORM_IS_A_LITERAL_UNION: IsLiteralUnion<ChannelPlatform> = true
 const LOCALES = ['en-US', 'zh-TW', 'ja-JP'].map((name) => ({
   name,
   messages: JSON.parse(
-    readFileSync(resolve(__dirname, `../../../../../../packages/plugin-ui/src/foundation/i18n/locales/${name}.json`), 'utf8')
+    readFileSync(resolve(__dirname, `../../../i18n/locales/${name}.json`), 'utf8')
   ) as Record<string, unknown>,
 }))
 

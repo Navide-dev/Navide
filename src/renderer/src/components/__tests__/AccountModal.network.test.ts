@@ -640,7 +640,7 @@ describe('account modal — your network', () => {
     for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
       const strings = JSON.parse(
         readFileSync(
-          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`),
           'utf8',
         ),
       )
@@ -668,7 +668,7 @@ describe('account modal — your network', () => {
     for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
       const strings = JSON.parse(
         readFileSync(
-          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`),
           'utf8',
         ),
       )

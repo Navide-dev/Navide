@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Plugins (0.2.44): the App-bundled plugins no longer move with the Host. The Host's own UI strings left the shared `@navide/plugin-ui` catalogs for `src/renderer/src/i18n/locales`, and Git and Mini-IDE now ship their own strings, as Plans and Browser already did, so a Host-only string change leaves every plugin's fingerprint as it was (`node scripts/official-plugin-fingerprints.mjs --probe <path>` shows which plugins a change would move). A fingerprint counts only the workspace packages a plugin's bundle contains, without the `plugin-sdk` command-line tools, and the Plans backend bundles the Python plugin SDK, which now holds the path guard, write path, Git-internal path check and plan versions itself instead of borrowing them from the core backend. Each plugin runs its own tests through `plugins/<dir>/vitest.config.ts` (`pnpm test:plugins`). The plugins move once to Navide Browser 1.1.5, Git 1.0.8, Mini-IDE 1.0.7 and Plans 1.1.7; what they show is unchanged.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added

@@ -1,13 +1,15 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   OFFICIAL_PLUGIN_SOURCES,
+  WORKSPACE_PACKAGES,
   checkRecord,
   fingerprint,
   nextRecord,
+  probe,
   readRecord,
 } from '../../scripts/official-plugin-fingerprints.mjs'
 import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginVersions'
@@ -43,6 +45,9 @@ function releasedFixture() {
     for (const extra of source.extra) write(extra, '# shared')
   }
   write('packages/plugin-ui/src/index.ts', 'export {}')
+  write('src/renderer/src/i18n/locales/en-US.json', '{}')
+  write('backend/agent_team_backend/path_guard.py', '# core')
+  write('packages/plugin-sdk/bin/navide-plugin.mjs', '// cli')
   git(root, 'add', '-A')
   const record = {
     baseline: 'v1.0.0',
@@ -77,12 +82,20 @@ describe('official plugin release baseline', () => {
     ]))
   }, 30_000)
 
-  it('refuses a change to a core module the Plans backend bundles', () => {
+  it('refuses a change to the Python plugin SDK the Plans backend bundles', () => {
     const { root, file, record } = releasedFixture()
-    file('backend/agent_team_backend/path_guard.py', '# changed')
+    file('backend/navide_plugin_sdk/path_guard.py', '# changed')
     expect(checkRecord(root, record)).toEqual([
       expect.stringContaining('navide.plans: content changed since v1.0.0'),
     ])
+  }, 30_000)
+
+  it('ignores the Host: its strings, its backend and the plugin-sdk command line', () => {
+    const { root, file, record } = releasedFixture()
+    file('src/renderer/src/i18n/locales/en-US.json', '{"msg":{"changed":"Changed"}}')
+    file('backend/agent_team_backend/path_guard.py', '# the core name for the SDK module')
+    file('packages/plugin-sdk/bin/navide-plugin.mjs', '// changed')
+    expect(checkRecord(root, record)).toEqual([])
   }, 30_000)
 
   it('ignores tests, fixtures and Markdown', () => {
@@ -135,5 +148,47 @@ describe('official plugin release baseline', () => {
     for (const pluginId of Object.keys(OFFICIAL_PLUGIN_SOURCES)) {
       expect(fingerprint(root, pluginId, 'v1.0.0')).toBe(fingerprint(root, pluginId))
     }
+  }, 30_000)
+})
+
+describe('official plugin fingerprint inputs', () => {
+  it('leave every plugin unchanged by a Host-only string', () => {
+    // The P0 acceptance check of the bundled-plugin split, against the real
+    // index: Host strings live outside packages/plugin-ui.
+    expect(probe(process.cwd(), 'src/renderer/src/i18n/locales/en-US.json')).toEqual([])
+    expect(probe(process.cwd(), 'src/renderer/src/App.vue')).toEqual([])
+    expect(probe(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'))
+      .toEqual(Object.keys(OFFICIAL_PLUGIN_SOURCES))
+    expect(probe(process.cwd(), 'plugins/navide-git/src/locales/en-US.json')).toEqual(['navide.git'])
+  }, 60_000)
+
+  it('keep the Plans backend off the core backend', () => {
+    const inputs = OFFICIAL_PLUGIN_SOURCES['navide.plans'].extra
+    expect(inputs.filter((path) => path.startsWith('backend/agent_team_backend/'))).toEqual([])
+    const build = readFileSync('scripts/build-plans-v2-backend.mjs', 'utf8')
+    expect(build).not.toContain('agent_team_backend/')
+  })
+
+  it.each(Object.entries(OFFICIAL_PLUGIN_SOURCES))('list every workspace package %s really bundles', (_id, source) => {
+    // Import specifiers name a package (`@navide/plugin-ui/foundation` is
+    // plugin-ui); a package's own imports join the closure, so plugin-ui
+    // brings plugin-sdk and plugin-sdk brings plugin-contracts.
+    const imported = (directory: string): string[] => {
+      const files = git(process.cwd(), 'ls-files', '--', directory).split('\n')
+        .filter((path) => /\.(ts|vue|mjs|js)$/.test(path))
+        .filter((path) => !/(^|\/)(tests?|__tests__|test-fixtures|bin)\/|\.test\.|\/testing\.ts$/.test(path))
+      const names = files.flatMap((path) =>
+        [...readFileSync(path, 'utf8').matchAll(/(?:from|import)\s*\(?\s*['"](@navide\/plugin-[a-z]+)/g)].map((m) => m[1]))
+      return [...new Set(names)].filter((name) => name in WORKSPACE_PACKAGES)
+    }
+    const closure = new Set<string>()
+    const pending = imported(source.directory)
+    while (pending.length) {
+      const name = pending.pop()!
+      if (closure.has(name)) continue
+      closure.add(name)
+      pending.push(...imported(WORKSPACE_PACKAGES[name].directory))
+    }
+    expect([...source.packages].sort()).toEqual([...closure].sort())
   }, 30_000)
 })

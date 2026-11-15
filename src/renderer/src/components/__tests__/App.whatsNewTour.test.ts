@@ -35,7 +35,7 @@ describe('Help → What’s New… (menu action show-whats-new)', () => {
   })
 
   it('translates the no-release-notes message in every shipped locale', () => {
-    const localesDir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+    const localesDir = resolve(process.cwd(), 'src/renderer/src/i18n/locales')
     const message = (locale: string): unknown =>
       JSON.parse(readFileSync(resolve(localesDir, `${locale}.json`), 'utf8')).announce?.['whats-new-none']
     const locales = readdirSync(localesDir).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''))

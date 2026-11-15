@@ -11,6 +11,7 @@ import {
   type AiCliPluginContext,
 } from '@navide/plugin-ui'
 import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
+import './gitMessages'
 import { useBackend } from './capabilityBackend'
 import { createPluginGitTransport, type PluginGitSdk } from './sdkGitTransport'
 import {

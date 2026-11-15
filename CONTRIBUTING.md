@@ -139,8 +139,14 @@ rewritten: rotate it.
 3. Run the test suite:
    ```bash
    pnpm test:run
+   pnpm test:plugins
    uv --project backend run pytest backend/tests
    ```
+   `pnpm test:run` covers the Host and the workspace packages; each App-bundled
+   plugin under `plugins/` runs its own suite with its own
+   `plugins/<dir>/vitest.config.ts` (`pnpm vitest run --config
+   plugins/navide-git/vitest.config.ts`), which `pnpm test:plugins` runs for
+   every plugin, one after another.
    While iterating, run only what your change can affect, then the full suites
    above before you push (CI and the release gates always run them in full):
    ```bash
