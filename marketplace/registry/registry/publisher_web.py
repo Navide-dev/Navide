@@ -16,7 +16,7 @@ import urllib.parse
 from pathlib import Path
 
 from fastapi import APIRouter, Form, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -33,6 +33,7 @@ from .account_auth import (
 )
 from .auth_proxy import visitor_address
 from .developer_web import register_developer_routes
+from .app import _file_chunks
 from .app import _require_admin_token as require_admin_token
 from .blocklist import BlocklistError, add_entry, db_entries, remove_entry, removed_list
 from .dns_verify import DomainError, record_host, record_value
@@ -1074,11 +1075,11 @@ def create_publisher_router() -> APIRouter:
                 raise HTTPException(status_code=404, detail="version not found")
             key = row.package_key
         try:
-            data = request.app.state.registry.storage.get(key)
+            stream = request.app.state.registry.storage.open_stream(key)
         except StorageError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return Response(
-            data,
+        return StreamingResponse(
+            _file_chunks(stream),
             media_type="application/zip",
             headers={
                 "Content-Disposition": f'attachment; filename="{namespace}.{name}-{version}@{target}.vsix"',
