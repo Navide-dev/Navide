@@ -10210,6 +10210,32 @@ def _guarded_terminal_write_refusal(
     return None
 
 
+#: (terminal session, inject_id, seq) of the injection chunks already written,
+#: oldest first. An injection tags each chunk so that a chunk the renderer
+#: resends after its request timed out — the loop was stalled, not the write
+#: lost — is answered again rather than typed twice (inject-failed 2026-11-15).
+_APPLIED_INJECT_CHUNKS: dict[tuple[str, str, int], None] = {}
+_APPLIED_INJECT_MAX = 2048
+
+
+def _inject_tag(payload: dict) -> tuple[str, int] | None:
+    inject_id = payload.get("inject_id")
+    seq = payload.get("seq")
+    if not isinstance(inject_id, str) or not inject_id or isinstance(seq, bool) or not isinstance(seq, int):
+        return None
+    return inject_id, seq
+
+
+def _inject_chunk_applied(session_id: str, inject_id: str, seq: int) -> bool:
+    return (session_id, inject_id, seq) in _APPLIED_INJECT_CHUNKS
+
+
+def _remember_inject_chunk(session_id: str, inject_id: str, seq: int) -> None:
+    _APPLIED_INJECT_CHUNKS[(session_id, inject_id, seq)] = None
+    while len(_APPLIED_INJECT_CHUNKS) > _APPLIED_INJECT_MAX:
+        del _APPLIED_INJECT_CHUNKS[next(iter(_APPLIED_INJECT_CHUNKS))]
+
+
 @handler("terminal.input")
 async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10221,6 +10247,13 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
     # shell be at its prompt: checked here, next to the write, so a program
     # started between the renderer's last look and this write still refuses it.
     session_id = payload["terminal_session_id"]
+    tag = _inject_tag(payload) if payload["data"] else None
+    if tag is not None and _inject_chunk_applied(session_id, *tag):
+        # Already written: its first answer was lost to a timeout. No guard
+        # re-check either — the guarded line already holds this chunk.
+        pending = session.terminals.write(session_id, "")
+        await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending, "duplicate": True}))
+        return
     if payload.get("require_shell_prompt") is True and payload["data"]:
         if session.terminals.shell_in_foreground(session_id) is False:
             await session.send_json(
@@ -10249,6 +10282,8 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
             _PREFILL_HELD.discard(session_id)
             _GUARDED_LINES.pop(session_id, None)
     pending = session.terminals.write(session_id, payload["data"])
+    if tag is not None:
+        _remember_inject_chunk(session_id, *tag)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending}))
     # A keyboard frame (the renderer flags only those: not mouse/focus reports,
     # not paste or programmatic injection) is a human dev-time heartbeat for

@@ -522,6 +522,7 @@
     "reason-pane-closed": "El pane de destino se cerró antes de la entrega",
     "reason-dropped": "Se eliminó del registro antes de poder entregarse",
     "reason-inject-failed": "Falló la inyección: la CLI de destino nunca mostró el mensaje",
+    "reason-inject-timeout": "Se agotó el tiempo de entrega: el backend de Navide no respondió a tiempo, ni siquiera tras reintentar",
     "reason-delivery-unconfirmed": "Enviado, pero la CLI de destino aún no ha mostrado que lo haya recibido: comprueba el pane antes de reenviar",
     "reason-inject-error": "Error de inyección: {error}",
     "reason-push-stuck": "El cuadro de entrada de la CLI no se vació tras dos envíos",

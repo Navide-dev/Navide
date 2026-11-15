@@ -522,6 +522,7 @@
     "reason-pane-closed": "配信前に送信先のペインが閉じられました",
     "reason-dropped": "配信前にログから削除されました",
     "reason-inject-failed": "入力の挿入に失敗しました。送信先の CLI がメッセージを表示しませんでした",
+    "reason-inject-timeout": "配信がタイムアウトしました。再試行しても Navide のバックエンドが時間内に応答しませんでした",
     "reason-delivery-unconfirmed": "送信済みですが、送信先の CLI はまだ受信を示していません。再送する前に Pane を確認してください",
     "reason-inject-error": "入力の挿入エラー：{error}",
     "reason-push-stuck": "2 回送信しても CLI の入力欄が空になりませんでした",

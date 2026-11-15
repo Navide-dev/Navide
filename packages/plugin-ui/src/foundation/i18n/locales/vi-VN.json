@@ -522,6 +522,7 @@
     "reason-pane-closed": "Pane đích đã đóng trước khi gửi tới",
     "reason-dropped": "Bị loại khỏi nhật ký trước khi kịp gửi",
     "reason-inject-failed": "Không chèn được — CLI đích không bao giờ hiển thị lại tin nhắn",
+    "reason-inject-timeout": "Hết thời gian gửi — backend của Navide không phản hồi kịp, kể cả sau khi thử lại",
     "reason-delivery-unconfirmed": "Đã gửi, nhưng CLI đích chưa cho thấy đã nhận — hãy kiểm tra pane trước khi gửi lại",
     "reason-inject-error": "Lỗi chèn: {error}",
     "reason-push-stuck": "Ô nhập của CLI không trống sau hai lần đẩy",
