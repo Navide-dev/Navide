@@ -17,11 +17,12 @@ so a package cannot serve active `text/html`/`image/svg+xml` on this origin.
 from __future__ import annotations
 
 import zipfile
-from io import BytesIO
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from markdown_it import MarkdownIt
 from sqlmodel import Session
@@ -151,15 +152,36 @@ def _navide_requirement(row: ExtensionVersion | None) -> dict[str, str | None]:
     }
 
 
-def _read_package_zip(request: Request, package_key: str) -> zipfile.ZipFile | None:
+@contextmanager
+def _read_package_zip(request: Request, package_key: str) -> Iterator[zipfile.ZipFile | None]:
+    """Open the stored package as a ZIP read from its storage stream, so only
+    the entries asked for are read (never the whole package onto the heap).
+    Yields None when the package is missing or not a ZIP."""
     storage = request.app.state.registry.storage
     try:
-        data = storage.get(package_key)
+        stream = storage.open_stream(package_key)
     except StorageError:
-        return None
-    if not zipfile.is_zipfile(BytesIO(data)):
-        return None
-    return zipfile.ZipFile(BytesIO(data))
+        stream = None
+    if stream is None:
+        yield None
+        return
+    with stream:
+        if not zipfile.is_zipfile(stream):
+            yield None
+            return
+        with zipfile.ZipFile(stream) as zf:
+            yield zf
+
+
+_ASSET_CHUNK_SIZE = 1024 * 1024
+
+
+def _entry_chunks(resources: ExitStack, entry) -> Iterator[bytes]:
+    """Yield one ZIP entry in fixed-size chunks, then close the entry, the
+    archive and the storage stream it was read from."""
+    with resources:
+        while chunk := entry.read(_ASSET_CHUNK_SIZE):
+            yield chunk
 
 
 def _extract_readme(request: Request, row: ExtensionVersion) -> str | None:
@@ -169,10 +191,9 @@ def _extract_readme(request: Request, row: ExtensionVersion) -> str | None:
 
 def readme_text(request: Request, row: ExtensionVersion) -> str | None:
     """Return the package README as raw markdown text (not rendered)."""
-    zf = _read_package_zip(request, row.package_key)
-    if zf is None:
-        return None
-    with zf:
+    with _read_package_zip(request, row.package_key) as zf:
+        if zf is None:
+            return None
         target = None
         for entry in zf.namelist():
             if Path(entry).name.lower() in _README_NAMES:
@@ -192,10 +213,9 @@ CHANGELOG_NAMES = frozenset({"changelog.md", "changelog.markdown", "changelog"})
 
 def changelog_text(request: Request, row: ExtensionVersion) -> str | None:
     """The package's root CHANGELOG as raw markdown text, or None."""
-    zf = _read_package_zip(request, row.package_key)
-    if zf is None:
-        return None
-    with zf:
+    with _read_package_zip(request, row.package_key) as zf:
+        if zf is None:
+            return None
         target = next(
             (entry for entry in zf.namelist() if entry.lower() in CHANGELOG_NAMES),
             None,
@@ -406,23 +426,26 @@ def create_web_router() -> APIRouter:
             allowed = {a.path: a.content_type for a in repo.list_assets(row.id)}
             if asset_path not in allowed:
                 raise HTTPException(status_code=404, detail="asset not found")
-            zf = _read_package_zip(request, row.package_key)
+            resources = ExitStack()
+            zf = resources.enter_context(_read_package_zip(request, row.package_key))
             if zf is None:
+                resources.close()
                 raise HTTPException(status_code=404, detail="package unavailable")
-            with zf:
-                try:
-                    blob = zf.read(asset_path)
-                except KeyError as exc:
-                    raise HTTPException(
-                        status_code=404, detail="asset not found"
-                    ) from exc
+            try:
+                entry = resources.enter_context(zf.open(asset_path))
+            except KeyError as exc:
+                resources.close()
+                raise HTTPException(
+                    status_code=404, detail="asset not found"
+                ) from exc
             media = allowed[asset_path]
         finally:
             session.close()
         if media not in SAFE_ASSET_TYPES:
+            resources.close()
             raise HTTPException(status_code=415, detail="unsupported asset type")
-        return Response(
-            content=blob,
+        return StreamingResponse(
+            _entry_chunks(resources, entry),
             media_type=media,
             headers={
                 "Content-Security-Policy": "default-src 'none'; sandbox",
