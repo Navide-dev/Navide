@@ -386,18 +386,84 @@ _credential_watcher: CredentialWatcher | None = None
 _SESSIONS: set["Session"] = set()
 
 
+#: Longest one window may take to accept one broadcast event. A window that is
+#: not reading (a hung renderer, a full socket) misses that event rather than
+#: holding up the other windows and the caller; its ws ping closes it if it is
+#: really gone.
+BROADCAST_SEND_TIMEOUT_S = 10.0
+#: Broadcasts allowed in flight at once. Past it a broadcast is delivered in
+#: the caller's own task, as before this existed, so a flood of events cannot
+#: grow without bound.
+MAX_DETACHED_BROADCASTS = 512
+#: In-flight broadcasts, held so a task is not garbage-collected mid-send;
+#: each removes itself when done.
+_BROADCASTS: set["asyncio.Task[None]"] = set()
+_broadcast_cap_logged = False
+
+
+async def _send_within_timeout(session: "Session", event: dict[str, Any]) -> None:
+    try:
+        await asyncio.wait_for(session.send_json(event), BROADCAST_SEND_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        log.warning(
+            "broadcast %s to session %#x timed out after %.0fs; that window misses it",
+            event.get("type", "?"), id(session), BROADCAST_SEND_TIMEOUT_S,
+        )
+    except Exception as err:  # noqa: BLE001
+        # send_json already marks dead + discards on send failure; this is
+        # a defensive net for anything unexpected it re-raised.
+        log.warning("broadcast send failed: %s", err)
+        _SESSIONS.discard(session)
+
+
+async def _deliver(sends: list[tuple["Session", dict[str, Any]]]) -> None:
+    await asyncio.gather(*(_send_within_timeout(session, event) for session, event in sends))
+
+
+async def _deliver_detached(sends: list[tuple["Session", dict[str, Any]]]) -> None:
+    """Send each (session, event), in a task of its own: a broadcast that has
+    started is finished even if the task that asked for it is cancelled.
+
+    ws_endpoint cancels a closed connection's handler tasks, and about fifty
+    handlers answer their requester before telling every other window
+    (leftover-bugs-0243 report-c): a requester hanging up in between left the
+    other windows without the update. The caller still waits for delivery, so
+    two broadcasts in a row still arrive in order, and still sees its own
+    cancellation. Windows are sent to concurrently, each within
+    BROADCAST_SEND_TIMEOUT_S."""
+    global _broadcast_cap_logged
+    if not sends:
+        return
+    if len(_BROADCASTS) >= MAX_DETACHED_BROADCASTS:
+        if not _broadcast_cap_logged:
+            _broadcast_cap_logged = True
+            log.warning("%d broadcasts in flight; delivering the next ones in their callers' tasks", len(_BROADCASTS))
+        await _deliver(sends)
+        return
+    _broadcast_cap_logged = False
+    task = asyncio.create_task(_deliver(sends))
+    _BROADCASTS.add(task)
+    task.add_done_callback(_BROADCASTS.discard)
+    await asyncio.shield(task)
+
+
 async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) -> None:
-    """Fire-and-forget send to every connected session (optionally minus one)."""
-    for session in list(_SESSIONS):
-        if session is exclude:
-            continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            # send_json already marks dead + discards on send failure; this is
-            # a defensive net for anything unexpected it re-raised.
-            log.warning("broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+    """Send to every connected session (optionally minus one), to its end
+    even if the caller is cancelled meanwhile (see _deliver_detached)."""
+    await _deliver_detached([(session, event) for session in list(_SESSIONS) if session is not exclude])
+
+
+async def drain_broadcasts(timeout: float = 2.0) -> None:
+    """Shutdown: let in-flight broadcasts finish for up to ``timeout``, then
+    cancel the rest."""
+    pending = list(_BROADCASTS)
+    if not pending:
+        return
+    _done, still = await asyncio.wait(pending, timeout=timeout)
+    for task in still:
+        task.cancel()
+    if still:
+        await asyncio.wait(still)
 
 
 _tokens_version = 0
@@ -416,6 +482,7 @@ async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[st
     path = workspace_path or ""
     notice = make_event("tokens.notice", {"workspace_path": path, "version": _tokens_version})
     full: dict[str, Any] | None = None
+    sends: list[tuple[Session, dict[str, Any]]] = []
     for session in list(_SESSIONS):
         watch = session.tokens_watch
         if watch is None:
@@ -427,11 +494,8 @@ async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[st
             event = notice
         else:
             continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            log.warning("broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+        sends.append((session, event))
+    await _deliver_detached(sends)
 
 
 async def unicast_to(session: "Session | None", event: dict[str, Any]) -> bool:
@@ -492,14 +556,10 @@ def is_main_window(session: "Session") -> bool:
 async def broadcast_main_windows(event: dict[str, Any]) -> None:
     """Send *event* to every connected main window only (not plugin, editor
     or other WS clients): for records naming a requester's pane and workspace."""
-    for session in list(_SESSIONS):
-        if session.dead or not is_main_window(session):
-            continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            log.warning("main-window broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+    await _deliver_detached([
+        (session, event) for session in list(_SESSIONS)
+        if not session.dead and is_main_window(session)
+    ])
 
 
 async def nudge_plugin_request_recovery(session: "Session") -> None:
@@ -1240,6 +1300,12 @@ async def _session_archive_loop() -> None:
             except Exception as err:  # noqa: BLE001 — the loop must survive
                 log.warning("session archive pass failed: %s", err)
         await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
+
+
+@app.on_event("shutdown")
+async def _drain_broadcasts() -> None:
+    """Broadcasts still in flight get a moment to finish, then are cancelled."""
+    await drain_broadcasts()
 
 
 @app.on_event("shutdown")
