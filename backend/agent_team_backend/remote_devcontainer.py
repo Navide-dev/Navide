@@ -34,6 +34,13 @@ METADATA_KEY = "remote"
 
 AGENTS = ("claude", "codex")
 
+# ui_settings key: the targets the user opened from the setup dialog. App-level
+# on purpose — a pane record lives in the workspace's .agent-team/ database,
+# which a cloned repository can carry, so a target found there is only a claim.
+# A pane connects only to a target listed here.
+TRUSTED_KEY = "remoteDevcontainerTrusted"
+TRUSTED_MAX = 100
+
 # The remote side prints this once its tty echo is off; only then is the
 # token written. An OSC sequence: a terminal that does not know it draws
 # nothing.
@@ -64,6 +71,31 @@ class RemoteSpecError(ValueError):
 
 def enabled(settings: Mapping[str, Any] | None) -> bool:
     return bool(settings) and settings.get(SETTING_KEY) is True
+
+
+def _trusted_rows(settings: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    raw = (settings or {}).get(TRUSTED_KEY)
+    if not isinstance(raw, list):
+        return []
+    return [
+        {"host": str(row["host"]), "container": str(row["container"])}
+        for row in raw
+        if isinstance(row, Mapping) and isinstance(row.get("host"), str) and isinstance(row.get("container"), str)
+    ]
+
+
+def is_trusted(settings: Mapping[str, Any] | None, spec: Mapping[str, Any]) -> bool:
+    return any(
+        row["host"] == spec["host"] and row["container"] == spec["container"]
+        for row in _trusted_rows(settings)
+    )
+
+
+def with_trusted(settings: Mapping[str, Any] | None, spec: Mapping[str, Any]) -> list[dict[str, str]]:
+    """The trusted list with ``spec`` first, names only, capped."""
+    entry = {"host": spec["host"], "container": spec["container"]}
+    rest = [row for row in _trusted_rows(settings) if row != entry]
+    return [entry, *rest][:TRUSTED_MAX]
 
 
 def validate_host(host: str) -> str:

@@ -41,11 +41,15 @@ _SERVER_KEYS = (
 )
 
 
-async def _enabled() -> bool:
+async def _settings() -> dict[str, Any]:
     from . import app
     from .db_executor import run_in_db_thread
 
-    return rd.enabled(await run_in_db_thread(app.ui_settings_store.get))
+    return await run_in_db_thread(app.ui_settings_store.get)
+
+
+async def _enabled() -> bool:
+    return rd.enabled(await _settings())
 
 
 def is_remote_term(term: Any) -> bool:
@@ -140,6 +144,27 @@ async def remote_probe(session: "Session", msg_id: str, msg_type: str, payload: 
     await session.send_json(make_response(msg_id, msg_type, result))
 
 
+@handler("remote_devcontainer.trust")
+async def remote_trust(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user opened this target from the setup dialog: remember it in the
+    app-level trusted list, the only place create_remote_pane accepts a
+    target from."""
+    from . import app
+    from .db_executor import run_in_db_thread
+
+    if not await _enabled():
+        await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote devcontainer panes are off"))
+        return
+    try:
+        spec = rd.parse_remote(payload.get("remote"))
+    except rd.RemoteSpecError as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    trusted = rd.with_trusted(await _settings(), spec)
+    await run_in_db_thread(app.ui_settings_store.set, {rd.TRUSTED_KEY: trusted})
+    await session.send_json(make_response(msg_id, msg_type, {"trusted": True}))
+
+
 async def create_remote_pane(
     session: "Session",
     msg_id: str,
@@ -152,7 +177,8 @@ async def create_remote_pane(
     from . import app
     from .mcp_server import wiring
 
-    if not await _enabled():
+    settings = await _settings()
+    if not rd.enabled(settings):
         await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote devcontainer panes are off"))
         return
     agent_key = str(payload.get("agent_key") or "")
@@ -164,6 +190,15 @@ async def create_remote_pane(
             raise rd.RemoteSpecError(f"remote panes support claude and codex, not {agent_key!r}")
         if local_port is None:
             raise rd.RemoteSpecError("backend port unknown")
+        if not rd.is_trusted(settings, spec):
+            # A target from a restored pane record that the user never opened
+            # from the dialog (a workspace database can carry one): no ssh.
+            await session.send_json(make_error(
+                msg_id, msg_type, "REMOTE_UNTRUSTED",
+                "open this host and container from the remote container dialog first",
+                {"host": spec["host"], "container": spec["container"]},
+            ))
+            return
         argv = rd.pane_argv(
             spec, agent_key, pane_id=pane_id, local_port=local_port,
             remote_port=rd.pick_remote_port(), control_path_dir=rd.control_dir(),
