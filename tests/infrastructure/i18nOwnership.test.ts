@@ -42,6 +42,27 @@ const isTest = (file: string): boolean =>
 // paired, so neither an apostrophe in prose nor "$t('a.b')" in a template
 // attribute hides a key.
 const KEY_TOKEN = /(?<=['"`])([A-Za-z][\w-]*(?:\.[\w-]+)+)(?=['"`])/g
+// The static head of a template key, `t(\`a.b.${x}\`)` -> "a.b.".
+const KEY_PREFIX = /(?<=`)([A-Za-z][\w-]*(?:\.[\w-]+)*\.?)(?=\$\{)/g
+
+/** The catalog leaves one owner's sources reference, exactly or by a template prefix. */
+function referenced(files: string[], leaves: string[]): Set<string> {
+  const used = new Set<string>()
+  const leafSet = new Set(leaves)
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8')
+    for (const [, key] of text.matchAll(KEY_TOKEN)) {
+      if (leafSet.has(key)) used.add(key)
+      else for (const leaf of leaves) if (leaf.startsWith(`${key}.`)) used.add(leaf)
+    }
+    for (const [, prefix] of text.matchAll(KEY_PREFIX)) {
+      // A bare namespace (`git.${op}`) is a message type far more often than a key.
+      if (!prefix.includes('.') || /^[^.]+\.$/.test(prefix)) continue
+      for (const leaf of leaves) if (leaf.startsWith(prefix)) used.add(leaf)
+    }
+  }
+  return used
+}
 
 describe('i18n catalog ownership', () => {
   const known = new Set(ALL_CATALOGS.flatMap((dir) => [...paths(dir)]))
@@ -58,6 +79,27 @@ describe('i18n catalog ownership', () => {
         .map((key) => `${file}: ${key}`)
     )
     expect([...new Set(missing)], [...new Set(missing)].join('\n')).toEqual([])
+  })
+
+  it('keeps in @navide/plugin-ui only strings more than one owner shows', () => {
+    // A string only the Host (or only one plugin) shows belongs in that owner's
+    // catalog: in plugin-ui it would move every plugin's fingerprint.
+    const leaves = [...paths(UI)].filter((path) => {
+      let value: unknown = JSON.parse(readFileSync(resolve(UI, 'en-US.json'), 'utf8'))
+      for (const part of path.split('.')) value = (value as Record<string, unknown>)[part]
+      return typeof value === 'string'
+    })
+    const users = new Map<string, string[]>()
+    for (const { name, sources: pattern } of OWNERS) {
+      for (const key of referenced(sources.filter((file) => pattern.test(file)), leaves)) {
+        users.set(key, [...(users.get(key) ?? []), name])
+      }
+    }
+    const misplaced = leaves
+      .map((key) => [key, users.get(key) ?? []] as const)
+      .filter(([, owners]) => owners.length === 1 && owners[0] !== '@navide/plugin-ui')
+      .map(([key, owners]) => `${key}: only ${owners[0]} uses it`)
+    expect(misplaced, misplaced.join('\n')).toEqual([])
   })
 
   it('names every catalog folder in the repository', () => {
