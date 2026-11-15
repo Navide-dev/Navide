@@ -20,11 +20,12 @@ def _manager_with(session) -> TerminalService:
     return mgr
 
 
-def _session(fg: int, pid: int = 4242, closed: bool = False):
+def _session(fg: int, pid: int = 4242, closed: bool = False, shell_pid: int = 0):
     return types.SimpleNamespace(
         closed=closed,
         proc=types.SimpleNamespace(pid=pid),
         handle=types.SimpleNamespace(foreground_group=lambda: fg),
+        shell_pid=shell_pid,
     )
 
 
@@ -60,7 +61,7 @@ def test_real_pty_foreground_child_reads_busy():
     try:
         proc = types.SimpleNamespace(pid=pid)
         handle = types.SimpleNamespace(foreground_group=lambda: os.tcgetpgrp(master))
-        mgr = _manager_with(types.SimpleNamespace(closed=False, proc=proc, handle=handle))
+        mgr = _manager_with(types.SimpleNamespace(closed=False, proc=proc, handle=handle, shell_pid=0))
 
         def settle(want):
             deadline = time.time() + 5
@@ -97,3 +98,47 @@ def test_only_the_windows_backend_cannot_see_the_foreground():
 
     assert _posix.PosixTerminalBackend.reports_foreground is True
     assert _windows.WindowsTerminalBackend.reports_foreground is False
+
+
+# 0.2.43 macOS dmg: every pane runs under the pane helper, so the PTY child is
+# the helper and the shell is its child — an interactive zsh then takes a
+# process group of its own. Read against the helper's group, an idle terminal
+# was busy for good and cli_send to it failed after 120 s (reason=raw).
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot tell; answers None")
+def test_the_helpers_shell_in_front_is_at_prompt(monkeypatch):
+    monkeypatch.setattr(osplat.process_tree, "group_of", lambda pid: pid)
+    assert _manager_with(_session(fg=937, pid=934, shell_pid=937)).shell_in_foreground("s1") is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows cannot tell; answers None")
+def test_a_program_the_helpers_shell_runs_is_busy(monkeypatch):
+    monkeypatch.setattr(osplat.process_tree, "group_of", lambda pid: pid)
+    assert _manager_with(_session(fg=990, pid=934, shell_pid=937)).shell_in_foreground("s1") is False
+    # The shell not seen yet: nothing but the PTY child's own group counts.
+    assert _manager_with(_session(fg=937, pid=934)).shell_in_foreground("s1") is False
+
+
+def _snapshot_service(session):
+    mgr = TerminalService.__new__(TerminalService)
+    mgr._sessions = {"s1": session}
+    return mgr
+
+
+def _live(pid: int):
+    return types.SimpleNamespace(closed=False, proc=types.SimpleNamespace(pid=pid), descendants={}, shell_pid=0)
+
+
+def test_the_snapshot_names_the_helpers_shell(monkeypatch):
+    monkeypatch.setattr(osplat.terminal_backend, "helper", "/x/navide-pane", raising=False)
+    session = _live(934)
+    # pid -> (ppid, group, start): the helper's shell, and a command it runs.
+    snap = {934: (1, 934, "a"), 937: (934, 937, "b"), 990: (937, 990, "c")}
+    _snapshot_service(session)._refresh_descendants(snap)
+    assert session.shell_pid == 937
+
+
+def test_no_helper_no_shell_pid(monkeypatch):
+    monkeypatch.setattr(osplat.terminal_backend, "helper", None, raising=False)
+    session = _live(934)
+    _snapshot_service(session)._refresh_descendants({934: (1, 934, "a"), 990: (934, 990, "c")})
+    assert session.shell_pid == 0
