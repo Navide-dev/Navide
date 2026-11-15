@@ -63,7 +63,7 @@ dependencies = [
     # Windows has no system tz database; zoneinfo needs the package there.
     "tzdata; sys_platform == 'win32'",
     "uvicorn[standard]>=0.32",
-    "watchdog>=4.0",
+    "watchdog>=7.1",
     # Outbound WebSocket client for the Navide-Server link (server_link.py).
     # It already arrives as a transitive dependency of uvicorn[standard], but
     # that makes its presence and version a side effect of uvicorn's extras —
