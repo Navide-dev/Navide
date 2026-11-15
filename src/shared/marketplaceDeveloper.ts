@@ -119,3 +119,16 @@ export function trustedDocUrl(value: unknown): string | null {
 }
 /** The developer console's open page: the publishing steps, before signing in. */
 export const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
+/** The Official Registry's API. It stays under `/registry` on the Navide
+ * server host; marketplace.navide.dev and developers.navide.dev serve no API. */
+export const OFFICIAL_REGISTRY_API_URL = 'https://server.navide.dev/registry'
+/** Where the Official Registry's sign-in and developer pages live. */
+export const DEVELOPER_CONSOLE_ORIGIN = 'https://developers.navide.dev'
+
+/** The base for browser pages (`/cli/authorize`) of the Registry at
+ * `registryBase`: the developer console for the Official Registry (exact
+ * match), the Registry itself for any other one. The API base is unchanged. */
+export function developerPagesBase(registryBase: string): string {
+  const base = registryBase.replace(/\/+$/, '')
+  return base === OFFICIAL_REGISTRY_API_URL ? DEVELOPER_CONSOLE_ORIGIN : base
+}

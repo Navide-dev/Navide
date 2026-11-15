@@ -31,6 +31,7 @@ import {
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
 import { readBodyCapped } from './readBodyCapped'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
+import { OFFICIAL_REGISTRY_API_URL } from '../../shared/marketplaceDeveloper'
 import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
 import {
   sensitiveCapabilities,
@@ -204,9 +205,10 @@ import {
 const DEV_MARKETPLACE_URL = 'http://localhost:8787'
 /** App-shipped Official Registry identity. A normalized match is always
  * resolved through the independent packaged root pin and cannot be downgraded
- * by approval. The path is part of the identity: the Registry is served under
- * the `/registry` prefix of the Navide server host. */
-export const OFFICIAL_MARKETPLACE_URL = 'https://server.navide.dev/registry'
+ * by approval. The path is part of the identity: the Registry API is served
+ * under the `/registry` prefix of the Navide server host, and stays there
+ * although its website moved to marketplace.navide.dev and developers.navide.dev. */
+export const OFFICIAL_MARKETPLACE_URL = OFFICIAL_REGISTRY_API_URL
 
 /** Packaged builds talk to the Official Registry; development builds keep the
  * local Registry. `AGENT_TEAM_MARKETPLACE_URL` overrides both. */

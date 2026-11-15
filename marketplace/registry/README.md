@@ -333,7 +333,7 @@ unchanged, and the `Host` header picks the role (`registry/host_routing.py`):
 |---|---|---|---|
 | Storefront, e.g. `https://marketplace.navide.dev` | `/`, `/extensions/{ns}/{name}` and its `/report`, `/removed`, package assets, rating and report forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (allow); pages carry `<link rel="canonical">` | console pages → the console, same path | none |
 | Developer console, e.g. `https://developers.navide.dev` | `/publish`, `/publisher*`, `/developer/apply`, `/cli/authorize`, `/admin/*` (Testplace included), their forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (disallow) | storefront pages → the storefront, same path; `/` → `/publisher` | `noindex, nofollow` |
-| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | every website page (the list above, plus `/login`) → `REGISTRY_LEGACY_REDIRECT_TO`, except `/cli/authorize` → the console with its query (older CLIs open it to sign in) | `noindex, nofollow` |
+| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | console pages (`/login`, `/publish`, `/publisher*`, `/developer*`, `/cli/authorize`, `/admin/*`) → the same path on the console with its query (older Apps and CLIs open them); storefront pages → `REGISTRY_LEGACY_REDIRECT_TO` | `noindex, nofollow` |
 | Any other host (health checks by IP, the container healthcheck) | everything, as with routing off | none | `noindex, nofollow` |
 
 Neither the storefront nor the console serves `/api/*` (404 there). Each of the

@@ -24,7 +24,7 @@ import { createServer } from 'http'
 import type { DeveloperPublicState, DeveloperTokenScope, DeveloperVault } from './developerVault'
 import { publicKeyFingerprint } from './developerVault'
 import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
-import { CAPABILITY_DENIED_DOC_URL, trustedDocUrl } from '../../shared/marketplaceDeveloper'
+import { CAPABILITY_DENIED_DOC_URL, developerPagesBase, trustedDocUrl } from '../../shared/marketplaceDeveloper'
 
 export const DEVELOPER_LOGIN_TIMEOUT_MS = 5 * 60_000
 export const DEVELOPER_LOGIN_LABEL = 'Navide app'
@@ -312,7 +312,7 @@ export class DeveloperAccount {
       port: String(callback.port), state, code_challenge: challenge, label: DEVELOPER_LOGIN_LABEL, scope,
     })
     try {
-      await this.deps.openExternal(`${base}/cli/authorize?${query}`)
+      await this.deps.openExternal(`${developerPagesBase(base)}/cli/authorize?${query}`)
     } catch (error) {
       callback.close()
       throw error

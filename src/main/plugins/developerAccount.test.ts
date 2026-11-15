@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeveloperAccount, packageDigest, redactDeveloperSecrets, registryError } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
 import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl, membersView } from './developerIpc'
+import { OFFICIAL_REGISTRY_API_URL, developerPagesBase } from '../../shared/marketplaceDeveloper'
 
 // Built by concatenation so no scanner mistakes a fixture for a credential.
 const ACCOUNT_TOKEN = 'nva' + '_' + 'acc0unt' + 'Q'.repeat(24)
@@ -180,6 +181,39 @@ describe('DeveloperAccount', () => {
       expect(text).not.toContain(secret)
     }
     expect(redactDeveloperSecrets(`x ${privateKeyPem.trim()} y`)).toBe('x [redacted] y')
+  })
+})
+
+describe('the Official Registry sign-in page', () => {
+  it.each([
+    ['https://server.navide.dev/registry', 'https://developers.navide.dev'],
+    ['https://server.navide.dev/registry/', 'https://developers.navide.dev'],
+    ['https://server.navide.dev', 'https://server.navide.dev'],
+    ['https://server.navide.dev/registry/evil', 'https://server.navide.dev/registry/evil'],
+    ['https://server.navide.dev.evil.test/registry', 'https://server.navide.dev.evil.test/registry'],
+    ['http://server.navide.dev/registry', 'http://server.navide.dev/registry'],
+    ['http://127.0.0.1:8787', 'http://127.0.0.1:8787'],
+  ])('%s opens its pages at %s', (registry, pages) => {
+    expect(developerPagesBase(registry)).toBe(pages)
+  })
+
+  it('opens the console to sign in and keeps the API and the vault on the Registry', async () => {
+    const opened: string[] = []
+    const openExternal = vi.fn(async (url: string) => {
+      opened.push(url)
+      const params = new URL(url).searchParams
+      await fetch(`http://127.0.0.1:${params.get('port')}/callback?code=c0de&state=${params.get('state')}`)
+    })
+    const fetcher = fakeFetch(() => ({ status: 200, body: { token: PUBLISHER_TOKEN, scope: 'account', expires_at: null } }))
+    const dev = new DeveloperAccount({
+      vault, registryUrl: () => OFFICIAL_REGISTRY_API_URL, openExternal, fetch: fetcher.impl,
+    })
+    await dev.signIn('account')
+    const authorize = new URL(opened[0])
+    expect(authorize.origin).toBe('https://developers.navide.dev')
+    expect(authorize.pathname).toBe('/cli/authorize')
+    expect(fetcher.calls[0].url).toBe('https://server.navide.dev/registry/api/cli/token')
+    expect(vault.token(OFFICIAL_REGISTRY_API_URL, 'account')).toBe(PUBLISHER_TOKEN)
   })
 })
 

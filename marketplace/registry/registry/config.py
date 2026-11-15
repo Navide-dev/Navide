@@ -114,7 +114,8 @@ class Settings:
     """Developer console origin, e.g. https://developers.navide.dev."""
     legacy_hosts: tuple[str, ...] = ()
     """Hosts that keep serving the API under root_path only, e.g.
-    server.navide.dev; their website pages redirect to legacy_redirect_to."""
+    server.navide.dev; their console pages redirect to developer_origin and
+    their storefront pages to legacy_redirect_to."""
     legacy_redirect_to: str = DEFAULT_LEGACY_REDIRECT_TO
     legacy_robots_disallow: bool = False
     """Off while search engines still need to crawl the legacy pages to see
