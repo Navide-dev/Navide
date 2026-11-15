@@ -47,13 +47,34 @@ pub fn parse(text: &str) -> Parsed {
 /// `parse` for bytes. `json.loads(bytes)` first detects the encoding
 /// (`json.detect_encoding`): a UTF-8 or UTF-16 byte-order mark, or a NUL in the
 /// first four bytes (UTF-16 or UTF-32 without a mark), means Python decodes
-/// something this parser does not, so that is Python's to read. Otherwise only
-/// valid UTF-8 is read.
+/// something this parser does not, so that is Python's to read. So is UTF-8
+/// that holds an encoded surrogate (`22 ED A0 80 22`, `"\ud800"`): `json.loads`
+/// decodes with `surrogatepass`. Any other bytes that are not UTF-8 (a protobuf
+/// blob) are read by no one.
 pub fn parse_bytes(bytes: &[u8]) -> Parsed {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) || bytes.starts_with(&[0xFF, 0xFE]) || bytes.starts_with(&[0xFE, 0xFF]) || bytes.iter().take(4).any(|&byte| byte == 0) {
         return Parsed::Python;
     }
-    std::str::from_utf8(bytes).map_or(Parsed::Rejected, parse)
+    match std::str::from_utf8(bytes) {
+        Ok(text) => parse(text),
+        Err(_) if utf8_but_for_surrogates(bytes) => Parsed::Python,
+        Err(_) => Parsed::Rejected,
+    }
+}
+
+/// Whether `bytes` are valid UTF-8 once encoded surrogates (`ED A0..BF 80..BF`,
+/// which `surrogatepass` accepts) are let through.
+fn utf8_but_for_surrogates(mut bytes: &[u8]) -> bool {
+    loop {
+        let Err(error) = std::str::from_utf8(bytes) else {
+            return true;
+        };
+        let rest = &bytes[error.valid_up_to()..];
+        match rest {
+            [0xED, 0xA0..=0xBF, 0x80..=0xBF, ..] => bytes = &rest[3..],
+            _ => return false,
+        }
+    }
 }
 
 /// Whether Python's `json` may accept `text`, which `serde_json` rejected:
@@ -248,8 +269,12 @@ mod tests {
     }
 
     #[test]
-    fn bytes_that_are_not_utf8_are_not_json() {
+    fn bytes_that_are_not_utf8_are_python_s_only_for_encoded_surrogates() {
         assert_eq!(parse_bytes(b"\x12\xff file"), Parsed::Rejected);
+        assert_eq!(parse_bytes(b"\"\xed\xa0\x80\""), Parsed::Python, "an encoded surrogate, which `surrogatepass` reads");
+        assert_eq!(parse_bytes(b"\"\xed\xa0\""), Parsed::Rejected, "a surrogate cut short is not read");
+        assert_eq!(parse_bytes(b"\"\xed\xa0\x80\xff\""), Parsed::Rejected, "a surrogate beside a byte nothing reads");
+        assert_eq!(parse_bytes(b"\"\xed\xa0\x80\xed\xb0\x80\""), Parsed::Python, "two surrogates");
         assert_eq!(parse_bytes(b"{\"a\":NaN}"), Parsed::Python);
         assert!(matches!(parse_bytes(b"[1]"), Parsed::Value(_)));
     }

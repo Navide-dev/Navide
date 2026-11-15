@@ -63,5 +63,6 @@
   {"hex": "005b0031005d", "expect": "python", "python_accepts": true},
   {"hex": "5b00000031000000", "expect": "python", "python_accepts": false},
   {"hex": "12ff2066696c65", "expect": "rejected", "python_accepts": false},
+  {"hex": "22eda08022", "expect": "python", "python_accepts": true},
   {"hex": "7b226122", "expect": "rejected", "python_accepts": false}
 ]
