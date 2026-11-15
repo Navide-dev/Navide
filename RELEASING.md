@@ -241,6 +241,47 @@ the `navide.dev` zone).
   free tier. Nothing expires; old releases stay downloadable from the mirror
   as they do from GitHub.
 
+## Releasing navide.git on its own
+
+navide.git ships through the Navide Marketplace without waiting for an App
+release. An installed App picks the newer version up from the Marketplace (a
+verified Marketplace copy wins over the bundled one of the same or a lower
+version), so a Git fix reaches users without a new installer.
+
+1. **Branch and tests.** Change `plugins/navide-git/` on its own branch.
+   `.github/workflows/plugin-git.yml` runs the plugin's typecheck and its whole
+   suite (`pnpm test:plugin:git`) when the plugin or a package its bundle
+   contains changes; `ci.yml` no longer runs Git's tests. Locally run
+   `pnpm test:plugin:git` and `pnpm typecheck:plugin-git`.
+2. **Bridge contract.** Git's Git operations run in the Host over the
+   first-party bridge, frozen in `src/shared/gitBridgeContract.json` (Host) and
+   `plugins/navide-git/src/git-feature/gitBridgeContract.json` (plugin; it
+   declares the same version as `GIT_BRIDGE_VERSION`). A Git-only release
+   leaves both untouched. Adding a `git.*` request or event is a minor
+   contract version, removing or renaming one a major; either changes both
+   copies and the `FROZEN` digests in `src/main/plugins/gitBridgeContract.test.ts`
+   and the plugin's `gitBridgeContract.test.ts`, and needs a Host release
+   first: raise `engines.navide` in `plugins/navide-git/manifest.json` to that
+   App version so an older App never installs a Git that needs more than it
+   serves. The bridge stays first-party only; there is no public `git`
+   capability namespace.
+3. **Version.** Bump the patch (or minor) version once per release cycle in
+   `plugins/navide-git/manifest.json`, `plugins/navide-git/package.json` and
+   `src/main/plugins/officialPluginVersions.ts`; `node
+   scripts/official-plugin-fingerprints.mjs` passes again once it is higher
+   than the baseline. A Host-only change never needs one (`--probe <path>`).
+   Add a CHANGELOG line naming the new Git version.
+4. **Publish, with the user's go-ahead.** On the release machine, where the
+   publisher key lives (never in CI or the repository):
+   `NAVIDE_REGISTRY_URL=… NAVIDE_PUBLISHER_KEY=… NAVIDE_PLUGIN_TOKEN=…
+   scripts/publish-first-party-plugins.sh --only git` builds, packs, signs and
+   publishes the `universal` package. A version already published is refused
+   (409): a published version is never overwritten, so a second change needs a
+   new version.
+5. **Check.** `curl -s https://server.navide.dev/registry/api/extensions/navide/git`
+   shows the new `latest_version`; an installed App offers the update. The next
+   App release bundles the same version from source.
+
 ## Git recovery switch
 
 If a release needs the retained Git recovery bundle, launch the application

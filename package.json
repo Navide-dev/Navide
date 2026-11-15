@@ -87,6 +87,7 @@
     "release:prepare": "bash ./release.sh",
     "test:frontend": "vitest run --project unit --project packages --project cli",
     "test:plugins": "node scripts/run-plugin-tests.mjs",
+    "test:plugin:git": "vitest run --config plugins/navide-git/vitest.config.ts",
     "test:artifacts": "vitest run --project artifacts --project artifacts-heavy",
     "test:artifacts:ci": "node scripts/run-artifact-tests.mjs --prepared",
     "test:infrastructure": "vitest run --project unit tests/infrastructure",

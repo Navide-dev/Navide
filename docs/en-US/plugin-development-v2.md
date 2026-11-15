@@ -2759,6 +2759,18 @@ no further bump. A version below the baseline is always refused.
 `tests/infrastructure/officialPluginFingerprints.test.ts` checks this on every
 PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
 
+navide.git reaches its Git operations over a first-party bridge, not a
+public capability: the Host maps the `git.*` requests in
+`src/shared/gitBridgeContract.json` (78 requests and 3 events, version 1.0.0)
+for that package alone, and there is no public `git` namespace. The plugin
+keeps a copy of the contract it is built against
+(`plugins/navide-git/src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`);
+both sides test their copy against a frozen digest, the Host additionally
+against its capability map and backend handlers. Adding a message is a minor
+contract version and removing or renaming one a major, released in the Host
+before a Git version that needs it (raising Git's `engines.navide`). See
+`RELEASING.md` ("Releasing navide.git on its own").
+
 UI strings are split the same way. `@navide/plugin-ui` ships only the strings
 its own components use (`packages/plugin-ui/src/foundation/i18n/locales`), and
 its `enUSMessages`, `zhTWMessages` and `jaJPMessages` exports are those
