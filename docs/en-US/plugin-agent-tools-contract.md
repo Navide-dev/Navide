@@ -159,12 +159,15 @@ A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
 `channels_` `cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_`
 `memory_` `miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_`
-`preview_` `prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_`
+`preview_` `prompt_` `role_` `scheduler_` `share_` `ship_` `skills_` `stage_` `ui_`
 `window_` `workspace_`
 
 `git_`, `plans_` and `miniide_` are the prefixes the built-in packages
 (`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party
 tool cannot read as first-party.
+
+`ship_` holds the `ship_log_*` tools of the built-in `navide.shipped-log`
+backend plugin (0.2.44).
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
 pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 80
