@@ -10,8 +10,8 @@ update never reaches a published package.
 
 from __future__ import annotations
 
-from agent_team_backend import plan_versions
-from agent_team_backend.fs_write import (
+from . import plan_versions
+from .fs_write import (
     _WRITE_PART_MAX_BYTES as WRITE_PART_MAX_BYTES,
     _resolve_mutation_safe as resolve_mutation_safe,
     _staging_path as staging_path,
@@ -20,7 +20,7 @@ from agent_team_backend.fs_write import (
     write_file,
     write_part,
 )
-from agent_team_backend.path_guard import FsError, _resolve_safe as resolve_safe
+from .path_guard import FsError, _resolve_safe as resolve_safe
 
 API_VERSION = "1.0.0"
 

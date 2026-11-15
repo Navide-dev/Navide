@@ -41,16 +41,17 @@ def test_the_write_path_bundle_stays_standard_library_only() -> None:
     script = (
         "import sys\n"
         "before = set(sys.modules)\n"
-        "import agent_team_backend.plan_versions\n"
+        "import navide_plugin_sdk.plan_versions\n"
         "added = set(sys.modules) - before\n"
-        "print(sorted(m for m in added if m.startswith('agent_team_backend')))\n"
-        "print(sorted({m.split('.')[0] for m in added} - set(sys.stdlib_module_names) - {'agent_team_backend'}))\n"
+        "print(sorted(m for m in added if m.split('.')[0] in ('agent_team_backend', 'navide_plugin_sdk')))\n"
+        "print(sorted({m.split('.')[0] for m in added} - set(sys.stdlib_module_names) - {'navide_plugin_sdk'}))\n"
     )
     result = subprocess.run([sys.executable, "-c", script], cwd=BACKEND_ROOT, capture_output=True, text=True, check=True)
     loaded, third = result.stdout.splitlines()
+    # Plans bundles the plugin SDK, which reaches nothing of the core backend.
     assert loaded == str([
-        "agent_team_backend", "agent_team_backend.fs_write", "agent_team_backend.git_security",
-        "agent_team_backend.path_guard", "agent_team_backend.plan_versions",
+        "navide_plugin_sdk", "navide_plugin_sdk.fs_write", "navide_plugin_sdk.git_security",
+        "navide_plugin_sdk.path_guard", "navide_plugin_sdk.plan_versions",
     ])
     assert third == "[]"
 

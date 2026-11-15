@@ -1,12 +1,6 @@
-import { defineConfig } from 'vitest/config'
-import baseConfig from '../../vitest.config'
+import { pluginVitestConfig } from '../../vitest.plugin'
 
-export default defineConfig({
-  ...baseConfig,
-  test: {
-    ...baseConfig.test,
-    projects: undefined,
-    include: ['plugins/navide-mini-ide/tests/**/*.test.ts'],
-    globalSetup: ['tests/support/publicPackagesSetup.ts'],
-  }
+export default pluginVitestConfig('navide-mini-ide', {
+  setupFiles: ['plugins/navide-mini-ide/src/miniIdeMessages.ts'],
+  heavy: ['tests/packageBoundary.test.ts'],
 })

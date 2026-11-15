@@ -401,7 +401,7 @@ describe('CliAccountsPane with an API key account', () => {
 })
 
 describe('API key account wording, in every language', () => {
-  const dir = resolve(__dirname, '../../../../../packages/plugin-ui/src/foundation/i18n/locales')
+  const dir = resolve(__dirname, '../../i18n/locales')
   const locales = readdirSync(dir).filter((name) => name.endsWith('.json'))
     .map((name) => [name, JSON.parse(readFileSync(resolve(dir, name), 'utf8'))] as const)
 

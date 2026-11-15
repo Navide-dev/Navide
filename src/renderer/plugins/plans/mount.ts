@@ -14,6 +14,7 @@
 
 import { createApp } from 'vue'
 import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
+import '../../src/i18n/hostMessages'
 
 // Theme token layers — order matters: primitives → semantic roles → themes.
 import '@navide/plugin-ui/styles.css'

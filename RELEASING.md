@@ -99,7 +99,9 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    it must carry a higher version than the baseline (one bump per release
    cycle; a lower version is always refused), which
    `tests/infrastructure/officialPluginFingerprints.test.ts` checks on every
-   PR. `release.sh` rewrites the file for the new tag
+   PR. Only the plugin's own sources count, never the Host's, so a Host-only
+   change needs no bump (`node scripts/official-plugin-fingerprints.mjs --probe
+   <path>` names the plugins a change would move). `release.sh` rewrites the file for the new tag
    (`node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z`)
    and commits it with the version files; it stops if the rule does not hold.
    Never rewrite the file outside a release. The first baseline is `v0.2.34`:

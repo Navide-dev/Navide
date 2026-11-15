@@ -107,7 +107,7 @@ describe('ControlPane – the ＋ menu Compare block (model arena)', () => {
     wrapper = mountWith()
     await openMenu(wrapper)
     expect(wrapper.find('[data-testid="add-menu-arena"] .ws-add-exp').text()).toBe('arena.experimental')
-    const dir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+    const dir = resolve(process.cwd(), 'src/renderer/src/i18n/locales')
     const files = readdirSync(dir).filter((f) => f.endsWith('.json'))
     expect(files).toHaveLength(11)
     for (const f of files) {

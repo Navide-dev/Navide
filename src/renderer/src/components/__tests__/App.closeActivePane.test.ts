@@ -85,7 +85,7 @@ describe('App ⌘W closes the focused pane', () => {
   it('has the confirm strings in every shipped locale', () => {
     for (const locale of ['en-US', 'zh-TW']) {
       const dict = JSON.parse(
-        readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
+        readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`), 'utf8')
       )
       const terminal = dict.pane.terminal
       for (const key of [

@@ -20,7 +20,7 @@
 // terminal buffer.
 
 import { AGENT_SPECS } from '@navide/plugin-shell'
-import { enUSMessages } from '@navide/plugin-ui/foundation'
+import enUSMessages from '../i18n/locales/en-US.json'
 import { CHANNEL_PLATFORM_IDS } from '../platform/channels'
 
 export const MSG_START = '---MSG-START---'

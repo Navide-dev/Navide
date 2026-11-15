@@ -23,6 +23,8 @@ async function load() {
   vi.resetModules()
   const mod = await import('../useAnnouncements')
   const { i18n } = await import('@navide/plugin-ui/foundation')
+  // The reset dropped the instance the Host strings were merged into.
+  await import('../../i18n/hostMessages')
   return { ...mod, i18n }
 }
 

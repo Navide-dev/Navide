@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import enUS from '../../../../packages/plugin-ui/src/foundation/i18n/locales/en-US.json'
-import jaJP from '../../../../packages/plugin-ui/src/foundation/i18n/locales/ja-JP.json'
-import zhTW from '../../../../packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'
+import enUS from '../i18n/locales/en-US.json'
+import jaJP from '../i18n/locales/ja-JP.json'
+import zhTW from '../i18n/locales/zh-TW.json'
 
 describe('web disclosure', () => {
   it('says agents use your sign-ins, that a reload stops agent scripts and that many pages use memory, the same in the trust dialog and the card', () => {

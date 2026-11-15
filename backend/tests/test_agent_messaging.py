@@ -1234,7 +1234,7 @@ def test_every_resolve_code_has_a_ui_string() -> None:
 
     for locale in ("en-US", "zh-TW"):
         strings = json.loads(
-            (root / f"packages/plugin-ui/src/foundation/i18n/locales/{locale}.json").read_text(
+            (root / f"src/renderer/src/i18n/locales/{locale}.json").read_text(
                 encoding="utf-8"
             )
         )["msg"]
