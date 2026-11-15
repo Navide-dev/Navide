@@ -234,6 +234,22 @@ class Paths(Protocol):
         """
         ...
 
+    def bundled_executable(self, name: str) -> str:
+        """The file name of an executable the app ships beside itself (a
+        native sidecar built from `native/<name>`): `name` on POSIX,
+        `name.exe` on Windows. One name, not `executable_candidates`' list:
+        the build writes exactly this file.
+        """
+        ...
+
+    def helper_process_options(self) -> dict[str, int]:
+        """Keyword arguments for `subprocess.Popen` that start one of the
+        app's own helper processes in the background: none on POSIX; on
+        Windows `creationflags=CREATE_NO_WINDOW`, so a GUI-launched backend
+        does not flash a console window for it.
+        """
+        ...
+
     def enforces_posix_modes(self) -> bool:
         """Whether a file's mode bits mean anything on this platform.
 

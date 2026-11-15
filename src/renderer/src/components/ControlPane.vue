@@ -6774,14 +6774,17 @@ button.icon-btn.muted:hover {
   font-size: 11.5px;
 }
 .ws-add-div { height: 1px; margin: 6px 0; background: var(--border-muted); }
-/* Tall enough for the whole roster, capped against the viewport so a short
- * window still gets a menu that fits. 200px was set when ten vendors was the
- * whole list; at fourteen it cut the last four off with nothing on screen
- * saying so, and they read as unsupported. Each row is ~24px (12px text +
- * 3px padding either side), so 480px carries twenty, and 546px adds the
- * two section headings (~24px, and ~31px with the divider above Agents). The
- * viewport cap is no longer a guessed 45vh: the menu's own max-height is the
- * room it has, and this box shrinks into it (never below three rows). */
+/* A fixed budget, not a count of the roster: capped against the viewport so a
+ * short window still gets a menu that fits, and the box scrolls when the
+ * roster is longer than the budget. Nothing here is edited when a CLI is
+ * added. The list must still never look complete when it is not: the fades
+ * and shadows below show whichever end is hidden (that mistake was made when
+ * 200px cut the last four vendors off with nothing on screen saying so, and
+ * they read as unsupported). Each row is ~24px (12px text + 3px padding
+ * either side), so 546px shows twenty rows and the two section headings (~24px,
+ * and ~31px with the divider above Agents). The viewport cap is the menu's
+ * own max-height, the room it has, and this box shrinks into it (never below
+ * three rows). */
 .ws-add-scroll {
   max-height: min(546px, 100vh);
   flex-shrink: 1;

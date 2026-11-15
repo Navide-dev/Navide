@@ -24,23 +24,32 @@ names and does not prescribe current menu labels.
 
 ## Part 1 — Where the code lives
 
-Since the one-file-per-vendor refactor (July 2026) an integration is two
-vendor files plus one registration line on each side. No shared module
-carries per-vendor branches, and CI rejects a vendor module that imports
-another vendor or any app module.
+An integration is the CLI's declaration plus, where the app does more for it
+than launch and resume it, one vendor file on each side. Nothing registers
+them: both registries are built from the declarations and find the vendor
+files by the CLI's key. No shared module carries per-vendor branches, and CI
+rejects a vendor module that imports another vendor or any app module.
 
 | Layer | File |
 |-------|------|
-| Backend spec — credentials, usage, resume, session paths, spawn env, log reader, install entry | `backend/agent_team_backend/cli_vendors/<key>.py` |
-| Backend registration | `backend/agent_team_backend/cli_vendors/registry.py` |
-| Frontend spec — label, command, resume syntax, capability flags | `src/renderer/src/platform/plugin-shell/agents/<key>.ts` |
-| Frontend registration + display order | `src/renderer/src/platform/plugin-shell/agents/index.ts` |
+| Declaration — the key, label, kind and place in the lists; how the CLI is launched and resumed; (optionally) how its records are read | `native/navide-cli-runtime/src/vendors/<key>.rs` |
+| The declarations as the app reads them (generated, never edited) | `backend/agent_team_backend/cli_declarations.json`, `src/renderer/src/platform/plugin-shell/agents/_cli_declarations.ts` |
+| Backend spec — credentials, usage, session paths, log reader, install entry | `backend/agent_team_backend/cli_vendors/<key>.py` |
+| Frontend spec — capability flags and what the declaration cannot say | `src/renderer/src/platform/plugin-shell/agents/<key>.ts` |
 
-Everything the old layer-by-layer checklist enumerated now derives from those
-four:
+`cli_vendors/registry.py` imports the module named after each declared key,
+in the order the declarations give (`order.registry`); `agents/index.ts`
+finds every spec file with `import.meta.glob` and lists them by
+`order.menu`. A declared CLI with no vendor file on a side is registered
+there from its declaration alone: it can be launched and resumed, and has no
+other capability.
 
-- `AgentKey` is re-exported from `agents/index.ts`; `data/stages.ts` holds no
-  hand-written union to drift.
+Everything the old layer-by-layer checklist enumerated now derives from
+those:
+
+- `AgentKey` is the declared keys (`agents/index.ts`, from
+  `_cli_declarations.ts`); `data/stages.ts` holds no hand-written union to
+  drift.
 - The install wizard's `DEPS` aggregates each spec's `install_dep`
   (`onboarding_deps.py`), and a vendor absent from `_AGENT_CLI_ORDER` simply
   appends in registry order.
@@ -57,6 +66,144 @@ preflight, the credential vault or the log watcher paths that do not exist.
 `docs/adding-a-cli-vendor.md` carries the full step list, the structural
 tests that act as the checklist, and the import rules.
 
+### The declaration: launch and resume, declared once
+
+How a CLI is launched and resumed is written in one place, the vendor's file
+in the Rust crate `native/navide-cli-runtime`, and neither spec retypes it:
+
+- the program and its base arguments, the permission-bypass arguments, the
+  model and effort argument templates and the effort names the CLI accepts;
+- the environment a spawn adds (`env_defaults`) and the home relocators it
+  strips (`env_strip`);
+- the resume arguments, and how the session id is read back out of a saved
+  launch command;
+- the interrupt byte, the display label and the kind (CLI or Agent);
+- where the CLI sits in the app's two lists (`order.menu`: the spawn menus
+  and settings; `order.registry`: the backend's vendor registry). The numbers
+  leave gaps: a new CLI takes a free one and no other file changes.
+
+`navide-cli-runtime declarations launch` prints that part of every
+declaration as JSON. The output is checked in twice:
+`backend/agent_team_backend/cli_declarations.json` for the vendor registry,
+and `src/renderer/src/platform/plugin-shell/agents/_cli_declarations.ts` for
+the agent specs: the same JSON as a typed constant, so the agent keys are a
+literal union at compile time, and inside plugin-shell because it imports
+nothing from outside itself. Both are generated; never edit them.
+
+#### Exactly which files a new CLI needs
+
+To exist in the app (it appears in the menus, launches, and resumes if its
+declaration says how):
+
+1. `native/navide-cli-runtime/src/vendors/<key>.rs`: a `pub static CLI: Cli`
+   and, for a CLI whose records are not declared, `crate::unobserved!(CLI);`.
+   The crate's `build.rs` lists the directory, so no shared Rust file is
+   edited. `native/navide-cli-runtime/tests/extensibility.rs` is a complete
+   CLI declared in one file, and `DESIGN.md` beside the crate explains the
+   vocabulary.
+2. The two generated copies, rewritten by one command in
+   `native/navide-cli-runtime` and committed:
+   `NAVIDE_DECLARATIONS_WRITE=1 cargo test --test checked_in`. Run without the
+   variable (plain `cargo test`), that test fails when either copy is not
+   what the source prints. It needs no built binary.
+
+No shared file is edited for that: not `registry.py`, not `agents/index.ts`,
+and none of the recording tests (`cli_declarations_main.json`,
+`MAIN_REGISTRY_ORDER`, `MAIN_ORDER`/`MAIN`): they hold the CLIs main had to the
+values main had, compare only those keys, and leave a later CLI out. A
+declared CLI with no vendor file on a side is registered there from its
+declaration alone, and the structural tests check only the files that exist
+(a backend test and a frontend test declare a fake CLI to show it).
+
+What the repository's tests still ask of **every** registered CLI, with or
+without vendor files, was found by declaring a throwaway CLI (launch only, no
+vendor file) and running both suites; it was not committed:
+
+3. Its regression inventory entry, `tests/fixtures/cli-regression/catalog.json`
+   with a fixture `<key>.json` beside it, and its row in
+   `tests/cli/vendorContracts.test.ts` (the inventory tests fail until both
+   name the CLI).
+4. The lists that still name a CLI by hand. The earlier hand-kept lists
+   (`EXPECTED_VENDORS`, `CLI_NAMES`, `MEMORY_SOURCES`, the exemption sets, the
+   plans plugin's frozen copy, `NO_LOG_READER`, `TURN_START_SIGNAL`, the ＋
+   menu's cap) now derive from the declaration or the vendor's own spec, or are
+   recorded subsets (that includes the `SNAPSHOT` in
+   `test_install_deps_snapshot.py`). A second throwaway CLI, a copy of goose
+   with its adapter files, still needed: the README vendor count and list, and
+   the `CliAgentsHelp.vue` row. They are listed in
+   [Adding a CLI vendor](../adding-a-cli-vendor.md#other-hand-kept-lists), with
+   the one list a second binary name goes into by hand (the alias set beside
+   `CLI_NAMES`). So one declaration plus its tests is true of registration and
+   of the recording tests; the prose a person writes is what is left.
+
+For everything beyond launch and resume, add the vendor file of the side
+that needs it; each is found by its name:
+
+5. `backend/agent_team_backend/cli_vendors/<key>.py`, exporting `SPEC`
+   (credentials, usage, install detection, the log reader, hooks). Spread
+   `**declared("<key>")` (`cli_vendors/_declared.py`): it supplies
+   `supports_model`, `supports_effort`, `known_efforts`,
+   `spawn_env_defaults`, `home_env_vars`, `interrupt_key`,
+   `supports_session_resume` and `resume_id_from_command`; do not set these
+   by hand. The packaged backend needs no entry for it: the PyInstaller spec
+   collects every module of the package (`collect_submodules`, because the
+   registry imports it by name and the graph walk cannot see that), and
+   `test_pyinstaller_spec.py` runs that collection.
+6. `src/renderer/src/platform/plugin-shell/agents/<key>.ts`, exporting `SPEC`
+   (capability flags, prompt patterns, quota semantics). Spread
+   `...declared('<key>')` (`agents/_declared.ts`): it supplies `label`,
+   `defaultCommand`, `skipPermissionFlag`, `modelArgs`, `effortArgs`,
+   `knownEfforts`, `resumeArgs`, `resumeCommandPattern` and `kind`. The
+   declared `resumeCommandPattern` recognizes the resume command Navide itself
+   builds; set your own after the spread only to recognize more (a short-flag
+   alias, the `=` and the spaced form both, arguments in between).
+
+The repository's tests then ask for more before a vendor counts as
+integrated (a log reader module, an install entry, the hand-kept test lists):
+[Adding a CLI vendor](../adding-a-cli-vendor.md) has that list. Those are the
+tests' requirements for a fully supported CLI, not registration.
+
+`backend/tests/test_cli_declarations.py` holds a recording of every value
+main's hand-written specs had, and of the session id each of main's parsers
+read out of some 4,800 commands, so a declaration cannot drift from what the
+specs used to say without a test saying so. The frontend's
+`agents/__tests__/declared.test.ts` does the same for the agent specs.
+
+### Records: the Rust runtime behind a switch (experimental)
+
+The same file may also declare how the CLI's records are read (`Observe`:
+token usage, activity events, per-turn usage). That part is used only when
+the `rustCliRuntime` setting is on. There is no toggle for it in the Settings
+window yet: the switch is the `rustCliRuntime` key of the UI settings
+document. Off, which is the default, every log reader runs its own Python
+code and no process is started. On, three reader calls
+(`parse_incremental`, `parse_activity`, `turns_for_session`) of each CLI whose
+records are declared go to one `navide-cli-runtime serve` process, and
+anything that process cannot answer falls back to the Python reader for that
+call (`backend/agent_team_backend/cli_runtime.py`). The `diagnostics` of
+`/health` report, per CLI, how many calls the runtime answered and how many
+fell back (`cli_runtime.calls`).
+
+A new CLI does not need an `Observe` declaration: `unobserved!` keeps its
+Python log reader for everything. Declaring one is worth it once the reader
+exists and has tests, because the declaration is checked against it:
+
+1. Add a scenario built from the vendor test's own record builders to
+   `backend/tests/test_cli_runtime_parity.py`, and record it from the Python
+   reader: `NAVIDE_PARITY_WRITE=1 uv --project backend run pytest
+   backend/tests/test_cli_runtime_parity.py -k test_python_readers_match_the_parity_fixtures`.
+   Fixtures are recorded only from Python, never from the runtime.
+2. Write the `Observe` declaration until `cargo test` replays the fixture
+   with the same results. The parity test also fails for a declared rule that
+   no fixture record reaches.
+3. Run the vendor's tests with the switch on:
+   `uv --project backend run pytest -p tests.cli_runtime_on backend/tests/vendors/test_<key>.py`.
+   The run prints who answered each routed call and fails on a fallback.
+
+The Python log reader stays: it is what the switch-off default runs, what
+answers a call the runtime declines, and what every other reader method
+(session discovery, marker binding, resume preflight) still goes through.
+
 Account switching (added 2026-09-21) is declared the same way: an
 `AccountSwitchSpec` on the vendor spec names the credential pool, the switch
 method (`hot` / `restart` / `manual`), the store layout with its provider
@@ -69,6 +216,45 @@ guide lists the contract. As of this writing all fifteen vendors that declare
 one carry `evidence="source"` — no real-account round-trip has been recorded; MiniMax
 Code's adapter (region-scoped compound file plus a companion `auth-state`
 write, no session resume) is the newest.
+
+### Rust CLI runtime (experimental)
+
+For someone who runs Navide, not someone who adds a CLI. The runtime is off
+unless you turn it on, and off is exactly main's behaviour: nothing starts and
+every reader is Python.
+
+- **Turn it on.** Send `ui.settings.set` with `{"updates": {"rustCliRuntime": true}}`.
+  There is no Settings toggle yet. The backend applies the setting at startup
+  and at every change, without a restart.
+- **Where the binary comes from.** In a packaged app (macOS and Linux)
+  `<resources>/bin/navide-cli-runtime`, which the build stages from
+  `build/cli-runtime` (`pnpm build:cli-runtime`). From a source checkout,
+  `native/navide-cli-runtime/target/release/navide-cli-runtime`
+  (`cargo build --release --manifest-path native/navide-cli-runtime/Cargo.toml`).
+  `NAVIDE_CLI_RUNTIME_BIN` names another file and replaces both; a name that is
+  not a file means no binary, and no other is tried. Windows packages carry
+  none, and the runtime observes nothing there.
+- **No binary, or the wrong one.** The backend logs it once and every reader
+  stays on Python. A binary that says it is another version than the backend,
+  or was built from other CLI declarations than the backend's
+  `cli_declarations.json`, counts as no binary.
+- **What it is doing.** `GET /health` → `diagnostics.cli_runtime`:
+  `state` (`off`, `idle`, `starting`, `running`, `waiting-to-restart`,
+  `stopped-after-failures`), `binary` (found and usable), `failures`,
+  `runtime` (the version and declarations fingerprint the process reported, and
+  `unusable`, the reason it is not used), and `calls` per CLI: `rust`
+  (answered by the runtime), `unsupported` and `unreadable` (the Python reader
+  decided, as on main), `python` (a record only Python's JSON reader accepts,
+  such as a lone surrogate escape or `NaN`: the Python reader read that call),
+  `deferred` (a reader making its own reads, or the process starting), and
+  `fallback`. `fallback` is the number to watch: it counts stalled or dead
+  processes and answers the backend could not use, and a value that keeps
+  growing is a defect to report.
+- **Roll back.** Set `rustCliRuntime` to `false` (or remove it): the process is
+  ended at once and the next read is Python. After five process failures in a
+  row the runtime stays off by itself until the setting is switched off and
+  on again; the log says so once, with the last lines the process wrote to
+  stderr.
 
 ### Two kinds of vendors: CLI and Agent
 
@@ -88,11 +274,13 @@ and outlives it, it is an Agent. If a session is the unit of work and the
 repository is where the work lands, it is a CLI. A vendor that merely
 *can* run unattended (`--yolo`, a headless mode) is still a CLI.
 
-The kind is the frontend spec's `kind` field
-(`src/renderer/src/platform/plugin-shell/agents/types.ts`): `'agent'` for an
-Agent, left out (or `'cli'`) for a CLI. Set it in `agents/<key>.ts`; nothing
-else needs an edit, and no surface keeps a list of names. The backend spec has
-no counterpart.
+The kind is declared with the CLI (`kind: Kind::Agent` or `Kind::Cli` in
+`native/navide-cli-runtime/src/vendors/<key>.rs`) and reaches the frontend
+spec's `kind` field
+(`src/renderer/src/platform/plugin-shell/agents/types.ts`) through
+`declared('<key>')`: `'agent'` for an Agent, left out for a CLI. Nothing else
+needs an edit, and no surface keeps a list of names. The backend spec has no
+counterpart.
 
 Where it shows: the ＋ menu on a workspace heading lists its entries in two
 blocks, each under a small heading — **CLI** first, then **Agents**. Inside

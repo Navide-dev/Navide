@@ -1,7 +1,7 @@
 // Facts about the built-in CLIs that the Help pages quote — counts and name
 // lists — derived from the vendor specs, so adding a CLI updates the prose
 // instead of leaving "fifteen" behind in eleven locale files.
-import { AGENT_SPECS, CLI_AGENT_SPECS, type AgentSpec } from '../platform/plugin-shell/agents'
+import { AGENT_SPECS, CLI_AGENT_SPECS, OBSERVED_AGENT_KEYS, type AgentSpec } from '../platform/plugin-shell/agents'
 
 /** The spec label without its trailing "(Vendor)": "Goose (AAIF)" → "Goose". */
 export function cliName(spec: AgentSpec): string {
@@ -14,14 +14,20 @@ export function joinNames(names: readonly string[], locale: string): string {
 }
 
 // Two backend facts the renderer specs do not carry, keyed by registry key.
-// MCP_WIRED = vendors whose cli_vendors/<key>.py declares `mcp_wiring`;
-// NO_LOG_READER = vendors with no `make_log_reader` (nothing reads their turn
-// text, so the bare-line output protocol cannot reach Navide either).
-// backend/tests/test_cli_vendors_registry.py fails when these drift.
+// MCP_WIRED = vendors whose cli_vendors/<key>.py declares `mcp_wiring`. The
+// fact lives in that Python spec, not in the runtime's declaration, so it is
+// kept here by hand; backend/tests/test_cli_vendors_registry.py fails when it
+// drifts.
+// NO_LOG_READER = vendors with no log reader (nothing reads their turn text,
+// so the bare-line output protocol cannot reach Navide either): the CLIs whose
+// declaration is not `observed`, derived, not listed. The same test holds it
+// to the registry's `make_log_reader`.
 export const MCP_WIRED: ReadonlySet<string> = new Set([
   'claude', 'codex', 'copilot', 'qwen', 'opencode', 'kilo', 'kimi', 'grok', 'antigravity', 'cursor', 'kiro',
 ])
-export const NO_LOG_READER: ReadonlySet<string> = new Set(['mcode', 'devin', 'kiro'])
+export const NO_LOG_READER: ReadonlySet<string> = new Set(
+  CLI_AGENT_SPECS.map((spec) => spec.agentKey).filter((key) => !OBSERVED_AGENT_KEYS.has(key)),
+)
 
 export type SendRoute = 'both' | 'mcpOnly' | 'protocolOnly' | 'none'
 

@@ -97,6 +97,8 @@ import time
 from pathlib import Path
 
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, MemorySource
+from ._declared import declared
 from .base import AccountSwitchSpec, Dep, VendorSpec
 
 MCODE_BUILD_ENV = "prod"
@@ -321,7 +323,17 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("plugin-dirs", (".minimax", "plugins"), "MiniMax Code plugin"),
 ))
 
+# Instruction files: `mcode init .` writes AGENTS.md from a directory analysis,
+# which is the only instruction file the CLI documents. No user-scope row: the
+# data dir (~/.minimax, $MINIMAX_DATA_DIR) holds config.yaml, auth and the
+# session SQLite, and nothing observed there is an instruction file --
+# `agents/` is agent DEFINITIONS (agent.md per built-in agent), not memory.
+_MEMORY_SOURCES = (
+    MemorySource("mcode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="mcode",
     # Region/environment auth routing is known; service hosts are not verified.
@@ -329,19 +341,19 @@ SPEC = VendorSpec(
     # Relocation and legacy fallback verified against mcode 0.4.12 above.
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("MINIMAX_DATA_DIR") or ctx.env.get("MAVIS_DATA_DIR") or ctx.home / ".minimax"),),
     data_dir_env_vars=("MINIMAX_DATA_DIR", "MAVIS_DATA_DIR"),
-    label="MiniMax Code",
     # `--session <id>` exists on the interactive command, but resume also
     # needs something able to NAME the id of a session Navide started, and
     # that is the log reader mcode does not have yet (see the module
     # docstring for the SQLite schema it would read). Declared False so the
     # default True does not advertise a resume that would find no id —
     # unlike aider, this is a missing reader, not a missing concept.
-    supports_session_resume=False,
-    # Relocates the entire data root — config, auth, session SQLite. The CLI
-    # also honours MAVIS_DATA_DIR as a legacy fallback. Navide strips rather
-    # than injects these variables, so both names must be guarded or the
-    # fallback can redirect a pane to a different account and session store.
-    home_env_vars=("MINIMAX_DATA_DIR", "MAVIS_DATA_DIR"),
+    #
+    # MINIMAX_DATA_DIR relocates the entire data root — config, auth, session
+    # SQLite — and the CLI also honours MAVIS_DATA_DIR as a legacy fallback.
+    # Navide strips rather than injects these variables, so both names must be
+    # guarded or the fallback can redirect a pane to a different account and
+    # session store. Both facts are the launch declaration's.
+    **declared("mcode"),
     # `mcode login` (add `--region global` for a non-mainland account, which
     # is a choice the user makes in the CLI's own flow, not something Navide
     # can pick for them).

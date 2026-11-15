@@ -428,8 +428,12 @@ jobs:
       # a file's tests keep sharing their module state and fixtures in order.
       # Tests marked `serial` (wall-clock timed, seen failing beside the
       # workers) run alone afterwards; both passes always run.
+      # This job compiles no Rust: the tests that run the Rust CLI runtime
+      # skip here (tests/cli_runtime_build.py) and run in the cli-runtime job.
       - name: Complete backend suite
         if: runner.os != 'Windows'
+        env:
+          NAVIDE_CLI_RUNTIME_REQUIRED: '0'
         run: |
           status=0
           uv --project backend run --locked pytest backend/tests -n 4 --dist loadfile -m "not serial" --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30 || status=$?
@@ -531,6 +535,77 @@ jobs:
           CMAKE_PROJECT_INCLUDE_BEFORE: ${{ github.workspace }}/native/navide-stt/portable.cmake
         run: cargo test --locked --manifest-path native/navide-stt/Cargo.toml
 
+  # The Rust CLI runtime (native/navide-cli-runtime) and the backend seam to
+  # it. The crate's own tests replay the parity fixtures and hold the
+  # checked-in declarations to the source; the backend tests then run the
+  # binary this job just built, first with the switch off (declarations, seam,
+  # parity) and then a whole reader suite with the switch on, which fails on
+  # any call the runtime did not answer. Nothing here may skip for want of a
+  # binary: NAVIDE_CLI_RUNTIME_REQUIRED makes that a failure. Linux and macOS
+  # only: the runtime is not built on Windows.
+  cli-runtime:
+    name: Rust CLI runtime (${{ matrix.platform }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            runner: macos-15
+          - platform: Linux
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      NAVIDE_CLI_RUNTIME_REQUIRED: '1'
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: native/navide-cli-runtime
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install locked dependencies
+        run: uv --project backend sync --locked
+      # The crate is kept free of warnings, tests and build script included.
+      - name: Cargo check (no warnings)
+        env:
+          RUSTFLAGS: -D warnings
+        run: cargo check --locked --all-targets --manifest-path native/navide-cli-runtime/Cargo.toml
+      - name: Cargo tests
+        run: cargo test --locked --manifest-path native/navide-cli-runtime/Cargo.toml
+      # The release build, staged where a package takes it from.
+      - name: Build and stage the sidecar
+        run: node scripts/build-cli-runtime.mjs
+      - name: Backend tests of the runtime (switch off)
+        run: uv --project backend run --locked pytest backend/tests/test_cli_declarations.py backend/tests/test_cli_runtime_seam.py backend/tests/test_cli_runtime_parity.py --timeout=300 -o faulthandler_timeout=360 --junitxml=test-results/ci/cli-runtime-off.xml
+      - name: Reader suites with the switch on
+        run: uv --project backend run --locked pytest -p tests.cli_runtime_on backend/tests/vendors backend/tests/test_cli_runtime_parity.py backend/tests/test_cli_runtime_seam.py backend/tests/test_claude_activity_resume.py backend/tests/test_activity_high_water.py --timeout=300 -o faulthandler_timeout=360 --junitxml=test-results/ci/cli-runtime-on.xml
+      - name: Upload diagnostic artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: cli-runtime-${{ matrix.platform }}-diagnostics
+          path: test-results/ci/
+          retention-days: 7
+
   # App Lock's Windows Hello helper: it must build, and asking the runner (no
   # Windows Hello set up) must answer "not available" (exit 1), not fail (2).
   hello-helper:
@@ -601,7 +676,7 @@ jobs:
     # except a group the path filter (the changes job) chose not to run.
     name: Lint and test
     if: ${{ always() }}
-    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, registry, dependency-audit, stt-sidecar, hello-helper]
+    needs: [changes, static, frontend, build-artifacts, pnpm-lockfile, backend, cli-runtime, registry, dependency-audit, stt-sidecar, hello-helper]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -614,6 +689,7 @@ jobs:
           BUILD_ARTIFACTS_RESULT: ${{ needs['build-artifacts'].result }}
           PNPM_LOCKFILE_RESULT: ${{ needs['pnpm-lockfile'].result }}
           BACKEND_RESULT: ${{ needs.backend.result }}
+          CLI_RUNTIME_RESULT: ${{ needs['cli-runtime'].result }}
           REGISTRY_RESULT: ${{ needs.registry.result }}
           AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
           STT_RESULT: ${{ needs['stt-sidecar'].result }}
@@ -634,6 +710,7 @@ jobs:
           check build-artifacts "$BUILD_ARTIFACTS_RESULT" "$RUN_FRONTEND"
           check pnpm-lockfile "$PNPM_LOCKFILE_RESULT" "$RUN_FRONTEND"
           check backend "$BACKEND_RESULT" "$RUN_BACKEND"
+          check cli-runtime "$CLI_RUNTIME_RESULT" "$RUN_BACKEND"
           check registry "$REGISTRY_RESULT"
           check dependency-audit "$AUDIT_RESULT"
           check stt-sidecar "$STT_RESULT"

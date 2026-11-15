@@ -31,7 +31,9 @@ import tomllib
 
 import psutil
 
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import AccountSwitchSpec, Dep, McpWiring, SkillsWiring, VendorRuntimeContext, VendorSpec, command_text
 from ..applog import app_data_dir
 from ..skills_store import SkillsStore
@@ -1945,14 +1947,8 @@ async def fetch_codex(codex_home: Path) -> dict:
 
 
 # ---- resume / session ------------------------------------------------------
-
-_RESUME_RE = re.compile(r"^codex\s+resume\s+(\S+)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `codex resume <id> ...` command ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# How a launch names the session it resumes is declared with the rest of the
+# launch (native/navide-cli-runtime/src/vendors/codex.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -1985,7 +1981,15 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("hooks", (".codex", "hooks.json"), "Codex hook", section=("hooks",), native_consent="hook-trust"),
 ))
 
+# Instruction files: AGENTS.md, with AGENTS.override.md replacing it per directory.
+_MEMORY_SOURCES = (
+    MemorySource("codex", USER_SCOPE, (".codex", "AGENTS.md"), canonical=True),
+    MemorySource("codex", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("codex", PROJECT_SCOPE, ("AGENTS.override.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="codex",
     # Built-in OpenAI API and ChatGPT service defaults (verified 2026-09-21):
@@ -1998,7 +2002,6 @@ SPEC = VendorSpec(
     # CODEX_HOME is assigned per pane, including resumes in an existing home.
     data_dirs=_risk_data_dirs,
     data_dir_env_vars=("CODEX_HOME", "CODEX_SQLITE_HOME"),
-    supports_model=True,
     # Verified 2026-08-15: codex resolves its skills from $CODEX_HOME/skills.
     skills_supported=True,
     skills_wiring=SkillsWiring(
@@ -2008,7 +2011,6 @@ SPEC = VendorSpec(
         skills_rel=("skills",),
         isolated_panes_home=(".codex-panes",),
     ),
-    label="Codex CLI (OpenAI)",
     # No JSON document at all: `-c` is a one-shot TOML override merged over
     # config.toml at process start, and stays valid after a subcommand
     # (`codex resume`). The dotted key doubles as the already-wired marker.
@@ -2053,10 +2055,10 @@ SPEC = VendorSpec(
         Path(os.environ["CODEX_HOME"]) if os.environ.get("CODEX_HOME")
         else home / ".codex"
     ),
-    resume_id_from_command=_resume_id_from_command,
+    # Model support, the home variable a spawn strips, the interrupt byte
+    # (Esc) and resume-id parsing: the launch declaration.
+    **declared("codex"),
     session_exists=_session_exists,
-    home_env_vars=("CODEX_HOME",),
-    interrupt_key=b"\x1b",
     make_log_reader=CodexLogReader,
     install_dep=Dep("codex", "Codex CLI (OpenAI)", "OpenAI Codex CLI", "agent_cli",
         ["codex", "--version"], r"(\d+\.\d+\.\d+)",

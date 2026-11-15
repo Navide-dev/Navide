@@ -1,0 +1,234 @@
+{
+ "vendor": "codex",
+ "file": "home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [
+  "usage@1",
+  "activity@1",
+  "turns"
+ ],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"timestamp\": \"2026-10-20T10:00:00.000Z\", \"ordinal\": 0, \"type\": \"session_meta\", \"payload\": {\"session_id\": \"01a20000-0000-7000-8000-00000000c0de\", \"id\": \"01a20000-0000-7000-8000-00000000c0de\", \"timestamp\": \"2026-10-20T10:00:00.000Z\", \"cwd\": \"/Users/me/proj\", \"runtime_workspace_roots\": [\"/Users/me/proj\"], \"originator\": \"codex_cli_rs\", \"cli_version\": \"0.163.0\", \"source\": \"cli\", \"thread_source\": \"user\", \"model_provider\": \"openai\", \"history_mode\": \"paginated\", \"context_window\": {\"window_id\": \"01a20000-0000-7000-8000-0000000000aa\"}}}\n{\"timestamp\": \"2026-10-20T10:00:00.100Z\", \"ordinal\": 1, \"type\": \"response_item\", \"payload\": {\"type\": \"additional_tools\", \"role\": \"developer\", \"tools\": [{\"type\": \"function\", \"name\": \"fixture_tool\"}]}}\n{\"timestamp\": \"2026-10-20T10:00:00.200Z\", \"ordinal\": 2, \"type\": \"world_state\", \"payload\": {}}\n{\"timestamp\": \"2026-10-20T10:00:00.300Z\", \"ordinal\": 3, \"type\": \"event_msg\", \"payload\": {\"type\": \"thread_settings_applied\"}}\n{\"timestamp\": \"2026-10-20T10:01:00.000Z\", \"ordinal\": 4, \"type\": \"event_msg\", \"payload\": {\"type\": \"task_started\", \"turn_id\": \"turn-fixture-1\", \"root_turn_id\": \"turn-fixture-1\", \"started_at\": 1792490001, \"model_context_window\": 258400}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1188,
+      "anchor": "daddf42dc515a3d7",
+      "input_total": 0,
+      "output_total": 0,
+      "cwd": "/Users/me/proj",
+      "model": "openai",
+      "session_id": "01a20000-0000-7000-8000-00000000c0de",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "",
+      "basis": 2
+     }
+    },
+    "activity": [
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "2026-10-20T10:00:00.300Z",
+      "detail": "thread_settings_applied",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "act:5",
+      "timestamp": "2026-10-20T10:01:00.000Z",
+      "detail": "task_started",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::5"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"timestamp\": \"2026-10-20T10:01:01.000Z\", \"ordinal\": 5, \"type\": \"turn_context\", \"payload\": {\"turn_id\": \"turn-fixture-1\", \"root_turn_id\": \"turn-fixture-1\", \"cwd\": \"/Users/me/proj\", \"approval_policy\": \"on-request\", \"sandbox_policy\": {\"type\": \"workspace-write\"}, \"model\": \"gpt-5.5-codex\", \"effort\": \"medium\", \"summary\": \"none\"}, \"navide_probe\": \"cut \\ud83d\"}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1544,
+      "anchor": "fde974a842418f18",
+      "input_total": 0,
+      "output_total": 0,
+      "cwd": "/Users/me/proj",
+      "model": "openai",
+      "session_id": "01a20000-0000-7000-8000-00000000c0de",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "gpt-5.5-codex",
+      "basis": 2
+     }
+    },
+    "activity": [],
+    "bag": [
+     "act_hw::6"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"timestamp\": \"2026-10-20T10:01:02.000Z\", \"ordinal\": 6, \"type\": \"event_msg\", \"payload\": {\"type\": \"item_completed\", \"thread_id\": \"01a20000-0000-7000-8000-00000000c0de\", \"turn_id\": \"turn-fixture-1\", \"item\": {\"type\": \"UserMessage\", \"id\": \"u1\", \"content\": [{\"type\": \"text\", \"text\": \"first prompt\", \"text_elements\": []}]}, \"completed_at_ms\": 1792490000001}}\n{\"timestamp\": \"2026-10-20T10:01:03.000Z\", \"ordinal\": 7, \"type\": \"response_item\", \"payload\": {\"type\": \"reasoning\", \"summary\": [], \"encrypted_content\": \"x\"}}\n{\"timestamp\": \"2026-10-20T10:01:04.000Z\", \"ordinal\": 8, \"type\": \"response_item\", \"payload\": {\"type\": \"message\", \"role\": \"assistant\", \"phase\": \"final_answer\", \"content\": [{\"type\": \"output_text\", \"text\": \"first reply\"}]}, \"metadata\": {\"turn_id\": \"turn-fixture-1\"}}\n{\"timestamp\": \"2026-10-20T10:01:05.000Z\", \"ordinal\": 9, \"type\": \"event_msg\", \"payload\": {\"type\": \"token_count\", \"info\": {\"total_token_usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 400, \"cache_write_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 10, \"total_tokens\": 1050}, \"last_token_usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 400, \"cache_write_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 10, \"total_tokens\": 1050}, \"model_context_window\": 258400}, \"rate_limits\": null}}\n{\"timestamp\": \"2026-10-20T10:01:06.000Z\", \"ordinal\": 10, \"type\": \"token_usage_record\", \"payload\": {\"thread_id\": \"01a20000-0000-7000-8000-00000000c0de\", \"turn_id\": \"turn-fixture-1\", \"session_id\": \"01a20000-0000-7000-8000-00000000c0de\", \"root_turn_id\": \"turn-fixture-1\", \"response_id\": \"resp-1\", \"usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 400, \"cache_write_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 10, \"total_tokens\": 1050}, \"turn_token_usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 400, \"cache_write_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 10, \"total_tokens\": 1050}, \"thread_token_usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 400, \"cache_write_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 10, \"total_tokens\": 1050}}}\n{\"timestamp\": \"2026-10-20T10:01:07.000Z\", \"ordinal\": 11, \"type\": \"event_msg\", \"payload\": {\"type\": \"task_complete\", \"turn_id\": \"turn-fixture-1\", \"root_turn_id\": \"turn-fixture-1\", \"last_agent_message\": \"first reply\", \"started_at\": 1792490001}}\n",
+   "mtime": 1792000002,
+   "now": 1792000003,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "codex",
+       "input_tokens": 1000,
+       "output_tokens": 50,
+       "cwd": "/Users/me/proj",
+       "session_id": "01a20000-0000-7000-8000-00000000c0de",
+       "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+       "dedup_key": "codex_cumulative::01a20000-0000-7000-8000-00000000c0de::1000::50",
+       "timestamp": "2026-10-20T10:01:05.000Z",
+       "model": "openai",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 2847,
+        "anchor": "1c3cae668b3f89a7",
+        "input_total": 1000,
+        "output_total": 50,
+        "cwd": "/Users/me/proj",
+        "model": "openai",
+        "session_id": "01a20000-0000-7000-8000-00000000c0de",
+        "cli_version": "0.163.0",
+        "meta_seen": true,
+        "ledger_model": "gpt-5.5-codex",
+        "basis": 2
+       },
+       "raw": {
+        "ledger_session_totals": {
+         "input": 600,
+         "cache_read": 400,
+         "cache_write": 0,
+         "output": 50,
+         "model": "gpt-5.5-codex"
+        }
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.163.0"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 3906,
+      "anchor": "1c3cae668b3f89a7",
+      "input_total": 1000,
+      "output_total": 50,
+      "cwd": "/Users/me/proj",
+      "model": "openai",
+      "session_id": "01a20000-0000-7000-8000-00000000c0de",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "gpt-5.5-codex",
+      "basis": 2
+     }
+    },
+    "activity": [
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "act:7",
+      "timestamp": "2026-10-20T10:01:02.000Z",
+      "detail": "user_message",
+      "text": "first prompt",
+      "full": "first prompt"
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "act:10",
+      "timestamp": "2026-10-20T10:01:05.000Z",
+      "detail": "token_count",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "act:12",
+      "timestamp": "2026-10-20T10:01:07.000Z",
+      "detail": "task_complete",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de",
+      "file_path": "<root>/home/.codex/sessions/2026/10/22/rollout-2026-10-22T10-00-00-01a20000-0000-7000-8000-00000000c0de.jsonl",
+      "dedup_key": "turn:12",
+      "timestamp": "2026-10-20T10:01:07.000Z",
+      "detail": "task_complete",
+      "text": "first reply"
+     }
+    ],
+    "bag": [
+     "__lasttext__:",
+     "act_hw::12"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "01a20000-0000-7000-8000-00000000c0de",
+   "started_at": "2026-10-20T10:01:02.000Z",
+   "ended_at": "2026-10-20T10:01:05.000Z",
+   "prompt_excerpt": "first prompt",
+   "input": 600,
+   "cache_read": 400,
+   "cache_creation": 0,
+   "output": 50,
+   "calls": [
+    {
+     "ts": "2026-10-20T10:01:05.000Z",
+     "model": "openai",
+     "input": 600,
+     "cache_read": 400,
+     "cache_creation": 0,
+     "output": 50,
+     "cli_version": "0.163.0"
+    }
+   ],
+   "model_calls": null,
+   "cli_version": "0.163.0"
+  }
+ ]
+}

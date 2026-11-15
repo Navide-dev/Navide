@@ -1,0 +1,49 @@
+{
+ "vendor": "muse",
+ "file": "share/muse/sessions/2026/08/12/b3ef50f0-e347-4887-a498-c7c16c3aa11e/subagent/child-1/session.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"schema_version\": 1, \"id\": \"env-1\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 1, \"recorded_at\": 1786491820000001, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session.metadata\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"metadata\", \"record\": {\"workspace_root\": \"/Users/me/proj\", \"provider_id\": \"echo\", \"tool_surface_version\": \"2\", \"build\": {\"semver\": \"0.9.1\"}}}}\n{\"schema_version\": 1, \"id\": \"env-2\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 2, \"recorded_at\": 1786491820000002, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"context_block_diagnostic\", \"block\": \"system\"}}}\n{\"schema_version\": 1, \"id\": \"env-3\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 3, \"recorded_at\": 1786491820000003, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.command_intake.received\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"command_intake\", \"record\": {\"kind\": \"received\", \"command_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"session_stream\": {\"kind\": \"session\", \"id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\"}, \"command\": {\"kind\": \"turn_submit\", \"prompt\": \"refactor the cache\"}}}}\n{\"schema_version\": 1, \"id\": \"env-4\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 4, \"recorded_at\": 1786491820000004, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"started\"}}}\n{\"schema_version\": 1, \"id\": \"env-5\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 5, \"recorded_at\": 1786491820000005, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"assistant_message_committed\", \"message_id\": \"msg-5\", \"text\": \"  cache is now LRU  \"}}}\n{\"schema_version\": 1, \"id\": \"env-6\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 6, \"recorded_at\": 1786491820000006, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"goal_usage_attribution\", \"record\": {\"schema_version\": 1, \"usage_id\": \"u-1\", \"usage_family\": \"provider\", \"quantity\": {\"unit\": \"tokens\", \"reported\": true, \"input_tokens\": 900, \"output_tokens\": 40, \"cached_tokens\": 0, \"reasoning_tokens\": 0, \"main_llm_steps\": 1}, \"owner\": {\"requester_kind\": \"main\", \"session_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"owner_id\": \"main-root\"}, \"goal_attribution\": {\"mode\": \"none\"}}}}}\n{\"schema_version\": 1, \"id\": \"env-7\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 7, \"recorded_at\": 1786491820000007, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"goal_usage_attribution\", \"record\": {\"schema_version\": 1, \"usage_id\": \"u-sub\", \"usage_family\": \"provider\", \"quantity\": {\"unit\": \"tokens\", \"reported\": true, \"input_tokens\": 100, \"output_tokens\": 20, \"cached_tokens\": 0, \"reasoning_tokens\": 0, \"main_llm_steps\": 1}, \"owner\": {\"requester_kind\": \"subagent\", \"session_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"owner_id\": \"main-root\"}, \"goal_attribution\": {\"mode\": \"none\"}}}}}\n{\"schema_version\": 1, \"id\": \"env-8\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 8, \"recorded_at\": 1786491820000008, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"goal_usage_attribution\", \"record\": {\"schema_version\": 1, \"usage_id\": \"u-0\", \"usage_family\": \"provider\", \"quantity\": {\"unit\": \"tokens\", \"reported\": true, \"input_tokens\": 0, \"output_tokens\": 0, \"cached_tokens\": 0, \"reasoning_tokens\": 0, \"main_llm_steps\": 1}, \"owner\": {\"requester_kind\": \"main\", \"session_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"owner_id\": \"main-root\"}, \"goal_attribution\": {\"mode\": \"none\"}}}}}\n{\"schema_version\": 1, \"id\": \"env-9\", \"stream\": {\"kind\": \"session\", \"id\": \"b3ef50f0-e347-4887-a498-c7c16c3aa11e\"}, \"sequence\": 9, \"recorded_at\": 1786491820000009, \"record_type\": \"event\", \"durability\": \"durable\", \"causation_id\": null, \"payload_type\": \"runtime.session\", \"payload_schema_version\": 1, \"payload\": {\"kind\": \"run\", \"run_id\": \"4c39ad2b-b850-428e-814c-45e6212c53f0\", \"event\": {\"kind\": \"terminal\", \"terminal\": \"completed\", \"reason\": null, \"turn_duration_ms\": 185}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {}
+    },
+    "activity": [],
+    "bag": []
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "",
+   "started_at": "2026-08-11T23:43:40.000006+00:00",
+   "ended_at": "2026-08-11T23:43:40.000006+00:00",
+   "prompt_excerpt": "",
+   "input": 900,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 40,
+   "calls": [
+    {
+     "ts": "2026-08-11T23:43:40.000006+00:00",
+     "model": "",
+     "input": 900,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 40,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

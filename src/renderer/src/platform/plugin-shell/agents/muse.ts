@@ -23,31 +23,30 @@
  * neither is a reader question and neither has been observed.
  */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'muse',
-  label: 'Muse Code (Meta)',
-  defaultCommand: 'muse',
-  // Values from the binary's --help, which lists one more (`max`) than the
-  // published configuration docs. Meta-hosted models reject `none`.
-  modelArgs: (m) => `--model ${m}`,
-  effortArgs: (e) => `--reasoning-effort ${e}`,
-  knownEfforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  // Two documented ways to stop the prompting: `--yolo` drops BOTH the
-  // approval layer and the OS sandbox (Meta scopes it to "CI containers
-  // only"), while `--disable-approval` drops only the approval prompts and
-  // keeps the sandbox confining writes to the workspace. YOLO mode here means
-  // "don't stop to ask", not "remove OS containment", so the narrower flag is
-  // the match; `--yolo` remains available to type as a custom command.
-  skipPermissionFlag: '--disable-approval',
-  // Subcommand, NOT a --flag. `muse resume --help` (0.1.0) states
+  // Label, command, flags and resume arguments: the launch declaration.
+  //
+  // Effort values are from the binary's --help, which lists one more (`max`)
+  // than the published configuration docs. Meta-hosted models reject `none`.
+  //
+  // Unattended: two documented ways to stop the prompting: `--yolo` drops
+  // BOTH the approval layer and the OS sandbox (Meta scopes it to "CI
+  // containers only"), while `--disable-approval` drops only the approval
+  // prompts and keeps the sandbox confining writes to the workspace. YOLO
+  // mode here means "don't stop to ask", not "remove OS containment", so the
+  // narrower flag is the match; `--yolo` remains available to type as a
+  // custom command.
+  //
+  // Resume is a subcommand, NOT a --flag. `muse resume --help` (0.1.0) states
   // `muse resume <session-uuid>`, and the reader verified that uuid against
   // real session files: it is the session DIRECTORY's name, which equals the
   // `stream.id` every record carries — NOT the internal command id that also
   // appears in the log under `owner.session_id` / `command_id`.
-  resumeArgs: (id) => `resume ${id}`,
-  resumeCommandPattern: /^muse\s+resume\s+\S+/,
+  ...declared('muse'),
   // Muse can't be told a session id at launch, and its session directory is
   // named by a uuid it coins itself — so a fresh pane embeds the `at-pane:`
   // marker in its kickoff and the reader matches the resulting session file

@@ -159,7 +159,7 @@ The following cases are in `plugins/navide-plans/src/PlansApp.test.ts` and mount
 | Delayed add/edit from A cannot replace B drafts/pending state | Parameterized `parity: delayed %s response from A cannot replace B drafts or pending state` |
 | Pending document selection rejects old iframe writes; out-of-order reads cannot overwrite current document | Existing `prevents cross-document todo mutation race...`, `prevents out-of-order plans.read results...`, and `prevents a refresh for A from overwriting B...` cases |
 | Existing todo no-flash path and anchored CRUD preserve the original iframe | Existing `preserves iframe identity...` and Review Notes identity cases |
-| Picker registry order/labels/hints | `src/retained/agentSpecs.test.ts` compares the exact ordered projection with the v1 registry |
+| Picker registry order/labels/hints | `src/retained/agentSpecs.test.ts` compares the exact ordered projection of the recorded (v1) keys with the live registry; a CLI declared later is not in the frozen copy and needs no edit there |
 
 ## List surface regression matrix
 

@@ -1,0 +1,119 @@
+{
+ "vendor": "claude",
+ "file": "claude/projects/-tmp-demo-app/dash-1.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"user\", \"promptId\": \"p1\", \"timestamp\": \"2026-09-18T00:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"before the bad line\"}}\n{\"type\": \"assistant\", \"requestId\": \"r1\", \"timestamp\": \"2026-09-18T00:00:01Z\", \"message\": {\"id\": \"m1\", \"model\": \"claude-opus-4-7\", \"stop_reason\": \"end_turn\", \"content\": [{\"type\": \"text\", \"text\": \"…\"}], \"usage\": {\"input_tokens\": 4, \"cache_read_input_tokens\": 0, \"cache_creation_input_tokens\": 0, \"output_tokens\": 2}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 4,
+       "output_tokens": 2,
+       "cwd": "/tmp/demo/app",
+       "session_id": "dash-1",
+       "file_path": "<root>/claude/projects/-tmp-demo-app/dash-1.jsonl",
+       "dedup_key": "m1::r1",
+       "timestamp": "2026-09-18T00:00:01Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 453,
+        "anchor": "9027597690f0d86d",
+        "recent_keys": [
+         "m1::r1"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 453,
+      "anchor": "9027597690f0d86d",
+      "recent_keys": [
+       "m1::r1"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo/app",
+      "session_id": "dash-1",
+      "file_path": "<root>/claude/projects/-tmp-demo-app/dash-1.jsonl",
+      "dedup_key": "act:1",
+      "timestamp": "2026-09-18T00:00:00Z",
+      "detail": "user",
+      "text": "before the bad line",
+      "full": "before the bad line"
+     },
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo/app",
+      "session_id": "dash-1",
+      "file_path": "<root>/claude/projects/-tmp-demo-app/dash-1.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-09-18T00:00:01Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "claude",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo/app",
+      "session_id": "dash-1",
+      "file_path": "<root>/claude/projects/-tmp-demo-app/dash-1.jsonl",
+      "dedup_key": "turn:2",
+      "timestamp": "2026-09-18T00:00:01Z",
+      "detail": "end_turn",
+      "text": "…"
+     }
+    ],
+    "bag": [
+     "act_hw::2"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "dash-1",
+   "started_at": "2026-09-18T00:00:00Z",
+   "ended_at": "2026-09-18T00:00:01Z",
+   "prompt_excerpt": "before the bad line",
+   "input": 4,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 2,
+   "calls": [
+    {
+     "ts": "2026-09-18T00:00:01Z",
+     "model": "claude-opus-4-7",
+     "input": 4,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 2,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

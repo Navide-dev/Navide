@@ -85,7 +85,7 @@ describe('required CI gate', () => {
 
     const groups = [
       { filter: 'RUN_FRONTEND', jobs: ['FRONTEND_RESULT', 'BUILD_ARTIFACTS_RESULT', 'PNPM_LOCKFILE_RESULT'] },
-      { filter: 'RUN_BACKEND', jobs: ['BACKEND_RESULT'] },
+      { filter: 'RUN_BACKEND', jobs: ['BACKEND_RESULT', 'CLI_RUNTIME_RESULT'] },
     ]
 
     it('accepts a job group the path filter chose not to run', () => {

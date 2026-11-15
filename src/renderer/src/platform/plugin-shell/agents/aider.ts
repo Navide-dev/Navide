@@ -6,16 +6,16 @@ import {
   paneHistoryRoot,
   resumeHistoryFile,
 } from './aider/history'
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'aider',
-  label: 'Aider',
-  defaultCommand: 'aider',
-  // Left unsupported deliberately. aider passes any model string straight
-  // through to litellm, so a wrong value cannot be caught before launch.
-  // --yes-always auto-confirms every prompt (edits, shell commands, adds)
-  skipPermissionFlag: '--yes-always',
+  // Label, command and flags: the launch declaration. No model flag,
+  // deliberately: aider passes any model string straight through to litellm,
+  // so a wrong value cannot be caught before launch. Its unattended flag,
+  // --yes-always, auto-confirms every prompt (edits, shell commands, adds).
+  ...declared('aider'),
   // Give every pane its own chat history: the default shared
   // `<git-root>/.aider.chat.history.md` merges all panes' token accounting.
   paneArg: (ctx) => aiderChatHistoryFlag(aiderHistoryPath(ctx.historyRoot, ctx.paneId)),

@@ -13,12 +13,16 @@ These are the CI guardrails of the one-file-per-vendor refactor:
 from __future__ import annotations
 
 import ast
+import copy
+import importlib
 import inspect
 import re
 import sys
 from pathlib import Path
 
-from agent_team_backend.cli_vendors import registry
+import pytest
+
+from agent_team_backend.cli_vendors import _declared, registry
 from agent_team_backend.cli_vendors.base import VendorSpec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +34,30 @@ CLI_AGENTS_HELP = (
     REPO_ROOT / "src" / "renderer" / "src" / "components" / "CliAgentsHelp.vue"
 )
 
+def _frontend_declaration(path: Path, source: str) -> dict | None:
+    """The declaration a frontend spec file takes its launch and resume
+    fields from, by spreading `...declared('<key>')` (`agents/_declared.ts`,
+    which reads `agents/cli_declarations.ts`: the backend's
+    `cli_declarations.json` as a typed constant, held equal to it by
+    `test_cli_declarations.py`); None for a file that spreads none (the plain
+    terminal). A spec must spread its own key: another vendor's declaration
+    would launch the wrong program under this vendor's name."""
+    spread = re.search(r"\.\.\.declared\('([a-z]+)'\)", source)
+    if spread is None:
+        return None
+    key = re.search(r"agentKey: '([a-z]+)'", source)
+    assert key and key.group(1) == spread.group(1), (
+        f"{path.name} spreads declared('{spread.group(1)}'), which is not its own agentKey"
+    )
+    from agent_team_backend.cli_vendors import _declared
+
+    entries = [entry for entry in _declared.declarations().values() if entry["key"] == spread.group(1)]
+    assert len(entries) == 1, f"{path.name}: no declaration for {spread.group(1)!r}"
+    return entries[0]
+
+
+# The CLIs main had. A CLI declared after them needs no entry here: this is
+# what must stay registered, not every CLI there is.
 EXPECTED_KEYS = {
     "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "kiro",
     "droid", "goose", "grok", "hermes", "kilo", "kimi", "mcode", "muse",
@@ -47,8 +75,10 @@ NON_VENDOR_AGENT_KEYS = {"terminal"}
 # single allowed vendor→vendor edge (reader class inheritance).
 # `osplat` is a leaf (it imports nothing vendor-side), so reaching the
 # platform seam from a vendor cannot form a cycle.
+# `_declared` reads the launch and resume part of each CLI's declaration
+# (cli_declarations.json); it imports only `base`.
 ALLOWED_LOCAL_IMPORTS = {
-    "base", "_protocols", "applog", "log_readers.base", "osplat", "skills_store",
+    "base", "_declared", "_protocols", "applog", "log_readers.base", "osplat", "skills_store",
     "usage_common",
 }
 VENDOR_IMPORT_EXEMPTIONS = {"kilo": {"opencode"}}
@@ -58,18 +88,92 @@ ALLOWED_THIRD_PARTY = {"httpx", "psutil", "yaml"}
 
 
 def test_registry_matches_expected_vendor_set() -> None:
-    assert set(registry.VENDORS) == EXPECTED_KEYS
+    assert EXPECTED_KEYS <= set(registry.VENDORS)
+    # Every registered CLI is a declared one, whether or not it has a module.
+    assert set(registry.VENDORS) == set(_declared.declarations())
     for key, spec in registry.VENDORS.items():
         assert isinstance(spec, VendorSpec)
         assert spec.key == key
         assert spec.label
 
 
+# The order of main's hand-kept registry tuple, recorded before discovery
+# replaced the tuple (the discovered specs were compared with it one by one,
+# by identity, before it was deleted). The order reaches callers that iterate
+# VENDORS, so it must stay what it was; it is each declaration's
+# `order.registry`.
+MAIN_REGISTRY_ORDER = (
+    "aider", "antigravity", "claude", "codex", "copilot", "cursor", "devin", "droid", "goose", "grok",
+    "hermes", "kilo", "kimi", "kiro", "mcode", "muse", "opencode", "openclaw", "pi", "qwen",
+)
+
+
+def test_registry_is_discovered_in_mains_order() -> None:
+    # Main's CLIs keep their relative order; a CLI declared later takes its
+    # own place among them, so only the recorded keys are compared.
+    assert tuple(key for key in registry.VENDORS if key in MAIN_REGISTRY_ORDER) == MAIN_REGISTRY_ORDER
+    # Each registered spec that has a module is that module's own SPEC.
+    for key, spec in registry.VENDORS.items():
+        if (VENDORS_DIR / f"{key}.py").exists():
+            module = importlib.import_module(f"agent_team_backend.cli_vendors.{key}")
+            assert spec is module.SPEC, f"{key}: the registry holds its module's SPEC"
+
+
+def test_every_cli_main_had_still_has_its_vendor_module_and_log_reader_module() -> None:
+    """The adapters are optional for a CLI declared later, but not for the ones
+    main had: a module deleted by mistake would otherwise leave that CLI
+    registered from its declaration alone. ``log_readers/<key>.py`` is held
+    even where it is the empty placeholder (devin, kiro, mcode). The recorded
+    list is the only one asked: a new CLI edits nothing here."""
+    missing = [
+        str(path.relative_to(REPO_ROOT))
+        for key in sorted(EXPECTED_KEYS)
+        for path in (VENDORS_DIR / f"{key}.py", VENDORS_DIR.parent / "log_readers" / f"{key}.py")
+        if not path.is_file()
+    ]
+    assert not missing, f"adapter files of CLIs main had are gone: {missing}"
+
+
+def test_a_declared_cli_with_no_module_is_registered_from_its_declaration(monkeypatch) -> None:
+    """A fake CLI declared in no Rust file: the registry, rebuilt from a
+    declarations table that holds it, registers it from the declaration alone
+    and puts it where its ``order.registry`` says."""
+    real = dict(_declared.declarations())
+    fake = copy.deepcopy(real["devin"])
+    fake.update(key="no_such_vendor_module", label="New CLI")
+    fake["order"] = {**fake["order"], "registry": real["devin"]["order"]["registry"] + 1}
+    fake["launch"]["env_defaults"] = [["NO_SUCH_CLI_MODE", "on"]]
+    monkeypatch.setattr(_declared, "declarations", lambda: {**real, fake["key"]: fake})
+    try:
+        importlib.reload(registry)
+        spec = registry.VENDORS["no_such_vendor_module"]
+        assert (spec.key, spec.label) == ("no_such_vendor_module", "New CLI")
+        assert spec.spawn_env_defaults == (("NO_SUCH_CLI_MODE", "on"),)
+        assert spec.install_dep is None and spec.account_switch is None and spec.make_log_reader is None
+        keys = list(registry.VENDORS)
+        assert keys.index("no_such_vendor_module") == keys.index("devin") + 1
+        # Main's CLIs are all still there, in their order.
+        assert [key for key in keys if key in MAIN_REGISTRY_ORDER] == list(MAIN_REGISTRY_ORDER)
+    finally:
+        monkeypatch.undo()
+        importlib.reload(registry)
+
+
+def test_a_vendor_module_that_cannot_be_imported_is_not_mistaken_for_a_missing_one(monkeypatch) -> None:
+    def broken(name: str):
+        raise ModuleNotFoundError("No module named 'yaml'", name="yaml")
+
+    monkeypatch.setattr(importlib, "import_module", broken)
+    with pytest.raises(ModuleNotFoundError, match="yaml"):
+        registry._spec({"key": "claude", "label": "Claude Code"})
+
+
 def test_registry_matches_install_detection_deps() -> None:
     from agent_team_backend.onboarding_deps import DEPS
 
     dep_ids = {dep.id for dep in DEPS}
-    assert set(registry.VENDORS) <= dep_ids
+    # A vendor with no `install_dep` (a declaration-only CLI) has no entry.
+    assert {key for key, spec in registry.VENDORS.items() if spec.install_dep is not None} <= dep_ids
     assert dep_ids - set(registry.VENDORS) == NON_VENDOR_DEPS
 
 
@@ -80,7 +184,12 @@ def test_registry_matches_log_reader_package() -> None:
         if not path.stem.startswith("_")
         and path.stem not in {"base", "watcher", "attribution"}
     }
-    assert reader_modules == set(registry.VENDORS)
+    # Every reader module belongs to a registered CLI; a CLI may have none.
+    assert reader_modules <= set(registry.VENDORS)
+    # A reader a spec makes is the one its module names.
+    for key, spec in registry.VENDORS.items():
+        if spec.make_log_reader is not None:
+            assert key in reader_modules, f"{key} makes a log reader but has no log_readers/{key}.py"
 
 
 def test_registry_matches_frontend_agent_specs() -> None:
@@ -94,7 +203,9 @@ def test_registry_matches_frontend_agent_specs() -> None:
             continue
         source = path.read_text(encoding="utf-8")
         frontend_keys |= set(re.findall(r"agentKey: '([a-z]+)'", source))
-    assert frontend_keys - NON_VENDOR_AGENT_KEYS == set(registry.VENDORS)
+    # Every spec file belongs to a registered CLI; a CLI may have no file
+    # (the frontend lists it from its declaration alone).
+    assert frontend_keys - NON_VENDOR_AGENT_KEYS <= set(registry.VENDORS)
 
 
 # The supported-CLI sentence of each README: (file, the sentence's count and
@@ -371,11 +482,11 @@ def test_help_panel_sign_in_column_matches_login_command_args() -> None:
             continue
         spec_source = path.read_text(encoding="utf-8")
         key = re.search(r"agentKey: '([a-z]+)'", spec_source)
-        command = re.search(r"defaultCommand: '([^']+)'", spec_source)
-        assert key and command, f"{path.name} declares no agentKey/defaultCommand"
-        # The binary is the first word: a default command may carry a
-        # subcommand (`hermes chat`).
-        bin_to_key[command.group(1).split()[0]] = key.group(1)
+        # The default command is the declared program and its base arguments
+        # (`hermes chat`); the binary is the program.
+        declaration = _frontend_declaration(path, spec_source)
+        assert key and declaration, f"{path.name} declares no agentKey, or spreads no declared(...)"
+        bin_to_key[declaration["launch"]["program"]] = key.group(1)
 
     help_panel = {}
     for binary, sign_in in rows:
@@ -572,6 +683,7 @@ def test_model_capability_matches_the_frontend_agent_spec() -> None:
     frontend_model: set[str] = set()
     frontend_effort: set[str] = set()
     frontend_efforts: dict[str, tuple[str, ...]] = {}
+    with_file: set[str] = set()
     for path in FRONTEND_AGENTS_DIR.glob("*.ts"):
         if path.stem.startswith("_") or path.stem in {"index", "types"}:
             continue
@@ -579,13 +691,29 @@ def test_model_capability_matches_the_frontend_agent_spec() -> None:
         keys = set(re.findall(r"agentKey: '([a-z]+)'", source))
         assert len(keys) == 1, f"{path.name} declares agentKeys {sorted(keys)}"
         key = keys.pop()
-        if re.search(r"^\s+modelArgs:", source, re.M):
+        with_file.add(key)
+        # What `declared(key)` hands the spec, and anything the file still
+        # types by hand on top of it.
+        launch = (_frontend_declaration(path, source) or {"launch": {}})["launch"]
+        if launch.get("model") or re.search(r"^\s+modelArgs:", source, re.M):
             frontend_model.add(key)
-        if re.search(r"^\s+effortArgs:", source, re.M):
+        if launch.get("effort") or re.search(r"^\s+effortArgs:", source, re.M):
             frontend_effort.add(key)
         listed = re.search(r"^\s+knownEfforts: \[([^\]]*)\]", source, re.M)
         if listed:
             frontend_efforts[key] = tuple(re.findall(r"'([^']+)'", listed.group(1)))
+        elif launch.get("efforts"):
+            frontend_efforts[key] = tuple(launch["efforts"])
+    # A CLI with no spec file is listed by the frontend from its declaration
+    # alone, so that is what the frontend says about it.
+    for key in sorted(set(registry.VENDORS) - with_file):
+        launch = _declared.declarations()[key]["launch"]
+        if launch.get("model"):
+            frontend_model.add(key)
+        if launch.get("effort"):
+            frontend_effort.add(key)
+        if launch.get("efforts"):
+            frontend_efforts[key] = tuple(launch["efforts"])
 
     backend_model = {k for k, s in registry.VENDORS.items() if s.supports_model}
     backend_effort = {k for k, s in registry.VENDORS.items() if s.supports_effort}
@@ -621,6 +749,7 @@ def test_session_resume_capability_matches_the_frontend_agent_spec() -> None:
     successful resume until someone reads the transcript.
     """
     frontend_id_resume: set[str] = set()
+    with_file: set[str] = set()
     for path in FRONTEND_AGENTS_DIR.glob("*.ts"):
         if path.stem.startswith("_") or path.stem in {"index", "types"}:
             continue
@@ -628,10 +757,17 @@ def test_session_resume_capability_matches_the_frontend_agent_spec() -> None:
         keys = set(re.findall(r"agentKey: '([a-z]+)'", source))
         assert len(keys) == 1, f"{path.name} declares agentKeys {sorted(keys)}"
         key = keys.pop()
+        with_file.add(key)
         # resumeArgs takes an id; resumeWithoutId (aider) restores from a file
-        # and has no id to be named.
-        if re.search(r"^\s+resumeArgs:", source, re.M):
+        # and has no id to be named. The spec gets resumeArgs from its
+        # declaration's resume arguments (or still types it by hand).
+        declaration = _frontend_declaration(path, source)
+        if (declaration and declaration["resume"]["args"]) or re.search(r"^\s+resumeArgs:", source, re.M):
             frontend_id_resume.add(key)
+    # A CLI with no spec file resumes as its declaration says.
+    frontend_id_resume |= {
+        key for key in set(registry.VENDORS) - with_file if _declared.declarations()[key]["resume"]["args"]
+    }
 
     backend_id_resume = {
         k for k, s in registry.VENDORS.items() if s.supports_session_resume
@@ -659,8 +795,9 @@ def test_vendors_without_session_ids() -> None:
     """
     assert registry.VENDORS["aider"].supports_session_resume is False
     assert registry.VENDORS["mcode"].supports_session_resume is False
+    # Main's CLIs only: a CLI declared later may have no session ids too.
     others = {
-        k for k, s in registry.VENDORS.items() if not s.supports_session_resume
+        k for k, s in registry.VENDORS.items() if not s.supports_session_resume and k in EXPECTED_KEYS
     }
     # devin: sessions exist (-c / -r <id>) but their store is undocumented
     # and no reader is written yet.
@@ -712,9 +849,16 @@ def _ts_key_set(source: str, name: str) -> set[str]:
 def test_help_cli_facts_mirror_the_registry():
     # The Help pages say which CLIs can send through MCP and which have no
     # output protocol. The renderer cannot ask the backend, so helpCliFacts.ts
-    # mirrors two registry facts; a vendor added here must be added there.
+    # mirrors the first by hand: `mcp_wiring` is a fact of the Python spec,
+    # which the declaration does not carry. The second it derives from the
+    # declarations' `observed`; here that is held to the registry.
     source = HELP_CLI_FACTS.read_text(encoding="utf-8")
     wired = {key for key, spec in registry.VENDORS.items() if spec.mcp_wiring is not None}
     no_reader = {key for key, spec in registry.VENDORS.items() if spec.make_log_reader is None}
     assert _ts_key_set(source, "MCP_WIRED") == wired
-    assert _ts_key_set(source, "NO_LOG_READER") == no_reader
+    assert "OBSERVED_AGENT_KEYS" in source, "NO_LOG_READER is derived from the declarations' `observed`"
+    unobserved = {key for key, entry in _declared.declarations().items() if not entry["observed"]}
+    assert unobserved == no_reader, "`observed` in a declaration and `make_log_reader` on its spec disagree"
+    # The CLIs main had without a log reader (the list this test used to read
+    # off helpCliFacts.ts).
+    assert {"mcode", "devin", "kiro"} <= no_reader

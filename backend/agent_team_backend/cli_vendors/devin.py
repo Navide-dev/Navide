@@ -50,7 +50,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ._declared import declared
 from .base import Dep, ExtensionsSpec, VendorRuntimeContext, VendorSpec
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from ..osplat import platform_id as _platform_id
 
 
@@ -62,17 +64,34 @@ def _config_dir(ctx: VendorRuntimeContext, platform: str | None = None) -> Path:
     return ctx.home / ".config" / "devin"
 
 
+# Instruction files: every standard file is an always-on rule, user and project
+# loaded together; ~/.config/devin/AGENTS.md is %APPDATA%\devin on Windows
+# (docs.devin.ai/cli/extensibility/rules, read 2026-11-07 -- docs only).
+_MEMORY_SOURCES = (
+    MemorySource("devin", USER_SCOPE, (".config", "devin", "AGENTS.md"), canonical=True),
+    MemorySource("devin", USER_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", USER_SCOPE, (".devin", "rules"), glob="*.md"),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.local.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("AGENT.md",)),
+    MemorySource("devin", PROJECT_SCOPE, ("CLAUDE.md",)),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "global_rules.md")),
+    MemorySource("devin", PROJECT_SCOPE, (".devin", "rules"), glob="*.md"),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
+    cli_unverified_reason="wired from the docs (read 2026-11-07); no binary installed, so no version was checked",
     key="devin",
-    label="Devin CLI (Cognition)",
     extensions=ExtensionsSpec(
         supported=False,
         note="Devin plugins, skills and hooks (devin plugins / skills paths) are not inventoried yet",
     ),
     data_dirs=lambda ctx: (_config_dir(ctx),),
     data_dir_env_vars=("APPDATA",),
-    # No reader can name a session Navide started (see the docstring).
-    supports_session_resume=False,
+    # No reader can name a session Navide started (see the docstring), so the
+    # launch declaration has no resume.
+    **declared("devin"),
     install_dep=Dep("devin", "Devin CLI (Cognition)", "Cognition terminal coding agent", "agent_cli",
         ["devin", "--version"], r"(\d+\.\d+\.\d+)",
         # The official installers are `curl | bash` and `irm … | iex`;

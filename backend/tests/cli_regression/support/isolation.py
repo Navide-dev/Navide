@@ -13,12 +13,16 @@ import subprocess
 import sys
 
 
-CLI_NAMES = frozenset({
-    "claude", "codex", "gemini", "kimi", "grok", "qwen", "opencode", "kilo",
-    "kilocode", "cursor-agent", "agent", "copilot", "pi", "droid", "aider",
-    "agy", "antigravity", "muse", "mcode", "goose", "openclaw", "hermes",
-    "devin", "kiro-cli",
-})
+# The names a real CLI install answers to. Every declared CLI's launch program
+# comes from its declaration (read as the file it is: the app is not imported
+# yet when the guards are installed), so a new CLI is covered without an edit
+# here. Only names that are not a declared program are listed by hand: a CLI
+# Navide does not launch (gemini) and the other names the declared ones go by.
+_DECLARATIONS = Path(__file__).resolve().parents[3] / "agent_team_backend" / "cli_declarations.json"
+CLI_NAMES = frozenset(
+    {entry["launch"]["program"] for entry in json.loads(_DECLARATIONS.read_text(encoding="utf-8"))}
+    | {"gemini", "kilocode", "cursor-agent", "antigravity"}
+)
 
 
 def isolated_environment(root: Path) -> dict[str, str]:

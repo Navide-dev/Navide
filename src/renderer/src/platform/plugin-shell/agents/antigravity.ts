@@ -1,21 +1,16 @@
 /** Antigravity CLI — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'antigravity',
-  label: 'Antigravity CLI (Google)',
-  defaultCommand: 'agy',
-  // agy validates both together and exits 1 on a bad value, naming the
-  // three it accepts.
-  modelArgs: (m) => `--model ${m}`,
-  effortArgs: (e) => `--effort ${e}`,
-  knownEfforts: ['low', 'medium', 'high'],
-  skipPermissionFlag: '--dangerously-skip-permissions',
-  resumeArgs: (id) => `--conversation ${id}`,
+  // Label, command, flags and resume arguments: the launch declaration. agy
+  // validates model and effort together and exits 1 on a bad value, naming
+  // the three efforts it accepts.
+  ...declared('antigravity'),
   needsSessionMarker: true,
   bracketedPaste: true,
-  resumeCommandPattern: /^agy\s+--conversation\s+\S+/,
   supportsRebuild: true,
   // Measured on a real PTY (agy 1.1.13): the CLI itself emits `ESC[?1049h`
   // during startup and keeps the conversation there. The probe only read 82

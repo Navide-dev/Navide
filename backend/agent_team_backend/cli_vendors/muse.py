@@ -132,7 +132,9 @@ from ..log_readers.base import (
     set_activity_high_water,
     user_prompt_text,
 )
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -687,13 +689,8 @@ class MuseLogReader(LogReader):
 
 # ---- resume / session ------------------------------------------------------
 
-_RESUME_RE = re.compile(r"^muse\s+resume\s+(\S+)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `muse resume <id> ...` command ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# The session id of a `muse resume <id> ...` command is read by the launch
+# declaration (native/navide-cli-runtime/src/vendors/muse.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -761,7 +758,17 @@ _EXTENSIONS = ExtensionsSpec(sources=(
         section=("plugins",), native_consent="capability-approve"),
 ))
 
+# Instruction files: $XDG_CONFIG_HOME/muse (default ~/.config/muse), then every
+# level from the VCS root down. CLAUDE.md is read only where AGENTS.md is absent.
+_MEMORY_SOURCES = (
+    MemorySource("muse", USER_SCOPE, (".config", "muse", "AGENTS.md"), canonical=True),
+    MemorySource("muse", USER_SCOPE, (".config", "muse", "CLAUDE.md")),
+    MemorySource("muse", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("muse", PROJECT_SCOPE, ("CLAUDE.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="muse",
     # Login/usage observations do not establish Muse's CLI service host set.
@@ -769,9 +776,6 @@ SPEC = VendorSpec(
     # Same dedicated XDG root as muse_data_root, with the pane's HOME shim.
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("XDG_DATA_HOME", "").strip() or ctx.home / ".local" / "share") / "muse",),
     data_dir_env_vars=("XDG_DATA_HOME",),
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'),
     # Verified 2026-08-15: `muse skills list --source user` reports skills
     # from ~/.claude/skills and ~/.agents/skills. Only HOME relocates those,
     # so this is the one vendor whose shim exists for skills alone.
@@ -781,7 +785,6 @@ SPEC = VendorSpec(
         reads_shared_root=True,
         skills_rel=(".agents", "skills"),
     ),
-    label="Muse Code (Meta)",
     # `muse login` signs in with a Meta account by having the user approve a
     # code in the browser — a flow a PTY pane can carry. Note META_API_KEY
     # still takes priority over the account login if it is set in the
@@ -817,7 +820,8 @@ SPEC = VendorSpec(
         resume="native",
         todo="layout from Meta's launcher script only (the binary's own writer not inspected); META_API_KEY in the pane env shadows the file; no real-account round-trip recorded",
     ),
-    resume_id_from_command=_resume_id_from_command,
+    # Model and effort support and resume-id parsing: the launch declaration.
+    **declared("muse"),
     session_exists=_session_exists,
     make_log_reader=MuseLogReader,
     install_dep=Dep(

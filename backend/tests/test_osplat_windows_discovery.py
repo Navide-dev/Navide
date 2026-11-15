@@ -59,6 +59,15 @@ class TestOtherDiscoveryAnswers:
         assert win.backend_entry_on_disk("backend/navide-plans.exe") == "backend/navide-plans.exe"
         assert _posix_paths.backend_entry_on_disk("backend/navide-plans") == "backend/navide-plans"
 
+    def test_a_bundled_sidecar_is_one_exe_started_without_a_console(self, win) -> None:
+        assert win.bundled_executable("navide-cli-runtime") == "navide-cli-runtime.exe"
+        assert _posix_paths.bundled_executable("navide-cli-runtime") == "navide-cli-runtime"
+        # CREATE_NO_WINDOW exists only on Windows; elsewhere the flag is 0.
+        import subprocess
+
+        assert win.helper_process_options() == {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+        assert _posix_paths.helper_process_options() == {}
+
     def test_ntfs_has_no_posix_modes(self, win) -> None:
         assert win.enforces_posix_modes() is False
         assert _posix_paths.enforces_posix_modes() is True

@@ -1,0 +1,993 @@
+// Generated from native/navide-cli-runtime/src/vendors/*.rs: the output of
+// `navide-cli-runtime declarations launch`, as a typed constant. Never edited
+// by hand. `NAVIDE_DECLARATIONS_WRITE=1 cargo test --test checked_in` (in
+// native/navide-cli-runtime) rewrites it together with the backend's copy.
+export default [
+  {
+    "key": "aider",
+    "label": "Aider",
+    "kind": "cli",
+    "order": {
+      "menu": 120,
+      "registry": 10
+    },
+    "launch": {
+      "program": "aider",
+      "base_args": [],
+      "yolo_args": [
+        "--yes-always"
+      ],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "AIDER_CHAT_HISTORY_FILE",
+        "AIDER_INPUT_HISTORY_FILE"
+      ]
+    },
+    "resume": {
+      "args": null,
+      "parse": null
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "antigravity",
+    "label": "Antigravity CLI (Google)",
+    "kind": "cli",
+    "order": {
+      "menu": 30,
+      "registry": 20
+    },
+    "launch": {
+      "program": "agy",
+      "base_args": [],
+      "yolo_args": [
+        "--dangerously-skip-permissions"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": [
+        "--effort",
+        "{}"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "--conversation",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "agy"
+        ],
+        "tokens": "Literal",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--conversation"
+        ],
+        "joined": "NoDash",
+        "pick": "First",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "claude",
+    "label": "Claude Code (Anthropic)",
+    "kind": "cli",
+    "order": {
+      "menu": 10,
+      "registry": 30
+    },
+    "launch": {
+      "program": "claude",
+      "base_args": [],
+      "yolo_args": [
+        "--dangerously-skip-permissions"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": [
+        "--effort",
+        "{}"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "env_defaults": [
+        [
+          "MCP_TIMEOUT",
+          "120000"
+        ]
+      ],
+      "env_strip": [
+        "CLAUDE_CONFIG_DIR",
+        "CLAUDE_CODE_CHILD_SESSION"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--resume",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "claude"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--resume"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "Any"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "codex",
+    "label": "Codex CLI (OpenAI)",
+    "kind": "cli",
+    "order": {
+      "menu": 20,
+      "registry": 40
+    },
+    "launch": {
+      "program": "codex",
+      "base_args": [],
+      "yolo_args": [
+        "--dangerously-bypass-approvals-and-sandbox"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "CODEX_HOME"
+      ]
+    },
+    "resume": {
+      "args": [
+        "resume",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "codex"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [
+          "resume"
+        ],
+        "id_after_subcommand": true,
+        "flags": [],
+        "joined": null,
+        "pick": "First",
+        "value": "Any"
+      }
+    },
+    "interrupt": [
+      27
+    ],
+    "observed": true
+  },
+  {
+    "key": "copilot",
+    "label": "GitHub Copilot CLI",
+    "kind": "cli",
+    "order": {
+      "menu": 100,
+      "registry": 50
+    },
+    "launch": {
+      "program": "copilot",
+      "base_args": [],
+      "yolo_args": [
+        "--yolo"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": [
+        "--reasoning-effort",
+        "{}"
+      ],
+      "efforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "env_defaults": [],
+      "env_strip": [
+        "COPILOT_HOME"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--resume={id}"
+      ],
+      "parse": {
+        "programs": [
+          "copilot"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--resume"
+        ],
+        "joined": "Any",
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "cursor",
+    "label": "Cursor CLI",
+    "kind": "cli",
+    "order": {
+      "menu": 110,
+      "registry": 60
+    },
+    "launch": {
+      "program": "agent",
+      "base_args": [],
+      "yolo_args": [
+        "--force"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "--resume={id}"
+      ],
+      "parse": {
+        "programs": [
+          "agent",
+          "cursor-agent"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--resume"
+        ],
+        "joined": "Any",
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "devin",
+    "label": "Devin CLI (Cognition)",
+    "kind": "cli",
+    "order": {
+      "menu": 170,
+      "registry": 70
+    },
+    "launch": {
+      "program": "devin",
+      "base_args": [],
+      "yolo_args": [
+        "--permission-mode",
+        "dangerous"
+      ],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": null,
+      "parse": null
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": false
+  },
+  {
+    "key": "droid",
+    "label": "Droid CLI (Factory)",
+    "kind": "cli",
+    "order": {
+      "menu": 140,
+      "registry": 80
+    },
+    "launch": {
+      "program": "droid",
+      "base_args": [],
+      "yolo_args": [
+        "--auto",
+        "high"
+      ],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "FACTORY_HOME_OVERRIDE",
+        "FACTORY_RUNTIME_SETTINGS_PATH",
+        "DROID_PARENT_SESSION_ID"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--resume",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "droid"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--resume",
+          "-r"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "Any"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "goose",
+    "label": "Goose (AAIF)",
+    "kind": "cli",
+    "order": {
+      "menu": 160,
+      "registry": 90
+    },
+    "launch": {
+      "program": "goose",
+      "base_args": [],
+      "yolo_args": [],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "session",
+        "-r",
+        "--session-id",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "goose"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [
+          "session",
+          "s"
+        ],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session-id"
+        ],
+        "joined": "NoDash",
+        "pick": "First",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "grok",
+    "label": "Grok Build (SpaceXAI)",
+    "kind": "cli",
+    "order": {
+      "menu": 40,
+      "registry": 100
+    },
+    "launch": {
+      "program": "grok",
+      "base_args": [],
+      "yolo_args": [],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "GROK_HOME",
+        "GROK_BACKGROUND_CHILD",
+        "GROK_DAEMON_CHILD"
+      ]
+    },
+    "resume": {
+      "args": [
+        "-r",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "grok"
+        ],
+        "tokens": "Literal",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "-r",
+          "--resume"
+        ],
+        "joined": "Uuid",
+        "pick": "First",
+        "value": "Uuid"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "hermes",
+    "label": "Hermes Agent",
+    "kind": "agent",
+    "order": {
+      "menu": 200,
+      "registry": 110
+    },
+    "launch": {
+      "program": "hermes",
+      "base_args": [
+        "chat"
+      ],
+      "yolo_args": [
+        "--yolo"
+      ],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "--continue",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "hermes"
+        ],
+        "tokens": "Literal",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "-c",
+          "--continue"
+        ],
+        "joined": {
+          "Prefix": "navide-"
+        },
+        "pick": "First",
+        "value": {
+          "Prefix": "navide-"
+        }
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "kilo",
+    "label": "Kilo Code CLI",
+    "kind": "cli",
+    "order": {
+      "menu": 80,
+      "registry": 120
+    },
+    "launch": {
+      "program": "kilo",
+      "base_args": [],
+      "yolo_args": [
+        "--auto"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "KILO_CONFIG_DIR",
+        "KILO_CONFIG"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--session",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "kilo"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session",
+          "-s"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "kimi",
+    "label": "Kimi Code CLI (Moonshot AI)",
+    "kind": "cli",
+    "order": {
+      "menu": 50,
+      "registry": 130
+    },
+    "launch": {
+      "program": "kimi",
+      "base_args": [],
+      "yolo_args": [
+        "--yolo"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [
+        [
+          "PI_TUI_ESC_TIMEOUT",
+          "100"
+        ]
+      ],
+      "env_strip": [
+        "KIMI_CODE_HOME"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--session",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "kimi"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session",
+          "-S"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "kiro",
+    "label": "Kiro CLI (AWS)",
+    "kind": "cli",
+    "order": {
+      "menu": 180,
+      "registry": 140
+    },
+    "launch": {
+      "program": "kiro-cli",
+      "base_args": [
+        "chat",
+        "--v3"
+      ],
+      "yolo_args": [
+        "--trust-all-tools"
+      ],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "KIRO_HOME"
+      ]
+    },
+    "resume": {
+      "args": null,
+      "parse": null
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": false
+  },
+  {
+    "key": "mcode",
+    "label": "MiniMax Code",
+    "kind": "cli",
+    "order": {
+      "menu": 150,
+      "registry": 150
+    },
+    "launch": {
+      "program": "mcode",
+      "base_args": [],
+      "yolo_args": [],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "MINIMAX_DATA_DIR",
+        "MAVIS_DATA_DIR"
+      ]
+    },
+    "resume": {
+      "args": null,
+      "parse": null
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": false
+  },
+  {
+    "key": "muse",
+    "label": "Muse Code (Meta)",
+    "kind": "cli",
+    "order": {
+      "menu": 130,
+      "registry": 160
+    },
+    "launch": {
+      "program": "muse",
+      "base_args": [],
+      "yolo_args": [
+        "--disable-approval"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": [
+        "--reasoning-effort",
+        "{}"
+      ],
+      "efforts": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "resume",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "muse"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [
+          "resume"
+        ],
+        "id_after_subcommand": true,
+        "flags": [],
+        "joined": null,
+        "pick": "First",
+        "value": "Any"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "openclaw",
+    "label": "OpenClaw",
+    "kind": "agent",
+    "order": {
+      "menu": 190,
+      "registry": 180
+    },
+    "launch": {
+      "program": "openclaw",
+      "base_args": [
+        "tui",
+        "--local"
+      ],
+      "yolo_args": [],
+      "model": null,
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": []
+    },
+    "resume": {
+      "args": [
+        "--session",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "openclaw"
+        ],
+        "tokens": "Literal",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session"
+        ],
+        "joined": {
+          "Prefix": "agent:"
+        },
+        "pick": "First",
+        "value": {
+          "Prefix": "agent:"
+        }
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "opencode",
+    "label": "OpenCode (Anomaly)",
+    "kind": "cli",
+    "order": {
+      "menu": 60,
+      "registry": 170
+    },
+    "launch": {
+      "program": "opencode",
+      "base_args": [],
+      "yolo_args": [],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "OPENCODE_CONFIG_DIR",
+        "OPENCODE_CONFIG"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--session",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "opencode"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session",
+          "-s"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "pi",
+    "label": "Pi",
+    "kind": "cli",
+    "order": {
+      "menu": 90,
+      "registry": 190
+    },
+    "launch": {
+      "program": "pi",
+      "base_args": [],
+      "yolo_args": [],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": [
+        "--thinking",
+        "{}"
+      ],
+      "efforts": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "env_defaults": [],
+      "env_strip": [
+        "PI_CODING_AGENT_DIR",
+        "PI_CODING_AGENT_SESSION_DIR",
+        "PI_PACKAGE_DIR"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--session-id",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "pi"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--session-id"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  },
+  {
+    "key": "qwen",
+    "label": "Qwen Code (Alibaba Cloud)",
+    "kind": "cli",
+    "order": {
+      "menu": 70,
+      "registry": 200
+    },
+    "launch": {
+      "program": "qwen",
+      "base_args": [],
+      "yolo_args": [
+        "--yolo"
+      ],
+      "model": [
+        "--model",
+        "{}"
+      ],
+      "effort": null,
+      "efforts": [],
+      "env_defaults": [],
+      "env_strip": [
+        "QWEN_HOME",
+        "QWEN_RUNTIME_DIR"
+      ]
+    },
+    "resume": {
+      "args": [
+        "--resume",
+        "{id}"
+      ],
+      "parse": {
+        "programs": [
+          "qwen"
+        ],
+        "tokens": "Whitespace",
+        "subcommand": [],
+        "id_after_subcommand": false,
+        "flags": [
+          "--resume",
+          "-r"
+        ],
+        "joined": null,
+        "pick": "Last",
+        "value": "NoDash"
+      }
+    },
+    "interrupt": [
+      3
+    ],
+    "observed": true
+  }
+] as const

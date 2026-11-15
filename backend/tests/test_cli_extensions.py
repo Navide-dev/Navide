@@ -54,12 +54,24 @@ def _by(items: list[cli_extensions.CliExtension], cli: str) -> dict[str, cli_ext
 # ── declarations ─────────────────────────────────────────────────────────────
 
 
-def test_every_vendor_but_aider_declares_where_its_extensions_live() -> None:
+def test_every_vendor_declares_where_its_extensions_live_or_says_it_has_none() -> None:
+    # A CLI with no extension system leaves `extensions` None and says why in
+    # its own file (`extensions_none_reason`); every other declares a spec.
     for key, spec in VENDORS.items():
-        if key == "aider":
-            assert spec.extensions is None, "aider has no extension system to show"
+        if spec.extensions is None:
+            assert spec.extensions_none_reason, f"{key}: declare `extensions`, or `extensions_none_reason`"
         else:
             assert isinstance(spec.extensions, ExtensionsSpec), key
+            assert not spec.extensions_none_reason, f"{key} declares both"
+    # Main's one CLI with none, and the nineteen that declare one, by key: a
+    # CLI added later is in neither set and needs no edit here.
+    assert VENDORS["aider"].extensions is None and VENDORS["aider"].extensions_none_reason
+    declared_on_main = {
+        "antigravity", "claude", "codex", "copilot", "cursor", "devin", "kiro", "droid", "goose", "grok",
+        "hermes", "kilo", "kimi", "mcode", "muse", "opencode", "openclaw", "pi", "qwen",
+    }
+    for key in declared_on_main:
+        assert isinstance(VENDORS[key].extensions, ExtensionsSpec), f"{key} declared an extension spec on main"
 
 
 def test_the_vendor_list_hides_aider_and_marks_unread_clis_unsupported(tmp_path: Path) -> None:

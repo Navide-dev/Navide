@@ -69,9 +69,13 @@ describe('skipPermissionFlagFor', () => {
   })
 
   it('keeps the six flagless vendors flagless', () => {
-    const flagless = CLI_AGENT_SPECS.filter((spec) => !spec.skipPermissionFlag)
-      .map((spec) => spec.agentKey)
-      .sort()
-    expect(flagless).toEqual(['goose', 'grok', 'mcode', 'openclaw', 'opencode', 'pi'])
+    // The vendors main had without a bypass flag. A CLI added later states its
+    // own flag (or none) in its spec, so this list is a recorded subset.
+    const flagless = new Set(
+      CLI_AGENT_SPECS.filter((spec) => !spec.skipPermissionFlag).map((spec) => spec.agentKey),
+    )
+    for (const key of ['goose', 'grok', 'mcode', 'openclaw', 'opencode', 'pi']) {
+      expect(flagless.has(key), key).toBe(true)
+    }
   })
 })

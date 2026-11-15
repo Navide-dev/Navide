@@ -1,17 +1,15 @@
 /** Kimi Code — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'kimi',
-  label: 'Kimi Code CLI (Moonshot AI)',
-  defaultCommand: 'kimi',
+  // Label, command, flags and resume arguments: the launch declaration.
   // Effort lives in ~/.kimi-code/config.toml ([thinking] effort) and an
   // invalid value is silently clamped there, so it is not exposed here.
-  modelArgs: (m) => `--model ${m}`,
-  skipPermissionFlag: '--yolo',
-  // id is the `session_<uuid>` dir name.
-  resumeArgs: (id) => `--session ${id}`,
+  // Resume (`--session <id>`): the id is the `session_<uuid>` dir name.
+  ...declared('kimi'),
   // Short flag is uppercase `-S` (verified with `kimi --help`); kimi does not
   // accept a lowercase `-s`, so it is not matched here.
   resumeCommandPattern: /^kimi\s+(?:--session|-S)\s+\S+/,

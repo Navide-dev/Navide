@@ -1545,6 +1545,13 @@ class WindowsDiscoveryLayout(WindowsLayout):
             return entry
         return entry + ".exe"
 
+    def bundled_executable(self, name: str) -> str:
+        return name + ".exe"
+
+    def helper_process_options(self) -> dict[str, int]:
+        # Absent off Windows, where this module still imports for the tests.
+        return {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)}
+
     def enforces_posix_modes(self) -> bool:
         return False
 

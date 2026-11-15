@@ -242,6 +242,14 @@ def backend_entry_on_disk(entry: str) -> str:
     return entry
 
 
+def bundled_executable(name: str) -> str:
+    return name
+
+
+def helper_process_options() -> dict[str, int]:
+    return {}
+
+
 def enforces_posix_modes() -> bool:
     return True
 

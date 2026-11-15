@@ -1,0 +1,44 @@
+[package]
+name = "navide-cli-runtime"
+version = "0.1.0"
+edition = "2021"
+# The oldest toolchain that builds the crate with the pinned dependencies in
+# Cargo.lock: 1.85 builds and tests it, 1.80 cannot even read the lock's
+# `hashbrown 0.17.1` (it needs the `edition2024` Cargo feature, stable from
+# 1.85). Raise it when a dependency pin asks for more.
+rust-version = "1.85"
+publish = false
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "navide-cli-runtime"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+# preserve_order: records keep their key order (a model map's first entry
+# is the model, as `next(iter(dict))` is in main), and checkpoints keep
+# main's key order.
+# unbounded_depth: only `pyjson` uses it, to tell a record nested past
+# serde_json's 128 levels (which Python's `json` reads) from a corrupt one.
+serde_json = { version = "=1.0.150", features = ["preserve_order", "unbounded_depth"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.186"
+
+# The SQLite backend (observe/sqlite.rs) links the system library on macOS
+# and Windows; Linux builds the bundled one, as the evaluation crate does.
+[target.'cfg(target_os = "linux")'.dependencies]
+libsqlite3-sys = { version = "=0.38.2", default-features = false, features = ["bundled", "min_sqlite_version_3_34_1"] }
+
+# `wire::answer` catches a panic in one request with `catch_unwind` and keeps
+# serving; that only works with `panic = "unwind"`, the default. Setting
+# `panic = "abort"` here would turn every caught panic into a dead process,
+# and no test runs under the release profile to say so.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

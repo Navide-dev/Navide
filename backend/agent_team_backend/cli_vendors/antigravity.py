@@ -31,7 +31,9 @@ import os
 import sys
 import time
 
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -42,7 +44,6 @@ from .base import (
     SkillsWiring,
     VendorSpec,
     keychain_payload_items,
-    simple_command_args,
 )
 from ..usage_common import (
     HTTP_TIMEOUT,
@@ -800,21 +801,9 @@ async def fetch_antigravity(home: Path) -> dict:
 
 # ---- session ---------------------------------------------------------------
 
-def _resume_id_from_command(command) -> str:
-    args = simple_command_args(command)
-    if not args or args[0] != "agy":
-        return ""
-    for index, arg in enumerate(args[1:], 1):
-        if arg == "--":
-            break
-        if arg == "--conversation" and index + 1 < len(args):
-            value = args[index + 1]
-        elif arg.startswith("--conversation="):
-            value = arg.partition("=")[2]
-        else:
-            continue
-        return value if value and not value.startswith("-") else ""
-    return ""
+# The conversation an `agy --conversation <id>` launch resumes is read by the
+# launch declaration (native/navide-cli-runtime/src/vendors/antigravity.rs;
+# see _declared).
 
 
 def _session_path(workspace_path: str, session_id: str) -> Path:
@@ -834,16 +823,27 @@ _EXTENSIONS = ExtensionsSpec(
     note="agy has plugins (`agy plugin list`), but where it keeps them is not verified yet.",
 )
 
+# Instruction files: readGlobalRules stats both ~/.gemini and ~/.gemini/config
+# for each of the two filenames; the project tier walks cwd up to the git
+# root. The .agents/rules aliases (.agent, _agents, _agent) are not listed.
+_MEMORY_SOURCES = (
+    MemorySource("antigravity", USER_SCOPE, (".gemini", "GEMINI.md"), canonical=True),
+    MemorySource("antigravity", USER_SCOPE, (".gemini", "AGENTS.md")),
+    MemorySource("antigravity", USER_SCOPE, (".gemini", "config", "GEMINI.md")),
+    MemorySource("antigravity", USER_SCOPE, (".gemini", "config", "AGENTS.md")),
+    MemorySource("antigravity", PROJECT_SCOPE, ("GEMINI.md",), canonical=True),
+    MemorySource("antigravity", PROJECT_SCOPE, ("AGENTS.md",)),
+    MemorySource("antigravity", PROJECT_SCOPE, (".agents", "rules"), glob="*.md"),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="antigravity",
     # Quota/OAuth constants above do not establish CLI service expectations.
     expected_hosts=(),
     # Conversation root from AntigravityLogReader; honor the pane HOME shim.
     data_dirs=lambda ctx: (ctx.path(ctx.home / ".gemini" / "antigravity-cli"),),
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=('low', 'medium', 'high'),
     # Verified 2026-08-15: `gemini skills list` reports locations under
     # ~/.gemini/skills — not the ~/.gemini/antigravity-cli/skills that other
     # shared configs assume. Rides the HOME shim its MCP wiring builds.
@@ -852,7 +852,6 @@ SPEC = VendorSpec(
         root_env="HOME",
         skills_rel=(".gemini", "skills"),
     ),
-    label="Antigravity CLI (Google)",
     # Multi-account: the refresh token is one fixed-name macOS Keychain item
     # (service "gemini", account "antigravity" — go-keyring, base64 JSON),
     # with the token file below as the stale copy the reader falls back to.
@@ -890,7 +889,8 @@ SPEC = VendorSpec(
     ),
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_antigravity(home),
-    resume_id_from_command=_resume_id_from_command,
+    # Model and effort support and resume-id parsing: the launch declaration.
+    **declared("antigravity"),
     session_path=_session_path,
     make_log_reader=AntigravityLogReader,
     install_dep=Dep("antigravity", "Antigravity CLI (Google)", "Google Antigravity CLI", "agent_cli",

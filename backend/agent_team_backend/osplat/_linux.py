@@ -285,6 +285,12 @@ class LinuxLayout(LinuxPaths):
     def backend_entry_on_disk(self, entry: str) -> str:
         return _posix_paths.backend_entry_on_disk(entry)
 
+    def bundled_executable(self, name: str) -> str:
+        return _posix_paths.bundled_executable(name)
+
+    def helper_process_options(self) -> dict[str, int]:
+        return _posix_paths.helper_process_options()
+
     def enforces_posix_modes(self) -> bool:
         return _posix_paths.enforces_posix_modes()
 

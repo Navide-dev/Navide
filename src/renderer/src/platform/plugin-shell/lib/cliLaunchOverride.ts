@@ -121,8 +121,9 @@ export function spawnEnvOverride(stored: unknown): Record<string, string> | unde
  *
  * This is a MIRROR, not a second rule: the backend still filters, and a key
  * that slipped past this list is dropped there. `cliLaunchOverride.test.ts`
- * derives the same union out of the Python sources and fails if the two
- * disagree, so the list cannot drift quietly when a vendor gains a home var.
+ * derives the same union out of the backend's sources (two Python tables and
+ * every launch declaration's `env_strip`) and fails if the two disagree, so
+ * the list cannot drift quietly when a vendor gains a home var.
  *
  * It is a single global list, not per vendor: the backend's union covers every
  * vendor's home relocators at once (a claude pane is refused CODEX_HOME too),

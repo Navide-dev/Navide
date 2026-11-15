@@ -112,7 +112,9 @@ import sys
 import time
 
 from .. import osplat
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, MemorySource
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -1374,16 +1376,9 @@ async def fetch_copilot(home: Path, env: dict | None = None) -> dict:
 # `copilot --resume=<id>` (or `--resume <id>`) resumes when the id exists and
 # silently starts a blank NEW session under that UUID when it does not — so
 # the id names this pane's session either way and preflight matters.
-_RESUME_RE = re.compile(
-    r"^copilot\s+(?:\S+\s+)*--resume(?:=(\S+)|\s+([^-\s]\S*))"
-)
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `copilot ... --resume=<id>` / `--resume <id>`
-    command ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return (m.group(1) or m.group(2)) if m else ""
+# The session id of a `copilot ... --resume=<id>` / `--resume <id>` command is
+# read by the launch declaration (native/navide-cli-runtime/src/vendors/
+# copilot.rs; see _declared).
 
 
 def _session_path(workspace_path: str, session_id: str) -> Path:
@@ -1458,7 +1453,15 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("hooks-dir", (".copilot", "hooks"), "Copilot hook"),
 ))
 
+# Instruction files: `copilot init` writes the .github file; AGENTS.md is loaded
+# too ("--no-custom-instructions ... from AGENTS.md and related files").
+_MEMORY_SOURCES = (
+    MemorySource("copilot", PROJECT_SCOPE, (".github", "copilot-instructions.md"), canonical=True),
+    MemorySource("copilot", PROJECT_SCOPE, ("AGENTS.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="copilot",
     # Enterprise hosts/model routing have no verified default CLI host set here.
@@ -1466,9 +1469,6 @@ SPEC = VendorSpec(
     # Same root as copilot_root, using the captured child environment.
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("COPILOT_HOME") or ctx.home / ".copilot"),),
     data_dir_env_vars=("COPILOT_HOME",),
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'),
     # Verified 2026-08-15: `copilot skill list` under a relocated COPILOT_HOME
     # lists exactly the skills below <home>/skills.
     skills_supported=True,
@@ -1482,7 +1482,6 @@ SPEC = VendorSpec(
         # user silently loses them.
         discovery_home=((".agents", "skills"),),
     ),
-    label="GitHub Copilot CLI",
     # `copilot login` authenticates over OAuth. On a local desktop it opens
     # the browser and captures the result on a loopback callback — exactly
     # what a login pane carries; the device-code flow it falls back to for
@@ -1534,10 +1533,11 @@ SPEC = VendorSpec(
     install_hooks=_install_hooks,
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_copilot(home),
-    resume_id_from_command=_resume_id_from_command,
+    # Model and effort support, the home variable a spawn strips and
+    # resume-id parsing: the launch declaration.
+    **declared("copilot"),
     session_path=_session_path,
     session_exists=_session_exists,
-    home_env_vars=("COPILOT_HOME",),
     make_log_reader=CopilotLogReader,
     # Copilot CLI ships `copilot update` but no doctor subcommand;
     # COPILOT_AUTO_UPDATE=false is its autoupdate opt-out and COPILOT_HOME

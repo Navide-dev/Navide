@@ -1,12 +1,13 @@
 /** Kilo Code — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'kilo',
-  label: 'Kilo Code CLI',
-  defaultCommand: 'kilo',
-  // A fork of opencode, confirmed in its source (Kilo-Org/kilocode, MIT): the
+  // Label, command, flags and resume arguments: the launch declaration.
+  //
+  // Model (`--model`): a fork of opencode, confirmed in its source (Kilo-Org/kilocode, MIT): the
   // root command declares `-m, --model` itself (cli/cmd/tui.ts:148) and the
   // value reaches the TUI (tui.ts:503) which parses and applies it
   // (tui/src/app.tsx:501-510). kilo goes further than upstream — it writes the
@@ -23,14 +24,16 @@ export const SPEC = {
   // `--variant` (its effort equivalent) exists only on `kilo run`; the root
   // command's option list has no such entry, and even `--mini` hardcodes
   // `variant: undefined` (cli/cmd/run.ts:1225).
-  modelArgs: (m) => `--model ${m}`,
-  // `--auto` ("auto-approve permissions that are not explicitly denied
-  // (dangerous!)") is listed on both the root TUI command and `kilo run`
-  // (verified on 7.4.21).
-  skipPermissionFlag: '--auto',
-  // id is `ses_`-prefixed (OpenCode fork).
-  resumeArgs: (id) => `--session ${id}`,
+  //
+  // Unattended: `--auto` ("auto-approve permissions that are not explicitly
+  // denied (dangerous!)") is listed on both the root TUI command and
+  // `kilo run` (verified on 7.4.21).
+  //
+  // Resume (`--session <id>`): the id is `ses_`-prefixed (OpenCode fork).
+  ...declared('kilo'),
   needsSessionMarker: true,
+  // Also the short flag, which the pattern derived from the declaration
+  // (Navide's own resume command) does not know.
   resumeCommandPattern: /^kilo\s+(?:--session|-s)\s+\S+/,
   supportsRebuild: true,
   // Measured on a real PTY: the CLI itself emits `ESC[?1049h` during startup

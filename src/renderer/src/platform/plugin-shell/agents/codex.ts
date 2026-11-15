@@ -1,22 +1,19 @@
 /** Codex — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'codex',
-  label: 'Codex CLI (OpenAI)',
-  defaultCommand: 'codex',
-  // No effort flag: codex takes it as a config override
+  // Label, command, flags and resume arguments: the launch declaration. No
+  // effort flag: codex takes it as a config override
   // (`-c model_reasoning_effort=<value>`), a different injection shape than
-  // every other vendor. Declaring none refuses `effort` rather than guessing.
-  modelArgs: (m) => `--model ${m}`,
-  skipPermissionFlag: '--dangerously-bypass-approvals-and-sandbox',
-  // Subcommand, NOT a --flag.
-  resumeArgs: (id) => `resume ${id}`,
+  // every other vendor; declaring none refuses `effort` rather than guessing.
+  // Resume is a subcommand (`resume <id>`), NOT a --flag.
+  ...declared('codex'),
   // SessionStart or the pane's own rollout binds the ID after real work starts.
   // An idle pane must not submit a synthetic prompt just to discover its ID.
   needsSessionMarker: false,
-  resumeCommandPattern: /^codex\s+resume\s+\S+/,
   supportsRebuild: true,
   verifiedTurnText: true,
   bracketedPaste: true,

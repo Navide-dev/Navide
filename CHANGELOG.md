@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- CLI runtime: an experimental `rustCliRuntime` setting, off by default, that reads three transcript calls (token usage, activity, turns) through a Rust helper, `navide-cli-runtime`, instead of the Python readers; every CLI is declared once in that crate, and the backend's registry and the frontend's agent specs are generated from the declaration. Off, nothing changes and nothing starts; on, any failure falls back to the Python reader for that call. There is no Settings toggle yet; see "Rust CLI runtime (experimental)" in `docs/en-US/cli-extension-guide.md`.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added

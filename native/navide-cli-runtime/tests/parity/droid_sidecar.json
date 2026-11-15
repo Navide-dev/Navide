@@ -1,0 +1,303 @@
+{
+ "vendor": "droid",
+ "file": "droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"session_start\", \"id\": \"d0c1e2f3-0000-4000-8000-000000000001\", \"title\": \"t\", \"owner\": \"me\", \"version\": 2, \"cwd\": \"/tmp/filed\", \"lastCwd\": \"/tmp/demo\"}\n{\"type\": \"message\", \"id\": \"m-user-43\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"fix the build\"}]}}\n{\"type\": \"message\", \"id\": \"m-assistant-71\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"looking\"}, {\"type\": \"tool_use\", \"id\": \"t1\"}]}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "legacy",
+      "legacy_seen": []
+     }
+    },
+    "activity": [
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "user",
+      "text": "fix the build",
+      "full": "fix the build"
+     },
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:3",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::3",
+     "droid_text::looking"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"type\": \"message\", \"id\": \"m-user-63\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t1\", \"content\": \"ok\"}]}}\n{\"type\": \"message\", \"id\": \"m-user-9\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"user\", \"content\": \"echo hook\", \"hookEventName\": \"Stop\"}}\n{\"type\": \"agent_turn_outcome\", \"reason\": \"completed\", \"timestamp\": \"2026-08-26T17:59:00.000Z\"}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "sidecars": {
+    "droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.settings.json": "{\"model\": \"glm-4.6\", \"tokenUsage\": {\"inputTokens\": 100, \"outputTokens\": 20, \"cacheReadTokens\": 50, \"cacheCreationTokens\": 0, \"thinkingTokens\": 9}}"
+   },
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "droid",
+       "input_tokens": 150,
+       "output_tokens": 20,
+       "cwd": "/tmp/demo",
+       "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+       "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+       "dedup_key": "usage::d0c1e2f3-0000-4000-8000-000000000001::150::20",
+       "timestamp": "",
+       "model": "glm-4.6",
+       "checkpoint": {},
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "legacy",
+      "legacy_seen": [
+       "droid_tok::150:20",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::150::20"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "user",
+      "text": ""
+     },
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:5",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "user",
+      "text": ""
+     },
+     {
+      "vendor": "droid",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "turn:6",
+      "timestamp": "2026-08-26T17:59:00.000Z",
+      "detail": "completed",
+      "text": "looking"
+     }
+    ],
+    "bag": [
+     "act_hw::6"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"type\": \"message\", \"id\": \"m-user-12\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"user\", \"content\": \"and the docs\"}}\n{\"type\": \"message\", \"id\": \"m-assistant-34\", \"timestamp\": \"2026-08-26T17:58:46.446Z\", \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"done\"}]}}\n{\"type\": \"agent_turn_outcome\", \"reason\": \"cancelled\", \"timestamp\": \"2026-08-26T18:00:00.000Z\"}\n",
+   "mtime": 1792000002,
+   "now": 1792000003,
+   "sidecars": {
+    "droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.settings.json": "{\"model\": \"glm-4.6\", \"tokenUsage\": {\"inputTokens\": 400, \"outputTokens\": 60, \"cacheReadTokens\": 50, \"cacheCreationTokens\": 0, \"thinkingTokens\": 9}}"
+   },
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "droid",
+       "input_tokens": 300,
+       "output_tokens": 40,
+       "cwd": "/tmp/demo",
+       "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+       "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+       "dedup_key": "usage::d0c1e2f3-0000-4000-8000-000000000001::450::60",
+       "timestamp": "",
+       "model": "glm-4.6",
+       "checkpoint": {},
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "legacy",
+      "legacy_seen": [
+       "droid_tok::450:60",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::150::20",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::450::60"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:7",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "user",
+      "text": "and the docs",
+      "full": "and the docs"
+     },
+     {
+      "vendor": "droid",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "act:8",
+      "timestamp": "2026-08-26T17:58:46.446Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "droid",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+      "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+      "dedup_key": "turn:9",
+      "timestamp": "2026-08-26T18:00:00.000Z",
+      "detail": "cancelled",
+      "text": "done"
+     }
+    ],
+    "bag": [
+     "act_hw::9"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000003,
+   "now": 1792000004,
+   "sidecars": {
+    "droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.settings.json": "{\"model\": \"glm-4.6\", \"tokenUsage\": {\"inputTokens\": 30, \"outputTokens\": 5, \"cacheReadTokens\": 0, \"cacheCreationTokens\": 0, \"thinkingTokens\": 9}}"
+   },
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "legacy",
+      "legacy_seen": [
+       "droid_tok::30:5",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::150::20",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::450::60"
+      ]
+     }
+    },
+    "activity": [],
+    "bag": [
+     "act_hw::9"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000004,
+   "now": 1792000005,
+   "sidecars": {
+    "droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.settings.json": "{\"model\": \"glm-4.6\", \"tokenUsage\": {\"inputTokens\": 70, \"outputTokens\": 9, \"cacheReadTokens\": 0, \"cacheCreationTokens\": 0, \"thinkingTokens\": 9}}"
+   },
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "droid",
+       "input_tokens": 40,
+       "output_tokens": 4,
+       "cwd": "/tmp/demo",
+       "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+       "file_path": "<root>/droid/sessions/-tmp-demo/d0c1e2f3-0000-4000-8000-000000000001.jsonl",
+       "dedup_key": "usage::d0c1e2f3-0000-4000-8000-000000000001::70::9",
+       "timestamp": "",
+       "model": "glm-4.6",
+       "checkpoint": {},
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "legacy",
+      "legacy_seen": [
+       "droid_tok::70:9",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::150::20",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::450::60",
+       "usage::d0c1e2f3-0000-4000-8000-000000000001::70::9"
+      ]
+     }
+    },
+    "activity": [],
+    "bag": [
+     "act_hw::9"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "d0c1e2f3-0000-4000-8000-000000000001",
+   "started_at": null,
+   "ended_at": null,
+   "prompt_excerpt": "",
+   "input": 70,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 9,
+   "calls": [
+    {
+     "ts": null,
+     "model": "glm-4.6",
+     "input": 70,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 9,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

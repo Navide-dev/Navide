@@ -22,7 +22,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -303,16 +305,9 @@ async def fetch_kilo(home: Path, env: dict | None = None, *, bound_store: bool =
 
 # ---- resume / session ------------------------------------------------------
 
-# Kilo Code keeps OpenCode's resume flags — same optional-id guard so the
-# capture never swallows a following flag.
-_RESUME_RE = re.compile(r"^kilo\s+(?:\S+\s+)*(?:--session|-s)\s+([^-\s]\S*)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `kilo ... --session <id>` / `-s <id>` command
-    ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# Kilo Code keeps OpenCode's resume flags (`--session <id>` / `-s <id>`, never
+# a following flag as the id); the launch declaration reads them
+# (native/navide-cli-runtime/src/vendors/kilo.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -333,7 +328,17 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("npm-list", (".config", "kilo", "kilo.jsonc"), "Kilo plugin", section=("plugin",)),
 ))
 
+# Instruction files: its own config dir, and ~/.claude/CLAUDE.md unless disabled.
+_MEMORY_SOURCES = (
+    MemorySource("kilo", USER_SCOPE, (".config", "kilo", "AGENTS.md"), canonical=True),
+    MemorySource("kilo", USER_SCOPE, (".claude", "CLAUDE.md")),
+    MemorySource("kilo", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("kilo", PROJECT_SCOPE, ("CLAUDE.md",)),
+    MemorySource("kilo", PROJECT_SCOPE, ("CONTEXT.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="kilo",
     # OpenCode fork with arbitrary providers; quota base is not a CLI host set.
@@ -345,10 +350,8 @@ SPEC = VendorSpec(
     # --model and applies it at the highest priority. No effort flag —
     # --variant exists only on `kilo run`. Details in agents/kilo.ts, which
     # owns the flags themselves.
-    supports_model=True,
     # Verified 2026-08-15: kilo's bundle carries no SKILL.md handling at all.
     skills_supported=False,
-    label="Kilo Code CLI",
     # An OpenCode fork: identical config document, its own variable.
     mcp_wiring=McpWiring(
         config=McpServerConfig(
@@ -421,9 +424,9 @@ SPEC = VendorSpec(
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_kilo(home),
     fetch_usage_from_context=lambda ctx: fetch_kilo(ctx.home, dict(ctx.env), bound_store=True),
-    resume_id_from_command=_resume_id_from_command,
-    session_exists=_session_exists,
-    # Only the env vars Kilo actually documents (kilo-config.md defines
+    # Model support, resume-id parsing and the variables a spawn strips are
+    # the launch declaration's. It strips KILO_CONFIG_DIR and KILO_CONFIG:
+    # only the env vars Kilo actually documents (kilo-config.md defines
     # KILO_CONFIG, KILO_CONFIG_DIR, KILO_CONFIG_CONTENT and
     # KILO_DISABLE_PROJECT_CONFIG — there is no KILO_DB, so listing it stripped
     # a variable no Kilo build reads):
@@ -434,7 +437,8 @@ SPEC = VendorSpec(
     # real lever is XDG_DATA_HOME, which is a general-purpose variable and
     # cannot go in this strip-list. Kilo's data locations can be confirmed on a
     # machine that has it installed with `kilo debug paths`.
-    home_env_vars=("KILO_CONFIG_DIR", "KILO_CONFIG"),
+    **declared("kilo"),
+    session_exists=_session_exists,
     make_log_reader=KiloLogReader,
     # Kilo Code (OpenCode fork) ships `kilo upgrade` but no doctor subcommand
     # (`kilo debug` is diagnostics-adjacent, not a doctor — no invented command).

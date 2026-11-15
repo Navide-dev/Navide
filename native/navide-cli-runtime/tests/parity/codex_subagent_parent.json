@@ -1,0 +1,259 @@
+{
+ "vendor": "codex",
+ "file": "home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"timestamp\": \"2026-09-05T01:10:06Z\", \"type\": \"session_meta\", \"payload\": {\"id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"cwd\": \"/proj\", \"source\": \"cli\", \"cli_version\": \"0.163.0\", \"model_provider\": \"openai\"}}\n{\"timestamp\": \"2026-09-05T01:10:40Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"task_started\", \"turn_id\": \"p1\"}}\n{\"timestamp\": \"2026-09-05T01:10:40Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"item_completed\", \"item\": {\"type\": \"UserMessage\", \"id\": \"u\", \"content\": [{\"type\": \"text\", \"text\": \"Refactor the parser\"}]}}}\n{\"timestamp\": \"2026-09-05T01:10:50Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"token_count\", \"info\": {\"total_token_usage\": {\"input_tokens\": 1000, \"cached_input_tokens\": 0, \"output_tokens\": 100, \"reasoning_output_tokens\": 0, \"total_tokens\": 1100}}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "codex",
+       "input_tokens": 1000,
+       "output_tokens": 100,
+       "cwd": "/proj",
+       "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+       "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+       "dedup_key": "codex_cumulative::01a06f1d-9b8d-7912-8ef1-ffc830909d4c::1000::100",
+       "timestamp": "2026-09-05T01:10:50Z",
+       "model": "openai",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 775,
+        "anchor": "c845c9d2852eb550",
+        "input_total": 1000,
+        "output_total": 100,
+        "cwd": "/proj",
+        "model": "openai",
+        "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+        "cli_version": "0.163.0",
+        "meta_seen": true,
+        "ledger_model": "",
+        "basis": 2
+       },
+       "raw": {
+        "ledger_session_totals": {
+         "input": 1000,
+         "cache_read": 0,
+         "cache_write": 0,
+         "output": 100,
+         "model": ""
+        }
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.163.0"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 775,
+      "anchor": "c845c9d2852eb550",
+      "input_total": 1000,
+      "output_total": 100,
+      "cwd": "/proj",
+      "model": "openai",
+      "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "",
+      "basis": 2
+     }
+    },
+    "activity": [
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-09-05T01:10:40Z",
+      "detail": "task_started",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:3",
+      "timestamp": "2026-09-05T01:10:40Z",
+      "detail": "user_message",
+      "text": "Refactor the parser",
+      "full": "Refactor the parser"
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "2026-09-05T01:10:50Z",
+      "detail": "token_count",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::4"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"timestamp\": \"2026-09-05T01:12:00Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"agent_message\", \"message\": \"Parent's answer\"}}\n{\"timestamp\": \"2026-09-05T01:12:00Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"token_count\", \"info\": {\"total_token_usage\": {\"input_tokens\": 3000, \"cached_input_tokens\": 0, \"output_tokens\": 300, \"reasoning_output_tokens\": 0, \"total_tokens\": 3300}}}}\n{\"timestamp\": \"2026-09-05T01:12:01Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"task_complete\", \"turn_id\": \"p1\", \"last_agent_message\": \"Parent's answer\"}}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "codex",
+       "input_tokens": 2000,
+       "output_tokens": 200,
+       "cwd": "/proj",
+       "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+       "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+       "dedup_key": "codex_cumulative::01a06f1d-9b8d-7912-8ef1-ffc830909d4c::3000::300",
+       "timestamp": "2026-09-05T01:12:00Z",
+       "model": "openai",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1152,
+        "anchor": "c5419038af452285",
+        "input_total": 3000,
+        "output_total": 300,
+        "cwd": "/proj",
+        "model": "openai",
+        "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+        "cli_version": "0.163.0",
+        "meta_seen": true,
+        "ledger_model": "",
+        "basis": 2
+       },
+       "raw": {
+        "ledger_session_totals": {
+         "input": 3000,
+         "cache_read": 0,
+         "cache_write": 0,
+         "output": 300,
+         "model": ""
+        }
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.163.0"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1307,
+      "anchor": "c5419038af452285",
+      "input_total": 3000,
+      "output_total": 300,
+      "cwd": "/proj",
+      "model": "openai",
+      "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "",
+      "basis": 2
+     }
+    },
+    "activity": [
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:5",
+      "timestamp": "2026-09-05T01:12:00Z",
+      "detail": "agent_message",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:6",
+      "timestamp": "2026-09-05T01:12:00Z",
+      "detail": "token_count",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "agent_active",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "act:7",
+      "timestamp": "2026-09-05T01:12:01Z",
+      "detail": "task_complete",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "turn_complete",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-06-01a06f1d-9b8d-7912-8ef1-ffc830909d4c.jsonl",
+      "dedup_key": "turn:7",
+      "timestamp": "2026-09-05T01:12:01Z",
+      "detail": "task_complete",
+      "text": "Parent's answer"
+     }
+    ],
+    "bag": [
+     "__lasttext__:",
+     "act_hw::7"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "01a06f1d-9b8d-7912-8ef1-ffc830909d4c",
+   "started_at": "2026-09-05T01:10:40Z",
+   "ended_at": "2026-09-05T01:12:00Z",
+   "prompt_excerpt": "Refactor the parser",
+   "input": 3000,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 300,
+   "calls": [
+    {
+     "ts": "2026-09-05T01:10:50Z",
+     "model": "openai",
+     "input": 1000,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 100,
+     "cli_version": "0.163.0"
+    },
+    {
+     "ts": "2026-09-05T01:12:00Z",
+     "model": "openai",
+     "input": 2000,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 200,
+     "cli_version": "0.163.0"
+    }
+   ],
+   "model_calls": null,
+   "cli_version": "0.163.0"
+  }
+ ]
+}

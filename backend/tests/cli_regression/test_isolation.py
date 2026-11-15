@@ -88,6 +88,29 @@ def test_guard_still_refuses_a_real_cli_launch(tmp_path, monkeypatch, argv):
     assert real_cli_in(argv, {}, (tmp_path / "allowed",)) == str(executable)
 
 
+def test_guard_refuses_every_declared_cli_program(tmp_path, monkeypatch):
+    """CLI_NAMES is a safety list: a declared CLI missing from it would let the
+    regression suite reach a real install. It is built from the declarations;
+    this holds each declared program (and the pre-existing names) to the
+    guard's behaviour."""
+    from agent_team_backend.cli_vendors import _declared
+
+    programs = {entry["launch"]["program"] for entry in _declared.declarations().values()}
+    assert programs, "no declared programs found"
+    # The names the hand-written list held before it was derived: none may drop out.
+    recorded = {
+        "claude", "codex", "gemini", "kimi", "grok", "qwen", "opencode", "kilo", "kilocode", "cursor-agent",
+        "agent", "copilot", "pi", "droid", "aider", "agy", "antigravity", "muse", "mcode", "goose", "openclaw",
+        "hermes", "devin", "kiro-cli",
+    }
+    for program in sorted(programs | recorded):
+        executable = tmp_path / "installed" / program
+        executable.parent.mkdir(exist_ok=True)
+        executable.write_text("unused")
+        monkeypatch.setattr("shutil.which", lambda *args, _found=executable, **kwargs: str(_found))
+        assert real_cli_in([program, "--version"], {}, (tmp_path / "allowed",)) == str(executable), program
+
+
 def test_guard_refuses_a_cli_script_run_by_node(tmp_path):
     script = tmp_path / "installed" / "codex.js"
     script.parent.mkdir()

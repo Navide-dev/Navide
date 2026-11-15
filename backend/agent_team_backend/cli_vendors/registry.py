@@ -1,64 +1,52 @@
-"""The vendor registry — one entry per CLI vendor, one line to register.
+"""The vendor registry: one entry per declared CLI. Nothing is registered here.
 
-Adding a vendor: create ``<key>.py`` from ``_template.py``, then add its SPEC
-to the tuple below. ``test_cli_vendors_registry.py`` cross-checks this set
-against the install-detection table, the log-reader package, and the frontend
-agent specs, so a missed registration fails CI rather than surfacing at
-runtime.
+Which CLIs exist, and in which order, is the Rust runtime's declarations
+(``cli_declarations.json``, read by ``_declared``). What the backend does for
+a CLI beyond launching and resuming it (credentials, install detection, its
+log reader, ...) lives in ``<key>.py`` beside this file, which exports
+``SPEC``; the registry imports that module by the CLI's key. A declared CLI
+with no such module is registered from its declaration alone.
+
+So adding a vendor never edits this file. ``test_cli_vendors_registry.py``
+cross-checks the set against the install-detection table, the log-reader
+package and the frontend agent specs, and ``test_pyinstaller_spec.py`` holds
+the packaged app to every module found this way (an import by name is one
+PyInstaller cannot see).
 """
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
 from .. import osplat
+from ._declared import declarations, declared
 from .base import VendorRuntimeContext, VendorSpec
-from . import (
-    aider,
-    antigravity,
-    claude,
-    codex,
-    copilot,
-    cursor,
-    devin,
-    droid,
-    goose,
-    grok,
-    hermes,
-    kilo,
-    kimi,
-    kiro,
-    mcode,
-    muse,
-    opencode,
-    openclaw,
-    pi,
-    qwen,
-)
 
-_ALL: tuple[VendorSpec, ...] = (
-    aider.SPEC,
-    antigravity.SPEC,
-    claude.SPEC,
-    codex.SPEC,
-    copilot.SPEC,
-    cursor.SPEC,
-    devin.SPEC,
-    droid.SPEC,
-    goose.SPEC,
-    grok.SPEC,
-    hermes.SPEC,
-    kilo.SPEC,
-    kimi.SPEC,
-    kiro.SPEC,
-    mcode.SPEC,
-    muse.SPEC,
-    opencode.SPEC,
-    openclaw.SPEC,
-    pi.SPEC,
-    qwen.SPEC,
+
+def _spec(entry: Mapping[str, Any]) -> VendorSpec:
+    """The spec of one declared CLI: ``SPEC`` of the module named after its
+    key, else the declaration alone."""
+    key = entry["key"]
+    name = f"{__package__}.{key}"
+    try:
+        module = importlib.import_module(name)
+    except ModuleNotFoundError as err:
+        if err.name != name:
+            raise  # the module is there; one of its own imports is not
+        return VendorSpec(key=key, **declared(key))
+    spec = module.SPEC
+    if spec.key != key:
+        raise ValueError(f"cli_vendors/{key}.py declares {spec.key!r}, not the CLI it is named after")
+    return spec
+
+
+#: Every declared CLI, in the registry order its declaration names.
+_ALL: tuple[VendorSpec, ...] = tuple(
+    _spec(entry) for entry in sorted(declarations().values(), key=lambda entry: entry["order"]["registry"])
 )
 
 VENDORS: dict[str, VendorSpec] = {spec.key: spec for spec in _ALL}

@@ -100,9 +100,36 @@ def test_split_runtime_roots_and_legacy_precedence(tmp_path):
     assert registry.VENDORS["mcode"].data_dirs(ctx) == (tmp_path / "minimax",)
 
 
+def test_every_vendor_declares_data_dirs_or_says_why_it_has_none():
+    # A CLI with no data root of its own leaves `data_dirs` None and says why in
+    # its own file (`data_dirs_none_reason`); every other declares a resolver.
+    for key, spec in registry.VENDORS.items():
+        if spec.data_dirs is None:
+            assert spec.data_dirs_none_reason, f"{key}: declare `data_dirs`, or `data_dirs_none_reason`"
+        else:
+            assert not spec.data_dirs_none_reason, f"{key} declares both"
+    # The roots pinned above are main's: each is still declared. A CLI declared
+    # later is not in DEFAULT_ROOTS and needs no entry there.
+    assert set(DEFAULT_ROOTS) <= set(registry.VENDORS)
+    assert all(registry.VENDORS[key].data_dirs is not None for key in DEFAULT_ROOTS)
+
+
 def test_aider_does_not_declare_workspace_as_data_root():
     assert registry.VENDORS["aider"].data_dirs is None
-    assert set(registry.VENDORS) == set(DEFAULT_ROOTS) | {"aider"}
+    assert registry.VENDORS["aider"].data_dirs_none_reason
+
+
+def test_every_declared_root_is_absolute_and_under_the_pane_home(tmp_path):
+    # For every CLI that declares roots, pinned above or not.
+    home = tmp_path / "pane-home"
+    ctx = registry.risk_runtime_context({"HOME": str(home)}, tmp_path)
+    for key, spec in registry.VENDORS.items():
+        if spec.data_dirs is None:
+            continue
+        roots = spec.data_dirs(ctx)
+        assert roots, key
+        for path in roots:
+            assert path.is_absolute() and (path == home or home in path.parents), (key, path)
 
 
 def test_codex_separate_sqlite_home(tmp_path):
@@ -127,8 +154,9 @@ def test_root_resolution_does_not_read_filesystem(tmp_path, monkeypatch):
 
     for name in ("home", "resolve", "stat", "is_dir", "exists", "open", "iterdir"):
         monkeypatch.setattr(Path, name, refuse)
-    for key in DEFAULT_ROOTS:
-        assert registry.VENDORS[key].data_dirs(ctx)
+    for key, spec in registry.VENDORS.items():
+        if spec.data_dirs is not None:
+            assert spec.data_dirs(ctx), key
 
 
 def test_runtime_capture_drops_credentials_and_redacts_endpoint_values(tmp_path):

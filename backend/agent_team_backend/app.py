@@ -65,6 +65,7 @@ from .analyzer_settings import AnalyzerSettingsStore
 from . import session_archive
 from .ai_chat_settings import AIChatSettingsStore
 from .applog import app_data_dir, backend_log_path, backend_port_file, in_data_dir
+from . import cli_runtime as _cli_runtime
 from .cli_vendors.registry import VENDORS as _CLI_VENDORS
 from .cli_vendors.registry import vendor as cli_vendor
 from .codex_home import CodexHomeManager
@@ -365,8 +366,10 @@ async def analyzer_benchmark(progress_cb=None) -> list:
 
 # Log readers: one per vendor. Attribution maps log session files to panes.
 # One reader per registered vendor — the registry is the single source.
+# cli_runtime.wrap leaves each reader on Python unless the Rust CLI runtime
+# switch is on (off by default).
 _readers = [
-    spec.make_log_reader()
+    _cli_runtime.wrap(spec.make_log_reader())
     for spec in _CLI_VENDORS.values()
     if spec.make_log_reader is not None
 ]
@@ -2642,6 +2645,8 @@ async def _start_log_watcher() -> None:
     from . import acp_switch
 
     acp_switch.apply_settings(ui_settings_store.get())
+    # The `rustCliRuntime` setting (experimental, no Settings toggle yet); off unless set.
+    _cli_runtime.apply_settings(ui_settings_store.get())
     # Per-pane watch files hold message text in the clear and belong to panes
     # that died with the previous process. Only a startup sweep ever removes
     # the ones a killed backend left behind.
@@ -3022,6 +3027,18 @@ async def _stop_log_watcher() -> None:
     _credential_watcher = None
 
 
+@app.on_event("shutdown")
+async def _stop_cli_runtime() -> None:
+    """Stop the Rust CLI runtime's process, if the switch ever started one.
+
+    Its own handler, registered after _stop_log_watcher: the watcher, whose
+    readers call the runtime, has stopped by then. Off the loop, since it waits
+    for the process to go. Should the handler before it raise, this one does
+    not run; the process then ends when its stdin closes with the backend.
+    """
+    await asyncio.to_thread(_cli_runtime.shutdown)
+
+
 def _default_pool_reading(loop: asyncio.AbstractEventLoop) -> dict[str, int]:
     """The shared default executor's size and backlog. It is created lazily,
     so before the first to_thread it reads as empty. Private attributes of
@@ -3062,6 +3079,8 @@ async def health() -> dict[str, Any]:
         body["diagnostics"] = {
             "loop_lag_ms": await _loop_lag_ms(loop),
             "default_pool": _default_pool_reading(loop),
+            # The switch, the process, and who answered each CLI's reader calls.
+            "cli_runtime": _cli_runtime.status(),
         }
     except Exception as err:  # noqa: BLE001 — fail open
         log.debug("health diagnostics unavailable: %s", err)

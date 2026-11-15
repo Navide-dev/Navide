@@ -44,7 +44,9 @@ from pathlib import Path
 
 import re
 
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -822,13 +824,8 @@ async def fetch_pi(home: Path, env: dict | None = None) -> dict:
 # `pi --session-id <id>` resumes when the id exists and creates a NEW session
 # under that id otherwise — either way the id names this pane's session, so
 # it is claimed like Claude's --session-id. Flag guard as usual.
-_RESUME_RE = re.compile(r"^pi\s+(?:\S+\s+)*--session-id\s+([^-\s]\S*)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `pi ... --session-id <id>` command ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# The parsing itself is the launch declaration's
+# (native/navide-cli-runtime/src/vendors/pi.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -860,21 +857,27 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("npm-list", (".pi", "agent", "settings.json"), "Pi package", section=("packages",)),
 ))
 
+# Instruction files: ~/.pi/agent/ and every ancestor directory, override first.
+_MEMORY_SOURCES = (
+    MemorySource("pi", USER_SCOPE, (".pi", "agent", "AGENTS.md"), canonical=True),
+    MemorySource("pi", USER_SCOPE, (".pi", "agent", "CLAUDE.md")),
+    MemorySource("pi", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("pi", PROJECT_SCOPE, ("AGENTS.override.md",)),
+    MemorySource("pi", PROJECT_SCOPE, ("CLAUDE.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="pi",
     # Open-ended provider/model config; OpenRouter quota is not a CLI host set.
     expected_hosts=(),
     data_dirs=_risk_data_dirs,
     data_dir_env_vars=("PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR"),
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'),
     skills_supported=True,
     # --skill takes one skill (file or directory) and is repeated; it adds to
     # discovery rather than replacing it (--no-skills is the opt-out).
     skills_wiring=SkillsWiring(flag="--skill", flag_takes="each"),
-    label="Pi",
     # Multi-account: ``auth.json`` is a provider map (FileAuthStorageBackend,
     # 0600, written whole under a lock file); a profile binds to one OAuth
     # provider and a switch rewrites that entry only. ``PI_CODING_AGENT_DIR``
@@ -907,13 +910,10 @@ SPEC = VendorSpec(
     ),
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_pi(home),
-    resume_id_from_command=_resume_id_from_command,
+    # Model and effort support, the home variables a spawn strips and
+    # resume-id parsing: the launch declaration.
+    **declared("pi"),
     session_exists=_session_exists,
-    home_env_vars=(
-        "PI_CODING_AGENT_DIR",
-        "PI_CODING_AGENT_SESSION_DIR",
-        "PI_PACKAGE_DIR",
-    ),
     make_log_reader=PiLogReader,
     # Pi ships `pi update` but no doctor subcommand; PI_SKIP_VERSION_CHECK is
     # its own opt-out for the startup version check.

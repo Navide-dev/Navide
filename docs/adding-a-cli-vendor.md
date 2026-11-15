@@ -1,30 +1,57 @@
 # Adding a CLI vendor
 
 Navide supports one CLI agent per vendor file. Adding a vendor is a
-self-contained PR: two new files plus one registration line on each side,
-and the test lists and docs under [Other hand-kept lists](#other-hand-kept-lists).
+self-contained PR: its declaration, two new spec files (found by their names;
+nothing registers them, and the packaged backend collects them), and the test
+lists and docs under [Other hand-kept lists](#other-hand-kept-lists).
 You never need to read or modify the shared orchestration code.
+
+## Declaration
+
+How the CLI is launched and resumed (program, flags, environment, resume
+syntax, label, kind) and where it sits in the app's lists is declared once,
+in `native/navide-cli-runtime/src/vendors/<key>.rs`, and both spec files read
+it through `declared(<key>)` instead of retyping it. Write that file first
+and regenerate the two checked-in copies of the declarations
+(`NAVIDE_DECLARATIONS_WRITE=1 cargo test --test checked_in` in the crate):
+["Exactly which files a new CLI needs"](en-US/cli-extension-guide.md#exactly-which-files-a-new-cli-needs)
+has the steps. Reading the CLI's records through the Rust runtime is a
+separate, optional part of the same file, described in the section after it.
 
 ## Backend
 
 1. Copy `backend/agent_team_backend/cli_vendors/_template.py` to
    `cli_vendors/<key>.py` (short lowercase key, e.g. `mycli`) and fill in
-   the `SPEC`. Every capability you leave at its default is treated as
+   the `SPEC`, spreading `**declared("<key>")` for the launch and resume
+   fields. Every capability you leave at its default is treated as
    "unsupported" for your vendor — the app degrades gracefully.
-2. Register the spec in `cli_vendors/registry.py` (one line, alphabetical).
+2. Do not register it: `cli_vendors/registry.py` imports the module named
+   after each declared key, in the order the declarations give
+   (`order.registry`). The packaged app needs no entry either: the PyInstaller
+   spec collects every module of the `cli_vendors` package
+   (`collect_submodules`, with `on_error="raise"` so a module that fails to
+   import fails the build instead of being left out), and
+   `test_pyinstaller_spec.py` runs that collection, requires the registry
+   module in it, and fails if a module on disk is not in it.
 3. If the CLI writes local conversation logs, implement the log reader in
    your vendor file and set `make_log_reader`.
-4. Add `backend/agent_team_backend/log_readers/<key>.py`. Every registered
-   vendor needs a module there — a re-export shim when you wrote a reader
-   (copy any existing one), an empty placeholder when you did not. If you
-   wrote one, also list its class in `log_readers/__init__.py`
-   (`_MIGRATED_READERS` and `__all__`). Shipping no reader has one consequence
-   worth knowing up front: Navide cannot learn the id of a session it started,
-   so set `supports_session_resume=False` (it defaults to **True**) and leave
+4. If you wrote a reader, add `backend/agent_team_backend/log_readers/<key>.py`
+   as a re-export shim (copy any existing one): a spec that sets
+   `make_log_reader` must have it. A CLI without a reader needs no file there
+   (the empty placeholders of devin, kiro and mcode exist because main had
+   them, and a test holds main's CLIs to their files). Listing the class in
+   `log_readers/__init__.py` (`_MIGRATED_READERS` and `__all__`) is optional
+   and nothing asks for it: it only lets `from agent_team_backend.log_readers
+   import <Key>LogReader` resolve, so add it only if code imports the reader
+   that way. A CLI listed in `_MIGRATED_READERS` is also checked to be a
+   hidden import of the packaged app, which the whole-package collection
+   already satisfies. Shipping no reader has one consequence worth knowing up
+   front: Navide cannot learn the id of a session it started, so set
+   `supports_session_resume=False` (it defaults to **True**) and leave
    `resumeArgs` out of the frontend spec — the two sides are cross-checked.
-5. Add a row to `MEMORY_SOURCES` in
-   `backend/agent_team_backend/native_memory.py` naming the instruction file
-   your CLI reads (`AGENTS.md` for most). Every vendor must be mapped there or
+5. Set `memory_sources` on your `SPEC`, naming the instruction file your CLI
+   reads (`AGENTS.md` for most). `native_memory.py` builds its table from the
+   registry, so nothing there changes. Every vendor must have sources or be
    listed in `_CONFIGURED`; otherwise `test_native_memory` fails with a vendor
    in state `unknown`.
 6. Add `backend/tests/vendors/test_<key>.py` covering what you implemented.
@@ -36,13 +63,16 @@ You never need to read or modify the shared orchestration code.
    unsupported capabilities with negative assertions instead of inventing
    uniform capabilities or skipping the vendor. See
    [CI and CLI regressions](en-US/ci-and-cli-regression.md).
-7. Add your key to the hardcoded lists in the tests: `EXPECTED_KEYS` in
-   `backend/tests/test_cli_vendors_registry.py`, and the `SNAPSHOT` in
-   `backend/tests/vendors/test_install_deps_snapshot.py`. The snapshot is
-   ordered by `DEPS`, which is `_AGENT_CLI_ORDER` first and then the remaining
-   keys in **registry order** — so unless you add your key to
-   `_AGENT_CLI_ORDER`, your entry goes where the key sorts among the others,
-   which is usually *not* the end. Run the test and let the diff place it.
+7. No edit to `backend/tests/vendors/test_install_deps_snapshot.py`: its
+   `SNAPSHOT` is a recording of the entries that existed, compared by id and
+   relative order only. Your own `Dep` is stated in your vendor file and
+   covered by `tests/vendors/test_<key>.py`. (The other recording tests need
+   no entry either: `test_cli_declarations.py`, `test_cli_vendors_registry.py`
+   and `agents/__tests__/declared.test.ts` compare only the CLIs main had, and
+   hold the declared ones to each other.)
+   Pin your data roots there too: `test_risk_declarations.py` checks only
+   that they resolve under the pane home, so the values of `data_dirs` are
+   asserted by your own test file or by nobody.
 8. Only if your spec sets `login_command_args`: add the key to the expected set
    in `backend/tests/test_login_spawn_command.py`.
 9. Account switching is opt-in through `account_switch=AccountSwitchSpec(...)`
@@ -103,8 +133,9 @@ You never need to read or modify the shared orchestration code.
     extension system whose location you have not verified declares
     `ExtensionsSpec(supported=False, note=...)` rather than a guess; only a CLI
     with no extension system at all leaves it `None`, which hides it from the
-    page. `backend/tests/test_cli_extensions.py` fails for a vendor that
-    declares nothing. A CLI Navide lists without running it in a pane (Gemini
+    page, and says why in `extensions_none_reason`.
+    `backend/tests/test_cli_extensions.py` fails for a vendor that declares
+    neither. A CLI Navide lists without running it in a pane (Gemini
     CLI) is declared in `_UNMANAGED_CLIS` in `cli_extensions.py`; when it
     becomes a vendor, move that declaration onto its spec (the vendor spec
     wins while both exist).
@@ -119,14 +150,14 @@ You never need to read or modify the shared orchestration code.
 ## Frontend
 
 1. Copy `src/renderer/src/platform/plugin-shell/agents/_template.ts` to `agents/<key>.ts` and
-   fill in the spec (label, default command, resume syntax, capability
-   flags — the template lists every optional field with pointers to the
-   full docs in `agents/types.ts`).
-2. Register it in `agents/index.ts` (one line, display order).
-   Decide whether the vendor is a CLI or an Agent ("Two kinds of vendors" in
-   `docs/en-US/cli-extension-guide.md`) and set the spec's `kind` field:
-   `kind: 'agent'` for an Agent, left out for a CLI. It picks the ＋ menu
-   block the vendor is listed in.
+   fill in the spec: `...declared('<key>')` for the label, default command,
+   flags and resume syntax, then the capability flags — the template lists
+   every optional field with pointers to the full docs in `agents/types.ts`.
+2. Do not register it: `agents/index.ts` finds every spec file and lists it
+   where the declaration says (`order.menu`). Whether the vendor is a CLI or
+   an Agent ("Two kinds of vendors" in `docs/en-US/cli-extension-guide.md`)
+   is the declaration's `kind`, which `declared()` hands to the spec. It
+   picks the ＋ menu block the vendor is listed in.
 3. Add a row to `vendors` in `src/renderer/src/components/CliAgentsHelp.vue`
    (Settings ▸ Help). It is a hand-maintained mirror, and
    `test_help_panel_sign_in_column_matches_login_command_args` compares its
@@ -134,67 +165,89 @@ You never need to read or modify the shared orchestration code.
 4. Update `src/renderer/src/components/__tests__/CliAgentsHelp.test.ts`: the
    table row count (asserted twice, once per locale), the sign-in command
    list, and the list of which cells render a `<code>` element.
-5. Append your `{ agentKey, label, hint }` to
-   `plugins/navide-plans/src/retained/agentSpecs.ts` — the plans plugin keeps a
-   retained copy that a test compares against the live list.
+5. Do not touch `plugins/navide-plans/src/retained/agentSpecs.ts`: the plans
+   plugin keeps a frozen v1 copy of main's CLIs, and its test compares only
+   the recorded keys against the live list. A new CLI is not added to v1.
 6. Only if your spec declares `home_env_vars`: add each one to
    `SPAWN_ENV_RESERVED_KEYS` in
    `src/renderer/src/platform/plugin-shell/lib/cliLaunchOverride.ts`. This is
    product code, not a test list: a home relocator Navide sets itself must not
    be offered as a user-editable spawn env var, or the page promises an
    override that gets overwritten.
-7. Only if your spec has no `skipPermissionFlag`: update the flagless-vendor
-   list in `src/renderer/src/platform/plugin-shell/lib/cliPermission.test.ts`.
+7. Nothing for a spec with no `skipPermissionFlag`: the flagless-vendor list in
+   `src/renderer/src/platform/plugin-shell/lib/cliPermission.test.ts` is a
+   recorded subset (the six main had), so a new flagless CLI is not added.
 8. Run `pnpm vitest run src/renderer/src/platform/plugin-shell/agents` — the structural tests there
    check your spec against the rules the template states (key matches the
-   filename, the file is registered, `resumeCommandPattern` matches the
+   filename, the file is listed, `resumeCommandPattern` matches the
    command Navide builds for you, no `/g` on a matcher). They need no edit
    when you add a vendor; they discover your file on their own.
 
 ## Other hand-kept lists
 
-The steps above are not the whole set. These lists also name every vendor
-(or every vendor of a kind), and each one fails a test, not a build, when a
-new key is missing — so they are easy to find only after a red run:
+The steps above are not the whole set. A few lists also name every vendor, and
+each one fails a test, not a build, when a new key is missing — so they are
+easy to find only after a red run.
 
-- `backend/tests/test_cli_launch_argv.py` — `EXPECTED_VENDORS`.
-- `backend/tests/cli_regression/support/isolation.py` — `CLI_NAMES` (the
-  binary name, so the regression suite never reaches a real install).
-- `backend/tests/test_spawn_probe_version_drift.py` — every vendor declares a
-  verified version (`cli_verified_version` or the account-switch evidence); a
-  vendor wired from docs with no install declares none and is listed as an
-  exception there instead of inventing one.
-- `backend/tests/test_cli_vendors_registry.py` — besides `EXPECTED_KEYS`, the
-  `test_vendors_without_session_ids` set when `supports_session_resume=False`.
-- `backend/tests/vendors/test_risk_declarations.py` — `DEFAULT_ROOTS` (and the
-  override-variable table) only when the spec declares `data_dirs`.
-- `src/renderer/src/lib/submitTurnConfirm.ts` — `TURN_START_SIGNAL` (`true`
-  only when the log reader reports a turn start; then also add the key to the
-  watched list in `lib/__tests__/submitTurnConfirm.test.ts`).
-- `src/renderer/src/components/ControlPane.vue` — the ＋ menu scroller cap
-  (`.ws-add-scroll` `max-height`, ~24px per CLI row) and `ADD_MENU_MAX_H`
-  above it; `ControlPane.addMenu.test.ts` fails when the CLI list outgrows
-  the cap.
-- `backend/agent_team_backend.spec` — only for a vendor with a log reader
-  (`test_pyinstaller_spec.py` holds that list to `_MIGRATED_READERS`).
-- The vendor count and list in `README.md`, `README.ja-JP.md` and
-  `README.zh-TW.md`, the roster in `docs/en-US/cli-vendor-matrix.md`, the key
-  list and an integration record in `docs/en-US/cli-extension-guide.md`.
+Most lists that used to name every vendor now derive from the declarations or
+the vendor's own spec, or are recorded subsets (a test that holds main's CLIs
+to their recorded values and leaves yours alone), so none of them is edited
+for a new CLI. Found by declaring a throwaway CLI that was a copy of goose,
+adapter files included, and running both suites (it was not committed). The
+throwaway still needed these, and nothing else:
+
+- its regression inventory entry and fixture:
+  `tests/fixtures/cli-regression/catalog.json` and `<key>.json` beside it, and
+  its row in `tests/cli/vendorContracts.test.ts` (the inventory tests fail
+  until both name the CLI);
+- the vendor count and list in `README.md`, `README.ja-JP.md` and
+  `README.zh-TW.md` (`test_readmes_list_every_registered_vendor`), and a row in
+  the `vendors` table of `CliAgentsHelp.vue`;
+- the roster in `docs/en-US/cli-vendor-matrix.md`, the key list and an
+  integration record in `docs/en-US/cli-extension-guide.md` (no test holds
+  these; they go stale quietly).
+
+What the CLI states in its own files, so no shared list changes:
+
+- `memory_sources` on its `VendorSpec` (the instruction files Settings →
+  Memory scans; `native_memory.py` assembles the table from the registry);
+- a verified version (`cli_verified_version`, or the account-switch
+  evidence), or `cli_unverified_reason` when it was wired from docs with no
+  install to run;
+- `data_dirs`, or `data_dirs_none_reason`, for `test_risk_declarations.py`;
+- `extensions`, or `extensions_none_reason` (aider), for `test_cli_extensions.py`;
+- `observed` in its Rust declaration: `helpCliFacts.ts` (`NO_LOG_READER`) and
+  `submitTurnConfirm.ts` (`TURN_START_SIGNAL`) derive from it. It stands for
+  three facts that agree today: the runtime declares the CLI's records, a
+  Python reader exists (the registry test requires the two to be equal), and
+  that reader reports turn starts. A CLI that breaks the equality (a reader
+  that cannot report a turn start, or a Python reader shipped before its Rust
+  declaration) needs a new declared field first; do not set `observed` to
+  paper over it;
+- its binary name: `CLI_NAMES` in the regression guard is built from each
+  declaration's `launch.program`. A second name the CLI answers to (an alias
+  or a legacy binary) is not declared anywhere: add it by hand to the alias
+  set beside it in `backend/tests/cli_regression/support/isolation.py`, or
+  the guard will not refuse a real run of it.
+
+Still by hand, only when the fact applies: `MCP_WIRED` in `helpCliFacts.ts`
+(held to the registry by `test_help_cli_facts_mirror_the_registry`). The ＋
+menu in `ControlPane.vue` needs no edit: its scroller cap is a fixed budget.
 
 Write the spec as `export const SPEC = { … } as const satisfies AgentSpec`,
-never `SPEC: AgentSpec`. The annotation widens `agentKey` to `string`, and
-`index.ts` derives the app-wide `AgentKey` union from these literals — one
-annotated spec collapses that union everywhere. A compile-time assertion in
-`agents/__tests__/specs.test.ts` fails if this regresses.
+never `SPEC: AgentSpec`: the annotation widens every literal in the spec. The
+app-wide `AgentKey` union is the declared keys (`_cli_declarations.ts`, a
+typed constant); a compile-time assertion in `agents/__tests__/specs.test.ts`
+fails if it ever degrades to `string`.
 
 ## Where your vendor shows up in the UI
 
-Registering the spec is all the wiring there is — every surface below reads
-the assembled list, so none of them needs an edit. What the list is, though,
-passes through one filter that is easy to mistake for a bug:
+The declaration and the spec file are all the wiring there is — every surface
+below reads the assembled list, so none of them needs an edit. What the list
+is, though, passes through one filter that is easy to mistake for a bug:
 
 ```
-agents/<key>.ts  →  agents/index.ts (ORDERED)  →  AGENT_SPECS / CLI_AGENT_SPECS
+agents/<key>.ts  →  agents/index.ts (found, in `order.menu`)  →  AGENT_SPECS / CLI_AGENT_SPECS
                                                           │
                         App.vue `enabledAgentSpecs` ──────┘
                         (user's Settings → CLI Agents order + disabled list)
@@ -289,11 +342,13 @@ uv --project backend run pytest backend/tests
 pnpm test:run && pnpm typecheck
 ```
 
-The registry test is your checklist: it fails with a message naming exactly
-which list you forgot (registry, DEPS, log reader, frontend spec) and
-rejects forbidden imports (vendor modules may import only `base`,
-`_protocols`, the standard library, and httpx — never another vendor or any
-app module).
+The registry test is your checklist for the files a CLI of main's kind keeps
+(vendor module, log reader module, frontend spec): it fails naming the missing
+file for every CLI main had, and holds yours to the declaration. The lists
+under [Other hand-kept lists](#other-hand-kept-lists) are what is left to do
+by hand. It also rejects forbidden imports (vendor modules may import only `base`,
+`_declared`, `_protocols`, the standard library, and httpx — never another vendor
+or any app module).
 
 ## Boundaries
 

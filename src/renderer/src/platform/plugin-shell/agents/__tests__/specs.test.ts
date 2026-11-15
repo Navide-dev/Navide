@@ -18,9 +18,10 @@ import { modelArgsFor } from '../../lib/cliModel'
 
 // ── compile-time invariant ─────────────────────────────────────────────────
 // Checked by `pnpm typecheck` (tsconfig.web.json includes this file), not at
-// runtime: if any spec widens its agentKey — `SPEC: AgentSpec` instead of
-// `as const satisfies AgentSpec` — AgentKey degrades to `string`, this type
-// resolves to `false`, and the assignment below stops compiling.
+// runtime: AgentKey is the declared keys of `_cli_declarations.ts`, a typed
+// constant. If that file lost its `as const` (or became a `.json` import),
+// AgentKey would degrade to `string`, this type would resolve to `false`,
+// and the assignment below would stop compiling.
 type IsLiteralUnion<T> = string extends T ? false : true
 const AGENT_KEY_IS_A_LITERAL_UNION: IsLiteralUnion<AgentKey> = true
 
@@ -40,11 +41,18 @@ describe('spec assembly', () => {
     expect(AGENT_KEY_IS_A_LITERAL_UNION).toBe(true)
   })
 
-  it('registers every vendor file in index.ts', () => {
+  it('lists every spec file, found without being registered', () => {
     const onDisk = vendorFiles.filter(({ mod }) => mod.SPEC).map(({ stem }) => stem).sort()
-    const registered = AGENT_SPECS.map((s) => s.agentKey).sort()
+    const registered = AGENT_SPECS.map((s) => s.agentKey)
 
-    expect(registered).toEqual(onDisk)
+    // Every file is listed. A declared CLI may have no file (it is listed
+    // from its declaration alone: `declared.test.ts`), so the reverse is not
+    // required.
+    expect(onDisk.filter((stem) => !registered.includes(stem))).toEqual([])
+    // The list holds the files' own SPEC objects, not copies built beside them.
+    for (const { stem, mod } of vendorFiles) {
+      expect(AGENT_SPECS.find((s) => s.agentKey === stem), stem).toBe(mod.SPEC)
+    }
   })
 
   it('names each spec after its own file', () => {

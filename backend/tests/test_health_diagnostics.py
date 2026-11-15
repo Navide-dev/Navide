@@ -30,6 +30,14 @@ def test_health_reports_loop_lag_and_default_pool(client: TestClient) -> None:
     assert all(isinstance(v, int) and v >= 0 for v in pool.values())
 
 
+def test_health_reports_the_rust_cli_runtime_switch(client: TestClient) -> None:
+    runtime = client.get("/health").json()["diagnostics"]["cli_runtime"]
+
+    assert set(runtime) == {"enabled", "state", "binary", "failures", "runtime", "calls"}
+    assert set(runtime["runtime"]) == {"version", "declarations", "unusable"}
+    assert isinstance(runtime["enabled"], bool) and isinstance(runtime["calls"], dict)
+
+
 def test_health_still_answers_when_measuring_fails(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

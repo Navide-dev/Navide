@@ -85,6 +85,7 @@ from typing import Any
 import yaml
 
 from .applog import app_data_dir
+from .cli_vendors.base import PROJECT_SCOPE, USER_SCOPE, MemorySource  # noqa: F401 — re-exported
 from .cli_vendors.registry import VENDORS
 
 log = logging.getLogger("agent_team_backend.native_memory")
@@ -96,9 +97,6 @@ FILE_SIZE_LIMIT = 1_000_000
 #: Under the app data dir: the previous version of each file a save replaced.
 BACKUP_DIR_NAME = "memory-backups"
 
-USER_SCOPE = "user"
-PROJECT_SCOPE = "project"
-
 #: The reader of auto-memory rows: Claude writes and loads them itself.
 AUTO_MEMORY_AGENT = "claude"
 #: Claude Code cuts a longer project folder name and appends a hash.
@@ -109,167 +107,20 @@ class MemoryConflictError(RuntimeError):
     """The file changed on disk since the editor read it."""
 
 
-@dataclass(frozen=True)
-class MemorySource:
-    """One instruction file one CLI loads, described well enough to find."""
-
-    #: Agent key, as used everywhere else in the backend.
-    agent: str
-    #: ``"user"`` (relative to the real home) or ``"project"`` (relative to
-    #: the workspace root).
-    scope: str
-    #: Path to the file, or -- with ``glob`` -- to the directory holding them.
-    relative: tuple[str, ...]
-    #: True when this is the file Navide offers to create for the agent. A
-    #: canonical row is listed even when the file does not exist yet; the
-    #: others are listed only once the user has one.
-    canonical: bool = False
-    #: Non-empty when ``relative`` is a directory of instruction files rather
-    #: than a single file, e.g. cursor's ``.cursor/rules``.
-    glob: str = ""
-
-
-#: Where each CLI looks for its instructions. Verified 2026-08-28 against the
-#: installed binary or its bundled docs -- never against documentation alone.
-#: A file read by several CLIs gets one row per reader; ``scan`` merges them.
-MEMORY_SOURCES: tuple[MemorySource, ...] = (
-    # -- claude: ~/.claude/CLAUDE.md plus the project file and its untracked
-    # sibling; nested CLAUDE.md files load per directory (not enumerated).
-    MemorySource("claude", USER_SCOPE, (".claude", "CLAUDE.md"), canonical=True),
-    MemorySource("claude", PROJECT_SCOPE, ("CLAUDE.md",), canonical=True),
-    MemorySource("claude", PROJECT_SCOPE, ("CLAUDE.local.md",)),
-    MemorySource("claude", PROJECT_SCOPE, (".claude", "CLAUDE.md")),
-    # -- codex: AGENTS.md, with AGENTS.override.md replacing it per directory.
-    MemorySource("codex", USER_SCOPE, (".codex", "AGENTS.md"), canonical=True),
-    MemorySource("codex", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("codex", PROJECT_SCOPE, ("AGENTS.override.md",)),
-    # -- antigravity: readGlobalRules stats both ~/.gemini and ~/.gemini/config
-    # for each of the two filenames; the project tier walks cwd up to the git
-    # root. The .agents/rules aliases (.agent, _agents, _agent) are not listed.
-    MemorySource("antigravity", USER_SCOPE, (".gemini", "GEMINI.md"), canonical=True),
-    MemorySource("antigravity", USER_SCOPE, (".gemini", "AGENTS.md")),
-    MemorySource("antigravity", USER_SCOPE, (".gemini", "config", "GEMINI.md")),
-    MemorySource("antigravity", USER_SCOPE, (".gemini", "config", "AGENTS.md")),
-    MemorySource("antigravity", PROJECT_SCOPE, ("GEMINI.md",), canonical=True),
-    MemorySource("antigravity", PROJECT_SCOPE, ("AGENTS.md",)),
-    MemorySource("antigravity", PROJECT_SCOPE, (".agents", "rules"), glob="*.md"),
-    # -- copilot: `copilot init` writes the .github file; AGENTS.md is loaded
-    # too ("--no-custom-instructions ... from AGENTS.md and related files").
-    MemorySource(
-        "copilot", PROJECT_SCOPE, (".github", "copilot-instructions.md"), canonical=True
-    ),
-    MemorySource("copilot", PROJECT_SCOPE, ("AGENTS.md",)),
-    # -- cursor: rules live in .cursor/rules/**/*.mdc; it also reads the
-    # other agents' project files verbatim.
-    MemorySource("cursor", PROJECT_SCOPE, (".cursor", "rules"), glob="**/*.mdc"),
-    MemorySource("cursor", PROJECT_SCOPE, ("AGENTS.md",)),
-    MemorySource("cursor", PROJECT_SCOPE, ("CLAUDE.md",)),
-    MemorySource("cursor", PROJECT_SCOPE, ("CLAUDE.local.md",)),
-    MemorySource("cursor", PROJECT_SCOPE, (".cursorrules",)),
-    # cursor has no user-scope loader: loadRulesFromDirAndAncestors walks up to
-    # the filesystem root, so the home tree is reached only while the workspace
-    # lives under it -- true for a normal project, false on an external volume.
-    MemorySource("cursor", USER_SCOPE, (".cursor", "rules"), glob="**/*.mdc"),
-    MemorySource("cursor", USER_SCOPE, ("AGENTS.md",)),
-    MemorySource("cursor", USER_SCOPE, ("CLAUDE.md",)),
-    MemorySource("cursor", USER_SCOPE, ("CLAUDE.local.md",)),
-    # -- devin: every standard file is an always-on rule, user and project
-    # loaded together; ~/.config/devin/AGENTS.md is %APPDATA%\devin on Windows
-    # (docs.devin.ai/cli/extensibility/rules, read 2026-11-07 -- docs only).
-    MemorySource("devin", USER_SCOPE, (".config", "devin", "AGENTS.md"), canonical=True),
-    MemorySource("devin", USER_SCOPE, (".devin", "global_rules.md")),
-    MemorySource("devin", USER_SCOPE, (".devin", "rules"), glob="*.md"),
-    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("devin", PROJECT_SCOPE, ("AGENTS.local.md",)),
-    MemorySource("devin", PROJECT_SCOPE, ("AGENT.md",)),
-    MemorySource("devin", PROJECT_SCOPE, ("CLAUDE.md",)),
-    MemorySource("devin", PROJECT_SCOPE, (".devin", "global_rules.md")),
-    MemorySource("devin", PROJECT_SCOPE, (".devin", "rules"), glob="*.md"),
-    # -- droid: three personal dot dirs (the bare home is explicitly skipped),
-    # and the same dirs per project level. The Claude.md/Agents.md/agents.md
-    # spellings are the same files on a case-insensitive volume, so one row.
-    MemorySource("droid", USER_SCOPE, (".factory", "AGENTS.md"), canonical=True),
-    MemorySource("droid", USER_SCOPE, (".factory", "CLAUDE.md")),
-    MemorySource("droid", USER_SCOPE, (".agents", "AGENTS.md")),
-    MemorySource("droid", USER_SCOPE, (".agent", "AGENTS.md")),
-    MemorySource("droid", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("droid", PROJECT_SCOPE, ("CLAUDE.md",)),
-    MemorySource("droid", PROJECT_SCOPE, (".factory", "AGENTS.md")),
-    MemorySource("droid", PROJECT_SCOPE, (".agents", "AGENTS.md")),
-    # -- goose: CONTEXT_FILE_NAMES (default .goosehints, AGENTS.md) in the
-    # config dir ($XDG_CONFIG_HOME/goose, or $GOOSE_PATH_ROOT/config) and
-    # ~/.agents/AGENTS.md, then per directory from the git root down
-    # (crates/goose/src/hints/load_hints.rs, 1.55.0).
-    MemorySource("goose", USER_SCOPE, (".config", "goose", ".goosehints"), canonical=True),
-    MemorySource("goose", USER_SCOPE, (".config", "goose", "AGENTS.md")),
-    MemorySource("goose", USER_SCOPE, (".agents", "AGENTS.md")),
-    MemorySource("goose", PROJECT_SCOPE, (".goosehints",), canonical=True),
-    MemorySource("goose", PROJECT_SCOPE, ("AGENTS.md",)),
-    # -- hermes: one project file per session, first match of .hermes.md /
-    # HERMES.md (up to the git root), AGENTS.override.md, AGENTS.md (merged
-    # git root -> cwd), CLAUDE.md, .cursorrules; SOUL.md only from the Hermes
-    # home (docs/user-guide/features/context-files, read 2026-11-07).
-    MemorySource("hermes", USER_SCOPE, (".hermes", "SOUL.md"), canonical=True),
-    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("hermes", PROJECT_SCOPE, (".hermes.md",)),
-    MemorySource("hermes", PROJECT_SCOPE, ("HERMES.md",)),
-    MemorySource("hermes", PROJECT_SCOPE, ("AGENTS.override.md",)),
-    MemorySource("hermes", PROJECT_SCOPE, ("CLAUDE.md",)),
-    # -- grok: ~/.grok/AGENTS.md, then AGENTS.override.md/AGENTS.md per level.
-    MemorySource("grok", USER_SCOPE, (".grok", "AGENTS.md"), canonical=True),
-    MemorySource("grok", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("grok", PROJECT_SCOPE, ("AGENTS.override.md",)),
-    # -- kilo: its own config dir, and ~/.claude/CLAUDE.md unless disabled.
-    MemorySource("kilo", USER_SCOPE, (".config", "kilo", "AGENTS.md"), canonical=True),
-    MemorySource("kilo", USER_SCOPE, (".claude", "CLAUDE.md")),
-    MemorySource("kilo", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("kilo", PROJECT_SCOPE, ("CLAUDE.md",)),
-    MemorySource("kilo", PROJECT_SCOPE, ("CONTEXT.md",)),
-    # -- kimi: $KIMI_CODE_HOME/AGENTS.md, else ~/.kimi-code/AGENTS.md.
-    MemorySource("kimi", USER_SCOPE, (".kimi-code", "AGENTS.md"), canonical=True),
-    MemorySource("kimi", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    # -- kiro: steering files, global under the home and per workspace, plus
-    # AGENTS.md at the workspace root (kiro.dev/docs/steering, read
-    # 2026-11-12 -- docs only, no binary installed).
-    MemorySource("kiro", USER_SCOPE, (".kiro", "steering"), glob="*.md"),
-    MemorySource("kiro", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("kiro", PROJECT_SCOPE, (".kiro", "steering"), glob="*.md"),
-    # -- mcode: `mcode init .` writes AGENTS.md from a directory analysis,
-    # which is the only instruction file the CLI documents. No user-scope row:
-    # the data dir (~/.minimax, $MINIMAX_DATA_DIR) holds config.yaml, auth and
-    # the session SQLite, and nothing observed there is an instruction file —
-    # `agents/` is agent DEFINITIONS (agent.md per built-in agent), not memory.
-    MemorySource("mcode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    # -- muse: $XDG_CONFIG_HOME/muse (default ~/.config/muse), then every level
-    # from the VCS root down. CLAUDE.md is read only where AGENTS.md is absent.
-    MemorySource("muse", USER_SCOPE, (".config", "muse", "AGENTS.md"), canonical=True),
-    MemorySource("muse", USER_SCOPE, (".config", "muse", "CLAUDE.md")),
-    MemorySource("muse", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("muse", PROJECT_SCOPE, ("CLAUDE.md",)),
-    # -- opencode: same loader family as kilo.
-    MemorySource(
-        "opencode", USER_SCOPE, (".config", "opencode", "AGENTS.md"), canonical=True
-    ),
-    MemorySource("opencode", USER_SCOPE, (".claude", "CLAUDE.md")),
-    MemorySource("opencode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("opencode", PROJECT_SCOPE, ("CLAUDE.md",)),
-    MemorySource("opencode", PROJECT_SCOPE, ("CONTEXT.md",)),
-    # -- openclaw: bootstrap files come from the agent workspace
-    # (~/.openclaw/workspace; OPENCLAW_WORKSPACE_DIR / profile relocate it),
-    # not from the TUI's cwd (docs/concepts/agent-workspace, read 2026-11-07).
-    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "AGENTS.md"), canonical=True),
-    MemorySource("openclaw", USER_SCOPE, (".openclaw", "workspace", "SOUL.md")),
-    # -- pi: ~/.pi/agent/ and every ancestor directory, override first.
-    MemorySource("pi", USER_SCOPE, (".pi", "agent", "AGENTS.md"), canonical=True),
-    MemorySource("pi", USER_SCOPE, (".pi", "agent", "CLAUDE.md")),
-    MemorySource("pi", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
-    MemorySource("pi", PROJECT_SCOPE, ("AGENTS.override.md",)),
-    MemorySource("pi", PROJECT_SCOPE, ("CLAUDE.md",)),
-    # -- qwen: hierarchical QWEN.md, plus the private project-local file.
-    MemorySource("qwen", USER_SCOPE, (".qwen", "QWEN.md"), canonical=True),
-    MemorySource("qwen", PROJECT_SCOPE, ("QWEN.md",), canonical=True),
-    MemorySource("qwen", PROJECT_SCOPE, (".qwen", "QWEN.local.md")),
-    MemorySource("qwen", PROJECT_SCOPE, ("AGENTS.md",)),
+#: Where each CLI looks for its instructions: every vendor's own
+#: ``VendorSpec.memory_sources``, in registry order (verified against the
+#: installed binary or its bundled docs, never against documentation alone;
+#: see each ``cli_vendors/<key>.py``). A file read by several CLIs has one row
+#: per reader; ``scan`` merges them. The order is not observable except in one
+#: case: ``candidates`` keeps the scope and relative path of the first row to
+#: reach a path, so when the workspace is itself a CLI's user directory (``~/.codex``)
+#: its ``AGENTS.md`` is listed under the first project row's label (registry
+#: order: Project ``AGENTS.md``), where main listed it under User
+#: ``.codex/AGENTS.md``. Readers are sorted and ``canonical`` is merged by OR,
+#: and the set of allowed paths does not depend on the order. Pinned by
+#: ``test_native_memory.py``.
+MEMORY_SOURCES: tuple[MemorySource, ...] = tuple(
+    source for spec in VENDORS.values() for source in spec.memory_sources
 )
 
 #: aider is the one CLI with no filename of its own: ``main.py`` loads whatever

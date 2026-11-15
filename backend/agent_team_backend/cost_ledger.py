@@ -180,9 +180,10 @@ def transcript_cwd(usage: TokenUsage) -> str:
     cwd = usage.cwd
     if usage.vendor == "claude":
         if _claude_reader is None:
+            from . import cli_runtime
             from .cli_vendors.claude import ClaudeLogReader
 
-            _claude_reader = ClaudeLogReader()
+            _claude_reader = cli_runtime.wrap(ClaudeLogReader())
         cwd = _claude_reader._session_cwd(Path(usage.file_path)) or ""
     return unicodedata.normalize("NFC", cwd or "")
 
@@ -514,11 +515,15 @@ def main(argv: list[str]) -> int:
     if len(argv) != 2 or argv[0] != "backfill":
         print("usage: python -m agent_team_backend.cost_ledger backfill <navide.db>")
         return 2
+    from . import cli_runtime
     from .cli_vendors.claude import ClaudeLogReader
     from .cli_vendors.codex import CodexLogReader
 
+    # Wrapped like the backend's own readers. This is a separate process that
+    # applies no setting, so they read with main's Python code.
     ledger = CostLedger(Database(Path(argv[1])))
-    written, skipped = backfill(ledger, [ClaudeLogReader(), CodexLogReader()])
+    readers = [cli_runtime.wrap(ClaudeLogReader()), cli_runtime.wrap(CodexLogReader())]
+    written, skipped = backfill(ledger, readers)
     print(f"written={written} skipped={skipped}")
     return 0
 

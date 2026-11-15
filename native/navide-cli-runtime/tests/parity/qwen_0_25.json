@@ -1,0 +1,341 @@
+{
+ "vendor": "qwen",
+ "file": "qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"uuid\": \"s1\", \"parentUuid\": null, \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:00.000Z\", \"type\": \"system\", \"provenance\": \"system\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"session_approval_mode\", \"systemPayload\": {\"mode\": \"default\"}}\n{\"uuid\": \"u1\", \"parentUuid\": \"s1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:01.000Z\", \"type\": \"user\", \"provenance\": \"real_user\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"promptId\": \"p-u1\", \"executionContext\": {\"modelId\": \"qwen3-coder-plus\", \"approvalMode\": \"default\"}, \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"first prompt\"}]}, \"systemPayload\": {\"displayText\": \"first prompt\"}}\n{\"uuid\": \"s2\", \"parentUuid\": \"u1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:02.000Z\", \"type\": \"system\", \"provenance\": \"system\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"turn_attempt\", \"systemPayload\": {}}\n{\"uuid\": \"a1\", \"parentUuid\": \"s2\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:03.000Z\", \"type\": \"assistant\", \"provenance\": \"assistant_output\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"model\": \"qwen3-coder-plus\", \"message\": {\"role\": \"model\", \"parts\": [{\"text\": \"working on it\"}]}, \"usageMetadata\": {\"promptTokenCount\": 1000, \"candidatesTokenCount\": 40, \"cachedContentTokenCount\": 600, \"thoughtsTokenCount\": 10, \"totalTokenCount\": 1050}, \"contextWindowSize\": 1000000}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "qwen",
+       "input_tokens": 1000,
+       "output_tokens": 50,
+       "cwd": "/Users/me/proj",
+       "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+       "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+       "dedup_key": "a1",
+       "timestamp": "2026-10-20T10:00:03.000Z",
+       "model": "qwen3-coder-plus",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1587,
+        "anchor": "64941af0eb6feda3",
+        "recent_keys": [
+         "a1"
+        ]
+       },
+       "raw": {},
+       "cache_read_tokens": 600,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.25.3"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1587,
+      "anchor": "64941af0eb6feda3",
+      "recent_keys": [
+       "a1"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-10-20T10:00:01.000Z",
+      "detail": "user",
+      "text": "first prompt",
+      "full": "first prompt"
+     },
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "2026-10-20T10:00:03.000Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::4",
+     "qwen_text::working on it",
+     "qwen_turn::{\"idx\": 0, \"flushed\": false, \"ts\": \"2026-10-20T10:00:03.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"uuid\": \"t1\", \"parentUuid\": \"a1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:04.000Z\", \"type\": \"tool_result\", \"provenance\": \"tool_result\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"message\": {\"role\": \"user\", \"parts\": [{\"functionResponse\": {\"name\": \"x\"}}]}}\n{\"uuid\": \"m1\", \"parentUuid\": \"t1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:05.000Z\", \"type\": \"user\", \"provenance\": \"external_agent\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"agent_message\", \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"note from another agent\"}]}, \"systemPayload\": {\"author\": {\"agentId\": \"agent-fixture\", \"name\": \"worker\"}}, \"externalRecordKey\": \"k-m1\", \"agentId\": \"agent-fixture\", \"agentName\": \"worker\"}\n{\"uuid\": \"m2\", \"parentUuid\": \"m1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:06.000Z\", \"type\": \"user\", \"provenance\": \"external_agent\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"agent_mention\", \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"note from another agent\"}]}, \"systemPayload\": {\"author\": {\"agentId\": \"agent-fixture\", \"name\": \"worker\"}}, \"externalRecordKey\": \"k-m2\"}\n{\"uuid\": \"a2\", \"parentUuid\": \"m2\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:07.000Z\", \"type\": \"assistant\", \"provenance\": \"assistant_output\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"model\": \"qwen3-coder-plus\", \"message\": {\"role\": \"model\", \"parts\": [{\"text\": \"first reply\"}]}, \"usageMetadata\": {\"promptTokenCount\": 1200, \"candidatesTokenCount\": 60, \"cachedContentTokenCount\": 1000, \"thoughtsTokenCount\": 0, \"totalTokenCount\": 1260}, \"contextWindowSize\": 1000000}\n",
+   "mtime": 1792000002,
+   "now": 1792000003,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "qwen",
+       "input_tokens": 1200,
+       "output_tokens": 60,
+       "cwd": "/Users/me/proj",
+       "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+       "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+       "dedup_key": "a2",
+       "timestamp": "2026-10-20T10:00:07.000Z",
+       "model": "qwen3-coder-plus",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 3405,
+        "anchor": "18f639bd44ccdef6",
+        "recent_keys": [
+         "a1",
+         "a2"
+        ]
+       },
+       "raw": {},
+       "cache_read_tokens": 1000,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.25.3"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 3405,
+      "anchor": "18f639bd44ccdef6",
+      "recent_keys": [
+       "a1",
+       "a2"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "act:8",
+      "timestamp": "2026-10-20T10:00:07.000Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::8",
+     "qwen_text::first reply",
+     "qwen_turn::{\"idx\": 0, \"flushed\": false, \"ts\": \"2026-10-20T10:00:07.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"uuid\": \"u2\", \"parentUuid\": \"a2\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:08.000Z\", \"type\": \"user\", \"provenance\": \"real_user\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"promptId\": \"p-u2\", \"executionContext\": {\"modelId\": \"qwen3-coder-plus\", \"approvalMode\": \"default\"}, \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"second prompt\"}]}, \"systemPayload\": {\"displayText\": \"second prompt\"}}\n{\"uuid\": \"a3\", \"parentUuid\": \"u2\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:09.000Z\", \"type\": \"assistant\", \"provenance\": \"assistant_output\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"model\": \"qwen3-coder-plus\", \"message\": {\"role\": \"model\", \"parts\": [{\"text\": \"second reply\"}]}, \"usageMetadata\": {\"promptTokenCount\": 1500, \"candidatesTokenCount\": 30, \"cachedContentTokenCount\": 1200, \"thoughtsTokenCount\": 5, \"totalTokenCount\": 1535}, \"contextWindowSize\": 1000000}\n{\"uuid\": \"n1\", \"parentUuid\": \"a3\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:10.000Z\", \"type\": \"user\", \"provenance\": \"real_user\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"notification\", \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"<task-notification>\\n<task-id>bg-7</task-id>\\n<status>completed</status>\\n</task-notification>\"}]}}\n{\"uuid\": \"n2\", \"parentUuid\": \"n1\", \"sessionId\": \"2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25\", \"timestamp\": \"2026-10-20T10:00:11.000Z\", \"type\": \"user\", \"provenance\": \"real_user\", \"cwd\": \"/Users/me/proj\", \"version\": \"0.25.3\", \"gitBranch\": \"main\", \"subtype\": \"notification\", \"message\": {\"role\": \"user\", \"parts\": [{\"text\": \"<task-notification>\\n<task-id>bg-8</task-id>\\n<status>running</status>\\n</task-notification>\"}]}}\n",
+   "mtime": 1792000004,
+   "now": 1792000005,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "qwen",
+       "input_tokens": 1500,
+       "output_tokens": 35,
+       "cwd": "/Users/me/proj",
+       "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+       "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+       "dedup_key": "a3",
+       "timestamp": "2026-10-20T10:00:09.000Z",
+       "model": "qwen3-coder-plus",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 4395,
+        "anchor": "f28392c7a6cd8588",
+        "recent_keys": [
+         "a1",
+         "a2",
+         "a3"
+        ]
+       },
+       "raw": {},
+       "cache_read_tokens": 1200,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.25.3"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 5221,
+      "anchor": "f28392c7a6cd8588",
+      "recent_keys": [
+       "a1",
+       "a2",
+       "a3"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "qwen",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "turn:0",
+      "timestamp": "2026-10-20T10:00:07.000Z",
+      "detail": "boundary",
+      "text": "first reply"
+     },
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "act:9",
+      "timestamp": "2026-10-20T10:00:08.000Z",
+      "detail": "user",
+      "text": "second prompt",
+      "full": "second prompt"
+     },
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "act:10",
+      "timestamp": "2026-10-20T10:00:09.000Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "qwen",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "bg:11",
+      "timestamp": "2026-10-20T10:00:10.000Z",
+      "detail": "background:end",
+      "text": "bg-7"
+     }
+    ],
+    "bag": [
+     "act_hw::12",
+     "qwen_text::second reply",
+     "qwen_turn::{\"idx\": 1, \"flushed\": false, \"ts\": \"2026-10-20T10:00:09.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000004,
+   "now": 1792000014,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 5221,
+      "anchor": "f28392c7a6cd8588",
+      "recent_keys": [
+       "a1",
+       "a2",
+       "a3"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "qwen",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+      "file_path": "<root>/qwen/projects/-Users-me-proj/chats/2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25.jsonl",
+      "dedup_key": "turn:1",
+      "timestamp": "2026-10-20T10:00:09.000Z",
+      "detail": "idle",
+      "text": "second reply"
+     }
+    ],
+    "bag": [
+     "act_hw::12",
+     "qwen_turn::{\"idx\": 1, \"flushed\": true, \"ts\": \"2026-10-20T10:00:09.000Z\"}"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+   "started_at": "2026-10-20T10:00:01.000Z",
+   "ended_at": "2026-10-20T10:00:07.000Z",
+   "prompt_excerpt": "first prompt",
+   "input": 2200,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 110,
+   "calls": [
+    {
+     "ts": "2026-10-20T10:00:03.000Z",
+     "model": "qwen3-coder-plus",
+     "input": 1000,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 50,
+     "cli_version": ""
+    },
+    {
+     "ts": "2026-10-20T10:00:07.000Z",
+     "model": "qwen3-coder-plus",
+     "input": 1200,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 60,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  },
+  {
+   "turn_index": 2,
+   "session_id": "2a0c9d5e-2f4a-4c0e-9b7d-3a5c8e9f0a25",
+   "started_at": "2026-10-20T10:00:08.000Z",
+   "ended_at": "2026-10-20T10:00:09.000Z",
+   "prompt_excerpt": "second prompt",
+   "input": 1500,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 35,
+   "calls": [
+    {
+     "ts": "2026-10-20T10:00:09.000Z",
+     "model": "qwen3-coder-plus",
+     "input": 1500,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 35,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

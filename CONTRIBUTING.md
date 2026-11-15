@@ -47,7 +47,10 @@ Describe the problem you are trying to solve and the solution you have in mind.
 ## Development Setup / 開發環境設定
 
 **Requirements:** Node.js 22.12+ (22.x), pnpm 10+, Python 3.12+, uv 0.11+, Go 1.27.x
-for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64
+for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64.
+Rust 1.85+ (`rust-version` of `native/navide-cli-runtime`) is needed to change a
+CLI declaration or to build or test that crate — not to run the app, whose
+Rust runtime is experimental and off by default.
 
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
@@ -238,9 +241,15 @@ CI runs its install, typecheck and test jobs on Bun (`bun install --frozen-lockf
   build if you do.
 
 **Adding a CLI agent**
-- Follow [`docs/adding-a-cli-vendor.md`](docs/adding-a-cli-vendor.md). An
-  integration is two vendor spec files plus registration — never an
-  `if agent_key == "<yours>"` branch in a shared module.
+- Follow [`docs/adding-a-cli-vendor.md`](docs/adding-a-cli-vendor.md). A CLI is
+  declared once, in `native/navide-cli-runtime/src/vendors/<key>.rs` (launch,
+  resume, label, order); the backend's vendor module and the frontend's agent
+  spec read that declaration with `declared(...)`, and nothing is registered by
+  hand — never an `if agent_key == "<yours>"` branch in a shared module.
+- After changing a declaration, regenerate the checked-in copies the backend
+  and frontend read, in `native/navide-cli-runtime`, and commit them with it:
+  `NAVIDE_DECLARATIONS_WRITE=1 cargo test --test checked_in`. Plain
+  `cargo test` fails with that command's name when they are stale.
 
 **Tests that have to pass on macOS, Linux and Windows**
 

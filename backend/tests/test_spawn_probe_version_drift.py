@@ -52,14 +52,27 @@ def _effective(spec) -> str:
 _VERIFIED = [(spec.key, _effective(spec)) for spec in VENDORS.values() if _effective(spec)]
 
 
-def test_every_vendor_has_a_verified_version() -> None:
+def test_every_vendor_has_a_verified_version_or_says_why_it_has_none() -> None:
     # Goose has no account switching, so its version is CLI-wide only.
-    # OpenClaw and Hermes Agent were wired from their docs with no install to
-    # run, so they declare no verified version rather than an invented one;
-    # Devin CLI and Kiro CLI likewise (docs read 2026-11-07 and 2026-11-12,
-    # no binary installed).
-    assert {key for key, _ in _VERIFIED} == set(VENDORS) - {"openclaw", "hermes", "devin", "kiro"}
-    assert len(_VERIFIED) == 16
+    # A vendor wired from docs with no install to run declares no verified
+    # version rather than an invented one, and says so in its own file
+    # (`cli_unverified_reason`): exactly one of the two, so a new CLI states
+    # which, and no list here is edited for it.
+    for key, spec in VENDORS.items():
+        assert bool(_effective(spec)) != bool(spec.cli_unverified_reason), (
+            f"{key}: declare a verified version, or `cli_unverified_reason` (never both)"
+        )
+    # The ones main left unverified still are (OpenClaw and Hermes Agent, wired
+    # from their docs; Devin CLI and Kiro CLI, docs read 2026-11-07 and
+    # 2026-11-12, no binary installed), and main's sixteen still are verified,
+    # by key: a CLI added later is in neither set and needs no edit here.
+    unverified = {key for key, spec in VENDORS.items() if spec.cli_unverified_reason}
+    assert {"openclaw", "hermes", "devin", "kiro"} <= unverified
+    verified = {key for key, _ in _VERIFIED}
+    assert {
+        "aider", "antigravity", "claude", "codex", "copilot", "cursor", "droid", "goose",
+        "grok", "kilo", "kimi", "mcode", "muse", "opencode", "pi", "qwen",
+    } <= verified
 
 
 def test_goose_and_kimi_compare_against_their_cli_wide_version() -> None:

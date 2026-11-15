@@ -1,0 +1,174 @@
+{
+ "vendor": "claude",
+ "file": "claude/projects/-tmp-demo/bad-1.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"user\", \"promptId\": \"p1\", \"timestamp\": \"2026-09-18T00:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"before the bad line\"}}\n{\"type\": \"assistant\", \"requestId\": \"r1\", \"timestamp\": \"2026-09-18T00:00:01Z\", \"message\": {\"id\": \"m1\", \"model\": \"claude-opus-4-7\", \"stop_reason\": \"end_turn\", \"content\": [{\"type\": \"text\", \"text\": \"…\"}], \"usage\": {\"input_tokens\": 4, \"cache_read_input_tokens\": 0, \"cache_creation_input_tokens\": 0, \"output_tokens\": 2}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 4,
+       "output_tokens": 2,
+       "cwd": "/tmp/demo",
+       "session_id": "bad-1",
+       "file_path": "<root>/claude/projects/-tmp-demo/bad-1.jsonl",
+       "dedup_key": "m1::r1",
+       "timestamp": "2026-09-18T00:00:01Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 453,
+        "anchor": "9027597690f0d86d",
+        "recent_keys": [
+         "m1::r1"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 453,
+      "anchor": "9027597690f0d86d",
+      "recent_keys": [
+       "m1::r1"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "bad-1",
+      "file_path": "<root>/claude/projects/-tmp-demo/bad-1.jsonl",
+      "dedup_key": "act:1",
+      "timestamp": "2026-09-18T00:00:00Z",
+      "detail": "user",
+      "text": "before the bad line",
+      "full": "before the bad line"
+     },
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "bad-1",
+      "file_path": "<root>/claude/projects/-tmp-demo/bad-1.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-09-18T00:00:01Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "claude",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "bad-1",
+      "file_path": "<root>/claude/projects/-tmp-demo/bad-1.jsonl",
+      "dedup_key": "turn:2",
+      "timestamp": "2026-09-18T00:00:01Z",
+      "detail": "end_turn",
+      "text": "…"
+     }
+    ],
+    "bag": [
+     "act_hw::2"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "b64": "eyJ0eXBlIjoiYXNzaXN0YW50IiwidGltZXN0YW1wIjoiMjAyNi0wOS0xOFQwMDowMDowMloiLCJtZXNzYWdlIjp7ImNvbnRlbnQiOiL//iJ9fQp7InR5cGUiOiAiYXNzaXN0YW50IiwgInJlcXVlc3RJZCI6ICJyMiIsICJ0aW1lc3RhbXAiOiAiMjAyNi0wOS0xOFQwMDowMDowM1oiLCAibWVzc2FnZSI6IHsiaWQiOiAibTIiLCAibW9kZWwiOiAiY2xhdWRlLW9wdXMtNC03IiwgInN0b3BfcmVhc29uIjogImVuZF90dXJuIiwgImNvbnRlbnQiOiBbeyJ0eXBlIjogInRleHQiLCAidGV4dCI6ICLigKYifV0sICJ1c2FnZSI6IHsiaW5wdXRfdG9rZW5zIjogNywgImNhY2hlX3JlYWRfaW5wdXRfdG9rZW5zIjogMCwgImNhY2hlX2NyZWF0aW9uX2lucHV0X3Rva2VucyI6IDAsICJvdXRwdXRfdG9rZW5zIjogMX19fQo=",
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 7,
+       "output_tokens": 1,
+       "cwd": "/tmp/demo",
+       "session_id": "bad-1",
+       "file_path": "<root>/claude/projects/-tmp-demo/bad-1.jsonl",
+       "dedup_key": "m2::r2",
+       "timestamp": "2026-09-18T00:00:03Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 854,
+        "anchor": "e1ed6b7b90e4e1c9",
+        "recent_keys": [
+         "m1::r1",
+         "m2::r2"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 854,
+      "anchor": "e1ed6b7b90e4e1c9",
+      "recent_keys": [
+       "m1::r1",
+       "m2::r2"
+      ]
+     }
+    },
+    "activity": [],
+    "activity_error": "decode",
+    "bag": [
+     "act_hw::2"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000001,
+   "now": 1792000003,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 854,
+      "anchor": "e1ed6b7b90e4e1c9",
+      "recent_keys": [
+       "m1::r1",
+       "m2::r2"
+      ]
+     }
+    },
+    "activity": [],
+    "activity_error": "decode",
+    "bag": [
+     "act_hw::2"
+    ]
+   }
+  }
+ ],
+ "turns": {
+  "error": "decode"
+ }
+}

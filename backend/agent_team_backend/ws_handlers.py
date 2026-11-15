@@ -5252,6 +5252,10 @@ async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payloa
 
     if acp_switch.SETTING_KEY in delta:
         acp_switch.apply_settings(delta)
+    from . import cli_runtime
+
+    if cli_runtime.SETTING_KEY in delta:
+        cli_runtime.apply_settings(delta)
     if delta:
         # Other windows (EditorWindow, roles/stages) hold their own ws
         # connections — broadcast the merged delta so their caches

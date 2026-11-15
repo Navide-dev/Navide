@@ -1,20 +1,16 @@
 /** Claude Code — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'claude',
-  label: 'Claude Code (Anthropic)',
-  defaultCommand: 'claude',
-  // `--effort` warns and falls back to the default on an unknown value
-  // (exit 0), so an unchecked typo would run at the wrong effort and look
-  // like it worked — hence knownEfforts. `ultracode` is deliberately absent:
-  // it is a Claude Code orchestration mode, not a model effort level.
-  modelArgs: (m) => `--model ${m}`,
-  effortArgs: (e) => `--effort ${e}`,
-  knownEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-  skipPermissionFlag: '--dangerously-skip-permissions',
-  resumeArgs: (id) => `--resume ${id}`,
+  // Label, command, flags and resume arguments: the launch declaration. It
+  // lists the efforts because `--effort` warns and falls back to the default
+  // on an unknown value (exit 0), so an unchecked typo would run at the wrong
+  // effort and look like it worked. `ultracode` is deliberately absent: it is
+  // a Claude Code orchestration mode, not a model effort level.
+  ...declared('claude'),
   supportsRebuild: true,
   verifiedTurnText: true,
   bracketedPaste: true,

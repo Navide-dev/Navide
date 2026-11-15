@@ -98,6 +98,9 @@ jobs:
           # likely has no effect; it stays for anything that still starts a
           # real Node.js, matching CI's test jobs.
           NODE_OPTIONS: "--max-old-space-size=4096"
+          # These gates compile no Rust: the backend tests that run the Rust
+          # CLI runtime skip here, and run in CI's cli-runtime job.
+          NAVIDE_CLI_RUNTIME_REQUIRED: '0'
         run: |
           uv --project backend run --locked ruff check backend
           bun run typecheck
@@ -115,7 +118,9 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: native/navide-stt
+          workspaces: |
+            native/navide-stt
+            native/navide-cli-runtime
 
       - name: Build speech-to-text sidecar
         # Compiles whisper.cpp (cmake) into build/stt/, which electron-builder
@@ -125,6 +130,16 @@ jobs:
         env:
           NAVIDE_STT_REQUIRED: '1'
         run: bun run build:stt
+
+      - name: Build Rust CLI runtime sidecar
+        # Into build/cli-runtime/, which electron-builder packages as
+        # bin/navide-cli-runtime (signed and notarized with the app). Required
+        # here: without it the rustCliRuntime setting finds no binary in the
+        # release and every reader silently stays on Python.
+        shell: bash
+        env:
+          NAVIDE_CLI_RUNTIME_REQUIRED: '1'
+        run: bun run build:cli-runtime
 
       - name: Build, sign & notarize application
         shell: bash
@@ -177,6 +192,11 @@ jobs:
           test -x "${stt_bin}"
           codesign --verify --strict --verbose=2 "${stt_bin}"
           codesign --display --verbose=2 "${stt_bin}" 2>&1 | grep -q 'flags=.*runtime'
+          # So is the Rust CLI runtime sidecar, with the same requirements.
+          cli_runtime_bin="${app_path}/Contents/Resources/bin/navide-cli-runtime"
+          test -x "${cli_runtime_bin}"
+          codesign --verify --strict --verbose=2 "${cli_runtime_bin}"
+          codesign --display --verbose=2 "${cli_runtime_bin}" 2>&1 | grep -q 'flags=.*runtime'
           echo "Verifying ${app_path}"
           # Signed with a valid Developer ID and the seal is intact.
           codesign --verify --deep --strict --verbose=2 "${app_path}"
@@ -311,6 +331,10 @@ jobs:
         # OS: the backend suite on this kernel, and the smoke test that opens
         # a real PTY, reads /proc, and serves /health — the things the suite
         # structurally cannot prove and that the port lives or dies by.
+        env:
+          # These gates compile no Rust: the backend tests that run the Rust
+          # CLI runtime skip here, and run in CI's cli-runtime job.
+          NAVIDE_CLI_RUNTIME_REQUIRED: '0'
         run: |
           uv --project backend run --locked ruff check backend
           uv --project backend run --locked pytest backend/tests
@@ -328,7 +352,9 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: native/navide-stt
+          workspaces: |
+            native/navide-stt
+            native/navide-cli-runtime
 
       - name: Build speech-to-text sidecar
         # Compiles whisper.cpp (cmake) into build/stt/, which electron-builder
@@ -338,6 +364,16 @@ jobs:
         env:
           NAVIDE_STT_REQUIRED: '1'
         run: bun run build:stt
+
+      - name: Build Rust CLI runtime sidecar
+        # Into build/cli-runtime/, which electron-builder packages as
+        # bin/navide-cli-runtime. Required here: without it the rustCliRuntime
+        # setting finds no binary in the release and every reader silently
+        # stays on Python.
+        shell: bash
+        env:
+          NAVIDE_CLI_RUNTIME_REQUIRED: '1'
+        run: bun run build:cli-runtime
 
       - name: Build application
         shell: bash
@@ -373,6 +409,10 @@ jobs:
           test -x "${backend}"
           test -d "${work}/squashfs-root/resources/bin/agent_team_backend/_internal"
           file "${backend}" | grep -q 'ELF 64-bit'
+          # The Rust CLI runtime sidecar sits beside it, built by this job.
+          cli_runtime="${work}/squashfs-root/resources/bin/navide-cli-runtime"
+          test -x "${cli_runtime}"
+          file "${cli_runtime}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
           browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
@@ -515,6 +555,9 @@ jobs:
         # Same OS-level gates as the x64 job, on the arm64 kernel: the backend
         # suite, and the smoke test that opens a real PTY, reads /proc, and
         # serves /health.
+        env:
+          # As in the x64 job: no Rust is compiled here.
+          NAVIDE_CLI_RUNTIME_REQUIRED: '0'
         run: |
           uv --project backend run --locked ruff check backend
           uv --project backend run --locked pytest backend/tests
@@ -535,7 +578,9 @@ jobs:
         continue-on-error: true
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          workspaces: native/navide-stt
+          workspaces: |
+            native/navide-stt
+            native/navide-cli-runtime
 
       - name: Build speech-to-text sidecar
         continue-on-error: true
@@ -546,6 +591,17 @@ jobs:
         env:
           NAVIDE_STT_REQUIRED: '0'
         run: bun run build:stt
+
+      - name: Build Rust CLI runtime sidecar
+        continue-on-error: true
+        # Into build/cli-runtime/, packaged as bin/navide-cli-runtime.
+        # Best-effort here, as the sidecar above: on failure the script warns
+        # and the build ships without it (the rustCliRuntime setting then
+        # finds no binary and readers stay on Python).
+        shell: bash
+        env:
+          NAVIDE_CLI_RUNTIME_REQUIRED: '0'
+        run: bun run build:cli-runtime
 
       - name: Build application
         shell: bash

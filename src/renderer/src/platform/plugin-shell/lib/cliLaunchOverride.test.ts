@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
@@ -204,11 +204,12 @@ function backendDenyList(): string[] {
   add(pythonTupleStrings(readFileSync(`${BACKEND}profiles_store.py`, 'utf8'), 'CLAUDE_ENV_OVERRIDES'))
   // 2. The legacy table of inherited home relocators / runtime markers.
   add(pythonTupleStrings(readFileSync(`${BACKEND}app.py`, 'utf8'), '_INHERITED_CLI_HOME_VARS'))
-  // 3. Every migrated vendor's declared home vars.
-  for (const file of readdirSync(`${BACKEND}cli_vendors`)) {
-    if (!file.endsWith('.py') || file === 'base.py' || file === '_template.py') continue
-    add(pythonTupleStrings(readFileSync(`${BACKEND}cli_vendors/${file}`, 'utf8'), 'home_env_vars'))
-  }
+  // 3. Every vendor's home vars: the `env_strip` of its launch declaration,
+  //    which is where the registry's `home_env_vars` come from.
+  const declarations = JSON.parse(readFileSync(`${BACKEND}cli_declarations.json`, 'utf8')) as Array<{
+    launch: { env_strip: string[] }
+  }>
+  for (const declaration of declarations) add(declaration.launch.env_strip)
   return [...keys].sort()
 }
 

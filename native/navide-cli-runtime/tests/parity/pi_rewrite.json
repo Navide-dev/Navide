@@ -1,0 +1,351 @@
+{
+ "vendor": "pi",
+ "file": "pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"session\", \"version\": 3, \"id\": \"pi-sess.01_a\", \"timestamp\": \"2026-07-27T10:00:00.000Z\", \"cwd\": \"/Users/me/proj\"}\n{\"type\": \"message\", \"id\": \"u1\", \"parentId\": null, \"timestamp\": \"2026-07-27T10:00:01.000Z\", \"message\": {\"role\": \"user\", \"content\": \"fix the parser\"}}\n{\"type\": \"message\", \"id\": \"a1\", \"parentId\": \"u1\", \"timestamp\": \"2026-07-27T10:00:02.000Z\", \"message\": {\"role\": \"assistant\", \"model\": \"claude-opus-4\", \"content\": [{\"type\": \"text\", \"text\": \"ok\"}], \"usage\": {\"input\": 120, \"output\": 20, \"cacheRead\": 30, \"cacheWrite\": 0, \"totalTokens\": 170, \"cost\": {\"total\": 0.01}}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "pi",
+       "input_tokens": 150,
+       "output_tokens": 20,
+       "cwd": "/Users/me/proj",
+       "session_id": "pi-sess.01_a",
+       "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+       "dedup_key": "a1",
+       "timestamp": "2026-07-27T10:00:02.000Z",
+       "model": "claude-opus-4",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 585,
+        "anchor": "a584ac180982f4eb",
+        "recent_keys": [
+         "a1"
+        ],
+        "session_id": "pi-sess.01_a",
+        "cwd": "/Users/me/proj",
+        "credited_count": 1
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 585,
+      "anchor": "a584ac180982f4eb",
+      "recent_keys": [
+       "a1"
+      ],
+      "session_id": "pi-sess.01_a",
+      "cwd": "/Users/me/proj",
+      "credited_count": 1
+     }
+    },
+    "activity": [
+     {
+      "vendor": "pi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-07-27T10:00:01.000Z",
+      "detail": "user",
+      "text": "fix the parser",
+      "full": "fix the parser"
+     },
+     {
+      "vendor": "pi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "act:3",
+      "timestamp": "2026-07-27T10:00:02.000Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::3",
+     "pi_text::ok",
+     "pi_turn::{\"idx\": 0, \"flushed\": false, \"ts\": \"2026-07-27T10:00:02.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"type\": \"compaction\", \"id\": \"c1\", \"parentId\": \"a1\", \"timestamp\": \"2026-07-27T10:00:03.000Z\", \"usage\": {\"input\": 10, \"output\": 5, \"cacheRead\": 0, \"cacheWrite\": 0}}\n{\"type\": \"message\", \"id\": \"u2\", \"parentId\": \"c1\", \"timestamp\": \"2026-07-27T10:00:01.000Z\", \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"and the tests\"}]}}\n{\"type\": \"message\", \"id\": \"a2\", \"parentId\": \"u2\", \"timestamp\": \"2026-07-27T10:00:02.000Z\", \"message\": {\"role\": \"assistant\", \"model\": \"claude-opus-4\", \"content\": [{\"type\": \"text\", \"text\": \"all green\"}], \"usage\": {\"input\": 100, \"output\": 20, \"cacheRead\": 0, \"cacheWrite\": 0, \"totalTokens\": 120, \"cost\": {\"total\": 0.01}}}}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "pi",
+       "input_tokens": 10,
+       "output_tokens": 5,
+       "cwd": "/Users/me/proj",
+       "session_id": "pi-sess.01_a",
+       "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+       "dedup_key": "c1",
+       "timestamp": "2026-07-27T10:00:03.000Z",
+       "model": "",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 749,
+        "anchor": "903df60644799eee",
+        "recent_keys": [
+         "a1",
+         "c1"
+        ],
+        "session_id": "pi-sess.01_a",
+        "cwd": "/Users/me/proj",
+        "credited_count": 2
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      },
+      {
+       "vendor": "pi",
+       "input_tokens": 100,
+       "output_tokens": 20,
+       "cwd": "/Users/me/proj",
+       "session_id": "pi-sess.01_a",
+       "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+       "dedup_key": "a2",
+       "timestamp": "2026-07-27T10:00:02.000Z",
+       "model": "claude-opus-4",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1245,
+        "anchor": "903df60644799eee",
+        "recent_keys": [
+         "a1",
+         "c1",
+         "a2"
+        ],
+        "session_id": "pi-sess.01_a",
+        "cwd": "/Users/me/proj",
+        "credited_count": 3
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1245,
+      "anchor": "903df60644799eee",
+      "recent_keys": [
+       "a1",
+       "c1",
+       "a2"
+      ],
+      "session_id": "pi-sess.01_a",
+      "cwd": "/Users/me/proj",
+      "credited_count": 3
+     }
+    },
+    "activity": [
+     {
+      "vendor": "pi",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "turn:0",
+      "timestamp": "2026-07-27T10:00:02.000Z",
+      "detail": "boundary",
+      "text": "ok"
+     },
+     {
+      "vendor": "pi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "act:5",
+      "timestamp": "2026-07-27T10:00:01.000Z",
+      "detail": "user",
+      "text": "and the tests",
+      "full": "and the tests"
+     },
+     {
+      "vendor": "pi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "act:6",
+      "timestamp": "2026-07-27T10:00:02.000Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::6",
+     "pi_text::all green",
+     "pi_turn::{\"idx\": 1, \"flushed\": false, \"ts\": \"2026-07-27T10:00:02.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000001,
+   "now": 1792000020,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1245,
+      "anchor": "903df60644799eee",
+      "recent_keys": [
+       "a1",
+       "c1",
+       "a2"
+      ],
+      "session_id": "pi-sess.01_a",
+      "cwd": "/Users/me/proj",
+      "credited_count": 3
+     }
+    },
+    "activity": [
+     {
+      "vendor": "pi",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "turn:1",
+      "timestamp": "2026-07-27T10:00:02.000Z",
+      "detail": "idle",
+      "text": "all green"
+     }
+    ],
+    "bag": [
+     "act_hw::6",
+     "pi_turn::{\"idx\": 1, \"flushed\": true, \"ts\": \"2026-07-27T10:00:02.000Z\"}"
+    ]
+   }
+  },
+  {
+   "mode": "write",
+   "text": "{\"type\": \"session\", \"version\": 3, \"id\": \"pi-sess.01_a\", \"timestamp\": \"2026-07-27T10:00:00.000Z\", \"cwd\": \"/Users/me/proj\"}\n{\"type\": \"message\", \"id\": \"u1\", \"parentId\": null, \"timestamp\": \"2026-07-27T10:00:01.000Z\", \"message\": {\"role\": \"user\", \"content\": \"fix the parser\"}}\n{\"type\": \"message\", \"id\": \"a1\", \"parentId\": \"u1\", \"timestamp\": \"2026-07-27T10:00:02.000Z\", \"message\": {\"role\": \"assistant\", \"model\": \"claude-opus-4\", \"content\": [{\"type\": \"text\", \"text\": \"ok\"}], \"usage\": {\"input\": 120, \"output\": 20, \"cacheRead\": 30, \"cacheWrite\": 0, \"totalTokens\": 170, \"cost\": {\"total\": 0.01}}}}\n{\"type\": \"compaction\", \"id\": \"c1\", \"parentId\": \"a1\", \"timestamp\": \"2026-07-27T10:00:03.000Z\", \"usage\": {\"input\": 10, \"output\": 5, \"cacheRead\": 0, \"cacheWrite\": 0}}\n{\"type\": \"message\", \"id\": \"u2\", \"parentId\": \"c1\", \"timestamp\": \"2026-07-27T10:00:01.000Z\", \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"and the tests\"}]}}\n{\"type\": \"message\", \"id\": \"a2\", \"parentId\": \"u2\", \"timestamp\": \"2026-07-27T10:00:02.000Z\", \"message\": {\"role\": \"assistant\", \"model\": \"claude-opus-4\", \"content\": [{\"type\": \"text\", \"text\": \"all green\"}], \"usage\": {\"input\": 100, \"output\": 20, \"cacheRead\": 0, \"cacheWrite\": 0, \"totalTokens\": 120, \"cost\": {\"total\": 0.01}}}}\n{\"type\": \"message\", \"id\": \"u3\", \"parentId\": \"a2\", \"timestamp\": \"2026-07-27T10:00:01.000Z\", \"message\": {\"role\": \"user\", \"content\": \"one more\"}}\n",
+   "mtime": 1792000030,
+   "now": 1792000031,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1388,
+      "anchor": "d942055cc7493a38",
+      "recent_keys": [
+       "a1",
+       "c1",
+       "a2"
+      ],
+      "session_id": "pi-sess.01_a",
+      "cwd": "/Users/me/proj",
+      "credited_count": 3
+     }
+    },
+    "activity": [
+     {
+      "vendor": "pi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "pi-sess.01_a",
+      "file_path": "<root>/pi/--Users-me-proj--/2026-07-27T10-00-00-000Z_pi-sess.01_a.jsonl",
+      "dedup_key": "act:7",
+      "timestamp": "2026-07-27T10:00:01.000Z",
+      "detail": "user",
+      "text": "one more",
+      "full": "one more"
+     }
+    ],
+    "bag": [
+     "act_hw::7",
+     "pi_turn::{\"idx\": 2, \"flushed\": false, \"ts\": \"2026-07-27T10:00:01.000Z\"}"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "pi-sess.01_a",
+   "started_at": "2026-07-27T10:00:01.000Z",
+   "ended_at": "2026-07-27T10:00:02.000Z",
+   "prompt_excerpt": "and the tests",
+   "input": 250,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 40,
+   "calls": [
+    {
+     "ts": "2026-07-27T10:00:02.000Z",
+     "model": "claude-opus-4",
+     "input": 150,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 20,
+     "cli_version": ""
+    },
+    {
+     "ts": "2026-07-27T10:00:02.000Z",
+     "model": "claude-opus-4",
+     "input": 100,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 20,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  },
+  {
+   "turn_index": 2,
+   "session_id": "pi-sess.01_a",
+   "started_at": "2026-07-27T10:00:03.000Z",
+   "ended_at": "2026-07-27T10:00:03.000Z",
+   "prompt_excerpt": "",
+   "input": 10,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 5,
+   "calls": [
+    {
+     "ts": "2026-07-27T10:00:03.000Z",
+     "model": "",
+     "input": 10,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 5,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

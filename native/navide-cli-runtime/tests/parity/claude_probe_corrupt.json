@@ -1,0 +1,314 @@
+{
+ "vendor": "claude",
+ "file": "claude/projects/-tmp-demo/probe-corrupt.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"user\", \"promptId\": \"p1\", \"timestamp\": \"2026-09-19T00:00:00Z\", \"message\": {\"role\": \"user\", \"content\": \"before the probe line\"}, \"cwd\": \"/tmp/demo\"}\n{\"type\": \"assistant\", \"requestId\": \"r1\", \"timestamp\": \"2026-09-19T00:00:01Z\", \"message\": {\"id\": \"m1\", \"model\": \"claude-opus-4-7\", \"stop_reason\": \"end_turn\", \"content\": [{\"type\": \"text\", \"text\": \"…\"}], \"usage\": {\"input_tokens\": 4, \"cache_read_input_tokens\": 0, \"cache_creation_input_tokens\": 0, \"output_tokens\": 2}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 4,
+       "output_tokens": 2,
+       "cwd": "/tmp/demo",
+       "session_id": "probe-corrupt",
+       "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+       "dedup_key": "m1::r1",
+       "timestamp": "2026-09-19T00:00:01Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 475,
+        "anchor": "93e4c7451502d126",
+        "recent_keys": [
+         "m1::r1"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 475,
+      "anchor": "93e4c7451502d126",
+      "recent_keys": [
+       "m1::r1"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "act:1",
+      "timestamp": "2026-09-19T00:00:00Z",
+      "detail": "user",
+      "text": "before the probe line",
+      "full": "before the probe line"
+     },
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "act:2",
+      "timestamp": "2026-09-19T00:00:01Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "claude",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "turn:2",
+      "timestamp": "2026-09-19T00:00:01Z",
+      "detail": "end_turn",
+      "text": "…"
+     }
+    ],
+    "bag": [
+     "act_hw::2"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{not json}\n{\"type\": \"assistant\", \"requestId\": \"r2\", \"timestamp\": \"2026-09-19T00:00:03Z\", \"message\": {\"id\": \"m2\", \"model\": \"claude-opus-4-7\", \"stop_reason\": \"end_turn\", \"content\": [{\"type\": \"text\", \"text\": \"…\"}], \"usage\": {\"input_tokens\": 10, \"cache_read_input_tokens\": 5, \"cache_creation_input_tokens\": 0, \"output_tokens\": 5}}}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 15,
+       "output_tokens": 5,
+       "cwd": "/tmp/demo",
+       "session_id": "probe-corrupt",
+       "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+       "dedup_key": "m2::r2",
+       "timestamp": "2026-09-19T00:00:03Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 805,
+        "anchor": "bb2834db32243573",
+        "recent_keys": [
+         "m1::r1",
+         "m2::r2"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 5,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 805,
+      "anchor": "bb2834db32243573",
+      "recent_keys": [
+       "m1::r1",
+       "m2::r2"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "2026-09-19T00:00:03Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "claude",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "turn:4",
+      "timestamp": "2026-09-19T00:00:03Z",
+      "detail": "end_turn",
+      "text": "…"
+     }
+    ],
+    "bag": [
+     "act_hw::4"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"type\": \"user\", \"promptId\": \"p2\", \"timestamp\": \"2026-09-19T00:01:00Z\", \"message\": {\"role\": \"user\", \"content\": \"after the probe line\"}}\n{\"type\": \"assistant\", \"requestId\": \"r3\", \"timestamp\": \"2026-09-19T00:01:04Z\", \"message\": {\"id\": \"m3\", \"model\": \"claude-opus-4-7\", \"stop_reason\": \"end_turn\", \"content\": [{\"type\": \"text\", \"text\": \"…\"}], \"usage\": {\"input_tokens\": 7, \"cache_read_input_tokens\": 1, \"cache_creation_input_tokens\": 0, \"output_tokens\": 1}}}\n",
+   "mtime": 1792000002,
+   "now": 1792000003,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "claude",
+       "input_tokens": 8,
+       "output_tokens": 1,
+       "cwd": "/tmp/demo",
+       "session_id": "probe-corrupt",
+       "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+       "dedup_key": "m3::r3",
+       "timestamp": "2026-09-19T00:01:04Z",
+       "model": "claude-opus-4-7",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1259,
+        "anchor": "e282169af26c4e4b",
+        "recent_keys": [
+         "m1::r1",
+         "m2::r2",
+         "m3::r3"
+        ]
+       },
+       "raw": {
+        "cache_write_1h": 0
+       },
+       "cache_read_tokens": 1,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1259,
+      "anchor": "e282169af26c4e4b",
+      "recent_keys": [
+       "m1::r1",
+       "m2::r2",
+       "m3::r3"
+      ]
+     }
+    },
+    "activity": [
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "act:5",
+      "timestamp": "2026-09-19T00:01:00Z",
+      "detail": "user",
+      "text": "after the probe line",
+      "full": "after the probe line"
+     },
+     {
+      "vendor": "claude",
+      "event_type": "agent_active",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "act:6",
+      "timestamp": "2026-09-19T00:01:04Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "claude",
+      "event_type": "turn_complete",
+      "cwd": "/tmp/demo",
+      "session_id": "probe-corrupt",
+      "file_path": "<root>/claude/projects/-tmp-demo/probe-corrupt.jsonl",
+      "dedup_key": "turn:6",
+      "timestamp": "2026-09-19T00:01:04Z",
+      "detail": "end_turn",
+      "text": "…"
+     }
+    ],
+    "bag": [
+     "act_hw::6"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "probe-corrupt",
+   "started_at": "2026-09-19T00:00:00Z",
+   "ended_at": "2026-09-19T00:00:03Z",
+   "prompt_excerpt": "before the probe line",
+   "input": 14,
+   "cache_read": 5,
+   "cache_creation": 0,
+   "output": 7,
+   "calls": [
+    {
+     "ts": "2026-09-19T00:00:01Z",
+     "model": "claude-opus-4-7",
+     "input": 4,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 2,
+     "cli_version": ""
+    },
+    {
+     "ts": "2026-09-19T00:00:03Z",
+     "model": "claude-opus-4-7",
+     "input": 10,
+     "cache_read": 5,
+     "cache_creation": 0,
+     "output": 5,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  },
+  {
+   "turn_index": 2,
+   "session_id": "probe-corrupt",
+   "started_at": "2026-09-19T00:01:00Z",
+   "ended_at": "2026-09-19T00:01:04Z",
+   "prompt_excerpt": "after the probe line",
+   "input": 7,
+   "cache_read": 1,
+   "cache_creation": 0,
+   "output": 1,
+   "calls": [
+    {
+     "ts": "2026-09-19T00:01:04Z",
+     "model": "claude-opus-4-7",
+     "input": 7,
+     "cache_read": 1,
+     "cache_creation": 0,
+     "output": 1,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

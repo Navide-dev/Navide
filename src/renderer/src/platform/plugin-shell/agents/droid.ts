@@ -1,15 +1,17 @@
 /** Droid (Factory) — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'droid',
-  label: 'Droid CLI (Factory)',
-  defaultCommand: 'droid',
+  // Label, command, flags and resume arguments: the launch declaration.
+  //
   // No model or effort flag: `droid --help` (the interactive command Navide
   // spawns) declares neither, and its `-r` means --resume there while
   // meaning --reasoning-effort under `droid exec`. Passing effort through
   // would resume a session named after the level, so both are refused.
+  //
   // Droid has no boolean "skip every prompt" flag on its INTERACTIVE command:
   // `droid --help` (0.204.0) lists only `--auto <level>` with low|medium|high.
   // `--skip-permissions-unsafe` exists, but `droid exec --help` is the only
@@ -17,9 +19,9 @@ export const SPEC = {
   // unknown flags (verified: a deliberately bogus flag still starts the TUI),
   // so "it did not error" proves nothing here. `--auto high` is the documented
   // unattended level and is what YOLO mode appends.
-  skipPermissionFlag: '--auto high',
-  // `-r, --resume [sessionId]` — the id is the session file's stem.
-  resumeArgs: (id) => `--resume ${id}`,
+  //
+  // Resume: `-r, --resume [sessionId]` — the id is the session file's stem.
+  ...declared('droid'),
   supportsRebuild: true,
   // Measured on a real PTY (0.204.0): droid emits `ESC[?2004h` during startup,
   // before it even finishes authenticating, and keeps it on.

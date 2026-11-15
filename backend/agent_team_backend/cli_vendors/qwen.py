@@ -39,7 +39,9 @@ from ..log_readers.base import (
     user_prompt_text,
 )
 from ..log_readers.base import encode_claude_cwd
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -916,14 +918,9 @@ async def fetch_qwen(home: Path, env: dict | None = None) -> dict:
 
 # ---- resume / session ------------------------------------------------------
 
-_RESUME_RE = re.compile(r"^qwen\s+(?:\S+\s+)*(?:--resume|-r)\s+([^-\s]\S*)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `qwen ... --resume <id>` / `-r <id>` command
-    ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# The session id of a `qwen ... --resume <id>` / `-r <id>` command is read by
+# the launch declaration (native/navide-cli-runtime/src/vendors/qwen.rs; see
+# _declared).
 
 
 def _session_path(workspace_path: str, session_id: str) -> Path:
@@ -974,14 +971,22 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("hooks", (".qwen", "settings.json"), "Qwen hook", section=("hooks",)),
 ))
 
+# Instruction files: hierarchical QWEN.md, plus the private project-local file.
+_MEMORY_SOURCES = (
+    MemorySource("qwen", USER_SCOPE, (".qwen", "QWEN.md"), canonical=True),
+    MemorySource("qwen", PROJECT_SCOPE, ("QWEN.md",), canonical=True),
+    MemorySource("qwen", PROJECT_SCOPE, (".qwen", "QWEN.local.md")),
+    MemorySource("qwen", PROJECT_SCOPE, ("AGENTS.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="qwen",
     # OpenAI-compatible/custom providers; quota hosts cover another interface.
     expected_hosts=(),
     data_dirs=_risk_data_dirs,
     data_dir_env_vars=("QWEN_HOME", "QWEN_RUNTIME_DIR"),
-    supports_model=True,
     # Verified 2026-08-15: QWEN_HOME *is* the .qwen directory (its
     # resolveQwenHome falls back to ~/.qwen), so skills sit one level in.
     skills_supported=True,
@@ -990,7 +995,6 @@ SPEC = VendorSpec(
         root_home=(".qwen",),
         skills_rel=("skills",),
     ),
-    label="Qwen Code (Alibaba Cloud)",
     # `--mcp-config` is undocumented in `qwen --help` but registered, takes
     # inline JSON or a path, and merges over settings.json. No "type"
     # discriminator: httpUrl is streamable HTTP, a plain url would be SSE.
@@ -1051,10 +1055,11 @@ SPEC = VendorSpec(
         resume="native",
         todo="a Coding Plan key in the pane environment outranks both files and cannot be switched; no real-account round-trip recorded",
     ),
-    resume_id_from_command=_resume_id_from_command,
+    # Model support, the home variables a spawn strips and resume-id
+    # parsing: the launch declaration.
+    **declared("qwen"),
     session_path=_session_path,
     session_exists=_session_exists,
-    home_env_vars=("QWEN_HOME", "QWEN_RUNTIME_DIR"),
     make_log_reader=QwenLogReader,
     # Qwen Code ships `qwen update` but no doctor subcommand; its autoupdate
     # opt-out is a settings.json key, not an env var — autoupdate_env stays empty.

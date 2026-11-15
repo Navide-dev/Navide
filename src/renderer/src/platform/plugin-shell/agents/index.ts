@@ -1,67 +1,59 @@
 /**
- * One file per vendor; this assembler is the canonical list. Adding a CLI:
- * copy `_template.ts` to `<key>.ts`, then register it here (one line, in
- * display order). The backend registry test cross-checks the key set.
+ * The agent specs, assembled. Nothing is registered here.
+ *
+ * Which CLIs exist, and where each sits in the menus, is the runtime's
+ * declarations (`_cli_declarations.ts`, generated from
+ * `native/navide-cli-runtime/src/vendors/<key>.rs`). What the app knows about
+ * a CLI beyond launching and resuming it lives in `<key>.ts` beside this
+ * file, which exports `SPEC`; every such file is found by `import.meta.glob`.
+ * A declared CLI with no file gets its spec from the declaration alone. A
+ * spec file that is not a declared CLI (the plain terminal) is listed after
+ * the CLIs. The backend registry test cross-checks the key set.
  */
 
+import declarations from './_cli_declarations'
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
-import { SPEC as aider } from './aider'
-import { SPEC as antigravity } from './antigravity'
-import { SPEC as claude } from './claude'
-import { SPEC as codex } from './codex'
-import { SPEC as copilot } from './copilot'
-import { SPEC as cursor } from './cursor'
-import { SPEC as devin } from './devin'
-import { SPEC as droid } from './droid'
-import { SPEC as goose } from './goose'
-import { SPEC as grok } from './grok'
-import { SPEC as hermes } from './hermes'
-import { SPEC as kilo } from './kilo'
-import { SPEC as kimi } from './kimi'
-import { SPEC as kiro } from './kiro'
-import { SPEC as mcode } from './mcode'
-import { SPEC as muse } from './muse'
-import { SPEC as opencode } from './opencode'
-import { SPEC as openclaw } from './openclaw'
-import { SPEC as pi } from './pi'
-import { SPEC as qwen } from './qwen'
-import { SPEC as terminal } from './terminal'
 
 export type { AgentSpec, DirLister, PaneArgContext } from './types'
 
-// Display order (spawn menus, settings) — deliberate, not alphabetical.
-const ORDERED = [
-  claude,
-  codex,
-  antigravity,
-  grok,
-  kimi,
-  opencode,
-  qwen,
-  kilo,
-  pi,
-  copilot,
-  cursor,
-  aider,
-  muse,
-  droid,
-  mcode,
-  goose,
-  devin,
-  kiro,
-  openclaw,
-  hermes,
-  terminal
-] as const
-
-/** Literal union of real CLI agent keys, derived from the specs — the single
+/** Literal union of real CLI agent keys: the declared ones. The single
  *  source stages.ts and friends re-export instead of hand-written unions. */
-export type AgentKey = Exclude<(typeof ORDERED)[number]['agentKey'], 'terminal'>
+export type AgentKey = (typeof declarations)[number]['key']
 
-export const AGENT_SPECS: AgentSpec[] = [...ORDERED]
+/** Every spec file in this directory by its stem. `_`-prefixed files are
+ *  infrastructure (the template, the declarations and their reader). */
+const files = new Map<string, AgentSpec>()
+for (const [path, module] of Object.entries(
+  import.meta.glob<{ SPEC?: AgentSpec }>(['./*.ts', '!./_*.ts', '!./index.ts', '!./types.ts'], { eager: true }),
+)) {
+  if (module.SPEC) files.set(path.replace(/^\.\//, '').replace(/\.ts$/, ''), module.SPEC)
+}
+
+// Display order (spawn menus, settings): each declaration's `order.menu`,
+// deliberate and not alphabetical.
+const clis: AgentSpec[] = [...declarations]
+  .sort((a, b) => a.order.menu - b.order.menu)
+  .map(({ key }) => files.get(key) ?? { agentKey: key, ...declared(key) })
+
+const declaredKeys = new Set<string>(declarations.map((entry) => entry.key))
+const others: AgentSpec[] = [...files.keys()]
+  .filter((stem) => !declaredKeys.has(stem))
+  .sort()
+  .map((stem) => files.get(stem)!)
+
+export const AGENT_SPECS: AgentSpec[] = [...clis, ...others]
 
 /** Specs that are real CLI agents (excludes the plain-shell terminal entry). */
 export const CLI_AGENT_SPECS: AgentSpec[] = AGENT_SPECS.filter((s) => s.agentKey !== 'terminal')
+
+/** The CLIs whose records the runtime declares (`observed` in the declaration,
+ *  printed by `declarations launch`): they have a log reader, and it reports
+ *  when a turn starts. The renderer reads this instead of keeping its own list
+ *  of the CLIs that have none. */
+export const OBSERVED_AGENT_KEYS: ReadonlySet<string> = new Set(
+  declarations.filter((entry) => entry.observed).map((entry) => entry.key),
+)
 
 /** CLIs whose panes can be re-spawned via the vendor resume command (aider is
  *  excluded by its spec: no session ids, the gate flags never satisfy). */

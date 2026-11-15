@@ -45,6 +45,8 @@ describe('CI path filter rules', () => {
     'plugins/navide-plans/backend/plans_backend.py',
     'package.json',
     'pnpm-lock.yaml',
+    'native/navide-cli-runtime/src/vendors/claude.rs',
+    'scripts/build-cli-runtime.mjs',
     '.github/workflows/ci.yml',
     'scripts/ci-changed-scopes.mjs',
     'docs/en-US/architecture.md',
@@ -174,6 +176,9 @@ describe('CI workflow wiring of the path filter', () => {
 
   it.each([
     ['backend', 'backend'],
+    // The Rust CLI runtime is read through the backend: the crate, the seam
+    // and the backend's tests of it are all on the backend side of the filter.
+    ['cli-runtime', 'backend'],
     ['frontend', 'frontend'],
     ['build-artifacts', 'frontend'],
     ['pnpm-lockfile', 'frontend'],
@@ -185,7 +190,7 @@ describe('CI workflow wiring of the path filter', () => {
 
   it('leaves every other job unfiltered', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (['backend', 'frontend', 'build-artifacts', 'pnpm-lockfile', 'lint-and-test'].includes(name)) continue
+      if (['backend', 'cli-runtime', 'frontend', 'build-artifacts', 'pnpm-lockfile', 'lint-and-test'].includes(name)) continue
       expect(job.if, name).toBeUndefined()
     }
   })

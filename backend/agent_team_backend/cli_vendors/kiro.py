@@ -38,6 +38,8 @@ hook.
 
 from __future__ import annotations
 
+from ._declared import declared
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     Dep,
     ExtensionsSpec,
@@ -61,16 +63,27 @@ def _install_hooks(port_file: str):
     return install_hooks(port_file)
 
 
+# Instruction files: steering files, global under the home and per workspace,
+# plus AGENTS.md at the workspace root (kiro.dev/docs/steering, read
+# 2026-11-12 -- docs only, no binary installed).
+_MEMORY_SOURCES = (
+    MemorySource("kiro", USER_SCOPE, (".kiro", "steering"), glob="*.md"),
+    MemorySource("kiro", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("kiro", PROJECT_SCOPE, (".kiro", "steering"), glob="*.md"),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
+    cli_unverified_reason="wired from the docs (read 2026-11-12); no binary installed, so no version was checked",
     key="kiro",
-    label="Kiro CLI (AWS)",
     extensions=ExtensionsSpec(
         supported=False,
         note="Kiro hooks, custom agents, powers and skills (~/.kiro) are not inventoried yet",
     ),
     data_dirs=lambda ctx: (_home(ctx),),
     data_dir_env_vars=("KIRO_HOME",),
-    supports_session_resume=False,
+    # No resume by id, and the home variable a spawn strips: the launch declaration.
+    **declared("kiro"),
     mcp_wiring=McpWiring(
         config=McpServerConfig(
             section=("mcpServers",),
@@ -80,7 +93,6 @@ SPEC = VendorSpec(
         config_dir_env="KIRO_HOME",
         config_file=("settings", "mcp.json"),
     ),
-    home_env_vars=("KIRO_HOME",),
     install_hooks=_install_hooks,
     hook_pane_token=True,
     install_dep=Dep("kiro", "Kiro CLI (AWS)", "AWS Kiro terminal coding agent", "agent_cli",

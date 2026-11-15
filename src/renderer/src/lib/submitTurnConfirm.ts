@@ -11,6 +11,7 @@
  * box, or the CLI's own queue hint appear, is returned untouched and at once.
  */
 
+import { CLI_AGENT_SPECS, OBSERVED_AGENT_KEYS } from '../platform/plugin-shell/agents'
 import { matchAwaitingInput } from './cliAwaitingInput'
 import { BOX_ONLY_LINE_RE, type SubmitEvidence } from './injectEcho'
 import { screenShowsBlockingDialog } from './sessionMarkerTurn'
@@ -20,36 +21,17 @@ export const SUBMIT_TURN_CONFIRM_MS = 12_000
 
 /** Whether a vendor's log reader reports the start of a turn (agent_active
  *  after a turn end) — the only thing the watch can wait for. Every agent spec
- *  is listed on purpose (a test enforces it): a vendor that cannot signal a
+ *  is mapped, from its declaration (below): a vendor that cannot signal a
  *  turn would have every growth-only submit read as unconfirmed, and a
- *  scheduler run recorded as an error. Those keep main's growth verdict. */
+ *  scheduler run recorded as an error. Those keep main's growth verdict.
+ *
+ *  A CLI has the signal exactly when its declaration is `observed` (it has a
+ *  log reader: hermes and openclaw read the user row their SQLite stores gain
+ *  when a turn starts). mcode, devin and kiro have none: their stores are
+ *  SQLite or undocumented, and Kiro's Stop hook reports turn ends, not starts.
+ *  A plain shell takes its own submit path and never reaches the watch. */
 export const TURN_START_SIGNAL: Readonly<Record<string, boolean>> = {
-  claude: true,
-  codex: true,
-  copilot: true,
-  cursor: true,
-  droid: true,
-  antigravity: true,
-  aider: true,
-  muse: true,
-  opencode: true,
-  kilo: true,
-  grok: true,
-  kimi: true,
-  pi: true,
-  qwen: true,
-  goose: true,
-  // Read the user row their SQLite stores gain when a turn starts.
-  hermes: true,
-  openclaw: true,
-  // No log reader: mcode keeps its history in SQLite Navide cannot read yet.
-  mcode: false,
-  // No log reader yet: Devin's session store is undocumented.
-  devin: false,
-  // No log reader: Kiro's sessions sit in an undocumented SQLite store. Its
-  // Stop hook reports turn ends, not turn starts.
-  kiro: false,
-  // A plain shell takes its own submit path and never reaches the watch.
+  ...Object.fromEntries(CLI_AGENT_SPECS.map((spec) => [spec.agentKey, OBSERVED_AGENT_KEYS.has(spec.agentKey)])),
   terminal: false,
 }
 

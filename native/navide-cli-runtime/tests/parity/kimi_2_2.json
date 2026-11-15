@@ -1,0 +1,184 @@
+{
+ "vendor": "kimi",
+ "file": "kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+ "sidecars": {
+  "kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/state.json": "{\"id\": \"session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa\", \"version\": 2, \"cwd\": \"/Users/me/proj\", \"createdAt\": 1, \"updatedAt\": 2, \"archived\": false, \"agents\": {\"main\": {\"homedir\": \"<session>/agents/main\", \"type\": \"main\"}}, \"custom\": {}, \"lastPrompt\": \"slow one\", \"title\": \"say hello\", \"titleKind\": \"replaceable\", \"lastTurnReason\": \"cancelled\", \"isCustomTitle\": false}"
+ },
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"type\": \"metadata\", \"protocol_version\": \"1.5\", \"created_at\": 1792000000000}\n{\"type\": \"runtime.set_binding\", \"workspaceId\": \"wd_proj_c41def6fd06b\", \"runtimeId\": \"local\", \"agentId\": \"main\", \"time\": 1792000000001}\n{\"type\": \"permission.set_mode\", \"agentId\": \"main\", \"mode\": \"manual\", \"time\": 1792000000002}\n{\"type\": \"turn.prompt\", \"agentId\": \"main\", \"input\": [{\"type\": \"text\", \"text\": \"at-pane:fixture say hello\"}], \"origin\": {\"kind\": \"user\"}, \"promptId\": \"msg_fixture_1\", \"turnId\": 0, \"time\": 1792000000003}\n{\"type\": \"agent.turn.started\", \"turnId\": 0, \"queueItemId\": \"msg_fixture_1\", \"time\": 1792000000004, \"kind\": \"event\"}\n{\"type\": \"context.append_loop_event\", \"agentId\": \"main\", \"event\": {\"turnId\": \"0\", \"type\": \"step.begin\", \"uuid\": \"s1\", \"step\": 1}, \"time\": 1792000000005}\n{\"type\": \"usage.record\", \"agentId\": \"main\", \"model\": \"__kimi_env_model__\", \"usage\": {\"inputOther\": 8, \"output\": 3, \"inputCacheRead\": 4, \"inputCacheCreation\": 0}, \"usageScope\": \"turn\", \"time\": 1792000000006}\n{\"type\": \"context.append_loop_event\", \"agentId\": \"main\", \"event\": {\"turnId\": \"0\", \"type\": \"content.part\", \"uuid\": \"p1\", \"step\": 1, \"stepUuid\": \"s1\", \"part\": {\"type\": \"text\", \"text\": \"Regression reply: café 完成\\n---MSG-END---\"}}, \"time\": 1792000000007}\n{\"type\": \"context.append_loop_event\", \"agentId\": \"main\", \"event\": {\"turnId\": \"0\", \"type\": \"step.end\", \"uuid\": \"s1\", \"step\": 1, \"finishReason\": \"end_turn\"}, \"time\": 1792000000008}\n{\"type\": \"agent.turn.ended\", \"turnId\": 0, \"outcome\": \"done\", \"time\": 1792000000009, \"kind\": \"event\"}\n{\"type\": \"turn.ended\", \"agentId\": \"main\", \"turnId\": 0, \"reason\": \"completed\", \"durationMs\": 6, \"time\": 1792000000010}\n{\"type\": \"prompt.completed\", \"agentId\": \"main\", \"promptId\": \"msg_fixture_1\", \"reason\": \"completed\", \"time\": 1792000000011}\n",
+   "mtime": 1792000001,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "kimi",
+       "input_tokens": 12,
+       "output_tokens": 3,
+       "cwd": "/Users/me/proj",
+       "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+       "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+       "dedup_key": "kimi::session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa::@982",
+       "timestamp": "1792000000006",
+       "model": "__kimi_env_model__",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 982,
+        "anchor": "dfc6500e94eb66dc",
+        "cwd": "/Users/me/proj"
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1759,
+      "anchor": "dfc6500e94eb66dc",
+      "cwd": "/Users/me/proj"
+     }
+    },
+    "activity": [
+     {
+      "vendor": "kimi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+      "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+      "dedup_key": "act:4",
+      "timestamp": "1792000000003",
+      "detail": "prompt",
+      "text": "at-pane:fixture say hello",
+      "full": "at-pane:fixture say hello"
+     },
+     {
+      "vendor": "kimi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+      "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+      "dedup_key": "act:7",
+      "timestamp": "1792000000006",
+      "detail": "usage",
+      "text": ""
+     },
+     {
+      "vendor": "kimi",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+      "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+      "dedup_key": "turn:0",
+      "timestamp": "1792000000010",
+      "detail": "turn-ended",
+      "text": "Regression reply: café 完成\n---MSG-END---"
+     }
+    ],
+    "bag": [
+     "act_hw::12",
+     "kimi_turn::{\"idx\":0,\"last_ms\":1792000000008,\"flushed\":true}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"type\": \"turn.prompt\", \"agentId\": \"main\", \"input\": [{\"type\": \"text\", \"text\": \"slow one\"}], \"origin\": {\"kind\": \"user\"}, \"promptId\": \"msg_fixture_2\", \"turnId\": 1, \"time\": 1792000000020}\n{\"type\": \"context.append_loop_event\", \"agentId\": \"main\", \"event\": {\"turnId\": \"1\", \"type\": \"step.begin\", \"uuid\": \"s2\", \"step\": 1}, \"time\": 1792000000021}\n{\"type\": \"turn.cancel\", \"agentId\": \"main\", \"turnId\": 1, \"target\": \"active\", \"reason\": \"user_cancelled\", \"time\": 1792000000022}\n{\"type\": \"context.append_loop_event\", \"agentId\": \"main\", \"event\": {\"turnId\": \"1\", \"type\": \"step.end\", \"uuid\": \"s2\", \"step\": 1, \"finishReason\": \"interrupted\"}, \"time\": 1792000000023}\n{\"type\": \"turn.step.interrupted\", \"agentId\": \"main\", \"turnId\": 1, \"step\": 1, \"reason\": \"aborted\", \"time\": 1792000000024}\n{\"type\": \"agent.turn.ended\", \"turnId\": 1, \"outcome\": \"aborted\", \"time\": 1792000000025, \"kind\": \"event\"}\n{\"type\": \"turn.ended\", \"agentId\": \"main\", \"turnId\": 1, \"reason\": \"cancelled\", \"durationMs\": 5, \"time\": 1792000000026}\n{\"type\": \"prompt.aborted\", \"agentId\": \"main\", \"promptId\": \"msg_fixture_2\", \"time\": 1792000000027}\n",
+   "mtime": 1792000002,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 2847,
+      "anchor": "af4a03a1f8eb7d15",
+      "cwd": "/Users/me/proj"
+     }
+    },
+    "activity": [
+     {
+      "vendor": "kimi",
+      "event_type": "agent_active",
+      "cwd": "/Users/me/proj",
+      "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+      "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+      "dedup_key": "act:13",
+      "timestamp": "1792000000020",
+      "detail": "prompt",
+      "text": "slow one",
+      "full": "slow one"
+     },
+     {
+      "vendor": "kimi",
+      "event_type": "turn_complete",
+      "cwd": "/Users/me/proj",
+      "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+      "file_path": "<root>/kimi/sessions/wd_proj_c41def6fd06b/session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa/agents/main/wire.jsonl",
+      "dedup_key": "turn:1",
+      "timestamp": "1792000000022",
+      "detail": "cancel",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::20",
+     "kimi_turn::{\"idx\":1,\"last_ms\":1792000000021,\"flushed\":true,\"cancelled\":true}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "",
+   "mtime": 1792000002,
+   "now": 1792000100,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 2847,
+      "anchor": "af4a03a1f8eb7d15",
+      "cwd": "/Users/me/proj"
+     }
+    },
+    "activity": [],
+    "bag": [
+     "act_hw::20",
+     "kimi_turn::{\"idx\":1,\"last_ms\":1792000000021,\"flushed\":true,\"cancelled\":true}"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "session_1c45769d-43e6-4fad-b36c-94ce2aa8b9aa",
+   "started_at": "2026-10-14T17:46:40.003Z",
+   "ended_at": "2026-10-14T17:46:40.006Z",
+   "prompt_excerpt": "at-pane:fixture say hello",
+   "input": 12,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 3,
+   "calls": [
+    {
+     "ts": "2026-10-14T17:46:40.006Z",
+     "model": "__kimi_env_model__",
+     "input": 12,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 3,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

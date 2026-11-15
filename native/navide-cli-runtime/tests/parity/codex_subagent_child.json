@@ -1,0 +1,154 @@
+{
+ "vendor": "codex",
+ "file": "home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"timestamp\": \"2026-09-05T01:10:57Z\", \"type\": \"session_meta\", \"payload\": {\"id\": \"01a06f1e-61a5-7751-916e-3b30d4db0812\", \"session_id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"forked_from_id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"parent_thread_id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"cwd\": \"/proj\", \"cli_version\": \"0.163.0\", \"model_provider\": \"openai\", \"thread_source\": \"subagent\", \"agent_nickname\": \"Dirac\", \"agent_path\": \"/root/explore\", \"subagent_history_start_ordinal\": 19, \"source\": {\"subagent\": {\"thread_spawn\": {\"parent_thread_id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"depth\": 1, \"agent_path\": \"/root/explore\", \"agent_nickname\": \"Dirac\", \"agent_role\": null}}}}}\n{\"timestamp\": \"2026-09-05T01:10:06Z\", \"type\": \"session_meta\", \"payload\": {\"id\": \"01a06f1d-9b8d-7912-8ef1-ffc830909d4c\", \"cwd\": \"/proj\", \"source\": \"cli\", \"cli_version\": \"0.163.0\", \"model_provider\": \"openai\"}}\n{\"timestamp\": \"2026-09-05T01:10:58Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"task_started\", \"turn_id\": \"c1\"}}\n{\"timestamp\": \"2026-09-05T01:10:58Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"item_completed\", \"item\": {\"type\": \"UserMessage\", \"id\": \"u\", \"content\": [{\"type\": \"text\", \"text\": \"Explore the cloud folder\"}]}}}\n{\"timestamp\": \"2026-09-05T01:11:10Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"token_count\", \"info\": {\"total_token_usage\": {\"input_tokens\": 24796, \"cached_input_tokens\": 0, \"output_tokens\": 50, \"reasoning_output_tokens\": 0, \"total_tokens\": 24846}}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "codex",
+       "input_tokens": 24796,
+       "output_tokens": 50,
+       "cwd": "/proj",
+       "session_id": "01a06f1e-61a5-7751-916e-3b30d4db0812",
+       "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812.jsonl",
+       "dedup_key": "codex_cumulative::01a06f1e-61a5-7751-916e-3b30d4db0812::24796::50",
+       "timestamp": "2026-09-05T01:11:10Z",
+       "model": "openai",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1463,
+        "anchor": "be1dcc6170817306",
+        "input_total": 24796,
+        "output_total": 50,
+        "cwd": "/proj",
+        "model": "openai",
+        "session_id": "01a06f1e-61a5-7751-916e-3b30d4db0812",
+        "cli_version": "0.163.0",
+        "meta_seen": true,
+        "ledger_model": "",
+        "basis": 2
+       },
+       "raw": {
+        "ledger_session_totals": {
+         "input": 24796,
+         "cache_read": 0,
+         "cache_write": 0,
+         "output": 50,
+         "model": ""
+        }
+       },
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": "0.163.0"
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1463,
+      "anchor": "be1dcc6170817306",
+      "input_total": 24796,
+      "output_total": 50,
+      "cwd": "/proj",
+      "model": "openai",
+      "session_id": "01a06f1e-61a5-7751-916e-3b30d4db0812",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "",
+      "basis": 2
+     }
+    },
+    "activity": [],
+    "bag": [
+     "act_hw::5"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"timestamp\": \"2026-09-05T01:11:20Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"agent_message\", \"message\": \"Child's findings\"}}\n{\"timestamp\": \"2026-09-05T01:11:21Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"task_complete\", \"turn_id\": \"c1\", \"last_agent_message\": \"Child's findings\"}}\n{\"timestamp\": \"2026-09-05T01:13:00Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"task_started\", \"turn_id\": \"c2\"}}\n{\"timestamp\": \"2026-09-05T01:13:05Z\", \"type\": \"event_msg\", \"payload\": {\"type\": \"turn_aborted\", \"turn_id\": \"c2\", \"reason\": \"interrupted\"}}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1998,
+      "anchor": "f90918b7b868f873",
+      "input_total": 24796,
+      "output_total": 50,
+      "cwd": "/proj",
+      "model": "openai",
+      "session_id": "01a06f1e-61a5-7751-916e-3b30d4db0812",
+      "cli_version": "0.163.0",
+      "meta_seen": true,
+      "ledger_model": "",
+      "basis": 2
+     }
+    },
+    "activity": [
+     {
+      "vendor": "codex",
+      "event_type": "subagent_turn_end",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812.jsonl",
+      "dedup_key": "turn:7",
+      "timestamp": "2026-09-05T01:11:21Z",
+      "detail": "task_complete",
+      "text": ""
+     },
+     {
+      "vendor": "codex",
+      "event_type": "subagent_turn_end",
+      "cwd": "/proj",
+      "session_id": "rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812",
+      "file_path": "<root>/home/.codex-panes/pane-1/sessions/2026/09/05/rollout-2026-09-05T09-10-57-01a06f1e-61a5-7751-916e-3b30d4db0812.jsonl",
+      "dedup_key": "turn:9",
+      "timestamp": "2026-09-05T01:13:05Z",
+      "detail": "turn_aborted",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "act_hw::9"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "01a06f1e-61a5-7751-916e-3b30d4db0812",
+   "started_at": "2026-09-05T01:10:58Z",
+   "ended_at": "2026-09-05T01:11:10Z",
+   "prompt_excerpt": "Explore the cloud folder",
+   "input": 24796,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 50,
+   "calls": [
+    {
+     "ts": "2026-09-05T01:11:10Z",
+     "model": "openai",
+     "input": 24796,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 50,
+     "cli_version": "0.163.0"
+    }
+   ],
+   "model_calls": null,
+   "cli_version": "0.163.0"
+  }
+ ]
+}

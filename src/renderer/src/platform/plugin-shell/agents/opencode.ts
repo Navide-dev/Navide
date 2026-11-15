@@ -1,11 +1,12 @@
 /** OpenCode — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'opencode',
-  label: 'OpenCode (Anomaly)',
-  defaultCommand: 'opencode',
+  // Label, command, flags and resume arguments: the launch declaration.
+  //
   // The root command really does consume `--model` — it is declared on the
   // root command, threaded into the TUI and parsed there. An earlier audit
   // recorded this as silently swallowed; that was wrong. What it saw was
@@ -15,7 +16,7 @@ export const SPEC = {
   // `opencode models` lists what that resolves to. Effort is not a flag here
   // either — it is part of the model id (`-high`, `-fast`) or a config
   // variant.
-  modelArgs: (m) => `--model ${m}`,
+  //
   // No skipPermissionFlag: the opencode TUI has no permission-bypass flag —
   // only the `opencode run` subcommand does, as `--dangerously-skip-permissions`
   // (still listed under `opencode run --help` on 1.15.12).
@@ -27,9 +28,12 @@ export const SPEC = {
   // command REJECTS the flag — `opencode --auto models` prints the help banner
   // and exits 1, while bare `opencode models` exits 0 — so a YOLO-mode pane
   // spawned `opencode --auto ...`, never reached the TUI, and died on startup.
-  // id is `ses_`-prefixed.
-  resumeArgs: (id) => `--session ${id}`,
+  //
+  // Resume (`--session <id>`): the id is `ses_`-prefixed.
+  ...declared('opencode'),
   needsSessionMarker: true,
+  // Also the short flag, which the pattern derived from the declaration
+  // (Navide's own resume command) does not know.
   resumeCommandPattern: /^opencode\s+(?:--session|-s)\s+\S+/,
   supportsRebuild: true,
   // Measured on a real PTY: the CLI itself emits `ESC[?1049h` during startup

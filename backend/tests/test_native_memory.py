@@ -227,6 +227,110 @@ def test_save_and_read_refuse_anything_over_the_size_limit(tmp_path: Path) -> No
         native_memory.read(str(target), home)
 
 
+# ---- the table is assembled from the vendors -------------------------------
+
+#: `native_memory.MEMORY_SOURCES` as main had it, before each CLI's rows moved
+#: onto its `VendorSpec.memory_sources`: [agent, scope, relative, canonical, glob].
+MAIN_SOURCES = json.loads((Path(__file__).parent / "native_memory_sources_main.json").read_text(encoding="utf-8"))
+
+
+def _rows(sources) -> list[list[Any]]:
+    return [[s.agent, s.scope, list(s.relative), s.canonical, s.glob] for s in sources]
+
+
+def test_every_row_is_declared_on_the_vendor_it_names() -> None:
+    for key, spec in VENDORS.items():
+        for source in spec.memory_sources:
+            assert source.agent == key, f"{key} declares a row for {source.agent}"
+
+
+def test_the_assembled_table_has_main_s_entries_and_each_cli_s_order() -> None:
+    recorded_agents = {row[0] for row in MAIN_SOURCES}
+    assembled = [row for row in _rows(native_memory.MEMORY_SOURCES) if row[0] in recorded_agents]
+    # The same entries, none added or dropped...
+    assert len(assembled) == len(MAIN_SOURCES) == 87
+    assert sorted(assembled, key=repr) == sorted(MAIN_SOURCES, key=repr)
+    # ...and each CLI's rows in the order they had. (A CLI declared later adds
+    # its own rows and needs no edit here.)
+    for agent in recorded_agents:
+        assert [r for r in assembled if r[0] == agent] == [r for r in MAIN_SOURCES if r[0] == agent], agent
+
+
+def test_which_cli_comes_first_in_the_table_is_not_observable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The table is assembled in registry order; main's was in its own. The
+    result of a scan is the same either way: every row's file exists below, and
+    `scan` and `candidates` give the same answer from either table."""
+    home, workspace = _home(tmp_path), tmp_path / "workspace"
+    workspace.mkdir()
+    for source in native_memory.MEMORY_SOURCES:
+        root = home if source.scope == native_memory.USER_SCOPE else workspace
+        if source.glob:
+            _write(root, (*source.relative, "rule.mdc" if source.glob.endswith("mdc") else "rule.md"))
+        else:
+            _write(root, source.relative)
+    now = [f.as_dict() for f in native_memory.scan(home, workspace)]
+    now_allowed = native_memory.candidates(home, workspace)
+
+    main_order = tuple(
+        native_memory.MemorySource(agent, scope, tuple(relative), canonical, glob)
+        for agent, scope, relative, canonical, glob in MAIN_SOURCES
+    )
+    # A CLI main did not have has no recorded rows; it keeps the rows its own
+    # spec declares, after main's.
+    recorded_agents = {row[0] for row in MAIN_SOURCES}
+    added = tuple(s for s in native_memory.MEMORY_SOURCES if s.agent not in recorded_agents)
+    monkeypatch.setattr(native_memory, "MEMORY_SOURCES", main_order + added)
+
+    assert [f.as_dict() for f in native_memory.scan(home, workspace)] == now
+    assert native_memory.candidates(home, workspace) == now_allowed
+
+
+def test_a_workspace_that_is_a_cli_s_user_directory_lists_the_file_under_the_first_row_that_reaches_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The one case where the order of the table shows. `~/.codex` as the
+    workspace: `~/.codex/AGENTS.md` is codex's user row (`.codex/AGENTS.md`) and
+    every project row `AGENTS.md`. `candidates` keeps the scope and the relative
+    path of the first row to reach a path, and the table is in registry order.
+
+    This pins the registry-order result. Main's order listed it under User as
+    `.codex/AGENTS.md`; that is a known difference (REDESIGN-REPORT.md, "Rust
+    differences from main"). The set of allowed paths is the same either way."""
+    home = _home(tmp_path)
+    workspace = home / ".codex"
+    target = _write(workspace, ("AGENTS.md",))
+
+    [listed] = [f for f in native_memory.scan(home, workspace) if f.path == str(target)]
+    assert (listed.scope, listed.relative) == (native_memory.PROJECT_SCOPE, "AGENTS.md")
+    assert "codex" in listed.readers, "codex still reads it, through its user row"
+
+    # With the rows in main's order the label differs; nothing else does.
+    main_order = tuple(
+        native_memory.MemorySource(agent, scope, tuple(relative), canonical, glob)
+        for agent, scope, relative, canonical, glob in MAIN_SOURCES
+    )
+    recorded_agents = {row[0] for row in MAIN_SOURCES}
+    added = tuple(s for s in native_memory.MEMORY_SOURCES if s.agent not in recorded_agents)
+    allowed_now = set(native_memory.candidates(home, workspace))
+    monkeypatch.setattr(native_memory, "MEMORY_SOURCES", main_order + added)
+    [on_main] = [f for f in native_memory.scan(home, workspace) if f.path == str(target)]
+    assert (on_main.scope, on_main.relative) == (native_memory.USER_SCOPE, ".codex/AGENTS.md")
+    assert on_main.readers == listed.readers
+    assert set(native_memory.candidates(home, workspace)) == allowed_now
+
+
+def test_every_declared_row_is_a_relative_path_of_one_of_the_two_scopes() -> None:
+    """`memory_sources` is the allow-list of files Settings may read and write,
+    and a user-scope row is not checked for containment: the shape is."""
+    for key, spec in VENDORS.items():
+        for source in spec.memory_sources:
+            where = f"{key}: {source}"
+            assert source.scope in (native_memory.USER_SCOPE, native_memory.PROJECT_SCOPE), where
+            assert source.relative, where
+            for part in source.relative:
+                assert part and part != "..", where
+                assert not Path(part).is_absolute() and "/" not in part and "\\" not in part, where
+
+
 # ---- agent coverage -------------------------------------------------------
 
 

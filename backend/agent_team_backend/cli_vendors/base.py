@@ -470,6 +470,37 @@ class ExtensionsSpec:
     note: str = ""
 
 
+#: ``MemorySource.scope``: relative to the real home / to the workspace root.
+USER_SCOPE = "user"
+PROJECT_SCOPE = "project"
+
+
+@dataclass(frozen=True)
+class MemorySource:
+    """One instruction file one CLI loads, described well enough to find.
+
+    A vendor lists its own in ``VendorSpec.memory_sources``; ``native_memory``
+    assembles the table from the registry. Verified against the installed
+    binary or its bundled docs, never against documentation alone, and a file
+    read by several CLIs gets one row per reader (``scan`` merges them).
+    """
+
+    #: Agent key, as used everywhere else in the backend (the owning spec's ``key``).
+    agent: str
+    #: ``"user"`` (relative to the real home) or ``"project"`` (relative to
+    #: the workspace root).
+    scope: str
+    #: Path to the file, or -- with ``glob`` -- to the directory holding them.
+    relative: tuple[str, ...]
+    #: True when this is the file Navide offers to create for the agent. A
+    #: canonical row is listed even when the file does not exist yet; the
+    #: others are listed only once the user has one.
+    canonical: bool = False
+    #: Non-empty when ``relative`` is a directory of instruction files rather
+    #: than a single file, e.g. cursor's ``.cursor/rules``.
+    glob: str = ""
+
+
 @dataclass(frozen=True)
 class PushChannel:
     """How an external process hands this CLI a new instruction without typing
@@ -1034,6 +1065,16 @@ class VendorSpec:
     # Where the CLI keeps the plugins, mods, extensions and hooks it installed
     # for itself. None = no extension system (aider), hidden from the page.
     extensions: ExtensionsSpec | None = None
+    # Why ``extensions`` is None: the CLI has no extension system. A reviewed
+    # fact of this vendor, stated in its own file; a vendor declares exactly one
+    # of the two (test_cli_extensions.py).
+    extensions_none_reason: str = ""
+
+    # --- instruction files (Settings → Memory) ---
+    # Where the CLI loads its instructions from, one row per file (native_memory
+    # assembles the table from every vendor's rows, in registry order). Empty =
+    # the CLI has none Navide can name (aider's are whatever its config says).
+    memory_sources: tuple[MemorySource, ...] = ()
 
     # --- model selection (mirrors the frontend AgentSpec) ---
     # Whether a spawn may name the model / reasoning effort for this CLI.
@@ -1069,6 +1110,11 @@ class VendorSpec:
     # The startup probe discloses a newer installed CLI against this first,
     # then against the account-switch version.
     cli_verified_version: str = ""
+    # Why there is no verified version (neither this nor the account-switch
+    # evidence): the integration was wired from docs with no install to run, so
+    # the vendor says so instead of inventing one. Exactly one of the two is
+    # set (test_spawn_probe_version_drift.py).
+    cli_unverified_reason: str = ""
 
     # --- lifecycle hooks ---
     # (backend_port_file: str) -> install result. Set when this CLI can be
@@ -1096,6 +1142,11 @@ class VendorSpec:
     # Pure resolver for the active pane's absolute data roots. None/empty =
     # unsupported. The observer, not the declaration, owns filesystem access.
     data_dirs: Callable[[VendorRuntimeContext], tuple[Path, ...]] | None = None
+    # Why ``data_dirs`` is None: the CLI keeps nothing under a user-home data
+    # directory of its own (aider's files live in the workspace, which is not
+    # a data root). A vendor declares exactly one of the two
+    # (test_risk_declarations.py).
+    data_dirs_none_reason: str = ""
     # Only these environment path values may enter the risk context.
     data_dir_env_vars: tuple[str, ...] = ()
     # These values are captured ONLY as presence markers. Any nonempty

@@ -24,6 +24,8 @@ from pathlib import Path
 import re
 
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
+from ._declared import declared
 from .base import AccountSwitchSpec, Dep, PlatformInstall, McpServerConfig, McpValue, McpWiring, SkillsWiring, VendorSpec, command_text
 from ..usage_common import HTTP_TIMEOUT, _epoch_to_iso, _num, _snapshot, _window, parse_retry_after
 from ..log_readers.base import (
@@ -594,15 +596,9 @@ async def fetch_kimi(home: Path, env: dict | None = None) -> dict:
 
 # ---- resume / session ------------------------------------------------------
 
-# Optional-id guard so the capture never swallows a following flag.
-_RESUME_RE = re.compile(r"^kimi\s+(?:\S+\s+)*(?:--session|-S)\s+([^-\s]\S*)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `kimi ... --session <id>` / `-S <id>` command
-    ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# The session id of a `kimi ... --session <id>` / `-S <id>` command (never a
+# following flag) is read by the launch declaration
+# (native/navide-cli-runtime/src/vendors/kimi.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -621,7 +617,14 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("hooks", (".kimi-code", "config.toml"), "Kimi hook", section=("hooks",)),
 ))
 
+# Instruction files: $KIMI_CODE_HOME/AGENTS.md, else ~/.kimi-code/AGENTS.md.
+_MEMORY_SOURCES = (
+    MemorySource("kimi", USER_SCOPE, (".kimi-code", "AGENTS.md"), canonical=True),
+    MemorySource("kimi", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="kimi",
     # Configurable provider/base URL; no verified default CLI host set here.
@@ -629,7 +632,6 @@ SPEC = VendorSpec(
     # Same runtime root as _kimi_home.
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("KIMI_CODE_HOME") or ctx.home / ".kimi-code"),),
     data_dir_env_vars=("KIMI_CODE_HOME",),
-    supports_model=True,
     skills_supported=True,
     # --skills-dir is repeatable but replaces auto-discovery outright, so the
     # roots kimi would have found itself are passed back alongside ours.
@@ -639,7 +641,6 @@ SPEC = VendorSpec(
         discovery_home=((".kimi-code", "skills"), (".agents", "skills")),
         discovery_project=((".agents", "skills"),),
     ),
-    label="Kimi Code CLI (Moonshot AI)",
     # No flag and no config variable, so the MCP config can only be reached
     # through the config directory — which kimi, unlike grok and antigravity,
     # relocates with a variable of its own. A url with no transport field is
@@ -679,13 +680,10 @@ SPEC = VendorSpec(
     cli_verified_version="2.2.0",
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_kimi(home),
-    resume_id_from_command=_resume_id_from_command,
+    # Model support, the spawn environment (the ESC reassembly window, the
+    # home variable stripped) and resume-id parsing: the launch declaration.
+    **declared("kimi"),
     session_exists=_session_exists,
-    # pi-tui otherwise treats a split ESC prefix as Escape after 10ms. Pane
-    # input crosses the renderer/WebSocket/PTY boundary, so give Kimi the same
-    # reassembly window pi-tui already uses for remote terminals.
-    spawn_env_defaults=(("PI_TUI_ESC_TIMEOUT", "100"),),
-    home_env_vars=("KIMI_CODE_HOME",),
     make_log_reader=KimiLogReader,
     # Kimi Code ships `kimi doctor` and `kimi upgrade` (aliased `update`);
     # verified with `kimi --help` on 2.2.0 (Kimi Code never had a 1.x — the

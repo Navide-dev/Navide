@@ -1,21 +1,24 @@
 /** Goose (AAIF) — per-vendor agent spec (see types.ts; assembled by index.ts). */
 
+import { declared } from './_declared'
 import type { AgentSpec } from './types'
 
 export const SPEC = {
   agentKey: 'goose',
-  label: 'Goose (AAIF)',
-  // Bare `goose` opens a new interactive session once a provider is
+  // Label, command and resume arguments: the launch declaration.
+  //
+  // Command: bare `goose` opens a new interactive session once a provider is
   // configured, and runs `goose configure` first when none is (1.55.0).
-  defaultCommand: 'goose',
+  //
   // no skipPermissionFlag: goose has no such flag. Approval is the GOOSE_MODE
   // setting (auto — the default — approve, smart_approve, chat), so a pane
   // runs with whatever mode the user configured.
-  // `--session-id` only resumes (`-r`); a new session cannot be given an id
-  // at launch, so the pane binds through the kickoff marker. An unknown id
-  // exits with "no such session exists", which the backend preflight checks.
-  resumeArgs: (id) => `session -r --session-id ${id}`,
-  resumeCommandPattern: /^goose\s+session\s+-r\s+--session-id\s+\S+/,
+  //
+  // Resume (`session -r --session-id <id>`): `--session-id` only resumes
+  // (`-r`); a new session cannot be given an id at launch, so the pane binds
+  // through the kickoff marker. An unknown id exits with "no such session
+  // exists", which the backend preflight checks.
+  ...declared('goose'),
   needsSessionMarker: true,
   supportsRebuild: true,
   // Measured on a real PTY (1.55.0): `ESC[?2004h` at startup, never

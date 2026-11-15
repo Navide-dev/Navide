@@ -618,4 +618,10 @@ def test_agent_cli_install_entries_unchanged():
         {k: list(v) if isinstance(v, tuple) else v for k, v in entry.items()}
         for entry in actual
     ]
-    assert actual == SNAPSHOT
+    # The snapshot is a recording of the entries that existed when it was
+    # taken: every one is still there, unchanged, in the same relative order.
+    # A CLI added later states its own `Dep` in its vendor file and needs no
+    # entry here.
+    recorded = [entry["id"] for entry in SNAPSHOT]
+    assert set(recorded) <= {entry["id"] for entry in actual}, "a recorded install entry is gone"
+    assert [entry for entry in actual if entry["id"] in recorded] == SNAPSHOT

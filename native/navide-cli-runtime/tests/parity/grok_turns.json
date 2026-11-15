@@ -1,0 +1,244 @@
+{
+ "vendor": "grok",
+ "file": "grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+ "sidecars": {},
+ "as_written": [],
+ "python_reads": [],
+ "steps": [
+  {
+   "mode": "write",
+   "text": "{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-1\", \"agentTimestampMs\": 1789379453712}, \"update\": {\"sessionUpdate\": \"user_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"hello grok\"}}}}\n{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-2\", \"agentTimestampMs\": 1789379453713}, \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"hi \"}}}}\n",
+   "mtime": 1792000000,
+   "now": 1792000001,
+   "expect": {
+    "usage": {
+     "events": [],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 634,
+      "anchor": "453559d18799d16a"
+     }
+    },
+    "activity": [
+     {
+      "vendor": "grok",
+      "event_type": "agent_active",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "act:01a09f53-9ed8-7303-9e16-e4907f948d93-1",
+      "timestamp": "2026-09-14T09:50:53.711Z",
+      "detail": "user",
+      "text": "hello grok",
+      "full": "hello grok"
+     },
+     {
+      "vendor": "grok",
+      "event_type": "agent_active",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "act:01a09f53-9ed8-7303-9e16-e4907f948d93-2",
+      "timestamp": "2026-09-14T09:50:53.713Z",
+      "detail": "assistant",
+      "text": ""
+     }
+    ],
+    "bag": [
+     "grok_act::{\"anchor\": \"453559d18799d16a\", \"kind\": \"jsonl\", \"offset\": 634}",
+     "grok_text::\"hi \""
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-3\", \"agentTimestampMs\": 1789379453714}, \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"there\"}}}}\n{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-4\", \"agentTimestampMs\": 1789379453715}, \"update\": {\"sessionUpdate\": \"turn_completed\", \"stop_reason\": \"end_turn\", \"usage\": {\"inputTokens\": 100, \"outputTokens\": 10, \"modelUsage\": {\"grok-4.6\": {\"inputTokens\": 100, \"outputTokens\": 10}}}}}}\n",
+   "mtime": 1792000001,
+   "now": 1792000002,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "grok",
+       "input_tokens": 100,
+       "output_tokens": 10,
+       "cwd": "/Users/dev/proj",
+       "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+       "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+       "dedup_key": "usage:01a09f53-9ed8-7303-9e16-e4907f948d93-4",
+       "timestamp": "2026-09-14T09:50:53.714Z",
+       "model": "grok-4.6",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 1363,
+        "anchor": "541df0036f1c26de"
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 1363,
+      "anchor": "541df0036f1c26de"
+     }
+    },
+    "activity": [
+     {
+      "vendor": "grok",
+      "event_type": "agent_active",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "act:01a09f53-9ed8-7303-9e16-e4907f948d93-3",
+      "timestamp": "2026-09-14T09:50:53.713Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "grok",
+      "event_type": "turn_complete",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "turn:01a09f53-9ed8-7303-9e16-e4907f948d93-4",
+      "timestamp": "2026-09-14T09:50:53.714Z",
+      "detail": "end_turn",
+      "text": "hi there"
+     }
+    ],
+    "bag": [
+     "grok_act::{\"anchor\": \"541df0036f1c26de\", \"kind\": \"jsonl\", \"offset\": 1363}"
+    ]
+   }
+  },
+  {
+   "mode": "append",
+   "text": "{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-5\", \"agentTimestampMs\": 1789379453716}, \"update\": {\"sessionUpdate\": \"user_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"again\"}}}}\n{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-6\", \"agentTimestampMs\": 1789379453717}, \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"ok\"}}}}\n{\"method\": \"session/update\", \"timestamp\": 1789379453, \"params\": {\"sessionId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93\", \"_meta\": {\"eventId\": \"01a09f53-9ed8-7303-9e16-e4907f948d93-7\", \"agentTimestampMs\": 1789379453718}, \"update\": {\"sessionUpdate\": \"turn_completed\", \"stop_reason\": \"cancelled\", \"usage\": {\"inputTokens\": 50, \"outputTokens\": 5, \"modelUsage\": {\"grok-4.6\": {\"inputTokens\": 50, \"outputTokens\": 5}}}}}}\n",
+   "mtime": 1792000002,
+   "now": 1792000003,
+   "expect": {
+    "usage": {
+     "events": [
+      {
+       "vendor": "grok",
+       "input_tokens": 50,
+       "output_tokens": 5,
+       "cwd": "/Users/dev/proj",
+       "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+       "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+       "dedup_key": "usage:01a09f53-9ed8-7303-9e16-e4907f948d93-7",
+       "timestamp": "2026-09-14T09:50:53.717Z",
+       "model": "grok-4.6",
+       "checkpoint": {
+        "kind": "jsonl",
+        "offset": 2401,
+        "anchor": "a152f730111f5de6"
+       },
+       "raw": {},
+       "cache_read_tokens": 0,
+       "cache_creation_tokens": 0,
+       "cli_version": ""
+      }
+     ],
+     "checkpoint": {
+      "kind": "jsonl",
+      "offset": 2401,
+      "anchor": "a152f730111f5de6"
+     }
+    },
+    "activity": [
+     {
+      "vendor": "grok",
+      "event_type": "agent_active",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "act:01a09f53-9ed8-7303-9e16-e4907f948d93-5",
+      "timestamp": "2026-09-14T09:50:53.716Z",
+      "detail": "user",
+      "text": "again",
+      "full": "again"
+     },
+     {
+      "vendor": "grok",
+      "event_type": "agent_active",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "act:01a09f53-9ed8-7303-9e16-e4907f948d93-6",
+      "timestamp": "2026-09-14T09:50:53.717Z",
+      "detail": "assistant",
+      "text": ""
+     },
+     {
+      "vendor": "grok",
+      "event_type": "turn_complete",
+      "cwd": "/Users/dev/proj",
+      "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+      "file_path": "<root>/grok/sessions/%2FUsers%2Fdev%2Fproj/01a09f53-9ed8-7303-9e16-e4907f948d93/updates.jsonl",
+      "dedup_key": "turn:01a09f53-9ed8-7303-9e16-e4907f948d93-7",
+      "timestamp": "2026-09-14T09:50:53.717Z",
+      "detail": "cancelled",
+      "text": "ok"
+     }
+    ],
+    "bag": [
+     "grok_act::{\"anchor\": \"a152f730111f5de6\", \"kind\": \"jsonl\", \"offset\": 2401}"
+    ]
+   }
+  }
+ ],
+ "turns": [
+  {
+   "turn_index": 1,
+   "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+   "started_at": "2026-09-14T09:50:53.711Z",
+   "ended_at": "2026-09-14T09:50:53.714Z",
+   "prompt_excerpt": "hello grok",
+   "input": 100,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 10,
+   "calls": [
+    {
+     "ts": "2026-09-14T09:50:53.714Z",
+     "model": "grok-4.6",
+     "input": 100,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 10,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  },
+  {
+   "turn_index": 2,
+   "session_id": "01a09f53-9ed8-7303-9e16-e4907f948d93",
+   "started_at": "2026-09-14T09:50:53.716Z",
+   "ended_at": "2026-09-14T09:50:53.717Z",
+   "prompt_excerpt": "again",
+   "input": 50,
+   "cache_read": 0,
+   "cache_creation": 0,
+   "output": 5,
+   "calls": [
+    {
+     "ts": "2026-09-14T09:50:53.717Z",
+     "model": "grok-4.6",
+     "input": 50,
+     "cache_read": 0,
+     "cache_creation": 0,
+     "output": 5,
+     "cli_version": ""
+    }
+   ],
+   "model_calls": null,
+   "cli_version": ""
+  }
+ ]
+}

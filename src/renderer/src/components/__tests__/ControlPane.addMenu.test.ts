@@ -581,6 +581,10 @@ const COMPONENT_SRC = readFileSync(
  *  larger, which fails safe; underestimating would let a too-short cap pass. */
 const ROW_PX = 24
 
+/** How many roster rows the cap must show before the list needs scrolling: the
+ *  twenty CLIs main had. A fixed number; a longer roster scrolls. */
+const ROWS_ALWAYS_SHOWN = 20
+
 /** A `.ws-add-sec` heading (CLI, Agents): ~15px text plus 9px padding, and the
  *  second one adds a divider with 9px more space above it — 24 + 31, rounded up
  *  to 28 each. */
@@ -604,9 +608,13 @@ function flipThresholdPx(): number {
 }
 
 describe('ControlPane – the ＋ menu fits its roster', () => {
-  it('the scroller is tall enough to show every CLI at once', () => {
-    const needed = CLI_AGENT_SPECS.length * ROW_PX + 2 * HEADING_PX
-    expect(scrollerCapPx()).toBeGreaterThanOrEqual(needed)
+  it('the scroller cap is a fixed budget that scrolls, not a count of the roster', () => {
+    // The cap does not grow with the CLI list (a new CLI edits nothing here):
+    // it is a usable height, the roster scrolls past it, and the affordance
+    // test below holds that scrolling to be visible.
+    expect(scrollerCapPx()).toBeGreaterThanOrEqual(ROWS_ALWAYS_SHOWN * ROW_PX + 2 * HEADING_PX)
+    const block = COMPONENT_SRC.match(/\.ws-add-scroll\s*\{[\s\S]*?\n\}/)?.[0] ?? ''
+    expect(block).toMatch(/overflow-y:\s*auto/)
   })
 
   it('the flip threshold tracks the scroller cap', () => {

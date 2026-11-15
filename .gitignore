@@ -28,6 +28,7 @@ backend/dist/
 build/pane-helper/
 build/fn-key/
 build/stt/
+build/cli-runtime/
 native/navide-stt/target/
 native/navide-hello/target/
 backend/build/

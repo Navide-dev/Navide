@@ -52,7 +52,9 @@ from pathlib import Path
 
 import re
 
+from ._declared import declared
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -469,6 +471,17 @@ class OpencodeLogReader(LogReader):
         log.info("%s db: a read that failed works again", self.vendor)
         if not entries:
             del _READ_PROBLEMS[self.vendor]
+
+    def reads_itself(self) -> bool:
+        """True while one of this reader's queries is on record as failing.
+
+        The Rust CLI runtime (cli_runtime) asks before it answers a read in
+        this reader's place. It reports what the schema check finds, under the
+        same "schema" entry, but a failing query it leaves to this reader: the
+        runtime declines that read, this code makes it and records why, and
+        goes on making it until the query works again and clears its entry.
+        """
+        return any(key != "schema" for key in _READ_PROBLEMS.get(self.vendor, ()))
 
     def _conditional_reads_ok(self, path: Path) -> None:
         """A usage pass over `path` worked: the reads that only run on some
@@ -1053,14 +1066,9 @@ async def fetch_opencode(home: Path, env: dict | None = None) -> dict:
 
 # ---- resume / session ------------------------------------------------------
 
-_RESUME_RE = re.compile(r"^opencode\s+(?:\S+\s+)*(?:--session|-s)\s+([^-\s]\S*)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from an `opencode ... --session <id>` / `-s <id>` command
-    ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# The session id of an `opencode ... --session <id>` / `-s <id>` command is
+# read by the launch declaration (native/navide-cli-runtime/src/vendors/
+# opencode.rs; see _declared).
 
 
 def _session_exists(workspace_path: str, session_id: str) -> bool:
@@ -1081,7 +1089,17 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("npm-list", (".config", "opencode", "opencode.jsonc"), "opencode plugin", section=("plugin",)),
 ))
 
+# Instruction files: same loader family as kilo.
+_MEMORY_SOURCES = (
+    MemorySource("opencode", USER_SCOPE, (".config", "opencode", "AGENTS.md"), canonical=True),
+    MemorySource("opencode", USER_SCOPE, (".claude", "CLAUDE.md")),
+    MemorySource("opencode", PROJECT_SCOPE, ("AGENTS.md",), canonical=True),
+    MemorySource("opencode", PROJECT_SCOPE, ("CLAUDE.md",)),
+    MemorySource("opencode", PROJECT_SCOPE, ("CONTEXT.md",)),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="opencode",
     # Arbitrary provider config; a selected quota provider is not a CLI host set.
@@ -1089,7 +1107,6 @@ SPEC = VendorSpec(
     # Same XDG database/auth root as _data_dir("opencode").
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("XDG_DATA_HOME") or ctx.home / ".local" / "share") / "opencode",),
     data_dir_env_vars=("XDG_DATA_HOME",),
-    supports_model=True,
     skills_supported=True,
     # skills.paths registers extra roots; opencode deep-merges this document
     # over the user's own config, so their skills keep loading.
@@ -1098,7 +1115,6 @@ SPEC = VendorSpec(
         reads_shared_root=True,
         config_paths_key=("skills", "paths"),
     ),
-    label="OpenCode (Anomaly)",
     # No MCP flag; instead a whole config document read out of
     # OPENCODE_CONFIG_CONTENT and deep-merged over the user's files, so nothing
     # on disk is touched and the value dies with the pane. Verified against
@@ -1185,9 +1201,10 @@ SPEC = VendorSpec(
     # Late-bound (module global at call time) so tests can monkeypatch.
     fetch_usage=lambda home: fetch_opencode(home),
     fetch_usage_from_context=lambda ctx: fetch_opencode(ctx.home, dict(ctx.env)),
-    resume_id_from_command=_resume_id_from_command,
+    # Model support, the config variables a spawn strips and resume-id
+    # parsing: the launch declaration.
+    **declared("opencode"),
     session_exists=_session_exists,
-    home_env_vars=("OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG"),
     make_log_reader=OpencodeLogReader,
     # OpenCode ships `opencode upgrade` but no doctor subcommand.
     install_dep=Dep("opencode", "OpenCode (Anomaly)", "OpenCode terminal coding agent", "agent_cli",

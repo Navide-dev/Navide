@@ -172,7 +172,10 @@ describe('which vendors get the turn watch', () => {
   })
 
   it('keeps main\'s growth verdict for vendors with no turn signal', () => {
-    expect(shouldWatchTurn({ agentKey: 'mcode', midTurn: false })).toBe(false)
+    // The ones main had without a log reader; the signal is the declaration's `observed`.
+    for (const key of ['mcode', 'devin', 'kiro']) {
+      expect(shouldWatchTurn({ agentKey: key, midTurn: false }), key).toBe(false)
+    }
     expect(shouldWatchTurn({ agentKey: 'terminal', midTurn: false })).toBe(false)
     expect(shouldWatchTurn({ agentKey: 'some-new-cli', midTurn: false })).toBe(false)
     expect(shouldWatchTurn({ agentKey: undefined, midTurn: false })).toBe(false)

@@ -35,7 +35,9 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .. import osplat
+from ._declared import declared, resume_id
 from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
+from .base import PROJECT_SCOPE, USER_SCOPE, MemorySource
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -1461,14 +1463,8 @@ async def fetch_claude_account_dir(config_dir: Path) -> dict:
 
 
 # ---- resume / session ------------------------------------------------------
-
-_RESUME_RE = re.compile(r"^claude\s+(?:\S+\s+)*--resume\s+(\S+)")
-
-
-def _resume_id_from_command(command) -> str:
-    """Session id from a `claude ... --resume <id>` command ('' otherwise)."""
-    m = _RESUME_RE.match(command_text(command).strip())
-    return m.group(1) if m else ""
+# How a launch names the session it resumes is declared with the rest of the
+# launch (native/navide-cli-runtime/src/vendors/claude.rs; see _declared).
 
 
 def _session_path(workspace_path: str, session_id: str) -> Path:
@@ -1543,7 +1539,7 @@ def resume_fallback_command(
     "No conversation found" and exit, so return a fresh launch whose first
     message asks the agent to pick up the old transcript, plus the id."""
     text = command_text(command)
-    session_id = _resume_id_from_command(text)
+    session_id = resume_id("claude", text)
     if not session_id or not _FALLBACK_ID_RE.match(session_id):
         return command, ""
     if session_exists_in(config_projects, session_id):
@@ -1599,7 +1595,17 @@ _EXTENSIONS = ExtensionsSpec(sources=(
     ExtensionsSource("hooks", (".claude", "settings.json"), "Claude hook", section=("hooks",)),
 ))
 
+# Instruction files: ~/.claude/CLAUDE.md plus the project file and its
+# untracked sibling; nested CLAUDE.md files load per directory (not enumerated).
+_MEMORY_SOURCES = (
+    MemorySource("claude", USER_SCOPE, (".claude", "CLAUDE.md"), canonical=True),
+    MemorySource("claude", PROJECT_SCOPE, ("CLAUDE.md",), canonical=True),
+    MemorySource("claude", PROJECT_SCOPE, ("CLAUDE.local.md",)),
+    MemorySource("claude", PROJECT_SCOPE, (".claude", "CLAUDE.md")),
+)
+
 SPEC = VendorSpec(
+    memory_sources=_MEMORY_SOURCES,
     extensions=_EXTENSIONS,
     key="claude",
     # Official standalone CLI network requirements (verified 2026-09-21):
@@ -1627,9 +1633,6 @@ SPEC = VendorSpec(
     # search across other accounts when this pane has an isolated config dir.
     data_dirs=lambda ctx: (ctx.path(ctx.env.get("CLAUDE_CONFIG_DIR") or ctx.home / ".claude"),),
     data_dir_env_vars=("CLAUDE_CONFIG_DIR",),
-    supports_model=True,
-    supports_effort=True,
-    known_efforts=('low', 'medium', 'high', 'xhigh', 'max'),
     skills_supported=True,
     # --add-dir adds another project directory, and Claude Code discovers a
     # project's skills below .claude/skills — so the view has to carry that
@@ -1638,7 +1641,6 @@ SPEC = VendorSpec(
         flag="--add-dir",
         view_layout=(".claude", "skills"),
     ),
-    label="Claude Code (Anthropic)",
     # `--mcp-config` takes a literal JSON string as well as a path, and servers
     # from it load IN ADDITION to the user's own config (we never pass
     # --strict-mcp-config). A command that already carries the flag is the
@@ -1729,21 +1731,11 @@ SPEC = VendorSpec(
     # The vault's claude behavior branches (Keychain dual-track, oauthAccount,
     # wiped guard, login CLAUDE_CONFIG_DIR + env removals) are the documented
     # exemption list and are NOT routed through this spec.
-    resume_id_from_command=_resume_id_from_command,
+    # Model and effort support, the home variables a spawn strips, the
+    # interrupt byte and resume-id parsing: the launch declaration.
+    **declared("claude"),
     session_path=_session_path,
     session_exists=_session_exists,
-    # Claude Code gives the first MCP connect 30s (MCP_TIMEOUT) and stops
-    # after three retries; a mass restore slowed /plan-mcp past that and left
-    # panes without Navide tools until a manual /mcp (2026-11-12). Verified on
-    # 2.1.325 that HTTP servers honor it.
-    spawn_env_defaults=(("MCP_TIMEOUT", "120000"),),
-    home_env_vars=(
-        "CLAUDE_CONFIG_DIR",
-        # Claude Code stamps its own subprocesses with this; inherited, a
-        # spawned pane silently skips transcript saving (blank pane after
-        # restart — root-caused live 2026-08-07).
-        "CLAUDE_CODE_CHILD_SESSION",
-    ),
     make_log_reader=ClaudeLogReader,
     # Step 2 — Agent CLIs (≥ 1 required) + Analyzer
     # Anthropic now lists `curl -fsSL https://claude.ai/install.sh | bash` (or
