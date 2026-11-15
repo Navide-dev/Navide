@@ -153,7 +153,7 @@ a = Analysis(
         # all of them costs a warning line per platform and nothing else.
         'watchdog.observers.fsevents',              # macOS
         'watchdog.observers.inotify',               # Linux
-        'watchdog.observers.inotify_buffer',
+        'watchdog.observers.inotify_move_event_grouper',
         'watchdog.observers.inotify_c',
         'watchdog.observers.read_directory_changes',  # Windows
         'watchdog.observers.winapi',

@@ -47,9 +47,9 @@ from watchdog.events import (
     FileSystemEvent,
     FileSystemEventHandler,
 )
+from watchdog.observers import Observer
 
 from . import osplat
-from .fs_observer import Observer
 from .gitignore import GitIgnore
 
 log = logging.getLogger("agent_team_backend.git_watcher")
