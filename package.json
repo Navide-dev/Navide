@@ -78,7 +78,7 @@
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:integration && pnpm run build:public-packages && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-git/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-plans/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-mini-ide/tsconfig.json && node scripts/bun/vue-tsc.cjs --noEmit -p plugins/navide-browser/tsconfig.json && pnpm run typecheck:web && pnpm run typecheck:public",
     "build:public-packages": "tsc -p packages/plugin-contracts/tsconfig.json && tsc -p packages/plugin-sdk/tsconfig.build.json && vite build --config packages/plugin-ui/vite.config.ts && node scripts/bun/vue-tsc.cjs -p packages/plugin-ui/tsconfig.build.json",
     "test": "vitest",
-    "test:run": "vitest run",
+    "test:run": "vitest run && node scripts/run-plugin-tests.mjs --all",
     "test:e2e": "playwright test",
     "backend:dev": "uv --project backend run python -m agent_team_backend",
     "package:local": "bash ./build.sh",
