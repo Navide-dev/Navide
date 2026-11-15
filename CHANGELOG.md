@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Guard asks before the forms 0.2.43 listed as not covered: credential paths reached through `${P:-x}`, `${P%…}` and other parameter expansions; readers wrapped in `timeout`, `nice` or `env -u` given a variable too long to follow; credential paths handed on through `xargs`; and `curl --data-binary @- < file` (and other stdin uploads) of a credential, now marked as a credential upload. A terminal allow prefix no longer lets a line read a credential file.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added
