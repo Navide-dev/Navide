@@ -180,6 +180,9 @@ class TerminalSession:
     shell_pid: int = 0
     # Sanitized path/override context only; never persisted as pane metadata.
     risk_context: VendorRuntimeContext | None = field(default=None, repr=False)
+    # Observers of raw output, called before it is buffered for the client
+    # (a remote pane's token feeder). Empty for every other pane.
+    output_taps: list[Callable[[bytes], None]] = field(default_factory=list, repr=False)
 
 
 # Output logs currently held open for append by a live session (terminal
@@ -1749,7 +1752,13 @@ class TerminalService:
         # Whatever arrived before EOF still has to reach the client, and _close
         # flushes the output buffer — so absorb first, then close.
         if raw:
-            self._absorb_output(session, b"".join(raw), nbytes)
+            combined = b"".join(raw)
+            for tap in getattr(session, "output_taps", ()):
+                try:
+                    tap(combined)
+                except Exception:  # noqa: BLE001 — an observer never stops output
+                    log.exception("output tap failed for session %s", session.id)
+            self._absorb_output(session, combined, nbytes)
         if close_reason is not None:
             pending = getattr(session, "pending_close_reason", None)
             if close_reason == "exit" and pending:

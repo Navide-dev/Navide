@@ -58,6 +58,21 @@ For Kimi Code panes, Navide gives the CLI a 100 ms escape-sequence reassembly wi
 
 For Claude Code panes, Navide sets `MCP_TIMEOUT=120000` so the Navide tools still connect when many panes start at once and the backend answers slowly. An existing `MCP_TIMEOUT` value still takes precedence.
 
+### Remote container panes (experimental)
+
+Off by default. Turn it on in **Settings → General → Experimental features → Remote container panes**; the **+** menu then shows **Remote container…**.
+
+A remote container pane runs Claude Code or Codex inside a Docker container on another machine: Navide runs `ssh` to the host and `docker exec` into the container, with the same typing, colors and resizing as a local pane.
+
+- **Host** is a name your own ssh configuration already knows. Navide uses your ssh setup as it is; it does not read or change `~/.ssh`, add keys to your agent, or store any key or password. It remembers only the host name and the container name.
+- **List containers** shows the host's containers. A stopped container, or one whose network mode Navide cannot reach, cannot be chosen.
+- **Test connection** checks each hop: the host, the container, the CLI inside it, and the Navide tools tunnel.
+- **Navide tools** (pane messages, plans) reach the container through an `ssh -R` reverse tunnel to this computer. With host networking the container dials `127.0.0.1`; with a bridge network it dials the bridge gateway, which needs `GatewayPorts clientspecified` in the host's `sshd_config`. The pane's tool token is passed on the pane's first input line with echo off, never on a command line.
+- **Sign in inside the container.** A remote pane has no account switching and no automatic quota failover: both work by copying this computer's sign-in files into the CLI, which would send your credentials to another machine. On first open a card walks you through `/login` (Claude Code) or the device code (Codex CLI). The sign-in lives in the container and is lost when the container is rebuilt.
+- **SSH agent forwarding stays off**, and environment variables other than what `ssh` itself needs are removed from the connection, so no `SendEnv` rule can carry a local API key.
+- **Disconnects:** when the connection drops, the CLI in the container stops and the pane shows **Reconnect**, which opens a new session in the same container. Long-running work that must survive a disconnect needs `tmux` or similar inside the container.
+- Only Claude Code and Codex are supported in remote panes. Windows hosts of Navide connect without connection sharing (Windows OpenSSH has no ControlMaster).
+
 ### CLI risk observations
 
 An active agent pane can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active panes, while network findings belong to the observed pane's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

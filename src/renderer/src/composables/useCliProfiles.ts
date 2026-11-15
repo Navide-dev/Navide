@@ -883,11 +883,13 @@ export function paneNeedsAccountRestart(
     isLogin?: boolean
     pinnedSessionId?: string
     sessionOnDisk?: boolean
+    /** A remote container pane never follows this machine's accounts. */
+    remote?: unknown
   },
   agentKey: string,
   status: string | undefined,
 ): boolean {
-  if (!pane.realized || pane.agentKey !== agentKey || pane.isLogin) return false
+  if (!pane.realized || pane.agentKey !== agentKey || pane.isLogin || pane.remote) return false
   if (status === 'exited' || status === 'error') return false
   return paneCanRebuild({ ...pane, agentKey })
 }

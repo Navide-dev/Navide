@@ -35,6 +35,18 @@ export interface TerminalSpawnOptions {
   /** A claude sign-in inside the pane's account's own config dir (the
    *  account is the pane's `metadata.profile_id`). */
   accountDirLogin?: boolean
+  /** A remote container pane (Settings → Experimental → Remote container
+   *  panes): the backend runs the CLI over ssh inside this container and
+   *  ignores `command`. Absent for every local pane. */
+  remote?: TerminalRemoteTarget
+}
+
+/** The `remote` object terminal.create takes: host and container names, and
+ *  how the container reaches this machine's tool server. */
+export interface TerminalRemoteTarget {
+  host: string
+  container: string
+  network: { mode: 'host' } | { mode: 'bridge'; gateway: string }
 }
 
 export interface TerminalCreateRequest {
@@ -53,6 +65,7 @@ export interface TerminalCreateRequest {
   loginProfileId: string | null
   isLogin: boolean
   accountDirLogin?: boolean
+  remote?: TerminalRemoteTarget
   replacesTerminalId: string | null
 }
 

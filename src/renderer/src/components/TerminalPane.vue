@@ -34,6 +34,13 @@ import AgentControlPanel from './agent/AgentControlPanel.vue'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
 import { formatClock } from '../lib/schedulerJobs'
+import {
+  REMOTE_AGENT_LABELS,
+  isRemoteAgentKey,
+  isRemoteLoginDone,
+  markRemoteLoginDone,
+  type RemoteTarget,
+} from '../composables/useRemoteDevcontainerPrefs'
 
 interface Props {
   paneId: string
@@ -158,6 +165,17 @@ interface Props {
    *  CLI-only chips (loop, login, quota, account) are left out. Undefined for
    *  every CLI pane, which renders exactly as before. */
   agent?: AgentPaneInfo
+  /** Set for a remote container pane (Settings → Experimental → Remote
+   *  container panes): its CLI runs over ssh inside this container. The header
+   *  names the target, the account controls give way to a disabled chip, and
+   *  an exited CLI gets a reconnect banner. Undefined for every local pane,
+   *  which renders exactly as before. */
+  remote?: RemoteTarget
+  /** Banner "Reconnect": App.vue respawns this pane against the same
+   *  container. Callbacks, not emits, for the reason given at openCliUpdate. */
+  remoteReconnect?: () => void
+  /** Banner "Close pane": App.vue's ordinary close path. */
+  remoteClosePane?: () => void
 }
 
 const props = defineProps<Props>()
@@ -392,6 +410,69 @@ const showContinueButton = computed<boolean>(
     !props.restoring &&
     displayStatus.value === 'idle' &&
     (terminal.lastUserKeyAt?.value ?? 0) === 0
+)
+
+// ── Remote container pane ────────────────────────────────────────────────────
+const remoteCliLabel = computed<string>(() => {
+  const key = props.agentKey ?? ''
+  return isRemoteAgentKey(key) ? REMOTE_AGENT_LABELS[key] : key
+})
+
+// The sign-in card: the container has its own CLI login, which Navide never
+// copies there. Shown by itself on the first open of each host + container +
+// CLI until dismissed, and reopened from the remote badge. For claude, opening
+// it types `/login` into the prompt once the CLI is at it — never Enter: the
+// user submits it.
+const loginCardOpen = ref(false)
+const loginStepsOpen = ref(false)
+let loginPrefillPending = false
+
+function tryLoginPrefill(): void {
+  if (!loginPrefillPending || terminal.liveStatus?.value !== 'idle') return
+  if (terminal.pasteText('/login')) loginPrefillPending = false
+}
+
+function openLoginCard(withSteps: boolean): void {
+  loginCardOpen.value = true
+  loginStepsOpen.value = withSteps
+  loginPrefillPending = props.agentKey === 'claude'
+  tryLoginPrefill()
+}
+
+function dismissLoginCard(): void {
+  loginCardOpen.value = false
+  loginPrefillPending = false
+  if (props.remote) markRemoteLoginDone(props.remote.host, props.remote.container, props.agentKey ?? '')
+}
+
+watch(() => terminal.liveStatus?.value, tryLoginPrefill)
+
+if (props.remote && !isRemoteLoginDone(props.remote.host, props.remote.container, props.agentKey ?? '')) {
+  openLoginCard(false)
+}
+
+// Disconnect banner: a remote CLI that ended is usually a dropped ssh link, so
+// the pane offers to reconnect to the same container. Local panes are not
+// affected — their exit stays the exit badge it always was.
+const remoteDownAt = ref<number | null>(null)
+const remoteNow = ref(Date.now())
+let remoteTick: ReturnType<typeof setInterval> | null = null
+
+watch(
+  () => !!props.remote && (displayStatus.value === 'exited' || displayStatus.value === 'error'),
+  (down) => {
+    if (remoteTick) clearInterval(remoteTick)
+    remoteTick = null
+    remoteDownAt.value = down ? Date.now() : null
+    remoteNow.value = Date.now()
+    if (down) remoteTick = setInterval(() => { remoteNow.value = Date.now() }, 1000)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => { if (remoteTick) clearInterval(remoteTick) })
+
+const remoteDownSeconds = computed<number>(() =>
+  remoteDownAt.value == null ? 0 : Math.max(0, Math.floor((remoteNow.value - remoteDownAt.value) / 1000))
 )
 
 // ── Agent pane ───────────────────────────────────────────────────────────────
@@ -856,6 +937,14 @@ onMounted(() => {
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
         <span v-if="agentView" class="agent-vendor" data-testid="agent-vendor" v-truncate>{{ agentVendorLine }}</span>
+        <span
+          v-if="remote"
+          class="remote-badge"
+          role="button"
+          data-testid="remote-badge"
+          :title="$t('remoteDevcontainer.login-help')"
+          @click.stop="openLoginCard(true)"
+        >{{ $t('remoteDevcontainer.badge', { host: remote.host, container: remote.container }) }}</span>
         <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
         <template v-if="!agentView">
         <span
@@ -953,7 +1042,7 @@ onMounted(() => {
           ? $t('pane.terminal.usage-limit-badge', { time: formatLoopTime(usageLimitUntil) })
           : $t('pane.terminal.usage-limit-badge-unknown') }}</span>
         <span
-          v-if="usageLimitHit && quotaSwitchOffered"
+          v-if="usageLimitHit && quotaSwitchOffered && !remote"
           class="usage-limit-switch"
           role="button"
           data-testid="usage-limit-switch"
@@ -986,6 +1075,14 @@ onMounted(() => {
           :title="$t('pane.terminal.stop-ineffective-tooltip')"
         >{{ $t('pane.terminal.stop-ineffective') }}</span>
         <template v-if="!agentView">
+        <span
+          v-if="remote"
+          class="remote-account-chip"
+          aria-disabled="true"
+          data-testid="remote-account-disabled"
+          :title="`${$t('remoteDevcontainer.account-disabled-title')}\n${$t('remoteDevcontainer.account-disabled-body')}`"
+        >{{ $t('remoteDevcontainer.account-disabled') }}</span>
+        <template v-else>
         <UsageBadge
           v-if="agentKey"
           data-tour="usage-badge"
@@ -1004,6 +1101,7 @@ onMounted(() => {
           :title="$t('account-follow.pinned-indicator-tooltip')"
           :aria-label="$t('account-follow.pinned-indicator-label')"
         >📌</span>
+        </template>
         </template>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
         <template v-if="agentView">
@@ -1026,6 +1124,7 @@ onMounted(() => {
         </template>
       </div>
       <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
+      <div v-else-if="remote" class="header-sub" data-testid="remote-sub" v-truncate>{{ $t('remoteDevcontainer.sub', { cli: remoteCliLabel, host: remote.host, container: remote.container }) }}</div>
       <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
     <div
@@ -1058,6 +1157,35 @@ onMounted(() => {
     <div v-if="disconnectedNotice" class="disconnected-banner" role="status" aria-live="polite">
       <span class="disconnected-dot" />
       <span class="disconnected-text" v-truncate>{{ disconnectedNotice }}</span>
+    </div>
+    <!-- Remote container pane: its CLI ended (usually the ssh link). Same
+         sibling-of-.xterm-host placement as the banner above. -->
+    <div v-if="remote && remoteDownAt != null" class="remote-disconnected" role="status" data-testid="remote-disconnected">
+      <div class="remote-disc-head">
+        <strong>{{ $t('remoteDevcontainer.disconnected-title', { host: remote.host }) }}</strong>
+        <span class="remote-disc-ago">{{ $t('remoteDevcontainer.disconnected-ago', { seconds: remoteDownSeconds }) }}</span>
+      </div>
+      <p class="remote-disc-body">{{ $t('remoteDevcontainer.disconnected-body') }}</p>
+      <div class="remote-actions">
+        <button type="button" class="primary" data-testid="remote-reconnect" @click.stop="remoteReconnect?.()">{{ $t('remoteDevcontainer.reconnect') }}</button>
+        <button type="button" data-testid="remote-close-pane" @click.stop="remoteClosePane?.()">{{ $t('remoteDevcontainer.close-pane') }}</button>
+      </div>
+    </div>
+    <div v-else-if="remote && loginCardOpen" class="remote-login" role="dialog" data-testid="remote-login-card" :aria-label="$t('remoteDevcontainer.login-title', { cli: remoteCliLabel })">
+      <strong class="remote-login-title">{{ $t('remoteDevcontainer.login-title', { cli: remoteCliLabel }) }}</strong>
+      <template v-if="loginStepsOpen">
+        <ol class="remote-login-steps">
+          <li>{{ $t('remoteDevcontainer.login-step1') }}</li>
+          <li>{{ $t('remoteDevcontainer.login-step2') }}</li>
+          <li>{{ $t('remoteDevcontainer.login-step3') }}</li>
+        </ol>
+        <p v-if="agentKey === 'codex'" class="remote-login-note">{{ $t('remoteDevcontainer.login-codex') }}</p>
+      </template>
+      <p class="remote-login-note">{{ $t('remoteDevcontainer.login-note') }}</p>
+      <div class="remote-actions">
+        <button v-if="!loginStepsOpen" type="button" data-testid="remote-login-help" @click.stop="loginStepsOpen = true">{{ $t('remoteDevcontainer.login-help') }}</button>
+        <button type="button" class="primary" data-testid="remote-login-done" @click.stop="dismissLoginCard">{{ $t('remoteDevcontainer.login-done') }}</button>
+      </div>
     </div>
     <!-- Optional-chained: the pane's tests stub useTerminal with partial objects. -->
     <div
@@ -1427,6 +1555,63 @@ onMounted(() => {
 }
 /* Beside the quota badge, with the follow-switch flag on: reopen the pane
    on another account. Quieter than the badge it sits next to. */
+.remote-badge {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-3xs, 10px);
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.remote-badge:hover { color: var(--text-primary); }
+.remote-account-chip {
+  flex: none;
+  padding: 0 6px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-3xs, 10px);
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 0.7;
+  cursor: help;
+}
+.remote-disconnected,
+.remote-login {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-base);
+  box-shadow: var(--shadow-modal);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.remote-disconnected { border-color: var(--danger-fg, #cf222e); }
+.remote-disc-head { display: flex; gap: 8px; align-items: baseline; }
+.remote-disc-ago { color: var(--text-secondary); }
+.remote-disc-body,
+.remote-login-note { margin: 6px 0 0; color: var(--text-secondary); }
+.remote-login-title { display: block; }
+.remote-login-steps { margin: 6px 0 0; padding-left: 18px; }
+.remote-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.remote-actions button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.remote-actions button.primary { background: var(--accent-emphasis, var(--accent-focus)); border-color: transparent; color: var(--text-on-emphasis); }
 .usage-limit-switch {
   font-size: var(--font-3xs);
   font-weight: 600;

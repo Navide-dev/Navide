@@ -12357,6 +12357,15 @@ async def request_account_switch(
 
     if not agent_key or not profile_id:
         return {**await settle("bad-request"), "error": "agent and profile_id are required"}
+    from agent_team_backend.remote_devcontainer_ws import is_remote_pane
+
+    if target_pane and is_remote_pane(target_pane):
+        # A switch copies this machine's sign-in into the pane's CLI; a remote
+        # pane signs in inside its own container instead.
+        return {
+            **await settle("refused", code="REMOTE_PANE"),
+            "error": "remote container panes do not switch accounts; sign in inside the container",
+        }
     from agent_team_backend import api_key_accounts
 
     if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):

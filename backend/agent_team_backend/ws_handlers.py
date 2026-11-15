@@ -3825,7 +3825,14 @@ async def account_switch_settled(session: "Session", msg_id: str, msg_type: str,
 @handler("quota_failover.report")
 async def quota_failover_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .remote_devcontainer_ws import is_remote_pane
 
+    if is_remote_pane(str(payload.get("pane_id") or "")):
+        # A remote pane's quota is its container's own sign-in: failing over
+        # would copy this machine's credentials, so it is never reported.
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_PANE", "remote container panes do not fail over"))
+        return
     await _failover_call(
         session, msg_id, msg_type, lambda: app.quota_failover.report(payload),
         shape=lambda result: {"incident": result[0].to_dict(), "created": result[1]},
@@ -8804,9 +8811,16 @@ async def terminal_create(session: "Session", msg_id: str, msg_type: str, payloa
         }
         session._terminal_create_transactions[key] = transaction
         try:
-            await _terminal_create_impl(
-                session, msg_id, msg_type, payload, transaction, generation
-            )
+            if payload.get("remote") is not None:
+                from .remote_devcontainer_ws import create_remote_pane
+
+                await create_remote_pane(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
+            else:
+                await _terminal_create_impl(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
         except asyncio.CancelledError:
             await _rollback_terminal_create(session, transaction)
             raise
@@ -12448,6 +12462,15 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", unsafe))
         return
 
+    remote_target: dict[str, Any] | None = None
+    if payload.get("remote") is not None:
+        from . import remote_devcontainer
+
+        try:
+            remote_target = remote_devcontainer.parse_remote(payload.get("remote"))
+        except remote_devcontainer.RemoteSpecError as err:
+            await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+            return
     manual_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
     # A rebuild re-keys the old record onto the new id; read the session the old
@@ -12488,6 +12511,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         spawned_by=payload.get("spawned_by", ""),
         launch_id=launch_id.current(),
         opened_by=str(payload.get("opened_by") or ""),
+        remote=remote_target,
     )
     await run_in_db_thread(app.pane_account_history.pin, str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(

@@ -81,6 +81,7 @@ import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
 import { useArenaPrefs } from '../composables/useArenaPrefs'
+import { useRemoteDevcontainerPrefs } from '../composables/useRemoteDevcontainerPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -1139,6 +1140,8 @@ const emit = defineEmits<{
   (e: 'spawn', payload: SpawnPayload): void
   /** Settings → CLI Agents → ACP (experimental) only: open an ACP pane. */
   (e: 'spawn-acp', payload: SpawnPayload): void
+  /** Settings → General → Remote container panes only: open the setup dialog. */
+  (e: 'spawn-remote', payload: { workspacePath: string; runGroupId?: string }): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
   (e: 'kill-all'): void
@@ -2819,6 +2822,17 @@ async function spawnAcpFromMenu(row: { agentKey: string; adapterDep: string; lab
     workspacePath: workspace,
     runGroupId: group || undefined,
   })
+}
+
+// ── ＋ menu, remote container entry (Settings → General → Experimental) ─────
+const { remoteEnabled } = useRemoteDevcontainerPrefs()
+
+/** App.vue opens the setup dialog; the pane is spawned from there. */
+function openRemoteFromMenu(): void {
+  const workspace = addMenuWorkspace.value || workspacePath.value
+  const group = addMenuGroup.value
+  addMenuOpen.value = false
+  emit('spawn-remote', { workspacePath: workspace, runGroupId: group || undefined })
 }
 
 function openAgentFromMenu(identityId: string): void {
@@ -4631,6 +4645,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
              ship as Navide plugins, so the menu points there. -->
         <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
+        <!-- Remote container pane (experimental): absent while the switch is off. -->
+        <button
+          v-if="remoteEnabled"
+          class="ws-add-opt ws-add-more ws-add-remote"
+          data-testid="add-menu-remote"
+          @click="openRemoteFromMenu"
+        >
+          <span class="ws-add-lb" v-truncate>{{ $t('remoteDevcontainer.menu-entry') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+        </button>
         <!-- Model arena (experimental): its own block, styled exactly like the
              CLI / Agents headings and entries; absent while the switch is off. -->
         <template v-if="arenaEnabled">
