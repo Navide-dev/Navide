@@ -42,7 +42,7 @@ describe('navide.plans production package boundary', () => {
 
     expect(manifest.schemaVersion).toBe(2)
     expect(manifest.id).toBe('navide.plans')
-    expect(manifest.version).toBe('1.1.6')
+    expect(manifest.version).toBe('1.1.7')
     expect(manifest.permissions.system).toEqual(['fs', 'ui', 'aiCli'])
     expect(manifest.permissions).not.toHaveProperty('plans')
     expect(manifest.permissions.shell).toBeUndefined()
@@ -157,7 +157,8 @@ describe('navide.plans production package boundary', () => {
     // package. Messages only the package uses (new in 1.1.0) are not copied
     // into the shared plugin-ui shadow: that package is a fingerprint input of
     // every first-party plugin, and legacy recovery never shows them.
-    expect(Object.keys(pluginMessages)).toEqual(['pane'])
+    // plans.* holds the share dialog, which only this package shows (0.2.44).
+    expect(Object.keys(pluginMessages)).toEqual(['pane', 'plans'])
     const plans = (pluginMessages as { pane: { plans: Record<string, unknown> } }).pane.plans
     const shadow = shadowMessages.pane?.plans ?? {}
     expect(Object.keys(shadow).length).toBeGreaterThan(0)

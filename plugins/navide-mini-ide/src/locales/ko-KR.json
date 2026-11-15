@@ -1,0 +1,13 @@
+{
+  "editorWindow": {
+    "quit-dirty": "파일 {count}개에 저장하지 않은 변경 내용이 있어요. 변경 내용을 버리고 종료할까요?",
+    "app": {
+      "breadcrumb-empty": "(비어 있음)"
+    }
+  },
+  "pane": {
+    "pluginViews": {
+      "unavailable": "이 보기는 Navide 플러그인이 제공하며 열지 못했어요."
+    }
+  }
+}

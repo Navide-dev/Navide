@@ -307,7 +307,7 @@ describe('PipelineManagerModal — list view redesign', () => {
   // ── i18n bookkeeping for the keys this redesign added ──────────────────────
 
   it('ships every new key in every locale with matching placeholders', () => {
-    const dir = 'packages/plugin-ui/src/foundation/i18n/locales'
+    const dir = 'src/renderer/src/i18n/locales'
     const read = (f: string) =>
       JSON.parse(readFileSync(resolve(process.cwd(), dir, f), 'utf8')) as Record<
         string,

@@ -20,10 +20,10 @@ const appSource = readFileSync(
   'utf8'
 )
 const enLocale = JSON.parse(
-  readFileSync(resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'), 'utf8')
+  readFileSync(resolve(process.cwd(), 'src/renderer/src/i18n/locales/en-US.json'), 'utf8')
 ) as { action: Record<string, string> }
 const zhLocale = JSON.parse(
-  readFileSync(resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'), 'utf8')
+  readFileSync(resolve(process.cwd(), 'src/renderer/src/i18n/locales/zh-TW.json'), 'utf8')
 ) as { action: Record<string, string> }
 
 describe('pane context menu — Send message', () => {

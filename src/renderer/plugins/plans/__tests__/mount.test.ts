@@ -26,6 +26,7 @@ vi.mock('@navide/plugin-ui/foundation', async () => {
     i18n: {
       global: {
         locale: state.localeRef,
+        mergeLocaleMessage: () => {},
       },
     },
     resolveAvailableUiLocale: (value: unknown) =>

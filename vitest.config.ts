@@ -5,11 +5,13 @@ import { testWorkerCap } from './vitest.workerCap'
 
 // Every source test has one owner. Artifact consumers build/pack once before
 // their workers start; ordinary tests and CLI contracts need no plugin build.
-const allTests = ['vitest.*.{test,spec}.ts', '{src,tests,packages,plugins}/**/*.{test,spec}.ts']
+// The App-bundled plugins are not collected here: each runs its own tests with
+// plugins/<dir>/vitest.config.ts (see vitest.plugin.ts, pnpm test:plugins).
+const hostTests = ['vitest.*.{test,spec}.ts', '{src,tests}/**/*.{test,spec}.ts']
+const packageTests = ['packages/**/*.{test,spec}.ts']
 const cliTests = ['tests/cli/**/*.{test,spec}.ts']
 const artifactTests = [
   'tests/integration/**/*.{test,spec}.ts',
-  'plugins/*/tests/**/*.{test,spec}.ts',
   // CLI subprocesses use Node's package exports, outside Vitest's source aliases.
   'packages/plugin-sdk/bin/**/*.{test,spec}.ts',
   'src/main/plugins/pluginExternalWorkspace.test.ts',
@@ -21,12 +23,9 @@ const artifactTests = [
 // 60 s RPC deadline ("Timeout calling onTaskUpdate"), so they take turns in
 // one fork while the rest of the artifacts project runs in parallel.
 const heavyArtifactTests = [
-  'plugins/navide-mini-ide/tests/packageBoundary.test.ts',
-  'plugins/navide-plans/tests/packageBoundary.test.ts',
-  'plugins/navide-git/tests/compositionBoundary.test.ts',
   'src/main/plugins/pluginExternalWorkspace.test.ts',
 ]
-const excludedTests = ['**/node_modules/**', '**/dist/**', '**/out/**', '**/coverage/**', 'e2e/**']
+export const excludedTests = ['**/node_modules/**', '**/dist/**', '**/out/**', '**/coverage/**', 'e2e/**']
 export default defineConfig({
   // Mirrors electron.vite.config.ts: <webview> carries in-window plugin
   // contributions and is a built-in tag, not a Vue component.
@@ -67,7 +66,13 @@ export default defineConfig({
     // Empty unless a Navide pane carries a worker cap (Settings → Resource limits).
     ...testWorkerCap(process.env),
     projects: [
-      { extends: true, test: { name: 'unit', include: allTests, exclude: [...excludedTests, ...cliTests, ...artifactTests] } },
+      // Host tests render with the Host's own strings, as every Host window does
+      // (src/renderer/src/hostMount.ts); packages/* tests see only their own.
+      { extends: true, test: {
+        name: 'unit', include: hostTests, exclude: [...excludedTests, ...cliTests, ...artifactTests],
+        setupFiles: ['./src/renderer/src/i18n/hostMessages.ts'],
+      } },
+      { extends: true, test: { name: 'packages', include: packageTests, exclude: [...excludedTests, ...artifactTests] } },
       { extends: true, test: { name: 'cli', include: cliTests, exclude: excludedTests } },
       { extends: true, test: {
         name: 'artifacts', include: artifactTests, exclude: [...excludedTests, ...heavyArtifactTests],

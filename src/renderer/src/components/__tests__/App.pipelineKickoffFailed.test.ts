@@ -116,7 +116,7 @@ describe('a kickoff that never reached its pane fails the run (#448)', () => {
     expect(t.toasts[0].text).toContain('pipeline-kickoff-held')
     expect(t.toasts[0].text).toContain('codex-1')
     for (const locale of ['en-US', 'zh-TW', 'ja-JP']) {
-      const path = resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`)
+      const path = resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`)
       const text = JSON.parse(readFileSync(path, 'utf8')).error['pipeline-kickoff-held'] as string
       expect(text, locale).toMatch(/resume/i)
     }

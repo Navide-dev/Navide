@@ -16,7 +16,7 @@ const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'
 // assertions read the zh-TW strings the template now points at.
 const zhTW = JSON.parse(
   readFileSync(
-    resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'),
+    resolve(process.cwd(), 'src/renderer/src/i18n/locales/zh-TW.json'),
     'utf8',
   ),
 ) as { hint: Record<string, string> }

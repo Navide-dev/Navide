@@ -30,7 +30,7 @@ describe('GuidedTour is the release tour’s card walker only', () => {
 
   it('leaves no strings behind for it', () => {
     for (const code of ['en-US', 'zh-TW', 'ja-JP']) {
-      const tour = JSON.parse(read(`packages/plugin-ui/src/foundation/i18n/locales/${code}.json`)).tour
+      const tour = JSON.parse(read(`src/renderer/src/i18n/locales/${code}.json`)).tour
       for (const gone of ['waiting', 'done-feedback', 'skip-step']) expect(tour[gone], `${code} tour.${gone}`).toBeUndefined()
     }
   })

@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { transpileModule } from 'typescript'
 import { createI18n } from 'vue-i18n'
 import { flushPromises } from '@vue/test-utils'
-import { enUSMessages as enUS, zhTWMessages as zhTW, jaJPMessages as jaJP } from '@navide/plugin-ui/foundation'
+import enUS from '../../i18n/locales/en-US.json'
+import zhTW from '../../i18n/locales/zh-TW.json'
+import jaJP from '../../i18n/locales/ja-JP.json'
 
 // App.vue mounts backend/terminal/onboarding lifecycles, so it isn't practical
 // to mount it here — see App.spawnAdvisories.test.ts for the same reasoning.

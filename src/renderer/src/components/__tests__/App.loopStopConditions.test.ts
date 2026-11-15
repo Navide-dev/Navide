@@ -235,7 +235,7 @@ describe('F1: interrupting a pane stops its loop', () => {
 
 describe('notifications exist in every locale', () => {
   it.each(['en-US', 'ja-JP', 'zh-TW'])('%s', (name) => {
-    const locale = JSON.parse(readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${name}.json`), 'utf8'))
+    const locale = JSON.parse(readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${name}.json`), 'utf8'))
     for (const key of ['loop-inject-failed-notify-title', 'loop-inject-failed-notify-body', 'loop-interrupted-notify-title', 'loop-interrupted-notify-body']) {
       expect(locale.pane.terminal[key]).toBeTruthy()
     }

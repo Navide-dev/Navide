@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import '@navide/plugin-ui/styles.css'
 import { seedSettings } from '@navide/plugin-ui/shared'
 import { i18n } from '@navide/plugin-ui/foundation'
+import './miniIdeMessages'
 import { disposeBackend, viewRuntime } from './composables/useBackend'
 import MiniIdeApp from './MiniIdeApp.vue'
 

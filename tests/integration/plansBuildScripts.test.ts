@@ -22,12 +22,12 @@ function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'navide-plans-build-'))
   roots.push(root)
   file(root, 'plugins/navide-plans/backend/plans_backend.py', '# production source\n')
-  file(root, 'backend/agent_team_backend/__init__.py', '# package marker\n')
-  file(root, 'backend/agent_team_backend/path_guard.py', '# shared path guard\n')
-  file(root, 'backend/agent_team_backend/fs_write.py', '# shared write path\n')
-  file(root, 'backend/agent_team_backend/git_security.py', '# shared Git guard\n')
-  file(root, 'backend/agent_team_backend/plan_versions.py', '# shared plan versions\n')
   file(root, 'backend/navide_plugin_sdk/__init__.py', '# public plugin SDK\n')
+  file(root, 'backend/navide_plugin_sdk/path_guard.py', '# shared path guard\n')
+  file(root, 'backend/navide_plugin_sdk/fs_write.py', '# shared write path\n')
+  file(root, 'backend/navide_plugin_sdk/git_security.py', '# shared Git guard\n')
+  file(root, 'backend/navide_plugin_sdk/plan_versions.py', '# shared plan versions\n')
+  file(root, 'backend/agent_team_backend/__init__.py', '# core backend, not bundled\n')
   file(root, 'backend/pyproject.toml', '# build dependencies\n')
   file(root, 'backend/uv.lock', '# pinned toolchain\n')
   file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
@@ -82,29 +82,25 @@ describe.skipIf(isWindows())('Plans backend build cache', { timeout: 30_000 }, (
     expect(buildCount(root)).toBe(4)
   })
 
-  it('rebuilds when a core module the backend bundles changes', () => {
+  it('rebuilds when a plugin SDK module the backend bundles changes', () => {
     const root = fixture()
     build(root)
     build(root)
     expect(buildCount(root)).toBe(1)
-    file(root, 'backend/agent_team_backend/path_guard.py', '# changed shared path guard\n')
+    let builds = 1
+    for (const module of ['path_guard', 'fs_write', 'git_security', 'plan_versions', '__init__']) {
+      file(root, `backend/navide_plugin_sdk/${module}.py`, `# changed ${module}\n`)
+      build(root)
+      expect(buildCount(root)).toBe(++builds)
+    }
+  })
+
+  it('does not rebuild for a change to the core backend', () => {
+    const root = fixture()
     build(root)
-    expect(buildCount(root)).toBe(2)
-    file(root, 'backend/agent_team_backend/__init__.py', '# changed package marker\n')
+    file(root, 'backend/agent_team_backend/__init__.py', '# changed core backend\n')
     build(root)
-    expect(buildCount(root)).toBe(3)
-    file(root, 'backend/agent_team_backend/fs_write.py', '# changed shared write path\n')
-    build(root)
-    expect(buildCount(root)).toBe(4)
-    file(root, 'backend/agent_team_backend/git_security.py', '# changed shared Git guard\n')
-    build(root)
-    expect(buildCount(root)).toBe(5)
-    file(root, 'backend/agent_team_backend/plan_versions.py', '# changed shared plan versions\n')
-    build(root)
-    expect(buildCount(root)).toBe(6)
-    file(root, 'backend/navide_plugin_sdk/__init__.py', '# changed public plugin SDK\n')
-    build(root)
-    expect(buildCount(root)).toBe(7)
+    expect(buildCount(root)).toBe(1)
   })
 
   it('lets PyInstaller import the shared path guard from the backend source tree', () => {

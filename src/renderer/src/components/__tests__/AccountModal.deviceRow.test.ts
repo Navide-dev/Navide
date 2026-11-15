@@ -440,7 +440,7 @@ describe('a trust record with no room left', () => {
     for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
       const strings = JSON.parse(
         readFileSync(
-          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`),
           'utf8',
         ),
       )

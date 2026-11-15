@@ -18,6 +18,8 @@ async function load() {
   const announcements = await import('../useAnnouncements')
   const notices = await import('../useShareNotices')
   const { i18n } = await import('@navide/plugin-ui/foundation')
+  // The reset dropped the instance the Host strings were merged into.
+  await import('../../i18n/hostMessages')
   i18n.global.locale.value = 'en-US'
   const handlers = new Map<string, (payload: unknown) => void>()
   const backend = {
