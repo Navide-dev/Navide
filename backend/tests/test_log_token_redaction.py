@@ -171,7 +171,10 @@ _CHILD = textwrap.dedent(
         late.propagate = False
         late.addHandler(logging.StreamHandler(sys.stdout))
         late.warning("late /ws?t=%s", SECRET)
-        def has(f): return any(isinstance(x, TokenRedactionFilter) for x in f.filters)
+        def has(f):
+            # A handler log_offload wrapped redacts in its target, off the loop.
+            f = getattr(f, "target", f)
+            return any(isinstance(x, TokenRedactionFilter) for x in f.filters)
         report = {}
         for name in ("", "uvicorn", "uvicorn.error", "uvicorn.access", "agent_team_backend"):
             lg = logging.getLogger(name)

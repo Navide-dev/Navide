@@ -1091,6 +1091,8 @@
       "mcp-never-connected-tooltip": "CLI của khung này đã chạy 3 phút nhưng công cụ Navide chưa từng kết nối — bấm để kết nối lại khi rảnh",
       "mcp-never-connected-title": "Công cụ Navide chưa kết nối: {name}",
       "mcp-never-connected-body": "Khung \"{name}\" đã mở 3 phút nhưng công cụ Navide chưa từng kết nối.",
+      "mcp-disconnected-title": "Mất kết nối công cụ Navide: {name}",
+      "mcp-disconnected-body": "Khung \"{name}\" đã mất kết nối với công cụ Navide và CLI đã ngừng thử lại.",
       "mcp-reconnect": "Kết nối lại",
       "mcp-reconnect-busy": "Khung đang bận — bấm Kết nối lại khi khung rảnh (kết nối lại sẽ dừng các tiến trình nền của CLI)",
       "parked-overdue-body": "Tin nhắn gửi \"{name}\" đã chờ 10 phút: khung đó chưa được mở, tin nhắn sẽ được gửi khi khung mở. ({excerpt})",

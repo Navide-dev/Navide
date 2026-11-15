@@ -1091,6 +1091,8 @@
       "mcp-never-connected-tooltip": "이 창의 CLI가 3분째 실행 중이지만 Navide 도구에 한 번도 연결되지 않았습니다 — 유휴 상태일 때 클릭하여 다시 연결",
       "mcp-never-connected-title": "Navide 도구 미연결: {name}",
       "mcp-never-connected-body": "창 \"{name}\"이(가) 3분째 실행 중이지만 Navide 도구에 연결되지 않았습니다.",
+      "mcp-disconnected-title": "Navide 도구 연결 끊김: {name}",
+      "mcp-disconnected-body": "창 \"{name}\"의 Navide 도구 연결이 끊겼고 CLI가 재시도를 멈췄습니다.",
       "mcp-reconnect": "다시 연결",
       "mcp-reconnect-busy": "창이 작업 중입니다. 유휴 상태가 되면 \"다시 연결\"을 누르세요(다시 연결하면 CLI의 백그라운드 프로세스가 종료됩니다)",
       "parked-overdue-body": "\"{name}\"에게 보낸 메시지가 10분째 대기 중입니다. 그 창이 아직 열리지 않았으며, 열리면 메시지가 전달됩니다. ({excerpt})",

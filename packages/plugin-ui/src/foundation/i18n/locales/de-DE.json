@@ -1091,6 +1091,8 @@
       "mcp-never-connected-tooltip": "Die CLI dieses Bereichs läuft seit 3 Minuten, aber ihre Navide-Werkzeuge haben sich nie verbunden – klicken, um im Leerlauf neu zu verbinden",
       "mcp-never-connected-title": "Navide-Werkzeuge nicht verbunden: {name}",
       "mcp-never-connected-body": "Der Bereich „{name}“ läuft seit 3 Minuten, aber seine Navide-Werkzeuge haben sich nie verbunden.",
+      "mcp-disconnected-title": "Navide-Werkzeuge getrennt: {name}",
+      "mcp-disconnected-body": "Der Bereich „{name}“ hat die Verbindung zu den Navide-Werkzeugen verloren und seine CLI versucht es nicht mehr.",
       "mcp-reconnect": "Neu verbinden",
       "mcp-reconnect-busy": "Der Bereich ist beschäftigt – tippe auf „Neu verbinden“, sobald er untätig ist (das beendet die Hintergrundprozesse der CLI)",
       "parked-overdue-body": "Eine Nachricht an „{name}“ wartet seit 10 Minuten: Dieser Bereich ist noch nicht geöffnet, die Nachricht geht hinein, sobald er es ist. ({excerpt})",

@@ -1091,6 +1091,8 @@
       "mcp-never-connected-tooltip": "This pane's CLI has been up for 3 minutes and its Navide tools never connected — click to reconnect while idle",
       "mcp-never-connected-title": "Navide tools not connected: {name}",
       "mcp-never-connected-body": "Pane \"{name}\" has been up for 3 minutes and its Navide tools never connected.",
+      "mcp-disconnected-title": "Navide tools disconnected: {name}",
+      "mcp-disconnected-body": "Pane \"{name}\" lost its connection to the Navide tools and its CLI stopped retrying.",
       "mcp-reconnect": "Reconnect",
       "mcp-reconnect-busy": "The pane is busy — press Reconnect once it is idle (reconnecting ends the CLI's background processes)",
       "parked-overdue-body": "A message for \"{name}\" has been parked for 10 minutes: that pane is not open yet, and the message goes in once it is. ({excerpt})",

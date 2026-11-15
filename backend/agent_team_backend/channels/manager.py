@@ -4102,8 +4102,16 @@ class ChannelManager:
     async def notify_mcp_never_connected(self, pane: str) -> None:
         """Every bound direct chat once, in the user's language: a pane's CLI
         has been up for minutes and never reached Navide's tool server."""
+        await self._notify_mcp_connection("mcp_never_connected", pane)
+
+    async def notify_mcp_disconnected(self, pane: str) -> None:
+        """The same, for a pane's CLI that was connected and gave up after
+        losing the connection."""
+        await self._notify_mcp_connection("mcp_disconnected", pane)
+
+    async def _notify_mcp_connection(self, key: str, pane: str) -> None:
         lang = prompt_skills.language(await self._ui_settings())
-        text = quick_menu.text(lang, "mcp_never_connected", pane=pane)
+        text = quick_menu.text(lang, key, pane=pane)
         seen: set[str] = set()
         for b in self.store.bindings():
             key = b.location().key()
