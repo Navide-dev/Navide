@@ -810,6 +810,13 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Package installer
+        # Its own step so the signing credentials below never reach `bun run
+        # build` and the build tooling it runs.
+        run: |
           # Unsigned unless the signing switch is on (Resolve Windows signing):
           # unsigned, SmartScreen warns on first run and electron-updater
           # installs updates without verifying a signature. Signed, the hook
@@ -1049,6 +1056,13 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: Package installer
+        # Its own step so the signing credentials below never reach `bun run
+        # build` and the build tooling it runs.
+        run: |
           # Signed or unsigned exactly as the x64 build is.
           # electron-builder runs under Node on Windows: under Bun it hangs after
           # the icons-bundle download, in the step that edits Navide.exe's

@@ -153,7 +153,9 @@ describe('release workflow signing switch', () => {
 
   it('keeps the unsigned electron-builder call unchanged when the switch is off', () => {
     for (const [arch, job] of Object.entries(windows)) {
-      const build = job.steps.find((step) => step.name === 'Build application')!
+      // `bun run build` and its tooling never see a credential.
+      expect(JSON.stringify(job.steps.find((step) => step.name === 'Build application'))).not.toMatch(/ES_|WINDOWS_SIGNING/)
+      const build = job.steps.find((step) => step.name === 'Package installer')!
       const lines = build.run!.split('\n').map((line) => line.trim())
       const elseAt = lines.indexOf('else')
       expect(lines[elseAt + 1]).toBe(`node node_modules/electron-builder/cli.js --win --${arch} --publish never`)
@@ -176,7 +178,8 @@ describe('release workflow signing switch', () => {
       expect(resolveStep.run).toBe('node scripts/windows-signing.mjs resolve')
       expect(at('Resolve Windows signing')).toBeLessThan(at('Install CodeSignTool'))
       expect(at('Install CodeSignTool')).toBeLessThan(at('Build application'))
-      expect(at('Build application')).toBeLessThan(at('Verify Windows signatures'))
+      expect(at('Build application')).toBeLessThan(at('Package installer'))
+      expect(at('Package installer')).toBeLessThan(at('Verify Windows signatures'))
       expect(at('Verify Windows signatures')).toBeLessThan(at('Attach installers to the workflow run'))
       expect(at('Verify Windows signatures')).toBeLessThan(at('Upload to the draft GitHub Release'))
       for (const name of ['Install CodeSignTool', 'Verify Windows signatures']) {
