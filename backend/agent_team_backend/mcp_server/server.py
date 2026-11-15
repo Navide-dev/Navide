@@ -12543,6 +12543,11 @@ class _Runner:
 
 
 _runner: _Runner | None = None
+# The loop of the /plan-mcp listener on its own thread and the session manager
+# serving it there (own_loop), while it runs. Requests arriving on that loop
+# are served by that manager; the SDK's task group is bound to its loop.
+_own_loop: asyncio.AbstractEventLoop | None = None
+_own_runner: _Runner | None = None
 # Replaced runners whose task is still finishing (see _replace_stopped_runner).
 _stopping_runner_tasks: set[asyncio.Task[None]] = set()
 # Stands for an attribute the SDK no longer has (see _runner_stopped).
@@ -12597,7 +12602,7 @@ class _PlanMcpASGI:
     ASGI, not a request-response function); 503 until startup() has run."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        runner = _runner
+        runner = _loop_runner()
         if runner is None:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
@@ -12773,9 +12778,25 @@ def _runner_stopped(runner: _Runner) -> bool:
     return group is None or group.cancel_scope.cancel_called
 
 
+def _loop_runner() -> _Runner | None:
+    """The session manager for a request on the running loop: own_loop's on
+    its thread, the main one everywhere else."""
+    own = _own_loop
+    if own is not None and asyncio.get_running_loop() is own:
+        return _own_runner
+    return _runner
+
+
 def _replace_stopped_runner(stopped: _Runner) -> _Runner:
     """The running session manager, started anew if ``stopped`` is still it."""
-    global _runner, _session_manager
+    global _runner, _session_manager, _own_runner
+    if stopped is _own_runner:
+        _log.warning("plan-mcp: restarting the MCP session manager of its own loop")
+        if not stopped.task.done():
+            _stopping_runner_tasks.add(stopped.task)
+            stopped.task.add_done_callback(_stopping_runner_tasks.discard)
+        _own_runner = _start_runner()
+        return _own_runner
     if _runner is stopped:
         _log.warning("plan-mcp: restarting the MCP session manager")
         if not stopped.task.done():

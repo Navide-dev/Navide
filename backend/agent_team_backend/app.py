@@ -2928,6 +2928,14 @@ async def _start_log_watcher() -> None:
         await mcp_server.startup()
     except Exception as err:  # noqa: BLE001
         log.warning("MCP server startup failed: %s", err)
+    # The same endpoint on a loop of its own, before anything is wired to it:
+    # a stalled main loop no longer drops the CLIs' connections.
+    from .mcp_server import own_loop as mcp_own_loop
+
+    try:
+        await mcp_own_loop.start()
+    except Exception as err:  # noqa: BLE001 — the main port still serves
+        log.warning("plan-mcp own loop failed to start: %s", err)
     try:
         await asyncio.to_thread(mcp_server_wiring.write_claude_config_for_current_port)
     except Exception as err:  # noqa: BLE001
@@ -3014,6 +3022,12 @@ async def _stop_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("plugin shutdown hooks failed: %s", err)
     log.info("shutdown: plugin hooks done")
+    from .mcp_server import own_loop as mcp_own_loop
+
+    try:
+        await mcp_own_loop.stop()
+    except Exception as err:  # noqa: BLE001
+        log.warning("plan-mcp own loop shutdown failed: %s", err)
     try:
         await mcp_server.shutdown()
     except Exception as err:  # noqa: BLE001

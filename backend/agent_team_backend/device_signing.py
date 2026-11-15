@@ -133,9 +133,22 @@ def _load_private() -> Ed25519PrivateKey:
     return key
 
 
+#: (key file, key) of the last load. Read once per data directory instead of
+#: on every sign, verify and public_key: callers on the event loop made that
+#: file read part of p2p.network.snapshot, which held the loop 15.9 s under
+#: host load on 2026-11-15 and failed a message injection behind it.
+_cached: tuple[Path, Ed25519PrivateKey] | None = None
+
+
 def private_key() -> Ed25519PrivateKey:
+    global _cached
     with _lock:
-        return _load_private()
+        path = keys_path()
+        if _cached is not None and _cached[0] == path:
+            return _cached[1]
+        key = _load_private()
+        _cached = (path, key)
+        return key
 
 
 def public_key() -> str:
