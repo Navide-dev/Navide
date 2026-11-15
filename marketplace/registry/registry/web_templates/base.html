@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Navide Marketplace{% endblock %}</title>
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
   {% set site_url = (request.base_url|string).rstrip('/') %}
   {% set page_description %}{% block description %}Extensions for Navide: registry-signed packages, with every permission shown before you install.{% endblock %}{% endset %}
   <meta name="description" content="{{ page_description|trim }}">
@@ -30,7 +30,7 @@
     <div class="wrap header-inner">
       <a class="brand" href="{{ store }}/">
         <span class="brand-mark"><svg viewBox="0 0 28 28" aria-hidden="true" focusable="false"><defs><linearGradient id="nv-mark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7d94f4"/><stop offset="1" stop-color="#3b5bdb"/></linearGradient></defs><rect x="5.5" y="5.5" width="17" height="17" rx="4.5" transform="rotate(45 14 14)" fill="url(#nv-mark)"/><rect x="10.6" y="10.6" width="6.8" height="6.8" rx="1.6" transform="rotate(45 14 14)" fill="#fff" fill-opacity=".9"/></svg></span>
-        <span class="brand-name">Navide Marketplace</span>
+        <span class="brand-name">{{ site_name }}</span>
       </a>
       <form class="search" action="{{ store }}/" method="get" role="search">
         <input type="search" name="q" value="{{ query|default('') }}"
@@ -61,7 +61,7 @@
 
   <footer class="site-footer">
     <div class="wrap">
-      <span class="footer-mark">Navide Marketplace</span>
+      <span class="footer-mark">{{ site_name }}</span>
       <span>Packages are served by this registry, and the Navide app verifies each one before it installs anything.</span>
       <a href="{{ store }}/removed">Removed extensions</a>
       <a href="{{ dev }}/developer">Developers</a>

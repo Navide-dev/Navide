@@ -28,6 +28,7 @@ ENV_ROOT_PATH = "REGISTRY_ROOT_PATH"
 ENV_AUTH_URL = "REGISTRY_AUTH_URL"
 ENV_AUTH_SECRET = "REGISTRY_AUTH_SECRET"
 ENV_AUTH_RETURN_URL = "REGISTRY_AUTH_RETURN_URL"
+ENV_AUTH_UPSTREAM = "REGISTRY_AUTH_UPSTREAM"
 ENV_SESSION_SECRET = "REGISTRY_SESSION_SECRET"
 ENV_ADMIN_MEMBER_IDS = "REGISTRY_ADMIN_MEMBER_IDS"
 ENV_COOKIE_SECURE = "REGISTRY_COOKIE_SECURE"
@@ -41,6 +42,8 @@ CLOUD_ASSERTION_KID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DEFAULT_LEGACY_REDIRECT_TO = "https://navide.dev/"
 _ORIGIN_PATTERN = re.compile(r"^https?://[a-z0-9.-]+(?::[0-9]{1,5})?$")
 MIN_AUTH_SECRET_LENGTH = 32
+# navide-auth's path prefix, kept the same on the hosts that proxy it.
+AUTH_PROXY_PREFIX = "/navide-auth"
 
 TRUST_PROFILE_OFFICIAL = "official"
 TRUST_PROFILE_SELF_HOSTED_DEV = "self-hosted-dev"
@@ -103,6 +106,11 @@ class Settings:
     """Exact `/auth/callback` URL registered in navide-auth's allowlist."""
     session_secret: str | None = None
     """Signs the registry session and login-state cookies."""
+    auth_upstream: str | None = None
+    """navide-auth's own address as this container reaches it, e.g.
+    http://172.17.0.1:18790. Set, the storefront and the developer console
+    serve navide-auth's registry sign-in page on their own host
+    (auth_proxy.py) instead of sending the browser to auth_url's host."""
     admin_member_ids: tuple[str, ...] = ()
     """Navide Cloud member ids allowed into the review queue and blocklist UI."""
     cookie_secure: bool = True
@@ -174,6 +182,7 @@ class Settings:
                 "root_path must be empty or start with '/' and have no trailing '/'"
             )
         self._validate_host_routing()
+        self._validate_auth_upstream()
         self._validate_cloud_assertion_keys()
         if self.trust_profile != TRUST_PROFILE_OFFICIAL:
             return
@@ -203,6 +212,18 @@ class Settings:
                 raise ValueError(
                     f"cloud assertion key '{kid}' is not an Ed25519 SPKI public key in PEM form"
                 ) from exc
+
+    def _validate_auth_upstream(self) -> None:
+        if self.auth_upstream is None:
+            return
+        if not self.cloud_auth_enabled or not self.host_routing_enabled:
+            raise ValueError("auth_upstream needs Navide Cloud sign-in and host routing")
+        if not _ORIGIN_PATTERN.match(self.auth_upstream):
+            raise ValueError(
+                "auth_upstream must be an http(s) origin with no path, e.g. http://172.17.0.1:18790"
+            )
+        if urllib.parse.urlsplit(self.auth_url).path != AUTH_PROXY_PREFIX:
+            raise ValueError(f"auth_upstream needs auth_url to end in {AUTH_PROXY_PREFIX}")
 
     def _validate_host_routing(self) -> None:
         if (self.store_origin is None) != (self.developer_origin is None):
@@ -499,6 +520,7 @@ def load_settings() -> Settings:
         auth_secret=os.environ.get(ENV_AUTH_SECRET) or None,
         auth_return_url=(os.environ.get(ENV_AUTH_RETURN_URL) or "").strip() or None,
         session_secret=os.environ.get(ENV_SESSION_SECRET) or None,
+        auth_upstream=(os.environ.get(ENV_AUTH_UPSTREAM) or "").strip().rstrip("/") or None,
         admin_member_ids=tuple(
             item.strip()
             for item in os.environ.get(ENV_ADMIN_MEMBER_IDS, "").split(",")

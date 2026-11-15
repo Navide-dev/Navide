@@ -269,6 +269,24 @@ def test_repeated_failures_are_rate_limited(client, key):
     rejected(exchange(client, make_assertion(key)), "RATE_LIMITED", status=429)
 
 
+def test_rate_limit_keys_on_the_balancer_address_not_a_forged_one(client, key):
+    client.app.state.registry.cloud_exchange_limiter = SlidingWindowLimiter(2, 600)
+
+    def attempt(forwarded_for: str):
+        return client.post(
+            "/api/cli/cloud-exchange",
+            json={"assertion": make_assertion(Ed25519PrivateKey.generate()), "code_verifier": VERIFIER, "scope": "account", "namespace": None},
+            headers={"x-forwarded-for": forwarded_for},
+        )
+
+    # A visitor rewriting the left-most entry each time is still one visitor.
+    rejected(attempt("198.51.100.1, 203.0.113.7"), "ASSERTION_INVALID")
+    rejected(attempt("198.51.100.2, 203.0.113.7"), "ASSERTION_INVALID")
+    rejected(attempt("198.51.100.3, 203.0.113.7"), "RATE_LIMITED", status=429)
+    # Another visitor, as the load balancer saw them, has their own budget.
+    rejected(attempt("198.51.100.3, 203.0.113.8"), "ASSERTION_INVALID")
+
+
 # -- namespaces for the App's picker ---------------------------------------------
 def test_namespaces_lists_only_publishable_vetted_namespaces(client, key):
     owner_with_namespace(client)

@@ -33,8 +33,16 @@ services:
       REGISTRY_AUTH_RETURN_URL: https://server.navide.dev/registry/auth/callback
       REGISTRY_AUTH_SECRET_FILE: /run/secrets/navide-registry-auth-secret
       REGISTRY_SESSION_SECRET_FILE: /run/secrets/navide-registry-session-secret
+      # Serve the sign-in page on the storefront and console hosts
+      # (auth_proxy.py): navide-auth's address as this container reaches it.
+      # Needs the extra_hosts entry below. Unset = sign in on REGISTRY_AUTH_URL.
+      # REGISTRY_AUTH_UPSTREAM: http://host.docker.internal:18790
       # Comma-separated Navide member ids allowed into /admin/review.
       REGISTRY_ADMIN_MEMBER_IDS: ""
+    # Only with REGISTRY_AUTH_UPSTREAM: lets the container reach navide-auth's
+    # host port.
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
     secrets:
       - navide-registry-root.pem
       - navide-registry-signer.pem

@@ -48,7 +48,12 @@ _DEVELOPER_PAGE = re.compile(
 _STORE_FORM = re.compile(r"^/extensions/[^/]+/[^/]+/(?:rating|rating/delete|report)$")
 _STORE_ASSET = re.compile(r"^/extensions/[^/]+/[^/]+/[^/]+/assets/.+$")
 _DEVELOPER_FORM = re.compile(r"^/(?:publisher|developer|cli|admin)/.+$")
-_SHARED = re.compile(r"^/(?:login|logout|robots\.txt|auth/.+|static/.+)$")
+_SHARED = re.compile(
+    r"^/(?:login|logout|robots\.txt|auth/.+|static/.+"
+    r"|navide-auth/registry/sso(?:/login)?)$"
+)
+# /navide-auth/registry/sso[/login] is navide-auth's sign-in page, served on
+# each host by auth_proxy.py when REGISTRY_AUTH_UPSTREAM is set (404 otherwise).
 # On the legacy host /login is a page too (it starts a sign-in there); its
 # /auth/* stays served so a sign-in begun before the move can finish.
 # Old Apps and CLIs open the sign-in, developer, publisher and CLI-login pages
@@ -110,6 +115,17 @@ def host_role(settings: Settings, scope: Scope) -> str:
 def request_role(request) -> str | None:
     """The host role of a request, or None when host routing is off."""
     return request.scope.get("state", {}).get(ROLE_STATE_KEY)
+
+
+STORE_SITE_NAME = "Navide Marketplace"
+DEVELOPER_SITE_NAME = "Navide 開發者後台"
+
+
+def site_name(request) -> str:
+    """The name pages carry in their title and header: the developer console
+    has its own, every other host (storefront, legacy, single-host) is the
+    Marketplace."""
+    return DEVELOPER_SITE_NAME if request_role(request) == DEVELOPER else STORE_SITE_NAME
 
 
 def origin_for(settings: Settings, role: str) -> str:
