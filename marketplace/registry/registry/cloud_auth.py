@@ -287,6 +287,7 @@ def viewer_context(request: Request) -> dict:
         "viewer": viewer,
         "csrf": csrf_token(settings, viewer) if viewer is not None else "",
         "cloud_auth": settings.cloud_auth_enabled,
+        "site_name": host_routing.site_name(request),
     }
 
 

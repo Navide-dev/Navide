@@ -115,6 +115,17 @@ def request_role(request) -> str | None:
     return request.scope.get("state", {}).get(ROLE_STATE_KEY)
 
 
+STORE_SITE_NAME = "Navide Marketplace"
+DEVELOPER_SITE_NAME = "Navide 開發者後台"
+
+
+def site_name(request) -> str:
+    """The name pages carry in their title and header: the developer console
+    has its own, every other host (storefront, legacy, single-host) is the
+    Marketplace."""
+    return DEVELOPER_SITE_NAME if request_role(request) == DEVELOPER else STORE_SITE_NAME
+
+
 def origin_for(settings: Settings, role: str) -> str:
     return settings.store_origin if role == STORE else settings.developer_origin
 

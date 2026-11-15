@@ -31,6 +31,7 @@ from .account_auth import (
     issue_account_code,
     require_bearer,
 )
+from .auth_proxy import visitor_address
 from .developer_web import register_developer_routes
 from .app import _require_admin_token as require_admin_token
 from .blocklist import BlocklistError, add_entry, db_entries, remove_entry, removed_list
@@ -885,7 +886,7 @@ def create_publisher_router() -> APIRouter:
         if not keys:  # Step 1: off; the App falls back to the browser sign-in.
             raise HTTPException(status_code=404, detail="Not Found")
         limiter = request.app.state.registry.cloud_exchange_limiter
-        client_key = request.client.host if request.client else "unknown"
+        client_key = visitor_address(request) or "unknown"
         now = time.time()
         if limiter.exceeded(client_key, now):
             raise _assertion_error(429, "RATE_LIMITED", "too many failed sign-in attempts; try again later")

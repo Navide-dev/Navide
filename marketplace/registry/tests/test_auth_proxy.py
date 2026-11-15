@@ -228,6 +228,33 @@ def test_unreachable_upstream_is_a_502(tmp_path) -> None:
     assert resp.status_code == 502
 
 
+# -- site name in titles and the header ---------------------------------------
+def _title_and_brand(resp) -> tuple[str, str]:
+    import re
+
+    title = re.search(r"<title>(.*?)</title>", resp.text).group(1)
+    brand = re.search(r'<span class="brand-name">(.*?)</span>', resp.text).group(1)
+    return title, brand
+
+
+def test_console_pages_carry_the_console_name(direct) -> None:
+    for path in ("/developer", "/publish"):
+        title, brand = _title_and_brand(direct["dev"].get(path))
+        assert brand == "Navide 開發者後台", path
+        assert title.endswith("— Navide 開發者後台"), title
+        assert "Navide Marketplace" not in title
+
+
+def test_storefront_and_single_host_keep_the_marketplace_name(direct, tmp_path) -> None:
+    title, brand = _title_and_brand(direct["store"].get("/removed"))
+    assert (title, brand) == ("Removed extensions — Navide Marketplace", "Navide Marketplace")
+    title, brand = _title_and_brand(direct["store"].get("/"))
+    assert brand == "Navide Marketplace" and title.startswith("Navide Marketplace")
+    single = TestClient(create_app(cloud_settings(tmp_path / "single")), follow_redirects=False)
+    title, brand = _title_and_brand(single.get("/publish"))
+    assert (title, brand) == ("Publish — Navide Marketplace", "Navide Marketplace")
+
+
 # -- settings ----------------------------------------------------------------
 @pytest.mark.parametrize(
     "overrides",

@@ -53,7 +53,10 @@ _FORWARD_RESPONSE_HEADERS = (
 def visitor_address(request: Request) -> str:
     """The address the load balancer appended (the right-most
     X-Forwarded-For entry), which a visitor cannot choose; the socket peer
-    when there is no proxy in front."""
+    when there is no proxy in front. Uvicorn's own client address is the
+    left-most entry under --forwarded-allow-ips "*", which a visitor can
+    write, so per-visitor limits key on this instead. Assumes exactly one
+    proxy (the load balancer) in front of the registry."""
     header = request.headers.get("x-forwarded-for", "")
     entries = [item.strip() for item in header.split(",") if item.strip()]
     if entries:
