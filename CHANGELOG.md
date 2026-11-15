@@ -4,6 +4,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Navide Marketplace (0.2.44): the developer sign-in in Settings → Developer and `navide-plugin login` open the sign-in page on `https://developers.navide.dev` directly instead of the old `server.navide.dev/registry` address and its redirect. The App and the CLI still talk to the same Registry API, so installed plugins, their signatures and Registry trust are unchanged and nothing needs confirming again.
+- Navide Registry (0.2.44): the old `server.navide.dev/registry` sign-in, developer, publisher, publish and admin pages that older Apps and CLIs open redirect to the same page on `https://developers.navide.dev`, query kept, instead of the navide.dev home page. Takes effect with the next Registry deployment.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added

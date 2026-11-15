@@ -3383,7 +3383,11 @@ and agent tools; it cannot be removed.
   path is part of its identity, so another path on the same host is not
   official. The Marketplace website (`https://marketplace.navide.dev`) and
   developer console (`https://developers.navide.dev`) serve no API and are not
-  Registry identities.
+  Registry identities. Browser pages are the only thing that moved: the App's
+  developer sign-in and `navide-plugin login` open `/cli/authorize` on the
+  developer console for the Official Registry (exact match), and the
+  Registry redirects the old `/registry` sign-in, developer and publisher pages
+  to the same path there, query kept.
 - Registry envelope signatures identify the Registry signer key ID. Root-signed
   trust metadata records active,
   rotating, expired, and revoked keys. Rotation has a bounded old/new overlap.

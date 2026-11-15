@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createPluginViewRuntimeClient } from '../src/index'
 import { parseManifestV2, validateAgentTools } from '../../plugin-contracts/src/index'
 import { readZipEntries } from '../../../src/main/plugins/pluginPackage'
+import { OFFICIAL_REGISTRY, pagesUrl, registryUrl } from './registry-client.mjs'
 
 const roots: string[] = []
 const cli = join(process.cwd(), 'packages/plugin-sdk/bin/navide-plugin.mjs')
@@ -642,5 +643,20 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const published = run(['publish', 'f.vsix', '--registry', 'http://127.0.0.1:9'], directory, env)
     expect(published.status).not.toBe(0)
     expect(published.stderr).toContain('publish needs NAVIDE_PLUGIN_TOKEN')
+  })
+})
+
+describe('navide-plugin login page', () => {
+  it('signs in on the developer console for the Official Registry and keeps its API', () => {
+    expect(OFFICIAL_REGISTRY).toBe('https://server.navide.dev/registry')
+    expect(pagesUrl(registryUrl('https://server.navide.dev/registry/'))).toBe('https://developers.navide.dev')
+    for (const other of [
+      'https://registry.acme.test/registry',
+      'https://server.navide.dev/registry/evil',
+      'https://server.navide.dev.evil.test/registry',
+      'http://127.0.0.1:8787',
+    ]) {
+      expect(pagesUrl(registryUrl(other))).toBe(other)
+    }
   })
 })
