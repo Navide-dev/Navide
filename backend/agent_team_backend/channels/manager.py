@@ -2087,10 +2087,16 @@ class ChannelManager:
 
             self._enqueue(loc.key(), tell)
 
+    def _not_to_pane(self, msg: InboundMessage, why: str) -> None:
+        """Log a message that ends here without going to a pane: its log trail never just stops."""
+        log.info("channels: %s message %s: not sent to a pane: %s", _loc_log(msg), msg.message_id, why)
+
     async def _process_inbound(self, msg: InboundMessage) -> None:
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            self._not_to_pane(msg, "channels off or its bot not running")
             return
         if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            self._not_to_pane(msg, "sender not allowed (pairing reply)")
             await self._pairing_reply(msg)  # only DMs get this far
             return
         if self._remember_chat(msg):
@@ -2101,18 +2107,23 @@ class ChannelManager:
             if answer is None and not msg.callback_data:
                 answer = self._bare_answer(msg)
             if answer is not None:
+                self._not_to_pane(msg, f"an answer to prompt {answer.request_id}")
                 await self._handle_relay_answer(msg, answer)
                 return
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
+            self._not_to_pane(msg, "a quick menu button")
             await self._quick_press(msg)
             return
         if model_menu.parse_callback(msg.callback_data) is not None:
+            self._not_to_pane(msg, "a model menu button")
             await self._model_press(msg)
             return
         if account_menu.parse_callback(msg.callback_data) is not None:
+            self._not_to_pane(msg, "an account menu button")
             await self._account_press(msg)
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
+            self._not_to_pane(msg, "a share button")
             return
         if msg.callback_data.startswith(resend.CALLBACK_PREFIX):
             text = self.resend_buttons.press(resend.parse_callback(msg.callback_data) or "", msg.location_key())
@@ -2127,33 +2138,41 @@ class ChannelManager:
             # Then on through the binding checks below, as if the command had been typed.
             msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
         if msg.callback_data and not msg.text:
+            self._not_to_pane(msg, "a button that is not ours")
             return  # a button press with the relay off, or not ours
         pick = quick_menu.menu_pick(msg.text, self._identity(msg))
         if pick is not None:
+            self._not_to_pane(msg, "a /menu pick")
             await self._quick_pick(msg, pick)
             return
         pick = quick_menu.mcp_pick(msg.text, self._identity(msg))
         if pick is not None:
+            self._not_to_pane(msg, "an /mcp pick")
             await self._quick_pick(msg, pick, mcp=True)
             return
         # Only where /prompts and /skills answer with numbered lines: elsewhere "/skills 2"
         # stays text for the pane, as before (the CLI may have a /skills of its own).
         scoped = quick_menu.scoped_pick(msg.text, self._identity(msg)) if not self._menu_buttons(msg) else None
         if scoped is not None:
+            self._not_to_pane(msg, "a /prompts or /skills pick")
             await self._quick_pick(msg, scoped[1], scope=scoped[0])
             return
         scope = quick_menu.menu_scope(msg.text, self._identity(msg))
         if scope is not None:
+            self._not_to_pane(msg, "a menu command")
             await self._quick_menu(msg, scope)
             return
         if relay.is_pending_command(msg.text, self._identity(msg)):
+            self._not_to_pane(msg, "/pending")
             await self._list_pending(msg)
             return
         share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
         if share_cmd is not None and await self._share_command(msg, *share_cmd):
+            self._not_to_pane(msg, "a share command")
             return
         plugin_cmd = plugin_cmds.parse_command(msg.text, self._identity(msg))
         if plugin_cmd is not None and await self._plugin_command(msg, *plugin_cmd):
+            self._not_to_pane(msg, "a plugin command")
             return
         shipped_arg = shipped_cmds.parse_command(msg.text, self._identity(msg))
         if shipped_arg is not None and await self._shipped_command(msg, shipped_arg):
@@ -2163,10 +2182,16 @@ class ChannelManager:
             # One bot answers for its unbound chats and topics, as it always has; with
             # several, a bot in a group the user drives through another stays quiet.
             if self._sole_bot(msg.platform):
+                self._not_to_pane(msg, "chat not bound")
                 await self._reply(msg, MSG_NOT_BOUND)
             else:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
+            return
+        if msg.unsupported_kind:
+            self._not_to_pane(msg, f"unsupported content ({msg.unsupported_kind}); the chat is told")
+            lang = prompt_skills.language(await self._ui_settings())
+            await self._reply(msg, inbound.text(lang, "unsupported", kind=msg.unsupported_kind))
             return
         # A typed /wake (offered where there are no buttons) is answered like the button, never
         # sent to the CLI as a prompt.
@@ -2178,6 +2203,7 @@ class ChannelManager:
             # a wake opens it rather than answering that it is online.
             pane_id = ""
         if not pane_id:
+            self._not_to_pane(msg, "pane offline (kept for a wake, or the chat told)")
             await self._offline(msg, binding)  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
@@ -2193,27 +2219,34 @@ class ChannelManager:
             # A new message follows unless this was a wake: it keeps its place in the queue.
             await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_asked else 1)
             if wake_asked:
+                self._not_to_pane(msg, "a wake")
                 return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
         if _is_stop_word(command):
+            self._not_to_pane(msg, "a stop")
             await self._interrupt(msg, pane_id, buttons=RESUME_BUTTONS)
             return
         if _command_word(command) in CANCEL_WORDS:
+            self._not_to_pane(msg, "a cancel")
             await self._cancel_queued(msg)
             return
         if _command_word(command) in RESUME_WORDS:
+            self._not_to_pane(msg, "a resume")
             await self._resume(msg, pane_id)
             return
         model_cmd = model_menu.parse_command(command)
         if model_cmd is not None:
+            self._not_to_pane(msg, "a model command")
             await self._model_command(msg, binding, pane_id, model_cmd)
             return
         account_cmd = account_menu.parse_command(command)
         if account_cmd is not False:
+            self._not_to_pane(msg, "an account command")
             await self._account_command(msg, binding, pane_id, account_cmd)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
+            self._not_to_pane(msg, "handled by the mirror (/status, /stop, or routed to a child pane)")
             return
         await self._debounced_deliver(msg, binding, pane_id)
 
@@ -2474,6 +2507,7 @@ class ChannelManager:
                 return False  # a question is answered by typing
         choice, rest = relay.parse_bare(msg.text)
         if choice and not rest:
+            self._not_to_pane(msg, "a bare answer while the pane waits on a prompt; the chat is told")
             # A bare yes / 2 that answered nothing here is not kept: sent in later, it would
             # answer whatever prompt is on the screen by then.
             if live:
@@ -2481,6 +2515,7 @@ class ChannelManager:
             else:
                 await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
             return True
+        log.info("channels: %s -> pane %s: kept: the pane waits on a prompt", _loc_log(msg), pane_id)
         await self._hold(msg, binding, pane_id, live[0] if live else None, since)
         return True
 
@@ -3107,6 +3142,7 @@ class ChannelManager:
         files = await self._fetch_attachments(msg, pane_id)
         text = "\n".join(part for part in (msg.text, *files) if part)
         if msg.attachments and not text:
+            log.info("channels: %s -> pane %s: not delivered: every file refused", _loc_log(msg), pane_id)
             return False  # every file was refused, and the chat was told why
         body = _with_reply_quote(dataclasses.replace(msg, text=text), self._quote_trusted(msg),
                                  self.mirror.reports.get(msg))

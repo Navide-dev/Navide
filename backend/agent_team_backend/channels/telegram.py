@@ -66,6 +66,8 @@ CAPTION_LIMIT = 1024  # sendDocument caption, characters
 # The file kinds a Message may carry that are taken as attachments (stickers are not).
 # An animation also fills ``document`` "for backward compatibility", so it comes first.
 _FILE_KINDS = ("animation", "document", "video", "audio", "voice", "video_note")
+# Messages a person sends that no pane can take: the chat is told it did not go in.
+UNSUPPORTED_KINDS = ("poll", "dice", "story", "game", "invoice", "checklist", "paid_media", "giveaway")
 POLL_TIMEOUT_S = 30
 GENERAL_TOPIC_ID = "1"
 SEND_CONNECT_RETRIES = 2
@@ -509,10 +511,19 @@ class TelegramAdapter:
             return
         chat = msg.get("chat") or {}
         self._remember_chat(chat)
-        text = msg.get("text") or msg.get("caption") or ""
+        text = msg.get("text") or msg.get("caption") or _content_text(msg)
         attachments = _attachments(msg)
-        if not (text or attachments) or (msg.get("from") or {}).get("is_bot"):
+        if (msg.get("from") or {}).get("is_bot"):
+            log.info("telegram[%s]: message %s dropped: sent by a bot", self.account, msg.get("message_id"))
             return
+        unsupported = ""
+        if not (text or attachments):
+            # Only its field names are logged, never its content.
+            unsupported = next((k for k in UNSUPPORTED_KINDS if k in msg), "")
+            log.info("telegram[%s]: message %s dropped: unsupported content (fields: %s)%s", self.account,
+                     msg.get("message_id"), ",".join(sorted(msg)), "; the chat is told" if unsupported else "")
+            if not unsupported:
+                return  # a service message (a pin, a member joining, ...): nobody sent it to a pane
         # Sent on behalf of a chat (a channel, an anonymous admin): ``from`` is a stand-in
         # that names no one, so the message carries no sender id the gate could admit.
         sender_chat = msg.get("sender_chat")
@@ -523,13 +534,14 @@ class TelegramAdapter:
             ts=float(msg.get("date") or time.time()),
             reply_to_id=str((msg.get("reply_to_message") or {}).get("message_id") or ""),
             reply_quote=_reply_quote(msg, self.bot_id), attachments=attachments,
+            unsupported_kind=unsupported,
         )
 
     async def _deliver(
         self, *, chat: dict[str, Any], sender: dict[str, Any], text: str, thread: str,
         message_id: str, ts: float, callback_data: str = "", reply_to_id: str = "",
         reply_quote: tuple[str, str, str, bool] = ("", "", "", False),
-        attachments: list[InboundAttachment] | None = None,
+        attachments: list[InboundAttachment] | None = None, unsupported_kind: str = "",
     ) -> None:
         self.status.last_inbound_at = time.time()
         if self._emit is None:
@@ -541,7 +553,7 @@ class TelegramAdapter:
             callback_data=callback_data, reply_to_id=reply_to_id,
             reply_to_text=reply_quote[0], reply_to_sender=reply_quote[1],
             reply_to_sender_id=reply_quote[2], reply_to_self=reply_quote[3],
-            attachments=attachments or [],
+            attachments=attachments or [], unsupported_kind=unsupported_kind,
         ))
 
     def _remember_chat(self, chat: dict[str, Any]) -> None:
@@ -827,6 +839,28 @@ def _attachments(msg: dict[str, Any]) -> list[InboundAttachment]:
                                            str(obj.get("mime_type") or ""), str(obj["file_id"])))
             break
     return found
+
+
+def _content_text(msg: dict[str, Any]) -> str:
+    """A contact, venue, location or sticker as a line of text for the pane; "" otherwise.
+    A contact keeps its phone number: the user sent it to their own pane."""
+    contact = msg.get("contact")
+    if isinstance(contact, dict):
+        name = " ".join(str(p) for p in (contact.get("first_name"), contact.get("last_name")) if p)
+        return " ".join(p for p in ("[Contact]", name, str(contact.get("phone_number") or "")) if p)
+    venue = msg.get("venue")
+    if isinstance(venue, dict):
+        where = venue.get("location") or {}
+        coords = f"({where.get('latitude')}, {where.get('longitude')})" if where else ""
+        return " ".join(p for p in ("[Venue]", str(venue.get("title") or ""), str(venue.get("address") or ""),
+                                    coords) if p)
+    location = msg.get("location")
+    if isinstance(location, dict):
+        return f"[Location] {location.get('latitude')}, {location.get('longitude')}"
+    sticker = msg.get("sticker")
+    if isinstance(sticker, dict):
+        return " ".join(p for p in ("[Sticker]", str(sticker.get("emoji") or "")) if p)
+    return ""
 
 
 def _display_name(user: dict[str, Any]) -> str:

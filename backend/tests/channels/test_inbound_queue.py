@@ -11,7 +11,7 @@ import pytest
 
 from agent_team_backend.channels import inbound
 from agent_team_backend.channels import manager as mgr_mod
-from agent_team_backend.channels.base import Location
+from agent_team_backend.channels.base import InboundMessage, Location
 
 from .test_manager import (  # noqa: F401 — fixtures and helpers shared with the manager suite
     Env, _said, _until, clocked, env, fast_timers,
@@ -159,3 +159,22 @@ async def test_a_message_queued_over_ten_minutes_for_a_login_goes_in_anyway(cloc
     await _until(lambda: _said(e, "已直接送出，CLI 可能需要重新登入"))
     await e.m.wait_idle()
     assert _rows(e) == []
+
+
+async def test_an_unsupported_kind_is_told_to_the_chat_and_never_reaches_the_pane(env: Env, caplog) -> None:
+    caplog.set_level("INFO", logger="agent_team_backend.channels.manager")
+    await env.m.handle_inbound(InboundMessage(
+        platform="telegram", account="default", chat_id="-100", thread_id="50", sender_id="7",
+        sender_name="alice", text="", message_id="m-poll", is_direct=False, ts=time.time(),
+        unsupported_kind="poll"))
+    await env.m.wait_idle()
+    assert env.fake.delivered == []
+    assert _said(env, inbound.text("zh-TW", "unsupported", kind="poll"))
+    assert _rows(env) == []
+    assert "message m-poll: not sent to a pane: unsupported content (poll)" in caplog.text
+
+
+async def test_a_message_that_ends_before_a_pane_is_logged(env: Env, caplog) -> None:
+    caplog.set_level("INFO", logger="agent_team_backend.channels.manager")
+    await env.inbound("/pending", mid="m-pending")
+    assert "message m-pending: not sent to a pane: /pending" in caplog.text
