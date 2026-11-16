@@ -46,7 +46,8 @@ class FakeBotApi:
 
     def push_message(self, *, chat_id: int, text: str, sender_id: int = 7, username: str = "alice",
                      chat_type: str = "private", thread_id: int | None = None,
-                     topic: bool = False, forum: bool = False) -> int:
+                     topic: bool = False, forum: bool = False, extra: dict[str, Any] | None = None,
+                     is_bot: bool = False) -> int:
         with self.lock:
             uid = self._next_update_id
             self._next_update_id += 1
@@ -55,7 +56,8 @@ class FakeBotApi:
             msg: dict[str, Any] = {
                 "message_id": mid, "date": int(time.time()), "text": text,
                 "chat": {"id": chat_id, "type": chat_type, "title": f"chat{chat_id}", "is_forum": forum},
-                "from": {"id": sender_id, "is_bot": False, "username": username},
+                "from": {"id": sender_id, "is_bot": is_bot, "username": username},
+                **(extra or {}),
             }
             if thread_id is not None:
                 msg["message_thread_id"] = thread_id

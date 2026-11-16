@@ -829,3 +829,45 @@ async def test_a_second_gap_within_an_hour_is_not_told_again(api: FakeBotApi) ->
         await ad.stop()
     assert missed == [2]
     assert ad.status.missed_updates == 5
+
+
+async def test_contact_location_venue_and_sticker_go_in_as_text(api: FakeBotApi) -> None:
+    got, emit = _collect()
+    phone = "+886" + "900000000"  # built at run time: no real-looking number in the source
+    api.push_message(chat_id=42, text="", extra={"contact": {"first_name": "Ada", "last_name": "Lu",
+                                                             "phone_number": phone}})
+    api.push_message(chat_id=42, text="", extra={"location": {"latitude": 25.03, "longitude": 121.56}})
+    api.push_message(chat_id=42, text="", extra={
+        "venue": {"title": "Cafe", "address": "1 Road", "location": {"latitude": 1.5, "longitude": 2.5}},
+        "location": {"latitude": 1.5, "longitude": 2.5}})
+    api.push_message(chat_id=42, text="", extra={"sticker": {"emoji": "👍", "file_id": "s1"}})
+    ad = _adapter(api)
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) >= 4)
+    finally:
+        await ad.stop()
+    assert [m.text for m in got] == [
+        f"[聯絡人] Ada Lu {phone}", "[位置] 25.03, 121.56", "[地點] Cafe 1 Road (1.5, 2.5)", "[貼圖] 👍"]
+    assert all(m.unsupported_kind == "" and m.attachments == [] for m in got)
+
+
+async def test_an_unsupported_kind_is_emitted_to_be_told_and_logged_by_field_name(api: FakeBotApi, caplog) -> None:
+    got, emit = _collect()
+    api.push_message(chat_id=42, text="", extra={"poll": {"question": "secret question?"}})
+    api.push_message(chat_id=42, text="", extra={"pinned_message": {"message_id": 1}})  # service: dropped
+    api.push_message(chat_id=42, text="from a bot", is_bot=True)  # dropped
+    api.push_message(chat_id=42, text="after")
+    ad = _adapter(api)
+    caplog.set_level("INFO", logger="agent_team_backend.channels.telegram")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) >= 2)
+    finally:
+        await ad.stop()
+    assert [(m.text, m.unsupported_kind) for m in got] == [("", "poll"), ("after", "")]
+    log_text = caplog.text
+    assert "dropped: unsupported content (fields: chat,date,from,message_id,poll,text); the chat is told" in log_text
+    assert "(fields: chat,date,from,message_id,pinned_message,text)\n" in log_text  # not told
+    assert "dropped: sent by a bot" in log_text
+    assert "secret question" not in log_text

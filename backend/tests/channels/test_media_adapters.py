@@ -83,13 +83,14 @@ async def test_telegram_reads_the_largest_photo_and_other_file_kinds() -> None:
     await ad._handle_update(_tg(voice={"file_id": "v1", "mime_type": "audio/ogg", "file_size": 30}))
     await ad._handle_update(_tg(animation={"file_id": "a1", "file_name": "x.mp4", "mime_type": "video/mp4"},
                                 document={"file_id": "a1", "file_name": "x.mp4", "mime_type": "video/mp4"}))
-    await ad._handle_update(_tg(sticker={"file_id": "s1"}))  # no text, no file we take: skipped
-    assert [m.text for m in got] == ["look", "", "", ""]
+    await ad._handle_update(_tg(sticker={"file_id": "s1"}))  # no file we take: goes in as text
+    assert [m.text for m in got] == ["look", "", "", "", "[貼圖]"]
     assert [m.attachments for m in got] == [
         [InboundAttachment("photo", "", 900, "image/jpeg", "big")],
         [InboundAttachment("document", "r.pdf", 2000, "application/pdf", "d1")],
         [InboundAttachment("voice", "", 30, "audio/ogg", "v1")],
         [InboundAttachment("animation", "x.mp4", None, "video/mp4", "a1")],
+        [],
     ]
 
 
