@@ -7710,6 +7710,8 @@
         "dir-remind": "Claude accounts not signed in to their own folder yet: {count}. They keep working on the shared login. Use “Sign In to Its Own Folder” in the account badge to finish each one.",
         "new-account": "+ New Account",
         "new-account-scope": "Provider for the new account",
+        "order-handle": "Drag to set the order automatic switching tries accounts in",
+        "order-failed": "Couldn't save the account order: {message}",
         "global-login-title": "Sign in on the live credential?",
         "global-login-body": "{agent} has no isolated sign-in. During sign-in its live credential is temporarily replaced by the new account; when the sign-in completes the current account ({current}) is restored, and the new account is used only when you switch to it. Running {agent} panes block this — close or finish them first.",
         "global-login-confirm": "Sign In",

@@ -7710,6 +7710,8 @@
         "dir-remind": "有 {count} 个 Claude 账号还没登录到自己的文件夹，目前仍使用共用的登录。可以从账号徽章的“登录到账号文件夹”逐一补做。",
         "new-account": "＋ 添加账号",
         "new-account-scope": "新账号的 provider",
+        "order-handle": "拖动设置自动切换尝试账号的顺序",
+        "order-failed": "无法保存账号顺序：{message}",
         "global-login-title": "要在生效中的凭据上登录吗？",
         "global-login-body": "{agent} 没有隔离的登录方式。登录期间会暂时以新账号取代生效中的凭据；登录完成后会还原目前账号（{current}），新账号只有在你切换过去时才会使用。运行中的 {agent} 分格会阻挡此操作，请先关闭或完成它们。",
         "global-login-confirm": "登录",

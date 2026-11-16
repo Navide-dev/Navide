@@ -7710,6 +7710,8 @@
         "dir-remind": "Contas do Claude ainda não conectadas na própria pasta: {count}. Elas continuam funcionando com o login compartilhado. Use “Entrar na própria pasta” no selo da conta para concluir cada uma.",
         "new-account": "+ Nova conta",
         "new-account-scope": "Provedor da nova conta",
+        "order-handle": "Arraste para definir a ordem em que a troca automática tenta as contas",
+        "order-failed": "Não foi possível salvar a ordem das contas: {message}",
         "global-login-title": "Entrar usando a credencial ativa?",
         "global-login-body": "{agent} não tem login isolado. Durante o login, a credencial ativa é substituída temporariamente pela nova conta; quando o login termina, a conta atual ({current}) é restaurada, e a nova conta só é usada quando você trocar para ela. Panes de {agent} em execução impedem isso: feche-os ou deixe-os terminar primeiro.",
         "global-login-confirm": "Entrar",

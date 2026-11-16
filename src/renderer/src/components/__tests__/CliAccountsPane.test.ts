@@ -73,6 +73,8 @@ interface ApiOptions {
   globalLogin?: string[]
   /** Claude accounts signed in inside their own config dir. */
   accountDirs?: CliProfileAccountDirs
+  /** agentKey -> the user's account order ("__default__" = Default). */
+  slotOrder?: Record<string, string[]>
 }
 
 // Fake `api` prop mirroring the useCliProfiles return shape (refs + fns),
@@ -85,6 +87,7 @@ function makeApi(opts: ApiOptions = {}) {
   const duplicates = ref<CliProfileDuplicates>(opts.duplicates ?? {})
   const supportedAgents = ref<string[]>(opts.supported ?? SUPPORTED)
   const error = ref<string>(opts.error ?? '')
+  const slotOrder = ref<Record<string, string[]>>(opts.slotOrder ?? {})
 
   const api = {
     profiles,
@@ -109,6 +112,20 @@ function makeApi(opts: ApiOptions = {}) {
     remove: vi.fn(async () => true),
     setDefault: vi.fn(async () => ({ ok: true as const })),
     profilesForAgent: (agentKey: string) => profiles.value.filter((p) => p.agentKey === agentKey),
+    slotOrder,
+    orderedSlotIds: (agentKey: string) => {
+      const ids = [null, ...profiles.value.filter((p) => p.agentKey === agentKey).map((p) => p.id)]
+      const order = slotOrder.value[agentKey] ?? []
+      const rank = (id: string | null) => {
+        const i = order.indexOf(id ?? '__default__')
+        return i < 0 ? order.length : i
+      }
+      return [...ids].sort((a, b) => rank(a) - rank(b))
+    },
+    setSlotOrder: vi.fn(async (agentKey: string, ids: (string | null)[]) => {
+      slotOrder.value = { ...slotOrder.value, [agentKey]: ids.map((id) => id ?? '__default__') }
+      return { ok: true }
+    }),
     hasProfiles: (agentKey: string) => profiles.value.some((p) => p.agentKey === agentKey),
     defaultProfileId: (agentKey: string) => defaults.value[agentKey] ?? null,
     findProfile: (id: string | null | undefined) =>
@@ -193,6 +210,43 @@ describe('CliAccountsPane', () => {
     expect(claude.findAll('.cli-card')).toHaveLength(3) // Default + 2 profiles
     expect(buttonByText(claude, '+ New Account')).toBeDefined()
     expect(claude.find('.cli-unsupported').exists()).toBe(false)
+  })
+
+  it('shows the cards in the user\'s order and saves a drag as the new order', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2'), profile('p2', 'claude', 'Account 3')],
+      defaults: { claude: 'p1' },
+      identities: { claude: {
+        __default__: { email: 'd@example.com', signedIn: true },
+        p1: { email: 'one@example.com', signedIn: true },
+        p2: { email: 'two@example.com', signedIn: true },
+      } },
+      slotOrder: { claude: ['p2', '__default__', 'p1'] },
+    })
+    const w = mountPane(api)
+    const claude = section(w, 0)
+    const titles = () => section(w, 0).findAll('.cli-card .cli-card-id').map((n) => n.text())
+    expect(titles()).toEqual(['two@example.com', 'd@example.com', 'one@example.com'])
+
+    // Drag the last card onto the first one.
+    const handles = claude.findAll('[data-testid="account-order-handle"]')
+    expect(handles).toHaveLength(3)
+    await handles[2].trigger('dragstart')
+    const cards = claude.findAll('.cli-card')
+    await cards[0].trigger('dragover')
+    expect(cards[0].classes()).toContain('order-over')
+    await cards[0].trigger('drop')
+    await flushPromises()
+    expect(api.setSlotOrder).toHaveBeenCalledWith('claude', ['p1', 'p2', null])
+    expect(titles()).toEqual(['one@example.com', 'two@example.com', 'd@example.com'])
+  })
+
+  it('offers no drag handle while an agent has only its Default', () => {
+    const w = mountPane(makeApi({
+      identities: { codex: { __default__: { email: 'd@example.com', signedIn: true } } },
+      defaults: {},
+    }))
+    expect(w.find('[data-testid="account-order-handle"]').exists()).toBe(false)
   })
 
   it('lists unsupported agents once, with no rows or add button', () => {

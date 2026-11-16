@@ -307,6 +307,7 @@ describe('CliAccountsPane with an API key account', () => {
       supportedAgents: computed(() => [agentKey]),
       paneDefaults,
       profilesForAgent: (agent: string) => (agent === agentKey ? profiles : []),
+      orderedSlotIds: (agent: string) => [null, ...(agent === agentKey ? (profiles as { id: string }[]) : []).map((p) => p.id)],
       findProfile: (id: string) => (profiles as { id: string }[]).find((p) => p.id === id),
       defaultProfileId: () => null,
       newPaneProfileId: () => null,

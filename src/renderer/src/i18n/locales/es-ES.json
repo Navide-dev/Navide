@@ -7710,6 +7710,8 @@
         "dir-remind": "Cuentas de Claude sin sesión iniciada aún en su propia carpeta: {count}. Siguen funcionando con el inicio de sesión compartido. Usa «Iniciar sesión en su propia carpeta» en la insignia de la cuenta para terminar cada una.",
         "new-account": "+ Nueva cuenta",
         "new-account-scope": "Proveedor de la nueva cuenta",
+        "order-handle": "Arrastra para fijar el orden en que el cambio automático prueba las cuentas",
+        "order-failed": "No se pudo guardar el orden de las cuentas: {message}",
         "global-login-title": "¿Iniciar sesión sobre la credencial activa?",
         "global-login-body": "{agent} no tiene un inicio de sesión aislado. Durante el inicio de sesión, su credencial activa se sustituye temporalmente por la nueva cuenta; cuando termina, se restaura la cuenta actual ({current}) y la nueva cuenta solo se usa cuando cambies a ella. Los panes de {agent} en ejecución lo impiden: ciérralos o deja que terminen primero.",
         "global-login-confirm": "Iniciar sesión",
