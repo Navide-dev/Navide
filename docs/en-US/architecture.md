@@ -304,8 +304,12 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   dir, credential launch, launch provenance), and the account-switch and
   quota-failover callers refuse a pane whose term metadata carries `remote`.
   The `ssh -R` tunnel binds the remote host's loopback (or, for a bridge
-  network, its Docker gateway, reachable by other accounts on that host and
-  guarded only by the per-pane token). A pane connects only to a host and
+  network, its Docker gateway, reachable by other accounts on that host and by other
+  containers on that bridge, guarded only by the per-pane token). Each pane
+  has its own ssh connection, so closing it unbinds the forward at once (a
+  shared master would keep it for ControlPersist), and the remote shell stays
+  the parent of `docker exec` so a hangup also ends the CLI inside the
+  container, which a killed `docker exec` alone does not. A pane connects only to a host and
   container the user opened from the setup dialog, kept app-wide in
   `ui_settings` (`remoteDevcontainerTrusted`): the pane record lives in the
   workspace's `.agent-team/` database, which a cloned repository can carry, so

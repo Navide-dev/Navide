@@ -201,7 +201,7 @@ async def create_remote_pane(
             return
         argv = rd.pane_argv(
             spec, agent_key, pane_id=pane_id, local_port=local_port,
-            remote_port=rd.pick_remote_port(), control_path_dir=rd.control_dir(),
+            remote_port=rd.pick_remote_port(),
         )
     except rd.RemoteSpecError as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))

@@ -216,21 +216,36 @@ def cli_argv(agent_key: str, url: str) -> list[str]:
     raise RemoteSpecError(f"remote panes support claude and codex, not {agent_key!r}")
 
 
-def remote_script(container: str, argv: list[str]) -> str:
+def remote_script(container: str, argv: list[str], pidfile: str) -> str:
     """The shell line run on the remote host.
 
     Echo goes off before the token is requested, so the token never shows on
     the pane; it is exported and handed to ``docker exec`` by name only.
+
+    The shell stays as the parent of ``docker exec`` rather than exec'ing it:
+    a closed connection kills ``docker exec`` but not the process it started
+    in the container, so on hangup the shell ends that process group, found
+    by the pid the in-container wrapper recorded.
     """
     from .mcp_server import wiring
 
     env = wiring.TOKEN_ENV
     request = TOKEN_REQUEST.decode("ascii").replace("\x1b", "\\033").replace("\x07", "\\007")
+    ctr = shlex.quote(container)
+    cleanup = (
+        f"docker exec {ctr} sh -c "
+        + shlex.quote(f'p=$(cat {pidfile} 2>/dev/null) && kill -HUP "-$p"; rm -f {pidfile}')
+        + " >/dev/null 2>&1; exit 129"
+    )  # No '--' after kill: dash reads it as a pid and kills nothing.
+    # ':' rather than '': an ignored signal stays ignored across exec, a
+    # caught one resets, so the CLI keeps its own SIGINT handling.
+    wrapper = f'echo $$ > {pidfile}; trap : INT; "$@"; s=$?; rm -f {pidfile}; exit $s'
     return (
         f"stty -echo; printf '{request}'; IFS= read -r {env}; stty echo; export {env}; "
         "export LANG=C.UTF-8 LC_ALL=C.UTF-8; "
-        f"exec docker exec -it -e {env} -e LANG -e LC_ALL -e TERM "
-        f"{shlex.quote(container)} {shlex.join(argv)}"
+        f"trap {shlex.quote(cleanup)} HUP TERM; "
+        f"docker exec -it -e {env} -e LANG -e LC_ALL -e TERM "
+        f"{ctr} sh -c {shlex.quote(wrapper)} sh {shlex.join(argv)}"
     )
 
 
@@ -241,20 +256,22 @@ def pane_argv(
     pane_id: str,
     local_port: int,
     remote_port: int,
-    control_path_dir: Path | None,
 ) -> list[str]:
     network = spec["network"]
     forward = f"{tunnel_host(network)}:{remote_port}:127.0.0.1:{local_port}"
     argv = cli_argv(agent_key, mcp_url(network, remote_port, pane_id))
     return [
         "ssh", "-tt",
-        *ssh_base_options(control_path_dir),
+        # Its own connection, never a shared master: a master keeps the -R
+        # forward bound for ControlPersist seconds after the pane closes.
+        *ssh_base_options(None),
+        "-o", "ControlPath=none",
         # A taken remote port fails the connection rather than leaving the
         # pane without its tools.
         "-o", "ExitOnForwardFailure=yes",
         "-R", forward,
         spec["host"], "--",
-        remote_script(spec["container"], argv),
+        remote_script(spec["container"], argv, f"/tmp/navide-pane-{remote_port}.pid"),
     ]
 
 

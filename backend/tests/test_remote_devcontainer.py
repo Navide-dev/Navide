@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import shlex
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ def _fake_token() -> str:
 
 
 def _argv(agent: str = "claude", spec=SPEC) -> list[str]:
-    return rd.pane_argv(spec, agent, pane_id="pane-1", local_port=49161, remote_port=45000, control_path_dir=CM)
+    return rd.pane_argv(spec, agent, pane_id="pane-1", local_port=49161, remote_port=45000)
 
 
 def test_off_unless_exactly_true() -> None:
@@ -62,12 +63,35 @@ def test_pane_command_carries_utf8_and_no_keystroke_obscuring() -> None:
     assert argv[:2] == ["ssh", "-tt"]
     assert "ObscureKeystrokeTiming=no" in argv
     assert "ForwardAgent=no" in argv
-    assert "ControlMaster=auto" in argv
     assert "ExitOnForwardFailure=yes" in argv
     assert "-A" not in argv
     script = argv[-1]
     assert "LANG=C.UTF-8" in script and "LC_ALL=C.UTF-8" in script
     assert "docker exec -it" in script and "devc-navide-app" in script
+
+
+def test_pane_has_its_own_connection_so_closing_frees_the_tunnel() -> None:
+    # A shared master keeps a pane's -R forward bound for ControlPersist
+    # seconds after the pane closes (measured: ~60 s on the Phase 2 VM).
+    argv = _argv()
+    assert "ControlPath=none" in argv
+    assert "ControlMaster=auto" not in argv
+
+
+def test_hangup_ends_the_cli_inside_the_container() -> None:
+    # Killing `docker exec` leaves the exec'd process running in the
+    # container; the remote shell must stay as parent and clean up on HUP.
+    script = _argv()[-1]
+    assert "exec docker exec" not in script
+    pidfile = "/tmp/navide-pane-45000.pid"
+    trap = script[script.index("trap "):script.index("docker exec -it")]
+    assert "HUP" in trap and "kill -HUP" in trap and pidfile in trap
+    inner = shlex.split(script.split("docker exec -it", 1)[1])
+    wrapper = inner[inner.index("-c") + 1]
+    assert wrapper.startswith(f"echo $$ > {pidfile};")
+    assert f"rm -f {pidfile}" in wrapper
+    # The CLI keeps its own default for SIGINT: ':' (not '') resets on exec.
+    assert "trap : INT" in wrapper
 
 
 def test_tunnel_binds_loopback_for_host_network() -> None:
@@ -99,9 +123,7 @@ def test_claude_reads_its_config_as_content_with_a_bearer_from_env() -> None:
     script = argv[-1]
     assert "--mcp-config" in script
     # The JSON document is shell-quoted inside the remote line; recover it.
-    import shlex
-
-    inner = shlex.split(script.split("exec docker exec", 1)[1])
+    inner = shlex.split(script.split("docker exec -it", 1)[1])
     document = json.loads(inner[inner.index("--mcp-config") + 1])
     entry = document["mcpServers"][wiring.SERVER_NAME]
     assert entry["headers"] == {"Authorization": "Bearer ${NAVIDE_MCP_TOKEN}"}
