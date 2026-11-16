@@ -114,6 +114,7 @@ VERDICT_WATCH_MAX_S = 3600.0
 STATUS_POLL_S = 1.0
 DEBOUNCE_S = 0.5  # lines from one sender to one location within this window become one message
 DEBOUNCE_MAX_S = 3.0
+JOB_STALL_WARN_S = 60.0  # an inbound job running longer than this is logged: the chat's next ones wait
 LONG_REPLY_MAX_CHUNKS = 3  # past this, a reply is a preview plus the whole text as a file
 TELEGRAM_DIRECT_KINDS = ("private", "direct")  # the adapter's chat type; what _remember_chat stores
 REPLY_QUOTE_MAX_CHARS = 500  # a native reply's quoted message, cut before it reaches the pane
@@ -593,14 +594,28 @@ class ChannelManager:
             worker.task = self._spawn(self._run_worker(location_key, worker))
 
     async def _run_worker(self, location_key: str, worker: _Worker) -> None:
+        loop = asyncio.get_running_loop()
+        chat = inbound.chat_hash(location_key)
         while worker.jobs:
             job = worker.jobs.popleft()
+            started = time.monotonic()
+            # Logged while it runs, not only after: a job that never ends must still show.
+            stall = loop.call_later(JOB_STALL_WARN_S, lambda: log.warning(
+                "channels: inbound job for chat=%s still running after %.0fs; %d job(s) waiting behind it",
+                chat, time.monotonic() - started, len(worker.jobs)))
             try:
                 await job()
             except asyncio.CancelledError:
+                log.info("channels: inbound worker for chat=%s cancelled; %d job(s) not run to the end "
+                         "(kept messages replay on the next start)", chat, len(worker.jobs) + 1)
                 raise
             except Exception:  # noqa: BLE001 — one bad message must not stall the chat
                 log.exception("channels: inbound job for %s failed", location_key)
+            finally:
+                stall.cancel()
+            elapsed = time.monotonic() - started
+            if elapsed >= JOB_STALL_WARN_S:
+                log.warning("channels: inbound job for chat=%s finished after %.0fs", chat, elapsed)
         # Idle: retire. No await between the empty check above and this removal,
         # so a job enqueued from here on starts a fresh worker.
         if self._workers.get(location_key) is worker:
@@ -1984,6 +1999,7 @@ class ChannelManager:
         code = parse_link_code(msg.text) if msg.text and not msg.callback_data else ""
         invite = self.invites.consume(msg.platform, code, msg.account) if code else None
         if invite is not None:
+            self._not_to_pane(msg, "an invite code")
             self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code, invite.target))
             return
         if not msg.is_direct and not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
