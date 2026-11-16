@@ -7,6 +7,7 @@ Only non-secret data lives here. Bot tokens and app secrets go to
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -14,6 +15,9 @@ from typing import Any
 
 from ..db import Database
 from .base import Location, is_shared_sender
+from .inbound import chat_hash
+
+log = logging.getLogger(__name__)
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
@@ -434,6 +438,10 @@ class ChannelStore:
         now = int(time.time())
         with self._db.transaction() as cur:
             # One pane <-> one location: rebinding either side replaces the old row.
+            replaced = cur.execute("SELECT pane_id FROM channel_bindings WHERE platform = ? AND account = ?"
+                                   " AND chat_id = ? AND thread_id = ?",
+                                   (loc.platform, loc.account, loc.chat_id, loc.thread_id)).fetchone()
+            moved = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (pane_id,)).fetchone()
             cur.execute("DELETE FROM channel_bindings WHERE pane_id = ? OR (platform = ? AND account = ?"
                         " AND chat_id = ? AND thread_id = ?)",
                         (pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id))
@@ -441,6 +449,9 @@ class ChannelStore:
                         " created_at, verbosity, parent_pane_id, auto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id, loc.title, now,
                          verbosity, parent_pane_id, int(auto)))
+        if moved is not None and self._binding(moved).location().key() != loc.key():
+            _log_change("removed", self._binding(moved).location(), pane_id, "")
+        _log_change("bound", loc, replaced["pane_id"] if replaced is not None else "", pane_id)
         return Binding(pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id, loc.title, now,
                        verbosity, parent_pane_id, auto)
 
@@ -450,14 +461,20 @@ class ChannelStore:
             if r is None:
                 return None
             cur.execute("DELETE FROM channel_bindings WHERE pane_id = ?", (pane_id,))
-            return self._binding(r)
+            removed = self._binding(r)
+        _log_change("removed", removed.location(), pane_id, "")
+        return removed
 
     def rename_pane(self, old_pane_id: str, new_pane_id: str) -> bool:
         with self._db.transaction() as cur:
             cur.execute("UPDATE channel_bindings SET parent_pane_id = ? WHERE parent_pane_id = ?",
                         (new_pane_id, old_pane_id))
-            return cur.execute("UPDATE channel_bindings SET pane_id = ? WHERE pane_id = ?",
-                               (new_pane_id, old_pane_id)).rowcount > 0
+            r = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (old_pane_id,)).fetchone()
+            renamed = cur.execute("UPDATE channel_bindings SET pane_id = ? WHERE pane_id = ?",
+                                  (new_pane_id, old_pane_id)).rowcount > 0
+        if renamed and r is not None:
+            _log_change("renamed", self._binding(r).location(), old_pane_id, new_pane_id)
+        return renamed
 
     def set_wake_target(self, pane_id: str, workspace_path: str, session_id: str) -> bool:
         return self._exec("UPDATE channel_bindings SET workspace_path = ?, session_id = ? WHERE pane_id = ?",
@@ -500,3 +517,11 @@ class ChannelStore:
         rows = self._rows("SELECT id, created_at, payload FROM channel_inbound"
                           " WHERE platform = ? AND account = ? ORDER BY id", (platform, account))
         return [(int(r["id"]), float(r["created_at"]), json.loads(r["payload"])) for r in rows]
+
+
+def _log_change(what: str, loc: Location, old_pane_id: str, new_pane_id: str) -> None:
+    """A binding change in the log: which pane a chat went from and to, by a hash of the
+    chat, never its id. Without it a message for a binding that changed meanwhile
+    leaves no trail of where it was meant to go."""
+    log.info("channels: binding %s: %s/%s chat=%s: %s -> %s", what, loc.platform, loc.account,
+             chat_hash(loc.key()), old_pane_id or "(none)", new_pane_id or "(none)")
