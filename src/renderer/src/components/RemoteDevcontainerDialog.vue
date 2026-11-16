@@ -41,8 +41,8 @@ interface ProbeResult {
   error?: string
 }
 
+/** The pane opens under agent key 'remote'; `remote.cli` is the CLI run there. */
 export interface RemoteOpenRequest {
-  agentKey: RemoteAgentKey
   remote: RemoteTarget
 }
 
@@ -96,7 +96,7 @@ function networkOf(c: ListedContainer): RemoteNetwork {
 const target = computed<RemoteTarget | null>(() => {
   const c = containers.value?.find((row) => row.name === selected.value)
   if (!c || !selectable(c)) return null
-  return { host: host.value.trim(), container: c.name, network: networkOf(c) }
+  return { host: host.value.trim(), container: c.name, network: networkOf(c), cli: agentKey.value }
 })
 
 function sshError(reply: BackendReply): string {
@@ -143,7 +143,7 @@ async function testConnection(): Promise<void> {
   error.value = ''
   probe.value = null
   try {
-    const reply = await props.backend.send('remote_devcontainer.probe', { agent_key: agentKey.value, remote }, PROBE_TIMEOUT_MS)
+    const reply = await props.backend.send('remote_devcontainer.probe', { remote }, PROBE_TIMEOUT_MS)
     if (!reply.ok) {
       error.value = sshError(reply)
       return
@@ -182,8 +182,8 @@ const probeLines = computed<ProbeLine[]>(() => {
 function submit(): void {
   const remote = target.value
   if (!remote) return
-  rememberRemoteRecent({ host: remote.host, container: remote.container, agentKey: agentKey.value })
-  emit('open', { agentKey: agentKey.value, remote })
+  rememberRemoteRecent({ host: remote.host, container: remote.container, agentKey: remote.cli })
+  emit('open', { remote })
 }
 </script>
 

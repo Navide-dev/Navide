@@ -199,7 +199,7 @@ import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRol
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
 import { resolveDragBatch, reorderBatchByIds, withFoldedSubtree } from './lib/paneBatchDrag'
-import { AGENT_SPECS, type PaneArgContext } from '@navide/plugin-shell'
+import { AGENT_SPECS, REMOTE_AGENT_KEY, REMOTE_AGENT_SPEC, type PaneArgContext } from '@navide/plugin-shell'
 import {
   orderedAgentKeys,
   isAgentEnabled,
@@ -1544,6 +1544,19 @@ function roleLabel(key: string): string {
 // Full canonical list — used for agentKey → spec/label lookups everywhere, so a
 // disabled agent's existing panes still resolve their label.
 const agentSpecs: AgentSpec[] = AGENT_SPECS
+
+/** A live pane's spec by key: agentSpecs, plus the remote container pane's
+ *  stub, which is no vendor and so is in no list a menu or setting reads. */
+function paneAgentSpec(agentKey: string | undefined): AgentSpec | undefined {
+  return agentSpecs.find((s) => s.agentKey === agentKey)
+    ?? (agentKey === REMOTE_AGENT_KEY ? REMOTE_AGENT_SPEC : undefined)
+}
+
+/** The key whose screen shapes (permission box, update menu) a pane shows: a
+ *  remote pane draws the TUI of the CLI it runs in the container. */
+function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget } | undefined): string | undefined {
+  return pane?.remote?.cli ?? pane?.agentKey
+}
 
 // The subset (+order) the user chose in Settings → CLI Agents, fed to the manual
 // spawn UI. Only non-terminal specs are filtered/ordered; terminal is kept as-is
@@ -3219,7 +3232,7 @@ function deliveryHoldKey(paneId: string, opts: { ignoreTyping?: boolean } = {}):
   const key = messagingHoldKey(paneId, opts)
   if (key !== 'mid-turn' && key !== 'settling') return key
   const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
-  const spec = agentSpecs.find((s) => s.agentKey === agentKey)
+  const spec = paneAgentSpec(agentKey)
   return spec?.acceptsMidTurnInput === true ? null : key
 }
 
@@ -4729,7 +4742,8 @@ function pollStuckPanes(): void {
 
 function pollAwaitingPanes(): void {
   for (const pane of panes.value) {
-    if (!pane.realized || !hasAwaitingPattern(pane.agentKey)) continue
+    const screenKey = paneScreenAgentKey(pane) ?? pane.agentKey
+    if (!pane.realized || !hasAwaitingPattern(screenKey)) continue
     const ref = paneRefs[pane.id]
     if (!ref?.readScreenTail) continue
     // Contained per pane: this shares a tick with messaging.pump and
@@ -4738,8 +4752,8 @@ function pollAwaitingPanes(): void {
     // A badge must never take messaging down with it.
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
-      const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
-        || updatePromptHolds(pane.id, pane.agentKey)
+      const boxOnScreen = matchAwaitingInput(screenKey, screen)
+        || updatePromptHolds(pane.id, screenKey)
       // The safety net under a held permission wait (see holdOutlivedBox): the
       // box is no longer on screen, so nothing is left to hold for.
       const held = ref.awaitingHeld?.() as { since: number } | undefined
@@ -4753,7 +4767,7 @@ function pollAwaitingPanes(): void {
         ),
         boxOnScreen,
       })) ref.releaseNeedsInputHold?.()
-      applyScreenWatch(ref, pane.agentKey, boxOnScreen)
+      applyScreenWatch(ref, screenKey, boxOnScreen)
     } catch {
       /* leave this pane's badge as-is and carry on with the rest */
     }
@@ -4773,7 +4787,7 @@ function paneVisibleScreen(paneId: string): string {
 }
 
 function updatePromptOnScreen(paneId: string): boolean {
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   return updatePromptState(agentKey, paneVisibleScreen(paneId)) !== 'none'
 }
 
@@ -4789,7 +4803,7 @@ function updatePromptHolds(paneId: string, agentKey: string): boolean {
  *  its skip key, never Enter (lib/updatePrompt.ts). 'blocked' holds the pane
  *  as awaiting at once, so a queued message waits instead of retrying. */
 async function paneClearUpdatePrompt(paneId: string): Promise<UpdatePromptOutcome> {
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   const outcome = await clearUpdatePrompt({
     agentKey,
     readScreen: () => paneVisibleScreen(paneId),
@@ -7549,7 +7563,7 @@ function paneParkedOnPrompt(paneId: string): boolean {
   if (!ref) return false
   if ((ref.displayStatus as string | undefined) === 'awaiting') return true
   if (paneScreenBlocked(paneId)) return true
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   if (!agentKey || !ref.readScreenTail) return false
   try {
     return matchAwaitingInput(agentKey, ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string)
@@ -8345,7 +8359,7 @@ async function sendSessionMarkerBootstrap(pane: ActivePane, tag: string): Promis
 }
 
 async function spawnPane(opts: SpawnInternal): Promise<string | null> {
-  const spec = agentSpecs.find((s) => s.agentKey === opts.agentKey)
+  const spec = paneAgentSpec(opts.agentKey)
   if (!spec) return null
   const id = crypto.randomUUID()
   // Specs with a per-pane argument (aider's private chat-history file) need the
@@ -8443,7 +8457,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     realized: true,
     restoring: opts.restoring,
     agentKey: opts.agentKey,
-    agentLabel: spec.label,
+    // A remote pane is named after the CLI it runs, as before it had a key of its own.
+    agentLabel: (opts.remote && agentSpecs.find((s) => s.agentKey === opts.remote!.cli)?.label) || spec.label,
     customName: opts.customName,
     nameLocked: opts.nameLocked,
     autoName: opts.autoName,
@@ -13825,7 +13840,8 @@ interface ProjectPane {
 function savedRemoteTarget(saved: { remote?: Partial<RemoteTarget> }): RemoteTarget | undefined {
   const r = saved.remote
   return r && typeof r.host === 'string' && r.host && typeof r.container === 'string' && r.container && r.network
-    ? { host: r.host, container: r.container, network: r.network }
+    && (r.cli === 'claude' || r.cli === 'codex')
+    ? { host: r.host, container: r.container, network: r.network, cli: r.cli }
     : undefined
 }
 
@@ -24510,7 +24526,7 @@ async function onRemoteDialogOpen(req: RemoteOpenRequest): Promise<void> {
   // to a target listed there, never to one a workspace's pane record names.
   if (!await sendQuiet('remote_devcontainer.trust', { remote: req.remote })) return
   const paneId = await spawnPane({
-    agentKey: req.agentKey,
+    agentKey: REMOTE_AGENT_KEY,
     roleKey: '',
     stageId: '',
     commandOverride: '',
@@ -24524,7 +24540,7 @@ async function onRemoteDialogOpen(req: RemoteOpenRequest): Promise<void> {
   await sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: target.workspacePath,
     pane_id: paneId,
-    agent: req.agentKey,
+    agent: REMOTE_AGENT_KEY,
     role: '',
     command: '',
     session_id: pane?.pinnedSessionId ?? '',

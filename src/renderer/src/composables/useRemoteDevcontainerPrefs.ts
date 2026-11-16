@@ -36,11 +36,13 @@ export function isRemoteAgentKey(value: unknown): value is RemoteAgentKey {
 /** How the container reaches this machine's tool server, as the list answered. */
 export type RemoteNetwork = { mode: 'host' } | { mode: 'bridge'; gateway: string }
 
-/** The `remote` object terminal.create takes. */
+/** The `remote` object terminal.create takes. The pane's own agent key is
+ *  'remote' (plugin-shell/remoteAgent.ts); `cli` is what runs in the container. */
 export interface RemoteTarget {
   host: string
   container: string
   network: RemoteNetwork
+  cli: RemoteAgentKey
 }
 
 /** One remembered target: names only. */

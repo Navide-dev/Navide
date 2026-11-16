@@ -28,6 +28,32 @@ describe('App – remote container panes', () => {
     // Trusted app-wide before anything spawns; a refusal opens nothing.
     expect(body).toContain("if (!await sendQuiet('remote_devcontainer.trust', { remote: req.remote })) return")
     expect(body.indexOf('remote_devcontainer.trust')).toBeLessThan(body.indexOf('spawnPane('))
+    // Its own agent key, never the CLI's: the CLI travels in remote.cli.
+    expect(body.match(/agentKey: REMOTE_AGENT_KEY,/g)).toHaveLength(1)
+    expect(body.match(/agent: REMOTE_AGENT_KEY,/g)).toHaveLength(1)
+    expect(body).not.toContain('req.agentKey')
+  })
+
+  it('resolves the remote stub spec for the spawn and the delivery gate only', () => {
+    const lookup = functionBody('paneAgentSpec')
+    expect(lookup).toContain('agentSpecs.find((s) => s.agentKey === agentKey)')
+    expect(lookup).toContain('agentKey === REMOTE_AGENT_KEY ? REMOTE_AGENT_SPEC : undefined')
+    expect(functionBody('spawnPane')).toContain('const spec = paneAgentSpec(opts.agentKey)')
+    expect(functionBody('deliveryHoldKey')).toContain('const spec = paneAgentSpec(agentKey)')
+    // The menus and the MCP spawn gate keep reading the vendor list alone.
+    expect(appSource).not.toMatch(/validAgentKeys: .*REMOTE/)
+  })
+
+  it('reads the screen guards of the CLI the container runs', () => {
+    expect(functionBody('paneScreenAgentKey')).toContain('return pane?.remote?.cli ?? pane?.agentKey')
+    const poll = functionBody('pollAwaitingPanes')
+    expect(poll).toContain('hasAwaitingPattern(screenKey)')
+    expect(poll).toContain('matchAwaitingInput(screenKey, screen)')
+    expect(poll).toContain('updatePromptHolds(pane.id, screenKey)')
+    expect(poll).toContain('applyScreenWatch(ref, screenKey, boxOnScreen)')
+    for (const name of ['updatePromptOnScreen', 'paneClearUpdatePrompt', 'paneParkedOnPrompt']) {
+      expect(functionBody(name), name).toContain('paneScreenAgentKey(panes.value.find((p) => p.id === paneId))')
+    }
   })
 
   it('spawnPane records the target on the pane and hands it to the terminal', () => {
@@ -45,6 +71,9 @@ describe('App – remote container panes', () => {
     const read = functionBody('savedRemoteTarget')
     // A local record ({} or absent) restores as a local pane.
     expect(read).toContain('r.host && typeof r.container')
+    // The CLI comes back with it; a record without one is not a remote target.
+    expect(read).toContain("(r.cli === 'claude' || r.cli === 'codex')")
+    expect(read).toContain('cli: r.cli')
   })
 
   it('rebuild and reconnect respawn against the same container', () => {

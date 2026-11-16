@@ -41,12 +41,14 @@ export interface TerminalSpawnOptions {
   remote?: TerminalRemoteTarget
 }
 
-/** The `remote` object terminal.create takes: host and container names, and
- *  how the container reaches this machine's tool server. */
+/** The `remote` object terminal.create takes: host and container names, how
+ *  the container reaches this machine's tool server, and the CLI run there
+ *  (the pane's own agent key is 'remote'). */
 export interface TerminalRemoteTarget {
   host: string
   container: string
   network: { mode: 'host' } | { mode: 'bridge'; gateway: string }
+  cli: 'claude' | 'codex'
 }
 
 export interface TerminalCreateRequest {

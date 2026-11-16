@@ -7,6 +7,7 @@ export {
 export type { AgentKey, AgentSpec, DirLister, PaneArgContext } from './agents'
 
 export { agentProfileFor, agentUsesBracketedPaste, encodeShiftEnter } from './agentProfile'
+export { REMOTE_AGENT_KEY, REMOTE_AGENT_SPEC } from './remoteAgent'
 
 export {
   cliPermissionKey,

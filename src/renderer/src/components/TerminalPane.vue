@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTerminal, type ClipboardFailureReason } from '@navide/terminal'
-import { agentProfileFor } from '@navide/plugin-shell'
+import { agentProfileFor, REMOTE_AGENT_KEY } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
 import type { TerminalDockPort } from '@navide/terminal'
 import type { useCliProfiles } from '../composables/useCliProfiles'
@@ -310,7 +310,9 @@ const terminal = useTerminal(props.paneId, props.terminalPort, {
   onClipboardFailure,
   onOpenFileFailure,
   onPtyLostWhileDisconnected: () => emit('pty-lost'),
-  agentProfileFor,
+  // A remote pane's key is 'remote'; its PTY carries the TUI of the CLI run
+  // in the container, so paste, Shift+Enter and snapshots follow that CLI.
+  agentProfileFor: (key) => agentProfileFor(key === REMOTE_AGENT_KEY && props.remote ? props.remote.cli : key),
 })
 // Reattached terminals can keep the backend's old pane id. Actions must use
 // that same backend-owned identity, just like the resource usage projection.
@@ -414,7 +416,7 @@ const showContinueButton = computed<boolean>(
 
 // ── Remote container pane ────────────────────────────────────────────────────
 const remoteCliLabel = computed<string>(() => {
-  const key = props.agentKey ?? ''
+  const key = props.remote?.cli ?? ''
   return isRemoteAgentKey(key) ? REMOTE_AGENT_LABELS[key] : key
 })
 
@@ -435,19 +437,19 @@ function tryLoginPrefill(): void {
 function openLoginCard(withSteps: boolean): void {
   loginCardOpen.value = true
   loginStepsOpen.value = withSteps
-  loginPrefillPending = props.agentKey === 'claude'
+  loginPrefillPending = props.remote?.cli === 'claude'
   tryLoginPrefill()
 }
 
 function dismissLoginCard(): void {
   loginCardOpen.value = false
   loginPrefillPending = false
-  if (props.remote) markRemoteLoginDone(props.remote.host, props.remote.container, props.agentKey ?? '')
+  if (props.remote) markRemoteLoginDone(props.remote.host, props.remote.container, props.remote.cli)
 }
 
 watch(() => terminal.liveStatus?.value, tryLoginPrefill)
 
-if (props.remote && !isRemoteLoginDone(props.remote.host, props.remote.container, props.agentKey ?? '')) {
+if (props.remote && !isRemoteLoginDone(props.remote.host, props.remote.container, props.remote.cli)) {
   openLoginCard(false)
 }
 
@@ -1179,7 +1181,7 @@ onMounted(() => {
           <li>{{ $t('remoteDevcontainer.login-step2') }}</li>
           <li>{{ $t('remoteDevcontainer.login-step3') }}</li>
         </ol>
-        <p v-if="agentKey === 'codex'" class="remote-login-note">{{ $t('remoteDevcontainer.login-codex') }}</p>
+        <p v-if="remote.cli === 'codex'" class="remote-login-note">{{ $t('remoteDevcontainer.login-codex') }}</p>
       </template>
       <p class="remote-login-note">{{ $t('remoteDevcontainer.login-note') }}</p>
       <div class="remote-actions">

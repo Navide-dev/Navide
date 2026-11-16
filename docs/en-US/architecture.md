@@ -301,8 +301,13 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   line; the spawn environment is reduced to what `ssh` needs, so no `SendEnv`
   rule can carry a local credential; agent and X11 forwarding are off. The
   remote pane skips every local-credential step at spawn (CODEX_HOME, account
-  dir, credential launch, launch provenance), and the account-switch and
-  quota-failover callers refuse a pane whose term metadata carries `remote`.
+  dir, credential launch, launch provenance). The pane is registered under
+  its own agent key, `remote`, which is deliberately not a vendor in
+  `cli_vendors/registry.py`: with no `account_switch` it belongs to no auth
+  pool, so no account-switch or quota-failover scope can include it; the CLI
+  run in the container is `metadata.remote.cli`. The manual failover report
+  and the MCP account switch also refuse a pane whose term metadata carries
+  `remote`.
   The `ssh -R` tunnel binds the remote host's loopback (or, for a bridge
   network, its Docker gateway, reachable by other accounts on that host and by other
   containers on that bridge, guarded only by the per-pane token). Each pane

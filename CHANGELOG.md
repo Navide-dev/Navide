@@ -19,6 +19,11 @@ All notable released changes to Navide will be documented in this file. The form
 - Navide Registry (0.2.44): the old `server.navide.dev/registry` sign-in, developer, publisher, publish and admin pages that older Apps and CLIs open redirect to the same page on `https://developers.navide.dev`, query kept, instead of the navide.dev home page. Takes effect with the next Registry deployment.
 - Guard asks before the forms 0.2.43 listed as not covered: credential paths reached through `${P:-x}`, `${P%…}` and other parameter expansions; readers wrapped in `timeout`, `nice` or `env -u` given a variable too long to follow; credential paths handed on through `xargs`; and `curl --data-binary @- < file` (and other stdin uploads) of a credential, now marked as a credential upload. A terminal allow prefix no longer lets a line read a credential file.
 
+### Known limitations
+
+- Account switching (0.2.44): `claude` started by hand inside a terminal pane follows a hot switch of this computer's Claude account, and Navide cannot tell; it sees a shell, not a Claude pane.
+- Remote container panes (0.2.44, experimental): the pane runs under its own `remote` kind, so account switching and automatic quota failover never apply to it. The CLI's logs and hooks live in the container, so Navide reports no turn end from them, shows no token statistics, and keeps no session id for resume (Reconnect starts a new session). `cli_open_agent` cannot open one, so there is no kickoff prompt; `cli_send` works. Meeting and spotlight pane lists show "remote" instead of the CLI's name.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added
