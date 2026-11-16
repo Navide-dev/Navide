@@ -907,7 +907,9 @@ describe('paneNeedsAccountRestart', () => {
   })
 
   it('excludes a remote container pane: its CLI signs in inside the container', () => {
-    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' as const } }
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' as const }, cli: 'claude' as const }
+    expect(paneNeedsAccountRestart({ ...pane, agentKey: 'remote', remote }, 'claude', 'running')).toBe(false)
+    // The remote guard holds on its own, whatever key the pane carries.
     expect(paneNeedsAccountRestart({ ...pane, remote }, 'claude', 'running')).toBe(false)
   })
 

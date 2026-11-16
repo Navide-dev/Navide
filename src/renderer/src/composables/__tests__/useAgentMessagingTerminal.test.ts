@@ -8,6 +8,8 @@ import {
   type MessageReason,
   type MessagingDeps,
 } from '../useAgentMessaging'
+import { REMOTE_AGENT_KEY } from '@navide/plugin-shell'
+import { MSG_END, MSG_ENVELOPE_PREFIX, MSG_START } from '../../lib/agentMessaging'
 
 function flush(): Promise<void> {
   return new Promise((r) => setTimeout(r, 0))
@@ -175,5 +177,57 @@ describe('useAgentMessaging — a delivery refused for good', () => {
     await flush()
     expect(reports).toEqual([{ ok: false, reason: refusal }])
     expect(m.messages.value.find((x) => x.content === 'sudo ls')?.status).toBe('failed')
+  })
+})
+
+/** A remote container pane (agent key 'remote') runs claude or codex in the
+ *  container: it is an agent, never a shell, so it gets the envelope. */
+describe('useAgentMessaging — remote container targets', () => {
+  let delivered: Array<{ paneId: string; text: string }>
+  let m: ReturnType<typeof useAgentMessaging>
+
+  beforeEach(() => {
+    _resetMessagingForTest()
+    delivered = []
+    m = useAgentMessaging()
+    m.configureMessaging({
+      now: () => 1_000_000,
+      deliver: async (paneId, text) => {
+        delivered.push({ paneId, text })
+        return true
+      },
+      isPaneIdle: () => true,
+    })
+    m.registerPane('agent', 'claude', 'boss')
+    m.registerPane('box', REMOTE_AGENT_KEY, 'boxed')
+  })
+
+  it('wraps a message in the envelope: sender line, body, reply instruction', async () => {
+    const msg = m.sendMessage('boss', 'boxed', 'ls -la')
+    m.pump()
+    await flush()
+    expect(delivered).toHaveLength(1)
+    const text = delivered[0].text
+    expect(text).not.toBe('ls -la')
+    expect(text.split('\n')[0]).toBe(`${MSG_ENVELOPE_PREFIX} boss`)
+    expect(text).toContain('ls -la')
+    expect(text).toContain(`${MSG_START} to: boss re: ${msg.uid}`)
+    expect(text).toContain(MSG_END)
+  })
+
+  it('wraps an inbound cli_send too, and takes a Navide notice like any agent', async () => {
+    m.acceptRemoteMessage({ msgKey: 'k1', targetPaneId: 'box', fromDisplay: 'boss', content: 'pwd' })
+    await flush()
+    expect(delivered[0].text.split('\n')[0]).toBe(`${MSG_ENVELOPE_PREFIX} boss`)
+    const notice = m.sendMessage(NOTICE_SENDER, 'boxed', 'delivery failed', { kind: 'notice' })
+    m.pump()
+    await flush()
+    expect(notice.status).toBe('delivered')
+  })
+
+  it('is part of an `all` broadcast, unlike a terminal', async () => {
+    m.registerPane('shell', TERMINAL_AGENT_KEY, 'sh')
+    const sent = m.sendBroadcast('boss', 'status?')
+    expect(sent.map((x) => x.to)).toEqual(['boxed'])
   })
 })

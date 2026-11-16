@@ -79,13 +79,14 @@ def _session(svc: Any) -> SimpleNamespace:
 def _payload(**over: Any) -> dict[str, Any]:
     payload = {
         "pane_id": "remote-pane-1",
-        "agent_key": "claude",
+        "agent_key": "remote",
         "command": "claude",
         "cwd": str(Path.home()),
         "cols": 80,
         "rows": 24,
         "metadata": {"auth_scope": "forged", "profile_id": "forged", "workspace_path": "/w"},
-        "remote": {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}},
+        "remote": {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"},
+                   "cli": "claude"},
     }
     payload.update(over)
     return payload
@@ -140,6 +141,37 @@ def test_bad_host_is_refused_before_anything_spawns(monkeypatch: pytest.MonkeyPa
     assert asyncio.run(run())[-1]["error"]["code"] == "BAD_REQUEST"
 
 
+def test_a_remote_target_under_a_vendor_agent_key_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Spawned as "claude" it would join claude's auth pool; only "remote" runs.
+    _use_settings(monkeypatch, {remote_devcontainer.SETTING_KEY: True, remote_devcontainer.TRUSTED_KEY: TRUSTED})
+    monkeypatch.setattr(wiring, "backend_port", lambda: 49161)
+
+    async def run() -> list[dict[str, Any]]:
+        created: list[Any] = []
+        session = _session(SimpleNamespace(create=lambda **kw: created.append(kw)))
+        await ws_handlers.terminal_create(session, "m1", "terminal.create", _payload(agent_key="claude"))
+        assert created == []
+        return session.sent
+
+    assert asyncio.run(run())[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+def test_remote_agent_key_without_a_target_spawns_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_settings(monkeypatch, {remote_devcontainer.SETTING_KEY: True, remote_devcontainer.TRUSTED_KEY: TRUSTED})
+    monkeypatch.setattr(wiring, "backend_port", lambda: 49161)
+
+    async def run() -> list[dict[str, Any]]:
+        created: list[Any] = []
+        session = _session(SimpleNamespace(create=lambda **kw: created.append(kw)))
+        payload = _payload()
+        del payload["remote"]
+        await ws_handlers.terminal_create(session, "m1", "terminal.create", payload)
+        assert created == []
+        return session.sent
+
+    assert asyncio.run(run())[-1]["error"]["code"] == "BAD_REQUEST"
+
+
 def test_remote_pane_gets_its_token_on_stdin_and_nothing_local(
     fake_ssh: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -163,6 +195,9 @@ def test_remote_pane_gets_its_token_on_stdin_and_nothing_local(
             term = svc.get(body["terminal_session_id"])
             assert term is not None
             assert term.metadata["remote"]["container"] == "devc-navide-app"
+            # Registered as its own kind, never as the CLI it runs.
+            assert term.agent_key == "remote"
+            assert term.metadata["remote"]["cli"] == "claude"
             # Forged provenance from the window is dropped.
             assert "auth_scope" not in term.metadata and "profile_id" not in term.metadata
             assert remote_devcontainer_ws.is_remote_pane("remote-pane-1")
@@ -225,11 +260,11 @@ def test_pane_record_keeps_the_remote_target_across_restore(tmp_path: Path) -> N
     ws = str(tmp_path)
     store = ProjectStore()
     spec = remote_devcontainer.parse_remote(
-        {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}})
-    store.record_manual_pane_spawn(ws, pane_id="p1", agent="claude", remote=spec)
+        {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}, "cli": "claude"})
+    store.record_manual_pane_spawn(ws, pane_id="p1", agent="remote", remote=spec)
     store.record_manual_pane_spawn(ws, pane_id="local", agent="claude")
     # A restore re-keys the record under a new id without resending the target.
-    store.record_manual_pane_spawn(ws, pane_id="p2", previous_pane_id="p1", agent="claude")
+    store.record_manual_pane_spawn(ws, pane_id="p2", previous_pane_id="p1", agent="remote")
     reloaded = {p.pane_id: p for p in ProjectStore().load_or_create(ws).panes}
     assert reloaded["p2"].remote == spec
     assert reloaded["local"].remote == {}
@@ -261,7 +296,7 @@ def test_a_target_the_user_never_opened_does_not_connect(monkeypatch: pytest.Mon
     async def run() -> list[dict[str, Any]]:
         created: list[Any] = []
         session = _session(SimpleNamespace(create=lambda **kw: created.append(kw)))
-        payload = _payload(remote={"host": "attacker.example", "container": "devc-navide-app"})
+        payload = _payload(remote={"host": "attacker.example", "container": "devc-navide-app", "cli": "claude"})
         await ws_handlers.terminal_create(session, "m1", "terminal.create", payload)
         assert created == []
         return session.sent
@@ -280,7 +315,7 @@ def test_trust_records_names_only_newest_first(monkeypatch: pytest.MonkeyPatch) 
         session = _session(None)
         await remote_devcontainer_ws.remote_trust(session, "m1", "remote_devcontainer.trust", {"remote": {
             "host": "mac-mini-ubuntu", "container": "devc-navide-app",
-            "network": {"mode": "bridge", "gateway": "172.17.0.1"}}})
+            "network": {"mode": "bridge", "gateway": "172.17.0.1"}, "cli": "codex"}})
         return session.sent
 
     assert asyncio.run(run())[-1]["payload"] == {"trusted": True}

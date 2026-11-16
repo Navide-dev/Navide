@@ -28,9 +28,15 @@ from typing import Any
 # ui_settings key; off when absent or not exactly True.
 SETTING_KEY = "remoteDevcontainerExperimental"
 
-# Term metadata key carrying {"host", "container", "network"}; its presence is
-# what marks a pane as remote everywhere else (account switch, failover).
+# Term metadata key carrying {"host", "container", "network", "cli"}; its
+# presence is what marks a pane as remote everywhere else.
 METADATA_KEY = "remote"
+
+# The pane's agent_key. Deliberately NOT a vendor in cli_vendors.registry: it
+# has no account_switch and so no auth pool, which keeps every
+# account-switch and quota-failover scope from ever counting a remote pane.
+# The CLI actually run in the container is spec["cli"], one of AGENTS.
+AGENT_KEY = "remote"
 
 AGENTS = ("claude", "codex")
 
@@ -134,7 +140,15 @@ def parse_remote(payload: Any) -> dict[str, Any]:
         "host": validate_host(payload.get("host", "")),
         "container": validate_container(payload.get("container", "")),
         "network": validate_network(payload.get("network")),
+        "cli": validate_cli(payload.get("cli", "")),
     }
+
+
+def validate_cli(cli: str) -> str:
+    cli = str(cli or "")
+    if cli not in AGENTS:
+        raise RemoteSpecError(f"remote panes support claude and codex, not {cli!r}")
+    return cli
 
 
 def control_dir() -> Path | None:
@@ -251,7 +265,6 @@ def remote_script(container: str, argv: list[str], pidfile: str) -> str:
 
 def pane_argv(
     spec: Mapping[str, Any],
-    agent_key: str,
     *,
     pane_id: str,
     local_port: int,
@@ -259,7 +272,7 @@ def pane_argv(
 ) -> list[str]:
     network = spec["network"]
     forward = f"{tunnel_host(network)}:{remote_port}:127.0.0.1:{local_port}"
-    argv = cli_argv(agent_key, mcp_url(network, remote_port, pane_id))
+    argv = cli_argv(spec["cli"], mcp_url(network, remote_port, pane_id))
     return [
         "ssh", "-tt",
         # Its own connection, never a shared master: a master keeps the -R
@@ -315,7 +328,6 @@ def parse_container_list(text: str) -> list[dict[str, Any]]:
 
 def probe_argv(
     spec: Mapping[str, Any],
-    agent_key: str,
     *,
     local_port: int,
     remote_port: int,
@@ -324,8 +336,7 @@ def probe_argv(
     """Connection test: reaches the host, enters the container, finds the CLI,
     and calls the MCP endpoint through the tunnel WITHOUT a token — a 401
     proves the path works and sends nothing secret."""
-    if agent_key not in AGENTS:
-        raise RemoteSpecError(f"remote panes support claude and codex, not {agent_key!r}")
+    agent_key = validate_cli(spec["cli"])
     network = spec["network"]
     url = f"http://{tunnel_host(network)}:{remote_port}/plan-mcp"
     inner = (

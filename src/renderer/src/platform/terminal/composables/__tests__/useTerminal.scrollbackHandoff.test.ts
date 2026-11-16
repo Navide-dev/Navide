@@ -204,9 +204,10 @@ describe('useTerminal — scrollback handoff', () => {
   })
 
   it('carries a remote container target into terminal.create, and nothing for a local pane', async () => {
-    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' } }
-    const first = await spawnPane({ agentKey: 'claude', remote })
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' }, cli: 'claude' }
+    const first = await spawnPane({ agentKey: 'remote', remote })
     expect(first.mock.sent.find((s) => s.type === 'terminal.create')!.payload.remote).toEqual(remote)
+    expect(first.mock.sent.find((s) => s.type === 'terminal.create')!.payload.agent_key).toBe('remote')
     first.scope.stop()
     const second = await spawnPane({ agentKey: 'claude' })
     expect(second.mock.sent.find((s) => s.type === 'terminal.create')!.payload).not.toHaveProperty('remote')

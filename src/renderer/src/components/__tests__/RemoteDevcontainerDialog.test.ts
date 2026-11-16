@@ -70,8 +70,9 @@ describe('RemoteDevcontainerDialog', () => {
 
     await wrapper.get('[data-testid="remote-test"]').trigger('click')
     await flushPromises()
-    const remote = { host: 'devbox', container: 'app', network: { mode: 'bridge', gateway: '172.17.0.1' } }
-    expect(m.send).toHaveBeenCalledWith('remote_devcontainer.probe', { agent_key: 'codex', remote }, expect.any(Number))
+    // The CLI travels inside `remote`; the pane's own agent key is 'remote'.
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'bridge', gateway: '172.17.0.1' }, cli: 'codex' }
+    expect(m.send).toHaveBeenCalledWith('remote_devcontainer.probe', { remote }, expect.any(Number))
     const result = wrapper.get('[data-testid="remote-test-result"]').text()
     const t = i18n.global.t
     expect(result).toContain(t('remoteDevcontainer.test-host-ok', { ms: 120 }))
@@ -80,7 +81,7 @@ describe('RemoteDevcontainerDialog', () => {
     expect(result).not.toContain('✗')
 
     await openBtn().trigger('click')
-    expect(wrapper.emitted('open')?.[0]).toEqual([{ agentKey: 'codex', remote }])
+    expect(wrapper.emitted('open')?.[0]).toEqual([{ remote }])
     expect(settingsGet(REMOTE_RECENT_KEY, [])).toEqual([{ host: 'devbox', container: 'app', agentKey: 'codex' }])
   })
 
@@ -104,7 +105,7 @@ describe('RemoteDevcontainerDialog', () => {
     await listFor(wrapper, 'devbox')
     await wrapper.findAll('[data-testid="remote-container-row"]')[3].get('input').setValue(true)
     await wrapper.get('[data-testid="remote-open"]').trigger('click')
-    expect(wrapper.emitted('open')?.[0]).toEqual([{ agentKey: 'claude', remote: { host: 'devbox', container: 'hostnet', network: { mode: 'host' } } }])
+    expect(wrapper.emitted('open')?.[0]).toEqual([{ remote: { host: 'devbox', container: 'hostnet', network: { mode: 'host' }, cli: 'claude' } }])
   })
 
   it('shows an ssh failure with the stderr detail', async () => {
@@ -128,7 +129,7 @@ describe('RemoteDevcontainerDialog', () => {
     expect(options).toEqual(['other', 'devbox'])
     await listFor(wrapper, 'devbox')
     await wrapper.get('[data-testid="remote-open"]').trigger('click')
-    expect(wrapper.emitted('open')?.[0]).toEqual([{ agentKey: 'codex', remote: { host: 'devbox', container: 'hostnet', network: { mode: 'host' } } }])
+    expect(wrapper.emitted('open')?.[0]).toEqual([{ remote: { host: 'devbox', container: 'hostnet', network: { mode: 'host' }, cli: 'codex' } }])
   })
 
   it('cancel emits cancel and opens nothing', async () => {

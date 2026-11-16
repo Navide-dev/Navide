@@ -13,7 +13,7 @@ from agent_team_backend import remote_devcontainer as rd
 from agent_team_backend.mcp_server import wiring
 
 CM = Path("/tmp/navide-test-cm")
-SPEC = {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}}
+SPEC = {"host": "mac-mini-ubuntu", "container": "devc-navide-app", "network": {"mode": "host"}, "cli": "claude"}
 
 
 def _fake_token() -> str:
@@ -22,7 +22,7 @@ def _fake_token() -> str:
 
 
 def _argv(agent: str = "claude", spec=SPEC) -> list[str]:
-    return rd.pane_argv(spec, agent, pane_id="pane-1", local_port=49161, remote_port=45000)
+    return rd.pane_argv({**spec, "cli": agent}, pane_id="pane-1", local_port=49161, remote_port=45000)
 
 
 def test_off_unless_exactly_true() -> None:
@@ -194,7 +194,7 @@ def test_parse_container_list() -> None:
 def test_list_and_probe_are_batch_mode_and_validate() -> None:
     argv = rd.list_argv("mac-mini-ubuntu", CM)
     assert "BatchMode=yes" in argv and "-T" in argv
-    probe = rd.probe_argv(SPEC, "codex", local_port=49161, remote_port=45000, control_path_dir=CM)
+    probe = rd.probe_argv({**SPEC, "cli": "codex"}, local_port=49161, remote_port=45000, control_path_dir=CM)
     assert "BatchMode=yes" in probe
     assert "command -v codex" in probe[-1]
     assert probe[probe.index("-R") + 1] == "127.0.0.1:45000:127.0.0.1:49161"
@@ -202,7 +202,7 @@ def test_list_and_probe_are_batch_mode_and_validate() -> None:
     with pytest.raises(rd.RemoteSpecError):
         rd.list_argv("-oProxyCommand=evil", CM)
     with pytest.raises(rd.RemoteSpecError):
-        rd.probe_argv(SPEC, "gemini", local_port=1, remote_port=2, control_path_dir=CM)
+        rd.probe_argv({**SPEC, "cli": "gemini"}, local_port=1, remote_port=2, control_path_dir=CM)
 
 
 @pytest.mark.parametrize(("line", "status"), [

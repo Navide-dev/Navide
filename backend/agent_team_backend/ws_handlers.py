@@ -8807,7 +8807,9 @@ async def terminal_create(session: "Session", msg_id: str, msg_type: str, payloa
         }
         session._terminal_create_transactions[key] = transaction
         try:
-            if payload.get("remote") is not None:
+            # agent_key "remote" without a target is refused there too: it is
+            # no local CLI and must never fall through to a plain spawn.
+            if payload.get("remote") is not None or payload.get("agent_key") == "remote":
                 from .remote_devcontainer_ws import create_remote_pane
 
                 await create_remote_pane(

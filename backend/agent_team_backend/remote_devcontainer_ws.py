@@ -116,14 +116,13 @@ async def remote_probe(session: "Session", msg_id: str, msg_type: str, payload: 
     if not await _enabled():
         await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote devcontainer panes are off"))
         return
-    agent_key = str(payload.get("agent_key") or "")
     local_port = wiring.backend_port()
     try:
         spec = rd.parse_remote(payload.get("remote"))
         if local_port is None:
             raise rd.RemoteSpecError("backend port unknown")
         argv = rd.probe_argv(
-            spec, agent_key, local_port=local_port, remote_port=rd.pick_remote_port(),
+            spec, local_port=local_port, remote_port=rd.pick_remote_port(),
             control_path_dir=rd.control_dir(),
         )
     except rd.RemoteSpecError as err:
@@ -186,8 +185,8 @@ async def create_remote_pane(
     local_port = wiring.backend_port()
     try:
         spec = rd.parse_remote(payload.get("remote"))
-        if agent_key not in rd.AGENTS:
-            raise rd.RemoteSpecError(f"remote panes support claude and codex, not {agent_key!r}")
+        if agent_key != rd.AGENT_KEY:
+            raise rd.RemoteSpecError(f"a remote pane's agent_key is {rd.AGENT_KEY!r}, not {agent_key!r}")
         if local_port is None:
             raise rd.RemoteSpecError("backend port unknown")
         if not rd.is_trusted(settings, spec):
@@ -200,7 +199,7 @@ async def create_remote_pane(
             ))
             return
         argv = rd.pane_argv(
-            spec, agent_key, pane_id=pane_id, local_port=local_port,
+            spec, pane_id=pane_id, local_port=local_port,
             remote_port=rd.pick_remote_port(),
         )
     except rd.RemoteSpecError as err:
@@ -249,7 +248,7 @@ async def create_remote_pane(
         "terminal_session_id": term.id,
         "pane_id": term.pane_id,
         "pid": term.proc.pid,
-        "command": [argv[0], spec["host"], spec["container"], agent_key],
+        "command": [argv[0], spec["host"], spec["container"], spec["cli"]],
         "startup_probe": None,
         "create_generation": generation,
         "remote": spec,

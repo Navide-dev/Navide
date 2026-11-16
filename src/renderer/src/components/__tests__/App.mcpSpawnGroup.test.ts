@@ -172,6 +172,7 @@ describe('explicit group validation after asynchronous spawn preparation', () =>
     const deps = {
       crypto: { randomUUID: () => 'child' },
       agentSpecs: [{ agentKey: 'aider', paneArg: () => '' }],
+      REMOTE_AGENT_KEY: 'remote', REMOTE_AGENT_SPEC: { agentKey: 'remote' },
       paneHistoryRootFor: vi.fn(async () => {
         if (deleted) groups = []
         return '/history'
@@ -179,7 +180,7 @@ describe('explicit group validation after asynchronous spawn preparation', () =>
       runGroupsOf: () => groups, resolveCommand,
     }
     const javascript = ts.transpileModule(
-      ['assertRequestedSpawnGroup', 'spawnPane'].map(appFunction).join('\n'),
+      ['paneAgentSpec', 'assertRequestedSpawnGroup', 'spawnPane'].map(appFunction).join('\n'),
       { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
     ).outputText
     const spawn = new Function(...Object.keys(deps), `${javascript}; return spawnPane`)(...Object.values(deps))

@@ -4,6 +4,11 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Known limitations
+
+- Account switching (0.2.44): `claude` started by hand inside a terminal pane follows a hot switch of this computer's Claude account, and Navide cannot tell; it sees a shell, not a Claude pane.
+- Remote container panes (0.2.44, experimental): the pane runs under its own `remote` kind, so account switching and automatic quota failover never apply to it. The CLI's logs and hooks live in the container, so Navide reports no turn end from them, shows no token statistics, and keeps no session id for resume (Reconnect starts a new session). `cli_open_agent` cannot open one, so there is no kickoff prompt; `cli_send` works. Meeting and spotlight pane lists show "remote" instead of the CLI's name.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added

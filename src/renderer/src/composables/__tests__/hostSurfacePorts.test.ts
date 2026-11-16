@@ -84,9 +84,10 @@ describe('Host terminal dock adapter – remote container panes', () => {
 
   it('sends the remote target as a top-level field for a remote pane', async () => {
     const harness = createHarness()
-    const remote = { host: 'devbox', container: 'app', network: { mode: 'bridge' as const, gateway: '172.17.0.1' } }
-    await harness.port.create({ ...base, remote }, 10)
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'bridge' as const, gateway: '172.17.0.1' }, cli: 'claude' as const }
+    await harness.port.create({ ...base, agentKey: 'remote', remote }, 10)
     expect(harness.sent[0].payload.remote).toEqual(remote)
+    expect(harness.sent[0].payload.agent_key).toBe('remote')
     expect(harness.sent[0].payload.metadata).toBeNull()
   })
 
