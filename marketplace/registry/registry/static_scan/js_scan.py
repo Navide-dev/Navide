@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from ..plugin_contract.disclosure_scan_contract import classify_shell_command
 from .catalog_addresses import CATALOG_ADDRESSES
-from .js_tokens import Token, iter_tokens
+from .js_tokens import AstralChars, Token, iter_tokens
 from .limits import NO_DEADLINE, Deadline
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
@@ -124,9 +124,15 @@ def _mask_excerpt(excerpt: str) -> str:
 
 def locate(
     text: str, offsets: list[int], redacted: Callable[[str], bool], deadline: Deadline = NO_DEADLINE,
+    astral: AstralChars | None = None,
 ) -> dict[int, Site]:
     """The ``Site`` of every offset in ``text``, counting lines in one pass
-    over the sorted offsets (a bundle is often one 20 MiB line)."""
+    over the sorted offsets (a bundle is often one 20 MiB line). Excerpts of
+    a narrowed script are cut from its original text (``astral``)."""
+
+    def cut(start: int, end: int) -> str:
+        return text[start:end] if astral is None else astral.restore(text, start, end)
+
     located: dict[int, Site] = {}
     line = 1
     line_start = 0
@@ -145,8 +151,8 @@ def locate(
             line_end = min(len(text), offset + reach)
         begin = max(line_start, offset - EXCERPT_BEFORE)
         end = min(line_end, offset + EXCERPT_AFTER)
-        excerpt: str | None = _mask_excerpt(" ".join(text[begin:end].split()))[:EXCERPT_LENGTH]
-        if redacted(text[max(0, begin - EXCERPT_REDACTION_MARGIN):end + EXCERPT_REDACTION_MARGIN]):
+        excerpt: str | None = _mask_excerpt(" ".join(cut(begin, end).split()))[:EXCERPT_LENGTH]
+        if redacted(cut(max(0, begin - EXCERPT_REDACTION_MARGIN), end + EXCERPT_REDACTION_MARGIN)):
             excerpt = None
         located[offset] = (line, offset - line_start + 1, excerpt)
     return located
@@ -255,10 +261,12 @@ def scan_script(
     max_path_length: int,
     deadline: Deadline = NO_DEADLINE,
     redacted: Callable[[str], bool] = lambda _value: False,
+    astral: AstralChars | None = None,
 ) -> ScriptFacts:
-    """Facts of one script. Raises ``ScanTimeout`` or ``TooComplex`` (from
-    the tokenizer) when the file cannot be scanned within the bounds."""
-    window = _Window(iter_tokens(text, deadline))
+    """Facts of one script (``astral``: see ``js_tokens.narrow_script``).
+    Raises ``ScanTimeout`` or ``TooComplex`` (from the tokenizer) when the
+    file cannot be scanned within the bounds."""
+    window = _Window(iter_tokens(text, deadline, astral))
     at = window.at
     facts = ScriptFacts()
     has_shell_run = _SHELL_RUN_LITERAL.search(text) is not None
@@ -331,7 +339,7 @@ def scan_script(
         facts.obfuscation_signals.add("hexEscapes")
     if char_codes >= OBFUSCATION_THRESHOLDS["charCodeStrings"]:
         facts.obfuscation_signals.add("charCodeStrings")
-    located = locate(text, [offset for offsets in facts.sites.values() for offset in offsets], redacted, deadline)
+    located = locate(text, [offset for offsets in facts.sites.values() for offset in offsets], redacted, deadline, astral)
     facts.sites = {key: [located[offset] for offset in offsets] for key, offsets in facts.sites.items()}
     return facts
 
