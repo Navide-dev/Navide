@@ -2683,6 +2683,7 @@ async def _send_profiles_changed(
         # {signedIn, email}}}, and the account new panes start on.
         "accountDirs": view["accountDirs"],
         "paneDefaults": doc["paneDefaults"],
+        "slotOrder": doc["slotOrder"],
         "reason": reason,
     }
     if harvested_profile_ids:
@@ -2728,6 +2729,7 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
                 "duplicates": view["duplicates"],
                 "accountDirs": view["accountDirs"],
                 "paneDefaults": doc["paneDefaults"],
+                "slotOrder": doc["slotOrder"],
                 "supported_agents": list(PROFILE_AGENT_KEYS),
                 # Per vendor: hot/restart/manual, the credential pool, the
                 # provider scopes a new profile may bind to, resume ability.
@@ -2825,6 +2827,29 @@ async def cli_profiles_rename(session: "Session", msg_id: str, msg_type: str, pa
         )
     )
     await _broadcast_profiles_changed("rename")
+
+
+@handler("cli_profiles.reorder")
+async def cli_profiles_reorder(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Rank one agent's accounts for automatic switching: ``slot_ids`` in the
+    order to try them, the built-in Default as ``__default__``; [] clears
+    the order back to the quota-based ranking."""
+    from . import app
+
+    slot_ids = payload.get("slot_ids")
+    try:
+        if not isinstance(slot_ids, list) or not all(isinstance(i, str) for i in slot_ids):
+            raise ValueError("slot_ids must be a list of strings")
+        slot_order = app.cli_profiles_store.set_slot_order(
+            str(payload.get("agent_key") or ""), slot_ids,
+        )
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err))
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, {"slotOrder": slot_order}))
+    await _broadcast_profiles_changed("reorder")
 
 
 @handler("cli_profiles.delete")

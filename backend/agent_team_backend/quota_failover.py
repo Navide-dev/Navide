@@ -742,6 +742,7 @@ def rank_candidates(
     tried: set[str],
     now: float,
     ledger_vetoes: set[str] | None = None,
+    slot_order: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Order the accounts a switch may target. Excluded rows stay in the
     result with ``excluded`` set so the UI can say *why* nobody is eligible
@@ -754,7 +755,9 @@ def rank_candidates(
     quota ledger still holds an exhausted, un-reset cycle — newer than any
     snapshot and never overridden by one whose reset has passed. Percentages
     are never compared across vendors — the caller passes one vendor's
-    slots."""
+    slots. ``slot_order`` is the user's own ranking: an eligible account is
+    placed by its position there first, accounts it does not list after
+    every listed one, and the quota ranking only breaks the rest."""
     rows: list[dict[str, Any]] = []
     for slot_id in slot_ids:
         snap = snapshots.get(slot_id)
@@ -778,7 +781,9 @@ def rank_candidates(
             "fetchedAt": _now_iso(fetched_at) if fetched_at is not None else None,
         })
     eligible = [r for r in rows if r["excluded"] is None]
+    position = {slot_id: i for i, slot_id in enumerate(slot_order or ())}
     eligible.sort(key=lambda r: (
+        position.get(r["slotId"], len(position)),
         _TIER_ORDER.get(r["tier"], 9),
         -(r["headroom"] if r["headroom"] is not None else -1.0),
         -(_parse_iso(r["fetchedAt"]) or 0.0),
@@ -1759,6 +1764,7 @@ class QuotaFailoverService:
         return rank_candidates(
             slot_ids=slot_ids, current_slot_id=current, snapshots=snapshots,
             login_states=login_states, tried=tried, now=self._now(), ledger_vetoes=vetoes,
+            slot_order=doc.get("slotOrder", {}).get(agent_key),
         )
 
     def _ledger_vetoes(self, agent_key: str, slot_ids: list[str]) -> set[str]:

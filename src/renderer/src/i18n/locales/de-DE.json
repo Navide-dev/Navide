@@ -7710,6 +7710,8 @@
         "dir-remind": "Claude-Konten, die noch nicht in ihrem eigenen Ordner angemeldet sind: {count}. Sie arbeiten weiter mit der gemeinsamen Anmeldung. Verwenden Sie „Im eigenen Ordner anmelden“ im Konto-Badge, um jedes abzuschließen.",
         "new-account": "+ Neues Konto",
         "new-account-scope": "Anbieter für das neue Konto",
+        "order-handle": "Ziehen, um festzulegen, in welcher Reihenfolge der automatische Wechsel Konten versucht",
+        "order-failed": "Kontoreihenfolge konnte nicht gespeichert werden: {message}",
         "global-login-title": "Mit der aktiven Anmeldeinformation anmelden?",
         "global-login-body": "{agent} hat keine isolierte Anmeldung. Während der Anmeldung wird seine aktive Anmeldeinformation vorübergehend durch das neue Konto ersetzt; nach Abschluss wird das aktuelle Konto ({current}) wiederhergestellt, und das neue Konto wird erst verwendet, wenn Sie dazu wechseln. Laufende {agent}-Bereiche blockieren dies – schließen oder beenden Sie sie zuerst.",
         "global-login-confirm": "Anmelden",

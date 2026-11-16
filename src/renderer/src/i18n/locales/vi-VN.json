@@ -7710,6 +7710,8 @@
         "dir-remind": "Tài khoản Claude chưa đăng nhập vào thư mục riêng: {count}. Chúng vẫn hoạt động bằng đăng nhập dùng chung. Hãy dùng “Đăng nhập vào thư mục riêng” trên huy hiệu tài khoản để hoàn tất từng tài khoản.",
         "new-account": "+ Tài khoản mới",
         "new-account-scope": "Nhà cung cấp cho tài khoản mới",
+        "order-handle": "Kéo để đặt thứ tự tự động chuyển đổi thử các tài khoản",
+        "order-failed": "Không thể lưu thứ tự tài khoản: {message}",
         "global-login-title": "Đăng nhập trên thông tin xác thực đang dùng?",
         "global-login-body": "{agent} không có đăng nhập tách biệt. Trong lúc đăng nhập, thông tin xác thực đang dùng của nó tạm thời được thay bằng tài khoản mới; khi đăng nhập xong, tài khoản hiện tại ({current}) được khôi phục, và tài khoản mới chỉ được dùng khi bạn chuyển sang. Các pane {agent} đang chạy sẽ chặn việc này — hãy đóng hoặc chờ chúng xong trước.",
         "global-login-confirm": "Đăng nhập",

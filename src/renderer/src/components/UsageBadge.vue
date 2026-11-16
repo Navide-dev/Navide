@@ -168,7 +168,14 @@ const badgeSmall = computed(() => {
 
 // Account-switch block: only shown when this agent has ≥1 extra profile.
 const canSwitch = computed(() => props.cliProfiles.hasProfiles(props.agentKey))
-const switchProfiles = computed(() => props.cliProfiles.profilesForAgent(props.agentKey))
+// In the user's account order (Accounts settings); the Default row keeps its
+// own place at the top of the list.
+const switchProfiles = computed(() => {
+  const profiles = props.cliProfiles.profilesForAgent(props.agentKey)
+  const order = props.cliProfiles.orderedSlotIds?.(props.agentKey)
+  if (!order) return profiles
+  return order.flatMap((id) => profiles.filter((p) => p.id === id))
+})
 // The account NEW panes start on — the pane default when one is chosen, else
 // the live credential's owner. The tick marks this; with no account dirs it
 // is exactly the active account it always was. Under scheme A (liveMode) a row
@@ -363,6 +370,13 @@ const queuedHere = computed(() =>
 watch(open, (isOpen) => {
   if (isOpen && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
 })
+// A reorder in another window moves the next account while this one is open.
+watch(
+  () => props.cliProfiles.slotOrder?.value[props.agentKey],
+  () => {
+    if (open.value && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
+  },
+)
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true

@@ -368,6 +368,69 @@ def test_same_tier_orders_by_weakest_headroom_then_freshness_then_id() -> None:
     assert [r["slotId"] for r in rows] == ["b", "c", "a"]
 
 
+def _mixed_snapshots() -> dict[str, dict[str, Any] | None]:
+    return {
+        "fresh": snap("codex", [window("session", 30, 3600)]),
+        "stale": snap("codex", [window("session", 10, 3600)], fetched_at=NOW - 3 * 3600),
+        "reset": snap("codex", [window("session", 100, -60)], fetched_at=NOW - 7200),
+        "nodata": None,
+        "spent": snap("codex", [window("session", 100, 1800)]),
+        "signed-out": snap("codex", [window("session", 1, 3600)]),
+        "current": snap("codex", [window("session", 1, 3600)]),
+    }
+
+
+@pytest.mark.parametrize("slot_order", [None, []])
+def test_no_account_order_ranks_exactly_as_before(slot_order: list[str] | None) -> None:
+    snapshots = _mixed_snapshots()
+    args = dict(
+        slot_ids=list(snapshots), current_slot_id="current", snapshots=snapshots,
+        login_states={"signed-out": "signed-out"}, tried=set(), now=NOW,
+    )
+    assert qf.rank_candidates(**args, slot_order=slot_order) == qf.rank_candidates(**args)
+    assert [r["slotId"] for r in qf.rank_candidates(**args, slot_order=slot_order)] == [
+        "fresh", "reset", "stale", "nodata", "spent", "signed-out", "current",
+    ]
+
+
+def test_account_order_picks_the_first_usable_account_in_the_users_order() -> None:
+    snapshots = _mixed_snapshots()
+    rows = qf.rank_candidates(
+        slot_ids=list(snapshots), current_slot_id="current", snapshots=snapshots,
+        login_states={"signed-out": "signed-out"}, tried=set(), now=NOW,
+        # The current, signed-out and spent accounts come first in the
+        # user's order but are skipped; the weaker-tier "nodata" is next.
+        slot_order=["current", "signed-out", "spent", "nodata", "stale", "fresh", "reset"],
+    )
+    eligible = [r["slotId"] for r in rows if r["excluded"] is None]
+    assert eligible == ["nodata", "stale", "fresh", "reset"]
+    excluded = {r["slotId"]: r["excluded"] for r in rows if r["excluded"] is not None}
+    assert excluded == {"spent": "exhausted", "signed-out": "signed-out", "current": "current"}
+
+
+def test_accounts_missing_from_the_order_follow_it_in_quota_order() -> None:
+    snapshots = _mixed_snapshots()
+    rows = qf.rank_candidates(
+        slot_ids=list(snapshots), current_slot_id="current", snapshots=snapshots,
+        login_states={"signed-out": "signed-out"}, tried=set(), now=NOW,
+        slot_order=["stale", "gone"],
+    )
+    assert [r["slotId"] for r in rows if r["excluded"] is None] == ["stale", "fresh", "reset", "nodata"]
+
+
+@pytest.mark.asyncio
+async def test_candidates_follow_the_stored_account_order(h: Harness) -> None:
+    a, b, c = h.profile("codex", "A"), h.profile("codex", "B"), h.profile("codex", "C")
+    for slot in (a, b, c):
+        h.headroom_reading("codex", slot, used=20)
+    h.headroom_reading("codex", c, used=5)
+    unordered = [r["slotId"] for r in await h.service.candidates("codex") if r["excluded"] is None]
+    assert unordered[0] == c
+    h.store.set_slot_order("codex", [b, a, c])
+    ordered = [r["slotId"] for r in await h.service.candidates("codex") if r["excluded"] is None]
+    assert ordered[:3] == [b, a, c]
+
+
 # ── policy / budget persistence ─────────────────────────────────────────────
 
 @pytest.mark.asyncio

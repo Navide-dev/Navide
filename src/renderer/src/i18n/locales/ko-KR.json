@@ -7710,6 +7710,8 @@
         "dir-remind": "아직 자체 폴더에 로그인되지 않은 Claude 계정: {count}개. 공유 로그인으로 계속 동작해요. 계정 배지의 “자체 폴더에 로그인”으로 하나씩 마무리하세요.",
         "new-account": "+ 새 계정",
         "new-account-scope": "새 계정의 제공업체",
+        "order-handle": "드래그하여 자동 전환 시 계정을 시도할 순서를 설정",
+        "order-failed": "계정 순서를 저장하지 못했습니다: {message}",
         "global-login-title": "현재 자격 증명으로 로그인할까요?",
         "global-login-body": "{agent}에는 격리된 로그인이 없어요. 로그인하는 동안 현재 자격 증명이 새 계정으로 잠시 대체되고, 로그인이 끝나면 현재 계정({current})이 복원되며, 새 계정은 전환할 때만 쓰여요. 실행 중인 {agent} pane이 있으면 진행할 수 없으니 먼저 닫거나 작업을 끝내세요.",
         "global-login-confirm": "로그인",

@@ -786,6 +786,36 @@ async def test_cli_profiles_rename_unknown_is_bad_request(
     assert response["error"]["code"] == "BAD_REQUEST"
 
 
+async def test_cli_profiles_reorder_saves_and_announces_the_order(
+    store: CliProfilesStore, events: list[dict[str, Any]]
+) -> None:
+    session = _session()
+    a = store.create(agent_key="claude", name="A")
+    order = [a["id"], "__default__"]
+
+    await app.handle_message(session, {
+        "id": "o1", "type": "cli_profiles.reorder",
+        "payload": {"agent_key": "claude", "slot_ids": order},
+    })
+    await app.handle_message(session, {
+        "id": "o2", "type": "cli_profiles.reorder",
+        "payload": {"agent_key": "claude", "slot_ids": ["nope1234"]},
+    })
+    await app.handle_message(session, {
+        "id": "o3", "type": "cli_profiles.reorder",
+        "payload": {"agent_key": "claude", "slot_ids": "x"},
+    })
+
+    sent = session.websocket.sent  # type: ignore[attr-defined]
+    assert sent[0]["payload"] == {"slotOrder": {"claude": order}}
+    assert [s["error"]["code"] for s in sent[1:3]] == ["BAD_REQUEST", "BAD_REQUEST"]
+    assert store.list()["slotOrder"] == {"claude": order}
+    changed = [e for e in events if e["type"] == "cli_profiles.changed"]
+    assert len(changed) == 1
+    assert changed[0]["payload"]["slotOrder"] == {"claude": order}
+    assert changed[0]["payload"]["reason"] == "reorder"
+
+
 async def test_cli_profiles_rename_default_slot_sets_alias(
     store: CliProfilesStore, events: list[dict[str, Any]]
 ) -> None:

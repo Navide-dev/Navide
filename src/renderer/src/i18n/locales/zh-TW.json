@@ -7710,6 +7710,8 @@
         "dir-remind": "有 {count} 個 Claude 帳號還沒登入到自己的資料夾，目前仍使用共用的登入。可以從帳號徽章的「登入到帳號資料夾」逐一補做。",
         "new-account": "＋ 新增帳號",
         "new-account-scope": "新帳號的 provider",
+        "order-handle": "拖曳設定自動切換嘗試帳號的順序",
+        "order-failed": "無法儲存帳號順序：{message}",
         "global-login-title": "要在生效中的憑證上登入嗎？",
         "global-login-body": "{agent} 沒有隔離的登入方式。登入期間會暫時以新帳號取代生效中的憑證；登入完成後會還原目前帳號（{current}），新帳號只有在你切換過去時才會使用。執行中的 {agent} 分格會阻擋此操作，請先關閉或完成它們。",
         "global-login-confirm": "登入",

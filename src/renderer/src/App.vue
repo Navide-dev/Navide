@@ -13373,6 +13373,7 @@ const channelAccountDeps: ChannelAccountDeps = {
     defaultProfileId: (agentKey) => cliProfilesApi.defaultProfileId(agentKey),
     aliasFor: (agentKey, profileId) => cliProfilesApi.aliasFor(agentKey, profileId),
     profilesForAgent: (agentKey) => cliProfilesApi.profilesForAgent(agentKey),
+    orderedSlotIds: (agentKey) => cliProfilesApi.orderedSlotIds(agentKey),
     signedOut: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.signedIn === false,
   },
   usage: (agentKey, profileId) => {

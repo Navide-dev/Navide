@@ -7710,6 +7710,8 @@
         "dir-remind": "Comptes Claude pas encore connectés dans leur propre dossier : {count}. Ils continuent de fonctionner avec la connexion partagée. Utilisez « Se connecter dans son propre dossier » dans le badge du compte pour terminer chacun.",
         "new-account": "+ Nouveau compte",
         "new-account-scope": "Fournisseur du nouveau compte",
+        "order-handle": "Faites glisser pour définir l’ordre dans lequel le changement automatique essaie les comptes",
+        "order-failed": "Impossible d’enregistrer l’ordre des comptes : {message}",
         "global-login-title": "Se connecter sur l’identifiant actif ?",
         "global-login-body": "{agent} n’a pas de connexion isolée. Pendant la connexion, son identifiant actif est temporairement remplacé par le nouveau compte ; une fois la connexion terminée, le compte actuel ({current}) est restauré, et le nouveau compte n’est utilisé que lorsque vous basculez dessus. Les panes {agent} en cours bloquent cette opération – fermez-les ou laissez-les terminer d’abord.",
         "global-login-confirm": "Se connecter",
