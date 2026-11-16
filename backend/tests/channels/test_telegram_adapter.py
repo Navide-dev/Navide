@@ -848,7 +848,7 @@ async def test_contact_location_venue_and_sticker_go_in_as_text(api: FakeBotApi)
     finally:
         await ad.stop()
     assert [m.text for m in got] == [
-        f"[聯絡人] Ada Lu {phone}", "[位置] 25.03, 121.56", "[地點] Cafe 1 Road (1.5, 2.5)", "[貼圖] 👍"]
+        f"[Contact] Ada Lu {phone}", "[Location] 25.03, 121.56", "[Venue] Cafe 1 Road (1.5, 2.5)", "[Sticker] 👍"]
     assert all(m.unsupported_kind == "" and m.attachments == [] for m in got)
 
 

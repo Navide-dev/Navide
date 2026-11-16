@@ -847,19 +847,19 @@ def _content_text(msg: dict[str, Any]) -> str:
     contact = msg.get("contact")
     if isinstance(contact, dict):
         name = " ".join(str(p) for p in (contact.get("first_name"), contact.get("last_name")) if p)
-        return " ".join(p for p in ("[聯絡人]", name, str(contact.get("phone_number") or "")) if p)
+        return " ".join(p for p in ("[Contact]", name, str(contact.get("phone_number") or "")) if p)
     venue = msg.get("venue")
     if isinstance(venue, dict):
         where = venue.get("location") or {}
         coords = f"({where.get('latitude')}, {where.get('longitude')})" if where else ""
-        return " ".join(p for p in ("[地點]", str(venue.get("title") or ""), str(venue.get("address") or ""),
+        return " ".join(p for p in ("[Venue]", str(venue.get("title") or ""), str(venue.get("address") or ""),
                                     coords) if p)
     location = msg.get("location")
     if isinstance(location, dict):
-        return f"[位置] {location.get('latitude')}, {location.get('longitude')}"
+        return f"[Location] {location.get('latitude')}, {location.get('longitude')}"
     sticker = msg.get("sticker")
     if isinstance(sticker, dict):
-        return " ".join(p for p in ("[貼圖]", str(sticker.get("emoji") or "")) if p)
+        return " ".join(p for p in ("[Sticker]", str(sticker.get("emoji") or "")) if p)
     return ""
 
 
