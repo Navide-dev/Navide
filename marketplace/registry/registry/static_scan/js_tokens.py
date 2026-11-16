@@ -19,9 +19,13 @@ raises ``TooComplex``. The report records either as an incomplete scan.
 
 from __future__ import annotations
 
+import codecs
 import re
-from collections.abc import Iterator
+from array import array
+from bisect import bisect_left
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from itertools import chain
 
 from .limits import NO_DEADLINE, Deadline, TooComplex
 
@@ -222,12 +226,97 @@ def _regex_allowed(previous: Token | None) -> bool:
     return previous.value not in (")", "]", "}", "++", "--")
 
 
+_ASTRAL = re.compile("[\U00010000-\U0010ffff]")
+ASTRAL_PLACEHOLDER = "\x01"
+"""Stands in for a character above U+FFFF in a narrowed script. Like such a
+character it is no identifier, digit, whitespace, quote or punctuator
+character, so every token boundary and offset stays where it was."""
+
+
+MAX_ASTRAL_SHARE = 8
+"""Narrowing gives up when more than one character in this many is above
+U+FFFF: at 12 bytes per recorded character it would then cost more than
+the 4-byte-per-character text it avoids (a hostile script of emoji). The
+first ``ASTRAL_FREE`` characters' worth is always recorded, so a bundle
+that opens with a few emoji is narrowed too."""
+ASTRAL_FREE = 64 * 1024
+
+
+@dataclass(slots=True)
+class AstralChars:
+    """The characters above U+FFFF that ``narrow_script`` replaced: their
+    offsets and code points, stored compactly."""
+
+    offsets: array = field(default_factory=lambda: array("q"))
+    chars: array = field(default_factory=lambda: array("I"))
+
+    def within(self, start: int, end: int) -> bool:
+        at = bisect_left(self.offsets, start)
+        return at < len(self.offsets) and self.offsets[at] < end
+
+    def restore(self, text: str, start: int, end: int) -> str:
+        """``text[start:end]`` with the replaced characters put back."""
+        end = min(end, len(text))
+        at = bisect_left(self.offsets, start)
+        parts: list[str] = []
+        while at < len(self.offsets) and self.offsets[at] < end:
+            parts.append(text[start:self.offsets[at]])
+            parts.append(chr(self.chars[at]))
+            start = self.offsets[at] + 1
+            at += 1
+        parts.append(text[start:end])
+        return "".join(parts)
+
+
+def narrow_script(chunks: Iterable[bytes]) -> tuple[str, AstralChars] | None:
+    """The UTF-8 script in ``chunks`` decoded like ``bytes.decode("utf-8",
+    "replace")``, with each character above U+FFFF replaced by
+    ``ASTRAL_PLACEHOLDER``, and those characters.
+
+    One emoji in a bundle otherwise makes the whole text 4 bytes per
+    character, and decoding it at once peaks at about six times its size.
+    A placeholder already in the script stays as it is: only the recorded
+    offsets are restored. None when a character above U+FFFF is a digit,
+    which the tokenizer reads differently from the placeholder, or when
+    such characters are too many to record cheaply (``MAX_ASTRAL_SHARE``)."""
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    pieces: list[str] = []
+    astral = AstralChars()
+    length = 0
+    for chunk in chain(chunks, (None,)):
+        piece = decoder.decode(chunk or b"", final=chunk is None)
+        if _ASTRAL.search(piece):
+            for match in _ASTRAL.finditer(piece):
+                if match.group().isdigit():
+                    return None
+                astral.offsets.append(length + match.start())
+                astral.chars.append(ord(match.group()))
+            piece = _ASTRAL.sub(ASTRAL_PLACEHOLDER, piece)
+        pieces.append(piece)
+        length += len(piece)
+        if len(astral.offsets) * MAX_ASTRAL_SHARE > max(length, ASTRAL_FREE):
+            return None
+    return "".join(pieces), astral
+
+
+def _reread(token: Token, source: str, deadline: Deadline) -> Token | None:
+    """``token`` read again from its exact source text (narrowed scripts)."""
+    reader = {"str": _read_string, "tmpl": _read_template, "regex": _read_regex}[token.kind]
+    return reader(source, 0, deadline)[0]
+
+
 def tokenize(text: str, deadline: Deadline = NO_DEADLINE) -> list[Token]:
     return list(iter_tokens(text, deadline))
 
 
-def iter_tokens(text: str, deadline: Deadline = NO_DEADLINE) -> Iterator[Token]:
+def iter_tokens(
+    text: str, deadline: Deadline = NO_DEADLINE, astral: AstralChars | None = None
+) -> Iterator[Token]:
     """The tokens of ``text``, one at a time (constant memory for large bundles).
+
+    For a script narrowed by ``narrow_script`` pass its ``astral``: a literal
+    that held a replaced character is read again from its original text, so
+    every token equals that of the unnarrowed script.
 
     Raises ``ScanTimeout`` when ``deadline`` passes and ``TooComplex`` for a
     structure beyond the ceilings; both end the scan of this file only."""
@@ -274,6 +363,11 @@ def iter_tokens(text: str, deadline: Deadline = NO_DEADLINE) -> Iterator[Token]:
                 token, index = Token("punct", match.group()), match.end()
             else:
                 token, index = None, index + 1
+        if (
+            token is not None and astral is not None and token.kind in ("str", "tmpl", "regex")
+            and astral.within(begin, index)
+        ):
+            token = _reread(token, astral.restore(text, begin, index), deadline)
         if token is not None:
             object.__setattr__(token, "start", begin)
             yield token
