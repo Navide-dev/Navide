@@ -597,6 +597,8 @@ describe('SIGTERM quits without the confirm prompt', () => {
       return realOn(event, listener)
     }) as typeof process.on)
     await import('./index')
+    // index.ts installs the handler on ready, which this harness fires by hand.
+    for (const [event, listener] of appListeners) if (event === 'ready') (listener as () => void)()
     const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
     const { WindowRegistry } = await import('./window-registry')
     vi.spyOn(frontendPluginManager, 'hasWindowCloseParticipants').mockReturnValue(false)
