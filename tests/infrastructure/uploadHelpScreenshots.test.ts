@@ -81,7 +81,8 @@ describe('upload-help-screenshots', () => {
     const before = readFileSync(MANIFEST, 'utf8')
     // PATH without aws: a dry run must not need (or call) it.
     const out = execFileSync(process.execPath, [SCRIPT, dir], { encoding: 'utf8', env: { ...process.env, PATH: '' } })
-    expect(out).toMatch(/would upload zh-TW\/cliAgents\.menu\.png -> s3:\/\/navide-releases\/help\/cliAgents\.menu\/zh-TW\//)
+    // The local path is printed with the platform's separator; the S3 key is always `/`.
+    expect(out).toMatch(/would upload zh-TW[\\/]cliAgents\.menu\.png -> s3:\/\/navide-releases\/help\/cliAgents\.menu\/zh-TW\//)
     expect(out).toContain('dry run: 2 file(s), nothing uploaded')
     expect(readFileSync(MANIFEST, 'utf8')).toBe(before)
   })
