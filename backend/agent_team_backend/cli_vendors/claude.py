@@ -31,7 +31,7 @@ import time
 import unicodedata
 from datetime import datetime, timedelta
 from itertools import islice
-from typing import Any
+from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .. import osplat
@@ -56,6 +56,7 @@ from ..usage_common import (
 from ..log_readers.base import (
     ActivityEvent,
     IncrementalParseResult,
+    JsonlTail,
     LogReader,
     TokenUsage,
     TurnCall,
@@ -63,7 +64,6 @@ from ..log_readers.base import (
     activity_high_water,
     join_text_blocks,
     merge_prompt_excerpt,
-    read_jsonl_tail,
     set_activity_high_water,
     user_prompt_text,
 )
@@ -484,14 +484,40 @@ class ClaudeLogReader(LogReader):
         path: Path,
         checkpoint: dict,
     ) -> IncrementalParseResult:
-        """Parse only complete JSONL records after the persisted byte offset."""
-        records, final_checkpoint, rotated = read_jsonl_tail(path, checkpoint)
-        recent = [] if rotated else [str(k) for k in checkpoint.get("recent_keys", [])][-64:]
-        recent_set = set(recent)
-        out: list[TokenUsage] = []
-        cwd = self.cwd_from_file(path)
-        session_id = path.stem
+        """Parse only complete JSONL records after the persisted byte offset.
 
+        Streams the tail (JsonlTail): only the assistant records that carry
+        usage leave anything behind, so a large unread tail no longer sits in
+        memory as parsed dicts all at once.
+        """
+        out: list[TokenUsage] = []
+        with JsonlTail(path, checkpoint) as tail:
+            recent = [] if tail.rotated else [str(k) for k in checkpoint.get("recent_keys", [])][-64:]
+            recent_set = set(recent)
+            cwd = self.cwd_from_file(path)
+            session_id = path.stem
+            self._usage_events(tail, recent, recent_set, cwd, session_id, path, out)
+        final_checkpoint = tail.checkpoint
+        # Each event's checkpoint is the final one at that event's offset; the
+        # final fields are only known once the tail is read.
+        for ev in out:
+            event_checkpoint = dict(final_checkpoint)
+            event_checkpoint.update(ev.checkpoint)
+            ev.checkpoint = event_checkpoint
+        final_checkpoint["recent_keys"] = recent
+        return IncrementalParseResult(out, final_checkpoint)
+
+    @staticmethod
+    def _usage_events(
+        records: Iterable[tuple[int, dict[str, Any] | None]],
+        recent: list[str],
+        recent_set: set[str],
+        cwd: str,
+        session_id: str,
+        path: Path,
+        out: list[TokenUsage],
+    ) -> None:
+        """Append one TokenUsage per new usage record; `recent` is updated in place."""
         for end, rec in records:
             if rec is None or rec.get("type") != "assistant":
                 continue
@@ -513,14 +539,12 @@ class ClaudeLogReader(LogReader):
             if input_tokens == 0 and output_tokens == 0:
                 continue
             recent.append(dedup_key)
-            recent = recent[-64:]
-            recent_set = set(recent)
+            del recent[:-64]
+            recent_set.clear()
+            recent_set.update(recent)
             cache_split = usage.get("cache_creation")
             if not isinstance(cache_split, dict):
                 cache_split = {}
-            event_checkpoint = dict(final_checkpoint)
-            event_checkpoint["offset"] = end
-            event_checkpoint["recent_keys"] = list(recent)
             out.append(TokenUsage(
                 vendor="claude",
                 input_tokens=input_tokens,
@@ -531,7 +555,7 @@ class ClaudeLogReader(LogReader):
                 dedup_key=dedup_key,
                 timestamp=str(rec.get("timestamp") or ""),
                 model=str(msg.get("model") or ""),
-                checkpoint=event_checkpoint,
+                checkpoint={"offset": end, "recent_keys": list(recent)},
                 cache_read_tokens=_int(usage.get("cache_read_input_tokens")),
                 cache_creation_tokens=_int(usage.get("cache_creation_input_tokens")),
                 cli_version=str(rec.get("version") or ""),
@@ -539,9 +563,6 @@ class ClaudeLogReader(LogReader):
                 # than 1.25x (cost_ledger).
                 raw={"cache_write_1h": _int(cache_split.get("ephemeral_1h_input_tokens"))},
             ))
-
-        final_checkpoint["recent_keys"] = recent
-        return IncrementalParseResult(out, final_checkpoint)
 
     def turns_for_session(self, path: Path, session_id: str = "") -> list[TurnUsage]:
         """One turn per `promptId`: every human `user` record (no

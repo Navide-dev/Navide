@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Iterator
 
 log = logging.getLogger("agent_team_backend.log_readers")
 
@@ -264,34 +264,53 @@ def tail_anchor(fh: BinaryIO, end: int) -> str:
     return hashlib.blake2b(fh.read(end - start), digest_size=8).hexdigest()
 
 
-def read_jsonl_tail(
-    path: Path,
-    checkpoint: dict[str, Any],
-) -> tuple[list[tuple[int, dict[str, Any] | None]], dict[str, Any], bool]:
-    """Read complete JSONL records after a byte offset.
+class JsonlTail:
+    """Complete JSONL records after a byte offset, one at a time.
 
-    Returns ``(records, next_checkpoint, rotated)``. A partial trailing line is
-    intentionally left unread so a later append can complete it. File identity,
-    shrink and tail-anchor checks prevent seeking into a replaced/truncated
-    generation.
+    The streaming form of ``read_jsonl_tail``: a reader that keeps only a few
+    fields per record never holds the whole tail as parsed dicts at once. A
+    Claude transcript runs to hundreds of MB, and the list form held every
+    record of the unread part in memory together — a GB-scale peak whose
+    pymalloc arenas the process keeps long after the parse is done.
+
+    Use inside ``with``: ``rotated`` is known on entry, ``checkpoint`` once the
+    iteration has run to the end. A partial trailing line is intentionally
+    left unread so a later append can complete it. File identity, shrink and
+    tail-anchor checks prevent seeking into a replaced/truncated generation.
     """
-    stat = path.stat()
-    identity = f"{stat.st_dev}:{stat.st_ino}"
-    prior_identity = str(checkpoint.get("identity") or "")
-    prior_anchor = str(checkpoint.get("anchor") or "")
-    offset = max(0, int(checkpoint.get("offset") or 0))
-    rotated = bool(offset and (prior_identity != identity or stat.st_size < offset))
 
-    records: list[tuple[int, dict[str, Any] | None]] = []
-    with path.open("rb") as fh:
-        # Checkpoints persisted before the anchor existed carry none and are
-        # trusted on identity and size alone, as before.
-        if offset and not rotated and prior_anchor and tail_anchor(fh, offset) != prior_anchor:
-            rotated = True
-        if rotated:
+    def __init__(self, path: Path, checkpoint: dict[str, Any]) -> None:
+        stat = path.stat()
+        self._checkpoint = checkpoint
+        self._identity = f"{stat.st_dev}:{stat.st_ino}"
+        prior_identity = str(checkpoint.get("identity") or "")
+        prior_anchor = str(checkpoint.get("anchor") or "")
+        offset = max(0, int(checkpoint.get("offset") or 0))
+        self.rotated = bool(offset and (prior_identity != self._identity or stat.st_size < offset))
+        self._fh = path.open("rb")
+        try:
+            # Checkpoints persisted before the anchor existed carry none and
+            # are trusted on identity and size alone, as before.
+            if offset and not self.rotated and prior_anchor and tail_anchor(self._fh, offset) != prior_anchor:
+                self.rotated = True
+        except BaseException:
+            self._fh.close()
+            raise
+        if self.rotated:
             offset = 0
-        committed = offset
-        fh.seek(offset)
+        self._offset = offset
+        self._committed = offset
+        self._anchor: str | None = None
+
+    def __enter__(self) -> "JsonlTail":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._fh.close()
+
+    def __iter__(self) -> Iterator[tuple[int, dict[str, Any] | None]]:
+        fh = self._fh
+        fh.seek(self._offset)
         while True:
             raw = fh.readline()
             if not raw:
@@ -299,19 +318,38 @@ def read_jsonl_tail(
             end = fh.tell()
             if not raw.endswith(b"\n"):
                 break
-            committed = end
+            self._committed = end
             try:
                 value = json.loads(raw.decode("utf-8"))
-                records.append((end, value if isinstance(value, dict) else None))
+                yield end, value if isinstance(value, dict) else None
             except (UnicodeDecodeError, json.JSONDecodeError):
-                records.append((end, None))
-        anchor = tail_anchor(fh, committed) if committed else ""
+                yield end, None
+        self._anchor = tail_anchor(fh, self._committed) if self._committed else ""
 
-    next_checkpoint = dict(checkpoint)
-    next_checkpoint.update(
-        {"kind": "jsonl", "offset": committed, "identity": identity, "anchor": anchor}
-    )
-    return records, next_checkpoint, rotated
+    @property
+    def checkpoint(self) -> dict[str, Any]:
+        """The checkpoint after the last complete record (iterate fully first)."""
+        if self._anchor is None:
+            raise RuntimeError("JsonlTail.checkpoint read before the tail was consumed")
+        next_checkpoint = dict(self._checkpoint)
+        next_checkpoint.update(
+            {"kind": "jsonl", "offset": self._committed, "identity": self._identity, "anchor": self._anchor}
+        )
+        return next_checkpoint
+
+
+def read_jsonl_tail(
+    path: Path,
+    checkpoint: dict[str, Any],
+) -> tuple[list[tuple[int, dict[str, Any] | None]], dict[str, Any], bool]:
+    """Read complete JSONL records after a byte offset.
+
+    Returns ``(records, next_checkpoint, rotated)``; see ``JsonlTail`` for the
+    rules, and prefer it where the records can be handled one at a time.
+    """
+    with JsonlTail(path, checkpoint) as tail:
+        records = list(tail)
+    return records, tail.checkpoint, tail.rotated
 
 
 def encode_claude_cwd(cwd: str) -> str:
