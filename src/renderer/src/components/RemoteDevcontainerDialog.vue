@@ -7,7 +7,7 @@
 //
 // Only host, container and CLI names are remembered (useRemoteDevcontainerPrefs).
 import { computed, ref, watch } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import {
   REMOTE_AGENT_LABELS,
@@ -238,7 +238,7 @@ function submit(): void {
               data-testid="remote-container-row"
             >
               <input v-model="selected" type="radio" name="remote-dlg-container" :value="c.name" :disabled="!selectable(c)" />
-              <span class="cname">{{ c.name }}</span>
+              <span v-truncate class="cname">{{ c.name }}</span>
               <span class="cstate" :class="c.running ? 'run' : 'stop'">
                 {{ c.running ? $t('remoteDevcontainer.running') : $t('remoteDevcontainer.stopped') }}
               </span>
