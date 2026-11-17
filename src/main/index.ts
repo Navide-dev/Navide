@@ -6794,11 +6794,18 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
 // prompt held the quit open until something force-killed the app, and the next
 // launch took that for a crash. The rest of the quit runs as usual, so the exit
 // is marked clean and the backend is stopped rather than orphaned.
-process.on('SIGTERM', () => {
-  quitConfirmed = true
-  dockQuitInProgress = true
-  quitPromptAbort?.abort()
-  app.quit()
+//
+// Installed once the app is ready, not when this module loads: before ready
+// there is no prompt and no backend yet, so the default SIGTERM exit is right,
+// and an import of this module (the main-process tests) must not leave a
+// handler that calls app.quit() on the importing process when it is stopped.
+app.on('ready', () => {
+  process.on('SIGTERM', () => {
+    quitConfirmed = true
+    dockQuitInProgress = true
+    quitPromptAbort?.abort()
+    app.quit()
+  })
 })
 
 app.on('before-quit', async (e) => {
