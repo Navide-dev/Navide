@@ -327,6 +327,11 @@ class JsonlTail:
         self._anchor = tail_anchor(fh, self._committed) if self._committed else ""
 
     @property
+    def identity(self) -> str:
+        """The file's dev:ino, as the checkpoint will record it."""
+        return self._identity
+
+    @property
     def checkpoint(self) -> dict[str, Any]:
         """The checkpoint after the last complete record (iterate fully first)."""
         if self._anchor is None:
