@@ -2683,6 +2683,7 @@ async def _send_profiles_changed(
         # {signedIn, email}}}, and the account new panes start on.
         "accountDirs": view["accountDirs"],
         "paneDefaults": doc["paneDefaults"],
+        "slotOrder": doc["slotOrder"],
         "reason": reason,
     }
     if harvested_profile_ids:
@@ -2728,6 +2729,7 @@ async def cli_profiles_list(session: "Session", msg_id: str, msg_type: str, payl
                 "duplicates": view["duplicates"],
                 "accountDirs": view["accountDirs"],
                 "paneDefaults": doc["paneDefaults"],
+                "slotOrder": doc["slotOrder"],
                 "supported_agents": list(PROFILE_AGENT_KEYS),
                 # Per vendor: hot/restart/manual, the credential pool, the
                 # provider scopes a new profile may bind to, resume ability.
@@ -2825,6 +2827,29 @@ async def cli_profiles_rename(session: "Session", msg_id: str, msg_type: str, pa
         )
     )
     await _broadcast_profiles_changed("rename")
+
+
+@handler("cli_profiles.reorder")
+async def cli_profiles_reorder(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Rank one agent's accounts for automatic switching: ``slot_ids`` in the
+    order to try them, the built-in Default as ``__default__``; [] clears
+    the order back to the quota-based ranking."""
+    from . import app
+
+    slot_ids = payload.get("slot_ids")
+    try:
+        if not isinstance(slot_ids, list) or not all(isinstance(i, str) for i in slot_ids):
+            raise ValueError("slot_ids must be a list of strings")
+        slot_order = app.cli_profiles_store.set_slot_order(
+            str(payload.get("agent_key") or ""), slot_ids,
+        )
+    except ValueError as err:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", _profile_error(err))
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, {"slotOrder": slot_order}))
+    await _broadcast_profiles_changed("reorder")
 
 
 @handler("cli_profiles.delete")
@@ -3825,7 +3850,14 @@ async def account_switch_settled(session: "Session", msg_id: str, msg_type: str,
 @handler("quota_failover.report")
 async def quota_failover_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+    from .remote_devcontainer_ws import is_remote_pane
 
+    if is_remote_pane(str(payload.get("pane_id") or "")):
+        # A remote pane's quota is its container's own sign-in: failing over
+        # would copy this machine's credentials, so it is never reported.
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_PANE", "remote container panes do not fail over"))
+        return
     await _failover_call(
         session, msg_id, msg_type, lambda: app.quota_failover.report(payload),
         shape=lambda result: {"incident": result[0].to_dict(), "created": result[1]},
@@ -7866,7 +7898,11 @@ async def tokens_snapshot(session: "Session", msg_id: str, msg_type: str, payloa
     # log changed since is rescanned in the background and lands as a
     # `tokens.changed` broadcast.
     app.refresh_live_scans(workspace_path or "")
-    snap = app.tokens_store.snapshot(workspace_path)
+    # Off the loop: the token panel refetches this often, and a snapshot
+    # deep-copies twenty runs and may read the workspace document from the
+    # db (inject-failed root cause D, 2026-11-15). The db thread keeps it
+    # behind any write submitted before it, as on the loop.
+    snap = await run_in_db_thread(app.tokens_store.snapshot, workspace_path)
     if payload.get("global") == "all_time":
         # The token panel shows only the all-time total; leave the per-day,
         # per-account and per-version history out of its frequent refetches.
@@ -8800,9 +8836,18 @@ async def terminal_create(session: "Session", msg_id: str, msg_type: str, payloa
         }
         session._terminal_create_transactions[key] = transaction
         try:
-            await _terminal_create_impl(
-                session, msg_id, msg_type, payload, transaction, generation
-            )
+            # agent_key "remote" without a target is refused there too: it is
+            # no local CLI and must never fall through to a plain spawn.
+            if payload.get("remote") is not None or payload.get("agent_key") == "remote":
+                from .remote_devcontainer_ws import create_remote_pane
+
+                await create_remote_pane(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
+            else:
+                await _terminal_create_impl(
+                    session, msg_id, msg_type, payload, transaction, generation
+                )
         except asyncio.CancelledError:
             await _rollback_terminal_create(session, transaction)
             raise
@@ -10210,6 +10255,32 @@ def _guarded_terminal_write_refusal(
     return None
 
 
+#: (terminal session, inject_id, seq) of the injection chunks already written,
+#: oldest first. An injection tags each chunk so that a chunk the renderer
+#: resends after its request timed out — the loop was stalled, not the write
+#: lost — is answered again rather than typed twice (inject-failed 2026-11-15).
+_APPLIED_INJECT_CHUNKS: dict[tuple[str, str, int], None] = {}
+_APPLIED_INJECT_MAX = 2048
+
+
+def _inject_tag(payload: dict) -> tuple[str, int] | None:
+    inject_id = payload.get("inject_id")
+    seq = payload.get("seq")
+    if not isinstance(inject_id, str) or not inject_id or isinstance(seq, bool) or not isinstance(seq, int):
+        return None
+    return inject_id, seq
+
+
+def _inject_chunk_applied(session_id: str, inject_id: str, seq: int) -> bool:
+    return (session_id, inject_id, seq) in _APPLIED_INJECT_CHUNKS
+
+
+def _remember_inject_chunk(session_id: str, inject_id: str, seq: int) -> None:
+    _APPLIED_INJECT_CHUNKS[(session_id, inject_id, seq)] = None
+    while len(_APPLIED_INJECT_CHUNKS) > _APPLIED_INJECT_MAX:
+        del _APPLIED_INJECT_CHUNKS[next(iter(_APPLIED_INJECT_CHUNKS))]
+
+
 @handler("terminal.input")
 async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -10221,6 +10292,13 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
     # shell be at its prompt: checked here, next to the write, so a program
     # started between the renderer's last look and this write still refuses it.
     session_id = payload["terminal_session_id"]
+    tag = _inject_tag(payload) if payload["data"] else None
+    if tag is not None and _inject_chunk_applied(session_id, *tag):
+        # Already written: its first answer was lost to a timeout. No guard
+        # re-check either — the guarded line already holds this chunk.
+        pending = session.terminals.write(session_id, "")
+        await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending, "duplicate": True}))
+        return
     if payload.get("require_shell_prompt") is True and payload["data"]:
         if session.terminals.shell_in_foreground(session_id) is False:
             await session.send_json(
@@ -10249,6 +10327,8 @@ async def terminal_input(session: "Session", msg_id: str, msg_type: str, payload
             _PREFILL_HELD.discard(session_id)
             _GUARDED_LINES.pop(session_id, None)
     pending = session.terminals.write(session_id, payload["data"])
+    if tag is not None:
+        _remember_inject_chunk(session_id, *tag)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "pending": pending}))
     # A keyboard frame (the renderer flags only those: not mouse/focus reports,
     # not paste or programmatic injection) is a human dev-time heartbeat for
@@ -11238,6 +11318,24 @@ async def project_get_spawn_history(session: "Session", msg_id: str, msg_type: s
     )
 
 
+#: Follow-up work of a handler, held so a shielded task is not garbage-collected.
+_OUTLIVING_REQUESTER: set["asyncio.Future[Any]"] = set()
+
+
+async def _outlive_requester(work: Awaitable[Any]) -> Any:
+    """Run ``work`` to its end even if the requester hangs up meanwhile.
+
+    ws_endpoint cancels a closed connection's handler tasks. A handler that
+    writes and then tells the other windows would stop between the two: the
+    write lands (a thread cannot be cancelled), the broadcast never goes, and
+    every other window keeps the old state until it reloads. The work runs in
+    a task of its own; the caller still sees the cancellation."""
+    task = asyncio.ensure_future(work)
+    _OUTLIVING_REQUESTER.add(task)
+    task.add_done_callback(_OUTLIVING_REQUESTER.discard)
+    return await asyncio.shield(task)
+
+
 @handler("project.set_display_name")
 async def project_set_display_name(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Persist a user-set display name for the workspace itself.
@@ -11283,7 +11381,34 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
             app.recent_workspaces_store.set_name(ws_raw, display_name)
         return proj
 
-    project = await asyncio.to_thread(_persist)
+    async def _persist_and_announce() -> Any:
+        project = await asyncio.to_thread(_persist)
+        if project is None:
+            return None
+        # Peer windows adopt the new name live (sidebar, title bar).
+        await app.broadcast(
+            make_event(
+                "project.ui_state_changed",
+                {
+                    "workspace_path": project.workspace_path,
+                    "display_name": display_name,
+                },
+            ),
+            exclude=session,
+        )
+        # And the Welcome recent list re-reads the mirror.
+        recent = await asyncio.to_thread(app.recent_workspaces_store.list)
+        await app.broadcast(
+            make_event(
+                "workspace.recent_changed",
+                {"recent": recent, "reason": "display_name"},
+            )
+        )
+        return project
+
+    # A rename that was written reaches the other windows even when the
+    # requester hangs up while it is being written.
+    project = await _outlive_requester(_persist_and_announce())
     if project is None:
         await session.send_json(
             make_response(
@@ -11293,26 +11418,6 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
             )
         )
         return
-
-    # Peer windows adopt the new name live (sidebar, title bar).
-    await app.broadcast(
-        make_event(
-            "project.ui_state_changed",
-            {
-                "workspace_path": project.workspace_path,
-                "display_name": display_name,
-            },
-        ),
-        exclude=session,
-    )
-    # And the Welcome recent list re-reads the mirror.
-    recent = await asyncio.to_thread(app.recent_workspaces_store.list)
-    await app.broadcast(
-        make_event(
-            "workspace.recent_changed",
-            {"recent": recent, "reason": "display_name"},
-        )
-    )
     await session.send_json(
         make_response(msg_id, msg_type, {"ok": True, "display_name": display_name})
     )
@@ -11448,31 +11553,38 @@ async def pane_generate_auto_name(session: "Session", msg_id: str, msg_type: str
         return
 
     name = result["name"]
-    project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
-        ws_raw, pane_id=pane_id, auto_name=name, source="llm"
-    )
-    if project is not None and changed:
-        await asyncio.to_thread(
-            app.spawn_history_store.patch_entry,
-            ws_raw,
-            pane_id,
-            {"autoName": name},
-            seed=project.ui_spawn_history,
+
+    async def _persist_and_announce() -> bool:
+        project, changed = await run_in_db_thread(app.project_store.set_pane_auto_name,
+            ws_raw, pane_id=pane_id, auto_name=name, source="llm"
         )
-        await app.broadcast(
-            make_event(
-                "project.ui_state_changed",
-                {
-                    "workspace_path": project.workspace_path,
-                    "auto_named_pane": {
-                        "pane_id": pane_id,
-                        "auto_name": name,
-                        "source": "llm",
+        if project is not None and changed:
+            await asyncio.to_thread(
+                app.spawn_history_store.patch_entry,
+                ws_raw,
+                pane_id,
+                {"autoName": name},
+                seed=project.ui_spawn_history,
+            )
+            await app.broadcast(
+                make_event(
+                    "project.ui_state_changed",
+                    {
+                        "workspace_path": project.workspace_path,
+                        "auto_named_pane": {
+                            "pane_id": pane_id,
+                            "auto_name": name,
+                            "source": "llm",
+                        },
                     },
-                },
-            ),
-            exclude=session,
-        )
+                ),
+                exclude=session,
+            )
+        return changed
+
+    # Once the name is being written, the spawn-history mirror and the other
+    # windows get it too, even if the requester hangs up meanwhile.
+    changed = await _outlive_requester(_persist_and_announce())
     # 'changed' is reported so the caller can tell an accepted upgrade from one
     # the arbiter refused (the pane was renamed while the model was thinking).
     await session.send_json(make_response(
@@ -12377,6 +12489,15 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", unsafe))
         return
 
+    remote_target: dict[str, Any] | None = None
+    if payload.get("remote") is not None:
+        from . import remote_devcontainer
+
+        try:
+            remote_target = remote_devcontainer.parse_remote(payload.get("remote"))
+        except remote_devcontainer.RemoteSpecError as err:
+            await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+            return
     manual_pin = _profile_pin_for_bookkeeping(
         payload.get("agent", ""), payload.get("pane_id"), payload.get("profile_id"))
     # A rebuild re-keys the old record onto the new id; read the session the old
@@ -12417,6 +12538,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         spawned_by=payload.get("spawned_by", ""),
         launch_id=launch_id.current(),
         opened_by=str(payload.get("opened_by") or ""),
+        remote=remote_target,
     )
     await run_in_db_thread(app.pane_account_history.pin, str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(

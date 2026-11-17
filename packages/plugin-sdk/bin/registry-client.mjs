@@ -11,7 +11,10 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { readRegularFileNoFollow } from './package-files.mjs'
 
+// The Official Registry's API stays on the Navide server host; its sign-in
+// and developer pages live on the developer console.
 export const OFFICIAL_REGISTRY = 'https://server.navide.dev/registry'
+export const DEVELOPER_CONSOLE = 'https://developers.navide.dev'
 export const TOKEN_ENV = 'NAVIDE_PLUGIN_TOKEN'
 export const REGISTRY_ENV = 'NAVIDE_REGISTRY_URL'
 const CONFIG_DIR_ENV = 'NAVIDE_PLUGIN_CONFIG_DIR'
@@ -20,6 +23,12 @@ const LOGIN_TIMEOUT_MS = 300_000
 /** --registry, then NAVIDE_REGISTRY_URL, then the Official Registry. */
 export function registryUrl(option) {
   return (option || process.env[REGISTRY_ENV] || OFFICIAL_REGISTRY).replace(/\/+$/, '')
+}
+
+/** Where the browser pages of `registry` live: the console for the Official
+ *  Registry (exact match), the Registry itself for any other one. */
+export function pagesUrl(registry) {
+  return registry === OFFICIAL_REGISTRY ? DEVELOPER_CONSOLE : registry
 }
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
@@ -159,7 +168,7 @@ export async function login(registry, { label, noBrowser, timeoutMs = LOGIN_TIME
   const challenge = base64Url(createHash('sha256').update(verifier).digest())
   const { port, result } = await startCallbackServer(timeoutMs)
   const query = new URLSearchParams({ port: String(port), state, code_challenge: challenge, label })
-  const url = `${registry}/cli/authorize?${query}`
+  const url = `${pagesUrl(registry)}/cli/authorize?${query}`
   console.log(`Opening ${url}\nIf the browser does not open, visit that URL.`)
   if (!noBrowser) openBrowser(url)
   const received = await result

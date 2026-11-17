@@ -128,6 +128,7 @@ const locatorStatusRight = computed(() => [sample('clock')])
     <!-- Where each chapter lives. The marks are chapter numbers, so the
          picture doubles as this topic's table of contents. -->
     <MockFigure
+      shot="icons.locator"
       :caption="$t('settings.help.icons.mock.locator.caption')"
       :legend="locatorLegend"
     >

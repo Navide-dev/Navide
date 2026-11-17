@@ -6,7 +6,8 @@
   sign-in-gated publisher, developer, CLI-login, admin and Testplace pages.
 - A legacy host (legacy_hosts, e.g. server.navide.dev) keeps serving the API,
   downloads and sign-in callbacks under root_path for Apps and CLIs that have
-  the old URL built in; its website pages redirect to legacy_redirect_to.
+  the old URL built in; its console pages redirect to the same path on the
+  console and its storefront pages to legacy_redirect_to.
 
 Neither the storefront nor the console serves the API. A page asked for on
 the wrong one of the two is redirected to the right one, same path. Every
@@ -47,12 +48,18 @@ _DEVELOPER_PAGE = re.compile(
 _STORE_FORM = re.compile(r"^/extensions/[^/]+/[^/]+/(?:rating|rating/delete|report)$")
 _STORE_ASSET = re.compile(r"^/extensions/[^/]+/[^/]+/[^/]+/assets/.+$")
 _DEVELOPER_FORM = re.compile(r"^/(?:publisher|developer|cli|admin)/.+$")
-_SHARED = re.compile(r"^/(?:login|logout|robots\.txt|auth/.+|static/.+)$")
+_SHARED = re.compile(
+    r"^/(?:login|logout|robots\.txt|auth/.+|static/.+"
+    r"|navide-auth/registry/sso(?:/login)?)$"
+)
+# /navide-auth/registry/sso[/login] is navide-auth's sign-in page, served on
+# each host by auth_proxy.py when REGISTRY_AUTH_UPSTREAM is set (404 otherwise).
 # On the legacy host /login is a page too (it starts a sign-in there); its
 # /auth/* stays served so a sign-in begun before the move can finish.
-# The old CLI opens this page on the legacy host to sign in; it moves to the
-# console instead of the legacy redirect target so that sign-in keeps working.
-_CLI_LOGIN_PAGE = "/cli/authorize"
+# Old Apps and CLIs open the sign-in, developer, publisher and CLI-login pages
+# on the legacy host; they move to the same path on the console, query kept,
+# so those links keep working. Only storefront pages go to legacy_redirect_to.
+_LOGIN_PAGE = "/login"
 
 
 def page_owner(path: str) -> str | None:
@@ -108,6 +115,17 @@ def host_role(settings: Settings, scope: Scope) -> str:
 def request_role(request) -> str | None:
     """The host role of a request, or None when host routing is off."""
     return request.scope.get("state", {}).get(ROLE_STATE_KEY)
+
+
+STORE_SITE_NAME = "Navide Marketplace"
+DEVELOPER_SITE_NAME = "Navide 開發者後台"
+
+
+def site_name(request) -> str:
+    """The name pages carry in their title and header: the developer console
+    has its own, every other host (storefront, legacy, single-host) is the
+    Marketplace."""
+    return DEVELOPER_SITE_NAME if request_role(request) == DEVELOPER else STORE_SITE_NAME
 
 
 def origin_for(settings: Settings, role: str) -> str:
@@ -169,10 +187,9 @@ class HostRoutingMiddleware:
                     if scope.get("raw_path") is not None:
                         scope["raw_path"] = root.encode() + scope["raw_path"]
             relative = scope["path"][len(root):] or "/"
-            if role == LEGACY and method in ("GET", "HEAD") and (
-                page_owner(relative) or relative == "/login"
-            ):
-                if relative == _CLI_LOGIN_PAGE:
+            owner = DEVELOPER if relative == _LOGIN_PAGE else page_owner(relative)
+            if role == LEGACY and method in ("GET", "HEAD") and owner is not None:
+                if owner == DEVELOPER:
                     location = _with_query(settings.developer_origin + relative, scope)
                 else:
                     location = settings.legacy_redirect_to

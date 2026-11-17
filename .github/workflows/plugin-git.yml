@@ -1,0 +1,77 @@
+name: Navide Git plugin
+
+# navide.git's own suite, outside ci.yml: a change to the plugin or to what its
+# bundle contains runs it, and nothing else does. Its bundle contains
+# @navide/plugin-ui and, through it, plugin-sdk and plugin-contracts (see
+# scripts/official-plugin-fingerprints.mjs). The Host side of the Git bridge
+# contract (src/shared/gitBridgeContract.json) is tested in ci.yml.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'plugins/navide-git/**'
+      - 'packages/plugin-ui/**'
+      - 'packages/plugin-sdk/**'
+      - 'packages/plugin-contracts/**'
+      - 'vitest.config.ts'
+      - 'vitest.plugin.ts'
+      - 'tests/support/publicPackagesSetup.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/plugin-git.yml'
+  pull_request:
+    paths:
+      - 'plugins/navide-git/**'
+      - 'packages/plugin-ui/**'
+      - 'packages/plugin-sdk/**'
+      - 'packages/plugin-contracts/**'
+      - 'vitest.config.ts'
+      - 'vitest.plugin.ts'
+      - 'tests/support/publicPackagesSetup.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/plugin-git.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-git-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Navide Git plugin tests
+    # navide.git has no backend and one universal package: one runner is enough.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      # tests/compositionBoundary.test.ts installs a consumer workspace with
+      # pnpm. pnpm comes from packageManager.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck the plugin
+        run: bun run typecheck:plugin-git
+      - name: Unit and artifact suites
+        run: bun run test:plugin:git --reporter=default --reporter=junit --outputFile.junit=test-results/plugin-git.xml
+      - name: Upload diagnostic artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: plugin-git-diagnostics
+          path: test-results/
+          retention-days: 7

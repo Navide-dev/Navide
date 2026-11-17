@@ -140,6 +140,7 @@ class PaneRecord:
     report_to: str = ""             # messaging handle of the parent this spawned pane owes a report to
     report_pending: bool = False    # that report is still outstanding — persisted so a pane resumed after a restart still reports when its turn ends
     report_cross: bool = False      # report_to is a parent in ANOTHER project (cli_open_agent with workspace_path); set only by that spawn, never inferred from the name
+    remote: dict[str, Any] = field(default_factory=dict)  # remote container target {host, container, network} (remote_devcontainer.parse_remote); {} = a local pane, which is every record written before this field existed
     last_live_launch: str = ""      # launch id (launch_id.py) the pane's CLI last spawned in; cleared by an idle reclaim. "" = no live CLI known, which is every record written before this field existed. Read by the 'auto' resume scope.
 
 
@@ -1004,6 +1005,7 @@ class ProjectStore:
         window_kind: str = "",
         launch_id: str = "",
         opened_by: str = "",
+        remote: dict[str, Any] | None = None,
     ) -> Project:
         with self._save_lock:
             project = self.load_or_create(workspace_path)
@@ -1068,6 +1070,9 @@ class ProjectStore:
             # empty and the record exactly as before.
             if surface: pane.surface = surface
             if window_kind: pane.window_kind = window_kind
+            # Only a remote container pane's spawn passes this (validated by the
+            # caller); a local spawn leaves the record exactly as before.
+            if remote: pane.remote = dict(remote)
             # A rebuild hop owns its session: retire any OTHER spawned manual
             # record sharing it (legacy duplicate accumulation) so restore cannot
             # resurrect a ghost pane. Gated on previous_pane_id for the same

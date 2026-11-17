@@ -66,6 +66,7 @@ in-repo docs above.
    the integration branch. Then one PR, one CI, main, the release dry run, and
    the user's go. Bug fixes go in the current version, never the next one.
 7. **Secrets never leave the machine**: no cloud sync, no git history, no fixtures, no logs; tests build fakes at runtime.
+8. **Log what ships**: after any release or deploy completes, call `ship_log_record`.
 
 ## Workflow (Plan Documents)
 

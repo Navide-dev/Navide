@@ -2745,14 +2745,48 @@ Because the installed copy wins a tie, content must never change under a
 released version. `plugins/official-plugin-fingerprints.json` is the release
 baseline: each plugin's version and a fingerprint of the tracked sources its
 package is built from (its directory, the `packages/plugin-*` workspace packages
-and, for Plans, the core modules its backend bundles; tests and Markdown
-excluded) as of the last App release tag. When a plugin's content differs from
+its bundle really contains, without the `plugin-sdk` command-line tools in
+`bin/`, and, for Plans, the `navide_plugin_sdk` Python modules its backend
+bundles; tests and Markdown excluded) as of the last App release tag. Nothing
+of the Host is an input: its UI strings live in `src/renderer/src/i18n/locales`
+and its backend in `agent_team_backend`, so a Host-only change never asks for a
+plugin bump; `node scripts/official-plugin-fingerprints.mjs --probe <path>`
+names the plugins a change to one file would move. When a plugin's content differs from
 that baseline, its version must be higher than the baseline version: bump it
 once in the plugin's `manifest.json`, its `package.json` and
 `officialPluginVersions.ts`, and later changes in the same release cycle need
 no further bump. A version below the baseline is always refused.
 `tests/infrastructure/officialPluginFingerprints.test.ts` checks this on every
 PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
+
+navide.git reaches its Git operations over a first-party bridge, not a
+public capability: the Host maps the `git.*` requests in
+`src/shared/gitBridgeContract.json` (78 requests and 3 events, version 1.0.0)
+for that package alone, and there is no public `git` namespace. The plugin
+keeps a copy of the contract it is built against
+(`plugins/navide-git/src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`);
+both sides test their copy against a frozen digest, the Host additionally
+against its capability map and backend handlers. Adding a message is a minor
+contract version and removing or renaming one a major, released in the Host
+before a Git version that needs it (raising Git's `engines.navide`). See
+`RELEASING.md` ("Releasing navide.git on its own").
+
+UI strings are split the same way. `@navide/plugin-ui` ships only the strings
+its own components use (`packages/plugin-ui/src/foundation/i18n/locales`), and
+its `enUSMessages`, `zhTWMessages` and `jaJPMessages` exports are those
+catalogs alone. The Host merges its own strings into the shared `i18n`
+instance from `src/renderer/src/i18n/locales`, and each first-party plugin
+merges its own from `plugins/<dir>/src/locales` before it mounts (Git and
+Mini-IDE in `gitMessages.ts` and `miniIdeMessages.ts`, Plans and Browser in
+`plansI18n.ts` and `browserI18n.ts`). A string the Host and a plugin both
+show stays in plugin-ui. `tests/infrastructure/i18nOwnership.test.ts` fails
+when code references a string its own catalogs do not ship.
+
+Each first-party plugin also runs its own tests:
+`plugins/<dir>/vitest.config.ts` (built by `vitest.plugin.ts`) collects that
+directory alone, and the root `vitest.config.ts` no longer collects
+`plugins/**`. `pnpm test:plugins` runs every plugin's unit suite, one plugin
+at a time.
 
 ### First-party production Plans package
 
@@ -2761,7 +2795,13 @@ consumes the shared agent Execution Policy. One active Manifest v2 package
 version supplies both custom Plans contributions (`left` and `window`) and the
 self-contained Backend Wire executable. The package imports only the public SDK
 and UI packages; the Host selects its exact package/version, grant, workspace
-binding, backend methods, events, and private Bridge ports.
+binding, backend methods, events, and private Bridge ports. Its backend bundles
+the Python plugin SDK, `backend/navide_plugin_sdk`, which holds the path
+guard, write path, Git-internal path check and plan versions itself
+(`path_guard.py`, `fs_write.py`, `git_security.py`, `plan_versions.py`,
+standard library only) and imports nothing of `agent_team_backend`; the core
+backend imports the same modules under their old `agent_team_backend` names,
+which resolve to these.
 
 MCP integration uses the current core backend architecture introduced by
 `4a6cc02a`. The core owns the single server and endpoint, authentication, caller
@@ -3383,7 +3423,11 @@ and agent tools; it cannot be removed.
   path is part of its identity, so another path on the same host is not
   official. The Marketplace website (`https://marketplace.navide.dev`) and
   developer console (`https://developers.navide.dev`) serve no API and are not
-  Registry identities.
+  Registry identities. Browser pages are the only thing that moved: the App's
+  developer sign-in and `navide-plugin login` open `/cli/authorize` on the
+  developer console for the Official Registry (exact match), and the
+  Registry redirects the old `/registry` sign-in, developer and publisher pages
+  to the same path there, query kept.
 - Registry envelope signatures identify the Registry signer key ID. Root-signed
   trust metadata records active,
   rotating, expired, and revoked keys. Rotation has a bounded old/new overlap.

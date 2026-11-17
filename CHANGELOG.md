@@ -4,6 +4,29 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Shipped Log (0.2.44, MVP): a new built-in Navide plugin, `navide.shipped-log`, answers "what went live since …". Agents record a change once it is live with `ship_log_record` (a plain-language line, `commit`/`config`/`migration`/`other`, optional ref and time; a production setting is sensitive by default), and `ship_log_report` merges those entries with the deploy branch's first-parent commits (`main`, else `master`) and the tags created in the window, one item per commit, each naming its basis (agent, branch or tag). In a bound chat, `/shipped [today|yesterday|7d|ISO time]` answers from the backend without waking the pane; a sensitive item there is only counted, and secrets and email addresses are masked. An entry that looks like it carries a secret is refused, never stored. The ledger lives in the workspace's own `.agent-team/navide.db` and never leaves the machine. Plugins can no longer derive the `ship_` agent-tool prefix.
+- Account order (0.2.44): in Settings → Accounts, drag an account card by its handle to rank a CLI's accounts, the built-in Default included. Automatic switching then picks the first account in that order that is not in use, is signed in and has quota left; without an order it ranks by remaining quota exactly as before. The usage badge's account list, its "next" tag and the Telegram `/account` menu follow the same order. API key accounts are still tried only after every subscription account, wherever they are ranked. Which panes a switch moves, manual switching and Make All Follow are unchanged.
+
+### Changed
+
+- Plugins (0.2.44): the App-bundled plugins no longer move with the Host. The Host's own UI strings left the shared `@navide/plugin-ui` catalogs for `src/renderer/src/i18n/locales`, and Git and Mini-IDE now ship their own strings, as Plans and Browser already did, so a Host-only string change leaves every plugin's fingerprint as it was (`node scripts/official-plugin-fingerprints.mjs --probe <path>` shows which plugins a change would move). A fingerprint counts only the workspace packages a plugin's bundle contains, without the `plugin-sdk` command-line tools, and the Plans backend bundles the Python plugin SDK, which now holds the path guard, write path, Git-internal path check and plan versions itself instead of borrowing them from the core backend. Each plugin runs its own tests through `plugins/<dir>/vitest.config.ts` (`pnpm test:plugins`). The plugins move once to Navide Browser 1.1.5, Git 1.0.8, Mini-IDE 1.0.7 and Plans 1.1.7; what they show is unchanged.
+- Navide Git plugin (0.2.44): navide.git is tested and released on its own. Its own workflow (`plugin-git.yml`) runs its suite when the plugin or a package its bundle contains changes, and the main CI no longer does. The Host's first-party Git bridge is now a versioned contract (1.0.0: 78 `git.*` requests and 3 events) that the Host and the plugin each test their copy of, so a Git release through the Navide Marketplace cannot quietly depend on a Host it does not run on. The bridge stays first-party only.
+
+### Fixed
+
+- Navide Marketplace (0.2.44): the developer sign-in in Settings → Developer and `navide-plugin login` open the sign-in page on `https://developers.navide.dev` directly instead of the old `server.navide.dev/registry` address and its redirect. The App and the CLI still talk to the same Registry API, so installed plugins, their signatures and Registry trust are unchanged and nothing needs confirming again.
+- Navide Registry (0.2.44): the old `server.navide.dev/registry` sign-in, developer, publisher, publish and admin pages that older Apps and CLIs open redirect to the same page on `https://developers.navide.dev`, query kept, instead of the navide.dev home page. Takes effect with the next Registry deployment.
+- Guard asks before the forms 0.2.43 listed as not covered: credential paths reached through `${P:-x}`, `${P%…}` and other parameter expansions; readers wrapped in `timeout`, `nice` or `env -u` given a variable too long to follow; credential paths handed on through `xargs`; and `curl --data-binary @- < file` (and other stdin uploads) of a credential, now marked as a credential upload. A terminal allow prefix no longer lets a line read a credential file.
+- Telegram (0.2.44): a contact, location, venue or sticker sent to a bound chat was dropped without a trace; it now goes to the pane as a line of text tagged `[Contact]`, `[Location]`, `[Venue]` or `[Sticker]` (a contact with its name and phone number). Other kinds no pane can take (a poll, a dice roll, a story, …) are answered in the chat with "not supported, not sent to the pane", and the backend log names every message that ends without reaching a pane (by its field names only, never its content).
+- Chat channels (0.2.44): a chat message that reached Navide but never went to a pane could leave no trace in the log, as two plain-text Telegram messages did on 2026-11-16. Binding changes (bound, moved, renamed, removed) are now logged with the pane they went from and to, an inbound job that runs over 60 seconds is logged while it runs and when it ends, a cancelled chat worker logs how many jobs it did not finish, and an invite code is logged as not for a pane. Only a hash of the chat is logged, never its id or the message text; nothing behaves differently.
+
+### Known limitations
+
+- Account switching (0.2.44): `claude` started by hand inside a terminal pane follows a hot switch of this computer's Claude account, and Navide cannot tell; it sees a shell, not a Claude pane.
+- Remote container panes (0.2.44, experimental): the pane runs under its own `remote` kind, so account switching and automatic quota failover never apply to it. The CLI's logs and hooks live in the container, so Navide reports no turn end from them, shows no token statistics, and keeps no session id for resume (Reconnect starts a new session). `cli_open_agent` cannot open one, so there is no kickoff prompt; `cli_send` works. Meeting and spotlight pane lists show "remote" instead of the CLI's name.
+
 ## [0.2.43] — 2026-11-14
 
 ### Added
@@ -30,6 +53,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Windows (0.2.43): reopening a workspace no longer adds an empty "Default 0/0" tab beside the tab holding its restored panes.
 - Accounts (0.2.43): adding, renaming or removing an account and closing the window that asked right away no longer leaves other windows' account lists and quota badges on old data; the change notice now always reaches every window.
 - Grok (0.2.43): a Grok pane in a deeply nested workspace (whose encoded folder name is over 255 bytes, often with CJK characters) could not scope or resume its sessions. Navide now finds the session group through Grok's `.cwd` marker; short paths are found as before.
+- Navide Guard (0.2.43): the answer a CLI shows names at most three reasons, and they were taken in the order the rules fired, so on Windows a PowerShell credential read piped to a stdin upload could show only opaque notes (unmodelled syntax, a computed command name) and leave out "uploads a secret file". Reasons are now named most severe rule first; verdicts, levels and actions are unchanged (#890).
 
 ### Security
 

@@ -50,11 +50,13 @@ async def test_every_live_core_tool_is_reserved() -> None:
 
     from agent_team_backend.mcp_server import server as core
     from agent_team_backend.plugins.builtin.navide_plans import plan_tools
+    from agent_team_backend.plugins.builtin.navide_shipped_log import ship_log_tools
     from agent_team_backend.plugins.builtin.navide_skills import skills_tools
 
     plugin_installed = FastMCP(name="contract-probe")
     plan_tools.install(plugin_installed)
     skills_tools.install(plugin_installed)
+    ship_log_tools.install(plugin_installed)
     live = {tool.name for tool in await core.server.list_tools()}
     live |= {tool.name for tool in await plugin_installed.list_tools()}
     assert live == set(tools.CORE_TOOL_NAMES)

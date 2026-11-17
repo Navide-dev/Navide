@@ -462,6 +462,23 @@ async def test_get_me_says_whether_the_bot_can_manage_bots(flag, expected) -> No
     assert dataclasses.asdict(ad.status)["can_manage_bots"] is expected
 
 
+async def test_can_manage_bots_is_kept_while_recovering() -> None:
+    # Settings → Channels keeps Telegram's "Create a New Bot" (disabled) through a
+    # reconnect, which relies on the last getMe answer staying in the status.
+    with FakeBotApi(TOKEN, can_manage_bots=True) as fake:
+        got, emit = _collect()
+        ad = TelegramAdapter(TOKEN, base_url=fake.base_url, backoff=lambda a, r: 0.5, poll_timeout_s=1)
+        await ad.start(emit)
+        try:
+            await _until(lambda: ad.status.lifecycle == "ready")
+            fake.fail("getUpdates", 502, "Bad Gateway", times=1)
+            await _until(lambda: ad.status.lifecycle == "recovering")
+            assert ad.status.connected is False
+            assert dataclasses.asdict(ad.status)["can_manage_bots"] is True
+        finally:
+            await ad.stop()
+
+
 async def test_a_managed_bot_update_goes_to_the_handler_and_not_to_chats(api: FakeBotApi) -> None:
     got, emit = _collect()
     handled: list[dict] = []
@@ -545,7 +562,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "prompts", "skills", "mcp", "status", "stop", "cancel", "resume", "model", "account"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "prompts", "skills", "mcp", "status", "stop", "cancel", "resume", "model", "account", "shipped"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -555,7 +572,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "prompts", "skills", "mcp", "stop", "cancel", "resume", "model", "account"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "prompts", "skills", "mcp", "stop", "cancel", "resume", "model", "account", "shipped"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
@@ -829,3 +846,45 @@ async def test_a_second_gap_within_an_hour_is_not_told_again(api: FakeBotApi) ->
         await ad.stop()
     assert missed == [2]
     assert ad.status.missed_updates == 5
+
+
+async def test_contact_location_venue_and_sticker_go_in_as_text(api: FakeBotApi) -> None:
+    got, emit = _collect()
+    phone = "+886" + "900000000"  # built at run time: no real-looking number in the source
+    api.push_message(chat_id=42, text="", extra={"contact": {"first_name": "Ada", "last_name": "Lu",
+                                                             "phone_number": phone}})
+    api.push_message(chat_id=42, text="", extra={"location": {"latitude": 25.03, "longitude": 121.56}})
+    api.push_message(chat_id=42, text="", extra={
+        "venue": {"title": "Cafe", "address": "1 Road", "location": {"latitude": 1.5, "longitude": 2.5}},
+        "location": {"latitude": 1.5, "longitude": 2.5}})
+    api.push_message(chat_id=42, text="", extra={"sticker": {"emoji": "👍", "file_id": "s1"}})
+    ad = _adapter(api)
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) >= 4)
+    finally:
+        await ad.stop()
+    assert [m.text for m in got] == [
+        f"[Contact] Ada Lu {phone}", "[Location] 25.03, 121.56", "[Venue] Cafe 1 Road (1.5, 2.5)", "[Sticker] 👍"]
+    assert all(m.unsupported_kind == "" and m.attachments == [] for m in got)
+
+
+async def test_an_unsupported_kind_is_emitted_to_be_told_and_logged_by_field_name(api: FakeBotApi, caplog) -> None:
+    got, emit = _collect()
+    api.push_message(chat_id=42, text="", extra={"poll": {"question": "secret question?"}})
+    api.push_message(chat_id=42, text="", extra={"pinned_message": {"message_id": 1}})  # service: dropped
+    api.push_message(chat_id=42, text="from a bot", is_bot=True)  # dropped
+    api.push_message(chat_id=42, text="after")
+    ad = _adapter(api)
+    caplog.set_level("INFO", logger="agent_team_backend.channels.telegram")
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(got) >= 2)
+    finally:
+        await ad.stop()
+    assert [(m.text, m.unsupported_kind) for m in got] == [("", "poll"), ("after", "")]
+    log_text = caplog.text
+    assert "dropped: unsupported content (fields: chat,date,from,message_id,poll,text); the chat is told" in log_text
+    assert "(fields: chat,date,from,message_id,pinned_message,text)\n" in log_text  # not told
+    assert "dropped: sent by a bot" in log_text
+    assert "secret question" not in log_text

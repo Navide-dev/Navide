@@ -230,6 +230,7 @@ def test_corrupt_registry_starts_empty(tmp_path: Path) -> None:
         "defaults": {key: None for key in profiles_mod.SUPPORTED_AGENT_KEYS},
         "defaultNames": {},
         "paneDefaults": {},
+        "slotOrder": {},
     }
 
 
@@ -386,3 +387,29 @@ def test_set_default_name_cleans_like_rename(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="64"):
         store.set_default_name("claude", "z" * 65)
     assert store.list()["defaultNames"] == {"claude": "Home"}
+
+
+def test_slot_order_is_stored_per_agent_and_validated(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    a = store.create(agent_key="claude", name="A")
+    b = store.create(agent_key="claude", name="B")
+    other = store.create(agent_key="codex", name="C")
+    order = [b["id"], profiles_mod.DEFAULT_SLOT_ID, a["id"]]
+    assert store.set_slot_order("claude", order) == {"claude": order}
+    assert store.list()["slotOrder"] == {"claude": order}
+    with pytest.raises(ValueError):
+        store.set_slot_order("claude", [a["id"], a["id"]])
+    with pytest.raises(ValueError):
+        store.set_slot_order("claude", [other["id"]])
+    with pytest.raises(ValueError):
+        store.set_slot_order("no-such-cli", [])
+    store.delete(b["id"])
+    assert store.list()["slotOrder"] == {"claude": [profiles_mod.DEFAULT_SLOT_ID, a["id"]]}
+    assert store.set_slot_order("claude", []) == {}
+
+
+def test_normalize_keeps_only_well_formed_slot_orders() -> None:
+    doc = CliProfilesStore._normalize_doc({
+        "slotOrder": {"claude": ["x", "x", 3, "", "y"], "codex": "nope", "kimi": [], "unknown": ["z"]},
+    })
+    assert doc is not None and doc["slotOrder"] == {"claude": ["x", "y"]}

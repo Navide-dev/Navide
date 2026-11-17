@@ -43,12 +43,19 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: _notify_commit_listeners, called once at the end of _after_commit, hand a
 #: copy of the committed switch to failover_notice on its own task. Nothing
 #: in detection, ranking, the budget, the swap or the audit row changed.
+#: quota_failover was updated deliberately in 0.2.44 for the user's account
+#: order (user-approved rule A, 2026-11-16): rank_candidates takes slot_order
+#: and sorts eligible accounts by their position in it first; candidates()
+#: passes the profiles store's slotOrder. With no order the sort key reduces
+#: to the old tier/headroom/fetchedAt/slotId one (test_quota_failover
+#: regression tests). Exclusion, detection, the budget and the swap are as
+#: before.
 MAIN_DIGESTS = {
     "usage_service": (
         "e5672d4b14a3bc7e0674f42c8710bbe4920e6bb1be242da276563b06dd6b49e1", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "6629199a2b55dc956d6f99512ebbcfce6e9b1ea1752d31fbc0a283cbb17a4a8f", frozenset(),
+        "534dd11c92157732e4ab3207eed2382d09cf46da5ee945d326f7ff194e3497d9", frozenset(),
     ),
 }
 

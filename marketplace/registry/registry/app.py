@@ -20,6 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
 from . import audit, cloud_auth, qualification
+from .access_log import AccessLogMiddleware, RouteTemplateMiddleware
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import TRUST_PROFILE_SELF_HOSTED_DEV, VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
@@ -211,6 +212,8 @@ def create_app(
         root_path=settings.root_path,
     )
     app.state.registry = state
+    # Innermost: sees the router's scope (access_log.py).
+    app.add_middleware(RouteTemplateMiddleware)
     if settings.host_routing_enabled:
         from .host_routing import HostRoutingMiddleware
 
@@ -244,10 +247,15 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .auth_proxy import create_auth_proxy_router
+
+    app.include_router(create_auth_proxy_router())
     from .testplace_web import create_testplace_admin_router
 
     app.include_router(create_testplace_admin_router())
     app.add_middleware(_HtmlSecurityHeadersMiddleware, csp=html_content_security_policy(settings))
+    # Outermost: the duration covers every middleware.
+    app.add_middleware(AccessLogMiddleware)
     return app
 
 

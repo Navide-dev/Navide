@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import bisect
 import fnmatch
+import functools
 import os
 import posixpath
 import re
@@ -1068,17 +1069,84 @@ LONG_VARS_CHARS = 64_000
 LONG_EXPANSION_CHARS = 256_000
 
 
+#: `${NAME<op>word}` and `${#NAME}`: (length mark, name, operator and word).
+_OP_REF_RE = re.compile(r"\$\{(#?)([A-Za-z_][A-Za-z0-9_]*)([^A-Za-z0-9_}][^{}]*)?\}")
+_DEFAULT_OPS = (":-", ":=", ":?", "-", "=", "?")
+_TRIM_OPS = ("%%", "##", "%", "#")
+
+
+def _ref_names(word: str) -> list[str]:
+    """Every variable name `word` reads, in any `$` form."""
+    return [m.group(1) or m.group(2) for m in _VAR_REF_RE.finditer(word)] + [
+        m.group(2) for m in _OP_REF_RE.finditer(word)]
+
+
+#: A glob trim tries every cut, so it is only worked out for values this short;
+#: a longer one stands in as the whole value (escalation only, see _param).
+_GLOB_TRIM_CHARS = 64
+
+
+@functools.lru_cache(maxsize=4096)
+def _trim(value: str, op: str, pattern: str) -> str:
+    """`${V%p}` `${V%%p}` `${V#p}` `${V##p}`, the pattern read as a glob."""
+    if not _GLOB_CHARS & set(pattern):
+        if op.startswith("%"):
+            return value[: len(value) - len(pattern)] if pattern and value.endswith(pattern) else value
+        return value[len(pattern):] if value.startswith(pattern) else value
+    if len(value) > _GLOB_TRIM_CHARS:
+        return value
+    n = len(value)
+    if op in ("%", "%%"):
+        cuts = range(n, -1, -1) if op == "%" else range(n + 1)
+        return next((value[:i] for i in cuts if fnmatch.fnmatchcase(value[i:], pattern)), value)
+    cuts = range(n + 1) if op == "#" else range(n, -1, -1)
+    return next((value[i:] for i in cuts if fnmatch.fnmatchcase(value[:i], pattern)), value)
+
+
+def _param(m: re.Match, values: dict[str, str]) -> str:
+    """One `${...}` with an operator, as the shell would write it out when
+    the name is known; a default word stands in for an unknown name. Forms
+    not modelled (`/`, `:off`, `^`, `@`) stand in as the whole value, which
+    is only ever read to escalate (_indirect_credentials)."""
+    length, name, rest = m.group(1), m.group(2), m.group(3) or ""
+    value = values.get(name)
+    if length:
+        return m.group(0) if value is None or rest else str(len(value))
+    if not rest:
+        return m.group(0) if value is None else value
+    for op in _DEFAULT_OPS:
+        if rest.startswith(op):
+            word = rest[len(op):]
+            unset = value is None or (op.startswith(":") and value == "")
+            return (m.group(0) if op.endswith("?") else word) if unset else value
+    for op in (":+", "+"):
+        if rest.startswith(op):
+            return rest[len(op):] if value else ""
+    if value is None:
+        return m.group(0)
+    for op in _TRIM_OPS:
+        if rest.startswith(op):
+            return _trim(value, op, rest[len(op):])
+    return value
+
+
 def _expanded_len(word: str, values: dict[str, str]) -> int:
-    """Length of `word` with its known variables written out, without building it."""
+    """Length of `word` with its known variables written out, without building
+    it; an upper bound where an operator is applied to one."""
     return len(word) + sum(
         len(values[name]) - len(m.group(0))
         for m in _VAR_REF_RE.finditer(word)
         if (name := m.group(1) or m.group(2)) in values
-    )
+    ) + sum(len(values[m.group(2)]) for m in _OP_REF_RE.finditer(word) if m.group(2) in values and (m.group(1) or m.group(3)))
 
 
 def _subst_vars(word: str, values: dict[str, str]) -> str:
-    """`$NAME` and `${NAME}` replaced by the values set earlier; others kept."""
+    """`$NAME`, `${NAME}` and `${NAME<op>...}` replaced by the values set
+    earlier (see _param); others kept. Two passes reach one nested level,
+    `${A:-${B}}`."""
+    if "${" in word:
+        for _ in range(2):
+            word = _OP_REF_RE.sub(lambda m: _param(m, values), word)
     return _VAR_REF_RE.sub(lambda m: values.get(m.group(1) or m.group(2), m.group(0)), word)
 
 
@@ -1119,8 +1187,17 @@ _READ_OR_SEND = DOWNLOADERS | DECODERS | {
 }
 
 
+def _command_word(argv: list[str]) -> str:
+    """The command a word list runs once its wrappers (env, timeout, nice,
+    sudo, xargs, ...) are taken off, as _classify_pipeline sees it."""
+    inner, _ = _unwrap(list(argv), _Acc())
+    return os.path.basename(inner[0]).lower() if inner else ""
+
+
 def _reads_or_sends(cmd: _Cmd) -> bool:
     if any(op in ("<", "<>") for op, _ in cmd.redirects):
+        return True
+    if _command_word(cmd.argv) in _READ_OR_SEND:
         return True
     for word in cmd.argv:
         if _ASSIGN_RE.match(word) or word in WRAPPERS_NO_ARG or word in {"sudo", "env", "xargs"} or word.startswith("-"):
@@ -1135,7 +1212,7 @@ def _unfollowed_reads(pipeline: list[_Cmd], capped: set[int], ctx: _Ctx, acc: _A
     if ctx.unfollowed:
         for i, c in enumerate(pipeline):
             words = [*c.argv, *(t for _, t in c.redirects)]
-            if any((m.group(1) or m.group(2)) in ctx.unfollowed for w in words for m in _VAR_REF_RE.finditer(w)):
+            if any(name in ctx.unfollowed for w in words for name in _ref_names(w)):
                 capped.add(i)
     if any(_reads_or_sends(pipeline[i]) for i in capped):
         acc.hit("critical", "dynamic-path-read", "reads or sends a path held in a variable too long to follow")
@@ -1160,7 +1237,7 @@ def _record_assignments(argv: list[str], ctx: _Ctx, acc: _Acc) -> None:
             _too_big_to_follow(acc)
             ctx.unfollowed.add(name)
             continue
-        if any((r.group(1) or r.group(2)) in ctx.unfollowed for r in _VAR_REF_RE.finditer(m.group(2))):
+        if any(ref in ctx.unfollowed for ref in _ref_names(m.group(2))):
             ctx.unfollowed.add(name)  # built from one Guard stopped holding
         else:
             ctx.unfollowed.discard(name)
@@ -1217,7 +1294,8 @@ def _indirect_credentials(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downlo
 
 
 def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads: set[int], depth: int) -> None:
-    capped = _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth) if ctx.vars else set()
+    defaults = any(_OP_REF_RE.search(w) for c in pipeline for w in (*c.argv, *(t for _, t in c.redirects)))
+    capped = _indirect_credentials(pipeline, ctx, acc, sub_downloads, depth) if ctx.vars or defaults else set()
     _unfollowed_reads(pipeline, capped, ctx, acc)
     if len(pipeline) == 1:
         _record_assignments(pipeline[0].argv, ctx, acc)
@@ -1225,6 +1303,7 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
     piped: list[str] = []  # heredoc bodies and here-strings flowing down the pipe
     for idx, cmd in enumerate(pipeline):
         argv, from_stdin = _unwrap(list(cmd.argv), acc)
+        via_xargs = from_stdin
         from_stdin = from_stdin or idx > 0
         heredocs = _heredoc_bodies(cmd, ctx)
         for body, quoted in heredocs:
@@ -1256,7 +1335,8 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
         if _PLACEHOLDER in word_raw or "$" in word_raw:
             acc.opaque("dynamic-command", "command name is computed at run time")
             continue
-        if any(c.argv and os.path.basename(c.argv[0]) in DOWNLOADERS for c in pipeline[idx + 1:]) and any(
+        if any(c.argv and (os.path.basename(c.argv[0]) in DOWNLOADERS or _command_word(c.argv) in DOWNLOADERS)
+               for c in pipeline[idx + 1:]) and any(
             (path := _resolve(cand, ctx)) and _ssh_public_key(path, ctx) for a in argv[1:] for cand in _arg_paths(a)
         ):
             # Reading a public key is exempt from the credential check (see
@@ -1282,6 +1362,10 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
             if "/" in word_raw:
                 _check_script_exec(word_raw, ctx, acc, sub_downloads)
             _classify_command(word, argv, ctx, acc, from_stdin)
+        if via_xargs and (word in _READ_OR_SEND or word in DOWNLOADERS):
+            _xargs_credentials(word, pipeline[:idx], inputs + piped, ctx, acc)
+        if word in DOWNLOADERS and _sends_stdin(argv[1:]):
+            _stdin_credential_upload(cmd, pipeline[:idx], ctx, acc)
 
         if word in DOWNLOADERS:
             upstream.add("download")
@@ -1290,6 +1374,59 @@ def _classify_pipeline(pipeline: list[_Cmd], ctx: _Ctx, acc: _Acc, sub_downloads
             upstream.add("decode")
         else:
             upstream.add("other")
+
+
+def _secret_paths(words: list[str], ctx: _Ctx) -> list[str]:
+    """Credential stores (not ~/.ssh public keys) named by any of `words`."""
+    out = []
+    for w in words:
+        for cand in _arg_paths(w) or ([w] if w and not w.startswith("-") else []):
+            path = _resolve(cand, ctx)
+            if path and _credential_kind(path, ctx) and not _ssh_public_key(path, ctx):
+                out.append(path)
+    return out
+
+
+def _xargs_credentials(word: str, upstream: list[_Cmd], inputs: list[str], ctx: _Ctx, acc: _Acc) -> None:
+    """`echo ~/.ssh/id_rsa | xargs cat`: xargs hands the words written
+    upstream (arguments, heredocs, here-strings) to a reader or sender, which
+    is graded as if it had been given them."""
+    words = [w for c in upstream for w in _unwrap(list(c.argv), _Acc())[0][1:]]
+    words += [w for body in inputs for w in body.split()]
+    for path in _secret_paths(words, ctx):
+        if word in DOWNLOADERS:
+            acc.hit("critical", "credential-exfil", f"uploads a secret file passed on through xargs: {path}")
+        else:
+            acc.hit("critical", "credential-access", f"reads a credential file passed on through xargs: {path}")
+        return
+
+
+def _sends_stdin(args: list[str]) -> bool:
+    """curl / wget sending its stdin: `@-` in any form, `@/dev/stdin`, `-T -`,
+    `--upload-file -`, `--post-file=/dev/stdin`."""
+    prev = ""
+    for a in args:
+        if any(a.endswith("@" + p) for p in _STDIN_PATHS) or a == "-T-":
+            return True
+        if a in _STDIN_PATHS and prev in {"-T", "--upload-file", "--post-file", "--body-file"}:
+            return True
+        if a.startswith(("--upload-file=", "--post-file=", "--body-file=")) and a.split("=", 1)[1] in _STDIN_PATHS:
+            return True
+        prev = a
+    return False
+
+
+def _stdin_credential_upload(cmd: _Cmd, upstream: list[_Cmd], ctx: _Ctx, acc: _Acc) -> None:
+    """A sender reading its stdin from a credential: `curl --data-binary @- <
+    ~/.aws/credentials`, or a reader piping one in (`cat cred | curl -d @-`)."""
+    words = [t for op, t in cmd.redirects if op in ("<", "<>")]
+    for c in upstream:
+        words += [t for op, t in c.redirects if op in ("<", "<>")]
+        if _command_word(c.argv) in _READ_OR_SEND:
+            words += _unwrap(list(c.argv), _Acc())[0][1:]
+    for path in _secret_paths(words, ctx):
+        acc.hit("critical", "credential-exfil", f"uploads a secret file from stdin: {path}")
+        return
 
 
 def _interpreter_args(word: str, args: list[str]) -> tuple[str | None, str | None, bool]:

@@ -237,3 +237,38 @@ describe('UsageBadge ▸ when quota runs out', () => {
     expect(single.find('[data-testid="pop-failover-mode"]').exists()).toBe(false)
   })
 })
+
+describe('UsageBadge ▸ the user\'s account order', () => {
+  it('lists accounts in that order and re-reads the next one when it changes', async () => {
+    fo.state.value = state('auto')
+    const order = ref<Record<string, string[]>>({ claude: ['bbbb', 'aaaa', '__default__'] })
+    const api = {
+      ...profiles(),
+      slotOrder: order,
+      orderedSlotIds: () => {
+        const ids = order.value.claude ?? []
+        return ids.map((id) => (id === '__default__' ? null : id))
+      },
+    }
+    const w = mount(UsageBadge, {
+      props: { agentKey: 'claude', cliProfiles: api as unknown as ReturnType<typeof useCliProfiles> },
+      global: { plugins: [i18n], stubs: { teleport: true } },
+    })
+    await open(w)
+    const names = () => w.findAll('.usage-acct-row .usage-acct-name').map((n) => n.text())
+    // The Default row keeps its place on top; the accounts follow the order.
+    expect(names().slice(1)).toEqual(['Account B', 'Account A'])
+    expect(fo.previewCandidates).toHaveBeenCalledTimes(1)
+
+    fo.previewCandidates.mockImplementation(async () => [
+      current, { ...candB, slotId: '__default__' }, candB,
+    ])
+    order.value = { claude: ['__default__', 'aaaa', 'bbbb'] }
+    await flushPromises()
+    expect(names().slice(1)).toEqual(['Account A', 'Account B'])
+    expect(fo.previewCandidates).toHaveBeenCalledTimes(2)
+    const tagged = w.findAll('[data-testid="pop-tag-next"]')
+    expect(tagged).toHaveLength(1)
+    expect(tagged[0].element.closest('.usage-acct-row')).toBe(w.findAll('.usage-acct-row')[0].element)
+  })
+})

@@ -41,3 +41,15 @@ export function skipPermissionFlagFor(input: {
   if (input.mode === 'force-on') return flag
   return input.globalYolo ? flag : ''
 }
+
+/** Whether a pane's recorded launch command carried its vendor's bypass flag:
+ *  'on' / 'off', or null for a vendor with no flag (nothing to report).
+ *
+ *  Read from the command the pane actually started with, not from settings:
+ *  the flag is fixed at launch, so a pane started before a settings change —
+ *  or from a custom launch command, which Navide runs as typed — can differ
+ *  from what the settings say now. */
+export function launchBypassState(command: string, flag: string | undefined): 'on' | 'off' | null {
+  if (!flag) return null
+  return command.split(/\s+/).includes(flag) ? 'on' : 'off'
+}

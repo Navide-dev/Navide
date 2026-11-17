@@ -778,10 +778,11 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
-          # No signing yet: there is no Windows code-signing certificate, so
-          # SmartScreen will warn on first run and electron-updater installs
-          # updates without verifying a signature. `--publish never` still
-          # writes latest.yml, which the NSIS updater reads.
+          # Always unsigned here: CI never holds a Windows signing credential.
+          # The installer is signed afterwards on the release manager's Mac
+          # (scripts/sign-windows-local.mjs, docs/en-US/releases.md "Windows
+          # code signing"). Unsigned, SmartScreen warns on first run.
+          # `--publish never` still writes latest.yml, which the NSIS updater reads.
           # electron-builder runs under Node on Windows: under Bun it hangs after
           # the icons-bundle download, in the step that edits Navide.exe's
           # resources (dry run 39303269789). Install and build stay on Bun.
@@ -957,8 +958,7 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
-          # Unsigned for the same reason the x64 build is: there is no Windows
-          # code-signing certificate yet.
+          # Always unsigned, like the x64 build: signing happens locally.
           # electron-builder runs under Node on Windows: under Bun it hangs after
           # the icons-bundle download, in the step that edits Navide.exe's
           # resources (dry run 39303269789). Install and build stay on Bun.
@@ -1049,7 +1049,11 @@ jobs:
     # assets back from GitHub rather than from each job's dist-release means
     # the mirror carries exactly what GitHub will serve — including the
     # Windows latest.yml after the arm64 job merged itself into it.
-    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
+    # With the WINDOWS_SIGN_LOCALLY variable set to true, this and the publish
+    # job are skipped so the release stays a draft until the Windows
+    # installers are signed locally; scripts/sign-windows-local.mjs then runs
+    # mirror.yml itself.
+    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49' && vars.WINDOWS_SIGN_LOCALLY != 'true'
     needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-arm64]
     uses: ./.github/workflows/mirror.yml
     with:
@@ -1064,7 +1068,9 @@ jobs:
     # release-windows-arm64 already implies it, so the dependency is explicit.
     # Any failure upstream skips this job and leaves the release a draft; a
     # "Re-run failed jobs" on the run finishes it once the cause is fixed.
-    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
+    # Skipped under WINDOWS_SIGN_LOCALLY (see mirror-release): the release
+    # manager publishes after signing.
+    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49' && vars.WINDOWS_SIGN_LOCALLY != 'true'
     needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-gates, release-windows-x64, release-windows-arm64, mirror-release]
     name: Publish the GitHub Release
     runs-on: ubuntu-22.04

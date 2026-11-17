@@ -29,6 +29,8 @@ export interface ChannelAccountRow {
 export interface ChannelAccountDeps {
   accounts: AgentAccountSwitchAccounts & {
     profilesForAgent: (agentKey: string) => { id: string; authKind?: string }[]
+    /** Every account in the user's order (null = Default), as automatic switching ranks them. */
+    orderedSlotIds: (agentKey: string) => (string | null)[]
     signedOut: (agentKey: string, profileId: string | null) => boolean
   }
   /** remainingPercent(accountUsageFor(...)) and its stale flag, as the badge reads them. */
@@ -41,10 +43,10 @@ export function channelAccountMenu(args: Record<string, unknown>, deps: ChannelA
   const agentKey = String(args.agentKey ?? '')
   if (agentKey !== CHANNEL_SWITCH_AGENT) return { status: 'unsupported', agentKey }
   const active = deps.accounts.defaultProfileId(agentKey)
-  const ids: (string | null)[] = [
-    null,
-    ...deps.accounts.profilesForAgent(agentKey).filter((p) => p.authKind !== 'api-key').map((p) => p.id),
-  ]
+  const apiKeys = new Set(
+    deps.accounts.profilesForAgent(agentKey).filter((p) => p.authKind === 'api-key').map((p) => p.id),
+  )
+  const ids = deps.accounts.orderedSlotIds(agentKey).filter((id) => id === null || !apiKeys.has(id))
   const rows: ChannelAccountRow[] = ids.map((id) => {
     const usage = deps.usage(agentKey, id)
     return {

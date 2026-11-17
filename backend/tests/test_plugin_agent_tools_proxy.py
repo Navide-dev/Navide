@@ -178,7 +178,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.43 MCP disconnect F (previous pin 6873c749…): the
 #: cli_send description documents `delivered: false` / `parked` for a
 #: placeholder and cli_check_message the "not-opened" hold. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "c6ba74766d1af7134950fa00ddc30da59dc890abc4abc9554cc7d99ceaab6d26"
+#: Re-pinned for 0.2.44 MCP disconnected (previous pin c6ba7476…): the
+#: cli_get_status and cli_list_targets descriptions document
+#: `mcp: "disconnected"`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "ce06b1f21d5abef47584a28c9a58836d6f161dcc45364f8f97b78bd437bdbfa0"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -231,6 +234,9 @@ CHANNEL_CORE_TOOLS = frozenset({
 #: description gained the navide:<name> source for skills shipped with Navide.
 #: No other plan_* or skills_* tool changed.
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
+#: The same for the ship_log_* tools the built-in Shipped Log package
+#: (navide.shipped-log) installs, new in 0.2.44.
+SHIPPED_LOG_TOOLS_SHA256 = "6b200031b48f02c571e3907fedea3352a362fe4cd0eebe19fc8a233c1f808ff5"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],
@@ -380,10 +386,20 @@ async def _builtin_package_tools() -> list[Any]:
     return await probe.list_tools()
 
 
+async def _shipped_log_tools() -> list[Any]:
+    from mcp.server.fastmcp import FastMCP
+
+    from agent_team_backend.plugins.builtin.navide_shipped_log import ship_log_tools
+
+    probe = FastMCP(name="builtin-probe")
+    ship_log_tools.install(probe)
+    return await probe.list_tools()
+
+
 async def _builtin_package_tool_names() -> set[str]:
-    """Names the built-in Plans and Skills packages install on the core server.
-    Other tests in the same run install them there; main's digest is of the
-    server module alone."""
+    """Names the built-in Plans, Skills and Shipped Log packages install on the
+    core server. Other tests in the same run install them there; main's digest
+    is of the server module alone."""
     from mcp.server.fastmcp import FastMCP
 
     from agent_team_backend.plugins.builtin.navide_plans import plan_tools
@@ -392,7 +408,7 @@ async def _builtin_package_tool_names() -> set[str]:
     probe = FastMCP(name="builtin-probe")
     plan_tools.install(probe)
     skills_tools.install(probe)
-    return {tool.name for tool in await probe.list_tools()}
+    return {tool.name for tool in await probe.list_tools()} | {tool.name for tool in await _shipped_log_tools()}
 
 
 async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() -> None:
@@ -428,7 +444,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: the list hashes to MAIN_TOOLS_LIST_SHA256, which is not re-pinned for it.
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect D (previous pin 8e682fa5…).
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect F (previous pin 82ce0a41…).
-ACP_ON_TOOLS_LIST_SHA256 = "12601f4d077e5c7dc2032ab44e7397e479dce93b4b9f8a08fce7bda462a9f88e"
+#: Re-pinned with MAIN for 0.2.44 MCP disconnected (previous pin 12601f4d…).
+ACP_ON_TOOLS_LIST_SHA256 = "9b4f8389a403bc212fef468b3732aa5238c7b5621bc02413925c427802fc94c7"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
@@ -925,6 +942,14 @@ async def test_plan_and_skills_tools_are_byte_identical_to_main() -> None:
         sort_keys=True, separators=(",", ":"), ensure_ascii=True,
     )
     assert hashlib.sha256(probe_text.encode()).hexdigest() == MAIN_PLAN_SKILLS_TOOLS_SHA256
+
+
+async def test_ship_log_tools_are_pinned() -> None:
+    probe_text = json.dumps(
+        [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in await _shipped_log_tools()],
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
+    assert hashlib.sha256(probe_text.encode()).hexdigest() == SHIPPED_LOG_TOOLS_SHA256
 
 
 async def test_tools_list_serves_every_schema_string_neutralized() -> None:

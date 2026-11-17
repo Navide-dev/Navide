@@ -231,6 +231,12 @@ jobs:
           # The step above installs the Registry env everywhere but Windows.
           NAVIDE_REGISTRY_E2E_REQUIRED: ${{ runner.os != 'Windows' && '1' || '' }}
         run: bun run test:frontend --reporter=default --reporter=./tests/cli/contractReporter.ts --reporter=junit --reporter=json --outputFile.junit=test-results/ci/frontend.xml --outputFile.json=test-results/ci/frontend.json
+      # Each App-bundled plugin's own suite (plugins/<dir>/vitest.config.ts),
+      # one plugin at a time; the root config no longer collects plugins/**.
+      # navide.git runs in its own workflow, plugin-git.yml.
+      - name: App-bundled plugin unit suites
+        if: ${{ !cancelled() }}
+        run: bun run test:plugins --skip navide-git --reporter=default --reporter=junit --outputFile.junit=test-results/ci/plugin-{plugin}.xml
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -319,6 +325,9 @@ jobs:
       # Consumes this job's output. The macOS invocation additionally builds
       # the test-only Plans fixtures and exercises the production backend.
       - name: Complete artifact suite and packaged Plans contracts
+        # navide.git's artifact tests run in plugin-git.yml.
+        env:
+          NAVIDE_PLUGIN_TESTS_SKIP: navide-git
         run: bun run test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
       - name: Verify production Plans excludes fixtures
         run: node scripts/verify-plans-production.mjs

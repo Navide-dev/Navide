@@ -355,3 +355,27 @@ async def test_recovery_report_names_the_process_cpu_spent_while_stalled(
     found = re.search(r"recovered after ([\d.]+)s stalled \(process CPU ([\d.]+)s\)", recovery)
     assert found, recovery
     assert float(found.group(2)) < float(found.group(1))
+
+
+@pytest.mark.asyncio
+async def test_recovery_listeners_hear_how_long_the_loop_stalled(
+    fast_watchdog, reports: _Reports, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # mcp_connect_watch re-checks the panes' MCP streams after a stall longer
+    # than the CLIs' reconnect budget (2026-11-15).
+    heard: list[float] = []
+    monkeypatch.setattr(fast_watchdog, "_recovery_listeners", [])
+    fast_watchdog.on_recovery(heard.append)
+    fast_watchdog.on_recovery(heard.append)  # registered once
+    fast_watchdog.start(asyncio.get_running_loop())
+    try:
+        await asyncio.sleep(0.05)
+        await _stall_loop(reports, 0.4)
+        for _ in range(100):
+            if heard:
+                break
+            await asyncio.sleep(0.02)
+    finally:
+        await fast_watchdog.stop()
+
+    assert len(heard) == 1 and heard[0] >= 0.3

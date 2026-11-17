@@ -674,6 +674,33 @@ async def test_delivery_failure_posts_notice(env: Env) -> None:
     await _until(lambda: any("pane-closed" in t for t in env.tg.texts()))
 
 
+async def test_delivery_failure_names_the_pane_and_offers_a_resend(env: Env) -> None:
+    """inject-failed 2026-11-15: the warning did not say which pane, and the text was gone."""
+    env.m._seams.pane_directory = lambda: [{"pane_id": "pane-1", "name": "Appletoken指揮"}]
+    await env.inbound("please do the thing")
+    env.fake.verdicts["k1"] = {"status": "failed", "reason": "inject-timeout"}
+    notice = "⚠️ 訊息沒有送進分格「Appletoken指揮」（inject-timeout）"
+    await _until(lambda: notice in env.tg.texts())
+    [(label, data)] = env.tg.buttons[notice]
+    assert label == "🔁 重送" and data.startswith("nv7:")
+
+    await env.inbound("", callback=data)
+    assert [d[1] for d in env.fake.delivered] == ["please do the thing", "please do the thing"]
+    # One press, one resend: the same button again is expired, not a third copy.
+    await env.inbound("", callback=data)
+    assert len(env.fake.delivered) == 2
+    assert env.tg.texts()[-1] == mgr_mod.MSG_RESEND_EXPIRED
+
+
+async def test_a_resend_button_only_works_in_its_own_chat(env: Env) -> None:
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "failed", "reason": "inject-failed"}
+    await _until(lambda: any(t.startswith("⚠️ 訊息沒有送進分格") for t in env.tg.texts()))
+    [(_, data)] = next(b for t, b in env.tg.buttons.items() if t.startswith("⚠️ 訊息沒有送進分格"))
+    await env.inbound("", callback=data, chat="-200")
+    assert len(env.fake.delivered) == 1
+
+
 async def test_held_gone_posts_notice(env: Env, monkeypatch) -> None:
     monkeypatch.setattr(mgr_mod, "HOLD_FAILURE_AFTER_S", 0.0)
     await env.inbound("go")

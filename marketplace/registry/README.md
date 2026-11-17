@@ -333,14 +333,20 @@ unchanged, and the `Host` header picks the role (`registry/host_routing.py`):
 |---|---|---|---|
 | Storefront, e.g. `https://marketplace.navide.dev` | `/`, `/extensions/{ns}/{name}` and its `/report`, `/removed`, package assets, rating and report forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (allow); pages carry `<link rel="canonical">` | console pages → the console, same path | none |
 | Developer console, e.g. `https://developers.navide.dev` | `/publish`, `/publisher*`, `/developer/apply`, `/cli/authorize`, `/admin/*` (Testplace included), their forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (disallow) | storefront pages → the storefront, same path; `/` → `/publisher` | `noindex, nofollow` |
-| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | every website page (the list above, plus `/login`) → `REGISTRY_LEGACY_REDIRECT_TO`, except `/cli/authorize` → the console with its query (older CLIs open it to sign in) | `noindex, nofollow` |
+| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | console pages (`/login`, `/publish`, `/publisher*`, `/developer*`, `/cli/authorize`, `/admin/*`) → the same path on the console with its query (older Apps and CLIs open them); storefront pages → `REGISTRY_LEGACY_REDIRECT_TO` | `noindex, nofollow` |
 | Any other host (health checks by IP, the container healthcheck) | everything, as with routing off | none | `noindex, nofollow` |
 
 Neither the storefront nor the console serves `/api/*` (404 there). Each of the
 two signs in on its own host: its callback is `<origin>/auth/callback` and its
 cookies are host-only, so both callbacks must be in navide-auth's
 `REGISTRY_RETURN_URLS`; `REGISTRY_AUTH_RETURN_URL` stays the legacy callback so
-a sign-in begun there before the move still finishes. The legacy
+a sign-in begun there before the move still finishes. With
+`REGISTRY_AUTH_UPSTREAM` set, the sign-in page itself stays on that host too:
+`/login` sends the browser to `<origin>/navide-auth/registry/sso`, and the
+registry relays that path and its form post (and nothing else under
+`/navide-auth`) to navide-auth, forwarding only navide-auth's own sign-in
+cookie and the load balancer's X-Forwarded-For entry, and passing back only a
+redirect to the same host's `/auth/callback`. The legacy
 `/robots.txt` allows crawling by default so search engines see the redirects
 and the `noindex`; set `REGISTRY_LEGACY_ROBOTS_DISALLOW=true` once the old URLs
 have left the index.
@@ -632,6 +638,7 @@ approved by default.
 |---|---|---|
 | `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://forum.navide.dev/navide-auth`. |
 | `REGISTRY_AUTH_SECRET` / `_FILE` | _(unset)_ | This registry's navide-auth client secret (≥ 32 chars; equals navide-auth's `REGISTRY_CONNECT_SECRET`, never the Discourse secret). |
+| `REGISTRY_AUTH_UPSTREAM` | _(unset)_ | navide-auth's address as this container reaches it, e.g. `http://172.17.0.1:18790`. Set, the storefront and the console serve the sign-in page on their own host (needs host routing, and `REGISTRY_AUTH_URL` ending in `/navide-auth`). Unset, the browser goes to `REGISTRY_AUTH_URL`. |
 | `REGISTRY_AUTH_RETURN_URL` | _(unset)_ | Exact callback, e.g. `https://server.navide.dev/registry/auth/callback`; must be in navide-auth's `REGISTRY_RETURN_URLS`. |
 | `REGISTRY_SESSION_SECRET` / `_FILE` | _(unset)_ | Signs the session and login-state cookies (≥ 32 chars, different from the auth secret). |
 | `REGISTRY_ADMIN_MEMBER_IDS` | _(empty)_ | Comma-separated Navide member ids allowed into the review queue and blocklist UI. |

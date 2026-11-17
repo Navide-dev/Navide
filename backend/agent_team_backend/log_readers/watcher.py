@@ -29,8 +29,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.observers import Observer
 
-from ..fs_observer import Observer
 from .base import (
     ActivityEvent,
     LogReader,

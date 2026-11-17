@@ -410,7 +410,9 @@ revoke it under **Publisher tokens** on the dashboard. For CI, create a token
 there and pass it as `NAVIDE_PLUGIN_TOKEN` instead of logging in.
 
 Commands that talk to a Registry use `--registry`, then
-`$NAVIDE_REGISTRY_URL`, then `https://server.navide.dev/registry`. `login` and
+`$NAVIDE_REGISTRY_URL`, then `https://server.navide.dev/registry`. For that
+Official Registry, `login` opens its sign-in page on
+`https://developers.navide.dev`; any other Registry serves its own. `login` and
 `publish` send your token, so they refuse a plain `http://` Registry unless it
 is on loopback (`127.0.0.1`, `localhost`, `[::1]`); `--insecure-http`
 overrides that for a local development host and prints a warning.

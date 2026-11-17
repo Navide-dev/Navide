@@ -33,7 +33,9 @@ digest of the complete archive with a detached Ed25519 signature. `login`
 signs in through the Registry in the browser and stores a publish token in
 `~/.config/navide-plugin/credentials.json` (0600); `publish` uploads to
 `--registry`, `$NAVIDE_REGISTRY_URL`, or `https://server.navide.dev/registry`
-(the Registry API; the website is `https://marketplace.navide.dev`).
+(the Registry API; the website is `https://marketplace.navide.dev`, and
+`login` against the Official Registry opens its sign-in page on
+`https://developers.navide.dev`).
 `dev-backend` runs a built backend under the same sandbox profile Navide uses
 and answers every Host bridge request with `CAPABILITY_DENIED`. There is no
 `dev` command.

@@ -58,6 +58,21 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 
 對 Claude Code 分格，Navide 會設定 `MCP_TIMEOUT=120000`，讓大量分格同時啟動、後端回應變慢時，Navide 工具仍能連上；若環境已有 `MCP_TIMEOUT`，則仍以既有值為準。
 
+### 遠端容器分格（實驗功能）
+
+預設關閉。到 **設定 → 一般 → 實驗功能 → 遠端容器分格** 打開後，**＋** 選單會多出 **遠端容器…**。
+
+遠端容器分格把 Claude Code 或 Codex 開在另一台電腦的 Docker 容器裡：Navide 用 `ssh` 連到主機、再 `docker exec` 進容器；打字、顏色、縮放和本機分格一樣。
+
+- **主機**：填你自己的 ssh 設定已經認得的名稱。Navide 照你的 ssh 設定連線，不讀也不改 `~/.ssh`、不把金鑰加進 agent、不儲存任何金鑰或密碼；只記住主機名稱與容器名稱。
+- **列出容器**：列出主機上的容器。已停止、或網路模式連不回來的容器不能選。
+- **連線測試**：逐段檢查主機、容器、容器裡的 CLI、Navide 工具通道。
+- **Navide 工具**（分格訊息、計畫書）經 `ssh -R` 反向隧道回到這台電腦。容器用 host 網路時連 `127.0.0.1`；用 bridge 網路時連 bridge gateway，主機的 `sshd_config` 需要 `GatewayPorts clientspecified`（改完隔一分鐘再測：連線測試會沿用同一條 ssh 連線最多 60 秒）。同一個 bridge 上的其他容器也連得到隧道的埠，但仍然需要分格的通行碼。分格的工具通行碼在關閉回顯後由第一行輸入傳入，不會出現在任何命令列。
+- **在容器裡登入**：遠端分格沒有帳號切換與額度自動接續，因為這兩個功能會把本機的登入檔複製進 CLI，等於把憑證送到另一台電腦。第一次開啟時會有引導卡：Claude Code 用 `/login`，Codex CLI 用裝置代碼。登入資料存在容器裡，容器重建後要重新登入。
+- **SSH agent 轉送保持關閉**；連線只保留 `ssh` 本身需要的環境變數，任何 `SendEnv` 設定都帶不走本機的 API 金鑰。
+- **斷線**：連線中斷或關閉分格時，容器裡的 CLI 會停止（Navide 把它的程序記在容器 `/tmp` 底下的檔案，所以容器需要 `sh` 和可寫入的 `/tmp`），分格顯示 **重新連線**，會在同一個容器開新的工作階段。需要撐過斷線的長任務，請在容器裡用 `tmux` 之類的工具。
+- 遠端分格只支援 Claude Code 與 Codex。列出容器與連線測試會共用一條 ssh 連線最多 60 秒；每個分格都用自己的連線，所以關閉分格會立刻釋放它的隧道。Windows 版 Navide 一律不共用連線（Windows 的 OpenSSH 沒有 ControlMaster）。
+
 ### CLI risk observations
 
 An active agent 分格 can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active 分格, while network findings belong to the observed 分格's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

@@ -20,7 +20,7 @@ function functionBody(name: string): string {
 const harvestStart = appSource.indexOf("if (ev?.reason !== 'login-harvest') return")
 const harvestBlock = appSource.slice(harvestStart, appSource.indexOf('\n})\n', harvestStart))
 
-const localesDir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+const localesDir = resolve(process.cwd(), 'src/renderer/src/i18n/locales')
 function locale(name: string): Record<string, Record<string, unknown>> {
   return JSON.parse(readFileSync(resolve(localesDir, `${name}.json`), 'utf8'))
 }

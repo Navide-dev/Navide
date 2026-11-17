@@ -14,9 +14,9 @@ from __future__ import annotations
 import logging
 import time
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
-from typing import Any
+from typing import IO, Any
 
 from ..plugin_contract.disclosure_scan_contract import (
     SCAN_LIMITS,
@@ -27,11 +27,16 @@ from ..plugin_contract.disclosure_scan_contract import (
 from ..secret_scan import RULES as SECRET_RULES
 from ..package import PackageSource, backend_entry_for_target, entry_buffer, open_source
 from .js_scan import MAX_SITES_PER_FINDING, ScriptFacts, scan_script
+from .js_tokens import AstralChars, narrow_script
 from .limits import Deadline, ScanTimeout, TooComplex
 from .native import NativeFacts, summarize_executable
 
 SCANNER_VERSION = "1.2.0"
 SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
+SCRIPT_CHUNK = 64 * 1024
+"""Decoded and narrowed a piece at a time. Small pieces keep the allocator
+from holding on to megabyte-sized temporaries (1 MiB pieces cost twice the
+resident memory on macOS)."""
 
 
 def _timestamp(value: datetime) -> str:
@@ -73,6 +78,30 @@ def _sites(found: list) -> list[dict[str, Any]]:
 def _redacted(value: str) -> bool:
     data = value.encode("utf-8", "replace")
     return any(pattern.search(data) for _rule, pattern in SECRET_RULES)
+
+
+def _read_script(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[str, AstralChars | None, int, bool]:
+    """(text, narrowed characters, bytes read, truncated) of one script entry,
+    cut at ``maxScriptBytes``. The text is decoded in chunks and narrowed
+    (``narrow_script``), so neither the raw bytes nor a 4-byte-per-character
+    copy of a large bundle is held; a script narrowing cannot represent is
+    decoded whole, as before."""
+    limit = SCAN_LIMITS["maxScriptBytes"]
+    read = 0
+
+    def chunks(stream: IO[bytes]) -> Iterator[bytes]:
+        nonlocal read
+        while read < limit and (chunk := stream.read(min(SCRIPT_CHUNK, limit - read))):
+            read += len(chunk)
+            yield chunk
+
+    with archive.open(info) as stream:
+        narrowed = narrow_script(chunks(stream))
+        if narrowed is not None:
+            return narrowed[0], narrowed[1], read, read == limit and stream.read(1) != b""
+    with archive.open(info) as stream:
+        content = stream.read(limit + 1)
+    return content[:limit].decode("utf-8", "replace"), None, min(len(content), limit), len(content) > limit
 
 
 def scan_package(
@@ -155,17 +184,15 @@ def scan_package(
                 timed_out = True
                 skip("unsupported")
                 continue
-            with archive.open(info) as stream:
-                content = stream.read(SCAN_LIMITS["maxScriptBytes"] + 1)
-            if len(content) > SCAN_LIMITS["maxScriptBytes"]:
-                content = content[:SCAN_LIMITS["maxScriptBytes"]]
-                truncated = True
+            text, astral, size, cut = _read_script(archive, info)
+            truncated = truncated or cut
             try:
                 facts = scan_script(
-                    content.decode("utf-8", "replace"),
+                    text,
                     max_path_length=SCAN_LIMITS["maxPathLength"],
                     deadline=deadline,
                     redacted=_redacted,
+                    astral=astral,
                 )
             except ScanTimeout:
                 timed_out = True
@@ -179,7 +206,7 @@ def scan_package(
                 continue
             any_script = True
             files_scanned += 1
-            bytes_scanned += len(content)
+            bytes_scanned += size
             for call in facts.calls:
                 key = (*call, "frontend")
                 call_files[key] = call_files.get(key, 0) + 1

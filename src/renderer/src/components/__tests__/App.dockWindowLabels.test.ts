@@ -25,7 +25,7 @@ function body(source: string, name: string): string {
 }
 
 const locales = ['en-US', 'zh-TW', 'ja-JP'].map((l) =>
-  JSON.parse(read(`packages/plugin-ui/src/foundation/i18n/locales/${l}.json`)),
+  JSON.parse(read(`src/renderer/src/i18n/locales/${l}.json`)),
 )
 
 describe('the @-mention menu names a panel\'s window', () => {

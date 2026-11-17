@@ -1,7 +1,9 @@
 import { createApp, type Component } from 'vue'
 import { i18n, resolveAvailableUiLocale } from '@navide/plugin-ui/foundation'
+import './i18n/hostMessages'
 import { seedSettings } from '@navide/plugin-ui/shared'
 import { readHostBootstrapSettings } from './lib/settingsBootstrap'
+import { installMainWindowCsp } from './lib/mainWindowCsp'
 
 // Publish the Host snapshot before a lazy renderer root imports lib/settings.
 // The settings module only reads this generic value, so plugin bundles do not
@@ -57,7 +59,9 @@ const loadRoot = (): Promise<{ default: Component }> => {
     case 'editor': return import('./EditorWindowApp.vue')
     case 'plans':  return import('./PlanWindowApp.vue')
     case 'token-monitor': return import('./TokenMonitorApp.vue')
-    default:       return import('./App.vue')
+    default:
+      installMainWindowCsp()
+      return import('./App.vue')
   }
 }
 

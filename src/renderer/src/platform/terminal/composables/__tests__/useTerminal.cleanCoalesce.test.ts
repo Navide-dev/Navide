@@ -117,6 +117,17 @@ describe('useTerminal clean-path coalescing', () => {
     expect(result.cleanBuffer.value).toContain('hello red wörld ✓ 中文')
   })
 
+  // macOS VM 0.2.42/0.2.43: Claude Code 2.1.3xx under bypass permissions drew
+  // its whole first frame with cursor moves, footer included, and the pane
+  // never counted a visible byte — cli_open_agent left its task untyped.
+  it('counts the first frame of a CLI that draws rows with cursor moves', async () => {
+    const { mock, result } = await spawnedTerminal()
+    emit(mock, enc.encode('\x1b[H Claude Code v2.1.319\r\x1b[1B Opus 5.5\r\x1b[2B❯ \r\x1b[1B ▸▸ bypass permissions on'))
+    await vi.advanceTimersByTimeAsync(60)
+    expect(result.cleanBytesSeen.value).toBeGreaterThan(0)
+    expect(result.cleanBuffer.value).toContain('Claude Code v2.1.319')
+  })
+
   it('flushPendingClean takes effect synchronously', async () => {
     const { mock, result } = await spawnedTerminal()
     emit(mock, enc.encode('abc'))

@@ -20,7 +20,7 @@
 // terminal buffer.
 
 import { AGENT_SPECS } from '@navide/plugin-shell'
-import { enUSMessages } from '@navide/plugin-ui/foundation'
+import enUSMessages from '../i18n/locales/en-US.json'
 import { CHANNEL_PLATFORM_IDS } from '../platform/channels'
 
 export const MSG_START = '---MSG-START---'
@@ -804,6 +804,12 @@ export const PUSH_COOLDOWN_MS = 60_000
  *  that will not clear twice running is one the message will never get through,
  *  and the sender is told so instead of the queue holding it forever. */
 export const PUSH_UNCLEAR_LIMIT = 2
+
+/** How many deliveries of the same message may time out against a backend
+ *  that did not answer the write before the sender is told so. Each try is
+ *  already a few resent chunks (injectChunkSend), so this is minutes of a
+ *  stalled loop, not seconds. */
+export const INJECT_TIMEOUT_RETRY_LIMIT = 3
 
 /** The same, for a CLI whose server simply is not listening yet. That is what a
  *  pane looks like for the first seconds of its life, and it fixes itself — so

@@ -16,6 +16,7 @@ function deps(over: Partial<ChannelAccountDeps> = {}): ChannelAccountDeps {
       defaultProfileId: () => 'p-work',
       aliasFor: (_agentKey, id) => (id && profiles[id]?.nameIsCustom ? profiles[id].name : undefined),
       profilesForAgent: () => Object.entries(profiles).map(([id, p]) => ({ id, authKind: p.authKind })),
+      orderedSlotIds: () => [null, ...Object.keys(profiles)],
       signedOut: (_agentKey, id) => id === 'p-two',
     },
     usage: (_agentKey, id) => (id === 'p-work' ? { remaining: 2, stale: false } : id === null ? { remaining: 80, stale: true } : { remaining: null, stale: false }),
@@ -46,6 +47,13 @@ describe('channelAccountMenu', () => {
     const menu = channelAccountMenu({ agentKey: 'claude' }, d) as { activeId: string; rows: { id: string; active: boolean }[] }
     expect(menu.activeId).toBe('__default__')
     expect(menu.rows.filter((r) => r.active).map((r) => r.id)).toEqual(['__default__'])
+  })
+
+  it('lists the accounts in the user\'s order, as automatic switching tries them', () => {
+    const d = deps()
+    d.accounts.orderedSlotIds = () => ['p-two', 'p-key', null, 'p-work']
+    const menu = channelAccountMenu({ agentKey: 'claude' }, d) as { rows: { id: string }[] }
+    expect(menu.rows.map((r) => r.id)).toEqual(['p-two', '__default__', 'p-work'])
   })
 
   it('refuses any CLI but claude', () => {

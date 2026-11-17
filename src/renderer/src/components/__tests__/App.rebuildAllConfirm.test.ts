@@ -9,10 +9,10 @@ import { describe, expect, it } from 'vitest'
 // tab bar "rebuild this tab"), which reprint every conversation.
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const enLocale = JSON.parse(
-  readFileSync(resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'), 'utf8')
+  readFileSync(resolve(process.cwd(), 'src/renderer/src/i18n/locales/en-US.json'), 'utf8')
 )
 const zhLocale = JSON.parse(
-  readFileSync(resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'), 'utf8')
+  readFileSync(resolve(process.cwd(), 'src/renderer/src/i18n/locales/zh-TW.json'), 'utf8')
 )
 
 describe('App batch rebuild confirmation', () => {

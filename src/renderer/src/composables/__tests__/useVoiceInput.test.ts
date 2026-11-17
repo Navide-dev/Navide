@@ -697,7 +697,7 @@ describe('voice error sentences', () => {
   const locales = ['en-US', 'ja-JP', 'zh-TW'].map((l) => ({
     l,
     data: JSON.parse(
-      readFileSync(join(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${l}.json`), 'utf-8'),
+      readFileSync(join(process.cwd(), `src/renderer/src/i18n/locales/${l}.json`), 'utf-8'),
     ) as { voice: { error: Record<string, string> } },
   }))
 

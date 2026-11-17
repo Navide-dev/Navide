@@ -1,0 +1,13 @@
+{
+  "editorWindow": {
+    "quit-dirty": "{count} file has unsaved changes. Quit and discard it? | {count} files have unsaved changes. Quit and discard them?",
+    "app": {
+      "breadcrumb-empty": "(empty)"
+    }
+  },
+  "pane": {
+    "pluginViews": {
+      "unavailable": "This view is provided by a Navide plugin and could not be opened."
+    }
+  }
+}

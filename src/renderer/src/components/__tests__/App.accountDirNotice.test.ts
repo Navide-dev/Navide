@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 // one with a handoff prompt). App.vue cannot be mounted by this suite, so its
 // wiring is asserted against the source like the other App.*.test.ts files.
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
-const localesDir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+const localesDir = resolve(process.cwd(), 'src/renderer/src/i18n/locales')
 const LOCALES = ['de-DE', 'en-US', 'es-ES', 'fr-FR', 'ja-JP', 'ko-KR', 'pt-BR', 'ru-RU', 'vi-VN', 'zh-CN', 'zh-TW']
 
 function handler(): string {

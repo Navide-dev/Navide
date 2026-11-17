@@ -5,7 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
-import { bufferTail, createRedrawGuard, dropTuiNoise, stripAnsi } from '../lib/buffer'
+import { bufferTail, createRedrawGuard, dropNoiseRows, dropTuiNoise, stripAnsi } from '../lib/buffer'
 import { createResizeController, type ResizeController } from './useTerminalResize'
 import { installTerminalZoomShortcuts, terminalFontSize } from './useTerminalFontSize'
 import { getResumeConcurrency } from '../lib/resumeConcurrency'
@@ -1151,7 +1151,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // clock is NOT touched here: it is bumped per chunk in _flushPendingOutput,
   // so liveness never waits on the coalescing timer.
   function appendClean(chunk: string): void {
-    const cleaned = dropTuiNoise(stripAnsi(chunk))
+    const cleaned = dropTuiNoise(stripAnsi(dropNoiseRows(chunk)))
     if (!cleaned) return
     // A focus/resize repaint re-emits content already on screen; after noise
     // stripping it looks like fresh output and would flip the badge to RUNNING
@@ -3023,6 +3023,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         loginProfileId: opts.loginProfileId ?? null,
         isLogin: opts.isLogin ?? false,
         ...(opts.accountDirLogin ? { accountDirLogin: true } : {}),
+        ...(opts.remote ? { remote: opts.remote } : {}),
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,

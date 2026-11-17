@@ -44,20 +44,22 @@ def test_the_write_path_imports_only_the_standard_library() -> None:
     probe = (
         "import sys\n"
         "before = set(sys.modules)\n"
-        "import agent_team_backend.fs_write\n"
+        "import navide_plugin_sdk.fs_write\n"
         "added = set(sys.modules) - before\n"
-        "loaded = sorted(m for m in sys.modules if m.startswith('agent_team_backend'))\n"
+        "loaded = sorted(m for m in sys.modules if m.split('.')[0] in ('agent_team_backend', 'navide_plugin_sdk'))\n"
         "third = sorted({m.split('.')[0] for m in added} - set(sys.stdlib_module_names)\n"
-        "               - set(sys.builtin_module_names) - {'agent_team_backend'})\n"
+        "               - set(sys.builtin_module_names) - {'navide_plugin_sdk'})\n"
         "print(loaded); print(third)\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], cwd=BACKEND_ROOT, capture_output=True, text=True, check=True,
     )
     loaded, third = result.stdout.splitlines()
+    # The write path lives in the plugin SDK (Plans bundles it) and reaches
+    # nothing of the core backend.
     assert loaded == str([
-        "agent_team_backend", "agent_team_backend.fs_write",
-        "agent_team_backend.git_security", "agent_team_backend.path_guard",
+        "navide_plugin_sdk", "navide_plugin_sdk.fs_write", "navide_plugin_sdk.git_security",
+        "navide_plugin_sdk.path_guard", "navide_plugin_sdk.plan_versions",
     ])
     assert third == "[]"
 

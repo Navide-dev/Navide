@@ -558,6 +558,42 @@ describe('useCliProfiles', () => {
     scope.stop()
   })
 
+  it('orderedSlotIds follows the stored order, unranked accounts after it in creation order', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', {
+      profiles: [profile('a', 'claude', 'One'), profile('b', 'claude', 'Two'), profile('c', 'claude', 'Three')],
+      defaults: {},
+      slotOrder: { claude: ['c', '__default__'] },
+      supported_agents: SUPPORTED,
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    expect(result.orderedSlotIds('claude')).toEqual(['c', null, 'a', 'b'])
+    // No order = the old layout: Default first, then creation order.
+    expect(result.orderedSlotIds('codex')).toEqual([null])
+    mock.emit('cli_profiles.changed', { slotOrder: {}, reason: 'reorder' })
+    expect(result.orderedSlotIds('claude')).toEqual([null, 'a', 'b', 'c'])
+    scope.stop()
+  })
+
+  it('setSlotOrder sends the Default as __default__ and adopts the returned order', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', {
+      profiles: [profile('a', 'claude', 'One')], defaults: {}, supported_agents: SUPPORTED,
+    })
+    mock.setResponse('cli_profiles.reorder', { slotOrder: { claude: ['a', '__default__'] } })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    expect(await result.setSlotOrder('claude', ['a', null])).toEqual({ ok: true })
+    expect(mock.sent.find((s) => s.type === 'cli_profiles.reorder')?.payload).toEqual({
+      agent_key: 'claude', slot_ids: ['a', '__default__'],
+    })
+    expect(result.orderedSlotIds('claude')).toEqual(['a', null])
+    scope.stop()
+  })
+
   it('loads duplicate account groups on connect and exposes them via duplicateFor', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('cli_profiles.list', {
@@ -904,6 +940,13 @@ describe('paneNeedsAccountRestart', () => {
     expect(paneNeedsAccountRestart({ ...pane, isLogin: true }, 'claude', 'running')).toBe(false)
     expect(paneNeedsAccountRestart(pane, 'codex', 'running')).toBe(false)
     expect(paneNeedsAccountRestart({ ...pane, realized: false }, 'claude', 'running')).toBe(false)
+  })
+
+  it('excludes a remote container pane: its CLI signs in inside the container', () => {
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' as const }, cli: 'claude' as const }
+    expect(paneNeedsAccountRestart({ ...pane, agentKey: 'remote', remote }, 'claude', 'running')).toBe(false)
+    // The remote guard holds on its own, whatever key the pane carries.
+    expect(paneNeedsAccountRestart({ ...pane, remote }, 'claude', 'running')).toBe(false)
   })
 
   it('excludes exited and errored panes', () => {

@@ -7,17 +7,55 @@
 // The legend arrives as data rather than as slotted markup: slot content
 // carries the CALLER's scope id, so list styling declared here would not
 // reach it.
-defineProps<{
+//
+// `shot` names a real screenshot on dl.navide.dev/help/ (see
+// lib/helpScreenshots.ts). The mock stays on screen until that image has
+// loaded and comes back if it fails, so offline or unpublished figures read
+// exactly as before and a broken image is never shown.
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+import { helpScreenshotUrl } from '../../lib/helpScreenshots'
+
+const props = defineProps<{
   /** One-line explanation printed under the picture. */
   caption: string
   /** Optional key: one row per marked region, in mark order. */
   legend?: { mark: string; label: string; text: string }[]
+  /** Optional screenshot id in the help manifest. */
+  shot?: string
 }>()
+
+const { locale } = useI18n()
+const shotUrl = computed(() => {
+  if (!props.shot) return null
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return null
+  return helpScreenshotUrl(props.shot, String(locale.value))
+})
+const loaded = ref(false)
+const failed = ref(false)
+watch(shotUrl, () => {
+  loaded.value = false
+  failed.value = false
+})
 </script>
 
 <template>
   <figure class="mk-fig">
-    <div class="mk-fig-frame"><slot /></div>
+    <div v-show="!loaded" class="mk-fig-frame"><slot /></div>
+    <img
+      v-if="shotUrl && !failed"
+      v-show="loaded"
+      class="mk-fig-shot"
+      :src="shotUrl"
+      :alt="caption"
+      loading="lazy"
+      decoding="async"
+      referrerpolicy="no-referrer"
+      draggable="false"
+      @load="loaded = true"
+      @error="failed = true; loaded = false"
+    />
     <ol v-if="legend?.length" class="mk-fig-legend">
       <li v-for="item in legend" :key="item.mark">
         <span class="mk-fig-mark">{{ item.mark }}</span>
@@ -47,6 +85,14 @@ defineProps<{
   padding: 0.9em;
   min-width: 0;
   overflow: hidden;
+}
+
+.mk-fig-shot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
 }
 
 .mk-fig-legend {

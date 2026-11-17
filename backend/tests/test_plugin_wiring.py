@@ -69,7 +69,7 @@ def test_startup_does_not_scan_legacy_external_plugins_dir(
     monkeypatch.setenv("AGENT_TEAM_PLUGINS_DIR", str(external.parent))
 
     host = PluginHost()
-    assert wiring.startup(host) == ["navide.plans", "navide.skills"]
+    assert wiring.startup(host) == ["navide.plans", "navide.shipped-log", "navide.skills"]
     assert host.get("acme.external") is None
     wiring.shutdown(host)
 
@@ -125,7 +125,7 @@ def test_startup_does_not_import_host_approved_v2_backend_binary(
     )
 
     host = PluginHost()
-    assert wiring.startup(host) == ["navide.plans", "navide.skills"]
+    assert wiring.startup(host) == ["navide.plans", "navide.shipped-log", "navide.skills"]
     assert host.get("acme.binary") is None
     wiring.shutdown(host)
 

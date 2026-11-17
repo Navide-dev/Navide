@@ -484,6 +484,7 @@ const resourceRows = computed(() => [
       </div>
 
       <MockFigure
+        shot="settingsSystem.nav"
         :caption="$t('settings.help.settingsSystem.mock.nav.caption')"
         :legend="navLegend"
       >
@@ -920,6 +921,7 @@ const resourceRows = computed(() => [
       </ul>
 
       <MockFigure
+        shot="settingsSystem.resource"
         :caption="$t('settings.help.settingsSystem.mock.resource.caption', helpVars)"
         :legend="resourceLegend"
       >

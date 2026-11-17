@@ -24,6 +24,13 @@ export interface GitTransportResponse<TPayload = unknown> {
   error: GitTransportError | null
 }
 
+/**
+ * The version of the Host bridge contract (./gitBridgeContract.json) this
+ * package is built against: the git.* requests and events the Host serves
+ * navide.git on its first-party bridge.
+ */
+export const GIT_BRIDGE_VERSION = '1.0.0'
+
 /** Default request deadline preserved from the legacy WebSocket transport. */
 export const DEFAULT_GIT_TIMEOUT_MS = 10_000
 

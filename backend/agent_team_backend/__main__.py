@@ -334,6 +334,17 @@ def main() -> int:
     # After Config, whose dictConfig replaces the uvicorn handlers: uvicorn logs
     # every ws handshake at INFO with its query, and the query is the token.
     log_redaction.install()
+    # Handlers write from threads of their own, so a slow stderr pipe or
+    # disk no longer blocks the event loop (log_offload). After redaction:
+    # the records it queues have already been redacted.
+    from . import log_offload
+
+    log_offload.install()
+    # /plan-mcp also on a loop of its own (mcp_server.own_loop), so a stalled
+    # main loop does not cost the CLIs their Navide tools.
+    from .mcp_server import own_loop as mcp_own_loop
+
+    mcp_own_loop.enable()
     server = uvicorn.Server(config)
     threading.Thread(
         target=_watch_stdin_for_shutdown, args=(server,), name="stdin-shutdown", daemon=True

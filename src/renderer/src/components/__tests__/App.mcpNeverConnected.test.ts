@@ -41,8 +41,20 @@ describe('a pane whose Navide tools never connected', () => {
     expect(fn).toContain("if (paneRefs[paneId]?.displayStatus !== 'idle')")
     expect(fn).toContain("'pane.terminal.mcp-reconnect-busy'")
     expect(fn).toContain('await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })')
-    // Never types into the pane: /mcp is an interactive menu.
-    expect(fn).not.toMatch(/sendInput|\/mcp/)
+    // Never opens the interactive /mcp menu: only its non-interactive form.
+    expect(fn).not.toMatch(/sendInput/)
+  })
+
+  it('reconnects an idle claude pane in place before falling back to the rebuild', () => {
+    // 2026-11-15: the in-place reconnect keeps the conversation and the CLI's
+    // background processes, which a rebuild ends.
+    expect(appSource).toContain("const MCP_RECONNECT_COMMAND = '/mcp reconnect navide'")
+    const at = appSource.indexOf('async function reconnectPaneMcp(')
+    const fn = appSource.slice(at, appSource.indexOf('\n}\n', at))
+    const inPlace = fn.indexOf("if (pane?.agentKey === 'claude' && messagingHoldKey(paneId) === null)")
+    expect(inPlace).toBeGreaterThan(fn.indexOf("displayStatus !== 'idle'"))
+    expect(fn).toContain("if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return")
+    expect(fn.indexOf('rebuildPaneViaResume')).toBeGreaterThan(inPlace)
   })
 
   it('reopens a pane nobody typed in fresh and still reports a failed rebuild', () => {
@@ -53,6 +65,17 @@ describe('a pane whose Navide tools never connected', () => {
     const fn = appSource.slice(at, appSource.indexOf('\n}\n', at))
     expect(fn).toContain('freshWhenNoTranscript: true')
     expect(fn).not.toContain('suppressBusyToast')
+  })
+})
+
+describe('a pane whose Navide tools were connected and dropped', () => {
+  it('badges the pane, tells the user and offers Reconnect', () => {
+    const body = handler('mcp.disconnected')
+    expect(body).toContain('pane.mcpNeverConnected = true')
+    expect(body).toContain("'pane.terminal.mcp-disconnected-title'")
+    expect(body).toContain("'pane.terminal.mcp-disconnected-body'")
+    expect(body).toContain('sysNotify.notifyPaneState(')
+    expect(body).toContain('run: () => { void reconnectPaneMcp(paneId) }')
   })
 })
 

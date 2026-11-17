@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  dropNoiseRows,
   stripAnsi,
   dropTuiNoise,
   findQuestionBlock,
@@ -37,6 +38,36 @@ describe('stripAnsi', () => {
 
   it('leaves plain text untouched', () => {
     expect(stripAnsi('hello 世界')).toBe('hello 世界')
+  })
+})
+
+describe('dropNoiseRows', () => {
+  // Claude Code 2.1.3xx writes no \n: each screen row is placed with a cursor
+  // move. Run under --dangerously-skip-permissions its first frame ends in the
+  // "bypass permissions on" footer, and with every row joined into one line
+  // dropTuiNoise dropped the banner and prompt along with it — the pane never
+  // counted a visible byte, and cli_open_agent reported its kickoff failed
+  // without typing it (macOS VM 4/4, 0.2.42/0.2.43).
+  const firstFrame =
+    '\x1b[H Claude Code v2.1.319\r\x1b[1B Opus 5.5\r\x1b[1B ~/wh/wq\r\x1b[2B❯ \r\x1b[1B ▸▸ bypass permissions on'
+
+  it('keeps the rest of a frame whose footer is status chrome', () => {
+    const cleaned = dropTuiNoise(stripAnsi(dropNoiseRows(firstFrame)))
+    expect(cleaned).toContain('Claude Code v2.1.319')
+    expect(cleaned).toContain('❯')
+    expect(cleaned).not.toContain('bypass')
+    // Still one line, as the Manager router's screen scan expects.
+    expect(cleaned.includes('\n')).toBe(false)
+  })
+
+  it('is the old result for a frame with no chrome row', () => {
+    const frame = '\x1b[H top\r\x1b[1B next \x1b[3Grow'
+    expect(dropNoiseRows(frame)).toBe(frame)
+    expect(dropNoiseRows('plain\r\nlines')).toBe('plain\r\nlines')
+  })
+
+  it('still drops a chunk that is nothing but chrome', () => {
+    expect(dropTuiNoise(stripAnsi(dropNoiseRows('\x1b[40;1H ▸▸ bypass permissions on\x1b[38;3H')))).toBe('')
   })
 })
 

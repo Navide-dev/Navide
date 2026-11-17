@@ -748,6 +748,8 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     `mcp: "never-connected"` appears on a pane whose CLI has been up for three
     minutes without once reaching Navide's tool server: its Navide tools are
     missing, so a message it is asked to answer through them will not come.
+    `mcp: "disconnected"` is the same for a CLI that was connected, lost the
+    connection and stopped retrying.
 
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
@@ -2520,6 +2522,10 @@ async def _dispatch_delivery(
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
         await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+    # On record before the broadcast: it runs in a task of its own, so the
+    # receiving window can report back before this call resumes, and a report
+    # for a key not yet recorded is dropped (the send would stay "queued").
+    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -2558,7 +2564,6 @@ async def _dispatch_delivery(
             },
         )
     )
-    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     return msg_key
 
 
@@ -4314,7 +4319,8 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     renderer; it is omitted (not a failure) when the window does not reply.
     `mcp: "never-connected"` appears when the pane's CLI has been up for
     three minutes without once reaching Navide's tool server, so its Navide
-    tools are missing; absent otherwise.
+    tools are missing; `mcp: "disconnected"` when it was connected, lost the
+    connection and stopped retrying; absent otherwise.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -12354,6 +12360,15 @@ async def request_account_switch(
 
     if not agent_key or not profile_id:
         return {**await settle("bad-request"), "error": "agent and profile_id are required"}
+    from agent_team_backend.remote_devcontainer_ws import is_remote_pane
+
+    if target_pane and is_remote_pane(target_pane):
+        # A switch copies this machine's sign-in into the pane's CLI; a remote
+        # pane signs in inside its own container instead.
+        return {
+            **await settle("refused", code="REMOTE_PANE"),
+            "error": "remote container panes do not switch accounts; sign in inside the container",
+        }
     from agent_team_backend import api_key_accounts
 
     if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
@@ -12540,6 +12555,11 @@ class _Runner:
 
 
 _runner: _Runner | None = None
+# The loop of the /plan-mcp listener on its own thread and the session manager
+# serving it there (own_loop), while it runs. Requests arriving on that loop
+# are served by that manager; the SDK's task group is bound to its loop.
+_own_loop: asyncio.AbstractEventLoop | None = None
+_own_runner: _Runner | None = None
 # Replaced runners whose task is still finishing (see _replace_stopped_runner).
 _stopping_runner_tasks: set[asyncio.Task[None]] = set()
 # Stands for an attribute the SDK no longer has (see _runner_stopped).
@@ -12594,7 +12614,7 @@ class _PlanMcpASGI:
     ASGI, not a request-response function); 503 until startup() has run."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        runner = _runner
+        runner = _loop_runner()
         if runner is None:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
@@ -12671,9 +12691,20 @@ class _PlanMcpASGI:
                 return
             await send(message)
 
+        # A pane's GET is its CLI's long-lived stream: while one is open the
+        # CLI is connected, and one closing without another opening is a CLI
+        # that may have given up (mcp_connect_watch, 2026-11-15).
+        stream_pane = caller.pane_id if caller is not None and caller.kind == "pane" \
+            and scope.get("method") == "GET" else ""
+        if stream_pane:
+            from agent_team_backend import mcp_connect_watch
+
+            mcp_connect_watch.stream_opened(stream_pane)
         try:
             await manager.handle_request(scope, counting_receive, explaining_send)
         finally:
+            if stream_pane:
+                mcp_connect_watch.stream_closed(stream_pane)
             _sdk_failures.reset(failures_token)
             _request_body_bytes.reset(token)
             from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
@@ -12759,9 +12790,25 @@ def _runner_stopped(runner: _Runner) -> bool:
     return group is None or group.cancel_scope.cancel_called
 
 
+def _loop_runner() -> _Runner | None:
+    """The session manager for a request on the running loop: own_loop's on
+    its thread, the main one everywhere else."""
+    own = _own_loop
+    if own is not None and asyncio.get_running_loop() is own:
+        return _own_runner
+    return _runner
+
+
 def _replace_stopped_runner(stopped: _Runner) -> _Runner:
     """The running session manager, started anew if ``stopped`` is still it."""
-    global _runner, _session_manager
+    global _runner, _session_manager, _own_runner
+    if stopped is _own_runner:
+        _log.warning("plan-mcp: restarting the MCP session manager of its own loop")
+        if not stopped.task.done():
+            _stopping_runner_tasks.add(stopped.task)
+            stopped.task.add_done_callback(_stopping_runner_tasks.discard)
+        _own_runner = _start_runner()
+        return _own_runner
     if _runner is stopped:
         _log.warning("plan-mcp: restarting the MCP session manager")
         if not stopped.task.done():
