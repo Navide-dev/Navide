@@ -51,6 +51,9 @@ interface Props {
   subtitle?: string
   /** CLI vendor key (e.g. 'claude', 'codex') carried in the cli-context drag payload. */
   agentKey?: string
+  /** Whether the CLI was launched with its permission-bypass flag; null when
+   *  the vendor has none. 'off' shows a header chip, 'on' a status tooltip line. */
+  permissionBypass?: 'on' | 'off' | null
   /** Vendor conversation id, distinct from useTerminal's backend PTY id. */
   cliSessionId?: string
   sessionHomeId?: string
@@ -1068,8 +1071,14 @@ onMounted(() => {
           class="status"
           :data-status="displayStatus"
           :style="statusBadgeVars"
-          :title="statusTooltipKey ? $t(statusTooltipKey) : ''"
+          :title="[statusTooltipKey ? $t(statusTooltipKey) : '', permissionBypass === 'on' ? $t('pane.terminal.bypass-on-tooltip') : ''].filter(Boolean).join('\n')"
         >{{ statusBadgeText }}</span>
+        <span
+          v-if="permissionBypass === 'off'"
+          class="bypass-off"
+          data-testid="bypass-off"
+          :title="$t('pane.terminal.bypass-off-tooltip')"
+        >{{ $t('pane.terminal.bypass-off') }}</span>
         <span
           v-if="terminal.stopIneffective.value && displayStatus !== 'exited' && displayStatus !== 'error'"
           class="stop-ineffective"
@@ -1689,8 +1698,10 @@ onMounted(() => {
   border: 1px solid var(--border-default);
 }
 /* A STOP the CLI did not act on: sits beside the live status badge, in the
- * warning colours, so the pane reads as still working and the press as missed. */
-.stop-ineffective {
+ * warning colours, so the pane reads as still working and the press as missed.
+ * A CLI launched without its bypass flag reuses the same chip. */
+.stop-ineffective,
+.bypass-off {
   font-size: var(--font-3xs);
   padding: 2px 8px;
   border-radius: 999px;
@@ -1774,7 +1785,8 @@ onMounted(() => {
 .pane.pane-agent-narrow .header-main > .status,
 .pane.pane-agent-narrow .header-main > .exit-fault-inline,
 .pane.pane-agent-narrow .header-main > .stuck-inline,
-.pane.pane-agent-narrow .header-main > .stop-ineffective { order: 1; flex: none; }
+.pane.pane-agent-narrow .header-main > .stop-ineffective,
+.pane.pane-agent-narrow .header-main > .bypass-off { order: 1; flex: none; }
 .pane.pane-agent-narrow .header-main :deep(.pane-channel) { order: 2; flex: none; }
 .pane.pane-agent-narrow .header-main > .agent-sched-inline { order: 3; }
 .pane.pane-agent-narrow .header-main > .commander-inline,
