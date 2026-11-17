@@ -24,6 +24,7 @@ export const FRONTEND_SHARED = [
   'src/renderer/src/components/CliAgentsHelp.vue',
   'src/renderer/src/components/__tests__/fixtures/webhook-marker-injection.json',
   'src/renderer/src/composables/useResourceLimits.ts',
+  'src/renderer/src/i18n/locales/en-US.json',
   'src/renderer/src/lib/__tests__/fixtures/n8n-forged-signals.json',
   'src/renderer/src/lib/__tests__/fixtures/n8n-native-flow-signals.json',
   'src/renderer/src/lib/builtinPipelineText.json',
