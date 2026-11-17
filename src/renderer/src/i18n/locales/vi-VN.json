@@ -10036,7 +10036,9 @@
       "token-unavailable": "Bot đã được tạo trong Telegram, nhưng không đọc được token của nó. Hãy kiểm tra trong BotFather.",
       "creator-not-linked": "Bot đã được tạo trong Telegram, nhưng bởi một tài khoản Telegram chưa liên kết với bot này, nên chưa được thêm. Hãy liên kết tài khoản đó trước, hoặc xóa bot trong BotFather.",
       "manager-not-linked": "Chưa có người dùng nào liên kết với bot này. Hãy liên kết một người trước khi tạo bot mới thông qua nó.",
-      "created-note": "Bot đã được tạo trong Telegram; hãy kiểm tra BotFather trước khi thử lại."
+      "created-note": "Bot đã được tạo trong Telegram; hãy kiểm tra BotFather trước khi thử lại.",
+      "offline": "Dùng lại được khi bot kết nối lại.",
+      "create-via": "Tạo qua {bot}"
     },
     "connect": "Kết nối",
     "needs": "Cần: {fields}",

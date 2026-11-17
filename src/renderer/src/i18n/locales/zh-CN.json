@@ -10036,7 +10036,9 @@
       "token-unavailable": "bot 已在 Telegram 创建，但无法取得 token。请到 BotFather 查看。",
       "creator-not-linked": "bot 已在 Telegram 创建，但创建者的 Telegram 账号没有链接到这只 bot，所以没有加入。请先链接该账号，或到 BotFather 删除这只 bot。",
       "manager-not-linked": "这个 bot 还没有链接任何用户，请先链接再通过它创建新 bot。",
-      "created-note": "bot 已在 Telegram 创建；重试前请先到 BotFather 确认。"
+      "created-note": "bot 已在 Telegram 创建；重试前请先到 BotFather 确认。",
+      "offline": "bot 重新连上后即可使用。",
+      "create-via": "通过 {bot} 创建"
     },
     "connect": "连接",
     "needs": "需要：{fields}",
