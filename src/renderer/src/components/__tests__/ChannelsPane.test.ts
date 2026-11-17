@@ -1010,6 +1010,146 @@ describe('ChannelsPane', () => {
     })
   })
 
+  describe('Telegram "Create a New Bot" on the group header line', () => {
+    type Bot = { account: string; identity: string; canManage?: boolean; connected?: boolean; enabled?: boolean }
+
+    function seedBots(bots: Bot[], enabled = true): void {
+      const accounts = bots.map((b) => {
+        const connected = b.connected ?? true
+        const status: Record<string, unknown> = {
+          lifecycle: connected ? 'ready' : 'recovering', connected, identity: b.identity, last_error: '',
+        }
+        if (b.canManage !== undefined) status.can_manage_bots = b.canManage
+        return { account: b.account, name: '', configured: true, enabled: b.enabled ?? true, status, config: {}, capabilities: null }
+      })
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: accounts[0].status, config: {}, capabilities: null, accounts,
+        }],
+      })
+      mock.setResponse('channels.overview', ov([]))
+    }
+
+    const action = (w: VueWrapper) => w.find('[data-testid="channel-nav-group-action"]')
+    const botRow = (w: VueWrapper, account: string) => w.get(`[data-platform="telegram"] [data-account="${account}"]`)
+
+    it('sits on a TELEGRAM header outside every bot card, even as the only platform', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true }])
+      const w = await render()
+      const header = w.get('[data-testid="channel-nav-group"]')
+      expect(header.text()).toContain('Telegram')
+      expect(header.get('[data-testid="channel-nav-group-action"]').text()).toBe('TG＋ Create a New Bot')
+      expect(action(w).element.closest('[data-platform]')).toBeNull()
+      // The card and its ⋯ menu keep their own entries.
+      expect(botRow(w, 'default').find('[data-testid="channel-managed-start"]').exists()).toBe(true)
+      expect(botRow(w, 'default').find('[data-testid="channel-managed-create"]').exists()).toBe(true)
+    })
+
+    it('opens the bot\'s own confirmation and sends nothing yet', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true }])
+      const w = await render()
+      await action(w).trigger('click')
+      expect(botRow(w, 'default').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @navide_bot')
+      expect(mock.sent.some((m) => m.type === 'channels.managed_create')).toBe(false)
+    })
+
+    it('stays while the bot reconnects, disabled with a note; the card stays as it was', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true, connected: false }])
+      const w = await render()
+      expect(action(w).attributes('disabled')).toBeDefined()
+      expect(w.get('[data-testid="channel-nav-group-action-note"]').text()).toBe('Available again once the bot reconnects.')
+      expect(w.find('[data-testid="channel-managed-start"]').exists()).toBe(false)
+      // Reconnected: usable again without reloading.
+      mock.emit('channels.status', { platform: 'telegram', account: 'default', status: { lifecycle: 'ready', connected: true, identity: '@navide_bot', can_manage_bots: true } })
+      await flushPromises()
+      expect(action(w).attributes('disabled')).toBeUndefined()
+      expect(w.find('[data-testid="channel-nav-group-action-note"]').exists()).toBe(false)
+    })
+
+    it('is absent without the permission, on a switched-off bot, or with channels off', async () => {
+      for (const [bots, on] of [
+        [[{ account: 'default', identity: '@navide_bot', canManage: false }], true],
+        [[{ account: 'default', identity: '@navide_bot' }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: false, connected: false }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: true, enabled: false }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: true }], false],
+      ] as [Bot[], boolean][]) {
+        wrapper?.unmount()
+        mock = createMockBackend('connected')
+        seed()
+        seedBots(bots, on)
+        const w = await render()
+        expect(action(w).exists()).toBe(false)
+        // A single platform without the action keeps its unlabelled list.
+        expect(w.find('[data-testid="channel-nav-group"]').exists()).toBe(false)
+      }
+    })
+
+    it('asks which bot when several can create one and the picked bot cannot', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+        { account: 'bot-def456', identity: '@plain_bot', canManage: false },
+      ])
+      const w = await render()
+      const plain = w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@plain_bot'))!
+      await plain.trigger('click')
+      await action(w).trigger('click')
+      const choices = w.findAll('[data-testid="channel-nav-group-action-choice"]')
+      expect(choices.map((c) => c.text())).toEqual(['Create via @navide_bot', 'Create via @second_bot'])
+      await choices[1].trigger('click')
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+    })
+
+    it('closes the bot menu on a click elsewhere or Esc, creating nothing', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+        { account: 'bot-def456', identity: '@plain_bot', canManage: false },
+      ])
+      const w = await render()
+      await w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@plain_bot'))!.trigger('click')
+      for (const close of [
+        () => document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })),
+        () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
+      ]) {
+        await action(w).trigger('click')
+        expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(true)
+        close()
+        await flushPromises()
+        expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      }
+      expect(w.find('[data-testid="channel-managed-title"]').exists()).toBe(false)
+    })
+
+    it('goes straight through the picked bot when it can create one', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+      ])
+      const w = await render()
+      const item = w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@second_bot'))!
+      await item.trigger('click')
+      await action(w).trigger('click')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
+    })
+
+    it('goes straight through the only bot that can create one', async () => {
+      seedBots([
+        { account: 'default', identity: '@plain_bot', canManage: false },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+      ])
+      const w = await render()
+      await action(w).trigger('click')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
+    })
+  })
+
   describe('bindings overview', () => {
     const ready = { lifecycle: 'ready', connected: true, last_error: '' }
     const pane = (name: string, extra: Record<string, unknown> = {}) => ({

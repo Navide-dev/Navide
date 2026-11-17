@@ -10036,7 +10036,9 @@
       "token-unavailable": "Der Bot wurde in Telegram erstellt, aber sein Token konnte nicht gelesen werden. Prüfen Sie es in BotFather.",
       "creator-not-linked": "Der Bot wurde in Telegram erstellt, allerdings von einem Telegram-Konto, das nicht mit diesem Bot verknüpft ist, daher wurde er nicht hinzugefügt. Verknüpfen Sie zuerst dieses Konto oder löschen Sie den Bot in BotFather.",
       "manager-not-linked": "Mit diesem Bot ist noch kein Benutzer verknüpft. Verknüpfen Sie einen, bevor Sie darüber einen neuen Bot erstellen.",
-      "created-note": "Der Bot wurde in Telegram bereits erstellt; prüfen Sie BotFather, bevor Sie es erneut versuchen."
+      "created-note": "Der Bot wurde in Telegram bereits erstellt; prüfen Sie BotFather, bevor Sie es erneut versuchen.",
+      "offline": "Wieder verfügbar, sobald der Bot neu verbunden ist.",
+      "create-via": "Über {bot} erstellen"
     },
     "connect": "Verbinden",
     "needs": "Benötigt: {fields}",

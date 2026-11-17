@@ -10036,7 +10036,9 @@
       "token-unavailable": "Telegram에서 bot을 만들었지만 token을 읽지 못했어요. BotFather에서 확인하세요.",
       "creator-not-linked": "Telegram에서 bot을 만들었지만 이 bot에 연결되지 않은 Telegram 계정으로 만들어져 추가하지 않았어요. 먼저 그 계정을 연결하거나 BotFather에서 bot을 삭제하세요.",
       "manager-not-linked": "이 bot에 연결된 사용자가 아직 없어요. 이 bot으로 새 bot을 만들기 전에 사용자를 연결하세요.",
-      "created-note": "bot은 이미 Telegram에서 만들어졌어요. 다시 시도하기 전에 BotFather를 확인하세요."
+      "created-note": "bot은 이미 Telegram에서 만들어졌어요. 다시 시도하기 전에 BotFather를 확인하세요.",
+      "offline": "봇이 다시 연결되면 사용할 수 있습니다.",
+      "create-via": "{bot}(으)로 만들기"
     },
     "connect": "연결",
     "needs": "필요: {fields}",

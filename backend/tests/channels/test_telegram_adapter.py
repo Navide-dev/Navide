@@ -462,6 +462,23 @@ async def test_get_me_says_whether_the_bot_can_manage_bots(flag, expected) -> No
     assert dataclasses.asdict(ad.status)["can_manage_bots"] is expected
 
 
+async def test_can_manage_bots_is_kept_while_recovering() -> None:
+    # Settings → Channels keeps Telegram's "Create a New Bot" (disabled) through a
+    # reconnect, which relies on the last getMe answer staying in the status.
+    with FakeBotApi(TOKEN, can_manage_bots=True) as fake:
+        got, emit = _collect()
+        ad = TelegramAdapter(TOKEN, base_url=fake.base_url, backoff=lambda a, r: 0.5, poll_timeout_s=1)
+        await ad.start(emit)
+        try:
+            await _until(lambda: ad.status.lifecycle == "ready")
+            fake.fail("getUpdates", 502, "Bad Gateway", times=1)
+            await _until(lambda: ad.status.lifecycle == "recovering")
+            assert ad.status.connected is False
+            assert dataclasses.asdict(ad.status)["can_manage_bots"] is True
+        finally:
+            await ad.stop()
+
+
 async def test_a_managed_bot_update_goes_to_the_handler_and_not_to_chats(api: FakeBotApi) -> None:
     got, emit = _collect()
     handled: list[dict] = []
