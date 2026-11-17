@@ -438,6 +438,38 @@ async def test_cli_send_failure_is_reported_all_the_way_back_to_cli_check_messag
 
 
 @pytest.mark.asyncio
+async def test_a_window_that_answers_before_the_sender_resumes_is_not_lost() -> None:
+    """The deliver broadcast runs in a task of its own (app._deliver_detached),
+    so the receiving window can report back before cli_send resumes from it.
+    That report has to find the message already on record; otherwise it is
+    dropped and the send stays "queued" for good. On Windows the 15.6 ms timer
+    tick made the e2e window win this race every time."""
+    window_a = _window()
+    window_b = _window()
+    await _register(window_a, "pa", "sender", "/ws/alpha")
+    await _register(window_b, "pb", "reviewer", "/ws/beta")
+    reports: list[asyncio.Task[None]] = []
+    fake = window_b.websocket
+    plain_send = fake.send_json  # type: ignore[attr-defined]
+
+    async def answer_at_once(payload: dict[str, Any]) -> None:
+        await plain_send(payload)
+        if payload.get("type") == "agent_msg.deliver":
+            key = payload["payload"]["msg_key"]
+            reports.append(asyncio.create_task(_report_delivered(window_b, key, ok=True)))
+
+    fake.send_json = answer_at_once  # type: ignore[attr-defined]
+
+    sent = await plan_mcp.cli_send("beta/reviewer", "run the tests", _ctx("pa"), wait_for_delivery_s=2.0)
+    await asyncio.gather(*reports)
+
+    assert reports, "the deliver event never reached the window"
+    assert sent["status"] == "delivered"
+    check = await plan_mcp.cli_check_message(sent["msg_key"], _ctx("pa"))
+    assert check["status"] == "delivered"
+
+
+@pytest.mark.asyncio
 async def test_cli_send_and_wait_returns_the_turn_the_target_produced(
     monkeypatch: pytest.MonkeyPatch, log_activity: Any
 ) -> None:
