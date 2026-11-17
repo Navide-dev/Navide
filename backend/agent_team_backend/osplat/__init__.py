@@ -134,3 +134,8 @@ __all__ += ["paths_ignore_case"]
 # `modified`: ReadDirectoryChangesW does, inotify and FSEvents do not.
 watch_reports_touch_as_modified: bool = {"darwin": False, "linux": False, "win32": True}[platform_id]
 __all__ += ["watch_reports_touch_as_modified"]
+
+# Whether this platform's OpenSSH can share one connection per host through a
+# ControlMaster unix socket. Windows' OpenSSH port lacks it.
+ssh_connection_sharing: bool = {"darwin": True, "linux": True, "win32": False}[platform_id]
+__all__ += ["ssh_connection_sharing"]
