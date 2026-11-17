@@ -11,6 +11,7 @@ export { REMOTE_AGENT_KEY, REMOTE_AGENT_SPEC } from './remoteAgent'
 
 export {
   cliPermissionKey,
+  launchBypassState,
   parseCliPermissionMode,
   skipPermissionFlagFor,
 } from './lib/cliPermission'

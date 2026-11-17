@@ -330,7 +330,7 @@ import {
 import { isRepeatCrash, planBackendRestartResume, type LostPane } from './lib/backendRestartResume'
 import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
-import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
+import { cliPermissionKey, launchBypassState, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
 import { useLayoutStore } from './layout/useLayoutStore'
 import { RAIL_SIZE } from './layout/slots'
@@ -1600,6 +1600,13 @@ function skipFlagFor(agentKey: string, spec?: AgentSpec): string {
     globalYolo: yoloEnabled.value,
     mode: parseCliPermissionMode(settingsGet<string | null>(cliPermissionKey(agentKey), null))
   })
+}
+
+/** Whether this pane's CLI was launched with its bypass flag, for the header.
+ *  Sign-in and remote container panes are left out: neither runs the flag. */
+function paneBypassState(p: ActivePane): 'on' | 'off' | null {
+  if (p.isLogin || p.remote) return null
+  return launchBypassState(p.command, paneAgentSpec(p.agentKey)?.skipPermissionFlag)
 }
 
 const autoAnswerEnabled = makeStickyBool('agentTeam.autoAnswer', false)
@@ -26776,6 +26783,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
           :auto-named="paneIsAutoNamed(p)"
           :agent-key="p.agentKey"
+          :permission-bypass="paneBypassState(p)"
           :cli-session-id="p.pinnedSessionId"
           :session-home-id="p.sessionHomeId"
           :conversation-log-path="p.outputLogFile"
