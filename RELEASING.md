@@ -70,7 +70,10 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    README download links but writes neither of these.
 6. **Signing status** — macOS signs and notarizes in CI; Windows is unsigned
    and shows SmartScreen's "Unknown publisher" prompt. Do not describe a Windows
-   build as signed anywhere until that changes.
+   build as signed anywhere until that changes. Windows signing, once a
+   certificate exists, is done locally after the CI run, never in CI:
+   `scripts/sign-windows-local.mjs` (docs/en-US/releases.md, "Windows code
+   signing (local)").
 7. **Is the production Marketplace Registry caught up with `main`?** — the
    Registry is deployed separately from the app, and a stale one refuses
    publishes the current code expects (in 0.2.31 it rejected `navide.plans`

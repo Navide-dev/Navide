@@ -228,6 +228,9 @@ if [[ "$publish" =~ ^[Yy]$ ]]; then
   echo "https://github.com/Navide-dev/Navide/actions"
   echo "If a job fails, $TAG stays a draft: fix the cause and use \"Re-run failed jobs\""
   echo "(RELEASING.md, \"After the tag push\")."
+  echo "With the WINDOWS_SIGN_LOCALLY variable on, the run stops at the draft: sign the"
+  echo "Windows installers with scripts/sign-windows-local.mjs --tag $TAG (then --apply)"
+  echo "and publish it (docs/en-US/releases.md, \"Windows code signing (local)\")."
 else
   echo "Release remains local. Publish later with:"
   echo "  git push origin main"
