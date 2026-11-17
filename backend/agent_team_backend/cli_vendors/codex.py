@@ -41,13 +41,13 @@ from ..log_readers.base import (
     ActivityLines,
     ActivityEvent,
     IncrementalParseResult,
+    JsonlTail,
     LogReader,
     TokenUsage,
     TurnCall,
     TurnUsage,
     activity_high_water,
     join_text_blocks,
-    read_jsonl_tail,
     set_activity_high_water,
     turn_excerpt,
     user_prompt_text,
@@ -480,63 +480,69 @@ class CodexLogReader(LogReader):
         path: Path,
         checkpoint: dict,
     ) -> IncrementalParseResult:
-        """Read only the rollout tail while persisting cumulative baselines."""
-        records, next_checkpoint, rotated = read_jsonl_tail(path, checkpoint)
-        replaced = bool(
-            rotated
-            and checkpoint.get("identity")
-            and checkpoint.get("identity") != next_checkpoint.get("identity")
-        )
-        prev_in = 0 if replaced else max(0, int(checkpoint.get("input_total") or 0))
-        prev_out = 0 if replaced else max(0, int(checkpoint.get("output_total") or 0))
-        if (prev_in or prev_out) and checkpoint.get("basis") != _TOTALS_BASIS:
-            prev_in, prev_out = _counted_totals_before(path, int(checkpoint.get("offset") or 0))
-        latest_in, latest_out = prev_in, prev_out
-        cwd = "" if replaced else str(checkpoint.get("cwd") or "")
-        model = "" if replaced else str(checkpoint.get("model") or "")
-        cli_version = "" if replaced else str(checkpoint.get("cli_version") or "")
-        session_id = path.stem if replaced else str(checkpoint.get("session_id") or path.stem)
-        # The rollout's own id is its FIRST session_meta: a sub-agent's rollout
-        # replays its ancestors' records after it, and taking the last one
-        # filed the sub-agent's tokens under its parent's session.
-        meta_seen = False if replaced else bool(checkpoint.get("meta_seen"))
-        # The model a turn ran on (turn_context), for the cost ledger; `model`
-        # above is the provider name.
-        ledger_model = "" if replaced else str(checkpoint.get("ledger_model") or "")
-        latest_totals: dict = {}
-        latest_event: dict | None = None
-        latest_end = int(next_checkpoint.get("offset") or 0)
+        """Read only the rollout tail while persisting cumulative baselines.
 
-        for end, rec in records:
-            if rec is None:
-                continue
-            if rec.get("type") == "turn_context":
+        Streams the tail (JsonlTail): only the latest token_count record is
+        kept, so a large unread rollout is never held as parsed dicts at once.
+        """
+        with JsonlTail(path, checkpoint) as tail:
+            replaced = bool(
+                tail.rotated
+                and checkpoint.get("identity")
+                and checkpoint.get("identity") != tail.identity
+            )
+            prev_in = 0 if replaced else max(0, int(checkpoint.get("input_total") or 0))
+            prev_out = 0 if replaced else max(0, int(checkpoint.get("output_total") or 0))
+            if (prev_in or prev_out) and checkpoint.get("basis") != _TOTALS_BASIS:
+                prev_in, prev_out = _counted_totals_before(path, int(checkpoint.get("offset") or 0))
+            latest_in, latest_out = prev_in, prev_out
+            cwd = "" if replaced else str(checkpoint.get("cwd") or "")
+            model = "" if replaced else str(checkpoint.get("model") or "")
+            cli_version = "" if replaced else str(checkpoint.get("cli_version") or "")
+            session_id = path.stem if replaced else str(checkpoint.get("session_id") or path.stem)
+            # The rollout's own id is its FIRST session_meta: a sub-agent's rollout
+            # replays its ancestors' records after it, and taking the last one
+            # filed the sub-agent's tokens under its parent's session.
+            meta_seen = False if replaced else bool(checkpoint.get("meta_seen"))
+            # The model a turn ran on (turn_context), for the cost ledger; `model`
+            # above is the provider name.
+            ledger_model = "" if replaced else str(checkpoint.get("ledger_model") or "")
+            latest_totals: dict = {}
+            latest_event: dict | None = None
+            # Always set together with latest_event, and unread without one.
+            latest_end = 0
+
+            for end, rec in tail:
+                if rec is None:
+                    continue
+                if rec.get("type") == "turn_context":
+                    payload = rec.get("payload") or {}
+                    if isinstance(payload, dict) and payload.get("model"):
+                        ledger_model = str(payload["model"])
+                    continue
+                if rec.get("type") == "session_meta":
+                    payload = rec.get("payload") or {}
+                    if isinstance(payload, dict) and not meta_seen:
+                        meta_seen = True
+                        cwd = str(payload.get("cwd") or cwd)
+                        session_id = str(payload.get("id") or session_id)
+                        model = str(payload.get("model_provider") or payload.get("model") or model)
+                        cli_version = str(payload.get("cli_version") or cli_version)
+                    continue
+                if rec.get("type") != "event_msg":
+                    continue
                 payload = rec.get("payload") or {}
-                if isinstance(payload, dict) and payload.get("model"):
-                    ledger_model = str(payload["model"])
-                continue
-            if rec.get("type") == "session_meta":
-                payload = rec.get("payload") or {}
-                if isinstance(payload, dict) and not meta_seen:
-                    meta_seen = True
-                    cwd = str(payload.get("cwd") or cwd)
-                    session_id = str(payload.get("id") or session_id)
-                    model = str(payload.get("model_provider") or payload.get("model") or model)
-                    cli_version = str(payload.get("cli_version") or cli_version)
-                continue
-            if rec.get("type") != "event_msg":
-                continue
-            payload = rec.get("payload") or {}
-            if not isinstance(payload, dict) or payload.get("type") != "token_count":
-                continue
-            info = payload.get("info")
-            totals = info.get("total_token_usage") if isinstance(info, dict) else None
-            if not isinstance(totals, dict):
-                continue
-            latest_in, latest_out = _session_totals(totals)
-            latest_totals = totals
-            latest_event = rec
-            latest_end = end
+                if not isinstance(payload, dict) or payload.get("type") != "token_count":
+                    continue
+                info = payload.get("info")
+                totals = info.get("total_token_usage") if isinstance(info, dict) else None
+                if not isinstance(totals, dict):
+                    continue
+                latest_in, latest_out = _session_totals(totals)
+                latest_totals = totals
+                latest_event = rec
+                latest_end = end
+        next_checkpoint = tail.checkpoint
 
         next_checkpoint.update({
             "input_total": latest_in,
