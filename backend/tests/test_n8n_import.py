@@ -943,7 +943,7 @@ def test_the_native_flow_signal_fixture_is_the_converters_output():
 
 
 # ── translatable report ──────────────────────────────────────────────────
-EN_US = Path(__file__).resolve().parents[2] / "packages" / "plugin-ui" / "src" / "foundation" / "i18n" / "locales" / "en-US.json"
+EN_US = Path(__file__).resolve().parents[2] / "src" / "renderer" / "src" / "i18n" / "locales" / "en-US.json"
 
 
 def _report_corpus() -> list[dict]:

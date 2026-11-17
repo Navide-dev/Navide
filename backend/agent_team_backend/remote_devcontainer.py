@@ -25,6 +25,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from . import osplat
+
 # ui_settings key; off when absent or not exactly True.
 SETTING_KEY = "remoteDevcontainerExperimental"
 
@@ -157,7 +159,7 @@ def control_dir() -> Path | None:
     path has a ~104-byte limit the app data dir would overrun. Owner-only;
     None (no connection sharing) on Windows, whose OpenSSH lacks it, or when
     the directory is not safely ours."""
-    if os.name == "nt":
+    if not osplat.ssh_connection_sharing:
         return None
     path = Path(f"/tmp/navide-cm-{os.getuid()}")
     try:

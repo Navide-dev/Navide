@@ -40,6 +40,10 @@ class WindowError(ValueError):
 
 
 def _local_now(now: datetime | None) -> datetime:
+    # An aware ``now`` already names the zone its calendar day is in; only the
+    # real clock (or a naive value) takes this machine's zone.
+    if now is not None and now.tzinfo is not None:
+        return now
     return (now or datetime.now(timezone.utc)).astimezone()
 
 

@@ -2522,6 +2522,10 @@ async def _dispatch_delivery(
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
         await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+    # On record before the broadcast: it runs in a task of its own, so the
+    # receiving window can report back before this call resumes, and a report
+    # for a key not yet recorded is dropped (the send would stay "queued").
+    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -2560,7 +2564,6 @@ async def _dispatch_delivery(
             },
         )
     )
-    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     return msg_key
 
 
