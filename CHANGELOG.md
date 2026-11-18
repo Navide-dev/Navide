@@ -31,11 +31,13 @@ All notable released changes to Navide will be documented in this file. The form
 - App (0.2.44): a SIGTERM while "confirm before quit" was on opened the prompt and left the app running until it was force-killed, so the next launch took the exit for a crash. SIGTERM now quits through the normal path, closing an open prompt.
 - Git (0.2.44): a workspace folder that is not a repository (no `.git` in it or any parent, no bare layout, `GIT_DIR` unset) answers its status without starting `git`; every status bar, Explorer badge and Git pane read used to start a `git rev-parse`. Real repositories are read as before.
 - Inter-CLI messaging (0.2.44): a worker's kickoff ASK template whose letters the screen dropped (seen on Windows ConPTY) was forwarded to the Manager as a real ASK. The placeholder check now runs on both parse paths and looks past a damaged label, so a template is never forwarded.
+- Messaging (0.2.44): a message from an MCP caller with no pane behind it could stay held on `pty-blocked` until the pane was closed. When an interrupt came before the model printed anything, Claude Code put the prompt back in its input box, and the next envelope from such a caller ended with the same reply hint, so its echo could not be told apart and Enter was never pressed. That hint now ends with the message's short `msg_key`, so every envelope has its own tail.
 
 ### Known limitations
 
 - Account switching (0.2.44): `claude` started by hand inside a terminal pane follows a hot switch of this computer's Claude account, and Navide cannot tell; it sees a shell, not a Claude pane.
 - Remote container panes (0.2.44, experimental): the pane runs under its own `remote` kind, so account switching and automatic quota failover never apply to it. The CLI's logs and hooks live in the container, so Navide reports no turn end from them, shows no token statistics, and keeps no session id for resume (Reconnect starts a new session). `cli_open_agent` cannot open one, so there is no kickoff prompt; `cli_send` works. Meeting and spotlight pane lists show "remote" instead of the CLI's name.
+- Messaging (0.2.44): when an interrupt makes Claude Code put a prompt back in its input box, the next message is typed after it, and the Enter submits both as one prompt (pane-to-pane messages too). The next version checks the input box before typing.
 
 ## [0.2.43] — 2026-11-14
 

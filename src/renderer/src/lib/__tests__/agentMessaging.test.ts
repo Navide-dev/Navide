@@ -469,7 +469,7 @@ describe('hasReplyRoute', () => {
 describe('renderEnvelope for a sender with no reply route', () => {
   it('asks for the answer in the final output instead of a MSG block nobody can receive', () => {
     const env = renderEnvelope('a host client', 'status?', { correlationId: 'host:mcp:3e79', noReplyRoute: true })
-    expect(env).toBe(`${MSG_ENVELOPE_PREFIX} a host client\nstatus?\n${LAST_OUTPUT_REPLY_HINT}`)
+    expect(env).toBe(`${MSG_ENVELOPE_PREFIX} a host client\nstatus?\n${LAST_OUTPUT_REPLY_HINT.slice(0, -1)}；訊息 mcp:3e79）`)
     expect(env).not.toContain(MSG_START)
     expect(env).not.toContain('to: a host client')
   })
