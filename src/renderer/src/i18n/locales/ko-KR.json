@@ -7912,7 +7912,6 @@
     "run-group-active": "실행 중 — 이 그룹의 agent가 작업하고 있어요",
     "run-group-awaiting": "확인 필요 — 이 그룹의 agent가 권한이나 질문 때문에 멈춰 있어요",
     "agent-not-installed": "{label} — 설치되지 않음",
-    "cloud-agents-plugin-hint": "클라우드 에이전트(Grok Bot, dots 등)는 Navide 마켓플레이스에서 해당 Navide 플러그인을 설치하세요.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
     "add-menu-acp": "{label} (ACP)",
