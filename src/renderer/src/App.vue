@@ -194,7 +194,7 @@ import {
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, quietTurnEndDone, TURN_END_QUIET_FALLBACK_MS, turnCompleteDone,turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
-import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
+import { isBlankedCopy, noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -20428,7 +20428,9 @@ function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: Pendin
   const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
   const credits = (router.screenRoutes ??= new Map())
   if (turnTextSince === undefined) {
-    if (router.routedWorkerMessages.has(key)) {
+    const prefix = `${msg.kind}\u0000${msg.fromLabel}\u0000`
+    if (router.routedWorkerMessages.has(key) || [...router.routedWorkerMessages].some(
+      (k) => k.startsWith(prefix) && isBlankedCopy(msg.content, k.slice(prefix.length)))) {
       pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
       return
     }
@@ -20771,8 +20773,10 @@ async function globalManagerRouterScan(): Promise<void> {
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
     const firstSeen = (kind: string, content: string): boolean => {
-      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
-      if (globalRoutedMessages.has(key)) {
+      const prefix = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000`
+      const key = `${prefix}${content.replace(/\s+/g, '')}`
+      if (globalRoutedMessages.has(key) || [...globalRoutedMessages].some(
+        (k) => k.startsWith(prefix) && isBlankedCopy(content, k.slice(prefix.length)))) {
         pipelineLog(`🎯 Global: ${kind} from ${fromLabel} skipped — a block already routed`)
         return false
       }
