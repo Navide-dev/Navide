@@ -462,6 +462,15 @@ function dismissLoginCard(): void {
 }
 
 watch(() => terminal.liveStatus?.value, tryLoginPrefill)
+// A set-up container goes idle before Claude Code has drawn its prompt and
+// then only repaints, so idle never changes again: output arriving while the
+// prefill waits re-checks the screen once xterm has drawn it.
+let loginPrefillRecheck: ReturnType<typeof setTimeout> | null = null
+watch(() => terminal.lastRawActivityAt?.value, () => {
+  if (!loginPrefillPending || loginPrefillRecheck) return
+  loginPrefillRecheck = setTimeout(() => { loginPrefillRecheck = null; tryLoginPrefill() }, 250)
+})
+onBeforeUnmount(() => { if (loginPrefillRecheck) clearTimeout(loginPrefillRecheck) })
 
 if (props.remote && !isRemoteLoginDone(props.remote.host, props.remote.container, props.remote.cli)) {
   openLoginCard(false)

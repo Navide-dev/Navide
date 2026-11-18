@@ -40,4 +40,10 @@ describe('onCursorMenu', () => {
     expect(onCursorMenu(empty)).toBe(false)
     expect(onCursorMenu('')).toBe(false)
   })
+
+  it('does not take a prompt still being drawn (no rule below yet) for a menu', () => {
+    const halfDrawn = empty.split('\n').slice(0, 7).join('\n')
+    expect(atClaudeInputPrompt(halfDrawn)).toBe(false)
+    expect(onCursorMenu(halfDrawn)).toBe(false)
+  })
 })
