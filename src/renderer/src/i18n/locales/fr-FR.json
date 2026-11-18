@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Les panes distants n’ont ni changement de compte ni bascule automatique de quota",
     "account-disabled-body": "Ces fonctions copient les fichiers de connexion de cet ordinateur dans la CLI, ce qui enverrait vos identifiants sur la machine distante. Connectez-vous avec votre propre compte dans le conteneur.",
     "login-title": "Ce conteneur n’est pas connecté à {cli}",
-    "login-step1": "Tapez /login dans le terminal puis Entrée (Navide le pré-remplit dès que la CLI est à son invite). Si Claude Code affiche d'abord ses écrans de configuration (style de texte, méthode de connexion), suivez-les : ils vous connectent",
+    "login-step1": "Tapez /login dans le terminal puis Entrée (Navide le pré-remplit dès que la CLI est à son invite). Si Claude Code affiche d'abord ses écrans de configuration (style de texte, méthode de connexion), suivez-les : ils vous connectent",
     "login-step2": "Le terminal affiche un lien. Ouvrez-le dans le navigateur de cet ordinateur et connectez-vous",
     "login-step3": "Collez dans le terminal le code affiché par le navigateur",
     "login-codex": "Codex CLI affiche un code d’appareil. Saisissez-le dans le navigateur.",
