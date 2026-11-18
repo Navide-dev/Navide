@@ -241,6 +241,32 @@ describe('CliAccountsPane', () => {
     expect(titles()).toEqual(['one@example.com', 'two@example.com', 'd@example.com'])
   })
 
+  it('lists accounts in the user\'s order and saves a drag in the list as the new order', async () => {
+    const api = makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2'), profile('p2', 'claude', 'Account 3')],
+      defaults: { claude: 'p1' },
+      identities: { claude: {
+        __default__: { email: 'd@example.com', signedIn: true },
+        p1: { email: 'one@example.com', signedIn: true },
+        p2: { email: 'two@example.com', signedIn: true },
+      } },
+      slotOrder: { claude: ['p2', '__default__', 'p1'] },
+    })
+    const w = mountPane(api)
+    const rows = () => w.findAll('.acct-row[data-account^="claude/"]')
+    expect(rows().map((r) => r.attributes('data-account'))).toEqual(['claude/p2', 'claude/__default__', 'claude/p1'])
+    expect(rows().every((r) => r.attributes('draggable') === 'true')).toBe(true)
+
+    // Drag the last row onto the first one.
+    await rows()[2].trigger('dragstart')
+    await rows()[0].trigger('dragover')
+    expect(rows()[0].classes()).toContain('order-over')
+    await rows()[0].trigger('drop')
+    await flushPromises()
+    expect(api.setSlotOrder).toHaveBeenCalledWith('claude', ['p1', 'p2', null])
+    expect(rows().map((r) => r.attributes('data-account'))).toEqual(['claude/p1', 'claude/p2', 'claude/__default__'])
+  })
+
   it('offers no drag handle while an agent has only its Default', () => {
     const w = mountPane(makeApi({
       identities: { codex: { __default__: { email: 'd@example.com', signedIn: true } } },
