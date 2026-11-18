@@ -7912,7 +7912,6 @@
     "run-group-active": "Running — an agent in this group is active",
     "run-group-awaiting": "Needs you — an agent in this group is blocked on a permission or a question",
     "agent-not-installed": "{label} — not installed",
-    "cloud-agents-plugin-hint": "Cloud agents (Grok Bot, dots and others) come as Navide plugins: install them from the Navide Marketplace.",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agents",
     "add-menu-acp": "{label} (ACP)",

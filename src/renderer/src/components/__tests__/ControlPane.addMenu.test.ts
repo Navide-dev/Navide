@@ -250,13 +250,6 @@ describe('ControlPane – the ＋ menu', () => {
     expect(wrapper.find('.ws-add-term').exists()).toBe(true)
   })
 
-  it('points cloud agents at the Navide Marketplace, below the CLI list', async () => {
-    wrapper = mountWith()
-    await openMenu(wrapper)
-    expect(wrapper.find('.ws-add-scroll .ws-add-hint').exists()).toBe(false)
-    expect(wrapper.find('.ws-add-hint').text()).toBe('label.cloud-agents-plugin-hint')
-  })
-
   it('says a heading can be dragged out, only when it can be', async () => {
     // Nothing about the row shows it is draggable, and with one workspace it
     // silently is not — which reads as broken rather than deliberate.
@@ -587,9 +580,8 @@ const ROW_PX = 24
 const HEADING_PX = 28
 
 /** Everything in the menu that is not the scroller: its own padding, the role
- *  picker, two dividers, the cloud-agents hint (up to five lines, ~72px), and
- *  the Terminal + Manual-spawn buttons. */
-const FURNITURE_PX = 152
+ *  picker, two dividers, and the Terminal + Manual-spawn buttons. */
+const FURNITURE_PX = 80
 
 function scrollerCapPx(): number {
   const m = COMPONENT_SRC.match(/\.ws-add-scroll\s*\{[\s\S]*?max-height:\s*min\((\d+)px/)

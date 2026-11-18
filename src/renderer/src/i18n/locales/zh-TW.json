@@ -7912,7 +7912,6 @@
     "run-group-active": "執行中 — 這個分組有 agent 正在跑",
     "run-group-awaiting": "等待回應 — 這個分組有 agent 卡在權限確認或問題上",
     "agent-not-installed": "{label}（未安裝）",
-    "cloud-agents-plugin-hint": "雲端代理（Grok Bot、dots 等）請到 Navide 市集安裝對應的 Navide 外掛。",
     "add-menu-cli": "CLI",
     "add-menu-agents": "Agent",
     "add-menu-acp": "{label}（ACP）",
