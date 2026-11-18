@@ -214,6 +214,28 @@ export function onModelPicker(screen: string): boolean {
   return MODEL_PICKER_TITLE.test(screen) && parseMenu(screen).options.length > 0
 }
 
+// Claude Code's input prompt: a "❯" row with a full-width rule directly above
+// and below it (an older boxed prompt draws the rules with ╭ ╰ and the row
+// with │). First-run screens have no such frame: the text-style picker's
+// dashed ╌ lines enclose a code preview, not the cursor row.
+const PROMPT_RULE = /^\s*[╭╰]?─{8,}/
+const PROMPT_ROW = /^\s*(?:│\s*)?[❯>](?:\s|$)/
+
+/** True when the screen shows Claude Code's input prompt, ready for typing. */
+export function atClaudeInputPrompt(screen: string): boolean {
+  const lines = screen.split('\n')
+  return lines.some((line, at) =>
+    PROMPT_ROW.test(line) && PROMPT_RULE.test(lines[at - 1] ?? '') && PROMPT_RULE.test(lines[at + 1] ?? ''))
+}
+
+/** True when a menu cursor row (❯ outside the prompt frame) is on screen —
+ *  numbered or not, like the first-run text-style picker. */
+export function onCursorMenu(screen: string): boolean {
+  const lines = screen.split('\n')
+  return lines.some((line, at) =>
+    CURSOR_LINE.test(line) && !(PROMPT_RULE.test(lines[at - 1] ?? '') && PROMPT_RULE.test(lines[at + 1] ?? '')))
+}
+
 /** Between the picker's keys: still the same picker, with the same rows.
  *  Reads the screen alone, since the picker is not an awaiting prompt. */
 export function stillOnModelPicker(before: string, _displayStatus: string | undefined, screen: string): boolean {

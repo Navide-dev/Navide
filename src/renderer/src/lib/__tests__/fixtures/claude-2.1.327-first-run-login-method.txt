@@ -1,0 +1,39 @@
+/login/ltoiClaudemCode v2.1.327
+..........................................................
+
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+
+ Claude Code can be used with your Claude subscription or billed based 
+ on API usage through your Console account.
+
+ Select login method:
+
+ ❯ 1. Claude account with subscription · Individual, Team, or 
+      Enterprise
+   2. Anthropic Console account · API usage billing
+   3. 3rd-party platform · Bedrock, Microsoft Foundry, Google Vertex AI
+
+
+
+
+
+
+
+
+
+
+
+
+
