@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Navide 도구 터널이 작동해요 (pane 메시지, 계획)",
     "test-mcp-unknown": "Navide 도구 터널을 테스트하지 못했어요 (컨테이너에 curl이 없음)",
     "test-mcp-failed": "컨테이너에서 Navide 도구 터널에 연결할 수 없어요",
+    "test-mcp-forbidden": "Navide 백엔드가 도구 터널을 거부했어요 (Host 검사, HTTP 403)",
+    "test-mcp-http": "Navide 도구 터널이 HTTP {code}로 응답했어요",
     "error-ssh": "{host}에 연결할 수 없어요: {detail}",
     "privacy-note": "호스트 이름과 컨테이너 이름만 기억하고, 키나 비밀번호는 절대 저장하지 않아요. 연결은 내 ssh 설정을 사용하며 SSH 에이전트 전달은 꺼진 상태로 유지돼요.",
     "account-note": "원격 pane에서는 계정 전환을 지원하지 않아요. 처음에는 컨테이너 안에서 로그인하세요.",

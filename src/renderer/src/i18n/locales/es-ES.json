@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "El túnel de herramientas de Navide funciona (mensajes entre panes, planes)",
     "test-mcp-unknown": "No se pudo probar el túnel de herramientas de Navide (no hay curl en el contenedor)",
     "test-mcp-failed": "El túnel de herramientas de Navide no es accesible desde el contenedor",
+    "test-mcp-forbidden": "El backend de Navide rechazó el túnel de herramientas (comprobación de Host, HTTP 403)",
+    "test-mcp-http": "El túnel de herramientas de Navide respondió con HTTP {code}",
     "error-ssh": "No se pudo conectar con {host}: {detail}",
     "privacy-note": "Solo se recuerdan el nombre del host y el del contenedor, nunca claves ni contraseñas. La conexión usa tu propia configuración de ssh y el reenvío del agente SSH permanece desactivado.",
     "account-note": "Los panes remotos no permiten cambiar de cuenta. Inicia sesión dentro del contenedor la primera vez.",

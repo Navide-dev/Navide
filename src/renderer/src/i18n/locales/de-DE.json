@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Navide-Tool-Tunnel funktioniert (Bereichsnachrichten, Pläne)",
     "test-mcp-unknown": "Navide-Tool-Tunnel konnte nicht getestet werden (kein curl im Container)",
     "test-mcp-failed": "Der Navide-Tool-Tunnel ist vom Container aus nicht erreichbar",
+    "test-mcp-forbidden": "Das Navide-Backend hat den Tool-Tunnel abgelehnt (Host-Prüfung, HTTP 403)",
+    "test-mcp-http": "Der Navide-Tool-Tunnel antwortete mit HTTP {code}",
     "error-ssh": "{host} nicht erreichbar: {detail}",
     "privacy-note": "Gespeichert werden nur Host- und Containername, niemals Schlüssel oder Passwörter. Die Verbindung nutzt deine eigenen ssh-Einstellungen, und die SSH-Agent-Weiterleitung bleibt aus.",
     "account-note": "Remote-Bereiche bieten keinen Kontowechsel. Melde dich beim ersten Mal im Container an.",

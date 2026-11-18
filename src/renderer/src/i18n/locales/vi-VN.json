@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Đường hầm công cụ Navide hoạt động (tin nhắn giữa các pane, kế hoạch)",
     "test-mcp-unknown": "Không kiểm tra được đường hầm công cụ Navide (container không có curl)",
     "test-mcp-failed": "Không thể truy cập đường hầm công cụ Navide từ container",
+    "test-mcp-forbidden": "Backend Navide đã từ chối đường hầm công cụ (kiểm tra Host, HTTP 403)",
+    "test-mcp-http": "Đường hầm công cụ Navide trả về HTTP {code}",
     "error-ssh": "Không kết nối được tới {host}: {detail}",
     "privacy-note": "Chỉ ghi nhớ tên máy chủ và tên container, không bao giờ lưu khóa hay mật khẩu. Kết nối dùng thiết lập ssh của chính bạn, và chuyển tiếp SSH agent luôn tắt.",
     "account-note": "Pane từ xa không hỗ trợ chuyển tài khoản. Lần đầu hãy đăng nhập bên trong container.",

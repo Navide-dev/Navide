@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Navide 工具隧道正常（分格消息、计划）",
     "test-mcp-unknown": "无法测试 Navide 工具隧道（容器中没有 curl）",
     "test-mcp-failed": "从容器无法连到 Navide 工具隧道",
+    "test-mcp-forbidden": "Navide 后端拒绝了工具隧道（Host 检查，HTTP 403）",
+    "test-mcp-http": "Navide 工具隧道返回 HTTP {code}",
     "error-ssh": "无法连接 {host}：{detail}",
     "privacy-note": "只记住主机名称和容器名称，绝不保存密钥或密码。连接使用你自己的 ssh 设置，SSH agent 转发保持关闭。",
     "account-note": "远程分格不提供账号切换。第一次请在容器内登录。",

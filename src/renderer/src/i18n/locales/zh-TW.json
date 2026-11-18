@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Navide 工具通道（分格訊息、計畫書）可用",
     "test-mcp-unknown": "無法測試 Navide 工具通道（容器裡沒有 curl）",
     "test-mcp-failed": "容器連不到 Navide 工具通道",
+    "test-mcp-forbidden": "Navide 後端拒絕了工具通道（Host 檢查，HTTP 403）",
+    "test-mcp-http": "Navide 工具通道回應 HTTP {code}",
     "error-ssh": "連不到 {host}：{detail}",
     "privacy-note": "只會記住「主機名稱」與「容器名稱」，不儲存任何金鑰或密碼；連線使用你自己的 ssh 設定，SSH agent 轉送保持關閉。",
     "account-note": "遠端分格不提供帳號切換，第一次開啟需要在容器裡登入。",

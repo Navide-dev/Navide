@@ -12466,6 +12466,8 @@
     "test-mcp-ok": "Navide tools tunnel works (pane messages, plans)",
     "test-mcp-unknown": "Could not test the Navide tools tunnel (no curl in the container)",
     "test-mcp-failed": "The Navide tools tunnel is not reachable from the container",
+    "test-mcp-forbidden": "The Navide backend refused the tools tunnel (Host check, HTTP 403)",
+    "test-mcp-http": "The Navide tools tunnel answered with HTTP {code}",
     "error-ssh": "Could not reach {host}: {detail}",
     "privacy-note": "Only the host name and container name are remembered, never keys or passwords. The connection uses your own ssh settings, and SSH agent forwarding stays off.",
     "account-note": "Remote panes do not offer account switching. Sign in inside the container the first time.",
