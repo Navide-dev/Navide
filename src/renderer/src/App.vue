@@ -20217,18 +20217,18 @@ function parseContentBlocks(
     const lastStart = m[1].lastIndexOf(startMarker)
     const inner = lastStart >= 0 ? m[1].slice(lastStart + startMarker.length) : m[1]
     // `content:` consumes everything to end of inner block.
+    // Tolerant fallback: take inner trimmed if no `content:` prefix.
     const cm = inner.match(/(?:^|\n)\s*content:\s*([\s\S]*)$/)
-    if (cm) {
-      // Skip the protocol's own template (`content: <...>`): a TUI that prints
-      // the submitted kickoff in full puts it after the router's floor, and a
-      // `<...>` placeholder is never a worker's real message.
-      const content = cm[1].trim()
-      if (!/^<[^<>]*>$/.test(content)) items.push(content)
-    } else {
-      // Tolerant fallback: take inner trimmed if no `content:` prefix.
-      const trimmed = inner.trim()
-      if (trimmed) items.push(trimmed)
-    }
+    const content = (cm ? cm[1] : inner).trim()
+    // Skip the protocol's own template (`content: <...>`): a TUI that prints
+    // the submitted kickoff in full puts it after the router's floor, and a
+    // `<...>` placeholder is never a worker's real message. The screen can
+    // lose letters or break the line as it reads the template back
+    // ("conte t: <o paragraph …>", 0.2.44 Windows VM), so its shape decides,
+    // not its words: a lone placeholder behind at most a short letters-only
+    // label that no longer reads as `content:`.
+    const body = cm ? content : content.replace(/^[A-Za-z]{1,10}(?:\s+[A-Za-z]{1,10})?:?\s*(?=<)/, '')
+    if ((cm || content) && !/^<[^<>]*>$/.test(body)) items.push(content)
     lastEnd = m.index + m[0].length
   }
   return { items, newCursor: fromCursor + lastEnd }
