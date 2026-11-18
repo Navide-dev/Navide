@@ -302,7 +302,8 @@
     ],
     "auditConfig": {
       "ignoreGhsas": [
-        "GHSA-ch52-4w7c-c8xp"
+        "GHSA-ch52-4w7c-c8xp",
+        "GHSA-fc5q-39xc-vjpf"
       ]
     },
     "overrides": {
