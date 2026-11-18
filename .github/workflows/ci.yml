@@ -61,10 +61,15 @@ jobs:
       # package.json's pnpm.auditConfig still ignores GHSA-ch52-4w7c-c8xp
       # (http-cache-semantics <=4.2.0) for pnpm users; both lockfiles now
       # resolve the patched 4.3.0, so bun audit needs no ignore entry.
+      # GHSA-fc5q-39xc-vjpf (picomatch ReDoS) is ignored because no patched
+      # release exists: every version <=4.0.7 is affected and 4.0.7 is the
+      # latest. picomatch only reaches the build and test toolchain (vite,
+      # vitest, electron-builder via tinyglobby > fdir) and never ships in the
+      # installer. Remove this ignore once upstream publishes a fix.
       - name: Bun audit (high and above)
         id: bun-audit
         continue-on-error: true
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore=GHSA-fc5q-39xc-vjpf
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       # pip-audit has no severity threshold (bun audit's --audit-level=high
