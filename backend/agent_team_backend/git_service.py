@@ -394,8 +394,31 @@ async def _coalesced_after(
     return await read()
 
 
+def _no_repository_marker(workspace_path: str) -> bool:
+    """True when nothing on *workspace_path* or above it could make git find a
+    repository: no `.git` entry (directory or gitfile), no bare-repository
+    layout, and no GIT_DIR. Git's discovery walks the same chain, so then its
+    answer is certainly "not a git repository"; any doubt is left to git."""
+    if os.environ.get("GIT_DIR"):
+        return False
+    here = Path(os.path.realpath(workspace_path))
+    for d in (here, *here.parents):
+        if (d / ".git").exists():
+            return False
+        if (d / "HEAD").is_file() and (d / "objects").is_dir() and (d / "refs").is_dir():
+            return False
+    return True
+
+
 async def _read_status(workspace_path: str, include_ignored: bool) -> dict[str, Any]:
     if not workspace_path or not Path(workspace_path).is_dir():
+        return asdict(GitStatus(is_git_repo=False))
+
+    # A folder that is no repository (a home-folder workspace) is read on every
+    # git.changed, focus and timer by each window's status bar, badges and Git
+    # pane; asking git each time started a process per read. A `git init`
+    # creates the marker, so the next read goes to git as before.
+    if _no_repository_marker(workspace_path):
         return asdict(GitStatus(is_git_repo=False))
 
     # Verify it's a git repo. Only git's own answer means "not a repo": a check
