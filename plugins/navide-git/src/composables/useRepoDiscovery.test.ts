@@ -139,4 +139,39 @@ describe('useRepoDiscovery failure and Windows paths', () => {
       vi.useRealTimers()
     }
   })
+
+  it('re-scans for a folder change only when it can add or remove a repo', async () => {
+    // A home folder with nested repos: a file written beside them used to
+    // re-read every repo's status (Windows VM, homews samples.txt).
+    vi.useFakeTimers()
+    try {
+      let changed: ((payload: unknown) => void) | null = null
+      const send = vi.fn(async () => ({ ok: true, payload: { ok: true, repositories: [] } }))
+      const transport = {
+        send,
+        on: (type: string, cb: (payload: unknown) => void) => { if (type === 'git.changed') changed = cb; return () => undefined },
+      } as unknown as GitTransport
+      const scope = effectScope()
+      scope.run(() => useRepoDiscovery(() => '/home/u', transport))
+      await vi.advanceTimersByTimeAsync(0)
+      const scans = () => send.mock.calls.filter(([type]) => type === 'git.discover_repositories').length
+      const before = scans()
+
+      changed!({ workspace_path: '/home/u', paths: [{ rel_path: 'wh/samples.txt', change: 'modified' }] })
+      await vi.advanceTimersByTimeAsync(500)
+      expect(scans()).toBe(before)
+
+      changed!({ workspace_path: '/home/u', paths: [{ rel_path: 'new/.git/HEAD', change: 'created' }] })
+      await vi.advanceTimersByTimeAsync(500)
+      expect(scans()).toBe(before + 1)
+
+      // A directory-only window carries no paths: it may be a repo moved in.
+      changed!({ workspace_path: '/home/u', paths: [] })
+      await vi.advanceTimersByTimeAsync(31_000)
+      expect(scans()).toBe(before + 2)
+      scope.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
