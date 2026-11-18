@@ -23,7 +23,7 @@ import {
 } from '../../platform/terminal/lib/buffer'
 import { MANAGER_READY_SENTINEL, MANAGER_STAGE_DONE_SENTINEL } from '../../data/stages'
 import { RUN_SLOT_STUB } from './pipelineDagTestStub'
-import { noteScreenRoute, takeScreenRoute } from '../../lib/routedBlockCredits'
+import { isBlankedCopy, noteScreenRoute, takeScreenRoute } from '../../lib/routedBlockCredits'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const screens = JSON.parse(readFileSync(
@@ -97,6 +97,7 @@ async function load() {
     paneTurnStartedAt: new Map(),
     noteScreenRoute,
     takeScreenRoute,
+    isBlankedCopy,
     pipelineLog: (line: string) => log.push(line),
     i18n: { global: { t: (key: string) => key } },
     routerInject: async (paneId: string, text: string) => { injected.push([paneId, text]); return true },
@@ -306,6 +307,43 @@ describe('a template read back damaged is still a template', () => {
       + '---ASK-START---  Pick one: <Option A> or <Option B>?  ---ASK-END---'
     expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items)
       .toEqual(['worker ask Y850cf0ff1544', 'Pick one: <Option A> or <Option B>?'])
+  })
+})
+
+// 0.2.44 Linux VM ask3: a repaint read one cell of an ASK already routed back
+// blank ("worker ask Y2ddd9 5bdacf"), the text no longer matched the routed
+// block, and the Manager got the same ASK a second time.
+describe('a repaint that blanks a cell is not a new message', () => {
+  const asks = (t: Awaited<ReturnType<typeof load>>) =>
+    t.injected.filter(([pane, text]) => pane === 'mgr' && text.startsWith('[→ ASK FROM wk]'))
+
+  it('the blanked copy of a routed ASK is not routed again', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content: 'worker ask Y2ddd9e5bdacf' })
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content: 'worker ask Y2ddd9 5bdacf' })
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content: 'worker as  Y2ddd9e5bdacf' })
+    await Promise.resolve()
+    expect(asks(t)).toEqual([['mgr', '[→ ASK FROM wk]\nworker ask Y2ddd9e5bdacf']])
+  })
+
+  it('an ASK that differs in a letter it shows is a new message', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    for (const content of ['worker ask Y2ddd9e5bdacf', 'worker ask Y2ddd9f5bdacf', 'worker ask Y2ddd95bdacf', 'worker ask Y2ddd9e5bdacf2']) {
+      t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content })
+    }
+    await Promise.resolve()
+    expect(asks(t)).toHaveLength(4)
+  })
+
+  it('a REPORT is not taken for a blanked copy of an ASK', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content: 'worker note Y1234567890ab' })
+    t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content: 'worker note Y12345 7890ab' })
+    await Promise.resolve()
+    expect(t.injected.map(([, text]) => text.split('\n')[0])).toEqual(['[→ ASK FROM wk]', '[→ REPORT FROM wk]'])
   })
 })
 
