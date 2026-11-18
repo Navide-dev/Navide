@@ -2713,13 +2713,12 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
  *  546px: the rows plus the CLI and Agents headings) plus the fixed
- *  furniture around it — role picker, two dividers,
- *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  furniture around it — role picker, two dividers, the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 716
+const ADD_MENU_MAX_H = 644
 /** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
  *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
  *  ~276px of bold system-font text plus 36px of check mark and padding); at
@@ -4642,9 +4641,6 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             </button>
           </template>
         </div>
-        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
-             ship as Navide plugins, so the menu points there. -->
-        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
         <!-- Remote container pane (experimental): absent while the switch is off. -->
         <button
           v-if="remoteEnabled"
