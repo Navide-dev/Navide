@@ -16,6 +16,7 @@ const mockTerminal = vi.hoisted(() => ({
   displayStatus: null as unknown as Ref<string>,
   liveStatus: null as unknown as Ref<string>,
   pasteText: null as unknown as ReturnType<typeof import('vitest').vi.fn>,
+  screen: '',
   opts: null as null | { agentProfileFor?: (key?: string) => { agentKey: string } | undefined },
 }))
 
@@ -32,6 +33,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
       mount: v.fn(),
       stopIneffective: { value: false },
       pasteText: mockTerminal.pasteText,
+      readVisibleScreen: () => mockTerminal.screen,
       updateXtermTheme: v.fn(),
       setDisableStdin: v.fn(),
       displayStatus: mockTerminal.displayStatus,
@@ -128,6 +130,35 @@ describe('TerminalPane – remote container pane', () => {
     // Asked for from the badge, so the steps are open already.
     expect(wrapper.get('[data-testid="remote-login-card"]').text()).toContain('remoteDevcontainer.login-step3')
     expect(wrapper.get('[data-testid="remote-login-card"]').text()).not.toContain('remoteDevcontainer.login-codex')
+  })
+
+  it('a first-run setup menu cancels the /login prefill instead of typing into it', async () => {
+    // A fresh container's Claude Code opens on its text-style picker; it reads
+    // as idle, but a pasted /login lands on the picker and Enter picks a theme.
+    mockTerminal.screen = [
+      " Let's get started.",
+      ' Choose the text style that looks best with your terminal',
+      ' ❯ 1. Dark mode ✔',
+      '   2. Light mode',
+      '   3. Dark mode (colorblind-friendly)',
+    ].join('\n')
+    try {
+      wrapper = mountPane({ agentKey: 'remote', remote })
+      mockTerminal.liveStatus.value = 'idle'
+      await nextTick()
+      expect(mockTerminal.pasteText).not.toHaveBeenCalled()
+      // Setup finished and the CLI reached its prompt: still nothing typed —
+      // the setup screens run their own sign-in.
+      mockTerminal.screen = '> '
+      mockTerminal.liveStatus.value = 'running'
+      await nextTick()
+      mockTerminal.liveStatus.value = 'idle'
+      await nextTick()
+      expect(mockTerminal.pasteText).not.toHaveBeenCalled()
+      expect(wrapper.find('[data-testid="remote-login-card"]').exists()).toBe(true)
+    } finally {
+      mockTerminal.screen = ''
+    }
   })
 
   it('codex gets the device-code hint and nothing typed', async () => {

@@ -5,6 +5,7 @@ import base64
 import functools
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -164,8 +165,8 @@ app = FastAPI(
 #: same-origin with 127.0.0.1 still arrives here as ``Host: evil.com``. The
 #: /ws handshake already refuses a web Origin (see ws_auth); this is the same
 #: defence for the HTTP routes, which non-browser clients reach without ever
-#: sending an Origin at all.
-_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+#: sending an Origin at all. IP literals are accepted separately (see below).
+_LOCAL_HOSTNAMES = frozenset({"localhost"})
 
 
 def is_local_host_header(host_header: str) -> bool:
@@ -179,8 +180,24 @@ def is_local_host_header(host_header: str) -> bool:
     ``~/.claude/settings.json`` resolve the port from the port file at run
     time, and one pointing at a previous run must fail as a connection error
     rather than be rejected here as the wrong host.
+
+    Any IP literal is accepted. Rebinding needs a hostname the attacker's DNS
+    answers for; a browser that sends ``Host: 172.17.0.1`` connected to that
+    address itself, and this socket only listens on loopback, so the request
+    can only have come through loopback anyway. A devcontainer on a Docker
+    bridge network reaches us through the ssh reverse tunnel bound on its
+    gateway, and its Host is that gateway address.
     """
-    return urlparse(f"//{host_header or ''}").hostname in _LOCAL_HOSTS
+    hostname = urlparse(f"//{host_header or ''}").hostname
+    if not hostname:
+        return False
+    if hostname in _LOCAL_HOSTNAMES:
+        return True
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return True
 
 
 @app.middleware("http")
