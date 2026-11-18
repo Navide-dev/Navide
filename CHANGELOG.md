@@ -4,6 +4,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.44] — 2026-11-18
+
 ### Added
 
 - Shipped Log (0.2.44, MVP): a new built-in Navide plugin, `navide.shipped-log`, answers "what went live since …". Agents record a change once it is live with `ship_log_record` (a plain-language line, `commit`/`config`/`migration`/`other`, optional ref and time; a production setting is sensitive by default), and `ship_log_report` merges those entries with the deploy branch's first-parent commits (`main`, else `master`) and the tags created in the window, one item per commit, each naming its basis (agent, branch or tag). In a bound chat, `/shipped [today|yesterday|7d|ISO time]` answers from the backend without waking the pane; a sensitive item there is only counted, and secrets and email addresses are masked. An entry that looks like it carries a secret is refused, never stored. The ledger lives in the workspace's own `.agent-team/navide.db` and never leaves the machine. Plugins can no longer derive the `ship_` agent-tool prefix.
@@ -32,6 +34,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Git (0.2.44): a workspace folder that is not a repository (no `.git` in it or any parent, no bare layout, `GIT_DIR` unset) answers its status without starting `git`; every status bar, Explorer badge and Git pane read used to start a `git rev-parse`. Real repositories are read as before.
 - Inter-CLI messaging (0.2.44): a worker's kickoff ASK template whose letters the screen dropped (seen on Windows ConPTY) was forwarded to the Manager as a real ASK. The placeholder check now runs on both parse paths and looks past a damaged label, so a template is never forwarded.
 - Messaging (0.2.44): a message from an MCP caller with no pane behind it could stay held on `pty-blocked` until the pane was closed. When an interrupt came before the model printed anything, Claude Code put the prompt back in its input box, and the next envelope from such a caller ended with the same reply hint, so its echo could not be told apart and Enter was never pressed. That hint now ends with the message's short `msg_key`, so every envelope has its own tail.
+- Inter-CLI messaging (0.2.44): an ASK already routed to the Manager was routed a second time when a repaint read a few of its cells back blank (seen on a Linux VM), because the screen dedupe keys on the text without whitespace. Both screen paths now take a routed block of the same kind and sender with at most three cells, and no more than one in eight, read back blank as the block already routed; a block that differs in any character it shows is still a new message.
 
 ### Known limitations
 
