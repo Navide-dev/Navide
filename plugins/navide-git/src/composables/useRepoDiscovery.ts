@@ -150,8 +150,19 @@ export function useRepoDiscovery(
     await refresh()
     _quietRescans = repoKeys() === before ? _quietRescans + 1 : 0
   }
+  // A folder change adds or removes a repo only through a `.git` path (git
+  // init, clone, a repo moved in or deleted). A window without its paths — a
+  // directory event carries none, an older backend sends none, a long burst is
+  // cut — may hold one, so it rescans; a file written beside the repos cannot.
+  const mayChangeRepos = (p: { paths?: { rel_path?: string }[]; paths_truncated?: boolean }) =>
+    !p.paths?.length || p.paths_truncated === true
+    || p.paths.some((e) => (e.rel_path ?? '').split('/').includes('.git'))
   const _offChanged = on('git.changed', (payload: unknown) => {
-    const p = payload as { workspace_path?: string }
+    const p = payload as {
+      workspace_path?: string
+      paths?: { rel_path?: string }[]
+      paths_truncated?: boolean
+    }
     const ws = workspacePath()
     let folderOnly = false
     if (p?.workspace_path && ws) {
@@ -163,6 +174,7 @@ export function useRepoDiscovery(
       folderOnly = changed === root
     }
     if (folderOnly) {
+      if (!mayChangeRepos(p)) return
       if (_timer !== null && _quietRescans > 0) return
       if (_timer !== null) clearTimeout(_timer)
       _timer = setTimeout(() => {
