@@ -130,7 +130,7 @@ function rowKind(agentKey: string, profile: CliProfile | null): string {
 
 function listProfiles(agentKey: string): (CliProfile | null)[] {
   const query = listQuery.value.trim().toLowerCase()
-  return [null, ...props.api.profilesForAgent(agentKey)].filter(
+  return orderedCards(agentKey).filter(
     (p) => !query || [rowTitle(agentKey, p), agentLabel(agentKey)].some((part) => part.toLowerCase().includes(query)),
   )
 }
@@ -926,10 +926,21 @@ onMounted(() => refreshUsage())
                 :key="p?.id ?? '__default__'"
                 type="button"
                 class="acct-row"
-                :class="{ on: isSelectedAccount(spec.agentKey, p?.id ?? null), dim: !isApiKeyProfile(p) && cardSaysSignedOut(spec.agentKey, p) }"
+                :class="{
+                  on: isSelectedAccount(spec.agentKey, p?.id ?? null),
+                  dim: !isApiKeyProfile(p) && cardSaysSignedOut(spec.agentKey, p),
+                  'order-over': orderDragOverKey === slotKey(spec.agentKey, p),
+                }"
                 :aria-current="isSelectedAccount(spec.agentKey, p?.id ?? null) ? 'true' : undefined"
                 :data-account="slotKey(spec.agentKey, p)"
+                :draggable="api.profilesForAgent(spec.agentKey).length > 0 ? 'true' : undefined"
+                :title="api.profilesForAgent(spec.agentKey).length > 0 ? $t('settings.accounts.cli.order-handle') : undefined"
                 @click="selection = { type: 'account', agentKey: spec.agentKey, profileId: p?.id ?? null }"
+                @dragstart="onOrderDragStart($event, spec.agentKey, p)"
+                @dragend="onOrderDragEnd"
+                @dragover="onOrderDragOver($event, spec.agentKey, p)"
+                @dragleave="onOrderDragLeave(spec.agentKey, p)"
+                @drop.prevent="onOrderDrop(spec.agentKey, p)"
               >
                 <span class="acct-row-text">
                   <b v-truncate>{{ rowTitle(spec.agentKey, p) }}</b>
@@ -1366,6 +1377,7 @@ onMounted(() => refreshUsage())
 .acct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 5px 7px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
 .acct-row:hover { background: var(--bg-hover); }
 .acct-row.on { background: var(--accent-subtle, var(--bg-hover)); }
+.acct-row.order-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .acct-row:focus-visible, .acct-add:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -2px; }
 .acct-row.dim .acct-row-text b { color: var(--text-secondary); font-weight: 500; }
 .acct-row-text { min-width: 0; }
