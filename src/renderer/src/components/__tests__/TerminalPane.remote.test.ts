@@ -22,6 +22,7 @@ const PROMPT_SCREEN = realScreen('claude-2.1.327-prompt.txt')
 const mockTerminal = vi.hoisted(() => ({
   displayStatus: null as unknown as Ref<string>,
   liveStatus: null as unknown as Ref<string>,
+  lastRawActivityAt: null as unknown as Ref<number>,
   pasteText: null as unknown as ReturnType<typeof import('vitest').vi.fn>,
   screen: '',
   opts: null as null | { agentProfileFor?: (key?: string) => { agentKey: string } | undefined },
@@ -33,6 +34,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@navide/terminal')>()
   mockTerminal.displayStatus = ref('idle')
   mockTerminal.liveStatus = ref('starting')
+  mockTerminal.lastRawActivityAt = ref(0)
   mockTerminal.pasteText = v.fn(() => true)
   return {
     ...actual,
@@ -45,6 +47,7 @@ vi.mock('@navide/terminal', async (importOriginal) => {
       setDisableStdin: v.fn(),
       displayStatus: mockTerminal.displayStatus,
       liveStatus: mockTerminal.liveStatus,
+      lastRawActivityAt: mockTerminal.lastRawActivityAt,
       sessionId: { value: 'sess-1' },
       isAltBuffer: ref(false),
     }),
@@ -73,6 +76,7 @@ describe('TerminalPane – remote container pane', () => {
     __resetSettingsForTest()
     mockTerminal.displayStatus.value = 'idle'
     mockTerminal.liveStatus.value = 'starting'
+    mockTerminal.lastRawActivityAt.value = 0
     mockTerminal.pasteText.mockClear()
   })
   afterEach(() => {
@@ -160,28 +164,50 @@ describe('TerminalPane – remote container pane', () => {
     expect(mockTerminal.pasteText).not.toHaveBeenCalled()
     // Setup finished and the CLI reached its prompt: still nothing typed —
     // the setup screens run their own sign-in.
-    mockTerminal.screen = PROMPT_SCREEN
-    mockTerminal.liveStatus.value = 'running'
-    await nextTick()
-    mockTerminal.liveStatus.value = 'idle'
-    await nextTick()
+    vi.useFakeTimers()
+    try {
+      mockTerminal.screen = PROMPT_SCREEN
+      mockTerminal.lastRawActivityAt.value = Date.now()
+      mockTerminal.liveStatus.value = 'running'
+      await nextTick()
+      mockTerminal.liveStatus.value = 'idle'
+      await nextTick()
+      vi.advanceTimersByTime(1000)
+    } finally {
+      vi.useRealTimers()
+    }
     expect(mockTerminal.pasteText).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="remote-login-card"]').exists()).toBe(true)
   })
 
-  it('a screen that is still drawing keeps the prefill waiting for the prompt', async () => {
-    mockTerminal.screen = ''
-    wrapper = mountPane({ agentKey: 'remote', remote })
-    mockTerminal.liveStatus.value = 'idle'
-    await nextTick()
-    expect(mockTerminal.pasteText).not.toHaveBeenCalled()
-    mockTerminal.screen = PROMPT_SCREEN
-    mockTerminal.liveStatus.value = 'running'
-    await nextTick()
-    mockTerminal.liveStatus.value = 'idle'
-    await nextTick()
-    expect(mockTerminal.pasteText).toHaveBeenCalledTimes(1)
-    expect(mockTerminal.pasteText.mock.calls[0][0]).toBe('/login')
+  // On a set-up container the CLI goes idle before Claude Code has drawn its
+  // prompt, then only repaints: idle never changes again, so the prompt is
+  // found from the output that follows. A half-drawn prompt (rule above the
+  // ❯ row, nothing below yet) is not a menu and must not drop the prefill.
+  it.each([
+    ['an empty screen', ''],
+    ['a half-drawn prompt', PROMPT_SCREEN.split('\n').slice(0, 7).join('\n')],
+  ])('prefills once the prompt is drawn after the first idle on %s, with no status change', async (_name, first) => {
+    vi.useFakeTimers()
+    try {
+      mockTerminal.screen = first
+      wrapper = mountPane({ agentKey: 'remote', remote })
+      mockTerminal.liveStatus.value = 'idle'
+      await nextTick()
+      expect(mockTerminal.pasteText).not.toHaveBeenCalled()
+      mockTerminal.screen = PROMPT_SCREEN
+      mockTerminal.lastRawActivityAt.value = Date.now()
+      await nextTick()
+      vi.advanceTimersByTime(1000)
+      expect(mockTerminal.pasteText).toHaveBeenCalledTimes(1)
+      expect(mockTerminal.pasteText.mock.calls[0][0]).toBe('/login')
+      mockTerminal.lastRawActivityAt.value = Date.now() + 1
+      await nextTick()
+      vi.advanceTimersByTime(1000)
+      expect(mockTerminal.pasteText).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('codex gets the device-code hint and nothing typed', async () => {
