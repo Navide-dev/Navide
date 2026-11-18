@@ -12479,7 +12479,7 @@
     "account-disabled-title": "远程分格没有账号切换，也没有额度用尽时的自动切换",
     "account-disabled-body": "这些功能会把这台电脑的登录文件复制给 CLI，等于把你的凭证送到远程机器。请在容器内用你自己的账号登录。",
     "login-title": "这个容器尚未登录 {cli}",
-    "login-step1": "在终端输入 /login（已帮你填好，按 Enter 即可）",
+    "login-step1": "在终端中输入 /login 后按 Enter（CLI 停在输入行时 Navide 会帮你预填）。如果 Claude Code 先出现首次设置画面（选择文字样式、登录方式），按画面逐步选完即可，设置流程本身就会登录",
     "login-step2": "终端会显示一个链接，在这台电脑的浏览器打开并登录",
     "login-step3": "把浏览器显示的代码贴回终端",
     "login-codex": "Codex CLI 会显示设备代码，请在浏览器中输入。",

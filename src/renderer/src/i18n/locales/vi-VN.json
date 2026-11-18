@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Pane từ xa không có chuyển tài khoản hay tự động chuyển khi hết hạn mức",
     "account-disabled-body": "Các tính năng này sao chép tệp đăng nhập của máy tính này vào CLI, nghĩa là thông tin xác thực của bạn sẽ bị gửi sang máy từ xa. Hãy đăng nhập bằng tài khoản của bạn bên trong container.",
     "login-title": "Container này chưa đăng nhập {cli}",
-    "login-step1": "Gõ /login trong terminal (đã điền sẵn, chỉ cần nhấn Enter)",
+    "login-step1": "Gõ /login trong terminal rồi nhấn Enter (Navide điền sẵn khi CLI đang ở dòng nhập). Nếu Claude Code hiện màn hình thiết lập lần đầu (kiểu chữ, cách đăng nhập) trước, hãy làm theo các màn hình đó: chúng sẽ đăng nhập cho bạn",
     "login-step2": "Terminal sẽ in ra một liên kết. Mở nó trong trình duyệt trên máy tính này và đăng nhập",
     "login-step3": "Dán mã mà trình duyệt hiển thị trở lại vào terminal",
     "login-codex": "Codex CLI hiển thị một mã thiết bị. Hãy nhập mã đó trong trình duyệt.",

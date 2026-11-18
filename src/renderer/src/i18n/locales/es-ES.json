@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Los panes remotos no tienen cambio de cuenta ni conmutación automática por cuota",
     "account-disabled-body": "Estas funciones copian los archivos de inicio de sesión de este equipo en la CLI, lo que enviaría tus credenciales a la máquina remota. Inicia sesión con tu propia cuenta dentro del contenedor.",
     "login-title": "Este contenedor no ha iniciado sesión en {cli}",
-    "login-step1": "Escribe /login en el terminal (ya está escrito, solo pulsa Enter)",
+    "login-step1": "Escribe /login en la terminal y pulsa Enter (Navide lo rellena cuando la CLI está en su línea de entrada). Si Claude Code muestra primero sus pantallas de configuración (estilo de texto, método de inicio de sesión), síguelas: ellas inician la sesión",
     "login-step2": "El terminal muestra un enlace. Ábrelo en el navegador de este equipo e inicia sesión",
     "login-step3": "Pega en el terminal el código que muestra el navegador",
     "login-codex": "Codex CLI muestra un código de dispositivo. Introdúcelo en el navegador.",

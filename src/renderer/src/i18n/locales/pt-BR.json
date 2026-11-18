@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Panes remotos não têm troca de conta nem failover automático de cota",
     "account-disabled-body": "Esses recursos copiam os arquivos de login deste computador para a CLI, o que enviaria suas credenciais para a máquina remota. Faça login com sua própria conta dentro do contêiner.",
     "login-title": "Este contêiner não está conectado ao {cli}",
-    "login-step1": "Digite /login no terminal (já preenchido, basta pressionar Enter)",
+    "login-step1": "Digite /login no terminal e pressione Enter (o Navide preenche quando a CLI está no prompt). Se o Claude Code mostrar antes as telas de configuração (estilo de texto, método de login), siga-as: elas fazem o login",
     "login-step2": "O terminal mostra um link. Abra-o no navegador deste computador e faça login",
     "login-step3": "Cole no terminal o código que o navegador mostrar",
     "login-codex": "O Codex CLI mostra um código de dispositivo. Digite-o no navegador.",

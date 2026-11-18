@@ -11,6 +11,7 @@ import type { MentionCandidate } from '@navide/terminal'
 import { PLAN_REF_MIME, isPlanDrag, parsePlanRefPayload, type PlanDragRef } from '../lib/planDrag'
 import { formatLoopTime } from '../lib/loopPrompt'
 import { PANE_STUCK_AFTER_MS } from '../lib/paneStuck'
+import { parseMenuOptions } from '../lib/paneAnswerKeys'
 import type { StaleConfigPart } from '../lib/staleConfigPanes'
 import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
@@ -434,6 +435,14 @@ let loginPrefillPending = false
 
 function tryLoginPrefill(): void {
   if (!loginPrefillPending || terminal.liveStatus?.value !== 'idle') return
+  // A fresh container opens on Claude Code's first-run setup (text style,
+  // sign-in method), which also reads as idle: typed there, /login lands on
+  // the menu and Enter picks a theme. That setup signs in by itself, so the
+  // prefill is dropped and the card's steps say to follow the setup.
+  if (parseMenuOptions(terminal.readVisibleScreen?.() ?? '').length > 1) {
+    loginPrefillPending = false
+    return
+  }
   if (terminal.pasteText('/login')) loginPrefillPending = false
 }
 

@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Remote-Bereiche haben keinen Kontowechsel und keinen automatischen Kontingent-Failover",
     "account-disabled-body": "Diese Funktionen kopieren die Anmeldedateien dieses Computers in die CLI, wodurch deine Zugangsdaten auf den entfernten Rechner gelangen würden. Melde dich im Container mit deinem eigenen Konto an.",
     "login-title": "Dieser Container ist nicht bei {cli} angemeldet",
-    "login-step1": "Gib /login im Terminal ein (bereits ausgefüllt, einfach Enter drücken)",
+    "login-step1": "Gib /login im Terminal ein und drücke Enter (Navide füllt es aus, sobald die CLI an ihrer Eingabezeile steht). Zeigt Claude Code zuerst seine Einrichtung (Textstil, Anmeldemethode), folge stattdessen dieser: Sie meldet dich an",
     "login-step2": "Das Terminal zeigt einen Link. Öffne ihn im Browser auf diesem Computer und melde dich an",
     "login-step3": "Füge den Code, den der Browser anzeigt, wieder im Terminal ein",
     "login-codex": "Codex CLI zeigt einen Gerätecode. Gib ihn im Browser ein.",

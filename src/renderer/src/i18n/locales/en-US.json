@@ -12479,7 +12479,7 @@
     "account-disabled-title": "Remote panes have no account switching or automatic quota failover",
     "account-disabled-body": "These features copy this computer's sign-in files into the CLI, which would send your credentials to the remote machine. Sign in with your own account inside the container.",
     "login-title": "This container is not signed in to {cli}",
-    "login-step1": "Type /login in the terminal (already filled in, just press Enter)",
+    "login-step1": "Type /login in the terminal and press Enter (Navide fills it in once the CLI is at its prompt). If Claude Code first shows its setup screens (text style, sign-in method), follow those instead: they sign you in",
     "login-step2": "The terminal prints a link. Open it in the browser on this computer and sign in",
     "login-step3": "Paste the code the browser shows back into the terminal",
     "login-codex": "Codex CLI shows a device code. Enter it in the browser.",
