@@ -233,7 +233,7 @@ export function atClaudeInputPrompt(screen: string): boolean {
 export function onCursorMenu(screen: string): boolean {
   const lines = screen.split('\n')
   return lines.some((line, at) =>
-    CURSOR_LINE.test(line) && !(PROMPT_RULE.test(lines[at - 1] ?? '') && PROMPT_RULE.test(lines[at + 1] ?? '')))
+    CURSOR_LINE.test(line) && !PROMPT_RULE.test(lines[at - 1] ?? '') && !PROMPT_RULE.test(lines[at + 1] ?? ''))
 }
 
 /** Between the picker's keys: still the same picker, with the same rows.
