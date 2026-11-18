@@ -175,6 +175,9 @@ const probeLines = computed<ProbeLine[]>(() => {
     : { ok: false, text: t('remoteDevcontainer.test-cli-missing', { cli, container: remote.container }) })
   if (r.mcp === 'ok') lines.push({ ok: true, text: t('remoteDevcontainer.test-mcp-ok') })
   else if (r.mcp === 'unknown') lines.push({ ok: null, text: t('remoteDevcontainer.test-mcp-unknown') })
+  // The tunnel connected but the backend answered: not "unreachable".
+  else if (r.mcp === 'http-403') lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-forbidden') })
+  else if (r.mcp?.startsWith('http-')) lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-http', { code: r.mcp.slice(5) }) })
   else lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-failed') })
   return lines
 })

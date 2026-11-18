@@ -108,6 +108,32 @@ describe('RemoteDevcontainerDialog', () => {
     expect(wrapper.emitted('open')?.[0]).toEqual([{ remote: { host: 'devbox', container: 'hostnet', network: { mode: 'host' }, cli: 'claude' } }])
   })
 
+  it.each([
+    ['http-403', 'remoteDevcontainer.test-mcp-forbidden', {}],
+    ['http-502', 'remoteDevcontainer.test-mcp-http', { code: '502' }],
+    ['unreachable', 'remoteDevcontainer.test-mcp-failed', {}],
+  ])('tells a %s tunnel result apart from the others', async (mcp, key, params) => {
+    const m = mountDialog({
+      'remote_devcontainer.list': { ok: true, payload: { containers } },
+      'remote_devcontainer.probe': {
+        ok: true,
+        payload: { host_ok: true, container_ok: true, cli_path: '/usr/bin/claude', cli_version: '2.0', mcp, elapsed_ms: 5 },
+      },
+    })
+    wrapper = m.wrapper
+    await listFor(wrapper, 'devbox')
+    await wrapper.findAll('[data-testid="remote-container-row"]')[0].get('input').setValue(true)
+    await wrapper.get('[data-testid="remote-test"]').trigger('click')
+    await flushPromises()
+    const result = wrapper.get('[data-testid="remote-test-result"]').text()
+    const t = i18n.global.t
+    expect(t(key, params)).not.toBe(key)
+    expect(result).toContain(t(key, params))
+    for (const other of ['test-mcp-forbidden', 'test-mcp-http', 'test-mcp-failed']) {
+      if (`remoteDevcontainer.${other}` !== key) expect(result).not.toContain(t(`remoteDevcontainer.${other}`, { code: '502' }))
+    }
+  })
+
   it('shows an ssh failure with the stderr detail', async () => {
     const m = mountDialog({
       'remote_devcontainer.list': { ok: false, error: { code: 'REMOTE_SSH_FAILED', message: 'ssh failed', details: { exit_code: 255, stderr: 'Could not resolve hostname devbox' } } },
