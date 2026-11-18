@@ -82,8 +82,19 @@ def test_a_the_other_loopback_spellings_are_allowed(host, workspace) -> None:
         ("localhost:54321", True),
         ("[::1]", True),
         ("[::1]:54321", True),
+        # An IP literal cannot be a DNS-rebinding vector (rebinding needs a
+        # hostname the attacker controls), and this socket only listens on
+        # loopback. A devcontainer on a Docker bridge reaches us through the
+        # ssh reverse tunnel as its gateway address, so these must pass.
+        ("172.17.0.1", True),
+        ("172.17.0.1:54321", True),
+        ("10.0.0.5:80", True),
+        ("[fd00::1]:54321", True),
+        ("LOCALHOST", True),
         ("evil.com", False),
         ("evil.com:80", False),
+        ("172.17.0.1.evil.com", False),
+        ("localhost.evil.com", False),
         ("127.0.0.1.evil.com", False),
         ("testserver", False),
         ("", False),
@@ -97,6 +108,13 @@ def test_a_host_header_rule(host_header, allowed) -> None:
     be covered here. Splitting by hand is the same mistake the parser avoids.
     """
     assert app_module.is_local_host_header(host_header) is allowed
+
+
+def test_a_bridge_gateway_host_still_serves(workspace) -> None:
+    """A devcontainer on a Docker bridge network arrives as Host: <gateway>."""
+    bridged = TestClient(app, base_url="http://172.17.0.1:54321")
+    resp = bridged.get("/fs/raw", params={"workspace": str(workspace), "rel": "note.txt", "t": "test-ws-token"})
+    assert resp.status_code == 200
 
 
 def test_a_schema_routes_are_gone(client) -> None:
