@@ -258,6 +258,57 @@ describe('worker screen: templates are not messages, and a repaint is not a seco
   })
 })
 
+// 0.2.44 Windows VM (m1, m7, m10–m12, rep1, rep3): the worker kickoff's ASK
+// template, read back from the ConPTY screen with letters lost, reached the
+// Manager as "[→ ASK FROM wk]\nconte t: <o paragraph on the question you need
+// decided>". The label no longer read as `content:`, so the placeholder check
+// never ran, and the Manager CLI took the next injection, the real REPORT, into
+// the same turn (REPORT exact-text 0). Lost letters, a broken line or a lost
+// label must not turn a template into a message.
+describe('a template read back damaged is still a template', () => {
+  const damaged = [
+    'conte t: <o paragraph on the question you need decided>',
+    'conte\nt: <one paragraph on the\nquestion you need decided>',
+    '<one paragrph on the question you ned decided>',
+    'ontent <one paragraph on the question you need decided>',
+  ]
+
+  it.each(damaged)('an ASK template %j is not an ASK', async (body) => {
+    const t = await load()
+    const buf = `---ASK-START---\n  ${body}\n  ---ASK-END---`
+    expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items).toEqual([])
+  })
+
+  it('a damaged REPORT template is not a REPORT', async () => {
+    const t = await load()
+    const buf = '---REPORT-START---  cont nt: <one paragraph on what you completed and where things stand>  ---REPORT-END---'
+    expect(t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items).toEqual([])
+  })
+
+  it('the real REPORT after a damaged ASK template reaches the Manager alone', async () => {
+    const t = await load()
+    t.router.managerReady = true
+    const buf = '  ---ASK-START---  conte t: <o paragraph on the question you need decided>  ---ASK-END---'
+      + '  ⏺ ---REPORT-START---  worker report Y0596c936a84f  ---REPORT-END---'
+    for (const content of t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items) {
+      t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'ASK', content })
+    }
+    for (const content of t.api.parseContentBlocks(buf, 0, t.api.REPORT_RE).items) {
+      t.api.queueOrRouteWorkerMsg(t.router, 'm1', { fromLabel: 'wk', kind: 'REPORT', content })
+    }
+    await Promise.resolve()
+    expect(t.injected).toEqual([['mgr', '[→ REPORT FROM wk]\nworker report Y0596c936a84f']])
+  })
+
+  it('a real block without a content: label is still routed', async () => {
+    const t = await load()
+    const buf = '---ASK-START---  worker ask Y850cf0ff1544  ---ASK-END---'
+      + '---ASK-START---  Pick one: <Option A> or <Option B>?  ---ASK-END---'
+    expect(t.api.parseContentBlocks(buf, 0, t.api.ASK_RE).items)
+      .toEqual(['worker ask Y850cf0ff1544', 'Pick one: <Option A> or <Option B>?'])
+  })
+})
+
 describe('STAGE-DONE in the Manager reply text ends the stage', () => {
   it('finishes the stage once', async () => {
     const t = await load()
