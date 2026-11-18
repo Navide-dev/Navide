@@ -340,10 +340,15 @@ describe('0.2.44 — message delivery, MCP reconnect in place, remote container 
     expect(en()).toContain('Reconnect starts a new conversation')
   })
 
-  // The account order shipped without a way to drag it in Settings (screenshot
-  // report 0-2-44_671d1e, X1), so the announcement must not promise it.
-  it('does not announce account ordering', () => {
-    for (const text of entry!.highlights) expect(text['en-US']).not.toMatch(/drag|order your accounts/i)
+  // The order picks among eligible accounts only (not in use, signed in, quota
+  // left); there is no low-quota threshold that moves an account to the end.
+  it('describes the account order the way the switching code ranks it', () => {
+    const order = entry!.highlights.find((text) => text['en-US'].startsWith('Account order:'))!
+    expect(order['en-US']).toContain('drag accounts in the list on the left of Settings → Accounts')
+    expect(order['en-US']).toContain('the first account in that order that is not in use, is signed in and has quota left')
+    expect(order['en-US']).toContain('API key accounts still come after every subscription account')
+    expect(order['zh-TW']).toContain('左側清單拖拉')
+    for (const locale of locales) expect(order[locale], locale).not.toMatch(/threshold|門檻|门槛/i)
   })
 
   it('puts a no-break space before French : ; ? !', () => {
