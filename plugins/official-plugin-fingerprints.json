@@ -1,21 +1,21 @@
 {
-  "baseline": "v0.2.43",
+  "baseline": "v0.2.44",
   "plugins": {
     "navide.browser": {
-      "version": "1.1.4",
-      "fingerprint": "f53954d1fd6f858898631a92278928eec0ed8eac98113579ba99381c2f4f0765"
+      "version": "1.1.5",
+      "fingerprint": "73aa4c6f492606028ef84b15d26ae44fb09a10f9ae282b8234be85d93b851096"
     },
     "navide.git": {
-      "version": "1.0.7",
-      "fingerprint": "39bd20f87855af0cc11879d4b8caac4e7be034bed940efe0263d8e59c7cd87b8"
+      "version": "1.0.8",
+      "fingerprint": "de8b5a86442b99f82de82641fae451c78a28c79acc7b9ed8f8d726ac038dd512"
     },
     "navide.mini-ide": {
-      "version": "1.0.6",
-      "fingerprint": "bba94b1f343a52a67f5d17b81b77f0924ca3307d37bd0c0a8a35a11a4da7e4e2"
+      "version": "1.0.7",
+      "fingerprint": "837f727071e490f593864e6e2c904b13b21aae7427aec32f590b61e790cc93dd"
     },
     "navide.plans": {
-      "version": "1.1.6",
-      "fingerprint": "3d695f043d1e8e6ae66cdb9206738484becd95c71cd77f9ecf11f8472f2efb50"
+      "version": "1.1.7",
+      "fingerprint": "5321442155737148c60973f299764b1b0266b7efd96da0ab7ec4f5a948483b6c"
     }
   }
 }
