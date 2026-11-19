@@ -1201,10 +1201,7 @@ class UsageService:
                 # the same last-good-or-nothing snapshot a parked slot gets, so
                 # the card has something to carry the mark.
                 self._record_parked_claude_slot(slot)
-            if self.enabled and reading:
-                account[slot]["refreshPending"] = True
-            else:
-                account[slot].pop("refreshPending", None)
+            self._set_reading_mark(account[slot], self.enabled and reading)
             self._cancel_claude_reads()
             self.request_refresh()
             return
@@ -1212,11 +1209,19 @@ class UsageService:
         account = self.account_snapshots.setdefault(agent_key, {})
         if slot not in account:
             account[slot] = _snapshot(agent_key, "not-measured")
-        if self.enabled and reading:
-            account[slot]["refreshPending"] = True
-        else:
-            account[slot].pop("refreshPending", None)
+        self._set_reading_mark(account[slot], self.enabled and reading)
         self.request_refresh(agent_key)
+
+    @staticmethod
+    def _set_reading_mark(snapshot: dict, reading: bool) -> None:
+        """Mark a snapshot as being read, with when that started — the badge
+        says how long it has been reading — or drop both."""
+        if reading:
+            snapshot["refreshPending"] = True
+            snapshot["refreshPendingSince"] = _now_iso()
+        else:
+            snapshot.pop("refreshPending", None)
+            snapshot.pop("refreshPendingSince", None)
 
     async def announce_switch(
         self, agent_key: str, slot_id: str | None, *, reading: bool = True, mark: bool = True
@@ -1230,6 +1235,16 @@ class UsageService:
         from .ipc import make_event
 
         await app.broadcast(make_event("usage.changed", self.payload()))
+
+    async def _publish_payload(self) -> None:
+        """Broadcast the current payload mid-cycle. Best effort."""
+        try:
+            from . import app
+            from .ipc import make_event
+
+            await app.broadcast(make_event("usage.changed", self.payload()))
+        except Exception as err:  # noqa: BLE001 — publishing cannot break polling
+            log.warning("usage: early broadcast failed: %s", err)
 
     def _notify_failover(self, agent_key: str, slot_id: str, snap: dict) -> None:
         """Hand a reading this cycle KEPT to the failover authority (a reading
@@ -1351,27 +1366,35 @@ class UsageService:
         # Everything below about Claude rests on this answer to "who is active".
         # Capture the epoch first: if a switch lands while the cycle is out
         # reading the CLI, the answer is stale and must not be written back.
-        switch_epoch = self._switch_epoch
         agent_epochs = dict(self._agent_epochs)
-        claude_accounts = await self._claude_credentials_by_slot()
         cache_changed = False
-        # Claude quota comes from the CLI's own `/usage` panel — Claude Code
-        # asks under its own identity and this reads what it printed. Only the
-        # signed-in account can be reported that way, so a parked account shows
-        # its own last reading marked stale, never a figure passed off as live.
-        parked_slots: list[str] = []
-        if claude_accounts is None:
-            claude_active = "__default__"
-        else:
-            claude_active, credentials = claude_accounts
-            parked_slots = [s for s in credentials if s != claude_active]
-        claude_coros = {claude_active: lambda: fetch_claude(home)}
-        # A parked account that signed in inside its own config dir is not
-        # parked for measuring: its /usage read runs on that dir. One at a
-        # time — each read boots a whole Claude Code.
-        for slot_id, directory in await self._claude_account_dirs(parked_slots):
-            claude_coros[slot_id] = functools.partial(self._read_account_dir, directory)
-        parked_slots = [s for s in parked_slots if s not in claude_coros]
+        # A switch that lands while "who is active" is being resolved has no
+        # read to cancel yet, so it would let this cycle start reads that are
+        # discarded the moment they finish. Resolve again instead — a bounded
+        # number of times, after which the epoch guard below still holds.
+        for _attempt in range(3):
+            switch_epoch = self._switch_epoch
+            claude_accounts = await self._claude_credentials_by_slot()
+            # Claude quota comes from the CLI's own `/usage` panel — Claude
+            # Code asks under its own identity and this reads what it printed.
+            # Only the signed-in account can be reported that way, so a parked
+            # account shows its own last reading marked stale, never a figure
+            # passed off as live.
+            parked_slots: list[str] = []
+            if claude_accounts is None:
+                claude_active = "__default__"
+            else:
+                claude_active, credentials = claude_accounts
+                parked_slots = [s for s in credentials if s != claude_active]
+            claude_coros = {claude_active: lambda: fetch_claude(home)}
+            # A parked account that signed in inside its own config dir is not
+            # parked for measuring: its /usage read runs on that dir. One at a
+            # time — each read boots a whole Claude Code.
+            for slot_id, directory in await self._claude_account_dirs(parked_slots):
+                claude_coros[slot_id] = functools.partial(self._read_account_dir, directory)
+            parked_slots = [s for s in parked_slots if s not in claude_coros]
+            if self._switch_epoch == switch_epoch:
+                break
         if self._switch_epoch == switch_epoch:
             for slot_id in parked_slots:
                 self._record_parked_claude_slot(slot_id)
@@ -1469,6 +1492,11 @@ class UsageService:
                 continue
             cache_changed = self._record_claude_snapshot(slot_id, snap) or cache_changed
             self._notify_failover("claude", slot_id, snap)
+            if slot_id == claude_active and len(claude_tasks) > 1:
+                # The badges follow `usage.changed`, which otherwise waits for
+                # every parked read (each a whole Claude Code boot): publish the
+                # active account's figure the moment it lands.
+                await self._publish_payload()
             if self.quota_history is not None and snap.get("status") == "ok":
                 try:
                     await asyncio.to_thread(
@@ -1486,7 +1514,7 @@ class UsageService:
             touched = set(parked_slots) | set(claude_coros)
             for slot_id, snapshot in self.account_snapshots.get("claude", {}).items():
                 if slot_id not in touched:
-                    snapshot.pop("refreshPending", None)
+                    self._set_reading_mark(snapshot, False)
         for provider, task in tasks.items():
             try:
                 snap = await task
@@ -1524,7 +1552,7 @@ class UsageService:
                 # Skipped this cycle (cooldown) with no switch since: nothing
                 # is being read, so no snapshot may say it is.
                 for snapshot in self.account_snapshots.get(provider, {}).values():
-                    snapshot.pop("refreshPending", None)
+                    self._set_reading_mark(snapshot, False)
         if cache_changed:
             await asyncio.to_thread(self._save_cache)
         await self._file_quota_samples()

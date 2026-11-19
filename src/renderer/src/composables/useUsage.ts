@@ -76,6 +76,8 @@ export interface UsageSnapshot {
    *  let them pass for the switch's result. Cleared by the snapshot the poll
    *  writes, whatever that snapshot turns out to be. */
   refreshPending?: boolean
+  /** When the in-flight read started (ISO); present with refreshPending. */
+  refreshPendingSince?: string
 }
 
 interface UsagePayload {

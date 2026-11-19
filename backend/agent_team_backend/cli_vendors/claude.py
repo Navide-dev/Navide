@@ -1134,6 +1134,33 @@ def _first_line(*streams: str) -> str:
     return ""
 
 
+_HINT_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f]")
+_HINT_EMAIL = re.compile(r"[^\s()<>\[\]]+@[^\s()<>\[\]]+")
+_HINT_UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+_HINT_HEX_ID = re.compile(r"\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{8,}\b")
+_HINT_TOKEN = re.compile(r"[A-Za-z0-9_\-.+/=]{24,}")
+_HINT_MAX = 160
+
+
+def usage_output_hint(text: str) -> str:
+    """The first line ``claude -p /usage`` printed, safe for a log or a badge.
+
+    When the panel holds no windows, that line is the only clue to why (a
+    login prompt, an error). Escape sequences, email addresses, UUIDs, hex ids
+    such as account slots, and anything token-shaped are replaced before it
+    leaves this function, and the line is capped."""
+    for raw in _HINT_ANSI.sub("", text or "").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        line = _HINT_EMAIL.sub("[email]", line)
+        line = _HINT_UUID.sub("[id]", line)
+        line = _HINT_TOKEN.sub("[redacted]", line)
+        line = _HINT_HEX_ID.sub("[id]", line)
+        return line[:_HINT_MAX]
+    return ""
+
+
 async def read_usage_panel(binary: str, config_dir: str | None = None) -> str:
     """Run ``claude -p /usage`` and return what it printed.
 
@@ -1236,8 +1263,9 @@ async def fetch_claude_usage_via_cli(
         return _costly(str(err) or type(err).__name__)
     windows = parse_usage_panel(raw)
     if not windows:
-        log.info("claude /usage produced no readable windows")
-        return _costly("claude -p /usage printed no usage windows")
+        hint = usage_output_hint(raw)
+        log.info("claude /usage produced no readable windows%s", f": {hint}" if hint else "")
+        return _costly("claude -p /usage printed no usage windows" + (f": {hint}" if hint else ""))
     snap = _snapshot("claude", "ok", windows=windows)
     absent = usage_panel_absent_windows(raw)
     if absent:
