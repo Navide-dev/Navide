@@ -115,6 +115,23 @@ def _register_shutdown_diag(environ=None) -> bool:
     return True
 
 
+# The Windows stand-in for that dump: with no SIGUSR1 to receive, a backend
+# under the harness variable arms faulthandler's own timer when the shutdown
+# line arrives, and one still running after this long writes every thread's
+# stack itself — inside the harness's 15 s wait, before it is killed. The timer
+# thread needs neither the event loop nor the GIL, so a stalled loop still
+# dumps. A backend that exits in time writes nothing.
+_SHUTDOWN_DUMP_AFTER_S = 10.0
+
+
+def _arm_shutdown_dump(environ=None) -> bool:
+    environ = os.environ if environ is None else environ
+    if environ.get(SHUTDOWN_DIAG_ENV) != "1" or hasattr(signal, "SIGUSR1"):
+        return False
+    faulthandler.dump_traceback_later(_SHUTDOWN_DUMP_AFTER_S, file=sys.stderr)
+    return True
+
+
 def _hold_free_port(host: str) -> socket.socket:
     """A socket bound to a free port, kept open for uvicorn to serve on.
 
@@ -144,6 +161,7 @@ def _watch_stdin_for_shutdown(server: "uvicorn.Server", stream=None) -> None:
             if line.strip() == SHUTDOWN_LINE:
                 logging.getLogger("agent_team_backend.main").info("shutdown requested on stdin")
                 server.should_exit = True
+                _arm_shutdown_dump()
                 return
     except Exception:  # noqa: BLE001 - a broken pipe must not take the server down
         return
