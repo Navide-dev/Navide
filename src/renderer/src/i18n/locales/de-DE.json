@@ -463,7 +463,11 @@
     "push-badge": "per {kind}",
     "push-badge-title-box": "Über die eigene lokale Schnittstelle der CLI übergeben statt Taste für Taste eingegeben – es landete trotzdem im Eingabefeld des Bereichs und wartete daher, bis Sie mit dem Tippen fertig waren",
     "push-badge-title-direct": "Direkt an die CLI übergeben, ohne je das Eingabefeld des Bereichs zu erreichen, sodass nichts, was Sie gerade tippten, mit abgeschickt werden konnte",
-    "expand-rail": "Nachrichten zwischen CLIs aufklappen"
+    "expand-rail": "Nachrichten zwischen CLIs aufklappen",
+    "leftover-cleared-title": "Eingabefeld geleert · {pane}",
+    "leftover-cleared-body": "Navide hat vor dem Zustellen einer Nachricht den Text geleert, den eine Unterbrechung im Eingabefeld hinterlassen hat, damit er nicht mitgesendet wird. „Wiederherstellen“ fügt ihn ohne Enter wieder ein.",
+    "leftover-restore": "Wiederherstellen",
+    "leftover-copy": "Kopieren"
   },
   "shutdown": {
     "title": "Wird beendet …",

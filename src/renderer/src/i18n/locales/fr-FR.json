@@ -463,7 +463,11 @@
     "push-badge": "via {kind}",
     "push-badge-title-box": "Transmis à la CLI par sa propre interface locale plutôt que saisi touche par touche : il est quand même passé par la zone de saisie du pane et a donc attendu que vous arrêtiez de taper",
     "push-badge-title-direct": "Transmis directement à la CLI sans jamais passer par la zone de saisie du pane : rien de ce que vous tapiez n’a pu être envoyé avec",
-    "expand-rail": "Développer les messages entre CLI"
+    "expand-rail": "Développer les messages entre CLI",
+    "leftover-cleared-title": "Zone de saisie vidée · {pane}",
+    "leftover-cleared-body": "Navide a vidé le texte qu’une interruption avait laissé dans la zone de saisie avant de livrer un message, pour qu’il ne parte pas avec. « Restaurer » le recolle sans appuyer sur Entrée.",
+    "leftover-restore": "Restaurer",
+    "leftover-copy": "Copier"
   },
   "shutdown": {
     "title": "Arrêt en cours…",

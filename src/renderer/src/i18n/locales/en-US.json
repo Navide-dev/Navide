@@ -463,7 +463,11 @@
     "push-badge": "via {kind}",
     "push-badge-title-box": "Handed to the CLI over its own local interface rather than typed key by key — it still went into the pane's input box, so it waited for you to stop typing",
     "push-badge-title-direct": "Handed straight to the CLI without ever reaching the pane's input box, so nothing you were typing could be submitted with it",
-    "expand-rail": "Expand inter-CLI messages"
+    "expand-rail": "Expand inter-CLI messages",
+    "leftover-cleared-title": "Input box cleared · {pane}",
+    "leftover-cleared-body": "Navide cleared the text an interrupt left in the input box before delivering a message, so it would not be sent along. Restore puts it back without pressing Enter.",
+    "leftover-restore": "Restore",
+    "leftover-copy": "Copy"
   },
   "shutdown": {
     "title": "Shutting down…",

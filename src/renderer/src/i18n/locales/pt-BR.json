@@ -463,7 +463,11 @@
     "push-badge": "via {kind}",
     "push-badge-title-box": "Entregue à CLI pela interface local dela em vez de digitada tecla por tecla – ainda assim foi para a caixa de entrada do pane, por isso esperou você parar de digitar",
     "push-badge-title-direct": "Entregue diretamente à CLI sem passar pela caixa de entrada do pane; por isso, nada do que você estava digitando poderia ser enviado junto",
-    "expand-rail": "Expandir mensagens entre CLIs"
+    "expand-rail": "Expandir mensagens entre CLIs",
+    "leftover-cleared-title": "Campo de entrada limpo · {pane}",
+    "leftover-cleared-body": "O Navide limpou o texto que uma interrupção deixou no campo de entrada antes de entregar uma mensagem, para que ele não fosse enviado junto. \"Restaurar\" o cola de volta sem pressionar Enter.",
+    "leftover-restore": "Restaurar",
+    "leftover-copy": "Copiar"
   },
   "shutdown": {
     "title": "Encerrando…",

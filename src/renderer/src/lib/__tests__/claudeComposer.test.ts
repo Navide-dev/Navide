@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt } from '../claudeComposer'
+import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt, composerOwner, unwrapComposer } from '../claudeComposer'
 import { composerClearKeys } from '../cliCoordination'
 
 const screen = (name: string): string => readFileSync(join(__dirname, 'fixtures', name), 'utf8')
@@ -21,7 +21,7 @@ function withBox(rows: string[]): string {
 
 const RESTORED = 'Run the release dry run and report back'
 const restored = withBox([RESTORED])
-const wrapped = withBox(['[Navide] from Navide指揮: check the CI run on integration/0.2.45 and', 'tell me which job failed first'])
+const wrapped = withBox(['[Navide MSG] from: Navide指揮 check the CI run on integration/0.2.45 and', 'tell me which job failed first'])
 
 describe('claudeComposerText', () => {
   it('reads an empty box as empty and a typed one as its text', () => {
@@ -31,7 +31,7 @@ describe('claudeComposerText', () => {
 
   it('reads a restored prompt, one row or wrapped over several', () => {
     expect(claudeComposerText(restored)).toBe(RESTORED)
-    expect(claudeComposerText(wrapped)).toBe('[Navide] from Navide指揮: check the CI run on integration/0.2.45 and\ntell me which job failed first')
+    expect(claudeComposerText(wrapped)).toBe('[Navide MSG] from: Navide指揮 check the CI run on integration/0.2.45 and\ntell me which job failed first')
   })
 
   it('is null without a framed box: a first-run menu, a box still being drawn, a blank screen', () => {
@@ -60,43 +60,69 @@ describe('boxHoldsUserDraft', () => {
   })
 })
 
-function harness(screens: string[], draft = '') {
+describe('composerOwner', () => {
+  const none = { draft: '', navideTypedLast: false }
+  it('tells the person\'s line, their paste, our envelope and a restored prompt apart', () => {
+    expect(composerOwner(RESTORED, { ...none, draft: RESTORED })).toBe('user')
+    expect(composerOwner('[Pasted text #1 +12 lines]', none)).toBe('user-paste')
+    expect(composerOwner('[Pasted text #1 +12 lines]', { ...none, navideTypedLast: true })).toBe('navide')
+    expect(composerOwner(claudeComposerText(wrapped) as string, none)).toBe('navide')
+    expect(composerOwner(RESTORED, none)).toBe('restored')
+    expect(composerOwner(`${RESTORED} [Pasted text #1 +3 lines]`, none)).toBe('restored')
+  })
+})
+
+describe('unwrapComposer', () => {
+  it('joins rows the box wrapped and keeps a typed line break', () => {
+    const long = 'word '.repeat(13).trim() // 64 columns: wrapped at 68
+    expect(unwrapComposer(`${long}\nnext part`, 72)).toBe(`${long} next part`)
+    expect(unwrapComposer('first line\nsecond line', 72)).toBe('first line\nsecond line')
+    expect(unwrapComposer(`${'中'.repeat(32)}\n文`, 72)).toBe(`${'中'.repeat(32)}文`)
+  })
+})
+
+function harness(screens: string[], draft = '', navideTypedLast = false) {
   const writes: string[] = []
-  const record = vi.fn()
+  const onCleared = vi.fn()
   let read = 0
   return {
     writes,
-    record,
+    onCleared,
     deps: {
       readScreen: () => screens[Math.min(read++, screens.length - 1)],
       draftText: () => draft,
+      navideTypedLast: () => navideTypedLast,
       cols: 72,
       send: async (keys: string) => { writes.push(keys) },
       sleep: async () => {},
-      record,
+      onCleared,
     },
   }
 }
 
 describe('clearLeftoverPrompt', () => {
-  it('empties a restored prompt with Ctrl-U and says so', async () => {
+  it('empties a restored prompt with Ctrl-U and hands its text over as the person\'s', async () => {
     const h = harness([restored, empty])
     expect(await clearLeftoverPrompt(h.deps)).toBe('cleared')
     expect(h.writes).toEqual(composerClearKeys(RESTORED, 72))
-    expect(h.record).toHaveBeenCalledOnce()
-    expect(h.record.mock.calls[0][0]).toContain('Run the release dry run')
+    expect(h.onCleared).toHaveBeenCalledOnce()
+    expect(h.onCleared.mock.calls[0][0]).toMatchObject({ text: RESTORED, owner: 'restored' })
+    expect(h.onCleared.mock.calls[0][0].diagnostic).toContain('Run the release dry run')
   })
 
-  it('clears every row of a wrapped one', async () => {
+  it('clears every row of a wrapped one; one of our envelopes is handed over as ours', async () => {
     const h = harness([wrapped, empty])
     expect(await clearLeftoverPrompt(h.deps)).toBe('cleared')
     expect(h.writes).toEqual(composerClearKeys(claudeComposerText(wrapped) as string, 72))
+    expect(h.onCleared.mock.calls[0][0].owner).toBe('navide')
   })
 
-  it('never touches what the person at the keyboard is writing', async () => {
-    const h = harness([restored], 'Run the release dry run and report back')
-    expect(await clearLeftoverPrompt(h.deps)).toBe('user-draft')
-    expect(h.writes).toEqual([])
+  it('never touches what the person at the keyboard is writing, nor a paste of theirs', async () => {
+    for (const [s, draft] of [[restored, RESTORED], [withBox(['[Pasted text #1 +12 lines]']), '']]) {
+      const h = harness([s], draft)
+      expect(await clearLeftoverPrompt(h.deps)).toBe('user-draft')
+      expect(h.writes).toEqual([])
+    }
   })
 
   it('does nothing on an empty box, another CLI, or a screen it cannot read', async () => {
@@ -110,6 +136,6 @@ describe('clearLeftoverPrompt', () => {
   it('stays quiet when Ctrl-U leaves the box as it was (a suggested prompt)', async () => {
     const h = harness([restored, restored])
     expect(await clearLeftoverPrompt(h.deps)).toBe('unchanged')
-    expect(h.record).not.toHaveBeenCalled()
+    expect(h.onCleared).not.toHaveBeenCalled()
   })
 })

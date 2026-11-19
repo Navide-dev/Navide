@@ -12,6 +12,7 @@ import { transformWithEsbuild } from 'vite'
 import * as injectEcho from '../../lib/injectEcho'
 import * as injectChunkSend from '../../lib/injectChunkSend'
 import { clearLeftoverPrompt } from '../../lib/claudeComposer'
+import { leftoverToast } from '../../lib/leftoverToast'
 import { composerClearKeys } from '../../lib/cliCoordination'
 
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -39,11 +40,12 @@ async function loadInjectText(scope: Record<string, unknown>) {
 const fixture = readFileSync(join(__dirname, '../../lib/__tests__/fixtures/claude-2.1.327-prompt.txt'), 'utf8')
 const RESTORED = 'Run the release dry run and report back'
 const withBox = (text: string): string => fixture.replace(/^❯.*$/m, `❯ ${text}`)
+const ENVELOPE = '[Navide MSG] from: Navide指揮 run the release dry run'
 
 const COLS = 72
 const MESSAGE = '[Navide] from Navide指揮: the CI run is green'
 
-async function run(opts: { agentKey: string; box: string; draft?: string }) {
+async function run(opts: { agentKey: string; box: string; draft?: string; injectedAt?: number; writeText?: (t: string) => Promise<void> }) {
   const writes: string[] = []
   let screen = withBox(opts.box)
   const backend = {
@@ -56,6 +58,10 @@ async function run(opts: { agentKey: string; box: string; draft?: string }) {
       return { ok: true, payload: { ok: true, pending: 0 } }
     }),
   }
+  const recordDiagnostic = vi.fn()
+  const insertText = vi.fn(() => true)
+  const toast = vi.fn()
+  const leftoverStash = new Map<string, string>()
   const ref = {
     sessionId: 's1',
     displayStatus: 'idle',
@@ -63,19 +69,26 @@ async function run(opts: { agentKey: string; box: string; draft?: string }) {
     readScreenTail: () => '',
     readVisibleScreen: () => screen,
     draftText: () => opts.draft ?? '',
+    lastUserKeyAt: 1,
+    insertText,
     terminalSize: () => ({ cols: COLS, rows: 40 }),
     isBracketedPasteActive: () => true,
     awaitingKind: null,
   }
-  const recordDiagnostic = vi.fn()
   const { injectText } = await loadInjectText({
     ...injectEcho,
     ...injectChunkSend,
     composerClearKeys,
     clearLeftoverPrompt,
+    leftoverToast,
+    leftoverStash,
+    // Navide typed last when it typed after the person's last key (1).
+    paneNavideTypedLast: () => (opts.injectedAt ?? 0) > 1,
+    notifyRestore: { toast },
+    navigator: { clipboard: { writeText: opts.writeText ?? (async () => {}) } },
     backend,
     paneRefs: { p1: ref },
-    panes: { value: [{ id: 'p1', agentKey: opts.agentKey }] },
+    panes: { value: [{ id: 'p1', agentKey: opts.agentKey, messagingName: 'worker' }] },
     paneScreenAgentKey: (p: { agentKey: string } | undefined) => p?.agentKey,
     paneClearUpdatePrompt: async () => 'none',
     paneCleanBytes: () => 1_000,
@@ -96,7 +109,7 @@ async function run(opts: { agentKey: string; box: string; draft?: string }) {
     paneLastActiveAt: new Map(),
   })
   await injectText('s1', MESSAGE, 'agent-msg', true)
-  return { writes, recordDiagnostic }
+  return { writes, recordDiagnostic, toast, insertText, leftoverStash }
 }
 
 describe('injectText into a Claude Code box that already holds text', () => {
@@ -114,6 +127,47 @@ describe('injectText into a Claude Code box that already holds text', () => {
     expect(r.recordDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'inject.cleared-leftover', paneId: 'p1' }))
   })
 
+  it('tells the person, keeps their prompt, and Restore pastes it back without Enter', async () => {
+    const r = await run({ agentKey: 'claude', box: RESTORED })
+    expect(r.toast).toHaveBeenCalledOnce()
+    const [, opts] = r.toast.mock.calls[0] as [string, { duration: number; action: { run: () => void }; secondaryAction: { run: () => void } }]
+    expect(opts.duration).toBe(0)
+    expect(r.leftoverStash.get('p1')).toBe(RESTORED)
+    opts.action.run()
+    expect(r.insertText).toHaveBeenCalledWith(RESTORED)
+    expect(r.writes).not.toContain('\r')
+    expect(r.leftoverStash.has('p1')).toBe(false)
+  })
+
+  it('Copy puts the cleared prompt on the clipboard', async () => {
+    const writeText = vi.fn(async () => {})
+    const r = await run({ agentKey: 'claude', box: RESTORED, writeText })
+    const [, opts] = r.toast.mock.calls[0] as [string, { secondaryAction: { run: () => void } }]
+    opts.secondaryAction.run()
+    expect(writeText).toHaveBeenCalledWith(RESTORED)
+  })
+
+  it('clears one of Navide\'s own envelopes without a toast', async () => {
+    const r = await run({ agentKey: 'claude', box: ENVELOPE })
+    expect(r.writes[0]).toMatch(/^\x15+$/)
+    expect(r.writes.indexOf(MESSAGE)).toBeGreaterThan(0)
+    expect(r.recordDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'inject.cleared-leftover' }))
+    expect(r.toast).not.toHaveBeenCalled()
+    expect(r.leftoverStash.size).toBe(0)
+  })
+
+  it('clears a collapsed paste Navide typed after the last key, without a toast', async () => {
+    const r = await run({ agentKey: 'claude', box: '[Pasted text #1 +12 lines]', injectedAt: 5 })
+    expect(r.writes[0]).toMatch(/^\x15+$/)
+    expect(r.toast).not.toHaveBeenCalled()
+  })
+
+  it('leaves a collapsed paste of the person\'s own alone', async () => {
+    const r = await run({ agentKey: 'claude', box: '[Pasted text #1 +12 lines]' })
+    expect(r.writes[0]).toBe(MESSAGE)
+    expect(r.toast).not.toHaveBeenCalled()
+  })
+
   it('types straight in when the box is empty', async () => {
     const r = await run({ agentKey: 'claude', box: '' })
     expect(r.writes[0]).toBe(MESSAGE)
@@ -122,6 +176,7 @@ describe('injectText into a Claude Code box that already holds text', () => {
   it('never clears a line the person at the keyboard is writing', async () => {
     const r = await run({ agentKey: 'claude', box: RESTORED, draft: RESTORED })
     expect(r.writes[0]).toBe(MESSAGE)
+    expect(r.toast).not.toHaveBeenCalled()
   })
 
   it('leaves another CLI as it was', async () => {

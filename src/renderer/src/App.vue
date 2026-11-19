@@ -240,7 +240,8 @@ import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDia
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
-import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt } from './lib/claudeComposer'
+import { claudeComposerText, clearLeftoverPrompt, composerOwner } from './lib/claudeComposer'
+import { leftoverToast } from './lib/leftoverToast'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -2904,6 +2905,8 @@ function unregisterPaneMessaging(paneId: string, opts: { keepPersisted?: boolean
   pushReadyPanes.delete(paneId)
   pushCooldownUntil.delete(paneId)
   pushUnclearAt.delete(paneId)
+  paneInjectedAt.delete(paneId)
+  leftoverStash.delete(paneId)
   backend.send('agent_msg.unregister', { pane_id: paneId }).catch(() => { /* best effort */ })
   if (!opts.keepPersisted) dropPersistedMessagingName(paneId)
 }
@@ -3198,12 +3201,6 @@ function messagingHoldKey(
     // longer than an agent's composer does.
     const holdMs = pane.agentKey === TERMINAL_AGENT_KEY ? TERMINAL_TYPING_HOLD_MS : TYPING_HOLD_MS
     if (hasDraft || (lastKey > 0 && now - lastKey < holdMs)) return 'typing'
-    // hasDraft stops counting a minute after the last key, but a Claude Code
-    // box still showing that line is still the person's: injectText leaves it
-    // alone, so the message would be typed after it and sent with it.
-    const draft = (typist?.draftText as (() => string) | undefined)?.() ?? ''
-    if (draft && paneScreenAgentKey(pane) === 'claude'
-      && boxHoldsUserDraft(claudeComposerText(paneVisibleScreen(paneId)), draft)) return 'typing'
   }
   // A shell reports no turns, so its output is the only sign of work: while
   // the badge reads RUNNING a command is printing, and a line typed now would
@@ -3220,6 +3217,21 @@ function messagingHoldKey(
   })
   if (inFlight) return 'mid-turn'
   if (now - lastActive < 2000) return 'settling'
+  // Last, as it reads the screen: a Claude Code box still showing the
+  // person's own line (hasDraft stops counting a minute after the last key)
+  // or a collapsed paste of theirs. injectText leaves both alone, so the
+  // message would be typed after them and sent with them.
+  if (!opts.ignoreTyping && paneScreenAgentKey(pane) === 'claude') {
+    const box = claudeComposerText(paneVisibleScreen(paneId))
+    if (box) {
+      const typist = paneRefs[paneId]
+      const owner = composerOwner(box, {
+        draft: (typist?.draftText as (() => string) | undefined)?.() ?? '',
+        navideTypedLast: paneNavideTypedLast(paneId),
+      })
+      if (owner === 'user' || owner === 'user-paste') return 'typing'
+    }
+  }
   return null
 }
 
@@ -3263,6 +3275,23 @@ const pushCooldownUntil = new Map<string, number>()
  *  Read by messagingHoldKey(); cleared on activity newer than the push, on a
  *  fresh push_state, and on unregister. */
 const pushUnclearAt = new Map<string, number>()
+
+/** When injectText last typed into each pane, so a collapsed paste in the box
+ *  can be told apart: ours if typed after the person's last key. */
+const paneInjectedAt = new Map<string, number>()
+
+/** The last prompt injectText cleared out of each pane's input box, kept for
+ *  the toast's Restore (lib/leftoverToast.ts). One per pane, newest wins. */
+const leftoverStash = new Map<string, string>()
+
+function notePaneInjected(paneId: string): void {
+  paneInjectedAt.set(paneId, Date.now())
+}
+
+/** Whether injectText typed into the pane after the person's last key. */
+function paneNavideTypedLast(paneId: string): boolean {
+  return (paneInjectedAt.get(paneId) ?? 0) > ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0)
+}
 
 /** pushTarget() dep: the channel that could take a message for this pane right
  *  now, or null. Applies the gates that channel still answers to — every
@@ -5193,15 +5222,31 @@ async function injectText(
     }
     // A prompt an interrupt put back in Claude Code's box would be submitted
     // with ours by the Enter: empty the box first. Never a line the person at
-    // the keyboard is writing (lib/claudeComposer.ts).
-    if (paneId !== undefined && paneScreenAgentKey(panes.value.find((p) => p.id === paneId)) === 'claude') {
+    // the keyboard is writing (lib/claudeComposer.ts). Their restored prompt
+    // is kept and offered back; one of our own envelopes is only recorded.
+    const target = panes.value.find((p) => p.id === paneId)
+    if (paneId !== undefined && paneScreenAgentKey(target) === 'claude') {
       await clearLeftoverPrompt({
         readScreen: renderedScreen,
         draftText: () => (paneRefs[paneId]?.draftText as (() => string) | undefined)?.() ?? '',
+        navideTypedLast: () => paneNavideTypedLast(paneId),
         cols: paneRefs[paneId]?.terminalSize?.()?.cols ?? 80,
         send: async (keys) => { await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys }) },
         sleep,
-        record: (message) => recordDiagnostic({ level: 'warn', code: 'inject.cleared-leftover', message, paneId }),
+        onCleared: ({ text: cleared, owner, diagnostic }) => {
+          recordDiagnostic({ level: 'warn', code: 'inject.cleared-leftover', message: diagnostic, paneId })
+          if (owner !== 'restored') return
+          leftoverStash.set(paneId, cleared)
+          const toast = leftoverToast(target?.messagingName || target?.agentLabel || '', {
+            restore: () => {
+              const kept = leftoverStash.get(paneId)
+              if (kept === undefined) return
+              if (paneRefs[paneId]?.insertText?.(kept)) leftoverStash.delete(paneId)
+            },
+            copy: () => { void navigator.clipboard.writeText(leftoverStash.get(paneId) ?? cleared).catch(() => {}) },
+          })
+          notifyRestore.toast(toast.message, toast.opts)
+        },
       })
     }
     const preBytes = cleanBytes()
@@ -5209,6 +5254,7 @@ async function injectText(
     sentAt = Date.now()
     const screenBefore = renderedScreen()
     const ackPending = await sendChunks()
+    if (paneId !== undefined && wroteBytes) notePaneInjected(paneId)
     if (ackPending === null) return giveUp()
     if (paneId === undefined || preBytes < 0) {
       // Nothing observable — keep the old fixed-gap fallback and fire once.

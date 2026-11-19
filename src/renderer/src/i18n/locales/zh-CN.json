@@ -463,7 +463,11 @@
     "push-badge": "经由 {kind}",
     "push-badge-title-box": "经由该 CLI 自己的本机界面送入，不是逐字打进去 — 但文字仍然进了分格的输入框，所以还是等你停止打字才送",
     "push-badge-title-direct": "直接交给该 CLI，全程没有经过分格的输入框，你正在打的字不可能被一起送出",
-    "expand-rail": "展开 CLI 互传消息"
+    "expand-rail": "展开 CLI 互传消息",
+    "leftover-cleared-title": "已清空输入框・{pane}",
+    "leftover-cleared-body": "Navide 投递消息前清掉了输入框里中断后留下的文字，以免它跟着一起发送。点「还原」会把它粘贴回输入框，不会按 Enter。",
+    "leftover-restore": "还原",
+    "leftover-copy": "复制"
   },
   "shutdown": {
     "title": "正在关闭…",
