@@ -39,10 +39,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from . import osplat
 from .cli_vendors.registry import VENDORS
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
 from .profiles_store import SUPPORTED_AGENT_KEYS
@@ -354,7 +354,7 @@ class CredentialWatcher:
         debounce_s: float = 0.8,
         poll_s: float = POLL_INTERVAL_S,
         resolver=None,
-        platform: str = sys.platform,
+        platform: str = osplat.platform_id,
     ) -> None:
         self._on_identity_change = on_identity_change
         self._real_home = Path(real_home or Path.home())
