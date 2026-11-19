@@ -6225,7 +6225,7 @@ app.on('web-contents-created', (_e, contents) => {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(contents, () => (scalable ? zoom.get() : 1))
+  lockPageZoom(contents, () => (scalable ? zoom.get() : 1), warnMain)
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
