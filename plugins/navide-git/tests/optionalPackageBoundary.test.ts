@@ -55,13 +55,21 @@ describe('factory first-party package boundary', () => {
 
   it('builds navide.git only from public plugin packages', () => {
     const manifest = readJson(join(repositoryRoot, 'plugins', 'navide-git', 'package.json'))
-    const dependencies = Object.keys((manifest.dependencies ?? {}) as Record<string, string>)
+    const ranges = (manifest.dependencies ?? {}) as Record<string, string>
+    const dependencies = Object.keys(ranges)
 
+    // plugin-sdk and plugin-contracts are plugin-ui's peers, declared so a
+    // checkout outside the monorepo installs them from npm.
     expect(dependencies.sort()).toEqual([
+      '@navide/plugin-contracts',
+      '@navide/plugin-sdk',
       '@navide/plugin-ui',
       'vue',
       'vue-i18n',
     ])
+    for (const name of ['@navide/plugin-contracts', '@navide/plugin-sdk', '@navide/plugin-ui']) {
+      expect(ranges[name], name).toMatch(/^\^1\./)
+    }
   })
 
   it('does not import Host implementation aliases', () => {
