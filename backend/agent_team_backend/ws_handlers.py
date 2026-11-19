@@ -13726,6 +13726,60 @@ async def agent_msg_push(
             make_error(msg_id, msg_type, "BAD_REQUEST", "agent_msg.push needs pane_id and text")
         )
         return
+    push_id = str(payload.get("push_id") or "")
+    key = (pane_id, push_id)
+    pushed = _PUSHES.get(key) if push_id else None
+    if pushed is None:
+        pushed = asyncio.ensure_future(_push_and_announce(pane_id, text))
+        if push_id:
+            _PUSHES[key] = pushed
+            # The answer is kept a while after the push settles: the window
+            # asks again only once its own request has failed, which takes up
+            # to its request timeout plus a reconnect.
+            pushed.add_done_callback(
+                lambda done: asyncio.get_running_loop().call_later(PUSH_OUTCOME_TTL_S, _forget_push, key, done)
+            )
+    kind, ok, reason = await _outlive_requester(pushed)
+    await session.send_json(
+        make_response(
+            msg_id,
+            msg_type,
+            {
+                "ok": ok,
+                "kind": kind,
+                "reason": reason,
+                # "the pane may still be holding this text": the window must
+                # then re-queue the message rather than typing it in, or the
+                # envelope goes in twice, concatenated.
+                "unclear": (not ok) and push_delivery.leaves_text_behind(kind, reason),
+            },
+        )
+    )
+
+
+#: How long the outcome of a push named by its push_id is kept for a window
+#: asking again.
+PUSH_OUTCOME_TTL_S = 120.0
+#: Pushes by (pane_id, push_id), in flight or settled within PUSH_OUTCOME_TTL_S.
+_PUSHES: dict[tuple[str, str], "asyncio.Future[tuple[str, bool, str]]"] = {}
+
+
+def _forget_push(key: tuple[str, str], push: "asyncio.Future[Any]") -> None:
+    if _PUSHES.get(key) is push:
+        del _PUSHES[key]
+
+
+async def _push_and_announce(pane_id: str, text: str) -> tuple[str, bool, str]:
+    """One push and what it set off; (kind, landed, reason).
+
+    Run to its end whoever is waiting: a requester that hangs up mid-push
+    would otherwise stop it between the CLI's append and its submit, or after
+    the CLI took the text but before the windows heard the pane went active.
+    And a window that lost the answer asks again by push_id instead of typing
+    the message in, so a push the CLI took is never delivered a second time.
+    """
+    from . import app, push_delivery
+
     state = push_delivery.get(pane_id)
     ok, reason = await push_delivery.deliver(pane_id, text)
     if ok:
@@ -13748,22 +13802,7 @@ async def agent_msg_push(
             "detail": f"push:{state.kind if state else ''}",
             "notification_type": "",
         }))
-    kind = state.kind if state else ""
-    await session.send_json(
-        make_response(
-            msg_id,
-            msg_type,
-            {
-                "ok": ok,
-                "kind": kind,
-                "reason": reason,
-                # "the pane may still be holding this text": the window must
-                # then re-queue the message rather than typing it in, or the
-                # envelope goes in twice, concatenated.
-                "unclear": (not ok) and push_delivery.leaves_text_behind(kind, reason),
-            },
-        )
-    )
+    return (state.kind if state else ""), ok, reason
 
 
 @handler("agent_msg.hold_update")
