@@ -134,6 +134,51 @@ describe('RemoteDevcontainerDialog', () => {
     }
   })
 
+  it('names the sshd GatewayPorts setting when the host bound a bridge tunnel on loopback', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const m = mountDialog({
+      'remote_devcontainer.list': { ok: true, payload: { containers } },
+      'remote_devcontainer.probe': {
+        ok: true,
+        payload: { host_ok: true, container_ok: true, cli_path: '/usr/bin/claude', cli_version: '2.0', mcp: 'bridge-gateway-ports', elapsed_ms: 5 },
+      },
+    })
+    wrapper = m.wrapper
+    await listFor(wrapper, 'devbox')
+    await wrapper.findAll('[data-testid="remote-container-row"]')[0].get('input').setValue(true)
+    await wrapper.get('[data-testid="remote-test"]').trigger('click')
+    await flushPromises()
+    const t = i18n.global.t
+    const key = 'remoteDevcontainer.test-mcp-gateway-ports'
+    expect(t(key, { gateway: '172.17.0.1' })).not.toBe(key)
+    const result = wrapper.get('[data-testid="remote-test-result"]').text()
+    expect(result).toContain(t(key, { gateway: '172.17.0.1' }))
+    expect(result).not.toContain(t('remoteDevcontainer.test-mcp-failed'))
+    // Only a hint: the line to add, copyable, and nothing sent to the host.
+    const fix = wrapper.get('[data-testid="remote-gateway-ports-fix"]')
+    expect(fix.get('code').text()).toBe('GatewayPorts clientspecified')
+    await fix.get('[data-testid="remote-gateway-ports-copy"]').trigger('click')
+    expect(writeText).toHaveBeenCalledWith('GatewayPorts clientspecified')
+    expect(m.send.mock.calls.map(([type]) => type)).toEqual(['remote_devcontainer.list', 'remote_devcontainer.probe'])
+  })
+
+  it('shows no GatewayPorts hint for a plain unreachable tunnel', async () => {
+    const m = mountDialog({
+      'remote_devcontainer.list': { ok: true, payload: { containers } },
+      'remote_devcontainer.probe': {
+        ok: true,
+        payload: { host_ok: true, container_ok: true, cli_path: '/usr/bin/claude', cli_version: '2.0', mcp: 'unreachable', elapsed_ms: 5 },
+      },
+    })
+    wrapper = m.wrapper
+    await listFor(wrapper, 'devbox')
+    await wrapper.findAll('[data-testid="remote-container-row"]')[0].get('input').setValue(true)
+    await wrapper.get('[data-testid="remote-test"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="remote-gateway-ports-fix"]').exists()).toBe(false)
+  })
+
   it('shows an ssh failure with the stderr detail', async () => {
     const m = mountDialog({
       'remote_devcontainer.list': { ok: false, error: { code: 'REMOTE_SSH_FAILED', message: 'ssh failed', details: { exit_code: 255, stderr: 'Could not resolve hostname devbox' } } },

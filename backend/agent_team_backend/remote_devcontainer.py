@@ -346,7 +346,12 @@ def probe_argv(
         f'echo "VER:$({agent_key} --version 2>/dev/null | head -n 1)"; '
         f"echo \"MCP:$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 5 -X POST {url} 2>/dev/null || echo none)\""
     )
-    script = f"docker exec {shlex.quote(spec['container'])} sh -lc {shlex.quote(inner)}"
+    # On the host, before entering the container: where sshd actually bound
+    # the -R forward. Without GatewayPorts clientspecified it binds loopback
+    # in place of the bridge gateway, and tells the client nothing.
+    listeners = " (ss -ltnH 2>/dev/null || netstat -ltn 2>/dev/null)"
+    bind = f"echo \"BIND:$({listeners} | awk '{{print $4}}' | grep -E ':{remote_port}$' | tr '\\n' ' ')\""
+    script = f"{bind}; docker exec {shlex.quote(spec['container'])} sh -lc {shlex.quote(inner)}"
     return [
         "ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
         *ssh_base_options(control_path_dir),
@@ -356,11 +361,16 @@ def probe_argv(
     ]
 
 
-def parse_probe(text: str) -> dict[str, Any]:
+def _loopback_only(addresses: list[str]) -> bool:
+    hosts = [addr.rpartition(":")[0].strip("[]") for addr in addresses]
+    return bool(hosts) and all(h.startswith("127.") or h == "::1" for h in hosts)
+
+
+def parse_probe(text: str, network: Mapping[str, str] | None = None) -> dict[str, Any]:
     fields: dict[str, str] = {}
     for line in text.splitlines():
         key, sep, value = line.partition(":")
-        if sep and key in ("CLI", "VER", "MCP"):
+        if sep and key in ("CLI", "VER", "MCP", "BIND"):
             fields[key] = value.strip()
     mcp = fields.get("MCP", "")
     if mcp == "401":
@@ -369,6 +379,9 @@ def parse_probe(text: str) -> dict[str, Any]:
     elif mcp.startswith("000"):
         # curl ran (and printed 000) but could not connect.
         status = "unreachable"
+        if (network or {}).get("mode") == "bridge" and _loopback_only(fields.get("BIND", "").split()):
+            # The host's sshd bound the forward on loopback, not the gateway.
+            status = "bridge-gateway-ports"
     elif mcp[:3].isdigit():
         status = f"http-{mcp[:3]}"
     else:
