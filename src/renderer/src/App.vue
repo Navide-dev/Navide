@@ -328,6 +328,7 @@ import {
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
 import { isRepeatCrash, planBackendRestartResume, type LostPane } from './lib/backendRestartResume'
+import { requestAgentPush } from './lib/agentPushRequest'
 import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, launchBypassState, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
@@ -3286,20 +3287,21 @@ function pushTargetForMessaging(paneId: string): { kind: string } | null {
  *
  *  `unclear` is the backend saying the CLI may still be holding our text: the
  *  message must go back in the queue rather than be typed in on top of itself.
+ *  So is an answer that never came back: the push may have landed.
  */
 async function pushDeliverAgentMessage(paneId: string, text: string): Promise<PushOutcome> {
   let reason = 'push-request-failed'
-  let unclear = false
-  try {
-    const resp = await backend.send<{ ok?: boolean; reason?: string; unclear?: boolean }>(
-      'agent_msg.push',
-      { pane_id: paneId, text },
-    )
+  let unclear = true
+  const resp = await requestAgentPush(
+    (type, payload) => backend.send<{ ok?: boolean; reason?: string; unclear?: boolean }>(type, payload),
+    paneId,
+    text,
+    crypto.randomUUID(),
+  )
+  if (resp) {
     if (resp.ok && resp.payload?.ok) return 'landed'
     reason = resp.payload?.reason || resp.error?.message || reason
     unclear = !!resp.payload?.unclear
-  } catch {
-    /* the backend never answered — treat it as an ordinary refusal */
   }
   pushCooldownUntil.set(paneId, Date.now() + pushCooldownMs(reason))
   if (unclear) {
