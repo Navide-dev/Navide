@@ -71,7 +71,7 @@ major). The plugin declares the lowest Host it needs in `engines.navide`.
 | `tests/sharedOwnershipBoundary.test.ts` | Reads `packages/plugin-ui/src` and `package.json` | Check against the installed `@navide/plugin-ui` exports instead. |
 | `tests/compositionBoundary.test.ts` | Packs the plugin and the public packages from the repository; uses `scripts/bun/vue-tsc.cjs` | Install the public packages from npm. |
 | `src/git-feature/__tests__/gitTransport.inventory.test.ts`, `gitTransport.boundary.test.ts`, `src/__tests__/themeCallSites.test.ts` | Read Host sources under `src/renderer` | Move the Host half to the Host repository; keep only the plugin half. |
-| `src/components/__tests__/MultiRepoGit.test.ts`, `src/GitLeftApp.shortcuts.test.ts` | Import `@navide/plugin-ui/shared/testing`, which the published package does not export | Add a public testing export to `@navide/plugin-ui` (an addition, so allowed in 1.x) or keep local test helpers. |
+| `src/components/__tests__/MultiRepoGit.test.ts`, `src/GitLeftApp.shortcuts.test.ts` | Import `@navide/plugin-ui/shared/testing` | Resolved in 0.2.45: the published package exports it (Plans' tests use it too). |
 
 ### Host references that change when the directory leaves
 

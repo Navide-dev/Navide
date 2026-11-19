@@ -31,6 +31,10 @@
       "types": "./dist/shared/index.d.ts",
       "import": "./dist/shared/index.js"
     },
+    "./shared/testing": {
+      "types": "./dist/shared/testing.d.ts",
+      "import": "./dist/shared/testing.js"
+    },
     "./foundation": {
       "types": "./dist/foundation/index.d.ts",
       "import": "./dist/foundation/index.js"

@@ -93,6 +93,14 @@ status changes only Registry trust and marketplace classification; it does not
 grant access to private Host modules or force an official package to be
 installed. The base App must remain usable with an empty plugin catalog.
 
+The `@navide/plugin-ui/shared/testing` subpath (0.2.45) is for tests only:
+`__resetSettingsForTest`, `_resetRegistry` and `_resetKeybindingsState` put
+the shared settings, command registry and keybinding state back between test
+cases. It is built as its own entry that shares its modules with
+`@navide/plugin-ui/shared`, so it resets the very state a plugin's code uses;
+a plugin's production code never imports it. It is part of the 1.x surface
+like every other subpath.
+
 The `@navide/plugin-ui/editor` subpath provides the shared text editor and a
 typed consumer-injected `EditorPort`. It does not expose Host transports,
 diagnostics stores, window state, or filesystem authority. See
