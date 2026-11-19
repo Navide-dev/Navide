@@ -50,9 +50,16 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: to the old tier/headroom/fetchedAt/slotId one (test_quota_failover
 #: regression tests). Exclusion, detection, the budget and the swap are as
 #: before.
+#: usage_service was updated deliberately in 0.2.45 for the badge stuck on
+#: "reading" (user-authorized 2026-11-20): poll_once resolves the active Claude
+#: account again when a switch lands before its reads start (instead of
+#: running them and discarding them), publishes the active account's reading
+#: as soon as it lands when parked reads are still out, and the reading mark
+#: carries refreshPendingSince. Switch decisions, credentials and failover
+#: are untouched.
 MAIN_DIGESTS = {
     "usage_service": (
-        "e5672d4b14a3bc7e0674f42c8710bbe4920e6bb1be242da276563b06dd6b49e1", D7_LOGIN_FUNCTIONS,
+        "369f00219e0f4f05dac97a777b1218b9c1cca147c309bd859fc61605ebe3e247", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
         "534dd11c92157732e4ab3207eed2382d09cf46da5ee945d326f7ff194e3497d9", frozenset(),

@@ -303,9 +303,11 @@ describe('UsageBadge – badge rendering', () => {
     expect(wrapper.get('.usage-pop-reason').text()).toContain('timed out after 180s')
   })
 
-  it('does not offer a stale reason while the next read is in flight', async () => {
-    // The error belongs to the read that already finished. Showing it next to
-    // "reading now" would attribute a failure to the attempt still running.
+  it('keeps the last failure on screen while the next read is in flight, labelled as the last one', async () => {
+    // A badge stuck on "reading" over "Refresh: unavailable" said nothing about
+    // why the account had not been read for a week. The reason belongs to the
+    // read that already finished, so it is shown as that — never as the
+    // attempt still running.
     usage.usageFor.mockReturnValue(
       snapshot({
         stale: true,
@@ -318,7 +320,30 @@ describe('UsageBadge – badge rendering', () => {
     wrapper = mountBadge(makeCliProfiles().fake)
 
     await openPopover(wrapper)
-    expect(wrapper.find('.usage-pop-reason').exists()).toBe(false)
+    const reason = wrapper.get('.usage-pop-reason').text()
+    expect(reason).toContain('Last read failed')
+    expect(reason).toContain('timed out after 180s')
+  })
+
+  it('says how long the read has been running', async () => {
+    // "Up to 3 minutes" with no clock gave no way to tell a slow read from a
+    // stuck one.
+    vi.setSystemTime(Date.parse('2026-07-25T02:00:00Z'))
+    usage.usageFor.mockReturnValue(
+      snapshot({
+        stale: true,
+        refreshPending: true,
+        refreshPendingSince: '2026-07-25T01:57:55Z',
+        lastSuccessAt: '2026-07-25T00:00:00Z',
+        refreshStatus: 'unavailable',
+      }),
+    )
+    wrapper = mountBadge(makeCliProfiles().fake)
+
+    await openPopover(wrapper)
+    expect(wrapper.get('.usage-pop-pending').text()).toContain('2:05')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(wrapper.get('.usage-pop-pending').text()).toContain('2:15')
   })
 
   it('stays quiet when a healthy reading carries no error', async () => {
