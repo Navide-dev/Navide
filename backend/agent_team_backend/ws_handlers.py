@@ -167,6 +167,23 @@ def lookup(msg_type: str) -> Handler | None:
     return _REGISTRY.get(msg_type)
 
 
+def outlives_requester(fn: Handler) -> Handler:
+    """Run the whole handler to its end even if the requester hangs up.
+
+    For a handler that writes and then tells the other windows in several
+    awaited steps: ws_endpoint cancels a closed connection's handler tasks, and
+    a cancellation landing between the steps left the write in place (a thread
+    cannot be cancelled) with the rest of the work, and the broadcasts, never
+    done. Not for a handler that waits on something open-ended — it would hold
+    that wait past the connection. See _outlive_requester."""
+
+    @functools.wraps(fn)
+    async def run(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+        await _outlive_requester(fn(session, msg_id, msg_type, payload))
+
+    return run
+
+
 # ── Editor AI (editor.*) ────────────────────────────────────────────────────
 #: The Navide plugins whose Disabled switch the Host reports (sent only while
 #: one is disabled).
@@ -5244,6 +5261,7 @@ UI_SETTINGS_BACKEND_ONLY_KEYS = frozenset({"sync-detached", "sync-secret-dismiss
 
 
 @handler("ui.settings.set")
+@outlives_requester
 async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -6431,6 +6449,7 @@ async def settings_bundle_export(session: "Session", msg_id: str, msg_type: str,
 
 
 @handler("settings.bundle.import")
+@outlives_requester
 async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7085,6 +7104,7 @@ async def roles_upsert(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.rename")
+@outlives_requester
 async def roles_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Change a role's key, carrying the stage slots that name it across.
 
@@ -7177,6 +7197,7 @@ async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.reset")
+@outlives_requester
 async def roles_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7392,6 +7413,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("pipelines.reset_builtin")
+@outlives_requester
 async def pipelines_reset_builtin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7489,6 +7511,7 @@ async def stages_list(session: "Session", msg_id: str, msg_type: str, payload: d
 
 
 @handler("stages.upsert")
+@outlives_requester
 async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7524,6 +7547,7 @@ async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("stages.reorder")
+@outlives_requester
 async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7558,6 +7582,7 @@ async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload
 
 
 @handler("stages.delete")
+@outlives_requester
 async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7592,6 +7617,7 @@ async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("stages.reset")
+@outlives_requester
 async def stages_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7682,6 +7708,7 @@ async def _broadcast_graph_change(out: dict, reason: str) -> None:
 
 
 @handler("pipelines.graph.set")
+@outlives_requester
 async def pipelines_graph_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7693,6 +7720,7 @@ async def pipelines_graph_set(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("pipelines.graph.apply")
+@outlives_requester
 async def pipelines_graph_apply(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -8603,6 +8631,7 @@ async def onboarding_install_prompt(session: "Session", msg_id: str, msg_type: s
 
 
 @handler("codex.hook_trust_blocked")
+@outlives_requester
 async def codex_hook_trust_blocked(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The window saw Codex demand approval for the hook Navide injects.
 
@@ -12250,6 +12279,7 @@ async def _sweep_pane_ptys(session: "Session", pane_id: str, *, force: bool = Tr
 
 
 @handler("pipeline.slot_unspawn")
+@outlives_requester
 async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
     from .projects import StageOutOfRange
@@ -12565,6 +12595,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
 
 
 @handler("manual_pane.unspawn")
+@outlives_requester
 async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -12596,6 +12627,7 @@ async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("pipeline.slot_unspawn_by_pane")
+@outlives_requester
 async def pipeline_slot_unspawn_by_pane(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Retire a pipeline pane's record by pane id, and take its PTY with it.
 
@@ -12632,6 +12664,7 @@ async def pipeline_slot_unspawn_by_pane(session: "Session", msg_id: str, msg_typ
 
 
 @handler("manual_pane.release_pty")
+@outlives_requester
 async def manual_pane_release_pty(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """End a pane's PTY while its record stays 'spawned'.
 
