@@ -73,9 +73,13 @@ describe('navide.plans production package boundary', () => {
     const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
+    // plugin-contracts is plugin-sdk's peer and mermaid an import of its
+    // own, both declared so a checkout outside the monorepo installs them.
     expect(Object.keys(packageJson.dependencies ?? {}).sort()).toEqual([
+      '@navide/plugin-contracts',
       '@navide/plugin-sdk',
       '@navide/plugin-ui',
+      'mermaid',
       'vue',
       'vue-i18n',
       'yaml',
