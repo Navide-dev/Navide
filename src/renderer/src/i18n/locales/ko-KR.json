@@ -10015,8 +10015,10 @@
       "add": "빠른 추가",
       "verifying": "확인하는 중…",
       "advanced": "고급",
-      "rejected": "{platform}에서 자격 증명을 거부했어요: {error}",
+      "rejected": "{platform}에서 자격 증명을 거부했어요: {error}. token 전체를 다시 복사해서 시도하세요. token을 새로 발급했다면 이전 token은 더 이상 쓸 수 없어요.",
       "timeout": "{platform}이(가) 제시간에 응답하지 않았어요. 네트워크를 확인하고 다시 시도하세요. ({error})",
+      "network": "{platform}에 연결할 수 없어요: {error}. 이 컴퓨터에서 {platform}에 연결할 수 있는지 확인하세요. 회사 네트워크나 방화벽이 연결을 막고 있을 수 있어요. 프록시가 필요하면 시스템 네트워크 설정에서 프록시를 설정한 뒤 다시 시도하세요.",
+      "conflict": "추가했지만 다른 프로그램이 이 bot을 사용 중이라(409 Conflict) Navide가 아직 메시지를 받을 수 없어요. 같은 token을 쓰는 다른 프로그램(다른 컴퓨터의 Navide나 Claude Code --channels 등)을 종료하거나, BotFather에서 token을 새로 발급해 여기에 붙여 넣으세요.",
       "step": {
         "verifying": "확인 중",
         "opening": "{platform} 여는 중",

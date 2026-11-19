@@ -10015,8 +10015,10 @@
       "add": "クイック追加",
       "verifying": "確認中…",
       "advanced": "詳細設定",
-      "rejected": "{platform} が認証情報を拒否しました：{error}",
+      "rejected": "{platform} が認証情報を拒否しました：{error}。token 全体をもう一度コピーして再試行してください。token を再発行した場合、古い token は使えなくなります。",
       "timeout": "{platform} から時間内に応答がありませんでした。ネットワークを確認して再試行してください。（{error}）",
+      "network": "{platform} に接続できません：{error}。このコンピューターから {platform} に接続できるか確認してください。社内ネットワークやファイアウォールで遮断されている可能性があります。プロキシが必要な場合は、システムのネットワーク設定でプロキシを設定してから再試行してください。",
+      "conflict": "追加しましたが、この bot は別のプログラムで使用中のため（409 Conflict）、Navide はまだメッセージを受信できません。同じ token を使っている別のプログラム（別のコンピューターの Navide や Claude Code --channels など）を終了するか、BotFather で token を再発行してここに貼り付けてください。",
       "step": {
         "verifying": "確認中",
         "opening": "{platform} を開いています",

@@ -10015,8 +10015,10 @@
       "add": "Quick Add",
       "verifying": "Verifying…",
       "advanced": "Advanced",
-      "rejected": "{platform} rejected the credential: {error}",
+      "rejected": "{platform} rejected the credential: {error}. Copy the whole token again and retry; generating a new token makes the old one stop working.",
       "timeout": "{platform} did not answer in time. Check the network and try again. ({error})",
+      "network": "Could not reach {platform}: {error}. Check that this computer can reach {platform}; a company network or firewall may be blocking it. If you need a proxy, set it in the system network settings, then try again.",
+      "conflict": "Added, but another program is already using this bot (409 Conflict), so Navide cannot receive its messages yet. Close the other program that uses this token (such as Navide on another computer or Claude Code --channels), or generate a new token in BotFather and paste it here.",
       "step": {
         "verifying": "Verifying",
         "opening": "Opening {platform}",

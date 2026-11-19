@@ -10015,8 +10015,10 @@
       "add": "快速新增",
       "verifying": "驗證中…",
       "advanced": "進階",
-      "rejected": "{platform} 拒絕了這組憑證：{error}",
+      "rejected": "{platform} 拒絕了這組憑證：{error}。請重新複製完整的 token 再試一次；重新產生過 token 的話，舊的會失效。",
       "timeout": "{platform} 沒有及時回應，請檢查網路後再試一次。（{error}）",
+      "network": "連不到 {platform}：{error}。請確認這台電腦能連上 {platform}，公司網路或防火牆可能擋住連線；需要代理的話，請在系統的網路設定裡設定代理後再試一次。",
+      "conflict": "已新增，但這個 bot 正被別的程式使用（409 Conflict），Navide 暫時收不到訊息。請關掉其他使用同一個 token 的程式（例如另一台電腦上的 Navide 或 Claude Code --channels），或到 BotFather 重新產生 token 後貼到這裡。",
       "step": {
         "verifying": "驗證中",
         "opening": "開啟 {platform} 中",

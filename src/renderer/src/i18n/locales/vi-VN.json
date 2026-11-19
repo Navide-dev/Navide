@@ -10015,8 +10015,10 @@
       "add": "Thêm nhanh",
       "verifying": "Đang xác minh…",
       "advanced": "Nâng cao",
-      "rejected": "{platform} đã từ chối thông tin xác thực: {error}",
+      "rejected": "{platform} đã từ chối thông tin xác thực: {error}. Hãy sao chép lại toàn bộ token rồi thử lại; nếu đã tạo token mới thì token cũ không còn dùng được.",
       "timeout": "{platform} không trả lời kịp. Hãy kiểm tra mạng và thử lại. ({error})",
+      "network": "Không kết nối được tới {platform}: {error}. Hãy kiểm tra máy tính này có truy cập được {platform} không; mạng công ty hoặc tường lửa có thể đang chặn kết nối. Nếu cần proxy, hãy cài đặt proxy trong phần cài đặt mạng của hệ thống rồi thử lại.",
+      "conflict": "Đã thêm, nhưng một chương trình khác đang dùng bot này (409 Conflict) nên Navide chưa nhận được tin nhắn. Hãy tắt chương trình khác đang dùng cùng token (ví dụ Navide trên máy khác hoặc Claude Code --channels), hoặc tạo token mới trong BotFather rồi dán vào đây.",
       "step": {
         "verifying": "Đang xác minh",
         "opening": "Đang mở {platform}",

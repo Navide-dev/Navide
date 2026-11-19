@@ -10015,8 +10015,10 @@
       "add": "Schnell hinzufügen",
       "verifying": "Wird überprüft …",
       "advanced": "Erweitert",
-      "rejected": "{platform} hat die Anmeldeinformationen abgelehnt: {error}",
+      "rejected": "{platform} hat die Anmeldeinformationen abgelehnt: {error}. Kopieren Sie das Token vollständig erneut und versuchen Sie es noch einmal; ein neu erzeugtes Token macht das alte ungültig.",
       "timeout": "{platform} hat nicht rechtzeitig geantwortet. Prüfen Sie das Netzwerk und versuchen Sie es erneut. ({error})",
+      "network": "{platform} ist nicht erreichbar: {error}. Prüfen Sie, ob dieser Computer {platform} erreichen kann – ein Firmennetz oder eine Firewall blockiert die Verbindung womöglich. Falls Sie einen Proxy brauchen, richten Sie ihn in den Netzwerkeinstellungen des Systems ein und versuchen Sie es erneut.",
+      "conflict": "Hinzugefügt, aber ein anderes Programm verwendet diesen Bot bereits (409 Conflict), daher kann Navide noch keine Nachrichten empfangen. Beenden Sie das andere Programm mit demselben Token (etwa Navide auf einem anderen Computer oder Claude Code --channels) oder erzeugen Sie in BotFather ein neues Token und fügen Sie es hier ein.",
       "step": {
         "verifying": "Überprüfen",
         "opening": "{platform} wird geöffnet",

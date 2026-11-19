@@ -103,6 +103,8 @@ const quickInvite = reactive<Record<string, ChannelLinkInvite>>({})
 const quickCopied = reactive<Record<string, boolean>>({})
 // Added, but no invite reached the link guide: the row says to link from the guide.
 const quickAdded = reactive<Record<string, boolean>>({})
+// Added, but another program polls the same bot (409): shown until the bot connects.
+const quickConflict = reactive<Record<string, boolean>>({})
 const QUICK_STEPS: readonly QuickStep[] = ['verifying', 'opening', 'waiting', 'done']
 // Creating a bot through a managing Telegram bot: the row asking for the disclosure to be
 // confirmed, the request each manager row waits on, and why the last one failed.
@@ -335,16 +337,18 @@ async function quickAdd(spec: RegisteredChannelPlatform, bot: BotRow): Promise<v
     const linkTarget = primary?.opensLink ? primary.target : undefined
     errorByBot[bot.key] = ''
     delete quickAdded[bot.key]
+    delete quickConflict[bot.key]
     quickStep[bot.key] = 'verifying'
     const res = await store.quickAdd(spec.id, req.config, req.secret ?? {}, bot.account, linkTarget)
     if (!res.ok || !res.data) {
       delete quickStep[bot.key]
       const error = res.error ?? t('channels.error.generic')
-      errorByBot[bot.key] = res.reason === 'rejected' || res.reason === 'timeout'
+      errorByBot[bot.key] = res.reason === 'rejected' || res.reason === 'network' || res.reason === 'timeout'
         ? t(`channels.quick.${res.reason}`, { platform: platformName(spec.id), error })
         : error
       return
     }
+    if (res.data.warning === 'conflict') quickConflict[bot.key] = true
     closeForm(spec, bot)
     const agent = agentAdd[bot.key]
     if (agent) {
@@ -427,7 +431,7 @@ function managedFailureText(ev: ChannelManagedCreatedEvent): string {
   if (ev.reason === 'token_unavailable') return t('channels.managed.token-unavailable')
   if (ev.reason === 'creator_not_linked') return t('channels.managed.creator-not-linked')
   const error = ev.error || t('channels.error.generic')
-  const text = ev.reason === 'rejected' || ev.reason === 'timeout'
+  const text = ev.reason === 'rejected' || ev.reason === 'network' || ev.reason === 'timeout'
     ? t(`channels.quick.${ev.reason}`, { platform: platformName('telegram'), error })
     : error
   // The bot exists in Telegram even though it was not added: a blind retry makes a second one.
@@ -1055,6 +1059,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
               >{{ t('channels.quick.copied-code', { platform: platformName(spec.id) }) }}</p>
             </template>
             <p v-else-if="quickAdded[bot.key]" class="ch-form-hint" data-testid="channel-quick-added">{{ t('channels.quick.added') }}</p>
+            <p v-if="quickConflict[bot.key] && !isConnected(bot)" class="ch-form-hint" data-testid="channel-quick-conflict">{{ t('channels.quick.conflict') }}</p>
 
             <div
               v-if="spec.id === 'telegram' && isConnected(bot) && (bot.status.can_manage_bots || managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"

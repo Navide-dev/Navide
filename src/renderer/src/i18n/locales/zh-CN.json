@@ -10015,8 +10015,10 @@
       "add": "快速添加",
       "verifying": "验证中…",
       "advanced": "高级",
-      "rejected": "{platform} 拒绝了这组凭据：{error}",
+      "rejected": "{platform} 拒绝了这组凭据：{error}。请重新复制完整的 token 再试一次；重新生成过 token 的话，旧的会失效。",
       "timeout": "{platform} 没有及时回应，请检查网络后再试一次。（{error}）",
+      "network": "连不上 {platform}：{error}。请确认这台电脑能连上 {platform}，公司网络或防火墙可能拦截了连接；需要代理的话，请在系统的网络设置里设置代理后再试一次。",
+      "conflict": "已添加，但这个 bot 正被别的程序使用（409 Conflict），Navide 暂时收不到消息。请关掉其他使用同一个 token 的程序（例如另一台电脑上的 Navide 或 Claude Code --channels），或在 BotFather 重新生成 token 后粘贴到这里。",
       "step": {
         "verifying": "验证中",
         "opening": "打开 {platform} 中",

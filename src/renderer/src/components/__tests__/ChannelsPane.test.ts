@@ -573,7 +573,7 @@ describe('ChannelsPane', () => {
       await flushPromises()
       const sent = mock.sent.find((m) => m.type === 'channels.quick_add')
       expect(sent?.payload).toEqual({ platform: 'telegram', config: {}, secret: { token: TG_TOKEN }, link_target: 'direct' })
-      expect(sent?.timeoutMs).toBe(45_000) // outlasts the backend's worst case (see QUICK_ADD_TIMEOUT_MS)
+      expect(sent?.timeoutMs).toBe(60_000) // outlasts the backend's worst case (see QUICK_ADD_TIMEOUT_MS)
       expect(mock.sent.some((m) => m.type === 'channels.configure' || m.type === 'channels.link.create')).toBe(false)
       expect(openExternal).toHaveBeenCalledWith('https://t.me/quick_bot?start=QK7M2XAB')
       expect(clip.written).toEqual([]) // the deep link carries the code: nothing to paste
@@ -704,6 +704,32 @@ describe('ChannelsPane', () => {
         expect(openExternal).not.toHaveBeenCalled()
       })
 
+      it('warns that another program holds the bot until it connects', async () => {
+        seedEmpty()
+        const w = await render()
+        mock.setResponse('channels.quick_add', { ...quickOk(false), warning: 'conflict' })
+        const status = { lifecycle: 'recovering', connected: false, identity: '@quick_bot', last_error: '409 Conflict' }
+        mock.setResponse('channels.list', {
+          ok: true,
+          enabled: true,
+          platforms: [{
+            platform: 'telegram', configured: true, enabled: true, status, config: { name: '@quick_bot' }, capabilities: null,
+            accounts: [{ account: 'default', name: '@quick_bot', configured: true, enabled: true, status, config: { name: '@quick_bot' }, capabilities: null }],
+          }],
+        })
+        const tg = await submitTelegram(w)
+        expect(tg.get('[data-testid="channel-quick-conflict"]').text()).toContain('another program is already using this bot (409 Conflict)')
+      })
+
+      it('shows no conflict warning for a free bot', async () => {
+        seedEmpty()
+        const w = await render()
+        mock.setResponse('channels.quick_add', quickOk(false))
+        seedAdded('telegram', '@quick_bot')
+        const tg = await submitTelegram(w)
+        expect(tg.find('[data-testid="channel-quick-conflict"]').exists()).toBe(false)
+      })
+
       it('ends the steps when the chats of the new bot cannot be loaded', async () => {
         seedEmpty()
         const w = await render()
@@ -725,7 +751,7 @@ describe('ChannelsPane', () => {
       mock.setResponse('channels.quick_add', { ok: false, reason: 'rejected', error: 'Unauthorized' })
       await tg.get('form').trigger('submit')
       await flushPromises()
-      expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized')
+      expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized. Copy the whole token again and retry; generating a new token makes the old one stop working.')
       expect(tg.find('[data-testid="channel-quick-steps"]').exists()).toBe(false)
       expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
       expect(openExternal).not.toHaveBeenCalled()
@@ -734,6 +760,14 @@ describe('ChannelsPane', () => {
       await tg.get('form').trigger('submit')
       await flushPromises()
       expect(tg.get('form [role="alert"]').text()).toContain('Telegram did not answer in time')
+
+      // Nothing came back at all: say Telegram cannot be reached, and what to check.
+      mock.setResponse('channels.quick_add', { ok: false, reason: 'network', error: 'no answer from telegram within 25s: ConnectTimeout' })
+      await tg.get('form').trigger('submit')
+      await flushPromises()
+      expect(tg.get('form [role="alert"]').text()).toBe(
+        'Could not reach Telegram: no answer from telegram within 25s: ConnectTimeout. Check that this computer can reach Telegram; '
+        + 'a company network or firewall may be blocking it. If you need a proxy, set it in the system network settings, then try again.')
     })
 
     it('ignores a clipboard that does not look like the token, and never overwrites a typed one', async () => {
@@ -986,8 +1020,9 @@ describe('ChannelsPane', () => {
       [{ reason: 'timeout', error: 'no bot was created within 600s' }, 'No bot was created within 10 minutes. Try again.'],
       [{ reason: 'token_unavailable', error: 'bot is not managed', created: true }, 'The bot was created in Telegram, but its token could not be read. Check it in BotFather.'],
       [{ reason: 'creator_not_linked', error: 'bot 999 was created by Telegram user 8', created: true }, 'The bot was created in Telegram, but by a Telegram account not linked to this bot, so it was not added. Link that account first, or delete the bot in BotFather.'],
-      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized. Copy the whole token again and retry; generating a new token makes the old one stop working. The bot was already created in Telegram; check BotFather before trying again.'],
       [{ reason: 'timeout', error: 'no answer from telegram within 10s', created: true }, 'Telegram did not answer in time. Check the network and try again. (no answer from telegram within 10s) The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'network', error: 'ConnectError', created: true }, 'Could not reach Telegram: ConnectError. Check that this computer can reach Telegram; a company network or firewall may be blocking it. If you need a proxy, set it in the system network settings, then try again. The bot was already created in Telegram; check BotFather before trying again.'],
       [{ reason: 'invalid', error: 'chat channels are turned off', created: true }, 'chat channels are turned off The bot was already created in Telegram; check BotFather before trying again.'],
     ])('shows a failure in words: %o', async (failure, text) => {
       seedManager(true)
