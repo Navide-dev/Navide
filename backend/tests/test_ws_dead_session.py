@@ -291,3 +291,66 @@ async def test_pull_task_is_tracked_for_cancellation(monkeypatch) -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     assert session._handler_tasks == set(), "done_callback must discard the finished task"
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_benchmark_tells_the_other_windows_it_ended(monkeypatch) -> None:
+    """Cancelled with the window that started it, the benchmark must still
+    end the progress bar the other windows show (0.2.45 broadcast report)."""
+    from agent_team_backend import ws_handlers
+
+    running = asyncio.Event()
+    events: list[dict] = []
+
+    async def slow_benchmark(progress_cb=None):  # noqa: ANN001, ANN202
+        running.set()
+        await asyncio.sleep(30)
+        return []
+
+    async def broadcast(event, **_kwargs):  # noqa: ANN001, ANN202
+        events.append(event)
+
+    monkeypatch.setattr(app_module, "analyzer_benchmark", slow_benchmark)
+    monkeypatch.setattr(app_module, "broadcast", broadcast)
+    session = _TaskRecordingSession()
+    await ws_handlers.analyzer_benchmark_h(session, "m1", "analyzer.benchmark", {})
+    await asyncio.wait_for(running.wait(), timeout=2)
+    task = next(iter(session._handler_tasks))
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert [(e["type"], e["payload"].get("cancelled")) for e in events] == [
+        ("analyzer.benchmark_done", True),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_pull_tells_the_other_windows_it_ended(monkeypatch) -> None:
+    from agent_team_backend import ws_handlers
+
+    running = asyncio.Event()
+    events: list[dict] = []
+
+    async def slow_pull(name, base_url):  # noqa: ANN001, ANN202
+        running.set()
+        await asyncio.sleep(30)
+        yield {}  # pragma: no cover - never reached
+
+    async def broadcast(event, **_kwargs):  # noqa: ANN001, ANN202
+        events.append(event)
+
+    monkeypatch.setattr(app_module, "_az_is_ollama", lambda: True)
+    monkeypatch.setattr(app_module, "_az_base_url", lambda: "http://localhost:11434")
+    monkeypatch.setattr(app_module, "_ollama_pull_model", slow_pull)
+    monkeypatch.setattr(app_module, "broadcast", broadcast)
+    session = _TaskRecordingSession()
+    await ws_handlers.analyzer_pull(session, "m2", "analyzer.pull", {"name": "qwen2.5-coder"})
+    await asyncio.wait_for(running.wait(), timeout=2)
+    task = next(iter(session._handler_tasks))
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(events) == 1
+    assert events[0]["type"] == "analyzer.pull_done"
+    assert events[0]["payload"]["ok"] is False
+    assert events[0]["payload"]["cancelled"] is True

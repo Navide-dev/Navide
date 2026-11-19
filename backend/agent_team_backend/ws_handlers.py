@@ -7843,6 +7843,11 @@ async def analyzer_benchmark_h(session: "Session", msg_id: str, msg_type: str, p
         try:
             results = await app.analyzer_benchmark(progress_cb=_on_progress)
             await app.broadcast(make_event("analyzer.benchmark_done", {"results": results}))
+        except asyncio.CancelledError:
+            # Stopped with the window that started it (see below); the other
+            # windows still show its progress bar until they hear it ended.
+            await app.broadcast(make_event("analyzer.benchmark_done", {"results": [], "cancelled": True}))
+            raise
         except Exception as _bench_err:  # noqa: BLE001
             app.log.warning("benchmark error: %s", _bench_err)
             await app.broadcast(make_event("analyzer.benchmark_done", {"results": [], "error": str(_bench_err)}))
@@ -7878,6 +7883,12 @@ async def analyzer_pull(session: "Session", msg_id: str, msg_type: str, payload:
                 async for progress in app._ollama_pull_model(name, app._az_base_url()):
                     await app.broadcast(make_event("analyzer.pull_progress", {"name": name, **progress}))
                 await app.broadcast(make_event("analyzer.pull_done", {"name": name, "ok": True}))
+            except asyncio.CancelledError:
+                await app.broadcast(make_event("analyzer.pull_done", {
+                    "name": name, "ok": False, "cancelled": True,
+                    "error": "download stopped: the window that started it closed",
+                }))
+                raise
             except Exception as _pull_err:
                 await app.broadcast(make_event("analyzer.pull_done", {"name": name, "ok": False, "error": str(_pull_err)}))
 

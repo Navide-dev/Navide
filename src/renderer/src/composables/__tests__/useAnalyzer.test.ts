@@ -93,6 +93,22 @@ describe('useAnalyzer', () => {
     scope.stop()
   })
 
+  it('a cancelled benchmark ends the run but keeps the last results', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('analyzer.health', { ok: false })
+    const { result, scope } = withScope(() => useAnalyzer(mock.backend))
+    await flush()
+
+    const finished = [{ model: 'qwen' }] as unknown as typeof result.benchmarkResults.value
+    mock.emit('analyzer.benchmark_done', { results: finished })
+    result.benchmarking.value = true
+    mock.emit('analyzer.benchmark_done', { results: [], cancelled: true })
+
+    expect(result.benchmarking.value).toBe(false)
+    expect(result.benchmarkResults.value).toEqual(finished)
+    scope.stop()
+  })
+
   describe('health polling', () => {
     afterEach(() => vi.useRealTimers())
 
