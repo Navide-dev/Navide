@@ -134,6 +134,12 @@ def _history(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **payload: Any) ->
     return {"workspace_path": mirror.workspace_path, "pane_id": "P1", **payload}
 
 
+def _quota(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
+    _stub(monkeypatch, app_module.pane_account_history, "profile_at", "profile-1")
+    _stub(monkeypatch, app_module.quota_ledger, "mark_exhausted", ["five_hour"])
+    return {"agent_key": "claude", "pane_id": "P1", "at": "2026-11-19T09:00:00Z"}
+
+
 def _convenience(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
     from agent_team_backend import convenience_wiring
 
@@ -165,8 +171,6 @@ def _pipeline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
     return {"pipeline_id": pid, "name": "Renamed"}
 
 
-# tokens.reset and tokens.quota_exhausted are on the quota path: changing how
-# they behave on a hang-up waits for the user's authorization (RULE ZERO).
 CASES: list[tuple[str, Setup]] = [
     ("sync.set_scope", lambda mp, tp: (
         _stub(mp, __import__("agent_team_backend.sync_scopes", fromlist=["x"]), "set_scope_enabled", {"prompts": True}),
@@ -191,6 +195,7 @@ CASES: list[tuple[str, Setup]] = [
     ("pipelines.set_active", _pipeline),
     ("analyzer.settings.set", lambda mp, tp: {}),
     ("archive.settings.set", lambda mp, tp: {}),
+    ("tokens.reset", lambda mp, tp: {"workspace_path": _ws(tp), "scope": "global"}),
     ("devtime.reset", lambda mp, tp: {"workspace_path": _ws(tp)}),
     ("project.set_ui_state", lambda mp, tp: {"workspace_path": _project(tp), "active_tab": "git"}),
     ("pipeline.node_states", lambda mp, tp: {"workspace_path": _ws(tp), "nodes": {}}),
@@ -199,6 +204,7 @@ CASES: list[tuple[str, Setup]] = [
     ("convenience.upgrade_ack", lambda mp, tp: {}),
     ("convenience.set", _convenience),
     ("pipelines.import_n8n", _n8n),
+    ("tokens.quota_exhausted", _quota),
     ("terminal.kill", _pane_gone),
     ("terminal.kill_surface", _pane_gone),
     ("project.rename_pane", lambda mp, tp: _history(mp, tp, custom_name="New")),

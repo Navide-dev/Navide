@@ -8001,6 +8001,7 @@ async def tokens_turns(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("tokens.reset")
+@outlives_requester
 async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -8057,6 +8058,7 @@ async def tokens_quota_accounts(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("tokens.quota_exhausted")
+@outlives_requester
 async def tokens_quota_exhausted(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
     from .pane_account_history import UNKNOWN_PROFILE_ID, parse_event_time
