@@ -240,6 +240,7 @@ import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDia
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
+import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt } from './lib/claudeComposer'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -3197,6 +3198,12 @@ function messagingHoldKey(
     // longer than an agent's composer does.
     const holdMs = pane.agentKey === TERMINAL_AGENT_KEY ? TERMINAL_TYPING_HOLD_MS : TYPING_HOLD_MS
     if (hasDraft || (lastKey > 0 && now - lastKey < holdMs)) return 'typing'
+    // hasDraft stops counting a minute after the last key, but a Claude Code
+    // box still showing that line is still the person's: injectText leaves it
+    // alone, so the message would be typed after it and sent with it.
+    const draft = (typist?.draftText as (() => string) | undefined)?.() ?? ''
+    if (draft && paneScreenAgentKey(pane) === 'claude'
+      && boxHoldsUserDraft(claudeComposerText(paneVisibleScreen(paneId)), draft)) return 'typing'
   }
   // A shell reports no turns, so its output is the only sign of work: while
   // the badge reads RUNNING a command is printing, and a line typed now would
@@ -5183,6 +5190,19 @@ async function injectText(
     if (paneId !== undefined && !shellTarget && await paneClearUpdatePrompt(paneId) === 'blocked') {
       if (evidence) evidence.updatePrompt = 'blocked'
       return false
+    }
+    // A prompt an interrupt put back in Claude Code's box would be submitted
+    // with ours by the Enter: empty the box first. Never a line the person at
+    // the keyboard is writing (lib/claudeComposer.ts).
+    if (paneId !== undefined && paneScreenAgentKey(panes.value.find((p) => p.id === paneId)) === 'claude') {
+      await clearLeftoverPrompt({
+        readScreen: renderedScreen,
+        draftText: () => (paneRefs[paneId]?.draftText as (() => string) | undefined)?.() ?? '',
+        cols: paneRefs[paneId]?.terminalSize?.()?.cols ?? 80,
+        send: async (keys) => { await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys }) },
+        sleep,
+        record: (message) => recordDiagnostic({ level: 'warn', code: 'inject.cleared-leftover', message, paneId }),
+      })
     }
     const preBytes = cleanBytes()
     bytesBeforeSend = preBytes

@@ -47,6 +47,14 @@ describe('messagingHoldKey — the typing hold', () => {
     expect(typing).toBeLessThan(body.indexOf("return 'settling'"))
   })
 
+  it('keeps holding past the draft window while Claude Code\'s box still shows the line', () => {
+    // injectText never clears the person's own line (lib/claudeComposer.ts),
+    // so a message let through here would be typed after it and sent with it.
+    const body = fn('messagingHoldKey')
+    expect(body).toMatch(/boxHoldsUserDraft\(claudeComposerText\(paneVisibleScreen\(paneId\)\), draft\)\) return 'typing'/)
+    expect(body.indexOf('boxHoldsUserDraft')).toBeLessThan(body.indexOf("return 'mid-turn'"))
+  })
+
   it('keeps the grace window bounded so a glance cannot park a pane', () => {
     const declared = /const TYPING_HOLD_MS = (\d+)/.exec(appSource)
     expect(declared).not.toBeNull()
