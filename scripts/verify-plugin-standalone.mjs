@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Checks that navide.git builds outside the Navide monorepo, as it will once
-// it lives in a repository of its own: copy plugins/navide-git into a fresh
-// directory outside the repository, install it with plain npm (no workspace,
-// no repository node_modules), then typecheck, build, `navide-plugin validate`
-// and package it.
+// Checks that a first-party plugin builds outside the Navide monorepo, as it
+// will once it lives in a repository of its own: copy plugins/<dir> into a
+// fresh directory outside the repository, install it with plain npm (no
+// workspace, no repository node_modules), then typecheck, build,
+// `navide-plugin validate` and package it.
 //
-//   node scripts/verify-git-plugin-standalone.mjs [--tarballs <dir>] [--registry] [--keep]
+//   node scripts/verify-plugin-standalone.mjs <dir> [--tarballs <dir>] [--registry] [--keep]
+//
+//   <dir>             the plugin directory under plugins/, e.g. navide-git
 //
 //   --tarballs <dir>  install @navide/plugin-{contracts,sdk,ui} from the
 //                     tarballs in <dir> (default dist/npm, as written by
@@ -16,9 +18,9 @@
 //   --keep            leave the temporary checkout in place for inspection.
 //
 // Covers the build only. The plugin's tests still run in the monorepo
-// (pnpm test:plugin:git); docs/en-US/navide-git-repository-move.md lists what
-// they need before they can move too. Reads no token and writes nothing
-// inside the repository.
+// (pnpm test:plugins); docs/en-US/plugin-repository-moves.md lists what they
+// need before they can move too. Reads no token and writes nothing inside the
+// repository.
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -27,6 +29,7 @@ import { join, resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const names = ['plugin-contracts', 'plugin-sdk', 'plugin-ui']
 const args = process.argv.slice(2)
+let pluginDir = null
 let tarballDir = join(root, 'dist', 'npm')
 let fromRegistry = false
 let keep = false
@@ -34,14 +37,19 @@ for (let i = 0; i < args.length; i++) {
   if (args[i] === '--tarballs') tarballDir = resolve(args[++i] ?? '')
   else if (args[i] === '--registry') fromRegistry = true
   else if (args[i] === '--keep') keep = true
+  else if (!args[i].startsWith('-') && pluginDir === null) pluginDir = args[i]
   else {
     console.error(`unknown option: ${args[i]}`)
     process.exit(2)
   }
 }
 
+if (pluginDir === null || !/^navide-[a-z-]+$/.test(pluginDir) || !existsSync(join(root, 'plugins', pluginDir, 'manifest.json'))) {
+  console.error('usage: node scripts/verify-plugin-standalone.mjs <plugins/ directory, e.g. navide-git> [--tarballs <dir>] [--registry] [--keep]')
+  process.exit(2)
+}
 const version = JSON.parse(readFileSync(join(root, 'packages/plugin-contracts/package.json'), 'utf8')).version
-const pluginVersion = JSON.parse(readFileSync(join(root, 'plugins/navide-git/manifest.json'), 'utf8')).version
+const source = JSON.parse(readFileSync(join(root, 'plugins', pluginDir, 'manifest.json'), 'utf8'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 function run(command, commandArgs, cwd) {
@@ -50,11 +58,11 @@ function run(command, commandArgs, cwd) {
   if (result.status !== 0) throw new Error(`${command} ${commandArgs.join(' ')} exited with ${result.status ?? result.signal}`)
 }
 
-const temporaryRoot = mkdtempSync(join(tmpdir(), 'navide-git-standalone-'))
-const project = join(temporaryRoot, 'navide-git')
+const temporaryRoot = mkdtempSync(join(tmpdir(), `${pluginDir}-standalone-`))
+const project = join(temporaryRoot, pluginDir)
 let failed = false
 try {
-  cpSync(join(root, 'plugins', 'navide-git'), project, {
+  cpSync(join(root, 'plugins', pluginDir), project, {
     recursive: true,
     filter: (source) => !/[\\/](node_modules|dist)$/.test(source),
   })
@@ -62,7 +70,7 @@ try {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
   for (const name of names) {
     const range = manifest.dependencies?.[`@navide/${name}`]
-    if (!/^\^1\./.test(range ?? '')) throw new Error(`plugins/navide-git must depend on @navide/${name} with a ^1.x range (found '${range}')`)
+    if (!/^\^1\./.test(range ?? '')) throw new Error(`plugins/${pluginDir} must depend on @navide/${name} with a ^1.x range (found '${range}')`)
     if (fromRegistry) continue
     const file = join(tarballDir, `navide-${name}-${version}.tgz`)
     if (!existsSync(file)) throw new Error(`${file} is missing; run scripts/publish-public-packages.sh first (it dry-runs by default)`)
@@ -79,12 +87,12 @@ try {
   run(npm, ['run', 'package'], project)
 
   const built = JSON.parse(readFileSync(join(project, 'dist', 'manifest.json'), 'utf8'))
-  if (built.id !== 'navide.git' || built.version !== pluginVersion) {
-    throw new Error(`dist/manifest.json is ${built.id}@${built.version}, expected navide.git@${pluginVersion}`)
+  if (built.id !== source.id || built.version !== source.version) {
+    throw new Error(`dist/manifest.json is ${built.id}@${built.version}, expected ${source.id}@${source.version}`)
   }
-  const archive = join(project, 'navide-git.vsix')
+  const archive = join(project, `${pluginDir}.vsix`)
   if (!existsSync(archive) || statSync(archive).size === 0) throw new Error(`${archive} was not produced`)
-  console.log(`PASS: navide.git@${pluginVersion} installed, typechecked, built, validated and packaged on its own (${statSync(archive).size} bytes)`)
+  console.log(`PASS: ${source.id}@${source.version} installed, typechecked, built, validated and packaged on its own (${statSync(archive).size} bytes)`)
 } catch (error) {
   failed = true
   console.error(`FAIL: ${error instanceof Error ? error.message : String(error)}`)
