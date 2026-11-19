@@ -10,8 +10,8 @@
 
 export interface AgentPushAnswer {
   ok?: boolean
-  payload?: { ok?: boolean; reason?: string; unclear?: boolean }
-  error?: { message?: string }
+  payload?: { ok?: boolean; reason?: string; unclear?: boolean } | null
+  error?: { message?: string } | null
 }
 
 export type AgentPushSend = (
