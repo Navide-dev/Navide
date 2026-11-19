@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
-- Settings: after signing in to the Antigravity CLI (Google) from its own pane, the CLI Agents card and the Accounts page kept showing it as signed out until Navide restarted. On macOS the CLI stores its login in the Keychain, while the backend only watches the token file it no longer updates, so no change event arrived; opening either page now re-reads the account state.
+- Settings: after signing in to the Antigravity CLI (Google) from its own pane, the CLI Agents card and the Accounts page kept showing it as signed out until Navide restarted. On macOS the CLI stores its login in the Keychain, while the backend only watches the token file it no longer updates, so no change event arrived; opening either page now re-reads the account state. On macOS the backend also watches the login keychain database for Antigravity, so a sign-in updates an open Settings page and moves the install guide past its sign-in step by itself; a Keychain write by another app costs one identity check and announces nothing unless the sign-in state changed.
 
 ## [0.2.44] — 2026-11-19
 
