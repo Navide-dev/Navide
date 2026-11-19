@@ -10,6 +10,10 @@ import type { Session, WebContents } from 'electron'
 // audio, and only for a main (workspace) window's own renderer. Plugin
 // WebContentsViews hosted inside that window, and every other window, are
 // denied — nothing else in the app captures media.
+//
+// Electron 45 reports screen capture as `display-capture` instead of `media`
+// (with no media types). It keeps the rule screen capture had under `media`:
+// granted to a main window's own renderer only.
 
 /** Which kind of media a request or check is about. */
 export interface MediaAsk {
@@ -27,9 +31,10 @@ export function decideMediaPermission(ask: MediaAsk): boolean {
   return ask.mediaTypes.every((t) => t === 'audio')
 }
 
-/** Decision for any permission: everything but `media` keeps Electron's
- *  default (allow). */
+/** Decision for any permission: everything but `media` and
+ *  `display-capture` keeps Electron's default (allow). */
 export function decidePermission(permission: string, ask: () => MediaAsk): boolean {
+  if (permission === 'display-capture') return ask().fromMainRenderer
   if (permission !== 'media') return true
   return decideMediaPermission(ask())
 }

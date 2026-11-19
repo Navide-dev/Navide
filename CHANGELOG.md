@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Changed
+
+- Electron 45 (0.2.45): the App runs on Electron 45.4.1 (Chromium 156, Node 24.22) instead of 44.10.1. Electron 45 reports screen capture as the `display-capture` permission instead of `media`; it keeps the rule screen capture had before, granted only to a main window's own renderer, so it is not newly granted to other windows on the default session. Plugin views still refuse it.
+
 ### Fixed
 
 - Navide Git plugin 1.0.9: in a workspace holding several repositories (a home folder), a file written beside them, such as a download or a cache, no longer makes the Git pane rediscover them and read every repository's status again. Only a change that can add or remove a repository (a `.git` path, a directory event, or a change list the backend did not send in full) rescans; a write inside a repository still refreshes that repository as before.
