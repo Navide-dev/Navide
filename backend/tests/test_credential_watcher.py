@@ -273,6 +273,66 @@ async def test_claude_json_change_still_reaches_the_identity_sink(
         watcher.stop()
 
 
+async def _keychain_watcher(tmp_path: Path, platform: str):
+    """An antigravity watcher whose login keychain is a plain file under a
+    fake home: the real Keychain is never touched, and the fingerprint is
+    injected, so no secret is read at all."""
+    home = tmp_path / "home"
+    keychain = home / "Library" / "Keychains" / "login.keychain-db"
+    keychain.parent.mkdir(parents=True)
+    keychain.write_bytes(b"db-" + b"0")
+    identity = {"antigravity": (None, False)}
+    fired: list[str] = []
+
+    async def sink(agent_key: str) -> None:
+        fired.append(agent_key)
+
+    watcher = CredentialWatcher(
+        sink, real_home=home, agent_keys=("antigravity",),
+        fingerprint=lambda key: identity[key], debounce_s=0.1, poll_s=0.05,
+        platform=platform,
+    )
+    return watcher, keychain, identity, fired
+
+
+async def test_a_keychain_sign_in_reaches_the_identity_sink_on_macos(tmp_path: Path) -> None:
+    """Antigravity keeps its macOS login in the Keychain and leaves its token
+    file alone, so only the login keychain database changes on a sign-in."""
+    watcher, keychain, identity, fired = await _keychain_watcher(tmp_path, "darwin")
+    watcher.start()
+    try:
+        await asyncio.sleep(0.2)  # let the startup seeding land
+        identity["antigravity"] = (None, True)
+        keychain.write_bytes(b"db-" + b"1-longer")
+        await _wait_for(fired)
+        assert fired == ["antigravity"]
+    finally:
+        watcher.stop()
+
+
+async def test_other_keychain_writes_do_not_reach_the_identity_sink(tmp_path: Path) -> None:
+    """Every app writes the login keychain; a write that leaves the identity
+    as it was is only a fingerprint read, never a reconcile."""
+    watcher, keychain, _identity, fired = await _keychain_watcher(tmp_path, "darwin")
+    watcher.start()
+    try:
+        await asyncio.sleep(0.2)
+        keychain.write_bytes(b"db-" + b"2-other-app")
+        await asyncio.sleep(0.4)
+        assert fired == []
+    finally:
+        watcher.stop()
+
+
+async def test_the_login_keychain_is_not_watched_off_macos(tmp_path: Path) -> None:
+    watcher, keychain, _identity, _fired = await _keychain_watcher(tmp_path, "linux")
+    watcher.start()
+    try:
+        assert keychain not in watcher._watched  # noqa: SLF001
+    finally:
+        watcher.stop()
+
+
 # ---- reconcile -------------------------------------------------------------
 
 
