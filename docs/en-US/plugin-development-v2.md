@@ -2776,6 +2776,27 @@ is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
 
+The bundled copy is the installer's fallback, not the version Navide keeps
+running (0.2.45). After the trust refresh at launch and every 15 minutes, the
+Host looks up each first-party plugin that runs from its bundled copy (not
+disabled, nothing staged, no install in progress) on the configured
+Marketplace, only when that is the Official Registry, and only for stable
+versions newer than the bundled one. A newer version is downloaded and
+verified exactly as a user's install is (digest, package signature,
+root-signed trust metadata, disclosure signature, `engines.navide`) and must
+be an official package. When it discloses exactly what the bundled copy does
+(no permission, backend, agent tool or network item added or removed, the
+same risk level, the same views), it is staged without asking: the user
+accepted that disclosure with the App, the same rule an agent's unchanged
+update follows. The running bundled copy is never replaced mid-session; the
+next launch switches to the staged version as Restart would, and keeps loading
+it from then on. A version that discloses anything else is not installed; it
+appears as an ordinary update (`permissionChange: "more"`) for the user to
+review and approve. Offline, a Registry error, a 15-second timeout or any
+verification failure writes nothing, and the bundled copy keeps serving, so a
+first launch without a network works as before. Removing a bundled plugin
+(the opt-out) still leaves the id alone.
+
 Because the installed copy wins a tie, content must never change under a
 released version. `plugins/official-plugin-fingerprints.json` is the release
 baseline: each plugin's version and a fingerprint of the tracked sources its

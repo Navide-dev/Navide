@@ -2690,13 +2690,16 @@ async function revalidateLocalInstalls(): Promise<void> {
 }
 // Update reminder: runs after each trust refresh settles, never inside it, so
 // a failed check cannot touch trust state or quarantine decisions. Detection
-// only — installing an update still goes through the consent dialogs.
+// only — installing an update still goes through the consent dialogs; the one
+// exception is a bundled first-party plugin's newer official version that
+// discloses exactly what the bundled copy does, staged for the next launch.
 const refreshInstalledPluginTrustAndUpdates = (): void => {
   void refreshTrustThenUpdates({
     refreshTrust: async () => {
       await refreshInstalledPluginTrust()
       await revalidateLocalInstalls()
     },
+    refreshBundled: () => pluginTrustRefresh.refreshBundledOfficial(),
     checkUpdates: () => pluginTrustRefresh.checkUpdates(),
     publish: (updates) => {
       for (const hostWindow of mainWindows) {

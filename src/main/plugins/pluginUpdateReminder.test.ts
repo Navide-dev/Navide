@@ -28,6 +28,35 @@ describe('refreshTrustThenUpdates', () => {
     expect(publish).toHaveBeenCalledWith([update])
   })
 
+  it('refreshes bundled plugins after the trust refresh and before the update check', async () => {
+    const order: string[] = []
+    await refreshTrustThenUpdates({
+      refreshTrust: async () => { order.push('trust') },
+      refreshBundled: async () => { order.push('bundled') },
+      checkUpdates: async () => {
+        order.push('check')
+        return [update]
+      },
+      publish: () => order.push('publish'),
+      warn: vi.fn(),
+    })
+    expect(order).toEqual(['trust', 'bundled', 'check', 'publish'])
+  })
+
+  it('contains a failed bundled refresh: the update check still runs and publishes', async () => {
+    const publish = vi.fn()
+    const warn = vi.fn()
+    await refreshTrustThenUpdates({
+      refreshTrust: async () => {},
+      refreshBundled: async () => { throw new Error('offline') },
+      checkUpdates: async () => [update],
+      publish,
+      warn,
+    })
+    expect(publish).toHaveBeenCalledWith([update])
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bundled plugin refresh failed: offline'))
+  })
+
   it('contains a failed update check: no throw, no publish, trust refresh already done', async () => {
     const refreshTrust = vi.fn(async () => {})
     const publish = vi.fn()
