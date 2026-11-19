@@ -979,4 +979,5 @@ def _describe_update(update: dict[str, Any]) -> str:
 def _describe_failure(exc: Exception) -> str:
     if isinstance(exc, TelegramApiError) and exc.code == 409:
         return "另一個程式也在用這個 bot（409 Conflict: another getUpdates consumer）"
-    return f"{type(exc).__name__}: {exc}"
+    # httpx's timeouts often carry no message: the class name alone, not "ConnectTimeout: ".
+    return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__

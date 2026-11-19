@@ -896,6 +896,11 @@ async def test_an_unsupported_kind_is_emitted_to_be_told_and_logged_by_field_nam
 # --- the first connection: getMe is short, retried once on a network failure, and the ---
 # --- outcome says whether Telegram answered at all (quick add's "network" vs "rejected") ---
 
+def test_a_network_error_without_a_message_is_named_by_its_kind() -> None:
+    assert telegram_mod._describe_failure(httpx.ConnectTimeout("")) == "ConnectTimeout"
+    assert telegram_mod._describe_failure(httpx.ConnectError("refused")) == "ConnectError: refused"
+
+
 class _FlakyNetwork(httpx.AsyncBaseTransport):
     """The first ``failures`` requests fail like ``exc`` before reaching Telegram (a dead
     IPv6 route, a refused connection); later ones go to the fake Bot API."""
