@@ -63,6 +63,10 @@ jobs:
           sysctl user.max_user_namespaces
           bwrap --unshare-all --die-with-parent --ro-bind / / true && echo "bwrap works as configured" || echo "bwrap is refused as configured"
 
+      # Both steps call vitest directly: `test:run` chains the plugin suites, so
+      # file arguments passed to it reach that second command and vitest runs
+      # the whole repository suite instead of the escape suite.
+
       # 1. Restricted: no user namespaces at all. The Host and dev-backend must
       #    refuse with a clear reason; nothing may run unsandboxed.
       - name: Restricted user namespaces refuse cleanly
@@ -72,7 +76,7 @@ jobs:
           previous=$(sysctl -n user.max_user_namespaces)
           echo "PREVIOUS_MAX_USER_NAMESPACES=$previous" >> "$GITHUB_ENV"
           sudo sysctl -w user.max_user_namespaces=0
-          bun run test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
+          bunx vitest run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
 
       # 2. Permitted: namespaces allowed and the AppArmor restriction relaxed,
       #    so bwrap works. Every escape in the suite must be blocked.
@@ -82,4 +86,4 @@ jobs:
         run: |
           sudo sysctl -w user.max_user_namespaces="$PREVIOUS_MAX_USER_NAMESPACES"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || echo "no AppArmor userns restriction on this kernel"
-          bun run test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
+          bunx vitest run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
