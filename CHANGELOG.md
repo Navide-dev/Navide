@@ -7,6 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Navide Git plugin 1.0.9: in a workspace holding several repositories (a home folder), a file written beside them, such as a download or a cache, no longer makes the Git pane rediscover them and read every repository's status again. Only a change that can add or remove a repository (a `.git` path, a directory event, or a change list the backend did not send in full) rescans; a write inside a repository still refreshes that repository as before.
+- Settings: after signing in to the Antigravity CLI (Google) from its own pane, the CLI Agents card and the Accounts page kept showing it as signed out until Navide restarted. On macOS the CLI stores its login in the Keychain, while the backend only watches the token file it no longer updates, so no change event arrived; opening either page now re-reads the account state.
 
 ## [0.2.44] — 2026-11-19
 
