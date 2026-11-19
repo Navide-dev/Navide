@@ -214,6 +214,36 @@ def test_parse_probe(line: str, status: str) -> None:
     assert result == {"cli_path": "/usr/bin/claude", "cli_version": "2.1.0 (Claude Code)", "mcp": status}
 
 
+BRIDGE = {"mode": "bridge", "gateway": "172.17.0.1"}
+
+
+def test_probe_reports_where_the_host_bound_the_tunnel() -> None:
+    probe = rd.probe_argv({**SPEC, "network": BRIDGE}, local_port=49161, remote_port=45000, control_path_dir=CM)
+    assert probe[probe.index("-R") + 1] == "172.17.0.1:45000:127.0.0.1:49161"
+    script = probe[-1]
+    # Read on the host, before docker exec: the container cannot see it.
+    assert script.index("BIND:") < script.index("docker exec")
+    assert "ss -ltnH" in script and ":45000$" in script
+
+
+@pytest.mark.parametrize(("network", "lines", "status"), [
+    # sshd without GatewayPorts clientspecified binds loopback, silently.
+    (BRIDGE, "BIND:127.0.0.1:45000\nMCP:000", "bridge-gateway-ports"),
+    (BRIDGE, "BIND:[::1]:45000 127.0.0.1:45000\nMCP:000none", "bridge-gateway-ports"),
+    # Bound on the gateway yet unreachable: something else, not the sshd setting.
+    (BRIDGE, "BIND:172.17.0.1:45000\nMCP:000", "unreachable"),
+    (BRIDGE, "BIND:0.0.0.0:45000\nMCP:000", "unreachable"),
+    # No ss or netstat on the host: cannot tell, keep the plain result.
+    (BRIDGE, "BIND:\nMCP:000", "unreachable"),
+    (BRIDGE, "MCP:000", "unreachable"),
+    ({"mode": "host"}, "BIND:127.0.0.1:45000\nMCP:000", "unreachable"),
+    (BRIDGE, "BIND:127.0.0.1:45000\nMCP:401", "ok"),
+])
+def test_parse_probe_names_a_loopback_bound_bridge_tunnel(network, lines: str, status: str) -> None:
+    result = rd.parse_probe(f"CLI:/usr/bin/claude\nVER:2.1.0\n{lines}\n", network)
+    assert result["mcp"] == status
+
+
 def test_control_dir_is_owner_only(tmp_path, monkeypatch) -> None:
     if rd.os.name == "nt":
         assert rd.control_dir() is None

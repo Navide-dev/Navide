@@ -136,7 +136,7 @@ async def remote_probe(session: "Session", msg_id: str, msg_type: str, payload: 
         await session.send_json(make_error(
             msg_id, msg_type, "REMOTE_SSH_FAILED", "could not reach the host", _ssh_error(code, err)))
         return
-    result = rd.parse_probe(out)
+    result = rd.parse_probe(out, spec["network"])
     result.update({"host_ok": True, "container_ok": code == 0 or bool(result["cli_path"]), "elapsed_ms": elapsed_ms})
     if not result["container_ok"]:
         result["error"] = _ssh_error(code, err)
