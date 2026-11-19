@@ -4,10 +4,14 @@ import type { PluginRescanNotice, PluginUpdateInfo } from './pluginIpc'
  * One periodic pass: the installed-plugin trust refresh, then the update
  * reminder. The update check starts only after the trust refresh settled and
  * its failure is contained here, so it can never alter trust state or
- * quarantine decisions. Detection only — nothing is installed.
+ * quarantine decisions. Detection only — nothing is installed, except by
+ * `refreshBundled`: it runs between the two, stages newer official versions
+ * of bundled plugins that disclose nothing new for the next launch, and its
+ * failure is contained the same way.
  */
 export async function refreshTrustThenUpdates(deps: {
   refreshTrust: () => Promise<void>
+  refreshBundled?: () => Promise<unknown>
   checkUpdates: () => Promise<PluginUpdateInfo[]>
   publish: (updates: PluginUpdateInfo[]) => void
   warn: (message: string) => void
@@ -15,6 +19,15 @@ export async function refreshTrustThenUpdates(deps: {
   try {
     await deps.refreshTrust()
   } finally {
+    if (deps.refreshBundled) {
+      try {
+        await deps.refreshBundled()
+      } catch (error) {
+        deps.warn(
+          `[main] bundled plugin refresh failed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    }
     try {
       deps.publish(await deps.checkUpdates())
     } catch (error) {

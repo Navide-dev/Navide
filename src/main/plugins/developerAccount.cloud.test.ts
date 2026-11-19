@@ -15,9 +15,9 @@ const ASSERTION = 'nvsa1' + '.k1.' + 'p'.repeat(20) + '.' + 's'.repeat(20)
 const REGISTRY = 'https://registry.example.test/registry'
 
 const fakeCrypto: DeveloperVaultCrypto = {
-  available: true,
-  encrypt: (plain) => Buffer.from(Buffer.from(plain).map((b) => b ^ 0x5a)).toString('base64'),
-  decrypt: (enc) => Buffer.from(Buffer.from(enc, 'base64').map((b) => b ^ 0x5a)).toString(),
+  available: async () => true,
+  encrypt: async (plain) => Buffer.from(Buffer.from(plain).map((b) => b ^ 0x5a)).toString('base64'),
+  decrypt: async (enc) => Buffer.from(Buffer.from(enc, 'base64').map((b) => b ^ 0x5a)).toString(),
 }
 
 interface Call { url: string; method: string; body: unknown; auth: string | undefined }
@@ -93,7 +93,7 @@ describe('Cloud sign-in, account scope', () => {
     const body = exchange.body as { assertion: string; code_verifier: string; scope: string }
     expect(body.assertion).toBe(ASSERTION)
     expect(sha256(body.code_verifier)).toBe(assertions[0].challenge)
-    expect(vault.token(REGISTRY, 'account')).toBe(ACCOUNT_TOKEN)
+    expect(await vault.token(REGISTRY, 'account')).toBe(ACCOUNT_TOKEN)
     expect(JSON.stringify(state)).not.toContain(ACCOUNT_TOKEN)
   })
 
@@ -114,14 +114,14 @@ describe('Cloud sign-in, account scope', () => {
   })
 
   it('keeps an existing sign-in and asks for no assertion', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
     const { account, assertions } = setup({ registry: () => ({ status: 500, body: {} }) })
     expect((await account.syncCloudAccount()).signedIn.account).toBe(true)
     expect(assertions).toHaveLength(0)
   })
 
   it('forgets tokens exchanged for a different Cloud account', async () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, '2099-01-01T00:00:00Z', 'old-ns')
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, '2099-01-01T00:00:00Z', 'old-ns')
     vault.setCloudMember(REGISTRY, 'm_other')
     const { account } = setup({ registry: (call) => exchangeAnswer(call) ?? { status: 404, body: {} } })
     const state = await account.syncCloudAccount()
@@ -166,7 +166,7 @@ describe('Cloud sign-in, publish scope', () => {
     const { account, assertions } = setup({ registry: publishRegistry(['acme']), confirm: async () => null })
     await expect(account.signIn('publish')).rejects.toThrow(/not granted/)
     expect(assertions.filter((a) => a.scope === 'publish')).toHaveLength(0)
-    expect(vault.token(REGISTRY, 'publisher')).toBeNull()
+    expect(await vault.token(REGISTRY, 'publisher')).toBeNull()
   })
 
   it('refuses a namespace the Registry did not offer', async () => {
@@ -184,7 +184,7 @@ describe('Cloud sign-in, publish scope', () => {
       },
     })
     await expect(account.signIn('publish')).rejects.toThrow(/403 QUALIFICATION_REQUIRED/)
-    expect(vault.token(REGISTRY, 'publisher')).toBeNull()
+    expect(await vault.token(REGISTRY, 'publisher')).toBeNull()
   })
 
   it('falls back to the browser when the Registry has no Cloud sign-in', async () => {
@@ -204,7 +204,7 @@ describe('Cloud sign-in, publish scope', () => {
 })
 
 describe('publishConfirmDialog', () => {
-  it('defaults to Cancel and maps each button to its namespace', () => {
+  it('defaults to Cancel and maps each button to its namespace', async () => {
     const { options, namespaceFor } = publishConfirmDialog({ accountName: 'Neo', memberId: 'm_1', namespaces: ['acme', 'beta'] }, 'zh-TW')
     expect(options.buttons).toEqual(['以 acme 允許', '以 beta 允許', '取消'])
     expect(options.defaultId).toBe(2)
@@ -213,7 +213,7 @@ describe('publishConfirmDialog', () => {
     expect([namespaceFor(0), namespaceFor(1), namespaceFor(2), namespaceFor(-1)]).toEqual(['acme', 'beta', null, null])
   })
 
-  it('falls back to English for a locale without a table', () => {
+  it('falls back to English for a locale without a table', async () => {
     expect(publishConfirmDialog({ accountName: '', memberId: 'm_1', namespaces: ['acme'] }, 'ko-KR').options.buttons).toEqual(['Allow as acme', 'Cancel'])
   })
 })

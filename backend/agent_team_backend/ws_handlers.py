@@ -167,6 +167,23 @@ def lookup(msg_type: str) -> Handler | None:
     return _REGISTRY.get(msg_type)
 
 
+def outlives_requester(fn: Handler) -> Handler:
+    """Run the whole handler to its end even if the requester hangs up.
+
+    For a handler that writes and then tells the other windows in several
+    awaited steps: ws_endpoint cancels a closed connection's handler tasks, and
+    a cancellation landing between the steps left the write in place (a thread
+    cannot be cancelled) with the rest of the work, and the broadcasts, never
+    done. Not for a handler that waits on something open-ended — it would hold
+    that wait past the connection. See _outlive_requester."""
+
+    @functools.wraps(fn)
+    async def run(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+        await _outlive_requester(fn(session, msg_id, msg_type, payload))
+
+    return run
+
+
 # ── Editor AI (editor.*) ────────────────────────────────────────────────────
 #: The Navide plugins whose Disabled switch the Host reports (sent only while
 #: one is disabled).
@@ -4775,6 +4792,7 @@ async def sync_rotate_key(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("sync.set_scope")
+@outlives_requester
 async def sync_set_scope(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, sync_engine, sync_scopes
 
@@ -5090,6 +5108,7 @@ async def workspace_list_recent(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("workspace.touch")
+@outlives_requester
 async def workspace_touch(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5134,6 +5153,7 @@ async def workspace_touch(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("workspace.set_recent_limit")
+@outlives_requester
 async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5152,6 +5172,7 @@ async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: 
 
 
 @handler("workspace.pin")
+@outlives_requester
 async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5166,6 +5187,7 @@ async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("workspace.unpin")
+@outlives_requester
 async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5180,6 +5202,7 @@ async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("workspace.remove")
+@outlives_requester
 async def workspace_remove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5244,6 +5267,7 @@ UI_SETTINGS_BACKEND_ONLY_KEYS = frozenset({"sync-detached", "sync-secret-dismiss
 
 
 @handler("ui.settings.set")
+@outlives_requester
 async def ui_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5326,6 +5350,7 @@ async def p2p_link_status(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("p2p.link.set_paused")
+@outlives_requester
 async def p2p_link_set_paused(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -5354,6 +5379,7 @@ async def p2p_link_set_paused(
 
 
 @handler("p2p.link.configure")
+@outlives_requester
 async def p2p_link_configure(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Store or clear the access token, then reconnect.
 
@@ -5608,6 +5634,7 @@ async def p2p_account_resend_verification(
 
 
 @handler("p2p.account.logout")
+@outlives_requester
 async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Forget this machine's credential. The server keeps the account.
 
@@ -5971,6 +5998,7 @@ async def p2p_pair_confirm(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("p2p.trust.device.defer")
+@outlives_requester
 async def p2p_trust_device_defer(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6001,6 +6029,7 @@ async def p2p_trust_device_defer(
 
 
 @handler("p2p.trust.device.unpair")
+@outlives_requester
 async def p2p_trust_device_unpair(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6058,6 +6087,7 @@ async def p2p_trust_device_unpair(
 
 
 @handler("p2p.trust.rebuild")
+@outlives_requester
 async def p2p_trust_rebuild(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6116,6 +6146,7 @@ async def p2p_trust_rebuild(
 
 
 @handler("p2p.trust.block")
+@outlives_requester
 async def p2p_trust_block(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Refuse a device outright, ahead of every rule.
 
@@ -6431,6 +6462,7 @@ async def settings_bundle_export(session: "Session", msg_id: str, msg_type: str,
 
 
 @handler("settings.bundle.import")
+@outlives_requester
 async def settings_bundle_import(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7066,6 +7098,7 @@ async def roles_list(session: "Session", msg_id: str, msg_type: str, payload: di
 
 
 @handler("roles.upsert")
+@outlives_requester
 async def roles_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7085,6 +7118,7 @@ async def roles_upsert(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.rename")
+@outlives_requester
 async def roles_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Change a role's key, carrying the stage slots that name it across.
 
@@ -7147,6 +7181,7 @@ async def roles_rename(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.delete")
+@outlives_requester
 async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7177,6 +7212,7 @@ async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.reset")
+@outlives_requester
 async def roles_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7242,6 +7278,7 @@ async def pipelines_list(session: "Session", msg_id: str, msg_type: str, payload
 
 
 @handler("pipelines.create")
+@outlives_requester
 async def pipelines_create(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7259,6 +7296,7 @@ async def pipelines_create(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.import_n8n")
+@outlives_requester
 async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Convert an n8n workflow (dry_run: report only) or import it as a new
     pipeline. Same conversion and storage as the MCP tool pipeline_import_n8n."""
@@ -7304,6 +7342,7 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("pipelines.rename")
+@outlives_requester
 async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7328,6 +7367,7 @@ async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.delete")
+@outlives_requester
 async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7358,6 +7398,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.set_active")
+@outlives_requester
 async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7392,6 +7433,7 @@ async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("pipelines.reset_builtin")
+@outlives_requester
 async def pipelines_reset_builtin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7489,6 +7531,7 @@ async def stages_list(session: "Session", msg_id: str, msg_type: str, payload: d
 
 
 @handler("stages.upsert")
+@outlives_requester
 async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7524,6 +7567,7 @@ async def stages_upsert(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("stages.reorder")
+@outlives_requester
 async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7558,6 +7602,7 @@ async def stages_reorder(session: "Session", msg_id: str, msg_type: str, payload
 
 
 @handler("stages.delete")
+@outlives_requester
 async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7592,6 +7637,7 @@ async def stages_delete(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("stages.reset")
+@outlives_requester
 async def stages_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7682,6 +7728,7 @@ async def _broadcast_graph_change(out: dict, reason: str) -> None:
 
 
 @handler("pipelines.graph.set")
+@outlives_requester
 async def pipelines_graph_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7693,6 +7740,7 @@ async def pipelines_graph_set(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("pipelines.graph.apply")
+@outlives_requester
 async def pipelines_graph_apply(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7736,6 +7784,7 @@ async def analyzer_settings_get(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("analyzer.settings.set")
+@outlives_requester
 async def analyzer_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7752,6 +7801,7 @@ async def archive_settings_get(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("archive.settings.set")
+@outlives_requester
 async def archive_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7815,6 +7865,11 @@ async def analyzer_benchmark_h(session: "Session", msg_id: str, msg_type: str, p
         try:
             results = await app.analyzer_benchmark(progress_cb=_on_progress)
             await app.broadcast(make_event("analyzer.benchmark_done", {"results": results}))
+        except asyncio.CancelledError:
+            # Stopped with the window that started it (see below); the other
+            # windows still show its progress bar until they hear it ended.
+            await app.broadcast(make_event("analyzer.benchmark_done", {"results": [], "cancelled": True}))
+            raise
         except Exception as _bench_err:  # noqa: BLE001
             app.log.warning("benchmark error: %s", _bench_err)
             await app.broadcast(make_event("analyzer.benchmark_done", {"results": [], "error": str(_bench_err)}))
@@ -7850,6 +7905,12 @@ async def analyzer_pull(session: "Session", msg_id: str, msg_type: str, payload:
                 async for progress in app._ollama_pull_model(name, app._az_base_url()):
                     await app.broadcast(make_event("analyzer.pull_progress", {"name": name, **progress}))
                 await app.broadcast(make_event("analyzer.pull_done", {"name": name, "ok": True}))
+            except asyncio.CancelledError:
+                await app.broadcast(make_event("analyzer.pull_done", {
+                    "name": name, "ok": False, "cancelled": True,
+                    "error": "download stopped: the window that started it closed",
+                }))
+                raise
             except Exception as _pull_err:
                 await app.broadcast(make_event("analyzer.pull_done", {"name": name, "ok": False, "error": str(_pull_err)}))
 
@@ -7940,6 +8001,7 @@ async def tokens_turns(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("tokens.reset")
+@outlives_requester
 async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7996,6 +8058,7 @@ async def tokens_quota_accounts(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("tokens.quota_exhausted")
+@outlives_requester
 async def tokens_quota_exhausted(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
     from .pane_account_history import UNKNOWN_PROFILE_ID, parse_event_time
@@ -8117,6 +8180,7 @@ async def devtime_snapshot(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("devtime.reset")
+@outlives_requester
 async def devtime_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -8603,6 +8667,7 @@ async def onboarding_install_prompt(session: "Session", msg_id: str, msg_type: s
 
 
 @handler("codex.hook_trust_blocked")
+@outlives_requester
 async def codex_hook_trust_blocked(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The window saw Codex demand approval for the hook Navide injects.
 
@@ -10647,6 +10712,7 @@ async def terminal_interrupt(session: "Session", msg_id: str, msg_type: str, pay
 
 
 @handler("terminal.kill")
+@outlives_requester
 async def terminal_kill(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -10704,6 +10770,7 @@ async def terminal_kill(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("terminal.kill_surface")
+@outlives_requester
 async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """End the embedded AI panels one window held.
 
@@ -11175,6 +11242,7 @@ async def project_set_tab_order(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("project.set_ui_state")
+@outlives_requester
 async def project_set_ui_state(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -11424,6 +11492,7 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
 
 
 @handler("project.rename_pane")
+@outlives_requester
 async def project_rename_pane(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -11465,6 +11534,7 @@ async def project_rename_pane(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("project.set_pane_auto_name")
+@outlives_requester
 async def project_set_pane_auto_name(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Persist an auto-generated pane title (custom_name always wins).
 
@@ -11593,6 +11663,7 @@ async def pane_generate_auto_name(session: "Session", msg_id: str, msg_type: str
 
 
 @handler("project.rename_spawn_history")
+@outlives_requester
 async def project_rename_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Rename a spawn-history entry whose pane no longer exists.
 
@@ -11640,6 +11711,7 @@ async def project_rename_spawn_history(session: "Session", msg_id: str, msg_type
 
 
 @handler("project.star_spawn_history")
+@outlives_requester
 async def project_star_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Star or unstar a spawn-history entry.
 
@@ -11689,6 +11761,7 @@ async def project_star_spawn_history(session: "Session", msg_id: str, msg_type: 
 
 
 @handler("project.delete_spawn_history")
+@outlives_requester
 async def project_delete_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Delete spawn-history entries from the full store and the mirror.
 
@@ -12250,6 +12323,7 @@ async def _sweep_pane_ptys(session: "Session", pane_id: str, *, force: bool = Tr
 
 
 @handler("pipeline.slot_unspawn")
+@outlives_requester
 async def pipeline_slot_unspawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
     from .projects import StageOutOfRange
@@ -12387,6 +12461,7 @@ async def pipeline_start_refused(session: "Session", msg_id: str, msg_type: str,
 
 
 @handler("pipeline.node_states")
+@outlives_requester
 async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The renderer engine reports per-graph-node run state; stored on the
     project so MCP pipeline_status can read it, then broadcast for canvases in
@@ -12565,6 +12640,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
 
 
 @handler("manual_pane.unspawn")
+@outlives_requester
 async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -12596,6 +12672,7 @@ async def manual_pane_unspawn(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("pipeline.slot_unspawn_by_pane")
+@outlives_requester
 async def pipeline_slot_unspawn_by_pane(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Retire a pipeline pane's record by pane id, and take its PTY with it.
 
@@ -12632,6 +12709,7 @@ async def pipeline_slot_unspawn_by_pane(session: "Session", msg_id: str, msg_typ
 
 
 @handler("manual_pane.release_pty")
+@outlives_requester
 async def manual_pane_release_pty(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """End a pane's PTY while its record stays 'spawned'.
 
@@ -13726,6 +13804,60 @@ async def agent_msg_push(
             make_error(msg_id, msg_type, "BAD_REQUEST", "agent_msg.push needs pane_id and text")
         )
         return
+    push_id = str(payload.get("push_id") or "")
+    key = (pane_id, push_id)
+    pushed = _PUSHES.get(key) if push_id else None
+    if pushed is None:
+        pushed = asyncio.ensure_future(_push_and_announce(pane_id, text))
+        if push_id:
+            _PUSHES[key] = pushed
+            # The answer is kept a while after the push settles: the window
+            # asks again only once its own request has failed, which takes up
+            # to its request timeout plus a reconnect.
+            pushed.add_done_callback(
+                lambda done: asyncio.get_running_loop().call_later(PUSH_OUTCOME_TTL_S, _forget_push, key, done)
+            )
+    kind, ok, reason = await _outlive_requester(pushed)
+    await session.send_json(
+        make_response(
+            msg_id,
+            msg_type,
+            {
+                "ok": ok,
+                "kind": kind,
+                "reason": reason,
+                # "the pane may still be holding this text": the window must
+                # then re-queue the message rather than typing it in, or the
+                # envelope goes in twice, concatenated.
+                "unclear": (not ok) and push_delivery.leaves_text_behind(kind, reason),
+            },
+        )
+    )
+
+
+#: How long the outcome of a push named by its push_id is kept for a window
+#: asking again.
+PUSH_OUTCOME_TTL_S = 120.0
+#: Pushes by (pane_id, push_id), in flight or settled within PUSH_OUTCOME_TTL_S.
+_PUSHES: dict[tuple[str, str], "asyncio.Future[tuple[str, bool, str]]"] = {}
+
+
+def _forget_push(key: tuple[str, str], push: "asyncio.Future[Any]") -> None:
+    if _PUSHES.get(key) is push:
+        del _PUSHES[key]
+
+
+async def _push_and_announce(pane_id: str, text: str) -> tuple[str, bool, str]:
+    """One push and what it set off; (kind, landed, reason).
+
+    Run to its end whoever is waiting: a requester that hangs up mid-push
+    would otherwise stop it between the CLI's append and its submit, or after
+    the CLI took the text but before the windows heard the pane went active.
+    And a window that lost the answer asks again by push_id instead of typing
+    the message in, so a push the CLI took is never delivered a second time.
+    """
+    from . import app, push_delivery
+
     state = push_delivery.get(pane_id)
     ok, reason = await push_delivery.deliver(pane_id, text)
     if ok:
@@ -13748,22 +13880,7 @@ async def agent_msg_push(
             "detail": f"push:{state.kind if state else ''}",
             "notification_type": "",
         }))
-    kind = state.kind if state else ""
-    await session.send_json(
-        make_response(
-            msg_id,
-            msg_type,
-            {
-                "ok": ok,
-                "kind": kind,
-                "reason": reason,
-                # "the pane may still be holding this text": the window must
-                # then re-queue the message rather than typing it in, or the
-                # envelope goes in twice, concatenated.
-                "unclear": (not ok) and push_delivery.leaves_text_behind(kind, reason),
-            },
-        )
-    )
+    return (state.kind if state else ""), ok, reason
 
 
 @handler("agent_msg.hold_update")
@@ -13990,6 +14107,7 @@ async def preview_log_snapshot(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("preview.log_append")
+@outlives_requester
 async def preview_log_append(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -14032,6 +14150,7 @@ async def preview_log_append(session: "Session", msg_id: str, msg_type: str, pay
 
 
 @handler("preview.log_clear")
+@outlives_requester
 async def preview_log_clear(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -14349,6 +14468,7 @@ async def convenience_history(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("convenience.set")
+@outlives_requester
 async def convenience_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, convenience_wiring
     from .applog import backend_port_file
@@ -14382,6 +14502,7 @@ async def convenience_set(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("convenience.upgrade_ack")
+@outlives_requester
 async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 

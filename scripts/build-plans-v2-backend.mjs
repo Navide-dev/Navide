@@ -15,7 +15,19 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const sourceDirectory = resolve(repositoryRoot, 'plugins/navide-plans/backend')
+// A copy of the plugin built on its own (scripts/verify-plugin-standalone.mjs)
+// names its source and its dist directory; such a build keeps no cache and
+// runs PyInstaller in an isolated environment from the copy's
+// backend/requirements.txt, with no part of this repository's backend/. The
+// Python plugin SDK comes from PyPI there, or from NAVIDE_PLANS_PYTHON_SDK (a
+// wheel or sdist path, e.g. one scripts/publish-python-plugin-sdk.sh built)
+// while it is unpublished.
+const standaloneSource = process.env['NAVIDE_PLANS_SOURCE_DIR']
+const standaloneDist = process.env['NAVIDE_PLANS_DIST_DIR']
+const standalone = Boolean(standaloneSource || standaloneDist)
+const pluginSourceRoot = standaloneSource ? resolve(standaloneSource) : resolve(repositoryRoot, 'plugins/navide-plans')
+const pluginDistRoot = standaloneDist ? resolve(standaloneDist) : resolve(repositoryRoot, 'dist-plugins/navide-plans')
+const sourceDirectory = resolve(pluginSourceRoot, 'backend')
 // The backend imports `navide_plugin_sdk`, which holds the path guard, write
 // path and plan versions itself (standard library only) and imports nothing
 // of agent_team_backend; these are every source the bundle carries from the
@@ -29,11 +41,18 @@ const sharedSourceFiles = [
   resolve(sharedSourceRoot, 'navide_plugin_sdk/plan_versions.py'),
 ]
 const source = join(sourceDirectory, 'plans_backend.py')
-const backendDirectory = resolve(repositoryRoot, 'dist-plugins/navide-plans/backend')
+// A standalone build uses the PyInstaller backend/uv.lock pins.
+function lockedVersion(name) {
+  const lock = readFileSync(resolve(repositoryRoot, 'backend/uv.lock'), 'utf8')
+  const match = lock.match(new RegExp(`\\nname = "${name}"\\nversion = "([^"]+)"`))
+  if (!match) throw new Error(`backend/uv.lock pins no ${name}`)
+  return match[1]
+}
+const backendDirectory = resolve(pluginDistRoot, 'backend')
 const executableName = process.platform === 'win32' ? 'navide-plans.exe' : 'navide-plans'
 const executable = join(backendDirectory, executableName)
 const cacheFile = resolve(repositoryRoot, 'node_modules/.cache/navide/plans-v2-backend.json')
-const artifactFileList = resolve(repositoryRoot, 'dist-plugins/navide-plans/artifact-files.json')
+const artifactFileList = resolve(pluginDistRoot, 'artifact-files.json')
 
 // `--if-needed` is how `pnpm dev` invokes this script, and only `pnpm dev`:
 // every production path (build:plans:backend ← build:plans ←
@@ -122,7 +141,7 @@ function recordBackendArtifactFile() {
   if (!Array.isArray(listed.files) || listed.files.some((file) => typeof file !== 'string')) {
     throw new Error(`Plans artifact file list is invalid: ${artifactFileList}`)
   }
-  const manifest = JSON.parse(readFileSync(resolve(repositoryRoot, 'dist-plugins/navide-plans/manifest.json'), 'utf8'))
+  const manifest = JSON.parse(readFileSync(resolve(pluginDistRoot, 'manifest.json'), 'utf8'))
   const backendEntry = 'backend/navide-plans'
   if (manifest.backend?.entry !== backendEntry) {
     throw new Error(`Plans manifest must declare its backend entry: ${backendEntry}`)
@@ -132,7 +151,7 @@ function recordBackendArtifactFile() {
   writeFileSync(artifactFileList, `${JSON.stringify({ files }, null, 2)}\n`)
 }
 
-if (developmentInvocation) {
+if (developmentInvocation && !standalone) {
   try {
     const cached = JSON.parse(readFileSync(cacheFile, 'utf8'))
     if (cached.inputDigest === inputDigest && cached.outputDigest === executableDigest()) {
@@ -145,26 +164,37 @@ if (developmentInvocation) {
   }
 }
 // A failed build must never leave a successful cache marker behind.
-rmSync(cacheFile, { force: true })
+if (!standalone) rmSync(cacheFile, { force: true })
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'navide-plans-v2-backend-'))
 
 try {
   mkdirSync(backendDirectory, { recursive: true })
   try {
+    const runner = standalone
+      ? [
+          'run',
+          '--isolated',
+          '--no-project',
+          '--python',
+          '3.12',
+          '--with',
+          `pyinstaller==${lockedVersion('pyinstaller')}`,
+          '--with-requirements',
+          join(sourceDirectory, 'requirements.txt'),
+          ...(process.env['NAVIDE_PLANS_PYTHON_SDK'] ? ['--with', resolve(process.env['NAVIDE_PLANS_PYTHON_SDK'])] : []),
+          'pyinstaller',
+        ]
+      : ['--project', resolve(repositoryRoot, 'backend'), 'run', 'pyinstaller']
     execFileSync(
       'uv',
       [
-        '--project',
-        resolve(repositoryRoot, 'backend'),
-        'run',
-        'pyinstaller',
+        ...runner,
         '--noconfirm',
         '--clean',
         '--onefile',
         '--name',
         'navide-plans',
-        '--paths',
-        sharedSourceRoot,
+        ...(standalone ? [] : ['--paths', sharedSourceRoot]),
         '--distpath',
         backendDirectory,
         '--workpath',
@@ -174,7 +204,7 @@ try {
         source,
       ],
       {
-        cwd: repositoryRoot,
+        cwd: standalone ? pluginSourceRoot : repositoryRoot,
         stdio: 'inherit',
         env: {
           ...process.env,
@@ -197,8 +227,10 @@ try {
   if (process.platform !== 'win32') chmodSync(executable, entry.mode | 0o111)
   const outputDigest = executableDigest()
   recordBackendArtifactFile()
-  mkdirSync(dirname(cacheFile), { recursive: true })
-  writeFileSync(cacheFile, `${JSON.stringify({ inputDigest, outputDigest })}\n`)
+  if (!standalone) {
+    mkdirSync(dirname(cacheFile), { recursive: true })
+    writeFileSync(cacheFile, `${JSON.stringify({ inputDigest, outputDigest })}\n`)
+  }
   console.log(`Built production Plans backend: ${executable}`)
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true })

@@ -380,3 +380,45 @@ async def test_a_snapshot_with_a_session_window_adds_nothing(monkeypatch, tmp_pa
     snap = await _read_panel(monkeypatch, tmp_path, PRINTED_REPORT)
 
     assert "absentWindows" not in snap
+
+
+async def test_a_read_with_no_windows_names_what_the_cli_printed_without_secrets(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    """"printed no usage windows" alone left an account unreadable for a week
+    with nothing to go on. The CLI's first line says why (a login prompt, an
+    error), so it goes into the error and the log — with anything that could
+    identify or authenticate the account taken out first."""
+    from agent_team_backend import ai_chat_cli_engine
+
+    # Fakes assembled at runtime: no secret-shaped literal lives in the repo.
+    token = "sk-" + "ant-" + "oat01-" + "Q" * 40
+    email = "someone" + "@" + "example.com"
+    slot = "33fa" + "8a5d"
+    uuid = "6032b1c4-" + "1111-2222-3333-" + "444455556666"
+
+    async def creds(home):
+        return {"accessToken": "x"}
+
+    async def read_odd(binary):
+        return (
+            "\n\x1b[31mInvalid API key · Please run /login"
+            f" ({email}) token={token} slot {slot} session {uuid}\x1b[0m\n"
+            "second line\n"
+        )
+
+    monkeypatch.setattr(cu, "read_claude_credentials", creds)
+    monkeypatch.setattr(ai_chat_cli_engine, "resolve_cli_binary", lambda name: "/bin/claude")
+    monkeypatch.setattr(cu, "read_usage_panel", read_odd)
+
+    with caplog.at_level(logging.INFO, logger=cu.log.name):
+        snap = await _REAL_FETCH(tmp_path)
+
+    assert snap["status"] == "unavailable"
+    assert "no usage windows" in snap["error"]
+    assert "Invalid API key · Please run /login" in snap["error"]
+    assert "Invalid API key · Please run /login" in caplog.text
+    assert "second line" not in snap["error"]
+    for leaked in (token, "oat01", email, "someone", slot, uuid, "\x1b"):
+        assert leaked not in snap["error"]
+        assert leaked not in caplog.text

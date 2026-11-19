@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import threading
 import time
 
+import httpx
 import pytest
 
+from agent_team_backend.channels import telegram as telegram_mod
 from agent_team_backend.channels.base import ChannelSendError, InboundMessage, Location
 from agent_team_backend.channels.telegram import CONFLICT_MIN_ATTEMPT, TelegramAdapter
 
@@ -375,7 +378,7 @@ async def test_stop_ends_polling_even_if_a_cancel_is_swallowed(api: FakeBotApi, 
     swallowed: list[str] = []
     polling = asyncio.Event()
 
-    async def call(method, params=None):
+    async def call(method, params=None, timeout=None):
         if method == "getUpdates" and not swallowed:
             polling.set()
             try:
@@ -384,7 +387,7 @@ async def test_stop_ends_polling_even_if_a_cancel_is_swallowed(api: FakeBotApi, 
                 asyncio.current_task().uncancel()
                 swallowed.append(method)
                 return []
-        return await real_call(method, params)
+        return await real_call(method, params, timeout)
 
     monkeypatch.setattr(ad, "_call", call)
 
@@ -888,3 +891,138 @@ async def test_an_unsupported_kind_is_emitted_to_be_told_and_logged_by_field_nam
     assert "(fields: chat,date,from,message_id,pinned_message,text)\n" in log_text  # not told
     assert "dropped: sent by a bot" in log_text
     assert "secret question" not in log_text
+
+
+# --- the first connection: getMe is short, retried once on a network failure, and the ---
+# --- outcome says whether Telegram answered at all (quick add's "network" vs "rejected") ---
+
+def test_a_network_error_without_a_message_is_named_by_its_kind() -> None:
+    assert telegram_mod._describe_failure(httpx.ConnectTimeout("")) == "ConnectTimeout"
+    assert telegram_mod._describe_failure(httpx.ConnectError("refused")) == "ConnectError: refused"
+
+
+class _FlakyNetwork(httpx.AsyncBaseTransport):
+    """The first ``failures`` requests fail like ``exc`` before reaching Telegram (a dead
+    IPv6 route, a refused connection); later ones go to the fake Bot API."""
+
+    def __init__(self, exc: type[httpx.TransportError], failures: int = 1) -> None:
+        self._inner = httpx.AsyncHTTPTransport()
+        self._exc = exc
+        self.failures = failures
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if self.failures > 0:
+            self.failures -= 1
+            raise self._exc("[Errno 65] No route to host", request=request)
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+async def _noop(msg: InboundMessage) -> None:
+    pass
+
+
+def _slow_start(api: FakeBotApi, network: httpx.AsyncBaseTransport | None = None) -> TelegramAdapter:
+    # A long backoff: anything that recovers within the test did so by the immediate retry.
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=lambda a, r: 60.0, poll_timeout_s=1)
+    ad._transport = network
+    return ad
+
+
+async def test_get_me_is_retried_at_once_after_a_network_failure(api: FakeBotApi) -> None:
+    ad = _slow_start(api, _FlakyNetwork(httpx.ConnectError))
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.status.identity == "@navide_bot", timeout=3.0)
+        assert not ad.unreachable
+    finally:
+        await ad.stop()
+
+
+async def test_a_get_me_that_hangs_gives_up_on_its_own_timeout_and_retries(api: FakeBotApi, monkeypatch) -> None:
+    # The first getMe never answers (a stalled first connection): it must not wait out the
+    # long poll's 45 s read timeout, but end on getMe's own and try again at once.
+    monkeypatch.setattr(telegram_mod, "GET_ME_TIMEOUT", httpx.Timeout(0.3))
+    release = threading.Event()
+    answered = {"n": 0}
+
+    def get_me(params):
+        answered["n"] += 1
+        if answered["n"] == 1:
+            release.wait(20)
+        return {"id": 12345, "is_bot": True, "first_name": "Navide", "username": "navide_bot"}
+
+    api.handlers["getMe"] = get_me
+    ad = _slow_start(api)
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.status.identity == "@navide_bot", timeout=3.0)
+    finally:
+        release.set()
+        await ad.stop()
+
+
+async def test_get_me_failing_twice_marks_telegram_unreachable(api: FakeBotApi) -> None:
+    ad = _slow_start(api, _FlakyNetwork(httpx.ConnectTimeout, failures=2))
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.status.lifecycle == "recovering", timeout=3.0)
+        assert ad.unreachable and ad.status.identity == ""
+        assert "ConnectTimeout" in ad.status.last_error and TOKEN not in ad.status.last_error
+        assert api.calls_of("getMe") == []
+    finally:
+        await ad.stop()
+
+
+async def test_a_rejected_token_is_an_answer_not_a_network_failure(api: FakeBotApi) -> None:
+    api.fail("getMe", 401, "Unauthorized")
+    ad = _slow_start(api)
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.status.lifecycle == "blocked")
+        assert not ad.unreachable and "401" in ad.status.last_error
+    finally:
+        await ad.stop()
+
+
+async def test_the_first_poll_answers_at_once_and_says_whether_another_program_holds_the_bot(api: FakeBotApi) -> None:
+    api.fail("getUpdates", 409, "Conflict: terminated by other getUpdates request")
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=lambda a, r: 0.3, poll_timeout_s=1)
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.conflict)
+        assert ad.polled and ad.status.identity == "@navide_bot"
+        await _until(lambda: not ad.conflict and len(api.calls_of("getUpdates")) >= 3)
+        polls = api.calls_of("getUpdates")
+        assert polls[0]["timeout"] == 0 and polls[1]["timeout"] == 0  # each session's first poll
+        assert polls[2]["timeout"] == 1
+    finally:
+        await ad.stop()
+
+
+async def test_a_free_bot_is_polled_without_a_conflict(api: FakeBotApi) -> None:
+    ad = _slow_start(api)
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.polled)
+        assert not ad.conflict
+    finally:
+        await ad.stop()
+
+
+async def test_the_system_proxy_is_used(api: FakeBotApi, monkeypatch) -> None:
+    # Telegram reachable only through a proxy (a company network): HTTPS_PROXY / HTTP_PROXY,
+    # or the macOS / Windows proxy settings httpx reads through urllib.request.getproxies().
+    for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("HTTP_PROXY", api.base_url)
+    monkeypatch.setenv("http_proxy", api.base_url)
+    ad = TelegramAdapter(TOKEN, base_url="http://api.telegram.invalid", backoff=lambda a, r: 60.0, poll_timeout_s=1)
+    await ad.start(_noop)
+    try:
+        await _until(lambda: ad.status.identity == "@navide_bot", timeout=3.0)
+    finally:
+        await ad.stop()
+    assert "api.telegram.invalid" in api.hosts

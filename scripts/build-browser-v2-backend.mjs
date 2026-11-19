@@ -15,13 +15,20 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const sourceDirectory = resolve(repositoryRoot, 'plugins/navide-browser/backend')
+// A copy of the plugin built on its own (scripts/verify-plugin-standalone.mjs)
+// names its source and its dist directory; such a build keeps no cache.
+const standaloneSource = process.env['NAVIDE_BROWSER_SOURCE_DIR']
+const standaloneDist = process.env['NAVIDE_BROWSER_DIST_DIR']
+const standalone = Boolean(standaloneSource || standaloneDist)
+const pluginSourceRoot = standaloneSource ? resolve(standaloneSource) : resolve(repositoryRoot, 'plugins/navide-browser')
+const pluginDistRoot = standaloneDist ? resolve(standaloneDist) : resolve(repositoryRoot, 'dist-plugins/navide-browser')
+const sourceDirectory = resolve(pluginSourceRoot, 'backend')
 const source = join(sourceDirectory, 'browser_backend.py')
-const backendDirectory = resolve(repositoryRoot, 'dist-plugins/navide-browser/backend')
+const backendDirectory = resolve(pluginDistRoot, 'backend')
 const executableName = process.platform === 'win32' ? 'navide-browser.exe' : 'navide-browser'
 const executable = join(backendDirectory, executableName)
 const cacheFile = resolve(repositoryRoot, 'node_modules/.cache/navide/browser-v2-backend.json')
-const artifactFileList = resolve(repositoryRoot, 'dist-plugins/navide-browser/artifact-files.json')
+const artifactFileList = resolve(pluginDistRoot, 'artifact-files.json')
 
 // `--if-needed` is how `pnpm dev` invokes this script, and only `pnpm dev`:
 // every production path (build:browser:backend and the official plugin build)
@@ -108,7 +115,7 @@ function recordBackendArtifactFile() {
   if (!Array.isArray(listed.files) || listed.files.some((file) => typeof file !== 'string')) {
     throw new Error(`Navide Browser artifact file list is invalid: ${artifactFileList}`)
   }
-  const manifest = JSON.parse(readFileSync(resolve(repositoryRoot, 'dist-plugins/navide-browser/manifest.json'), 'utf8'))
+  const manifest = JSON.parse(readFileSync(resolve(pluginDistRoot, 'manifest.json'), 'utf8'))
   const backendEntry = 'backend/navide-browser'
   if (manifest.backend?.entry !== backendEntry) {
     throw new Error(`Navide Browser manifest must declare its backend entry: ${backendEntry}`)
@@ -118,7 +125,7 @@ function recordBackendArtifactFile() {
   writeFileSync(artifactFileList, `${JSON.stringify({ files }, null, 2)}\n`)
 }
 
-if (developmentInvocation) {
+if (developmentInvocation && !standalone) {
   try {
     const cached = JSON.parse(readFileSync(cacheFile, 'utf8'))
     if (cached.inputDigest === inputDigest && cached.outputDigest === executableDigest()) {
@@ -131,7 +138,7 @@ if (developmentInvocation) {
   }
 }
 // A failed build must never leave a successful cache marker behind.
-rmSync(cacheFile, { force: true })
+if (!standalone) rmSync(cacheFile, { force: true })
 const temporaryRoot = mkdtempSync(join(tmpdir(), 'navide-browser-v2-backend-'))
 
 try {
@@ -181,8 +188,10 @@ try {
   if (process.platform !== 'win32') chmodSync(executable, entry.mode | 0o111)
   const outputDigest = executableDigest()
   recordBackendArtifactFile()
-  mkdirSync(dirname(cacheFile), { recursive: true })
-  writeFileSync(cacheFile, `${JSON.stringify({ inputDigest, outputDigest })}\n`)
+  if (!standalone) {
+    mkdirSync(dirname(cacheFile), { recursive: true })
+    writeFileSync(cacheFile, `${JSON.stringify({ inputDigest, outputDigest })}\n`)
+  }
   console.log(`Built production Navide Browser backend: ${executable}`)
 } finally {
   rmSync(temporaryRoot, { recursive: true, force: true })

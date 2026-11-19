@@ -31,6 +31,7 @@ import {
   SECRET_NAME_PATTERN,
 } from '../../../packages/plugin-contracts/src/secrets'
 import { isWindows } from '../../shared/osplat'
+import type { AsyncSecretCrypto } from '../safeStorageCrypto'
 
 export type { PluginSecretsNotice } from '../../shared/pluginSecretsNotice'
 
@@ -43,12 +44,9 @@ export type SecretsOperation = (typeof SECRETS_BRIDGE_OPERATIONS)[number]
  *  never name a path outside the secrets directory. */
 const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 
-export interface PluginSecretsCrypto {
-  /** Whether real encryption is usable (false for Linux's basic_text backend too). */
-  readonly available: boolean
-  encrypt(plain: string): string
-  decrypt(enc: string): string
-}
+/** Real impl wraps Electron safeStorage (safeStorageCrypto.ts); `available`
+ *  is false for Linux's basic_text backend too. */
+export type PluginSecretsCrypto = AsyncSecretCrypto
 
 /** Too many secrets or a value too long: the capability's RESOURCE_LIMIT. */
 export class PluginSecretsLimitError extends Error {
@@ -159,13 +157,13 @@ export class PluginSecretStore {
    *  as the installed package's trust `identity` (secretsIdentity). A file
    *  bound to another identity answers SECRETS_IDENTITY_MISMATCH and is left
    *  as it is; `onMismatch` is told so the user can be. */
-  run(
+  async run(
     pluginId: string,
     identity: string | null,
     operation: SecretsOperation,
     args: Record<string, unknown>,
     onMismatch?: () => void,
-  ): unknown {
+  ): Promise<unknown> {
     if (identity === null) return UNAVAILABLE
     const stored = this.read(pluginId).identity
     if (stored !== undefined && stored !== identity) {
@@ -186,28 +184,30 @@ export class PluginSecretStore {
     return stored !== undefined && stored !== identity
   }
 
-  set(pluginId: string, name: string, value: string, identity?: string): { ok: true } | typeof UNAVAILABLE {
-    if (!this.crypto.available) return UNAVAILABLE
+  async set(pluginId: string, name: string, value: string, identity?: string): Promise<{ ok: true } | typeof UNAVAILABLE> {
+    if (!(await this.crypto.available())) return UNAVAILABLE
     if (Buffer.byteLength(value, 'utf8') > MAX_SECRET_VALUE_BYTES) {
       throw new PluginSecretsLimitError(`a secret value is at most ${MAX_SECRET_VALUE_BYTES} bytes`)
     }
+    const encrypted = await this.crypto.encrypt(value)
+    // Read after the await, so a write made meanwhile is not lost.
     const file = this.read(pluginId)
     // The first write binds the file to the package's trust identity.
     if (file.identity === undefined && identity !== undefined) file.identity = identity
     if (!Object.hasOwn(file.secrets, name) && Object.keys(file.secrets).length >= MAX_SECRETS_PER_PLUGIN) {
       throw new PluginSecretsLimitError(`a plugin keeps at most ${MAX_SECRETS_PER_PLUGIN} secrets`)
     }
-    file.secrets[name] = this.crypto.encrypt(value)
+    file.secrets[name] = encrypted
     this.write(pluginId, file)
     return { ok: true }
   }
 
-  get(pluginId: string, name: string): { present: true; value: string } | { present: false } | typeof UNAVAILABLE {
-    if (!this.crypto.available) return UNAVAILABLE
+  async get(pluginId: string, name: string): Promise<{ present: true; value: string } | { present: false } | typeof UNAVAILABLE> {
+    if (!(await this.crypto.available())) return UNAVAILABLE
     const encrypted = this.read(pluginId).secrets[name]
     if (typeof encrypted !== 'string') return { present: false }
     try {
-      return { present: true, value: this.crypto.decrypt(encrypted) }
+      return { present: true, value: await this.crypto.decrypt(encrypted) }
     } catch {
       // The keychain key changed or the entry is damaged: never plaintext.
       return UNAVAILABLE
@@ -239,12 +239,12 @@ export class PluginSecretStore {
 
   /** The plugin's decrypted values, for redacting agent tool results only.
    *  Never returned to any caller. */
-  values(pluginId: string): string[] {
-    if (!this.crypto.available) return []
+  async values(pluginId: string): Promise<string[]> {
+    if (!(await this.crypto.available())) return []
     const values: string[] = []
     for (const encrypted of Object.values(this.read(pluginId).secrets)) {
       try {
-        values.push(this.crypto.decrypt(encrypted))
+        values.push(await this.crypto.decrypt(encrypted))
       } catch {
         // A value that cannot be decrypted cannot have been handed out either.
       }

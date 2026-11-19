@@ -769,15 +769,15 @@ interface GitContributionState {
 }
 
 interface GitAccountHandlers {
-  available(): boolean
+  available(): Promise<boolean>
   list(): Array<{ id: string; label: string; host: string; username: string; tokenLast4: string }>
-  add(input: { label: string; host: string; username: string; token: string }): { id: string; label: string; host: string; username: string; tokenLast4: string }
-  update(id: string, patch: Partial<{ label: string; host: string; username: string; token: string }>): void
+  add(input: { label: string; host: string; username: string; token: string }): Promise<{ id: string; label: string; host: string; username: string; tokenLast4: string }>
+  update(id: string, patch: Partial<{ label: string; host: string; username: string; token: string }>): Promise<void>
   remove(id: string): void
   bind(workspacePath: string, accountId: string): void
   unbind(workspacePath: string): void
   getBinding(workspacePath: string): string | null
-  getCredential(workspacePath: string): { username: string; token: string; expectedHost: string } | null
+  getCredential(workspacePath: string): Promise<{ username: string; token: string; expectedHost: string } | null>
 }
 
 interface GitCredentialOwner {
@@ -2675,7 +2675,7 @@ export class FrontendPluginManager {
   }
 
   /** One secrets operation as the installed package's trust identity. */
-  private runPluginSecrets(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): unknown {
+  private runPluginSecrets(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): Promise<unknown> {
     const store = this.pluginSecretStore
     if (!store) throw new Error('plugin secrets are unavailable')
     let identity: string | null
@@ -2712,10 +2712,10 @@ export class FrontendPluginManager {
 
   /** An agent tool answer with the package's own secret values redacted.
    *  A chunked result is joined and parsed first; the core splits it again. */
-  private redactAgentToolSecrets(pluginId: string, response: HostAgentToolResponse): HostAgentToolResponse {
+  private async redactAgentToolSecrets(pluginId: string, response: HostAgentToolResponse): Promise<HostAgentToolResponse> {
     let values: string[]
     try {
-      values = this.pluginSecretStore?.values(pluginId) ?? []
+      values = (await this.pluginSecretStore?.values(pluginId)) ?? []
     } catch {
       values = []
     }
@@ -3274,14 +3274,14 @@ export class FrontendPluginManager {
    *  runtime binding's. */
   createThirdPartySecretsPort(): PackageSecretsPort {
     return {
-      run: (operation, args, context) => {
+      run: async (operation, args, context) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
         if (!this.thirdPartyAgentsGrantAllows('secrets', context)) {
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Secrets capability is denied.')
         }
         if (!this.pluginSecretStore) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Plugin secrets are unavailable.')
         try {
-          return this.runPluginSecrets(context.runtime.pluginId, operation, args) as JsonValue
+          return (await this.runPluginSecrets(context.runtime.pluginId, operation, args)) as JsonValue
         } catch (error) {
           if (error instanceof PluginSecretsLimitError) throw new PlansBridgeError('RESOURCE_LIMIT', error.message)
           throw new PlansBridgeError('INTERNAL_ERROR', 'Plugin secrets request failed.')
@@ -5242,7 +5242,7 @@ export class FrontendPluginManager {
         const accounts = handlers.list().map(({ id, label, host, username, tokenLast4 }) => ({
           id, label, host, username, tokenLast4,
         }))
-        return buildSuccess(reqId, { available: handlers.available(), accounts })
+        return buildSuccess(reqId, { available: await handlers.available(), accounts })
       }
       if (!plugin.workspacePath) {
         return buildError(reqId, 'WORKSPACE_SCOPE_VIOLATION', 'Git view is not workspace-bound')
@@ -5264,7 +5264,7 @@ export class FrontendPluginManager {
         ) {
           return buildError(reqId, 'BAD_REQUEST', 'Git account details are invalid')
         }
-        const { id, label, host, username, tokenLast4 } = handlers.add({
+        const { id, label, host, username, tokenLast4 } = await handlers.add({
           label: payload.label,
           host: payload.host,
           username: payload.username,
@@ -5349,7 +5349,7 @@ export class FrontendPluginManager {
       let credential: { username: string; token: string; expectedHost: string } | null = null
       if (this.gitAccountHandlers) {
         try {
-          credential = this.gitAccountHandlers.getCredential(resolve(workspacePath))
+          credential = await this.gitAccountHandlers.getCredential(resolve(workspacePath))
         } catch (error) {
           return buildError(
             reqId,
@@ -7016,7 +7016,7 @@ export class FrontendPluginManager {
         throw new Error('agent execution policy denied the operation')
       }
       // The plugin id is the Host binding's, never the request's.
-      return this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
+      return await this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
     }
 
     if (plan.address === 'agentNotify.send') {
@@ -10536,7 +10536,7 @@ export class FrontendPluginManager {
           toolResponse = await this.executeAgentToolCall(toolRequest, progress)
           // A tool answer never carries the package's own secrets.
           const toolPluginId = parseAgentToolCallRequest(toolRequest)?.pluginId
-          if (toolPluginId) toolResponse = this.redactAgentToolSecrets(toolPluginId, toolResponse)
+          if (toolPluginId) toolResponse = await this.redactAgentToolSecrets(toolPluginId, toolResponse)
         } catch (error) {
           // Never forward an internal message (it can carry local paths).
           console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)

@@ -7,6 +7,7 @@ import asyncio
 import base64
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -4178,3 +4179,159 @@ async def test_a_sign_in_through_navide_applies_live_even_with_auto_repair_off(
     await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
         "agent_key": "claude", "profile_id": pc, "force": True}})
     assert vault.read_slot("claude", pa).secret == fresh
+
+
+# ── "reading" that never ends (fix/quota-reading-stuck-0245) ─────────────────
+
+
+async def test_a_switch_before_the_reads_start_re_resolves_instead_of_discarding(
+    tmp_path, monkeypatch
+):
+    """A switch that lands after the cycle captured its epoch but before any
+    read was started had nothing to cancel, so the cycle ran every read to the
+    end — the incoming account's own live read included — and then threw all
+    of them away as "switched mid-read". The badge said "reading" for a whole
+    extra cycle (minutes on a loaded machine). The cycle must notice the switch
+    before it starts reading and resolve who is active again."""
+    from agent_team_backend import app
+
+    store = _isolated_store(tmp_path)
+    one = store.create(agent_key="claude", name="One")
+    two = store.create(agent_key="claude", name="Two")
+    store.set_default("claude", one["id"])
+    alive = int(time.time() * 1000 + 3_600_000)
+    vault = _SlotVault({
+        "__default__": _slot_secret("d", "rt-d", alive),
+        one["id"]: _slot_secret("a", "rt-a", alive),
+        two["id"]: _slot_secret("b", "rt-b", alive),
+    })
+    monkeypatch.setattr(us, "_get_profiles_store", lambda: store)
+    monkeypatch.setattr(us, "_get_credential_vault", lambda: vault)
+    monkeypatch.setattr(app, "broadcast", lambda event: _append([], event))
+
+    svc = us.UsageService(cache_path=tmp_path / "usage-cache.json")
+    svc.enabled = True
+
+    reads: list[str] = []
+
+    async def fake_claude(home):
+        reads.append(store.list()["defaults"]["claude"])
+        return us._snapshot("claude", "ok",
+                            windows=[us._window("session", "Session", 40, None)])
+
+    monkeypatch.setattr(us, "fetch_claude", fake_claude)
+    _stub_non_claude_fetchers(monkeypatch)
+
+    real_dirs = svc._claude_account_dirs
+    switched = False
+
+    async def switch_while_resolving(slot_ids):
+        nonlocal switched
+        if not switched:
+            switched = True
+            store.set_default("claude", two["id"])
+            await svc.announce_claude_switch(two["id"])
+        return await real_dirs(slot_ids)
+
+    monkeypatch.setattr(svc, "_claude_account_dirs", switch_while_resolving)
+
+    payload = await svc.poll_once(tmp_path)
+
+    assert switched
+    assert reads == [two["id"]]  # one live read, for the incoming account
+    row = payload["accounts"]["claude"][two["id"]]
+    assert row["status"] == "ok"
+    assert row["stale"] is False
+    assert "refreshPending" not in row
+    assert svc._last_good["claude"][two["id"]]["windows"][0]["usedPercent"] == 40
+    assert svc._last_good.get("claude", {}).get(one["id"]) is None
+
+
+async def test_the_active_reading_is_broadcast_before_slower_parked_reads_finish(
+    tmp_path, monkeypatch
+):
+    """The badge follows `usage.changed`, which used to go out only once the
+    whole cycle ended — after every parked account-dir read, each one a full
+    Claude Code boot. The active account's figure was in hand minutes before
+    the badge stopped saying "reading". It is published as soon as it lands."""
+    from agent_team_backend import app
+
+    store = _isolated_store(tmp_path)
+    active = store.create(agent_key="claude", name="Active")
+    parked = store.create(agent_key="claude", name="Parked")
+    store.set_default("claude", active["id"])
+    vault = _AccountDirVault({}, {parked["id"]})
+    monkeypatch.setattr(us, "_get_profiles_store", lambda: store)
+    monkeypatch.setattr(us, "_get_credential_vault", lambda: vault)
+    events: list[dict] = []
+
+    async def broadcast(event, *, exclude=None):
+        events.append(event)
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+
+    async def fake_claude(home):
+        return us._snapshot("claude", "ok",
+                            windows=[us._window("session", "Session", 10, None)])
+
+    release = asyncio.Event()
+
+    async def slow_dir(directory):
+        await release.wait()
+        return us._snapshot("claude", "ok",
+                            windows=[us._window("session", "Session", 70, None)])
+
+    monkeypatch.setattr(us, "fetch_claude", fake_claude)
+    monkeypatch.setattr(us, "fetch_claude_account_dir", slow_dir)
+    _stub_non_claude_fetchers(monkeypatch)
+
+    svc = us.UsageService(cache_path=tmp_path / "usage-cache.json")
+    svc.enabled = True
+    svc.begin_switch_epoch("claude", active["id"])
+
+    def active_published() -> bool:
+        for event in events:
+            if event.get("type") != "usage.changed":
+                continue
+            row = event["payload"]["accounts"]["claude"].get(active["id"], {})
+            if row.get("status") == "ok" and not row.get("refreshPending"):
+                return True
+        return False
+
+    poll = asyncio.create_task(svc.poll_once(tmp_path))
+    try:
+        async def wait_published():
+            while not active_published():
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(wait_published(), timeout=2)
+        assert not poll.done()  # the parked read is still out
+    finally:
+        release.set()
+        await asyncio.wait_for(poll, timeout=5)
+
+
+async def test_the_reading_mark_carries_when_it_started(tmp_path, monkeypatch):
+    """"Up to 3 minutes" means nothing without knowing when the read began;
+    the mark carries its start so the badge can say how long it has been
+    reading. A fresh reading drops both."""
+    from agent_team_backend import app
+
+    monkeypatch.setattr(app, "broadcast", lambda event: _append([], event))
+    svc = us.UsageService(cache_path=tmp_path / "usage-cache.json")
+    svc.enabled = True
+
+    svc.begin_switch_epoch("claude", "acct-b")
+    row = svc.account_snapshots["claude"]["acct-b"]
+    assert row["refreshPending"] is True
+    since = datetime.fromisoformat(row["refreshPendingSince"].replace("Z", "+00:00"))
+    assert abs((datetime.now(timezone.utc) - since).total_seconds()) < 60
+
+    svc._record_claude_snapshot("acct-b", us._snapshot(
+        "claude", "ok", windows=[us._window("session", "Session", 5, None)]))
+    row = svc.account_snapshots["claude"]["acct-b"]
+    assert "refreshPending" not in row and "refreshPendingSince" not in row
+
+    svc.enabled = False
+    svc.begin_switch_epoch("claude", "acct-b")
+    assert "refreshPendingSince" not in svc.account_snapshots["claude"]["acct-b"]

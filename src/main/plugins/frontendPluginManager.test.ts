@@ -11582,15 +11582,15 @@ describe('first-party Git private bridge', () => {
     const bind = vi.fn()
     const unbind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [{ id: 'account-1', label: 'GitHub', host: 'github.com', username: 'alice', tokenLast4: '1234' }],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind,
       getBinding: () => 'account-1',
-      getCredential: () => null,
+      getCredential: async () => null,
     })
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
 
@@ -11625,15 +11625,15 @@ describe('first-party Git private bridge', () => {
     const { mgr, instanceId } = await openGitView()
     const bind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
     mgr.setExecutionPolicyResolver(() => ({
@@ -14195,15 +14195,15 @@ describe('first-party Git private bridge', () => {
     dateNow.mockRestore()
 
     first.mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
     const clonePick = await call(first.view, 'git.contribution', { operation: 'pick_workspace', payload: {} }, 'clone-pick')
     await expect(call(first.view, 'git.request', {
@@ -14753,15 +14753,15 @@ describe('first-party Git private bridge', () => {
     const bind = vi.fn()
     const unbind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [{ id: 'account-1', label: 'GitHub', host: 'github.com', username: 'alice', tokenLast4: '1234' }],
-      add: () => ({ id: 'account-2', label: 'GitLab', host: 'gitlab.com', username: 'bob', tokenLast4: '5678' }),
-      update: () => undefined,
+      add: async () => ({ id: 'account-2', label: 'GitLab', host: 'gitlab.com', username: 'bob', tokenLast4: '5678' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }),
     })
 
     const listed = await call(view, 'git.account', { operation: 'list', payload: {} }, 'git-list')
@@ -14819,15 +14819,15 @@ describe('first-party Git private bridge', () => {
   it('limits account actions to Git left and window audiences', async () => {
     const { mgr, view } = await openGitView('/workspace', 'git-history')
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(view, 'git.account', {
@@ -14961,15 +14961,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: (workspacePath) => workspacePath === resolve('/workspace')
+      getCredential: async (workspacePath) => workspacePath === resolve('/workspace')
         ? { username: 'alice', token: 'secret-token', expectedHost: 'github.com' }
         : null,
     })
@@ -15077,12 +15077,12 @@ describe('first-party Git private bridge', () => {
     mgr.setBackendWsUrl('ws://git-credential-required-test')
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
-    const getCredential = vi.fn(() => null)
+    const getCredential = vi.fn(async () => null)
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
@@ -15118,15 +15118,15 @@ describe('first-party Git private bridge', () => {
   it('releases an interactive credential owner when the backend is unavailable', async () => {
     const { mgr, view } = await openGitView()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(view, 'git.request', {
@@ -15155,15 +15155,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     first.mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(first.view, 'git.request', {
@@ -15981,15 +15981,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
 
     await expect(call(view, 'git.request', {
@@ -16059,15 +16059,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
 
     const picked = await call(view, 'git.contribution', { operation: 'pick_workspace', payload: {} }, 'window-clone-pick')
@@ -16132,12 +16132,12 @@ describe('first-party Git private bridge', () => {
     mgr.setBackendWsUrl('ws://git-issues-test')
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
-    const getCredential = vi.fn(() => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }))
+    const getCredential = vi.fn(async () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }))
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,

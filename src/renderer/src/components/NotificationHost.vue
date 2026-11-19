@@ -55,6 +55,12 @@ watch(dialog, async (d) => {
             class="toast-action"
             @click.stop="t.action.run(); dismissToast(t.id)"
           >{{ t.action.label }}</button>
+          <button
+            v-if="t.secondaryAction"
+            type="button"
+            class="toast-action"
+            @click.stop="t.secondaryAction.run(); dismissToast(t.id)"
+          >{{ t.secondaryAction.label }}</button>
         </div>
       </transition-group>
     </div>

@@ -178,9 +178,24 @@ const probeLines = computed<ProbeLine[]>(() => {
   // The tunnel connected but the backend answered: not "unreachable".
   else if (r.mcp === 'http-403') lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-forbidden') })
   else if (r.mcp?.startsWith('http-')) lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-http', { code: r.mcp.slice(5) }) })
+  // The host's sshd bound the forward on loopback, not the bridge gateway.
+  else if (r.mcp === 'bridge-gateway-ports') lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-gateway-ports', { gateway: remote.network.mode === 'bridge' ? remote.network.gateway : '' }) })
   else lines.push({ ok: false, text: t('remoteDevcontainer.test-mcp-failed') })
   return lines
 })
+
+// Shown, never applied: Navide does not touch the host's sshd configuration.
+const GATEWAY_PORTS_LINE = 'GatewayPorts clientspecified'
+const gatewayPortsCopied = ref(false)
+async function copyGatewayPortsLine(): Promise<void> {
+  try {
+    await navigator.clipboard?.writeText(GATEWAY_PORTS_LINE)
+    gatewayPortsCopied.value = true
+  } catch {
+    // The line stays selectable in the dialog.
+  }
+}
+watch(probe, () => { gatewayPortsCopied.value = false })
 
 function submit(): void {
   const remote = target.value
@@ -278,6 +293,15 @@ function submit(): void {
               <span class="mark" aria-hidden="true">{{ line.ok === true ? '✓' : line.ok === false ? '✗' : '?' }}</span>{{ line.text }}
             </li>
           </ul>
+          <div v-if="probe?.mcp === 'bridge-gateway-ports'" class="fix" data-testid="remote-gateway-ports-fix">
+            <p class="muted">{{ $t('remoteDevcontainer.gateway-ports-fix') }}</p>
+            <div class="fix-row">
+              <code>{{ GATEWAY_PORTS_LINE }}</code>
+              <button data-testid="remote-gateway-ports-copy" @click="copyGatewayPortsLine">
+                {{ gatewayPortsCopied ? $t('remoteDevcontainer.gateway-ports-copied') : $t('remoteDevcontainer.gateway-ports-copy') }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <p v-if="error" class="err" role="alert">{{ error }}</p>
@@ -362,6 +386,9 @@ input[type='text'] {
 .ok .mark { color: var(--success-fg, #1a7f37); }
 .bad .mark { color: var(--danger-fg, #cf222e); }
 .warn .mark { color: var(--attention-fg, #9a6700); }
+.fix { display: flex; flex-direction: column; gap: 6px; }
+.fix-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.fix-row code { flex: 1; min-width: 0; padding: 4px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-subtle); font-family: var(--font-mono, monospace); font-size: 12px; user-select: text; overflow-wrap: anywhere; }
 .muted { color: var(--text-secondary); font-size: 12px; margin: 0; }
 .note { color: var(--text-secondary); font-size: 11px; margin: 0 0 6px; }
 .err { color: var(--danger-fg, #cf222e); font-size: 12px; margin: 0 0 10px; white-space: pre-wrap; word-break: break-word; }

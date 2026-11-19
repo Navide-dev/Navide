@@ -1,0 +1,6 @@
+# The Plans backend's Python dependencies, for a build outside the Navide
+# repository (scripts/build-plans-v2-backend.mjs with NAVIDE_PLANS_SOURCE_DIR).
+# Inside the repository the backend builds from backend/'s environment, whose
+# pyproject.toml carries the same ranges.
+navide-plugin-sdk>=1.0.0,<2
+pyyaml>=6.0

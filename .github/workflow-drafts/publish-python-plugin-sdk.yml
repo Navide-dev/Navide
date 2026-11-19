@@ -1,0 +1,67 @@
+# DRAFT — not active. GitHub runs only files under .github/workflows/, so this
+# file does nothing until it is moved to
+# .github/workflows/publish-python-plugin-sdk.yml (the file name PyPI's trusted
+# publisher settings must name; see docs/en-US/plugin-development-v2.md,
+# "Publishing the Python plugin SDK to PyPI").
+#
+# Publishes navide-plugin-sdk (backend/navide_plugin_sdk) through PyPI trusted
+# publishing (OIDC): the job holds no PyPI token and the repository stores no
+# PyPI secret. A tag python-plugin-sdk-v<version> triggers it; the tag must
+# match the version in packages/plugin-sdk-python/pyproject.toml, which
+# scripts/publish-python-plugin-sdk.sh checks against API_VERSION.
+name: Publish Python plugin SDK
+
+on:
+  push:
+    tags:
+      - 'python-plugin-sdk-v1.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-python-plugin-sdk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish navide-plugin-sdk to PyPI
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    # Protect this environment with required reviewers so every publication
+    # waits for the user's approval in the Actions UI.
+    environment: pypi-publish
+    permissions:
+      contents: read
+      # PyPI trusted publishing exchanges this OIDC token for a short-lived
+      # upload credential.
+      id-token: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Check the tag matches the package version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/plugin-sdk-python/pyproject.toml)"
+          if [[ "$GITHUB_REF_NAME" != "python-plugin-sdk-v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+      # Stages the SDK sources, builds the sdist and wheel into dist/pypi/ and
+      # checks them (version equals API_VERSION, only the SDK sources and
+      # metadata, no dependency).
+      - name: Build and check the archives
+        run: scripts/publish-python-plugin-sdk.sh
+      - name: Refuse a version already on PyPI
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' packages/plugin-sdk-python/pyproject.toml)"
+          status="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/navide-plugin-sdk/$version/json")"
+          if [[ "$status" == "200" ]]; then
+            echo "navide-plugin-sdk $version is already on PyPI; bump the version instead of republishing" >&2
+            exit 1
+          fi
+      - name: Publish through trusted publishing
+        run: uv publish --trusted-publishing always dist/pypi/navide_plugin_sdk-*.tar.gz dist/pypi/navide_plugin_sdk-*-py3-none-any.whl

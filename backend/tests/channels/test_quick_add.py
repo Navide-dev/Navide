@@ -14,16 +14,21 @@ from agent_team_backend.channels import ws_api
 from .test_manager import Env, env, fast_timers  # noqa: F401 — fixtures shared with the manager suite
 
 ACCOUNT = "bot-q1"
+# Read before the autouse fixture shortens them.
+TIMEOUT_S = mgr_mod.QUICK_ADD_TIMEOUT_S
+DEADLINE_S = mgr_mod.QUICK_ADD_DEADLINE_S
 
 
 @pytest.fixture(autouse=True)
 def fast_quick_add(monkeypatch):
     monkeypatch.setattr(mgr_mod, "QUICK_ADD_TIMEOUT_S", 0.3)
     monkeypatch.setattr(mgr_mod, "QUICK_ADD_POLL_S", 0.01)
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_CONFLICT_CHECK_S", 0.1)
 
 
 def _login_as(env: Env, behaviour: str, identity: str = "@quick_bot") -> None:
-    """Make bots built from now on log in like ``behaviour``: ready / rejected / identified / silent."""
+    """Make bots built from now on log in like ``behaviour``: ready / rejected / identified /
+    conflict / unpolled / unreachable / silent."""
     original = env.m._factory_for
 
     def factory_for(platform: str):
@@ -46,6 +51,16 @@ def _login_as(env: Env, behaviour: str, identity: str = "@quick_bot") -> None:
                     ad.status.identity = identity
                     ad.status.lifecycle = "recovering"
                     ad.status.last_error = "409 Conflict"
+                elif behaviour in ("conflict", "unpolled"):  # getMe answered; the first poll did not yet / was refused
+                    ad.identity_confirms_credential = True
+                    ad.status.identity = identity
+                    ad.status.lifecycle = "ready"
+                    ad.polled = behaviour == "conflict"
+                    ad.conflict = behaviour == "conflict"
+                elif behaviour == "unreachable":  # nothing came back from the platform at all
+                    ad.unreachable = True
+                    ad.status.lifecycle = "recovering"
+                    ad.status.last_error = "ConnectTimeout: "
                 else:  # silent: connecting forever, the last attempt failed
                     ad.status.lifecycle = "recovering"
                     ad.status.last_error = "ConnectError: unreachable"
@@ -353,3 +368,43 @@ async def test_a_credential_still_being_stored_at_the_deadline_is_removed_too(en
             break
         await asyncio.sleep(0.02)
     _no_trace(env)
+
+
+async def test_an_unreachable_platform_is_a_network_failure_not_a_timeout(env: Env) -> None:
+    _login_as(env, "unreachable")
+    res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
+    assert not res["ok"] and res["reason"] == "network"
+    assert "ConnectTimeout" in res["error"]
+    _no_trace(env)
+
+
+async def test_a_bot_another_program_polls_is_added_with_a_warning(env: Env) -> None:
+    # The token is valid (getMe answered): the bot is kept, and the window says why it
+    # cannot receive messages yet instead of a silent success.
+    _login_as(env, "conflict")
+    res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
+    assert res["ok"] and res["warning"] == "conflict" and res["identity"] == "@quick_bot"
+    assert ("telegram", ACCOUNT) in env.store.accounts()
+
+
+async def test_a_first_poll_that_never_answers_does_not_hold_the_add_up(env: Env) -> None:
+    _login_as(env, "unpolled")
+    res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
+    assert res["ok"] and "warning" not in res
+
+
+async def test_a_free_bot_carries_no_warning(env: Env) -> None:
+    _login_as(env, "ready")
+    res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
+    assert res["ok"] and "warning" not in res
+
+
+def test_the_wait_covers_a_slow_first_connection_and_its_retry() -> None:
+    from agent_team_backend.channels import telegram
+
+    get_me_tries = telegram.GET_ME_NETWORK_RETRIES + 1
+    # The user saw "no answer from telegram within 10s" while getMe could still be connecting.
+    assert 20.0 <= TIMEOUT_S <= 30.0
+    assert telegram.GET_ME_TIMEOUT.connect * get_me_tries < TIMEOUT_S
+    # The whole call still answers first (with room for the undo), before the window's 60 s.
+    assert TIMEOUT_S + 10.0 < DEADLINE_S < 60.0

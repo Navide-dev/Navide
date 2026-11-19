@@ -93,6 +93,14 @@ status changes only Registry trust and marketplace classification; it does not
 grant access to private Host modules or force an official package to be
 installed. The base App must remain usable with an empty plugin catalog.
 
+The `@navide/plugin-ui/shared/testing` subpath (0.2.45) is for tests only:
+`__resetSettingsForTest`, `_resetRegistry` and `_resetKeybindingsState` put
+the shared settings, command registry and keybinding state back between test
+cases. It is built as its own entry that shares its modules with
+`@navide/plugin-ui/shared`, so it resets the very state a plugin's code uses;
+a plugin's production code never imports it. It is part of the 1.x surface
+like every other subpath.
+
 The `@navide/plugin-ui/editor` subpath provides the shared text editor and a
 typed consumer-injected `EditorPort`. It does not expose Host transports,
 diagnostics stores, window state, or filesystem authority. See
@@ -137,6 +145,73 @@ the 1.x line Navide commits to:
 The static scan, the Registry's manifest validation and the Host's disclosure
 contract are versioned with the packages, so a manifest that `navide-plugin
 validate` accepts at 1.x is accepted by the Registry of the same 1.x line.
+
+### Publishing the public packages to npm
+
+The three packages are not on npm until the user publishes them; nothing in
+the repository holds an npm token. Two paths exist, and both start from the
+same checks:
+
+- `scripts/publish-public-packages.sh` (dry run by default) builds the
+  packages, packs them into `dist/npm/`, writes each tarball's file list next
+  to it as `<tarball>.files.txt`, and refuses a tarball that holds a `src/`
+  tree, a test, snapshot or fixture file (`*.test.*`, `__tests__/`,
+  `__snapshots__/`, `test-fixtures/`), a private file (`.env*`, `*.pem`,
+  `*.key`, `.npmrc`) or a `workspace:`/`link:` specifier. The packages
+  themselves declare plain SemVer ranges (`^1.x` peers), so `npm pack` ships
+  their manifests unchanged; only the private repository root uses `link:`.
+- `node scripts/verify-public-packages-external.mjs` is the acceptance check:
+  it copies `examples/third-party-files/` to a temporary directory outside the
+  repository, installs it with plain npm — the three Navide packages from the
+  tarballs in `dist/npm/`, everything else from the registry — and runs
+  `typecheck`, `build`, `check` (`navide-plugin validate`) and `package`. With
+  `--registry` it installs the published versions instead, to confirm a
+  publication.
+
+**Local publication** (the first release, and the fallback): after
+`npm login`, `scripts/publish-public-packages.sh --publish`. The manifests set
+`publishConfig.provenance`, which only a supported CI runner can satisfy, so
+the local path passes `--provenance=false`.
+
+**Provenance publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-public-packages.yml` publishes through npm
+trusted publishing (OIDC, `id-token: write`) with `--provenance`, triggered by
+a tag `plugin-packages-v<version>` and gated by a `npm-publish` environment
+with required reviewers. It holds no npm token and reads no repository secret.
+To enable it, move it to `.github/workflows/publish-public-packages.yml` and
+register that file name as each package's trusted publisher on npmjs.com.
+
+### Publishing the Python plugin SDK to PyPI
+
+`navide_plugin_sdk`, the Python surface a plugin backend imports (the path
+guard, the staged write path and plan versions; standard library only), is
+published as `navide-plugin-sdk` at its `API_VERSION`, which shares its major
+with the npm packages. It is not on PyPI until the user publishes it. The
+sources stay in `backend/navide_plugin_sdk`; `packages/plugin-sdk-python/`
+holds only the publication metadata (`pyproject.toml`, `README.md`).
+
+- `scripts/publish-python-plugin-sdk.sh` (dry run by default) stages the
+  metadata, the repository `LICENSE` and the SDK's git-tracked sources in a
+  temporary directory, builds the sdist and the wheel into `dist/pypi/`,
+  writes each archive's file list next to it, and refuses a version other
+  than `API_VERSION`, an archive holding anything beyond the SDK sources and
+  their metadata (tests, caches, fixtures or private files), and a wheel that
+  declares a dependency.
+- `node scripts/verify-plugin-standalone.mjs navide-plans` builds the Plans
+  backend in an isolated Python environment from the plugin's
+  `backend/requirements.txt` with that wheel; `--registry` installs the SDK
+  from PyPI instead.
+
+**Local publication** (the first release): `scripts/publish-python-plugin-sdk.sh
+--publish`, which runs `uv publish` with the user's own PyPI credential.
+
+**Trusted publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-python-plugin-sdk.yml` publishes through PyPI
+trusted publishing (OIDC, `id-token: write`) on a tag
+`python-plugin-sdk-v<version>`, gated by a `pypi-publish` environment with
+required reviewers. It holds no PyPI token and reads no repository secret. To
+enable it, move it to `.github/workflows/publish-python-plugin-sdk.yml` and
+register that file name as the project's trusted publisher on pypi.org.
 
 ## Recommended source project
 
@@ -2740,6 +2815,27 @@ leave the installed copy in charge. An older installed copy
 is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
+
+The bundled copy is the installer's fallback, not the version Navide keeps
+running (0.2.45). After the trust refresh at launch and every 15 minutes, the
+Host looks up each first-party plugin that runs from its bundled copy (not
+disabled, nothing staged, no install in progress) on the configured
+Marketplace, only when that is the Official Registry, and only for stable
+versions newer than the bundled one. A newer version is downloaded and
+verified exactly as a user's install is (digest, package signature,
+root-signed trust metadata, disclosure signature, `engines.navide`) and must
+be an official package. When it discloses exactly what the bundled copy does
+(no permission, backend, agent tool or network item added or removed, the
+same risk level, the same views), it is staged without asking: the user
+accepted that disclosure with the App, the same rule an agent's unchanged
+update follows. The running bundled copy is never replaced mid-session; the
+next launch switches to the staged version as Restart would, and keeps loading
+it from then on. A version that discloses anything else is not installed; it
+appears as an ordinary update (`permissionChange: "more"`) for the user to
+review and approve. Offline, a Registry error, a 15-second timeout or any
+verification failure writes nothing, and the bundled copy keeps serving, so a
+first launch without a network works as before. Removing a bundled plugin
+(the opt-out) still leaves the id alone.
 
 Because the installed copy wins a tie, content must never change under a
 released version. `plugins/official-plugin-fingerprints.json` is the release

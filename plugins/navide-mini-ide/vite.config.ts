@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 
 const packageRoot = resolve(__dirname)
@@ -18,7 +18,11 @@ const outputRoot = process.env.NAVIDE_MINI_IDE_DIST_DIR
       if (!isAbsolute(process.env.NAVIDE_MINI_IDE_DIST_DIR)) throw new Error('NAVIDE_MINI_IDE_DIST_DIR must be absolute')
       return resolve(process.env.NAVIDE_MINI_IDE_DIST_DIR)
     })()
-  : resolve(repositoryRoot, 'dist-plugins/navide-mini-ide')
+  // Inside the Navide repository the App build stages dist-plugins/; a
+  // checkout of the plugin on its own builds into its own dist/.
+  : existsSync(resolve(repositoryRoot, 'packages/plugin-ui/package.json'))
+    ? resolve(repositoryRoot, 'dist-plugins/navide-mini-ide')
+    : resolve(packageRoot, 'dist')
 function outputFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => (
     entry.isDirectory()

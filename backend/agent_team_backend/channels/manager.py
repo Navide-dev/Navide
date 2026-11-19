@@ -189,11 +189,17 @@ LINK_TARGETS = ("direct", "group")
 # Platforms whose "direct" code travels only in a DM deep link (a separate "group"
 # code exists): seeing one in a group means it leaked, so it links nothing there.
 DM_ONLY_LINK_PLATFORMS = frozenset({"telegram"})
-QUICK_ADD_TIMEOUT_S = 10.0  # how long a quick add waits for the platform to accept the credential
+# How long a quick add waits for the platform to accept the credential: a first connection
+# may need DNS, a fallback from a dead IPv6 route, TLS and a retry (Telegram's getMe is
+# bounded at 10 s a try and retried once on a network failure).
+QUICK_ADD_TIMEOUT_S = 25.0
 QUICK_ADD_POLL_S = 0.1
-# A whole quick add, the channels lock included: under the window's 45 s (QUICK_ADD_TIMEOUT_MS)
+# Once the credential is proven, how long a quick add waits for the first poll to say whether
+# another program holds the bot (an adapter that reports ``polled``); then it succeeds anyway.
+QUICK_ADD_CONFLICT_CHECK_S = 5.0
+# A whole quick add, the channels lock included: under the window's 60 s (QUICK_ADD_TIMEOUT_MS)
 # with room for the undo of a failure (a Keychain delete, up to 10 s) and the round trips.
-QUICK_ADD_DEADLINE_S = 30.0
+QUICK_ADD_DEADLINE_S = 45.0
 # Telegram Managed Bots (Bot API 9.6): how long a t.me/newbot link waits for its bot.
 MANAGED_REQUEST_TTL_S = 600.0
 MANAGED_DEFAULT_NAME = "Navide bot"
@@ -918,8 +924,10 @@ class ChannelManager:
         """Add a new bot in one step: ``configure`` it, wait until the platform accepted
         its credential, name it after its identity when unnamed, and with ``link_target``
         hand back a link invite (as ``link_create``). Any failure removes everything this
-        call stored; ``reason`` is "rejected" (credential refused), "timeout" or "invalid"
-        (refused before connecting). The whole call ends within QUICK_ADD_DEADLINE_S."""
+        call stored; ``reason`` is "rejected" (credential refused), "network" (the platform
+        could not be reached), "timeout" or "invalid" (refused before connecting). A success
+        may carry ``warning`` "conflict": another program polls the same bot. The whole call
+        ends within QUICK_ADD_DEADLINE_S."""
         _check_platform(platform)
         _check_account(account)
         try:
@@ -950,7 +958,7 @@ class ChannelManager:
                 await self._discard_bot(platform, account)
                 return {"ok": False, "reason": "invalid", "error": "the bot did not start"}
             failure = await self._await_first_login(bot, adapter)
-            if failure is not None:
+            if failure is not None and "reason" in failure:
                 await self._discard_bot(platform, account)
                 return {"ok": False, **failure}
         except BaseException:
@@ -968,24 +976,34 @@ class ChannelManager:
         name = str(((self.store.accounts().get(bot) or {}).get("config") or {}).get("name") or "")
         link = self.link_create(platform, link_target, account) if link_target else {}
         return {"ok": True, "platform": platform, "account": account, "name": name, "identity": identity,
-                "link": {k: v for k, v in link.items() if k != "ok"} if link.get("ok") else None}
+                "link": {k: v for k, v in link.items() if k != "ok"} if link.get("ok") else None,
+                **(failure or {})}
 
     async def _await_first_login(self, bot: BotKey, adapter: ChannelAdapter) -> dict[str, str] | None:
         """None once ``adapter`` reached ready, or reported an identity when it says that
-        proves the credential (or never reports progress at all); otherwise why it did
-        not within QUICK_ADD_TIMEOUT_S."""
+        proves the credential (or never reports progress at all), and {"warning": "conflict"}
+        when its first poll then found another program holding the bot; otherwise why it did
+        not within QUICK_ADD_TIMEOUT_S ("network" when the adapter heard nothing back)."""
         status = adapter.status
         identity_proves = bool(getattr(adapter, "identity_confirms_credential", False))
         # An adapter that never left "stopped" has no login signal to wait for.
         if status.lifecycle == "stopped":
             return None
+        loop = asyncio.get_running_loop()
 
         async def settled() -> dict[str, str] | None:
+            proven_at: float | None = None
             while True:
                 if status.lifecycle == "blocked":
                     return {"reason": "rejected", "error": status.last_error or "credential rejected"}
                 if status.lifecycle == "ready" or (identity_proves and status.identity):
-                    return None
+                    if getattr(adapter, "conflict", False):
+                        return {"warning": "conflict"}
+                    if getattr(adapter, "polled", True):
+                        return None
+                    proven_at = proven_at if proven_at is not None else loop.time()
+                    if loop.time() - proven_at >= QUICK_ADD_CONFLICT_CHECK_S:
+                        return None
                 if self._adapters.get(bot) is not adapter:
                     return {"reason": "invalid", "error": "the bot was stopped while connecting"}
                 await asyncio.sleep(QUICK_ADD_POLL_S)
@@ -993,8 +1011,11 @@ class ChannelManager:
         try:
             return await asyncio.wait_for(settled(), QUICK_ADD_TIMEOUT_S)
         except asyncio.TimeoutError:
+            if status.lifecycle == "ready" or (identity_proves and status.identity):
+                return None  # proven, only the first poll was still out
             detail = f": {status.last_error}" if status.last_error else ""
-            return {"reason": "timeout", "error": f"no answer from {bot[0]} within {QUICK_ADD_TIMEOUT_S:g}s{detail}"}
+            reason = "network" if getattr(adapter, "unreachable", False) else "timeout"
+            return {"reason": reason, "error": f"no answer from {bot[0]} within {QUICK_ADD_TIMEOUT_S:g}s{detail}"}
 
     def _undo_quick_add(self, platform: str, account: str) -> None:
         """Discard a half-added bot in the background, never waited for: the lock the undo

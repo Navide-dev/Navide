@@ -42,7 +42,7 @@ describe('navide.plans production package boundary', () => {
 
     expect(manifest.schemaVersion).toBe(2)
     expect(manifest.id).toBe('navide.plans')
-    expect(manifest.version).toBe('1.1.7')
+    expect(manifest.version).toBe('1.1.8')
     expect(manifest.permissions.system).toEqual(['fs', 'ui', 'aiCli'])
     expect(manifest.permissions).not.toHaveProperty('plans')
     expect(manifest.permissions.shell).toBeUndefined()
@@ -73,9 +73,13 @@ describe('navide.plans production package boundary', () => {
     const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
+    // plugin-contracts is plugin-sdk's peer and mermaid an import of its
+    // own, both declared so a checkout outside the monorepo installs them.
     expect(Object.keys(packageJson.dependencies ?? {}).sort()).toEqual([
+      '@navide/plugin-contracts',
       '@navide/plugin-sdk',
       '@navide/plugin-ui',
+      'mermaid',
       'vue',
       'vue-i18n',
       'yaml',

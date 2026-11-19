@@ -36,6 +36,7 @@ import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/re
 import {
   sensitiveCapabilities,
   assertRegistryUrlAllowed,
+  isOfficialPluginId,
   sha256Hex,
 } from './pluginVerify'
 import type { RegistryPackageEnvelope, RegistryTrustMetadata } from './pluginRegistryTrust'
@@ -112,6 +113,7 @@ import type {
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
 import { answerPluginAgentAction, type PluginAgentActionNotice, type PluginAgentRequester } from './pluginAgentAction'
+import { refreshBundledOfficialPlugins, type BundledRefreshOutcome } from './bundledOfficialRefresh'
 import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import {
@@ -559,6 +561,10 @@ export interface PluginTrustRefreshController {
    *  Rejects when the Registry did not answer for some package, after
    *  remembering the merged answer (those packages keep their last update). */
   checkUpdates(): Promise<PluginUpdateInfo[]>
+  /** P3: stage newer official Marketplace versions of bundled plugins that
+   *  disclose exactly what the bundled copy does, for the next launch; the
+   *  others join the update list. Never throws for one plugin. */
+  refreshBundledOfficial(): Promise<BundledRefreshOutcome[]>
   /** D-f: rescans of installed versions that found new items since the last
    *  call, each reported once. Notice only. */
   takeRescanNotices(): PluginRescanNotice[]
@@ -588,6 +594,8 @@ export interface PluginRescanNotice {
 }
 
 export interface PluginIpcOptions {
+  /** How long the bundled-plugin Marketplace check waits for the Registry. */
+  bundledRefreshTimeoutMs?: number
   /** How long a Testplace withdrawal check may take before it counts as
    *  unreachable (S8 LOW-R3-1); tests shorten it. */
   testplaceWithdrawalTimeoutMs?: number
@@ -1934,6 +1942,9 @@ export function registerPluginIpc(
   // installing the update goes through the normal prepareInstall/commitInstall
   // consent path. The last answer is kept for windows that open later.
   let pendingUpdates: PluginUpdateInfo[] = []
+  // Newer official versions of bundled plugins that disclose more than the
+  // bundled copy (refreshBundledOfficial): offered like any other update.
+  let bundledPendingUpdates: PluginUpdateInfo[] = []
   // The update badge only: a malformed listing disclosure means no badge.
   const listedPermissionChange = (id: string, listed: unknown): 'more' | 'same' | undefined => {
     const from = activeDisclosure(id)
@@ -1949,7 +1960,7 @@ export function registerPluginIpc(
       .listInstalledPackages()
       .filter((pkg) => pkg.provenance === 'official-registry' && pkg.packageVersion)
     if (candidates.length === 0) {
-      pendingUpdates = []
+      pendingUpdates = [...bundledPendingUpdates]
       return pendingUpdates
     }
     const marketplace = resolveConfiguredMarketplace(trust)
@@ -2040,7 +2051,7 @@ export function registerPluginIpc(
         next.push({ ...previous, installedVersion: pkg.packageVersion! })
       }
     }
-    pendingUpdates = next
+    pendingUpdates = [...next, ...bundledPendingUpdates]
     // The merged answer is kept for `plugins:pendingUpdates`; the caller still
     // learns that the check was incomplete.
     if (failures.length > 0) {
@@ -2051,6 +2062,88 @@ export function registerPluginIpc(
       )
     }
     return pendingUpdates
+  }
+
+  // P3 (0.2.45): a bundled first-party plugin follows the Marketplace. A newer
+  // official version that discloses exactly what the bundled copy does is
+  // verified and staged for the next launch; one that discloses more is
+  // offered as an update. Offline or unverifiable: the bundled copy serves.
+  const bundledRefreshTimeoutMs = options.bundledRefreshTimeoutMs ?? 15_000
+  const refreshBundledOfficial = async (): Promise<BundledRefreshOutcome[]> => {
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const base = marketplace.registryUrl.replace(/\/+$/, '')
+    const hostTarget = marketplace.trust.expectedTarget ?? currentPluginHostTarget()
+    const outcomes = await refreshBundledOfficialPlugins({
+      candidates: () => manager.listInstalledPackages()
+        .filter((pkg) => pkg.provenance === 'factory-bundled' && pkg.packageVersion && isOfficialPluginId(pkg.id))
+        .filter((pkg) => !disabledPlugins.has(pkg.id) && !prepared.has(pkg.id) && !activeTransactions.has(pkg.id))
+        .filter((pkg) => !lifecycleSelector.read(pkg.id)?.candidate)
+        .map((pkg) => {
+          const dir = manager.getDescriptor(pkg.id)?.packageDir
+          let manifest: ReturnType<typeof parseInstalledManifest> | null = null
+          try {
+            if (dir) manifest = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
+          } catch {
+            manifest = null
+          }
+          return {
+            id: pkg.id,
+            version: pkg.packageVersion!,
+            disclosure: manifest && isManifestV2(manifest)
+              ? computeDisclosure(manifest as unknown as DisclosureManifestInput)
+              : null,
+            hasViews: manifest ? manifestHasViews(manifest) : undefined,
+          }
+        }),
+      marketplaceIsOfficial: () => marketplace.trust.registryAuthority === 'official',
+      newestVersion: async (id) => {
+        const dot = id.indexOf('.')
+        const res = await fetch(
+          `${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`,
+          { signal: AbortSignal.timeout(bundledRefreshTimeoutMs) }
+        )
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const detail = (await res.json()) as { versions?: Parameters<typeof newestInstallableVersion>[0] }
+        // Stable versions only: the pre-release opt-in is per installed package.
+        return newestInstallableVersion(detail.versions ?? [], hostTarget, hostAppVersion(), false)
+      },
+      isNewer: isUpdateAvailable,
+      prepare: async (id, version) => {
+        const dot = id.indexOf('.')
+        const summary = await prepareRegistryInstall({ namespace: id.slice(0, dot), name: id.slice(dot + 1), version })
+        const held = prepared.get(id)?.pkg
+        return {
+          official: held?.official === true,
+          disclosure: held && isManifestV2(held.manifest)
+            ? computeDisclosure(held.manifest as unknown as DisclosureManifestInput)
+            : null,
+          hasViews: summary.hasViews,
+        }
+      },
+      diff: diffDisclosure,
+      // The disclosure equals the one the user runs, so the risk the commit
+      // confirms is the one already accepted with the App (as O1).
+      commit: async (id) => {
+        await commitRegistryInstall({ id, riskConfirmed: true })
+      },
+      discard: (id) => {
+        prepared.delete(id)
+      },
+      warn: (message) => console.warn(message),
+    })
+    bundledPendingUpdates = outcomes.flatMap((outcome) => {
+      if (outcome.result !== 'needs-approval') return []
+      const dot = outcome.id.indexOf('.')
+      return [{
+        id: outcome.id,
+        namespace: outcome.id.slice(0, dot),
+        name: outcome.id.slice(dot + 1),
+        installedVersion: outcome.from,
+        latestVersion: outcome.to,
+        permissionChange: 'more' as const,
+      }]
+    })
+    return outcomes
   }
 
   // D2: the per-extension "Get pre-releases" switch, default off. Turning it
@@ -3512,7 +3605,7 @@ export function registerPluginIpc(
     if (typeof args?.enabled !== 'boolean') throw new Error('invalid Developer Mode switch value')
     const enabled = args.enabled
     if (developerMode.isEnabled() !== enabled) {
-      developerMode.setEnabled(enabled)
+      await developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
         try {
@@ -3537,7 +3630,7 @@ export function registerPluginIpc(
     } else if (!enabled) {
       // A2-5: off already, but another program's "on" may still be in the
       // file; the user's "off" replaces it and its notice goes.
-      developerMode.setEnabled(false)
+      await developerMode.setEnabled(false)
     }
     return developerModeState()
   })
@@ -3590,7 +3683,7 @@ export function registerPluginIpc(
         forgetKeptNativeBackendDataSource(dataRoot, id)
       }
     }
-    developerMode.consent({
+    await developerMode.consent({
       path: pending.dir,
       pluginId: id,
       permissionsDigest: pending.permissionsDigest,
@@ -3718,7 +3811,7 @@ export function registerPluginIpc(
     if (developerMode.anyFolder(id) && options.nativeBackendDataRoot) {
       recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
     }
-    developerMode.forget(id)
+    await developerMode.forget(id)
     folderMeta.forget(id)
     stopWatchingFolder(id)
     reloadErrors.delete(id)
@@ -4002,6 +4095,8 @@ export function registerPluginIpc(
   })
 
   async function loadDeveloperFolders(trigger: DeveloperFolderLoadTrigger = 'startup'): Promise<void> {
+    // A2-5: the signatures are checked from here on (secure storage is asynchronous).
+    await developerMode.prepare()
     if (!developerModeOn()) return
     for (const folder of developerMode.folders()) {
       try {
@@ -4033,6 +4128,22 @@ export function registerPluginIpc(
     if (!record?.candidate || record.active || record.activation) return false
     return !manager.getDescriptor(record.pluginId) &&
       !manager.listInstalledPackages().some((pkg) => pkg.id === record.pluginId)
+  }
+
+  /** P3: the first Marketplace version of a first-party plugin, staged over
+   * the App-bundled copy (by refreshBundledOfficial, or by the user's own
+   * install), nothing selected yet. A launch switches to it before the
+   * bundled copy has been in use, exactly as Restart would; the bundled copy
+   * stays in the installer as the fallback. Only a newer Registry version
+   * qualifies, never a local file. */
+  function isStagedOverBundled(
+    record: ReturnType<PluginActivationSelector['read']>,
+  ): record is NonNullable<ReturnType<PluginActivationSelector['read']>> & { candidate: PluginPackageSelection } {
+    if (!record?.candidate || record.active || record.activation || !isOfficialPluginId(record.pluginId)) return false
+    const bundled = manager.listInstalledPackages().find((pkg) => pkg.id === record.pluginId)
+    if (bundled?.provenance !== 'factory-bundled' || !bundled.packageVersion) return false
+    if (!isUpdateAvailable(bundled.packageVersion, record.candidate.packageVersion)) return false
+    return !isLocalInstalledPackage(pluginsRoot, lifecycleSelector.packageDir(record.pluginId, record.candidate), record.pluginId)
   }
 
   /** L1: a first install takes effect when the user approves it, through the
@@ -4531,7 +4642,7 @@ export function registerPluginIpc(
   async function activateStagedFirstInstalls(): Promise<Array<{ pluginId: string; version: string; reason: string }>> {
     const failures: Array<{ pluginId: string; version: string; reason: string }> = []
     for (const record of lifecycleSelector.list()) {
-      if (!isStagedFirstInstall(record)) continue
+      if (!isStagedFirstInstall(record) && !isStagedOverBundled(record)) continue
       try {
         await restartStagedCandidate(record.pluginId)
       } catch (error) {
@@ -5018,7 +5129,7 @@ export function registerPluginIpc(
       // Review LOW-1 on #428: removing a developer folder's plugin (also by an
       // agent's request) forgets its consent, so the next start does not load
       // it again. The folder itself is never touched.
-      developerMode.forget(id)
+      await developerMode.forget(id)
       folderMeta.forget(id)
       stopWatchingFolder(id)
       // HIGH-3: kept data remembers whose it is, so only an install of the
@@ -5770,6 +5881,7 @@ export function registerPluginIpc(
 
   return {
     checkUpdates: checkInstalledUpdates,
+    refreshBundledOfficial,
     loadDeveloperFolders,
     activateStagedFirstInstalls,
     stagedUpdates,

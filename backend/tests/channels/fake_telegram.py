@@ -7,6 +7,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 
 class FakeBotApi:
@@ -17,6 +18,8 @@ class FakeBotApi:
         # Left out of getMe when None, as the Bot API did before 9.6.
         self.can_manage_bots = can_manage_bots
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        # The host named in each request line: set only for a request that came through a proxy.
+        self.hosts: list[str] = []
         self.updates: list[dict[str, Any]] = []
         self._next_update_id = 100
         self._next_message_id = 1
@@ -149,10 +152,14 @@ class FakeBotApi:
                 length = int(self.headers.get("Content-Length") or 0)
                 params = json.loads(self.rfile.read(length) or b"{}")
                 prefix = f"/bot{api.token}/"
-                if not self.path.startswith(prefix):
+                # Through a proxy the request line carries the absolute URL.
+                path = urlsplit(self.path).path if "://" in self.path else self.path
+                if not path.startswith(prefix):
                     body = {"ok": False, "error_code": 401, "description": "Unauthorized"}
                 else:
-                    body = api._dispatch(self.path[len(prefix):], params)
+                    with api.lock:
+                        api.hosts.append(urlsplit(self.path).hostname or "")
+                    body = api._dispatch(path[len(prefix):], params)
                 raw = json.dumps(body).encode()
                 status = 200 if body.get("ok") else int(body.get("error_code", 400))
                 self.send_response(status)
