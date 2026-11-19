@@ -14,15 +14,13 @@ import { createHash, createPublicKey, generateKeyPairSync } from 'crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import type { DeveloperPublicState } from '../../shared/marketplaceDeveloper'
+import type { AsyncSecretCrypto } from '../safeStorageCrypto'
 
 export type { DeveloperPublicState }
 
-export interface DeveloperVaultCrypto {
-  /** Whether real encryption is usable (false for Linux's basic_text backend too). */
-  available: boolean
-  encrypt(plain: string): string
-  decrypt(enc: string): string
-}
+/** Real impl wraps Electron safeStorage (safeStorageCrypto.ts); `available`
+ *  is false for Linux's basic_text backend too. */
+export type DeveloperVaultCrypto = AsyncSecretCrypto
 
 export type DeveloperTokenScope = 'account' | 'publisher'
 
@@ -81,8 +79,8 @@ export class DeveloperVault {
     private readonly now: () => number = Date.now,
   ) {}
 
-  get available(): boolean {
-    return this.crypto.available
+  available(): Promise<boolean> {
+    return this.crypto.available()
   }
 
   state(registry: string): DeveloperPublicState {
@@ -106,24 +104,25 @@ export class DeveloperVault {
   }
 
   /** The token for `scope`, or null when there is none or it expired. Main-process use only. */
-  token(registry: string, scope: DeveloperTokenScope): string | null {
+  async token(registry: string, scope: DeveloperTokenScope): Promise<string | null> {
     const entry = this.read().registries[normalizeRegistry(registry)]
     const stored = entry?.[scope]
     if (!stored || expired(stored, this.now())) return null
     return this.crypto.decrypt(stored.tokenEnc)
   }
 
-  saveToken(
+  async saveToken(
     registry: string,
     scope: DeveloperTokenScope,
     token: string,
     expiresAt: string | null,
     namespace: string | null,
-  ): void {
-    this.requireEncryption()
+  ): Promise<void> {
+    await this.requireEncryption()
     if (!token) throw new Error('empty token')
+    const tokenEnc = await this.crypto.encrypt(token)
     this.update(registry, (entry) => {
-      entry[scope] = { tokenEnc: this.crypto.encrypt(token), expiresAt }
+      entry[scope] = { tokenEnc, expiresAt }
       if (scope === 'publisher') entry.namespace = namespace
     })
   }
@@ -140,21 +139,32 @@ export class DeveloperVault {
   }
 
   /** The signing key, created on first use (Ed25519, PKCS#8 / SPKI PEM). Main-process use only. */
-  signingKey(registry: string): { privateKeyPem: string; publicKeyPem: string } {
-    const entry = this.read().registries[normalizeRegistry(registry)]
-    if (entry?.privateKeyEnc && entry.publicKeyPem) {
-      return { privateKeyPem: this.crypto.decrypt(entry.privateKeyEnc), publicKeyPem: entry.publicKeyPem }
-    }
-    this.requireEncryption()
+  async signingKey(registry: string): Promise<{ privateKeyPem: string; publicKeyPem: string }> {
+    const kept = await this.keptSigningKey(registry)
+    if (kept) return kept
+    await this.requireEncryption()
     const keys = generateKeyPairSync('ed25519')
     const privateKeyPem = keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
     const publicKeyPem = keys.publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    const privateKeyEnc = await this.crypto.encrypt(privateKeyPem)
+    // Another call may have created the key while this one awaited: the first
+    // key written stays the identity.
+    let created = false
     this.update(registry, (stored) => {
-      stored.privateKeyEnc = this.crypto.encrypt(privateKeyPem)
+      if (stored.privateKeyEnc && stored.publicKeyPem) return
+      stored.privateKeyEnc = privateKeyEnc
       stored.publicKeyPem = publicKeyPem
       stored.registeredFingerprint = null
+      created = true
     })
-    return { privateKeyPem, publicKeyPem }
+    if (created) return { privateKeyPem, publicKeyPem }
+    return (await this.keptSigningKey(registry))!
+  }
+
+  private async keptSigningKey(registry: string): Promise<{ privateKeyPem: string; publicKeyPem: string } | null> {
+    const entry = this.read().registries[normalizeRegistry(registry)]
+    if (!entry?.privateKeyEnc || !entry.publicKeyPem) return null
+    return { privateKeyPem: await this.crypto.decrypt(entry.privateKeyEnc), publicKeyPem: entry.publicKeyPem }
   }
 
   markKeyRegistered(registry: string, fingerprint: string): void {
@@ -181,8 +191,8 @@ export class DeveloperVault {
     })
   }
 
-  private requireEncryption(): void {
-    if (!this.crypto.available) throw new DeveloperVaultUnavailableError()
+  private async requireEncryption(): Promise<void> {
+    if (!(await this.crypto.available())) throw new DeveloperVaultUnavailableError()
   }
 
   private update(registry: string, change: (entry: StoredDeveloper) => void): void {

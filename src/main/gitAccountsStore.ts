@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFile
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { URL } from 'node:url'
+import type { AsyncSecretCrypto } from './safeStorageCrypto'
 
 /** Canonical key for a workspace path: resolve symlinks/worktrees when the path
  * exists and strip trailing separators, so trailing-slash or symlinked variants
@@ -29,15 +30,9 @@ function normalizeWorkspaceKey(workspacePath: string): string {
 // with a fake crypto (the real safeStorage is injected from index.ts). Follows
 // the same shape as health-timeout.ts / window-registry.ts.
 
-/** Encrypt/decrypt provider — real impl wraps Electron safeStorage. */
-export interface GitAccountCrypto {
-  /** Whether encryption is usable on this platform/session. */
-  available: boolean
-  /** Encrypt plaintext → base64 string safe to persist. */
-  encrypt(plain: string): string
-  /** Decrypt a base64 string produced by encrypt(). */
-  decrypt(enc: string): string
-}
+/** Encrypt/decrypt provider — real impl wraps Electron safeStorage
+ *  (safeStorageCrypto.ts). */
+export type GitAccountCrypto = AsyncSecretCrypto
 
 /** On-disk account record. `token` is never stored in plaintext. */
 export interface StoredAccount {
@@ -131,44 +126,47 @@ export class GitAccountsStore {
     private readonly crypto: GitAccountCrypto
   ) {}
 
-  get available(): boolean {
-    return this.crypto.available
+  available(): Promise<boolean> {
+    return this.crypto.available()
   }
 
   list(): PublicAccount[] {
     return this.read().accounts.map(toPublic)
   }
 
-  add(input: GitAccountInput): PublicAccount {
-    this.requireEncryption()
+  async add(input: GitAccountInput): Promise<PublicAccount> {
+    await this.requireEncryption()
     const token = String(input.token ?? '')
     if (!token) throw new Error('empty token')
+    const label = String(input.label ?? '').trim()
+    const host = normalizeGitAccountHost(String(input.host ?? ''))
+    const username = String(input.username ?? '').trim()
+    const tokenEnc = await this.crypto.encrypt(token)
+    // Read after the await, so a write made meanwhile is not lost.
     const doc = this.read()
-    const account: StoredAccount = {
-      id: randomUUID(),
-      label: String(input.label ?? '').trim(),
-      host: normalizeGitAccountHost(String(input.host ?? '')),
-      username: String(input.username ?? '').trim(),
-      tokenEnc: this.crypto.encrypt(token),
-      tokenLast4: token.slice(-4)
-    }
+    const account: StoredAccount = { id: randomUUID(), label, host, username, tokenEnc, tokenLast4: token.slice(-4) }
     doc.accounts.push(account)
     this.write(doc)
     return toPublic(account)
   }
 
-  update(id: string, patch: Partial<GitAccountInput>): void {
+  async update(id: string, patch: Partial<GitAccountInput>): Promise<void> {
+    let tokenEnc: string | null = null
+    if (patch.token !== undefined && patch.token !== '') {
+      if (!this.read().accounts.some((a) => a.id === id)) throw new Error('account not found')
+      await this.requireEncryption()
+      tokenEnc = await this.crypto.encrypt(String(patch.token))
+    }
+    // Read after the await, so a write made meanwhile is not lost.
     const doc = this.read()
     const account = doc.accounts.find((a) => a.id === id)
     if (!account) throw new Error('account not found')
     if (patch.label !== undefined) account.label = String(patch.label).trim()
     if (patch.host !== undefined) account.host = normalizeGitAccountHost(String(patch.host))
     if (patch.username !== undefined) account.username = String(patch.username).trim()
-    if (patch.token !== undefined && patch.token !== '') {
-      this.requireEncryption()
-      const token = String(patch.token)
-      account.tokenEnc = this.crypto.encrypt(token)
-      account.tokenLast4 = token.slice(-4)
+    if (tokenEnc !== null) {
+      account.tokenEnc = tokenEnc
+      account.tokenLast4 = String(patch.token).slice(-4)
     }
     this.write(doc)
   }
@@ -210,7 +208,7 @@ export class GitAccountsStore {
   }
 
   /** Decrypt the token for the account bound to this workspace, if any. */
-  getCredentialForWorkspace(workspacePath: string): GitCredential | null {
+  async getCredentialForWorkspace(workspacePath: string): Promise<GitCredential | null> {
     const doc = this.read()
     // Prefer the normalized key; fall back to a legacy raw-path binding.
     const accountId =
@@ -221,7 +219,7 @@ export class GitAccountsStore {
     try {
       return {
         username: account.username,
-        token: this.crypto.decrypt(account.tokenEnc),
+        token: await this.crypto.decrypt(account.tokenEnc),
         expectedHost: normalizeGitAccountHost(account.host),
       }
     } catch {
@@ -231,8 +229,8 @@ export class GitAccountsStore {
     }
   }
 
-  private requireEncryption(): void {
-    if (!this.crypto.available) throw new EncryptionUnavailableError()
+  private async requireEncryption(): Promise<void> {
+    if (!(await this.crypto.available())) throw new EncryptionUnavailableError()
   }
 
   /** Read the doc, tolerating a missing or corrupt file (→ empty). */

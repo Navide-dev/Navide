@@ -817,7 +817,7 @@ export interface PackageAgentsPort {
 /** A third-party backend's own secrets (pluginSecrets.ts): `run` is given an
  * operation and arguments already validated; the plugin id is the binding's. */
 export interface PackageSecretsPort {
-  run(operation: SecretsOperation, args: Record<string, unknown>, context: PlansBridgeContext): JsonValue
+  run(operation: SecretsOperation, args: Record<string, unknown>, context: PlansBridgeContext): Promise<JsonValue>
 }
 
 /** Plan P4: a package backend's notification to one agent pane (frontendPluginManager). */
@@ -1422,7 +1422,7 @@ export class ThirdPartyBackendController {
     spec: ThirdPartyLaunchSpec,
     request: PlansBridgeRequest,
     context: PlansBridgeContext,
-  ): JsonValue {
+  ): Promise<JsonValue> {
     if (!spec.thirdParty.system.includes('secrets')) throw new PlansBridgeError('CAPABILITY_DENIED')
     const operation = request.operation as SecretsOperation
     if (!validateSecretsOperation(operation, request.arguments)) throw new PlansBridgeError('INVALID_ARGUMENT')

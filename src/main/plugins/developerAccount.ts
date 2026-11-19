@@ -298,7 +298,7 @@ export class DeveloperAccount {
     const tokenScope: DeveloperTokenScope = body.scope === 'publisher' ? 'publisher' : 'account'
     const namespace = typeof body.namespace === 'string' ? body.namespace : null
     const expiresAt = typeof body.expires_at === 'string' ? body.expires_at : null
-    this.deps.vault.saveToken(base, tokenScope, body.token, expiresAt, namespace)
+    await this.deps.vault.saveToken(base, tokenScope, body.token, expiresAt, namespace)
     if (tokenScope === 'publisher') await this.registerKey()
   }
 
@@ -348,7 +348,7 @@ export class DeveloperAccount {
    *  Settings, replaces it. */
   async registerKey(options: { replace?: boolean } = {}): Promise<DeveloperPublicState> {
     const base = this.base()
-    const { publicKeyPem } = this.deps.vault.signingKey(base)
+    const { publicKeyPem } = await this.deps.vault.signingKey(base)
     const res = await this.registryFetch(
       '/api/publisher/me/key',
       { method: 'PUT', json: { public_key: publicKeyPem, ...(options.replace ? { replace: true } : {}) } },
@@ -408,7 +408,7 @@ export class DeveloperAccount {
     if (!path.startsWith('/')) throw new Error('a Registry path starts with /')
     const base = this.base()
     // An account-scoped call may use the publisher token: both name the same account.
-    const token = this.deps.vault.token(base, auth) ?? (auth === 'account' ? this.deps.vault.token(base, 'publisher') : null)
+    const token = (await this.deps.vault.token(base, auth)) ?? (auth === 'account' ? await this.deps.vault.token(base, 'publisher') : null)
     if (!token) return null
     const headers: Record<string, string> = { ...(init.headers ?? {}), Authorization: `Bearer ${token}` }
     let body = init.body
@@ -445,7 +445,7 @@ export class DeveloperAccount {
   /** Sign `bytes` with the kept key and upload them (POST /api/publish). */
   async publish(bytes: Uint8Array, fileName: string, target: string): Promise<DeveloperRegistryResponse & { digest: string }> {
     const base = this.base()
-    if (!this.deps.vault.token(base, 'publisher')) return { status: 401, body: NOT_SIGNED_IN, digest: '' }
+    if (!(await this.deps.vault.token(base, 'publisher'))) return { status: 401, body: NOT_SIGNED_IN, digest: '' }
     if (!this.state().keyRegistered) await this.registerKey()
     const conflict = this.state().keyConflictFingerprint
     if (!this.state().keyRegistered && conflict) {
@@ -463,7 +463,7 @@ export class DeveloperAccount {
       }
     }
     const digest = packageDigest(bytes)
-    const signature = signPackageDigest(digest, this.deps.vault.signingKey(base).privateKeyPem)
+    const signature = signPackageDigest(digest, (await this.deps.vault.signingKey(base)).privateKeyPem)
     const form = new FormData()
     // A copy backed by a plain ArrayBuffer: a Blob part may not be a SharedArrayBuffer view.
     form.append('package', new Blob([new Uint8Array(bytes)], { type: 'application/zip' }), fileName)

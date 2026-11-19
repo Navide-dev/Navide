@@ -989,9 +989,9 @@ describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
     externalChanges = 0
     // A reversible stand-in for safeStorage: no keychain is touched.
     integrity = {
-      available: true,
-      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
-      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+      available: async () => true,
+      encrypt: async (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: async (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
       onExternalChange: () => { externalChanges += 1 },
     }
   })
@@ -1072,9 +1072,9 @@ describe('Developer Mode settings another program wrote (A2-5, G5)', () => {
 describe('review MED-1 on #536: the loader record is signed', () => {
   beforeEach(() => {
     integrity = {
-      available: true,
-      encrypt: (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
-      decrypt: (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
+      available: async () => true,
+      encrypt: async (plain) => `enc:${Buffer.from(plain, 'utf8').toString('base64')}`,
+      decrypt: async (enc) => Buffer.from(enc.slice(4), 'base64').toString('utf8'),
     }
   })
 
