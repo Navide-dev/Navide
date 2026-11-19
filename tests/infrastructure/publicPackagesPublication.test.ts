@@ -62,6 +62,33 @@ describe('public plugin packages', () => {
     expect(source).toContain('test-fixtures')
   })
 
+  it('publish the Python plugin SDK at its API_VERSION, from a token-free script and an inactive draft', () => {
+    const pyproject = readFileSync('packages/plugin-sdk-python/pyproject.toml', 'utf8')
+    const apiVersion = /^API_VERSION = "([^"]+)"$/m.exec(readFileSync('backend/navide_plugin_sdk/__init__.py', 'utf8'))?.[1]
+    expect(apiVersion).toMatch(/^1\.\d+\.\d+$/)
+    expect(/^version = "([^"]+)"$/m.exec(pyproject)?.[1]).toBe(apiVersion)
+    expect(pyproject).toContain('name = "navide-plugin-sdk"')
+    expect(pyproject).toContain('dependencies = []')
+    expect(pyproject).toContain('packages = ["navide_plugin_sdk"]')
+
+    const pythonScript = 'scripts/publish-python-plugin-sdk.sh'
+    expect(spawnSync('git', ['ls-files', '-s', pythonScript], { encoding: 'utf8' }).stdout).toMatch(/^100755 /)
+    expect(spawnSync('bash', ['-n', pythonScript]).status).toBe(0)
+    const scriptSource = readFileSync(pythonScript, 'utf8')
+    expect(scriptSource).toContain('--publish')
+    expect(scriptSource).toContain("git ls-files 'backend/navide_plugin_sdk/*.py'")
+    expect(scriptSource).not.toMatch(/--token|PYPI_TOKEN|UV_PUBLISH_TOKEN|password/i)
+
+    const draft = '.github/workflow-drafts/publish-python-plugin-sdk.yml'
+    const workflow = readFileSync(draft, 'utf8')
+    expect(existsSync('.github/workflows/publish-python-plugin-sdk.yml')).toBe(false)
+    expect(workflow).toContain('id-token: write')
+    expect(workflow).toContain('--trusted-publishing always')
+    expect(workflow).toContain("'python-plugin-sdk-v1.*'")
+    expect(workflow).not.toMatch(/secrets\.|PYPI_TOKEN|UV_PUBLISH_TOKEN|password/i)
+    expect(readFileSync('docs/en-US/plugin-development-v2.md', 'utf8')).toContain(draft)
+  })
+
   it('keep the provenance publishing workflow as an inactive, token-free draft', () => {
     const draft = '.github/workflow-drafts/publish-public-packages.yml'
     const source = readFileSync(draft, 'utf8')

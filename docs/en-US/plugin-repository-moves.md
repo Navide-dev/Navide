@@ -24,8 +24,10 @@ node scripts/verify-plugin-standalone.mjs <dir> --registry  # same, from npm onc
 ...). A plugin with a native backend is built for this host's target: the
 backend comes from the repository's `scripts/build-<name>-v2-backend.mjs`,
 pointed at the copy through `NAVIDE_<NAME>_SOURCE_DIR` and
-`NAVIDE_<NAME>_DIST_DIR`, with the repository's Python toolchain (`uv`,
-PyInstaller from `backend/uv.lock`). The check covers the build only. The plugins' tests still run in the
+`NAVIDE_<NAME>_DIST_DIR`. Browser packages it with the repository's
+`backend/` environment; Plans in an isolated environment (see below). Both use
+the PyInstaller version `backend/uv.lock` pins. The check covers the build
+only. The plugins' tests still run in the
 monorepo (`pnpm test:plugins`); the couplings listed per plugin keep them
 there.
 
@@ -69,7 +71,7 @@ major). The plugin declares the lowest Host it needs in `engines.navide`.
 | `tests/sharedOwnershipBoundary.test.ts` | Reads `packages/plugin-ui/src` and `package.json` | Check against the installed `@navide/plugin-ui` exports instead. |
 | `tests/compositionBoundary.test.ts` | Packs the plugin and the public packages from the repository; uses `scripts/bun/vue-tsc.cjs` | Install the public packages from npm. |
 | `src/git-feature/__tests__/gitTransport.inventory.test.ts`, `gitTransport.boundary.test.ts`, `src/__tests__/themeCallSites.test.ts` | Read Host sources under `src/renderer` | Move the Host half to the Host repository; keep only the plugin half. |
-| `src/components/__tests__/MultiRepoGit.test.ts`, `src/GitLeftApp.shortcuts.test.ts` | Import `@navide/plugin-ui/shared/testing`, which the published package does not export | Add a public testing export to `@navide/plugin-ui` (an addition, so allowed in 1.x) or keep local test helpers. |
+| `src/components/__tests__/MultiRepoGit.test.ts`, `src/GitLeftApp.shortcuts.test.ts` | Import `@navide/plugin-ui/shared/testing` | Resolved in 0.2.45: the published package exports it (Plans' tests use it too). |
 
 ### Host references that change when the directory leaves
 
@@ -171,6 +173,54 @@ for the Browser backend), `src/main/index.ts` (the factory Browser load),
 `.github/workflows/release.yml`, and
 `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`.
 
+## navide.plans
+
+`node scripts/verify-plugin-standalone.mjs navide-plans` passes for the
+build host's target after `scripts/publish-python-plugin-sdk.sh` has built the
+Python SDK wheel: the frontend builds from the copy, and the backend from the
+copy's `backend/plans_backend.py` in an isolated `uv run --no-project`
+environment holding only PyInstaller (the `backend/uv.lock` pin), the copy's
+`backend/requirements.txt` (`navide-plugin-sdk>=1.0.0,<2`, `pyyaml>=6.0`, the
+ranges `backend/pyproject.toml` carries) and that wheel. Nothing of the
+repository's `backend/` goes into the executable. Building on its own also
+surfaced `mermaid`, imported by the retained Markdown body but never
+declared; it is declared now.
+
+### What moves
+
+| Path | Notes |
+|---|---|
+| `plugins/navide-plans/**` | Manifest, `package.json`, `src/`, `frontend/`, `backend/` (with `requirements.txt`), `tests/`, `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, with history. |
+| `scripts/build-plans-v2-backend.mjs` | Becomes the plugin's own backend build; its standalone path (isolated environment, SDK from PyPI) becomes the only one, with a lock file of its own for PyInstaller and PyYAML. |
+| `.github/workflows/plugin-packages.yml` | Becomes the new repository's packaging CI, one job per target. |
+
+### What stays in the Host
+
+| Path | Why |
+|---|---|
+| `backend/navide_plugin_sdk` and `packages/plugin-sdk-python/` | The public Python SDK, published to PyPI from the Navide repository like the npm packages. |
+| `src/renderer/plugins/plans/`, `vite.plans.config.ts`, `NAVIDE_PLANS_RECOVERY=legacy` | The legacy recovery view the Host keeps. |
+| `registerBundledPlans` (`src/main/plugins/frontendPluginManager.ts`, called from `src/main/index.ts`), `src/main/plugins/plansBridge.ts`, `plansStorage*.ts`, `plansDirectories.ts` | Host loading of the bundled copy, the Plans bridge and plan storage. |
+| `src/main/plugins/officialPluginVersions.ts` (`navide.plans` entry), `scripts/stage-official-plugin-artifacts.mjs`, `scripts/publish-first-party-plugins.sh`, the `release.yml` installer checks | Pin, stage and check the installer's copy. |
+
+### Couplings to resolve before the tests can move
+
+| Test or file | Coupling | Change |
+|---|---|---|
+| `vitest.config.ts` | `pluginVitestConfig` from the root `vitest.plugin.ts`, and `tests/support/publicPackagesSetup.ts` | A self-contained Vitest config with happy-dom and `@vue/test-utils` as dev dependencies. |
+| `tests/packageBoundary.test.ts` | Reads the repository layout and builds against the packed public packages | Install the public packages from npm. |
+| `tests/integration/plans*.test.ts`, `backend/tests/test_plans_review_parity.py` | Host-side tests that build or drive the plugin from `plugins/navide-plans` | Keep the Host half; run the plugin half in the plugin repository against the published SDK. |
+
+### Host references that change when the directory leaves
+
+`package.json` (`build:plans`, `build:plans:v2`, `build:plans:backend`,
+`typecheck:plugin-plans`, the `typecheck` chain),
+`scripts/official-plugin-fingerprints.mjs` (the Plans entry also counts the
+Python SDK modules), `tests/integration/plansBuildScripts.test.ts`,
+`src/main/plugins/{plansProvenance,officialPluginVersions}.test.ts`,
+`.github/workflows/release.yml`, and
+`backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`.
+
 ## What the user does
 
 1. Create each repository under `Navide-dev` (names and visibility are the
@@ -178,4 +228,7 @@ for the Browser backend), `src/main/index.ts` (the factory Browser load),
 2. Publish `@navide/plugin-*` 1.0.0 to npm (see
    [Plugin development v2](plugin-development-v2.md#publishing-the-public-packages-to-npm)),
    so the moved plugins install them from the registry.
-3. Approve each plugin's Marketplace publications, as today.
+3. Publish `navide-plugin-sdk` to PyPI (see
+   [Plugin development v2](plugin-development-v2.md#publishing-the-python-plugin-sdk-to-pypi)),
+   so the moved Plans backend installs it from PyPI.
+4. Approve each plugin's Marketplace publications, as today.

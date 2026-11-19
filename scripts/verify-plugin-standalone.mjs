@@ -14,14 +14,16 @@
 //                     scripts/publish-public-packages.sh). Everything else
 //                     comes from the npm registry.
 //   --registry        keep the plugin's own ^1.x ranges and install the
-//                     published packages, once they are on npm.
+//                     published packages, once they are on npm (and the
+//                     Python plugin SDK from PyPI).
 //   --keep            leave the temporary checkout in place for inspection.
 //
 // A plugin with a native backend (Browser, Plans) is built for this host's
 // target: its frontend from the copy, its backend by the repository's
-// scripts/build-<name>-v2-backend.mjs pointed at the copy, with the
-// repository's Python toolchain (uv, PyInstaller), which has no standalone
-// replacement yet.
+// scripts/build-<name>-v2-backend.mjs pointed at the copy. Plans builds in an
+// isolated Python environment from the copy's backend/requirements.txt, with
+// the Python plugin SDK wheel scripts/publish-python-plugin-sdk.sh built
+// (dist/pypi); Browser still uses the repository's backend/ environment.
 //
 // Covers the build only. The plugin's tests still run in the monorepo
 // (pnpm test:plugins); docs/en-US/plugin-repository-moves.md lists what they
@@ -57,6 +59,13 @@ if (pluginDir === null || !/^navide-[a-z-]+$/.test(pluginDir) || !existsSync(joi
 const version = JSON.parse(readFileSync(join(root, 'packages/plugin-contracts/package.json'), 'utf8')).version
 const source = JSON.parse(readFileSync(join(root, 'plugins', pluginDir, 'manifest.json'), 'utf8'))
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+
+function pythonSdkWheel() {
+  const apiVersion = readFileSync(join(root, 'backend/navide_plugin_sdk/__init__.py'), 'utf8').match(/^API_VERSION = "([^"]+)"$/m)?.[1]
+  const wheel = join(root, 'dist', 'pypi', `navide_plugin_sdk-${apiVersion}-py3-none-any.whl`)
+  if (!existsSync(wheel)) throw new Error(`${wheel} is missing; run scripts/publish-python-plugin-sdk.sh first (it dry-runs by default)`)
+  return wheel
+}
 
 function run(command, commandArgs, cwd) {
   console.log(`$ ${command} ${commandArgs.join(' ')}`)
@@ -100,7 +109,14 @@ try {
     const built = spawnSync(process.execPath, [builder], {
       cwd: root,
       stdio: 'inherit',
-      env: { ...process.env, [`${prefix}_SOURCE_DIR`]: project, [`${prefix}_DIST_DIR`]: join(project, 'dist') },
+      env: {
+        ...process.env,
+        [`${prefix}_SOURCE_DIR`]: project,
+        [`${prefix}_DIST_DIR`]: join(project, 'dist'),
+        // The unpublished Python plugin SDK, as scripts/publish-python-plugin-sdk.sh
+        // built it; --registry installs it from PyPI instead.
+        ...(fromRegistry ? {} : { [`${prefix}_PYTHON_SDK`]: pythonSdkWheel() }),
+      },
     })
     if (built.status !== 0) throw new Error(`${builder} exited with ${built.status ?? built.signal}`)
   }

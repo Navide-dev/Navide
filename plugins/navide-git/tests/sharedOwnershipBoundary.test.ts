@@ -53,6 +53,7 @@ describe('public Vue plugin ownership boundary', () => {
       './file-picker',
       './foundation',
       './shared',
+      './shared/testing',
       './styles.css',
     ])
   })
