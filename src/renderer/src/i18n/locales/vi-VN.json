@@ -463,7 +463,11 @@
     "push-badge": "qua {kind}",
     "push-badge-title-box": "Được trao cho CLI qua giao diện cục bộ của chính nó thay vì gõ từng phím — vẫn vào ô nhập của pane, nên đã chờ bạn ngừng gõ",
     "push-badge-title-direct": "Được trao thẳng cho CLI mà không hề đi qua ô nhập của pane, nên những gì bạn đang gõ không thể bị gửi kèm",
-    "expand-rail": "Mở rộng tin nhắn giữa các CLI"
+    "expand-rail": "Mở rộng tin nhắn giữa các CLI",
+    "leftover-cleared-title": "Đã xoá ô nhập · {pane}",
+    "leftover-cleared-body": "Trước khi gửi tin nhắn, Navide đã xoá đoạn văn bản mà lần ngắt để lại trong ô nhập để nó không bị gửi kèm. \"Khôi phục\" sẽ dán lại mà không nhấn Enter.",
+    "leftover-restore": "Khôi phục",
+    "leftover-copy": "Sao chép"
   },
   "shutdown": {
     "title": "Đang tắt…",

@@ -463,7 +463,11 @@
     "push-badge": "por {kind}",
     "push-badge-title-box": "Se entregó a la CLI por su propia interfaz local en lugar de escribirse tecla a tecla; aun así entró en el cuadro de entrada del pane, así que esperó a que dejaras de escribir",
     "push-badge-title-direct": "Se entregó directamente a la CLI sin pasar por el cuadro de entrada del pane, así que nada de lo que estuvieras escribiendo pudo enviarse con él",
-    "expand-rail": "Desplegar los mensajes entre CLI"
+    "expand-rail": "Desplegar los mensajes entre CLI",
+    "leftover-cleared-title": "Campo de entrada vaciado · {pane}",
+    "leftover-cleared-body": "Navide vació el texto que una interrupción dejó en el campo de entrada antes de entregar un mensaje, para que no se enviara con él. «Restaurar» lo vuelve a pegar sin pulsar Enter.",
+    "leftover-restore": "Restaurar",
+    "leftover-copy": "Copiar"
   },
   "shutdown": {
     "title": "Cerrando…",

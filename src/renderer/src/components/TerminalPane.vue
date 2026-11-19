@@ -651,6 +651,7 @@ defineExpose({
   lastRawActivityAt: terminal.lastRawActivityAt,
   // The person at the keyboard, for App.vue's messaging idle gate.
   hasDraft: terminal.hasDraft,
+  draftText: terminal.draftText,
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,

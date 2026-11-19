@@ -218,8 +218,8 @@ export function onModelPicker(screen: string): boolean {
 // and below it (an older boxed prompt draws the rules with ╭ ╰ and the row
 // with │). First-run screens have no such frame: the text-style picker's
 // dashed ╌ lines enclose a code preview, not the cursor row.
-const PROMPT_RULE = /^\s*[╭╰]?─{8,}/
-const PROMPT_ROW = /^\s*(?:│\s*)?[❯>](?:\s|$)/
+export const PROMPT_RULE = /^\s*[╭╰]?─{8,}/
+export const PROMPT_ROW = /^\s*(?:│\s*)?[❯>](?:\s|$)/
 
 /** True when the screen shows Claude Code's input prompt, ready for typing. */
 export function atClaudeInputPrompt(screen: string): boolean {

@@ -463,7 +463,11 @@
     "push-badge": "{kind} 경유",
     "push-badge-title-box": "키를 하나씩 입력하지 않고 CLI 자체의 로컬 인터페이스로 전달했어요. 그래도 pane의 입력란에 들어갔기 때문에 입력을 멈출 때까지 기다렸어요",
     "push-badge-title-direct": "pane의 입력란을 거치지 않고 CLI에 바로 전달했어요. 그래서 입력 중이던 내용이 함께 제출되지 않아요",
-    "expand-rail": "CLI 간 메시지 펼치기"
+    "expand-rail": "CLI 간 메시지 펼치기",
+    "leftover-cleared-title": "입력창을 비웠습니다 · {pane}",
+    "leftover-cleared-body": "메시지를 전달하기 전에 중단으로 입력창에 남은 텍스트를 Navide가 지웠습니다(함께 전송되지 않도록). '복원'을 누르면 Enter 없이 입력창에 다시 붙여 넣습니다.",
+    "leftover-restore": "복원",
+    "leftover-copy": "복사"
   },
   "shutdown": {
     "title": "종료하는 중…",

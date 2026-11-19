@@ -2379,6 +2379,13 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     draftPending.value = inputBuffer.trim() !== ''
   }
 
+  /** The unsent line this pane tracked the user typing, past DRAFT_STALE_MS
+   *  too — checked against the input box on screen before anything clears it
+   *  (lib/claudeComposer.ts). Empty when there is none. */
+  function draftText(): string {
+    return draftPending.value ? inputBuffer : ''
+  }
+
   /** Whether the program on the other end of this PTY has mode 2004 on right
    *  now, as xterm parsed it off that program's own output.
    *
@@ -3711,6 +3718,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     lastActivityAt,
     lastRawActivityAt,
     hasDraft,
+    draftText,
     lastUserKeyAt,
     isBracketedPasteActive,
     terminalSize,

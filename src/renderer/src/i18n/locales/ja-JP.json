@@ -463,7 +463,11 @@
     "push-badge": "{kind} 経由",
     "push-badge-title-box": "1 文字ずつ入力せず、CLI 自身のローカルインターフェース経由で渡しました。ペインの入力欄には入るため、ユーザーの入力が止まるまで待機しました",
     "push-badge-title-direct": "ペインの入力欄を経由せず CLI に直接渡したため、入力途中の内容が一緒に送信されることはありません",
-    "expand-rail": "CLI 間メッセージを展開"
+    "expand-rail": "CLI 間メッセージを展開",
+    "leftover-cleared-title": "入力欄をクリアしました・{pane}",
+    "leftover-cleared-body": "メッセージを届ける前に、中断で入力欄に残ったテキストを Navide がクリアしました（一緒に送信されないように）。「元に戻す」で Enter を押さずに入力欄へ戻します。",
+    "leftover-restore": "元に戻す",
+    "leftover-copy": "コピー"
   },
   "shutdown": {
     "title": "終了中…",
