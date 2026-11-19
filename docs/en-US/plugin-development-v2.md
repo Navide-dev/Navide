@@ -173,6 +173,38 @@ with required reviewers. It holds no npm token and reads no repository secret.
 To enable it, move it to `.github/workflows/publish-public-packages.yml` and
 register that file name as each package's trusted publisher on npmjs.com.
 
+### Publishing the Python plugin SDK to PyPI
+
+`navide_plugin_sdk`, the Python surface a plugin backend imports (the path
+guard, the staged write path and plan versions; standard library only), is
+published as `navide-plugin-sdk` at its `API_VERSION`, which shares its major
+with the npm packages. It is not on PyPI until the user publishes it. The
+sources stay in `backend/navide_plugin_sdk`; `packages/plugin-sdk-python/`
+holds only the publication metadata (`pyproject.toml`, `README.md`).
+
+- `scripts/publish-python-plugin-sdk.sh` (dry run by default) stages the
+  metadata, the repository `LICENSE` and the SDK's git-tracked sources in a
+  temporary directory, builds the sdist and the wheel into `dist/pypi/`,
+  writes each archive's file list next to it, and refuses a version other
+  than `API_VERSION`, an archive holding anything beyond the SDK sources and
+  their metadata (tests, caches, fixtures or private files), and a wheel that
+  declares a dependency.
+- `node scripts/verify-plugin-standalone.mjs navide-plans` builds the Plans
+  backend in an isolated Python environment from the plugin's
+  `backend/requirements.txt` with that wheel; `--registry` installs the SDK
+  from PyPI instead.
+
+**Local publication** (the first release): `scripts/publish-python-plugin-sdk.sh
+--publish`, which runs `uv publish` with the user's own PyPI credential.
+
+**Trusted publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-python-plugin-sdk.yml` publishes through PyPI
+trusted publishing (OIDC, `id-token: write`) on a tag
+`python-plugin-sdk-v<version>`, gated by a `pypi-publish` environment with
+required reviewers. It holds no PyPI token and reads no repository secret. To
+enable it, move it to `.github/workflows/publish-python-plugin-sdk.yml` and
+register that file name as the project's trusted publisher on pypi.org.
+
 ## Recommended source project
 
 The source project is a scaffold convention, not the installed package
