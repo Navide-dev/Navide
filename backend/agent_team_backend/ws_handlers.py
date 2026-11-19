@@ -4792,6 +4792,7 @@ async def sync_rotate_key(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("sync.set_scope")
+@outlives_requester
 async def sync_set_scope(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, sync_engine, sync_scopes
 
@@ -5107,6 +5108,7 @@ async def workspace_list_recent(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("workspace.touch")
+@outlives_requester
 async def workspace_touch(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5151,6 +5153,7 @@ async def workspace_touch(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("workspace.set_recent_limit")
+@outlives_requester
 async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5169,6 +5172,7 @@ async def workspace_set_recent_limit(session: "Session", msg_id: str, msg_type: 
 
 
 @handler("workspace.pin")
+@outlives_requester
 async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5183,6 +5187,7 @@ async def workspace_pin(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("workspace.unpin")
+@outlives_requester
 async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5197,6 +5202,7 @@ async def workspace_unpin(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("workspace.remove")
+@outlives_requester
 async def workspace_remove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -5344,6 +5350,7 @@ async def p2p_link_status(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("p2p.link.set_paused")
+@outlives_requester
 async def p2p_link_set_paused(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -5372,6 +5379,7 @@ async def p2p_link_set_paused(
 
 
 @handler("p2p.link.configure")
+@outlives_requester
 async def p2p_link_configure(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Store or clear the access token, then reconnect.
 
@@ -5626,6 +5634,7 @@ async def p2p_account_resend_verification(
 
 
 @handler("p2p.account.logout")
+@outlives_requester
 async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Forget this machine's credential. The server keeps the account.
 
@@ -5989,6 +5998,7 @@ async def p2p_pair_confirm(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("p2p.trust.device.defer")
+@outlives_requester
 async def p2p_trust_device_defer(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6019,6 +6029,7 @@ async def p2p_trust_device_defer(
 
 
 @handler("p2p.trust.device.unpair")
+@outlives_requester
 async def p2p_trust_device_unpair(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6076,6 +6087,7 @@ async def p2p_trust_device_unpair(
 
 
 @handler("p2p.trust.rebuild")
+@outlives_requester
 async def p2p_trust_rebuild(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
@@ -6134,6 +6146,7 @@ async def p2p_trust_rebuild(
 
 
 @handler("p2p.trust.block")
+@outlives_requester
 async def p2p_trust_block(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Refuse a device outright, ahead of every rule.
 
@@ -7085,6 +7098,7 @@ async def roles_list(session: "Session", msg_id: str, msg_type: str, payload: di
 
 
 @handler("roles.upsert")
+@outlives_requester
 async def roles_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7167,6 +7181,7 @@ async def roles_rename(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("roles.delete")
+@outlives_requester
 async def roles_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7263,6 +7278,7 @@ async def pipelines_list(session: "Session", msg_id: str, msg_type: str, payload
 
 
 @handler("pipelines.create")
+@outlives_requester
 async def pipelines_create(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7280,6 +7296,7 @@ async def pipelines_create(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.import_n8n")
+@outlives_requester
 async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Convert an n8n workflow (dry_run: report only) or import it as a new
     pipeline. Same conversion and storage as the MCP tool pipeline_import_n8n."""
@@ -7325,6 +7342,7 @@ async def pipelines_import_n8n(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("pipelines.rename")
+@outlives_requester
 async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7349,6 +7367,7 @@ async def pipelines_rename(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.delete")
+@outlives_requester
 async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7379,6 +7398,7 @@ async def pipelines_delete(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("pipelines.set_active")
+@outlives_requester
 async def pipelines_set_active(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7764,6 +7784,7 @@ async def analyzer_settings_get(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("analyzer.settings.set")
+@outlives_requester
 async def analyzer_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7780,6 +7801,7 @@ async def archive_settings_get(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("archive.settings.set")
+@outlives_requester
 async def archive_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -7979,6 +8001,7 @@ async def tokens_turns(session: "Session", msg_id: str, msg_type: str, payload: 
 
 
 @handler("tokens.reset")
+@outlives_requester
 async def tokens_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -8035,6 +8058,7 @@ async def tokens_quota_accounts(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("tokens.quota_exhausted")
+@outlives_requester
 async def tokens_quota_exhausted(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
     from .pane_account_history import UNKNOWN_PROFILE_ID, parse_event_time
@@ -8156,6 +8180,7 @@ async def devtime_snapshot(session: "Session", msg_id: str, msg_type: str, paylo
 
 
 @handler("devtime.reset")
+@outlives_requester
 async def devtime_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -10687,6 +10712,7 @@ async def terminal_interrupt(session: "Session", msg_id: str, msg_type: str, pay
 
 
 @handler("terminal.kill")
+@outlives_requester
 async def terminal_kill(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -10744,6 +10770,7 @@ async def terminal_kill(session: "Session", msg_id: str, msg_type: str, payload:
 
 
 @handler("terminal.kill_surface")
+@outlives_requester
 async def terminal_kill_surface(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """End the embedded AI panels one window held.
 
@@ -11215,6 +11242,7 @@ async def project_set_tab_order(session: "Session", msg_id: str, msg_type: str, 
 
 
 @handler("project.set_ui_state")
+@outlives_requester
 async def project_set_ui_state(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -11464,6 +11492,7 @@ async def project_set_display_name(session: "Session", msg_id: str, msg_type: st
 
 
 @handler("project.rename_pane")
+@outlives_requester
 async def project_rename_pane(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -11505,6 +11534,7 @@ async def project_rename_pane(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("project.set_pane_auto_name")
+@outlives_requester
 async def project_set_pane_auto_name(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Persist an auto-generated pane title (custom_name always wins).
 
@@ -11633,6 +11663,7 @@ async def pane_generate_auto_name(session: "Session", msg_id: str, msg_type: str
 
 
 @handler("project.rename_spawn_history")
+@outlives_requester
 async def project_rename_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Rename a spawn-history entry whose pane no longer exists.
 
@@ -11680,6 +11711,7 @@ async def project_rename_spawn_history(session: "Session", msg_id: str, msg_type
 
 
 @handler("project.star_spawn_history")
+@outlives_requester
 async def project_star_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Star or unstar a spawn-history entry.
 
@@ -11729,6 +11761,7 @@ async def project_star_spawn_history(session: "Session", msg_id: str, msg_type: 
 
 
 @handler("project.delete_spawn_history")
+@outlives_requester
 async def project_delete_spawn_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Delete spawn-history entries from the full store and the mirror.
 
@@ -12428,6 +12461,7 @@ async def pipeline_start_refused(session: "Session", msg_id: str, msg_type: str,
 
 
 @handler("pipeline.node_states")
+@outlives_requester
 async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The renderer engine reports per-graph-node run state; stored on the
     project so MCP pipeline_status can read it, then broadcast for canvases in
@@ -14073,6 +14107,7 @@ async def preview_log_snapshot(session: "Session", msg_id: str, msg_type: str, p
 
 
 @handler("preview.log_append")
+@outlives_requester
 async def preview_log_append(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -14115,6 +14150,7 @@ async def preview_log_append(session: "Session", msg_id: str, msg_type: str, pay
 
 
 @handler("preview.log_clear")
+@outlives_requester
 async def preview_log_clear(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
@@ -14432,6 +14468,7 @@ async def convenience_history(session: "Session", msg_id: str, msg_type: str, pa
 
 
 @handler("convenience.set")
+@outlives_requester
 async def convenience_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, convenience_wiring
     from .applog import backend_port_file
@@ -14465,6 +14502,7 @@ async def convenience_set(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 @handler("convenience.upgrade_ack")
+@outlives_requester
 async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 

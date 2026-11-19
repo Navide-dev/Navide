@@ -3287,24 +3287,21 @@ function pushTargetForMessaging(paneId: string): { kind: string } | null {
  *
  *  `unclear` is the backend saying the CLI may still be holding our text: the
  *  message must go back in the queue rather than be typed in on top of itself.
- *  So is an answer that never came back: the push may have landed.
+ *  An answer that never came back is `lost`: the push may have landed, so the
+ *  queue asks again under the same `pushId` rather than typing it in.
  */
-async function pushDeliverAgentMessage(paneId: string, text: string): Promise<PushOutcome> {
-  let reason = 'push-request-failed'
-  let unclear = true
+async function pushDeliverAgentMessage(paneId: string, text: string, pushId: string): Promise<PushOutcome> {
   const resp = await requestAgentPush(
     (type, payload) => backend.send<{ ok?: boolean; reason?: string; unclear?: boolean }>(type, payload),
     paneId,
     text,
-    crypto.randomUUID(),
+    pushId,
   )
-  if (resp) {
-    if (resp.ok && resp.payload?.ok) return 'landed'
-    reason = resp.payload?.reason || resp.error?.message || reason
-    unclear = !!resp.payload?.unclear
-  }
+  if (!resp) return 'lost'
+  if (resp.ok && resp.payload?.ok) return 'landed'
+  const reason = resp.payload?.reason || resp.error?.message || 'push-request-failed'
   pushCooldownUntil.set(paneId, Date.now() + pushCooldownMs(reason))
-  if (unclear) {
+  if (resp.payload?.unclear) {
     pushUnclearAt.set(paneId, Date.now())
     return 'unclear'
   }

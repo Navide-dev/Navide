@@ -471,16 +471,34 @@ async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) 
 
 
 async def drain_broadcasts(timeout: float = 2.0) -> None:
-    """Shutdown: let in-flight broadcasts finish for up to ``timeout``, then
-    cancel the rest."""
-    pending = list(_BROADCASTS)
+    """Shutdown: let in-flight broadcasts, and the handler work running past
+    its requester (ws_handlers._outlive_requester), finish for up to
+    ``timeout`` in all, then cancel the rest.
+
+    That handler work usually ends in a broadcast of its own, so the set is
+    read again after each wait: a broadcast a finishing handler started is
+    given what is left of the same deadline."""
+    from . import ws_handlers
+
+    def running() -> list[asyncio.Future[Any]]:
+        detached = (*_BROADCASTS, *ws_handlers._OUTLIVING_REQUESTER, *ws_handlers._PROFILE_BROADCASTS)
+        return [task for task in detached if not task.done()]
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    pending = running()
+    while pending and (left := deadline - loop.time()) > 0:
+        await asyncio.wait(pending, timeout=left)
+        pending = running()
     if not pending:
         return
-    _done, still = await asyncio.wait(pending, timeout=timeout)
-    for task in still:
+    log.warning(
+        "shutdown: %d broadcasts or handler tails still running after %.1fs; cancelling them",
+        len(pending), timeout,
+    )
+    for task in pending:
         task.cancel()
-    if still:
-        await asyncio.wait(still)
+    await asyncio.wait(pending)
 
 
 _tokens_version = 0
