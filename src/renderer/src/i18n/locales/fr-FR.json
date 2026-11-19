@@ -9072,7 +9072,7 @@
     "refresh-status": "Actualisation : {status}",
     "refresh-not-signed-in": "Actualisation impossible – non connecté",
     "refresh-error": "Motif : {reason}",
-    "last-refresh-error": "Dernière lecture échouée : {reason}",
+    "last-refresh-error": "Dernière lecture échouée : {reason}",
     "refresh-status-ok": "à jour",
     "refresh-status-not-refreshed": "pas encore actualisé",
     "refresh-status-no-credentials": "aucun identifiant",

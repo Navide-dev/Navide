@@ -45,6 +45,12 @@ jobs:
         with:
           bun-version-file: .bun-version
 
+      # Not for installing: the vitest global setup (tests/support/
+      # publicPackagesSetup.ts) rebuilds the public packages through pnpm and
+      # needs the binary. pnpm comes from packageManager, as in ci.yml.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
       - name: Install bubblewrap and a C compiler
         run: |
           sudo apt-get update
