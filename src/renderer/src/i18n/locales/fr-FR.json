@@ -10015,8 +10015,10 @@
       "add": "Ajout rapide",
       "verifying": "Vérification…",
       "advanced": "Avancé",
-      "rejected": "{platform} a refusé l’identifiant : {error}",
+      "rejected": "{platform} a refusé l’identifiant : {error}. Copiez à nouveau le token en entier et réessayez ; générer un nouveau token rend l’ancien inutilisable.",
       "timeout": "{platform} n’a pas répondu à temps. Vérifiez le réseau et réessayez. ({error})",
+      "network": "Impossible de joindre {platform} : {error}. Vérifiez que cet ordinateur peut accéder à {platform} ; un réseau d’entreprise ou un pare-feu bloque peut-être la connexion. Si vous avez besoin d’un proxy, configurez-le dans les réglages réseau du système, puis réessayez.",
+      "conflict": "Ajouté, mais un autre programme utilise déjà ce bot (409 Conflict) : Navide ne peut pas encore recevoir ses messages. Fermez l’autre programme qui utilise ce token (par exemple Navide sur un autre ordinateur ou Claude Code --channels), ou générez un nouveau token dans BotFather et collez-le ici.",
       "step": {
         "verifying": "Vérification",
         "opening": "Ouverture de {platform}",

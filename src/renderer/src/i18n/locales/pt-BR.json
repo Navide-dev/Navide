@@ -10015,8 +10015,10 @@
       "add": "Adição rápida",
       "verifying": "Verificando…",
       "advanced": "Avançado",
-      "rejected": "{platform} rejeitou a credencial: {error}",
+      "rejected": "{platform} rejeitou a credencial: {error}. Copie o token inteiro de novo e tente outra vez; gerar um token novo faz o anterior parar de funcionar.",
       "timeout": "{platform} não respondeu a tempo. Verifique a rede e tente novamente. ({error})",
+      "network": "Não foi possível conectar ao {platform}: {error}. Verifique se este computador consegue acessar o {platform}; a rede da empresa ou um firewall pode estar bloqueando a conexão. Se precisar de um proxy, configure-o nas configurações de rede do sistema e tente novamente.",
+      "conflict": "Adicionado, mas outro programa já está usando este bot (409 Conflict), então o Navide ainda não consegue receber as mensagens. Feche o outro programa que usa este token (como o Navide em outro computador ou o Claude Code --channels) ou gere um token novo no BotFather e cole aqui.",
       "step": {
         "verifying": "Verificando",
         "opening": "Abrindo {platform}",

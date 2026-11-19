@@ -90,11 +90,11 @@ export interface ChannelPlatformState {
 export const DEFAULT_ACCOUNT = 'default'
 
 // The backend's worst case, each step bounded on its side: storing the credential
-// (a Keychain write, up to 10 s), waiting for the platform to accept it (10 s,
+// (a Keychain write, up to 10 s), waiting for the platform to accept it (25 s,
 // QUICK_ADD_TIMEOUT_S), then undoing a failure (a Keychain delete, up to 10 s).
-// The whole call, the channels lock included, gives up at 30 s (QUICK_ADD_DEADLINE_S)
+// The whole call, the channels lock included, gives up at 45 s (QUICK_ADD_DEADLINE_S)
 // and answers "timeout", so this only covers a backend that cannot answer at all.
-const QUICK_ADD_TIMEOUT_MS = 45_000
+const QUICK_ADD_TIMEOUT_MS = 60_000
 
 /** A fresh id for a bot being added: stable for its life, whatever it is renamed to. */
 export function newAccountId(): string {
@@ -247,6 +247,8 @@ export interface ChannelQuickAddResult {
   name: string
   identity: string
   link: ChannelLinkInvite | null
+  /** "conflict": added, but another program polls the same bot, so no message arrives yet. */
+  warning?: 'conflict'
 }
 
 /** `channels.managed_created`: the bot a `channels.managed_create` link was for, added
@@ -561,7 +563,7 @@ function createChannelsStore(backend: Backend) {
       mutate('channels.configure', secret ? { platform, ...acct(account), config, secret } : { platform, ...acct(account), config }),
     /** Add a new bot in one step: the backend stores it only once the platform accepted
      *  the credential, and with `linkTarget` answers with a link invite too. A failure
-     *  carries `reason` ("rejected" | "timeout" | "invalid") and leaves nothing stored. */
+     *  carries `reason` ("rejected" | "network" | "timeout" | "invalid") and leaves nothing stored. */
     quickAdd: async (platform: ChannelPlatform, config: Record<string, unknown>, secret: Record<string, string>,
       account: string, linkTarget?: 'direct' | 'group'): Promise<ChannelResult<ChannelQuickAddResult> & { reason?: string }> => {
       const type = 'channels.quick_add'

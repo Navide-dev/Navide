@@ -69,6 +69,12 @@ _FILE_KINDS = ("animation", "document", "video", "audio", "voice", "video_note")
 # Messages a person sends that no pane can take: the chat is told it did not go in.
 UNSUPPORTED_KINDS = ("poll", "dice", "story", "game", "invoice", "checklist", "paid_media", "giveaway")
 POLL_TIMEOUT_S = 30
+# getMe is the short request that proves the token, quick add included: bounded on its own
+# (connect, TLS and the answer each within this), not by the long poll's read timeout, and
+# retried at once when the network failed, so a first connection that stalls (an IPv6 route
+# that drops packets, a slow DNS or proxy) gets a second, fresh try well inside quick add's wait.
+GET_ME_TIMEOUT = httpx.Timeout(10.0)
+GET_ME_NETWORK_RETRIES = 1
 GENERAL_TOPIC_ID = "1"
 SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
@@ -266,7 +272,8 @@ class TelegramApiError(Exception):
 
 class TelegramAdapter:
     # getMe answering sets the identity: the token is accepted even while getUpdates
-    # still fails (another poller holds it, 409), so quick add need not wait for ready.
+    # still fails (another poller holds it, 409), so quick add need not wait for ready
+    # (it only waits for the first poll, to warn of that conflict).
     identity_confirms_credential = True
     platform = "telegram"
     capabilities = Capabilities(
@@ -316,6 +323,15 @@ class TelegramAdapter:
         self.command_language: Callable[[], str] | None = None
         self.bot_id = self._token.split(":", 1)[0]
         self._client: httpx.AsyncClient | None = None
+        self._transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake network
+        # Nothing from Telegram has come back since the last network failure (or since start):
+        # quick add reports such a bot as unreachable rather than as a slow answer.
+        self.unreachable = True
+        # The last getUpdates was refused with 409: another program polls this bot.
+        self.conflict = False
+        # The session's first getUpdates answered (or was refused): quick add waits for it to
+        # tell a bot another program holds from one that is free.
+        self.polled = False
         self._task: asyncio.Task[None] | None = None
         self._emit: Emit | None = None
         self._offset: int | None = None
@@ -331,7 +347,13 @@ class TelegramAdapter:
         if self._task and not self._task.done():
             return
         self._emit = emit
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=self._poll_timeout_s + 15.0))
+        # trust_env (httpx's default) picks up the system proxy: HTTP(S)_PROXY, or macOS and
+        # Windows proxy settings through urllib.request.getproxies().
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=self._poll_timeout_s + 15.0),
+                                         transport=self._transport)
+        self.unreachable = True
+        self.conflict = False
+        self.polled = False
         self.status.lifecycle = "starting"
         self.status.last_error = ""
         self._task = asyncio.create_task(self._run(), name="channels-telegram")
@@ -364,6 +386,8 @@ class TelegramAdapter:
                 self._attempt += 1
                 if isinstance(exc, TelegramApiError) and exc.code == 409:
                     self._attempt = max(self._attempt, CONFLICT_MIN_ATTEMPT)
+                    self.conflict = True
+                    self.polled = True
                 self.status.lifecycle = "recovering"
                 self.status.connected = False
                 self.status.reconnect_attempts = self._attempt
@@ -409,8 +433,20 @@ class TelegramAdapter:
         except Exception as exc:  # noqa: BLE001
             log.info("telegram: updating the bot's commands failed: %s", exc)
 
+    async def _get_me(self) -> dict[str, Any]:
+        failures = 0
+        while True:
+            try:
+                return await self._call("getMe", timeout=GET_ME_TIMEOUT)
+            except httpx.TransportError as exc:
+                failures += 1
+                if failures > GET_ME_NETWORK_RETRIES:
+                    raise
+                log.info("telegram[%s]: getMe failed (%s); retrying now", self.account,
+                         self._redact(_describe_failure(exc)))
+
     async def _session(self) -> None:
-        me = await self._call("getMe")
+        me = await self._get_me()
         username = me.get("username") or ""
         self.status.identity = f"@{username}" if username else str(me.get("id", ""))
         self.status.display_name = str(me.get("first_name") or "")
@@ -425,9 +461,11 @@ class TelegramAdapter:
         self.status.connected = True
         self.status.last_connected_at = time.time()
         ready_at = time.monotonic()
+        first = True
         while True:
             params: dict[str, Any] = {
-                "timeout": self._poll_timeout_s,
+                # The first poll answers at once: whether another program holds the bot shows now.
+                "timeout": 0 if first else self._poll_timeout_s,
                 # managed_bot only ever arrives for a bot in Bot Management Mode.
                 "allowed_updates": ["message", "callback_query", "managed_bot"],
             }
@@ -439,6 +477,9 @@ class TelegramAdapter:
                 )
             except asyncio.TimeoutError as exc:
                 raise RuntimeError("getUpdates stalled; restarting") from exc
+            first = False
+            self.conflict = False
+            self.polled = True
             # A session that stayed up (ReceiveLoop's rule): the next failure is a fresh
             # drop, not one more in a series. A shorter one keeps backing off.
             if time.monotonic() - ready_at >= self._stable_s:
@@ -764,13 +805,20 @@ class TelegramAdapter:
         # The token is part of every request URL; keep it out of status and logs.
         return text.replace(self._token, "***") if self._token else text
 
-    async def _call(self, method: str, params: dict[str, Any] | None = None) -> Any:
+    async def _call(self, method: str, params: dict[str, Any] | None = None,
+                    timeout: httpx.Timeout | None = None) -> Any:
         client = self._client
         own = client is None
         if own:
-            client = httpx.AsyncClient(timeout=20.0)
+            client = httpx.AsyncClient(timeout=20.0, transport=self._transport)
         try:
-            resp = await client.post(f"{self._base}/{method}", json=params or {})
+            try:
+                resp = await client.post(f"{self._base}/{method}", json=params or {},
+                                         timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT)
+            except httpx.TransportError:
+                self.unreachable = True
+                raise
+            self.unreachable = False
         finally:
             if own:
                 await client.aclose()
@@ -931,4 +979,5 @@ def _describe_update(update: dict[str, Any]) -> str:
 def _describe_failure(exc: Exception) -> str:
     if isinstance(exc, TelegramApiError) and exc.code == 409:
         return "另一個程式也在用這個 bot（409 Conflict: another getUpdates consumer）"
-    return f"{type(exc).__name__}: {exc}"
+    # httpx's timeouts often carry no message: the class name alone, not "ConnectTimeout: ".
+    return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
