@@ -7,6 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Changed
 
 - Electron 45 (0.2.45): the App runs on Electron 45.4.1 (Chromium 156, Node 24.22) instead of 44.10.1. Electron 45 reports screen capture as the `display-capture` permission instead of `media`; it keeps the rule screen capture had before, granted only to a main window's own renderer, so it is not newly granted to other windows on the default session. Plugin views still refuse it.
+- Secure storage (0.2.45): Git accounts, plugin secrets, the Navide Marketplace developer sign-in and the Developer Mode signature key now use Electron's asynchronous `safeStorage` API; the synchronous one is deprecated in Electron 45 and removed in 46. What is stored and where is unchanged: values written by earlier versions decrypt as they are, nothing is rewritten on upgrade, and new values are written in the same format. Developer Mode checks its signatures once its key is unwrapped, before the developer folders load; until then it checks nothing, as it already did before the app was ready.
 
 ### Fixed
 

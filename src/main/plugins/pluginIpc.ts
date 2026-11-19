@@ -3512,7 +3512,7 @@ export function registerPluginIpc(
     if (typeof args?.enabled !== 'boolean') throw new Error('invalid Developer Mode switch value')
     const enabled = args.enabled
     if (developerMode.isEnabled() !== enabled) {
-      developerMode.setEnabled(enabled)
+      await developerMode.setEnabled(enabled)
       manager.recordDeveloperModeChange(enabled, hostAppVersion())
       if (!developerModeOn()) {
         try {
@@ -3537,7 +3537,7 @@ export function registerPluginIpc(
     } else if (!enabled) {
       // A2-5: off already, but another program's "on" may still be in the
       // file; the user's "off" replaces it and its notice goes.
-      developerMode.setEnabled(false)
+      await developerMode.setEnabled(false)
     }
     return developerModeState()
   })
@@ -3590,7 +3590,7 @@ export function registerPluginIpc(
         forgetKeptNativeBackendDataSource(dataRoot, id)
       }
     }
-    developerMode.consent({
+    await developerMode.consent({
       path: pending.dir,
       pluginId: id,
       permissionsDigest: pending.permissionsDigest,
@@ -3718,7 +3718,7 @@ export function registerPluginIpc(
     if (developerMode.anyFolder(id) && options.nativeBackendDataRoot) {
       recordKeptNativeBackendDataSource(options.nativeBackendDataRoot, id, 'local-unsigned')
     }
-    developerMode.forget(id)
+    await developerMode.forget(id)
     folderMeta.forget(id)
     stopWatchingFolder(id)
     reloadErrors.delete(id)
@@ -4002,6 +4002,8 @@ export function registerPluginIpc(
   })
 
   async function loadDeveloperFolders(trigger: DeveloperFolderLoadTrigger = 'startup'): Promise<void> {
+    // A2-5: the signatures are checked from here on (secure storage is asynchronous).
+    await developerMode.prepare()
     if (!developerModeOn()) return
     for (const folder of developerMode.folders()) {
       try {
@@ -5018,7 +5020,7 @@ export function registerPluginIpc(
       // Review LOW-1 on #428: removing a developer folder's plugin (also by an
       // agent's request) forgets its consent, so the next start does not load
       // it again. The folder itself is never touched.
-      developerMode.forget(id)
+      await developerMode.forget(id)
       folderMeta.forget(id)
       stopWatchingFolder(id)
       // HIGH-3: kept data remembers whose it is, so only an install of the

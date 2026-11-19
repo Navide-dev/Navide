@@ -214,6 +214,7 @@ import {
   type GitAccountCrypto,
   type GitAccountInput
 } from './gitAccountsStore'
+import { safeStorageCrypto } from './safeStorageCrypto'
 import { applyLinuxKeyringPreflight } from './linuxKeyring'
 import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
@@ -599,13 +600,7 @@ function getGitAccountsStore(): GitAccountsStore {
     // Under basic_text Electron reports encryption unavailable unless plain-text
     // encryption is opted into explicitly.
     if (linuxKeyringDowngraded) safeStorage.setUsePlainTextEncryption(true)
-    const crypto: GitAccountCrypto = {
-      get available(): boolean {
-        return safeStorage.isEncryptionAvailable()
-      },
-      encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-      decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64'))
-    }
+    const crypto: GitAccountCrypto = safeStorageCrypto(safeStorage)
     gitAccountsStore = new GitAccountsStore(join(app.getPath('userData'), 'git-accounts.json'), crypto)
   }
   return gitAccountsStore
@@ -616,7 +611,7 @@ function getGitAccountsStore(): GitAccountsStore {
 // renderer-facing package receives only masked accounts or one authenticated
 // workspace-bound credential response.
 frontendPluginManager.setGitAccountHandlers({
-  available: () => getGitAccountsStore().available,
+  available: () => getGitAccountsStore().available(),
   list: () => getGitAccountsStore().list(),
   add: (input) => getGitAccountsStore().add(input),
   update: (id, patch) => getGitAccountsStore().update(id, patch),
@@ -1027,15 +1022,14 @@ const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
 // publisher key from the environment. Set before anything resolves either.
 // A2-5 (G5): entries of that file another program wrote are disclosed and
 // asked about again. Its HMAC key is wrapped by safeStorage, touched only once
-// the app is ready and only while Developer Mode is in use; before that, or
-// without secure storage, nothing is checked (disclosed).
+// the app is ready and only while Developer Mode is in use; before that (until
+// the store is prepared, before the developer folders load), or without
+// secure storage, nothing is checked (disclosed).
 const pluginDeveloperModeIntegrity: DeveloperModeIntegrity = {
-  get available(): boolean {
-    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-  },
-  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  ...safeStorageCrypto(
+    safeStorage,
+    () => app.isReady() && !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  ),
   onExternalChange: () => frontendPluginManager.recordDeveloperModeExternalChange(app.getVersion()),
 }
 const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot(), pluginDeveloperModeIntegrity)
@@ -2494,29 +2488,21 @@ void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
 // <userData>/plugin-secrets, keyed by plugin id, never synced, exported or
 // logged. Without real encryption every set/get answers SECRETS_UNAVAILABLE;
 // nothing is ever written in plain text. Not the CLI account credentials.
-const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), {
-  get available(): boolean {
-    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-  },
-  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
-})
+const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), safeStorageCrypto(
+  safeStorage,
+  () => app.isReady() && !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+))
 frontendPluginManager.setPluginSecretStore(pluginSecretStore)
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their
 // own file, never the CLI account credentials; see developerVault.ts.
 const developerAccount = new DeveloperAccount({
-  vault: new DeveloperVault(join(app.getPath('userData'), 'marketplace-developer.json'), {
-    get available(): boolean {
-      // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
-      return !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-        (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-    },
-    encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-    decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
-  }),
+  vault: new DeveloperVault(join(app.getPath('userData'), 'marketplace-developer.json'), safeStorageCrypto(
+    safeStorage,
+    // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
+    () => !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  )),
   registryUrl: () => resolveConfiguredMarketplace().registryUrl,
   openExternal: (url) => shell.openExternal(url),
   // 0.2.43 #2b: reuse the Navide Cloud sign-in; the Cloud token stays in the backend.
@@ -5956,10 +5942,10 @@ ipcMain.handle('settings:cdp-debug-write', (event, config: CdpDebugConfig) => {
 // safeStorage (token encryption) is a main-process API; the renderer only sees
 // masked accounts and, at git-op time, the decrypted credential for the bound
 // account. Handlers never throw across the IPC boundary — always { ok, ... }.
-ipcMain.handle('git-accounts:available', (event) => {
+ipcMain.handle('git-accounts:available', async (event) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    return { ok: true, available: getGitAccountsStore().available }
+    return { ok: true, available: await getGitAccountsStore().available() }
   } catch (e) {
     return { ok: false, error: String(e) }
   }
@@ -5974,19 +5960,19 @@ ipcMain.handle('git-accounts:list', (event) => {
   }
 })
 
-ipcMain.handle('git-accounts:add', (event, input: GitAccountInput) => {
+ipcMain.handle('git-accounts:add', async (event, input: GitAccountInput) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    return { ok: true, account: getGitAccountsStore().add(input) }
+    return { ok: true, account: await getGitAccountsStore().add(input) }
   } catch (e) {
     return { ok: false, error: String(e) }
   }
 })
 
-ipcMain.handle('git-accounts:update', (event, id: string, patch: Partial<GitAccountInput>) => {
+ipcMain.handle('git-accounts:update', async (event, id: string, patch: Partial<GitAccountInput>) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    getGitAccountsStore().update(id, patch)
+    await getGitAccountsStore().update(id, patch)
     return { ok: true }
   } catch (e) {
     return { ok: false, error: String(e) }

@@ -12,6 +12,7 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import { join, resolve } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import { canonicalContractJson } from '../../shared/pluginDisclosure'
+import type { AsyncSecretCrypto } from '../safeStorageCrypto'
 
 // The Developer Mode switch (DX report A2, card K4) and the developer folders
 // the user consented to. The main process owns this file; inside Navide the
@@ -35,15 +36,34 @@ import { canonicalContractJson } from '../../shared/pluginDisclosure'
 const DEVELOPER_MODE_FILE = '.navide-plugin-developer-mode.json'
 const DEVELOPER_MODE_SIGNATURE_FILE = '.navide-plugin-developer-mode.sig.json'
 
-/** Wraps the HMAC key at rest (Electron safeStorage in the app). Never the CLI
- * account credentials: this key is its own, in its own file. */
-export interface DeveloperModeIntegrity {
-  /** False where secure storage is unavailable: nothing is checked then. */
-  readonly available: boolean
-  encrypt(plain: string): string
-  decrypt(enc: string): string
+/** Wraps the HMAC key at rest (Electron safeStorage in the app, through
+ * safeStorageCrypto.ts). Never the CLI account credentials: this key is its
+ * own, in its own file. `available()` answers false where secure storage is
+ * unavailable: nothing is checked then. */
+export interface DeveloperModeIntegrity extends AsyncSecretCrypto {
   /** Called once when a change made outside Navide is first seen. */
   onExternalChange?: (change: DeveloperModeExternalChange) => void
+}
+
+/** What `prepare()` learned from the asynchronous secure storage, shared by
+ * every store on the same provider (main and the plugin IPC each keep one),
+ * so the synchronous reads can check signatures. `available` is null until a
+ * store was prepared: nothing is checked then, as before the app is ready. */
+interface IntegrityCache {
+  available: boolean | null
+  /** Unwrapped HMAC keys by their wrapped value; null when one cannot be. */
+  keys: Map<string, Buffer | null>
+}
+
+const integrityCaches = new WeakMap<DeveloperModeIntegrity, IntegrityCache>()
+
+function integrityCache(integrity: DeveloperModeIntegrity): IntegrityCache {
+  let cache = integrityCaches.get(integrity)
+  if (!cache) {
+    cache = { available: null, keys: new Map() }
+    integrityCaches.set(integrity, cache)
+  }
+  return cache
 }
 
 /** When Navide first saw entries it did not write. */
@@ -169,6 +189,16 @@ function readSignature(path: string): PersistedSignature | null {
   }
 }
 
+/** The HMAC key a signature file wraps; null when it cannot be unwrapped. */
+async function unwrapKey(crypto: AsyncSecretCrypto, keyEnc: string): Promise<Buffer | null> {
+  try {
+    const raw = Buffer.from(await crypto.decrypt(keyEnc), 'base64')
+    return raw.length === 32 ? raw : null
+  } catch {
+    return null
+  }
+}
+
 function readSignatureSafely(path: string): PersistedSignature | null {
   try {
     return readSignature(path)
@@ -180,7 +210,8 @@ function readSignatureSafely(path: string): PersistedSignature | null {
 export class PluginDeveloperModeStore {
   private readonly file: string
   private readonly signatureFile: string
-  private unwrapped: { keyEnc: string; key: Buffer | null } | null = null
+  /** A key wrapped ahead of a write that has no usable key yet. */
+  private freshKey: { keyEnc: string; key: Buffer } | null = null
   /** A notice that could not be saved in the signature file. */
   private unsavedChange: DeveloperModeExternalChange | null = null
 
@@ -196,7 +227,57 @@ export class PluginDeveloperModeStore {
     return evaluated.state.enabled && evaluated.enabledTrusted
   }
 
-  setEnabled(enabled: boolean): void {
+  /** Ask the asynchronous secure storage whether it is available and unwrap
+   * the stored HMAC key, so the synchronous reads can check signatures. The
+   * app calls it once it is ready (before loading developer folders); every
+   * write calls it again. The key is only touched while Developer Mode is in
+   * use (the switch or a folder is in the file) or for a write. Never throws. */
+  async prepare(forWrite = false): Promise<void> {
+    const integrity = this.integrity
+    if (!integrity) return
+    const cache = integrityCache(integrity)
+    let available = false
+    try {
+      available = await integrity.available()
+    } catch {
+      available = false
+    }
+    const state = this.read()
+    if (available && (forWrite || state.enabled || state.folders.length > 0)) {
+      const keyEnc = readSignatureSafely(this.signatureFile)?.keyEnc
+      if (keyEnc && !cache.keys.has(keyEnc)) cache.keys.set(keyEnc, await unwrapKey(integrity, keyEnc))
+    }
+    cache.available = available
+  }
+
+  /** prepare(), and wrap a new key when this write will need one: secure
+   * storage is available and the stored key is missing or unusable. A key
+   * that cannot be wrapped leaves the write unsigned (`signing-unavailable`). */
+  private async prepareWrite(): Promise<void> {
+    await this.prepare(true)
+    this.freshKey = null
+    if (!this.secureStorage()) return
+    const keyEnc = readSignatureSafely(this.signatureFile)?.keyEnc
+    if (keyEnc && this.cachedKey(keyEnc)) return
+    const key = randomBytes(32)
+    try {
+      this.freshKey = { keyEnc: await this.integrity!.encrypt(key.toString('base64')), key }
+    } catch (error) {
+      console.warn('[plugins] Developer Mode signing key could not be wrapped:', error)
+    }
+  }
+
+  /** Whether signatures are checked now (see IntegrityCache). */
+  private secureStorage(): boolean {
+    return !!this.integrity && integrityCache(this.integrity).available === true
+  }
+
+  private cachedKey(keyEnc: string): Buffer | null {
+    return this.integrity ? integrityCache(this.integrity).keys.get(keyEnc) ?? null : null
+  }
+
+  async setEnabled(enabled: boolean): Promise<void> {
+    await this.prepareWrite()
     const evaluated = this.evaluate()
     // Turning it off also writes over a switch another program turned on, so
     // that entry and its notice go (review LOW-2 on #537).
@@ -247,7 +328,7 @@ export class PluginDeveloperModeStore {
     | { state: 'no-secure-storage' }
     | { state: 'no-key' }
     | { state: 'ready'; keyId: string; mac(entry: string): string } {
-    if (!this.integrity?.available) return { state: 'no-secure-storage' }
+    if (!this.secureStorage()) return { state: 'no-secure-storage' }
     try {
       const signature = readSignature(this.signatureFile)
       const key = signature?.keyEnc ? this.key(signature) : null
@@ -268,13 +349,15 @@ export class PluginDeveloperModeStore {
   }
 
   /** Record (or replace) the consent for one plugin id's developer folder. */
-  consent(folder: DeveloperFolderConsent): void {
+  async consent(folder: DeveloperFolderConsent): Promise<void> {
+    await this.prepareWrite()
     const evaluated = this.evaluate()
     const kept = evaluated.state.folders.filter((entry) => entry.pluginId !== folder.pluginId)
     this.write({ ...evaluated.state, folders: [...kept, { ...folder }] }, evaluated, { folder: { ...folder } })
   }
 
-  forget(pluginId: string): void {
+  async forget(pluginId: string): Promise<void> {
+    await this.prepareWrite()
     const evaluated = this.evaluate()
     if (!evaluated.state.folders.some((entry) => entry.pluginId === pluginId)) return
     this.write(
@@ -284,18 +367,10 @@ export class PluginDeveloperModeStore {
     )
   }
 
-  /** The HMAC key, unwrapped once per wrapped value; null when it cannot be. */
+  /** The HMAC key prepare() unwrapped for this wrapped value; null when it
+   * could not be, or for a wrapped value that appeared after it ran. */
   private key(signature: PersistedSignature): Buffer | null {
-    if (this.unwrapped?.keyEnc === signature.keyEnc) return this.unwrapped.key
-    let key: Buffer | null = null
-    try {
-      const raw = Buffer.from(this.integrity!.decrypt(signature.keyEnc), 'base64')
-      key = raw.length === 32 ? raw : null
-    } catch {
-      key = null
-    }
-    this.unwrapped = { keyEnc: signature.keyEnc, key }
-    return key
+    return this.cachedKey(signature.keyEnc)
   }
 
   /** Never throws (review MED-2 on #537): when the signature cannot be read,
@@ -343,8 +418,7 @@ export class PluginDeveloperModeStore {
 
   private evaluateSigned(state: PersistedDeveloperModeState): Evaluated {
     const all: Evaluated = { state, enabledTrusted: true, untrusted: new Set(), externalChange: null }
-    const integrity = this.integrity
-    if (!integrity || !integrity.available) return all
+    if (!this.secureStorage()) return all
     // Nothing to trust: no crypto is touched (Developer Mode never used).
     if (!state.enabled && state.folders.length === 0) {
       const signature = readSignature(this.signatureFile)
@@ -402,9 +476,14 @@ export class PluginDeveloperModeStore {
     previous: PersistedSignature | null,
   ): PersistedSignature {
     const prior = previous?.keyEnc ? this.key(previous) : null
-    const key = prior ?? randomBytes(32)
-    const keyEnc = prior ? previous!.keyEnc : this.integrity!.encrypt(key.toString('base64'))
-    if (!prior) this.unwrapped = { keyEnc, key }
+    const fresh = prior ? null : this.freshKey
+    if (!prior && !fresh) throw new Error('secure storage could not wrap a signing key')
+    const key = prior ?? fresh!.key
+    const keyEnc = prior ? previous!.keyEnc : fresh!.keyEnc
+    if (fresh) {
+      integrityCache(this.integrity!).keys.set(keyEnc, key)
+      this.freshKey = null
+    }
     const mac = (entry: string): string => createHmac('sha256', key).update(entry).digest('hex')
     const macs = new Set<string>()
     if (state.enabled && enabledTrusted) macs.add(mac(enabledEntry()))
@@ -426,7 +505,7 @@ export class PluginDeveloperModeStore {
     evaluated?: Evaluated,
     decision: { enabled?: true; folder?: DeveloperFolderConsent } = {},
   ): void {
-    if (!this.integrity?.available || !evaluated) {
+    if (!this.secureStorage() || !evaluated) {
       this.writeAtomic(this.file, state)
       return
     }
