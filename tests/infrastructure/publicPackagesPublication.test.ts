@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 // The three public npm packages ship together through
@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 const names = ['plugin-contracts', 'plugin-sdk', 'plugin-ui'] as const
 type Manifest = {
   name: string; version: string; license?: string; files?: string[]; keywords?: string[]
-  publishConfig?: { access?: string }; repository?: { url?: string; directory?: string }
+  publishConfig?: { access?: string; provenance?: boolean }; repository?: { url?: string; directory?: string }
   peerDependencies?: Record<string, string>; dependencies?: Record<string, string>; engines?: { node?: string }
 }
 const manifests = Object.fromEntries(
@@ -31,7 +31,8 @@ describe('public plugin packages', () => {
       expect(manifest.name).toBe(`@navide/${name}`)
       expect(manifest.license).toBe('MIT')
       expect(manifest.publishConfig?.access).toBe('public')
-      expect(manifest.repository?.url).toBe('https://github.com/Navide-dev/Navide.git')
+      expect(manifest.publishConfig?.provenance).toBe(true)
+      expect(manifest.repository?.url).toBe('git+https://github.com/Navide-dev/Navide.git')
       expect(manifest.repository?.directory).toBe(`packages/${name}`)
       expect(manifest.keywords).toContain('navide')
       expect(manifest.engines?.node).toBe('>=20')
@@ -42,6 +43,7 @@ describe('public plugin packages', () => {
       }
     }
     expect(manifests['plugin-sdk'].files).toContain('bin')
+    expect(manifests['plugin-sdk'].files).toContain('!bin/**/*.test.ts')
   })
 
   it('are published by an executable script that dry-runs by default and never takes a token', () => {
@@ -55,5 +57,20 @@ describe('public plugin packages', () => {
     expect(source).not.toMatch(/--token|NPM_TOKEN|_authToken/)
     for (const name of names) expect(source).toContain(name)
     expect(readFileSync('docs/en-US/releases.md', 'utf8')).toContain(script)
+    // publishConfig.provenance needs a CI runner; the local path opts out.
+    expect(source).toContain('--provenance=false')
+    expect(source).toContain('test-fixtures')
+  })
+
+  it('keep the provenance publishing workflow as an inactive, token-free draft', () => {
+    const draft = '.github/workflow-drafts/publish-public-packages.yml'
+    const source = readFileSync(draft, 'utf8')
+    expect(existsSync('.github/workflows/publish-public-packages.yml')).toBe(false)
+    expect(source).toContain('id-token: write')
+    expect(source).toContain('--provenance')
+    expect(source).toContain("'plugin-packages-v1.*'")
+    expect(source).toContain('scripts/verify-public-packages-external.mjs')
+    expect(source).not.toMatch(/secrets\.|NPM_TOKEN|NODE_AUTH_TOKEN|_authToken/)
+    expect(readFileSync('docs/en-US/plugin-development-v2.md', 'utf8')).toContain(draft)
   })
 })

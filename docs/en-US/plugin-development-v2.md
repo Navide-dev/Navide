@@ -138,6 +138,41 @@ The static scan, the Registry's manifest validation and the Host's disclosure
 contract are versioned with the packages, so a manifest that `navide-plugin
 validate` accepts at 1.x is accepted by the Registry of the same 1.x line.
 
+### Publishing the public packages to npm
+
+The three packages are not on npm until the user publishes them; nothing in
+the repository holds an npm token. Two paths exist, and both start from the
+same checks:
+
+- `scripts/publish-public-packages.sh` (dry run by default) builds the
+  packages, packs them into `dist/npm/`, writes each tarball's file list next
+  to it as `<tarball>.files.txt`, and refuses a tarball that holds a `src/`
+  tree, a test, snapshot or fixture file (`*.test.*`, `__tests__/`,
+  `__snapshots__/`, `test-fixtures/`), a private file (`.env*`, `*.pem`,
+  `*.key`, `.npmrc`) or a `workspace:`/`link:` specifier. The packages
+  themselves declare plain SemVer ranges (`^1.x` peers), so `npm pack` ships
+  their manifests unchanged; only the private repository root uses `link:`.
+- `node scripts/verify-public-packages-external.mjs` is the acceptance check:
+  it copies `examples/third-party-files/` to a temporary directory outside the
+  repository, installs it with plain npm — the three Navide packages from the
+  tarballs in `dist/npm/`, everything else from the registry — and runs
+  `typecheck`, `build`, `check` (`navide-plugin validate`) and `package`. With
+  `--registry` it installs the published versions instead, to confirm a
+  publication.
+
+**Local publication** (the first release, and the fallback): after
+`npm login`, `scripts/publish-public-packages.sh --publish`. The manifests set
+`publishConfig.provenance`, which only a supported CI runner can satisfy, so
+the local path passes `--provenance=false`.
+
+**Provenance publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-public-packages.yml` publishes through npm
+trusted publishing (OIDC, `id-token: write`) with `--provenance`, triggered by
+a tag `plugin-packages-v<version>` and gated by a `npm-publish` environment
+with required reviewers. It holds no npm token and reads no repository secret.
+To enable it, move it to `.github/workflows/publish-public-packages.yml` and
+register that file name as each package's trusted publisher on npmjs.com.
+
 ## Recommended source project
 
 The source project is a scaffold convention, not the installed package

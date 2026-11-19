@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Public plugin packages (0.2.45): `@navide/plugin-contracts`, `@navide/plugin-sdk` and `@navide/plugin-ui` 1.0.0 are ready for npm, still unpublished. Their manifests request npm provenance; the SDK tarball no longer ships the CLI's own test files; `scripts/publish-public-packages.sh` writes each tarball's file list beside it and refuses a tarball holding tests, fixtures or private files. `scripts/verify-public-packages-external.mjs` installs the example plugin outside the repository with plain npm, from the packed tarballs or (`--registry`) the published versions, and typechecks, builds, validates and packages it. An inactive workflow draft, `.github/workflow-drafts/publish-public-packages.yml`, publishes them with provenance through npm trusted publishing on a `plugin-packages-v<version>` tag, without any npm token.
+
 ### Fixed
 
 - Navide Git plugin 1.0.9: in a workspace holding several repositories (a home folder), a file written beside them, such as a download or a cache, no longer makes the Git pane rediscover them and read every repository's status again. Only a change that can add or remove a repository (a `.git` path, a directory event, or a change list the backend did not send in full) rescans; a write inside a repository still refreshes that repository as before.
