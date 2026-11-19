@@ -17,6 +17,12 @@
 //                     published packages, once they are on npm.
 //   --keep            leave the temporary checkout in place for inspection.
 //
+// A plugin with a native backend (Browser, Plans) is built for this host's
+// target: its frontend from the copy, its backend by the repository's
+// scripts/build-<name>-v2-backend.mjs pointed at the copy, with the
+// repository's Python toolchain (uv, PyInstaller), which has no standalone
+// replacement yet.
+//
 // Covers the build only. The plugin's tests still run in the monorepo
 // (pnpm test:plugins); docs/en-US/plugin-repository-moves.md lists what they
 // need before they can move too. Reads no token and writes nothing inside the
@@ -83,8 +89,23 @@ try {
   run(npm, ['install', '--no-audit', '--no-fund', '--no-package-lock'], project)
   run(npm, ['run', 'typecheck'], project)
   run(npm, ['run', 'build'], project)
-  run(npm, ['run', 'check'], project)
-  run(npm, ['run', 'package'], project)
+  // A backend package must name the build host's exact target.
+  const targetArgs = source.backend ? ['--', '--target', `${process.platform}-${process.arch}`] : []
+  if (source.backend) {
+    const name = pluginDir.slice('navide-'.length)
+    const builder = join(root, 'scripts', `build-${name}-v2-backend.mjs`)
+    if (!existsSync(builder)) throw new Error(`${source.id} declares a backend but ${builder} does not exist`)
+    const prefix = `NAVIDE_${name.toUpperCase().replace(/-/g, '_')}`
+    console.log(`$ ${prefix}_SOURCE_DIR=… ${prefix}_DIST_DIR=… node ${builder}`)
+    const built = spawnSync(process.execPath, [builder], {
+      cwd: root,
+      stdio: 'inherit',
+      env: { ...process.env, [`${prefix}_SOURCE_DIR`]: project, [`${prefix}_DIST_DIR`]: join(project, 'dist') },
+    })
+    if (built.status !== 0) throw new Error(`${builder} exited with ${built.status ?? built.signal}`)
+  }
+  run(npm, ['run', 'check', ...targetArgs], project)
+  run(npm, ['run', 'package', ...targetArgs], project)
 
   const built = JSON.parse(readFileSync(join(project, 'dist', 'manifest.json'), 'utf8'))
   if (built.id !== source.id || built.version !== source.version) {

@@ -21,7 +21,11 @@ node scripts/verify-plugin-standalone.mjs <dir> --registry  # same, from npm onc
 ```
 
 `<dir>` is the directory under `plugins/` (`navide-git`, `navide-mini-ide`,
-...). The check covers the build only. The plugins' tests still run in the
+...). A plugin with a native backend is built for this host's target: the
+backend comes from the repository's `scripts/build-<name>-v2-backend.mjs`,
+pointed at the copy through `NAVIDE_<NAME>_SOURCE_DIR` and
+`NAVIDE_<NAME>_DIST_DIR`, with the repository's Python toolchain (`uv`,
+PyInstaller from `backend/uv.lock`). The check covers the build only. The plugins' tests still run in the
 monorepo (`pnpm test:plugins`); the couplings listed per plugin keep them
 there.
 
@@ -121,6 +125,50 @@ private bridge to version.
 `tests/infrastructure/{artifactInputs,ciTriage,i18nOwnership,mermaidClassicLook,miniIdeMonacoWorkerFallbacks,officialPluginFingerprints,testDiscovery,truncateCoverage}.test.ts`,
 `tests/support/publicPackagesSetup.ts`,
 `src/main/plugins/officialPluginVersions.test.ts`, and
+`backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`.
+
+## navide.browser
+
+`node scripts/verify-plugin-standalone.mjs navide-browser` passes for the
+build host's target (`darwin-arm64` here): the frontend builds from the copy
+and the backend from the copy's `backend/browser_backend.py`. The backend is
+standard-library Python, so the plugin needs no Python SDK; what it still
+borrows is the toolchain that packages it.
+
+### What moves
+
+| Path | Notes |
+|---|---|
+| `plugins/navide-browser/**` | Manifest, `package.json`, `src/`, `frontend/`, `backend/`, `tests/`, `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`, with history. |
+| `scripts/build-browser-v2-backend.mjs` | Becomes the plugin's own backend build, with a `pyproject.toml` and `uv.lock` of its own that pin PyInstaller (today it runs from `backend/`). |
+| `.github/workflows/browser-plugin-package.yml` | Becomes the new repository's packaging CI: one job per target (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`), since PyInstaller builds only for the host it runs on. |
+
+### What stays in the Host
+
+| Path | Why |
+|---|---|
+| The `web.view` and `web.cdp` capabilities and the plugin web view host (`src/main/plugins/pluginWebViewHost.ts`) | Public capabilities the plugin declares (`web`); there is no private bridge. |
+| First-party backend and agent-tool admission (`src/main/plugins/pluginThirdPartyBackends.ts`) | Host policy for `navide.*` packages from the Official Registry or the App bundle. |
+| `src/main/plugins/officialPluginVersions.ts` (`navide.browser` entry), `scripts/stage-official-plugin-artifacts.mjs`, `scripts/publish-first-party-plugins.sh`, the `release.yml` installer checks | Pin, stage and check the installer's copy; they switch to the signed Marketplace package after the move. |
+
+### Couplings to resolve before the tests can move
+
+| Test or file | Coupling | Change |
+|---|---|---|
+| `vitest.config.ts` | `pluginVitestConfig` from the root `vitest.plugin.ts` | A self-contained Vitest config with happy-dom as a dev dependency. |
+| `tests/manifest.test.ts` | Imports `packages/plugin-contracts/src` and the Host's `src/main/plugins/pluginManifestV2` | Parse with the installed `@navide/plugin-contracts`; leave the Host parser check in the Host. |
+| `src/themeTokens.test.ts` | Reads `packages/plugin-ui/src` | Read the tokens from the installed `@navide/plugin-ui`. |
+| `vite.config.ts` build id | Hashes the installed public packages' `dist/`, found by walking `node_modules` | Works as is outside the monorepo. |
+
+### Host references that change when the directory leaves
+
+`package.json` (`build:browser`, `build:browser:v2`, `build:browser:backend`,
+the `typecheck` chain), `scripts/official-plugin-fingerprints.mjs`,
+`tests/infrastructure/i18nOwnership.test.ts`,
+`tests/integration/plansBuildScripts.test.ts` (the release-workflow checks
+for the Browser backend), `src/main/index.ts` (the factory Browser load),
+`src/main/plugins/officialPluginVersions.test.ts`,
+`.github/workflows/release.yml`, and
 `backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md`.
 
 ## What the user does
