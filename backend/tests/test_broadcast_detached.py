@@ -141,3 +141,46 @@ async def test_shutdown_lets_broadcasts_finish_then_cancels_the_stuck(windows: s
 
     assert quick.got == ["late"]
     assert not app._BROADCASTS
+
+
+async def test_shutdown_waits_for_a_handler_running_past_its_requester(windows: set) -> None:
+    """A handler finishing after a hang-up (ws_handlers._outlive_requester)
+    is given the same deadline, along with the broadcast it ends in."""
+    from agent_team_backend import ws_handlers
+
+    window = _Window()
+    windows.add(window)
+
+    async def tail() -> None:
+        await asyncio.sleep(0.05)
+        await app.broadcast(app.make_event("after-write", {}))
+
+    caller = asyncio.create_task(ws_handlers._outlive_requester(tail()))
+    await asyncio.sleep(0)
+    caller.cancel()
+    await app.drain_broadcasts(timeout=1.0)
+
+    assert window.got == ["after-write"]
+    assert not ws_handlers._OUTLIVING_REQUESTER
+
+
+async def test_shutdown_cancels_a_stuck_handler_tail_and_says_so(
+    windows: set, caplog: pytest.LogCaptureFixture,
+) -> None:
+    import time
+
+    from agent_team_backend import ws_handlers
+
+    async def stuck() -> None:
+        await asyncio.sleep(60)
+
+    caller = asyncio.create_task(ws_handlers._outlive_requester(stuck()))
+    await asyncio.sleep(0)
+    caller.cancel()
+    started = time.monotonic()
+    with caplog.at_level("WARNING"):
+        await app.drain_broadcasts(timeout=0.2)
+
+    assert time.monotonic() - started < 1.0
+    assert not ws_handlers._OUTLIVING_REQUESTER
+    assert "still running" in caplog.text
