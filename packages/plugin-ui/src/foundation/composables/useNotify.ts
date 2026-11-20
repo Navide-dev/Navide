@@ -20,17 +20,14 @@ export interface Toast {
   message: string
   type: ToastType
   variant?: ToastVariant
-  /** Header line above the message (the source of the toast). With a
-   *  `variant` the header carries the icon too; without one the icon is shown
-   *  once, beside the message. */
+  /** Header line above the message (the source of the toast). */
   title?: string
   /** Replaces the type's icon glyph. */
   icon?: string
   /** One button on the toast (e.g. Undo). Clicking it runs `run` and
    *  dismisses the toast. Absent means no button. */
   action?: ToastAction
-  /** A second button beside `action` (e.g. Copy next to Restore), on the
-   *  same row. */
+  /** A second button beside `action` (e.g. Copy next to Restore). */
   secondaryAction?: ToastAction
 }
 
