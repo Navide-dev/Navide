@@ -24,6 +24,7 @@ import {
   type ShipReport,
   type ShipSourceKind,
 } from '../composables/useShippedLog'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { blockTourWhile } from '../composables/useTourBlockers'
 import { isValidHhmm, isValidTimeZone } from '../lib/schedulerJobs'
 
@@ -253,7 +254,7 @@ async function runDigest(): Promise<void> {
       >
         <div class="sl-head">
           <span class="sl-title">🚀 {{ t('shippedLog.title') }}</span>
-          <span class="sl-ws" :title="workspace"><b>{{ workspaceName }}</b> · {{ workspace }}</span>
+          <span class="sl-ws" v-truncate><b>{{ workspaceName }}</b> · {{ workspace }}</span>
           <button class="sl-x" data-test="close" :title="t('shippedLog.close')" @click="close">✕</button>
         </div>
 
