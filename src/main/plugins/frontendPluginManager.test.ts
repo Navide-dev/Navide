@@ -658,6 +658,62 @@ describe('backend Host session registration', () => {
     expect(newSocket.sent.map((raw) => JSON.parse(raw).type)).toContain('host.register')
   })
 
+  // The backend reaches the Host (channel proxy lookups, PDF rendering, agent
+  // tools) only through a registered session, so the Host connects as soon as
+  // the backend is ready -- whether or not a plugin view is open yet.
+  it('registers with no plugin running, in the order main reports url then token', () => {
+    const mgr = new FrontendPluginManager()
+    const before = wsMock.FakeNodeWebSocket.instances.length
+    mgr.setBackendWsUrl('ws://backend-no-plugin')
+    mgr.setBackendHostToken('host-token')
+    expect(wsMock.FakeNodeWebSocket.instances.length).toBe(before + 1)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+
+    const registration = socket.sent
+      .map((raw) => JSON.parse(raw) as { type?: string; payload?: unknown })
+      .find((message) => message.type === 'host.register')
+    expect(registration?.payload).toMatchObject({ token: 'host-token' })
+  })
+
+  it('registers again on every reconnect after the socket drops', async () => {
+    vi.useFakeTimers()
+    try {
+      const mgr = new FrontendPluginManager()
+      mgr.setBackendWsUrl('ws://backend-drops')
+      mgr.setBackendHostToken('host-token')
+      expect(wsMock.FakeNodeWebSocket.instances.at(-1)?.url).toBe('ws://backend-drops')
+      const registrations = (socket: InstanceType<typeof wsMock.FakeNodeWebSocket>) =>
+        socket.sent
+          .map((raw) => JSON.parse(raw) as { id: string; type?: string })
+          .filter((message) => message.type === 'host.register')
+
+      // First drop: the registration was answered.
+      const first = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      first.open()
+      const [answered] = registrations(first)
+      first.receive({ id: answered!.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+      await vi.advanceTimersByTimeAsync(0)
+      first.close()
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      // Second drop: the registration was still in flight.
+      const second = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      expect(second).not.toBe(first)
+      second.open()
+      expect(registrations(second)).toHaveLength(1)
+      second.close()
+      await vi.advanceTimersByTimeAsync(4_000)
+
+      const third = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      expect(third).not.toBe(second)
+      third.open()
+      expect(registrations(third)).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('advertises Plans support only after its exact v2 backend activation is registered', () => {
     const mgr = new FrontendPluginManager()
     mgr.open(
