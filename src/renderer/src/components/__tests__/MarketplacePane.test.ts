@@ -1715,7 +1715,6 @@ describe('MarketplacePane', () => {
         'Trust',
         'Capabilities',
         'Downloads',
-        'Status',
       ])
     })
 

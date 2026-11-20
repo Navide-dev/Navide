@@ -331,6 +331,13 @@ const shownVersions = computed(() => {
     ? rows.filter((v) => v.installable && !v.yanked && v.compatible !== false)
     : rows
 })
+// The Status column only when a row has something to say there, so the
+// table fits beside the sidebar.
+const statusColumn = computed(
+  () =>
+    (showCompatibleOnly.value && !installedRow.value) ||
+    shownVersions.value.some((v) => !v.yanked && (!v.installable || v.compatible === false))
+)
 // "Works with" describes one version: the one Install would install, else the
 // Registry's latest. Its platforms and its minimum Navide version, so neither
 // mixes in what only an older version supports.
@@ -709,7 +716,7 @@ watch(
         </header>
 
         <p v-if="riskCaps.length" class="mkt-callout mkt-callout--risk mkt-risk-banner" role="note">
-          <span aria-hidden="true">⚠</span>
+          <span class="mkt-risk-icon" aria-hidden="true">⚠</span>
           <span>{{ riskText }}</span>
         </p>
 
@@ -813,7 +820,7 @@ watch(
                       <th>{{ $t('settings.extensions.marketplace.column.trust') }}</th>
                       <th>{{ $t('settings.extensions.marketplace.column.capabilities') }}</th>
                       <th class="mkt-num">{{ $t('settings.extensions.marketplace.column.downloads') }}</th>
-                      <th>{{ $t('settings.extensions.marketplace.column.status') }}</th>
+                      <th v-if="statusColumn">{{ $t('settings.extensions.marketplace.column.status') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -822,7 +829,13 @@ watch(
                       :key="`${v.version}-${v.target}`"
                       :class="{ 'mkt-yanked': v.yanked, 'mkt-other-target': !v.installable || v.compatible === false }"
                     >
-                      <td><code>{{ v.version }}</code></td>
+                      <td>
+                        <code>{{ v.version }}</code>
+                        <!-- Yanked is marked on the version, as on the website. -->
+                        <span v-if="v.yanked" class="mkt-badge mkt-badge--warn mkt-yanked-tag">
+                          {{ $t('settings.extensions.marketplace.yanked') }}
+                        </span>
+                      </td>
                       <td class="mkt-muted">{{ formatDate(v.published_at) }}</td>
                       <td class="mkt-muted">{{ v.target }}</td>
                       <td>
@@ -851,10 +864,8 @@ watch(
                         </span>
                       </td>
                       <td class="mkt-muted mkt-num">{{ formatCount(v.download_count) }}</td>
-                      <td>
-                        <span v-if="v.yanked" class="mkt-badge mkt-badge--warn">
-                          {{ $t('settings.extensions.marketplace.yanked') }}
-                        </span>
+                      <td v-if="statusColumn">
+                        <span v-if="v.yanked"></span>
                         <span v-else-if="!v.installable" class="mkt-other-target-reason">
                           {{ $t('settings.extensions.marketplace.otherTarget', { target: v.target }) }}
                         </span>
@@ -2308,7 +2319,7 @@ watch(
 @container (min-width: 720px) {
   .mkt-detail-body {
     /* Main column plus a sidebar, as on the Marketplace website. */
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 232px;
     gap: var(--space-7);
   }
   .mkt-detail-side {
@@ -2378,10 +2389,22 @@ watch(
 .mkt-risk-banner {
   margin-top: var(--space-4);
 }
+.mkt-callout > .mkt-risk-icon {
+  flex: none;
+}
 .mkt-shot-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-3);
+}
+.mkt-yanked-tag {
+  display: table;
+  margin-top: 4px;
+}
+.mkt-row-trust,
+.mkt-channel-stable,
+.mkt-channel-pre {
+  white-space: nowrap;
 }
 .mkt-row-caps {
   display: inline-flex;
@@ -2520,7 +2543,7 @@ watch(
   font-variant-numeric: tabular-nums;
 }
 .mkt-versions th {
-  padding: 6px 12px 6px 0;
+  padding: 6px 8px 6px 0;
   border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-size: var(--font-2xs);
@@ -2531,7 +2554,7 @@ watch(
   white-space: nowrap;
 }
 .mkt-versions td {
-  padding: 8px 12px 8px 0;
+  padding: 8px 8px 8px 0;
   border-bottom: 1px solid var(--border-muted);
 }
 .mkt-versions tbody tr {
