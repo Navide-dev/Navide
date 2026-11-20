@@ -5,7 +5,7 @@
   "publishConfig": { "access": "public" },
   "files": ["src", "!src/**/*.test.ts", "!src/**/__tests__"],
   "type": "module",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "scripts": {
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",

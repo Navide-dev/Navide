@@ -1,10 +1,17 @@
 """One Shipped Log report: the ledger and the deploy branch's git history, merged.
 
 Every item names its basis: ``agent`` (recorded with ship_log_record),
-``branch`` (a first-parent commit of the deploy branch) or ``tag`` (a tag
-created in the window). A commit that arrives from more than one source is one
-item, deduplicated by its hash. ``ci`` is reserved for the CI-run source of
-the full version; nothing in the MVP produces it.
+``branch`` (a first-parent commit of the deploy branch), ``tag`` (a tag
+created in the window) or ``hook`` (a deploy command a CLI hook saw an agent
+run, still unconfirmed). A commit that arrives from more than one source is one
+item, deduplicated by its hash. ``ci`` is reserved for a CI-run source;
+nothing produces it yet.
+
+A detected command is only a hint: one that failed, one the user confirmed or
+dismissed, and one the same pane recorded with ship_log_record within
+CONFIRM_WINDOW_S are left out. The user's own line or sensitive mark
+(``ship_override``) replaces the item's, and a ``config`` entry whose ref is a
+registered setting carries that setting's label.
 
 A git commit nobody recorded gets its plain-language line by rule: the
 conventional-commit prefix is dropped and its type picks the verb (``feat`` →
@@ -22,7 +29,10 @@ from agent_team_backend import git_service
 from agent_team_backend.plugins.builtin.navide_shipped_log import messages
 from agent_team_backend.plugins.builtin.navide_shipped_log.ledger import ShipLogLedger, ledger as _default_ledger
 
-BASES = ("agent", "branch", "tag", "ci")
+BASES = ("agent", "branch", "tag", "hook", "ci")
+#: A recorded entry this close to a detected command, from the same pane,
+#: confirms it.
+CONFIRM_WINDOW_S = 30 * 60
 FORMATS = ("text", "json")
 #: The most items one report lists; the count past it is reported.
 MAX_ITEMS = 200
@@ -127,7 +137,8 @@ async def build_report(
     items: list[dict[str, Any]] = []
     for commit in reversed(commits):  # oldest first
         kind, text = plain(commit["subject"], commit["body"])
-        item = {"at": commit["committed_at"], "summary": text, "kind": kind, "bases": ["branch"],
+        item = {"key": f"commit:{commit['hash']}", "at": commit["committed_at"], "summary": text, "kind": kind,
+                "bases": ["branch"],
                 "source_kind": "commit", "hash": commit["hash"], "short_hash": commit["short_hash"],
                 "tags": [], "sensitive": False}
         by_hash[commit["hash"]] = item
@@ -136,7 +147,8 @@ async def build_report(
         item = by_hash.get(tag["commit_hash"])
         if item is None:
             kind, text = plain(tag["subject"])
-            item = {"at": tag["created_at"], "summary": text, "kind": kind, "bases": [],
+            item = {"key": f"commit:{tag['commit_hash']}", "at": tag["created_at"], "summary": text, "kind": kind,
+                    "bases": [],
                     "source_kind": "commit", "hash": tag["commit_hash"], "short_hash": tag["commit_hash"][:7],
                     "tags": [], "sensitive": False}
             by_hash[tag["commit_hash"]] = item
@@ -145,9 +157,11 @@ async def build_report(
             item["bases"].append("tag")
         item["tags"].append(tag["name"])
 
-    recorded = book.entries(workspace_path, int(since.timestamp()), int(until.timestamp()) if until else None)
+    start_ts, end_ts = int(since.timestamp()), int(until.timestamp()) if until else None
+    recorded = book.entries(workspace_path, start_ts, end_ts)
     if recorded.get("disabled"):
         warnings.append(f"the ship log ledger is disabled: {recorded['disabled']}")
+    labels = {c["key"]: c["label"] for c in book.configs(workspace_path, include_removed=True)["configs"]}
     for entry in recorded["entries"]:
         item = _match_commit(entry["ref"], by_hash) if entry["source_kind"] == "commit" else None
         if item is not None:
@@ -157,9 +171,38 @@ async def build_report(
             item["bases"].insert(0, "agent")
             item["sensitive"] = item["sensitive"] or entry["sensitive"]
             continue
-        items.append({"at": entry["at"], "summary": entry["summary"], "kind": "recorded", "bases": ["agent"],
-                      "source_kind": entry["source_kind"], "hash": "", "short_hash": "",
-                      "ref": entry["ref"], "tags": [], "sensitive": entry["sensitive"]})
+        item = {"key": entry["key"], "at": entry["at"], "summary": entry["summary"], "kind": "recorded",
+                "bases": ["agent"], "source_kind": entry["source_kind"], "hash": "", "short_hash": "",
+                "ref": entry["ref"], "tags": [], "sensitive": entry["sensitive"]}
+        if entry["source_kind"] == "config" and entry["ref"] in labels:
+            item["config_label"] = labels[entry["ref"]]
+        items.append(item)
+
+    recorded_by_pane: dict[str, list[int]] = {}
+    for entry in recorded["entries"]:
+        recorded_by_pane.setdefault(entry["pane"], []).append(entry["at"])
+    pending = 0
+    for found in book.detections(workspace_path, start_ts, end_ts)["detections"]:
+        if not found["ok"] or found["status"] != "pending":
+            continue
+        if any(abs(at - found["at"]) <= CONFIRM_WINDOW_S for at in recorded_by_pane.get(found["pane"], ())):
+            continue
+        pending += 1
+        items.append({"key": f"detect:{found['id']}", "at": found["at"], "summary": found["excerpt"],
+                      "kind": "detected", "bases": ["hook"], "source_kind": "other", "hash": "", "short_hash": "",
+                      "tags": [], "sensitive": False, "detection_id": found["id"], "rule": found["rule"],
+                      "pane": found["pane"]})
+
+    overrides = book.overrides(workspace_path)
+    for item in items:
+        mine = overrides.get(item["key"])
+        if not mine:
+            continue
+        if mine["summary"]:
+            item["summary"] = mine["summary"]
+            item["edited"] = True
+        if mine["sensitive"] is not None:
+            item["sensitive"] = mine["sensitive"]
 
     items.sort(key=lambda i: i["at"])
     omitted = max(0, len(items) - MAX_ITEMS)
@@ -167,9 +210,10 @@ async def build_report(
         "since": since.isoformat(timespec="seconds"),
         "until": until.isoformat(timespec="seconds") if until else None,
         "branch": deploy or None,
-        "count": len(items),
+        "count": len(items) - pending,  # shipped items; detected commands are counted apart
         "items": items[-MAX_ITEMS:] if omitted else items,
         "omitted": omitted,
+        "pending_detections": pending,
         "warnings": warnings,
     }
 
@@ -179,7 +223,7 @@ def _time(ts: int, now: datetime | None = None) -> str:
 
 
 def _source(item: dict[str, Any]) -> str:
-    parts = [item["short_hash"]] if item["short_hash"] else [item["source_kind"]]
+    parts = [item["short_hash"]] if item["short_hash"] else [item.get("config_label") or item["source_kind"]]
     parts += item["tags"]
     return " ".join(parts) + " · " + "+".join(item["bases"])
 
@@ -187,22 +231,30 @@ def _source(item: dict[str, Any]) -> str:
 def render_text(report: dict[str, Any], lang: str, *, for_chat: bool, now: datetime | None = None) -> str:
     """One line per item: ``time｜plain line｜source · basis``.
 
-    ``for_chat`` is what leaves the machine: a sensitive item is folded into
-    one count line and no ref is shown. Locally a sensitive item keeps its
-    summary but never its ref.
+    ``for_chat`` is what leaves the machine: a sensitive item and a detected
+    command are each folded into one count line and no ref is shown. Locally
+    a sensitive item keeps its summary but never its ref.
     """
     start = report["since"][:16].replace("T", " ")
-    shown = [i for i in report["items"] if not (for_chat and i["sensitive"])]
-    hidden = len(report["items"]) - len(shown)
+    detected = [i for i in report["items"] if i["kind"] == "detected"]
+    shown = [i for i in report["items"] if not (for_chat and (i["sensitive"] or i["kind"] == "detected"))]
+    hidden = sum(1 for i in report["items"] if for_chat and i["sensitive"] and i["kind"] != "detected")
     if not report["items"]:
         return messages.text(lang, "empty", start=start)
     lines = [messages.text(lang, "head", start=start, count=report["count"])]
     for item in shown:
-        verb = messages.text(lang, f"kind_{item['kind']}") if item["kind"] != "recorded" else ""
-        summary = f"{verb} {item['summary']}".strip() if verb else item["summary"]
+        if item["kind"] == "detected":
+            summary = messages.text(lang, "kind_detected", rule=item["rule"]) + f" {item['summary']}"
+        elif item["kind"] != "recorded" and not item.get("edited"):
+            verb = messages.text(lang, f"kind_{item['kind']}")
+            summary = f"{verb} {item['summary']}".strip()
+        else:
+            summary = item["summary"]
         lines.append(messages.text(lang, "line", time=_time(item["at"], now), text=summary, source=_source(item)))
     if hidden:
         lines.append(messages.text(lang, "sensitive_count", count=hidden))
+    if for_chat and detected:
+        lines.append(messages.text(lang, "pending_detections", count=len(detected)))
     if report["omitted"]:
         lines.append(messages.text(lang, "omitted", count=report["omitted"]))
     return "\n".join(lines)
