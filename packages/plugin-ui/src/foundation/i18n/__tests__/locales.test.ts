@@ -17,7 +17,6 @@ import { describe, expect, it } from 'vitest'
 const UI_DIR = 'packages/plugin-ui/src/foundation/i18n/locales'
 const HOST_DIR = 'src/renderer/src/i18n/locales'
 const PLUGIN_DIRS = [
-  'plugins/navide-mini-ide/src/locales',
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'
 ]

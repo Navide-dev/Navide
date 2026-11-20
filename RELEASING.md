@@ -294,6 +294,13 @@ verified from the official Registry at build time.
    pinned version is not on the Registry or does not verify
    (`node scripts/stage-official-plugin-artifacts.mjs --check-registry`).
 
+navide.mini-ide follows the same steps from
+[Navide-dev/navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide)
+(`--id navide.mini-ide`), without a bridge contract: it uses public
+capabilities only. Its pinned manifest lives in `tests/fixtures/navide-mini-ide/`
+and its plugin-ui strings under `navide-mini-ide` in
+`tests/infrastructure/externalPluginUiKeys.json`.
+
 ## Git recovery switch
 
 If a release needs the retained Git recovery bundle, launch the application

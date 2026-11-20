@@ -266,13 +266,15 @@ describe('the standalone packaged-Plans gate builds every package it stages', ()
   const standalone = runner.slice(runner.indexOf('if (!prepared)'), runner.indexOf('stage-official-plugin-artifacts.mjs'))
   const staged = [...stage.matchAll(/directory: 'dist-plugins\/navide-([a-z-]+)'/g)].map((match) => match[1])
 
-  it('stages the three official packages built here', () => {
-    expect(staged).toEqual(['mini-ide', 'plans', 'browser'])
+  it('stages the two official packages built here', () => {
+    expect(staged).toEqual(['plans', 'browser'])
   })
 
-  it('takes navide.git from the Registry instead of building it', () => {
+  it('takes navide.git and navide.mini-ide from the Registry instead of building them', () => {
     expect(stage).toContain("{ id: 'navide.git', target: 'universal' }")
+    expect(stage).toContain("{ id: 'navide.mini-ide', target: 'universal' }")
     expect(standalone).not.toContain("'build:git:v2'")
+    expect(standalone).not.toContain("'build:mini-ide:v2'")
   })
 
   it.each(staged)('builds navide-%s before staging it', (name) => {

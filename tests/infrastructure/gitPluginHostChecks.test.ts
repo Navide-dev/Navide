@@ -22,13 +22,15 @@ function sourceFiles(root: string, skipTests = false): string[] {
 }
 
 describe('navide.git, Host side', () => {
-  it('keeps the navide.git fixture at the pinned version', () => {
-    // Host tests read the pinned version's manifest and target schema from
-    // tests/fixtures/navide-git: update them with the pin.
-    const manifest = JSON.parse(read('tests/fixtures/navide-git/manifest.json')) as { id: string; version: string }
-    expect(manifest.id).toBe('navide.git')
-    expect(manifest.version).toBe(OFFICIAL_PLUGIN_VERSIONS['navide.git'])
-  })
+  it.each([['navide-git', 'navide.git'], ['navide-mini-ide', 'navide.mini-ide']])(
+    'keeps the %s fixture at the pinned version', (dir, id) => {
+      // Host tests read the pinned version's manifest (and Git's target schema)
+      // from tests/fixtures/<dir>: update them with the pin.
+      const manifest = JSON.parse(read(`tests/fixtures/${dir}/manifest.json`)) as { id: string; version: string }
+      expect(manifest.id).toBe(id)
+      expect(manifest.version).toBe(OFFICIAL_PLUGIN_VERSIONS[id])
+    },
+  )
 
   it('keeps no private feature package system', () => {
     expect(existsSync('packages/features')).toBe(false)

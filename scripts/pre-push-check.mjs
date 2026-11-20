@@ -49,7 +49,7 @@ const BACKEND_SCAN_EXTRA = ['backend/tests/test_cross_platform_test_hygiene.py']
 const ARTIFACT_GUARD = /^plugins\/[^/]+\/tests\//
 // Each App-bundled plugin runs its tests through its own Vitest config; the
 // root config collects only the Host (`unit`) and the workspace packages.
-const PLUGIN_DIRS = ['navide-browser', 'navide-mini-ide', 'navide-plans']
+const PLUGIN_DIRS = ['navide-browser', 'navide-plans']
 const pluginVitest = (dir) => ['pnpm', 'vitest', 'run', '--config', `plugins/${dir}/vitest.config.ts`]
 const pluginOf = (file) => PLUGIN_DIRS.find((dir) => file.startsWith(`plugins/${dir}/`))
 

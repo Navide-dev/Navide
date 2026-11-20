@@ -12,14 +12,15 @@ const factoryRoot = join(outputRoot, 'factory-resources')
 const archivesRoot = join(outputRoot, 'archives')
 const hostTarget = `${process.platform}-${process.arch}`
 
-// navide.git lives in its own repository (Navide-dev/navide-git): the
-// installer carries the version officialPluginVersions.ts pins, as the
-// official Registry signed it, never a local build.
+// First-party plugins that live in their own repositories (Navide-dev/navide-git,
+// Navide-dev/navide-mini-ide): the installer carries the version
+// officialPluginVersions.ts pins, as the official Registry signed it, never a
+// local build.
 const registrySources = [
   { id: 'navide.git', target: 'universal' },
+  { id: 'navide.mini-ide', target: 'universal' },
 ]
 const sources = [
-  { id: 'navide.mini-ide', directory: 'dist-plugins/navide-mini-ide', source: 'plugins/navide-mini-ide', target: 'universal' },
   { id: 'navide.plans', directory: 'dist-plugins/navide-plans', source: 'plugins/navide-plans', target: hostTarget },
   { id: 'navide.browser', directory: 'dist-plugins/navide-browser', source: 'plugins/navide-browser', target: hostTarget },
 ]
