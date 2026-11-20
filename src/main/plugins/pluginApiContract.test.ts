@@ -172,13 +172,13 @@ describe('plugin API version', () => {
   })
 
   it('accepts every first-party manifest', () => {
-    const manifests = readdirSync(join(repoRoot, 'plugins'), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(repoRoot, 'plugins', entry.name, 'manifest.json'))
-      .flatMap((path) => {
-        try { return [readJson(path)] } catch { return [] }
-      })
-    expect(manifests.length).toBeGreaterThanOrEqual(3)
+    // The first-party plugins are built in their own repositories; the
+    // manifests of the versions the App pins are recorded under tests/fixtures.
+    const fixtures = join(repoRoot, 'tests', 'fixtures')
+    const manifests = readdirSync(fixtures, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('navide-'))
+      .map((entry) => readJson(join(fixtures, entry.name, 'manifest.json')))
+    expect(manifests.length).toBeGreaterThanOrEqual(4)
     expect(manifests.filter((manifest) => !isPluginApiSupported(manifest.apiVersion as string))).toEqual([])
   })
 })

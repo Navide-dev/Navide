@@ -1,5 +1,5 @@
 {
-  "_comment": "Values of the pinned navide.plans version (Navide-dev/navide-plans) the Host checks against: update with the pin. planDocDirs: backend/plans_backend.py PLAN_DOC_DIRS; maxFrameBytes: its MAX_FRAME_BYTES; singleWriteMaxJsonBytes: src/planPaging.ts SINGLE_WRITE_MAX_JSON_BYTES; agentSpecs: src/retained/agentSpecs.ts CLI_AGENT_SPECS.",
+  "_comment": "Values of the pinned navide.plans version (Navide-dev/navide-plans) the Host checks against: update with the pin. planDocDirs: backend/plans_backend.py PLAN_DOC_DIRS; maxFrameBytes: its MAX_FRAME_BYTES; singleWriteMaxJsonBytes: src/planPaging.ts SINGLE_WRITE_MAX_JSON_BYTES; agentSpecs: src/retained/agentSpecs.ts CLI_AGENT_SPECS; planDocumentLocations: backend/plans_backend.py PLAN_DOC_DIRS, DOC_SUFFIXES and the _MAX_*/_NOISE_SEGMENTS discovery limits (docs/plugin-contracts/plan-document-locations-v1.json).",
   "planDocDirs": [
     ".agent-team/plans",
     ".agent-team/reports",
@@ -112,5 +112,44 @@
       "label": "Hermes Agent",
       "hint": "generalist"
     }
-  ]
+  ],
+  "planDocumentLocations": {
+    "directoryInventory": [
+      ".agent-team/plans",
+      ".agent-team/reports",
+      ".claude/loop-reports",
+      ".claude/plans",
+      ".cursor/plans",
+      "docs/plans",
+      "docs/reports"
+    ],
+    "supportedExtensions": [
+      ".html",
+      ".plan.md",
+      ".md"
+    ],
+    "maxNestedDepth": 2,
+    "maxNestedRoots": 50,
+    "maxNestedCandidates": 2000,
+    "maxDirectoryEntries": 2000,
+    "noiseSegments": [
+      ".cache",
+      ".gradle",
+      ".idea",
+      ".mypy_cache",
+      ".next",
+      ".nuxt",
+      ".pytest_cache",
+      ".ruff_cache",
+      ".turbo",
+      ".venv",
+      "__pycache__",
+      "build",
+      "dist",
+      "node_modules",
+      "out",
+      "target",
+      "venv"
+    ]
+  }
 }

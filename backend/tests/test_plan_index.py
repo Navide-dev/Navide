@@ -16,6 +16,7 @@ from agent_team_backend.plan_index import (
     PlanIndex,
     _DOC_SUFFIXES,
     _MAX_DIRECTORY_ENTRIES,
+    _MAX_NESTED_CANDIDATES,
     _MAX_NESTED_ROOTS,
     _MAX_ROOT_DEPTH,
     _NOISE_SEGMENTS,
@@ -597,35 +598,36 @@ def test_cache_survives_a_new_index_instance(tmp_path: Path) -> None:
 
 
 def test_plan_document_locations_triple_parity() -> None:
-    """Triple-parity: legacy plan_index.py, packaged plans_backend.py, and pure data fixture."""
+    """Triple-parity: legacy plan_index.py, the pinned navide.plans backend, and pure data fixture.
+
+    navide.plans is built in Navide-dev/navide-plans; its backend's values for
+    the pinned version are recorded in tests/fixtures/navide-plans/contract.json,
+    and that repository checks its sources against the same record.
+    """
     repo_root = Path(__file__).parents[2]
     fixture_path = repo_root / "docs" / "plugin-contracts" / "plan-document-locations-v1.json"
     assert fixture_path.exists(), f"Missing fixture at {fixture_path}"
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
-
-    # Load packaged plans_backend.py
-    backend_path = repo_root / "plugins" / "navide-plans" / "backend" / "plans_backend.py"
-    spec = importlib.util.spec_from_file_location("plans_backend_parity", backend_path)
-    assert spec is not None and spec.loader is not None
-    backend_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(backend_module)
+    contract = json.loads((repo_root / "tests" / "fixtures" / "navide-plans" / "contract.json").read_text(encoding="utf-8"))
+    plugin = contract["planDocumentLocations"]
 
     # 1. Directory inventory
-    assert list(PLAN_DOC_DIRS) == list(backend_module.PLAN_DOC_DIRS) == fixture["directoryInventory"]
+    assert list(PLAN_DOC_DIRS) == plugin["directoryInventory"] == contract["planDocDirs"] == fixture["directoryInventory"]
     assert len(PLAN_DOC_DIRS) == 7
     assert len(set(PLAN_DOC_DIRS)) == len(PLAN_DOC_DIRS)
 
     # 2. Supported extensions
-    assert list(_DOC_SUFFIXES) == list(backend_module.DOC_SUFFIXES) == fixture["supportedExtensions"]
+    assert list(_DOC_SUFFIXES) == plugin["supportedExtensions"] == fixture["supportedExtensions"]
     assert len(_DOC_SUFFIXES) == 3
 
     # 3. Discovery depth, root count limits, and directory entry limits
-    assert _MAX_ROOT_DEPTH == backend_module._MAX_ROOT_DEPTH == fixture["maxNestedDepth"] == 2
-    assert _MAX_NESTED_ROOTS == backend_module._MAX_NESTED_ROOTS == fixture["maxNestedRoots"] == 50
-    assert _MAX_DIRECTORY_ENTRIES == backend_module._MAX_DIRECTORY_ENTRIES == fixture["maxDirectoryEntries"] == 2000
+    assert _MAX_ROOT_DEPTH == plugin["maxNestedDepth"] == fixture["maxNestedDepth"] == 2
+    assert _MAX_NESTED_ROOTS == plugin["maxNestedRoots"] == fixture["maxNestedRoots"] == 50
+    assert _MAX_NESTED_CANDIDATES == plugin["maxNestedCandidates"] == fixture["maxNestedCandidates"] == 2000
+    assert _MAX_DIRECTORY_ENTRIES == plugin["maxDirectoryEntries"] == fixture["maxDirectoryEntries"] == 2000
 
     # 4. Noise segments
-    assert sorted(_NOISE_SEGMENTS) == sorted(backend_module._NOISE_SEGMENTS) == sorted(fixture["noiseSegments"])
+    assert sorted(_NOISE_SEGMENTS) == sorted(plugin["noiseSegments"]) == sorted(fixture["noiseSegments"])
     assert len(_NOISE_SEGMENTS) == 17
 
     # 5. Traversal sort order
