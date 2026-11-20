@@ -126,6 +126,8 @@ MCP_TOOLS = [
     "share_create",
     "share_list",
     "share_revoke",
+    "ship_log_config_list",
+    "ship_log_config_register",
     "ship_log_record",
     "ship_log_report",
     "skills_inspect",

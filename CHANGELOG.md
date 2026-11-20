@@ -7,6 +7,11 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Diagnostics: two ways a pane could go missing after a restart without a trace now leave a warning in `ui_diagnostics` and the error log (`errors.jsonl`). `restore.pane-record-write-failed`: the record of a pane opened by an external `cli_open_agent` was not saved, so the pane will not be restored. `restore.workspace-check-gave-up`: a restored window could not read its workspace's project after every retry and showed it without its panes. Each names only the workspace and the pane; nothing else changes.
+- Shipped Log (0.2.46): a register of a workspace's production settings, by name and by where each one lives, never its value. `ship_log_config_register(key, location, label?, environment?, note?, remove?)` adds, updates or unregisters one and `ship_log_config_list` lists them; a field that looks like a value (`KEY=value`, a URL with a login, a token, key or password) is refused, not masked. `ship_log_record(source_kind="config", ref=<key>)` ties a change to a registered setting, whose label then names it in the report; an unregistered key only adds a warning. The ledger in the workspace's `.agent-team/navide.db` moves to schema 2 (detected deploy commands, the register, your own line or sensitive mark for an item, digest settings); a failed upgrade disables only the ledger, as before. `ship_log_report` gains the `hook` basis and `pending_detections`. The `navide.shipped-log` plugin is now 0.1.1.
+
+### Changed
+
+- Bundled plugins (0.2.46): Navide Browser 1.1.7, Git 1.0.10, Mini-IDE 1.0.9 and Plans 1.1.9. The two new `ship_log_config_*` tool names joined the reserved agent-tool names in `@navide/plugin-contracts`, which every one of these plugins bundles, so their release fingerprints moved; what the plugins do is unchanged.
 
 ### Fixed
 

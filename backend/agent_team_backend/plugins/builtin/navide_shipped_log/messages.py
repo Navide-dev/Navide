@@ -23,6 +23,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "用法：/shipped [今天|昨天|7d|ISO 時間]",
         "no_workspace": "⚠️ 這個聊天綁定的分格沒有工作區，無法查詢上線紀錄",
         "failed": "⚠️ 無法產生上線紀錄：{error}",
+        "kind_detected": "偵測到部署指令（待確認）：{rule}",
+        "pending_detections": "• 另有 {count} 筆偵測到的部署指令待確認（請在 Navide 確認）",
+        "digest_head": "📋 {workspace}｜每日上線摘要",
     },
     "en-US": {
         "head": "🚀 {count} shipped since {start}:",
@@ -36,6 +39,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Usage: /shipped [today|yesterday|7d|ISO time]",
         "no_workspace": "⚠️ The pane bound to this chat has no workspace, so there is no shipped log to show",
         "failed": "⚠️ Could not build the shipped log: {error}",
+        "kind_detected": "Deploy command detected (unconfirmed): {rule}",
+        "pending_detections": "• {count} detected deploy command(s) awaiting confirmation (confirm in Navide)",
+        "digest_head": "📋 {workspace} | Daily shipped digest",
     },
     "ja-JP": {
         "head": "🚀 {start} 以降のリリース {count} 件：",
@@ -49,6 +55,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "使い方：/shipped [today|yesterday|7d|ISO 日時]",
         "no_workspace": "⚠️ このチャットに紐づくペインにワークスペースがないため、リリース記録を表示できません",
         "failed": "⚠️ リリース記録を作成できませんでした：{error}",
+        "kind_detected": "デプロイコマンドを検出（未確認）：{rule}",
+        "pending_detections": "• 検出したデプロイコマンド {count} 件が確認待ち（Navide で確認してください）",
+        "digest_head": "📋 {workspace}｜毎日のリリース要約",
     },
     "zh-CN": {
         "head": "🚀 {start} 起上线 {count} 条：",
@@ -62,6 +71,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "用法：/shipped [今天|昨天|7d|ISO 时间]",
         "no_workspace": "⚠️ 这个聊天绑定的窗格没有工作区，无法查询上线记录",
         "failed": "⚠️ 无法生成上线记录：{error}",
+        "kind_detected": "检测到部署命令（待确认）：{rule}",
+        "pending_detections": "• 另有 {count} 条检测到的部署命令待确认（请在 Navide 确认）",
+        "digest_head": "📋 {workspace}｜每日上线摘要",
     },
     "ko-KR": {
         "head": "🚀 {start} 이후 배포 {count}건:",
@@ -75,6 +87,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "사용법: /shipped [today|yesterday|7d|ISO 시간]",
         "no_workspace": "⚠️ 이 채팅에 연결된 pane에 작업 공간이 없어 배포 기록을 볼 수 없습니다",
         "failed": "⚠️ 배포 기록을 만들 수 없습니다: {error}",
+        "kind_detected": "배포 명령 감지(미확인): {rule}",
+        "pending_detections": "• 확인 대기 중인 배포 명령 {count}건 (Navide에서 확인하세요)",
+        "digest_head": "📋 {workspace} | 일일 배포 요약",
     },
     "es-ES": {
         "head": "🚀 {count} cambios publicados desde {start}:",
@@ -88,6 +103,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Uso: /shipped [today|yesterday|7d|hora ISO]",
         "no_workspace": "⚠️ El pane vinculado a este chat no tiene espacio de trabajo; no hay registro de publicaciones",
         "failed": "⚠️ No se pudo generar el registro de publicaciones: {error}",
+        "kind_detected": "Comando de despliegue detectado (sin confirmar): {rule}",
+        "pending_detections": "• {count} comando(s) de despliegue detectado(s) pendiente(s) de confirmar (confírmalo en Navide)",
+        "digest_head": "📋 {workspace} | Resumen diario de publicaciones",
     },
     "fr-FR": {
         "head": "🚀 {count} mise(s) en production depuis {start} :",
@@ -101,6 +119,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Utilisation : /shipped [today|yesterday|7d|heure ISO]",
         "no_workspace": "⚠️ Le pane lié à cette discussion n’a pas d’espace de travail : aucun journal de mise en production",
         "failed": "⚠️ Impossible de produire le journal de mise en production : {error}",
+        "kind_detected": "Commande de déploiement détectée (non confirmée) : {rule}",
+        "pending_detections": "• {count} commande(s) de déploiement détectée(s) à confirmer (à confirmer dans Navide)",
+        "digest_head": "📋 {workspace} | Résumé quotidien des mises en production",
     },
     "de-DE": {
         "head": "🚀 {count} Auslieferung(en) seit {start}:",
@@ -114,6 +135,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Verwendung: /shipped [today|yesterday|7d|ISO-Zeit]",
         "no_workspace": "⚠️ Der mit diesem Chat verbundene Pane hat keinen Arbeitsbereich, daher gibt es kein Auslieferungsprotokoll",
         "failed": "⚠️ Das Auslieferungsprotokoll konnte nicht erstellt werden: {error}",
+        "kind_detected": "Deploy-Befehl erkannt (unbestätigt): {rule}",
+        "pending_detections": "• {count} erkannte(r) Deploy-Befehl(e) warten auf Bestätigung (in Navide bestätigen)",
+        "digest_head": "📋 {workspace} | Tägliche Release-Zusammenfassung",
     },
     "pt-BR": {
         "head": "🚀 {count} entrega(s) desde {start}:",
@@ -127,6 +151,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Uso: /shipped [today|yesterday|7d|hora ISO]",
         "no_workspace": "⚠️ O pane vinculado a este chat não tem espaço de trabalho, então não há registro de entregas",
         "failed": "⚠️ Não foi possível gerar o registro de entregas: {error}",
+        "kind_detected": "Comando de deploy detectado (não confirmado): {rule}",
+        "pending_detections": "• {count} comando(s) de deploy detectado(s) aguardando confirmação (confirme no Navide)",
+        "digest_head": "📋 {workspace} | Resumo diário de publicações",
     },
     "ru-RU": {
         "head": "🚀 Выпущено с {start}: {count}",
@@ -140,6 +167,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Использование: /shipped [today|yesterday|7d|время ISO]",
         "no_workspace": "⚠️ У pane, привязанного к этому чату, нет рабочей области, журнал выпусков недоступен",
         "failed": "⚠️ Не удалось составить журнал выпусков: {error}",
+        "kind_detected": "Обнаружена команда развёртывания (не подтверждена): {rule}",
+        "pending_detections": "• {count} обнаруженн. команд(ы) развёртывания ждут подтверждения (подтвердите в Navide)",
+        "digest_head": "📋 {workspace} | Ежедневная сводка выпусков",
     },
     "vi-VN": {
         "head": "🚀 {count} thay đổi đã phát hành từ {start}:",
@@ -153,6 +183,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "usage": "Cách dùng: /shipped [today|yesterday|7d|thời gian ISO]",
         "no_workspace": "⚠️ Pane gắn với cuộc trò chuyện này không có không gian làm việc nên không có nhật ký phát hành",
         "failed": "⚠️ Không thể tạo nhật ký phát hành: {error}",
+        "kind_detected": "Phát hiện lệnh triển khai (chưa xác nhận): {rule}",
+        "pending_detections": "• {count} lệnh triển khai đã phát hiện đang chờ xác nhận (xác nhận trong Navide)",
+        "digest_head": "📋 {workspace} | Tóm tắt phát hành hằng ngày",
     },
 }
 

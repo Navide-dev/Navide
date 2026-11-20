@@ -167,7 +167,8 @@ A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 tool cannot read as first-party.
 
 `ship_` holds the `ship_log_*` tools of the built-in `navide.shipped-log`
-backend plugin (0.2.44).
+backend plugin (0.2.44; `ship_log_config_register` and `ship_log_config_list`
+joined in 0.2.46).
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
 pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 80

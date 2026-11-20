@@ -2,7 +2,7 @@
   "name": "@navide/navide-mini-ide",
   "private": true,
   "type": "module",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "scripts": {
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",

@@ -238,8 +238,11 @@ CHANNEL_CORE_TOOLS = frozenset({
 #: No other plan_* or skills_* tool changed.
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
 #: The same for the ship_log_* tools the built-in Shipped Log package
-#: (navide.shipped-log) installs, new in 0.2.44.
-SHIPPED_LOG_TOOLS_SHA256 = "6b200031b48f02c571e3907fedea3352a362fe4cd0eebe19fc8a233c1f808ff5"
+#: (navide.shipped-log) installs, new in 0.2.44. Re-pinned in 0.2.46 (previous
+#: pin 6b200031…) for the full version: ship_log_config_register and
+#: ship_log_config_list are new, ship_log_record's ref names a registered
+#: setting and ship_log_report reports the hook basis and pending_detections.
+SHIPPED_LOG_TOOLS_SHA256 = "78109418e0170fadef2b35897e3122c8ddc2eea82f2d48a3ab86048fdf172903"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],
