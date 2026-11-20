@@ -752,7 +752,13 @@ def _wire_command(
                 log.warning("%s for %s is unusable, left unchanged: %s", wiring.config_env, agent_key, err)
                 errors.append(f"{wiring.config_env} is not a valid JSON object ({err}); left unchanged")
         return command
-    if not wiring.flag or str(view) in text:
+    if not wiring.flag:
+        return command
+    if wiring.flag_needs_trust:
+        from agent_team_backend.convenience_wiring import trust_claude_skills_view_gated
+
+        trust_claude_skills_view_gated(view, env)
+    if str(view) in text:
         return command
     suffix = " ".join(
         f"{wiring.flag} {osplat.paths.quote_arg(value)}" for value in flag_values(wiring, view, cwd)

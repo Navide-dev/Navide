@@ -1683,9 +1683,13 @@ SPEC = VendorSpec(
     # --add-dir adds another project directory, and Claude Code discovers a
     # project's skills below .claude/skills — so the view has to carry that
     # layout for the flag to reach them.
+    # Since 2.1.32x an --add-dir directory with no trust record stops a new
+    # session on "Adding a new directory" (verified against 2.1.329), so the
+    # view is pre-trusted the way the CLI itself says to.
     skills_wiring=SkillsWiring(
         flag="--add-dir",
         view_layout=(".claude", "skills"),
+        flag_needs_trust=True,
     ),
     label="Claude Code (Anthropic)",
     # `--mcp-config` takes a literal JSON string as well as a path, and servers

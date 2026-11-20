@@ -110,6 +110,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `grok.folder-trust` | grok | rows in `~/.grok/trusted_folders.toml` for folders a Grok pane was told to trust (see below) | yes | every new or rebuilt Grok pane asks you to trust the same folder again |
+| `claude.skills-trust` | claude | one record, `projects[<Navide data>/runtime/skills-views/claude].hasTrustDialogAccepted`, in the `.claude.json` a Claude pane uses (`~/.claude.json`, or an account's own Claude folder), written under Claude Code's config lock only when it is missing; no other folder is trusted | yes | every new Claude pane with delivered skills first asks "Adding a new directory" about Navide's skills folder |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
 | `credentials.auto-repair` | all | live CLI login (Keychain, `~/.claude.json`, vendor credential files) | yes | a pane can start signed out after an account switch went wrong |

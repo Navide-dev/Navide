@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml : quand un pane Grok enregistre que vous avez fait confiance à un dossier, Navide ajoute l’entrée de ce dossier à la fin de ce fichier. Seul l’espace de travail dans lequel le pane a été ouvert, ou un dossier qu’il contient, est partagé avec ~/.grok. Seuls les dossiers que le fichier ne mentionne pas encore sont ajoutés ; vos propres entrées, commentaires et mise en forme ne sont jamais modifiés. Le fichier est sauvegardé avant chaque modification, et la désactivation supprime exactement le texte ajouté par Navide, le fichier redevient donc tel qu’il était (ou est supprimé si Navide l’a créé)",
         "cost": "Un dossier auquel vous avez fait confiance dans un pane Grok fait l’objet d’une nouvelle demande dans chaque pane Grok nouveau ou reconstruit."
       },
+      "claude_skills-trust": {
+        "name": "Dossier de skills Claude approuvé",
+        "benefit": "Les nouveaux volets Claude s'ouvrent directement sur la saisie au lieu de demander d'abord s'il faut faire confiance au dossier de skills de Navide.",
+        "purpose": "Les volets Claude ne demandent plus de faire confiance au dossier par lequel Navide fournit les skills",
+        "writes": "~/.claude.json (ou le .claude.json du dossier Claude propre à un compte) : Navide ajoute un seul enregistrement de confiance, projects[<données Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, pour le dossier de liens de skills qu'il construit et transmet à chaque volet Claude avec --add-dir. Aucun autre dossier n'est approuvé et le reste du fichier est conservé. L'écriture se fait sous le verrou de configuration de Claude Code, seulement si l'enregistrement manque ; le fichier est sauvegardé avant, et la désactivation retire exactement cet enregistrement",
+        "cost": "Chaque nouveau volet Claude qui reçoit des skills demande d'abord « Adding a new directory » pour le dossier de skills de Navide."
+      },
       "cursor_project-mcp": {
         "name": "Outils MCP de Navide pour Cursor",
         "benefit": "Les panes Cursor reçoivent les outils MCP de Navide, comme la messagerie, les plans et la planification.",

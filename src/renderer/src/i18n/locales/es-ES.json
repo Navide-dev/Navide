@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: cuando un pane de Grok registra que confiaste en una carpeta, Navide añade la entrada de esa carpeta al final de este archivo. Solo se comparte con ~/.grok el área de trabajo en la que se abrió el pane, o una carpeta dentro de ella. Solo se añaden las carpetas que el archivo aún no menciona; tus propias entradas, comentarios y formato nunca se modifican. El archivo se copia antes de cada cambio, y al desactivar esta función se quita exactamente el texto que añadió Navide, así que el archivo vuelve a estar como estaba (o se elimina si lo creó Navide)",
         "cost": "Una carpeta en la que confiaste en un pane de Grok se vuelve a preguntar en cada pane de Grok nuevo o reconstruido."
       },
+      "claude_skills-trust": {
+        "name": "Carpeta de skills de Claude de confianza",
+        "benefit": "Los nuevos paneles de Claude se abren directamente en la entrada en lugar de preguntar primero si confiar en la carpeta de skills de Navide.",
+        "purpose": "Los paneles de Claude no piden confiar en la carpeta con la que Navide entrega skills",
+        "writes": "~/.claude.json (o el .claude.json de la carpeta de Claude propia de una cuenta): Navide añade un único registro de confianza, projects[<datos de Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, para la carpeta de enlaces de skills que crea y entrega a cada panel de Claude con --add-dir. No se confía en ninguna otra carpeta y el resto del archivo se conserva. Se escribe bajo el bloqueo de configuración del propio Claude Code y solo si falta el registro; antes se hace una copia de seguridad, y al desactivarlo se elimina exactamente ese registro",
+        "cost": "Cada nuevo panel de Claude que recibe skills pregunta primero «Adding a new directory» sobre la carpeta de skills de Navide."
+      },
       "cursor_project-mcp": {
         "name": "Herramientas MCP de Navide para Cursor",
         "benefit": "Los panes de Cursor obtienen las herramientas MCP de Navide, como mensajería, planes y programación.",

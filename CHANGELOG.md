@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Claude panes: a new Claude pane could stop before its first turn on "Adding a new directory: …/runtime/skills-views/claude — This session hasn't worked here before", which also left `cli_open_agent` and `cli_send` waiting on it. Claude Code 2.1.32x asks about every `--add-dir` directory that has no trust record, and Navide hands every Claude pane its managed-skills folder that way. Navide now records that one folder as trusted the way Claude Code itself says to, `projects[<folder>].hasTrustDialogAccepted` in the `.claude.json` the pane uses (`~/.claude.json`, or an account's own Claude folder), under Claude Code's own config lock and only when the record is missing. No other folder is trusted. This is the new convenience feature `claude.skills-trust`: the file is backed up first, the write is announced, and turning the feature off removes exactly that record.
+
 ## [0.2.45] — 2026-11-20
 
 ### Added
