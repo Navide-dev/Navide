@@ -73,7 +73,7 @@ simply missing at runtime.
 |---|---|---|
 | A panel beside the panes | view `location`: `left`, `right`, `top` or `bottom` | [navide-git](https://github.com/Navide-dev/navide-git) (`left`) |
 | A full tab in the stage tab bar | view `location: "main"` | the `init` scaffold |
-| A separate window | view `location: "window"` | `plugins/navide-mini-ide` |
+| A separate window | view `location: "window"` | [navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide) |
 | Read or write workspace files | `permissions.system: ["fs"]`, `fs.*` capabilities; narrow with `permissions.scopes.fs` | `plugins/navide-plans` (scoped `fs`) |
 | Run a command | `permissions.shell: "allowlist"` (git, gh, glab) or `{"mode": "allowlist", "executables": ["npm"]}` for other executables, then `shell.run` | [navide-git](https://github.com/Navide-dev/navide-git); spec, "Declared executables" |
 | Call a web API from the view | `permissions.network: {"hosts": ["api.example.com"]}`, then `fetch` in the view | spec, "Network hosts" |

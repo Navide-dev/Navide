@@ -11,7 +11,6 @@ import {
 
 const sourceDirs: Record<string, string> = {
   'navide.browser': 'plugins/navide-browser',
-  'navide.mini-ide': 'plugins/navide-mini-ide',
   'navide.plans': 'plugins/navide-plans',
 }
 
@@ -24,9 +23,9 @@ describe('OFFICIAL_PLUGIN_VERSIONS', () => {
       .toEqual([...Object.keys(sourceDirs), ...REGISTRY_SOURCED_OFFICIAL_PLUGINS].sort())
   })
 
-  it('takes navide.git from the Registry, not from a directory here', () => {
-    expect(REGISTRY_SOURCED_OFFICIAL_PLUGINS).toEqual(['navide.git'])
-    expect(Object.keys(sourceDirs)).not.toContain('navide.git')
+  it('takes navide.git and navide.mini-ide from the Registry, not from a directory here', () => {
+    expect(REGISTRY_SOURCED_OFFICIAL_PLUGINS).toEqual(['navide.git', 'navide.mini-ide'])
+    for (const id of REGISTRY_SOURCED_OFFICIAL_PLUGINS) expect(Object.keys(sourceDirs)).not.toContain(id)
   })
 
   it.each(Object.entries(sourceDirs))('%s equals its source manifest and package.json', (id, dir) => {

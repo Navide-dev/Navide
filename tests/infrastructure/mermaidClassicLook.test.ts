@@ -36,7 +36,6 @@ const calls = roots.flatMap(sourceFiles).flatMap((path) => {
 it('finds every mermaid.initialize call site', () => {
   // A scan that matches nothing would pass the check below vacuously.
   expect(calls.map((call) => call.file).sort()).toEqual([
-    'plugins/navide-mini-ide/src/editor/PlanFileView.vue',
     'plugins/navide-plans/src/retained/PlanMarkdownBody.vue',
     'src/renderer/src/editor/PlanFileView.vue',
     'src/renderer/src/editor/PlanMarkdownBody.vue',

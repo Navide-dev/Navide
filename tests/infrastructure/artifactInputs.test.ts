@@ -21,7 +21,6 @@ function cacheFixture() {
   file('package.json', '{}')
   file('pnpm-lock.yaml')
   for (const name of ['plugin-contracts', 'plugin-sdk', 'plugin-ui']) file(`packages/${name}/src/index.ts`)
-  file('plugins/navide-mini-ide/src/App.vue')
   const build = vi.fn(() => {
     for (const path of missingArtifactInputs(root)) file(path, 'built fixture')
     file('packages/plugin-ui/dist/assets/editor.worker.js', 'built worker')
@@ -38,8 +37,7 @@ it('reuses an unchanged local artifact build', () => {
 
 it.each([
   'packages/plugin-contracts/src/index.ts', 'packages/plugin-sdk/tsconfig.build.json',
-  'packages/plugin-ui/src/index.ts', 'plugins/navide-mini-ide/src/App.vue',
-  'plugins/navide-mini-ide/vite.config.ts', 'plugins/navide-mini-ide/manifest.json',
+  'packages/plugin-ui/src/index.ts',
   'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'bun.lock', 'bunfig.toml', 'tsconfig.web.json', '.env.production',
   'tests/support/publicPackagesSetup.ts', 'node_modules/vite/package.json',
 ])('rebuilds after changing build input %s', (path) => {
@@ -64,7 +62,7 @@ it.each(['NAVIDE_PLUGIN_ARTIFACT_VERSION', 'VITE_FEATURE', 'npm_config_user_agen
 it.each(['remove', 'modify'])('rebuilds when an output is damaged: %s', (damage) => {
   const { root, file, build } = cacheFixture()
   prepareArtifactInputs(root, build)
-  if (damage === 'remove') rmSync(join(root, 'dist-plugins/navide-mini-ide/frontend/window/index.html'))
+  if (damage === 'remove') rmSync(join(root, 'packages/plugin-ui/dist/editor/index.js'))
   else file('packages/plugin-ui/dist/assets/editor.worker.js', 'corrupted worker')
   prepareArtifactInputs(root, build)
   expect(build).toHaveBeenCalledTimes(2)
@@ -107,7 +105,7 @@ it('uses prepared outputs without rebuilding or requiring a local stamp', () => 
   expect(build).not.toHaveBeenCalled()
 })
 
-it('requires real public entrypoints and the staged Mini IDE before reusing a build', () => {
+it('requires real public entrypoints before reusing a build', () => {
   const root = mkdtempSync(join(tmpdir(), 'navide-artifact-inputs-'))
   try {
     mkdirSync(join(root, 'packages/plugin-ui/dist'), { recursive: true })
@@ -116,16 +114,14 @@ it('requires real public entrypoints and the staged Mini IDE before reusing a bu
     const inputs = [
       'packages/plugin-contracts/dist/index.js', 'packages/plugin-sdk/dist/index.js',
       'packages/plugin-ui/dist/index.js', 'packages/plugin-ui/dist/editor/index.js',
-      'dist-plugins/navide-mini-ide/manifest.json',
-      'dist-plugins/navide-mini-ide/frontend/window/index.html',
     ]
     for (const input of inputs) {
       mkdirSync(dirname(join(root, input)), { recursive: true })
       writeFileSync(join(root, input), 'built fixture')
     }
     expect(missingArtifactInputs(root)).toEqual([])
-    rmSync(join(root, inputs[5]))
-    expect(missingArtifactInputs(root)).toEqual([inputs[5]])
+    rmSync(join(root, inputs[3]))
+    expect(missingArtifactInputs(root)).toEqual([inputs[3]])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

@@ -10,14 +10,14 @@
 export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object.freeze({
   'navide.browser': '1.1.7',
   'navide.git': '1.0.11',
-  'navide.mini-ide': '1.0.9',
+  'navide.mini-ide': '1.0.10',
   'navide.plans': '1.1.9',
 })
 
 /** First-party plugins developed in their own repositories: the installer
  * carries the pinned version as the official Registry signed it
  * (scripts/stage-official-plugin-artifacts.mjs). */
-export const REGISTRY_SOURCED_OFFICIAL_PLUGINS: readonly string[] = ['navide.git']
+export const REGISTRY_SOURCED_OFFICIAL_PLUGINS: readonly string[] = ['navide.git', 'navide.mini-ide']
 
 /** The navide.git bridge contract version the pinned navide.git was built
  *  against (its src/git-feature/gitBridgeContract.json). Raise it with the

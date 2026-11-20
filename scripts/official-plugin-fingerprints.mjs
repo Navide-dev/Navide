@@ -49,16 +49,12 @@ export const WORKSPACE_PACKAGES = {
 // plugin-sdk, plugin-sdk imports plugin-contracts at runtime).
 // tests/infrastructure/officialPluginFingerprints.test.ts derives the same
 // closure from the import statements and fails when this table falls behind.
-// navide.git is not here: it is built in its own repository and the installer
-// takes it from the Registry, whose versions are immutable.
+// navide.git and navide.mini-ide are not here: they are built in their own
+// repositories and the installer takes them from the Registry, whose versions
+// are immutable.
 export const OFFICIAL_PLUGIN_SOURCES = {
   'navide.browser': {
     directory: 'plugins/navide-browser',
-    packages: ['@navide/plugin-contracts', '@navide/plugin-sdk', '@navide/plugin-ui'],
-    extra: [],
-  },
-  'navide.mini-ide': {
-    directory: 'plugins/navide-mini-ide',
     packages: ['@navide/plugin-contracts', '@navide/plugin-sdk', '@navide/plugin-ui'],
     extra: [],
   },

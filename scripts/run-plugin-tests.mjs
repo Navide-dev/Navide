@@ -11,7 +11,7 @@
 // directory name so each run can write its own report.
 import { run, testEnvironment } from './test-process.mjs'
 
-export const PLUGIN_DIRS = ['navide-browser', 'navide-mini-ide', 'navide-plans']
+export const PLUGIN_DIRS = ['navide-browser', 'navide-plans']
 
 const args = process.argv.slice(2).filter((arg) => arg !== '--')
 const skipAt = args.indexOf('--skip')
