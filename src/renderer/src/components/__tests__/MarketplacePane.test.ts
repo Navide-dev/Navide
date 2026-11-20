@@ -699,6 +699,61 @@ describe('MarketplacePane', () => {
     expect(wrapper.get('.mkt-no-readme').text()).toContain('no README')
   })
 
+  it('leaves the skeleton for the error state when the detail request times out, and retry succeeds', async () => {
+    const api = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockRejectedValueOnce(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        .mockResolvedValue(demoDetail()),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.mkt-detail-skeleton').exists()).toBe(false)
+    expect(wrapper.get('.mkt-detail-error').text()).toContain('timeout')
+
+    await wrapper.get('.mkt-detail-error .mkt-retry').trigger('click')
+    await flushPromises()
+    expect(api.marketplaceDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.mkt-detail-error').exists()).toBe(false)
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Demo')
+  })
+
+  it('never lets an older detail answer overwrite the one opened after it', async () => {
+    let answerFirst: (value: unknown) => void = () => {}
+    const other = { namespace: 'acme', name: 'other', identity: 'acme.other', display_name: 'Other', description: null, categories: [], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false }
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          { namespace: 'acme', name: 'demo', identity: 'acme.demo', display_name: 'Demo', description: null, categories: [], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false },
+          other,
+        ],
+        total: 2,
+        offset: 0,
+        limit: 20,
+      }),
+      marketplaceDetail: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((resolve) => { answerFirst = resolve }))
+        .mockResolvedValueOnce(demoDetail({ name: 'other', identity: 'acme.other', display_name: 'Other' })),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-back').trigger('click')
+    await wrapper.get('[data-id="acme.other"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Other')
+
+    answerFirst(demoDetail())
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail').attributes('data-detail-id')).toBe('acme.other')
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Other')
+    expect(wrapper.get('.mkt-detail-title').text()).not.toContain('Demo')
+  })
+
   it('offers Update on the Extensions page and routes it through the trust dialog', async () => {
     const api = mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
