@@ -127,6 +127,12 @@ APFS copy-on-write clone, so it takes seconds and no extra disk until the guest 
 #   revert -> start -> macos-up.sh -> guest/macsmoke.py (wizard, first pane) -> collect -> stop -> revert, timed
 ```
 
+A cold-start check (quit the app, start it again) runs `guest/restorecheck.py <root> before` while the first pane is
+up and `guest/restorecheck.py <root> cold-1` (`cold-2`, ...) after each start, with the app up. It writes
+`restore-<label>.json`: the workspace's project row from `wm/.agent-team/navide.db` (pane names, origin, spawn status
+only), the `restore.*` warnings from the app's `logs/errors.jsonl`, and the window's `ui_diagnostics`. Collect those
+files with the rest; without them a pane missing after a restart cannot be told apart from one never recorded.
+
 The test account is the image's own `admin`, which logs on to the desktop by itself, so `open -a` over ssh starts
 the app in that session. `tart run --no-graphics` runs detached on the VM host (`~/vm-retest-tart/run.pid` there),
 so no Fusion or tart window opens.

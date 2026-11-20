@@ -230,6 +230,7 @@ import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/s
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
+import { notePaneRecordWrite, workspaceCheckGaveUp } from './lib/restoreDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
@@ -3777,7 +3778,10 @@ async function createStandaloneRequestedPane(
     profileId: req.profileId,
   })
   if (!paneId) return null
-  void sendQuiet<ProjectPayload>('manual_pane.spawn', {
+  // Still not awaited (the spawn answers its caller first), but a record that
+  // never reached the project document is recorded: the pane would be missing
+  // after the next restart with nothing to say why (lib/restoreDiagnostics.ts).
+  void notePaneRecordWrite(sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: workspacePath,
     pane_id: paneId,
     agent: req.agentKey,
@@ -3799,7 +3803,7 @@ async function createStandaloneRequestedPane(
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
     ...(req.profileId ? { profile_id: req.profileId } : {}),
-  })
+  }), { workspacePath, name: req.name, paneId }, recordDiagnostic)
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
     pane_id: paneId,
@@ -14513,6 +14517,9 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
       }
       return
     }
+    // Out of retries: the window goes on as if the workspace were new, with
+    // none of its panes. Say so, or a missing restore leaves no trace.
+    recordDiagnostic(workspaceCheckGaveUp(path, workspaceCheckRetries + 1))
   } else {
     workspaceCheckRetries = 0
   }
