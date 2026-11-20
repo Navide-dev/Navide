@@ -9442,7 +9442,8 @@
       "locked-title": "アプリが管理するシステムジョブです。その workspace の自己改善パネルから変更してください",
       "managed-by": "workspace で管理",
       "name": "自己改善 · {workspace}",
-      "locked-title-shipped-log": "App が管理するシステムスケジュール：そのワークスペースのリリース記録パネルで変更してください"
+      "locked-title-shipped-log": "App が管理するシステムスケジュール：そのワークスペースのリリース記録パネルで変更してください",
+      "name-shipped-log": "リリース記録ダイジェスト · {workspace}"
     },
     "add": "＋ 新規",
     "empty": "スケジュールされたジョブはまだありません",
@@ -10225,6 +10226,9 @@
       "empty": "チャンネルに接続されているペインはありません。",
       "disconnect": "切断",
       "disconnect-label": "{pane} と {channel} の接続を切断",
+      "disconnect-confirm-text": "切断すると、{channel} には {pane} のメッセージが届かなくなり、チャットからこの会話を再開することもできなくなります。元に戻すには再度バインドが必要です。",
+      "disconnect-confirm": "切断する",
+      "disconnect-cancel": "キャンセル",
       "go-to": "{pane} へ移動",
       "auto-child": "自動サブトピック",
       "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。",

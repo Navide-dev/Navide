@@ -9442,7 +9442,8 @@
       "locked-title": "A system job owned by the app: change it from that workspace's self-evolution panel",
       "managed-by": "Managed by the workspace",
       "name": "Self-evolution · {workspace}",
-      "locked-title-shipped-log": "A system schedule kept by the App: change it in that workspace's Shipped Log panel"
+      "locked-title-shipped-log": "A system schedule kept by the App: change it in that workspace's Shipped Log panel",
+      "name-shipped-log": "Shipped Log digest · {workspace}"
     },
     "add": "+ New",
     "empty": "No scheduled jobs yet",
@@ -10225,6 +10226,9 @@
       "empty": "No pane is linked to a channel yet.",
       "disconnect": "Disconnect",
       "disconnect-label": "Disconnect {pane} from {channel}",
+      "disconnect-confirm-text": "After closing, {channel} stops getting messages from {pane} and can no longer wake this conversation. To link it again you have to bind it anew.",
+      "disconnect-confirm": "Close connection",
+      "disconnect-cancel": "Cancel",
       "go-to": "Go to {pane}",
       "auto-child": "Auto sub-topic",
       "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too.",

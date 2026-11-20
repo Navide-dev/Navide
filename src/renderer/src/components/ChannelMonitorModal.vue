@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import type { ChannelBinding, ChannelOverviewBinding, ChannelsStore } from '../composables/useChannels'
 import { formatChannelIdentity } from '../lib/channelIdentity'
@@ -125,12 +125,19 @@ const groups = computed<Group[]>(() => {
   return tops.map((b) => ({ ...toRow(b), children: children.get(b.pane_id) ?? [] }))
 })
 
+/** Closing a link cannot be undone (a dormant pane can never be woken again),
+ *  so the button only opens a confirmation under its row. */
+const confirming = ref<string | null>(null)
+
 function onKeyDown(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && props.open) emit('close')
+  if (e.key !== 'Escape' || !props.open) return
+  if (confirming.value) confirming.value = null
+  else emit('close')
 }
 watch(
   () => props.open,
   (open) => {
+    confirming.value = null
     if (open) void props.store.loadOverview()
     if (open) window.addEventListener('keydown', onKeyDown)
     else window.removeEventListener('keydown', onKeyDown)
@@ -140,6 +147,7 @@ watch(
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 function disconnect(row: Row): void {
+  confirming.value = null
   void props.store.unbind(row.binding.pane_id, row.paneName)
 }
 
@@ -231,8 +239,32 @@ async function wakeRow(row: Row): Promise<void> {
               type="button"
               data-testid="channel-monitor-unlink"
               :aria-label="t('channels.monitor.disconnect-label', { pane: row.pane, channel: row.channel })"
-              @click="disconnect(row)"
+              :aria-expanded="confirming === row.binding.pane_id"
+              @click="confirming = row.binding.pane_id"
             >{{ t('channels.monitor.disconnect') }}</button>
+          </div>
+          <div
+            v-if="confirming === row.binding.pane_id"
+            class="cmon-confirm"
+            role="alertdialog"
+            :aria-label="t('channels.monitor.disconnect-label', { pane: row.pane, channel: row.channel })"
+            data-testid="channel-monitor-unlink-confirm"
+          >
+            <p class="cmon-confirm-text">{{ t('channels.monitor.disconnect-confirm-text', { pane: row.pane, channel: row.channel }) }}</p>
+            <div class="cmon-confirm-actions">
+              <button
+                class="cmon-unlink"
+                type="button"
+                data-testid="channel-monitor-unlink-cancel"
+                @click="confirming = null"
+              >{{ t('channels.monitor.disconnect-cancel') }}</button>
+              <button
+                class="cmon-unlink cmon-danger"
+                type="button"
+                data-testid="channel-monitor-unlink-confirm-button"
+                @click="disconnect(row)"
+              >{{ t('channels.monitor.disconnect-confirm') }}</button>
+            </div>
           </div>
           <ul v-if="row.children.length" class="cmon-children">
             <li v-for="child in row.children" :key="child.binding.pane_id" class="cmon-row cmon-child" data-testid="channel-monitor-child">
@@ -393,6 +425,16 @@ async function wakeRow(row: Row): Promise<void> {
 .cmon-unlink:hover { background: var(--bg-muted); color: var(--danger-fg); }
 .cmon-unlink:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px; }
 .cmon-wake { color: var(--accent-fg); }
+.cmon-confirm {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-control);
+  background: var(--bg-base);
+}
+.cmon-confirm-text { margin: 0 0 8px; font-size: 12px; color: var(--text-primary); white-space: normal; }
+.cmon-confirm-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.cmon-danger { color: var(--danger-fg); border-color: var(--danger-fg); font-weight: 600; }
 .cmon-wake:hover { color: var(--accent-fg); }
 .cmon-wake:disabled { cursor: progress; opacity: 0.7; }
 .cmon-dormant { border-style: dashed; }

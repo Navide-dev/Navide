@@ -9442,7 +9442,8 @@
       "locked-title": "Ein Systemauftrag der App: Ändern Sie ihn im Selbstentwicklungs-Panel dieses Arbeitsbereichs",
       "managed-by": "Vom Arbeitsbereich verwaltet",
       "name": "Selbstentwicklung · {workspace}",
-      "locked-title-shipped-log": "Von der App verwalteter Systemplan: nur im Release-Protokoll dieses Arbeitsbereichs änderbar"
+      "locked-title-shipped-log": "Von der App verwalteter Systemplan: nur im Release-Protokoll dieses Arbeitsbereichs änderbar",
+      "name-shipped-log": "Release-Protokoll-Zusammenfassung · {workspace}"
     },
     "add": "+ Neu",
     "empty": "Noch keine geplanten Aufträge",
@@ -10225,6 +10226,9 @@
       "empty": "Noch ist kein Bereich mit einem Kanal verknüpft.",
       "disconnect": "Trennen",
       "disconnect-label": "{pane} von {channel} trennen",
+      "disconnect-confirm-text": "Danach erhält {channel} keine Nachrichten mehr von {pane} und kann diese Unterhaltung nicht mehr aufwecken. Zum erneuten Verbinden muss neu verknüpft werden.",
+      "disconnect-confirm": "Verbindung trennen",
+      "disconnect-cancel": "Abbrechen",
       "go-to": "Zu {pane} wechseln",
       "auto-child": "Automatisches Unterthema",
       "auto-child-hint": "Automatisch für einen untergeordneten Bereich erstellt. Beim Trennen des übergeordneten Bereichs wird er ebenfalls geschlossen.",

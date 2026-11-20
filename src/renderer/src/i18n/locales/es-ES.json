@@ -9442,7 +9442,8 @@
       "locked-title": "Una tarea del sistema propiedad de la app: cámbiala desde el panel de autoevolución de esa área de trabajo",
       "managed-by": "Gestionada por el área de trabajo",
       "name": "Autoevolución · {workspace}",
-      "locked-title-shipped-log": "Programación del sistema gestionada por la App: cámbiala en el panel Registro de publicaciones de ese espacio de trabajo"
+      "locked-title-shipped-log": "Programación del sistema gestionada por la App: cámbiala en el panel Registro de publicaciones de ese espacio de trabajo",
+      "name-shipped-log": "Resumen del registro de publicaciones · {workspace}"
     },
     "add": "+ Nueva",
     "empty": "Aún no hay tareas programadas",
@@ -10225,6 +10226,9 @@
       "empty": "Aún no hay ningún pane vinculado a un canal.",
       "disconnect": "Desconectar",
       "disconnect-label": "Desconectar {pane} de {channel}",
+      "disconnect-confirm-text": "Después, {channel} deja de recibir mensajes de {pane} y ya no puede reactivar esta conversación. Para volver a conectarlo hay que vincularlo de nuevo.",
+      "disconnect-confirm": "Desconectar",
+      "disconnect-cancel": "Cancelar",
       "go-to": "Ir a {pane}",
       "auto-child": "Subtema automático",
       "auto-child-hint": "Creado automáticamente para un pane hijo. Al desconectar el pane padre también se cierra.",
