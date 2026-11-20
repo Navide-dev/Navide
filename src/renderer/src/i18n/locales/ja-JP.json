@@ -9402,7 +9402,8 @@
       "manage": "workspace で管理 →",
       "locked-title": "アプリが管理するシステムジョブです。その workspace の自己改善パネルから変更してください",
       "managed-by": "workspace で管理",
-      "name": "自己改善 · {workspace}"
+      "name": "自己改善 · {workspace}",
+      "locked-title-shipped-log": "App が管理するシステムスケジュール：そのワークスペースのリリース記録パネルで変更してください"
     },
     "add": "＋ 新規",
     "empty": "スケジュールされたジョブはまだありません",
@@ -9435,7 +9436,11 @@
       "interrupted": "スキップ：中断",
       "budget_global": "スキップ：agent の 1 日の合計に到達",
       "expired": "期限切れ：agent のジョブが 7 日間更新されていません",
-      "unknown": "スキップ"
+      "unknown": "スキップ",
+      "empty": "スキップ：リリースなし",
+      "no_chat": "スキップ：紐づいた個別チャットがありません",
+      "plugin_disabled": "スキップ：リリース記録が無効です",
+      "workspace_gone": "スキップ：ワークスペースのフォルダがありません"
     },
     "fail-reason": {
       "no_window": "この job の workspace を開いている Navide ウィンドウがありません。workspace を開いてから、もう一度実行してください。",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "コンテナ内の CLI は停止しました。再接続すると同じコンテナで新しいセッションを開きます。",
     "reconnect": "再接続",
     "close-pane": "ペインを閉じる"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "リリース記録"
+    },
+    "title": "リリース記録",
+    "close": "閉じる",
+    "loading": "読み込み中…",
+    "window": {
+      "today": "今日",
+      "yesterday": "昨日",
+      "7d": "7 日",
+      "30d": "30 日"
+    },
+    "count": "リリース {n} 件",
+    "pending": "確認待ちのデプロイコマンド {n} 件",
+    "empty": "この期間のリリースはありません",
+    "verb": {
+      "added": "追加",
+      "fixed": "修正",
+      "changed": "変更"
+    },
+    "basis": {
+      "agent": "記録",
+      "branch": "デプロイブランチ",
+      "tag": "タグ",
+      "hook": "検出",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "本番設定",
+      "migration": "DB マイグレーション",
+      "other": "その他"
+    },
+    "sensitive": "機密",
+    "edited": "書き換え済み",
+    "detected": "デプロイコマンドを検出（未確認）",
+    "confirm": "リリース済みにする",
+    "dismiss": "無視",
+    "edit": "説明を編集",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "reset": "元に戻す",
+    "mark-sensitive": "機密にする（チャットには件数のみ）",
+    "add-title": "1 件追加",
+    "add": "追加",
+    "summary-placeholder": "何が変わったかを一文で（値は書かない）",
+    "ref-placeholder": "commit hash・設定 key・チケット番号（任意）",
+    "config-title": "本番設定の登録",
+    "config-hint": "名前と場所だけを登録し、値は書きません。値に見える内容は拒否されます。",
+    "config-empty": "登録された設定はまだありません",
+    "config-key": "key（例：mail.sender）",
+    "config-label": "名前",
+    "config-location": "場所（例：SSM /app/prod/mail_from）",
+    "config-environment": "環境（既定 production）",
+    "config-note": "メモ",
+    "remove": "削除",
+    "digest-title": "毎日の要約",
+    "digest-hint": "Navide が紐づいた個別チャットへ直接送ります。ペインは起こさず、ペインの利用枠も使いません。機密項目と検出コマンドは件数のみです。",
+    "digest-enabled": "毎日、直近 24 時間の記録を送る",
+    "digest-at": "時刻",
+    "digest-tz": "タイムゾーン",
+    "digest-skip-empty": "リリースがない日は送らない",
+    "digest-next": "次回：{time}",
+    "digest-run": "今すぐ 1 回送る",
+    "digest-sent": "送信を予約しました",
+    "error-at": "時刻は HH:MM 形式で入力してください",
+    "error-tz": "不明なタイムゾーン"
   }
 }

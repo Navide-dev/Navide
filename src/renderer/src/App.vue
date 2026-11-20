@@ -537,6 +537,7 @@ const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./component
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
+const ShippedLogPanel = defineAsyncComponent(() => import('./components/ShippedLogPanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 // Plan P2: the status bar's Navide plugins item and its Stop popover.
@@ -28010,6 +28011,10 @@ function paneIsCommander(p: ActivePane): boolean {
       :agent-specs="enabledAgentSpecs"
       @close="evolve.closePanel()"
     />
+
+    <!-- Shipped Log panel (opened from the sidebar workspace menus and the
+         Schedule panel's digest job row; shown while a workspace is set) -->
+    <ShippedLogPanel :backend="backend" />
 
     <!-- Notifications popover -->
     <NotifyPanel

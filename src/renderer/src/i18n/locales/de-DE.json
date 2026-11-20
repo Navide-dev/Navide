@@ -9402,7 +9402,8 @@
       "manage": "Im Arbeitsbereich verwalten →",
       "locked-title": "Ein Systemauftrag der App: Ändern Sie ihn im Selbstentwicklungs-Panel dieses Arbeitsbereichs",
       "managed-by": "Vom Arbeitsbereich verwaltet",
-      "name": "Selbstentwicklung · {workspace}"
+      "name": "Selbstentwicklung · {workspace}",
+      "locked-title-shipped-log": "Von der App verwalteter Systemplan: nur im Release-Protokoll dieses Arbeitsbereichs änderbar"
     },
     "add": "+ Neu",
     "empty": "Noch keine geplanten Aufträge",
@@ -9435,7 +9436,11 @@
       "interrupted": "Übersprungen: unterbrochen",
       "budget_global": "Übersprungen: Tageskontingent der Agents aufgebraucht",
       "expired": "Abgelaufen: Agent-Auftrag seit 7 Tagen nicht erneuert",
-      "unknown": "Übersprungen"
+      "unknown": "Übersprungen",
+      "empty": "Übersprungen: nichts veröffentlicht",
+      "no_chat": "Übersprungen: kein Direktchat verknüpft",
+      "plugin_disabled": "Übersprungen: das Release-Protokoll ist aus",
+      "workspace_gone": "Übersprungen: der Arbeitsbereichsordner existiert nicht"
     },
     "fail-reason": {
       "no_window": "Kein Navide-Fenster hat den Arbeitsbereich dieses Jobs geöffnet. Öffnen Sie den Arbeitsbereich und führen Sie den Job erneut aus.",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "Die CLI im Container wurde beendet. Neu verbinden öffnet eine neue Sitzung im selben Container.",
     "reconnect": "Neu verbinden",
     "close-pane": "Bereich schließen"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Release-Protokoll"
+    },
+    "title": "Release-Protokoll",
+    "close": "Schließen",
+    "loading": "Wird geladen…",
+    "window": {
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "7d": "7 Tage",
+      "30d": "30 Tage"
+    },
+    "count": "{n} veröffentlicht",
+    "pending": "{n} erkannte(r) Deploy-Befehl(e) zu bestätigen",
+    "empty": "In diesem Zeitraum wurde nichts veröffentlicht",
+    "verb": {
+      "added": "Hinzugefügt",
+      "fixed": "Behoben",
+      "changed": "Geändert"
+    },
+    "basis": {
+      "agent": "erfasst",
+      "branch": "Deploy-Branch",
+      "tag": "Tag",
+      "hook": "erkannt",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Produktionseinstellung",
+      "migration": "Datenbankmigration",
+      "other": "Sonstiges"
+    },
+    "sensitive": "Vertraulich",
+    "edited": "Bearbeitet",
+    "detected": "Deploy-Befehl erkannt (unbestätigt)",
+    "confirm": "Als veröffentlicht bestätigen",
+    "dismiss": "Verwerfen",
+    "edit": "Zeile bearbeiten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "reset": "Zurücksetzen",
+    "mark-sensitive": "Als vertraulich markieren (ein Chat erhält nur die Anzahl)",
+    "add-title": "Eintrag hinzufügen",
+    "add": "Hinzufügen",
+    "summary-placeholder": "Ein einfacher Satz, was sich geändert hat (nie ein Wert)",
+    "ref-placeholder": "Commit-Hash, Einstellungs-Key oder Ticket (optional)",
+    "config-title": "Produktionseinstellungen",
+    "config-hint": "Erfasse Name und Ort einer Einstellung, nie ihren Wert; alles, was wie ein Wert aussieht, wird abgelehnt.",
+    "config-empty": "Noch keine Einstellungen erfasst",
+    "config-key": "Key (z. B. mail.sender)",
+    "config-label": "Bezeichnung",
+    "config-location": "Ort (z. B. SSM /app/prod/mail_from)",
+    "config-environment": "Umgebung (Standard production)",
+    "config-note": "Notiz",
+    "remove": "Entfernen",
+    "digest-title": "Tägliche Zusammenfassung",
+    "digest-hint": "Navide sendet sie selbst an jeden verknüpften Direktchat: Kein Bereich wird geweckt und kein Bereichskontingent verbraucht; vertrauliche Einträge und erkannte Befehle werden nur gezählt.",
+    "digest-enabled": "Jeden Tag die letzten 24 Stunden senden",
+    "digest-at": "Uhrzeit",
+    "digest-tz": "Zeitzone",
+    "digest-skip-empty": "Tage ohne Veröffentlichung überspringen",
+    "digest-next": "Nächste: {time}",
+    "digest-run": "Jetzt einmal senden",
+    "digest-sent": "Senden eingeplant",
+    "error-at": "Die Uhrzeit muss HH:MM sein",
+    "error-tz": "Unbekannte Zeitzone"
   }
 }

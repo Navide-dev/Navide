@@ -9402,7 +9402,8 @@
       "manage": "Quản lý trong workspace →",
       "locked-title": "Tác vụ hệ thống do ứng dụng sở hữu: hãy thay đổi từ bảng tự tiến hóa của workspace đó",
       "managed-by": "Do workspace quản lý",
-      "name": "Tự tiến hóa · {workspace}"
+      "name": "Tự tiến hóa · {workspace}",
+      "locked-title-shipped-log": "Lịch hệ thống do App quản lý: chỉ đổi được trong bảng Nhật ký phát hành của không gian làm việc đó"
     },
     "add": "+ Mới",
     "empty": "Chưa có tác vụ theo lịch nào",
@@ -9435,7 +9436,11 @@
       "interrupted": "Đã bỏ qua: bị gián đoạn",
       "budget_global": "Đã bỏ qua: tổng số lần chạy trong ngày của agent đã hết",
       "expired": "Đã hết hạn: tác vụ của agent không được gia hạn trong 7 ngày",
-      "unknown": "Đã bỏ qua"
+      "unknown": "Đã bỏ qua",
+      "empty": "Bỏ qua: không có phát hành",
+      "no_chat": "Bỏ qua: chưa liên kết cuộc trò chuyện riêng nào",
+      "plugin_disabled": "Bỏ qua: Nhật ký phát hành đang tắt",
+      "workspace_gone": "Bỏ qua: thư mục không gian làm việc không tồn tại"
     },
     "fail-reason": {
       "no_window": "Không có cửa sổ Navide nào đang mở workspace của tác vụ này. Hãy mở workspace rồi chạy lại.",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "CLI trong container đã dừng. Kết nối lại sẽ mở một phiên mới trong cùng container.",
     "reconnect": "Kết nối lại",
     "close-pane": "Đóng pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Nhật ký phát hành"
+    },
+    "title": "Nhật ký phát hành",
+    "close": "Đóng",
+    "loading": "Đang tải…",
+    "window": {
+      "today": "Hôm nay",
+      "yesterday": "Hôm qua",
+      "7d": "7 ngày",
+      "30d": "30 ngày"
+    },
+    "count": "{n} mục đã phát hành",
+    "pending": "{n} lệnh triển khai đã phát hiện cần xác nhận",
+    "empty": "Không có gì được phát hành trong khoảng này",
+    "verb": {
+      "added": "Thêm",
+      "fixed": "Sửa",
+      "changed": "Điều chỉnh"
+    },
+    "basis": {
+      "agent": "đã ghi",
+      "branch": "nhánh triển khai",
+      "tag": "thẻ",
+      "hook": "phát hiện",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Cấu hình production",
+      "migration": "Di chuyển cơ sở dữ liệu",
+      "other": "Khác"
+    },
+    "sensitive": "Nhạy cảm",
+    "edited": "Đã sửa",
+    "detected": "Phát hiện lệnh triển khai (chưa xác nhận)",
+    "confirm": "Xác nhận đã phát hành",
+    "dismiss": "Bỏ qua",
+    "edit": "Sửa mô tả",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "reset": "Khôi phục",
+    "mark-sensitive": "Đánh dấu nhạy cảm (chat chỉ nhận số lượng)",
+    "add-title": "Thêm một mục",
+    "add": "Thêm",
+    "summary-placeholder": "Một câu đơn giản nói điều gì đã thay đổi (không bao giờ ghi giá trị)",
+    "ref-placeholder": "Hash commit, key cấu hình hoặc mã ticket (tùy chọn)",
+    "config-title": "Cấu hình production",
+    "config-hint": "Chỉ đăng ký tên và vị trí của cấu hình, không bao giờ ghi giá trị; nội dung trông giống giá trị sẽ bị từ chối.",
+    "config-empty": "Chưa đăng ký cấu hình nào",
+    "config-key": "key (ví dụ mail.sender)",
+    "config-label": "Tên",
+    "config-location": "Vị trí (ví dụ SSM /app/prod/mail_from)",
+    "config-environment": "Môi trường (mặc định production)",
+    "config-note": "Ghi chú",
+    "remove": "Gỡ",
+    "digest-title": "Tóm tắt hằng ngày",
+    "digest-hint": "Navide tự gửi đến mọi cuộc trò chuyện riêng đã liên kết: không đánh thức pane nào và không tốn hạn mức của pane; mục nhạy cảm và lệnh đã phát hiện chỉ được đếm.",
+    "digest-enabled": "Mỗi ngày gửi 24 giờ vừa qua",
+    "digest-at": "Giờ",
+    "digest-tz": "Múi giờ",
+    "digest-skip-empty": "Bỏ qua những ngày không có phát hành",
+    "digest-next": "Lần tới: {time}",
+    "digest-run": "Gửi một lần ngay",
+    "digest-sent": "Đã lên lịch gửi",
+    "error-at": "Giờ phải có dạng HH:MM",
+    "error-tz": "Múi giờ không xác định"
   }
 }

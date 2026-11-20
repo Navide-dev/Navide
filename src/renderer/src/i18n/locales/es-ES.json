@@ -9402,7 +9402,8 @@
       "manage": "Gestionar en el área de trabajo →",
       "locked-title": "Una tarea del sistema propiedad de la app: cámbiala desde el panel de autoevolución de esa área de trabajo",
       "managed-by": "Gestionada por el área de trabajo",
-      "name": "Autoevolución · {workspace}"
+      "name": "Autoevolución · {workspace}",
+      "locked-title-shipped-log": "Programación del sistema gestionada por la App: cámbiala en el panel Registro de publicaciones de ese espacio de trabajo"
     },
     "add": "+ Nueva",
     "empty": "Aún no hay tareas programadas",
@@ -9435,7 +9436,11 @@
       "interrupted": "Omitida: interrumpida",
       "budget_global": "Omitida: total diario de los agents agotado",
       "expired": "Caducada: tarea de agent no renovada en 7 días",
-      "unknown": "Omitida"
+      "unknown": "Omitida",
+      "empty": "Omitido: no se publicó nada",
+      "no_chat": "Omitido: no hay ningún chat directo vinculado",
+      "plugin_disabled": "Omitido: el Registro de publicaciones está desactivado",
+      "workspace_gone": "Omitido: la carpeta del espacio de trabajo no existe"
     },
     "fail-reason": {
       "no_window": "Ninguna ventana de Navide tiene abierta el área de trabajo de esta tarea. Abre el área de trabajo y vuelve a ejecutarla.",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "La CLI del contenedor se detuvo. Reconectar abre una nueva sesión en el mismo contenedor.",
     "reconnect": "Reconectar",
     "close-pane": "Cerrar pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Registro de publicaciones"
+    },
+    "title": "Registro de publicaciones",
+    "close": "Cerrar",
+    "loading": "Cargando…",
+    "window": {
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "7d": "7 días",
+      "30d": "30 días"
+    },
+    "count": "{n} publicados",
+    "pending": "{n} comando(s) de despliegue detectado(s) por confirmar",
+    "empty": "No se publicó nada en este periodo",
+    "verb": {
+      "added": "Añadido",
+      "fixed": "Corregido",
+      "changed": "Cambiado"
+    },
+    "basis": {
+      "agent": "registrado",
+      "branch": "rama de despliegue",
+      "tag": "etiqueta",
+      "hook": "detectado",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Ajuste de producción",
+      "migration": "Migración de base de datos",
+      "other": "Otro"
+    },
+    "sensitive": "Sensible",
+    "edited": "Editado",
+    "detected": "Comando de despliegue detectado (sin confirmar)",
+    "confirm": "Confirmar publicado",
+    "dismiss": "Descartar",
+    "edit": "Editar línea",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "reset": "Restablecer",
+    "mark-sensitive": "Marcar como sensible (un chat solo recibe el recuento)",
+    "add-title": "Añadir una entrada",
+    "add": "Añadir",
+    "summary-placeholder": "Una línea sencilla sobre qué cambió (nunca un valor)",
+    "ref-placeholder": "Hash de commit, clave de ajuste o ticket (opcional)",
+    "config-title": "Ajustes de producción",
+    "config-hint": "Registra el nombre de un ajuste y dónde vive, nunca su valor; lo que parezca un valor se rechaza.",
+    "config-empty": "Aún no hay ajustes registrados",
+    "config-key": "clave (p. ej. mail.sender)",
+    "config-label": "Nombre",
+    "config-location": "Ubicación (p. ej. SSM /app/prod/mail_from)",
+    "config-environment": "Entorno (por defecto production)",
+    "config-note": "Nota",
+    "remove": "Quitar",
+    "digest-title": "Resumen diario",
+    "digest-hint": "Navide lo envía directamente a cada chat directo vinculado: no despierta ningún panel ni gasta su cuota; los elementos sensibles y los comandos detectados solo se cuentan.",
+    "digest-enabled": "Enviar las últimas 24 horas cada día",
+    "digest-at": "Hora",
+    "digest-tz": "Zona horaria",
+    "digest-skip-empty": "Omitir los días sin publicaciones",
+    "digest-next": "Siguiente: {time}",
+    "digest-run": "Enviar uno ahora",
+    "digest-sent": "Envío en cola",
+    "error-at": "La hora debe ser HH:MM",
+    "error-tz": "Zona horaria desconocida"
   }
 }

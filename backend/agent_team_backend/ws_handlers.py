@@ -14426,6 +14426,19 @@ async def evolve_badges(session: "Session", msg_id: str, msg_type: str, payload:
     )
 
 
+# ── Shipped Log panel (ship_log.*) ─────────────────────────────────────────
+# The built-in navide.shipped-log plugin's own requests (plugins/builtin/
+# navide_shipped_log/ui_api.py); every answer is a dict with ok.
+@handler(
+    "ship_log.report", "ship_log.record", "ship_log.detection", "ship_log.override",
+    "ship_log.configs", "ship_log.config_set", "ship_log.digest_get", "ship_log.digest_set", "ship_log.digest_run",
+)
+async def ship_log_request(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from .plugins.builtin.navide_shipped_log import ui_api
+
+    await session.send_json(make_response(msg_id, msg_type, await ui_api.handle(msg_type, payload)))
+
+
 # ── CLI extensions (cli_extensions.*) ──────────────────────────────────────
 # The read-only inventory behind Settings → Extensions. Scanning reads
 # files and at most a declared listing command with a timeout, so a thread

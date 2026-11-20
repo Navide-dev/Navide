@@ -16,6 +16,7 @@ import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDispla
 import type { SidebarMode } from '../lib/sidebarMode'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { evolveBadgeLabel, evolveBadgeState, isEvolveSystemPane, useEvolveBadges } from '../composables/useEvolve'
+import { openShippedLogPanel } from '../composables/useShippedLog'
 import { rollupTabStatus, runGroupStateLabelKey, tabRunStatePaneStatus } from '../lib/tabStatus'
 import {
   ALL_RAIL_ID,
@@ -2511,6 +2512,11 @@ function openEvolveFor(path: string): void {
   closeWsMenu()
   evolve.openPanel(path)
 }
+function openShippedLogFor(path: string): void {
+  closeWsMoreMenu()
+  closeWsMenu()
+  openShippedLogPanel(path)
+}
 
 /** Same floor as the right-click menu's: a window must keep one workspace, so
  *  the close rows only appear for a project that has somewhere to land. */
@@ -4393,6 +4399,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <button class="ws-ctx-opt" @click="wsMenuAction('reveal')">{{ $t('action.open-in-finder') }}</button>
         <button class="ws-ctx-opt" @click="wsMenuAction('copy')">{{ $t('action.copy-path') }}</button>
         <button class="ws-ctx-opt" data-test="evolve-ctx" @click="openEvolveFor(wsMenu.path)">✦ {{ $t('evolve.menu.open') }}</button>
+        <button class="ws-ctx-opt" data-test="shipped-log-ctx" @click="openShippedLogFor(wsMenu.path)">🚀 {{ $t('shippedLog.menu.open') }}</button>
         <!-- Membership is exclusive, so this reads as a radio group: one tick,
              and "None" is a real choice rather than the absence of one. -->
         <template v-if="workspaceRails.length">
@@ -4465,6 +4472,10 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <span class="ws-more-ico">✦</span>
           <span>{{ $t('evolve.menu.open') }}</span>
           <span v-if="evolve.badges.value[wsMoreMenuPath]?.enabled" class="ws-evolve-on">● {{ $t('evolve.menu.enabled') }}</span>
+        </button>
+        <button class="ws-more-opt" data-test="shipped-log-menu" @click="openShippedLogFor(wsMoreMenuPath)">
+          <span class="ws-more-ico">🚀</span>
+          <span>{{ $t('shippedLog.menu.open') }}</span>
         </button>
 
         <!-- Everything below already existed, reachable only by right-clicking

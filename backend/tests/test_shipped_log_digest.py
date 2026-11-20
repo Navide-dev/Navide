@@ -78,6 +78,9 @@ async def test_settings_save_the_system_job(env) -> None:
     assert job["schedule"] == {"kind": "daily", "at": "18:30", "tz": "Asia/Taipei"}
     assert job["owner"] == {"kind": "system", "feature": "shipped-log", "workspace": env.ws}
     assert answer["next_run_at"] is not None
+    # scheduler.list / scheduler_list show it like any system job.
+    [listed] = (await env.service.list())["jobs"]
+    assert listed["action"] == {"kind": "ship_digest", "workspace": env.ws}
 
 
 @pytest.mark.parametrize("updates, message", [

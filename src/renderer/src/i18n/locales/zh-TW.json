@@ -9402,7 +9402,8 @@
       "manage": "到工作區管理 →",
       "locked-title": "由 App 管理的系統排程：只能在該工作區的自我優化面板修改",
       "managed-by": "由工作區管理",
-      "name": "自我優化 · {workspace}"
+      "name": "自我優化 · {workspace}",
+      "locked-title-shipped-log": "由 App 管理的系統排程：只能在該工作區的上線紀錄面板修改"
     },
     "add": "＋ 新增",
     "empty": "還沒有排程工作",
@@ -9435,7 +9436,11 @@
       "interrupted": "略過：執行中斷",
       "budget_global": "略過：agent 每日總量已滿",
       "expired": "已過期：agent job 7 天未更新",
-      "unknown": "略過"
+      "unknown": "略過",
+      "empty": "略過：這段時間沒有上線",
+      "no_chat": "略過：沒有綁定的私訊",
+      "plugin_disabled": "略過：上線紀錄已停用",
+      "workspace_gone": "略過：工作區資料夾不存在"
     },
     "fail-reason": {
       "no_window": "沒有 Navide 視窗開著這個 job 的工作區。請先開啟工作區，再執行一次。",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "容器裡的 CLI 已經停止。按「重新連線」會在同一個容器開一個新的工作階段。",
     "reconnect": "重新連線",
     "close-pane": "關閉分格"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "上線紀錄"
+    },
+    "title": "上線紀錄",
+    "close": "關閉",
+    "loading": "讀取中…",
+    "window": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "count": "上線 {n} 筆",
+    "pending": "待確認的部署指令 {n} 筆",
+    "empty": "這段時間沒有上線紀錄",
+    "verb": {
+      "added": "新增",
+      "fixed": "修好",
+      "changed": "調整"
+    },
+    "basis": {
+      "agent": "登記",
+      "branch": "部署分支",
+      "tag": "標籤",
+      "hook": "偵測",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "正式機設定",
+      "migration": "資料庫遷移",
+      "other": "其他"
+    },
+    "sensitive": "敏感",
+    "edited": "已改寫",
+    "detected": "偵測到部署指令（待確認）",
+    "confirm": "確認上線",
+    "dismiss": "忽略",
+    "edit": "改白話",
+    "save": "儲存",
+    "cancel": "取消",
+    "reset": "還原",
+    "mark-sensitive": "標為敏感（聊天只顯示筆數）",
+    "add-title": "補登一筆",
+    "add": "新增",
+    "summary-placeholder": "一句白話說明改了什麼（不要填任何值）",
+    "ref-placeholder": "commit hash、設定 key 或單號（選填）",
+    "config-title": "正式機設定登記",
+    "config-hint": "只登記名稱與位置，絕不填值；看起來像值的內容會被拒絕。",
+    "config-empty": "還沒有登記任何設定",
+    "config-key": "key（例如 mail.sender）",
+    "config-label": "名稱",
+    "config-location": "位置（例如 SSM /app/prod/mail_from）",
+    "config-environment": "環境（預設 production）",
+    "config-note": "備註",
+    "remove": "移除",
+    "digest-title": "每日摘要",
+    "digest-hint": "由 Navide 直接推送到所有綁定的私訊，不喚醒分格、不花分格額度；敏感項目與偵測到的指令只顯示筆數。",
+    "digest-enabled": "每天推送過去 24 小時的上線紀錄",
+    "digest-at": "時間",
+    "digest-tz": "時區",
+    "digest-skip-empty": "沒有上線的那天不推",
+    "digest-next": "下次：{time}",
+    "digest-run": "立即推送一次",
+    "digest-sent": "已排入推送",
+    "error-at": "時間格式要是 HH:MM",
+    "error-tz": "不認得的時區"
   }
 }
