@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut. Installierte Navide-Plug-ins funktionieren weiter.",
         "errorDetails": "Fehlerdetails",
         "info": "Informationen",
-        "detailTabs": "Details zum Navide-Plug-in",
         "installVersion": "{version} installieren",
         "versionLabel": "Version {version}",
         "otherTarget": "Nicht für diese Plattform ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Ziel",
           "channel": "Kanal",
           "downloads": "Downloads",
-          "status": "Status"
+          "status": "Status",
+          "trust": "Vertrauen",
+          "capabilities": "Fähigkeiten"
         },
         "prereleaseAvailable": "Vorabversion {version} verfügbar",
         "buildOwnHint": "Selbst etwas bauen?",
-        "buildOwn": "Navide-Plug-in entwickeln"
+        "buildOwn": "Navide-Plug-in entwickeln",
+        "installCard": "Installieren",
+        "disabledBadge": "Deaktiviert",
+        "actionsNote": "Jede Aktion fragt nach, bevor sich etwas ändert.",
+        "enableInExtensions": "Navide hat dieses Navide-Plug-in gestoppt. Prüfe auf der Seite „Navide-Plug-ins“, was es dabei getan hat, bevor du es wieder aktivierst.",
+        "actionFailed": "Konnte nicht abgeschlossen werden: {error}",
+        "verifiedDomain": "verifiziert · {domain}",
+        "riskBanner": "Dieses Navide-Plug-in fordert sensible Fähigkeiten an: {list}. Vor der Installation prüfen.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Bildschirmfotos",
+        "screenshotLabel": "Bildschirmfoto {n}",
+        "ratingTitle": "Bewertung",
+        "rateOnWeb": "Auf der Website bewerten",
+        "report": "Melden",
+        "ratingSignIn": "Bewerten und Melden erfolgen auf der Website des Navide Marketplace und erfordern eine Anmeldung bei Navide Cloud.",
+        "capabilityHint": {
+          "fs": "liest und schreibt Dateien",
+          "shell": "führt Shell-Befehle aus",
+          "terminal": "führt Befehle in einem Terminal aus",
+          "aiCli": "steuert KI-CLI-Agenten",
+          "web": "besucht Websites mit deinen Anmeldungen und behält sie",
+          "agentMessages": "liest den Text von Nachrichten zwischen deinen Agenten",
+          "secrets": "speichert eigene API-Schlüssel verschlüsselt auf deinem Gerät",
+          "agentNotify": "benachrichtigt deine Agent-Bereiche, sobald du es erlaubst"
+        },
+        "intro": {
+          "title": "Mach Navide zu deinem, mit verifizierten Navide-Plug-ins.",
+          "signed": "Von der Registry signierte Pakete",
+          "permissions": "Berechtigungen vor der Installation sichtbar",
+          "inApp": "Jede Installation wird in Navide bestätigt"
+        },
+        "footer": {
+          "label": "Links zum Navide Marketplace",
+          "removed": "Entfernte Navide-Plug-ins",
+          "docs": "Entwicklerdokumentation",
+          "discussions": "Diskussionen",
+          "security": "Sicherheit"
+        }
       },
       "developerMode": {
         "errors": {

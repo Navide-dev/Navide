@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Check your connection and try again. Installed Navide plugins keep working.",
         "errorDetails": "Details",
         "info": "Information",
-        "detailTabs": "Navide plugin details",
         "installVersion": "Install {version}",
         "versionLabel": "Version {version}",
         "otherTarget": "Not for this platform ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Target",
           "channel": "Channel",
           "downloads": "Downloads",
-          "status": "Status"
+          "status": "Status",
+          "trust": "Trust",
+          "capabilities": "Capabilities"
         },
         "prereleaseAvailable": "pre-release {version} available",
         "buildOwnHint": "Want to make your own?",
-        "buildOwn": "Build a Navide Plugin"
+        "buildOwn": "Build a Navide Plugin",
+        "installCard": "Install",
+        "disabledBadge": "Disabled",
+        "actionsNote": "Each action asks you to confirm before anything changes.",
+        "enableInExtensions": "Navide stopped this Navide plugin. Review what it was doing on the Navide Plugins page before you enable it again.",
+        "actionFailed": "Could not finish: {error}",
+        "verifiedDomain": "verified · {domain}",
+        "riskBanner": "This Navide plugin requests sensitive capabilities: {list}. Review before installing.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Screenshots",
+        "screenshotLabel": "Screenshot {n}",
+        "ratingTitle": "Rating",
+        "rateOnWeb": "Rate on the website",
+        "report": "Report",
+        "ratingSignIn": "Rating and reporting happen on the Navide Marketplace website and need a Navide Cloud sign-in.",
+        "capabilityHint": {
+          "fs": "reads and writes files",
+          "shell": "runs shell commands",
+          "terminal": "runs commands in a terminal",
+          "aiCli": "drives AI CLI agents",
+          "web": "browses websites with your sign-ins and keeps them",
+          "agentMessages": "reads the text of messages between your agents",
+          "secrets": "keeps its own API keys encrypted on your device",
+          "agentNotify": "sends notifications to your agent panes, once you allow it"
+        },
+        "intro": {
+          "title": "Make Navide yours, one verified Navide plugin at a time.",
+          "signed": "Registry-signed packages",
+          "permissions": "Permissions shown before install",
+          "inApp": "Every install is confirmed in Navide"
+        },
+        "footer": {
+          "label": "Navide Marketplace links",
+          "removed": "Removed Navide plugins",
+          "docs": "Developer docs",
+          "discussions": "Discussions",
+          "security": "Security"
+        }
       },
       "developerMode": {
         "errors": {

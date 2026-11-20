@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Hãy kiểm tra kết nối rồi thử lại. Plugin Navide đã cài vẫn hoạt động bình thường.",
         "errorDetails": "Chi tiết",
         "info": "Thông tin",
-        "detailTabs": "Chi tiết plugin Navide",
         "installVersion": "Cài {version}",
         "versionLabel": "Phiên bản {version}",
         "otherTarget": "Không dành cho nền tảng này ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Nền tảng",
           "channel": "Kênh",
           "downloads": "Lượt tải",
-          "status": "Trạng thái"
+          "status": "Trạng thái",
+          "trust": "Tin cậy",
+          "capabilities": "Khả năng"
         },
         "prereleaseAvailable": "có bản thử nghiệm {version}",
         "buildOwnHint": "Muốn tự làm một cái?",
-        "buildOwn": "Tạo plugin Navide"
+        "buildOwn": "Tạo plugin Navide",
+        "installCard": "Cài đặt",
+        "disabledBadge": "Đã tắt",
+        "actionsNote": "Mỗi thao tác đều hỏi xác nhận trước khi thay đổi.",
+        "enableInExtensions": "Navide đã dừng plugin Navide này. Hãy xem trên trang Plugin Navide nó đang làm gì trước khi bật lại.",
+        "actionFailed": "Không thể hoàn tất: {error}",
+        "verifiedDomain": "đã xác minh · {domain}",
+        "riskBanner": "Plugin Navide này yêu cầu các khả năng nhạy cảm: {list}. Hãy xem kỹ trước khi cài đặt.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Ảnh chụp màn hình",
+        "screenshotLabel": "Ảnh chụp {n}",
+        "ratingTitle": "Đánh giá",
+        "rateOnWeb": "Đánh giá trên trang web",
+        "report": "Báo cáo",
+        "ratingSignIn": "Đánh giá và báo cáo được thực hiện trên trang web Navide Marketplace và cần đăng nhập Navide Cloud.",
+        "capabilityHint": {
+          "fs": "đọc và ghi tệp",
+          "shell": "chạy lệnh shell",
+          "terminal": "chạy lệnh trong terminal",
+          "aiCli": "điều khiển các agent AI CLI",
+          "web": "duyệt trang web bằng thông tin đăng nhập của bạn và giữ lại",
+          "agentMessages": "đọc nội dung tin nhắn giữa các agent của bạn",
+          "secrets": "lưu khóa API của riêng nó đã mã hóa trên thiết bị của bạn",
+          "agentNotify": "gửi thông báo tới các khung agent, khi bạn cho phép"
+        },
+        "intro": {
+          "title": "Biến Navide thành của bạn, với các plugin Navide đã xác minh.",
+          "signed": "Gói được Registry ký",
+          "permissions": "Hiển thị quyền trước khi cài",
+          "inApp": "Mọi lần cài đặt đều được xác nhận trong Navide"
+        },
+        "footer": {
+          "label": "Liên kết Navide Marketplace",
+          "removed": "Plugin Navide đã gỡ",
+          "docs": "Tài liệu nhà phát triển",
+          "discussions": "Thảo luận",
+          "security": "Bảo mật"
+        }
       },
       "developerMode": {
         "errors": {

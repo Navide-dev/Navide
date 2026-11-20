@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Comprueba la conexión y vuelve a intentarlo. Los complementos de Navide instalados siguen funcionando.",
         "errorDetails": "Detalles",
         "info": "Información",
-        "detailTabs": "Detalles del complemento de Navide",
         "installVersion": "Instalar {version}",
         "versionLabel": "Versión {version}",
         "otherTarget": "No es para esta plataforma ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Destino",
           "channel": "Canal",
           "downloads": "Descargas",
-          "status": "Estado"
+          "status": "Estado",
+          "trust": "Confianza",
+          "capabilities": "Capacidades"
         },
         "prereleaseAvailable": "versión preliminar {version} disponible",
         "buildOwnHint": "¿Quieres crear el tuyo?",
-        "buildOwn": "Crear un complemento de Navide"
+        "buildOwn": "Crear un complemento de Navide",
+        "installCard": "Instalar",
+        "disabledBadge": "Desactivada",
+        "actionsNote": "Cada acción pide confirmación antes de cambiar nada.",
+        "enableInExtensions": "Navide detuvo este complemento de Navide. Revisa en la página Complementos de Navide lo que estaba haciendo antes de volver a activarlo.",
+        "actionFailed": "No se pudo completar: {error}",
+        "verifiedDomain": "verificado · {domain}",
+        "riskBanner": "Este complemento de Navide solicita capacidades sensibles: {list}. Revísalo antes de instalar.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Capturas de pantalla",
+        "screenshotLabel": "Captura {n}",
+        "ratingTitle": "Valoración",
+        "rateOnWeb": "Valorar en el sitio web",
+        "report": "Denunciar",
+        "ratingSignIn": "Las valoraciones y denuncias se hacen en el sitio web de Navide Marketplace y requieren iniciar sesión en Navide Cloud.",
+        "capabilityHint": {
+          "fs": "lee y escribe archivos",
+          "shell": "ejecuta comandos de shell",
+          "terminal": "ejecuta comandos en un terminal",
+          "aiCli": "controla agentes de CLI de IA",
+          "web": "navega por sitios web con tus inicios de sesión y los conserva",
+          "agentMessages": "lee el texto de los mensajes entre tus agentes",
+          "secrets": "guarda sus propias claves de API cifradas en tu dispositivo",
+          "agentNotify": "envía notificaciones a los paneles de tus agentes, cuando lo permitas"
+        },
+        "intro": {
+          "title": "Haz Navide a tu medida, con complementos de Navide verificados.",
+          "signed": "Paquetes firmados por el Registry",
+          "permissions": "Permisos visibles antes de instalar",
+          "inApp": "Cada instalación se confirma en Navide"
+        },
+        "footer": {
+          "label": "Enlaces de Navide Marketplace",
+          "removed": "Complementos de Navide retirados",
+          "docs": "Documentación para desarrolladores",
+          "discussions": "Debates",
+          "security": "Seguridad"
+        }
       },
       "developerMode": {
         "errors": {
