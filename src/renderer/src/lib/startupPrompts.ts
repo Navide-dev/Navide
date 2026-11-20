@@ -19,6 +19,9 @@
  * | `workspace-trust.own-workspace` | A CLI's workspace trust dialog at launch (Claude Code "Accessing workspace: <dir> … Yes, I trust this folder", Codex "Trust this folder?", "Do you trust the contents of this directory?"), answered on its trust option: Claude Code's is selected by reading where the cursor is and moving it there first (2.1.329 draws "No, exit" first with the cursor on it), never answered when the cursor cannot be read; any other vendor's with Enter on its default (trust) option | the dialog names `<dir>` and it is exactly the pane's own workspace (`workspace`), the folder the user opened; not a parent, not a folder inside it | The user opened that workspace in Navide and asked for a pane in it; any other folder, or a dialog that names none, is theirs to judge. Vendors with a trust watcher of their own (`startupTrust`, Grok) are left to it. |
  * | `claude.add-dir.navide-skills-view` | Claude Code's "Adding a new directory: <dir> … This session hasn't worked here before" (No, exit / Yes, add it) | `<dir>` is one of the directories Navide itself handed this pane with `--add-dir` (the spawn reports them as `navide_dirs`) AND it is Navide's managed-skills view (`…/runtime/skills-views/claude`) | Navide built that folder out of the skills the user enabled for Claude and added it to the pane itself; "Yes, add it" holds for this session only and writes nothing. It is the folder the convenience feature claude.skills-trust pre-trusts; this covers a spawn where that record could not be written (lock held, feature off). |
  *
+ * Apart from these, Enter goes only to an informational launch screen that
+ * grants nothing (CONTINUE_NOTICES below, each matched whole for its vendor).
+ *
  * Everything else is left to a person or to the caller's cli_answer_prompt:
  * any other folder (for an add-dir prompt the pane's workspace included — a
  * folder Claude asks to add is not the one the user opened), a prompt this
@@ -69,32 +72,46 @@ const BOX = /[─-╿]/g
 const collapse = (screen: string): string => screen.replace(BOX, ' ').replace(/\s+/g, ' ').trim()
 const noSpace = (path: string): string => path.replace(/\s+/g, '').replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 
+// A narrow pane wraps the dialog's own text, mid-word too ("Yes, I trust this
+// f" / "older"), and collapse() turns each break into a space, so a fixed
+// phrase is matched with an optional space between any two of its characters.
+const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const loose = (phrase: string): string => [...phrase.replace(/ /g, '')].map(escapeRe).join(' ?')
+const squash = (text: string): string => text.replace(/\s+/g, '')
+const FOOTER = loose('Enter to confirm · Esc to cancel')
+
 // Claude Code 2.1.329's dialog (verified against the installed binary and a
 // live render). The body between the question and the menu differs with the
 // window height, so it is skipped; the folder is everything between the title
 // and the first sentence, which a wrapped path splits with a line break.
 const CLAUDE_ADD_DIR = new RegExp(
-  'Adding a new directory: (.+?) This session hasn\'t worked here before\\. '
-    + 'Is this a directory you created or one you trust\\?(.{0,900}?)'
-    + ' ?(❯ ?)?No, exit ?(❯ ?)?Yes, add it ?Enter to confirm · Esc to cancel(.{0,200})$',
+  `${loose('Adding a new directory:')} (.+?) ${loose("This session hasn't worked here before.")} ?`
+    + `${loose('Is this a directory you created or one you trust?')}(.{0,1200}?)`
+    + ` ?(❯ ?)?${loose(ADD_DIR_OPTIONS[0])} ?(❯ ?)?${loose(ADD_DIR_OPTIONS[1])} ?${FOOTER}(.{0,200})$`,
 )
 
 // A CLI asking at launch whether to trust the folder it runs in. The menu and
 // wording differ by vendor and version; the question does not.
-const WORKSPACE_TRUST = [/Do you trust the contents/i, /Trust the contents of this/i, /Trust this folder/i]
+const WORKSPACE_TRUST = ['Do you trust the contents', 'Trust the contents of this', 'Trust this folder']
+  .map((phrase) => new RegExp(loose(phrase), 'i'))
+
+// Where Claude Code's trust dialog starts: the folder it names is read from
+// here on, so a path in the scrollback above it is never taken for it.
+const CLAUDE_TRUST_TITLE = new RegExp(loose('Accessing workspace:'), 'g')
 
 // Claude Code's trust menu, in either order: 2.1.329 draws "No, exit" first
 // with the cursor on it and no numbers (cancelFirst, focus "cancel"); older
 // builds drew "1. Yes, I trust this folder" first with the cursor on it.
-const CLAUDE_TRUST_OPTION = `(${CLAUDE_TRUST_YES}|No, exit)`
+const CLAUDE_TRUST_OPTIONS = [CLAUDE_TRUST_YES, 'No, exit']
+const CLAUDE_TRUST_OPTION = `(${CLAUDE_TRUST_OPTIONS.map(loose).join('|')})`
 const CLAUDE_TRUST_MENU = new RegExp(
-  `(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?`
-    + 'Enter to confirm · Esc to cancel(.{0,200})$',
+  `(❯ ?)?(?:\\d ?\\. ?)?${CLAUDE_TRUST_OPTION} ?(❯ ?)?(?:\\d ?\\. ?)?${CLAUDE_TRUST_OPTION} ?`
+    + `${FOOTER}(.{0,200})$`,
 )
+/** A menu option as read (a wrapped one has spaces in it), by its own name. */
+const trustOption = (read: string): string => CLAUDE_TRUST_OPTIONS.find((o) => squash(o) === squash(read)) ?? read
 
 const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/
-
-const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Whether `screen` names `folder` as a whole path: not a parent of it, not a
  *  folder inside it, not a longer name that starts with it. A path the CLI
@@ -130,15 +147,47 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
     if (agentKey !== 'claude') return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
     // Which option the cursor is on, read off the menu; '' when it cannot be.
     const menu = CLAUDE_TRUST_MENU.exec(text)
-    const options = menu && menu[2] !== menu[4] ? [menu[2], menu[4]] : []
+    const read = menu ? [trustOption(menu[2]), trustOption(menu[4])] : []
+    const options = read.length && read[0] !== read[1] ? read : []
     const cursorOn = options.length ? (menu![1] ? options[0] : menu![3] ? options[1] : '') : ''
-    return { kind: 'workspace-trust', folder: '', prompt: text, options, cursorOn, readCursor: true }
+    // The dialog from its last title on; without the title on screen it names
+    // no folder, and is left to a person.
+    const title = [...text.matchAll(CLAUDE_TRUST_TITLE)].pop()
+    const prompt = title ? text.slice(title.index) : ''
+    return { kind: 'workspace-trust', folder: '', prompt, options, cursorOn, readCursor: true }
   }
   // The tail after the footer is the CLI's own status line at most; a long
   // tail is a later screen, so this dialog is scrollback.
   const cursorOn = m[3] ? ADD_DIR_OPTIONS[0] : m[4] ? ADD_DIR_OPTIONS[1] : ''
   const prompt = collapse(m[0].slice(0, m[0].length - m[5].length))
   return { kind: 'claude.add-dir', folder: m[1], prompt, options: [...ADD_DIR_OPTIONS], cursorOn }
+}
+
+// Launch screens that only inform: Enter there grants, signs in or selects
+// nothing, it only goes on. Each is matched whole, for its own vendor, with
+// its footer at the bottom of the screen; "continue" anywhere else is not one
+// of these (Codex's sign-in screen says "Press enter to continue" too, and
+// Enter there starts a sign-in).
+const CONTINUE_NOTICES: ReadonlyArray<{ agentKey: string; rule: string; re: RegExp }> = [
+  {
+    // Codex: "Codex detected a damaged local database, moved it into a backup
+    // folder, and will continue startup with a fresh database. … Continuing
+    // startup with a fresh local database... Press Enter to continue."
+    agentKey: 'codex',
+    rule: 'codex.fresh-database-notice',
+    re: new RegExp(
+      `${loose('Codex detected a damaged local database')}.{0,600}?${loose('Press Enter to continue')} ?\\.?(.{0,200})$`,
+      'i',
+    ),
+  },
+]
+
+/** The informational launch screen live on this pane's screen that Enter
+ *  only dismisses (CONTINUE_NOTICES), by its rule name; '' when there is
+ *  none. Anything else is never answered with a bare Enter. */
+export function readContinueNotice(agentKey: string, screen: string): string {
+  const text = collapse(screen)
+  return CONTINUE_NOTICES.find((notice) => notice.agentKey === agentKey && notice.re.test(text))?.rule ?? ''
 }
 
 /** Whether Navide answers `prompt` by itself (see the allowlist above).
