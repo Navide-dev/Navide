@@ -3696,6 +3696,13 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
       return pane ? sendSessionMarkerBootstrap(pane, tag) : Promise.resolve(false)
     },
     dismissStartupDialog: (id) => dismissStartupDialog(id, DISMISS_TIMEOUT_MS),
+    // The pane path's own launch-prompt hold, so both decide and report alike.
+    holdForStartupPrompt: (id, report) => {
+      const agentKey = panes.value.find((p) => p.id === id)?.agentKey
+      return agentKey
+        ? holdKickoffForStartupPrompt(agentKey, id, STARTUP_PROMPT_WATCH_MS, report)
+        : Promise.resolve(false)
+    },
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
     waitForPromptReady: async (id, timeoutMs) => {
@@ -4464,10 +4471,21 @@ async function handleMcpSpawnRequest(ev: {
     // 建立失敗).
     report({ ok: true, paneId, name: childName, advisories: gate.advisories })
     const standaloneEvidence: StandaloneKickoffEvidence = {}
+    // One verdict per request: a launch prompt reported as blocked-by-prompt
+    // is the answer, and the verdict judged below is then dropped, as on the
+    // pane path.
+    const reportStandalone = createKickoffReporter({
+      requestId: ev.request_id,
+      paneId,
+      send: (payload) => {
+        backend.send('agent_spawn.kickoff', payload).catch(() => { /* the tool call times out and says so */ })
+      },
+    })
     try {
       await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
         resume: !!(ev.session_id ?? '').trim(),
         evidence: standaloneEvidence,
+        report: reportStandalone,
         ...(ev.submit === false ? { prefill: true } : {}),
       })
     } catch { /* judged below on whatever evidence was recorded */ }
@@ -4478,12 +4496,7 @@ async function handleMcpSpawnRequest(ev: {
     // 'sent'. Hard-coding 'unverified' here reported every external spawn as
     // failed, the task already running (Linux VM 0.2.38).
     const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task, prefill: ev.submit === false })
-    backend.send('agent_spawn.kickoff', {
-      request_id: ev.request_id,
-      pane_id: paneId,
-      kickoff: verdict.kickoff,
-      ...(verdict.reason ? { reason: verdict.reason } : {}),
-    }).catch(() => { /* the tool call times out and says so */ })
+    reportStandalone(verdict.kickoff, verdict.reason)
     return
   }
   // Shut the injection window before the caller learns this pane's name, not

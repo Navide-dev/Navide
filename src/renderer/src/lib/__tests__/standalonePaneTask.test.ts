@@ -18,6 +18,7 @@ function deps(overrides: Partial<StandaloneTaskInjectionDeps> = {}): StandaloneT
     paneAlive: vi.fn(() => true),
     injectPane: vi.fn(async () => true),
     onKill: vi.fn(async () => {}),
+    holdForStartupPrompt: vi.fn(async () => true),
     ...overrides,
   }
 }
@@ -228,5 +229,57 @@ describe('lib/standalonePaneTask kickoff evidence (cli_open_agent target_workspa
     const body = app.slice(start, app.indexOf('\nfunction describeSpawnRefusal(', start))
     expect(body).not.toMatch(/kickoff: 'unverified'/)
     expect(body).toMatch(/standaloneKickoffVerdict\(/)
+  })
+})
+
+// A standalone spawn (target_workspace, ui.pane.create) is held on a launch
+// prompt the same way the pane path's kickoff is: lib/startupPrompts decides,
+// a blocked prompt is reported as blocked-by-prompt and the task is not typed.
+describe('lib/standalonePaneTask launch prompts', () => {
+  it('asks about launch prompts before typing, with the caller\'s reporter', async () => {
+    const report = vi.fn()
+    const d = deps()
+    expect(await injectStandaloneTask('pane-1', 'do the thing', 'mcp-task', d, { report })).toBe(true)
+    expect(d.holdForStartupPrompt).toHaveBeenCalledWith('pane-1', report)
+    expect(vi.mocked(d.holdForStartupPrompt).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(d.injectPane).mock.invocationCallOrder[0])
+  })
+
+  it('holds the task when the prompt was not answered: nothing typed, pane kept', async () => {
+    const report = vi.fn()
+    const d = deps({
+      holdForStartupPrompt: vi.fn(async (_id, r) => {
+        r('blocked-by-prompt', 'the trust dialog does not name this pane\'s workspace', { prompt: 'Trust this folder?' })
+        return false
+      }),
+    })
+    const evidence: StandaloneKickoffEvidence = {}
+    expect(await injectStandaloneTask('pane-1', 'do the thing', 'mcp-task', d, { evidence, report })).toBe(false)
+    expect(d.injectPane).not.toHaveBeenCalled()
+    expect(d.waitForPromptReady).not.toHaveBeenCalled()
+    expect(d.onKill).not.toHaveBeenCalled()
+    expect(report).toHaveBeenCalledWith('blocked-by-prompt', expect.any(String), { prompt: 'Trust this folder?' })
+    expect(evidence.heldByPrompt).toBe(true)
+    expect(standaloneKickoffVerdict(evidence, { task: 'do the thing' }).kickoff).toBe('failed')
+  })
+
+  it('rolls back a pane that died while it was held, as before', async () => {
+    const d = deps({ holdForStartupPrompt: vi.fn(async () => false), paneAlive: vi.fn(() => false) })
+    const evidence: StandaloneKickoffEvidence = {}
+    expect(await injectStandaloneTask('pane-1', 'do the thing', 'mcp-task', d, { evidence })).toBe(false)
+    expect(evidence.paneGone).toBe(true)
+    expect(d.onKill).toHaveBeenCalledWith('pane-1')
+  })
+
+  it('App.vue wires the hold to the kickoff path\'s and reports through one reporter', () => {
+    const app = readFileSync(resolve(__dirname, '../../App.vue'), 'utf8')
+    const depsStart = app.indexOf('function standaloneTaskDeps(')
+    const depsBody = app.slice(depsStart, app.indexOf('\n}', depsStart))
+    expect(depsBody).toMatch(/holdForStartupPrompt: .*holdKickoffForStartupPrompt\(/s)
+    const start = app.indexOf('async function handleMcpSpawnRequest(')
+    const body = app.slice(start, app.indexOf('\nfunction describeSpawnRefusal(', start))
+    expect(body).toMatch(/const reportStandalone = createKickoffReporter\(/)
+    expect(body).toMatch(/report: reportStandalone/)
+    expect(body).toMatch(/reportStandalone\(verdict\.kickoff/)
   })
 })
