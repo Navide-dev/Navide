@@ -28,6 +28,7 @@ vi.mock('../useTerminalResize', () => ({
 
 const captured = vi.hoisted(() => ({
   dataHandler: undefined as ((data: string) => void) | undefined,
+  keyHandler: undefined as ((e: KeyboardEvent) => boolean) | undefined,
 }))
 
 vi.mock('@xterm/xterm', () => {
@@ -50,7 +51,9 @@ vi.mock('@xterm/xterm', () => {
       el.appendChild(this.textarea)
     }
     attachCustomWheelEventHandler(): void {}
-    attachCustomKeyEventHandler(): void {}
+    attachCustomKeyEventHandler(handler: (e: KeyboardEvent) => boolean): void {
+      captured.keyHandler = handler
+    }
     registerLinkProvider(): { dispose(): void } { return { dispose(): void {} } }
     onResize(): { dispose(): void } { return { dispose(): void {} } }
     onData(cb: (data: string) => void): { dispose(): void } {
@@ -447,5 +450,94 @@ describe('useTerminal — human flag on terminal.input', () => {
     terminal.setDisableStdin(false)
     expect(inputs(mock)).toEqual([{ terminal_session_id: 'sess-1', data: '\x1b[<0;10;10M' }])
     scope.stop()
+  })
+})
+
+// Restore (lib/claudeComposer.ts) puts back what an interrupt returned to
+// Claude Code's box; the box is hard-wrapped, so the pane keeps the prompt as
+// it was sent.
+describe('useTerminal — last submitted prompt', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    captured.dataHandler = undefined
+    captured.keyHandler = undefined
+    localStorage.clear()
+  })
+
+  async function spawnedTerminal() {
+    const mock = createMockBackend()
+    mock.setResponse('terminal.create', { terminal_session_id: 'sess-1', pid: 42 })
+    const { result, scope } = withScope(() => useTerminal('pane-1', mock.backend))
+    result.mount(document.createElement('div'))
+    await result.spawn({ command: 'bash', cwd: '/tmp', agentKey: 'claude' })
+    return { scope, terminal: result }
+  }
+
+  function type(text: string): void {
+    for (const ch of text) captured.dataHandler!(ch)
+  }
+
+  function shiftEnter(): void {
+    captured.keyHandler!({
+      type: 'keydown', key: 'Enter', shiftKey: true, metaKey: false, altKey: false, ctrlKey: false,
+      preventDefault: () => {}, stopPropagation: () => {},
+    } as unknown as KeyboardEvent)
+  }
+
+  it('is empty until something is sent, and is what Enter sent — not just the last 100 chars', async () => {
+    const { scope, terminal } = await spawnedTerminal()
+    expect(terminal.lastSubmittedPrompt()).toBe('')
+    const long = 'x'.repeat(150)
+    type(long)
+    expect(terminal.lastSubmittedPrompt()).toBe('')
+    captured.dataHandler!('\r')
+    expect(terminal.lastSubmittedPrompt()).toBe(long)
+    scope.stop()
+  })
+
+  it('keeps Shift+Enter, a trailing-backslash Enter and a paste\'s line breaks', async () => {
+    const { scope, terminal } = await spawnedTerminal()
+    type('first')
+    shiftEnter()
+    type('second\\')
+    captured.dataHandler!('\r') // Claude Code: a line break, not a send
+    expect(terminal.lastSubmittedPrompt()).toBe('')
+    captured.dataHandler!('\x1b[200~third\rfourth\x1b[201~')
+    captured.dataHandler!('\r')
+    expect(terminal.lastSubmittedPrompt()).toBe('first\nsecond\nthird\nfourth')
+    scope.stop()
+  })
+
+  it('follows edits, and an empty Enter or a cleared line leaves the last prompt as it was', async () => {
+    const { scope, terminal } = await spawnedTerminal()
+    type('fix teh')
+    captured.dataHandler!('\x7f')
+    captured.dataHandler!('\x7f')
+    type('he bug')
+    captured.dataHandler!('\r')
+    expect(terminal.lastSubmittedPrompt()).toBe('fix the bug')
+    type('never sent')
+    captured.dataHandler!('\x15')
+    captured.dataHandler!('\r')
+    expect(terminal.lastSubmittedPrompt()).toBe('fix the bug')
+    scope.stop()
+  })
+
+  it('never holds what Navide writes to the pane', async () => {
+    const { scope, terminal } = await spawnedTerminal()
+    type('my prompt')
+    captured.dataHandler!('\r')
+    terminal.pasteText('[Navide MSG] from: Navide指揮 hi')
+    terminal.pasteText('\r')
+    expect(terminal.lastSubmittedPrompt()).toBe('my prompt')
+    scope.stop()
+  })
+
+  it('is forgotten when the pane goes away', async () => {
+    const { scope, terminal } = await spawnedTerminal()
+    type('my prompt')
+    captured.dataHandler!('\r')
+    scope.stop()
+    expect(terminal.lastSubmittedPrompt()).toBe('')
   })
 })

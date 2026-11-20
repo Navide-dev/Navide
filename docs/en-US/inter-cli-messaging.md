@@ -672,13 +672,20 @@ empties it with Ctrl-U unless it holds your unsent line. When the cleared text
 was your own prompt, a toast offers Restore, which pastes it back without
 pressing Enter, and Copy.
 
-Restore rebuilds the text from the box's rows, and that is a best guess: a
-line break you typed exactly where the row reaches the box's right edge reads
-as the TUI's own wrap, so Restore joins the two lines with a space. The
-original is not on screen to read. Claude Code wraps the box itself and draws
-each row separately, so xterm records no soft wrap (`isWrapped` is false on
-every row) and the PTY stream carries the same rows. Check a restored
-multi-line prompt before sending it; Copy has the same text.
+Restore gives back the prompt as you sent it. Claude Code wraps the box
+itself and draws each row separately, so xterm records no soft wrap
+(`isWrapped` is false on every row) and the PTY stream carries the same rows:
+on screen, a line break you typed exactly where a row reaches the box's right
+edge looks like the TUI's own wrap. So each pane keeps the prompt you last
+sent with Enter (`useTerminal`'s `lastSubmittedPrompt`): your keystrokes,
+pastes and Shift+Enter, up to 32 KB, in the renderer's memory only — never in
+a file or a log, and dropped when the pane closes. Navide's own injections
+are written to the PTY without passing through it. When the cleared box holds
+that prompt, compared with every wrap, indent and line break taken out, Restore
+and Copy use it exactly (`restoredText` in `lib/claudeComposer.ts`). Anything
+else — queued messages glued to it, a prompt edited with the arrow keys or
+recalled from history, a collapsed paste — is rebuilt from the rows, a best
+guess that joins a row reaching the edge to the next one with a space.
 
 **One at a time, in order.** Each target has its own FIFO queue and at most one
 injection in flight. Injection itself is a bracketed paste plus a verified

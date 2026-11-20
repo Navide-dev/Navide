@@ -5344,6 +5344,7 @@ async function injectText(
       await clearLeftoverPrompt({
         readScreen: renderedScreen,
         draftText: () => (paneRefs[paneId]?.draftText as (() => string) | undefined)?.() ?? '',
+        lastSubmitted: () => (paneRefs[paneId]?.lastSubmittedPrompt as (() => string) | undefined)?.() ?? '',
         navideTypedLast: () => paneNavideTypedLast(paneId),
         cols: paneRefs[paneId]?.terminalSize?.()?.cols ?? 80,
         send: async (keys) => { await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys }) },
