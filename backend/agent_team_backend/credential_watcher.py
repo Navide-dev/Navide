@@ -73,10 +73,11 @@ CHECK_RETRIES = 5
 LOGIN_KEYCHAIN_REL = ("Library", "Keychains", "login.keychain-db")
 
 # Agents watched through the login keychain. Antigravity's identity names no
-# account, so a change there only re-announces the sign-in state. Cursor is
-# keychain-backed too but carries an email, and following it would let the
-# reconcile adopt and re-point its accounts — not wired until that is wanted.
-KEYCHAIN_WATCH_AGENTS = ("antigravity",)
+# account, so a change there only re-announces the sign-in state. Cursor's
+# names one (the access token's user id), so a change there reconciles like
+# any file-backed login: the ledger follows a profile already holding it, and
+# an account none holds is registered once.
+KEYCHAIN_WATCH_AGENTS = ("antigravity", "cursor")
 
 # Sentinel for "no fingerprint recorded yet" — a signed-out agent is a
 # legitimate reading, so no ordinary value can stand in for "never read".
@@ -292,6 +293,32 @@ def point_at_profile_holding_live(agent_key: str, *, scope: str | None = None) -
     return None
 
 
+def _navide_sign_in_pending(agent_key: str) -> bool:
+    """Is a sign-in started from Navide still running against the live store?
+
+    A CLI without login isolation (cursor, copilot, kilo, ...) signs in over
+    the live credentials; the profile the sign-in was started for parks that
+    login when it finishes and puts the previous one back. Until then the live
+    login belongs to that profile, so registering it as an unknown account
+    would hold the same account twice. Blocking."""
+    from . import app
+
+    vault = app.credential_vault
+    if vault._login_isolated(agent_key):  # noqa: SLF001 — vault-internal policy
+        return False
+    slot_ids = {DEFAULT_SLOT_ID} | {
+        str(p["id"])
+        for p in app.cli_profiles_store.list()["profiles"]
+        if p.get("agentKey") == agent_key
+    }
+    return any(vault.login_pending(agent_key, slot_id) for slot_id in slot_ids)
+
+
+def _align_unless_signing_in(agent_key: str) -> None:
+    if not _navide_sign_in_pending(agent_key):
+        align_default_to_live(agent_key)
+
+
 async def reconcile_live_account(agent_key: str) -> None:
     """CredentialWatcher sink: this agent's live credentials now belong to a
     different account than when we last looked.
@@ -310,7 +337,7 @@ async def reconcile_live_account(agent_key: str) -> None:
             guard = getattr(app.credential_vault, "require_store_mutation", None)
             if guard is not None:
                 await vault_to_thread(guard, agent_key)
-            await vault_to_thread(align_default_to_live, agent_key)
+            await vault_to_thread(_align_unless_signing_in, agent_key)
     except Exception as err:  # noqa: BLE001 — a watcher must never crash the loop
         log.warning("reconciling the active %s account failed: %s", agent_key, err)
         return

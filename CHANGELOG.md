@@ -7,6 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Diagnostics: two ways a pane could go missing after a restart without a trace now leave a warning in `ui_diagnostics` and the error log (`errors.jsonl`). `restore.pane-record-write-failed`: the record of a pane opened by an external `cli_open_agent` was not saved, so the pane will not be restored. `restore.workspace-check-gave-up`: a restored window could not read its workspace's project after every retry and showed it without its panes. Each names only the workspace and the pane; nothing else changes.
+- CLI accounts (macOS): signing in to or out of the Cursor CLI outside Navide (`agent login`, `agent logout` in a plain terminal) is now noticed without a restart, as it already was for Antigravity. The backend watches the login keychain database for Cursor too and reads only the account id in the login, never printing or logging a token. Signing back in to an account Navide already holds makes that account the active one again, and no second one is created. An account Navide has not seen is added once, named by that id (Cursor's login carries no email), and becomes the active one. A sign-out shows as signed out and leaves your accounts and their saved logins alone. A sign-in started from Navide's own Add Account is left to that account and is not added a second time. Nothing is written to the Keychain, and no pane restarts.
 
 ### Fixed
 
