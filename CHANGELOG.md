@@ -20,6 +20,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Known limitations
 
 - Messaging (0.2.45): Restore on the toast for a prompt Navide cleared from a Claude Code input box rebuilds the text from the box's rows. A line break typed exactly where a row reaches the box's right edge reads as Claude Code's own wrap, so the restored text has a space there instead of the break. Claude Code wraps the box itself, so neither the terminal nor its output records which rows were wrapped. Restore never presses Enter; check a restored multi-line prompt before sending it. See "A prompt an interrupt put back is cleared first" in `docs/en-US/inter-cli-messaging.md`.
+- Chat channels (0.2.45): Telegram and the other channels do not read a proxy auto-configuration (PAC) file or automatic proxy discovery; they use the proxy Python reads from the system (HTTP(S)_PROXY, the manual Web and Secure Web Proxy on macOS, the manual proxy server on Windows, the variables only on Linux). On a network that needs the PAC file, enter the proxy it picks for the platform's host as a fixed proxy. See "Proxies" under Chat channels in `docs/en-US/inter-cli-messaging.md`.
 
 ## [0.2.45] — 2026-11-20
 

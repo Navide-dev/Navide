@@ -1129,6 +1129,24 @@ Messages are not fetched on a timer: Telegram and Matrix hold a 30-second long p
 
 Platforms that need a public webhook (LINE, Teams, WhatsApp Cloud, SMS) are out of scope.
 
+**Proxies.** Every channel connects through the proxy Python's
+`urllib.request.getproxies()` reports, both for HTTP requests and for the
+WebSocket platforms: the `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` variables
+the backend starts with, plus, on macOS, the Web Proxy and Secure Web Proxy in
+System Settings → Network → Proxies and, on Windows, the manual proxy server
+under Settings → Network & internet → Proxy. Linux reads the variables only,
+not GNOME or KDE settings. A proxy auto-configuration (PAC) file, the macOS
+"Automatic proxy configuration" and "Auto proxy discovery" (WPAD) switches and
+the Windows "Use setup script" and "Automatically detect settings" switches are
+not read: a PAC file is a JavaScript program that needs an interpreter Navide's
+backend does not carry. On a network that only works through a PAC file, a
+channel connects directly and fails as unreachable. To use it there, ask the PAC
+file which proxy it picks for the platform's host (for example
+`api.telegram.org`) and enter that proxy as a fixed one: the Web and Secure Web
+Proxy on macOS, the manual proxy on Windows, or `HTTPS_PROXY` in the
+environment Navide starts from. A manual proxy set beside a PAC file on macOS
+is used.
+
 ### Setting up
 
 1. **Settings → Channels**: enter the platform's credentials (a Telegram bot
