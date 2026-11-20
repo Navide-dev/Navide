@@ -39,13 +39,13 @@ async function loadInjectText(scope: Record<string, unknown>) {
 
 const fixture = readFileSync(join(__dirname, '../../lib/__tests__/fixtures/claude-2.1.327-prompt.txt'), 'utf8')
 const RESTORED = 'Run the release dry run and report back'
-const withBox = (text: string): string => fixture.replace(/^❯.*$/m, `❯ ${text}`)
+const withBox = (text: string): string => fixture.replace(/^❯.*$/m, `❯ ${text.split('\n').join('\n  ')}`)
 const ENVELOPE = '[Navide MSG] from: Navide指揮 run the release dry run'
 
 const COLS = 72
 const MESSAGE = '[Navide] from Navide指揮: the CI run is green'
 
-async function run(opts: { agentKey: string; box: string; draft?: string; injectedAt?: number; writeText?: (t: string) => Promise<void> }) {
+async function run(opts: { agentKey: string; box: string; draft?: string; lastSubmitted?: string; injectedAt?: number; writeText?: (t: string) => Promise<void> }) {
   const writes: string[] = []
   let screen = withBox(opts.box)
   const backend = {
@@ -69,6 +69,7 @@ async function run(opts: { agentKey: string; box: string; draft?: string; inject
     readScreenTail: () => '',
     readVisibleScreen: () => screen,
     draftText: () => opts.draft ?? '',
+    lastSubmittedPrompt: () => opts.lastSubmitted ?? '',
     lastUserKeyAt: 1,
     insertText,
     terminalSize: () => ({ cols: COLS, rows: 40 }),
@@ -137,6 +138,17 @@ describe('injectText into a Claude Code box that already holds text', () => {
     expect(r.insertText).toHaveBeenCalledWith(RESTORED)
     expect(r.writes).not.toContain('\r')
     expect(r.leftoverStash.has('p1')).toBe(false)
+  })
+
+  it('Restore puts back the prompt as submitted, a line break at the box\'s right edge included', async () => {
+    // 68 columns fill a row of the 72-column pane's box: on screen the typed
+    // break reads as Claude Code's own wrap.
+    const submitted = `${'word '.repeat(13)}edge\nsecond line`
+    const r = await run({ agentKey: 'claude', box: submitted, lastSubmitted: submitted })
+    expect(r.leftoverStash.get('p1')).toBe(submitted)
+    const [, opts] = r.toast.mock.calls[0] as [string, { action: { run: () => void } }]
+    opts.action.run()
+    expect(r.insertText).toHaveBeenCalledWith(submitted)
   })
 
   it('Copy puts the cleared prompt on the clipboard', async () => {

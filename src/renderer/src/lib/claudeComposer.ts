@@ -103,11 +103,12 @@ const WIDE_CHAR = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\
  *  fit moves to the next row whole. */
 const WRAP_SLACK = 12
 
-/** The box's rows put back together as typed, for the Restore button. A row
- *  that reaches the box's width was wrapped by the TUI and joins the next one
- *  (with the space the wrap ate, unless either side is a wide character); a
- *  shorter row ended at a newline. A best guess: a typed line break right at
- *  the edge reads as a wrap. */
+/** The box's rows put back together as typed, for the Restore button when
+ *  the pane's last submitted prompt is not what the box holds (restoredText).
+ *  A row that reaches the box's width was wrapped by the TUI and joins the
+ *  next one (with the space the wrap ate, unless either side is a wide
+ *  character); a shorter row ended at a newline. A best guess: a typed line
+ *  break right at the edge reads as a wrap. */
 export function unwrapComposer(box: string, cols: number): string {
   const width = Math.max(1, cols - 4)
   const rows = box.split('\n')
@@ -124,6 +125,23 @@ export function unwrapComposer(box: string, cols: number): string {
   return out
 }
 
+/** What Restore puts back for a box an interrupt refilled. Claude Code
+ *  hard-wraps the box, so the screen cannot tell a typed line break at the
+ *  right edge from a wrap; the prompt the person last submitted in this pane
+ *  (useTerminal's lastSubmittedPrompt) can. When the box holds that prompt —
+ *  the same text once every wrap, indent and line break is taken out — the
+ *  original comes back exactly; anything else (queued messages, an edit, a
+ *  collapsed paste) is rebuilt from the rows. Never one of Navide's own
+ *  envelopes: those are not the person's words. */
+export function restoredText(box: string, cols: number, lastSubmitted: string): string {
+  const squash = (text: string): string => text.replace(/\s+/g, '')
+  if (lastSubmitted.trim() !== '' && !isInjectedMessageText(lastSubmitted.trimStart()) &&
+      squash(lastSubmitted) === squash(box)) {
+    return lastSubmitted
+  }
+  return unwrapComposer(box, cols)
+}
+
 export type LeftoverOutcome = 'none' | 'user-draft' | 'cleared' | 'unchanged'
 
 /** Before typing into a Claude Code pane: empty a box that holds text the
@@ -131,10 +149,11 @@ export type LeftoverOutcome = 'none' | 'user-draft' | 'cleared' | 'unchanged'
  *  'unchanged' when Ctrl-U left it as it was (a suggestion, which typing
  *  replaces), 'user-draft' when it was left alone ('user' or 'user-paste'),
  *  'none' when there was nothing to do or no box to read. `onCleared` hears
- *  what was in the box, put back together, and whose it was. */
+ *  what was in the box, put back together (restoredText), and whose it was. */
 export async function clearLeftoverPrompt(deps: {
   readScreen: () => string
   draftText: () => string
+  lastSubmitted: () => string
   navideTypedLast: () => boolean
   cols: number
   send: (keys: string) => Promise<void>
@@ -157,7 +176,7 @@ export async function clearLeftoverPrompt(deps: {
   if (claudeComposerText(deps.readScreen()) === box) return 'unchanged'
   const preview = box.replace(/\s+/g, ' ').slice(0, 60)
   deps.onCleared({
-    text: unwrapComposer(box, deps.cols),
+    text: owner === 'restored' ? restoredText(box, deps.cols, deps.lastSubmitted()) : unwrapComposer(box, deps.cols),
     owner,
     diagnostic: `cleared ${box.length} chars (${owner}) left in the input box before typing: "${preview}${box.length > 60 ? '…' : ''}"`,
   })
