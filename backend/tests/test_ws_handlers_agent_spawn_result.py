@@ -155,3 +155,26 @@ async def test_kickoff_handler_rejects_a_missing_request_id(
 
     assert called == []
     assert session.websocket.sent[-1]["ok"] is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_kickoff_verdict_carries_the_launch_prompt_it_is_blocked_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import ws_handlers
+    from agent_team_backend.mcp_server import server as plan_mcp
+
+    seen: list[dict] = []
+    monkeypatch.setattr(plan_mcp, "resolve_kickoff", lambda request_id, verdict: seen.append(verdict) or True)
+
+    class _Session:
+        async def send_json(self, _msg: dict) -> None:
+            return None
+
+    await ws_handlers.agent_spawn_kickoff(_Session(), "m1", "agent_spawn.kickoff", {
+        "request_id": "r1", "pane_id": "p1", "kickoff": "blocked-by-prompt", "reason": "why",
+        "prompt": "Adding a new directory: /x", "options": ["No, exit", "Yes, add it"],
+    })
+
+    assert seen == [{
+        "pane_id": "p1", "kickoff": "blocked-by-prompt", "reason": "why",
+        "prompt": "Adding a new directory: /x", "options": ["No, exit", "Yes, add it"],
+    }]

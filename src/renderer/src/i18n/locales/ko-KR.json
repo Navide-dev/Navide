@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: Grok pane이 폴더 신뢰를 기록하면 Navide가 그 폴더 항목을 이 파일 끝에 덧붙여요. pane을 연 작업 영역이나 그 안의 폴더만 ~/.grok에 공유해요. 파일에 아직 없는 폴더만 추가하며, 사용자의 항목·주석·배치는 절대 바꾸지 않아요. 변경할 때마다 파일을 백업하고, 이 기능을 끄면 Navide가 덧붙인 텍스트만 정확히 제거해서 원래대로 돌려놓아요(Navide가 만든 파일이면 파일을 제거해요)",
         "cost": "한 Grok pane에서 신뢰한 폴더를 새로 만들거나 다시 만든 Grok pane마다 다시 물어요."
       },
+      "claude_skills-trust": {
+        "name": "Claude 스킬 폴더 신뢰",
+        "benefit": "새 Claude 창이 Navide 스킬 폴더를 신뢰할지 먼저 묻지 않고 바로 입력창으로 열립니다.",
+        "purpose": "Claude 창이 Navide가 스킬을 전달하는 폴더의 신뢰를 다시 묻지 않습니다",
+        "writes": "~/.claude.json(또는 계정 전용 Claude 폴더의 .claude.json): Navide가 만들어 --add-dir로 모든 Claude 창에 넘기는 스킬 링크 폴더에 대해 신뢰 기록 projects[<Navide 데이터>/runtime/skills-views/claude].hasTrustDialogAccepted 한 건만 추가합니다. 다른 폴더는 절대 신뢰하지 않으며 파일의 나머지 내용은 그대로 둡니다. Claude Code 자체 설정 잠금 아래에서 기록이 없을 때만 쓰고, 먼저 백업하며, 끄면 그 기록만 제거합니다",
+        "cost": "스킬이 전달되는 새 Claude 창마다 Navide 스킬 폴더에 대해 먼저 \"Adding a new directory\"를 묻습니다."
+      },
       "cursor_project-mcp": {
         "name": "Cursor용 Navide MCP 도구",
         "benefit": "Cursor pane에서 메시지, 계획, 예약 같은 Navide의 MCP 도구를 사용할 수 있어요.",

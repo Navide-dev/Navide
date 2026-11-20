@@ -223,8 +223,9 @@ import {
 } from './lib/ptyInputBlock'
 import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
-  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
+  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
+import { settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -3893,6 +3894,93 @@ function kickoffPacing(paneId: string): { awaitReady: (timeoutMs: number) => Pro
   }
 }
 
+// How long a new pane's first screen is watched for a launch prompt, how long
+// a task held behind one waits for it to be answered, and the pause each key
+// into Claude's dialog needs (it ignores keys for 500 ms after it arms).
+const STARTUP_PROMPT_WATCH_MS = 15_000
+const STARTUP_PROMPT_HOLD_MS = 10 * 60_000
+const STARTUP_PROMPT_KEY_SETTLE_MS = 700
+
+function startupPromptDeps(agentKey: string, paneId: string) {
+  return {
+    agentKey,
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    navideDirs: () => ((paneRefs[paneId]?.navideDirs as unknown as string[] | undefined) ?? []),
+    awaiting: () => paneRefs[paneId]?.displayStatus === 'awaiting',
+    ready: () => promptReadyNow({
+      status: paneRefs[paneId]?.displayStatus as string | undefined,
+      cleanBytes: paneCleanBytes(paneId),
+      quietMs: Date.now() - Number((paneRefs[paneId]?.lastRawActivityAt as unknown as number | undefined) ?? 0),
+      quietNeededMs: PROMPT_READY_QUIET_MS,
+    }),
+    alive: () => paneAlive(paneId),
+    send: async (keys: string) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return false
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      return true
+    },
+    sleep,
+    now: Date.now,
+    settleMs: STARTUP_PROMPT_KEY_SETTLE_MS,
+  }
+}
+
+/** Watch a new pane's first screen for a launch prompt before its task is
+ *  typed (lib/startupPrompts.ts). Every answer Navide gives and every prompt
+ *  it leaves alone is recorded in ui_diagnostics and the error ledger. A
+ *  prompt it leaves alone is reported to cli_open_agent as
+ *  "blocked-by-prompt" with the prompt and its options, and the task waits
+ *  until somebody answers it. False when the kickoff ended here. */
+async function holdKickoffForStartupPrompt(
+  agentKey: string,
+  paneId: string,
+  timeoutMs: number,
+  report: (kickoff: ReportedKickoff, reason?: string, extra?: Record<string, unknown>) => void,
+): Promise<boolean> {
+  const deps = startupPromptDeps(agentKey, paneId)
+  const watch = await settleStartupPrompts({
+    ...deps,
+    timeoutMs,
+    record: (entry) => {
+      recordDiagnostic({
+        level: 'warn',
+        code: entry.answered ? 'spawn.startup-prompt-answered' : 'spawn.startup-prompt-held',
+        message: entry.answered
+          ? `answered a launch prompt by rule ${entry.rule} (folder ${entry.folder}): ${entry.why}`
+          : `left a launch prompt for a person${entry.folder ? ` (folder ${entry.folder})` : ''}: ${entry.why}`,
+        paneId,
+      })
+      pipelineLog(`${entry.answered ? '✓ answered' : '⏸ held on'} launch prompt (pane ${paneId.slice(0, 8)}): ${entry.why}`)
+    },
+  })
+  if (watch.outcome === 'clear') return paneAlive(paneId)
+  const screen = deps.readScreen()
+  report('blocked-by-prompt', watch.why, {
+    prompt: awaitingPromptText(screen),
+    options: parseMenuOptions(screen),
+    folder: watch.prompt?.folder ?? '',
+  })
+  if (await waitStartupPromptGone(deps, STARTUP_PROMPT_HOLD_MS)) return true
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (pane && paneAlive(paneId)) {
+    pane.kickoffStatus = 'failed'
+    recordDiagnostic({
+      level: 'warn',
+      code: 'spawn.startup-prompt-unanswered',
+      message: `the launch prompt was not answered within ${STARTUP_PROMPT_HOLD_MS / 60_000} min; the task was not typed`,
+      paneId,
+    })
+  }
+  return false
+}
+
 /** Wait for a freshly created pane's CLI to reach its prompt, then inject its
  *  task. Slow by nature: a cold CLI can take tens of seconds to print its
  *  first byte.
@@ -3945,14 +4033,23 @@ async function kickoffRequestedPane(
       await dismissStartupDialog(paneId, DISMISS_TIMEOUT_MS)
       await waitForStartupActivity(paneId)
     }
+    // A launch prompt the task must not be typed into: answered when it is on
+    // the allowlist, otherwise reported and the task held (lib/startupPrompts).
+    if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, STARTUP_PROMPT_WATCH_MS, emitKickoffVerdict))) return false
     // A resumed CLI reloads its transcript before it prints or listens —
     // observed 20-30s of silence on a real claude session — so the deadline a
     // fresh banner fits in would type the kickoff into a CLI not yet reading.
     const promptReadyTimeoutMs = opts.resume
       ? KICKOFF_PROMPT_READY_TIMEOUT_RESUME_MS
       : KICKOFF_PROMPT_READY_TIMEOUT_MS
-    const promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
+    let promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
     if (!paneAlive(paneId)) return false
+    // A prompt that showed up late never lets the gate open: look once more.
+    if (!promptReady) {
+      if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, 1_000, emitKickoffVerdict))) return false
+      promptReady = await waitForPromptReady(paneId, PROMPT_READY_QUIET_MS + 1_000)
+      if (!paneAlive(paneId)) return false
+    }
     // Sampled once, with the gate's answer: a pane that has printed nothing is
     // still initialising and is not typed into (runKickoffAttempts); one that
     // is printing but never read idle+quiet is typed into as before.
@@ -12548,6 +12645,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     screen: (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '',
     answer: a.answer,
     expected: a.expected,
+    navideDirs: (ref.navideDirs as unknown as string[] | undefined) ?? [],
   })
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }

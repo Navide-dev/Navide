@@ -120,9 +120,15 @@ export const SPEC = {
   // with a Submit answers / Cancel menu and none of the footers, so without it
   // a pane answered from the chat question by question would read as idle on
   // the last step. From the 2.1.304 binary as well; not yet seen on a live pane.
+  //
+  // And the "Adding a new directory" dialog 2.1.32x raises at launch for an
+  // --add-dir folder with no trust record (No, exit / Yes, add it, unnumbered,
+  // "Enter to confirm · Esc to cancel"; seen live on 2.1.329). Without it a
+  // pane stopped there did not read as awaiting, so a kickoff or a message
+  // could be typed into it (lib/startupPrompts.ts).
   awaitingInput: {
     pattern:
-      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend|Resume this conversation\?.{0,600}?Start a new conversation|Resume full session as-is.{0,40}?Don't ask me again|Ready to submit your answers\?.{0,80}?Submit answers.{0,40}?Cancel)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
+      /(?:No, and tell Claude what to do differently(?: \(esc\))?|Enter to select ·.{0,80}?Esc to cancel|Esc to cancel ·.{0,20}?Tab to amend|Resume this conversation\?.{0,600}?Start a new conversation|Resume full session as-is.{0,40}?Don't ask me again|Ready to submit your answers\?.{0,80}?Submit answers.{0,40}?Cancel|Yes, add it Enter to confirm · Esc to cancel)(?<![─-╿] ?(?:[❯>](?! ?\d+[.)])|!(?= ))(?:[^─-╿]|[─-╿](?![─-╿]{15}))*)(?!.*[─-╿] ?(?:[❯>]|!(?= )))(?:[─-╿]*[^─-╿]){0,300}[─-╿]*$/,
     // Additive to the hook, never authoritative over it: an MCP elicitation
     // draws no option box, so a non-match here says nothing about a wait the
     // hook raised. See the field's own doc comment.

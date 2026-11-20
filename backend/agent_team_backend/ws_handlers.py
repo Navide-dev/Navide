@@ -10217,6 +10217,13 @@ async def _terminal_create_impl(
     }
     if wiring_warnings:
         response_payload["wiring_warnings"] = wiring_warnings
+    # Folders Navide itself handed the CLI (claude's --add-dir skills view):
+    # the one a launch prompt about such a folder may be answered for.
+    from .plugins.builtin.navide_skills import skills_wiring as _skills_wiring
+
+    navide_dirs = _skills_wiring.handed_dirs(agent_key, term.command)
+    if navide_dirs:
+        response_payload["navide_dirs"] = navide_dirs
     await session.send_json(make_response(msg_id, msg_type, response_payload))
     if session.dead or transaction["cancelled"]:
         raise _TerminalCreateCancelled
@@ -13344,6 +13351,11 @@ async def agent_spawn_kickoff(session: "Session", msg_id: str, msg_type: str, pa
     }
     if payload.get("reason"):
         verdict["reason"] = str(payload["reason"])
+    if verdict["kickoff"] == "blocked-by-prompt":
+        # The launch prompt the task is held behind, for cli_answer_prompt.
+        verdict["prompt"] = str(payload.get("prompt") or "")
+        options = payload.get("options")
+        verdict["options"] = [str(o) for o in options] if isinstance(options, list) else []
     delivered = plan_mcp.resolve_kickoff(request_id, verdict)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 

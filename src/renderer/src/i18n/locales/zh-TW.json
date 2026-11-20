@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml：Grok 分格記下你信任某個資料夾後，Navide 會把那個資料夾的設定接在這個檔的最後面。只有分格開啟的工作區或它底下的資料夾，才會共享到 ~/.grok。只加入檔案裡還沒有的資料夾，你自己的設定、註解與排版都不會變動。每次修改前都會備份；關閉這項會只移除 Navide 接上去的那段文字，檔案回到原本的內容（檔案是 Navide 建立的就整個移除）",
         "cost": "在一個 Grok 分格信任過的資料夾，每個新開或重建的 Grok 分格都會再問一次。"
       },
+      "claude_skills-trust": {
+        "name": "信任 Claude 技能資料夾",
+        "benefit": "新的 Claude 分格直接進到輸入框，不會先問要不要信任 Navide 的技能資料夾。",
+        "purpose": "Claude 分格不會再要求信任 Navide 用來提供技能的資料夾",
+        "writes": "~/.claude.json（或帳號自己 Claude 資料夾裡的 .claude.json）：Navide 只加一筆信任紀錄 projects[<Navide 資料>/runtime/skills-views/claude].hasTrustDialogAccepted，對象是 Navide 自己建立、以 --add-dir 交給每個 Claude 分格的技能連結資料夾。不會信任其他任何資料夾，檔案其他內容一律保留。寫入時使用 Claude Code 自己的設定鎖，只在紀錄不存在時寫，寫入前先備份，關閉時只移除這一筆紀錄",
+        "cost": "每個有提供技能的新 Claude 分格，都會先針對 Navide 的技能資料夾問「Adding a new directory」。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor 分格可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",

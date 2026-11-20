@@ -600,6 +600,56 @@ def _grok_folder_trust_takeback() -> list[Takeback]:
     )]
 
 
+# ── Claude: trust for the managed-skills view ─────────────────────────────
+
+
+def trust_claude_skills_view_gated(view: Path, env: dict[str, str] | None) -> None:
+    """``claude_skills_trust.ensure_trusted`` as the feature claude.skills-trust.
+
+    Records in the pane's Claude config that Navide's own skills view, the
+    directory every Claude pane gets with ``--add-dir``, is trusted, so a new
+    pane does not stop on "Adding a new directory". One target per config
+    file; removing the record from one is that file's choice. Without a gate
+    nothing is written. A failure never blocks the spawn: the pane shows the
+    prompt as it did before."""
+    from . import claude_skills_trust
+    from .mcp_server import pane_home
+
+    g = _gate
+    if g is None:
+        return
+    config = claude_skills_trust.config_file(env, pane_home.real_home())
+    # An account's own config dir reset is a fresh start, not a removal.
+    own_dir = None if config.parent == pane_home.real_home() else config.parent
+    try:
+        g.apply(
+            "claude.skills-trust", config,
+            write=lambda: claude_skills_trust.ensure_trusted(config, view),
+            present=lambda: claude_skills_trust.is_trusted(config, view),
+            file=config, quiet_repairs=True, reset_folder=own_dir, per_target=True,
+            detail=f"recorded that Navide's skills folder {view} is trusted, so Claude panes"
+            " do not ask about it; no other folder is trusted",
+        )
+    except Exception as err:  # noqa: BLE001 — the spawn goes ahead whatever happens here
+        log.warning("could not record trust for %s in %s: %s", view, config, err)
+
+
+def _claude_skills_trust_takeback() -> list[Takeback]:
+    from . import claude_skills_trust
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    view = skills_wiring.agent_view_root("claude")
+    return [
+        Takeback(
+            target,
+            (lambda path=Path(target): claude_skills_trust.take_back(path, view)),
+            (lambda path=Path(target): claude_skills_trust.is_trusted(path, view)),
+            Path(target),
+        )
+        for target in _targets("claude.skills-trust")
+    ]
+
+
 # ── Account auto-repair (D7) ───────────────────────────────────────────────
 
 
@@ -707,4 +757,5 @@ TAKEBACKS: dict[str, Callable[[], list[Takeback]]] = {
     "cursor.project-skills": _project_dir_takeback,
     "codex.hook-trust": _codex_hook_trust_takeback,
     "grok.folder-trust": _grok_folder_trust_takeback,
+    "claude.skills-trust": _claude_skills_trust_takeback,
 }

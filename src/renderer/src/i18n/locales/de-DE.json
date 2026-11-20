@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: Wenn ein Grok-Bereich festhält, dass Sie einem Ordner vertraut haben, hängt Navide den Eintrag dieses Ordners ans Ende dieser Datei an. Nur der Arbeitsbereich, in dem der Bereich geöffnet wurde, oder ein Ordner darin wird mit ~/.grok geteilt. Es werden nur Ordner hinzugefügt, die die Datei noch nicht erwähnt; Ihre eigenen Einträge, Kommentare und Ihr Layout werden nie geändert. Die Datei wird vor jeder Änderung gesichert, und beim Ausschalten wird genau der von Navide angehängte Text entfernt, sodass die Datei wieder ihrem vorherigen Stand entspricht (oder die Datei entfernt wird, falls Navide sie erstellt hat)",
         "cost": "Bei einem Ordner, dem Sie in einem Grok-Bereich vertraut haben, wird in jedem neuen oder neu aufgebauten Grok-Bereich erneut nachgefragt."
       },
+      "claude_skills-trust": {
+        "name": "Claude-Skill-Ordner vertraut",
+        "benefit": "Neue Claude-Bereiche öffnen direkt die Eingabe, statt zuerst zu fragen, ob dem Skill-Ordner von Navide vertraut wird.",
+        "purpose": "Claude-Bereiche fragen nicht nach Vertrauen für den Ordner, über den Navide Skills bereitstellt",
+        "writes": "~/.claude.json (oder die .claude.json im eigenen Claude-Ordner eines Kontos): Navide fügt genau einen Vertrauenseintrag hinzu, projects[<Navide-Daten>/runtime/skills-views/claude].hasTrustDialogAccepted, für den Ordner mit Skill-Links, den Navide baut und jedem Claude-Bereich mit --add-dir übergibt. Keinem anderen Ordner wird vertraut, der Rest der Datei bleibt erhalten. Geschrieben wird unter Claude Codes eigener Konfigurationssperre und nur, wenn der Eintrag fehlt; die Datei wird vorher gesichert, und beim Ausschalten wird genau dieser Eintrag entfernt",
+        "cost": "Jeder neue Claude-Bereich mit bereitgestellten Skills fragt zuerst „Adding a new directory“ zum Skill-Ordner von Navide."
+      },
       "cursor_project-mcp": {
         "name": "Navide-MCP-Tools für Cursor",
         "benefit": "Cursor-Bereiche erhalten die MCP-Tools von Navide, etwa für Nachrichten, Pläne und Zeitplanung.",
