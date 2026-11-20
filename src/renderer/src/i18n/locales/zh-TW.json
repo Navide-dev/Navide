@@ -9442,7 +9442,8 @@
       "locked-title": "由 App 管理的系統排程：只能在該工作區的自我優化面板修改",
       "managed-by": "由工作區管理",
       "name": "自我優化 · {workspace}",
-      "locked-title-shipped-log": "由 App 管理的系統排程：只能在該工作區的上線紀錄面板修改"
+      "locked-title-shipped-log": "由 App 管理的系統排程：只能在該工作區的上線紀錄面板修改",
+      "name-shipped-log": "上線紀錄摘要 · {workspace}"
     },
     "add": "＋ 新增",
     "empty": "還沒有排程工作",
@@ -10225,6 +10226,9 @@
       "empty": "目前沒有任何分格連線到 channel。",
       "disconnect": "關閉連線",
       "disconnect-label": "關閉 {pane} 與 {channel} 的連線",
+      "disconnect-confirm-text": "關閉後，{channel} 不會再收到 {pane} 的訊息，也不能再從聊天室喚醒這段對話；要恢復只能重新綁定。",
+      "disconnect-confirm": "確定關閉",
+      "disconnect-cancel": "取消",
       "go-to": "跳到 {pane}",
       "auto-child": "自動子話題",
       "auto-child-hint": "為子分格自動建立的話題；關閉父分格的連線時會一併關閉。",

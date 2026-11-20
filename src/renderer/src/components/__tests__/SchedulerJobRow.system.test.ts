@@ -119,6 +119,29 @@ describe('SchedulerJobRow – system jobs are read-only', () => {
     expect(calls.filter((c) => c !== 'scheduler.list')).toEqual([])
   })
 
+  it('a system job name follows the UI language, even when the stored name is the old English one', async () => {
+    const digest = systemJob({
+      id: 'ship_digest:abc',
+      name: 'Shipped Log digest · Agent-Team',
+      action: { kind: 'ship_digest', workspace: WS },
+      owner: { kind: 'system', feature: 'shipped-log', workspace: WS },
+    })
+    wrapper = mountRow(digest)
+    await flushPromises()
+    const name = wrapper.get('[data-test="system-name"]')
+    expect(name.text()).toBe('上線紀錄摘要 · Agent-Team')
+    expect(name.attributes('data-truncate')).toBe('')
+    wrapper.unmount()
+    wrapper = mountRow(systemJob({ name: 'Self-evolution · Agent-Team' }))
+    await flushPromises()
+    expect(wrapper.get('[data-test="system-name"]').text()).toBe('自我優化 · Agent-Team')
+    wrapper.unmount()
+    i18n.global.locale.value = 'en-US'
+    wrapper = mountRow(digest)
+    await flushPromises()
+    expect(wrapper.get('[data-test="system-name"]').text()).toBe('Shipped Log digest · Agent-Team')
+  })
+
   it('an ordinary job keeps its controls and no manage link', async () => {
     wrapper = mountRow(userJob())
     await flushPromises()

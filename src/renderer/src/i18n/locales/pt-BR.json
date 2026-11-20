@@ -9442,7 +9442,8 @@
       "locked-title": "Uma tarefa do sistema pertencente ao app: altere-a no painel de autoevolução desse workspace",
       "managed-by": "Gerenciada pelo workspace",
       "name": "Autoevolução · {workspace}",
-      "locked-title-shipped-log": "Agendamento do sistema mantido pelo App: altere no painel Registro de publicações desse espaço de trabalho"
+      "locked-title-shipped-log": "Agendamento do sistema mantido pelo App: altere no painel Registro de publicações desse espaço de trabalho",
+      "name-shipped-log": "Resumo do registro de publicações · {workspace}"
     },
     "add": "+ Nova",
     "empty": "Nenhuma tarefa agendada ainda",
@@ -10225,6 +10226,9 @@
       "empty": "Nenhum pane está vinculado a um canal ainda.",
       "disconnect": "Desconectar",
       "disconnect-label": "Desconectar {pane} de {channel}",
+      "disconnect-confirm-text": "Depois disso, {channel} deixa de receber mensagens de {pane} e não pode mais reativar esta conversa. Para reconectar, será preciso vincular de novo.",
+      "disconnect-confirm": "Desconectar",
+      "disconnect-cancel": "Cancelar",
       "go-to": "Ir para {pane}",
       "auto-child": "Subtópico automático",
       "auto-child-hint": "Criado automaticamente para um pane filho. Desconectar o pane pai também o fecha.",
