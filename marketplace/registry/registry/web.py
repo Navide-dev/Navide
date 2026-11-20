@@ -374,7 +374,7 @@ def create_web_router() -> APIRouter:
                 for v in ordered
             ]
             readme_html = _extract_readme(request, latest) if latest else None
-            screenshots = _screenshots(repo, latest) if latest else []
+            screenshots = screenshot_paths(repo, latest) if latest else []
             icon_path = _safe_icon(repo, latest)
             pub = repo.session.get(Publisher, extension.publisher_id)
             viewer = current_viewer(request)
@@ -457,7 +457,7 @@ def create_web_router() -> APIRouter:
     return router
 
 
-def _screenshots(repo: RegistryRepository, row: ExtensionVersion) -> list[str]:
+def screenshot_paths(repo: RegistryRepository, row: ExtensionVersion) -> list[str]:
     icon = manifest_icon(row.manifest)
     paths = []
     for asset in repo.list_assets(row.id):
