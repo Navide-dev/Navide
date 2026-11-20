@@ -29,9 +29,13 @@ function runCli(args) {
 }
 
 const registryUrl = 'https://server.navide.dev/registry'
-// Verified downloads are kept here, so a build without network reuses them
-// (and checks them again: the Registry's trust metadata must still be valid).
+// Verified downloads are kept here. Only an explicitly offline build reuses
+// them (NAVIDE_OFFICIAL_PLUGIN_OFFLINE=1, or --allow-missing-registry), and
+// checks them again: the Registry's trust metadata must still be valid. A
+// release always asks the Registry, so a version yanked since is never bundled.
 const cacheRoot = process.env.NAVIDE_OFFICIAL_PLUGIN_CACHE || join(homedir(), '.cache', 'navide', 'official-plugins')
+const allowMissingRegistry = process.argv.includes('--allow-missing-registry')
+const allowOfflineCache = allowMissingRegistry || process.env.NAVIDE_OFFICIAL_PLUGIN_OFFLINE === '1'
 
 // The App's own verification code is TypeScript: bundle the one module this
 // needs. It never touches electron, which some of its imports name.
@@ -88,6 +92,9 @@ async function verifiedRegistryArtifact(host, { id, target }) {
     bytes = new Uint8Array(await (await fetchOk(`${base}/${version}/download`, `${id} ${version} download`)).arrayBuffer())
   } catch (error) {
     if (error instanceof host.OfficialArtifactMissingError) throw error
+    if (!allowOfflineCache) {
+      throw new Error(`${id} ${version}: the Registry is unreachable (${error.message}); set NAVIDE_OFFICIAL_PLUGIN_OFFLINE=1 to build from the verified copy in ${cacheDirectory}`)
+    }
     if (!existsSync(join(cacheDirectory, 'package.vsix'))) {
       throw new Error(`${id} ${version}: the Registry is unreachable and ${cacheDirectory} holds no verified copy (${error.message})`)
     }
@@ -109,7 +116,6 @@ async function verifiedRegistryArtifact(host, { id, target }) {
 // `pnpm dev` and the artifact tests pass --allow-missing-registry: a pinned
 // version not yet on the Registry (or no network and no cached copy) leaves
 // that plugin out with a warning. The App build and release.sh never pass it.
-const allowMissingRegistry = process.argv.includes('--allow-missing-registry')
 const host = await loadHostModules()
 const registryArtifacts = []
 for (const source of registrySources) {

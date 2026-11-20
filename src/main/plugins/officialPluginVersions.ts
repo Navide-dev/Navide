@@ -9,7 +9,7 @@
  * scanning. */
 export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object.freeze({
   'navide.browser': '1.1.7',
-  'navide.git': '1.0.10',
+  'navide.git': '1.0.11',
   'navide.mini-ide': '1.0.9',
   'navide.plans': '1.1.9',
 })

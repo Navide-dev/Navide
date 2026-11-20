@@ -76,8 +76,19 @@ export function verifyOfficialArtifact(input: {
   }
   const entries = readZipEntries(input.bytes)
   const manifest = readManifestFromEntries(entries)
-  if (manifest.id !== input.id || manifest.version !== input.version || typeof manifest.publisher !== 'string') {
-    throw new Error(`${input.id} ${input.version}: the package manifest names ${String(manifest.id)} ${String(manifest.version)}`)
+  // First-party ids are published by the publisher their namespace names.
+  const publisherId = input.id.split('.')[0]
+  if (manifest.id !== input.id || manifest.version !== input.version || manifest.publisher !== publisherId) {
+    throw new Error(
+      `${input.id} ${input.version}: the package manifest names ${String(manifest.id)} ${String(manifest.version)} ` +
+        `by ${String(manifest.publisher)}`,
+    )
+  }
+  // The installer carries released versions only: no pre-release or
+  // Testplace build, and no envelope that expires.
+  const envelope = row.registry_envelope
+  if ((envelope.channel !== undefined && envelope.channel !== 'stable') || envelope.expiresAt !== undefined) {
+    throw new Error(`${input.id} ${input.version}: the Registry lists it on the ${String(envelope.channel)} channel, not stable`)
   }
   verifyRegistryPackageTrust({
     envelope: row.registry_envelope,
@@ -90,7 +101,7 @@ export function verifyOfficialArtifact(input: {
       packageId: input.id,
       version: input.version,
       target: input.target,
-      publisherId: manifest.publisher,
+      publisherId,
     },
     expectedHostTarget: input.hostTarget,
     now: input.now,
