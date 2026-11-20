@@ -1168,8 +1168,13 @@ logged.
    button opens Settings → Channels.
 
 One pane ↔ one location. A binding survives window reloads, pane rebuilds,
-group detach and workspace switches; it ends only when you unbind it (or close
-the pane for real). A message for a bound pane that is not online is answered
+group detach, workspace switches and closing the pane; it ends only when it is
+unlinked: the chip's ✕, *Disconnect* in the channel monitor, or `/unlink` in the
+chat (asked once more; typed `unlink` on Mattermost). Closing a pane for real
+parks its binding as **dormant**: the chat is told, with buttons to wake it or
+unlink, and the channel monitor lists it as asleep with a **Wake** button of
+its own. A child topic the mirror opened for a sub-pane still goes with that
+pane. A message for a bound pane that is not online is answered
 in the Navide language ("the Navide window it belongs to is not open, or the
 pane was closed") and the binding is kept. For a minute after Navide starts, a
 pane that has not registered yet is waited for instead. Once the binding knows
@@ -1190,6 +1195,15 @@ message:
   a day. A wake refused before anything opened does not count.
 - A wake (button or typed `/wake`) for a pane that is already online is
   answered that it is online and is never sent to the CLI.
+- A closed pane's conversation is woken the same way: the window opens a pane
+  onto it. A workspace folder gone from the computer is refused up front.
+- When the conversation cannot be resumed (or none was ever recorded), the
+  chat is offered **🆕 New conversation** (typed: `/wake_new`): a new pane of
+  the same CLI in the same workspace, under the binding's name, bound to the
+  chat. The CLI and the folder come from Navide's own records; the chat cannot
+  name either. The same limits apply.
+- When the conversation is already open in another pane that no chat drives,
+  the binding follows it there instead of refusing.
 - The first 40 characters of each kept message are stored in `navide.db`
   (`channels.wake_kept`, `channels.wake_lost`) until sent or reported; see
   privacy.md.

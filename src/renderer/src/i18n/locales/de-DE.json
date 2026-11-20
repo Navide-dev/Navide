@@ -10192,6 +10192,11 @@
       "auto-child-hint": "Automatisch für einen untergeordneten Bereich erstellt. Beim Trennen des übergeordneten Bereichs wird er ebenfalls geschlossen.",
       "unnamed-pane": "Unbenannter Bereich",
       "pane-closed": "Geschlossen",
+      "pane-dormant": "Ruhend · aufweckbar",
+      "pane-dormant-hint": "Das pane wurde geschlossen, der Chat bleibt aber verknüpft. Wecken Sie es hier oder im Chat auf, oder trennen Sie die Verbindung, wenn Sie es nicht mehr brauchen.",
+      "wake": "Aufwecken",
+      "waking": "Wird aufgeweckt…",
+      "wake-label": "{pane} aufwecken und die Unterhaltung mit {channel} fortsetzen",
       "chat-id": "Chat {id}"
     }
   },

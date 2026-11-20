@@ -10192,6 +10192,11 @@
       "auto-child-hint": "Được tạo tự động cho một pane con. Ngắt kết nối pane cha cũng sẽ đóng nó.",
       "unnamed-pane": "Pane chưa đặt tên",
       "pane-closed": "Đã đóng",
+      "pane-dormant": "Đang ngủ · có thể đánh thức",
+      "pane-dormant-hint": "Pane đã đóng nhưng cuộc trò chuyện vẫn giữ liên kết. Hãy đánh thức ở đây hoặc từ cuộc trò chuyện, hoặc ngắt kết nối nếu không cần nữa.",
+      "wake": "Đánh thức",
+      "waking": "Đang đánh thức…",
+      "wake-label": "Đánh thức {pane} và quay lại cuộc hội thoại với {channel}",
       "chat-id": "cuộc trò chuyện {id}"
     }
   },

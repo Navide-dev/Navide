@@ -10192,6 +10192,11 @@
       "auto-child-hint": "Créé automatiquement pour un pane enfant. La déconnexion du pane parent le ferme aussi.",
       "unnamed-pane": "Pane sans nom",
       "pane-closed": "Fermé",
+      "pane-dormant": "En veille · réveillable",
+      "pane-dormant-hint": "Le pane a été fermé, mais le chat reste associé. Réveillez-le ici ou depuis le chat, ou déconnectez-le si vous n’en avez plus besoin.",
+      "wake": "Réveiller",
+      "waking": "Réveil…",
+      "wake-label": "Réveiller {pane} pour reprendre sa conversation avec {channel}",
       "chat-id": "chat {id}"
     }
   },
