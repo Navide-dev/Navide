@@ -242,3 +242,104 @@ describe('cli_answer_prompt never trusts a folder Navide did not hand the pane',
     })).toEqual({ ok: true, keys: '\x1b' })
   })
 })
+
+// Claude Code 2.1.329's workspace trust dialog at launch (strings from the
+// installed binary), and Codex's.
+const claudeTrust = (folder: string): string => [
+  ' Accessing workspace:',
+  '',
+  ` ${folder}`,
+  '',
+  ' Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known',
+  " open source project, or work from your team). If not, take a moment to review what's in this folder first.",
+  '',
+  " Claude Code'll be able to read, edit, and execute files here.",
+  '',
+  ' ❯ 1. Yes, I trust this folder',
+  '   2. No, exit',
+  '',
+  ' Enter to confirm · Esc to cancel',
+].join('\n')
+const codexTrust = (folder: string): string => [
+  ` You are in ${folder}`,
+  '',
+  ' Trust this folder? Codex can read, edit, and run files here, subject to your permission settings.',
+  '',
+  ' › 1. Trust and continue',
+  '   2. Open restricted',
+].join('\n')
+const WORKSPACE = '/Users/alex/proj'
+
+describe('the workspace trust dialog at launch', () => {
+  const decide = (screen: string, workspace: string, agentKey = 'claude') => {
+    const prompt = readStartupPrompt(agentKey, screen)
+    expect(prompt).toMatchObject({ kind: 'workspace-trust' })
+    return decideStartupPrompt(prompt!, { navideDirs: [], workspace })
+  }
+
+  it('is answered when it names the pane\'s own workspace', () => {
+    expect(decide(claudeTrust(WORKSPACE), WORKSPACE)).toMatchObject({ action: 'auto', rule: 'workspace-trust.own-workspace' })
+    expect(decide(claudeTrust(WORKSPACE), `${WORKSPACE}/`)).toMatchObject({ action: 'auto' })
+    // Codex's boilerplate speaks of permission settings; that is not what it asks.
+    expect(decide(codexTrust(WORKSPACE), WORKSPACE, 'codex')).toMatchObject({ action: 'auto' })
+    expect(decide(codexTrust('~/proj'), WORKSPACE, 'codex')).toMatchObject({ action: 'auto' })
+    expect(decide(claudeTrust('C:\\Users\\dev\\proj'), 'C:\\Users\\dev\\proj')).toMatchObject({ action: 'auto' })
+  })
+
+  it('is answered when the CLI wrapped the workspace path', () => {
+    const wrapped = claudeTrust('/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-p\n ane/proj')
+    expect(decide(wrapped, '/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-pane/proj')).toMatchObject({ action: 'auto' })
+  })
+
+  it('is left to a person for any other folder, or when it names none', () => {
+    for (const [screen, workspace] of [
+      [claudeTrust('/Users/alex/other'), WORKSPACE],
+      [claudeTrust('/Users/alex'), WORKSPACE], // the workspace's parent
+      [claudeTrust(`${WORKSPACE}/sub`), WORKSPACE], // a folder inside it
+      [claudeTrust(`${WORKSPACE}2`), WORKSPACE],
+      [claudeTrust('/Users/alex/pro'), WORKSPACE],
+      [codexTrust('~/other'), WORKSPACE],
+      [codexTrust('~/proj'), '/opt/proj'],
+      [' Trust this folder?\n ❯ 1. Yes\n   2. No', WORKSPACE],
+      [claudeTrust(WORKSPACE), ''],
+    ] as Array<[string, string]>) {
+      expect(decide(screen, workspace), `${screen} / ${workspace}`).toMatchObject({ action: 'block' })
+    }
+  })
+
+  it('leaves a vendor with its own trust watcher (Grok) to that watcher', () => {
+    const grok = 'Do you trust the contents of this directory?\n/Users/alex/proj\n  Yes, proceed   y\n  No, quit       n'
+    expect(readStartupPrompt('grok', grok)).toBeNull()
+  })
+
+  it('settles: Enter for the own workspace, blocked with nothing typed for another folder', async () => {
+    for (const [folder, outcome, sent] of [
+      [WORKSPACE, 'clear', ['\r']],
+      ['/Users/alex/other', 'blocked', []],
+    ] as Array<[string, string, string[]]>) {
+      const state = { screen: claudeTrust(folder), sent: [] as string[] }
+      let t = 0
+      const watch = await settleStartupPrompts({
+        agentKey: 'claude',
+        readScreen: () => state.screen,
+        navideDirs: () => [],
+        workspace: () => WORKSPACE,
+        awaiting: () => false,
+        ready: () => state.screen === ' > ',
+        alive: () => true,
+        send: async (keys) => {
+          state.sent.push(keys)
+          if (keys === '\r') state.screen = ' > '
+          return true
+        },
+        sleep: async () => { t += 250 },
+        now: () => t,
+        settleMs: 0,
+        timeoutMs: 15_000,
+        record: () => {},
+      })
+      expect(watch.outcome).toBe(outcome)
+      expect(state.sent).toEqual(sent)
+    }
+  })
+})

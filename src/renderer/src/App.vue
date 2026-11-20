@@ -225,7 +225,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
-import { settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
+import { decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -3912,6 +3912,7 @@ function startupPromptDeps(agentKey: string, paneId: string) {
       }
     },
     navideDirs: () => ((paneRefs[paneId]?.navideDirs as unknown as string[] | undefined) ?? []),
+    workspace: () => panes.value.find((p) => p.id === paneId)?.workspacePath ?? '',
     awaiting: () => paneRefs[paneId]?.displayStatus === 'awaiting',
     ready: () => promptReadyNow({
       status: paneRefs[paneId]?.displayStatus as string | undefined,
@@ -7638,6 +7639,33 @@ function watchStartupTrust(paneId: string, agentKey: string, folder: string): vo
   startupTrustWatches.set(paneId, watch)
 }
 
+/** Why the workspace trust dialog live on this pane is left to a person: it
+ *  names a folder other than the pane's own workspace, or none
+ *  (lib/startupPrompts.ts). '' when there is no such dialog, or Enter may
+ *  answer it. */
+function heldWorkspaceTrust(paneId: string): string {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return ''
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  if (prompt?.kind !== 'workspace-trust') return ''
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  return decision.action === 'block' ? decision.why : ''
+}
+
+/** Role injection's hold on a trust dialog left to a person: recorded, then
+ *  wait for whoever answers it. False when it was not answered in time. */
+async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string): Promise<boolean> {
+  recordDiagnostic({
+    level: 'warn',
+    code: 'spawn.startup-prompt-held',
+    message: `left a launch prompt for a person: ${why}`,
+    paneId: pane.id,
+  })
+  pipelineLog(`${tag} ⏸ startup trust dialog left for a person: ${why}`)
+  return waitStartupPromptGone(startupPromptDeps(pane.agentKey, pane.id), STARTUP_PROMPT_HOLD_MS)
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
   if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
@@ -7651,6 +7679,13 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
+      // Enter trusts the folder: only the pane's own workspace. Any other
+      // folder is reported (the kickoff's blocked-by-prompt) and left alone.
+      const held = heldWorkspaceTrust(paneId)
+      if (held) {
+        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${held}`)
+        return false
+      }
       if (ref.sessionId) {
         await backend.send('terminal.input', {
           terminal_session_id: ref.sessionId as string,
@@ -8057,7 +8092,15 @@ function scheduleInjection(pane: ActivePane): void {
     pipelineLog(`${tag} watching for startup dialog (up to ${DISMISS_TIMEOUT_MS / 1000}s)`)
     const dismissed = await dismissStartupDialog(pane.id, DISMISS_TIMEOUT_MS)
     if (!paneAlive(pane.id)) return
-    if (!dismissed) {
+    const heldTrust = dismissed ? '' : heldWorkspaceTrust(pane.id)
+    if (heldTrust && !(await waitHeldWorkspaceTrust(pane, heldTrust, tag))) {
+      pane.injectionStatus = 'failed'
+      setPrepStatus(pane, 'failed')
+      syncViews()
+      return
+    }
+    if (!paneAlive(pane.id)) return
+    if (!dismissed && !heldTrust) {
       pipelineLog(`${tag} no dialog detected — proceeding`)
       // Dump the buffer head so we can diagnose unrecognised CLI startup
       // screens. Trim to ~300 chars and replace whitespace runs for one-line
@@ -8113,7 +8156,16 @@ function scheduleInjection(pane: ActivePane): void {
     }
     if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
-      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
+      const lateHeld = TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) ? heldWorkspaceTrust(pane.id) : ''
+      if (lateHeld) {
+        if (!(await waitHeldWorkspaceTrust(pane, lateHeld, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
+        }
+        if (!paneAlive(pane.id)) return
+      } else if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
         const r = paneRefs[pane.id]
         if (r?.sessionId) {
