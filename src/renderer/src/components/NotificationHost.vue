@@ -36,7 +36,9 @@ watch(dialog, async (d) => {
           @click="dismissToast(t.id)"
         >
           <template v-if="t.title">
-            <span class="toast-band">{{ t.icon ?? toastIcon[t.type] }} {{ t.title }}</span>
+            <!-- A variant's band carries its source glyph; a plain titled
+                 toast shows its icon once, beside the message. -->
+            <span class="toast-band">{{ t.variant ? `${t.icon ?? toastIcon[t.type]} ` : '' }}{{ t.title }}</span>
             <span class="toast-row">
               <span class="toast-icon">{{ t.icon ?? toastIcon[t.type] }}</span>
               <span class="toast-msg">{{ t.message }}</span>
@@ -49,18 +51,20 @@ watch(dialog, async (d) => {
             </span>
             <span class="toast-msg">{{ t.message }}</span>
           </template>
-          <button
-            v-if="t.action"
-            type="button"
-            class="toast-action"
-            @click.stop="t.action.run(); dismissToast(t.id)"
-          >{{ t.action.label }}</button>
-          <button
-            v-if="t.secondaryAction"
-            type="button"
-            class="toast-action"
-            @click.stop="t.secondaryAction.run(); dismissToast(t.id)"
-          >{{ t.secondaryAction.label }}</button>
+          <span v-if="t.action || t.secondaryAction" class="toast-actions">
+            <button
+              v-if="t.action"
+              type="button"
+              class="toast-action"
+              @click.stop="t.action.run(); dismissToast(t.id)"
+            >{{ t.action.label }}</button>
+            <button
+              v-if="t.secondaryAction"
+              type="button"
+              class="toast-action"
+              @click.stop="t.secondaryAction.run(); dismissToast(t.id)"
+            >{{ t.secondaryAction.label }}</button>
+          </span>
         </div>
       </transition-group>
     </div>
@@ -179,9 +183,21 @@ watch(dialog, async (d) => {
 .toast.info .toast-icon {
   color: var(--accent-fg);
 }
+/* The buttons sit side by side: beside the message on a plain toast, on
+   their own row under it on a titled one (whose body is a column). */
+.toast-actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+.toast.titled .toast-actions {
+  align-self: flex-end;
+  margin-left: 0;
+  margin-top: 6px;
+}
 .toast-action {
   flex: none;
-  margin-left: 8px;
   padding: 2px 8px;
   border: 1px solid currentColor;
   border-radius: 4px;
