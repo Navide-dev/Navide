@@ -26,12 +26,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from . import osplat
 from .osplat import secret_files
 
 log = logging.getLogger("agent_team_backend.claude_skills_trust")
@@ -62,7 +62,7 @@ def project_key(directory: Path) -> str:
     """The key Claude Code files a directory's trust under: its real path,
     with forward slashes (the CLI normalises Windows paths that way)."""
     real = os.path.realpath(os.fspath(directory))
-    return real.replace("\\", "/") if sys.platform == "win32" else real
+    return real.replace("\\", "/") if osplat.platform_id == "win32" else real
 
 
 def _read(path: Path) -> dict[str, Any] | None:
