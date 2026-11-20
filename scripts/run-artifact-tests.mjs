@@ -10,7 +10,7 @@ if (!prepared) {
   // The manual packaged gate keeps its historical standalone entrypoint.
   // Each dependency builds once before any test worker starts.
   for (const build of [
-    'build:public-packages', 'build:plans:v2', 'build:plans:backend',
+    'build:public-packages',
   ]) pnpm(['run', build])
   run(process.execPath, ['scripts/stage-official-plugin-artifacts.mjs', '--allow-missing-registry'])
 }
@@ -35,11 +35,3 @@ run(process.execPath, [
   ] : []),
   ...forwarded,
 ], env)
-// The App-bundled plugins' artifact tests run under their own configs;
-// NAVIDE_PLUGIN_TESTS_SKIP (comma-separated directories) leaves some out.
-if (!packagedOnly) {
-  run(process.execPath, [
-    'scripts/run-plugin-tests.mjs', '--artifacts',
-    ...(process.env.NAVIDE_PLUGIN_TESTS_SKIP ? ['--skip', process.env.NAVIDE_PLUGIN_TESTS_SKIP] : []),
-  ], env)
-}

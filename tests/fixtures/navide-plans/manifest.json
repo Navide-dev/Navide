@@ -3,7 +3,7 @@
   "apiVersion": "^1.0.0",
   "id": "navide.plans",
   "name": "Plans",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "publisher": "navide",
   "engines": { "navide": ">=0.2.35" },
   "permissions": {
@@ -45,7 +45,7 @@
   "marketplace": {
     "description": "Review and update workspace plans.",
     "license": "MIT",
-    "repository": "https://github.com/Navide-dev/Navide",
+    "repository": "https://github.com/Navide-dev/navide-plans",
     "categories": ["productivity", "project-management"]
   },
   "contributes": {

@@ -9,19 +9,17 @@ import { describe, expect, it } from 'vitest'
 // So a key the Host references must not live only in a plugin's catalog, and
 // a plugin must not reference a Host-only key: that string would render as
 // its raw key in the shipped plugin. A Host-only string, in turn, lives
-// outside packages/plugin-ui, which is what keeps it out of every plugin's
-// fingerprint (scripts/official-plugin-fingerprints.mjs).
+// outside packages/plugin-ui, which is what keeps it out of the public package
+// every first-party plugin installs.
 const UI = 'packages/plugin-ui/src/foundation/i18n/locales'
 const OWNERS: Array<{ name: string; sources: RegExp; catalogs: string[] }> = [
   { name: 'Host', sources: /^src\//, catalogs: [UI, 'src/renderer/src/i18n/locales'] },
   { name: '@navide/plugin-ui', sources: /^packages\/plugin-(ui|contracts|sdk)\//, catalogs: [UI] },
-  { name: 'navide-plans', sources: /^plugins\/navide-plans\//, catalogs: [UI, 'plugins/navide-plans/src/locales'] },
 ]
 const ALL_CATALOGS = [...new Set(OWNERS.flatMap(({ catalogs }) => catalogs))]
 // First-party plugins built in their own repositories still show these
-// plugin-ui strings (navide.git: Navide-dev/navide-git, navide.mini-ide:
-// Navide-dev/navide-mini-ide, navide.browser: Navide-dev/navide-browser).
-// Update the list when
+// plugin-ui strings (navide.git, navide.mini-ide, navide.browser and
+// navide.plans: Navide-dev/navide-<name>). Update the list when
 // the pinned version starts or stops using one.
 const EXTERNAL_OWNERS = JSON.parse(
   readFileSync(resolve('tests/infrastructure/externalPluginUiKeys.json'), 'utf8'),

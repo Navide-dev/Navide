@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest'
 // injected platform id.
 
 const REPO_ROOT = resolve(__dirname, '..', '..')
-const PRODUCTION_DIRS = ['src', 'packages/plugin-contracts/src', 'packages/plugin-sdk/src', 'packages/plugin-ui/src', 'plugins/navide-plans/src']
+const PRODUCTION_DIRS = ['src', 'packages/plugin-contracts/src', 'packages/plugin-sdk/src', 'packages/plugin-ui/src']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'dist-plugins', '.git', '__tests__'])
 /** The one module allowed to ask. */
 const SEAM = 'src/shared/osplat.ts'

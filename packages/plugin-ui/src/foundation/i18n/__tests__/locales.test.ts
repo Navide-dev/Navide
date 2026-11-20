@@ -12,14 +12,12 @@ import {
 } from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-// plugin-ui holds only the strings its own components use; the Host and each
-// first-party plugin merge their own catalogs into the same i18n instance.
+// plugin-ui holds only the strings its own components use; the Host merges its
+// own catalog into the same i18n instance. The first-party plugins, built in
+// their own repositories, check theirs there.
 const UI_DIR = 'packages/plugin-ui/src/foundation/i18n/locales'
 const HOST_DIR = 'src/renderer/src/i18n/locales'
-const PLUGIN_DIRS = [
-  'plugins/navide-plans/src/locales'
-]
-const localeDirs = [UI_DIR, HOST_DIR, ...PLUGIN_DIRS]
+const localeDirs = [UI_DIR, HOST_DIR]
 const filesIn = (dir: string): string[] =>
   readdirSync(resolve(dir)).filter((fileName) => fileName.endsWith('.json')).sort()
 const read = (dir: string, fileName: string): unknown => JSON.parse(readFileSync(resolve(dir, fileName), 'utf8'))
@@ -80,10 +78,8 @@ describe.each(localeDirs)('locale JSON files in %s', (localesDir) => {
 
 describe('catalogs merged into one i18n instance', () => {
   // A key defined twice resolves to whichever catalog merged last, so the
-  // copies drift apart unseen. Plans keeps its own copy of the pane.plans
-  // strings it shares with the Host's legacy Plans window on purpose (its
-  // copy wins inside the plugin), so it is not held to this.
-  it.each([HOST_DIR, ...PLUGIN_DIRS.filter((dir) => !dir.includes('navide-plans'))])('%s defines no key plugin-ui already has', (dir) => {
+  // copies drift apart unseen.
+  it.each([HOST_DIR])('%s defines no key plugin-ui already has', (dir) => {
     const shared = new Set(leafKeys(read(UI_DIR, 'en-US.json')))
     const overlap = leafKeys(read(dir, 'en-US.json')).filter((key) => shared.has(key))
     expect(overlap, overlap.join('\n')).toEqual([])

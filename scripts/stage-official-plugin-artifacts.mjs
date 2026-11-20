@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { generateKeyPairSync } from 'node:crypto'
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -13,17 +12,15 @@ const archivesRoot = join(outputRoot, 'archives')
 const hostTarget = `${process.platform}-${process.arch}`
 
 // First-party plugins that live in their own repositories (Navide-dev/navide-git,
-// Navide-dev/navide-mini-ide, Navide-dev/navide-browser): the installer carries
+// navide-mini-ide, navide-browser, navide-plans): the installer carries
 // the version officialPluginVersions.ts pins, as the official Registry signed
-// it, never a local build. Browser has a native backend: each platform's build
-// takes the package published for its own target.
+// it, never a local build. Browser and Plans have a native backend: each
+// platform's build takes the package published for its own target.
 const registrySources = [
   { id: 'navide.git', target: 'universal' },
   { id: 'navide.mini-ide', target: 'universal' },
   { id: 'navide.browser', target: hostTarget },
-]
-const sources = [
-  { id: 'navide.plans', directory: 'dist-plugins/navide-plans', source: 'plugins/navide-plans', target: hostTarget },
+  { id: 'navide.plans', target: hostTarget },
 ]
 
 function runCli(args) {
@@ -163,57 +160,4 @@ for (const artifact of registryArtifacts) {
   const archive = join(archiveDirectory, `${artifact.id}-${artifact.version}-${artifact.target}.vsix`)
   writeFileSync(archive, artifact.bytes)
   writeFileSync(`${archive}.registry.json`, `${JSON.stringify(artifact.detail, null, 2)}\n`)
-}
-const signingDirectory = mkdtempSync(join(tmpdir(), 'navide-official-artifact-signing-'))
-const privateKey = join(signingDirectory, 'private.pem')
-const publicKey = join(signingDirectory, 'public.pem')
-const keyPair = generateKeyPairSync('ed25519')
-writeFileSync(privateKey, keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 })
-writeFileSync(publicKey, keyPair.publicKey.export({ type: 'spki', format: 'pem' }), { mode: 0o644 })
-
-try {
-for (const source of sources) {
-  const directory = join(repositoryRoot, source.directory)
-  const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8'))
-  if (manifest.id !== source.id || typeof manifest.version !== 'string') {
-    throw new Error(`artifact source identity is invalid: ${directory}`)
-  }
-  // The App looks a bundled plugin up by the plugin's own version
-  // (src/main/plugins/officialPluginVersions.ts), so an App build must not
-  // carry a package stamped with any other version.
-  const sourceManifest = JSON.parse(readFileSync(join(repositoryRoot, source.source, 'manifest.json'), 'utf8'))
-  if (manifest.version !== sourceManifest.version) {
-    throw new Error(
-      `${source.id} was built as ${manifest.version}, but its source manifest is ${sourceManifest.version}; ` +
-        'unset NAVIDE_PLUGIN_ARTIFACT_VERSION for an App build',
-    )
-  }
-  const files = JSON.parse(readFileSync(join(directory, 'artifact-files.json'), 'utf8'))
-  if (!Array.isArray(files.files) || files.files.some((file) => typeof file !== 'string')) {
-    throw new Error(`artifact file list is invalid: ${directory}`)
-  }
-  runCli(['validate', directory, '--target', source.target])
-  const versionRoot = join(factoryRoot, source.id, manifest.version, source.target)
-  const packageDirectory = join(versionRoot, 'package')
-  mkdirSync(packageDirectory, { recursive: true })
-  for (const file of files.files) {
-    const from = join(directory, file)
-    if (!lstatSync(from).isFile()) throw new Error(`artifact file is not a regular file: ${from}`)
-    const to = join(packageDirectory, file)
-    mkdirSync(dirname(to), { recursive: true })
-    cpSync(from, to, { preserveTimestamps: true })
-  }
-  writeFileSync(join(packageDirectory, 'artifact-files.json'), `${JSON.stringify(files, null, 2)}\n`)
-  runCli(['validate', packageDirectory, '--target', source.target])
-  const archiveDirectory = join(archivesRoot, source.id, manifest.version, source.target)
-  mkdirSync(archiveDirectory, { recursive: true })
-  const archive = join(archiveDirectory, `${source.id}-${manifest.version}-${source.target}.vsix`)
-  runCli(['package', packageDirectory, '--target', source.target, '--out', archive])
-  const signature = `${archive}.sig`
-  runCli(['sign', archive, '--key', privateKey, '--out', signature])
-  runCli(['verify', archive, '--key', publicKey, '--signature', signature])
-  rmSync(join(packageDirectory, 'artifact-files.json'), { force: true })
-}
-} finally {
-  rmSync(signingDirectory, { recursive: true, force: true })
 }
