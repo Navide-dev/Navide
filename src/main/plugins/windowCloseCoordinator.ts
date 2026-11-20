@@ -10,6 +10,9 @@ export interface WindowCloseHost {
   /** Report a refused close preparation so the user sees why the close did not
    *  happen instead of reaching for a force-quit. */
   notifyCloseRefused?(window: BrowserWindow, reason: NativeWindowCloseReason, cause: string): void
+  /** Report a participant that did not prepare for a forced quit. The quit goes
+   *  ahead anyway, so this is a log line, never a question for the user. */
+  logForcedQuitIgnored?(window: BrowserWindow, cause: string): void
   prepareWindowClose(hostWindow: BrowserWindow, reason: NativeWindowCloseReason): Promise<WindowCloseOutcome>
   commitWindowClose(id: string): void
   cancelWindowClose(id: string): void
@@ -30,9 +33,19 @@ export interface WindowCloseCoordinator {
   watch(window: BrowserWindow): void
   /** Route the View > Reload Window action through the same preparation. */
   prepareAndReload(target: WebContents): Promise<boolean>
-  /** Prepare every affected window before any window or backend is committed. */
-  prepareForQuit(windows: readonly BrowserWindow[]): Promise<boolean>
+  /** Prepare every affected window before any window or backend is committed.
+   *  A forced quit (SIGTERM, logout, shutdown) still gives every participant up
+   *  to `deadlineMs` to save, but always resolves true: nothing can veto it. */
+  prepareForQuit(windows: readonly BrowserWindow[], options?: QuitPreparationOptions): Promise<boolean>
 }
+
+export interface QuitPreparationOptions {
+  forced?: boolean
+  deadlineMs?: number
+}
+
+/** How long a forced quit waits for the participants, all windows together. */
+export const FORCED_QUIT_PREPARE_MS = 5000
 
 function findWindowFor(host: WindowCloseHost, target: WebContents): BrowserWindow | null {
   return host.windowForWebContents(target)
@@ -98,9 +111,60 @@ export function createWindowCloseCoordinator(host: WindowCloseHost): WindowClose
     return true
   }
 
-  async function prepareForQuit(windows: readonly BrowserWindow[]): Promise<boolean> {
+  // Nothing a participant answers can keep the app running: refused, busy,
+  // failed and late windows are logged, and every target is destroyed so its
+  // own close guard cannot stop the quit on the way out either.
+  async function prepareForForcedQuit(targets: readonly BrowserWindow[], deadlineMs: number): Promise<true> {
+    const free = targets.filter((target) => {
+      if (!closing.has(target.id)) return true
+      host.logForcedQuitIgnored?.(target, 'busy')
+      return false
+    })
+    for (const target of free) closing.add(target.id)
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(() => { timedOut = true; resolve() }, deadlineMs)
+    })
+    const prepared: string[] = []
+    const settled = new Set<BrowserWindow>()
+    try {
+      await Promise.race([
+        Promise.all(free.map(async (target) => {
+          let outcome: WindowCloseOutcome
+          try {
+            outcome = await host.prepareWindowClose(target, 'quit')
+          } catch {
+            outcome = { ok: false, reason: 'unavailable' }
+          }
+          // A preparation that settles after the deadline belongs to a quit
+          // that has already gone ahead: release it instead of committing.
+          if (timedOut) {
+            if (outcome.ok) host.cancelWindowClose(outcome.id)
+            return
+          }
+          settled.add(target)
+          if (outcome.ok) prepared.push(outcome.id)
+          else host.logForcedQuitIgnored?.(target, outcome.reason)
+        })),
+        deadline,
+      ])
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+    for (const target of free) if (!settled.has(target)) host.logForcedQuitIgnored?.(target, 'timeout')
+    for (const id of prepared) host.commitWindowClose(id)
+    for (const target of free) closing.delete(target.id)
+    for (const target of targets) {
+      if (!target.isDestroyed()) target.destroy()
+    }
+    return true
+  }
+
+  async function prepareForQuit(windows: readonly BrowserWindow[], options: QuitPreparationOptions = {}): Promise<boolean> {
     const targets = windows.filter((window) => !window.isDestroyed() && host.hasWindowCloseParticipants(window))
     if (targets.length === 0) return true
+    if (options.forced) return prepareForForcedQuit(targets, options.deadlineMs ?? FORCED_QUIT_PREPARE_MS)
     const busy = targets.find((target) => closing.has(target.id))
     if (busy) {
       host.notifyCloseRefused?.(busy, 'quit', 'busy')

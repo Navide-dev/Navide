@@ -204,4 +204,79 @@ describe('window close coordinator', () => {
     expect(first.destroy).not.toHaveBeenCalled()
     expect(second.destroy).not.toHaveBeenCalled()
   })
+
+  // SIGTERM, a logout or a shutdown: participants still get to save, but no
+  // answer keeps the app running and nothing is put on screen.
+  describe('forced quit', () => {
+    it.each(['refused', 'busy', 'timeout'] as const)('goes ahead when a participant answers %s', async (reason) => {
+      const kept = fakeWindow(21)
+      const other = fakeWindow(22)
+      const logForcedQuitIgnored = vi.fn()
+      const notifyCloseRefused = vi.fn()
+      const host = makeHost({
+        logForcedQuitIgnored,
+        notifyCloseRefused,
+        prepareWindowClose: vi.fn(async (window: BrowserWindow): Promise<WindowCloseOutcome> =>
+          window === kept ? { ok: false, reason } : { ok: true, id: 'prep-other' }),
+      })
+      expect(await createWindowCloseCoordinator(host).prepareForQuit([kept, other], { forced: true })).toBe(true)
+      // The participant that answered was saved and committed; the other is logged.
+      expect(host.commitWindowClose).toHaveBeenCalledWith('prep-other')
+      expect(logForcedQuitIgnored).toHaveBeenCalledWith(kept, reason)
+      expect(notifyCloseRefused).not.toHaveBeenCalled()
+      expect(kept.destroy).toHaveBeenCalledOnce()
+      expect(other.destroy).toHaveBeenCalledOnce()
+    })
+
+    it('stops waiting for a participant that never answers', async () => {
+      vi.useFakeTimers()
+      try {
+        const window = fakeWindow(23)
+        let answer!: (outcome: WindowCloseOutcome) => void
+        const host = makeHost({
+          logForcedQuitIgnored: vi.fn(),
+          prepareWindowClose: vi.fn(() => new Promise<WindowCloseOutcome>((resolve) => { answer = resolve })),
+        })
+        const quit = createWindowCloseCoordinator(host).prepareForQuit([window], { forced: true, deadlineMs: 1000 })
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(await quit).toBe(true)
+        expect(host.logForcedQuitIgnored).toHaveBeenCalledWith(window, 'timeout')
+        expect(window.destroy).toHaveBeenCalledOnce()
+        // A late answer is released, never committed.
+        answer({ ok: true, id: 'late' })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(host.cancelWindowClose).toHaveBeenCalledWith('late')
+        expect(host.commitWindowClose).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('goes ahead past a window already busy closing', async () => {
+      let release!: (outcome: WindowCloseOutcome) => void
+      const host = makeHost({
+        logForcedQuitIgnored: vi.fn(),
+        prepareWindowClose: vi.fn(() => new Promise<WindowCloseOutcome>((resolve) => { release = resolve })),
+      })
+      const coordinator = createWindowCloseCoordinator(host)
+      const window = fakeWindow(24)
+      coordinator.watch(window)
+      window.emitClose()
+      expect(await coordinator.prepareForQuit([window], { forced: true })).toBe(true)
+      expect(host.logForcedQuitIgnored).toHaveBeenCalledWith(window, 'busy')
+      expect(window.destroy).toHaveBeenCalledOnce()
+      release({ ok: false, reason: 'refused' })
+    })
+
+    it('a user quit can still be refused', async () => {
+      const window = fakeWindow(25)
+      const host = makeHost({
+        notifyCloseRefused: vi.fn(),
+        prepareWindowClose: vi.fn(async (): Promise<WindowCloseOutcome> => ({ ok: false, reason: 'refused' })),
+      })
+      expect(await createWindowCloseCoordinator(host).prepareForQuit([window], { forced: false })).toBe(false)
+      expect(host.notifyCloseRefused).toHaveBeenCalledWith(window, 'quit', 'refused')
+      expect(window.destroy).not.toHaveBeenCalled()
+    })
+  })
 })

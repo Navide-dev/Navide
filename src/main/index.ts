@@ -331,6 +331,9 @@ let quittingWindowsPrepared = false
 // the prompt is not shown again — it is cleared on every path that keeps the
 // app running.
 let dockQuitInProgress = false
+// A quit nobody can cancel: SIGTERM, a logout or a shutdown. Plugins still get
+// a bounded chance to save, but their answer is only logged.
+let quitForced = false
 let quittingWindowsPreparation: Promise<boolean> | null = null
 // Set once teardownBackendAndQuit has stopped the backend and put up the
 // shutdown screen, so a quit cancelled after that can bring both back.
@@ -339,6 +342,7 @@ let quitTeardownRan = false
 const resetCancelledQuit = createQuitCancelReset({
   clearQuitFlags: () => {
     dockQuitInProgress = false
+    quitForced = false
     quittingWindowsPrepared = false
   },
   clearCleanExit: () => {
@@ -628,6 +632,12 @@ frontendPluginManager.setGitAccountHandlers({
 const windowCloseCoordinator = createWindowCloseCoordinator({
   hasWindowCloseParticipants: (window) => frontendPluginManager.hasWindowCloseParticipants(window),
   notifyCloseRefused: (window, reason, cause) => {
+    // A forced quit that arrived while a user quit was being prepared: that
+    // preparation's refusal no longer decides anything, so no message box.
+    if (reason === 'quit' && quitForced) {
+      warnMain(`[main] forced quit: a plugin window did not prepare (${cause}); quitting anyway`)
+      return
+    }
     // A refusal is a normal outcome (a plugin keeps a draft), but silence would
     // look like a hang. Say what happened and where it comes from.
     const detail = cause === 'timeout'
@@ -645,6 +655,9 @@ const windowCloseCoordinator = createWindowCloseCoordinator({
     }
     void (window.isDestroyed() ? dialog.showMessageBox(options) : dialog.showMessageBox(window, options))
       .catch(() => undefined)
+  },
+  logForcedQuitIgnored: (_window, cause) => {
+    warnMain(`[main] forced quit: a plugin window did not prepare (${cause}); quitting anyway`)
   },
   prepareWindowClose: (window, reason) => frontendPluginManager.prepareWindowClose(window, reason),
   commitWindowClose: (id) => frontendPluginManager.commitWindowClose(id),
@@ -6787,13 +6800,20 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
 // there is no prompt and no backend yet, so the default SIGTERM exit is right,
 // and an import of this module (the main-process tests) must not leave a
 // handler that calls app.quit() on the importing process when it is stopped.
+//
+// Plugins holding a draft get the same bounded chance to save as on Cmd+Q, but
+// cannot veto: a refusal, a busy plugin or a timeout is logged and the quit
+// goes on. The system shutting down (macOS, Linux) is the same kind of request.
+function forceQuit(): void {
+  quitConfirmed = true
+  quitForced = true
+  dockQuitInProgress = true
+  quitPromptAbort?.abort()
+  app.quit()
+}
 app.on('ready', () => {
-  process.on('SIGTERM', () => {
-    quitConfirmed = true
-    dockQuitInProgress = true
-    quitPromptAbort?.abort()
-    app.quit()
-  })
+  process.on('SIGTERM', forceQuit)
+  powerMonitor.on('shutdown', forceQuit)
 })
 
 app.on('before-quit', async (e) => {
@@ -6825,11 +6845,17 @@ app.on('before-quit', async (e) => {
     const windows = BrowserWindow.getAllWindows()
     if (windows.some((window) => frontendPluginManager.hasWindowCloseParticipants(window))) {
       e.preventDefault()
-      quittingWindowsPreparation = windowCloseCoordinator.prepareForQuit(windows).finally(() => {
+      quittingWindowsPreparation = windowCloseCoordinator.prepareForQuit(windows, { forced: quitForced }).finally(() => {
         quittingWindowsPreparation = null
       })
       const prepared = await quittingWindowsPreparation
       if (!prepared) {
+        // A forced quit that landed while a user quit was being prepared: run
+        // the quit again, this time through the forced preparation.
+        if (quitForced) {
+          app.quit()
+          return
+        }
         // Vetoed: the app stays open, so closing a window ends its AI panels
         // again. quitConfirmed is left as it was, and the refusal has already
         // told the user why.
