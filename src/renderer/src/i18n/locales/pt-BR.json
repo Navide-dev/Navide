@@ -398,6 +398,7 @@
     "hold-starting": "O pane de destino ainda está iniciando",
     "hold-typing": "Alguém está digitando no pane de destino",
     "hold-mid-turn": "O agent de destino está no meio de um turno",
+    "hold-foreground": "Há um programa na frente do shell do terminal de destino (um comando, um editor, um pedido de senha)",
     "hold-settling": "Aguardando o destino se estabilizar",
     "hold-composer": "A caixa de entrada ainda contém o último envio",
     "hold-model-switch": "O pane de destino está trocando de modelo",

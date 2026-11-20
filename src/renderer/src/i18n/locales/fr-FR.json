@@ -398,6 +398,7 @@
     "hold-starting": "Le pane cible est encore en train de démarrer",
     "hold-typing": "Quelqu’un est en train de saisir dans le pane cible",
     "hold-mid-turn": "L’agent cible est au milieu d’un tour",
+    "hold-foreground": "Un programme occupe le terminal cible devant son shell (une commande, un éditeur, une invite de mot de passe)",
     "hold-settling": "En attente de la stabilisation de la cible",
     "hold-composer": "La zone de saisie contient encore le dernier envoi",
     "hold-model-switch": "Le pane cible est en train de changer de modèle",

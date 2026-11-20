@@ -2746,9 +2746,12 @@ async def cli_send(
       - `status: "queued"` with `waited_s`, plus `hold` and `held_for_s` when
         the receiving window said why — the message is still waiting. `hold.key`
         is "typing" (someone is at that keyboard), "mid-turn" (the agent is
-        working), "behind" (other messages first), "starting", "settling",
-        "not-ready" or "gone". Nothing was lost; it goes in when the pane frees
-        up, and cli_check_message picks the story up later.
+        working; for a terminal, a command is printing), "foreground" (a
+        terminal only: a program other than the shell has its tty — a quiet
+        command, an editor, a password prompt — so someone has to finish it),
+        "behind" (other messages first), "starting", "settling", "not-ready"
+        or "gone". Nothing was lost; it goes in when the pane frees up, and
+        cli_check_message picks the story up later.
 
     `error_code` "target-offline" is not "unknown-target": the pane exists but
     its Navide window is disconnected. Wait for it to come back and retry —
@@ -3394,7 +3397,10 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     On a "queued" message, `hold` is why it has not gone in yet — {key, n?},
     the same reason the Messages panel shows — and `held_for_s` is how long it
     has been that way. `hold.key` is "typing" (someone is typing in that pane),
-    "mid-turn" (its agent is working), "behind" (`n` messages ahead of it),
+    "mid-turn" (its agent is working; for a terminal, a command is printing),
+    "foreground" (a terminal whose tty a program other than the shell holds:
+    a quiet command, an editor, a password prompt), "behind" (`n` messages
+    ahead of it),
     "starting", "settling", "not-ready", "gone", "paused", "remote-ack",
     "composer" (text from an earlier push may still sit in that pane's input
     box, so nothing is typed until the pane shows activity) or "pty-blocked"

@@ -398,6 +398,7 @@
     "hold-starting": "Der Zielbereich startet noch",
     "hold-typing": "Im Zielbereich wird gerade getippt",
     "hold-mid-turn": "Der Ziel-Agent ist mitten in einer Runde",
+    "hold-foreground": "Vor der Shell des Ziel-Terminals läuft ein Programm (ein Befehl, ein Editor, eine Passwortabfrage)",
     "hold-settling": "Warten, bis sich das Ziel beruhigt",
     "hold-composer": "Das Eingabefeld enthält noch die letzte Übergabe",
     "hold-model-switch": "Der Zielbereich wechselt gerade sein Modell",

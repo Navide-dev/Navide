@@ -398,6 +398,7 @@
     "hold-starting": "Target pane is still starting up",
     "hold-typing": "Someone is typing in the target pane",
     "hold-mid-turn": "Target agent is mid-turn",
+    "hold-foreground": "A program is in front of the target terminal's shell (a running command, an editor, a password prompt)",
     "hold-settling": "Waiting for the target to settle",
     "hold-composer": "Input box still holds the last push",
     "hold-model-switch": "Target pane is switching its model",

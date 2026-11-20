@@ -1013,6 +1013,7 @@ it would be told about a failure.
 | `composer` | Text from an earlier push may still sit in the target's input box (its submit failed and the clear was not confirmed); nothing is typed until the pane shows activity newer than that push |
 | `pty-blocked` | Being typed in, but the target's terminal has stopped reading input; held for as long as that lasts |
 | `mid-turn` | Target agent is working (never reported for a vendor that queues input mid-turn) |
+| `foreground` | Plain terminal only: a program other than the shell has its tty (a quiet command, an editor, a password prompt); someone has to finish it first |
 | `settling` | Target just went quiet; waiting for it to settle (same exemption) |
 | `paused` | Delivery is paused for the window |
 | `gone` | Target pane no longer exists |

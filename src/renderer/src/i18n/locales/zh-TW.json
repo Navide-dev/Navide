@@ -398,6 +398,7 @@
     "hold-starting": "目標分格仍在啟動中",
     "hold-typing": "使用者正在該分格輸入中",
     "hold-mid-turn": "目標 agent 正在執行中",
+    "hold-foreground": "目標終端機的 shell 前面有程式在執行（指令、編輯器或密碼提示）",
     "hold-settling": "等待目標靜置",
     "hold-composer": "輸入框仍握著上一次推送的文字",
     "hold-model-switch": "目標分格正在切換模型",

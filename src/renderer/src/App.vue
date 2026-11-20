@@ -3212,8 +3212,10 @@ function messagingHoldKey(
   // A quiet program is still a program: an editor, a pager, a REPL, an ssh
   // session or a sudo password prompt prints nothing and reads idle, and would
   // take the line (and its Enter) as its own input. The backend knows who is in
-  // front of the tty; polled by refreshTerminalPrompts().
-  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'mid-turn'
+  // front of the tty; polled by refreshTerminalPrompts(). Its own key, not
+  // 'mid-turn': a sender told "printing" waits, one told "a program has the
+  // tty" (a password prompt, an editor) knows someone has to finish it.
+  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'foreground'
   const lastActive = paneLastActiveAt.get(paneId) ?? 0
   const inFlight = isTurnInFlight(lastActive, paneTurnCompleteAt.get(paneId) ?? 0, now, {
     inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
@@ -4331,6 +4333,27 @@ function spawnGateContextFor(parentPaneId: string) {
  *  by open workspace — mirrors handleUiInvokeRequest's ownership check. The
  *  gate runs here because only this window knows the pane counts, chain depth
  *  and name collisions it needs. */
+/** For a terminal just opened over MCP that is not on screen, where it went
+ *  and how to show it; null otherwise. A terminal is usually there for the
+ *  user to type into (a password, a prefilled command), and one that landed
+ *  on another tab, behind a plugin tab or in a background workspace read as
+ *  "it never opened" (0.2.46). Agent panes keep their placement rules and get
+ *  no note: their user reads the result, not the pane. */
+function terminalPlacementNote(paneId: string): string | null {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane || pane.agentKey !== TERMINAL_AGENT_KEY) return null
+  const otherWorkspace = normWs(pane.workspacePath) !== normWs(currentWorkspace.value)
+  const behindPlugin = activePluginMainKey.value !== null
+  if (!otherWorkspace && !behindPlugin && tabFilteredPaneIds.value.has(paneId)) return null
+  const tab = pane.runGroupId ? (runGroups.value.find((g) => g.id === pane.runGroupId)?.name ?? pane.runGroupId) : 'manual'
+  const where = otherWorkspace
+    ? `workspace ${pane.workspacePath}, which is not the one on screen`
+    : behindPlugin
+      ? `tab "${tab}", which a plugin tab is covering`
+      : `tab "${tab}", which is not the tab on screen`
+  return `terminal "${pane.messagingName ?? paneId}" opened in ${where} — call ui_invoke ui.pane.focus {"paneId": "${paneId}"} to show it to the user`
+}
+
 async function handleMcpSpawnRequest(ev: {
   request_id: string
   requester_pane_id: string
@@ -4455,6 +4478,8 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
+  const placement = terminalPlacementNote(paneId)
+  const advisories = placement ? [...(gate.advisories ?? []), placement] : gate.advisories
   if (cross) {
     // Disclosed in this window as well as in the backend's action record: an
     // agent of another project opened a pane here (DESIGN-C §5). The toast
@@ -4474,7 +4499,7 @@ async function handleMcpSpawnRequest(ev: {
     // next and judged as the kickoff verdict; a pane whose task did not land
     // stays open (Windows VM 0.2.38: killing it reported a launched pane as
     // 建立失敗).
-    report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+    report({ ok: true, paneId, name: childName, advisories })
     const standaloneEvidence: StandaloneKickoffEvidence = {}
     // One verdict per request: a launch prompt reported as blocked-by-prompt
     // is the answer, and the verdict judged below is then dropped, as on the
@@ -4509,7 +4534,7 @@ async function handleMcpSpawnRequest(ev: {
   // own task yet.
   if (child) child.kickoffStatus = 'pending'
   notifyRestore.toast(i18n.global.t('msg.spawn-toast', { parent: parentName, child: childName }))
-  report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+  report({ ok: true, paneId, name: childName, advisories })
 
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
@@ -12349,6 +12374,8 @@ registerCommand('ui.pane.create', async (args) => {
   for (const advisory of spawnAdvisoriesFor(gateCtx)) {
     recordDiagnostic({ level: 'warn', code: 'spawn.advisory', message: advisory, paneId })
   }
+  const placement = terminalPlacementNote(paneId)
+  if (placement) recordDiagnostic({ level: 'warn', code: 'spawn.placement', message: placement, paneId })
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: currentWorkspace.value,
     pane_id: paneId,
