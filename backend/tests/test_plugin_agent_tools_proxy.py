@@ -181,7 +181,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.44 MCP disconnected (previous pin c6ba7476…): the
 #: cli_get_status and cli_list_targets descriptions document
 #: `mcp: "disconnected"`. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "ce06b1f21d5abef47584a28c9a58836d6f161dcc45364f8f97b78bd437bdbfa0"
+#: Re-pinned for 0.2.46 launch prompts (previous pin ce06b1f2…): the
+#: cli_open_agent description documents `kickoff: "blocked-by-prompt"` with
+#: `prompt`, `options` and `prompt_fingerprint`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "0bf220a3719025bfd8da8b67dfe8eebb4d7e1ce6e685590938163393fda0c775"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -451,7 +454,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect D (previous pin 8e682fa5…).
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect F (previous pin 82ce0a41…).
 #: Re-pinned with MAIN for 0.2.44 MCP disconnected (previous pin 12601f4d…).
-ACP_ON_TOOLS_LIST_SHA256 = "9b4f8389a403bc212fef468b3732aa5238c7b5621bc02413925c427802fc94c7"
+#: Re-pinned with MAIN for 0.2.46 launch prompts (previous pin 9b4f8389…).
+ACP_ON_TOOLS_LIST_SHA256 = "e94a55fb0e63870e446c59cefc3306fc9682940290ce9aa2d650133112edcf7b"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
