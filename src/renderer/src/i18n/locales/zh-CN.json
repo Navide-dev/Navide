@@ -9402,7 +9402,8 @@
       "manage": "到工作区管理 →",
       "locked-title": "由 App 管理的系统调度：只能在该工作区的自我优化面板修改",
       "managed-by": "由工作区管理",
-      "name": "自我优化 · {workspace}"
+      "name": "自我优化 · {workspace}",
+      "locked-title-shipped-log": "由 App 管理的系统计划：只能在该工作区的上线记录面板修改"
     },
     "add": "＋ 添加",
     "empty": "还没有调度工作",
@@ -9435,7 +9436,11 @@
       "interrupted": "略过：运行中断",
       "budget_global": "略过：agent 每日总量已满",
       "expired": "已过期：agent job 7 天未更新",
-      "unknown": "略过"
+      "unknown": "略过",
+      "empty": "跳过：这段时间没有上线",
+      "no_chat": "跳过：没有绑定的私聊",
+      "plugin_disabled": "跳过：上线记录已停用",
+      "workspace_gone": "跳过：工作区文件夹不存在"
     },
     "fail-reason": {
       "no_window": "没有 Navide 窗口打开这个 job 的工作区。请先打开工作区，再运行一次。",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "容器中的 CLI 已停止。重新连接会在同一个容器中开启新的会话。",
     "reconnect": "重新连接",
     "close-pane": "关闭分格"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "上线记录"
+    },
+    "title": "上线记录",
+    "close": "关闭",
+    "loading": "读取中…",
+    "window": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "count": "上线 {n} 条",
+    "pending": "待确认的部署命令 {n} 条",
+    "empty": "这段时间没有上线记录",
+    "verb": {
+      "added": "新增",
+      "fixed": "修复",
+      "changed": "调整"
+    },
+    "basis": {
+      "agent": "登记",
+      "branch": "部署分支",
+      "tag": "标签",
+      "hook": "检测",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "生产环境设置",
+      "migration": "数据库迁移",
+      "other": "其他"
+    },
+    "sensitive": "敏感",
+    "edited": "已改写",
+    "detected": "检测到部署命令（待确认）",
+    "confirm": "确认上线",
+    "dismiss": "忽略",
+    "edit": "改说明",
+    "save": "保存",
+    "cancel": "取消",
+    "reset": "还原",
+    "mark-sensitive": "标为敏感（聊天只显示条数）",
+    "add-title": "补登一条",
+    "add": "新增",
+    "summary-placeholder": "一句话说明改了什么（不要填任何值）",
+    "ref-placeholder": "commit hash、设置 key 或单号（选填）",
+    "config-title": "生产环境设置登记",
+    "config-hint": "只登记名称与位置，绝不填值；看起来像值的内容会被拒绝。",
+    "config-empty": "还没有登记任何设置",
+    "config-key": "key（例如 mail.sender）",
+    "config-label": "名称",
+    "config-location": "位置（例如 SSM /app/prod/mail_from）",
+    "config-environment": "环境（默认 production）",
+    "config-note": "备注",
+    "remove": "移除",
+    "digest-title": "每日摘要",
+    "digest-hint": "由 Navide 直接推送到所有绑定的私聊，不唤醒分格、不花分格额度；敏感条目与检测到的命令只显示条数。",
+    "digest-enabled": "每天推送过去 24 小时的上线记录",
+    "digest-at": "时间",
+    "digest-tz": "时区",
+    "digest-skip-empty": "没有上线的那天不推",
+    "digest-next": "下次：{time}",
+    "digest-run": "立即推送一次",
+    "digest-sent": "已排入推送",
+    "error-at": "时间格式要是 HH:MM",
+    "error-tz": "无法识别的时区"
   }
 }

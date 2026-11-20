@@ -9402,7 +9402,8 @@
       "manage": "Gerenciar no workspace →",
       "locked-title": "Uma tarefa do sistema pertencente ao app: altere-a no painel de autoevolução desse workspace",
       "managed-by": "Gerenciada pelo workspace",
-      "name": "Autoevolução · {workspace}"
+      "name": "Autoevolução · {workspace}",
+      "locked-title-shipped-log": "Agendamento do sistema mantido pelo App: altere no painel Registro de publicações desse espaço de trabalho"
     },
     "add": "+ Nova",
     "empty": "Nenhuma tarefa agendada ainda",
@@ -9435,7 +9436,11 @@
       "interrupted": "Ignorada: interrompida",
       "budget_global": "Ignorada: o total diário dos agents se esgotou",
       "expired": "Expirada: tarefa de agent não renovada em 7 dias",
-      "unknown": "Ignorada"
+      "unknown": "Ignorada",
+      "empty": "Pulado: nada publicado",
+      "no_chat": "Pulado: nenhum chat privado vinculado",
+      "plugin_disabled": "Pulado: o Registro de publicações está desativado",
+      "workspace_gone": "Pulado: a pasta do espaço de trabalho não existe"
     },
     "fail-reason": {
       "no_window": "Nenhuma janela do Navide está com o workspace desta tarefa aberto. Abra o workspace e execute a tarefa de novo.",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "A CLI no contêiner parou. Reconectar abre uma nova sessão no mesmo contêiner.",
     "reconnect": "Reconectar",
     "close-pane": "Fechar pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Registro de publicações"
+    },
+    "title": "Registro de publicações",
+    "close": "Fechar",
+    "loading": "Carregando…",
+    "window": {
+      "today": "Hoje",
+      "yesterday": "Ontem",
+      "7d": "7 dias",
+      "30d": "30 dias"
+    },
+    "count": "{n} publicados",
+    "pending": "{n} comando(s) de deploy detectado(s) para confirmar",
+    "empty": "Nada foi publicado neste período",
+    "verb": {
+      "added": "Adicionado",
+      "fixed": "Corrigido",
+      "changed": "Alterado"
+    },
+    "basis": {
+      "agent": "registrado",
+      "branch": "branch de deploy",
+      "tag": "etiqueta",
+      "hook": "detectado",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Configuração de produção",
+      "migration": "Migração de banco de dados",
+      "other": "Outro"
+    },
+    "sensitive": "Sensível",
+    "edited": "Editado",
+    "detected": "Comando de deploy detectado (não confirmado)",
+    "confirm": "Confirmar publicação",
+    "dismiss": "Descartar",
+    "edit": "Editar linha",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "reset": "Restaurar",
+    "mark-sensitive": "Marcar como sensível (o chat recebe só a contagem)",
+    "add-title": "Adicionar uma entrada",
+    "add": "Adicionar",
+    "summary-placeholder": "Uma linha simples dizendo o que mudou (nunca um valor)",
+    "ref-placeholder": "Hash do commit, chave da configuração ou ticket (opcional)",
+    "config-title": "Configurações de produção",
+    "config-hint": "Registre o nome de uma configuração e onde ela fica, nunca o valor; o que parecer um valor é recusado.",
+    "config-empty": "Nenhuma configuração registrada ainda",
+    "config-key": "chave (ex.: mail.sender)",
+    "config-label": "Nome",
+    "config-location": "Local (ex.: SSM /app/prod/mail_from)",
+    "config-environment": "Ambiente (padrão production)",
+    "config-note": "Observação",
+    "remove": "Remover",
+    "digest-title": "Resumo diário",
+    "digest-hint": "O Navide envia direto para cada chat privado vinculado: nenhum painel é acordado e nenhuma cota de painel é gasta; itens sensíveis e comandos detectados são só contados.",
+    "digest-enabled": "Enviar as últimas 24 horas todo dia",
+    "digest-at": "Horário",
+    "digest-tz": "Fuso horário",
+    "digest-skip-empty": "Pular dias sem publicações",
+    "digest-next": "Próximo: {time}",
+    "digest-run": "Enviar um agora",
+    "digest-sent": "Envio agendado",
+    "error-at": "O horário deve ser HH:MM",
+    "error-tz": "Fuso horário desconhecido"
   }
 }

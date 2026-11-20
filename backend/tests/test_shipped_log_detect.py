@@ -77,6 +77,10 @@ def test_the_excerpt_is_masked() -> None:
     ("docker push https://bot:" + "s3" + "cret@registry.example/app", ["bot", "s3cret"], ["https://***@registry.example/app"]),
     ("fly deploy --private-key=" + "abc" + "def", ["abcdef"], ["--private-key=***"]),
     ("kubectl apply -f k8s/ --namespace prod", [], ["kubectl apply -f k8s/ --namespace prod"]),
+    # A safe flag's =value still gets the assignment and URL-login masking.
+    ("helm upgrade api ./c --namespace=TOKEN=" + "zz" + "9", ["zz9"], ["--namespace=TOKEN=***"]),
+    ("fly deploy --app=https://u:" + "pw" + "7@h.example", ["pw7"], ["--app=https://***@h.example"]),
+    ("docker push img -t " + "sec" + "ret", ["secret"], ["-t ***"]),
     # A line the shell cannot split keeps only its first word.
     ("./deploy.sh 'unbalanced " + "sec" + "ret", ["unbalanced", "secret"], ["./deploy.sh"]),
 ])

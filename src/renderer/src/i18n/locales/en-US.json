@@ -9402,7 +9402,8 @@
       "manage": "Manage in Workspace →",
       "locked-title": "A system job owned by the app: change it from that workspace's self-evolution panel",
       "managed-by": "Managed by the workspace",
-      "name": "Self-evolution · {workspace}"
+      "name": "Self-evolution · {workspace}",
+      "locked-title-shipped-log": "A system schedule kept by the App: change it in that workspace's Shipped Log panel"
     },
     "add": "+ New",
     "empty": "No scheduled jobs yet",
@@ -9435,7 +9436,11 @@
       "interrupted": "Skipped: interrupted",
       "budget_global": "Skipped: agents' daily total used up",
       "expired": "Expired: agent job not renewed in 7 days",
-      "unknown": "Skipped"
+      "unknown": "Skipped",
+      "empty": "Skipped: nothing shipped",
+      "no_chat": "Skipped: no direct chat is bound",
+      "plugin_disabled": "Skipped: the Shipped Log is turned off",
+      "workspace_gone": "Skipped: the workspace folder does not exist"
     },
     "fail-reason": {
       "no_window": "No Navide window has this job's workspace open. Open the workspace, then run the job again.",
@@ -12518,5 +12523,74 @@
     "disconnected-body": "The CLI in the container has stopped. Reconnect opens a new session in the same container.",
     "reconnect": "Reconnect",
     "close-pane": "Close pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Shipped Log"
+    },
+    "title": "Shipped Log",
+    "close": "Close",
+    "loading": "Loading…",
+    "window": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "count": "{n} shipped",
+    "pending": "{n} detected deploy command(s) to confirm",
+    "empty": "Nothing shipped in this window",
+    "verb": {
+      "added": "Added",
+      "fixed": "Fixed",
+      "changed": "Changed"
+    },
+    "basis": {
+      "agent": "recorded",
+      "branch": "deploy branch",
+      "tag": "tag",
+      "hook": "detected",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Production setting",
+      "migration": "Database migration",
+      "other": "Other"
+    },
+    "sensitive": "Sensitive",
+    "edited": "Edited",
+    "detected": "Deploy command detected (unconfirmed)",
+    "confirm": "Confirm shipped",
+    "dismiss": "Dismiss",
+    "edit": "Edit line",
+    "save": "Save",
+    "cancel": "Cancel",
+    "reset": "Reset",
+    "mark-sensitive": "Mark sensitive (a chat only gets the count)",
+    "add-title": "Add an entry",
+    "add": "Add",
+    "summary-placeholder": "One plain line saying what changed (never a value)",
+    "ref-placeholder": "Commit hash, setting key or ticket (optional)",
+    "config-title": "Production settings",
+    "config-hint": "Register a setting's name and where it lives, never its value; anything that looks like a value is refused.",
+    "config-empty": "No settings registered yet",
+    "config-key": "key (e.g. mail.sender)",
+    "config-label": "Name",
+    "config-location": "Location (e.g. SSM /app/prod/mail_from)",
+    "config-environment": "Environment (default production)",
+    "config-note": "Note",
+    "remove": "Remove",
+    "digest-title": "Daily digest",
+    "digest-hint": "Navide pushes it to every bound direct chat itself: no pane is woken and no pane quota is spent; sensitive items and detected commands are only counted.",
+    "digest-enabled": "Push the last 24 hours every day",
+    "digest-at": "Time",
+    "digest-tz": "Time zone",
+    "digest-skip-empty": "Skip days with nothing shipped",
+    "digest-next": "Next: {time}",
+    "digest-run": "Push one now",
+    "digest-sent": "Push queued",
+    "error-at": "Time must be HH:MM",
+    "error-tz": "Unknown time zone"
   }
 }

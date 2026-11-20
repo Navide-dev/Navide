@@ -56,8 +56,8 @@ _ASSIGNMENT_ARG_RE = re.compile(r"^[A-Za-z_][\w.-]*=")
 _URL_LOGIN_RE = re.compile(r"(\w+://)[^/@\s]*@")
 #: Flags whose value is kept in an excerpt; every other flag's value is masked.
 SAFE_VALUE_FLAGS = frozenset({
-    "-f", "--file", "--filename", "-t", "--tag", "--region", "--cluster", "--service", "-n", "--namespace",
-    "--access", "--project", "--environment", "--env", "--stage", "--target", "-c", "--context", "--app",
+    "-f", "--file", "--filename", "--tag", "--region", "--cluster", "--service", "-n", "--namespace",
+    "--access", "--project", "--stage", "--target", "--context", "--app",
 })
 HIDDEN = "***"
 
@@ -82,23 +82,28 @@ def match(command: str) -> tuple[str, str] | None:
     return None
 
 
+def _mask_value(word: str) -> str:
+    """A word that is not a flag: an assignment's value and a URL's login hidden."""
+    if _ASSIGNMENT_ARG_RE.match(word):
+        return word.split("=", 1)[0] + "=" + HIDDEN
+    return _URL_LOGIN_RE.sub(lambda m: f"{m.group(1)}{HIDDEN}@", word)
+
+
 def _mask_words(words: list[str]) -> list[str]:
     out: list[str] = []
     after_flag = False
     for word in words:
         if word.startswith("-") and len(word) > 1:
-            flag, eq, _value = word.partition("=")
-            out.append(word if not eq or flag in SAFE_VALUE_FLAGS else f"{flag}={HIDDEN}")
+            flag, eq, value = word.partition("=")
+            if not eq:
+                out.append(word)
+            else:
+                out.append(f"{flag}={_mask_value(value) if flag in SAFE_VALUE_FLAGS else HIDDEN}")
             after_flag = not eq and flag not in SAFE_VALUE_FLAGS
             continue
-        if after_flag:
-            # Fail closed: the word after any flag not known to take a harmless
-            # value is masked, even when that flag takes no value at all.
-            out.append(HIDDEN)
-        elif _ASSIGNMENT_ARG_RE.match(word):
-            out.append(word.split("=", 1)[0] + "=" + HIDDEN)
-        else:
-            out.append(_URL_LOGIN_RE.sub(lambda m: f"{m.group(1)}{HIDDEN}@", word))
+        # Fail closed: the word after any flag not known to take a harmless
+        # value is masked, even when that flag takes no value at all.
+        out.append(HIDDEN if after_flag else _mask_value(word))
         after_flag = False
     return out
 
