@@ -4,7 +4,7 @@
 #   NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 #   NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 #   NAVIDE_PLUGIN_TOKEN=<navide publisher bearer token> \
-#   scripts/publish-first-party-plugins.sh [--skip-build] [--only git|plans|mini-ide|browser]
+#   scripts/publish-first-party-plugins.sh [--skip-build] [--only plans|mini-ide|browser]
 #   scripts/publish-first-party-plugins.sh --package <vsix> --target <target> \
 #       --version <version> [--id <plugin id>]
 #   scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
@@ -26,8 +26,9 @@
 # --yes. --target narrows it to the listed targets (default: all KNOWN_TARGETS);
 # a target already published for that version is a 409 and stops the run. CI never sees the publisher key: it only builds and packs.
 #
-# navide.git and navide.mini-ide are frontend-only and are published once as
-# `universal`.
+# navide.mini-ide is frontend-only and is published once as `universal`.
+# navide.git lives in Navide-dev/navide-git: publish the vsix its CI packs with
+# --package <vsix> --id navide.git --target universal --version <version>.
 # navide.plans and navide.browser ship a PyInstaller backend, so their packages
 # are built for, and published as, the current host target only
 # (`<platform>-<arch>`, e.g. darwin-arm64). Other targets must be built and published from a machine of
@@ -58,7 +59,7 @@ YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1 ;;
-    --only) ONLY="${2:?--only needs git, plans, mini-ide or browser}"; shift ;;
+    --only) ONLY="${2:?--only needs plans, mini-ide or browser}"; shift ;;
     --package) PACKAGE="${2:?--package needs a vsix path}"; shift ;;
     --target) TARGET="${2:?--target needs a target}"; shift ;;
     --from-run) RUN_ID="${2:?--from-run needs a run id}"; shift ;;
@@ -70,8 +71,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 case "$ONLY" in
-  ""|git|plans|mini-ide|browser) ;;
-  *) echo "--only must be git, plans, mini-ide or browser" >&2; exit 2 ;;
+  ""|plans|mini-ide|browser) ;;
+  *) echo "--only must be plans, mini-ide or browser" >&2; exit 2 ;;
 esac
 
 # The targets the app ships a build for (release.yml); a plugin artifact for
@@ -182,13 +183,6 @@ require_publish_env
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
   pnpm run build:public-packages
-fi
-
-if [ -z "$ONLY" ] || [ "$ONLY" = "git" ]; then
-  if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:git:v2
-  fi
-  publish_dir "$ROOT/dist-plugins/navide-git" universal
 fi
 
 if [ -z "$ONLY" ] || [ "$ONLY" = "mini-ide" ]; then

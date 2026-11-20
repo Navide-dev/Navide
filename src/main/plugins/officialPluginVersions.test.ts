@@ -2,11 +2,15 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isEngineCompatible } from './pluginEngineCompat'
-import { OFFICIAL_PLUGIN_VERSIONS, officialPluginVersion, supersedingBundledVersions } from './officialPluginVersions'
+import {
+  OFFICIAL_PLUGIN_VERSIONS,
+  REGISTRY_SOURCED_OFFICIAL_PLUGINS,
+  officialPluginVersion,
+  supersedingBundledVersions,
+} from './officialPluginVersions'
 
 const sourceDirs: Record<string, string> = {
   'navide.browser': 'plugins/navide-browser',
-  'navide.git': 'plugins/navide-git',
   'navide.mini-ide': 'plugins/navide-mini-ide',
   'navide.plans': 'plugins/navide-plans',
 }
@@ -16,7 +20,13 @@ const appVersion = readJson('package.json').version as string
 
 describe('OFFICIAL_PLUGIN_VERSIONS', () => {
   it('lists exactly the bundled first-party plugins', () => {
-    expect(Object.keys(OFFICIAL_PLUGIN_VERSIONS).sort()).toEqual(Object.keys(sourceDirs).sort())
+    expect(Object.keys(OFFICIAL_PLUGIN_VERSIONS).sort())
+      .toEqual([...Object.keys(sourceDirs), ...REGISTRY_SOURCED_OFFICIAL_PLUGINS].sort())
+  })
+
+  it('takes navide.git from the Registry, not from a directory here', () => {
+    expect(REGISTRY_SOURCED_OFFICIAL_PLUGINS).toEqual(['navide.git'])
+    expect(Object.keys(sourceDirs)).not.toContain('navide.git')
   })
 
   it.each(Object.entries(sourceDirs))('%s equals its source manifest and package.json', (id, dir) => {
@@ -26,7 +36,7 @@ describe('OFFICIAL_PLUGIN_VERSIONS', () => {
     expect(readJson(`${dir}/package.json`).version).toBe(OFFICIAL_PLUGIN_VERSIONS[id])
   })
 
-  it.each(Object.entries(sourceDirs))('%s is not stamped with the App version', (id) => {
+  it.each(Object.keys(OFFICIAL_PLUGIN_VERSIONS))('%s is not stamped with the App version', (id) => {
     // Every Registry release so far was 0.2.x and stamped with the App
     // version; a decoupled version must sort above all of them, or the update
     // check and the bundled-vs-installed comparison would never pick it.

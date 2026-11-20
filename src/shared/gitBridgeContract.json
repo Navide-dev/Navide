@@ -1,5 +1,5 @@
 {
-  "description": "The private bridge between the Host and the first-party navide.git plugin: the git.* requests the Host maps for it (capability action git.request) and the git.* events it forwards. First-party only; not a public plugin capability. Adding a message is a minor version, removing or renaming one a major. Both copies (src/shared/gitBridgeContract.json, plugins/navide-git/src/git-feature/gitBridgeContract.json) change together.",
+  "description": "The private bridge between the Host and the first-party navide.git plugin: the git.* requests the Host maps for it (capability action git.request) and the git.* events it forwards. First-party only; not a public plugin capability. Adding a message is a minor version, removing or renaming one a major. navide.git (Navide-dev/navide-git) keeps a copy of the version it is built against; the Host serves the same major at a lower or equal minor.patch.",
   "version": "1.0.0",
   "requests": [
     "git.abort",

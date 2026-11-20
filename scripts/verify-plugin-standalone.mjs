@@ -7,7 +7,7 @@
 //
 //   node scripts/verify-plugin-standalone.mjs <dir> [--tarballs <dir>] [--registry] [--keep]
 //
-//   <dir>             the plugin directory under plugins/, e.g. navide-git
+//   <dir>             the plugin directory under plugins/, e.g. navide-mini-ide
 //
 //   --tarballs <dir>  install @navide/plugin-{contracts,sdk,ui} from the
 //                     tarballs in <dir> (default dist/npm, as written by
@@ -53,7 +53,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (pluginDir === null || !/^navide-[a-z-]+$/.test(pluginDir) || !existsSync(join(root, 'plugins', pluginDir, 'manifest.json'))) {
-  console.error('usage: node scripts/verify-plugin-standalone.mjs <plugins/ directory, e.g. navide-git> [--tarballs <dir>] [--registry] [--keep]')
+  console.error('usage: node scripts/verify-plugin-standalone.mjs <plugins/ directory, e.g. navide-mini-ide> [--tarballs <dir>] [--registry] [--keep]')
   process.exit(2)
 }
 const version = JSON.parse(readFileSync(join(root, 'packages/plugin-contracts/package.json'), 'utf8')).version

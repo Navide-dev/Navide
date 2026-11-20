@@ -15,12 +15,17 @@ const UI = 'packages/plugin-ui/src/foundation/i18n/locales'
 const OWNERS: Array<{ name: string; sources: RegExp; catalogs: string[] }> = [
   { name: 'Host', sources: /^src\//, catalogs: [UI, 'src/renderer/src/i18n/locales'] },
   { name: '@navide/plugin-ui', sources: /^packages\/plugin-(ui|contracts|sdk)\//, catalogs: [UI] },
-  { name: 'navide-git', sources: /^plugins\/navide-git\//, catalogs: [UI, 'plugins/navide-git/src/locales'] },
   { name: 'navide-mini-ide', sources: /^plugins\/navide-mini-ide\//, catalogs: [UI, 'plugins/navide-mini-ide/src/locales'] },
   { name: 'navide-plans', sources: /^plugins\/navide-plans\//, catalogs: [UI, 'plugins/navide-plans/src/locales'] },
   { name: 'navide-browser', sources: /^plugins\/navide-browser\//, catalogs: [UI, 'plugins/navide-browser/src/locales'] },
 ]
 const ALL_CATALOGS = [...new Set(OWNERS.flatMap(({ catalogs }) => catalogs))]
+// First-party plugins built in their own repositories still show these
+// plugin-ui strings (navide.git: Navide-dev/navide-git). Update the list when
+// the pinned version starts or stops using one.
+const EXTERNAL_OWNERS = JSON.parse(
+  readFileSync(resolve('tests/infrastructure/externalPluginUiKeys.json'), 'utf8'),
+) as Record<string, string[]>
 
 /** Every leaf and every subtree path, so `t(\`a.${x}\`)` style prefixes count too. */
 function paths(dir: string): Set<string> {
@@ -94,6 +99,10 @@ describe('i18n catalog ownership', () => {
       for (const key of referenced(sources.filter((file) => pattern.test(file)), leaves)) {
         users.set(key, [...(users.get(key) ?? []), name])
       }
+    }
+    for (const [name, keys] of Object.entries(EXTERNAL_OWNERS)) {
+      expect(keys.filter((key) => !leaves.includes(key)), `${name} lists strings plugin-ui does not have`).toEqual([])
+      for (const key of keys) users.set(key, [...(users.get(key) ?? []), name])
     }
     const misplaced = leaves
       .map((key) => [key, users.get(key) ?? []] as const)

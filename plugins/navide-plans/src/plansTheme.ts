@@ -44,7 +44,7 @@ export function applyPlansTheme(theme: string): void {
 }
 
 /**
- * Zero-flash initial theme, mirroring plugins/navide-git/src/mount.ts: the Host
+ * Zero-flash initial theme, mirroring navide-git's src/mount.ts: the Host
  * passes the current app theme as `?theme=` because the plugin origin has no
  * bootstrap snapshot. Stamp `data-theme` before mount, and seed the settings
  * cache with the store's JSON-string encoding so `useTheme.loadTheme()` — which

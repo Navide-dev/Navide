@@ -143,7 +143,7 @@ rewritten: rotate it.
    ```
    Each App-bundled plugin under `plugins/` has its own suite and its own
    `plugins/<dir>/vitest.config.ts` (`pnpm vitest run --config
-   plugins/navide-git/vitest.config.ts`); the root config covers the Host and
+   plugins/navide-mini-ide/vitest.config.ts`); the root config covers the Host and
    the workspace packages. `pnpm test:run` runs the root config and then every
    plugin's whole suite, one plugin after another; `pnpm test:plugins` runs
    only the plugins' unit projects.

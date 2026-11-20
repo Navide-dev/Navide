@@ -246,44 +246,53 @@ the `navide.dev` zone).
 
 ## Releasing navide.git on its own
 
-navide.git ships through the Navide Marketplace without waiting for an App
-release. An installed App picks the newer version up from the Marketplace (a
-verified Marketplace copy wins over the bundled one of the same or a lower
-version), so a Git fix reaches users without a new installer.
+navide.git is developed in its own repository,
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git), and ships
+through the Navide Marketplace without waiting for an App release. An
+installed App picks the newer version up from the Marketplace (a verified
+Marketplace copy wins over the bundled one of the same or a lower version),
+so a Git fix reaches users without a new installer. The App installer carries
+the version `src/main/plugins/officialPluginVersions.ts` pins, downloaded and
+verified from the official Registry at build time.
 
-1. **Branch and tests.** Change `plugins/navide-git/` on its own branch.
-   `.github/workflows/plugin-git.yml` runs the plugin's typecheck and its whole
-   suite (`pnpm test:plugin:git`) when the plugin or a package its bundle
-   contains changes; `ci.yml` no longer runs Git's tests. Locally run
-   `pnpm test:plugin:git` and `pnpm typecheck:plugin-git`.
+1. **Branch and tests.** Change navide-git on its own branch in its
+   repository; its CI runs the typecheck, the tests (the catalog checks
+   included) and the build, validate and package steps. It installs
+   `@navide/plugin-{contracts,sdk,ui}` from the tarballs a Navide GitHub
+   Release carries; a change it needs in those packages ships in Navide first.
 2. **Bridge contract.** Git's Git operations run in the Host over the
-   first-party bridge, frozen in `src/shared/gitBridgeContract.json` (Host) and
-   `plugins/navide-git/src/git-feature/gitBridgeContract.json` (plugin; it
-   declares the same version as `GIT_BRIDGE_VERSION`). A Git-only release
-   leaves both untouched. Adding a `git.*` request or event is a minor
-   contract version, removing or renaming one a major; either changes both
-   copies and the `FROZEN` digests in `src/main/plugins/gitBridgeContract.test.ts`
-   and the plugin's `gitBridgeContract.test.ts`, and needs a Host release
-   first: raise `engines.navide` in `plugins/navide-git/manifest.json` to that
-   App version so an older App never installs a Git that needs more than it
-   serves. The bridge stays first-party only; there is no public `git`
-   capability namespace.
+   first-party bridge, frozen in `src/shared/gitBridgeContract.json` (Host);
+   the plugin keeps a copy of the version it is built against
+   (`src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`). A
+   Git-only release leaves both untouched. Adding a `git.*` request or event
+   is a minor contract version, removing or renaming one a major; it changes
+   the Host copy and its `FROZEN` digest in
+   `src/main/plugins/gitBridgeContract.test.ts` and needs a Host release
+   first: raise `engines.navide` in navide-git's `manifest.json` to that App
+   version so an older App never installs a Git that needs more than it
+   serves. The Host serves any plugin contract of the same major and a lower
+   or equal minor.patch (`PINNED_GIT_BRIDGE_VERSION`,
+   `tests/infrastructure/gitBridgeContract.test.ts`). The bridge stays
+   first-party only; there is no public `git` capability namespace.
 3. **Version.** Bump the patch (or minor) version once per release cycle in
-   `plugins/navide-git/manifest.json`, `plugins/navide-git/package.json` and
-   `src/main/plugins/officialPluginVersions.ts`; `node
-   scripts/official-plugin-fingerprints.mjs` passes again once it is higher
-   than the baseline. A Host-only change never needs one (`--probe <path>`).
-   Add a CHANGELOG line naming the new Git version.
+   navide-git's `manifest.json` and `package.json`, and add a CHANGELOG line
+   there. The Registry refuses a version already published, so a second
+   change needs a new version.
 4. **Publish, with the user's go-ahead.** On the release machine, where the
-   publisher key lives (never in CI or the repository):
+   publisher key lives (never in CI or the repository), publish the vsix
+   navide-git's CI packed:
    `NAVIDE_REGISTRY_URL=… NAVIDE_PUBLISHER_KEY=… NAVIDE_PLUGIN_TOKEN=…
-   scripts/publish-first-party-plugins.sh --only git` builds, packs, signs and
-   publishes the `universal` package. A version already published is refused
-   (409): a published version is never overwritten, so a second change needs a
-   new version.
+   scripts/publish-first-party-plugins.sh --package navide-git.vsix --id navide.git --target universal --version <version>`.
 5. **Check.** `curl -s https://server.navide.dev/registry/api/extensions/navide/git`
-   shows the new `latest_version`; an installed App offers the update. The next
-   App release bundles the same version from source.
+   shows the new `latest_version`; an installed App offers the update.
+6. **Bundle it in the next App release.** Raise `navide.git` in
+   `src/main/plugins/officialPluginVersions.ts` (and
+   `PINNED_GIT_BRIDGE_VERSION` if it was built against a newer contract), and
+   update `tests/fixtures/navide-git/` (its manifest and target schema) and
+   `tests/infrastructure/externalPluginUiKeys.json` (the plugin-ui strings it
+   shows) from that version. `release.sh` stops before anything else when the
+   pinned version is not on the Registry or does not verify
+   (`node scripts/stage-official-plugin-artifacts.mjs --check-registry`).
 
 ## Git recovery switch
 

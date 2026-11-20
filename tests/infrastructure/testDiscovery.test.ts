@@ -2,7 +2,7 @@ import { createVitest } from 'vitest/node'
 import { describe, expect, it } from 'vitest'
 import { assertTestOwnership, repositoryTestFiles } from '../support/testInventory'
 
-const PLUGIN_DIRS = ['navide-browser', 'navide-git', 'navide-mini-ide', 'navide-plans']
+const PLUGIN_DIRS = ['navide-browser', 'navide-mini-ide', 'navide-plans']
 
 /** Every spec a config collects, as { file, project } with the config's projects. */
 async function collected(config: string): Promise<{ projects: string[]; owned: Array<{ file: string; project: string }> }> {
@@ -41,7 +41,6 @@ describe('test project ownership', () => {
     for (const [file, project] of [
       ['plugins/navide-mini-ide/tests/packageBoundary.test.ts', 'navide-mini-ide-artifacts-heavy'],
       ['plugins/navide-plans/tests/packageBoundary.test.ts', 'navide-plans-artifacts-heavy'],
-      ['plugins/navide-git/tests/compositionBoundary.test.ts', 'navide-git-artifacts-heavy'],
       ['src/main/plugins/pluginExternalWorkspace.test.ts', 'artifacts-heavy'],
     ]) {
       expect(owned.find((entry) => entry.file.endsWith(`/${file}`))?.project).toBe(project)

@@ -1168,7 +1168,7 @@ describe('registered receiver frame lifecycle', () => {
     const detailView: PluginViewLaunchDescriptor = {
       id: 'detail', contributionKey: 'acme.receiver-lifecycle.detail', kind: 'custom',
       location: 'detail', title: 'Detail', entryFile,
-      targetSchema: 'plugins/navide-git/schemas/branch-comparison.json',
+      targetSchema: 'tests/fixtures/navide-git/schemas/branch-comparison.json',
     }
     descriptor.views = withDetailPair ? [receiverView, providerView, detailView] : [receiverView, providerView]
     mgr.registerDescriptor(descriptor, { builtin: true })

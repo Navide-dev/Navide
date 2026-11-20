@@ -51,8 +51,6 @@ in-repo docs above.
    `src/renderer/src/components/ControlPane.vue` (~6.8K),
    `src/renderer/src/components/SettingsModal.vue` (~5.2K),
    `src/renderer/src/platform/terminal/composables/useTerminal.ts` (~4.7K),
-   `plugins/navide-git/src/components/GitPane.vue` (~3.6K; the Host keeps no
-   Git interface of its own),
    `backend/agent_team_backend/git_service.py` (~3.2K), and
    `src/renderer/src/EditorWindowApp.vue` (~2.8K). Check with `wc -l`
    rather than trusting this list — it drifts. Per-vendor CLI code lives in

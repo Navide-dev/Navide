@@ -12,7 +12,6 @@ import { AVAILABLE_UI_LOCALES } from '../index'
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
   'src/renderer/src/i18n/locales',
-  'plugins/navide-git/src/locales',
   'plugins/navide-mini-ide/src/locales',
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'
@@ -24,7 +23,6 @@ const localeDirs = [
 // (src/renderer/src/i18n/hostMessages.ts), so it must hold exactly its languages.
 const globRegistered = ['src/renderer/src/i18n/locales']
 const pluginRegistries: Record<string, string> = {
-  'plugins/navide-git/src/locales': 'plugins/navide-git/src/gitMessages.ts',
   'plugins/navide-mini-ide/src/locales': 'plugins/navide-mini-ide/src/miniIdeMessages.ts',
   'plugins/navide-plans/src/locales': 'plugins/navide-plans/src/plansI18n.ts',
   'plugins/navide-browser/src/locales': 'plugins/navide-browser/src/browserI18n.ts'

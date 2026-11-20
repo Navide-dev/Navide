@@ -143,6 +143,10 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
 fi
 
 pnpm release:check
+# The installer takes navide.git from the official Registry: the pinned
+# version must be published and verify before anything else runs.
+node scripts/stage-official-plugin-artifacts.mjs --check-registry \
+  || fail "a pinned Registry plugin version is missing or does not verify (see above)"
 warn_missing_announcement "$VERSION"
 require_uv_version "$MIN_UV_VERSION"
 

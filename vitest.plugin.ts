@@ -7,7 +7,7 @@
 // workspace-package aliases and the artifact setup are shared until a plugin
 // moves to a repository of its own.
 //
-//   pnpm vitest run --config plugins/navide-git/vitest.config.ts
+//   pnpm vitest run --config plugins/navide-mini-ide/vitest.config.ts
 //   pnpm test:plugins            # every plugin, one after another
 import type { ViteUserConfig } from 'vitest/config'
 import baseConfig, { excludedTests } from './vitest.config'

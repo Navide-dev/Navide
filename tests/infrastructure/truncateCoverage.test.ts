@@ -8,15 +8,13 @@ import { expect, it } from 'vitest'
 // it fails here; a deliberate exception goes in EXEMPT with its reason.
 
 const ROOT = join(__dirname, '..', '..')
-const SCAN = ['src/renderer/src', 'plugins/navide-git/src', 'plugins/navide-mini-ide/src', 'plugins/navide-plans/src']
+const SCAN = ['src/renderer/src', 'plugins/navide-mini-ide/src', 'plugins/navide-plans/src']
 // Static illustrations in the help pages, not live UI.
 const SKIP_DIRS = ['src/renderer/src/components/helpMocks']
 
 /** `<file>|<class>` (or `<file>|<class>|<another class on the element>`) -> why
  *  it does not get the tooltip. */
 const EXEMPT: Record<string, string> = {
-  // The row clips, but its text sits in .cd-file-label, which carries v-truncate.
-  'plugins/navide-git/src/components/GitPane.vue|cd-file': 'text is in the v-truncate .cd-file-label child',
   // The chip's wrapper already has a native title with the whole usage summary;
   // a second tooltip with just the name would cover it.
   'src/renderer/src/components/UsageBadge.vue|usage-badge-name-text': 'parent .usage-badge-name has the richer chipTooltip title',
@@ -121,9 +119,9 @@ it('every element a CSS rule cuts off with an ellipsis shows its full text on ho
 it('matches skip and exempt entries on Windows paths and CRLF sources', () => {
   const root = 'C:\\repo'
   expect(relPath(root, 'C:\\repo\\src\\renderer\\src\\components\\helpMocks', path.win32)).toBe(SKIP_DIRS[0])
-  const rel = relPath(root, 'C:\\repo\\plugins\\navide-git\\src\\components\\GitPane.vue', path.win32)
-  const style = '<style scoped>\r\n.cd-file {\r\n  text-overflow: ellipsis;\r\n}\r\n.cd-name {\r\n  text-overflow: ellipsis;\r\n}\r\n</style>\r\n'
-  const exempt = '<template>\r\n  <div class="cd-file">\r\n    x\r\n  </div>\r\n</template>\r\n'
+  const rel = relPath(root, 'C:\\repo\\src\\renderer\\src\\components\\UsageBadge.vue', path.win32)
+  const style = '<style scoped>\r\n.usage-badge-name-text {\r\n  text-overflow: ellipsis;\r\n}\r\n.cd-name {\r\n  text-overflow: ellipsis;\r\n}\r\n</style>\r\n'
+  const exempt = '<template>\r\n  <div class="usage-badge-name-text">\r\n    x\r\n  </div>\r\n</template>\r\n'
   expect(missingIn(rel, exempt + style)).toEqual([])
   const bare = '<template>\r\n  <span\r\n    class="cd-name"\r\n  >x</span>\r\n</template>\r\n'
   expect(missingIn(rel, bare + style)).toHaveLength(1)
