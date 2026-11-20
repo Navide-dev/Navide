@@ -91,7 +91,12 @@ async function verifiedRegistryArtifact(host, { id, target }) {
     detail = await (await fetchOk(base, `${id} listing`)).json()
     // Fails with the versions the Registry does have before anything downloads.
     host.selectOfficialVersion(detail, id, version, target, registryUrl)
-    bytes = new Uint8Array(await (await fetchOk(`${base}/${version}/download`, `${id} ${version} download`)).arrayBuffer())
+    // A platform build is one of several artifacts of its version: the Registry
+    // serves it by target, as the App's installer asks (pluginInstaller.ts).
+    const download = target === 'universal'
+      ? `${base}/${version}/download`
+      : `${base}/${version}/download?target=${encodeURIComponent(target)}`
+    bytes = new Uint8Array(await (await fetchOk(download, `${id} ${version} download`)).arrayBuffer())
   } catch (error) {
     if (error instanceof host.OfficialArtifactMissingError) throw error
     if (!allowOfflineCache) {

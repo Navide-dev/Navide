@@ -276,6 +276,8 @@ describe('the standalone packaged-Plans gate builds every package it stages', ()
     expect(stage).toContain("{ id: 'navide.git', target: 'universal' }")
     expect(stage).toContain("{ id: 'navide.mini-ide', target: 'universal' }")
     expect(stage).toContain("{ id: 'navide.browser', target: hostTarget }")
+    // A platform package is downloaded by target, as the App's installer asks.
+    expect(stage).toContain('/download?target=${encodeURIComponent(target)}')
     for (const build of ['build:git:v2', 'build:mini-ide:v2', 'build:browser:v2', 'build:browser:backend']) {
       expect(standalone).not.toContain(`'${build}'`)
     }
