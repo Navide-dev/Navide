@@ -54,7 +54,10 @@ Some Codex builds treat the `SessionStart` hook Navide passes on the command lin
 - Do not immediately rebuild or resume before the first session is detected.
 - If detection never completes, preserve the pane output and relevant backend log before filing an issue.
 
-## Grok Build panes
+## Claude Code panes
+
+- **"Adding a new directory: …/runtime/skills-views/claude — This session hasn't worked here before"** is Claude Code (2.1.32x and later) asking about the folder Navide delivers skills through. Navide records it as trusted before the pane starts (convenience feature `claude.skills-trust`, see [Convenience features](convenience-features.md)); when that record could not be written, Navide answers "Yes, add it" for that folder only, for that session, and logs it in `ui_diagnostics` as `spawn.startup-prompt-answered`. The same dialog about any other folder is left to you: the pane shows as waiting, its task and messages wait instead of being typed into it, and `cli_open_agent` answers `kickoff: "blocked-by-prompt"` with the prompt for `cli_answer_prompt` ("allow" is "Yes, add it", "deny" is "No, exit", which closes Claude Code).
+
 
 - **"Do you trust the contents of this directory?"** Navide answers it for every Grok pane it starts, when it asks about the pane's own workspace, and shares the answer with your other Grok panes through `~/.grok/trusted_folders.toml` (convenience feature `grok.folder-trust`, see [Convenience features](convenience-features.md)); only the workspace a pane was opened in, or a folder inside it, is shared to `~/.grok`. A prompt still on screen shows the pane as waiting, and messages wait instead of being typed into it. Trusting a folder lasts, so an agent or a chat relay can only refuse it (`cli_answer_prompt` "deny", which is Grok's "No, quit"); accept it yourself in the pane.
 - **`[startup probe] … does not identify as Grok Build`** means the `grok` on your `PATH` is another program with the same name (for example the community `grok-cli`). Install the official CLI with `curl -fsSL https://x.ai/cli/install.sh | bash`.

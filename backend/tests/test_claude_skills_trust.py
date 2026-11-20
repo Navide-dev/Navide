@@ -167,3 +167,11 @@ def test_the_feature_is_registered_and_switchable() -> None:
     assert convenience.feature(FEATURE).cli == "claude"
     assert convenience.feature(FEATURE).toggleable
     assert FEATURE in convenience_wiring.TAKEBACKS
+
+
+def test_the_spawn_names_the_view_it_handed_claude(view: Path) -> None:
+    command = skills_wiring.wire_command("claude", "claude", None, "p1", {}, "/work/repo")
+
+    assert skills_wiring.handed_dirs("claude", command) == [str(view)]
+    assert skills_wiring.handed_dirs("claude", "claude") == []
+    assert skills_wiring.handed_dirs("codex", command) == []

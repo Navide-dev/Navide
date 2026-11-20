@@ -77,6 +77,8 @@ export interface TerminalCreateResult {
   startup_probe?: TerminalStartupProbe | null
   /** Why this machine could not wire the pane's MCP, one line each; absent when it could. */
   wiring_warnings?: string[]
+  /** Folders Navide itself handed the CLI (claude's --add-dir skills view). */
+  navide_dirs?: string[]
 }
 
 export interface TerminalOutputEvent {

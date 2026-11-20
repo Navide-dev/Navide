@@ -766,6 +766,17 @@ def _wire_command(
     return _append_to_command(command, suffix) if suffix else command
 
 
+def handed_dirs(agent_key: str, command: Any) -> list[str]:
+    """The skills view this spawn handed a CLI whose flag needs trust, when
+    the command carries it — what a launch prompt about it may be answered
+    for (lib/startupPrompts.ts). Empty otherwise."""
+    wiring = skills_wiring(agent_key or "")
+    if wiring is None or not wiring.flag_needs_trust:
+        return []
+    view = str(agent_view_root(agent_key))
+    return [view] if view in _command_text(command) else []
+
+
 def _managed_root(store: SkillsStore | None) -> Path:
     return (store or SkillsStore()).runtime_root
 

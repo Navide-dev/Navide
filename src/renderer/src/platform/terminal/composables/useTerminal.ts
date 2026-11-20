@@ -775,6 +775,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // CLI reloads its transcript in silence, so quiet alone does not mean ready —
   // see lib/resumeBoot.ts.
   const resumeSpawnedAt = ref(0)
+  // Folders this spawn handed the CLI itself (lib/startupPrompts.ts).
+  const navideDirs = ref<string[]>([])
   // `lastActivityAt` only updates when CLEANED text changes — i.e. real content.
   // Used for analyzer triggers and sentinel scans.
   const lastActivityAt = ref<number>(0)
@@ -3060,6 +3062,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       replayEarlyOutput(sessionId.value)
       rememberSessionId(sessionId.value)  // enable reattach after a reload
       resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
+      navideDirs.value = resp.payload.navide_dirs ?? []
       status.value = 'running'
       const probe = resp.payload.startup_probe
       if (probe?.binary_path) {
@@ -3715,6 +3718,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     cleanBuffer,
     cleanBytesSeen,
     resumeSpawnedAt,
+    navideDirs,
     lastActivityAt,
     lastRawActivityAt,
     hasDraft,

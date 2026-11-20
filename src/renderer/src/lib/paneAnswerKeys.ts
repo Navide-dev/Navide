@@ -26,6 +26,12 @@
  *   Submit / Next button, which Enter presses. Each step is written on its own
  *   (`steps`), so the CLI never reads text and Enter as one paste.
  *
+ * - claude's "Adding a new directory" dialog at launch (lib/startupPrompts.ts)
+ *   draws "No, exit / Yes, add it" without numbers and takes no hotkey: the
+ *   arrows move the cursor and Enter confirms. "allow" (or option 2) moves to
+ *   "Yes, add it" — an answer that holds for this session only — and "deny"
+ *   (option 1) is Esc, the dialog's own "No, exit", which ends the CLI.
+ *
  * Free text is the only input the remote sender shapes, and it is typed into
  * the text box the question offered, as one line with no control characters.
  *
@@ -33,6 +39,8 @@
  * session" …) is never pressed from here: that choice is made at the computer.
  */
 
+
+import { ADD_DIR_OPTIONS, readStartupPrompt, type StartupPrompt } from './startupPrompts'
 export type PaneAnswer =
   | { kind: 'permission'; choice: 'allow' | 'deny' }
   | { kind: 'question'; option: number; text?: string }
@@ -87,7 +95,9 @@ export function isPermanentAllow(option: string): boolean {
 
 /** Numbered options at the bottom of the screen: the last run 1, 2, 3 … */
 export function parseMenuOptions(screen: string): string[] {
-  return parseMenu(screen).options
+  const options = parseMenu(screen).options
+  // Claude's "Adding a new directory" dialog draws its two options unnumbered.
+  return options.length ? options : (readStartupPrompt('claude', screen)?.options ?? [])
 }
 
 /** The last numbered run and the index of the row the cursor is on (-1: none). */
@@ -480,6 +490,10 @@ export function resolveAnswerKeys(input: {
       : freeTextKeys(input.screen, answer.option, answer.text ?? '')
   }
 
+  if (agentKey === 'claude') {
+    const addDir = readStartupPrompt('claude', input.screen)
+    if (addDir) return addDirKeys(addDir, answer)
+  }
   const options = parseMenuOptions(input.screen)
   if (!options.length) return { ok: false, error: 'no option menu on screen' }
   if (answer.kind === 'permission') {
@@ -497,4 +511,16 @@ export function resolveAnswerKeys(input: {
   }
   if (isPermanentAllow(options[n - 1])) return { ok: false, error: `option ${n} allows permanently` }
   return { ok: true, keys: String(n) }
+}
+
+/** Keys for Claude's "Adding a new directory" dialog: Esc is its "No, exit";
+ *  "Yes, add it" is reached with Down from wherever the cursor is, then Enter. */
+function addDirKeys(prompt: StartupPrompt, answer: PaneAnswer): AnswerKeys {
+  const option = answer.kind === 'permission' ? (answer.choice === 'allow' ? 2 : 1) : answer.kind === 'question' ? answer.option : 0
+  if (answer.kind === 'multi' || (answer.kind === 'question' && answer.text !== undefined) || (option !== 1 && option !== 2)) {
+    return { ok: false, error: 'the dialog has two options: 1 (No, exit) and 2 (Yes, add it)' }
+  }
+  if (option === 1) return { ok: true, keys: ESC }
+  const moves = prompt.cursorOn === ADD_DIR_OPTIONS[1] ? [] : [DOWN]
+  return { ok: true, keys: [...moves, '\r'].join(''), steps: [...moves, '\r'] }
 }
