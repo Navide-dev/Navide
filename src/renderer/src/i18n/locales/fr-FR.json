@@ -176,7 +176,7 @@
         "name": "Dossier de skills Claude approuvé",
         "benefit": "Les nouveaux volets Claude s'ouvrent directement sur la saisie au lieu de demander d'abord s'il faut faire confiance au dossier de skills de Navide.",
         "purpose": "Les volets Claude ne demandent plus de faire confiance au dossier par lequel Navide fournit les skills",
-        "writes": "~/.claude.json (ou le .claude.json du dossier Claude propre à un compte) : Navide ajoute un seul enregistrement de confiance, projects[<données Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, pour le dossier de liens de skills qu'il construit et transmet à chaque volet Claude avec --add-dir. Aucun autre dossier n'est approuvé et le reste du fichier est conservé. L'écriture se fait sous le verrou de configuration de Claude Code, seulement si l'enregistrement manque ; le fichier est sauvegardé avant, et la désactivation retire exactement cet enregistrement",
+        "writes": "~/.claude.json (ou le .claude.json du dossier Claude propre à un compte) : Navide ajoute un seul enregistrement de confiance, projects[<données Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, pour le dossier de liens de skills qu'il construit et transmet à chaque volet Claude avec --add-dir. Aucun autre dossier n'est approuvé et le reste du fichier est conservé. L'écriture se fait sous le verrou de configuration de Claude Code, seulement si l'enregistrement manque ; le fichier est sauvegardé avant, et la désactivation retire exactement cet enregistrement",
         "cost": "Chaque nouveau volet Claude qui reçoit des skills demande d'abord « Adding a new directory » pour le dossier de skills de Navide."
       },
       "cursor_project-mcp": {
