@@ -301,6 +301,16 @@ capabilities only. Its pinned manifest lives in `tests/fixtures/navide-mini-ide/
 and its plugin-ui strings under `navide-mini-ide` in
 `tests/infrastructure/externalPluginUiKeys.json`.
 
+navide.browser follows them from
+[Navide-dev/navide-browser](https://github.com/Navide-dev/navide-browser)
+with one package per target: its packaging workflow builds each target the
+App ships on its own runner, and the release machine lists them with
+`scripts/publish-first-party-plugins.sh --from-run <run id> --repo
+Navide-dev/navide-browser --id navide.browser --version <version> --yes`.
+Every target must be on the Registry before an App release: each platform's
+build stages its own. Its pinned manifest lives in
+`tests/fixtures/navide-browser/`.
+
 ## Git recovery switch
 
 If a release needs the retained Git recovery bundle, launch the application

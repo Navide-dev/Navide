@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { makeZip } from './zipFixture'
+import { readZipEntries } from './pluginPackage'
 import {
   OfficialArtifactMissingError,
   selectOfficialVersion,
@@ -83,5 +84,23 @@ describe('verifyOfficialArtifact', () => {
       detail: detail(row('1.0.11')), bytes: new Uint8Array([1, 2, 3]),
       rootKeyPem: '', hostTarget: 'darwin-arm64',
     })).toThrow(/package digest [0-9a-f]{64} does not match the Registry's 0{64}/)
+  })
+
+  it('keeps the execute bit of a packaged backend', () => {
+    const bytes = new Uint8Array(makeZip([
+      { name: 'manifest.json', data: JSON.stringify({ id: 'navide.browser', version: '1.1.8', publisher: 'navide' }) },
+      { name: 'backend/navide-browser', data: 'binary', unixMode: 0o100755 },
+    ]))
+    const digest = createHash('sha256').update(bytes).digest('hex')
+    // Every check before the Registry's own signature passes; that last one
+    // needs real trust metadata, so read the files the way the verifier does.
+    expect(() => verifyOfficialArtifact({
+      id: 'navide.browser', version: '1.1.8', target: 'universal', registryUrl,
+      detail: detail(row('1.1.8', { package_digest: digest })), bytes,
+      rootKeyPem: '', hostTarget: 'darwin-arm64',
+    })).toThrow()
+    const entries = readZipEntries(bytes)
+    expect(entries.find((entry) => entry.path === 'backend/navide-browser')?.executable).toBe(true)
+    expect(entries.find((entry) => entry.path === 'manifest.json')?.executable).toBe(false)
   })
 })

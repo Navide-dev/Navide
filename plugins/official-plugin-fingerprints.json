@@ -1,10 +1,6 @@
 {
   "baseline": "v0.2.45",
   "plugins": {
-    "navide.browser": {
-      "version": "1.1.6",
-      "fingerprint": "b0efe3c29743a97cd9f6571f33207c4176fc47cbf18e0b5e2a605c5dae794bfe"
-    },
     "navide.plans": {
       "version": "1.1.8",
       "fingerprint": "1ba8de5fd549316920b0f17e4066434e258c2bea736ba4ec58684276ad0d34d1"

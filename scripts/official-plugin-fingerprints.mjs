@@ -49,15 +49,10 @@ export const WORKSPACE_PACKAGES = {
 // plugin-sdk, plugin-sdk imports plugin-contracts at runtime).
 // tests/infrastructure/officialPluginFingerprints.test.ts derives the same
 // closure from the import statements and fails when this table falls behind.
-// navide.git and navide.mini-ide are not here: they are built in their own
-// repositories and the installer takes them from the Registry, whose versions
-// are immutable.
+// navide.git, navide.mini-ide and navide.browser are not here: they are built
+// in their own repositories and the installer takes them from the Registry,
+// whose versions are immutable.
 export const OFFICIAL_PLUGIN_SOURCES = {
-  'navide.browser': {
-    directory: 'plugins/navide-browser',
-    packages: ['@navide/plugin-contracts', '@navide/plugin-sdk', '@navide/plugin-ui'],
-    extra: [],
-  },
   // The Python plugin SDK scripts/build-plans-v2-backend.mjs bundles into the
   // backend; it imports nothing of agent_team_backend.
   'navide.plans': {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import contract from '../../src/shared/gitBridgeContract.json'
 import { HOST_GIT_EVENT_TYPES, HOST_GIT_REQUEST_TYPES } from '../../src/shared/gitCompatibility'
 import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginVersions'
+import { parseManifestV2 } from '../../src/main/plugins/pluginManifestV2'
 
 // The Host half of checks that ran inside navide.git while it lived in this
 // repository (its packageBoundary, optionalPackageBoundary,
@@ -22,7 +23,7 @@ function sourceFiles(root: string, skipTests = false): string[] {
 }
 
 describe('navide.git, Host side', () => {
-  it.each([['navide-git', 'navide.git'], ['navide-mini-ide', 'navide.mini-ide']])(
+  it.each([['navide-git', 'navide.git'], ['navide-mini-ide', 'navide.mini-ide'], ['navide-browser', 'navide.browser']])(
     'keeps the %s fixture at the pinned version', (dir, id) => {
       // Host tests read the pinned version's manifest (and Git's target schema)
       // from tests/fixtures/<dir>: update them with the pin.
@@ -31,6 +32,15 @@ describe('navide.git, Host side', () => {
       expect(manifest.version).toBe(OFFICIAL_PLUGIN_VERSIONS[id])
     },
   )
+
+  it('accepts the pinned navide.browser manifest, agent tools included', () => {
+    // The Host's own parser carries the agent-tool rules navide-browser's
+    // manifest test cannot run against the published plugin-contracts.
+    const parsed = parseManifestV2(JSON.parse(read('tests/fixtures/navide-browser/manifest.json')) as Record<string, unknown>)
+    expect(parsed.id).toBe('navide.browser')
+    const backend = parsed.backend!
+    expect([...new Set(backend.agentTools!.map((tool) => tool.method))].sort()).toEqual([...backend.methods].sort())
+  })
 
   it('keeps no private feature package system', () => {
     expect(existsSync('packages/features')).toBe(false)

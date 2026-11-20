@@ -6,10 +6,13 @@ from `plugins/navide-git`); the App installer takes its pinned version from
 the official Registry (`scripts/stage-official-plugin-artifacts.mjs`) and the
 Host keeps the Host half of its tests (`tests/infrastructure/gitPluginHostChecks.test.ts`).
 navide.mini-ide followed in the same version to
-[Navide-dev/navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide).
-Their sections below are the record of those moves. Browser and Plans have
-not moved yet; for them this page is the inventory of what moves, what stays
-and what has to change on each side. The order is Git, then Mini-IDE, Browser and Plans. The
+[Navide-dev/navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide), and
+navide.browser to [Navide-dev/navide-browser](https://github.com/Navide-dev/navide-browser),
+which packages its backend from its own Python environment (`backend/pyproject.toml`,
+`uv.lock`, `.python-version`) and publishes one package per target. Their
+sections below are the record of those moves. Plans has not moved yet; for it
+this page is the inventory of what moves, what stays and what has to change
+on each side. The order is Git, then Mini-IDE, Browser and Plans. The
 overall plan is in `.agent-team/plans/plan_8508e9.html` (P3, P4).
 
 ## Building outside the monorepo

@@ -10,8 +10,7 @@ import { describe, expect, it } from 'vitest'
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
   'src/renderer/src/i18n/locales',
-  'plugins/navide-plans/src/locales',
-  'plugins/navide-browser/src/locales'
+  'plugins/navide-plans/src/locales'
 ]
 // Every catalog in the folder, so a new language is checked without editing this.
 const localesIn = (dir: string): string[] =>
