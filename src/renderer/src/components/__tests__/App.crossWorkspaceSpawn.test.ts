@@ -51,7 +51,7 @@ function spawnHarness(opts: { panes?: Record<string, unknown>[]; held?: string[]
     standaloneTaskDeps: () => ({}), standaloneKickoffVerdict,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
-    recordDiagnostic: vi.fn(), notifyRestore: { toast: vi.fn() },
+    recordDiagnostic: vi.fn(), terminalPlacementNote: () => null, notifyRestore: { toast: vi.fn() },
     i18n: { global: { t: (key: string) => key } }, sendSpawnFeedback: vi.fn(),
     seenSpawnRequestIds: new Set(), SEEN_SPAWN_REQUEST_IDS_CAP: 200,
   }

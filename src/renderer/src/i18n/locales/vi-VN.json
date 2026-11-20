@@ -398,6 +398,7 @@
     "hold-starting": "Pane đích vẫn đang khởi động",
     "hold-typing": "Có người đang gõ trong pane đích",
     "hold-mid-turn": "Agent đích đang giữa lượt",
+    "hold-foreground": "Có chương trình đang chạy trước shell của terminal đích (lệnh, trình soạn thảo, lời nhắc mật khẩu)",
     "hold-settling": "Đang chờ đích ổn định",
     "hold-composer": "Ô nhập vẫn còn lần đẩy trước",
     "hold-model-switch": "Pane đích đang đổi mô hình",

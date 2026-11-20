@@ -116,7 +116,7 @@ describe('the kickoff verdict reaches the waiting cli_open_agent call', () => {
   // only that the handler runs that sequence through the one-shot reporter.
   it('the standalone path reports its kickoff too — judged on its evidence, so the call never waits 45s', () => {
     const handler = block('async function handleMcpSpawnRequest(ev: {', '\nfunction describeSpawnRefusal(')
-    const standaloneReport = handler.indexOf('report({ ok: true, paneId, name: childName, advisories: gate.advisories })')
+    const standaloneReport = handler.indexOf('report({ ok: true, paneId, name: childName, advisories })')
     expect(standaloneReport).toBeGreaterThan(-1)
     const standalone = handler.slice(standaloneReport, handler.indexOf('\n    return\n', standaloneReport))
     expect(standalone).toContain('const reportStandalone = createKickoffReporter({')

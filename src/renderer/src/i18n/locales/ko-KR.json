@@ -398,6 +398,7 @@
     "hold-starting": "대상 pane이 아직 시작하는 중이에요",
     "hold-typing": "누군가 대상 pane에 입력하고 있어요",
     "hold-mid-turn": "대상 agent가 턴을 진행 중이에요",
+    "hold-foreground": "대상 터미널의 셸 앞에서 프로그램이 실행 중이에요(명령, 편집기, 비밀번호 입력 등)",
     "hold-settling": "대상이 안정되기를 기다리는 중",
     "hold-composer": "입력란에 아직 마지막 푸시가 남아 있어요",
     "hold-model-switch": "대상 pane이 모델을 바꾸는 중이에요",

@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from typing import IO, Any, Awaitable, Callable
 from uuid import uuid4
 
+import psutil
+
 from . import login_panes, osplat, pty_registry
 from .applog import app_data_dir, in_data_dir
 from .cli_vendors.base import VendorRuntimeContext
@@ -173,11 +175,6 @@ class TerminalSession:
     # a stale entry from ever matching a recycled pid (same pattern as
     # pty_registry).
     descendants: dict[int, str] = field(default_factory=dict)
-    # Under the macOS pane helper the PTY child is the helper and the pane's
-    # shell is its one direct child, in a process group of its own once its
-    # job control is up. Taken from the same snapshot; 0 until it is seen, or
-    # when there is no helper (the PTY child is the shell itself).
-    shell_pid: int = 0
     # Sanitized path/override context only; never persisted as pane metadata.
     risk_context: VendorRuntimeContext | None = field(default=None, repr=False)
     # Observers of raw output, called before it is buffered for the client
@@ -405,6 +402,11 @@ _ECHO_PROBE_MAX_INPUT_CHARS = 16
 _LIFECYCLE_EXECUTOR = ThreadPoolExecutor(
     max_workers=32, thread_name_prefix="pty-lifecycle"
 )
+
+
+def _parent_pid(pid: int) -> int:
+    """The parent of one live process, straight from the kernel (no ps)."""
+    return psutil.Process(pid).ppid()
 
 
 def _ps_snapshot() -> dict[int, tuple[int, int, str]]:
@@ -805,12 +807,24 @@ class TerminalService:
         try:
             if fg == osplat.process_tree.group_of(session.proc.pid):
                 return True
-            # The pane helper's child is the shell: an interactive one moves
-            # to a group of its own, which is then the shell in front — read
-            # against the helper's group alone, an idle pane was "busy" for
-            # good and every cli_send to it failed (0.2.43 macOS dmg).
-            return bool(session.shell_pid) and fg == osplat.process_tree.group_of(session.shell_pid)
         except (ProcessLookupError, PermissionError):
+            return None
+        # The pane helper's child is the shell: an interactive one moves to a
+        # group of its own, which is then the shell in front (0.2.43 macOS dmg).
+        # Asked at the moment of the question — is the leader of the group in
+        # front the helper's own child? — never read off the rolling descendant
+        # snapshot: until that snapshot named the shell, and for good once it
+        # stopped naming new ones, an idle terminal read busy, so every
+        # cli_send to it held "mid-turn" and failed after 2 min (0.2.46).
+        if not getattr(osplat.terminal_backend, "helper", None):
+            return False
+        try:
+            return _parent_pid(fg) == session.proc.pid
+        except psutil.NoSuchProcess:
+            # The group's leader is gone while the group is still in front:
+            # whatever is left there is not the shell.
+            return False
+        except psutil.Error:
             return None
 
     def live_pane_marks(self) -> set[str]:
@@ -1547,9 +1561,6 @@ class TerminalService:
                 continue
             pids = _walk_descendants(children, session.proc.pid)
             session.descendants = {pid: snap[pid][2] for pid in pids}
-            if getattr(osplat.terminal_backend, "helper", None):
-                kids = children.get(session.proc.pid) or []
-                session.shell_pid = kids[0] if len(kids) == 1 else 0
             persist[session.proc.pid] = {
                 pid: snap[pid][2]
                 for pid in pids
