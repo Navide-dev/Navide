@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shlex
 import time
 from typing import Any
 
@@ -51,11 +52,14 @@ RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple((rule, re.compile(pattern
 _SPLIT_RE = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_]\w*=\S*\s+")
 _WRAPPER_RE = re.compile(r"^(?:sudo(?:\s+-\S+)*|time|env|nohup|npx|bunx|(?:pnpm|yarn)\s+dlx|exec)\s+")
-_ASSIGNED_VALUE_RE = re.compile(r"(?<![\w-])([A-Za-z_][\w.-]*)=(\S+)")
-_SECRET_FLAG_RE = re.compile(
-    r"(--?(?:[\w-]*token|[\w-]*password|pass|[\w-]*secret|[\w-]*api-?key|auth|otp|p)\b)(?:=|\s+)(\S+)",
-    re.IGNORECASE,
-)
+_ASSIGNMENT_ARG_RE = re.compile(r"^[A-Za-z_][\w.-]*=")
+_URL_LOGIN_RE = re.compile(r"(\w+://)[^/@\s]*@")
+#: Flags whose value is kept in an excerpt; every other flag's value is masked.
+SAFE_VALUE_FLAGS = frozenset({
+    "-f", "--file", "--filename", "-t", "--tag", "--region", "--cluster", "--service", "-n", "--namespace",
+    "--access", "--project", "--environment", "--env", "--stage", "--target", "-c", "--context", "--app",
+})
+HIDDEN = "***"
 
 
 def _strip(command: str) -> str:
@@ -78,14 +82,40 @@ def match(command: str) -> tuple[str, str] | None:
     return None
 
 
+def _mask_words(words: list[str]) -> list[str]:
+    out: list[str] = []
+    after_flag = False
+    for word in words:
+        if word.startswith("-") and len(word) > 1:
+            flag, eq, _value = word.partition("=")
+            out.append(word if not eq or flag in SAFE_VALUE_FLAGS else f"{flag}={HIDDEN}")
+            after_flag = not eq and flag not in SAFE_VALUE_FLAGS
+            continue
+        if after_flag:
+            # Fail closed: the word after any flag not known to take a harmless
+            # value is masked, even when that flag takes no value at all.
+            out.append(HIDDEN)
+        elif _ASSIGNMENT_ARG_RE.match(word):
+            out.append(word.split("=", 1)[0] + "=" + HIDDEN)
+        else:
+            out.append(_URL_LOGIN_RE.sub(lambda m: f"{m.group(1)}{HIDDEN}@", word))
+        after_flag = False
+    return out
+
+
 def mask(command: str) -> str:
-    """The command as it may be stored: every assigned value, every value of a
-    token/password/secret/key flag and every high-confidence secret replaced,
-    email addresses shortened, cut to the excerpt length."""
+    """The command as it may be stored. It is split into words the way the
+    shell does; every NAME=value, the value after any flag outside
+    SAFE_VALUE_FLAGS and the login part of a URL are replaced, then
+    high-confidence secrets, email addresses and registered secrets. A command
+    that cannot be split keeps only its first word. Cut to the excerpt length."""
     from agent_team_backend.channels import redact
 
-    text = _ASSIGNED_VALUE_RE.sub(lambda m: f"{m.group(1)}=***", command)
-    text = _SECRET_FLAG_RE.sub(lambda m: f"{m.group(1)} ***", text)
+    try:
+        words = _mask_words(shlex.split(command, posix=True))
+    except ValueError:
+        words = (command.split() or [""])[:1]
+    text = " ".join(words)
     text = share_scan.scan(text, kind="text").text
     text = redact.redact_text(redact.mask_emails(text))
     text = " ".join(text.split())
