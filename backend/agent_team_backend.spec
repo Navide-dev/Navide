@@ -95,6 +95,7 @@ a = Analysis(
         'agent_team_backend.plugins.builtin.navide_shipped_log.report',
         'agent_team_backend.plugins.builtin.navide_shipped_log.messages',
         'agent_team_backend.plugins.builtin.navide_shipped_log.deploy_detect',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.digest',
         'agent_team_backend.plugins.builtin.navide_skills.skills_wiring',
         'agent_team_backend.plugins.builtin.navide_skills.skills_tools',
         # Chat channel adapters: channels/manager.py imports each platform by

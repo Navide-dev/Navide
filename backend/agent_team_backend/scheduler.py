@@ -288,6 +288,10 @@ def _normalize_action(raw: Any) -> dict[str, Any]:
         # A workspace's self-evolution run: no pane, no text — the feature
         # that owns the job decides both when it fires.
         return {"kind": "evolve", "workspace": _require_str(raw, "workspace", "action.workspace")}
+    if raw.get("kind") == "ship_digest":
+        # A workspace's daily Shipped Log digest, pushed to the bound chats:
+        # no pane, no text, like evolve.
+        return {"kind": "ship_digest", "workspace": _require_str(raw, "workspace", "action.workspace")}
     if raw.get("kind") == "pipeline_start":
         return _normalize_pipeline_action(raw)
     if raw.get("kind") != "message":
@@ -480,14 +484,19 @@ def may_change(actor: dict[str, Any], job: dict[str, Any]) -> bool:
     return owner.get("kind") == "external" and actor.get("kind") == "external"
 
 
+#: Where the user changes a system job, by the feature that owns it.
+_SYSTEM_JOB_HOME = {"evolve": "Self-evolution", "shipped-log": "Shipped Log"}
+
+
 def _system_job(job: dict[str, Any]) -> dict[str, Any]:
     owner = job.get("owner") or USER
+    home = _SYSTEM_JOB_HOME.get(str(owner.get("feature") or ""), "Self-evolution")
     return {
         "ok": False,
         "code": SYSTEM_JOB,
         "error": f'this job belongs to Navide\'s "{owner.get("feature") or "system"}" feature for '
         f'{owner.get("workspace") or "a workspace"}; change it from that workspace '
-        "(sidebar workspace menu → Self-evolution), not from the Schedule panel",
+        f"(sidebar workspace menu → {home}), not from the Schedule panel",
         "owner": dict(owner),
     }
 
@@ -705,6 +714,13 @@ class LiveBridge:
         return await evolve_service.get_service().start_from_scheduler(
             action["workspace"], manual=manual
         )
+
+    async def deliver_ship_digest(self, action: dict[str, Any], manual: bool) -> dict[str, Any]:
+        """Push a workspace's Shipped Log digest; the plugin answers with a run
+        outcome of the same shape :meth:`deliver` returns."""
+        from .plugins.builtin.navide_shipped_log import digest
+
+        return await digest.run(action["workspace"], manual=manual)
 
     async def deliver_pipeline(self, action: dict[str, Any]) -> dict[str, Any]:
         """Start a pipeline run through pipeline_start's own path
@@ -1132,6 +1148,8 @@ class SchedulerService:
         try:
             if job["action"].get("kind") == "evolve":
                 outcome = await self.bridge.deliver_evolve(job["action"], manual)
+            elif job["action"].get("kind") == "ship_digest":
+                outcome = await self.bridge.deliver_ship_digest(job["action"], manual)
             elif job["action"].get("kind") == "pipeline_start":
                 outcome = await self.bridge.deliver_pipeline(_with_origin(job))
             else:
@@ -1300,6 +1318,11 @@ class SchedulerService:
                 raise JobInvalid(
                     'action.kind "evolve" is kept by Navide; turn self-evolution on '
                     "from the workspace instead"
+                )
+            if job["action"].get("kind") == "ship_digest" and not is_system(actor):
+                raise JobInvalid(
+                    'action.kind "ship_digest" is kept by Navide; turn the daily digest on '
+                    "from the workspace's Shipped Log instead"
                 )
             job["owner"] = existing["owner"] if existing else owner_of(actor)
             job["updated_by"] = owner_of(actor)

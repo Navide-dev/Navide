@@ -3373,6 +3373,13 @@ def _hook_tool_key(payload: dict) -> str:
 _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 
 
+def _is_shell_tool(payload: dict) -> bool:
+    """Whether a tool-result payload is of a tool the Shipped Log reads."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    return str(payload.get("tool_name") or "") in deploy_detect.SHELL_TOOLS
+
+
 def _note_ship_detection(vendor: str, pane_id: str, ws_path: str, event_kind: str, payload: dict) -> int | None:
     """Hand a tool result to the Shipped Log's deploy-command detector, unless
     the user turned the plugin off. Returns the recorded row id or None."""
@@ -3618,9 +3625,10 @@ async def cli_hook(vendor: str, request: Request) -> Any:
                 )
         except Exception as err:  # noqa: BLE001
             log.warning("preview record from %s hook failed: %s", vendor, err)
-    if event_kind in _TOOL_RESULT_EVENTS and pane_id and ws_path:
+    if event_kind in _TOOL_RESULT_EVENTS and pane_id and ws_path and _is_shell_tool(payload):
         # Shipped Log: a deploy command that just ran is recorded as an
         # unconfirmed hint. Records only; this answer never reaches the CLI.
+        # Checked here first so most tool results never queue for the db thread.
         try:
             await run_in_db_thread(_note_ship_detection, vendor, pane_id, ws_path, event_kind, payload)
         except Exception as err:  # noqa: BLE001

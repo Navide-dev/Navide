@@ -4172,6 +4172,23 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
 
+    async def notify_shipped_digest(self, text: str) -> int:
+        """The daily Shipped Log digest (already masked by the plugin), to every
+        bound direct chat once. Returns how many chats it reached."""
+        seen: set[str] = set()
+        sent = 0
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+                sent += 1
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: a shipped-log digest to %s failed: %s", b.platform, exc)
+        return sent
+
     async def notify_account_needs_login(self, account: str) -> None:
         """Every bound direct chat once, in the user's language: the claude
         account just switched in cannot sign in (account_switch_verify)."""

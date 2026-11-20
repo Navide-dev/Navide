@@ -70,6 +70,24 @@ def test_the_excerpt_is_masked() -> None:
     assert len(deploy_detect.mask("x " * 400)) == 160
 
 
+@pytest.mark.parametrize("command, hidden, kept", [
+    # A quoted value with spaces is one word, masked whole.
+    ('DB_PASS="two words here" ./deploy.sh', ["two", "words", "here"], ["DB_PASS=***", "./deploy.sh"]),
+    ("helm upgrade api ./chart -u deployer:" + "pa" + "ss123", ["deployer", "pass123"], ["helm upgrade api ./chart -u ***"]),
+    ("docker push https://bot:" + "s3" + "cret@registry.example/app", ["bot", "s3cret"], ["https://***@registry.example/app"]),
+    ("fly deploy --private-key=" + "abc" + "def", ["abcdef"], ["--private-key=***"]),
+    ("kubectl apply -f k8s/ --namespace prod", [], ["kubectl apply -f k8s/ --namespace prod"]),
+    # A line the shell cannot split keeps only its first word.
+    ("./deploy.sh 'unbalanced " + "sec" + "ret", ["unbalanced", "secret"], ["./deploy.sh"]),
+])
+def test_masking_fails_closed(command: str, hidden: list[str], kept: list[str]) -> None:
+    masked = deploy_detect.mask(command)
+    for word in hidden:
+        assert word not in masked, masked
+    for part in kept:
+        assert part in masked, masked
+
+
 def test_only_the_matching_command_is_kept(tmp_path: Path) -> None:
     book = ShipLogLedger(WorkspaceDatabases())
     payload = {"tool_name": "Bash", "tool_input": {"command": "echo secret-ish note && ./deploy.sh prod"}}
@@ -137,6 +155,23 @@ def test_nothing_is_recorded_without_a_pane_or_with_the_plugin_off(hooked: Any, 
     _post(client, "post_tool_use", "s1", "npm publish")
     _post(client, "pre_tool_use", "s1", "npm publish")
     assert book.detections(str(workspace), 0)["detections"] == []
+
+
+def test_a_non_shell_tool_result_never_queues_for_the_db_thread(hooked: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _workspace, _book = hooked
+    queued: list[Any] = []
+
+    async def spy(fn: Any, *args: Any) -> Any:
+        queued.append(fn)
+        return fn(*args)
+
+    monkeypatch.setattr(app_module, "run_in_db_thread", spy)
+    client.post("/hooks/claude", headers={"X-Agent-Team-Event": "post_tool_use"}, json={
+        "session_id": "s1", "cwd": "/", "tool_name": "Read", "tool_input": {"file_path": "/x"},
+    })
+    assert app_module._note_ship_detection not in queued
+    _post(client, "post_tool_use", "s1", "npm publish")
+    assert app_module._note_ship_detection in queued
 
 
 def test_a_failing_ledger_never_changes_the_answer(hooked: Any, monkeypatch: pytest.MonkeyPatch) -> None:
